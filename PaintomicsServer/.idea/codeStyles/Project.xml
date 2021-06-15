@@ -1,0 +1,10 @@
+<component name="ProjectCodeStyleConfiguration">
+  <code_scheme name="Project" version="173">
+    <XML>
+      <option name="XML_LEGACY_SETTINGS_IMPORTED" value="true" />
+    </XML>
+    <codeStyleSettings language="Python">
+      <option name="SPACE_WITHIN_METHOD_CALL_PARENTHESES" value="true" />
+    </codeStyleSettings>
+  </code_scheme>
+</component>

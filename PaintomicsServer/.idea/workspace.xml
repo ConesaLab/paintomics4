@@ -1,0 +1,791 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="SELECTIVE" />
+  </component>
+  <component name="ChangeListManager">
+    <list default="true" id="657be414-0410-416b-82a4-023b644455f2" name="Default Changelist" comment="">
+      <change afterPath="$PROJECT_DIR$/.idea/codeStyles/Project.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/codeStyles/codeStyleConfig.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/other.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../PaintomicsClient/.idea/misc.xml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../PaintomicsClient/public_html/app/controller/JobController.js" beforeDir="false" afterPath="$PROJECT_DIR$/../PaintomicsClient/public_html/app/controller/JobController.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../PaintomicsClient/public_html/app/model/JobInstanceModels.js" beforeDir="false" afterPath="$PROJECT_DIR$/../PaintomicsClient/public_html/app/model/JobInstanceModels.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../PaintomicsClient/public_html/app/view/PathwayAcquisitionViews/PA_Step3Views.js" beforeDir="false" afterPath="$PROJECT_DIR$/../PaintomicsClient/public_html/app/view/PathwayAcquisitionViews/PA_Step3Views.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../PaintomicsClient/public_html/app/view/PathwayAcquisitionViews/PA_Step4Views.js" beforeDir="false" afterPath="$PROJECT_DIR$/../PaintomicsClient/public_html/app/view/PathwayAcquisitionViews/PA_Step4Views.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../PaintomicsClient/public_html/index.html" beforeDir="false" afterPath="$PROJECT_DIR$/../PaintomicsClient/public_html/index.html" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../PaintomicsClient/public_html/resources/css/main.css" beforeDir="false" afterPath="$PROJECT_DIR$/../PaintomicsClient/public_html/resources/css/main.css" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/.name" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/.name" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/PaintomicsServer.iml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/PaintomicsServer.iml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/inspectionProfiles/Project_Default.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/inspectionProfiles/Project_Default.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/misc.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/AdminTools/DBManager.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/AdminTools/DBManager.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/AdminTools/scripts/common_build_database.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/AdminTools/scripts/common_build_database.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/AdminTools/scripts/common_resources/download_conf.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/AdminTools/scripts/common_resources/download_conf.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/AdminTools/scripts/default/build_database.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/AdminTools/scripts/default/build_database.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/AdminTools/scripts/hsa_resources/build_database.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/AdminTools/scripts/hsa_resources/build_database.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/AdminTools/scripts/mmu_resources/build_database.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/AdminTools/scripts/mmu_resources/build_database.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/AdminTools/scripts/mmu_resources/download_others.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/AdminTools/scripts/mmu_resources/download_others.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/AdminTools/scripts/sot_resources/build_database.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/AdminTools/scripts/sot_resources/build_database.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/AdminTools/scripts/sot_resources/download_conf.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/AdminTools/scripts/sot_resources/download_conf.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/classes/Job.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/classes/Job.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/classes/JobInstances/MiRNA2GeneJob.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/classes/JobInstances/MiRNA2GeneJob.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/classes/JobInstances/PathwayAcquisitionJob.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/classes/JobInstances/PathwayAcquisitionJob.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/classes/PathwayGraphicalData.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/classes/PathwayGraphicalData.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/common/JobInformationManager.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/common/JobInformationManager.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/common/KeggInformationManager.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/common/KeggInformationManager.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/common/Statistics.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/common/Statistics.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/common/bioscripts/PCA-GENES.R" beforeDir="false" afterPath="$PROJECT_DIR$/src/common/bioscripts/PCA-GENES.R" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/common/bioscripts/generateMetaGenes.R" beforeDir="false" afterPath="$PROJECT_DIR$/src/common/bioscripts/generateMetaGenes.R" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/common/bioscripts/miRNA2Target.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/common/bioscripts/miRNA2Target.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/conf/logging.cfg" beforeDir="false" afterPath="$PROJECT_DIR$/src/conf/logging.cfg" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/conf/organismDB.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/conf/organismDB.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/paintomicsserver.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/paintomicsserver.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/resources/example_serverconf.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/resources/example_serverconf.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/servlets/MiRNA2GenesServlet.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/servlets/MiRNA2GenesServlet.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/servlets/PathwayAcquisitionServlet.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/servlets/PathwayAcquisitionServlet.py" afterDir="false" />
+    </list>
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="FileTemplateManagerImpl">
+    <option name="RECENT_TEMPLATES">
+      <list>
+        <option value="Python Script" />
+        <option value="JavaScript File" />
+      </list>
+    </option>
+  </component>
+  <component name="FlaskConsoleOptions" custom-start-script="import sys&#10;sys.path.extend([WORKING_DIR_AND_PYTHON_PATHS])&#10;from flask.cli import ScriptInfo&#10;locals().update(ScriptInfo(create_app=None).load_app().make_shell_context())&#10;print(&quot;Python %s on %s\nApp: %s [%s]\nInstance: %s&quot; % (sys.version, sys.platform, app.import_name, app.env, app.instance_path))">
+    <envs>
+      <env key="FLASK_APP" value="app" />
+    </envs>
+    <option name="myCustomStartScript" value="import sys&#10;sys.path.extend([WORKING_DIR_AND_PYTHON_PATHS])&#10;from flask.cli import ScriptInfo&#10;locals().update(ScriptInfo(create_app=None).load_app().make_shell_context())&#10;print(&quot;Python %s on %s\nApp: %s [%s]\nInstance: %s&quot; % (sys.version, sys.platform, app.import_name, app.env, app.instance_path))" />
+    <option name="myEnvs">
+      <map>
+        <entry key="FLASK_APP" value="app" />
+      </map>
+    </option>
+  </component>
+  <component name="Git.Settings">
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$/.." />
+  </component>
+  <component name="GitSEFilterConfiguration">
+    <file-type-list>
+      <filtered-out-file-type name="LOCAL_BRANCH" />
+      <filtered-out-file-type name="REMOTE_BRANCH" />
+      <filtered-out-file-type name="TAG" />
+      <filtered-out-file-type name="COMMIT_BY_MESSAGE" />
+    </file-type-list>
+  </component>
+  <component name="HighlightingSettingsPerFile">
+    <setting file="file://$PROJECT_DIR$/../PaintomicsClient/public_html/app/view/PathwayAcquisitionViews/PA_Step3Views.js" root0="FORCE_HIGHLIGHTING" />
+    <setting file="file://$PROJECT_DIR$/../PaintomicsClient/public_html/app/view/common/ExtJS_extensions.js" root0="FORCE_HIGHLIGHTING" />
+  </component>
+  <component name="ProjectId" id="1ljosIq4ejgJ6jM8EDRgsLg5TiU" />
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent">
+    <property name="ASKED_ADD_EXTERNAL_FILES" value="true" />
+    <property name="RunOnceActivity.OpenProjectViewOnStart" value="true" />
+    <property name="RunOnceActivity.ShowReadmeOnStart" value="true" />
+    <property name="SHARE_PROJECT_CONFIGURATION_FILES" value="true" />
+    <property name="WebServerToolWindowFactoryState" value="false" />
+    <property name="last_opened_file_path" value="$PROJECT_DIR$/src/classes/JobInstances" />
+    <property name="settings.editor.selected.configurable" value="com.jetbrains.python.configuration.PyActiveSdkModuleConfigurable" />
+  </component>
+  <component name="RecentsManager">
+    <key name="CopyFile.RECENT_KEYS">
+      <recent name="$PROJECT_DIR$/src/AdminTools/scripts" />
+    </key>
+  </component>
+  <component name="RunManager" selected="Python.launch_server">
+    <configuration name="PathwayAcquisitionJob" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
+      <module name="PaintomicsServer" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs>
+        <env name="PYTHONUNBUFFERED" value="1" />
+      </envs>
+      <option name="SDK_HOME" value="$USER_HOME$/PycharmProjects/pythonProject1/venv/bin/python" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/src" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/classes/JobInstances/PathwayAcquisitionJob.py" />
+      <option name="PARAMETERS" value="" />
+      <option name="SHOW_COMMAND_LINE" value="true" />
+      <option name="EMULATE_TERMINAL" value="false" />
+      <option name="MODULE_MODE" value="false" />
+      <option name="REDIRECT_INPUT" value="false" />
+      <option name="INPUT_FILE" value="" />
+      <method v="2" />
+    </configuration>
+    <configuration default="true" type="PythonConfigurationType" factoryName="Python">
+      <module name="PaintomicsServer" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs>
+        <env name="PYTHONUNBUFFERED" value="1" />
+      </envs>
+      <option name="SDK_HOME" value="$USER_HOME$/PycharmProjects/pythonProject1/venv/bin/python" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/src" />
+      <option name="IS_MODULE_SDK" value="false" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/launch_server.py" />
+      <option name="PARAMETERS" value="" />
+      <option name="SHOW_COMMAND_LINE" value="true" />
+      <option name="EMULATE_TERMINAL" value="false" />
+      <option name="MODULE_MODE" value="false" />
+      <option name="REDIRECT_INPUT" value="false" />
+      <option name="INPUT_FILE" value="" />
+      <method v="2" />
+    </configuration>
+    <configuration name="build_mmu_test" type="PythonConfigurationType" factoryName="Python">
+      <module name="PaintomicsServer" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs>
+        <env name="PYTHONUNBUFFERED" value="1" />
+      </envs>
+      <option name="SDK_HOME" value="/usr/bin/python3.8" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/src/AdminTools/scripts/mmu_resources" />
+      <option name="IS_MODULE_SDK" value="false" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/AdminTools/scripts/mmu_resources/build_database.py" />
+      <option name="PARAMETERS" value="" />
+      <option name="SHOW_COMMAND_LINE" value="false" />
+      <option name="EMULATE_TERMINAL" value="false" />
+      <option name="MODULE_MODE" value="false" />
+      <option name="REDIRECT_INPUT" value="false" />
+      <option name="INPUT_FILE" value="" />
+      <method v="2" />
+    </configuration>
+    <configuration name="cbd" type="PythonConfigurationType" factoryName="Python">
+      <module name="PaintomicsServer" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs>
+        <env name="PYTHONUNBUFFERED" value="1" />
+      </envs>
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/src/AdminTools/scripts/hsa_resources" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="false" />
+      <option name="ADD_SOURCE_ROOTS" value="false" />
+      <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/AdminTools/scripts/hsa_resources/build_database.py" />
+      <option name="PARAMETERS" value="" />
+      <option name="SHOW_COMMAND_LINE" value="false" />
+      <option name="EMULATE_TERMINAL" value="false" />
+      <option name="MODULE_MODE" value="false" />
+      <option name="REDIRECT_INPUT" value="false" />
+      <option name="INPUT_FILE" value="" />
+      <method v="2" />
+    </configuration>
+    <configuration name="common_build_database" type="PythonConfigurationType" factoryName="Python" nameIsGenerated="true">
+      <module name="PaintomicsServer" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs>
+        <env name="PYTHONUNBUFFERED" value="1" />
+      </envs>
+      <option name="SDK_HOME" value="$USER_HOME$/PycharmProjects/pythonProject1/venv/bin/python" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/src" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/AdminTools/scripts/common_build_database.py" />
+      <option name="PARAMETERS" value="" />
+      <option name="SHOW_COMMAND_LINE" value="true" />
+      <option name="EMULATE_TERMINAL" value="false" />
+      <option name="MODULE_MODE" value="false" />
+      <option name="REDIRECT_INPUT" value="false" />
+      <option name="INPUT_FILE" value="" />
+      <method v="2" />
+    </configuration>
+    <configuration name="developAdminTools" type="PythonConfigurationType" factoryName="Python">
+      <module name="PaintomicsServer" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs>
+        <env name="PYTHONUNBUFFERED" value="1" />
+      </envs>
+      <option name="SDK_HOME" value="/usr/bin/python3.8" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/src/AdminTools/scripts/default" />
+      <option name="IS_MODULE_SDK" value="false" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/AdminTools/scripts/default/build_database.py" />
+      <option name="PARAMETERS" value="" />
+      <option name="SHOW_COMMAND_LINE" value="false" />
+      <option name="EMULATE_TERMINAL" value="false" />
+      <option name="MODULE_MODE" value="false" />
+      <option name="REDIRECT_INPUT" value="false" />
+      <option name="INPUT_FILE" value="" />
+      <method v="2" />
+    </configuration>
+    <configuration name="developtest" type="PythonConfigurationType" factoryName="Python">
+      <module name="PaintomicsServer" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs>
+        <env name="PYTHONUNBUFFERED" value="1" />
+      </envs>
+      <option name="SDK_HOME" value="/usr/bin/python3.8" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/src/AdminTools/scripts/default" />
+      <option name="IS_MODULE_SDK" value="false" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/AdminTools/scripts/default/build_database.py" />
+      <option name="PARAMETERS" value="" />
+      <option name="SHOW_COMMAND_LINE" value="false" />
+      <option name="EMULATE_TERMINAL" value="false" />
+      <option name="MODULE_MODE" value="false" />
+      <option name="REDIRECT_INPUT" value="false" />
+      <option name="INPUT_FILE" value="" />
+      <method v="2" />
+    </configuration>
+    <configuration name="downloadReactome" type="PythonConfigurationType" factoryName="Python">
+      <module name="PaintomicsServer" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs>
+        <env name="PYTHONUNBUFFERED" value="1" />
+      </envs>
+      <option name="SDK_HOME" value="$USER_HOME$/PycharmProjects/pythonProject1/venv/bin/python" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/src/AdminTools/scripts" />
+      <option name="IS_MODULE_SDK" value="false" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/AdminTools/scripts/downloadReactome.py" />
+      <option name="PARAMETERS" value="" />
+      <option name="SHOW_COMMAND_LINE" value="false" />
+      <option name="EMULATE_TERMINAL" value="false" />
+      <option name="MODULE_MODE" value="false" />
+      <option name="REDIRECT_INPUT" value="false" />
+      <option name="INPUT_FILE" value="" />
+      <method v="2" />
+    </configuration>
+    <configuration name="launch_server" type="PythonConfigurationType" factoryName="Python" nameIsGenerated="true">
+      <module name="PaintomicsServer" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs>
+        <env name="PYTHONUNBUFFERED" value="1" />
+      </envs>
+      <option name="SDK_HOME" value="/usr/bin/python3.8" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/src" />
+      <option name="IS_MODULE_SDK" value="false" />
+      <option name="ADD_CONTENT_ROOTS" value="false" />
+      <option name="ADD_SOURCE_ROOTS" value="false" />
+      <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/launch_server.py" />
+      <option name="PARAMETERS" value="" />
+      <option name="SHOW_COMMAND_LINE" value="false" />
+      <option name="EMULATE_TERMINAL" value="false" />
+      <option name="MODULE_MODE" value="false" />
+      <option name="REDIRECT_INPUT" value="false" />
+      <option name="INPUT_FILE" value="" />
+      <method v="2" />
+    </configuration>
+    <configuration name="mapman_sot" type="PythonConfigurationType" factoryName="Python">
+      <module name="PaintomicsServer" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs>
+        <env name="PYTHONUNBUFFERED" value="1" />
+      </envs>
+      <option name="SDK_HOME" value="/usr/bin/python3.8" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/src/AdminTools/scripts/sot_resources" />
+      <option name="IS_MODULE_SDK" value="false" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/AdminTools/scripts/sot_resources/build_database.py" />
+      <option name="PARAMETERS" value="" />
+      <option name="SHOW_COMMAND_LINE" value="false" />
+      <option name="EMULATE_TERMINAL" value="false" />
+      <option name="MODULE_MODE" value="false" />
+      <option name="REDIRECT_INPUT" value="false" />
+      <option name="INPUT_FILE" value="" />
+      <method v="2" />
+    </configuration>
+    <configuration name="miRNA2Target" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
+      <module name="PaintomicsServer" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs>
+        <env name="PYTHONUNBUFFERED" value="1" />
+      </envs>
+      <option name="SDK_HOME" value="$USER_HOME$/PycharmProjects/pythonProject1/venv/bin/python" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/src" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/common/bioscripts/miRNA2Target.py" />
+      <option name="PARAMETERS" value="" />
+      <option name="SHOW_COMMAND_LINE" value="true" />
+      <option name="EMULATE_TERMINAL" value="false" />
+      <option name="MODULE_MODE" value="false" />
+      <option name="REDIRECT_INPUT" value="false" />
+      <option name="INPUT_FILE" value="" />
+      <method v="2" />
+    </configuration>
+    <configuration name="paintomicsserver" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
+      <module name="PaintomicsServer" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs>
+        <env name="PYTHONUNBUFFERED" value="1" />
+      </envs>
+      <option name="SDK_HOME" value="$USER_HOME$/PycharmProjects/pythonProject1/venv/bin/python" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/src" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/paintomicsserver.py" />
+      <option name="PARAMETERS" value="" />
+      <option name="SHOW_COMMAND_LINE" value="true" />
+      <option name="EMULATE_TERMINAL" value="false" />
+      <option name="MODULE_MODE" value="false" />
+      <option name="REDIRECT_INPUT" value="false" />
+      <option name="INPUT_FILE" value="" />
+      <method v="2" />
+    </configuration>
+    <configuration default="true" type="Python.FlaskServer">
+      <module name="PaintomicsServer" />
+      <option name="target" value="$PROJECT_DIR$/src/launch_server.py" />
+      <option name="targetType" value="PATH" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <option name="SDK_HOME" value="/usr/bin/python3.8" />
+      <option name="WORKING_DIRECTORY" value="" />
+      <option name="IS_MODULE_SDK" value="false" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
+      <option name="launchJavascriptDebuger" value="false" />
+      <method v="2" />
+    </configuration>
+    <list>
+      <item itemvalue="Python.build_mmu_test" />
+      <item itemvalue="Python.cbd" />
+      <item itemvalue="Python.common_build_database" />
+      <item itemvalue="Python.developAdminTools" />
+      <item itemvalue="Python.developtest" />
+      <item itemvalue="Python.downloadReactome" />
+      <item itemvalue="Python.launch_server" />
+      <item itemvalue="Python.mapman_sot" />
+      <item itemvalue="Python.miRNA2Target" />
+      <item itemvalue="Python.paintomicsserver" />
+      <item itemvalue="Python.PathwayAcquisitionJob" />
+    </list>
+    <recent_temporary>
+      <list>
+        <item itemvalue="Python.PathwayAcquisitionJob" />
+        <item itemvalue="Python.paintomicsserver" />
+        <item itemvalue="Python.miRNA2Target" />
+        <item itemvalue="Python.common_build_database" />
+        <item itemvalue="Python.common_build_database" />
+      </list>
+    </recent_temporary>
+  </component>
+  <component name="SpellCheckerSettings" RuntimeDictionaries="0" Folders="0" CustomDictionaries="0" DefaultDictionary="project-level" UseSingleDictionary="true" transferred="true" />
+  <component name="SvnConfiguration">
+    <configuration>$USER_HOME$/.subversion</configuration>
+  </component>
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="657be414-0410-416b-82a4-023b644455f2" name="Default Changelist" comment="" />
+      <created>1608120072395</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1608120072395</updated>
+      <workItem from="1612150306107" duration="132000" />
+      <workItem from="1612150532293" duration="5159000" />
+      <workItem from="1612167924008" duration="681000" />
+      <workItem from="1616136827485" duration="17188000" />
+      <workItem from="1616306780874" duration="30510000" />
+      <workItem from="1616463625101" duration="32564000" />
+      <workItem from="1616814769265" duration="6844000" />
+      <workItem from="1616981495374" duration="49461000" />
+      <workItem from="1617174435888" duration="1099000" />
+      <workItem from="1617175564493" duration="9212000" />
+      <workItem from="1617253411687" duration="7420000" />
+      <workItem from="1617262953046" duration="300000" />
+      <workItem from="1617263291704" duration="8452000" />
+      <workItem from="1617329657488" duration="7932000" />
+      <workItem from="1617352487688" duration="4383000" />
+      <workItem from="1617518654320" duration="11750000" />
+      <workItem from="1617542033351" duration="18141000" />
+      <workItem from="1617690473091" duration="22577000" />
+      <workItem from="1617765129132" duration="10298000" />
+      <workItem from="1617781725748" duration="11337000" />
+      <workItem from="1617852916244" duration="25292000" />
+      <workItem from="1618272827601" duration="20129000" />
+      <workItem from="1618299323930" duration="327000" />
+      <workItem from="1618299689784" duration="5024000" />
+      <workItem from="1619429526098" duration="1112000" />
+      <workItem from="1620796885625" duration="11293000" />
+      <workItem from="1621222344386" duration="4044000" />
+      <workItem from="1621227990425" duration="13918000" />
+      <workItem from="1621335159667" duration="5079000" />
+      <workItem from="1621392297299" duration="683000" />
+      <workItem from="1621392993573" duration="9387000" />
+      <workItem from="1621406533699" duration="84000" />
+      <workItem from="1621412904960" duration="1039000" />
+      <workItem from="1621417605251" duration="3776000" />
+      <workItem from="1621509980739" duration="611000" />
+      <workItem from="1621511365776" duration="4403000" />
+      <workItem from="1621588710651" duration="615000" />
+      <workItem from="1621764474680" duration="2018000" />
+      <workItem from="1621768944546" duration="28789000" />
+      <workItem from="1621929861201" duration="11230000" />
+      <workItem from="1621996761693" duration="14183000" />
+      <workItem from="1622173831139" duration="13708000" />
+      <workItem from="1622207451271" duration="1984000" />
+      <workItem from="1622542912944" duration="361000" />
+      <workItem from="1622602723092" duration="3804000" />
+      <workItem from="1622789982119" duration="7266000" />
+      <workItem from="1622907397650" duration="17189000" />
+      <workItem from="1623056017461" duration="619000" />
+      <workItem from="1623204335878" duration="12401000" />
+      <workItem from="1623224701586" duration="3799000" />
+      <workItem from="1623228614849" duration="675000" />
+      <workItem from="1623230240173" duration="1808000" />
+      <workItem from="1623291492799" duration="1807000" />
+      <workItem from="1623385803992" duration="1375000" />
+      <workItem from="1623753681717" duration="1142000" />
+    </task>
+    <servers />
+  </component>
+  <component name="TypeScriptGeneratedFilesManager">
+    <option name="version" value="3" />
+  </component>
+  <component name="UnknownFeatures">
+    <option featureType="com.intellij.fileTypeFactory" implementationName="*.js" />
+  </component>
+  <component name="Vcs.Log.Tabs.Properties">
+    <option name="TAB_STATES">
+      <map>
+        <entry key="MAIN">
+          <value>
+            <State />
+          </value>
+        </entry>
+      </map>
+    </option>
+    <option name="oldMeFiltersMigrated" value="true" />
+  </component>
+  <component name="XDebuggerManager">
+    <breakpoint-manager>
+      <breakpoints>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/src/AdminTools/scripts/common_build_database.py</url>
+          <line>1943</line>
+          <option name="timeStamp" value="18" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/src/AdminTools/scripts/common_build_database.py</url>
+          <line>1993</line>
+          <option name="timeStamp" value="20" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/src/AdminTools/scripts/hsa_resources/build_database.py</url>
+          <line>52</line>
+          <option name="timeStamp" value="21" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/src/AdminTools/scripts/downloadReactome.py</url>
+          <line>136</line>
+          <option name="timeStamp" value="52" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/src/AdminTools/scripts/downloadReactome.py</url>
+          <line>157</line>
+          <option name="timeStamp" value="53" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/src/AdminTools/scripts/common_build_database.py</url>
+          <line>1285</line>
+          <option name="timeStamp" value="67" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/src/AdminTools/scripts/common_build_database.py</url>
+          <line>2348</line>
+          <option name="timeStamp" value="71" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/src/AdminTools/scripts/common_build_database.py</url>
+          <line>2360</line>
+          <option name="timeStamp" value="72" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/src/AdminTools/scripts/sot_resources/build_database.py</url>
+          <line>53</line>
+          <option name="timeStamp" value="80" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/src/AdminTools/scripts/common_build_database.py</url>
+          <line>1856</line>
+          <option name="timeStamp" value="81" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/src/AdminTools/scripts/common_build_database.py</url>
+          <line>1964</line>
+          <option name="timeStamp" value="82" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/src/AdminTools/scripts/common_build_database.py</url>
+          <line>1301</line>
+          <option name="timeStamp" value="85" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/src/AdminTools/scripts/common_build_database.py</url>
+          <line>1269</line>
+          <option name="timeStamp" value="87" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/src/AdminTools/scripts/common_build_database.py</url>
+          <line>1745</line>
+          <option name="timeStamp" value="91" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file:///usr/lib/python3.8/logging/handlers.py</url>
+          <line>69</line>
+          <option name="timeStamp" value="96" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/src/common/DAO/PathwayAcquisitionJobDAO.py</url>
+          <line>100</line>
+          <option name="timeStamp" value="98" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/test.py</url>
+          <line>62</line>
+          <option name="timeStamp" value="106" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/src/common/bioscripts/miRNA2Target.py</url>
+          <line>165</line>
+          <option name="timeStamp" value="152" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/src/classes/Job.py</url>
+          <line>126</line>
+          <option name="timeStamp" value="169" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/src/paintomicsserver.py</url>
+          <line>235</line>
+          <option name="timeStamp" value="179" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/src/paintomicsserver.py</url>
+          <line>241</line>
+          <option name="timeStamp" value="180" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/src/paintomicsserver.py</url>
+          <line>253</line>
+          <option name="timeStamp" value="181" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/src/servlets/MiRNA2GenesServlet.py</url>
+          <line>193</line>
+          <option name="timeStamp" value="208" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/src/paintomicsserver.py</url>
+          <line>625</line>
+          <option name="timeStamp" value="286" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/src/classes/JobInstances/PathwayAcquisitionJob.py</url>
+          <line>1162</line>
+          <option name="timeStamp" value="479" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/src/servlets/PathwayAcquisitionServlet.py</url>
+          <line>364</line>
+          <option name="timeStamp" value="481" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/src/classes/JobInstances/PathwayAcquisitionJob.py</url>
+          <line>1133</line>
+          <option name="timeStamp" value="482" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/src/classes/JobInstances/PathwayAcquisitionJob.py</url>
+          <line>1159</line>
+          <option name="timeStamp" value="483" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/src/classes/JobInstances/PathwayAcquisitionJob.py</url>
+          <line>1169</line>
+          <option name="timeStamp" value="484" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/src/servlets/PathwayAcquisitionServlet.py</url>
+          <line>370</line>
+          <option name="timeStamp" value="485" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/src/servlets/PathwayAcquisitionServlet.py</url>
+          <line>420</line>
+          <option name="timeStamp" value="486" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" type="javascript">
+          <url>file://$PROJECT_DIR$/src/public_html/app/view/PathwayAcquisitionViews/PA_Step3Views.js</url>
+          <line>3508</line>
+          <option name="timeStamp" value="302" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" type="javascript">
+          <url>file://$PROJECT_DIR$/../PaintomicsClient/public_html/app/view/PathwayAcquisitionViews/PA_Step3Views.js</url>
+          <line>3048</line>
+          <option name="timeStamp" value="324" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" type="javascript">
+          <url>file://$PROJECT_DIR$/../PaintomicsClient/public_html/app/view/PathwayAcquisitionViews/PA_Step4Views.js</url>
+          <line>1522</line>
+          <option name="timeStamp" value="358" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" type="javascript">
+          <url>file://$PROJECT_DIR$/../PaintomicsClient/public_html/app/view/PathwayAcquisitionViews/PA_Step4Views.js</url>
+          <line>1538</line>
+          <option name="timeStamp" value="359" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" type="javascript">
+          <url>file://$PROJECT_DIR$/../PaintomicsClient/public_html/app/view/PathwayAcquisitionViews/PA_Step4Views.js</url>
+          <line>1539</line>
+          <option name="timeStamp" value="360" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" type="javascript">
+          <url>file://$PROJECT_DIR$/../PaintomicsClient/public_html/app/view/PathwayAcquisitionViews/PA_Step4Views.js</url>
+          <line>1518</line>
+          <option name="timeStamp" value="362" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" type="javascript">
+          <url>file://$PROJECT_DIR$/../PaintomicsClient/public_html/app/view/PathwayAcquisitionViews/PA_Step4Views.js</url>
+          <line>1855</line>
+          <option name="timeStamp" value="369" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" type="javascript">
+          <url>file://$PROJECT_DIR$/../PaintomicsClient/public_html/app/view/PathwayAcquisitionViews/PA_Step4Views.js</url>
+          <line>1856</line>
+          <option name="timeStamp" value="370" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" type="javascript">
+          <url>file://$PROJECT_DIR$/../PaintomicsClient/public_html/app/view/PathwayAcquisitionViews/PA_Step4Views.js</url>
+          <line>1854</line>
+          <option name="timeStamp" value="371" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" type="javascript">
+          <url>file://$PROJECT_DIR$/../PaintomicsClient/public_html/app/view/PathwayAcquisitionViews/PA_Step4Views.js</url>
+          <line>3303</line>
+          <option name="timeStamp" value="372" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" type="javascript">
+          <url>file://$PROJECT_DIR$/../PaintomicsClient/public_html/app/view/PathwayAcquisitionViews/PA_Step4Views.js</url>
+          <line>1886</line>
+          <option name="timeStamp" value="373" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" type="javascript">
+          <url>file://$PROJECT_DIR$/../PaintomicsClient/public_html/app/view/PathwayAcquisitionViews/PA_Step4Views.js</url>
+          <line>140</line>
+          <option name="timeStamp" value="379" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" type="javascript">
+          <url>file://$PROJECT_DIR$/../PaintomicsClient/public_html/app/view/PathwayAcquisitionViews/PA_Step4Views.js</url>
+          <line>141</line>
+          <option name="timeStamp" value="380" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" type="javascript">
+          <url>file://$PROJECT_DIR$/../PaintomicsClient/public_html/app/view/PathwayAcquisitionViews/PA_Step4Views.js</url>
+          <line>470</line>
+          <option name="timeStamp" value="388" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" type="javascript">
+          <url>file://$PROJECT_DIR$/../PaintomicsClient/public_html/app/view/PathwayAcquisitionViews/PA_Step4Views.js</url>
+          <line>142</line>
+          <option name="timeStamp" value="390" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" type="javascript">
+          <url>file://$PROJECT_DIR$/../PaintomicsClient/public_html/app/view/PathwayAcquisitionViews/PA_Step4Views.js</url>
+          <line>3905</line>
+          <option name="timeStamp" value="391" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" type="javascript">
+          <url>file://$PROJECT_DIR$/../PaintomicsClient/public_html/app/view/PathwayAcquisitionViews/PA_Step4Views.js</url>
+          <line>143</line>
+          <option name="timeStamp" value="402" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" type="javascript">
+          <url>file://$PROJECT_DIR$/../PaintomicsClient/public_html/app/view/PathwayAcquisitionViews/PA_Step4Views.js</url>
+          <line>144</line>
+          <option name="timeStamp" value="403" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" type="javascript">
+          <url>file://$PROJECT_DIR$/../PaintomicsClient/public_html/app/view/PathwayAcquisitionViews/PA_Step4Views.js</url>
+          <line>3904</line>
+          <option name="timeStamp" value="405" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" type="javascript">
+          <url>file://$PROJECT_DIR$/../PaintomicsClient/public_html/app/view/PathwayAcquisitionViews/PA_Step4Views.js</url>
+          <line>1625</line>
+          <option name="timeStamp" value="408" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" type="javascript">
+          <url>file://$PROJECT_DIR$/../PaintomicsClient/public_html/app/view/PathwayAcquisitionViews/PA_Step4Views.js</url>
+          <line>1683</line>
+          <option name="timeStamp" value="409" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" type="javascript">
+          <url>file://$PROJECT_DIR$/../PaintomicsClient/public_html/app/controller/JobController.js</url>
+          <line>477</line>
+          <option name="timeStamp" value="487" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" type="javascript">
+          <url>file://$PROJECT_DIR$/../PaintomicsClient/public_html/app/controller/JobController.js</url>
+          <line>476</line>
+          <option name="timeStamp" value="488" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" type="javascript">
+          <url>file://$PROJECT_DIR$/../PaintomicsClient/public_html/app/controller/JobController.js</url>
+          <line>475</line>
+          <option name="timeStamp" value="489" />
+        </line-breakpoint>
+      </breakpoints>
+      <default-breakpoints>
+        <breakpoint type="python-exception">
+          <properties notifyOnTerminate="true" exception="BaseException">
+            <option name="notifyOnTerminate" value="true" />
+          </properties>
+        </breakpoint>
+      </default-breakpoints>
+    </breakpoint-manager>
+  </component>
+  <component name="com.intellij.coverage.CoverageDataManagerImpl">
+    <SUITE FILE_PATH="coverage/PathwayAcquisitionServlet_py$PathwayAcquisitionJob.coverage" NAME="PathwayAcquisitionJob Coverage Results" MODIFIED="1617156985027" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/src" />
+    <SUITE FILE_PATH="coverage/paintomicsserver_py$launch_server.coverage" NAME="launch_server Coverage Results" MODIFIED="1616418573638" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/src" />
+    <SUITE FILE_PATH="coverage/launch_server_py$launch_server.coverage" NAME="launch_server Coverage Results" MODIFIED="1623753690084" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/src" />
+    <SUITE FILE_PATH="coverage/paintomicsserver_py$paintomicsserver.coverage" NAME="paintomicsserver Coverage Results" MODIFIED="1616383808184" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/src" />
+    <SUITE FILE_PATH="coverage/PathwayAcquisitionServlet_py$launch_server.coverage" NAME="launch_server Coverage Results" MODIFIED="1622967783266" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/src" />
+  </component>
+</project>
