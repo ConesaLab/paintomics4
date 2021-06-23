@@ -157,7 +157,7 @@ function MainView() {
 				html:
 				'<div id="header">'+
 				'  <img src="resources/images/paintomics_150x150.png" alt="Paintomics logo">' +
-				'  <h1> PaintOmics 3<span style="font-size: 8px; margin-left:10px;">' + APP_VERSION + '</span></h1>' +
+				'  <h1> PaintOmics 4<span style="font-size: 8px; margin-left:10px;">' + APP_VERSION + '</span></h1>' +
 				'</div>' +
 				'<a class="button btn-sm btn-right loggedOption" data-name="logout" id="logoutButton"><i class="fa fa-sign-out"></i> ' + (noLogin !== true ? 'Log out' : 'Sign in/Log in') + '</a>'
 			}, {
@@ -254,7 +254,7 @@ function MainView() {
 									return;
 								}
 								if(response.messageList.length > 0){
-									showInfoMessage("Welcome to PaintOmics 3!", {
+									showInfoMessage("Welcome to PaintOmics 4!", {
 										message: response.messageList[0].message_content,
 										showButton: true
 									})

@@ -1,14 +1,10 @@
 #!/usr/bin/env Rscript
 
-All_human_kegg_interactions30march2020 = read.csv("/home/tian/Downloads/I_am_sending_the_scripts/mmu_data/kegg_interaction.csv", sep = '\t')
 SignificanceTestbyMetabolite<- function(UserDataset, UserDEfeatures,dir,iter){
-  
-  dim(All_human_kegg_interactions30march2020)
-
   ################################################
   # Step 1: Removing interactions with  Map
-  #dim(All_human_kegg_interactions30march2020) # 122875 x 9
-  hknomap1<-All_human_kegg_interactions30march2020[All_human_kegg_interactions30march2020$entry_type_1 != "map",]
+  #dim(kegg_interactions) # 122875 x 9
+  hknomap1<-kegg_interactions[kegg_interactions$entry_type_1 != "map",]
   humanKeggNoMap<-hknomap1[hknomap1$entry_type_2 != "map",]
   table(humanKeggNoMap$entry_type_1)
   table(humanKeggNoMap$entry_type_2)
@@ -142,16 +138,14 @@ parseArgs <- function(x) strsplit(sub("^--", "", gsub("\"", "", x)), "=")
 #args = parseArgs(args)
 
 argsDF <- as.data.frame(do.call("rbind", parseArgs(args)), stringsAsFactors=F)
-
-
 argsL <- as.list(as.character(argsDF$V2))
 names(argsL) <- argsDF$V1
 args <- as.data.frame(argsL, stringsAsFactors=F)
 
 userDataset = strsplit(args$userDataset, " +")[[1]] 
 userDEfeatures = strsplit(args$userDEfeatures, " +")[[1]] 
-
-result<-SignificanceTestbyMetabolite(UserDataset=userDataset,UserDEfeatures=userDEfeatures, dir="/home/tian/Downloads/I_am_sending_the_scripts/mmu_data/", iter=5)
+kegg_interactions = read.csv(paste0(args$inputDir,"kegg_interaction.csv"), sep = '\t')
+result<-SignificanceTestbyMetabolite(UserDataset=userDataset,UserDEfeatures=userDEfeatures, dir=args$inputDir, iter=5)
 output_file <- paste0(args$data_dir, "/hub_result.csv")
 write.table(result, file=output_file, quote = FALSE, sep="\t", row.names = FALSE, col.names = FALSE)
 

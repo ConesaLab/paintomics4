@@ -1343,7 +1343,7 @@ def processMapManPathwaysData():
     #
     # file.close()
 
-def processReactomePathwaysData():
+def processReactomePathwaysData(ROOT_DIR):
 
     # Declare later used variables
     FAILED_LINES["REACTOME PATHWAYS"] = []
@@ -1352,11 +1352,12 @@ def processReactomePathwaysData():
     EDGES = []
     #
     if not len(ALL_ENTRIES):
-        stderr.write(
-            "The mapping entries dictionary is not filled. Mapping of KEGG & auxiliary files must be processed first.")
+        stderr.write("The mapping entries dictionary is not filled. Mapping of KEGG & auxiliary files must be processed first.")
         exit(1)
 
     REACTOME_DIR = DATA_DIR + "reactome"
+
+    print("REACTOME_DATA_DIR:" + REACTOME_DIR)
     #REACTOME_DIR = DATA_DIR + "reactome"
 
     # If the path already exists rename it
@@ -1415,6 +1416,10 @@ def processReactomePathwaysData():
     processKEGG2CompoundSymbolMappingData(DATA_DIR + "../common/compounds_all.list")
 
     mapReactomeDir = DATA_DIR + "mapping/reactome/"
+
+    command = ROOT_DIR + "/scripts/processReactomeData.R" + " --specie=" + SPECIE + " --root=" + DATA_DIR + "/../common/"
+
+    check_call(command ,shell=True)
 
 
     #In the first step, we need to process the mapping data
@@ -1487,14 +1492,10 @@ def processReactomePathwaysData():
         return percen
 
 
-
-
     stderr.write("\nClassification part \n")
 
     #pathway_id = ""
     indexFinal = 0
-
-
 
     total_feature = defaultdict(set)
 
@@ -2501,6 +2502,7 @@ FAILED_LINES = {}
 
 
 DATA_DIR = ""
+ROOT_DIR = ""
 SPECIE  = ""
 EXTERNAL_RESOURCES = None
 COMMON_RESOURCES = None
