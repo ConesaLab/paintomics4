@@ -645,14 +645,14 @@ class Job(Model):
     def parseBSON(self, bsonData):
        bsonData.pop("_id")
        for (attr, value) in bsonData.items():
-            if(attr == "inputCompoundsData"):
+            if attr == "inputCompoundsData":
                 compoundInstance = None
                 self.inputCompoundsData.clear()
                 for (compoundID, compoundData) in value.items():
                     compoundInstance = Compound(compoundID)
                     compoundInstance.parseBSON(compoundData)
                     self.addInputCompoundData(compoundInstance)
-            elif(attr == "inputGenesData"):
+            elif attr == "inputGenesData":
                 geneInstance = None
                 self.inputGenesData.clear()
                 for (geneID, genData) in value.items():

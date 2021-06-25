@@ -1165,7 +1165,8 @@ class PathwayAcquisitionJob(Job):
                 ROOT_DIRECTORY + "common/bioscripts/hubAnalysis.R",
                 '--data_dir="' + self.outputDir + '"',
                 '--userDataset="' + userDataset + '"',
-                '--userDEfeatures="' + userDEfeatures + '"'
+                '--userDEfeatures="' + userDEfeatures + '"',
+                '--inputDir="' + KEGG_DATA_DIR + 'current/' + self.organism + '/hubData/' + '"'
             ], stderr=STDOUT
         )
 

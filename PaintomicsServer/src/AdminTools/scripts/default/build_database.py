@@ -10,7 +10,7 @@ from subprocess import CalledProcessError, check_call
 #**************************************************************************
 #SPECIE = "bta"
 #ROOT_DIR = '/home/tian/Desktop/git/paintomics3/PaintomicsServer/src/AdminTools/'
-#DATA_DIR = '/home/tian/Downloads/database/KEGG_DATA/current/bta/'
+#DATA_DIR = '/home/tian/Downloads/database/KEGG_DATA/current/mmu/'
 #LOG_FILE = "~/Downloads/database/KEGG_DATA/current/install.log"
 #currentDataDir = "~/Downloads/database/KEGG_DATA/current"
 #ROOT_DIRECTORY = "/home/tian/Desktop/git/paintomics3/PaintomicsServer/src/"

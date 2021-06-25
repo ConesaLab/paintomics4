@@ -12,6 +12,7 @@ from time import strftime, sleep, time
 from subprocess import check_call, CalledProcessError
 
 from conf.serverconf import KEGG_DATA_DIR, CLIENT_TMP_DIR, DOWNLOAD_DELAY_1, DOWNLOAD_DELAY_2, MAX_TRIES_1, MAX_TRIES_2
+from scripts.downloadReactome import *
 
 VERSION=0.12
 
@@ -22,7 +23,7 @@ VERSION=0.12
 #------------------------------------------------------------------------------------------
 #------------------------------------------------------------------------------------------
 
-def download_command(inputfile=None, specie=None, kegg=0, mapping=0, common=0, retry=0):
+def download_command(inputfile=None, specie=None, kegg=0, mapping=0, common=0, retry=0, reactome = 0):
     """
     Download the information for given species
     Usage: AdminTools.py download <options>
@@ -45,7 +46,7 @@ def download_command(inputfile=None, specie=None, kegg=0, mapping=0, common=0, r
         common    -- (optional) 1 if Pathways info (classification, PNG images...) should be downloaded, 0 to keep from previous version. Default=0
         retry     -- (optional) 1 to retry the installation of ERRONEOUS SPECIES from previous version, 0 to ignore them. Default=0
     """
-    if inputfile == None and specie == None:
+    if inputfile is None and specie is None:
         print("Organisms not specified, please type ./DBManager.py download -h for help")
         exit(-1)
 
@@ -91,6 +92,7 @@ def download_command(inputfile=None, specie=None, kegg=0, mapping=0, common=0, r
         common = True
 
 
+
     #********************************************************************************
     #STEP 2. IF WE CHOSE TO DOWNLOAD THE GENERAL DATA (PATHWAYS CLASSIFICATION, ETC.) -> GO TO 2.A
     #        OTHERWISE --> GO TO 2.B
@@ -98,22 +100,64 @@ def download_command(inputfile=None, specie=None, kegg=0, mapping=0, common=0, r
     currentStep+=1
 
     #STEP 2.A Download common data
-    if common == True:
+    if common:
         datadir = os.path.join(download_dir, "common/")
         try:
             #STEP 2.A.0 INITIALIZE THE NEW DIRECTORY
             if os.path.isdir(datadir):
                 shutil.rmtree(datadir)
             os.mkdir(datadir)
-
             # Add the flag file "DOWNLOADING"
             version = open(datadir + "DOWNLOADING",'w')
             version.write("# DOWNLOAD STARTS:" + strftime("%Y%m%d %H%M"))
             version.close()
-
             log('')
             log("New data will be stored at " + datadir)
             log("STEP " + str(currentStep) + ". DOWNLOAD THE COMMON KEGG INFORMATION")
+
+            if reactome:
+                reactomeURL = "https://reactome.org/download/current/"
+                downloadFile( URL=reactomeURL,
+                              fileName="ReactomePathwaysRelation.txt",
+                              outputName=datadir + "ReactomePathwaysRelation.list",
+                              delay=DOWNLOAD_DELAY_1,
+                              maxTries=MAX_TRIES_1,
+                              checkIfExists=True )
+
+                downloadFile( URL=reactomeURL,
+                              fileName="UniProt2Reactome_PE_All_Levels.txt",
+                              outputName=datadir + "UniProt2Reactome_PE_All_Levels.txt",
+                              delay=DOWNLOAD_DELAY_1,
+                              maxTries=MAX_TRIES_1,
+                              checkIfExists=True )
+
+                downloadFile( URL=reactomeURL,
+                              fileName="ChEBI2Reactome_PE_All_Levels.txt",
+                              outputName=datadir + "ChEBI2Reactome_PE_All_Levels.txt",
+                              delay=DOWNLOAD_DELAY_1,
+                              maxTries=MAX_TRIES_1,
+                              checkIfExists=True )
+
+                downloadFile( URL=reactomeURL,
+                              fileName="Ensembl2Reactome_PE_All_Levels.txt",
+                              outputName=datadir + "Ensembl2Reactome_PE_All_Levels.txt",
+                              delay=DOWNLOAD_DELAY_1,
+                              maxTries=MAX_TRIES_1,
+                              checkIfExists=True )
+
+                downloadFile( URL=reactomeURL,
+                              fileName="NCBI2Reactome_PE_All_Levels.txt",
+                              outputName=datadir + "NCBI2Reactome_PE_All_Levels.txt",
+                              delay=DOWNLOAD_DELAY_1,
+                              maxTries=MAX_TRIES_1,
+                              checkIfExists=True )
+
+                downloadFile( URL="rest.kegg.jp/conv/compound/",
+                              fileName="chebi",
+                              outputName=datadir + "kegg2chebi",
+                              delay=DOWNLOAD_DELAY_1,
+                              maxTries=MAX_TRIES_1,
+                              checkIfExists=True )
 
             #STEP 2.A.1 DOWNLOAD THE DATA FILES
             downloadKEGGFile("              * LIST OF ORGANISMS", downloadLog, "http://rest.kegg.jp/list/organism", datadir, "organisms_all.list",  DOWNLOAD_DELAY_1, MAX_TRIES_1)
@@ -194,6 +238,12 @@ def download_command(inputfile=None, specie=None, kegg=0, mapping=0, common=0, r
             kegg_errors = "";
             mapping_errors = "";
 
+            if reactome:
+                currentStep += 1
+                log( "STEP " + str( currentStep ) + " Download Reactome Files..." )
+                downloadReactome( specie )
+
+
             # STEP 2.B.1 IF USER SPECIFIED THAT KEGG DATA SHOULD BE DOWNLOADED, DOWNLOAD THE KEGG DATA, OTHERWISE COPY PREVIOUS DATA (IF EXISTS)
             # 2 = updateKegg, 3 = updateKegg && updateMapping
             if(SPECIES_DOWNLOAD[specie] > 1 or (not os.path.exists(KEGG_DATA_DIR + "current/" + specie))):
@@ -213,7 +263,9 @@ def download_command(inputfile=None, specie=None, kegg=0, mapping=0, common=0, r
 
             # STEP 2.B.2 IF SELECTED, GET THE MAPPING DATA, OTHERWISE COPY PREVIOUS DATA
             # 1=updateMapping, 3 = updateKegg && updateMapping
+
             if(SPECIES_DOWNLOAD[specie] == 1 or SPECIES_DOWNLOAD[specie] == 3 or (not os.path.exists(KEGG_DATA_DIR + "species/" + specie + "/mapping/"))):
+                log("DOWNLOADING MAPPING DATA...")
                 os.mkdir(datadir + "mapping")
                 mapping_errors = getSpecieMappingData(specie, downloadLog, datadir + "mapping/", str(step)+ "/" + total, ROOT_DIRECTORY + "AdminTools/scripts/")
             else:
@@ -280,7 +332,7 @@ def download_command(inputfile=None, specie=None, kegg=0, mapping=0, common=0, r
     else:
         exit(0)
 
-def install_command(inputfile=None, specie=None, common=0):
+def install_command(inputfile=None, specie=None, common=0, hub=0):
     """
     Install the information for given species
     Usage: AdminTools.py install <options>
@@ -304,6 +356,12 @@ def install_command(inputfile=None, specie=None, common=0):
     currentDataDir = os.path.join(KEGG_DATA_DIR, "current/")
     downloadDir = os.path.join(KEGG_DATA_DIR, "download/")
     oldDataDir = os.path.join(KEGG_DATA_DIR, "old/")
+
+    # Add hub analysis result dir
+    hubDir = os.path.join(downloadDir, specie.lower() + "/hubData/")
+
+    if not os.path.exists(hubDir):
+        os.makedirs(hubDir)
 
     installLog= currentDataDir + "install.log"
     summary = open(currentDataDir + 'summary.log','a')
@@ -336,7 +394,6 @@ def install_command(inputfile=None, specie=None, common=0):
     # log("       - " + str(len(ERRONEOUS_PREVIOUS)) + " organisms failed during the installation on previous executions." )
     log("")
 
-    currentStep+=1
     if((common==None and confirm(prompt='Do you want to install the common KEGG information (compound names, pathway names, ...)?', resp=False)) or (common== 1)):
         common = True
 
@@ -345,9 +402,23 @@ def install_command(inputfile=None, specie=None, common=0):
     #**************************************************************************
     try:
         #********************************************************************************
+        #STEP 2.A.1 IF WE CHOOSED TO install THE hub analysis data
+        #********************************************************************************
+        if hub:
+            check_call(
+                [
+                    ROOT_DIRECTORY + "AdminTools/scripts/hubAnalysisInstall.R",
+                    '--organism="' + specie + '"',
+                    '--scriptDir="' + ROOT_DIRECTORY + "AdminTools/scripts/" + '"',
+                    '--outputDir="' + hubDir + '"'
+                ]
+            )
+
+
+        #********************************************************************************
         #STEP 2.A.1 IF WE CHOOSED TO DONWLOAD THE GENERAL DATA (PATHWAYS CLASSIFICATION, ETC.)
         #********************************************************************************
-        if common == True:
+        if common:
             log("STEP " + str(currentStep) + ". INSTALLING COMMON KEGG INFORMATION")
             replaceNewVersionData(downloadDir, currentDataDir, "common", oldDataDir)
             installCommonData(currentDataDir + "common/", ROOT_DIRECTORY + "AdminTools/scripts/")
