@@ -2446,7 +2446,15 @@ def queryBiomart(URL, fileName, outputName, delay, maxTries):
     while nTry <= maxTries:
         wait(delay)
         try:
-            check_call(["curl", "--connect-timeout", "300", "--max-time", "900", "--data-urlencode", "query@" + fileName, URL, "-o", outputName])
+            import xml.etree.ElementTree as ET
+            tree = ET.parse( fileName )
+            tree = tree.getroot()
+            t = ET.tostring( tree )
+            t = t.lower()
+            tree = ET.fromstring( t )
+
+
+            check_call(["curl", "-G", "--connect-timeout", "300", "--max-time", "900", "--data-urlencode", 'query@' + fileName, URL, "-o", outputName])
             return True
         except Exception as e:
             nTry+=1

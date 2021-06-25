@@ -248,7 +248,7 @@ def download_command(inputfile=None, specie=None, kegg=0, mapping=0, common=0, r
             # 2 = updateKegg, 3 = updateKegg && updateMapping
             if(SPECIES_DOWNLOAD[specie] > 1 or (not os.path.exists(KEGG_DATA_DIR + "current/" + specie))):
                 os.mkdir(datadir + "kgml")
-                kegg_errors = getSpecieKeggData(specie, downloadLog, datadir, str(step)+ "/" + total)
+                #kegg_errors = getSpecieKeggData(specie, downloadLog, datadir, str(step)+ "/" + total)
             else:
                 log("COPYING PREVIOUS KEGG DATA FOR " + specie + "...")
                 shutil.rmtree(datadir)
@@ -263,7 +263,9 @@ def download_command(inputfile=None, specie=None, kegg=0, mapping=0, common=0, r
 
             # STEP 2.B.2 IF SELECTED, GET THE MAPPING DATA, OTHERWISE COPY PREVIOUS DATA
             # 1=updateMapping, 3 = updateKegg && updateMapping
+
             if(SPECIES_DOWNLOAD[specie] == 1 or SPECIES_DOWNLOAD[specie] == 3 or (not os.path.exists(KEGG_DATA_DIR + "species/" + specie + "/mapping/"))):
+                log("DOWNLOADING MAPPING DATA...")
                 os.mkdir(datadir + "mapping")
                 mapping_errors = getSpecieMappingData(specie, downloadLog, datadir + "mapping/", str(step)+ "/" + total, ROOT_DIRECTORY + "AdminTools/scripts/")
             else:
@@ -392,7 +394,6 @@ def install_command(inputfile=None, specie=None, common=0, hub=0):
     # log("       - " + str(len(ERRONEOUS_PREVIOUS)) + " organisms failed during the installation on previous executions." )
     log("")
 
-    currentStep+=1
     if((common==None and confirm(prompt='Do you want to install the common KEGG information (compound names, pathway names, ...)?', resp=False)) or (common== 1)):
         common = True
 

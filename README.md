@@ -24,10 +24,10 @@ PaintOmics 4 consists of three simple steps:
 Currently PaintOmics 4 supports integrated visualization of multipel species of different biological kingdoms and offers user the possibility to request any other organism present in the KEGG database.
 
 
-**PaintOmics 4** application is distributed under **GNU General Public License, Version 4**.
+**PaintOmics 4** application is distributed under **GNU General Public License, Version 3**.
 
 <div class="imageContainer" style="text-align:center; font-size:10px; color:#898989" >
-    <img src="docs/img/gplv4-127x51.png" title="GNU GENERAL PUBLIC LICENSE Version 4 logo."/>
+    <img src="docs/img/gplv3-127x51.png" title="GNU GENERAL PUBLIC LICENSE Version 3 logo."/>
 </div>         
 
 **Paintomics** v4.0 is part of the [STATegra Project](http://stategra.eu) and was developed by the [Genomics of Gene Expression Lab](http://bioinfo.cipf.es/aconesawp/) at [Príncipe Felipe Research Centre](http://www.cipf.es/).

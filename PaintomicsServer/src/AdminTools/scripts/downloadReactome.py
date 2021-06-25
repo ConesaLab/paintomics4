@@ -41,12 +41,15 @@ def downloadReactome(specie):
     downloadDir = KEGG_DATA_DIR + "download/"
     DATA_DIR =  downloadDir + SPECIES.lower() + '/'
     REACTOME_DIR = os.path.join(DATA_DIR + "reactome/")
-    ReactomePathwaysRelationFile = downloadDir + "/common/ReactomePathwaysRelation.list"
     ReactomePathwayHigh = set()
     ReactomePathwayLow = set()
     ReactomePathwayHighList = []
     ReactomePathwayLowList = []
     ReactomePathwayList = []
+    if os.path.isdir(DATA_DIR + "/../common/ReactomePathwaysRelation.list"):
+        ReactomePathwaysRelationFile = DATA_DIR + "/../common/ReactomePathwaysRelation.list"
+    else:
+        ReactomePathwaysRelationFile = DATA_DIR + "/../../current/common/ReactomePathwaysRelation.list"
 
 
 
@@ -110,7 +113,7 @@ def downloadReactome(specie):
     i = 0
     #for pathway_id in ReactomePathwayLast:
     import random
-    test = random.sample(ReactomePathwayLast, 10)
+    test = random.sample(ReactomePathwayLast, 5)
     for pathway_id in test:
 
         i += 1
@@ -145,7 +148,7 @@ def downloadReactome(specie):
 
 
 
-    ReactomePathwaysRelationFile = DATA_DIR + "../common/ReactomePathwaysRelation.list"
+
     with open(ReactomePathwaysRelationFile, 'r') as ReactomePathwaysRelation:
         for row in ReactomePathwaysRelation:
             if SPECIES in row:
