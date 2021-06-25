@@ -248,7 +248,7 @@ def download_command(inputfile=None, specie=None, kegg=0, mapping=0, common=0, r
             # 2 = updateKegg, 3 = updateKegg && updateMapping
             if(SPECIES_DOWNLOAD[specie] > 1 or (not os.path.exists(KEGG_DATA_DIR + "current/" + specie))):
                 os.mkdir(datadir + "kgml")
-                #kegg_errors = getSpecieKeggData(specie, downloadLog, datadir, str(step)+ "/" + total)
+                kegg_errors = getSpecieKeggData(specie, downloadLog, datadir, str(step)+ "/" + total)
             else:
                 log("COPYING PREVIOUS KEGG DATA FOR " + specie + "...")
                 shutil.rmtree(datadir)
