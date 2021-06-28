@@ -13,9 +13,9 @@ SPECIE      = argv[1]
 ROOT_DIR    = argv[2].rstrip("/") + "/"      #Should be src/AdminTools
 DESTINATION = argv[3].rstrip("/") + "/"
 
-#SPECIE = 'mmu'
-#ROOT_DIR = '/home/tian/PaintOmics4/PaintomicsServer/src/AdminTools/'
-#DESTINATION ='/home/tian/Downloads/database/KEGG_DATA/current/mmu/mapping/'
+# SPECIE = 'mmu'
+# ROOT_DIR = '/home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/'
+# DESTINATION ='/home/tian/Downloads/database/KEGG_DATA/download/mmu/mapping/'
 
 
 COMMON_BUILD_DB_TOOLS = imp.load_source('common_build_database', ROOT_DIR + "scripts/common_build_database.py")
@@ -42,10 +42,10 @@ try:
     resource = COMMON_BUILD_DB_TOOLS.EXTERNAL_RESOURCES.get("refseq")
     index =1
     for aux in resource:
-        if (index == 1):
-            index = index+1
-        else:
+        if index != 1:
             COMMON_BUILD_DB_TOOLS.downloadFile(aux.get("url"), aux.get("file"), DESTINATION + aux.get("output"), SERVER_SETTINGS.DOWNLOAD_DELAY_1, SERVER_SETTINGS.MAX_TRIES_1)
+        else:
+            index = index+1
 
     #**************************************************************************
     #STEP 2.3 GET UNIPROT TRANSCRIPTS, PEPTIDES -> ENTREZ GENES

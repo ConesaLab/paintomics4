@@ -1,3 +1,15 @@
+import imp
+import traceback
+
+from sys import argv, stderr
+from subprocess import CalledProcessError, check_call
+
+#DATA_DIR = '/home/tian/Downloads/database/KEGG_DATA/current/mmu/'
+#SPECIE = 'mmu'
+#ROOT_DIR = '/home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/'
+#LOG_FILE = '/home/tian/Downloads/database/KEGG_DATA/current/install.log'
+
+
 SPECIE      = argv[1]
 ROOT_DIR    = argv[2].rstrip("/") + "/"      #Should be src/AdminTools
 DATA_DIR    = argv[3].rstrip("/") + "/"
@@ -25,18 +37,22 @@ COMMON_BUILD_DB_TOOLS.SERVER_SETTINGS = imp.load_source('serverconf.py',  ROOT_D
 try:
     COMMON_BUILD_DB_TOOLS.processEnsemblData()
     COMMON_BUILD_DB_TOOLS.processRefSeqData()
+    COMMON_BUILD_DB_TOOLS.processRefSeqGeneSymbolData()
+
     COMMON_BUILD_DB_TOOLS.processUniProtData()
     # COMMON_BUILD_DB_TOOLS.processVegaData()
-    COMMON_BUILD_DB_TOOLS.processRefSeqGeneSymbolData()
 
     #**************************************************************************
     # STEP 1. EXTRACT THE MAPPING DATABASE
     #**************************************************************************
     COMMON_BUILD_DB_TOOLS.processKEGGMappingData()
+    COMMON_BUILD_DB_TOOLS.processKEGGPathwaysData()
+
+
+
     #**************************************************************************
     # STEP 2. PROCESS THE KEGG DATABASE
     #**************************************************************************
-    COMMON_BUILD_DB_TOOLS.processKEGGPathwaysData()
     COMMON_BUILD_DB_TOOLS.processReactomePathwaysData()
     COMMON_BUILD_DB_TOOLS.mergeNetworkFiles()
 

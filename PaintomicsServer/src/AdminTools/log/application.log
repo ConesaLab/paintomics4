@@ -31451,3 +31451,723 @@
 2021-06-25 15:52:50,954 - ERROR - DBManager.py : errorlog -              Error while calling /home/tian/PaintOmics4/PaintomicsServer/src/AdminTools/scripts/mmu_resources/download_others.py: Exit status 1. Output is available at /home/tian/Downloads/database/KEGG_DATA/download/download.log
 2021-06-25 15:52:50,955 - INFO - DBManager.py : log -      
 2021-06-25 15:52:50,956 - INFO - DBManager.py : log -      STEP 4. CLOSING LOG FILES, GENERATING VERSION FILE
+2021-06-28 12:30:40,195 - INFO - DBManager.py : log -      ######################################################################
+2021-06-28 12:30:40,196 - INFO - DBManager.py : log -      ### PAINTOMICS 3.0 - DATABASE KEGG DOWNLOADER 
+2021-06-28 12:30:40,196 - INFO - DBManager.py : log -      ### v.0.12
+2021-06-28 12:30:40,196 - INFO - DBManager.py : log -      ######################################################################
+2021-06-28 12:30:40,196 - INFO - DBManager.py : log -      
+2021-06-28 12:30:40,197 - INFO - DBManager.py : log -      Download log is at: /home/tian/Downloads/database/KEGG_DATA/download/download.log
+2021-06-28 12:30:40,197 - INFO - DBManager.py : log -      
+2021-06-28 12:30:40,197 - INFO - DBManager.py : log -      STEP 0. READ CONFIGURATION AND PARSE INPUT FILES...
+2021-06-28 12:30:40,197 - INFO - DBManager.py : log -             - 1 new organisms will be downloaded.
+2021-06-28 12:30:40,197 - INFO - DBManager.py : log -      
+2021-06-28 12:30:40,198 - INFO - DBManager.py : log -      
+2021-06-28 12:30:40,198 - INFO - DBManager.py : log -      STEP 2. DOWNLOADING THE INFORMATION FOR THE SELECTED ORGANISMS
+2021-06-28 12:30:40,198 - INFO - DBManager.py : log -             - 1 new organisms will be downloaded.
+2021-06-28 12:30:40,199 - INFO - DBManager.py : log -              
+2021-06-28 12:30:40,199 - INFO - DBManager.py : log -              New data will be stored at /home/tian/Downloads/database/KEGG_DATA/download/mmu/
+2021-06-28 12:30:40,199 - INFO - DBManager.py : log -                      DOWLOADING  mmu...
+2021-06-28 12:30:40,199 - INFO - DBManager.py : log -                  STEP 3 Download Reactome Files...
+2021-06-28 12:30:51,095 - DEBUG - PngImagePlugin.py : call - STREAM b'IHDR' 16 13
+2021-06-28 12:30:51,095 - DEBUG - PngImagePlugin.py : call - STREAM b'IDAT' 41 16916
+2021-06-28 12:31:02,829 - DEBUG - PngImagePlugin.py : call - STREAM b'IHDR' 16 13
+2021-06-28 12:31:02,829 - DEBUG - PngImagePlugin.py : call - STREAM b'IDAT' 41 32768
+2021-06-28 12:31:23,985 - DEBUG - PngImagePlugin.py : call - STREAM b'IHDR' 16 13
+2021-06-28 12:31:23,985 - DEBUG - PngImagePlugin.py : call - STREAM b'IDAT' 41 32768
+2021-06-28 12:31:35,639 - DEBUG - PngImagePlugin.py : call - STREAM b'IHDR' 16 13
+2021-06-28 12:31:35,640 - DEBUG - PngImagePlugin.py : call - STREAM b'IDAT' 41 32768
+2021-06-28 12:31:47,957 - DEBUG - PngImagePlugin.py : call - STREAM b'IHDR' 16 13
+2021-06-28 12:31:47,957 - DEBUG - PngImagePlugin.py : call - STREAM b'IDAT' 41 32768
+2021-06-28 12:32:02,914 - DEBUG - PngImagePlugin.py : call - STREAM b'IHDR' 16 13
+2021-06-28 12:32:02,914 - DEBUG - PngImagePlugin.py : call - STREAM b'IDAT' 41 32768
+2021-06-28 12:32:02,950 - INFO - DBManager.py : log -                  DOWNLOADING MAPPING DATA...
+2021-06-28 12:32:02,950 - INFO - DBManager.py : log -                  FETCHING MAPPING DATA FOR mmu (1/1)...
+2021-06-28 12:32:02,951 - INFO - DBManager.py : log -                   * RETRIEVING EXTERNAL MAPPING DATA
+2021-06-28 12:32:12,870 - INFO - DBManager.py : log -              DOWNLOAD  0 mmu...ERROR
+
+2021-06-28 12:32:12,871 - ERROR - DBManager.py : errorlog -              Error while calling /home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/scripts/mmu_resources/download_others.py: Exit status 1. Output is available at /home/tian/Downloads/database/KEGG_DATA/download/download.log
+2021-06-28 12:32:12,872 - INFO - DBManager.py : log -      
+2021-06-28 12:32:12,873 - INFO - DBManager.py : log -      STEP 4. CLOSING LOG FILES, GENERATING VERSION FILE
+2021-06-28 12:40:01,245 - INFO - DBManager.py : log -      ######################################################################
+2021-06-28 12:40:01,245 - INFO - DBManager.py : log -      ### PAINTOMICS 3.0 - DATABASE KEGG DOWNLOADER 
+2021-06-28 12:40:01,245 - INFO - DBManager.py : log -      ### v.0.12
+2021-06-28 12:40:01,246 - INFO - DBManager.py : log -      ######################################################################
+2021-06-28 12:40:01,246 - INFO - DBManager.py : log -      
+2021-06-28 12:40:01,246 - INFO - DBManager.py : log -      Download log is at: /home/tian/Downloads/database/KEGG_DATA/download/download.log
+2021-06-28 12:40:01,246 - INFO - DBManager.py : log -      
+2021-06-28 12:40:01,246 - INFO - DBManager.py : log -      STEP 0. READ CONFIGURATION AND PARSE INPUT FILES...
+2021-06-28 12:40:01,247 - INFO - DBManager.py : log -             - 1 new organisms will be downloaded.
+2021-06-28 12:40:01,247 - INFO - DBManager.py : log -      
+2021-06-28 12:40:01,247 - INFO - DBManager.py : log -      
+2021-06-28 12:40:01,247 - INFO - DBManager.py : log -      STEP 2. DOWNLOADING THE INFORMATION FOR THE SELECTED ORGANISMS
+2021-06-28 12:40:01,248 - INFO - DBManager.py : log -             - 1 new organisms will be downloaded.
+2021-06-28 12:40:01,248 - INFO - DBManager.py : log -              
+2021-06-28 12:40:01,248 - INFO - DBManager.py : log -              New data will be stored at /home/tian/Downloads/database/KEGG_DATA/download/mmu/
+2021-06-28 12:40:01,248 - INFO - DBManager.py : log -                      DOWLOADING  mmu...
+2021-06-28 12:40:01,249 - INFO - DBManager.py : log -                  STEP 3 Download Reactome Files...
+2021-06-28 12:40:15,232 - DEBUG - PngImagePlugin.py : call - STREAM b'IHDR' 16 13
+2021-06-28 12:40:15,233 - DEBUG - PngImagePlugin.py : call - STREAM b'IDAT' 41 32768
+2021-06-28 12:40:29,632 - DEBUG - PngImagePlugin.py : call - STREAM b'IHDR' 16 13
+2021-06-28 12:40:29,633 - DEBUG - PngImagePlugin.py : call - STREAM b'IDAT' 41 32768
+2021-06-28 12:40:45,954 - DEBUG - PngImagePlugin.py : call - STREAM b'IHDR' 16 13
+2021-06-28 12:40:45,954 - DEBUG - PngImagePlugin.py : call - STREAM b'IDAT' 41 32768
+2021-06-28 12:40:57,922 - DEBUG - PngImagePlugin.py : call - STREAM b'IHDR' 16 13
+2021-06-28 12:40:57,923 - DEBUG - PngImagePlugin.py : call - STREAM b'IDAT' 41 32768
+2021-06-28 12:41:09,544 - DEBUG - PngImagePlugin.py : call - STREAM b'IHDR' 16 13
+2021-06-28 12:41:09,544 - DEBUG - PngImagePlugin.py : call - STREAM b'IDAT' 41 32768
+2021-06-28 12:41:09,579 - INFO - DBManager.py : log -                  FETCHING KEGG DATA FOR mmu (1/1)...
+2021-06-28 12:41:09,580 - INFO - DBManager.py : log -                    * GENE to PATHWAY TABLE
+2021-06-28 12:41:13,199 - INFO - DBManager.py : log -                    * PATHWAYS LIST
+2021-06-28 12:41:16,443 - INFO - DBManager.py : log -                          DETECTED 340 PATHWAYS FOR mmu [28 min aprox.]
+2021-06-28 12:41:16,443 - INFO - DBManager.py : log -                           - mmu00010 [1/340]
+2021-06-28 12:41:18,915 - INFO - DBManager.py : log -                           - mmu00020 [2/340]
+2021-06-28 12:41:21,386 - INFO - DBManager.py : log -                           - mmu00030 [3/340]
+2021-06-28 12:41:23,857 - INFO - DBManager.py : log -                           - mmu00040 [4/340]
+2021-06-28 12:41:26,390 - INFO - DBManager.py : log -                           - mmu00051 [5/340]
+2021-06-28 12:41:28,847 - INFO - DBManager.py : log -                           - mmu00052 [6/340]
+2021-06-28 12:41:31,313 - INFO - DBManager.py : log -                           - mmu00053 [7/340]
+2021-06-28 12:41:33,742 - INFO - DBManager.py : log -                           - mmu00061 [8/340]
+2021-06-28 12:41:36,302 - INFO - DBManager.py : log -                           - mmu00062 [9/340]
+2021-06-28 12:41:38,756 - INFO - DBManager.py : log -                           - mmu00071 [10/340]
+2021-06-28 12:41:41,273 - INFO - DBManager.py : log -                           - mmu00072 [11/340]
+2021-06-28 12:41:43,754 - INFO - DBManager.py : log -                           - mmu00100 [12/340]
+2021-06-28 12:41:46,256 - INFO - DBManager.py : log -                           - mmu00120 [13/340]
+2021-06-28 12:41:48,717 - INFO - DBManager.py : log -                           - mmu00130 [14/340]
+2021-06-28 12:41:51,181 - INFO - DBManager.py : log -                           - mmu00140 [15/340]
+2021-06-28 12:41:53,709 - INFO - DBManager.py : log -                           - mmu00190 [16/340]
+2021-06-28 12:41:56,192 - INFO - DBManager.py : log -                           - mmu00220 [17/340]
+2021-06-28 12:41:58,625 - INFO - DBManager.py : log -                           - mmu00230 [18/340]
+2021-06-28 12:42:01,191 - INFO - DBManager.py : log -                           - mmu00232 [19/340]
+2021-06-28 12:42:03,644 - INFO - DBManager.py : log -                           - mmu00240 [20/340]
+2021-06-28 12:42:06,253 - INFO - DBManager.py : log -                           - mmu00250 [21/340]
+2021-06-28 12:42:09,764 - INFO - DBManager.py : log -                           - mmu00260 [22/340]
+2021-06-28 12:42:12,197 - INFO - DBManager.py : log -                           - mmu00270 [23/340]
+2021-06-28 12:42:14,684 - INFO - DBManager.py : log -                           - mmu00280 [24/340]
+2021-06-28 12:42:17,249 - INFO - DBManager.py : log -                           - mmu00290 [25/340]
+2021-06-28 12:42:19,715 - INFO - DBManager.py : log -                           - mmu00310 [26/340]
+2021-06-28 12:42:22,202 - INFO - DBManager.py : log -                           - mmu00330 [27/340]
+2021-06-28 12:42:24,738 - INFO - DBManager.py : log -                           - mmu00340 [28/340]
+2021-06-28 12:42:27,221 - INFO - DBManager.py : log -                           - mmu00350 [29/340]
+2021-06-28 12:42:29,739 - INFO - DBManager.py : log -                           - mmu00360 [30/340]
+2021-06-28 12:42:32,163 - INFO - DBManager.py : log -                           - mmu00380 [31/340]
+2021-06-28 12:42:34,655 - INFO - DBManager.py : log -                           - mmu00400 [32/340]
+2021-06-28 12:42:37,287 - INFO - DBManager.py : log -                           - mmu00410 [33/340]
+2021-06-28 12:42:39,721 - INFO - DBManager.py : log -                           - mmu00430 [34/340]
+2021-06-28 12:42:42,145 - INFO - DBManager.py : log -                           - mmu00440 [35/340]
+2021-06-28 12:42:44,607 - INFO - DBManager.py : log -                           - mmu00450 [36/340]
+2021-06-28 12:42:47,061 - INFO - DBManager.py : log -                           - mmu00471 [37/340]
+2021-06-28 12:42:49,390 - INFO - DBManager.py : log -                           - mmu00472 [38/340]
+2021-06-28 12:42:51,855 - INFO - DBManager.py : log -                           - mmu00480 [39/340]
+2021-06-28 12:42:54,359 - INFO - DBManager.py : log -                           - mmu00500 [40/340]
+2021-06-28 12:42:56,919 - INFO - DBManager.py : log -                           - mmu00510 [41/340]
+2021-06-28 12:42:59,334 - INFO - DBManager.py : log -                           - mmu00511 [42/340]
+2021-06-28 12:43:01,688 - INFO - DBManager.py : log -                           - mmu00512 [43/340]
+2021-06-28 12:43:04,163 - INFO - DBManager.py : log -                           - mmu00513 [44/340]
+2021-06-28 12:43:06,629 - INFO - DBManager.py : log -                           - mmu00514 [45/340]
+2021-06-28 12:43:09,083 - INFO - DBManager.py : log -                           - mmu00515 [46/340]
+2021-06-28 12:43:11,534 - INFO - DBManager.py : log -                           - mmu00520 [47/340]
+2021-06-28 12:43:14,048 - INFO - DBManager.py : log -                           - mmu00524 [48/340]
+2021-06-28 12:43:16,476 - INFO - DBManager.py : log -                           - mmu00531 [49/340]
+2021-06-28 12:43:18,916 - INFO - DBManager.py : log -                           - mmu00532 [50/340]
+2021-06-28 12:43:21,274 - INFO - DBManager.py : log -                           - mmu00533 [51/340]
+2021-06-28 12:43:23,697 - INFO - DBManager.py : log -                           - mmu00534 [52/340]
+2021-06-28 12:43:26,180 - INFO - DBManager.py : log -                           - mmu00561 [53/340]
+2021-06-28 12:43:28,640 - INFO - DBManager.py : log -                           - mmu00562 [54/340]
+2021-06-28 12:43:31,129 - INFO - DBManager.py : log -                           - mmu00563 [55/340]
+2021-06-28 12:43:33,556 - INFO - DBManager.py : log -                           - mmu00564 [56/340]
+2021-06-28 12:43:36,063 - INFO - DBManager.py : log -                           - mmu00565 [57/340]
+2021-06-28 12:43:38,571 - INFO - DBManager.py : log -                           - mmu00590 [58/340]
+2021-06-28 12:43:41,086 - INFO - DBManager.py : log -                           - mmu00591 [59/340]
+2021-06-28 12:43:43,435 - INFO - DBManager.py : log -                           - mmu00592 [60/340]
+2021-06-28 12:43:45,841 - INFO - DBManager.py : log -                           - mmu00600 [61/340]
+2021-06-28 12:43:48,330 - INFO - DBManager.py : log -                           - mmu00601 [62/340]
+2021-06-28 12:43:50,799 - INFO - DBManager.py : log -                           - mmu00603 [63/340]
+2021-06-28 12:43:53,217 - INFO - DBManager.py : log -                           - mmu00604 [64/340]
+2021-06-28 12:43:55,674 - INFO - DBManager.py : log -                           - mmu00620 [65/340]
+2021-06-28 12:43:58,082 - INFO - DBManager.py : log -                           - mmu00630 [66/340]
+2021-06-28 12:44:00,535 - INFO - DBManager.py : log -                           - mmu00640 [67/340]
+2021-06-28 12:44:02,995 - INFO - DBManager.py : log -                           - mmu00650 [68/340]
+2021-06-28 12:44:05,471 - INFO - DBManager.py : log -                           - mmu00670 [69/340]
+2021-06-28 12:44:07,858 - INFO - DBManager.py : log -                           - mmu00730 [70/340]
+2021-06-28 12:44:10,418 - INFO - DBManager.py : log -                           - mmu00740 [71/340]
+2021-06-28 12:44:12,771 - INFO - DBManager.py : log -                           - mmu00750 [72/340]
+2021-06-28 12:44:15,232 - INFO - DBManager.py : log -                           - mmu00760 [73/340]
+2021-06-28 12:44:17,773 - INFO - DBManager.py : log -                           - mmu00770 [74/340]
+2021-06-28 12:44:20,146 - INFO - DBManager.py : log -                           - mmu00780 [75/340]
+2021-06-28 12:44:22,591 - INFO - DBManager.py : log -                           - mmu00785 [76/340]
+2021-06-28 12:44:24,933 - INFO - DBManager.py : log -                           - mmu00790 [77/340]
+2021-06-28 12:44:27,375 - INFO - DBManager.py : log -                           - mmu00830 [78/340]
+2021-06-28 12:44:29,925 - INFO - DBManager.py : log -                           - mmu00860 [79/340]
+2021-06-28 12:44:32,436 - INFO - DBManager.py : log -                           - mmu00900 [80/340]
+2021-06-28 12:44:34,826 - INFO - DBManager.py : log -                           - mmu00910 [81/340]
+2021-06-28 12:44:37,274 - INFO - DBManager.py : log -                           - mmu00920 [82/340]
+2021-06-28 12:44:39,756 - INFO - DBManager.py : log -                           - mmu00970 [83/340]
+2021-06-28 12:44:42,212 - INFO - DBManager.py : log -                           - mmu00980 [84/340]
+2021-06-28 12:44:44,724 - INFO - DBManager.py : log -                           - mmu00982 [85/340]
+2021-06-28 12:44:47,239 - INFO - DBManager.py : log -                           - mmu00983 [86/340]
+2021-06-28 12:44:49,694 - INFO - DBManager.py : log -                           - mmu01040 [87/340]
+2021-06-28 12:44:52,158 - INFO - DBManager.py : log -                           - mmu01100 [88/340]
+2021-06-28 12:44:56,306 - INFO - DBManager.py : log -                           - mmu01200 [89/340]
+2021-06-28 12:44:58,801 - INFO - DBManager.py : log -                           - mmu01210 [90/340]
+2021-06-28 12:45:01,340 - INFO - DBManager.py : log -                           - mmu01212 [91/340]
+2021-06-28 12:45:03,824 - INFO - DBManager.py : log -                           - mmu01230 [92/340]
+2021-06-28 12:45:06,322 - INFO - DBManager.py : log -                           - mmu01240 [93/340]
+2021-06-28 12:45:08,832 - INFO - DBManager.py : log -                           - mmu01521 [94/340]
+2021-06-28 12:45:11,248 - INFO - DBManager.py : log -                           - mmu01522 [95/340]
+2021-06-28 12:45:13,706 - INFO - DBManager.py : log -                           - mmu01523 [96/340]
+2021-06-28 12:45:16,159 - INFO - DBManager.py : log -                           - mmu01524 [97/340]
+2021-06-28 12:45:18,618 - INFO - DBManager.py : log -                           - mmu02010 [98/340]
+2021-06-28 12:45:21,201 - INFO - DBManager.py : log -                           - mmu03008 [99/340]
+2021-06-28 12:45:23,635 - INFO - DBManager.py : log -                           - mmu03010 [100/340]
+2021-06-28 12:45:26,015 - INFO - DBManager.py : log -                           - mmu03013 [101/340]
+2021-06-28 12:45:28,450 - INFO - DBManager.py : log -                           - mmu03015 [102/340]
+2021-06-28 12:45:30,906 - INFO - DBManager.py : log -                           - mmu03018 [103/340]
+2021-06-28 12:45:33,363 - INFO - DBManager.py : log -                           - mmu03020 [104/340]
+2021-06-28 12:45:35,810 - INFO - DBManager.py : log -                           - mmu03022 [105/340]
+2021-06-28 12:45:38,215 - INFO - DBManager.py : log -                           - mmu03030 [106/340]
+2021-06-28 12:45:40,633 - INFO - DBManager.py : log -                           - mmu03040 [107/340]
+2021-06-28 12:45:43,100 - INFO - DBManager.py : log -                           - mmu03050 [108/340]
+2021-06-28 12:45:45,456 - INFO - DBManager.py : log -                           - mmu03060 [109/340]
+2021-06-28 12:45:47,902 - INFO - DBManager.py : log -                           - mmu03320 [110/340]
+2021-06-28 12:45:50,368 - INFO - DBManager.py : log -                           - mmu03410 [111/340]
+2021-06-28 12:45:52,819 - INFO - DBManager.py : log -                           - mmu03420 [112/340]
+2021-06-28 12:45:55,276 - INFO - DBManager.py : log -                           - mmu03430 [113/340]
+2021-06-28 12:45:57,632 - INFO - DBManager.py : log -                           - mmu03440 [114/340]
+2021-06-28 12:46:00,222 - INFO - DBManager.py : log -                           - mmu03450 [115/340]
+2021-06-28 12:46:02,624 - INFO - DBManager.py : log -                           - mmu03460 [116/340]
+2021-06-28 12:46:05,080 - INFO - DBManager.py : log -                           - mmu04010 [117/340]
+2021-06-28 12:46:07,639 - INFO - DBManager.py : log -                           - mmu04012 [118/340]
+2021-06-28 12:46:10,126 - INFO - DBManager.py : log -                           - mmu04014 [119/340]
+2021-06-28 12:46:12,608 - INFO - DBManager.py : log -                           - mmu04015 [120/340]
+2021-06-28 12:46:15,011 - INFO - DBManager.py : log -                           - mmu04020 [121/340]
+2021-06-28 12:46:17,399 - INFO - DBManager.py : log -                           - mmu04022 [122/340]
+2021-06-28 12:46:19,855 - INFO - DBManager.py : log -                           - mmu04024 [123/340]
+2021-06-28 12:46:22,286 - INFO - DBManager.py : log -                           - mmu04060 [124/340]
+2021-06-28 12:46:24,883 - INFO - DBManager.py : log -                           - mmu04061 [125/340]
+2021-06-28 12:46:27,431 - INFO - DBManager.py : log -                           - mmu04062 [126/340]
+2021-06-28 12:46:29,824 - INFO - DBManager.py : log -                           - mmu04064 [127/340]
+2021-06-28 12:46:32,325 - INFO - DBManager.py : log -                           - mmu04066 [128/340]
+2021-06-28 12:46:34,730 - INFO - DBManager.py : log -                           - mmu04068 [129/340]
+2021-06-28 12:46:37,218 - INFO - DBManager.py : log -                           - mmu04070 [130/340]
+2021-06-28 12:46:39,773 - INFO - DBManager.py : log -                           - mmu04071 [131/340]
+2021-06-28 12:46:42,205 - INFO - DBManager.py : log -                           - mmu04072 [132/340]
+2021-06-28 12:46:44,598 - INFO - DBManager.py : log -                           - mmu04080 [133/340]
+2021-06-28 12:46:47,076 - INFO - DBManager.py : log -                           - mmu04110 [134/340]
+2021-06-28 12:46:49,610 - INFO - DBManager.py : log -                           - mmu04114 [135/340]
+2021-06-28 12:46:52,140 - INFO - DBManager.py : log -                           - mmu04115 [136/340]
+2021-06-28 12:46:54,595 - INFO - DBManager.py : log -                           - mmu04120 [137/340]
+2021-06-28 12:46:57,056 - INFO - DBManager.py : log -                           - mmu04122 [138/340]
+2021-06-28 12:46:59,486 - INFO - DBManager.py : log -                           - mmu04130 [139/340]
+2021-06-28 12:47:01,941 - INFO - DBManager.py : log -                           - mmu04136 [140/340]
+2021-06-28 12:47:04,385 - INFO - DBManager.py : log -                           - mmu04137 [141/340]
+2021-06-28 12:47:06,756 - INFO - DBManager.py : log -                           - mmu04140 [142/340]
+2021-06-28 12:47:09,268 - INFO - DBManager.py : log -                           - mmu04141 [143/340]
+2021-06-28 12:47:11,672 - INFO - DBManager.py : log -                           - mmu04142 [144/340]
+2021-06-28 12:47:14,129 - INFO - DBManager.py : log -                           - mmu04144 [145/340]
+2021-06-28 12:47:16,563 - INFO - DBManager.py : log -                           - mmu04145 [146/340]
+2021-06-28 12:47:19,072 - INFO - DBManager.py : log -                           - mmu04146 [147/340]
+2021-06-28 12:47:21,504 - INFO - DBManager.py : log -                           - mmu04150 [148/340]
+2021-06-28 12:47:23,985 - INFO - DBManager.py : log -                           - mmu04151 [149/340]
+2021-06-28 12:47:26,478 - INFO - DBManager.py : log -                           - mmu04152 [150/340]
+2021-06-28 12:47:28,930 - INFO - DBManager.py : log -                           - mmu04210 [151/340]
+2021-06-28 12:47:31,426 - INFO - DBManager.py : log -                           - mmu04211 [152/340]
+2021-06-28 12:47:33,896 - INFO - DBManager.py : log -                           - mmu04213 [153/340]
+2021-06-28 12:47:36,337 - INFO - DBManager.py : log -                           - mmu04215 [154/340]
+2021-06-28 12:47:38,808 - INFO - DBManager.py : log -                           - mmu04216 [155/340]
+2021-06-28 12:47:41,266 - INFO - DBManager.py : log -                           - mmu04217 [156/340]
+2021-06-28 12:47:43,774 - INFO - DBManager.py : log -                           - mmu04218 [157/340]
+2021-06-28 12:47:46,335 - INFO - DBManager.py : log -                           - mmu04260 [158/340]
+2021-06-28 12:47:48,743 - INFO - DBManager.py : log -                           - mmu04261 [159/340]
+2021-06-28 12:47:51,231 - INFO - DBManager.py : log -                           - mmu04270 [160/340]
+2021-06-28 12:47:53,677 - INFO - DBManager.py : log -                           - mmu04310 [161/340]
+2021-06-28 12:47:56,164 - INFO - DBManager.py : log -                           - mmu04330 [162/340]
+2021-06-28 12:47:58,552 - INFO - DBManager.py : log -                           - mmu04340 [163/340]
+2021-06-28 12:48:00,985 - INFO - DBManager.py : log -                           - mmu04350 [164/340]
+2021-06-28 12:48:04,565 - INFO - DBManager.py : log -                           - mmu04360 [165/340]
+2021-06-28 12:48:07,153 - INFO - DBManager.py : log -                           - mmu04370 [166/340]
+2021-06-28 12:48:09,528 - INFO - DBManager.py : log -                           - mmu04371 [167/340]
+2021-06-28 12:48:12,018 - INFO - DBManager.py : log -                           - mmu04380 [168/340]
+2021-06-28 12:48:14,469 - INFO - DBManager.py : log -                           - mmu04390 [169/340]
+2021-06-28 12:48:16,951 - INFO - DBManager.py : log -                           - mmu04392 [170/340]
+2021-06-28 12:48:19,772 - INFO - DBManager.py : log -                           - mmu04510 [171/340]
+2021-06-28 12:48:22,236 - INFO - DBManager.py : log -                           - mmu04512 [172/340]
+2021-06-28 12:48:24,764 - INFO - DBManager.py : log -                           - mmu04514 [173/340]
+2021-06-28 12:48:27,302 - INFO - DBManager.py : log -                           - mmu04520 [174/340]
+2021-06-28 12:48:29,727 - INFO - DBManager.py : log -                           - mmu04530 [175/340]
+2021-06-28 12:48:32,246 - INFO - DBManager.py : log -                           - mmu04540 [176/340]
+2021-06-28 12:48:34,642 - INFO - DBManager.py : log -                           - mmu04550 [177/340]
+2021-06-28 12:48:37,334 - INFO - DBManager.py : log -                           - mmu04610 [178/340]
+2021-06-28 12:48:39,866 - INFO - DBManager.py : log -                           - mmu04611 [179/340]
+2021-06-28 12:48:42,326 - INFO - DBManager.py : log -                           - mmu04612 [180/340]
+2021-06-28 12:48:44,755 - INFO - DBManager.py : log -                           - mmu04613 [181/340]
+2021-06-28 12:48:47,266 - INFO - DBManager.py : log -                           - mmu04614 [182/340]
+2021-06-28 12:48:49,778 - INFO - DBManager.py : log -                           - mmu04620 [183/340]
+2021-06-28 12:48:52,258 - INFO - DBManager.py : log -                           - mmu04621 [184/340]
+2021-06-28 12:48:54,797 - INFO - DBManager.py : log -                           - mmu04622 [185/340]
+2021-06-28 12:48:57,252 - INFO - DBManager.py : log -                           - mmu04623 [186/340]
+2021-06-28 12:48:59,705 - INFO - DBManager.py : log -                           - mmu04625 [187/340]
+2021-06-28 12:49:02,266 - INFO - DBManager.py : log -                           - mmu04630 [188/340]
+2021-06-28 12:49:04,723 - INFO - DBManager.py : log -                           - mmu04640 [189/340]
+2021-06-28 12:49:07,239 - INFO - DBManager.py : log -                           - mmu04650 [190/340]
+2021-06-28 12:49:09,729 - INFO - DBManager.py : log -                           - mmu04657 [191/340]
+2021-06-28 12:49:12,159 - INFO - DBManager.py : log -                           - mmu04658 [192/340]
+2021-06-28 12:49:14,685 - INFO - DBManager.py : log -                           - mmu04659 [193/340]
+2021-06-28 12:49:17,178 - INFO - DBManager.py : log -                           - mmu04660 [194/340]
+2021-06-28 12:49:19,599 - INFO - DBManager.py : log -                           - mmu04662 [195/340]
+2021-06-28 12:49:22,031 - INFO - DBManager.py : log -                           - mmu04664 [196/340]
+2021-06-28 12:49:24,487 - INFO - DBManager.py : log -                           - mmu04666 [197/340]
+2021-06-28 12:49:33,017 - INFO - DBManager.py : log -                           - mmu04668 [198/340]
+2021-06-28 12:49:35,472 - INFO - DBManager.py : log -                           - mmu04670 [199/340]
+2021-06-28 12:49:37,930 - INFO - DBManager.py : log -                           - mmu04672 [200/340]
+2021-06-28 12:49:40,361 - INFO - DBManager.py : log -                           - mmu04710 [201/340]
+2021-06-28 12:49:42,799 - INFO - DBManager.py : log -                           - mmu04713 [202/340]
+2021-06-28 12:49:45,201 - INFO - DBManager.py : log -                           - mmu04714 [203/340]
+2021-06-28 12:49:47,658 - INFO - DBManager.py : log -                           - mmu04720 [204/340]
+2021-06-28 12:49:50,089 - INFO - DBManager.py : log -                           - mmu04721 [205/340]
+2021-06-28 12:49:52,547 - INFO - DBManager.py : log -                           - mmu04722 [206/340]
+2021-06-28 12:49:55,056 - INFO - DBManager.py : log -                           - mmu04723 [207/340]
+2021-06-28 12:49:57,503 - INFO - DBManager.py : log -                           - mmu04724 [208/340]
+2021-06-28 12:49:59,956 - INFO - DBManager.py : log -                           - mmu04725 [209/340]
+2021-06-28 12:50:02,404 - INFO - DBManager.py : log -                           - mmu04726 [210/340]
+2021-06-28 12:50:04,861 - INFO - DBManager.py : log -                           - mmu04727 [211/340]
+2021-06-28 12:50:07,296 - INFO - DBManager.py : log -                           - mmu04728 [212/340]
+2021-06-28 12:50:09,783 - INFO - DBManager.py : log -                           - mmu04730 [213/340]
+2021-06-28 12:50:12,211 - INFO - DBManager.py : log -                           - mmu04740 [214/340]
+2021-06-28 12:50:14,742 - INFO - DBManager.py : log -                           - mmu04742 [215/340]
+2021-06-28 12:50:17,229 - INFO - DBManager.py : log -                           - mmu04744 [216/340]
+2021-06-28 12:50:19,685 - INFO - DBManager.py : log -                           - mmu04750 [217/340]
+2021-06-28 12:50:22,170 - INFO - DBManager.py : log -                           - mmu04810 [218/340]
+2021-06-28 12:50:24,660 - INFO - DBManager.py : log -                           - mmu04910 [219/340]
+2021-06-28 12:50:27,190 - INFO - DBManager.py : log -                           - mmu04911 [220/340]
+2021-06-28 12:50:29,619 - INFO - DBManager.py : log -                           - mmu04912 [221/340]
+2021-06-28 12:50:32,033 - INFO - DBManager.py : log -                           - mmu04913 [222/340]
+2021-06-28 12:50:34,561 - INFO - DBManager.py : log -                           - mmu04914 [223/340]
+2021-06-28 12:50:36,991 - INFO - DBManager.py : log -                           - mmu04915 [224/340]
+2021-06-28 12:50:39,475 - INFO - DBManager.py : log -                           - mmu04916 [225/340]
+2021-06-28 12:50:41,842 - INFO - DBManager.py : log -                           - mmu04917 [226/340]
+2021-06-28 12:50:44,292 - INFO - DBManager.py : log -                           - mmu04918 [227/340]
+2021-06-28 12:50:46,754 - INFO - DBManager.py : log -                           - mmu04919 [228/340]
+2021-06-28 12:50:49,249 - INFO - DBManager.py : log -                           - mmu04920 [229/340]
+2021-06-28 12:50:51,740 - INFO - DBManager.py : log -                           - mmu04921 [230/340]
+2021-06-28 12:50:54,222 - INFO - DBManager.py : log -                           - mmu04922 [231/340]
+2021-06-28 12:50:56,679 - INFO - DBManager.py : log -                           - mmu04923 [232/340]
+2021-06-28 12:50:59,118 - INFO - DBManager.py : log -                           - mmu04924 [233/340]
+2021-06-28 12:51:01,569 - INFO - DBManager.py : log -                           - mmu04925 [234/340]
+2021-06-28 12:51:04,051 - INFO - DBManager.py : log -                           - mmu04926 [235/340]
+2021-06-28 12:51:06,535 - INFO - DBManager.py : log -                           - mmu04927 [236/340]
+2021-06-28 12:51:08,952 - INFO - DBManager.py : log -                           - mmu04928 [237/340]
+2021-06-28 12:51:11,426 - INFO - DBManager.py : log -                           - mmu04929 [238/340]
+2021-06-28 12:51:13,959 - INFO - DBManager.py : log -                           - mmu04930 [239/340]
+2021-06-28 12:51:16,417 - INFO - DBManager.py : log -                           - mmu04931 [240/340]
+2021-06-28 12:51:18,899 - INFO - DBManager.py : log -                           - mmu04932 [241/340]
+2021-06-28 12:51:21,360 - INFO - DBManager.py : log -                           - mmu04933 [242/340]
+2021-06-28 12:51:23,821 - INFO - DBManager.py : log -                           - mmu04934 [243/340]
+2021-06-28 12:51:26,300 - INFO - DBManager.py : log -                           - mmu04935 [244/340]
+2021-06-28 12:51:28,735 - INFO - DBManager.py : log -                           - mmu04940 [245/340]
+2021-06-28 12:51:31,142 - INFO - DBManager.py : log -                           - mmu04950 [246/340]
+2021-06-28 12:51:33,623 - INFO - DBManager.py : log -                           - mmu04960 [247/340]
+2021-06-28 12:51:36,053 - INFO - DBManager.py : log -                           - mmu04961 [248/340]
+2021-06-28 12:51:38,537 - INFO - DBManager.py : log -                           - mmu04962 [249/340]
+2021-06-28 12:51:40,969 - INFO - DBManager.py : log -                           - mmu04964 [250/340]
+2021-06-28 12:51:43,456 - INFO - DBManager.py : log -                           - mmu04966 [251/340]
+2021-06-28 12:51:45,884 - INFO - DBManager.py : log -                           - mmu04970 [252/340]
+2021-06-28 12:51:48,295 - INFO - DBManager.py : log -                           - mmu04971 [253/340]
+2021-06-28 12:51:50,752 - INFO - DBManager.py : log -                           - mmu04972 [254/340]
+2021-06-28 12:51:53,217 - INFO - DBManager.py : log -                           - mmu04973 [255/340]
+2021-06-28 12:51:55,639 - INFO - DBManager.py : log -                           - mmu04974 [256/340]
+2021-06-28 12:51:58,098 - INFO - DBManager.py : log -                           - mmu04975 [257/340]
+2021-06-28 12:52:00,555 - INFO - DBManager.py : log -                           - mmu04976 [258/340]
+2021-06-28 12:52:03,069 - INFO - DBManager.py : log -                           - mmu04977 [259/340]
+2021-06-28 12:52:05,530 - INFO - DBManager.py : log -                           - mmu04978 [260/340]
+2021-06-28 12:52:07,957 - INFO - DBManager.py : log -                           - mmu04979 [261/340]
+2021-06-28 12:52:10,414 - INFO - DBManager.py : log -                           - mmu05010 [262/340]
+2021-06-28 12:52:12,926 - INFO - DBManager.py : log -                           - mmu05012 [263/340]
+2021-06-28 12:52:15,355 - INFO - DBManager.py : log -                           - mmu05014 [264/340]
+2021-06-28 12:52:17,854 - INFO - DBManager.py : log -                           - mmu05016 [265/340]
+2021-06-28 12:52:20,373 - INFO - DBManager.py : log -                           - mmu05017 [266/340]
+2021-06-28 12:52:22,828 - INFO - DBManager.py : log -                           - mmu05020 [267/340]
+2021-06-28 12:52:25,300 - INFO - DBManager.py : log -                           - mmu05022 [268/340]
+2021-06-28 12:52:27,975 - INFO - DBManager.py : log -                           - mmu05030 [269/340]
+2021-06-28 12:52:30,487 - INFO - DBManager.py : log -                           - mmu05031 [270/340]
+2021-06-28 12:52:32,879 - INFO - DBManager.py : log -                           - mmu05032 [271/340]
+2021-06-28 12:52:35,327 - INFO - DBManager.py : log -                           - mmu05033 [272/340]
+2021-06-28 12:52:37,729 - INFO - DBManager.py : log -                           - mmu05034 [273/340]
+2021-06-28 12:52:40,214 - INFO - DBManager.py : log -                           - mmu05100 [274/340]
+2021-06-28 12:52:42,658 - INFO - DBManager.py : log -                           - mmu05132 [275/340]
+2021-06-28 12:52:45,235 - INFO - DBManager.py : log -                           - mmu05133 [276/340]
+2021-06-28 12:52:47,687 - INFO - DBManager.py : log -                           - mmu05134 [277/340]
+2021-06-28 12:52:50,221 - INFO - DBManager.py : log -                           - mmu05135 [278/340]
+2021-06-28 12:52:52,724 - INFO - DBManager.py : log -                           - mmu05140 [279/340]
+2021-06-28 12:52:55,149 - INFO - DBManager.py : log -                           - mmu05142 [280/340]
+2021-06-28 12:52:57,622 - INFO - DBManager.py : log -                           - mmu05143 [281/340]
+2021-06-28 12:53:00,051 - INFO - DBManager.py : log -                           - mmu05144 [282/340]
+2021-06-28 12:53:02,510 - INFO - DBManager.py : log -                           - mmu05145 [283/340]
+2021-06-28 12:53:04,934 - INFO - DBManager.py : log -                           - mmu05146 [284/340]
+2021-06-28 12:53:07,349 - INFO - DBManager.py : log -                           - mmu05150 [285/340]
+2021-06-28 12:53:09,783 - INFO - DBManager.py : log -                           - mmu05152 [286/340]
+2021-06-28 12:53:12,318 - INFO - DBManager.py : log -                           - mmu05160 [287/340]
+2021-06-28 12:53:14,855 - INFO - DBManager.py : log -                           - mmu05161 [288/340]
+2021-06-28 12:53:17,439 - INFO - DBManager.py : log -                           - mmu05162 [289/340]
+2021-06-28 12:53:19,872 - INFO - DBManager.py : log -                           - mmu05163 [290/340]
+2021-06-28 12:53:22,383 - INFO - DBManager.py : log -                           - mmu05164 [291/340]
+2021-06-28 12:53:24,914 - INFO - DBManager.py : log -                           - mmu05165 [292/340]
+2021-06-28 12:53:27,398 - INFO - DBManager.py : log -                           - mmu05166 [293/340]
+2021-06-28 12:53:29,931 - INFO - DBManager.py : log -                           - mmu05167 [294/340]
+2021-06-28 12:53:32,401 - INFO - DBManager.py : log -                           - mmu05168 [295/340]
+2021-06-28 12:53:34,985 - INFO - DBManager.py : log -                           - mmu05169 [296/340]
+2021-06-28 12:53:37,535 - INFO - DBManager.py : log -                           - mmu05170 [297/340]
+2021-06-28 12:53:40,070 - INFO - DBManager.py : log -                           - mmu05171 [298/340]
+2021-06-28 12:53:42,664 - INFO - DBManager.py : log -                           - mmu05200 [299/340]
+2021-06-28 12:53:45,344 - INFO - DBManager.py : log -                           - mmu05202 [300/340]
+2021-06-28 12:53:47,859 - INFO - DBManager.py : log -                           - mmu05203 [301/340]
+2021-06-28 12:53:50,346 - INFO - DBManager.py : log -                           - mmu05204 [302/340]
+2021-06-28 12:53:52,843 - INFO - DBManager.py : log -                           - mmu05205 [303/340]
+2021-06-28 12:53:55,384 - INFO - DBManager.py : log -                           - mmu05206 [304/340]
+2021-06-28 12:54:04,087 - INFO - DBManager.py : log -                           - mmu05207 [305/340]
+2021-06-28 12:54:06,619 - INFO - DBManager.py : log -                           - mmu05210 [306/340]
+2021-06-28 12:54:09,412 - INFO - DBManager.py : log -                           - mmu05211 [307/340]
+2021-06-28 12:54:11,845 - INFO - DBManager.py : log -                           - mmu05212 [308/340]
+2021-06-28 12:54:14,328 - INFO - DBManager.py : log -                           - mmu05213 [309/340]
+2021-06-28 12:54:16,758 - INFO - DBManager.py : log -                           - mmu05214 [310/340]
+2021-06-28 12:54:19,249 - INFO - DBManager.py : log -                           - mmu05215 [311/340]
+2021-06-28 12:54:21,702 - INFO - DBManager.py : log -                           - mmu05216 [312/340]
+2021-06-28 12:54:24,130 - INFO - DBManager.py : log -                           - mmu05217 [313/340]
+2021-06-28 12:54:26,589 - INFO - DBManager.py : log -                           - mmu05218 [314/340]
+2021-06-28 12:54:29,042 - INFO - DBManager.py : log -                           - mmu05219 [315/340]
+2021-06-28 12:54:31,503 - INFO - DBManager.py : log -                           - mmu05220 [316/340]
+2021-06-28 12:54:33,925 - INFO - DBManager.py : log -                           - mmu05221 [317/340]
+2021-06-28 12:54:36,417 - INFO - DBManager.py : log -                           - mmu05222 [318/340]
+2021-06-28 12:54:38,876 - INFO - DBManager.py : log -                           - mmu05223 [319/340]
+2021-06-28 12:54:41,358 - INFO - DBManager.py : log -                           - mmu05224 [320/340]
+2021-06-28 12:54:43,864 - INFO - DBManager.py : log -                           - mmu05225 [321/340]
+2021-06-28 12:54:46,402 - INFO - DBManager.py : log -                           - mmu05226 [322/340]
+2021-06-28 12:54:48,860 - INFO - DBManager.py : log -                           - mmu05230 [323/340]
+2021-06-28 12:54:51,319 - INFO - DBManager.py : log -                           - mmu05231 [324/340]
+2021-06-28 12:54:53,826 - INFO - DBManager.py : log -                           - mmu05235 [325/340]
+2021-06-28 12:54:56,314 - INFO - DBManager.py : log -                           - mmu05310 [326/340]
+2021-06-28 12:54:58,740 - INFO - DBManager.py : log -                           - mmu05320 [327/340]
+2021-06-28 12:55:01,205 - INFO - DBManager.py : log -                           - mmu05321 [328/340]
+2021-06-28 12:55:03,687 - INFO - DBManager.py : log -                           - mmu05322 [329/340]
+2021-06-28 12:55:06,116 - INFO - DBManager.py : log -                           - mmu05323 [330/340]
+2021-06-28 12:55:08,572 - INFO - DBManager.py : log -                           - mmu05330 [331/340]
+2021-06-28 12:55:11,031 - INFO - DBManager.py : log -                           - mmu05332 [332/340]
+2021-06-28 12:55:13,487 - INFO - DBManager.py : log -                           - mmu05340 [333/340]
+2021-06-28 12:55:15,950 - INFO - DBManager.py : log -                           - mmu05410 [334/340]
+2021-06-28 12:55:18,402 - INFO - DBManager.py : log -                           - mmu05412 [335/340]
+2021-06-28 12:55:20,863 - INFO - DBManager.py : log -                           - mmu05414 [336/340]
+2021-06-28 12:55:23,320 - INFO - DBManager.py : log -                           - mmu05415 [337/340]
+2021-06-28 12:55:25,860 - INFO - DBManager.py : log -                           - mmu05416 [338/340]
+2021-06-28 12:55:28,337 - INFO - DBManager.py : log -                           - mmu05417 [339/340]
+2021-06-28 12:55:30,929 - INFO - DBManager.py : log -                           - mmu05418 [340/340]
+2021-06-28 12:55:35,407 - INFO - DBManager.py : log -              DOWNLOADED IN 865.8267893791199 seconds ---
+2021-06-28 12:55:35,408 - INFO - DBManager.py : log -                  DOWNLOADING MAPPING DATA...
+2021-06-28 12:55:35,409 - INFO - DBManager.py : log -                  FETCHING MAPPING DATA FOR mmu (1/1)...
+2021-06-28 12:55:35,410 - INFO - DBManager.py : log -                   * RETRIEVING EXTERNAL MAPPING DATA
+2021-06-28 12:55:44,279 - INFO - DBManager.py : log -              DOWNLOAD  0 mmu...ERROR
+
+2021-06-28 12:55:44,280 - ERROR - DBManager.py : errorlog -              Error while calling /home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/scripts/mmu_resources/download_others.py: Exit status 1. Output is available at /home/tian/Downloads/database/KEGG_DATA/download/download.log
+2021-06-28 12:55:44,281 - INFO - DBManager.py : log -      
+2021-06-28 12:55:44,282 - INFO - DBManager.py : log -      STEP 4. CLOSING LOG FILES, GENERATING VERSION FILE
+2021-06-28 15:41:11,773 - INFO - DBManager.py : log -      ######################################################################
+2021-06-28 15:41:11,774 - INFO - DBManager.py : log -      ### PAINTOMICS 3.0 - DATABASE INSTALLER 
+2021-06-28 15:41:11,774 - INFO - DBManager.py : log -      ### v.0.12
+2021-06-28 15:41:11,774 - INFO - DBManager.py : log -      ######################################################################
+2021-06-28 15:41:11,775 - INFO - DBManager.py : log -      
+2021-06-28 15:41:11,775 - INFO - DBManager.py : log -      Installation log is at: /home/tian/Downloads/database/KEGG_DATA/current/install.log
+2021-06-28 15:41:11,775 - INFO - DBManager.py : log -      
+2021-06-28 15:41:11,776 - INFO - DBManager.py : log -      STEP 1. READ CONFIGURATION AND PARSE INPUT FILES...
+2021-06-28 15:41:13,955 - INFO - DBManager.py : log -             - 1 new organisms will be installed.
+2021-06-28 15:41:13,956 - INFO - DBManager.py : log -             - 6 organisms were installed on previous executions.
+2021-06-28 15:41:13,956 - INFO - DBManager.py : log -      
+2021-06-28 15:48:00,248 - INFO - DBManager.py : log -      
+2021-06-28 15:48:00,249 - INFO - DBManager.py : log -      STEP 1. INSTALLING NEW ORGANISMS
+2021-06-28 15:48:00,250 - INFO - DBManager.py : log -             1 new organisms will be installed.
+2021-06-28 15:48:00,250 - INFO - DBManager.py : log -                  INSTALLING  mmu...
+2021-06-28 15:48:00,251 - INFO - DBManager.py : log -                       INSTALLING MAPPING DATA FOR mmu (1/1)...
+2021-06-28 15:48:00,253 - INFO - DBManager.py : log -                     * PROCESSING AND INSTALLING CUSTOM AND KEGG DATA 
+2021-06-28 15:48:00,313 - ERROR - DBManager.py : errorlog -                  [<FrameSummary file /home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/DBManager.py, line 974 in <module>>, <FrameSummary file /home/tian/.local/lib/python3.8/site-packages/scriptine/command.py, line 194 in autocmds>, <FrameSummary file /home/tian/.local/lib/python3.8/site-packages/scriptine/command.py, line 105 in parse_and_run_function>, <FrameSummary file /home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/DBManager.py, line 457 in install_command>, <FrameSummary file /home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/DBManager.py, line 697 in installSpecieData>]
+2021-06-28 15:48:00,314 - INFO - DBManager.py : log -                       INSTALLING MAPPING DATA FOR mmu (1/1)...
+2021-06-28 15:48:00,315 - INFO - DBManager.py : log -                     * PROCESSING AND INSTALLING CUSTOM AND KEGG DATA 
+2021-06-28 15:48:00,346 - ERROR - DBManager.py : errorlog -                  [<FrameSummary file /home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/DBManager.py, line 974 in <module>>, <FrameSummary file /home/tian/.local/lib/python3.8/site-packages/scriptine/command.py, line 194 in autocmds>, <FrameSummary file /home/tian/.local/lib/python3.8/site-packages/scriptine/command.py, line 105 in parse_and_run_function>, <FrameSummary file /home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/DBManager.py, line 463 in install_command>, <FrameSummary file /home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/DBManager.py, line 697 in installSpecieData>]
+2021-06-28 15:54:18,037 - INFO - DBManager.py : log -      ######################################################################
+2021-06-28 15:54:18,038 - INFO - DBManager.py : log -      ### PAINTOMICS 3.0 - DATABASE KEGG DOWNLOADER 
+2021-06-28 15:54:18,038 - INFO - DBManager.py : log -      ### v.0.12
+2021-06-28 15:54:18,039 - INFO - DBManager.py : log -      ######################################################################
+2021-06-28 15:54:18,039 - INFO - DBManager.py : log -      
+2021-06-28 15:54:18,039 - INFO - DBManager.py : log -      Download log is at: /home/tian/Downloads/database/KEGG_DATA/download/download.log
+2021-06-28 15:54:18,040 - INFO - DBManager.py : log -      
+2021-06-28 15:54:18,040 - INFO - DBManager.py : log -      STEP 0. READ CONFIGURATION AND PARSE INPUT FILES...
+2021-06-28 15:54:18,040 - INFO - DBManager.py : log -             - 1 new organisms will be downloaded.
+2021-06-28 15:54:18,041 - INFO - DBManager.py : log -      
+2021-06-28 15:54:18,041 - INFO - DBManager.py : log -      
+2021-06-28 15:54:18,041 - INFO - DBManager.py : log -      STEP 2. DOWNLOADING THE INFORMATION FOR THE SELECTED ORGANISMS
+2021-06-28 15:54:18,042 - INFO - DBManager.py : log -             - 1 new organisms will be downloaded.
+2021-06-28 15:54:18,054 - INFO - DBManager.py : log -              
+2021-06-28 15:54:18,054 - INFO - DBManager.py : log -              New data will be stored at /home/tian/Downloads/database/KEGG_DATA/download/mmu/
+2021-06-28 15:54:18,055 - INFO - DBManager.py : log -                      DOWLOADING  mmu...
+2021-06-28 15:54:18,055 - INFO - DBManager.py : log -                  STEP 3 Download Reactome Files...
+2021-06-28 15:54:42,212 - INFO - DBManager.py : log -      ######################################################################
+2021-06-28 15:54:42,213 - INFO - DBManager.py : log -      ### PAINTOMICS 3.0 - DATABASE KEGG DOWNLOADER 
+2021-06-28 15:54:42,213 - INFO - DBManager.py : log -      ### v.0.12
+2021-06-28 15:54:42,213 - INFO - DBManager.py : log -      ######################################################################
+2021-06-28 15:54:42,214 - INFO - DBManager.py : log -      
+2021-06-28 15:54:42,214 - INFO - DBManager.py : log -      Download log is at: /home/tian/Downloads/database/KEGG_DATA/download/download.log
+2021-06-28 15:54:42,215 - INFO - DBManager.py : log -      
+2021-06-28 15:54:42,215 - INFO - DBManager.py : log -      STEP 0. READ CONFIGURATION AND PARSE INPUT FILES...
+2021-06-28 15:54:42,215 - INFO - DBManager.py : log -             - 1 new organisms will be downloaded.
+2021-06-28 15:54:42,216 - INFO - DBManager.py : log -      
+2021-06-28 15:54:42,216 - INFO - DBManager.py : log -      
+2021-06-28 15:54:42,216 - INFO - DBManager.py : log -      STEP 2. DOWNLOADING THE INFORMATION FOR THE SELECTED ORGANISMS
+2021-06-28 15:54:42,217 - INFO - DBManager.py : log -             - 1 new organisms will be downloaded.
+2021-06-28 15:54:42,218 - INFO - DBManager.py : log -              
+2021-06-28 15:54:42,218 - INFO - DBManager.py : log -              New data will be stored at /home/tian/Downloads/database/KEGG_DATA/download/mmu/
+2021-06-28 15:54:42,218 - INFO - DBManager.py : log -                      DOWLOADING  mmu...
+2021-06-28 15:54:42,219 - INFO - DBManager.py : log -                  STEP 3 Download Reactome Files...
+2021-06-28 15:54:57,212 - DEBUG - PngImagePlugin.py : call - STREAM b'IHDR' 16 13
+2021-06-28 15:54:57,212 - DEBUG - PngImagePlugin.py : call - STREAM b'IDAT' 41 32768
+2021-06-28 15:55:12,310 - DEBUG - PngImagePlugin.py : call - STREAM b'IHDR' 16 13
+2021-06-28 15:55:12,311 - DEBUG - PngImagePlugin.py : call - STREAM b'IDAT' 41 32768
+2021-06-28 15:55:22,339 - DEBUG - PngImagePlugin.py : call - STREAM b'IHDR' 16 13
+2021-06-28 15:55:22,340 - DEBUG - PngImagePlugin.py : call - STREAM b'IDAT' 41 3570
+2021-06-28 15:55:33,736 - DEBUG - PngImagePlugin.py : call - STREAM b'IHDR' 16 13
+2021-06-28 15:55:33,736 - DEBUG - PngImagePlugin.py : call - STREAM b'IDAT' 41 32768
+2021-06-28 15:55:48,862 - DEBUG - PngImagePlugin.py : call - STREAM b'IHDR' 16 13
+2021-06-28 15:55:48,862 - DEBUG - PngImagePlugin.py : call - STREAM b'IDAT' 41 32768
+2021-06-28 15:55:48,987 - INFO - DBManager.py : log -                  COPYING PREVIOUS KEGG DATA FOR mmu...
+2021-06-28 15:55:49,521 - INFO - DBManager.py : log -                  DOWNLOADING MAPPING DATA...
+2021-06-28 15:55:49,522 - INFO - DBManager.py : log -                  FETCHING MAPPING DATA FOR mmu (1/1)...
+2021-06-28 15:55:49,523 - INFO - DBManager.py : log -                   * RETRIEVING EXTERNAL MAPPING DATA
+2021-06-28 15:55:58,558 - INFO - DBManager.py : log -              DOWNLOAD  0 mmu...ERROR
+
+2021-06-28 15:55:58,559 - ERROR - DBManager.py : errorlog -              Error while calling /home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/scripts/mmu_resources/download_others.py: Exit status 1. Output is available at /home/tian/Downloads/database/KEGG_DATA/download/download.log
+2021-06-28 15:55:58,560 - INFO - DBManager.py : log -      
+2021-06-28 15:55:58,561 - INFO - DBManager.py : log -      STEP 4. CLOSING LOG FILES, GENERATING VERSION FILE
+2021-06-28 16:34:57,039 - INFO - DBManager.py : log -      ######################################################################
+2021-06-28 16:34:57,040 - INFO - DBManager.py : log -      ### PAINTOMICS 3.0 - DATABASE KEGG DOWNLOADER 
+2021-06-28 16:34:57,040 - INFO - DBManager.py : log -      ### v.0.12
+2021-06-28 16:34:57,041 - INFO - DBManager.py : log -      ######################################################################
+2021-06-28 16:34:57,041 - INFO - DBManager.py : log -      
+2021-06-28 16:34:57,041 - INFO - DBManager.py : log -      Download log is at: /home/tian/Downloads/database/KEGG_DATA/download/download.log
+2021-06-28 16:34:57,042 - INFO - DBManager.py : log -      
+2021-06-28 16:34:57,042 - INFO - DBManager.py : log -      STEP 0. READ CONFIGURATION AND PARSE INPUT FILES...
+2021-06-28 16:34:57,043 - INFO - DBManager.py : log -             - 1 new organisms will be downloaded.
+2021-06-28 16:34:57,043 - INFO - DBManager.py : log -      
+2021-06-28 16:34:57,043 - INFO - DBManager.py : log -      
+2021-06-28 16:34:57,044 - INFO - DBManager.py : log -      STEP 2. DOWNLOADING THE INFORMATION FOR THE SELECTED ORGANISMS
+2021-06-28 16:34:57,044 - INFO - DBManager.py : log -             - 1 new organisms will be downloaded.
+2021-06-28 16:34:57,044 - INFO - DBManager.py : log -              
+2021-06-28 16:34:57,045 - INFO - DBManager.py : log -              New data will be stored at /home/tian/Downloads/database/KEGG_DATA/download/mmu/
+2021-06-28 16:34:57,045 - INFO - DBManager.py : log -                      DOWLOADING  mmu...
+2021-06-28 16:34:57,046 - INFO - DBManager.py : log -                  STEP 3 Download Reactome Files...
+2021-06-28 16:35:13,308 - DEBUG - PngImagePlugin.py : call - STREAM b'IHDR' 16 13
+2021-06-28 16:35:13,308 - DEBUG - PngImagePlugin.py : call - STREAM b'IDAT' 41 32768
+2021-06-28 16:35:24,762 - DEBUG - PngImagePlugin.py : call - STREAM b'IHDR' 16 13
+2021-06-28 16:35:24,763 - DEBUG - PngImagePlugin.py : call - STREAM b'IDAT' 41 17215
+2021-06-28 16:35:37,770 - DEBUG - PngImagePlugin.py : call - STREAM b'IHDR' 16 13
+2021-06-28 16:35:37,771 - DEBUG - PngImagePlugin.py : call - STREAM b'IDAT' 41 32768
+2021-06-28 16:35:47,394 - DEBUG - PngImagePlugin.py : call - STREAM b'IHDR' 16 13
+2021-06-28 16:35:47,395 - DEBUG - PngImagePlugin.py : call - STREAM b'IDAT' 41 8461
+2021-06-28 16:36:00,708 - DEBUG - PngImagePlugin.py : call - STREAM b'IHDR' 16 13
+2021-06-28 16:36:00,708 - DEBUG - PngImagePlugin.py : call - STREAM b'IDAT' 41 32768
+2021-06-28 16:36:00,778 - INFO - DBManager.py : log -                  COPYING PREVIOUS KEGG DATA FOR mmu...
+2021-06-28 16:36:01,214 - INFO - DBManager.py : log -                  DOWNLOADING MAPPING DATA...
+2021-06-28 16:36:01,215 - INFO - DBManager.py : log -                  FETCHING MAPPING DATA FOR mmu (1/1)...
+2021-06-28 16:36:01,215 - INFO - DBManager.py : log -                   * RETRIEVING EXTERNAL MAPPING DATA
+2021-06-28 16:37:08,560 - INFO - DBManager.py : log -              DOWNLOAD  0 mmu...ERROR
+
+2021-06-28 16:37:08,560 - ERROR - DBManager.py : errorlog -              Error while calling /home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/scripts/mmu_resources/download_others.py: Exit status 1. Output is available at /home/tian/Downloads/database/KEGG_DATA/download/download.log
+2021-06-28 16:37:08,561 - INFO - DBManager.py : log -      
+2021-06-28 16:37:08,561 - INFO - DBManager.py : log -      STEP 4. CLOSING LOG FILES, GENERATING VERSION FILE
+2021-06-28 17:18:26,301 - INFO - DBManager.py : log -      ######################################################################
+2021-06-28 17:18:26,301 - INFO - DBManager.py : log -      ### PAINTOMICS 3.0 - DATABASE KEGG DOWNLOADER 
+2021-06-28 17:18:26,302 - INFO - DBManager.py : log -      ### v.0.12
+2021-06-28 17:18:26,302 - INFO - DBManager.py : log -      ######################################################################
+2021-06-28 17:18:26,302 - INFO - DBManager.py : log -      
+2021-06-28 17:18:26,303 - INFO - DBManager.py : log -      Download log is at: /home/tian/Downloads/database/KEGG_DATA/download/download.log
+2021-06-28 17:18:26,303 - INFO - DBManager.py : log -      
+2021-06-28 17:18:26,303 - INFO - DBManager.py : log -      STEP 0. READ CONFIGURATION AND PARSE INPUT FILES...
+2021-06-28 17:18:26,304 - INFO - DBManager.py : log -             - 1 new organisms will be downloaded.
+2021-06-28 17:18:26,304 - INFO - DBManager.py : log -      
+2021-06-28 17:18:26,304 - INFO - DBManager.py : log -      
+2021-06-28 17:18:26,305 - INFO - DBManager.py : log -      STEP 2. DOWNLOADING THE INFORMATION FOR THE SELECTED ORGANISMS
+2021-06-28 17:18:26,305 - INFO - DBManager.py : log -             - 1 new organisms will be downloaded.
+2021-06-28 17:18:26,306 - INFO - DBManager.py : log -              
+2021-06-28 17:18:26,306 - INFO - DBManager.py : log -              New data will be stored at /home/tian/Downloads/database/KEGG_DATA/download/mmu/
+2021-06-28 17:18:26,306 - INFO - DBManager.py : log -                      DOWLOADING  mmu...
+2021-06-28 17:18:26,307 - INFO - DBManager.py : log -                  STEP 3 Download Reactome Files...
+2021-06-28 17:18:39,345 - DEBUG - PngImagePlugin.py : call - STREAM b'IHDR' 16 13
+2021-06-28 17:18:39,345 - DEBUG - PngImagePlugin.py : call - STREAM b'IDAT' 41 32768
+2021-06-28 17:18:55,818 - DEBUG - PngImagePlugin.py : call - STREAM b'IHDR' 16 13
+2021-06-28 17:18:55,818 - DEBUG - PngImagePlugin.py : call - STREAM b'IDAT' 41 32768
+2021-06-28 17:19:08,927 - DEBUG - PngImagePlugin.py : call - STREAM b'IHDR' 16 13
+2021-06-28 17:19:08,927 - DEBUG - PngImagePlugin.py : call - STREAM b'IDAT' 41 26878
+2021-06-28 17:19:30,226 - DEBUG - PngImagePlugin.py : call - STREAM b'IHDR' 16 13
+2021-06-28 17:19:30,227 - DEBUG - PngImagePlugin.py : call - STREAM b'IDAT' 41 32768
+2021-06-28 17:19:44,486 - DEBUG - PngImagePlugin.py : call - STREAM b'IHDR' 16 13
+2021-06-28 17:19:44,486 - DEBUG - PngImagePlugin.py : call - STREAM b'IDAT' 41 32768
+2021-06-28 17:19:44,572 - INFO - DBManager.py : log -                  COPYING PREVIOUS KEGG DATA FOR mmu...
+2021-06-28 17:19:44,949 - INFO - DBManager.py : log -                  DOWNLOADING MAPPING DATA...
+2021-06-28 17:19:44,950 - INFO - DBManager.py : log -                  FETCHING MAPPING DATA FOR mmu (1/1)...
+2021-06-28 17:19:44,951 - INFO - DBManager.py : log -                   * RETRIEVING EXTERNAL MAPPING DATA
+2021-06-28 17:19:54,001 - INFO - DBManager.py : log -              DOWNLOAD  0 mmu...ERROR
+
+2021-06-28 17:19:54,001 - ERROR - DBManager.py : errorlog -              Error while calling /home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/scripts/mmu_resources/download_others.py: Exit status 1. Output is available at /home/tian/Downloads/database/KEGG_DATA/download/download.log
+2021-06-28 17:19:54,002 - INFO - DBManager.py : log -      
+2021-06-28 17:19:54,002 - INFO - DBManager.py : log -      STEP 4. CLOSING LOG FILES, GENERATING VERSION FILE
+2021-06-28 17:23:20,851 - INFO - DBManager.py : log -      ######################################################################
+2021-06-28 17:23:20,852 - INFO - DBManager.py : log -      ### PAINTOMICS 3.0 - DATABASE INSTALLER 
+2021-06-28 17:23:20,852 - INFO - DBManager.py : log -      ### v.0.12
+2021-06-28 17:23:20,853 - INFO - DBManager.py : log -      ######################################################################
+2021-06-28 17:23:20,853 - INFO - DBManager.py : log -      
+2021-06-28 17:23:20,853 - INFO - DBManager.py : log -      Installation log is at: /home/tian/Downloads/database/KEGG_DATA/current/install.log
+2021-06-28 17:23:20,854 - INFO - DBManager.py : log -      
+2021-06-28 17:23:20,854 - INFO - DBManager.py : log -      STEP 1. READ CONFIGURATION AND PARSE INPUT FILES...
+2021-06-28 17:23:23,021 - INFO - DBManager.py : log -             - 1 new organisms will be installed.
+2021-06-28 17:23:23,022 - INFO - DBManager.py : log -             - 6 organisms were installed on previous executions.
+2021-06-28 17:23:23,023 - INFO - DBManager.py : log -      
+2021-06-28 17:23:30,985 - INFO - DBManager.py : log -                  INSTALLING COMMON DATA... 
+2021-06-28 17:23:32,330 - INFO - DBManager.py : log -                  FAILED WHILE INSTALLING COMMON INFORMATION. UNABLE TO CONTINUE. ABORTING!!
+2021-06-28 17:23:32,331 - ERROR - DBManager.py : errorlog -          Command '['/home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/scripts/hubAnalysisInstall.R', '--organism="mmu"', '--scriptDir="/home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/scripts/"', '--outputDir="/home/tian/Downloads/database/KEGG_DATA/download/mmu/hubData/"']' returned non-zero exit status 1.
+2021-06-28 17:29:08,967 - INFO - DBManager.py : log -      ######################################################################
+2021-06-28 17:29:08,975 - INFO - DBManager.py : log -      ### PAINTOMICS 3.0 - DATABASE INSTALLER 
+2021-06-28 17:29:08,975 - INFO - DBManager.py : log -      ### v.0.12
+2021-06-28 17:29:08,976 - INFO - DBManager.py : log -      ######################################################################
+2021-06-28 17:29:08,976 - INFO - DBManager.py : log -      
+2021-06-28 17:29:08,976 - INFO - DBManager.py : log -      Installation log is at: /home/tian/Downloads/database/KEGG_DATA/current/install.log
+2021-06-28 17:29:08,977 - INFO - DBManager.py : log -      
+2021-06-28 17:29:08,977 - INFO - DBManager.py : log -      STEP 1. READ CONFIGURATION AND PARSE INPUT FILES...
+2021-06-28 17:29:11,103 - INFO - DBManager.py : log -             - 1 new organisms will be installed.
+2021-06-28 17:29:11,104 - INFO - DBManager.py : log -             - 6 organisms were installed on previous executions.
+2021-06-28 17:29:11,111 - INFO - DBManager.py : log -      
+2021-06-28 17:35:36,567 - INFO - DBManager.py : log -      
+2021-06-28 17:35:36,568 - INFO - DBManager.py : log -      STEP 1. INSTALLING NEW ORGANISMS
+2021-06-28 17:35:36,568 - INFO - DBManager.py : log -             1 new organisms will be installed.
+2021-06-28 17:35:36,569 - INFO - DBManager.py : log -                  INSTALLING  mmu...
+2021-06-28 17:35:36,570 - INFO - DBManager.py : log -                       INSTALLING MAPPING DATA FOR mmu (1/1)...
+2021-06-28 17:35:36,571 - INFO - DBManager.py : log -                     * PROCESSING AND INSTALLING CUSTOM AND KEGG DATA 
+2021-06-28 17:35:37,580 - ERROR - DBManager.py : errorlog -                  [<FrameSummary file DBManager.py, line 974 in <module>>, <FrameSummary file /home/tian/.local/lib/python3.8/site-packages/scriptine/command.py, line 194 in autocmds>, <FrameSummary file /home/tian/.local/lib/python3.8/site-packages/scriptine/command.py, line 105 in parse_and_run_function>, <FrameSummary file DBManager.py, line 457 in install_command>, <FrameSummary file DBManager.py, line 697 in installSpecieData>]
+2021-06-28 17:35:37,581 - INFO - DBManager.py : log -                       INSTALLING MAPPING DATA FOR mmu (1/1)...
+2021-06-28 17:35:37,582 - INFO - DBManager.py : log -                     * PROCESSING AND INSTALLING CUSTOM AND KEGG DATA 
+2021-06-28 17:35:38,584 - ERROR - DBManager.py : errorlog -                  [<FrameSummary file DBManager.py, line 974 in <module>>, <FrameSummary file /home/tian/.local/lib/python3.8/site-packages/scriptine/command.py, line 194 in autocmds>, <FrameSummary file /home/tian/.local/lib/python3.8/site-packages/scriptine/command.py, line 105 in parse_and_run_function>, <FrameSummary file DBManager.py, line 463 in install_command>, <FrameSummary file DBManager.py, line 697 in installSpecieData>]
+2021-06-28 19:11:33,178 - INFO - DBManager.py : log -      ######################################################################
+2021-06-28 19:11:33,178 - INFO - DBManager.py : log -      ### PAINTOMICS 3.0 - DATABASE INSTALLER 
+2021-06-28 19:11:33,178 - INFO - DBManager.py : log -      ### v.0.12
+2021-06-28 19:11:33,179 - INFO - DBManager.py : log -      ######################################################################
+2021-06-28 19:11:33,179 - INFO - DBManager.py : log -      
+2021-06-28 19:11:33,179 - INFO - DBManager.py : log -      Installation log is at: /home/tian/Downloads/database/KEGG_DATA/current/install.log
+2021-06-28 19:11:33,180 - INFO - DBManager.py : log -      
+2021-06-28 19:11:33,180 - INFO - DBManager.py : log -      STEP 1. READ CONFIGURATION AND PARSE INPUT FILES...
+2021-06-28 19:11:35,355 - INFO - DBManager.py : log -             - 1 new organisms will be installed.
+2021-06-28 19:11:35,356 - INFO - DBManager.py : log -             - 6 organisms were installed on previous executions.
+2021-06-28 19:11:35,356 - INFO - DBManager.py : log -      
+2021-06-28 19:18:02,757 - INFO - DBManager.py : log -      
+2021-06-28 19:18:02,758 - INFO - DBManager.py : log -      STEP 1. INSTALLING NEW ORGANISMS
+2021-06-28 19:18:02,759 - INFO - DBManager.py : log -             1 new organisms will be installed.
+2021-06-28 19:18:02,760 - INFO - DBManager.py : log -                  INSTALLING  mmu...
+2021-06-28 19:18:02,762 - INFO - DBManager.py : log -                       INSTALLING MAPPING DATA FOR mmu (1/1)...
+2021-06-28 19:18:02,763 - INFO - DBManager.py : log -                     * PROCESSING AND INSTALLING CUSTOM AND KEGG DATA 
+2021-06-28 19:19:00,638 - ERROR - DBManager.py : errorlog -                  [<FrameSummary file /home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/DBManager.py, line 974 in <module>>, <FrameSummary file /home/tian/.local/lib/python3.8/site-packages/scriptine/command.py, line 194 in autocmds>, <FrameSummary file /home/tian/.local/lib/python3.8/site-packages/scriptine/command.py, line 105 in parse_and_run_function>, <FrameSummary file /home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/DBManager.py, line 457 in install_command>, <FrameSummary file /home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/DBManager.py, line 697 in installSpecieData>]
+2021-06-28 19:19:00,639 - INFO - DBManager.py : log -                       INSTALLING MAPPING DATA FOR mmu (1/1)...
+2021-06-28 19:19:00,640 - INFO - DBManager.py : log -                     * PROCESSING AND INSTALLING CUSTOM AND KEGG DATA 
+2021-06-28 19:19:57,231 - ERROR - DBManager.py : errorlog -                  [<FrameSummary file /home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/DBManager.py, line 974 in <module>>, <FrameSummary file /home/tian/.local/lib/python3.8/site-packages/scriptine/command.py, line 194 in autocmds>, <FrameSummary file /home/tian/.local/lib/python3.8/site-packages/scriptine/command.py, line 105 in parse_and_run_function>, <FrameSummary file /home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/DBManager.py, line 463 in install_command>, <FrameSummary file /home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/DBManager.py, line 697 in installSpecieData>]
+2021-06-28 19:34:57,650 - INFO - DBManager.py : log -      ######################################################################
+2021-06-28 19:34:57,651 - INFO - DBManager.py : log -      ### PAINTOMICS 3.0 - DATABASE INSTALLER 
+2021-06-28 19:34:57,651 - INFO - DBManager.py : log -      ### v.0.12
+2021-06-28 19:34:57,651 - INFO - DBManager.py : log -      ######################################################################
+2021-06-28 19:34:57,652 - INFO - DBManager.py : log -      
+2021-06-28 19:34:57,652 - INFO - DBManager.py : log -      Installation log is at: /home/tian/Downloads/database/KEGG_DATA/current/install.log
+2021-06-28 19:34:57,652 - INFO - DBManager.py : log -      
+2021-06-28 19:34:57,652 - INFO - DBManager.py : log -      STEP 1. READ CONFIGURATION AND PARSE INPUT FILES...
+2021-06-28 19:34:59,802 - INFO - DBManager.py : log -             - 1 new organisms will be installed.
+2021-06-28 19:34:59,803 - INFO - DBManager.py : log -             - 6 organisms were installed on previous executions.
+2021-06-28 19:34:59,803 - INFO - DBManager.py : log -      
+2021-06-28 19:41:32,137 - INFO - DBManager.py : log -      
+2021-06-28 19:41:32,138 - INFO - DBManager.py : log -      STEP 1. INSTALLING NEW ORGANISMS
+2021-06-28 19:41:32,139 - INFO - DBManager.py : log -             1 new organisms will be installed.
+2021-06-28 19:41:32,139 - INFO - DBManager.py : log -                  INSTALLING  mmu...
+2021-06-28 19:41:32,140 - INFO - DBManager.py : log -                       INSTALLING MAPPING DATA FOR mmu (1/1)...
+2021-06-28 19:41:32,141 - INFO - DBManager.py : log -                     * PROCESSING AND INSTALLING CUSTOM AND KEGG DATA 
+2021-06-28 19:42:45,208 - ERROR - DBManager.py : errorlog -                  [<FrameSummary file /home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/DBManager.py, line 974 in <module>>, <FrameSummary file /home/tian/.local/lib/python3.8/site-packages/scriptine/command.py, line 194 in autocmds>, <FrameSummary file /home/tian/.local/lib/python3.8/site-packages/scriptine/command.py, line 105 in parse_and_run_function>, <FrameSummary file /home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/DBManager.py, line 457 in install_command>, <FrameSummary file /home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/DBManager.py, line 697 in installSpecieData>]
+2021-06-28 19:42:45,216 - INFO - DBManager.py : log -                       INSTALLING MAPPING DATA FOR mmu (1/1)...
+2021-06-28 19:42:45,217 - INFO - DBManager.py : log -                     * PROCESSING AND INSTALLING CUSTOM AND KEGG DATA 
+2021-06-28 19:43:58,650 - ERROR - DBManager.py : errorlog -                  [<FrameSummary file /home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/DBManager.py, line 974 in <module>>, <FrameSummary file /home/tian/.local/lib/python3.8/site-packages/scriptine/command.py, line 194 in autocmds>, <FrameSummary file /home/tian/.local/lib/python3.8/site-packages/scriptine/command.py, line 105 in parse_and_run_function>, <FrameSummary file /home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/DBManager.py, line 463 in install_command>, <FrameSummary file /home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/DBManager.py, line 697 in installSpecieData>]
+2021-06-28 21:21:16,422 - INFO - DBManager.py : log -      ######################################################################
+2021-06-28 21:21:16,423 - INFO - DBManager.py : log -      ### PAINTOMICS 3.0 - DATABASE INSTALLER 
+2021-06-28 21:21:16,423 - INFO - DBManager.py : log -      ### v.0.12
+2021-06-28 21:21:16,423 - INFO - DBManager.py : log -      ######################################################################
+2021-06-28 21:21:16,424 - INFO - DBManager.py : log -      
+2021-06-28 21:21:16,424 - INFO - DBManager.py : log -      Installation log is at: /home/tian/Downloads/database/KEGG_DATA/current/install.log
+2021-06-28 21:21:16,424 - INFO - DBManager.py : log -      
+2021-06-28 21:21:16,424 - INFO - DBManager.py : log -      STEP 1. READ CONFIGURATION AND PARSE INPUT FILES...
+2021-06-28 21:21:18,587 - INFO - DBManager.py : log -             - 1 new organisms will be installed.
+2021-06-28 21:21:18,588 - INFO - DBManager.py : log -             - 6 organisms were installed on previous executions.
+2021-06-28 21:21:18,588 - INFO - DBManager.py : log -      
+2021-06-28 21:22:27,382 - INFO - DBManager.py : log -                  INSTALLING COMMON DATA... 
+2021-06-28 21:22:28,802 - INFO - DBManager.py : log -                  FAILED WHILE INSTALLING COMMON INFORMATION. UNABLE TO CONTINUE. ABORTING!!
+2021-06-28 21:22:28,803 - ERROR - DBManager.py : errorlog -          Command '['/home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/scripts/hubAnalysisInstall.R', '--organism="mmu"', '--scriptDir="/home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/scripts/"', '--outputDir="/home/tian/Downloads/database/KEGG_DATA/download/mmu/hubData/"']' returned non-zero exit status 1.
+2021-06-28 21:25:50,733 - INFO - DBManager.py : log -      ######################################################################
+2021-06-28 21:25:50,734 - INFO - DBManager.py : log -      ### PAINTOMICS 3.0 - DATABASE INSTALLER 
+2021-06-28 21:25:50,734 - INFO - DBManager.py : log -      ### v.0.12
+2021-06-28 21:25:50,735 - INFO - DBManager.py : log -      ######################################################################
+2021-06-28 21:25:50,735 - INFO - DBManager.py : log -      
+2021-06-28 21:25:50,735 - INFO - DBManager.py : log -      Installation log is at: /home/tian/Downloads/database/KEGG_DATA/current/install.log
+2021-06-28 21:25:50,735 - INFO - DBManager.py : log -      
+2021-06-28 21:25:50,736 - INFO - DBManager.py : log -      STEP 1. READ CONFIGURATION AND PARSE INPUT FILES...
+2021-06-28 21:25:52,862 - INFO - DBManager.py : log -             - 1 new organisms will be installed.
+2021-06-28 21:25:52,863 - INFO - DBManager.py : log -             - 6 organisms were installed on previous executions.
+2021-06-28 21:25:52,864 - INFO - DBManager.py : log -      
+2021-06-28 21:32:30,716 - INFO - DBManager.py : log -      
+2021-06-28 21:32:30,716 - INFO - DBManager.py : log -      STEP 1. INSTALLING NEW ORGANISMS
+2021-06-28 21:32:30,717 - INFO - DBManager.py : log -             1 new organisms will be installed.
+2021-06-28 21:32:30,718 - INFO - DBManager.py : log -                  INSTALLING  mmu...
+2021-06-28 21:32:30,719 - INFO - DBManager.py : log -                       INSTALLING MAPPING DATA FOR mmu (1/1)...
+2021-06-28 21:32:30,720 - INFO - DBManager.py : log -                     * PROCESSING AND INSTALLING CUSTOM AND KEGG DATA 
+2021-06-28 21:33:27,810 - ERROR - DBManager.py : errorlog -                  [<FrameSummary file /home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/DBManager.py, line 974 in <module>>, <FrameSummary file /home/tian/.local/lib/python3.8/site-packages/scriptine/command.py, line 194 in autocmds>, <FrameSummary file /home/tian/.local/lib/python3.8/site-packages/scriptine/command.py, line 105 in parse_and_run_function>, <FrameSummary file /home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/DBManager.py, line 457 in install_command>, <FrameSummary file /home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/DBManager.py, line 697 in installSpecieData>]
+2021-06-28 21:33:27,818 - INFO - DBManager.py : log -                       INSTALLING MAPPING DATA FOR mmu (1/1)...
+2021-06-28 21:33:27,819 - INFO - DBManager.py : log -                     * PROCESSING AND INSTALLING CUSTOM AND KEGG DATA 
+2021-06-28 21:36:11,418 - INFO - DBManager.py : log -                  INSTALLED IN 163 seconds ---
+2021-06-28 21:36:11,419 - INFO - DBManager.py : log -              INSTALL  1 mmu...ERROR
+
+2021-06-28 21:36:11,419 - ERROR - DBManager.py : errorlog -              Error while calling /home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/scripts/mmu_resources/build_database.py: Exit status 1. Output is available at /home/tian/Downloads/database/KEGG_DATA/current/install.log
+2021-06-28 21:36:11,420 - INFO - DBManager.py : log -      
+2021-06-28 21:36:11,420 - INFO - DBManager.py : log -      STEP 2. CREATING THE species.json FILE
+2021-06-28 21:36:11,438 - INFO - DBManager.py : log -      
+2021-06-28 21:36:11,439 - INFO - DBManager.py : log -      STEP 3. CLOSING LOG FILES, GENERATING VERSION FILE
+2021-06-28 22:00:30,302 - INFO - DBManager.py : log -      ######################################################################
+2021-06-28 22:00:30,302 - INFO - DBManager.py : log -      ### PAINTOMICS 3.0 - DATABASE INSTALLER 
+2021-06-28 22:00:30,303 - INFO - DBManager.py : log -      ### v.0.12
+2021-06-28 22:00:30,303 - INFO - DBManager.py : log -      ######################################################################
+2021-06-28 22:00:30,303 - INFO - DBManager.py : log -      
+2021-06-28 22:00:30,304 - INFO - DBManager.py : log -      Installation log is at: /home/tian/Downloads/database/KEGG_DATA/current/install.log
+2021-06-28 22:00:30,304 - INFO - DBManager.py : log -      
+2021-06-28 22:00:30,304 - INFO - DBManager.py : log -      STEP 1. READ CONFIGURATION AND PARSE INPUT FILES...
+2021-06-28 22:00:32,459 - INFO - DBManager.py : log -             - 1 new organisms will be installed.
+2021-06-28 22:00:32,460 - INFO - DBManager.py : log -             - 6 organisms were installed on previous executions.
+2021-06-28 22:00:32,460 - INFO - DBManager.py : log -      
+2021-06-28 22:00:32,461 - INFO - DBManager.py : log -      
+2021-06-28 22:00:32,461 - INFO - DBManager.py : log -      STEP 1. INSTALLING NEW ORGANISMS
+2021-06-28 22:00:32,462 - INFO - DBManager.py : log -             1 new organisms will be installed.
+2021-06-28 22:00:32,462 - INFO - DBManager.py : log -                  INSTALLING  mmu...
+2021-06-28 22:00:32,470 - INFO - DBManager.py : log -                       INSTALLING MAPPING DATA FOR mmu (1/1)...
+2021-06-28 22:00:32,471 - INFO - DBManager.py : log -                     * PROCESSING AND INSTALLING CUSTOM AND KEGG DATA 
+2021-06-28 22:04:08,472 - INFO - DBManager.py : log -                  INSTALLED IN 216 seconds ---
+2021-06-28 22:04:08,473 - INFO - DBManager.py : log -              INSTALL  1 mmu...SUCCESS
+
+2021-06-28 22:04:08,474 - INFO - DBManager.py : log -      
+2021-06-28 22:04:08,474 - INFO - DBManager.py : log -      STEP 2. CREATING THE species.json FILE
+2021-06-28 22:04:08,492 - INFO - DBManager.py : log -      
+2021-06-28 22:04:08,492 - INFO - DBManager.py : log -      STEP 3. CLOSING LOG FILES, GENERATING VERSION FILE
+2021-06-28 23:03:09,320 - INFO - DBManager.py : log -      ######################################################################
+2021-06-28 23:03:09,321 - INFO - DBManager.py : log -      ### PAINTOMICS 3.0 - DATABASE INSTALLER 
+2021-06-28 23:03:09,321 - INFO - DBManager.py : log -      ### v.0.12
+2021-06-28 23:03:09,322 - INFO - DBManager.py : log -      ######################################################################
+2021-06-28 23:03:09,322 - INFO - DBManager.py : log -      
+2021-06-28 23:03:09,323 - INFO - DBManager.py : log -      Installation log is at: /home/tian/Downloads/database/KEGG_DATA/current/install.log
+2021-06-28 23:03:09,323 - INFO - DBManager.py : log -      
+2021-06-28 23:03:09,324 - INFO - DBManager.py : log -      STEP 1. READ CONFIGURATION AND PARSE INPUT FILES...
+2021-06-28 23:03:11,502 - INFO - DBManager.py : log -             - 1 new organisms will be installed.
+2021-06-28 23:03:11,503 - INFO - DBManager.py : log -             - 6 organisms were installed on previous executions.
+2021-06-28 23:03:11,503 - INFO - DBManager.py : log -      
+2021-06-28 23:05:13,650 - INFO - DBManager.py : log -                  INSTALLING COMMON DATA... 
+2021-06-28 23:05:15,353 - INFO - DBManager.py : log -                  FAILED WHILE INSTALLING COMMON INFORMATION. UNABLE TO CONTINUE. ABORTING!!
+2021-06-28 23:05:15,353 - ERROR - DBManager.py : errorlog -          Command '['/home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/scripts/hubAnalysisInstall.R', '--organism="mmu"', '--scriptDir="/home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/scripts/"', '--outputDir="/home/tian/Downloads/database/KEGG_DATA/download/mmu/hubData/"']' returned non-zero exit status 1.
