@@ -164,7 +164,7 @@ def download_command(inputfile=None, specie=None, kegg=0, mapping=0, common=0, r
             downloadKEGGFile("              * PATHWAYS CLASSIFICATION", downloadLog,  "http://rest.kegg.jp/get/br:br08901", datadir, "pathways_classification.list",  DOWNLOAD_DELAY_1, MAX_TRIES_1)
             downloadKEGGFile("              * LIST OF REFERENCE PATHWAYS", downloadLog,  "http://rest.kegg.jp/list/pathway", datadir, "pathways_all.list",  DOWNLOAD_DELAY_1, MAX_TRIES_1)
             downloadKEGGFile("              * LIST OF COMPOUND NAMES", downloadLog,  "http://rest.kegg.jp/list/compound", datadir, "compounds_all.list",  DOWNLOAD_DELAY_1, MAX_TRIES_1)
-            #downloadKEGGFile("              * PATHWAY to COMPOUND TABLE", downloadLog,  "http://rest.kegg.jp/link/pathway/compound", datadir, "pathway2compound.list",  DOWNLOAD_DELAY_1, MAX_TRIES_1)
+            downloadKEGGFile("              * PATHWAY to COMPOUND TABLE", downloadLog,  "http://rest.kegg.jp/link/pathway/compound", datadir, "pathway2compound.list",  DOWNLOAD_DELAY_1, MAX_TRIES_1)
 
             #STEP 2.A.2 DOWNLOAD THE PNG IMAGES
             pathways = readFile(datadir + "pathways_all.list", {"forced": True, "forcedColumn": 0})

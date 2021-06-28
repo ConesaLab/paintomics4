@@ -154,7 +154,7 @@ def processEnsemblData():
     resource = EXTERNAL_RESOURCES.get("ensembl")[0]
     file_name= DATA_DIR + "mapping/" + resource.get("output")
     if not os.path.isfile(file_name):
-        stderr.write("Unable to find the ENSEMBL MAPPING file: " + file_name)
+        stderr.write("Unable to find the ENSEMBL MAPPING file: " + file_name + "###########################################333")
         exit(1)
 
     #Get line count (for percentage)
@@ -169,7 +169,7 @@ def processEnsemblData():
     #Process files
     stderr.write("PROCESSING ENSEMBL MAPPING FILE...\n")
     with open(file_name, "r") as csvfile:
-        rows = csv.reader(csvfile, delimiter=',')
+        rows = csv.reader(csvfile, delimiter='\t')
         i =0
         prev=-1
         errorMessage=""
@@ -1343,7 +1343,7 @@ def processMapManPathwaysData():
     #
     # file.close()
 
-def processReactomePathwaysData(ROOT_DIR):
+def processReactomePathwaysData():
 
     # Declare later used variables
     FAILED_LINES["REACTOME PATHWAYS"] = []
