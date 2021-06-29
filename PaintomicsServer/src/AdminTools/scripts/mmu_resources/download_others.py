@@ -42,10 +42,8 @@ try:
     resource = COMMON_BUILD_DB_TOOLS.EXTERNAL_RESOURCES.get("refseq")
     index =1
     for aux in resource:
-        if index != 1:
-            COMMON_BUILD_DB_TOOLS.downloadFile(aux.get("url"), aux.get("file"), DESTINATION + aux.get("output"), SERVER_SETTINGS.DOWNLOAD_DELAY_1, SERVER_SETTINGS.MAX_TRIES_1)
-        else:
-            index = index+1
+        COMMON_BUILD_DB_TOOLS.downloadFile(aux.get("url"), aux.get("file"), DESTINATION + aux.get("output"), SERVER_SETTINGS.DOWNLOAD_DELAY_1, SERVER_SETTINGS.MAX_TRIES_1)
+
 
     #**************************************************************************
     #STEP 2.3 GET UNIPROT TRANSCRIPTS, PEPTIDES -> ENTREZ GENES

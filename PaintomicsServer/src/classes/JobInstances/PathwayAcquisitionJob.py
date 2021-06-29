@@ -1157,20 +1157,26 @@ class PathwayAcquisitionJob(Job):
             else:
                 userDataset.append(j)
 
-        userDataset = listToString(userDataset)
-        userDEfeatures = listToString(userDEfeatures)
+
+        import csv
+        with open(self.outputDir + "userDataset.csv", 'w') as w:
+            writer = csv.writer(w)
+            writer.writerow(userDataset)
+
+        with open(self.outputDir + "userDEfeatures.csv", 'w') as w:
+            writer = csv.writer(w)
+            writer.writerow(userDEfeatures)
+
+
 
         check_call(
             [
                 ROOT_DIRECTORY + "common/bioscripts/hubAnalysis.R",
                 '--data_dir="' + self.outputDir + '"',
-                '--userDataset="' + userDataset + '"',
-                '--userDEfeatures="' + userDEfeatures + '"',
                 '--inputDir="' + KEGG_DATA_DIR + 'current/' + self.organism + '/hubData/' + '"'
             ], stderr=STDOUT
         )
 
-        import csv
         hubResult = {}
 
         with open(self.outputDir + 'hub_result.csv', "r") as f:
