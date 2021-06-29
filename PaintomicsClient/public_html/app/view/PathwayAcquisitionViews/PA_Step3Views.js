@@ -4090,7 +4090,7 @@ function PA_Step3MetaboliteView () {
 	this.model = model;
 	this.model.addObserver(this);
 
-	var mappingComp = this.model.getMappingComp();
+	var mappingComp = this.model.mappingComp;
 	var pValueClassification = this.model.getpValueInDict();
 	var classificationDict = this.model.getClassificationDict();
 	var exprssionMetabolites = this.model.getExprssionMetabolites();
@@ -4130,6 +4130,7 @@ function PA_Step3MetaboliteView () {
 		}
 	}
 
+
 	var dataShow2 = []
 	for (var keys in dataFinal) {
 		dataShow2.push(
@@ -4161,8 +4162,7 @@ function PA_Step3MetaboliteView () {
 		alter("success")
 	}
 
-	this.initComponent = function() {
-		var renderFunction = function(value, metadata, record) {
+	var renderFunction = function(value, metadata, record) {
 			var myToolTipText = "<b style='display:block; width:200px'>" + "Metabolism" + "</b>";
 			metadata.style = "height: 33px; font-size:10px;"
 
@@ -4221,10 +4221,14 @@ function PA_Step3MetaboliteView () {
 	};
 
 
+	this.initComponent = function() {
+
+
 	this.component = Ext.widget(
 		{
 			xtype: "container",
-			padding: '10', border: 0, maxWidth: 1900,
+			padding: '4', border: 0, maxWidth: 1900,
+			autoScroll: true,
 			layout: 'column',
 			style: "margin-top:10px;width: 100%;",
 			renderTo: document.body,
@@ -4234,7 +4238,7 @@ function PA_Step3MetaboliteView () {
 				xtype: "gridpanel",
 				cls: "contentbox",
 				store: userStore,
-				width: 830,
+				width: 600,
 				height: 350,
 				header: {
 					xtype: 'box',
@@ -4252,7 +4256,7 @@ function PA_Step3MetaboliteView () {
 						xtype: 'customactioncolumn',
 						text: "Paint",
 						menuDisabled: true,
-						width: 55,
+						width: 50,
 						items: [{
 							icon: "fa-paint-brush-o",
 							text: "",
@@ -4260,13 +4264,17 @@ function PA_Step3MetaboliteView () {
 							style: "font-size: 20px;",
 							handler: function (grid, rowIndex) {
 								let classificationData = dataFinal[grid.getStore().getAt(rowIndex).data.name];
+								let nameComp = []
+								for (let i =0; i < classificationData.ID.length; i ++) {
+									nameComp.push(tableData.mappingComp[classificationData.ID[i]])
+								}
 
 								TESTER = document.getElementById('classificationPlotly');
 
 								let dataPlotly = [
 									{
 										z: classificationData.expressionVal,
-										y: classificationData.ID,
+										y: nameComp,
 										x: classificationData.header.slice(1, classificationData.header.length),
 										type: 'heatmap',
 										showscale:false,
@@ -4343,7 +4351,7 @@ function PA_Step3MetaboliteView () {
 					},
 					{
 						text: 'Name',
-						width: 280,
+						width: 150,
 						sortable: true,
 						hideable: false,
 						dataIndex: 'name'
@@ -4357,7 +4365,7 @@ function PA_Step3MetaboliteView () {
 					},
 					{
 						text: "P Value",
-						width: 130,
+						width: 90,
 						sortable: true,
 						dataIndex: 'pValue',
 						renderer: renderFunction
@@ -4365,7 +4373,7 @@ function PA_Step3MetaboliteView () {
 					},
 					{
 						text: "FDR BH",
-						width: 130,
+						width: 90,
 						sortable: true,
 						dataIndex: "FDR_BH",
 						renderer: renderFunction
@@ -4373,7 +4381,7 @@ function PA_Step3MetaboliteView () {
 					},
 					{
 						text: "FDR BY",
-						width: 130,
+						width: 90,
 						sortable: true,
 						dataIndex: "FDR_BY",
 						renderer: renderFunction
@@ -4463,7 +4471,7 @@ function PA_Step3HubAnalysis () {
 	this.component = Ext.widget(
 		{
 			xtype: "container",
-			padding: '10', border: 0, maxWidth: 1900,
+			padding: '3', border: 0, maxWidth: 1900,
 			layout: 'column',
 			style: "margin-top:10px;width: 100%;",
 			renderTo: document.body,
@@ -4473,7 +4481,7 @@ function PA_Step3HubAnalysis () {
 				xtype: "gridpanel",
 				cls: "contentbox",
 				store: userStore,
-				width: 1500,
+				width: 1110,
 				height: 350,
 				header: {
 					xtype: 'box',
