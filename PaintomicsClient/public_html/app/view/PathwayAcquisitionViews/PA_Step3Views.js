@@ -255,12 +255,12 @@ function PA_Step3JobView() {
 		}
 		this.pathwayTableView.loadModel(model);
 
-		if (this.metaboliteView === null) {
+		if ( this.metaboliteView === null && this.getModel().foundCompounds.length) {
 			this.metaboliteView = new PA_Step3MetaboliteView();
 			this.metaboliteView.setController(this.getController());
 			this.metaboliteView.setParent(this);
+			this.metaboliteView.loadModel(model);
 		}
-		this.metaboliteView.loadModel(model);
 
 		if (this.hubAnalysisView === null) {
 			this.hubAnalysisView = new PA_Step3HubAnalysis();
@@ -431,7 +431,9 @@ function PA_Step3JobView() {
 		/********************************************************/
 		this.pathwayTableView.updateObserver();
 
-		this.metaboliteView.updateObserver();
+		if (this.metaboliteView) {
+			this.metaboliteView.updateObserver();
+		}
 
 		this.hubAnalysisView.updateObserver();
 		/********************************************************/
@@ -707,8 +709,8 @@ function PA_Step3JobView() {
 						}
 				},
 				me.pathwayTableView.getComponent(), //THE TABLE PANEL
-				me.metaboliteView.getComponent(),
-				me.hubAnalysisView.getComponent()
+				me.hubAnalysisView.getComponent(),
+				(!this.getModel().foundCompounds.length?null:me.metaboliteView.getComponent())
 			],
 			listeners: {
 				boxready: function() {
@@ -4073,6 +4075,7 @@ function PA_Step3StatsView() {
 	return this;
 }
 PA_Step3StatsView.prototype = new View();
+
 
 function PA_Step3MetaboliteView () {
 	let me = this;
