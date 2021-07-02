@@ -1,3 +1,4 @@
 **/__pycache__
+*.log.*
 **/logs
-'/home/tian/Desktop/git/paintomics4/PaintomicsServer/src/conf/serverconf.py' 
+/serverconf.py 
