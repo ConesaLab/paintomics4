@@ -1021,16 +1021,21 @@ class PathwayAcquisitionJob(Job):
 
     def compundsClassification (self):
 
-        import json
+        import json, os
         from collections import defaultdict
 
+
+        brPath = os.path.dirname(__file__) + "/../../common/br08001.json"
+        interactionJSONPath = self.inputDir + "../../../KEGG_DATA/current/" + self.organism + '/hubData/kegg_interaction.json'
+
         # Load classification File
-        with open( "/home/tian/Desktop/git/paintomics3/PaintomicsServer/src/common/br08001.json", 'r' ) as f:
+        with open( brPath, 'r' ) as f:
             temp = json.loads( f.read() )
             print( temp )
 
-        with open( "/home/tian/Desktop/git/paintomics3/PaintomicsServer/src/common/mouse.json", 'r' ) as e:
-            compoundRegulateFeatures = json.loads( e.read() )
+        with open( interactionJSONPath, 'r' ) as e:
+            compoundRegulateFeatures = json.dumps(json.JSONDecoder().decode(e.read() ))
+        compoundRegulateFeatures = json.loads(compoundRegulateFeatures)
 
         temp2 = temp["children"]
 

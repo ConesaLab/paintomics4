@@ -9,21 +9,24 @@ suppressPackageStartupMessages(require(xml2))
 suppressPackageStartupMessages(require(stringr))
 suppressPackageStartupMessages(require(qdapRegex))
 suppressPackageStartupMessages(require(gtools))
+suppressPackageStartupMessages(require(jsonlite))
+suppressPackageStartupMessages(require(AnnotationDbi))
 
+result <- NULL
 
 hubAnalysisInstall <- function(organism, scriptDir, outputDir) {
   print(paste0("STEP 0 ", "Load source data"))
   source (paste0(scriptDir, "/GalaxyNetworkFunctionsv2.R"))
   
-  print(paste0("#######################STEP 1 ", "download pathway information"))
+  print(paste0("#######################STEP 1 ", "Downloading pathway information..."))
   download.file(sprintf("http://rest.kegg.jp/list/pathway/%s", organism),
                 paste0(outputDir,"/pathway_list.list"))
   pathway_df <- read.delim(paste0(outputDir,"/pathway_list.list"), header = F)
   Kegg_pathways<-unlist(sapply(strsplit(as.character(pathway_df$V1), split=':'), function (x) x[[2]]) )
-  print(paste0("#######################STEP 2 ", "parser pathway information"))
+  print(paste0("#######################STEP 2 ", "Parsering pathway information..."))
   invisible(kegg_interactions <- KeggParser(Pathways=Kegg_pathways))
   
-  print(paste0("#######################STEP 3 ", " Removing interactions with  Map"))
+  print(paste0("#######################STEP 3 ", " Removing interactions with map..."))
   hknomap1<-kegg_interactions[kegg_interactions$entry_type_1 != "map",]
   keggNoMap<-hknomap1[hknomap1$entry_type_2 != "map",]
   write.csv(kegg_interactions, paste0(outputDir,"/kegg_interaction.csv"), row.names = FALSE)
@@ -35,11 +38,9 @@ hubAnalysisInstall <- function(organism, scriptDir, outputDir) {
     # SignificantNodes: A vector with the differentially expressed nodes
     # Steps: Number of steps to be analyzed as a measure of "distance" between nodes.
     # PreviousCalculation: To merge previous calculated data to be able to partition the data analysis
-    
     # Output:
     # A list of tables of interacions between nodes, by steps.
     # and a table indicating if the node is significant or not
-    
     ####
     
     print("Using all compounds present in the dataset")
@@ -65,7 +66,6 @@ hubAnalysisInstall <- function(organism, scriptDir, outputDir) {
     prelist<-tabelita<-list()
     theTables<-NULL
     for (i in 1:length (allcompounds)){
-      print(allcompounds[i])
       actor<-allcompounds[i]
       
       t1<-Allintersnorepeated[Allintersnorepeated$entry_name_1 == actor,]
@@ -75,11 +75,10 @@ hubAnalysisInstall <- function(organism, scriptDir, outputDir) {
       colnames(t2)<-c("Var1","Var2")
       t3<-unique(rbind(t1,t2))
       rownames(t3)<- seq(1:nrow(t3) )
-      t3
       namecito<-unique(as.character(t3$Var1))
       preos<-as.character(t3$Var2)
       
-      prelist["One_Step"]<-list(preos)
+      prelist["1"]<-list(preos)
       tabelita<-prelist
       theTables[[namecito]]<-tabelita
       #culo<-theTables
@@ -88,12 +87,11 @@ hubAnalysisInstall <- function(organism, scriptDir, outputDir) {
       if (Steps>1) {
         #print (paste (Steps,"Steps", sep=" "))
         #print("Analyzing more than one step")
-        vectorNames<-c ("Two","Three","Four","Five","Six","Seven","Eight","Nine",
-                        "Ten","Eleven","Twelve","Thirteen","Fourteen","Fifteen",
-                        "Sixteen","Seventeen","Eighteen","Nineteen","Twenty"
-                        ,"TwentyOne")
+        vectorNames<-c ("2","3","4","5","6","7","8","9",
+                        "10","11","12","13","14","15",
+                        "16","17","18","19","20", "21")
         vectitonumbs<-vectorNames[1:(Steps-1)]
-        vectitonames<-paste(vectitonumbs,"Steps", sep="_")
+        vectitonames<-paste(vectitonumbs)
         
         preos<-NULL
         prelist<-tabelita<-list()
@@ -113,7 +111,6 @@ hubAnalysisInstall <- function(organism, scriptDir, outputDir) {
           colnames(t2)<-c("Var1","Var2")
           t3<-unique(rbind(t1,t2))
           rownames(t3)<- seq(1:nrow(t3) )
-          t3
           namecito<-elcompound
           preos<-unique(c(susinteracciones,setdiff(as.character(unique(t3$Var2) ),elcompound )) ) 
           prelist[namestep]<-list(preos)
@@ -125,21 +122,12 @@ hubAnalysisInstall <- function(organism, scriptDir, outputDir) {
         } # End of steps
         
       }# End of if Steps>1
-      save(theTables,file=paste(dir,"/",elcompound,".RData",sep=''))
+      #save(theTables,file=paste(dir,"/",elcompound,".RData",sep=''))
+      temp <- unlist2(theTables, 0)
+      result[[actor]] <- temp
       theTables<-NULL
-      
-      
-      #summary(theTables)
-      #for (i in 1:length(theTables)) {
-      #  print(theTables[[i]][1]  )
-      #} 
-      #theTables[[1]][[1]] %in% theTables[[2]][[1]] 
-      #theTables[[2]][[1]] %in% theTables[[3]][[1]] 
-      
-      #theTables[[1]][[2]] %in% theTables[[2]][[2]] 
-      #theTables[[2]][[2]] %in% theTables[[3]][[2]] 
-      
     } # End of all compounds
+    return(result)
   }
   invisible(InteractionsByStepsAllmetabs(InteractionsTable = keggNoMap, Steps = 4,dir=paste0(outputDir)))
 }
@@ -150,4 +138,10 @@ argsDF <- as.data.frame(do.call("rbind", parseArgs(args)), stringsAsFactors=F)
 argsL <- as.list(as.character(argsDF$V2))
 names(argsL) <- argsDF$V1
 args <- as.data.frame(argsL, stringsAsFactors=F)
-hubAnalysisInstall(organism = args$organism, scriptDir=args$scriptDir, outputDir=args$outputDir)
+result <- hubAnalysisInstall(organism = args$organism, scriptDir=args$scriptDir, outputDir=args$outputDir)
+
+print(paste0("#######################STEP 5 ", "Saving installation data..."))
+jsonResult <- jsonlite::toJSON(result, pretty = FALSE)
+
+write_json(jsonResult, path = paste0(args$outputDir, "/kegg_interaction.json"))
+

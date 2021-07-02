@@ -358,7 +358,7 @@ def mapFeatureNamesToKeggIDs(jobID, organism, databases, featureList, enrichment
 
         isFinished = True
         for thread in threadsList:
-            if(thread.is_alive()):
+            if thread.is_alive():
                 # TODO: possible deadlock with KeggInformationManager lock? Raise an exception to force the release there?
                 isFinished = False
                 thread.terminate()

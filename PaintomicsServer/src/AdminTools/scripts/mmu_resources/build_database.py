@@ -35,26 +35,28 @@ COMMON_BUILD_DB_TOOLS.SERVER_SETTINGS = imp.load_source('serverconf.py',  ROOT_D
 # STEP 2. INSTALL FILES
 #**************************************************************************
 try:
-    COMMON_BUILD_DB_TOOLS.processEnsemblData()
-    COMMON_BUILD_DB_TOOLS.processRefSeqData()
-    COMMON_BUILD_DB_TOOLS.processRefSeqGeneSymbolData()
-
-    COMMON_BUILD_DB_TOOLS.processUniProtData()
-    # COMMON_BUILD_DB_TOOLS.processVegaData()
-
     #**************************************************************************
     # STEP 1. EXTRACT THE MAPPING DATABASE
     #**************************************************************************
-    COMMON_BUILD_DB_TOOLS.processKEGGMappingData()
+    COMMON_BUILD_DB_TOOLS.processEnsemblData()
+    COMMON_BUILD_DB_TOOLS.processRefSeqData()
+    COMMON_BUILD_DB_TOOLS.processUniProtData()
+    COMMON_BUILD_DB_TOOLS.processRefSeqGeneSymbolData()
+    #COMMON_BUILD_DB_TOOLS.processKEGGMappingData()
+    # COMMON_BUILD_DB_TOOLS.processVegaData()
+
+
+    #**************************************************************************
+    # STEP 2. PROCESS THE KEGG And Reactome DATABASE
+    #**************************************************************************
     COMMON_BUILD_DB_TOOLS.processKEGGPathwaysData()
-
-
-
-    #**************************************************************************
-    # STEP 2. PROCESS THE KEGG DATABASE
-    #**************************************************************************
     COMMON_BUILD_DB_TOOLS.processReactomePathwaysData()
     COMMON_BUILD_DB_TOOLS.mergeNetworkFiles()
+
+    #**************************************************************************
+    # STEP 3. Print Result
+    #**************************************************************************
+    COMMON_BUILD_DB_TOOLS.printResults()
 
     #**************************************************************************
     # DUMP AND INSTALL
