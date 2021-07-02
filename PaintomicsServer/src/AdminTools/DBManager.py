@@ -65,17 +65,16 @@ def download_command(inputfile=None, specie=None, kegg=0, mapping=0, common=0, r
     os.system("touch " + downloadLog)
     summary = open(download_dir + 'summary.log', 'w')
 
-    #Check install options
-    if inputfile != None:
-        SPECIES_DOWNLOAD= readFile(inputfile) #THE IDS FOR THE SPECIES TO UPDATE
-    else:
+    if inputfile is None:
         n=3 #Download mapping and kegg
         if mapping == 0:
             n-=1 #Do not download mapping
         if kegg == 0:
             n-=2 #Do not download kegg
         SPECIES_DOWNLOAD= {specie : n} #THE IDS FOR THE SPECIES TO UPDATE
-
+    #Check install options
+    else:
+        SPECIES_DOWNLOAD= readFile(inputfile) #THE IDS FOR THE SPECIES TO UPDATE
 
     log("######################################################################" )
     log("### PAINTOMICS 3.0 - DATABASE KEGG DOWNLOADER ")

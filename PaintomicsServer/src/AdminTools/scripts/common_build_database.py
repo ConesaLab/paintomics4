@@ -2296,12 +2296,13 @@ def mergeNetworkFiles():
 def printResults():
     stderr.write("\n\n\n")
     stderr.write("\nVALID FEATURES LINES    : " + str(len(ALL_ENTRIES)))
-    for key, value in FAILED_LINES.items():
-        print("DATABASE:"+ key)
-        print("Failed:" + len(value))
-        print("All Feature:" + TOTAL_FEATURES[key])
+    try:
+        for key, value in FAILED_LINES.items():
+            stderr.write("\nERRONEOUS " + str(key) + " LINES : " + str(len(value)) + " of " + str(TOTAL_FEATURES[key]) + " [" + str(int(len(value)/float(TOTAL_FEATURES.get(key, 0.1))*100)) +"%]")
+        stderr.write("\n\n")
 
-    stderr.write("\n\n")
+    except Exception as e:
+        stderr.write("\nERRONEOUS in print result: " + str(key) )
 
 def dumpDatabase():
     #STEP1. GENERATE THE TABLE feature id --> [transcripts ids]
@@ -2392,7 +2393,7 @@ def createDatabase():
         command = "mongoimport --db " + SPECIE + "-paintomics --collection dbname  --drop --file /tmp/dbname.tmp"
         check_call(command, shell=True)
 
-        command = "mongoimport --db " + SPECIE + "-paintomics --collection kegg  --drop --file /tmp/pathways.tmp  --batchSize 1 --type json"
+        command = "mongoimport --db " + SPECIE + "-paintomics --collection kegg  --drop --file /tmp/pathways.tmp"
         check_call(command, shell=True)
 
         command = "mongoimport --db " + SPECIE + "-paintomics --collection versions  --drop --file /tmp/versions.tmp"

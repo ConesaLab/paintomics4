@@ -338,7 +338,7 @@ function JobInstance(jobID) {
 	}
 
 	this.setCompoundRegulateFeatures = function (compoundRegulateFeatures) {
-		this.compoundRegulateFeatures = compoundRegulateFeatures
+		this.compoundRegulateFeatures = JSON.parse(compoundRegulateFeatures)
 	}
 	this.getCompoundRegulateFeatures = function () {
 		return this.compoundRegulateFeatures == null ? {} : this.compoundRegulateFeatures

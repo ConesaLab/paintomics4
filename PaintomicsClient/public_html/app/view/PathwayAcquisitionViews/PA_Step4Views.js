@@ -4041,7 +4041,6 @@ function PA_Step4DetailsView() {
 	};
 
 	return this;
-
 }
 PA_Step4DetailsView.prototype = new View();
 

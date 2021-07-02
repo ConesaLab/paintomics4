@@ -32223,3 +32223,724 @@
 2021-06-28 23:55:21,525 - INFO - DBManager.py : log -      STEP 2. CREATING THE species.json FILE
 2021-06-28 23:55:21,541 - INFO - DBManager.py : log -      
 2021-06-28 23:55:21,542 - INFO - DBManager.py : log -      STEP 3. CLOSING LOG FILES, GENERATING VERSION FILE
+2021-06-30 21:31:54,448 - INFO - DBManager.py : log -      ######################################################################
+2021-06-30 21:31:54,448 - INFO - DBManager.py : log -      ### PAINTOMICS 3.0 - DATABASE INSTALLER 
+2021-06-30 21:31:54,448 - INFO - DBManager.py : log -      ### v.0.12
+2021-06-30 21:31:54,449 - INFO - DBManager.py : log -      ######################################################################
+2021-06-30 21:31:54,449 - INFO - DBManager.py : log -      
+2021-06-30 21:31:54,449 - INFO - DBManager.py : log -      Installation log is at: /home/tian/Downloads/database/KEGG_DATA/current/install.log
+2021-06-30 21:31:54,449 - INFO - DBManager.py : log -      
+2021-06-30 21:31:54,449 - INFO - DBManager.py : log -      STEP 1. READ CONFIGURATION AND PARSE INPUT FILES...
+2021-06-30 21:32:30,088 - INFO - DBManager.py : log -      ######################################################################
+2021-06-30 21:32:30,088 - INFO - DBManager.py : log -      ### PAINTOMICS 3.0 - DATABASE INSTALLER 
+2021-06-30 21:32:30,089 - INFO - DBManager.py : log -      ### v.0.12
+2021-06-30 21:32:30,089 - INFO - DBManager.py : log -      ######################################################################
+2021-06-30 21:32:30,089 - INFO - DBManager.py : log -      
+2021-06-30 21:32:30,089 - INFO - DBManager.py : log -      Installation log is at: /home/tian/Downloads/database/KEGG_DATA/current/install.log
+2021-06-30 21:32:30,089 - INFO - DBManager.py : log -      
+2021-06-30 21:32:30,090 - INFO - DBManager.py : log -      STEP 1. READ CONFIGURATION AND PARSE INPUT FILES...
+2021-06-30 21:32:32,192 - INFO - DBManager.py : log -             - 1 new organisms will be installed.
+2021-06-30 21:32:32,193 - INFO - DBManager.py : log -             - 6 organisms were installed on previous executions.
+2021-06-30 21:32:32,193 - INFO - DBManager.py : log -      
+2021-06-30 21:38:23,126 - INFO - DBManager.py : log -      
+2021-06-30 21:38:23,127 - INFO - DBManager.py : log -      STEP 1. INSTALLING NEW ORGANISMS
+2021-06-30 21:38:23,128 - INFO - DBManager.py : log -             1 new organisms will be installed.
+2021-06-30 21:38:23,128 - INFO - DBManager.py : log -                  INSTALLING  mmu...
+2021-06-30 21:38:23,129 - INFO - DBManager.py : log -                       INSTALLING MAPPING DATA FOR mmu (1/1)...
+2021-06-30 21:38:23,130 - INFO - DBManager.py : log -                     * PROCESSING AND INSTALLING CUSTOM AND KEGG DATA 
+2021-06-30 21:40:04,880 - INFO - DBManager.py : log -                  INSTALLED IN 101 seconds ---
+2021-06-30 21:40:04,881 - INFO - DBManager.py : log -              INSTALL  1 mmu...SUCCESS
+
+2021-06-30 21:40:04,882 - INFO - DBManager.py : log -      
+2021-06-30 21:40:04,882 - INFO - DBManager.py : log -      STEP 2. CREATING THE species.json FILE
+2021-06-30 21:40:04,899 - INFO - DBManager.py : log -      
+2021-06-30 21:40:04,899 - INFO - DBManager.py : log -      STEP 3. CLOSING LOG FILES, GENERATING VERSION FILE
+2021-06-30 21:47:23,250 - INFO - DBManager.py : log -      ######################################################################
+2021-06-30 21:47:23,251 - INFO - DBManager.py : log -      ### PAINTOMICS 3.0 - DATABASE INSTALLER 
+2021-06-30 21:47:23,251 - INFO - DBManager.py : log -      ### v.0.12
+2021-06-30 21:47:23,251 - INFO - DBManager.py : log -      ######################################################################
+2021-06-30 21:47:23,251 - INFO - DBManager.py : log -      
+2021-06-30 21:47:23,252 - INFO - DBManager.py : log -      Installation log is at: /home/tian/Downloads/database/KEGG_DATA/current/install.log
+2021-06-30 21:47:23,252 - INFO - DBManager.py : log -      
+2021-06-30 21:47:23,252 - INFO - DBManager.py : log -      STEP 1. READ CONFIGURATION AND PARSE INPUT FILES...
+2021-06-30 21:47:25,349 - INFO - DBManager.py : log -             - 1 new organisms will be installed.
+2021-06-30 21:47:25,350 - INFO - DBManager.py : log -             - 6 organisms were installed on previous executions.
+2021-06-30 21:47:25,350 - INFO - DBManager.py : log -      
+2021-06-30 21:47:27,922 - INFO - DBManager.py : log -                  INSTALLING COMMON DATA... 
+2021-06-30 21:47:28,987 - INFO - DBManager.py : log -                  FAILED WHILE INSTALLING COMMON INFORMATION. UNABLE TO CONTINUE. ABORTING!!
+2021-06-30 21:47:28,987 - ERROR - DBManager.py : errorlog -          Command '['/home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/scripts/hubAnalysisInstall.R', '--organism="mmu"', '--scriptDir="/home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/scripts/"', '--outputDir="/home/tian/Downloads/database/KEGG_DATA/download/mmu/hubData/"']' returned non-zero exit status 1.
+2021-06-30 21:48:31,412 - INFO - DBManager.py : log -      ######################################################################
+2021-06-30 21:48:31,412 - INFO - DBManager.py : log -      ### PAINTOMICS 3.0 - DATABASE INSTALLER 
+2021-06-30 21:48:31,412 - INFO - DBManager.py : log -      ### v.0.12
+2021-06-30 21:48:31,412 - INFO - DBManager.py : log -      ######################################################################
+2021-06-30 21:48:31,413 - INFO - DBManager.py : log -      
+2021-06-30 21:48:31,413 - INFO - DBManager.py : log -      Installation log is at: /home/tian/Downloads/database/KEGG_DATA/current/install.log
+2021-06-30 21:48:31,413 - INFO - DBManager.py : log -      
+2021-06-30 21:48:31,413 - INFO - DBManager.py : log -      STEP 1. READ CONFIGURATION AND PARSE INPUT FILES...
+2021-06-30 21:48:33,504 - INFO - DBManager.py : log -             - 1 new organisms will be installed.
+2021-06-30 21:48:33,505 - INFO - DBManager.py : log -             - 6 organisms were installed on previous executions.
+2021-06-30 21:48:33,505 - INFO - DBManager.py : log -      
+2021-06-30 21:51:00,263 - INFO - DBManager.py : log -      ######################################################################
+2021-06-30 21:51:00,264 - INFO - DBManager.py : log -      ### PAINTOMICS 3.0 - DATABASE INSTALLER 
+2021-06-30 21:51:00,264 - INFO - DBManager.py : log -      ### v.0.12
+2021-06-30 21:51:00,264 - INFO - DBManager.py : log -      ######################################################################
+2021-06-30 21:51:00,264 - INFO - DBManager.py : log -      
+2021-06-30 21:51:00,264 - INFO - DBManager.py : log -      Installation log is at: /home/tian/Downloads/database/KEGG_DATA/current/install.log
+2021-06-30 21:51:00,265 - INFO - DBManager.py : log -      
+2021-06-30 21:51:00,265 - INFO - DBManager.py : log -      STEP 1. READ CONFIGURATION AND PARSE INPUT FILES...
+2021-06-30 21:51:02,355 - INFO - DBManager.py : log -             - 1 new organisms will be installed.
+2021-06-30 21:51:02,356 - INFO - DBManager.py : log -             - 6 organisms were installed on previous executions.
+2021-06-30 21:51:02,357 - INFO - DBManager.py : log -      
+2021-06-30 21:54:06,791 - INFO - DBManager.py : log -                  INSTALLING COMMON DATA... 
+2021-06-30 21:54:07,900 - INFO - DBManager.py : log -                  FAILED WHILE INSTALLING COMMON INFORMATION. UNABLE TO CONTINUE. ABORTING!!
+2021-06-30 21:54:07,901 - ERROR - DBManager.py : errorlog -          Command '['/home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/scripts/hubAnalysisInstall.R', '--organism="mmu"', '--scriptDir="/home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/scripts/"', '--outputDir="/home/tian/Downloads/database/KEGG_DATA/download/mmu/hubData/"']' returned non-zero exit status 1.
+2021-06-30 23:13:45,925 - INFO - DBManager.py : log -      ######################################################################
+2021-06-30 23:13:45,925 - INFO - DBManager.py : log -      ### PAINTOMICS 3.0 - DATABASE INSTALLER 
+2021-06-30 23:13:45,926 - INFO - DBManager.py : log -      ### v.0.12
+2021-06-30 23:13:45,926 - INFO - DBManager.py : log -      ######################################################################
+2021-06-30 23:13:45,926 - INFO - DBManager.py : log -      
+2021-06-30 23:13:45,927 - INFO - DBManager.py : log -      Installation log is at: /home/tian/Downloads/database/KEGG_DATA/current/install.log
+2021-06-30 23:13:45,927 - INFO - DBManager.py : log -      
+2021-06-30 23:13:45,927 - INFO - DBManager.py : log -      STEP 1. READ CONFIGURATION AND PARSE INPUT FILES...
+2021-06-30 23:13:48,060 - INFO - DBManager.py : log -             - 1 new organisms will be installed.
+2021-06-30 23:13:48,061 - INFO - DBManager.py : log -             - 6 organisms were installed on previous executions.
+2021-06-30 23:13:48,062 - INFO - DBManager.py : log -      
+2021-06-30 23:22:57,941 - INFO - DBManager.py : log -                  INSTALLING COMMON DATA... 
+2021-06-30 23:22:59,257 - INFO - DBManager.py : log -                  FAILED WHILE INSTALLING COMMON INFORMATION. UNABLE TO CONTINUE. ABORTING!!
+2021-06-30 23:22:59,258 - ERROR - DBManager.py : errorlog -          Command '['/home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/scripts/hubAnalysisInstall.R', '--organism="mmu"', '--scriptDir="/home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/scripts/"', '--outputDir="/home/tian/Downloads/database/KEGG_DATA/download/mmu/hubData/"']' returned non-zero exit status 1.
+2021-06-30 23:24:56,835 - INFO - DBManager.py : log -      ######################################################################
+2021-06-30 23:24:56,835 - INFO - DBManager.py : log -      ### PAINTOMICS 3.0 - DATABASE INSTALLER 
+2021-06-30 23:24:56,835 - INFO - DBManager.py : log -      ### v.0.12
+2021-06-30 23:24:56,836 - INFO - DBManager.py : log -      ######################################################################
+2021-06-30 23:24:56,836 - INFO - DBManager.py : log -      
+2021-06-30 23:24:56,836 - INFO - DBManager.py : log -      Installation log is at: /home/tian/Downloads/database/KEGG_DATA/current/install.log
+2021-06-30 23:24:56,837 - INFO - DBManager.py : log -      
+2021-06-30 23:24:56,837 - INFO - DBManager.py : log -      STEP 1. READ CONFIGURATION AND PARSE INPUT FILES...
+2021-06-30 23:24:58,956 - INFO - DBManager.py : log -             - 1 new organisms will be installed.
+2021-06-30 23:24:58,956 - INFO - DBManager.py : log -             - 6 organisms were installed on previous executions.
+2021-06-30 23:24:58,957 - INFO - DBManager.py : log -      
+2021-06-30 23:35:31,623 - INFO - DBManager.py : log -                  INSTALLING COMMON DATA... 
+2021-06-30 23:35:33,030 - INFO - DBManager.py : log -                  FAILED WHILE INSTALLING COMMON INFORMATION. UNABLE TO CONTINUE. ABORTING!!
+2021-06-30 23:35:33,031 - ERROR - DBManager.py : errorlog -          Command '['/home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/scripts/hubAnalysisInstall.R', '--organism="mmu"', '--scriptDir="/home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/scripts/"', '--outputDir="/home/tian/Downloads/database/KEGG_DATA/download/mmu/hubData/"']' returned non-zero exit status 1.
+2021-06-30 23:39:24,256 - INFO - DBManager.py : log -      ######################################################################
+2021-06-30 23:39:24,257 - INFO - DBManager.py : log -      ### PAINTOMICS 3.0 - DATABASE INSTALLER 
+2021-06-30 23:39:24,257 - INFO - DBManager.py : log -      ### v.0.12
+2021-06-30 23:39:24,257 - INFO - DBManager.py : log -      ######################################################################
+2021-06-30 23:39:24,258 - INFO - DBManager.py : log -      
+2021-06-30 23:39:24,258 - INFO - DBManager.py : log -      Installation log is at: /home/tian/Downloads/database/KEGG_DATA/current/install.log
+2021-06-30 23:39:24,258 - INFO - DBManager.py : log -      
+2021-06-30 23:39:24,258 - INFO - DBManager.py : log -      STEP 1. READ CONFIGURATION AND PARSE INPUT FILES...
+2021-06-30 23:39:26,379 - INFO - DBManager.py : log -             - 1 new organisms will be installed.
+2021-06-30 23:39:26,379 - INFO - DBManager.py : log -             - 6 organisms were installed on previous executions.
+2021-06-30 23:39:26,380 - INFO - DBManager.py : log -      
+2021-06-30 23:44:23,743 - INFO - DBManager.py : log -                  INSTALLING COMMON DATA... 
+2021-06-30 23:44:25,065 - INFO - DBManager.py : log -                  FAILED WHILE INSTALLING COMMON INFORMATION. UNABLE TO CONTINUE. ABORTING!!
+2021-06-30 23:44:25,066 - ERROR - DBManager.py : errorlog -          Command '['/home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/scripts/hubAnalysisInstall.R', '--organism="mmu"', '--scriptDir="/home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/scripts/"', '--outputDir="/home/tian/Downloads/database/KEGG_DATA/download/mmu/hubData/"']' returned non-zero exit status 1.
+2021-06-30 23:47:55,427 - INFO - DBManager.py : log -      ######################################################################
+2021-06-30 23:47:55,428 - INFO - DBManager.py : log -      ### PAINTOMICS 3.0 - DATABASE INSTALLER 
+2021-06-30 23:47:55,428 - INFO - DBManager.py : log -      ### v.0.12
+2021-06-30 23:47:55,429 - INFO - DBManager.py : log -      ######################################################################
+2021-06-30 23:47:55,429 - INFO - DBManager.py : log -      
+2021-06-30 23:47:55,429 - INFO - DBManager.py : log -      Installation log is at: /home/tian/Downloads/database/KEGG_DATA/current/install.log
+2021-06-30 23:47:55,430 - INFO - DBManager.py : log -      
+2021-06-30 23:47:55,430 - INFO - DBManager.py : log -      STEP 1. READ CONFIGURATION AND PARSE INPUT FILES...
+2021-06-30 23:47:57,553 - INFO - DBManager.py : log -             - 1 new organisms will be installed.
+2021-06-30 23:47:57,554 - INFO - DBManager.py : log -             - 6 organisms were installed on previous executions.
+2021-06-30 23:47:57,561 - INFO - DBManager.py : log -      
+2021-06-30 23:57:05,268 - INFO - DBManager.py : log -      
+2021-06-30 23:57:05,270 - INFO - DBManager.py : log -      STEP 1. INSTALLING NEW ORGANISMS
+2021-06-30 23:57:05,270 - INFO - DBManager.py : log -             1 new organisms will be installed.
+2021-06-30 23:57:05,271 - INFO - DBManager.py : log -                  INSTALLING  mmu...
+2021-06-30 23:57:05,273 - INFO - DBManager.py : log -                       INSTALLING MAPPING DATA FOR mmu (1/1)...
+2021-06-30 23:57:05,274 - INFO - DBManager.py : log -                     * PROCESSING AND INSTALLING CUSTOM AND KEGG DATA 
+2021-06-30 23:59:37,276 - INFO - DBManager.py : log -                  INSTALLED IN 151 seconds ---
+2021-06-30 23:59:37,277 - INFO - DBManager.py : log -              INSTALL  1 mmu...SUCCESS
+
+2021-06-30 23:59:37,278 - INFO - DBManager.py : log -      
+2021-06-30 23:59:37,279 - INFO - DBManager.py : log -      STEP 2. CREATING THE species.json FILE
+2021-06-30 23:59:37,298 - INFO - DBManager.py : log -      
+2021-06-30 23:59:37,299 - INFO - DBManager.py : log -      STEP 3. CLOSING LOG FILES, GENERATING VERSION FILE
+2021-07-01 00:11:50,474 - INFO - DBManager.py : log -      ######################################################################
+2021-07-01 00:11:50,475 - INFO - DBManager.py : log -      ### PAINTOMICS 3.0 - DATABASE INSTALLER 
+2021-07-01 00:11:50,475 - INFO - DBManager.py : log -      ### v.0.12
+2021-07-01 00:11:50,476 - INFO - DBManager.py : log -      ######################################################################
+2021-07-01 00:11:50,476 - INFO - DBManager.py : log -      
+2021-07-01 00:11:50,476 - INFO - DBManager.py : log -      Installation log is at: /home/tian/Downloads/database/KEGG_DATA/current/install.log
+2021-07-01 00:11:50,477 - INFO - DBManager.py : log -      
+2021-07-01 00:11:50,477 - INFO - DBManager.py : log -      STEP 1. READ CONFIGURATION AND PARSE INPUT FILES...
+2021-07-01 00:11:52,664 - INFO - DBManager.py : log -             - 1 new organisms will be installed.
+2021-07-01 00:11:52,665 - INFO - DBManager.py : log -             - 6 organisms were installed on previous executions.
+2021-07-01 00:11:52,666 - INFO - DBManager.py : log -      
+2021-07-01 00:11:56,972 - INFO - DBManager.py : log -                  INSTALLING COMMON DATA... 
+2021-07-01 00:11:58,388 - INFO - DBManager.py : log -                  FAILED WHILE INSTALLING COMMON INFORMATION. UNABLE TO CONTINUE. ABORTING!!
+2021-07-01 00:11:58,389 - ERROR - DBManager.py : errorlog -          Command '['/home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/scripts/hubAnalysisInstall.R', '--organism="mmu"', '--scriptDir="/home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/scripts/"', '--outputDir="/home/tian/Downloads/database/KEGG_DATA/download/mmu/hubData/"']' returned non-zero exit status 1.
+2021-07-01 00:22:18,459 - INFO - DBManager.py : log -      ######################################################################
+2021-07-01 00:22:18,459 - INFO - DBManager.py : log -      ### PAINTOMICS 3.0 - DATABASE INSTALLER 
+2021-07-01 00:22:18,459 - INFO - DBManager.py : log -      ### v.0.12
+2021-07-01 00:22:18,460 - INFO - DBManager.py : log -      ######################################################################
+2021-07-01 00:22:18,460 - INFO - DBManager.py : log -      
+2021-07-01 00:22:18,460 - INFO - DBManager.py : log -      Installation log is at: /home/tian/Downloads/database/KEGG_DATA/current/install.log
+2021-07-01 00:22:18,461 - INFO - DBManager.py : log -      
+2021-07-01 00:22:18,461 - INFO - DBManager.py : log -      STEP 1. READ CONFIGURATION AND PARSE INPUT FILES...
+2021-07-01 00:22:20,602 - INFO - DBManager.py : log -             - 1 new organisms will be installed.
+2021-07-01 00:22:20,603 - INFO - DBManager.py : log -             - 6 organisms were installed on previous executions.
+2021-07-01 00:22:20,603 - INFO - DBManager.py : log -      
+2021-07-01 00:33:15,996 - INFO - DBManager.py : log -      
+2021-07-01 00:33:15,997 - INFO - DBManager.py : log -      STEP 1. INSTALLING NEW ORGANISMS
+2021-07-01 00:33:15,998 - INFO - DBManager.py : log -             1 new organisms will be installed.
+2021-07-01 00:33:15,998 - INFO - DBManager.py : log -                  INSTALLING  mmu...
+2021-07-01 00:33:16,002 - INFO - DBManager.py : log -                       INSTALLING MAPPING DATA FOR mmu (1/1)...
+2021-07-01 00:33:16,005 - INFO - DBManager.py : log -                     * PROCESSING AND INSTALLING CUSTOM AND KEGG DATA 
+2021-07-01 00:35:31,424 - INFO - DBManager.py : log -                  INSTALLED IN 135 seconds ---
+2021-07-01 00:35:31,426 - INFO - DBManager.py : log -              INSTALL  1 mmu...SUCCESS
+
+2021-07-01 00:35:31,426 - INFO - DBManager.py : log -      
+2021-07-01 00:35:31,427 - INFO - DBManager.py : log -      STEP 2. CREATING THE species.json FILE
+2021-07-01 00:35:31,452 - INFO - DBManager.py : log -      
+2021-07-01 00:35:31,452 - INFO - DBManager.py : log -      STEP 3. CLOSING LOG FILES, GENERATING VERSION FILE
+2021-07-01 00:59:39,986 - INFO - DBManager.py : log -      ######################################################################
+2021-07-01 00:59:39,987 - INFO - DBManager.py : log -      ### PAINTOMICS 3.0 - DATABASE INSTALLER 
+2021-07-01 00:59:39,987 - INFO - DBManager.py : log -      ### v.0.12
+2021-07-01 00:59:39,987 - INFO - DBManager.py : log -      ######################################################################
+2021-07-01 00:59:39,988 - INFO - DBManager.py : log -      
+2021-07-01 00:59:39,988 - INFO - DBManager.py : log -      Installation log is at: /home/tian/Downloads/database/KEGG_DATA/current/install.log
+2021-07-01 00:59:39,988 - INFO - DBManager.py : log -      
+2021-07-01 00:59:39,989 - INFO - DBManager.py : log -      STEP 1. READ CONFIGURATION AND PARSE INPUT FILES...
+2021-07-01 00:59:42,157 - INFO - DBManager.py : log -             - 1 new organisms will be installed.
+2021-07-01 00:59:42,158 - INFO - DBManager.py : log -             - 6 organisms were installed on previous executions.
+2021-07-01 00:59:42,158 - INFO - DBManager.py : log -      
+2021-07-01 00:59:45,916 - INFO - DBManager.py : log -                  INSTALLING COMMON DATA... 
+2021-07-01 00:59:47,332 - INFO - DBManager.py : log -                  FAILED WHILE INSTALLING COMMON INFORMATION. UNABLE TO CONTINUE. ABORTING!!
+2021-07-01 00:59:47,333 - ERROR - DBManager.py : errorlog -          Command '['/home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/scripts/hubAnalysisInstall.R', '--organism="mmu"', '--scriptDir="/home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/scripts/"', '--outputDir="/home/tian/Downloads/database/KEGG_DATA/download/mmu/hubData/"']' returned non-zero exit status 1.
+2021-07-01 01:00:11,478 - INFO - DBManager.py : log -      ######################################################################
+2021-07-01 01:00:11,478 - INFO - DBManager.py : log -      ### PAINTOMICS 3.0 - DATABASE INSTALLER 
+2021-07-01 01:00:11,478 - INFO - DBManager.py : log -      ### v.0.12
+2021-07-01 01:00:11,479 - INFO - DBManager.py : log -      ######################################################################
+2021-07-01 01:00:11,479 - INFO - DBManager.py : log -      
+2021-07-01 01:00:11,479 - INFO - DBManager.py : log -      Installation log is at: /home/tian/Downloads/database/KEGG_DATA/current/install.log
+2021-07-01 01:00:11,480 - INFO - DBManager.py : log -      
+2021-07-01 01:00:11,480 - INFO - DBManager.py : log -      STEP 1. READ CONFIGURATION AND PARSE INPUT FILES...
+2021-07-01 01:00:13,628 - INFO - DBManager.py : log -             - 1 new organisms will be installed.
+2021-07-01 01:00:13,629 - INFO - DBManager.py : log -             - 6 organisms were installed on previous executions.
+2021-07-01 01:00:13,629 - INFO - DBManager.py : log -      
+2021-07-01 01:01:15,954 - INFO - DBManager.py : log -                  INSTALLING COMMON DATA... 
+2021-07-01 01:01:17,302 - INFO - DBManager.py : log -                  FAILED WHILE INSTALLING COMMON INFORMATION. UNABLE TO CONTINUE. ABORTING!!
+2021-07-01 01:01:17,302 - ERROR - DBManager.py : errorlog -          Command '['/home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/scripts/hubAnalysisInstall.R', '--organism="mmu"', '--scriptDir="/home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/scripts/"', '--outputDir="/home/tian/Downloads/database/KEGG_DATA/download/mmu/hubData/"']' returned non-zero exit status 1.
+2021-07-01 15:02:56,012 - INFO - DBManager.py : log -      ######################################################################
+2021-07-01 15:02:56,012 - INFO - DBManager.py : log -      ### PAINTOMICS 3.0 - DATABASE INSTALLER 
+2021-07-01 15:02:56,012 - INFO - DBManager.py : log -      ### v.0.12
+2021-07-01 15:02:56,012 - INFO - DBManager.py : log -      ######################################################################
+2021-07-01 15:02:56,013 - INFO - DBManager.py : log -      
+2021-07-01 15:02:56,013 - INFO - DBManager.py : log -      Installation log is at: /home/tian/Downloads/database/KEGG_DATA/current/install.log
+2021-07-01 15:02:56,013 - INFO - DBManager.py : log -      
+2021-07-01 15:02:56,013 - INFO - DBManager.py : log -      STEP 1. READ CONFIGURATION AND PARSE INPUT FILES...
+2021-07-01 15:02:58,149 - INFO - DBManager.py : log -             - 1 new organisms will be installed.
+2021-07-01 15:02:58,150 - INFO - DBManager.py : log -             - 6 organisms were installed on previous executions.
+2021-07-01 15:02:58,150 - INFO - DBManager.py : log -      
+2021-07-01 15:08:43,500 - INFO - DBManager.py : log -      
+2021-07-01 15:08:43,501 - INFO - DBManager.py : log -      STEP 1. INSTALLING NEW ORGANISMS
+2021-07-01 15:08:43,501 - INFO - DBManager.py : log -             1 new organisms will be installed.
+2021-07-01 15:08:43,502 - INFO - DBManager.py : log -                  INSTALLING  mmu...
+2021-07-01 15:08:43,503 - INFO - DBManager.py : log -                       INSTALLING MAPPING DATA FOR mmu (1/1)...
+2021-07-01 15:08:43,503 - INFO - DBManager.py : log -                     * PROCESSING AND INSTALLING CUSTOM AND KEGG DATA 
+2021-07-01 15:10:22,171 - INFO - DBManager.py : log -                  INSTALLED IN 98 seconds ---
+2021-07-01 15:10:22,171 - INFO - DBManager.py : log -              INSTALL  1 mmu...SUCCESS
+
+2021-07-01 15:10:22,172 - INFO - DBManager.py : log -      
+2021-07-01 15:10:22,172 - INFO - DBManager.py : log -      STEP 2. CREATING THE species.json FILE
+2021-07-01 15:10:22,190 - INFO - DBManager.py : log -      
+2021-07-01 15:10:22,190 - INFO - DBManager.py : log -      STEP 3. CLOSING LOG FILES, GENERATING VERSION FILE
+2021-07-01 16:03:49,491 - INFO - DBManager.py : log -      ######################################################################
+2021-07-01 16:03:49,491 - INFO - DBManager.py : log -      ### PAINTOMICS 3.0 - DATABASE INSTALLER 
+2021-07-01 16:03:49,492 - INFO - DBManager.py : log -      ### v.0.12
+2021-07-01 16:03:49,492 - INFO - DBManager.py : log -      ######################################################################
+2021-07-01 16:03:49,492 - INFO - DBManager.py : log -      
+2021-07-01 16:03:49,492 - INFO - DBManager.py : log -      Installation log is at: /home/tian/Downloads/database/KEGG_DATA/current/install.log
+2021-07-01 16:03:49,493 - INFO - DBManager.py : log -      
+2021-07-01 16:03:49,493 - INFO - DBManager.py : log -      STEP 1. READ CONFIGURATION AND PARSE INPUT FILES...
+2021-07-01 16:03:51,655 - INFO - DBManager.py : log -             - 1 new organisms will be installed.
+2021-07-01 16:03:51,656 - INFO - DBManager.py : log -             - 6 organisms were installed on previous executions.
+2021-07-01 16:03:51,656 - INFO - DBManager.py : log -      
+2021-07-01 16:08:12,701 - INFO - DBManager.py : log -                  INSTALLING COMMON DATA... 
+2021-07-01 16:08:14,034 - INFO - DBManager.py : log -                  FAILED WHILE INSTALLING COMMON INFORMATION. UNABLE TO CONTINUE. ABORTING!!
+2021-07-01 16:08:14,035 - ERROR - DBManager.py : errorlog -          Command '['/home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/scripts/hubAnalysisInstall.R', '--organism="mmu"', '--scriptDir="/home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/scripts/"', '--outputDir="/home/tian/Downloads/database/KEGG_DATA/download/mmu/hubData/"']' returned non-zero exit status 1.
+2021-07-01 16:18:41,671 - INFO - DBManager.py : log -      ######################################################################
+2021-07-01 16:18:41,671 - INFO - DBManager.py : log -      ### PAINTOMICS 3.0 - DATABASE INSTALLER 
+2021-07-01 16:18:41,672 - INFO - DBManager.py : log -      ### v.0.12
+2021-07-01 16:18:41,672 - INFO - DBManager.py : log -      ######################################################################
+2021-07-01 16:18:41,672 - INFO - DBManager.py : log -      
+2021-07-01 16:18:41,673 - INFO - DBManager.py : log -      Installation log is at: /home/tian/Downloads/database/KEGG_DATA/current/install.log
+2021-07-01 16:18:41,673 - INFO - DBManager.py : log -      
+2021-07-01 16:18:41,673 - INFO - DBManager.py : log -      STEP 1. READ CONFIGURATION AND PARSE INPUT FILES...
+2021-07-01 16:18:43,793 - INFO - DBManager.py : log -             - 1 new organisms will be installed.
+2021-07-01 16:18:43,794 - INFO - DBManager.py : log -             - 6 organisms were installed on previous executions.
+2021-07-01 16:18:43,794 - INFO - DBManager.py : log -      
+2021-07-01 16:24:50,422 - INFO - DBManager.py : log -      
+2021-07-01 16:24:50,423 - INFO - DBManager.py : log -      STEP 1. INSTALLING NEW ORGANISMS
+2021-07-01 16:24:50,423 - INFO - DBManager.py : log -             1 new organisms will be installed.
+2021-07-01 16:24:50,424 - INFO - DBManager.py : log -                  INSTALLING  mmu...
+2021-07-01 16:24:50,424 - INFO - DBManager.py : log -                       INSTALLING MAPPING DATA FOR mmu (1/1)...
+2021-07-01 16:24:50,425 - INFO - DBManager.py : log -                     * PROCESSING AND INSTALLING CUSTOM AND KEGG DATA 
+2021-07-01 16:26:52,989 - INFO - DBManager.py : log -                  INSTALLED IN 122 seconds ---
+2021-07-01 16:26:52,991 - INFO - DBManager.py : log -              INSTALL  1 mmu...SUCCESS
+
+2021-07-01 16:26:52,991 - INFO - DBManager.py : log -      
+2021-07-01 16:26:52,992 - INFO - DBManager.py : log -      STEP 2. CREATING THE species.json FILE
+2021-07-01 16:26:53,010 - INFO - DBManager.py : log -      
+2021-07-01 16:26:53,010 - INFO - DBManager.py : log -      STEP 3. CLOSING LOG FILES, GENERATING VERSION FILE
+2021-07-01 16:37:05,608 - INFO - DBManager.py : log -      ######################################################################
+2021-07-01 16:37:05,608 - INFO - DBManager.py : log -      ### PAINTOMICS 3.0 - DATABASE INSTALLER 
+2021-07-01 16:37:05,609 - INFO - DBManager.py : log -      ### v.0.12
+2021-07-01 16:37:05,609 - INFO - DBManager.py : log -      ######################################################################
+2021-07-01 16:37:05,609 - INFO - DBManager.py : log -      
+2021-07-01 16:37:05,609 - INFO - DBManager.py : log -      Installation log is at: /home/tian/Downloads/database/KEGG_DATA/current/install.log
+2021-07-01 16:37:05,610 - INFO - DBManager.py : log -      
+2021-07-01 16:37:05,610 - INFO - DBManager.py : log -      STEP 1. READ CONFIGURATION AND PARSE INPUT FILES...
+2021-07-01 16:37:07,794 - INFO - DBManager.py : log -             - 1 new organisms will be installed.
+2021-07-01 16:37:07,795 - INFO - DBManager.py : log -             - 6 organisms were installed on previous executions.
+2021-07-01 16:37:07,796 - INFO - DBManager.py : log -      
+2021-07-01 16:37:31,399 - INFO - DBManager.py : log -                  INSTALLING COMMON DATA... 
+2021-07-01 16:37:32,867 - INFO - DBManager.py : log -                  FAILED WHILE INSTALLING COMMON INFORMATION. UNABLE TO CONTINUE. ABORTING!!
+2021-07-01 16:37:32,868 - ERROR - DBManager.py : errorlog -          Command '['/home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/scripts/hubAnalysisInstall.R', '--organism="mmu"', '--scriptDir="/home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/scripts/"', '--outputDir="/home/tian/Downloads/database/KEGG_DATA/download/mmu/hubData/"']' returned non-zero exit status 1.
+2021-07-01 16:40:12,072 - INFO - DBManager.py : log -      ######################################################################
+2021-07-01 16:40:12,073 - INFO - DBManager.py : log -      ### PAINTOMICS 3.0 - DATABASE INSTALLER 
+2021-07-01 16:40:12,073 - INFO - DBManager.py : log -      ### v.0.12
+2021-07-01 16:40:12,074 - INFO - DBManager.py : log -      ######################################################################
+2021-07-01 16:40:12,074 - INFO - DBManager.py : log -      
+2021-07-01 16:40:12,074 - INFO - DBManager.py : log -      Installation log is at: /home/tian/Downloads/database/KEGG_DATA/current/install.log
+2021-07-01 16:40:12,075 - INFO - DBManager.py : log -      
+2021-07-01 16:40:12,075 - INFO - DBManager.py : log -      STEP 1. READ CONFIGURATION AND PARSE INPUT FILES...
+2021-07-01 16:40:14,223 - INFO - DBManager.py : log -             - 1 new organisms will be installed.
+2021-07-01 16:40:14,224 - INFO - DBManager.py : log -             - 6 organisms were installed on previous executions.
+2021-07-01 16:40:14,225 - INFO - DBManager.py : log -      
+2021-07-01 16:43:32,895 - INFO - DBManager.py : log -                  INSTALLING COMMON DATA... 
+2021-07-01 16:43:34,226 - INFO - DBManager.py : log -                  FAILED WHILE INSTALLING COMMON INFORMATION. UNABLE TO CONTINUE. ABORTING!!
+2021-07-01 16:43:34,227 - ERROR - DBManager.py : errorlog -          Command '['/home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/scripts/hubAnalysisInstall.R', '--organism="mmu"', '--scriptDir="/home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/scripts/"', '--outputDir="/home/tian/Downloads/database/KEGG_DATA/download/mmu/hubData/"']' returned non-zero exit status 1.
+2021-07-01 16:48:10,538 - INFO - DBManager.py : log -      ######################################################################
+2021-07-01 16:48:10,538 - INFO - DBManager.py : log -      ### PAINTOMICS 3.0 - DATABASE INSTALLER 
+2021-07-01 16:48:10,539 - INFO - DBManager.py : log -      ### v.0.12
+2021-07-01 16:48:10,539 - INFO - DBManager.py : log -      ######################################################################
+2021-07-01 16:48:10,539 - INFO - DBManager.py : log -      
+2021-07-01 16:48:10,540 - INFO - DBManager.py : log -      Installation log is at: /home/tian/Downloads/database/KEGG_DATA/current/install.log
+2021-07-01 16:48:10,540 - INFO - DBManager.py : log -      
+2021-07-01 16:48:10,540 - INFO - DBManager.py : log -      STEP 1. READ CONFIGURATION AND PARSE INPUT FILES...
+2021-07-01 16:48:12,663 - INFO - DBManager.py : log -             - 1 new organisms will be installed.
+2021-07-01 16:48:12,664 - INFO - DBManager.py : log -             - 6 organisms were installed on previous executions.
+2021-07-01 16:48:12,665 - INFO - DBManager.py : log -      
+2021-07-01 16:55:15,551 - INFO - DBManager.py : log -      
+2021-07-01 16:55:15,552 - INFO - DBManager.py : log -      STEP 1. INSTALLING NEW ORGANISMS
+2021-07-01 16:55:15,553 - INFO - DBManager.py : log -             1 new organisms will be installed.
+2021-07-01 16:55:15,553 - INFO - DBManager.py : log -                  INSTALLING  mmu...
+2021-07-01 16:55:15,556 - INFO - DBManager.py : log -                       INSTALLING MAPPING DATA FOR mmu (1/1)...
+2021-07-01 16:55:15,558 - INFO - DBManager.py : log -                     * PROCESSING AND INSTALLING CUSTOM AND KEGG DATA 
+2021-07-01 16:57:19,766 - ERROR - DBManager.py : errorlog -                  [<FrameSummary file /home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/DBManager.py, line 974 in <module>>, <FrameSummary file /home/tian/.local/lib/python3.8/site-packages/scriptine/command.py, line 194 in autocmds>, <FrameSummary file /home/tian/.local/lib/python3.8/site-packages/scriptine/command.py, line 105 in parse_and_run_function>, <FrameSummary file /home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/DBManager.py, line 457 in install_command>, <FrameSummary file /home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/DBManager.py, line 697 in installSpecieData>]
+2021-07-01 16:57:19,768 - INFO - DBManager.py : log -                       INSTALLING MAPPING DATA FOR mmu (1/1)...
+2021-07-01 16:57:19,769 - INFO - DBManager.py : log -                     * PROCESSING AND INSTALLING CUSTOM AND KEGG DATA 
+2021-07-01 16:59:15,890 - ERROR - DBManager.py : errorlog -                  [<FrameSummary file /home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/DBManager.py, line 974 in <module>>, <FrameSummary file /home/tian/.local/lib/python3.8/site-packages/scriptine/command.py, line 194 in autocmds>, <FrameSummary file /home/tian/.local/lib/python3.8/site-packages/scriptine/command.py, line 105 in parse_and_run_function>, <FrameSummary file /home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/DBManager.py, line 463 in install_command>, <FrameSummary file /home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/DBManager.py, line 697 in installSpecieData>]
+2021-07-01 17:29:29,063 - INFO - DBManager.py : log -      ######################################################################
+2021-07-01 17:29:29,064 - INFO - DBManager.py : log -      ### PAINTOMICS 3.0 - DATABASE INSTALLER 
+2021-07-01 17:29:29,064 - INFO - DBManager.py : log -      ### v.0.12
+2021-07-01 17:29:29,064 - INFO - DBManager.py : log -      ######################################################################
+2021-07-01 17:29:29,065 - INFO - DBManager.py : log -      
+2021-07-01 17:29:29,065 - INFO - DBManager.py : log -      Installation log is at: /home/tian/Downloads/database/KEGG_DATA/current/install.log
+2021-07-01 17:29:29,065 - INFO - DBManager.py : log -      
+2021-07-01 17:29:29,065 - INFO - DBManager.py : log -      STEP 1. READ CONFIGURATION AND PARSE INPUT FILES...
+2021-07-01 17:36:38,070 - INFO - DBManager.py : log -      ######################################################################
+2021-07-01 17:36:38,070 - INFO - DBManager.py : log -      ### PAINTOMICS 3.0 - DATABASE INSTALLER 
+2021-07-01 17:36:38,070 - INFO - DBManager.py : log -      ### v.0.12
+2021-07-01 17:36:38,071 - INFO - DBManager.py : log -      ######################################################################
+2021-07-01 17:36:38,071 - INFO - DBManager.py : log -      
+2021-07-01 17:36:38,071 - INFO - DBManager.py : log -      Installation log is at: /home/tian/Downloads/database/KEGG_DATA/current/install.log
+2021-07-01 17:36:38,072 - INFO - DBManager.py : log -      
+2021-07-01 17:36:38,072 - INFO - DBManager.py : log -      STEP 1. READ CONFIGURATION AND PARSE INPUT FILES...
+2021-07-01 17:36:40,213 - INFO - DBManager.py : log -             - 1 new organisms will be installed.
+2021-07-01 17:36:40,214 - INFO - DBManager.py : log -             - 6 organisms were installed on previous executions.
+2021-07-01 17:36:40,215 - INFO - DBManager.py : log -      
+2021-07-01 17:43:48,653 - INFO - DBManager.py : log -      
+2021-07-01 17:43:48,654 - INFO - DBManager.py : log -      STEP 1. INSTALLING NEW ORGANISMS
+2021-07-01 17:43:48,655 - INFO - DBManager.py : log -         1 new organisms will be installed.
+2021-07-01 17:43:48,656 - INFO - DBManager.py : log -          INSTALLING  mmu...
+2021-07-01 17:43:48,657 - INFO - DBManager.py : log -                       INSTALLING MAPPING DATA FOR mmu (1/1)...
+2021-07-01 17:43:48,658 - INFO - DBManager.py : log -                     * PROCESSING AND INSTALLING CUSTOM AND KEGG DATA 
+2021-07-01 17:46:17,282 - INFO - DBManager.py : log -              INSTALLED IN 148 seconds ---
+2021-07-01 17:46:17,284 - INFO - DBManager.py : log -          INSTALL  1 mmu...SUCCESS
+
+2021-07-01 17:46:17,284 - INFO - DBManager.py : log -      
+2021-07-01 17:46:17,285 - INFO - DBManager.py : log -      STEP 2. CREATING THE species.json FILE
+2021-07-01 17:46:17,304 - INFO - DBManager.py : log -      
+2021-07-01 17:46:17,304 - INFO - DBManager.py : log -      STEP 3. CLOSING LOG FILES, GENERATING VERSION FILE
+2021-07-01 19:56:10,412 - INFO - DBManager.py : log -      ######################################################################
+2021-07-01 19:56:10,413 - INFO - DBManager.py : log -      ### PAINTOMICS 3.0 - DATABASE INSTALLER 
+2021-07-01 19:56:10,413 - INFO - DBManager.py : log -      ### v.0.12
+2021-07-01 19:56:10,413 - INFO - DBManager.py : log -      ######################################################################
+2021-07-01 19:56:10,414 - INFO - DBManager.py : log -      
+2021-07-01 19:56:10,414 - INFO - DBManager.py : log -      Installation log is at: /home/tian/Downloads/database/KEGG_DATA/current/install.log
+2021-07-01 19:56:10,414 - INFO - DBManager.py : log -      
+2021-07-01 19:56:10,415 - INFO - DBManager.py : log -      STEP 1. READ CONFIGURATION AND PARSE INPUT FILES...
+2021-07-01 19:56:12,615 - INFO - DBManager.py : log -             - 1 new organisms will be installed.
+2021-07-01 19:56:12,615 - INFO - DBManager.py : log -             - 6 organisms were installed on previous executions.
+2021-07-01 19:56:12,618 - INFO - DBManager.py : log -      
+2021-07-01 20:04:48,590 - INFO - DBManager.py : log -      
+2021-07-01 20:04:48,591 - INFO - DBManager.py : log -      STEP 1. INSTALLING NEW ORGANISMS
+2021-07-01 20:04:48,591 - INFO - DBManager.py : log -             1 new organisms will be installed.
+2021-07-01 20:04:48,592 - INFO - DBManager.py : log -                  INSTALLING  mmu...
+2021-07-01 20:04:48,595 - INFO - DBManager.py : log -                       INSTALLING MAPPING DATA FOR mmu (1/1)...
+2021-07-01 20:04:48,597 - INFO - DBManager.py : log -                     * PROCESSING AND INSTALLING CUSTOM AND KEGG DATA 
+2021-07-01 20:06:35,454 - INFO - DBManager.py : log -                  INSTALLED IN 106 seconds ---
+2021-07-01 20:06:35,454 - INFO - DBManager.py : log -              INSTALL  1 mmu...SUCCESS
+
+2021-07-01 20:06:35,455 - INFO - DBManager.py : log -      
+2021-07-01 20:06:35,455 - INFO - DBManager.py : log -      STEP 2. CREATING THE species.json FILE
+2021-07-01 20:06:35,481 - INFO - DBManager.py : log -      
+2021-07-01 20:06:35,482 - INFO - DBManager.py : log -      STEP 3. CLOSING LOG FILES, GENERATING VERSION FILE
+2021-07-01 21:09:31,072 - INFO - DBManager.py : log -      ######################################################################
+2021-07-01 21:09:31,073 - INFO - DBManager.py : log -      ### PAINTOMICS 3.0 - DATABASE INSTALLER 
+2021-07-01 21:09:31,073 - INFO - DBManager.py : log -      ### v.0.12
+2021-07-01 21:09:31,073 - INFO - DBManager.py : log -      ######################################################################
+2021-07-01 21:09:31,074 - INFO - DBManager.py : log -      
+2021-07-01 21:09:31,074 - INFO - DBManager.py : log -      Installation log is at: /home/tian/Downloads/database/KEGG_DATA/current/install.log
+2021-07-01 21:09:31,074 - INFO - DBManager.py : log -      
+2021-07-01 21:09:31,075 - INFO - DBManager.py : log -      STEP 1. READ CONFIGURATION AND PARSE INPUT FILES...
+2021-07-01 21:09:33,266 - INFO - DBManager.py : log -             - 1 new organisms will be installed.
+2021-07-01 21:09:33,267 - INFO - DBManager.py : log -             - 6 organisms were installed on previous executions.
+2021-07-01 21:09:33,267 - INFO - DBManager.py : log -      
+2021-07-01 21:11:32,888 - INFO - DBManager.py : log -                  INSTALLING COMMON DATA... 
+2021-07-01 21:11:34,290 - INFO - DBManager.py : log -                  FAILED WHILE INSTALLING COMMON INFORMATION. UNABLE TO CONTINUE. ABORTING!!
+2021-07-01 21:11:34,291 - ERROR - DBManager.py : errorlog -          Command '['/home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/scripts/hubAnalysisInstall.R', '--organism="mmu"', '--scriptDir="/home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/scripts/"', '--outputDir="/home/tian/Downloads/database/KEGG_DATA/download/mmu/hubData/"']' returned non-zero exit status 1.
+2021-07-01 21:32:47,236 - INFO - DBManager.py : log -      ######################################################################
+2021-07-01 21:32:47,236 - INFO - DBManager.py : log -      ### PAINTOMICS 3.0 - DATABASE INSTALLER 
+2021-07-01 21:32:47,237 - INFO - DBManager.py : log -      ### v.0.12
+2021-07-01 21:32:47,237 - INFO - DBManager.py : log -      ######################################################################
+2021-07-01 21:32:47,237 - INFO - DBManager.py : log -      
+2021-07-01 21:32:47,238 - INFO - DBManager.py : log -      Installation log is at: /home/tian/Downloads/database/KEGG_DATA/current/install.log
+2021-07-01 21:32:47,238 - INFO - DBManager.py : log -      
+2021-07-01 21:32:47,238 - INFO - DBManager.py : log -      STEP 1. READ CONFIGURATION AND PARSE INPUT FILES...
+2021-07-01 21:32:49,365 - INFO - DBManager.py : log -             - 1 new organisms will be installed.
+2021-07-01 21:32:49,366 - INFO - DBManager.py : log -             - 6 organisms were installed on previous executions.
+2021-07-01 21:32:49,366 - INFO - DBManager.py : log -      
+2021-07-01 21:41:59,803 - INFO - DBManager.py : log -      
+2021-07-01 21:41:59,804 - INFO - DBManager.py : log -      STEP 1. INSTALLING NEW ORGANISMS
+2021-07-01 21:41:59,805 - INFO - DBManager.py : log -             1 new organisms will be installed.
+2021-07-01 21:41:59,806 - INFO - DBManager.py : log -                  INSTALLING  mmu...
+2021-07-01 21:41:59,809 - INFO - DBManager.py : log -                       INSTALLING MAPPING DATA FOR mmu (1/1)...
+2021-07-01 21:41:59,810 - INFO - DBManager.py : log -                     * PROCESSING AND INSTALLING CUSTOM AND KEGG DATA 
+2021-07-01 21:44:46,507 - INFO - DBManager.py : log -                  INSTALLED IN 166 seconds ---
+2021-07-01 21:44:46,508 - INFO - DBManager.py : log -              INSTALL  1 mmu...SUCCESS
+
+2021-07-01 21:44:46,509 - INFO - DBManager.py : log -      
+2021-07-01 21:44:46,509 - INFO - DBManager.py : log -      STEP 2. CREATING THE species.json FILE
+2021-07-01 21:44:46,528 - INFO - DBManager.py : log -      
+2021-07-01 21:44:46,529 - INFO - DBManager.py : log -      STEP 3. CLOSING LOG FILES, GENERATING VERSION FILE
+2021-07-01 22:18:38,052 - INFO - DBManager.py : log -      ######################################################################
+2021-07-01 22:18:38,053 - INFO - DBManager.py : log -      ### PAINTOMICS 3.0 - DATABASE INSTALLER 
+2021-07-01 22:18:38,053 - INFO - DBManager.py : log -      ### v.0.12
+2021-07-01 22:18:38,054 - INFO - DBManager.py : log -      ######################################################################
+2021-07-01 22:18:38,054 - INFO - DBManager.py : log -      
+2021-07-01 22:18:38,054 - INFO - DBManager.py : log -      Installation log is at: /home/tian/Downloads/database/KEGG_DATA/current/install.log
+2021-07-01 22:18:38,055 - INFO - DBManager.py : log -      
+2021-07-01 22:18:38,055 - INFO - DBManager.py : log -      STEP 1. READ CONFIGURATION AND PARSE INPUT FILES...
+2021-07-01 22:18:40,205 - INFO - DBManager.py : log -             - 1 new organisms will be installed.
+2021-07-01 22:18:40,206 - INFO - DBManager.py : log -             - 6 organisms were installed on previous executions.
+2021-07-01 22:18:40,206 - INFO - DBManager.py : log -      
+2021-07-01 22:25:36,802 - INFO - DBManager.py : log -                  INSTALLING COMMON DATA... 
+2021-07-01 22:25:38,191 - INFO - DBManager.py : log -                  FAILED WHILE INSTALLING COMMON INFORMATION. UNABLE TO CONTINUE. ABORTING!!
+2021-07-01 22:25:38,191 - ERROR - DBManager.py : errorlog -          Command '['/home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/scripts/hubAnalysisInstall.R', '--organism="mmu"', '--scriptDir="/home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/scripts/"', '--outputDir="/home/tian/Downloads/database/KEGG_DATA/download/mmu/hubData/"']' returned non-zero exit status 1.
+2021-07-01 22:42:49,287 - INFO - DBManager.py : log -      ######################################################################
+2021-07-01 22:42:49,287 - INFO - DBManager.py : log -      ### PAINTOMICS 3.0 - DATABASE INSTALLER 
+2021-07-01 22:42:49,288 - INFO - DBManager.py : log -      ### v.0.12
+2021-07-01 22:42:49,288 - INFO - DBManager.py : log -      ######################################################################
+2021-07-01 22:42:49,288 - INFO - DBManager.py : log -      
+2021-07-01 22:42:49,289 - INFO - DBManager.py : log -      Installation log is at: /home/tian/Downloads/database/KEGG_DATA/current/install.log
+2021-07-01 22:42:49,289 - INFO - DBManager.py : log -      
+2021-07-01 22:42:49,289 - INFO - DBManager.py : log -      STEP 1. READ CONFIGURATION AND PARSE INPUT FILES...
+2021-07-01 22:42:51,464 - INFO - DBManager.py : log -             - 1 new organisms will be installed.
+2021-07-01 22:42:51,465 - INFO - DBManager.py : log -             - 6 organisms were installed on previous executions.
+2021-07-01 22:42:51,466 - INFO - DBManager.py : log -      
+2021-07-01 22:57:06,255 - INFO - DBManager.py : log -      
+2021-07-01 22:57:06,256 - INFO - DBManager.py : log -      STEP 1. INSTALLING NEW ORGANISMS
+2021-07-01 22:57:06,257 - INFO - DBManager.py : log -             1 new organisms will be installed.
+2021-07-01 22:57:06,257 - INFO - DBManager.py : log -                  INSTALLING  mmu...
+2021-07-01 22:57:06,260 - INFO - DBManager.py : log -                       INSTALLING MAPPING DATA FOR mmu (1/1)...
+2021-07-01 22:57:06,262 - INFO - DBManager.py : log -                     * PROCESSING AND INSTALLING CUSTOM AND KEGG DATA 
+2021-07-01 22:59:57,772 - ERROR - DBManager.py : errorlog -                  [<FrameSummary file /home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/DBManager.py, line 973 in <module>>, <FrameSummary file /home/tian/.local/lib/python3.8/site-packages/scriptine/command.py, line 194 in autocmds>, <FrameSummary file /home/tian/.local/lib/python3.8/site-packages/scriptine/command.py, line 105 in parse_and_run_function>, <FrameSummary file /home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/DBManager.py, line 456 in install_command>, <FrameSummary file /home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/DBManager.py, line 696 in installSpecieData>]
+2021-07-01 22:59:57,774 - INFO - DBManager.py : log -                       INSTALLING MAPPING DATA FOR mmu (1/1)...
+2021-07-01 22:59:57,775 - INFO - DBManager.py : log -                     * PROCESSING AND INSTALLING CUSTOM AND KEGG DATA 
+2021-07-01 23:02:37,734 - ERROR - DBManager.py : errorlog -                  [<FrameSummary file /home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/DBManager.py, line 973 in <module>>, <FrameSummary file /home/tian/.local/lib/python3.8/site-packages/scriptine/command.py, line 194 in autocmds>, <FrameSummary file /home/tian/.local/lib/python3.8/site-packages/scriptine/command.py, line 105 in parse_and_run_function>, <FrameSummary file /home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/DBManager.py, line 462 in install_command>, <FrameSummary file /home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/DBManager.py, line 696 in installSpecieData>]
+2021-07-01 23:07:12,856 - INFO - DBManager.py : log -      ######################################################################
+2021-07-01 23:07:12,856 - INFO - DBManager.py : log -      ### PAINTOMICS 3.0 - DATABASE INSTALLER 
+2021-07-01 23:07:12,856 - INFO - DBManager.py : log -      ### v.0.12
+2021-07-01 23:07:12,857 - INFO - DBManager.py : log -      ######################################################################
+2021-07-01 23:07:12,857 - INFO - DBManager.py : log -      
+2021-07-01 23:07:12,857 - INFO - DBManager.py : log -      Installation log is at: /home/tian/Downloads/database/KEGG_DATA/current/install.log
+2021-07-01 23:07:12,858 - INFO - DBManager.py : log -      
+2021-07-01 23:07:12,858 - INFO - DBManager.py : log -      STEP 1. READ CONFIGURATION AND PARSE INPUT FILES...
+2021-07-01 23:07:15,045 - INFO - DBManager.py : log -             - 1 new organisms will be installed.
+2021-07-01 23:07:15,046 - INFO - DBManager.py : log -             - 6 organisms were installed on previous executions.
+2021-07-01 23:07:15,046 - INFO - DBManager.py : log -      
+2021-07-01 23:07:20,958 - INFO - DBManager.py : log -                  INSTALLING COMMON DATA... 
+2021-07-01 23:07:22,300 - INFO - DBManager.py : log -                  FAILED WHILE INSTALLING COMMON INFORMATION. UNABLE TO CONTINUE. ABORTING!!
+2021-07-01 23:07:22,301 - ERROR - DBManager.py : errorlog -          Command '['/home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/scripts/hubAnalysisInstall.R', '--organism="mmu"', '--scriptDir="/home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/scripts/"', '--outputDir="/home/tian/Downloads/database/KEGG_DATA/download/mmu/hubData/"']' returned non-zero exit status 1.
+2021-07-01 23:07:51,342 - INFO - DBManager.py : log -      ######################################################################
+2021-07-01 23:07:51,342 - INFO - DBManager.py : log -      ### PAINTOMICS 3.0 - DATABASE INSTALLER 
+2021-07-01 23:07:51,350 - INFO - DBManager.py : log -      ### v.0.12
+2021-07-01 23:07:51,350 - INFO - DBManager.py : log -      ######################################################################
+2021-07-01 23:07:51,351 - INFO - DBManager.py : log -      
+2021-07-01 23:07:51,351 - INFO - DBManager.py : log -      Installation log is at: /home/tian/Downloads/database/KEGG_DATA/current/install.log
+2021-07-01 23:07:51,351 - INFO - DBManager.py : log -      
+2021-07-01 23:07:51,352 - INFO - DBManager.py : log -      STEP 1. READ CONFIGURATION AND PARSE INPUT FILES...
+2021-07-01 23:07:53,472 - INFO - DBManager.py : log -             - 1 new organisms will be installed.
+2021-07-01 23:07:53,473 - INFO - DBManager.py : log -             - 6 organisms were installed on previous executions.
+2021-07-01 23:07:53,473 - INFO - DBManager.py : log -      
+2021-07-01 23:17:38,636 - INFO - DBManager.py : log -                  INSTALLING COMMON DATA... 
+2021-07-01 23:17:39,952 - INFO - DBManager.py : log -                  FAILED WHILE INSTALLING COMMON INFORMATION. UNABLE TO CONTINUE. ABORTING!!
+2021-07-01 23:17:39,953 - ERROR - DBManager.py : errorlog -          Command '['/home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/scripts/hubAnalysisInstall.R', '--organism="mmu"', '--scriptDir="/home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/scripts/"', '--outputDir="/home/tian/Downloads/database/KEGG_DATA/download/mmu/hubData/"']' returned non-zero exit status 1.
+2021-07-02 00:10:17,420 - INFO - DBManager.py : log -      ######################################################################
+2021-07-02 00:10:17,420 - INFO - DBManager.py : log -      ### PAINTOMICS 3.0 - DATABASE INSTALLER 
+2021-07-02 00:10:17,421 - INFO - DBManager.py : log -      ### v.0.12
+2021-07-02 00:10:17,421 - INFO - DBManager.py : log -      ######################################################################
+2021-07-02 00:10:17,421 - INFO - DBManager.py : log -      
+2021-07-02 00:10:17,422 - INFO - DBManager.py : log -      Installation log is at: /home/tian/Downloads/database/KEGG_DATA/current/install.log
+2021-07-02 00:10:17,422 - INFO - DBManager.py : log -      
+2021-07-02 00:10:17,422 - INFO - DBManager.py : log -      STEP 1. READ CONFIGURATION AND PARSE INPUT FILES...
+2021-07-02 00:10:19,548 - INFO - DBManager.py : log -             - 1 new organisms will be installed.
+2021-07-02 00:10:19,549 - INFO - DBManager.py : log -             - 6 organisms were installed on previous executions.
+2021-07-02 00:10:19,550 - INFO - DBManager.py : log -      
+2021-07-02 00:10:19,550 - INFO - DBManager.py : log -      
+2021-07-02 00:10:19,551 - INFO - DBManager.py : log -      STEP 1. INSTALLING NEW ORGANISMS
+2021-07-02 00:10:19,551 - INFO - DBManager.py : log -             1 new organisms will be installed.
+2021-07-02 00:10:19,552 - INFO - DBManager.py : log -                  INSTALLING  mmu...
+2021-07-02 00:10:19,553 - INFO - DBManager.py : log -                       INSTALLING MAPPING DATA FOR mmu (1/1)...
+2021-07-02 00:10:19,553 - INFO - DBManager.py : log -                     * PROCESSING AND INSTALLING CUSTOM AND KEGG DATA 
+2021-07-02 00:13:17,532 - INFO - DBManager.py : log -                  INSTALLED IN 177 seconds ---
+2021-07-02 00:13:17,533 - INFO - DBManager.py : log -              INSTALL  1 mmu...SUCCESS
+
+2021-07-02 00:13:17,533 - INFO - DBManager.py : log -      
+2021-07-02 00:13:17,534 - INFO - DBManager.py : log -      STEP 2. CREATING THE species.json FILE
+2021-07-02 00:13:17,550 - INFO - DBManager.py : log -      
+2021-07-02 00:13:17,551 - INFO - DBManager.py : log -      STEP 3. CLOSING LOG FILES, GENERATING VERSION FILE
+2021-07-02 00:17:29,215 - INFO - DBManager.py : log -      ######################################################################
+2021-07-02 00:17:29,216 - INFO - DBManager.py : log -      ### PAINTOMICS 3.0 - DATABASE INSTALLER 
+2021-07-02 00:17:29,216 - INFO - DBManager.py : log -      ### v.0.12
+2021-07-02 00:17:29,216 - INFO - DBManager.py : log -      ######################################################################
+2021-07-02 00:17:29,216 - INFO - DBManager.py : log -      
+2021-07-02 00:17:29,216 - INFO - DBManager.py : log -      Installation log is at: /home/tian/Downloads/database/KEGG_DATA/current/install.log
+2021-07-02 00:17:29,217 - INFO - DBManager.py : log -      
+2021-07-02 00:17:29,217 - INFO - DBManager.py : log -      STEP 1. READ CONFIGURATION AND PARSE INPUT FILES...
+2021-07-02 00:17:31,310 - INFO - DBManager.py : log -             - 1 new organisms will be installed.
+2021-07-02 00:17:31,310 - INFO - DBManager.py : log -             - 6 organisms were installed on previous executions.
+2021-07-02 00:17:31,311 - INFO - DBManager.py : log -      
+2021-07-02 00:17:31,311 - INFO - DBManager.py : log -      
+2021-07-02 00:17:31,312 - INFO - DBManager.py : log -      STEP 1. INSTALLING NEW ORGANISMS
+2021-07-02 00:17:31,312 - INFO - DBManager.py : log -             1 new organisms will be installed.
+2021-07-02 00:17:31,313 - INFO - DBManager.py : log -                  INSTALLING  mmu...
+2021-07-02 00:17:31,314 - INFO - DBManager.py : log -                       INSTALLING MAPPING DATA FOR mmu (1/1)...
+2021-07-02 00:17:31,314 - INFO - DBManager.py : log -                     * PROCESSING AND INSTALLING CUSTOM AND KEGG DATA 
+2021-07-02 00:17:31,364 - ERROR - DBManager.py : errorlog -                  [<FrameSummary file /home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/DBManager.py, line 973 in <module>>, <FrameSummary file /home/tian/.local/lib/python3.8/site-packages/scriptine/command.py, line 194 in autocmds>, <FrameSummary file /home/tian/.local/lib/python3.8/site-packages/scriptine/command.py, line 105 in parse_and_run_function>, <FrameSummary file /home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/DBManager.py, line 456 in install_command>, <FrameSummary file /home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/DBManager.py, line 696 in installSpecieData>]
+2021-07-02 00:17:31,365 - INFO - DBManager.py : log -                       INSTALLING MAPPING DATA FOR mmu (1/1)...
+2021-07-02 00:17:31,365 - INFO - DBManager.py : log -                     * PROCESSING AND INSTALLING CUSTOM AND KEGG DATA 
+2021-07-02 00:17:31,404 - ERROR - DBManager.py : errorlog -                  [<FrameSummary file /home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/DBManager.py, line 973 in <module>>, <FrameSummary file /home/tian/.local/lib/python3.8/site-packages/scriptine/command.py, line 194 in autocmds>, <FrameSummary file /home/tian/.local/lib/python3.8/site-packages/scriptine/command.py, line 105 in parse_and_run_function>, <FrameSummary file /home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/DBManager.py, line 462 in install_command>, <FrameSummary file /home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/DBManager.py, line 696 in installSpecieData>]
+2021-07-02 00:17:48,199 - INFO - DBManager.py : log -      ######################################################################
+2021-07-02 00:17:48,200 - INFO - DBManager.py : log -      ### PAINTOMICS 3.0 - DATABASE INSTALLER 
+2021-07-02 00:17:48,200 - INFO - DBManager.py : log -      ### v.0.12
+2021-07-02 00:17:48,200 - INFO - DBManager.py : log -      ######################################################################
+2021-07-02 00:17:48,200 - INFO - DBManager.py : log -      
+2021-07-02 00:17:48,200 - INFO - DBManager.py : log -      Installation log is at: /home/tian/Downloads/database/KEGG_DATA/current/install.log
+2021-07-02 00:17:48,201 - INFO - DBManager.py : log -      
+2021-07-02 00:17:48,201 - INFO - DBManager.py : log -      STEP 1. READ CONFIGURATION AND PARSE INPUT FILES...
+2021-07-02 00:17:50,287 - INFO - DBManager.py : log -             - 1 new organisms will be installed.
+2021-07-02 00:17:50,288 - INFO - DBManager.py : log -             - 6 organisms were installed on previous executions.
+2021-07-02 00:17:50,289 - INFO - DBManager.py : log -      
+2021-07-02 00:17:50,289 - INFO - DBManager.py : log -      
+2021-07-02 00:17:50,290 - INFO - DBManager.py : log -      STEP 1. INSTALLING NEW ORGANISMS
+2021-07-02 00:17:50,290 - INFO - DBManager.py : log -             1 new organisms will be installed.
+2021-07-02 00:17:50,291 - INFO - DBManager.py : log -                  INSTALLING  mmu...
+2021-07-02 00:17:50,292 - INFO - DBManager.py : log -                       INSTALLING MAPPING DATA FOR mmu (1/1)...
+2021-07-02 00:17:50,292 - INFO - DBManager.py : log -                     * PROCESSING AND INSTALLING CUSTOM AND KEGG DATA 
+2021-07-02 00:17:50,335 - ERROR - DBManager.py : errorlog -                  [<FrameSummary file /home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/DBManager.py, line 973 in <module>>, <FrameSummary file /home/tian/.local/lib/python3.8/site-packages/scriptine/command.py, line 194 in autocmds>, <FrameSummary file /home/tian/.local/lib/python3.8/site-packages/scriptine/command.py, line 105 in parse_and_run_function>, <FrameSummary file /home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/DBManager.py, line 456 in install_command>, <FrameSummary file /home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/DBManager.py, line 696 in installSpecieData>]
+2021-07-02 00:17:50,336 - INFO - DBManager.py : log -                       INSTALLING MAPPING DATA FOR mmu (1/1)...
+2021-07-02 00:17:50,336 - INFO - DBManager.py : log -                     * PROCESSING AND INSTALLING CUSTOM AND KEGG DATA 
+2021-07-02 00:17:50,373 - ERROR - DBManager.py : errorlog -                  [<FrameSummary file /home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/DBManager.py, line 973 in <module>>, <FrameSummary file /home/tian/.local/lib/python3.8/site-packages/scriptine/command.py, line 194 in autocmds>, <FrameSummary file /home/tian/.local/lib/python3.8/site-packages/scriptine/command.py, line 105 in parse_and_run_function>, <FrameSummary file /home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/DBManager.py, line 462 in install_command>, <FrameSummary file /home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/DBManager.py, line 696 in installSpecieData>]
+2021-07-02 00:18:27,022 - INFO - DBManager.py : log -      ######################################################################
+2021-07-02 00:18:27,022 - INFO - DBManager.py : log -      ### PAINTOMICS 3.0 - DATABASE INSTALLER 
+2021-07-02 00:18:27,022 - INFO - DBManager.py : log -      ### v.0.12
+2021-07-02 00:18:27,023 - INFO - DBManager.py : log -      ######################################################################
+2021-07-02 00:18:27,023 - INFO - DBManager.py : log -      
+2021-07-02 00:18:27,023 - INFO - DBManager.py : log -      Installation log is at: /home/tian/Downloads/database/KEGG_DATA/current/install.log
+2021-07-02 00:18:27,023 - INFO - DBManager.py : log -      
+2021-07-02 00:18:27,023 - INFO - DBManager.py : log -      STEP 1. READ CONFIGURATION AND PARSE INPUT FILES...
+2021-07-02 00:18:29,106 - INFO - DBManager.py : log -             - 1 new organisms will be installed.
+2021-07-02 00:18:29,107 - INFO - DBManager.py : log -             - 6 organisms were installed on previous executions.
+2021-07-02 00:18:29,114 - INFO - DBManager.py : log -      
+2021-07-02 00:18:29,114 - INFO - DBManager.py : log -      
+2021-07-02 00:18:29,115 - INFO - DBManager.py : log -      STEP 1. INSTALLING NEW ORGANISMS
+2021-07-02 00:18:29,115 - INFO - DBManager.py : log -             1 new organisms will be installed.
+2021-07-02 00:18:29,116 - INFO - DBManager.py : log -                  INSTALLING  mmu...
+2021-07-02 00:18:29,117 - INFO - DBManager.py : log -                       INSTALLING MAPPING DATA FOR mmu (1/1)...
+2021-07-02 00:18:29,117 - INFO - DBManager.py : log -                     * PROCESSING AND INSTALLING CUSTOM AND KEGG DATA 
+2021-07-02 00:21:04,307 - INFO - DBManager.py : log -                  INSTALLED IN 155 seconds ---
+2021-07-02 00:21:04,308 - INFO - DBManager.py : log -              INSTALL  1 mmu...SUCCESS
+
+2021-07-02 00:21:04,309 - INFO - DBManager.py : log -      
+2021-07-02 00:21:04,309 - INFO - DBManager.py : log -      STEP 2. CREATING THE species.json FILE
+2021-07-02 00:21:04,328 - INFO - DBManager.py : log -      
+2021-07-02 00:21:04,329 - INFO - DBManager.py : log -      STEP 3. CLOSING LOG FILES, GENERATING VERSION FILE
+2021-07-02 00:27:53,698 - INFO - DBManager.py : log -      ######################################################################
+2021-07-02 00:27:53,699 - INFO - DBManager.py : log -      ### PAINTOMICS 3.0 - DATABASE INSTALLER 
+2021-07-02 00:27:53,699 - INFO - DBManager.py : log -      ### v.0.12
+2021-07-02 00:27:53,699 - INFO - DBManager.py : log -      ######################################################################
+2021-07-02 00:27:53,699 - INFO - DBManager.py : log -      
+2021-07-02 00:27:53,700 - INFO - DBManager.py : log -      Installation log is at: /home/tian/Downloads/database/KEGG_DATA/current/install.log
+2021-07-02 00:27:53,700 - INFO - DBManager.py : log -      
+2021-07-02 00:27:53,700 - INFO - DBManager.py : log -      STEP 1. READ CONFIGURATION AND PARSE INPUT FILES...
+2021-07-02 00:27:55,818 - INFO - DBManager.py : log -             - 1 new organisms will be installed.
+2021-07-02 00:27:55,818 - INFO - DBManager.py : log -             - 6 organisms were installed on previous executions.
+2021-07-02 00:27:55,819 - INFO - DBManager.py : log -      
+2021-07-02 00:27:55,819 - INFO - DBManager.py : log -      
+2021-07-02 00:27:55,820 - INFO - DBManager.py : log -      STEP 1. INSTALLING NEW ORGANISMS
+2021-07-02 00:27:55,820 - INFO - DBManager.py : log -             1 new organisms will be installed.
+2021-07-02 00:27:55,821 - INFO - DBManager.py : log -                  INSTALLING  mmu...
+2021-07-02 00:27:55,821 - INFO - DBManager.py : log -                       INSTALLING MAPPING DATA FOR mmu (1/1)...
+2021-07-02 00:27:55,822 - INFO - DBManager.py : log -                     * PROCESSING AND INSTALLING CUSTOM AND KEGG DATA 
+2021-07-02 00:30:33,087 - INFO - DBManager.py : log -                  INSTALLED IN 157 seconds ---
+2021-07-02 00:30:33,088 - INFO - DBManager.py : log -              INSTALL  1 mmu...SUCCESS
+
+2021-07-02 00:30:33,089 - INFO - DBManager.py : log -      
+2021-07-02 00:30:33,089 - INFO - DBManager.py : log -      STEP 2. CREATING THE species.json FILE
+2021-07-02 00:30:33,106 - INFO - DBManager.py : log -      
+2021-07-02 00:30:33,106 - INFO - DBManager.py : log -      STEP 3. CLOSING LOG FILES, GENERATING VERSION FILE
+2021-07-02 00:35:04,779 - INFO - DBManager.py : log -      ######################################################################
+2021-07-02 00:35:04,780 - INFO - DBManager.py : log -      ### PAINTOMICS 3.0 - DATABASE INSTALLER 
+2021-07-02 00:35:04,780 - INFO - DBManager.py : log -      ### v.0.12
+2021-07-02 00:35:04,780 - INFO - DBManager.py : log -      ######################################################################
+2021-07-02 00:35:04,780 - INFO - DBManager.py : log -      
+2021-07-02 00:35:04,781 - INFO - DBManager.py : log -      Installation log is at: /home/tian/Downloads/database/KEGG_DATA/current/install.log
+2021-07-02 00:35:04,781 - INFO - DBManager.py : log -      
+2021-07-02 00:35:04,781 - INFO - DBManager.py : log -      STEP 1. READ CONFIGURATION AND PARSE INPUT FILES...
+2021-07-02 00:35:06,911 - INFO - DBManager.py : log -             - 1 new organisms will be installed.
+2021-07-02 00:35:06,912 - INFO - DBManager.py : log -             - 6 organisms were installed on previous executions.
+2021-07-02 00:35:06,912 - INFO - DBManager.py : log -      
+2021-07-02 00:35:06,913 - INFO - DBManager.py : log -      
+2021-07-02 00:35:06,913 - INFO - DBManager.py : log -      STEP 1. INSTALLING NEW ORGANISMS
+2021-07-02 00:35:06,913 - INFO - DBManager.py : log -             1 new organisms will be installed.
+2021-07-02 00:35:06,914 - INFO - DBManager.py : log -                  INSTALLING  mmu...
+2021-07-02 00:35:06,914 - INFO - DBManager.py : log -                       INSTALLING MAPPING DATA FOR mmu (1/1)...
+2021-07-02 00:35:06,914 - INFO - DBManager.py : log -                     * PROCESSING AND INSTALLING CUSTOM AND KEGG DATA 
+2021-07-02 00:37:56,899 - INFO - DBManager.py : log -                  INSTALLED IN 169 seconds ---
+2021-07-02 00:37:56,901 - INFO - DBManager.py : log -              INSTALL  1 mmu...SUCCESS
+
+2021-07-02 00:37:56,901 - INFO - DBManager.py : log -      
+2021-07-02 00:37:56,902 - INFO - DBManager.py : log -      STEP 2. CREATING THE species.json FILE
+2021-07-02 00:37:56,918 - INFO - DBManager.py : log -      
+2021-07-02 00:37:56,918 - INFO - DBManager.py : log -      STEP 3. CLOSING LOG FILES, GENERATING VERSION FILE
+2021-07-02 12:15:34,795 - INFO - DBManager.py : log -      ######################################################################
+2021-07-02 12:15:34,796 - INFO - DBManager.py : log -      ### PAINTOMICS 3.0 - DATABASE INSTALLER 
+2021-07-02 12:15:34,796 - INFO - DBManager.py : log -      ### v.0.12
+2021-07-02 12:15:34,796 - INFO - DBManager.py : log -      ######################################################################
+2021-07-02 12:15:34,796 - INFO - DBManager.py : log -      
+2021-07-02 12:15:34,797 - INFO - DBManager.py : log -      Installation log is at: /home/tian/Downloads/database/KEGG_DATA/current/install.log
+2021-07-02 12:15:34,797 - INFO - DBManager.py : log -      
+2021-07-02 12:15:34,797 - INFO - DBManager.py : log -      STEP 1. READ CONFIGURATION AND PARSE INPUT FILES...
+2021-07-02 12:15:36,955 - INFO - DBManager.py : log -             - 1 new organisms will be installed.
+2021-07-02 12:15:36,956 - INFO - DBManager.py : log -             - 6 organisms were installed on previous executions.
+2021-07-02 12:15:36,957 - INFO - DBManager.py : log -      
+2021-07-02 12:15:36,957 - INFO - DBManager.py : log -      
+2021-07-02 12:15:36,958 - INFO - DBManager.py : log -      STEP 1. INSTALLING NEW ORGANISMS
+2021-07-02 12:15:36,958 - INFO - DBManager.py : log -             1 new organisms will be installed.
+2021-07-02 12:15:36,959 - INFO - DBManager.py : log -                  INSTALLING  mmu...
+2021-07-02 12:15:36,967 - INFO - DBManager.py : log -                       INSTALLING MAPPING DATA FOR mmu (1/1)...
+2021-07-02 12:15:36,967 - INFO - DBManager.py : log -                     * PROCESSING AND INSTALLING CUSTOM AND KEGG DATA 
+2021-07-02 12:15:37,005 - ERROR - DBManager.py : errorlog -                  [<FrameSummary file /home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/DBManager.py, line 973 in <module>>, <FrameSummary file /home/tian/.local/lib/python3.8/site-packages/scriptine/command.py, line 194 in autocmds>, <FrameSummary file /home/tian/.local/lib/python3.8/site-packages/scriptine/command.py, line 105 in parse_and_run_function>, <FrameSummary file /home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/DBManager.py, line 456 in install_command>, <FrameSummary file /home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/DBManager.py, line 696 in installSpecieData>]
+2021-07-02 12:15:37,006 - INFO - DBManager.py : log -                       INSTALLING MAPPING DATA FOR mmu (1/1)...
+2021-07-02 12:15:37,006 - INFO - DBManager.py : log -                     * PROCESSING AND INSTALLING CUSTOM AND KEGG DATA 
+2021-07-02 12:15:37,043 - ERROR - DBManager.py : errorlog -                  [<FrameSummary file /home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/DBManager.py, line 973 in <module>>, <FrameSummary file /home/tian/.local/lib/python3.8/site-packages/scriptine/command.py, line 194 in autocmds>, <FrameSummary file /home/tian/.local/lib/python3.8/site-packages/scriptine/command.py, line 105 in parse_and_run_function>, <FrameSummary file /home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/DBManager.py, line 462 in install_command>, <FrameSummary file /home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/DBManager.py, line 696 in installSpecieData>]
+2021-07-02 12:16:15,583 - INFO - DBManager.py : log -      ######################################################################
+2021-07-02 12:16:15,583 - INFO - DBManager.py : log -      ### PAINTOMICS 3.0 - DATABASE INSTALLER 
+2021-07-02 12:16:15,583 - INFO - DBManager.py : log -      ### v.0.12
+2021-07-02 12:16:15,584 - INFO - DBManager.py : log -      ######################################################################
+2021-07-02 12:16:15,584 - INFO - DBManager.py : log -      
+2021-07-02 12:16:15,584 - INFO - DBManager.py : log -      Installation log is at: /home/tian/Downloads/database/KEGG_DATA/current/install.log
+2021-07-02 12:16:15,584 - INFO - DBManager.py : log -      
+2021-07-02 12:16:15,585 - INFO - DBManager.py : log -      STEP 1. READ CONFIGURATION AND PARSE INPUT FILES...
+2021-07-02 12:16:17,671 - INFO - DBManager.py : log -             - 1 new organisms will be installed.
+2021-07-02 12:16:17,672 - INFO - DBManager.py : log -             - 6 organisms were installed on previous executions.
+2021-07-02 12:16:17,672 - INFO - DBManager.py : log -      
+2021-07-02 12:16:17,673 - INFO - DBManager.py : log -      
+2021-07-02 12:16:17,673 - INFO - DBManager.py : log -      STEP 1. INSTALLING NEW ORGANISMS
+2021-07-02 12:16:17,674 - INFO - DBManager.py : log -             1 new organisms will be installed.
+2021-07-02 12:16:17,674 - INFO - DBManager.py : log -                  INSTALLING  mmu...
+2021-07-02 12:16:17,675 - INFO - DBManager.py : log -                       INSTALLING MAPPING DATA FOR mmu (1/1)...
+2021-07-02 12:16:17,676 - INFO - DBManager.py : log -                     * PROCESSING AND INSTALLING CUSTOM AND KEGG DATA 
+2021-07-02 12:28:33,582 - ERROR - DBManager.py : errorlog -                  [<FrameSummary file /home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/DBManager.py, line 973 in <module>>, <FrameSummary file /home/tian/.local/lib/python3.8/site-packages/scriptine/command.py, line 194 in autocmds>, <FrameSummary file /home/tian/.local/lib/python3.8/site-packages/scriptine/command.py, line 105 in parse_and_run_function>, <FrameSummary file /home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/DBManager.py, line 456 in install_command>, <FrameSummary file /home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/DBManager.py, line 696 in installSpecieData>]
+2021-07-02 12:28:33,583 - INFO - DBManager.py : log -                       INSTALLING MAPPING DATA FOR mmu (1/1)...
+2021-07-02 12:28:33,584 - INFO - DBManager.py : log -                     * PROCESSING AND INSTALLING CUSTOM AND KEGG DATA 
+2021-07-02 12:30:54,524 - ERROR - DBManager.py : errorlog -                  [<FrameSummary file /home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/DBManager.py, line 973 in <module>>, <FrameSummary file /home/tian/.local/lib/python3.8/site-packages/scriptine/command.py, line 194 in autocmds>, <FrameSummary file /home/tian/.local/lib/python3.8/site-packages/scriptine/command.py, line 105 in parse_and_run_function>, <FrameSummary file /home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/DBManager.py, line 462 in install_command>, <FrameSummary file /home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/DBManager.py, line 696 in installSpecieData>]
+2021-07-02 16:21:17,075 - INFO - DBManager.py : log -      ######################################################################
+2021-07-02 16:21:17,076 - INFO - DBManager.py : log -      ### PAINTOMICS 3.0 - DATABASE INSTALLER 
+2021-07-02 16:21:17,076 - INFO - DBManager.py : log -      ### v.0.12
+2021-07-02 16:21:17,076 - INFO - DBManager.py : log -      ######################################################################
+2021-07-02 16:21:17,076 - INFO - DBManager.py : log -      
+2021-07-02 16:21:17,077 - INFO - DBManager.py : log -      Installation log is at: /home/tian/Downloads/database/KEGG_DATA/current/install.log
+2021-07-02 16:21:17,077 - INFO - DBManager.py : log -      
+2021-07-02 16:21:17,077 - INFO - DBManager.py : log -      STEP 1. READ CONFIGURATION AND PARSE INPUT FILES...
+2021-07-02 16:22:50,783 - INFO - DBManager.py : log -      ######################################################################
+2021-07-02 16:22:50,783 - INFO - DBManager.py : log -      ### PAINTOMICS 3.0 - DATABASE INSTALLER 
+2021-07-02 16:22:50,783 - INFO - DBManager.py : log -      ### v.0.12
+2021-07-02 16:22:50,784 - INFO - DBManager.py : log -      ######################################################################
+2021-07-02 16:22:50,784 - INFO - DBManager.py : log -      
+2021-07-02 16:22:50,784 - INFO - DBManager.py : log -      Installation log is at: /home/tian/Downloads/database/KEGG_DATA/current/install.log
+2021-07-02 16:22:50,784 - INFO - DBManager.py : log -      
+2021-07-02 16:22:50,784 - INFO - DBManager.py : log -      STEP 1. READ CONFIGURATION AND PARSE INPUT FILES...
+2021-07-02 16:22:52,899 - INFO - DBManager.py : log -             - 1 new organisms will be installed.
+2021-07-02 16:22:52,900 - INFO - DBManager.py : log -             - 6 organisms were installed on previous executions.
+2021-07-02 16:22:52,901 - INFO - DBManager.py : log -      
+2021-07-02 16:22:52,901 - INFO - DBManager.py : log -      
+2021-07-02 16:22:52,902 - INFO - DBManager.py : log -      STEP 1. INSTALLING NEW ORGANISMS
+2021-07-02 16:22:52,902 - INFO - DBManager.py : log -             1 new organisms will be installed.
+2021-07-02 16:22:52,903 - INFO - DBManager.py : log -                  INSTALLING  mmu...
+2021-07-02 16:22:52,903 - INFO - DBManager.py : log -                       INSTALLING MAPPING DATA FOR mmu (1/1)...
+2021-07-02 16:22:52,904 - INFO - DBManager.py : log -                     * PROCESSING AND INSTALLING CUSTOM AND KEGG DATA 
+2021-07-02 16:23:08,359 - INFO - DBManager.py : log -      ######################################################################
+2021-07-02 16:23:08,359 - INFO - DBManager.py : log -      ### PAINTOMICS 3.0 - DATABASE INSTALLER 
+2021-07-02 16:23:08,359 - INFO - DBManager.py : log -      ### v.0.12
+2021-07-02 16:23:08,359 - INFO - DBManager.py : log -      ######################################################################
+2021-07-02 16:23:08,360 - INFO - DBManager.py : log -      
+2021-07-02 16:23:08,360 - INFO - DBManager.py : log -      Installation log is at: /home/tian/Downloads/database/KEGG_DATA/current/install.log
+2021-07-02 16:23:08,360 - INFO - DBManager.py : log -      
+2021-07-02 16:23:08,360 - INFO - DBManager.py : log -      STEP 1. READ CONFIGURATION AND PARSE INPUT FILES...
+2021-07-02 16:23:10,446 - INFO - DBManager.py : log -             - 1 new organisms will be installed.
+2021-07-02 16:23:10,446 - INFO - DBManager.py : log -             - 6 organisms were installed on previous executions.
+2021-07-02 16:23:10,447 - INFO - DBManager.py : log -      
+2021-07-02 16:23:10,447 - INFO - DBManager.py : log -      
+2021-07-02 16:23:10,448 - INFO - DBManager.py : log -      STEP 1. INSTALLING NEW ORGANISMS
+2021-07-02 16:23:10,448 - INFO - DBManager.py : log -             1 new organisms will be installed.
+2021-07-02 16:23:10,449 - INFO - DBManager.py : log -                  INSTALLING  mmu...
+2021-07-02 16:23:10,450 - INFO - DBManager.py : log -                       INSTALLING MAPPING DATA FOR mmu (1/1)...
+2021-07-02 16:23:10,450 - INFO - DBManager.py : log -                     * PROCESSING AND INSTALLING CUSTOM AND KEGG DATA 
+2021-07-02 16:25:15,702 - ERROR - DBManager.py : errorlog -                  [<FrameSummary file /home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/DBManager.py, line 973 in <module>>, <FrameSummary file /home/tian/.local/lib/python3.8/site-packages/scriptine/command.py, line 194 in autocmds>, <FrameSummary file /home/tian/.local/lib/python3.8/site-packages/scriptine/command.py, line 105 in parse_and_run_function>, <FrameSummary file /home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/DBManager.py, line 456 in install_command>, <FrameSummary file /home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/DBManager.py, line 696 in installSpecieData>]
+2021-07-02 16:25:15,704 - INFO - DBManager.py : log -                       INSTALLING MAPPING DATA FOR mmu (1/1)...
+2021-07-02 16:25:15,705 - INFO - DBManager.py : log -                     * PROCESSING AND INSTALLING CUSTOM AND KEGG DATA 
+2021-07-02 16:27:20,918 - ERROR - DBManager.py : errorlog -                  [<FrameSummary file /home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/DBManager.py, line 973 in <module>>, <FrameSummary file /home/tian/.local/lib/python3.8/site-packages/scriptine/command.py, line 194 in autocmds>, <FrameSummary file /home/tian/.local/lib/python3.8/site-packages/scriptine/command.py, line 105 in parse_and_run_function>, <FrameSummary file /home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/DBManager.py, line 462 in install_command>, <FrameSummary file /home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/DBManager.py, line 696 in installSpecieData>]
+2021-07-02 16:34:14,169 - INFO - DBManager.py : log -      ######################################################################
+2021-07-02 16:34:14,170 - INFO - DBManager.py : log -      ### PAINTOMICS 3.0 - DATABASE INSTALLER 
+2021-07-02 16:34:14,170 - INFO - DBManager.py : log -      ### v.0.12
+2021-07-02 16:34:14,171 - INFO - DBManager.py : log -      ######################################################################
+2021-07-02 16:34:14,171 - INFO - DBManager.py : log -      
+2021-07-02 16:34:14,171 - INFO - DBManager.py : log -      Installation log is at: /home/tian/Downloads/database/KEGG_DATA/current/install.log
+2021-07-02 16:34:14,172 - INFO - DBManager.py : log -      
+2021-07-02 16:34:14,172 - INFO - DBManager.py : log -      STEP 1. READ CONFIGURATION AND PARSE INPUT FILES...
+2021-07-02 16:34:16,345 - INFO - DBManager.py : log -             - 1 new organisms will be installed.
+2021-07-02 16:34:16,346 - INFO - DBManager.py : log -             - 6 organisms were installed on previous executions.
+2021-07-02 16:34:16,346 - INFO - DBManager.py : log -      
+2021-07-02 16:34:16,347 - INFO - DBManager.py : log -      
+2021-07-02 16:34:16,347 - INFO - DBManager.py : log -      STEP 1. INSTALLING NEW ORGANISMS
+2021-07-02 16:34:16,348 - INFO - DBManager.py : log -             1 new organisms will be installed.
+2021-07-02 16:34:16,348 - INFO - DBManager.py : log -                  INSTALLING  mmu...
+2021-07-02 16:34:16,349 - INFO - DBManager.py : log -                       INSTALLING MAPPING DATA FOR mmu (1/1)...
+2021-07-02 16:34:16,350 - INFO - DBManager.py : log -                     * PROCESSING AND INSTALLING CUSTOM AND KEGG DATA 
+2021-07-02 16:37:55,079 - INFO - DBManager.py : log -                  INSTALLED IN 218 seconds ---
+2021-07-02 16:37:55,080 - INFO - DBManager.py : log -              INSTALL  1 mmu...SUCCESS
+
+2021-07-02 16:37:55,081 - INFO - DBManager.py : log -      
+2021-07-02 16:37:55,081 - INFO - DBManager.py : log -      STEP 2. CREATING THE species.json FILE
+2021-07-02 16:37:55,103 - INFO - DBManager.py : log -      
+2021-07-02 16:37:55,104 - INFO - DBManager.py : log -      STEP 3. CLOSING LOG FILES, GENERATING VERSION FILE

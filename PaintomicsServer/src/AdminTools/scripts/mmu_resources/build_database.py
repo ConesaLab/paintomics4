@@ -4,16 +4,16 @@ import traceback
 from sys import argv, stderr
 from subprocess import CalledProcessError, check_call
 
-#DATA_DIR = '/home/tian/Downloads/database/KEGG_DATA/current/mmu/'
-#SPECIE = 'mmu'
-#ROOT_DIR = '/home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/'
-#LOG_FILE = '/home/tian/Downloads/database/KEGG_DATA/current/install.log'
+DATA_DIR = '/home/tian/Downloads/database/KEGG_DATA/current/mmu/'
+SPECIE = 'mmu'
+ROOT_DIR = '/home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/'
+LOG_FILE = '/home/tian/Downloads/database/KEGG_DATA/current/install.log'
 
 
-SPECIE      = argv[1]
-ROOT_DIR    = argv[2].rstrip("/") + "/"      #Should be src/AdminTools
-DATA_DIR    = argv[3].rstrip("/") + "/"
-LOG_FILE    = argv[4]
+#SPECIE      = argv[1]
+#ROOT_DIR    = argv[2].rstrip("/") + "/"      #Should be src/AdminTools
+#DATA_DIR    = argv[3].rstrip("/") + "/"
+#LOG_FILE    = argv[4]
 
 
 
@@ -35,26 +35,28 @@ COMMON_BUILD_DB_TOOLS.SERVER_SETTINGS = imp.load_source('serverconf.py',  ROOT_D
 # STEP 2. INSTALL FILES
 #**************************************************************************
 try:
-    COMMON_BUILD_DB_TOOLS.processEnsemblData()
-    COMMON_BUILD_DB_TOOLS.processRefSeqData()
-    COMMON_BUILD_DB_TOOLS.processRefSeqGeneSymbolData()
-
-    COMMON_BUILD_DB_TOOLS.processUniProtData()
-    # COMMON_BUILD_DB_TOOLS.processVegaData()
-
     #**************************************************************************
     # STEP 1. EXTRACT THE MAPPING DATABASE
     #**************************************************************************
-    COMMON_BUILD_DB_TOOLS.processKEGGMappingData()
+    COMMON_BUILD_DB_TOOLS.processEnsemblData()
+    COMMON_BUILD_DB_TOOLS.processRefSeqData()
+    COMMON_BUILD_DB_TOOLS.processUniProtData()
+    COMMON_BUILD_DB_TOOLS.processRefSeqGeneSymbolData()
+    #COMMON_BUILD_DB_TOOLS.processKEGGMappingData()
+    # COMMON_BUILD_DB_TOOLS.processVegaData()
+
+
+    #**************************************************************************
+    # STEP 2. PROCESS THE KEGG And Reactome DATABASE
+    #**************************************************************************
     COMMON_BUILD_DB_TOOLS.processKEGGPathwaysData()
-
-
-
-    #**************************************************************************
-    # STEP 2. PROCESS THE KEGG DATABASE
-    #**************************************************************************
     COMMON_BUILD_DB_TOOLS.processReactomePathwaysData()
     COMMON_BUILD_DB_TOOLS.mergeNetworkFiles()
+
+    #**************************************************************************
+    # STEP 3. Print Result
+    #**************************************************************************
+    COMMON_BUILD_DB_TOOLS.printResults()
 
     #**************************************************************************
     # DUMP AND INSTALL
