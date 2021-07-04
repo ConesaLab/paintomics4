@@ -111,10 +111,10 @@ def downloadReactome(specie):
         os.makedirs(REACTOME_DIR + "/png/thumbnails")
 
     i = 0
-    #for pathway_id in ReactomePathwayLast:
-    import random
-    test = random.sample(ReactomePathwayLast, 3)
-    for pathway_id in test:
+    for pathway_id in ReactomePathwayLast:
+    #import random
+    #test = random.sample(ReactomePathwayLast, 3)
+    #for pathway_id in test:
 
         i += 1
         stderr.write('\n')
