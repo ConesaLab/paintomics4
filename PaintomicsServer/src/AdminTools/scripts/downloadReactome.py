@@ -37,7 +37,7 @@ def downloadFile(URL, fileName, outputName, delay, maxTries, checkIfExists=False
 
 def downloadReactome(specie):
 
-    SPECIES = specie.upper()# Change to the one you want to donwload
+    SPECIES = specie.upper()
     downloadDir = KEGG_DATA_DIR + "download/"
     DATA_DIR =  downloadDir + SPECIES.lower() + '/'
     REACTOME_DIR = os.path.join(DATA_DIR + "reactome/")
@@ -56,7 +56,7 @@ def downloadReactome(specie):
     with open( ReactomePathwaysRelationFile, 'r' ) as ReactomePathwaysRelation:
         for row in ReactomePathwaysRelation:
             if SPECIES in row:
-                #ReactomePathwayHigh.add( row.rstrip( '\n' ).split( '\t' )[0] )
+                ReactomePathwayHigh.add( row.rstrip( '\n' ).split( '\t' )[0] )
                 ReactomePathwayLow.add( row.rstrip( '\n' ).split( '\t' )[1] )
                 ReactomePathwayHighList.append( row.rstrip( '\n' ).split( '\t' )[0] )
                 ReactomePathwayLowList.append( row.rstrip( '\n' ).split( '\t' )[1] )
@@ -113,7 +113,7 @@ def downloadReactome(specie):
     i = 0
     for pathway_id in ReactomePathwayLast:
     #import random
-    #test = random.sample(ReactomePathwayLast, 5)
+    #test = random.sample(ReactomePathwayLast, 3)
     #for pathway_id in test:
 
         i += 1
@@ -159,7 +159,6 @@ def downloadReactome(specie):
                 ReactomePathwayList.append(row.rstrip('\n').split('\t'))
 
 
-    ReactomeHierarchy = dict()
     for key in ReactomePathwayTop:
         ReactomeHierarchy[key] = set()
         for item in ReactomePathwayList:
@@ -167,7 +166,8 @@ def downloadReactome(specie):
                 ReactomeHierarchy[key].add(item[1])
 
     ReactomeHierarchyPathway = defaultdict(list)
-    stderr.write("DOWNLOADING " + "STEP(2/2)" + "\n")
+
+    stderr.write("\n" + "DOWNLOADING " + "STEP(2/2)" + "\n")
 
     i=0
     for pathway_id in PATHWAY_ID:

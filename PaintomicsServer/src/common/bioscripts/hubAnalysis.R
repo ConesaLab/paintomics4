@@ -143,13 +143,12 @@ names(argsL) <- argsDF$V1
 args <- as.data.frame(argsL, stringsAsFactors=F)
 
 kegg_interactions = read.csv(paste0(args$inputDir,"kegg_interaction.csv"), sep = ',')
-
 userDataset = read.table(paste0(args$data_dir,"userDataset.csv"), sep = ',')
 userDataset<- as.vector(t(userDataset))
 userDEfeatures = read.table(paste0(args$data_dir,"userDEfeatures.csv"), sep = ',')
 userDEfeatures <- as.vector(t(userDEfeatures))
-
 result<-SignificanceTestbyMetabolite(UserDataset=userDataset,UserDEfeatures=userDEfeatures, dir=args$inputDir, iter=5)
+print(result)
 output_file <- paste0(args$data_dir, "/hub_result.csv")
 write.table(result, file=output_file, quote = FALSE, sep="\t", row.names = FALSE, col.names = FALSE)
 
