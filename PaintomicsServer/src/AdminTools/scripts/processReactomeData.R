@@ -19,7 +19,7 @@ ROOT_REACTOME = paste0(ROOT, "../", specie ,"/mapping/reactome/")
 library(stringr)
 
 cat("STEP 1 LOODING FILES...")
-ChEBI2Reactome = read.csv(file = paste0(ROOT, "ChEBI2Reactome_PE_All_Levels.txt"), sep = '\t', header = FALSE)
+#ChEBI2Reactome = read.csv(file = paste0(ROOT, "ChEBI2Reactome_PE_All_Levels.txt"), sep = '\t', header = FALSE)
 Ensembl2Reactome = read.csv(file = paste0(ROOT, "Ensembl2Reactome_PE_All_Levels.txt"), sep = '\t', header = FALSE)
 NCBI2Reactome = read.csv(file = paste0(ROOT, "NCBI2Reactome_PE_All_Levels.txt"), sep = '\t', header = FALSE)
 UniProt2Reactome = read.csv(file = paste0(ROOT, "UniProt2Reactome_PE_All_Levels.txt"), sep = '\t', header = FALSE)
@@ -53,5 +53,3 @@ processData(Ensembl2Reactome, "Ensembl2Reactome", specie)
 processData(NCBI2Reactome, "NCBI2Reactome", specie)
 processData(UniProt2Reactome, "UniProt2Reactome", specie)
 
-ChEBI2Reactome = ChEBI2Reactome[,1:2]
-write.table(ChEBI2Reactome, file = "ChEBI2Reactome.list", row.names = FALSE, col.names = FALSE, quote = FALSE, sep = '\t')

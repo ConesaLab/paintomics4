@@ -1351,9 +1351,9 @@ def processReactomePathwaysData():
     NODES = {}
     EDGES = []
     #
-    if not len(ALL_ENTRIES):
-        stderr.write("The mapping entries dictionary is not filled. Mapping of KEGG & auxiliary files must be processed first.")
-        exit(1)
+    #if not len(ALL_ENTRIES):
+    #    stderr.write("The mapping entries dictionary is not filled. Mapping of KEGG & auxiliary files must be processed first.")
+    #    exit(1)
 
     REACTOME_DIR = DATA_DIR + "reactome"
 
@@ -2445,13 +2445,14 @@ def queryBiomart(URL, fileName, outputName, delay, maxTries):
     stderr.write("DOWNLOADING FROM " + URL + "\n")
     nTry = 1
     while nTry <= maxTries:
-        wait(delay)
         try:
-            check_call(["curl", "-G", "--connect-timeout", "300", "--max-time", "900", "--data-urlencode", 'query@' + fileName, URL, "-o", outputName])
+            wait(delay)
+            check_call(["curl", "--connect-timeout", "300", "--max-time", "900", "--data-urlencode", 'query@' + fileName, URL, "-o", outputName])
             return True
         except Exception as e:
-            nTry+=1
+            nTry += 1
     raise Exception('Unable to retrieve ' + fileName + " from " + URL + "\n")
+
 
 def downloadFile(URL, fileName, outputName, delay, maxTries, checkIfExists=False):
     stderr.write("DOWNLOADING " + URL + fileName + "\n")
