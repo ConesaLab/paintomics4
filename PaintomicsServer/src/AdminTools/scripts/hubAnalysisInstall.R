@@ -15,7 +15,7 @@ suppressPackageStartupMessages(require(AnnotationDbi))
 result <- NULL
 
 hubAnalysisInstall <- function(organism, scriptDir, outputDir) {
-  print(paste0("STEP 0 ", "Load source data"))
+  print(paste0("#######################STEP 0 ", "Load source data"))
   source (paste0(scriptDir, "/GalaxyNetworkFunctionsv2.R"))
   
   print(paste0("#######################STEP 1 ", "Downloading pathway information..."))
@@ -43,11 +43,10 @@ hubAnalysisInstall <- function(organism, scriptDir, outputDir) {
     # and a table indicating if the node is significant or not
     ####
     
-    print("Using all compounds present in the dataset")
+    print("STEP 4.1 Using all compounds present in the dataset")
     clu<- unique(as.character(InteractionsTable$entry_name_1[InteractionsTable$entry_type_1 == "compound"]))
     clu2<- unique(as.character(InteractionsTable$entry_name_2[InteractionsTable$entry_type_2 == "compound"]))
     allcompounds<-unique(c(clu,clu2))
-    length(allcompounds)   # 1788
     print(paste(length(allcompounds), "will be analyzed"  ))
     #allcompounds<-c("C00267", "C00221", "C01172", "C00668", "C05345")
     prety1<-unique(InteractionsTable[,c("entry_type_1","entry_name_1")])
@@ -66,8 +65,8 @@ hubAnalysisInstall <- function(organism, scriptDir, outputDir) {
     prelist<-tabelita<-list()
     theTables<-NULL
     for (i in 1:length (allcompounds)){
+      print(paste0(round(i/length(allcompounds)*100),'% completed'))
       actor<-allcompounds[i]
-      
       t1<-Allintersnorepeated[Allintersnorepeated$entry_name_1 == actor,]
       colnames(t1)<-c("Var1","Var2")
       t2<-Allintersnorepeated[Allintersnorepeated$entry_name_2 == actor,]
@@ -81,9 +80,7 @@ hubAnalysisInstall <- function(organism, scriptDir, outputDir) {
       prelist["1"]<-list(preos)
       tabelita<-prelist
       theTables[[namecito]]<-tabelita
-      #culo<-theTables
-      #theTables<-culo
-      
+
       if (Steps>1) {
         #print (paste (Steps,"Steps", sep=" "))
         #print("Analyzing more than one step")
@@ -97,7 +94,7 @@ hubAnalysisInstall <- function(organism, scriptDir, outputDir) {
         prelist<-tabelita<-list()
         #prelist<-NULL
         for (vn in 1:length(vectitonames) ) {
-          print (vectitonames[vn])
+          #print (vectitonames[vn])
           namestep<-vectitonames[vn]
           lalistita<-theTables[[vn]][[1]]
           elcompound<-names(theTables[1])
@@ -122,7 +119,7 @@ hubAnalysisInstall <- function(organism, scriptDir, outputDir) {
         } # End of steps
         
       }# End of if Steps>1
-      #save(theTables,file=paste(dir,"/",elcompound,".RData",sep=''))
+      save(theTables,file=paste(dir,"/",elcompound,".RData",sep=''))
       temp <- unlist2(theTables, 0)
       result[[actor]] <- temp
       theTables<-NULL

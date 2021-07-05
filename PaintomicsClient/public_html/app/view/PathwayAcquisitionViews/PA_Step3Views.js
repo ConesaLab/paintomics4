@@ -4226,22 +4226,21 @@ function PA_Step3MetaboliteView () {
 
 	this.initComponent = function() {
 
-
 	this.component = Ext.widget(
+
 		{
 			xtype: "container",
-			padding: '4', border: 0, maxWidth: 1900,
-			autoScroll: true,
+			padding: '3', border: 0, maxWidth: 1900,
 			layout: 'column',
-			style: "margin-top:10px;width: 100%;",
 			renderTo: document.body,
 
 			items: [
 			{
 				xtype: "gridpanel",
 				cls: "contentbox",
+				autoScroll:true,
 				store: userStore,
-				width: 600,
+				width: getWidth(),
 				height: 350,
 				header: {
 					xtype: 'box',
@@ -4259,7 +4258,7 @@ function PA_Step3MetaboliteView () {
 						xtype: 'customactioncolumn',
 						text: "Paint",
 						menuDisabled: true,
-						width: 50,
+            			flex: 8 / 100,
 						items: [{
 							icon: "fa-paint-brush-o",
 							text: "",
@@ -4354,21 +4353,21 @@ function PA_Step3MetaboliteView () {
 					},
 					{
 						text: 'Name',
-						width: 150,
+            			flex: 15 / 100,
 						sortable: true,
 						hideable: false,
 						dataIndex: 'name'
 					},
 					{
 						text: 'Features',
-						width: 100,
+            			flex: 15 / 100,
 						sortable: true,
 						hideable: false,
 						dataIndex: 'totalFeatures'
 					},
 					{
 						text: "P Value",
-						width: 90,
+            			flex: 15 / 100,
 						sortable: true,
 						dataIndex: 'pValue',
 						renderer: renderFunction
@@ -4376,7 +4375,7 @@ function PA_Step3MetaboliteView () {
 					},
 					{
 						text: "FDR BH",
-						width: 90,
+            			flex: 15 / 100,
 						sortable: true,
 						dataIndex: "FDR_BH",
 						renderer: renderFunction
@@ -4384,7 +4383,7 @@ function PA_Step3MetaboliteView () {
 					},
 					{
 						text: "FDR BY",
-						width: 90,
+            			flex: 15 / 100,
 						sortable: true,
 						dataIndex: "FDR_BY",
 						renderer: renderFunction
@@ -4395,7 +4394,7 @@ function PA_Step3MetaboliteView () {
 			{
 				xtype: 'box',
 				cls: "contentbox",
-				style: 'background:#fff',
+				style: "margin-top:10px;width: 49%;background:#fff",
 				flex: 1,
 				padding: '30',
 				height: 350,
@@ -4476,15 +4475,15 @@ function PA_Step3HubAnalysis () {
 			xtype: "container",
 			padding: '3', border: 0, maxWidth: 1900,
 			layout: 'column',
-			style: "margin-top:10px;width: 100%;",
 			renderTo: document.body,
 
 			items: [
 			{
 				xtype: "gridpanel",
+
 				cls: "contentbox",
 				store: userStore,
-				width: 1110,
+				width: getWidth2(),
 				height: 350,
 				header: {
 					xtype: 'box',
@@ -4503,65 +4502,65 @@ function PA_Step3HubAnalysis () {
 				columns: [
 					{
 						text: 'Metabolite',
-						width: 160,
+						flex: 20/100,
 						sortable: true,
 						hideable: false,
 						dataIndex: 'Metabolite'
 					},
 					{
 						text: 'Step',
-						width: 120,
+						flex: 20/100,
 						sortable: true,
 						hideable: false,
 						dataIndex: 'Step'
 					},
 					{
 						text: "DE neighbors",
-						width: 150,
+						flex: 20/100,
 						sortable: true,
 						dataIndex: 'DE_neighbors'
 
 					},
 					{
 						text: "not DE neighbors",
-						width: 160,
+						flex: 20/100,
 						sortable: true,
 						dataIndex: "not_DE_neighbors"
 
 					},
 					{
 						text: "Percentage",
-						width: 150,
+						flex: 20/100,
 						sortable: true,
 						dataIndex: "Percentage"
 					},
 					{
 						text: "RDE neighbors",
-						width: 150,
+						flex: 20/100,
 						sortable: true,
 						dataIndex: "RDE_neighbors"
 					},
 					{
 						text: "Rnot DE neighbors",
-						width: 150,
+						flex: 20/100,
 						sortable: true,
 						dataIndex: "Rnot_DE_neighbors"
 					},
 					{
 						text: "RPercentage",
-						width: 150,
+						flex: 20/100,
 						sortable: true,
 						dataIndex: "RPercentage"
 					},
 					{
 						text: "P value",
-						width: 150,
+						flex: 20/100,
 						sortable: true,
 						dataIndex: "P_value"
 					},
 					{
 						text: "P adjusted",
-						width: 150,
+						flex: 20/100,
 						sortable: true,
 						dataIndex: "P_adjusted"
 					}
@@ -4579,12 +4578,31 @@ function PA_Step3HubAnalysis () {
 }
 
 
-
-
-
 PA_Step3HubAnalysis.prototype = new View();
 
 
+function getWidth () {
+	if ( window.screen.width * window.devicePixelRatio == 3840) {
+		return 730;
+	} else if ( window.screen.width * window.devicePixelRatio == 2880 ) {
+		return 500;
+	} else if (window.screen.width * window.devicePixelRatio == 2400 ) {
+		return 400;
+	} else {
+		return 500;
+	}
+}
+function getWidth2 () {
+	if ( window.screen.width * window.devicePixelRatio == 3840) {
+		return 730*2.1;
+	} else if ( window.screen.width * window.devicePixelRatio == 2880 ) {
+		return 500*2.1;
+	} else if (window.screen.width * window.devicePixelRatio == 2400 ) {
+		return 400*2.1;
+	} else {
+		return 500*2.1;
+	}
+}
 
 /**
 		* This function returns the MIN/MAX values that will be used as references
@@ -4686,3 +4704,5 @@ var getColor = function (limits, value, colorScale) {
 			}
 			return "rgb(" + Math.round(red) + ", " + Math.round(green) + "," + Math.round(blue) + ")";
 		};
+
+
