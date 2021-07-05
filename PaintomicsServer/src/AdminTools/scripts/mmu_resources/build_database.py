@@ -4,16 +4,16 @@ import traceback
 from sys import argv, stderr
 from subprocess import CalledProcessError, check_call
 
-DATA_DIR = '/home/tian/Downloads/database/KEGG_DATA/current/mmu/'
-SPECIE = 'mmu'
-ROOT_DIR = '/home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/'
-LOG_FILE = '/home/tian/Downloads/database/KEGG_DATA/current/install.log'
+#DATA_DIR = '/home/tian/Downloads/database/KEGG_DATA/current/mmu/'
+#SPECIE = 'mmu'
+#ROOT_DIR = '/home/tian/Desktop/git/paintomics4/PaintomicsServer/src/AdminTools/'
+#LOG_FILE = '/home/tian/Downloads/database/KEGG_DATA/current/install.log'
 
 
-#SPECIE      = argv[1]
-#ROOT_DIR    = argv[2].rstrip("/") + "/"      #Should be src/AdminTools
-#DATA_DIR    = argv[3].rstrip("/") + "/"
-#LOG_FILE    = argv[4]
+SPECIE      = argv[1]
+ROOT_DIR    = argv[2].rstrip("/") + "/"      #Should be src/AdminTools
+DATA_DIR    = argv[3].rstrip("/") + "/"
+LOG_FILE    = argv[4]
 
 
 
