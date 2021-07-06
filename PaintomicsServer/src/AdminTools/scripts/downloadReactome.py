@@ -21,8 +21,8 @@ def downloadFile(URL, fileName, outputName, delay, maxTries, checkIfExists=False
 
     # If the file already exists, avoid downloading it again
 
-    if checkIfExists and os.path.isfile( outputName ) and os.stat( outputName ).st_size > 0:mvmv
-        return True
+    if checkIfExists and os.path.isfile( outputName ) and os.stat( outputName ).st_size > 0:
+    	return True
 
     nTry = 1
     while nTry <= maxTries:

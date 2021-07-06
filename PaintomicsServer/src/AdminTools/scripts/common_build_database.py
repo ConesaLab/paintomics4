@@ -1355,7 +1355,7 @@ def processReactomePathwaysData():
     #    stderr.write("The mapping entries dictionary is not filled. Mapping of KEGG & auxiliary files must be processed first.")
     #    exit(1)
 
-    REACTOME_DIR = DATA_DIR + "reactome"
+    REACTOME_DIR = DATA_DIR + "/reactome"
 
     print("REACTOME_DATA_DIR:" + REACTOME_DIR)
     #REACTOME_DIR = DATA_DIR + "reactome"
@@ -1498,10 +1498,6 @@ def processReactomePathwaysData():
     indexFinal = 0
 
     total_feature = defaultdict(set)
-
-
-
-
 
     for pathway_id in PATHWAY_ID:
 
@@ -2003,11 +1999,27 @@ def processReactomePathwaysData():
 
     ALL_VERSIONS["REACTOME"] = {"name": "REACTOME", "date": strftime("%Y%m%d %H%M")}
     ALL_VERSIONS["REACTOME_MAPPING"] = {"name": "REACTOME_MAPPING", "date": strftime("%Y%m%d %H%M")}
-    #
-    # file_name= DATA_DIR + "mapping/MAP_VERSION"
-    # file = open(file_name, 'r')
-    #
-    # file.close()
+
+    # ***********************************************************************************
+    # * Move Reactome PNG files to global position
+    # ***********************************************************************************
+
+    REACTOME_DIR_PNG = REACTOME_DIR + '/png/'
+    onlyPNG = [f for f in os.listdir(REACTOME_DIR_PNG) if os.path.isfile(os.path.join(REACTOME_DIR_PNG, f))]
+    REACTOME_DIR_PNG_THUMB = REACTOME_DIR_PNG + '/thumbnails/'
+    onlyPNGThumb =  [f for f in os.listdir(REACTOME_DIR_PNG_THUMB) if os.path.isfile(os.path.join(REACTOME_DIR_PNG_THUMB, f))]
+
+    REACTOME_GLOBAL_DIR = DATA_DIR + '/../' + 'reactome'
+    REACTOME_GLOBAL_DIR_THUMB = REACTOME_GLOBAL_DIR + '/thumbnails'
+    if not os.path.exists(REACTOME_GLOBAL_DIR):
+        os.makedirs(REACTOME_GLOBAL_DIR)
+    if not os.path.exists(REACTOME_GLOBAL_DIR_THUMB):
+        os.makedirs(REACTOME_GLOBAL_DIR_THUMB)
+    for file_name in onlyPNG:
+            shutil.move(REACTOME_DIR_PNG + file_name,REACTOME_GLOBAL_DIR)
+    for file_name in onlyPNGThumb:
+            shutil.move(REACTOME_DIR_PNG_THUMB + file_name,REACTOME_GLOBAL_DIR_THUMB)
+
 
 
 
