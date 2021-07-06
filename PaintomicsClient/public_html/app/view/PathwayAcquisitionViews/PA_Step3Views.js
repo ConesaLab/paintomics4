@@ -86,10 +86,10 @@ function PA_Step3JobView() {
 		}
 		this.model = model;
 		this.model.addObserver(this);
-		
-		// Assign the 
+
+		// Assign the
 		this.isOwner = (String(Ext.util.Cookies.get("userID")) ==  String(this.model.getUserID()));
-		
+
 		/********************************************************/
 		/* STEP 2: PROCESS DATA AND GENERATE THE TABLES         */
 		/********************************************************/
@@ -119,7 +119,7 @@ function PA_Step3JobView() {
 			networkPvalMethod: 'none',
 			fontSize: 14
 		};
-        
+
         var globalDefaultVisualOptions = {
             selectedCombinedMethod: 'Fisher',
             selectedAdjustedMethod: 'None',
@@ -136,9 +136,9 @@ function PA_Step3JobView() {
 
 		// Ensure that the visual options timestamp is on par with the model (could be new due to 'Go back' feature)
 		if (window.sessionStorage && sessionStorage.getItem("visualOptions") !== null) {
-			this.visualOptions = jQuery.extend(jQuery.extend({}, globalDefaultVisualOptions), 
+			this.visualOptions = jQuery.extend(jQuery.extend({}, globalDefaultVisualOptions),
                                                JSON.parse(sessionStorage.getItem("visualOptions")));
-			
+
 			// The visualOptions session info can come from an old job (after 'Go back') or updated
 			// by recovering the job. Check that the time stamps match or invalidate this block.
 			if (this.visualOptions.timestamp >= this.model.getTimestamp()) {
@@ -167,19 +167,19 @@ function PA_Step3JobView() {
 		this.visualOptions = jQuery.extend(true, {}, globalDefaultVisualOptions, this.visualOptions);
 
 		databases.map((function(db) {
-			// jQuery extend with deep copy will merge the arrays, so if we are creating the 
+			// jQuery extend with deep copy will merge the arrays, so if we are creating the
 			// visual options from scratch we assign all the DB pathways and if not, the very
 			// same filtered pathways already saved so the merge won t do anything wrong.
 			var dbPathways;
-			
+
 			if (this.visualOptions[db]) {
-				dbPathways = $.isEmptyObject(this.visualOptions[db].pathwaysVisibility) ? 
+				dbPathways = $.isEmptyObject(this.visualOptions[db].pathwaysVisibility) ?
 					this.getModel().getPathwaysByDB(db).map(x => x.getID()) :
 					this.visualOptions[db].pathwaysVisibility;
 			} else {
 				dbPathways = this.getModel().getPathwaysByDB(db).map(x => x.getID());
-			}				
-			
+			}
+
 			this.visualOptions[db] = jQuery.extend(true, {}, defaultVisualOptions, {pathwaysVisibility: dbPathways}, this.visualOptions[db]);
 		}).bind(this));
 
@@ -271,7 +271,7 @@ function PA_Step3JobView() {
 
 		this.statsView = new PA_Step3StatsView();
 		this.statsView.loadModel(model);
-		
+
 		$.each(databases, (function(index, db) {
 			if(!(db in this.pathwayClassificationViews)){
 				this.pathwayClassificationViews[db] = new PA_Step3PathwayClassificationView(db);
@@ -286,7 +286,7 @@ function PA_Step3JobView() {
 				this.pathwayNetworkViews[db].setParent(this);
 			}
 			this.pathwayNetworkViews[db].loadModel(model);
-			
+
 			// Determine if the table for the DB is filtered or not
 			this.isFiltered[db] = (this.model.getPathwaysByDB(db).length != this.getTotalVisiblePathways(db).visible);
 		}).bind(this));
@@ -298,13 +298,13 @@ function PA_Step3JobView() {
 
 		return this;
 	};
-	
 
-	
+
+
 	this.canEdit = function() {
 		return (this.isOwner || ! this.model.getReadOnly());
 	};
-	
+
 	this.getVisualOptions = function(db = null){
 		return (db == null) ? this.visualOptions : this.visualOptions[db];
 	};
@@ -321,7 +321,7 @@ function PA_Step3JobView() {
 	this.getIndexedPathways = function(db = null){
 		return (db == null) ? this.indexedPathways : this.indexedPathways[db];
 	};
-	
+
 	this.indexPathways = function(pathways) {
 		var pathwayInstance;
 		for (var i in pathways) {
@@ -338,7 +338,7 @@ function PA_Step3JobView() {
 					this.indexedPathways[db][data[0]].networkCoordY = Number.parseFloat(data[2]);
 				}
 			}
-		}).bind(this));		
+		}).bind(this));
 	};
 
 	this.getTotalVisiblePathways = function(db){
@@ -378,7 +378,7 @@ function PA_Step3JobView() {
 				  // Added Reactome classification
 				  "cell_cycle", "cell-cell_communication", "cellular_responses_to_external_stimuli", "chromatin_organization", "circadian_clock", "developmental_biology",
 				  "digestion_and_absorption", "disease", "dna_repair", "dna_replication", "extracellular_matrix_organization", "gene_expression_(transcription)",
-				  "hemostasis", "immune_system", "metabolism_of_proteins", "metabolism_of_rna", "mitophagy", "muscle_contraction", "neuronal_system", 
+				  "hemostasis", "immune_system", "metabolism_of_proteins", "metabolism_of_rna", "mitophagy", "muscle_contraction", "neuronal_system",
 				  "organelle_biogenesis_and_maintenance", "programmed_cell_death", "reproduction", "signal_transduction", "transport_of_small_molecules", "vesicle-mediated_transport"].indexOf(classificationID);
 
 		if(pos !== -1){
@@ -414,12 +414,12 @@ function PA_Step3JobView() {
 		/********************************************************/
 		$("#jobIdField").html(this.getModel().getJobID());
 		$("#jobURL").html(window.location.href).attr('href', window.location.href);
-		
+
 		// Update Job name (description) if available
 		if (this.getModel().getName()) {
 			$("#jobName").html('[' + this.getModel().getName() + ']').show();
 		}
-		
+
 		/********************************************************/
 		/* STEP 2: GENERATE THE PATHWAYS CLASSIFICATION PLOT    */
 		/********************************************************/
@@ -490,7 +490,7 @@ function PA_Step3JobView() {
 			this.model.databases.forEach(function(db) {
 				me.isFiltered[db] = (me.model.getPathwaysByDB(db).length != me.getTotalVisiblePathways(db).visible);
 			});
-			
+
 			/********************************************************/
 			/* STEP 2. UPDATE THE TABLE WITH THE SELECTED OPTIONS   */
 			/*         (only if updating from categories panel)     */
@@ -544,13 +544,13 @@ function PA_Step3JobView() {
 		this.getController().step3OnFormSubmitHandler(this, pathwayID);
 		return this;
 	};
-	
+
 	this.shareHandler = function(){
 		var me = this;
 		var model = me.getModel();
 		var userID = Ext.util.Cookies.get("userID");
 		var isOwner = (userID !== undefined && String(model.getUserID()) == String(userID));
-		
+
 		var messageDialog = Ext.create('Ext.window.Window', {
 			title: "Sharing options",
 			height: 350, width: 600, modal: true, bodyPadding:10,
@@ -582,7 +582,7 @@ function PA_Step3JobView() {
 							checked   : model.getReadOnly(),
 							id        : 'readonly'
                 		},
-						
+
 					]
 				 }
 				 :
@@ -596,7 +596,7 @@ function PA_Step3JobView() {
 					handler : function() {
 						var allowSharing = messageDialog.queryById('linksharing').getValue();
 						var readOnly = messageDialog.queryById('readonly').getValue();
-						
+
 						messageDialog.close();
 						me.getController().updateSharingOptions(model, allowSharing, readOnly);
 					}
@@ -721,24 +721,24 @@ function PA_Step3JobView() {
 					$(".mappingButton").click(function() {
 						var cmp = Ext.getCmp('statsViewContainer');
 						cmp.getEl().toggle();
-						
+
 						var buttonHTML = $(this).html();
-						
+
 						$(this).html(buttonHTML.includes('Hide') ? buttonHTML.replace(/Hide/g, 'Show') : buttonHTML.replace(/Show/g, 'Hide'));
-						
+
 						$('#mainViewCenterPanel').scrollTop(cmp.getEl().dom.offsetTop - 60);
 					}).trigger('click');
-					
+
 					$("#resetButton").click(function() {
 						me.resetViewHandler();
 					});
 					$("#sharingButton").click(function() {
 						me.shareHandler();
 					});
-					
+
 					// Show a warning if it is read only
 					if (! me.canEdit()) {
-						$('#warningMessage').text("The current job is read-only, changes will not be saved in the server.").show();		
+						$('#warningMessage').text("The current job is read-only, changes will not be saved in the server.").show();
 					}
 					//INITIALIZE THE COUNTERS IN SUMMARY PANEL
 					new Odometer({el: $("#foundPathwaysTag")[0],value: 0});
@@ -1035,7 +1035,7 @@ function PA_Step3PathwayClassificationView(db = "KEGG") {
 			$("#pathwayClassificationContainer_" + me.dbid + " .step3ClassificationsPathway > input").change(function(){
 				updateStatus(this);
 			});
-		
+
 			this.applyVisualSettings(false);
 
 			return this;
@@ -1068,7 +1068,7 @@ function PA_Step3PathwayClassificationView(db = "KEGG") {
 			var classificationData = me.getParent().getClassificationData(me.database);
 			var mainClassificationID, secClassificationID;
 			var mainClassifications = [], secondClassifications = [];
-			
+
 			// Avoid this when no pathways are visible.
 			if (pathwaysVisibility.length) {
 				Object.keys(classificationData).forEach(function(classificationID) {
@@ -1100,10 +1100,10 @@ function PA_Step3PathwayClassificationView(db = "KEGG") {
 							y: (mainVisiblePathways/pathwaysVisibility.length) * 100,
 							color: me.getParent().getClassificationColor(classificationID, me.OTHER_COLORS),
 							drilldown: classificationID
-						});					
+						});
 					}
 				});
-				
+
 				me.highcharts.series[0].setData(mainClassifications);
 				me.highcharts.options.drilldown.series[0] = secondClassifications;
 			} else {
@@ -1111,7 +1111,7 @@ function PA_Step3PathwayClassificationView(db = "KEGG") {
 						name: 'No pathways',
 						y: 100,
 						color: "#FF0000"
-				}]);					
+				}]);
 			}
 
 			if (updateSettings) {

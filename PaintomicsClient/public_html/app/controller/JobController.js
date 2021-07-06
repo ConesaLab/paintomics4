@@ -316,6 +316,47 @@ function JobController() {
 						jobModel.setCompoundBasedInputOmics(response.compoundBasedInputOmics);
 						jobModel.setGeneBasedInputOmics(response.geneBasedInputOmics);
 
+						//update for PaintOmics 4
+						if (response.mappingComp) {
+							jobModel.setMappingComp(response.mappingComp)
+						}
+
+						if (response.classificationDict) {
+							jobModel.setClassificationDict(response.classificationDict)
+						}
+
+						if (response.pValueInDict) {
+							jobModel.setpValueInDict(response.pValueInDict)
+						}
+
+						if (response.exprssionMetabolites) {
+							jobModel.setExprssionMetabolites(response.exprssionMetabolites)
+						}
+
+						if (response.adjustPvalue) {
+							jobModel.setAdjustPvalue(response.adjustPvalue)
+						}
+						if (response.totalRelevantFeaturesInCategory) {
+							jobModel.setTotalRelevantFeaturesInCategory(response.totalRelevantFeaturesInCategory)
+						}
+
+						if (response.compoundRegulateFeatures) {
+							jobModel.setCompoundRegulateFeatures(response.compoundRegulateFeatures)
+						}
+
+						if (response.featureSummary) {
+							jobModel.setFeatureSummary(response.featureSummary)
+						}
+
+						if (response.globalExpressionData) {
+							jobModel.setGlobalExpressionData(response.globalExpressionData)
+						}
+
+						if (response.hubAnalysisResult) {
+							jobModel.setHubAnalysisResult(response.hubAnalysisResult)
+						}
+
+
 						//TODO: IF IS THE SECOND TIME THAT THE PREVIOUS STEP WAS EXECUTED AND NOTHING CHANGES, AVOID RESENDING?
 						jobModel.setFoundCompounds([]);
 						var matchedMetabolites = response.matchedMetabolites;
@@ -728,6 +769,47 @@ function JobController() {
 						if (response.omicsValuesID) {
 							jobModel.setOmicsValuesID(response.omicsValuesID);
 						}
+
+						//update for PaintOmics 4
+						if (response.mappingComp) {
+							jobModel.setMappingComp(response.mappingComp)
+						}
+
+						if (response.classificationDict) {
+							jobModel.setClassificationDict(response.classificationDict)
+						}
+
+						if (response.pValueInDict) {
+							jobModel.setpValueInDict(response.pValueInDict)
+						}
+
+						if (response.exprssionMetabolites) {
+							jobModel.setExprssionMetabolites(response.exprssionMetabolites)
+						}
+
+						if (response.adjustPvalue) {
+							jobModel.setAdjustPvalue(response.adjustPvalue)
+						}
+						if (response.totalRelevantFeaturesInCategory) {
+							jobModel.setTotalRelevantFeaturesInCategory(response.totalRelevantFeaturesInCategory)
+						}
+
+						if (response.compoundRegulateFeatures) {
+							jobModel.setCompoundRegulateFeatures(response.compoundRegulateFeatures)
+						}
+
+						if (response.featureSummary) {
+							jobModel.setFeatureSummary(response.featureSummary)
+						}
+
+						if (response.globalExpressionData) {
+							jobModel.setGlobalExpressionData(response.globalExpressionData)
+						}
+
+						if (response.hubAnalysisResult) {
+							jobModel.setHubAnalysisResult(response.hubAnalysisResult)
+						}
+
 
 						me.cleanStoredApplicationData();
 						me.updateStoredApplicationData("jobModel", jobModel);

@@ -361,7 +361,7 @@ def pathwayAcquisitionStep2_PART2(jobID, userID, selectedCompounds, clusterNumbe
         if selectedCompounds:
             mappingComp, pValueInDict, classificationDict, exprssionMetabolites, adjustPvalue, totalRelevantFeaturesInCategory, featureSummary, compoundRegulateFeatures = jobInstance.compundsClassification()
             # Creat Global expression information for all genes
-            globalExpressionData = jobInstance.globalExpressionData()
+            globalExpressionData = jobInstance.getGlobalExpressionData()
             hubAnalysisResult = jobInstance.hubAnalysis(ROOT_DIRECTORY)
 
 
@@ -534,6 +534,8 @@ def pathwayAcquisitionRecoverJob(request, response, QUEUE_INSTANCE):
         #****************************************************************
         # Step 1.LOAD THE INSTANCE OF JOB
         #****************************************************************
+
+
         formFields = request.form
         jobID  = formFields.get("jobID")
 
@@ -574,26 +576,60 @@ def pathwayAcquisitionRecoverJob(request, response, QUEUE_INSTANCE):
             logging.info("RECOVER_JOB - JOB " + jobID + " DOES NOT CONTAINS PATHWAYS.")
             response.setContent( {"success": False, "errorMessage":"Job " + jobID + " does not contains information about pathways. Please, run it again."})
         else:
-
-            response.setContent({
-                "success": True,
-                "jobID": jobInstance.getJobID(),
-                "userID": jobInstance.getUserID(),
-                "pathwaysInfo" : matchedPathwaysJSONList,
-                "geneBasedInputOmics": jobInstance.getGeneBasedInputOmics(),
-                "compoundBasedInputOmics": jobInstance.getCompoundBasedInputOmics(),
-                "organism" : jobInstance.getOrganism(),
-                "summary" : jobInstance.summary,
-                "visualOptions" : JobInformationManager().getVisualOptions(jobID),
-                "databases": jobInstance.getDatabases(),
-                "matchedMetabolites": matchedCompoundsJSONList,
-                "stepNumber": jobInstance.getLastStep(),
-                "name": jobInstance.getName(),
-                "timestamp": int(time()),
-                "allowSharing": jobInstance.getAllowSharing(),
-                "readOnly": jobInstance.getReadOnly(),
-                "omicsValuesID": jobInstance.getValueIdTable()
-            })
+            if len(matchedPathwaysJSONList) != 0 :
+                response.setContent({
+                    "success": True,
+                    "jobID": jobInstance.getJobID(),
+                    "userID": jobInstance.getUserID(),
+                    "pathwaysInfo" : matchedPathwaysJSONList,
+                    "geneBasedInputOmics": jobInstance.getGeneBasedInputOmics(),
+                    "compoundBasedInputOmics": jobInstance.getCompoundBasedInputOmics(),
+                    "organism" : jobInstance.getOrganism(),
+                    "summary" : jobInstance.summary,
+                    "visualOptions" : JobInformationManager().getVisualOptions(jobID),
+                    "databases": jobInstance.getDatabases(),
+                    "matchedMetabolites": matchedCompoundsJSONList,
+                    "stepNumber": jobInstance.getLastStep(),
+                    "name": jobInstance.getName(),
+                    "timestamp": int(time()),
+                    "allowSharing": jobInstance.getAllowSharing(),
+                    "readOnly": jobInstance.getReadOnly(),
+                    "omicsValuesID": jobInstance.getValueIdTable(),
+                    #PaintOmics 4
+                    "mappingComp": jobInstance.mappingComp,
+                    "classificationDict": jobInstance.classificationDict,
+                    "pValueInDict": jobInstance.pValueInDict,
+                    "exprssionMetabolites": jobInstance.exprssionMetabolites,
+                    "adjustPvalue": jobInstance.adjustPvalue,
+                    "totalRelevantFeaturesInCategory": jobInstance.totalRelevantFeaturesInCategory,
+                    "featureSummary":jobInstance.featureSummary,
+                    # Add compound regulate features
+                    "compoundRegulateFeatures": jobInstance.compoundRegulateFeatures,
+                    # Add global gene expression information
+                    "globalExpressionData":jobInstance.globalExpressionData,
+                    # Add hub analysis result
+                    'hubAnalysisResult': jobInstance.hubAnalysisResult,
+                })
+            else:
+                response.setContent({
+                    "success": True,
+                    "jobID": jobInstance.getJobID(),
+                    "userID": jobInstance.getUserID(),
+                    "pathwaysInfo" : matchedPathwaysJSONList,
+                    "geneBasedInputOmics": jobInstance.getGeneBasedInputOmics(),
+                    "compoundBasedInputOmics": jobInstance.getCompoundBasedInputOmics(),
+                    "organism" : jobInstance.getOrganism(),
+                    "summary" : jobInstance.summary,
+                    "visualOptions" : JobInformationManager().getVisualOptions(jobID),
+                    "databases": jobInstance.getDatabases(),
+                    "matchedMetabolites": matchedCompoundsJSONList,
+                    "stepNumber": jobInstance.getLastStep(),
+                    "name": jobInstance.getName(),
+                    "timestamp": int(time()),
+                    "allowSharing": jobInstance.getAllowSharing(),
+                    "readOnly": jobInstance.getReadOnly(),
+                    "omicsValuesID": jobInstance.getValueIdTable()
+                })
 
     except Exception as ex:
         handleException(response, ex, __file__ , "pathwayAcquisitionRecoverJob", userID=userID)

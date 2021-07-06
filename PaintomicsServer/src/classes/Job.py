@@ -39,6 +39,7 @@ class Job(Model):
     # CONSTRUCTORS
     #******************************************************************************************************************
     def __init__(self, jobID, userID, CLIENT_TMP_DIR):
+
         self.jobID = jobID
         self.date = formatDate("%Y%m%d%H%M")
         self.accessDate = formatDate("%Y%m%d%H%M")
