@@ -4440,7 +4440,7 @@ function PA_Step3HubAnalysis () {
 	for (keys in hubAnalysisResult) {
 		hubTable.push(
 			{
-				Metabolite:hubAnalysisResult[keys][0],
+				Metabolite:this.model.mappingComp[hubAnalysisResult[keys][0]],
 				Step:hubAnalysisResult[keys][1],
 				DE_neighbors:hubAnalysisResult[keys][2],
 				not_DE_neighbors:hubAnalysisResult[keys][3],

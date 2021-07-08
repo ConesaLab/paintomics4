@@ -1225,14 +1225,12 @@ class PathwayAcquisitionJob(Job):
         for i in self.inputGenesData:
             if self.inputGenesData[i].omicsValues[0].relevant:
                 userDEfeatures.append(i)
-            else:
-                userDataset.append(i)
+            userDataset.append(i)
 
         for j in self.inputCompoundsData:
             if self.inputCompoundsData[j].omicsValues[0].relevant:
                 userDEfeatures.append(j)
-            else:
-                userDataset.append(j)
+            userDataset.append(j)
 
         import csv
         with open(self.outputDir + "userDataset.csv", 'w') as w:
