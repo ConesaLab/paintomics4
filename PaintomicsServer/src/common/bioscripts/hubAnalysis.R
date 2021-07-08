@@ -21,10 +21,10 @@ SignificanceTestbyMetabolite<- function(UserDataset, UserDEfeatures,dir,iter){
   typesG<-types[!(types$type == "compound"),]
   
   # Differentially expressed metabolites
-  DEm<-UserDEfeatures[is.element(UserDEfeatures,typesC$name)] # 21 metabolites
+  DEm<-UserDEfeatures[is.element(UserDEfeatures,typesC$name)] 
   
   # Differentially expressed genes
-  DEg<-UserDEfeatures[is.element(UserDEfeatures,typesG$name)] # 234 genes
+  DEg<-UserDEfeatures[is.element(UserDEfeatures,typesG$name)]
   
   
   PRETAB2<-NULL
@@ -47,8 +47,6 @@ SignificanceTestbyMetabolite<- function(UserDataset, UserDEfeatures,dir,iter){
       PRETAB<-rbind(PRETAB,pretab)
     }
     PRETAB2<-rbind(PRETAB2,PRETAB)
-    
-    
   }
   PRETAB2<-data.frame(PRETAB2)
   rownames(PRETAB2)<-seq(1:nrow(PRETAB2))
@@ -62,7 +60,6 @@ SignificanceTestbyMetabolite<- function(UserDataset, UserDEfeatures,dir,iter){
   tabresumiterations<-NULL
   for(i in 1: length(DEm)) {
     elcompound<-DEm[i]
-    print(elcompound)
     load(paste(dir,"/",elcompound,".RData",sep=''))
     
     tpretab<-tPRETAB<-tPRETAB2<-NULL
@@ -75,16 +72,16 @@ SignificanceTestbyMetabolite<- function(UserDataset, UserDEfeatures,dir,iter){
         print (paste("iter",r, sep =" ") )
         SupposedUserDEfeatures<-sample(x = UserDataset,size = length(UserDEfeatures)-1)
         SupposedUserDEfeatures<-c(elcompound,SupposedUserDEfeatures)
-        losDEs<-losnodos[is.element(losnodos,SupposedUserDEfeatures)]
-        preNODE<-losnodos[!(is.element(losnodos,SupposedUserDEfeatures))]
-        losNODE<-preNODE[is.element(preNODE,UserDataset)]
-        numblosDEs<-length(losDEs)
-        numblosNODE<-length(losNODE)
-        prcnt<-round(numblosDEs/(numblosDEs+numblosNODE), digits = 3)
-        tpretab<-cbind(elcompound,elstep,numblosDEs,numblosNODE,prcnt)
-        tPRETAB<-rbind(tPRETAB,tpretab)
+        losDEs <- losnodos[is.element(losnodos,SupposedUserDEfeatures)]
+        preNODE <- losnodos[!(is.element(losnodos,SupposedUserDEfeatures))]
+        losNODE <- preNODE[is.element(preNODE,UserDataset)]
+        numblosDEs <- length(losDEs)
+        numblosNODE <- length(losNODE)
+        prcnt <- formatC(numblosDEs/(numblosDEs+numblosNODE),  format = "e", digits = 2)
+        tpretab <- cbind(elcompound,elstep,numblosDEs,numblosNODE,prcnt)
+        tPRETAB <- rbind(tPRETAB,tpretab)
       }
-      tPRETAB2<-tPRETAB
+      tPRETAB2 <- tPRETAB
       #tPRETAB2<-data.frame(tPRETAB2)
       #rownames(tPRETAB2)<-seq(1:nrow(tPRETAB2))
       #colnames(tPRETAB2)<-c("Metabolite", "Step", "DE_neighbors", "not_DE_neighbors","Percentage")
@@ -97,33 +94,29 @@ SignificanceTestbyMetabolite<- function(UserDataset, UserDEfeatures,dir,iter){
       vecDEneighbors<-as.vector(minitab[,3])
       vecNOTDEneighbors<-as.vector(minitab[,4])
       pval <- tryCatch(
-          {
-            pval<-t.test(x=as.numeric(as.character(vecDEneighbors)),mu=as.numeric(as.character(PRETAB2$DE_neighbors[lu])))$p.value
-          }, 
-          error = function(e) 
-          {
-            pval <- 1
-            return(pval)
-          }
-        )
+        {
+          pval <- t.test(x=as.numeric(as.character(vecDEneighbors)),mu=as.numeric(as.character(PRETAB2$DE_neighbors[lu])))$p.value
+          pval <- formatC(pval, format = "e", digits = 2)
+        }, 
+        error = function(e) 
+        {
+          pval <- 1
+          return(pval)
+        }
+      )
       # Agregar Multiple Testing Correction 
       met<-as.character(unique(minitab[,1]))
       DEn<-round(mean(as.numeric(as.character(minitab[,3]))), digits = 0)
       notDEn<-round(mean(as.numeric(as.character(minitab[,4]))), digits = 0)
-      prcnt<-round(DEn/(DEn+notDEn), digits = 3)
-
-      print(as.character(PRETAB2$DE_neighbors[lu]))
+      prcnt<-formatC(DEn/(DEn+notDEn), format = "e", digits = 2)
       pretabresumiterations<-cbind(RMetabolite=elcompound,RStep=elstep,RDE_neighbors=DEn,Rnot_DE_neighbors=notDEn,RPercentage=prcnt,P_value=pval)
       
       tabresumiterations<-rbind(tabresumiterations,pretabresumiterations)
       colnames(tabresumiterations)<- colnames(pretabresumiterations)
-      print("tabresumiterations")
-      print(tabresumiterations)
-      print(paste("voy por",lu))
     }
   }
   tabresumiterations<-data.frame(tabresumiterations)
-  p.adj<-round(p.adjust(as.numeric(as.character(tabresumiterations$P_value)), "BH"), 3)
+  p.adj<-formatC(p.adjust(as.numeric(as.character(tabresumiterations$P_value)), "BH"), format = "e", digits = 2)
   tabresumiterations$p.adj<-p.adj
   rownames(tabresumiterations)<-seq(1:nrow(tabresumiterations))
   colnames(tabresumiterations)<-c("RMetabolite", "RStep", "RDE_neighbors", "Rnot_DE_neighbors","RPercentage", "P_value","P_adjusted")
