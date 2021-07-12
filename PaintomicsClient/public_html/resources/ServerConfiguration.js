@@ -42,6 +42,9 @@ SERVER_URL_DM_SEND_REPORT = SERVER_URL + "dm_sendReport";
  * KEGG DATA URLS                          ***************************
  *********************************************************************/
 SERVER_URL_GET_PATHWAY_NETWORK = SERVER_URL + "kegg_data/pathway_network";
+SERVER_URL_GET_PATHWAY_NETWORK_REACTOME = SERVER_URL + "kegg_data/pathway_network_reactome";
+SERVER_URL_GET_PATHWAY_NETWORK_MAPMAN = SERVER_URL + "kegg_data/pathway_network_mapman";
+
 SERVER_URL_GET_AVAILABLE_SPECIES = SERVER_URL + "kegg_data/species.json";
 /*********************************************************************
  * USER MANIPULATION SERVICES URLS         ***************************

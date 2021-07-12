@@ -708,9 +708,9 @@ function PA_Step3JobView() {
 							}
 						}
 				},
-				me.pathwayTableView.getComponent(), //THE TABLE PANEL
 				me.hubAnalysisView.getComponent(),
-				(!this.getModel().foundCompounds.length?null:me.metaboliteView.getComponent())
+				(!this.getModel().foundCompounds.length?null:me.metaboliteView.getComponent()),
+				me.pathwayTableView.getComponent() //THE TABLE PANEL
 			],
 			listeners: {
 				boxready: function() {
@@ -975,70 +975,70 @@ function PA_Step3PathwayClassificationView(db = "KEGG") {
 				'</div>';
 			}
 
-			/********************************************************************/
-			/* STEP 3.3 UPDATE THE CONTENT FOR THE DOM                          */
-			/********************************************************************/
-			$("#pathwayClassificationContainer_" + me.dbid).html(htmlContent);
+		/********************************************************************/
+		/* STEP 3.3 UPDATE THE CONTENT FOR THE DOM                          */
+		/********************************************************************/
+		$("#pathwayClassificationContainer_" + me.dbid).html(htmlContent);
 
-			/********************************************************************/
-			/* STEP 3.4 SET THE BEHAVIOUR WHEN CLIKING THE NODES OF THE TREE    */
-			/********************************************************************/
-			var updateStatus = function(elem){
-				$(elem).parents(".step3ClassificationsWrapper").last().find(".step3ClassificationsWrapper").andSelf().each(function(){
-					var totalPathways = $(this).find("input").size();
-					var totalCheckedPathways = $(this).find("input:checked").size();
-					var className = "";
-					if(totalCheckedPathways === 0){
-						$(this).children(".step3ClassificationsTitle").addClass("disabled");
-						className = ".hideOption";
-					}else if(totalCheckedPathways === totalPathways){
-						$(this).children(".step3ClassificationsTitle").removeClass("disabled");
-						className = ".showOption";
-					}else{
-						$(this).children(".step3ClassificationsTitle").removeClass("disabled");
-						className = ".customOption";
-					}
-
-					//* SET TO "CUSTOM" ALL INMEDIATE CHILDREN OPTIONS
-					$(this).children(".step3ClassificationsTitle").find("a").removeClass("selected");
-					$(this).children(".step3ClassificationsTitle").find("a" + className).addClass("selected");
-				});
-			};
-
-			$("#pathwayClassificationContainer_" + me.dbid + " .step3ClassificationsTitle").click(function(event){
-				if(event.target.nodeName === "A"){
-					//IGNORE IF CLIKING ON CURRENT OPTION
-					if($(event.target).hasClass("selected")){
-						return;
-					}
-
-					if(event.target.text === "Show"){
-						$(this).next(".step3ClassificationsChildrenContainer").find("input").prop("checked",true);
-					}else if(event.target.text === "Hide"){
-						$(this).next(".step3ClassificationsChildrenContainer").find("input").removeAttr("checked");
-					}
-
-					updateStatus(this);
+		/********************************************************************/
+		/* STEP 3.4 SET THE BEHAVIOUR WHEN CLIKING THE NODES OF THE TREE    */
+		/********************************************************************/
+		var updateStatus = function(elem){
+			$(elem).parents(".step3ClassificationsWrapper").last().find(".step3ClassificationsWrapper").andSelf().each(function(){
+				var totalPathways = $(this).find("input").size();
+				var totalCheckedPathways = $(this).find("input:checked").size();
+				var className = "";
+				if(totalCheckedPathways === 0){
+					$(this).children(".step3ClassificationsTitle").addClass("disabled");
+					className = ".hideOption";
+				}else if(totalCheckedPathways === totalPathways){
+					$(this).children(".step3ClassificationsTitle").removeClass("disabled");
+					className = ".showOption";
 				}else{
-					//EXPAND/COLLAPSE
-					$(this).next(".step3ClassificationsChildrenContainer").slideToggle();
-					$(this).find("i.fa").each(function(){
-						if($(this).hasClass("fa-caret-right")){
-							$(this).removeClass("fa-caret-right").addClass("fa-caret-down");
-						}else{
-							$(this).removeClass("fa-caret-down").addClass("fa-caret-right");
-						}
-					});
+					$(this).children(".step3ClassificationsTitle").removeClass("disabled");
+					className = ".customOption";
 				}
-			});
 
-			$("#pathwayClassificationContainer_" + me.dbid + " .step3ClassificationsPathway > input").change(function(){
+				//* SET TO "CUSTOM" ALL INMEDIATE CHILDREN OPTIONS
+				$(this).children(".step3ClassificationsTitle").find("a").removeClass("selected");
+				$(this).children(".step3ClassificationsTitle").find("a" + className).addClass("selected");
+			});
+		};
+
+		$("#pathwayClassificationContainer_" + me.dbid + " .step3ClassificationsTitle").click(function(event){
+			if(event.target.nodeName === "A"){
+				//IGNORE IF CLIKING ON CURRENT OPTION
+				if($(event.target).hasClass("selected")){
+					return;
+				}
+
+				if(event.target.text === "Show"){
+					$(this).next(".step3ClassificationsChildrenContainer").find("input").prop("checked",true);
+				}else if(event.target.text === "Hide"){
+					$(this).next(".step3ClassificationsChildrenContainer").find("input").removeAttr("checked");
+				}
+
 				updateStatus(this);
-			});
+			}else{
+				//EXPAND/COLLAPSE
+				$(this).next(".step3ClassificationsChildrenContainer").slideToggle();
+				$(this).find("i.fa").each(function(){
+					if($(this).hasClass("fa-caret-right")){
+						$(this).removeClass("fa-caret-right").addClass("fa-caret-down");
+					}else{
+						$(this).removeClass("fa-caret-down").addClass("fa-caret-right");
+					}
+				});
+			}
+		});
 
-			this.applyVisualSettings(false);
+		$("#pathwayClassificationContainer_" + me.dbid + " .step3ClassificationsPathway > input").change(function(){
+			updateStatus(this);
+		});
 
-			return this;
+		this.applyVisualSettings(false);
+
+		return this;
 		};
 
 		/**
@@ -1049,117 +1049,117 @@ function PA_Step3PathwayClassificationView(db = "KEGG") {
 		* @chainable
 		* @returns {PA_Step3PathwayClassificationView}
 		*/
-		this.applyVisualSettings =  function(updateSettings=true) {
-			var me = this;
+	this.applyVisualSettings =  function(updateSettings=true) {
+		var me = this;
 
-			/********************************************************/
-			/* STEP 1. UPDATE THE pathways Visibility               */
-			/*         (indexedPathways TABLE)                      */
-			/********************************************************/
-			var pathwaysVisibility = [];
-			var indexedPathways = me.getParent().getIndexedPathways(this.database);
-			$("#pathwayClassificationContainer_" + me.dbid).find("input").each(function(){
-				indexedPathways[this.id].setVisible($(this).is(":checked"));
-				if(indexedPathways[this.id].isVisible()){
-					pathwaysVisibility.push(this.id);
+		/********************************************************/
+		/* STEP 1. UPDATE THE pathways Visibility               */
+		/*         (indexedPathways TABLE)                      */
+		/********************************************************/
+		var pathwaysVisibility = [];
+		var indexedPathways = me.getParent().getIndexedPathways(this.database);
+		$("#pathwayClassificationContainer_" + me.dbid).find("input").each(function(){
+			indexedPathways[this.id].setVisible($(this).is(":checked"));
+			if(indexedPathways[this.id].isVisible()){
+				pathwaysVisibility.push(this.id);
+			}
+		});
+
+		var classificationData = me.getParent().getClassificationData(me.database);
+		var mainClassificationID, secClassificationID;
+		var mainClassifications = [], secondClassifications = [];
+
+		// Avoid this when no pathways are visible.
+		if (pathwaysVisibility.length) {
+			Object.keys(classificationData).forEach(function(classificationID) {
+				var mainClassificationInstance = classificationData[classificationID];
+				var mainVisiblePathways = 0;
+
+				drilldownAux = {
+					name: mainClassificationInstance.name,
+					id: classificationID,
+					data: []
+				};
+
+				for (secondClassificationID in mainClassificationInstance.children){
+					var secClassificationInstance = mainClassificationInstance.children[secondClassificationID];
+					var secVisiblePathways = secClassificationInstance.children.filter(x => pathwaysVisibility.includes(x));
+
+					// Check if there are visible pathways in this classification
+					if (secVisiblePathways.length) {
+						mainVisiblePathways += secVisiblePathways.length;
+						drilldownAux.data.push([secClassificationInstance.name, (secVisiblePathways.length/pathwaysVisibility.length) * 100]);
+					}
+				}
+
+				if (mainVisiblePathways) {
+					secondClassifications.push(drilldownAux);
+
+					mainClassifications.push({
+						name: mainClassificationInstance.name,
+						y: (mainVisiblePathways/pathwaysVisibility.length) * 100,
+						color: me.getParent().getClassificationColor(classificationID, me.OTHER_COLORS),
+						drilldown: classificationID
+					});
 				}
 			});
 
-			var classificationData = me.getParent().getClassificationData(me.database);
-			var mainClassificationID, secClassificationID;
-			var mainClassifications = [], secondClassifications = [];
+			me.highcharts.series[0].setData(mainClassifications);
+			me.highcharts.options.drilldown.series[0] = secondClassifications;
+		} else {
+			me.highcharts.series[0].setData([{
+					name: 'No pathways',
+					y: 100,
+					color: "#FF0000"
+			}]);
+		}
 
-			// Avoid this when no pathways are visible.
-			if (pathwaysVisibility.length) {
-				Object.keys(classificationData).forEach(function(classificationID) {
-					var mainClassificationInstance = classificationData[classificationID];
-					var mainVisiblePathways = 0;
+		if (updateSettings) {
+			me.getParent().setVisualOptions("pathwaysVisibility", pathwaysVisibility, me.database);
 
-					drilldownAux = {
-						name: mainClassificationInstance.name,
-						id: classificationID,
-						data: []
-					};
+			/********************************************************/
+			/* STEP 2. NOTIFY THE CHANGES TO PARENT                 */
+			/********************************************************/
+			me.getParent().applyVisualSettings(me.getName(), me.database);
+		}
 
-					for (secondClassificationID in mainClassificationInstance.children){
-						var secClassificationInstance = mainClassificationInstance.children[secondClassificationID];
-						var secVisiblePathways = secClassificationInstance.children.filter(x => pathwaysVisibility.includes(x));
-
-						// Check if there are visible pathways in this classification
-						if (secVisiblePathways.length) {
-							mainVisiblePathways += secVisiblePathways.length;
-							drilldownAux.data.push([secClassificationInstance.name, (secVisiblePathways.length/pathwaysVisibility.length) * 100]);
-						}
-					}
-
-					if (mainVisiblePathways) {
-						secondClassifications.push(drilldownAux);
-
-						mainClassifications.push({
-							name: mainClassificationInstance.name,
-							y: (mainVisiblePathways/pathwaysVisibility.length) * 100,
-							color: me.getParent().getClassificationColor(classificationID, me.OTHER_COLORS),
-							drilldown: classificationID
-						});
-					}
-				});
-
-				me.highcharts.series[0].setData(mainClassifications);
-				me.highcharts.options.drilldown.series[0] = secondClassifications;
-			} else {
-				me.highcharts.series[0].setData([{
-						name: 'No pathways',
-						y: 100,
-						color: "#FF0000"
-				}]);
-			}
-
-			if (updateSettings) {
-				me.getParent().setVisualOptions("pathwaysVisibility", pathwaysVisibility, me.database);
-
-				/********************************************************/
-				/* STEP 2. NOTIFY THE CHANGES TO PARENT                 */
-				/********************************************************/
-				me.getParent().applyVisualSettings(me.getName(), me.database);
-			}
-
-			return this;
-		};
+		return this;
+	};
 
 		/**
 		* This function generates the component (EXTJS) using the content of the model
 		* @returns {Ext.ComponentView} The visual component
 		*/
-		this.initComponent = function() {
-			var me = this;
+	this.initComponent = function() {
+		var me = this;
 
-			this.component = Ext.widget({
-				xtype: 'box', cls: "contentbox",
-				maxWidth: 1900, html:
-				'<h2>Pathways classification (' + me.database + ' database)</h2>' +
-				'<div id="pathwayClassificationPlot1Box_' + me.dbid + '" style="padding-left: 10px;overflow:hidden;  min-height:300px; width: 45%; float: left;">'+
-				'  <h4>Category Distribution<span class="infoTip">Click on each slice to view the distribution of the subcategories.</span></h4> '+
-				'  <div id="pathwayDistributionsContainer_' + me.dbid + '" style="height: 240px;"></div>'+
-				'</div>' +
-				'<div id="pathwayClassificationPlot2Box_' + me.dbid + '" style="overflow:hidden;  min-height:300px; width: 55%; display:inline-block; padding: 0px 30px">'+
-				'  <h4>Filter by category<span class="infoTip">Use this tool to <b>Show or Hide Pathways</b> based on their classification</span></h4> '+
-				'  <div id="pathwayClassificationContainer_' + me.dbid + '"></div>'+
-				'  <a href="javascript:void(0)" class="button btn-success btn-right helpTip" id="applyClassificationSettingsButton_' + me.dbid + '" style="margin: 0px 50px 17px 0px;" title="Apply changes"><i class="fa fa-check"></i> Apply</a>' +
-				'</div>',
-				listeners: {
-					boxready: function() {
-						$("#applyClassificationSettingsButton_" + me.dbid).click(function() {
-							me.applyVisualSettings();
-						});
+		this.component = Ext.widget({
+			xtype: 'box', cls: "contentbox",
+			maxWidth: 1900, html:
+			'<h2>Pathways classification (' + me.database + ' database)</h2>' +
+			'<div id="pathwayClassificationPlot1Box_' + me.dbid + '" style="padding-left: 10px;overflow:hidden;  min-height:300px; width: 45%; float: left;">'+
+			'  <h4>Category Distribution<span class="infoTip">Click on each slice to view the distribution of the subcategories.</span></h4> '+
+			'  <div id="pathwayDistributionsContainer_' + me.dbid + '" style="height: 240px;"></div>'+
+			'</div>' +
+			'<div id="pathwayClassificationPlot2Box_' + me.dbid + '" style="overflow:hidden;  min-height:300px; width: 55%; display:inline-block; padding: 0px 30px">'+
+			'  <h4>Filter by category<span class="infoTip">Use this tool to <b>Show or Hide Pathways</b> based on their classification</span></h4> '+
+			'  <div id="pathwayClassificationContainer_' + me.dbid + '"></div>'+
+			'  <a href="javascript:void(0)" class="button btn-success btn-right helpTip" id="applyClassificationSettingsButton_' + me.dbid + '" style="margin: 0px 50px 17px 0px;" title="Apply changes"><i class="fa fa-check"></i> Apply</a>' +
+			'</div>',
+			listeners: {
+				boxready: function() {
+					$("#applyClassificationSettingsButton_" + me.dbid).click(function() {
+						me.applyVisualSettings();
+					});
 
-						initializeTooltips(".helpTip");
-					}
+					initializeTooltips(".helpTip");
 				}
-			});
-			return this.component;
-		};
-		return this;
-	}
+			}
+		});
+		return this.component;
+	};
+	return this;
+}
 PA_Step3PathwayClassificationView.prototype = new View();
 
 function PA_Step3PathwayNetworkView(db = "KEGG") {
@@ -2977,8 +2977,8 @@ function PA_Step3PathwayDetailsView() {
 			return this;
 		};
 
-		//TODO: DOCUMENTAR
-		this.generateHeatmap = function (targetID, omicName, metagenes, dataDistributionSummaries) {
+	//TODO: DOCUMENTAR
+	this.generateHeatmap = function (targetID, omicName, metagenes, dataDistributionSummaries) {
 			var featureValues, x = 0, y = 0, maxX = -1, series = [], yAxisCat = [], serie;
 			for (var i in metagenes) {
 				//restart the x coordinate
@@ -3066,8 +3066,8 @@ function PA_Step3PathwayDetailsView() {
 			return heatmap;
 		};
 
-		//TODO: DOCUMENTAR
-		this.generatePlot = function (targetID, omicName, metagenes, dataDistributionSummaries, heatmap) {
+	//TODO: DOCUMENTAR
+	this.generatePlot = function (targetID, omicName, metagenes, dataDistributionSummaries, heatmap) {
 			var series = [],
 			scaledValues, min, max,
 			maxVal = -100000000,
@@ -3158,12 +3158,12 @@ function PA_Step3PathwayDetailsView() {
 			return plot;
 		};
 
-		/**
-		* This function generates the component (EXTJS) using the content of the model
-		* @param {String}  renderTo  the ID for the DOM element where this component should be rendered
-		* @returns {Ext.ComponentView} The visual component
-		*/
-		this.initComponent = function(renderTo) {
+	/**
+	* This function generates the component (EXTJS) using the content of the model
+	* @param {String}  renderTo  the ID for the DOM element where this component should be rendered
+	* @returns {Ext.ComponentView} The visual component
+	*/
+	this.initComponent = function(renderTo) {
 			var me = this;
 			this.component = Ext.widget({
 				xtype: "box", renderTo: renderTo, html:
@@ -3183,8 +3183,8 @@ function PA_Step3PathwayDetailsView() {
 			return this.component;
 		};
 
-		return this;
-	}
+	return this;
+}
 PA_Step3PathwayDetailsView.prototype = new View();
 
 function PA_Step3PathwayTableView() {
@@ -4076,352 +4076,9 @@ function PA_Step3StatsView() {
 }
 PA_Step3StatsView.prototype = new View();
 
-
-function PA_Step3MetaboliteView () {
-	let me = this;
-
-	this.name = "PA_Step3MetaboliteView";
-	this.tableData = null;
-	var dataFinal = new Object();
-
-
-	this.loadModel= function(model){
-
-	if (this.model !== null) {
-		this.model.deleteObserver(this);
-	}
-	this.model = model;
-	this.model.addObserver(this);
-
-	var mappingComp = this.model.mappingComp;
-	var pValueClassification = this.model.getpValueInDict();
-	var classificationDict = this.model.getClassificationDict();
-	var exprssionMetabolites = this.model.getExprssionMetabolites();
-	var adjustPValue = this.model.getAdjustPvalue();
-	var totalRelevantFeaturesInCategory = this.model.getTotalRelevantFeaturesInCategory();
-	var featureSummary = this.model.getFeatureSummary();
-	var headerComp = this.model.getCompoundBasedInputOmics()[0].omicHeader
-
-
-	// metabolites Expression data
-
-
-	tableData = {
-		mappingComp: mappingComp,
-		pValueClassification: pValueClassification,
-		classificationDict: classificationDict,
-		exprssionMetabolites: exprssionMetabolites,
-		adjustPValueBH: adjustPValue["FDR BH"],
-		adjustPValueBY: adjustPValue["FDR BY"],
-		totalRelevantFeaturesInCategory: totalRelevantFeaturesInCategory
-	}
-
-	for (var keys in tableData.classificationDict) {
-		dataFinal[keys] = []
-		dataFinal[keys]["ID"] = []
-		dataFinal[keys]["expressionVal"] = []
-		for (var elements in tableData.classificationDict[keys]) {
-			dataFinal[keys]["ID"].push(tableData.classificationDict[keys][elements])
-			dataFinal[keys]["pValue"] = tableData.pValueClassification[keys]
-			dataFinal[keys]["FDR BH"] = tableData.adjustPValueBH[keys]
-			dataFinal[keys]["FDR BY"] = tableData.adjustPValueBY[keys]
-			dataFinal[keys]["relevantFeatures"] = tableData.totalRelevantFeaturesInCategory[keys]
-            dataFinal[keys]["expressionVal"].push(tableData.exprssionMetabolites[tableData.classificationDict[keys][elements]])
-			dataFinal[keys]["foundFeatures"] = featureSummary[0]
-			dataFinal[keys]["foundRelevant"] = featureSummary[1]
-			dataFinal[keys]['header'] = headerComp
-		}
-	}
-
-
-	var dataShow2 = []
-	for (var keys in dataFinal) {
-		dataShow2.push(
-			{
-				name: keys, totalFeatures: dataFinal[keys]["ID"].length, pValue: dataFinal[keys]["pValue"],
-				FDR_BH: dataFinal[keys]["FDR BH"], FDR_BY: dataFinal[keys]["FDR BY"],
-				relevantFeatures: dataFinal[keys]["relevantFeatures"],
-				foundFeatures: dataFinal[keys]["foundFeatures"],
-				foundRelevant: dataFinal[keys]["foundRelevant"]
-			}
-
-		)
-	}
-
-	Ext.define('User', {
-    extend: 'Ext.data.Model',
-    fields: [ 'name', 'totalFeatures', "pValue", "FDR_BH", "FDR_BY", "relevantFeatures","foundFeatures", "foundRelevant"]});
-
-	var userStore = Ext.create('Ext.data.Store', {
-    model: 'User',
-    data: dataShow2
-});
-
-
-	var statusRenderer = function(value, metadata, record, rowIndex,colIndex, store)
-	{
-		var tooltip = 'your tooltip';
-		metadata.attr = 'ext:qtip="' + tooltip + '"';
-		alter("success")
-	}
-
-	var renderFunction = function(value, metadata, record) {
-			var myToolTipText = "<b style='display:block; width:200px'>" + "Metabolism" + "</b>";
-			metadata.style = "height: 33px; font-size:10px;"
-
-			//IF THERE IS NOT DATA FOR THIS PATHWAY, FOR THIS OMIC, PRINT A '-'
-			if (value === "-" || value == undefined || isNaN(value)) {
-				myToolTipText = myToolTipText + "<i>No data for this pathway</i>";
-				metadata.tdAttr = 'data-qtip="' + myToolTipText + '"';
-				metadata.style += "background-color:#D4D4D4;";
-				return "-";
-			}
-			//ELSE, GENERATE SUMMARY TIP
-
-			//RENDER THE VALUE -> IF LESS THAN 0.05, USE SCIENTIFIC NOTATION
-			var renderedValue = (value > 0.001 || value === 0) ? parseFloat(value).toFixed(5) : parseFloat(value).toExponential(4);
-			var omicName = "-" + metadata.column.text.toLowerCase().replace(/ /g, "-").replace(/<\/br>/g, "-");
-
-			if(value <= 0.065){
-				var color = Math.round(225 * (value/0.065));
-				metadata.style += "background-color:rgb(255, " + color +"," + color + ");";
-			}
-
-			try {
-				var totalFeatures = record.data.totalFeatures;
-				var totalRelevant = record.data.relevantFeatures;
-
-				// Keep compatibility with old jobs
-				var foundFeatures = record.data.foundFeatures;
-				var foundRelevant = record.data.foundRelevant;
-
-				var foundNotRelevant = foundFeatures - foundRelevant;
-				var notFoundRelevant = totalRelevant - foundRelevant;
-				var notFoundNotRelev = (totalFeatures - foundFeatures) - notFoundRelevant;
-
-				if (foundRelevant !== undefined) {
-					myToolTipText +=
-					'<b>p-value:</b>'  + (value === -1 ? "-" : renderedValue) + "</br>" +
-					"<table class='contingencyTable'>" +
-					' <thead><th></th><th>Relevant</th><th>Not Relevant</th><th></th></thead>' +
-					'  <tr><td>Found</td><td>' + foundRelevant + '</td><td>' + foundNotRelevant + '</td><td>' + foundFeatures + '</td></tr>' +
-					'  <tr><td>Not found</td><td>' + notFoundRelevant + '</td><td>' + notFoundNotRelev + '</td><td>' + (totalFeatures - foundFeatures) + '</td></tr>' +
-					'  <tr><td></td><td>' + totalRelevant + '</td><td>' + (totalFeatures - totalRelevant) + '</td><td>' + (totalFeatures) + '</td></tr>' +
-					'</table>';
-					// myToolTipText = myToolTipText + "Features matched: " + ) + "</br>";
-					// myToolTipText = myToolTipText + "Relevant features matched: " +  + "</br>";
-					metadata.tdAttr = 'data-qtip="' + myToolTipText + '"';
-				}
-
-				} catch (e) {
-					debugger;
-					console.error("Error while creating tooltip");
-				} finally {
-
-				}
-
-	return renderedValue;
-	};
-
-
-	this.initComponent = function() {
-
-	this.component = Ext.widget(
-
-		{
-			xtype: "container",
-			padding: '3', border: 0, maxWidth: 1900,
-			layout: 'column',
-			renderTo: document.body,
-
-			items: [
-			{
-				xtype: "gridpanel",
-				cls: "contentbox",
-				autoScroll:true,
-				store: userStore,
-				width: getWidth(),
-				height: 350,
-				header: {
-					xtype: 'box',
-					flex: 1,
-					border: 0,
-					height: 35,
-					html: '<h2 id="EnrichmentSection"> Metabolites class enrichment</h2>',
-					style: {
-						backgroundColor: 'white'
-					}
-				},
-
-				columns: [
-					{
-						xtype: 'customactioncolumn',
-						text: "Paint",
-						menuDisabled: true,
-            			flex: 8 / 100,
-						items: [{
-							icon: "fa-paint-brush-o",
-							text: "",
-							tooltip: 'Paint this classification',
-							style: "font-size: 20px;",
-							handler: function (grid, rowIndex) {
-								let classificationData = dataFinal[grid.getStore().getAt(rowIndex).data.name];
-								let nameComp = []
-								for (let i =0; i < classificationData.ID.length; i ++) {
-									nameComp.push(tableData.mappingComp[classificationData.ID[i]])
-								}
-
-								TESTER = document.getElementById('classificationPlotly');
-
-								let dataPlotly = [
-									{
-										z: classificationData.expressionVal,
-										y: nameComp,
-										x: classificationData.header.slice(1, classificationData.header.length),
-										type: 'heatmap',
-										showscale:false,
-										hoverongaps:false,
-										hovertemplate: '<b>Condition: </b> %{x}' +
-													   '<br><b>Value: </b> %{z:.2f}' +
-													   '<extra></extra>'
-									}
-								]
-
-								let dataPlotlyLine = [];
-
-								for (let i = 0; i < classificationData.expressionVal.length; i++) {
-									let tempData = {
-										x: classificationData.header.slice(1, classificationData.header.length),
-										y: classificationData.expressionVal[i],
-										name: classificationData.ID[i],
-										type: 'scatter',
-										hovertemplate:'%{y:.2f}'
-									}
-									dataPlotlyLine.push(tempData);
-								}
-
-
-
-								let layout = {
-									title:{
-										text: grid.getStore().getAt(rowIndex).data.name,
-										font: {
-											family: 'Arial, monospace',
-											size:12
-										}
-									},
-									margin: {
-										l:100,
-										t:20
-									},
-									xaxis:{
-										showticklabels:false
-									},
-									width: 400,
-									height: 140 + (classificationData.expressionVal.length-1)*35
-
-								};
-
-								let layoutLine = {
-									title:{
-										text: grid.getStore().getAt(rowIndex).data.name,
-										font: {
-											family: 'Arial, monospace',
-											size:12
-										}
-									},
-									margin: {
-										l:100,
-										t:20
-									},
-									width: 400,
-									height: 260
-								}
-								//me.getParent().paintSelectedPathway(grid.getStore().getAt(rowIndex).get('pathwayID'));
-								let heatmapChart = document.getElementById("heatmapChart");
-								let lineChart= document.getElementById("lineChart");
-
-								if (heatmapChart.classList.contains('selected')) {
-									Plotly.newPlot(TESTER, dataPlotly, layout)
-								} else {
-									Plotly.newPlot(TESTER, dataPlotlyLine, layoutLine)
-								}
-								heatmapChart.addEventListener('click', function (){heatmapChart.classList.add('selected');lineChart.classList.remove('selected');Plotly.newPlot(TESTER, dataPlotly, layout);})
-								lineChart.addEventListener('click', function (){lineChart.classList.add('selected'); heatmapChart.classList.remove('selected'); Plotly.newPlot( TESTER, dataPlotlyLine, layoutLine);})
-							}
-						}]
-					},
-					{
-						text: 'Name',
-            			flex: 15 / 100,
-						sortable: true,
-						hideable: false,
-						dataIndex: 'name'
-					},
-					{
-						text: 'Features',
-            			flex: 15 / 100,
-						sortable: true,
-						hideable: false,
-						dataIndex: 'totalFeatures'
-					},
-					{
-						text: "P Value",
-            			flex: 15 / 100,
-						sortable: true,
-						dataIndex: 'pValue',
-						renderer: renderFunction
-
-					},
-					{
-						text: "FDR BH",
-            			flex: 15 / 100,
-						sortable: true,
-						dataIndex: "FDR_BH",
-						renderer: renderFunction
-
-					},
-					{
-						text: "FDR BY",
-            			flex: 15 / 100,
-						sortable: true,
-						dataIndex: "FDR_BY",
-						renderer: renderFunction
-
-					}
-				]
-			},
-			{
-				xtype: 'box',
-				cls: "contentbox",
-				style: "margin-top:10px;width: 49%;background:#fff",
-				flex: 1,
-				padding: '30',
-				height: 350,
-				html:
-				' <h4>Expression Value<span class="infoTip">Use this tool to <b>show expression details of metabolites</b> based on their classification</span></h4> '+
-					"  <div class='twoOptionsButtonWrapper'>" +
-					'      <a class="button twoOptionsButton selected" id="heatmapChart">Heatmap</a>'+
-					'      <a class="button twoOptionsButton" id="lineChart">Line chart</a>'+
-					"  </div>" +
-
-				' <div id="classificationPlotly" style="height: 100%; overflow: auto"></div>' +
-				' <div id="classificationPlotlyLine" style="height: 100%; overflow: auto"></div>',
-			}
-			]
-		}
-	);
-
-
-	};
-	this.initComponent();
-
-	}
-
-	return this;
-}
-PA_Step3MetaboliteView.prototype = new View();
-
+/*
+FOR PaintOmics 4
+ */
 function PA_Step3HubAnalysis () {
 	let me = this;
 
@@ -4430,145 +4087,143 @@ function PA_Step3HubAnalysis () {
 	let hubTable =[]
 
 
-	this.loadModel= function(model){
-	if (this.model !== null) {
-		this.model.deleteObserver(this);
+	this.loadModel = function (model) {
+		if (this.model !== null) {
+			this.model.deleteObserver(this);
+		}
+		this.model = model;
+		this.model.addObserver(this);
+		const hubAnalysisResult = this.model.getHubAnalysisResult();
+		for (keys in hubAnalysisResult) {
+			hubTable.push(
+				{
+					Metabolite: this.model.mappingComp[hubAnalysisResult[keys][0]],
+					Step: hubAnalysisResult[keys][1],
+					DE_neighbors: hubAnalysisResult[keys][2],
+					not_DE_neighbors: hubAnalysisResult[keys][3],
+					Percentage: hubAnalysisResult[keys][4],
+					RDE_neighbors: hubAnalysisResult[keys][5],
+					Rnot_DE_neighbors: hubAnalysisResult[keys][6],
+					RPercentage: hubAnalysisResult[keys][7],
+					P_value: hubAnalysisResult[keys][8],
+					P_adjusted: hubAnalysisResult[keys][9]
+				}
+			)
+		}
 	}
-	this.model = model;
-	this.model.addObserver(this);
-	const hubAnalysisResult = this.model.getHubAnalysisResult();
-	for (keys in hubAnalysisResult) {
-		hubTable.push(
-			{
-				Metabolite:this.model.mappingComp[hubAnalysisResult[keys][0]],
-				Step:hubAnalysisResult[keys][1],
-				DE_neighbors:hubAnalysisResult[keys][2],
-				not_DE_neighbors:hubAnalysisResult[keys][3],
-				Percentage:hubAnalysisResult[keys][4],
-				RDE_neighbors: hubAnalysisResult[keys][5],
-				Rnot_DE_neighbors: hubAnalysisResult[keys][6],
-				RPercentage: hubAnalysisResult[keys][7],
-				P_value: hubAnalysisResult[keys][8],
-				P_adjusted: hubAnalysisResult[keys][9]
-			}
-		)
-	}
-	}
 
-
-
-
-	this.initComponent = function() {
+	this.initComponent = function () {
+		var me = this;
 		Ext.define('User', {
-		extend: 'Ext.data.Model',
-		fields: [ 'Metabolite', 'Step', "DE_neighbors", "not_DE_neighbors", "Percentage", "RDE_neighbors", "Rnot_DE_neighbors","RPercentage", "P_value", "P_adjusted"]
+			extend: 'Ext.data.Model',
+			fields: ['Metabolite', 'Step', "DE_neighbors", "not_DE_neighbors", "Percentage", "RDE_neighbors", "Rnot_DE_neighbors", "RPercentage", "P_value", "P_adjusted"]
 		});
 
 		var userStore = Ext.create('Ext.data.Store', {
-   	 	model: 'User',
-    	data: hubTable
+			model: 'User',
+			data: hubTable
 		});
 
 
-	this.component = Ext.widget(
-		{
-			xtype: "container",
-			padding: '3', border: 0, maxWidth: 1900,
-			layout: 'column',
-			renderTo: document.body,
-
-			items: [
+		this.component = Ext.widget(
 			{
-				xtype: "gridpanel",
+				xtype: "container",
+				padding: '3', border: 0, maxWidth: 1900,
+				layout: 'column',
+				renderTo: document.body,
 
-				cls: "contentbox",
-				store: userStore,
-				width: getWidth2(),
-				height: 350,
-				header: {
-					xtype: 'box',
-					flex: 2,
-					border: 0,
-					height: 70,
-					html: '<h2 id="EnrichmentSection"> Metabolites Hub Analysis</h2>'+
-					' <span class="infoTip">The analysis is between <b> deferentially expressed metabolites</b> compared to <b> randomly selected metabolites</b></span> '+
-					' <span class="infoTip">The idea is to generate a table with the real values and the values after iterate the data and an associated p-value</span>',
+				items: [
+					{
+						xtype: "gridpanel",
 
-					style: {
-						backgroundColor: 'white'
-					}
-				},
+						cls: "contentbox",
+						store: userStore,
+						width: getWidth2(),
+						height: 350,
+						header: {
+							xtype: 'box',
+							flex: 2,
+							border: 0,
+							height: 70,
+							html: '<h2 id="EnrichmentSection"> Metabolites Hub Analysis</h2>' +
+								' <span class="infoTip">The analysis is between <b> deferentially expressed metabolites</b> compared to <b> randomly selected metabolites</b></span> ' +
+								' <span class="infoTip">The idea is to generate a table with the real values and the values after iterate the data and an associated p-value</span>',
 
-				columns: [
-					{
-						text: 'Metabolite',
-						flex: 20/100,
-						sortable: true,
-						hideable: false,
-						dataIndex: 'Metabolite'
-					},
-					{
-						text: 'Step',
-						flex: 20/100,
-						sortable: true,
-						hideable: false,
-						dataIndex: 'Step'
-					},
-					{
-						text: "DE neighbors",
-						flex: 20/100,
-						sortable: true,
-						dataIndex: 'DE_neighbors'
+							style: {
+								backgroundColor: 'white'
+							}
+						},
 
-					},
-					{
-						text: "not DE neighbors",
-						flex: 20/100,
-						sortable: true,
-						dataIndex: "not_DE_neighbors"
+						columns: [
+							{
+								text: 'Metabolite',
+								flex: 20 / 100,
+								sortable: true,
+								hideable: false,
+								dataIndex: 'Metabolite'
+							},
+							{
+								text: 'Step',
+								flex: 20 / 100,
+								sortable: true,
+								hideable: false,
+								dataIndex: 'Step'
+							},
+							{
+								text: "DE neighbors",
+								flex: 20 / 100,
+								sortable: true,
+								dataIndex: 'DE_neighbors'
 
-					},
-					{
-						text: "Percentage",
-						flex: 20/100,
-						sortable: true,
-						dataIndex: "Percentage"
-					},
-					{
-						text: "RDE neighbors",
-						flex: 20/100,
-						sortable: true,
-						dataIndex: "RDE_neighbors"
-					},
-					{
-						text: "Rnot DE neighbors",
-						flex: 20/100,
-						sortable: true,
-						dataIndex: "Rnot_DE_neighbors"
-					},
-					{
-						text: "RPercentage",
-						flex: 20/100,
-						sortable: true,
-						dataIndex: "RPercentage"
-					},
-					{
-						text: "P value",
-						flex: 20/100,
-						sortable: true,
-						dataIndex: "P_value"
-					},
-					{
-						text: "P adjusted",
-						flex: 20/100,
-						sortable: true,
-						dataIndex: "P_adjusted"
+							},
+							{
+								text: "not DE neighbors",
+								flex: 20 / 100,
+								sortable: true,
+								dataIndex: "not_DE_neighbors"
+
+							},
+							{
+								text: "Percentage",
+								flex: 20 / 100,
+								sortable: true,
+								dataIndex: "Percentage"
+							},
+							{
+								text: "RDE neighbors",
+								flex: 20 / 100,
+								sortable: true,
+								dataIndex: "RDE_neighbors"
+							},
+							{
+								text: "Rnot DE neighbors",
+								flex: 20 / 100,
+								sortable: true,
+								dataIndex: "Rnot_DE_neighbors"
+							},
+							{
+								text: "RPercentage",
+								flex: 20 / 100,
+								sortable: true,
+								dataIndex: "RPercentage"
+							},
+							{
+								text: "P value",
+								flex: 20 / 100,
+								sortable: true,
+								dataIndex: "P_value"
+							},
+							{
+								text: "P adjusted",
+								flex: 20 / 100,
+								sortable: true,
+								dataIndex: "P_adjusted"
+							}
+						]
 					}
 				]
 			}
-			]
-		}
-	);
+		);
 
 
 	};
@@ -4576,10 +4231,349 @@ function PA_Step3HubAnalysis () {
 	return this;
 
 }
-
-
 PA_Step3HubAnalysis.prototype = new View();
 
+function PA_Step3MetaboliteView() {
+	this.name = "PA_Step3MetaboliteView";
+	this.tableData = null;
+	let dataFinal = new Object();
+	var dataShow2 = [];
+	let userStore;
+
+	this.loadModel = function (model) {
+
+		if (this.model !== null) {
+			this.model.deleteObserver(this);
+		}
+		this.model = model;
+		this.model.addObserver(this);
+
+		var mappingComp = this.model.mappingComp;
+		var pValueClassification = this.model.getpValueInDict();
+		var classificationDict = this.model.getClassificationDict();
+		var exprssionMetabolites = this.model.getExprssionMetabolites();
+		var adjustPValue = this.model.getAdjustPvalue();
+		var totalRelevantFeaturesInCategory = this.model.getTotalRelevantFeaturesInCategory();
+		var featureSummary = this.model.getFeatureSummary();
+		var headerComp = this.model.getCompoundBasedInputOmics()[0].omicHeader
+
+
+		// metabolites Expression data
+
+
+		tableData = {
+			mappingComp: mappingComp,
+			pValueClassification: pValueClassification,
+			classificationDict: classificationDict,
+			exprssionMetabolites: exprssionMetabolites,
+			adjustPValueBH: adjustPValue["FDR BH"],
+			adjustPValueBY: adjustPValue["FDR BY"],
+			totalRelevantFeaturesInCategory: totalRelevantFeaturesInCategory
+		}
+
+		for (var keys in tableData.classificationDict) {
+			dataFinal[keys] = []
+			dataFinal[keys]["ID"] = []
+			dataFinal[keys]["expressionVal"] = []
+			for (var elements in tableData.classificationDict[keys]) {
+				dataFinal[keys]["ID"].push(tableData.classificationDict[keys][elements])
+				dataFinal[keys]["pValue"] = tableData.pValueClassification[keys]
+				dataFinal[keys]["FDR BH"] = tableData.adjustPValueBH[keys]
+				dataFinal[keys]["FDR BY"] = tableData.adjustPValueBY[keys]
+				dataFinal[keys]["relevantFeatures"] = tableData.totalRelevantFeaturesInCategory[keys]
+				dataFinal[keys]["expressionVal"].push(tableData.exprssionMetabolites[tableData.classificationDict[keys][elements]])
+				dataFinal[keys]["foundFeatures"] = featureSummary[0]
+				dataFinal[keys]["foundRelevant"] = featureSummary[1]
+				dataFinal[keys]['header'] = headerComp
+			}
+		}
+
+
+		for (var keys in dataFinal) {
+			dataShow2.push(
+				{
+					name: keys, totalFeatures: dataFinal[keys]["ID"].length, pValue: dataFinal[keys]["pValue"],
+					FDR_BH: dataFinal[keys]["FDR BH"], FDR_BY: dataFinal[keys]["FDR BY"],
+					relevantFeatures: dataFinal[keys]["relevantFeatures"],
+					foundFeatures: dataFinal[keys]["foundFeatures"],
+					foundRelevant: dataFinal[keys]["foundRelevant"]
+				}
+			)
+		}
+
+		Ext.define('User', {
+			extend: 'Ext.data.Model',
+			fields: ['name', 'totalFeatures', "pValue", "FDR_BH", "FDR_BY", "relevantFeatures", "foundFeatures", "foundRelevant"]
+		});
+
+		userStore = Ext.create('Ext.data.Store', {
+			model: 'User',
+			data: dataShow2
+		});
+	}
+	var renderFunction = function (value, metadata, record) {
+		var myToolTipText = "<b style='display:block; width:200px'>" + "Metabolism" + "</b>";
+		metadata.style = "height: 33px; font-size:10px;"
+
+		//IF THERE IS NOT DATA FOR THIS PATHWAY, FOR THIS OMIC, PRINT A '-'
+		if (value === "-" || value == undefined || isNaN(value)) {
+			myToolTipText = myToolTipText + "<i>No data for this pathway</i>";
+			metadata.tdAttr = 'data-qtip="' + myToolTipText + '"';
+			metadata.style += "background-color:#D4D4D4;";
+			return "-";
+		}
+		//ELSE, GENERATE SUMMARY TIP
+
+		//RENDER THE VALUE -> IF LESS THAN 0.05, USE SCIENTIFIC NOTATION
+		var renderedValue = (value > 0.001 || value === 0) ? parseFloat(value).toFixed(5) : parseFloat(value).toExponential(4);
+		var omicName = "-" + metadata.column.text.toLowerCase().replace(/ /g, "-").replace(/<\/br>/g, "-");
+
+		if (value <= 0.065) {
+			var color = Math.round(225 * (value / 0.065));
+			metadata.style += "background-color:rgb(255, " + color + "," + color + ");";
+		}
+
+		try {
+			var totalFeatures = record.data.totalFeatures;
+			var totalRelevant = record.data.relevantFeatures;
+
+			// Keep compatibility with old jobs
+			var foundFeatures = record.data.foundFeatures;
+			var foundRelevant = record.data.foundRelevant;
+
+			var foundNotRelevant = foundFeatures - foundRelevant;
+			var notFoundRelevant = totalRelevant - foundRelevant;
+			var notFoundNotRelev = (totalFeatures - foundFeatures) - notFoundRelevant;
+
+			if (foundRelevant !== undefined) {
+				myToolTipText +=
+					'<b>p-value:</b>' + (value === -1 ? "-" : renderedValue) + "</br>" +
+					"<table class='contingencyTable'>" +
+					' <thead><th></th><th>Relevant</th><th>Not Relevant</th><th></th></thead>' +
+					'  <tr><td>Found</td><td>' + foundRelevant + '</td><td>' + foundNotRelevant + '</td><td>' + foundFeatures + '</td></tr>' +
+					'  <tr><td>Not found</td><td>' + notFoundRelevant + '</td><td>' + notFoundNotRelev + '</td><td>' + (totalFeatures - foundFeatures) + '</td></tr>' +
+					'  <tr><td></td><td>' + totalRelevant + '</td><td>' + (totalFeatures - totalRelevant) + '</td><td>' + (totalFeatures) + '</td></tr>' +
+					'</table>';
+				// myToolTipText = myToolTipText + "Features matched: " + ) + "</br>";
+				// myToolTipText = myToolTipText + "Relevant features matched: " +  + "</br>";
+				metadata.tdAttr = 'data-qtip="' + myToolTipText + '"';
+			}
+
+		} catch (e) {
+			debugger;
+			console.error("Error while creating tooltip");
+		} finally {
+
+		}
+
+		return renderedValue;
+	};
+
+	var statusRenderer = function (value, metadata, record, rowIndex, colIndex, store) {
+		var tooltip = 'your tooltip';
+		metadata.attr = 'ext:qtip="' + tooltip + '"';
+		alter("success")
+	}
+
+	this.initComponent = function () {
+		this.component = Ext.widget(
+			{
+				xtype: "container",
+				padding: '3', border: 0, maxWidth: 1900,
+				layout: 'column',
+				renderTo: document.body,
+
+				items: [
+					{
+						xtype: "gridpanel",
+						cls: "contentbox",
+						autoScroll: true,
+						store: userStore,
+						width: getWidth(),
+						height: 350,
+						header: {
+							xtype: 'box',
+							flex: 1,
+							border: 0,
+							height: 35,
+							html: '<h2 id="EnrichmentSection"> Metabolites class enrichment</h2>',
+							style: {
+								backgroundColor: 'white'
+							}
+						},
+
+						columns: [
+							{
+								xtype: 'customactioncolumn',
+								text: "Paint",
+								menuDisabled: true,
+								flex: 8 / 100,
+								items: [{
+									icon: "fa-paint-brush-o",
+									text: "",
+									tooltip: 'Paint this classification',
+									style: "font-size: 20px;",
+									handler: function (grid, rowIndex) {
+										let classificationData = dataFinal[grid.getStore().getAt(rowIndex).data.name];
+										let nameComp = []
+										for (let i = 0; i < classificationData.ID.length; i++) {
+											nameComp.push(tableData.mappingComp[classificationData.ID[i]])
+										}
+
+										TESTER = document.getElementById('classificationPlotly');
+
+										let dataPlotly = [
+											{
+												z: classificationData.expressionVal,
+												y: nameComp,
+												x: classificationData.header.slice(1, classificationData.header.length),
+												type: 'heatmap',
+												showscale: false,
+												hoverongaps: false,
+												hovertemplate: '<b>Condition: </b> %{x}' +
+													'<br><b>Value: </b> %{z:.2f}' +
+													'<extra></extra>'
+											}
+										]
+
+										let dataPlotlyLine = [];
+
+										for (let i = 0; i < classificationData.expressionVal.length; i++) {
+											let tempData = {
+												x: classificationData.header.slice(1, classificationData.header.length),
+												y: classificationData.expressionVal[i],
+												name: classificationData.ID[i],
+												type: 'scatter',
+												hovertemplate: '%{y:.2f}'
+											}
+											dataPlotlyLine.push(tempData);
+										}
+
+
+										let layout = {
+											title: {
+												text: grid.getStore().getAt(rowIndex).data.name,
+												font: {
+													family: 'Arial, monospace',
+													size: 12
+												}
+											},
+											margin: {
+												l: 100,
+												t: 20
+											},
+											xaxis: {
+												showticklabels: false
+											},
+											//width: 400,
+											height: 140 + (classificationData.expressionVal.length - 1) * 35
+
+										};
+
+										let layoutLine = {
+											title: {
+												text: grid.getStore().getAt(rowIndex).data.name,
+												font: {
+													family: 'Arial, monospace',
+													size: 12
+												}
+											},
+											margin: {
+												l: 100,
+												t: 20
+											}
+											//width: 400,
+											//height: 260
+										}
+										//me.getParent().paintSelectedPathway(grid.getStore().getAt(rowIndex).get('pathwayID'));
+										let heatmapChart = document.getElementById("heatmapChart");
+										let lineChart = document.getElementById("lineChart");
+
+										if (heatmapChart.classList.contains('selected')) {
+											Plotly.newPlot(TESTER, dataPlotly, layout)
+										} else {
+											Plotly.newPlot(TESTER, dataPlotlyLine, layoutLine)
+										}
+										heatmapChart.addEventListener('click', function () {
+											heatmapChart.classList.add('selected');
+											lineChart.classList.remove('selected');
+											Plotly.newPlot(TESTER, dataPlotly, layout);
+										})
+										lineChart.addEventListener('click', function () {
+											lineChart.classList.add('selected');
+											heatmapChart.classList.remove('selected');
+											Plotly.newPlot(TESTER, dataPlotlyLine, layoutLine);
+										})
+									}
+								}]
+							},
+							{
+								text: 'Name',
+								flex: 15 / 100,
+								sortable: true,
+								hideable: false,
+								dataIndex: 'name'
+							},
+							{
+								text: 'Features',
+								flex: 15 / 100,
+								sortable: true,
+								hideable: false,
+								dataIndex: 'totalFeatures'
+							},
+							{
+								text: "P Value",
+								flex: 15 / 100,
+								sortable: true,
+								dataIndex: 'pValue',
+								renderer: renderFunction
+
+							},
+							{
+								text: "FDR BH",
+								flex: 15 / 100,
+								sortable: true,
+								dataIndex: "FDR_BH",
+								renderer: renderFunction
+
+							},
+							{
+								text: "FDR BY",
+								flex: 15 / 100,
+								sortable: true,
+								dataIndex: "FDR_BY",
+								renderer: renderFunction
+
+							}
+						]
+					},
+					{
+						xtype: 'box',
+						cls: "contentbox",
+						style: "margin-top:10px;width: 49%;background:#fff",
+						flex: 1,
+						padding: '30',
+						height: 350,
+						html:
+							' <h4>Expression Value<span class="infoTip">Use this tool to <b>show expression details of metabolites</b> based on their classification</span></h4> ' +
+							"  <div class='twoOptionsButtonWrapper'>" +
+							'      <a class="button twoOptionsButton selected" id="heatmapChart">Heatmap</a>' +
+							'      <a class="button twoOptionsButton" id="lineChart">Line chart</a>' +
+							"  </div>" +
+
+							' <div id="classificationPlotly" style="height: 100%; overflow: auto;" ></div>' +
+							' <div id="classificationPlotlyLine" style="height: 100%; overflow: auto;"></div>',
+					}
+				]
+			}
+		);
+
+
+	};
+	return this;
+}
+
+PA_Step3MetaboliteView.prototype = new View();
 
 function getWidth () {
 	if ( window.screen.width * window.devicePixelRatio == 3840) {

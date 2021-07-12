@@ -2007,18 +2007,23 @@ def processReactomePathwaysData():
     REACTOME_DIR_PNG = REACTOME_DIR + '/png/'
     onlyPNG = [f for f in os.listdir(REACTOME_DIR_PNG) if os.path.isfile(os.path.join(REACTOME_DIR_PNG, f))]
     REACTOME_DIR_PNG_THUMB = REACTOME_DIR_PNG + '/thumbnails/'
-    onlyPNGThumb =  [f for f in os.listdir(REACTOME_DIR_PNG_THUMB) if os.path.isfile(os.path.join(REACTOME_DIR_PNG_THUMB, f))]
+    onlyPNGThumb = [f for f in os.listdir(REACTOME_DIR_PNG_THUMB) if
+                    os.path.isfile(os.path.join(REACTOME_DIR_PNG_THUMB, f))]
 
     REACTOME_GLOBAL_DIR = DATA_DIR + '/../' + 'reactome'
-    REACTOME_GLOBAL_DIR_THUMB = REACTOME_GLOBAL_DIR + '/thumbnails'
+    REACTOME_GLOBAL_DIR_PNG = REACTOME_GLOBAL_DIR + '/png/'
+    REACTOME_GLOBAL_DIR_THUMB = REACTOME_GLOBAL_DIR_PNG + '/thumbnails'
     if not os.path.exists(REACTOME_GLOBAL_DIR):
         os.makedirs(REACTOME_GLOBAL_DIR)
+    if not os.path.exists(REACTOME_GLOBAL_DIR_PNG):
+        os.makedirs(REACTOME_GLOBAL_DIR_PNG)
     if not os.path.exists(REACTOME_GLOBAL_DIR_THUMB):
         os.makedirs(REACTOME_GLOBAL_DIR_THUMB)
+
     for file_name in onlyPNG:
-            shutil.move(REACTOME_DIR_PNG + file_name,REACTOME_GLOBAL_DIR)
+        shutil.move(REACTOME_DIR_PNG + file_name, REACTOME_GLOBAL_DIR_PNG)
     for file_name in onlyPNGThumb:
-            shutil.move(REACTOME_DIR_PNG_THUMB + file_name,REACTOME_GLOBAL_DIR_THUMB)
+        shutil.move(REACTOME_DIR_PNG_THUMB + file_name, REACTOME_GLOBAL_DIR_THUMB)
 
 
 

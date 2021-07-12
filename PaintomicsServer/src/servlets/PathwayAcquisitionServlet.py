@@ -606,7 +606,7 @@ def pathwayAcquisitionRecoverJob(request, response, QUEUE_INSTANCE):
                     # Add compound regulate features
                     "compoundRegulateFeatures": jobInstance.compoundRegulateFeatures,
                     # Add global gene expression information
-                    "globalExpressionData":jobInstance.globalExpressionData,
+                    "globalExpressionData":jobInstance.getGlobalExpressionData(),
                     # Add hub analysis result
                     'hubAnalysisResult': jobInstance.hubAnalysisResult,
                 })

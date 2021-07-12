@@ -1210,16 +1210,6 @@ class PathwayAcquisitionJob(Job):
 
     def hubAnalysis(self, ROOT_DIRECTORY):
 
-        def listToString(s):
-            # initialize an empty string
-            str1 = ""
-            sep = " "
-            # traverse in the string
-            for ele in s:
-                str1 = str1 + ele + sep
-                # return string
-            return str1
-
         userDEfeatures = []
         userDataset = []
         for i in self.inputGenesData:
