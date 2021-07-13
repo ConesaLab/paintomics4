@@ -3939,7 +3939,7 @@ function PA_Step4DetailsView() {
 					{xtype: 'box', html: "<div id='featureFamilyOverviewContainer'></div>"},
 
 
-					{xtype: "box", html: '<h2> Features regulate by this set </h2>'},
+					{xtype: "box", html: '<h2> Metabolite regulates Features </h2>'},
 					{
 						xtype: "box", html:
 							'  <div>' +
@@ -3968,53 +3968,113 @@ function PA_Step4DetailsView() {
 					$("#showFeatureButton").click(function () {
 						let elem = $("#featureFamilyOverviewContainerRegulate");
 						elem.empty();
-
+						let divWidth = elem.width() - 400;
 
 						let featureID = me.getModel().features[0].feature.ID
 						let compoundRegulateFeatures = me.getParent().getParent().model.compoundRegulateFeatures[featureID]
 						let inputLevel = document.getElementById('inputLevel').value
 						let regulateFeatures = compoundRegulateFeatures[inputLevel]
-						let divId = "Gene_expression_heatmapContainer_regulate"
-						let omicName = "Gene expression"
+						let divId = ["Gene_expression_heatmapContainer_regulate", "Compound_expression_heatmapContainer_regulate"]
+						let omicName = ["Gene expression", "Metabolomics"]
 						let distributionSummaries = me.getParent("PA_Step4PathwayView").getDataDistributionSummaries()
 						let visualOptions = me.getParent("PA_Step4PathwayView").getVisualOptions()
-						let regulateOmicsValue = []
+						let regulateOmicsValueGene = []
+						let regulateOmicsValueComp = []
 						let omicValues, featureName;
 						let entriesTable = {}, entriesTableMetagenes = {};
 
-
-						for (let i=0; i< regulateFeatures.length; i++ ) {
+						for (let i = 0; i < regulateFeatures.length; i++) {
 							let regulateFeature = regulateFeatures[i]
 							try {
-								regulateOmicsValue.push(me.getParent().getParent().model.globalExpressionData[regulateFeature])
+								regulateOmicsValueGene.push(me.getParent().getParent().model.globalExpressionData['inputGene'][regulateFeature])
 							} catch (e) {
-								console.log('No expression data for: '+regulateFeature)
+								console.log('No expression data for: ' + regulateFeature)
 							}
 						}
 
-						regulateOmicsValue = regulateOmicsValue.filter(function (x) {
-							return x !== undefined;
+						for (let i = 0; i < regulateFeatures.length; i++) {
+							let regulateFeature = regulateFeatures[i]
+							try {
+								regulateOmicsValueComp.push(me.getParent().getParent().model.globalExpressionData['inputCompound'][regulateFeature])
+							} catch (e) {
+								console.log('No expression data for: ' + regulateFeature)
+							}
+						}
+
+
+						regulateOmicsValueComp = regulateOmicsValueComp.filter(function (x) {
+								return x !== undefined;
 							}
 						);
-						/*
-						for (let i in regulateOmicsValue) {
-							featureName = regulateOmicsValue[i][0].getInputName()
-							omicValues = regulateOmicsValue[i];
-							for (var j in omicValues) {
-								addTableEntrie(entriesTable, omicValues[j], featureName, "");
+						regulateOmicsValueGene = regulateOmicsValueGene.filter(function (x) {
+								return x !== undefined;
 							}
+						);
+
+						if (regulateOmicsValueGene.length > 0) {
+							htmlCode =
+								"<div class='contentbox'>" +
+								"  <h3>" + omicName[0] + "<span><input type='checkbox' id='" + divId[0] + "_cb_relevant' value='" + omicName[0] + "'/>Only relevant</span></h3>" +
+								"  <div class='PA_step5_heatmapContainer' id='Gene_expression_heatmapContainer_regulate'  style='height: " + ((regulateOmicsValueGene.length * 30) + 100) + "px'><i class='fa fa-cog fa-spin'></i> Loading..</div>" +
+								"  <div class='PA_step5_plotContainer' id='" + divId[0] + "_plotContainer'  style='width:" + divWidth + "px;height: " + ((regulateOmicsValueGene.length * 30) + 100) + "px'><i class='fa fa-cog fa-spin'></i> Loading..</div>" +
+								"</div>";
+							elem.append(htmlCode);
+							heatmapGene = me.generateHeatmap(divId[0], omicName[0], regulateOmicsValueGene, distributionSummaries, visualOptions)
+							plot = me.generatePlot(divId[0] + "_plotContainer", omicName[0], regulateOmicsValueGene, distributionSummaries, divId[0] + "_plotlegendContainer", visualOptions);
+
+							// Link event individually to save heatmap reference
+							$("#"+divId[0]+"_cb_relevant").change(function () {
+								let onlyRelevants = $(this).is(":checked");
+
+								// Highcharts does not automatically hide Y labels when hiding series, so it is easier and faster
+								// to recreate the whole graphic.
+								let omicValues = regulateOmicsValueGene;
+
+								if (onlyRelevants) {
+									omicValues = omicValues.filter(x => x.isRelevant || x.isRelevantAssociation);
+								}
+
+								$('#' + divId[0]).height(omicValues.length * 30 + 100);
+
+								heatmapGene = me.generateHeatmap(divId[0], omicName[0], omicValues, distributionSummaries, visualOptions)
+								plot = me.generatePlot(divId[0] + "_plotContainer", omicName[0], omicValues, distributionSummaries, divId[0] + "_plotlegendContainer", visualOptions);
+
+							});
+
 						}
-						*/
 
-						htmlCode =
-						"<div class='contentbox'>" +
-						"  <h3>" + omicName + "<span><input type='checkbox' id='" + divId + "_cb_relevant' value='"+ omicName +"'/>Only relevant</span></h3>" +
-						"  <div class='PA_step5_heatmapContainer' id='Gene_expression_heatmapContainer_regulate'  style='height: " + ((regulateOmicsValue.length * 30) + 100) + "px'><i class='fa fa-cog fa-spin'></i> Loading..</div>" +
-						"</div>";
 
-						elem.append(htmlCode);
-						me.generateHeatmap(divId, omicName, regulateOmicsValue, distributionSummaries, visualOptions)
+						if (regulateOmicsValueComp.length > 0) {
+							htmlCode =
+								"<div class='contentbox'>" +
+								"  <h3>" + omicName[1] + "<span><input type='checkbox' id='" + divId[1] + "_cb_relevant' value='" + omicName[1] + "'/>Only relevant</span></h3>" +
+								"  <div class='PA_step5_heatmapContainer' id='Compound_expression_heatmapContainer_regulate'  style='height: " + ((regulateOmicsValueComp.length * 30) + 100) + "px'><i class='fa fa-cog fa-spin'></i> Loading..</div>" +
+								"  <div class='PA_step5_plotContainer' id='" + divId[1] + "_plotContainer'  style='width:" + divWidth + "px;height: " + ((regulateOmicsValueComp.length * 30) + 100) + "px'><i class='fa fa-cog fa-spin'></i> Loading..</div>" +
 
+								"</div>";
+							elem.append(htmlCode);
+							heatmapComp =me.generateHeatmap(divId[1], omicName[1], regulateOmicsValueComp, distributionSummaries, visualOptions)
+							plot = me.generatePlot(divId[1] + "_plotContainer", omicName[1], regulateOmicsValueComp, distributionSummaries, divId[1] + "_plotlegendContainer", visualOptions);
+
+							$("#"+divId[1]+"_cb_relevant").change(function () {
+								let onlyRelevants = $(this).is(":checked");
+
+								// Highcharts does not automatically hide Y labels when hiding series, so it is easier and faster
+								// to recreate the whole graphic.
+								let omicValues = regulateOmicsValueComp;
+
+								if (onlyRelevants) {
+									omicValues = omicValues.filter(x => x.isRelevant || x.isRelevantAssociation);
+								}
+
+								$('#' + divId[1]).height(omicValues.length * 30 + 100);
+
+								heatmapComp = me.generateHeatmap(divId[1], omicName[1], omicValues, distributionSummaries, visualOptions)
+								plot = me.generatePlot(divId[1] + "_plotContainer", omicName[1], omicValues, distributionSummaries, divId[1] + "_plotlegendContainer", visualOptions);
+
+							});
+
+						}
 
 
 					});

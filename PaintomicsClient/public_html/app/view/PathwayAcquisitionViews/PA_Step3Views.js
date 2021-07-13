@@ -4127,7 +4127,7 @@ function PA_Step3HubAnalysis () {
 
 		this.component = Ext.widget(
 			{
-				xtype: "container",
+				xtype: 'container', cls: "contentbox",
 				padding: '3', border: 0, maxWidth: 1900,
 				layout: 'column',
 				renderTo: document.body,
@@ -4135,10 +4135,8 @@ function PA_Step3HubAnalysis () {
 				items: [
 					{
 						xtype: "gridpanel",
-
-						cls: "contentbox",
+						width:getWidth2(),
 						store: userStore,
-						width: getWidth2(),
 						height: 350,
 						header: {
 							xtype: 'box',
@@ -4378,7 +4376,7 @@ function PA_Step3MetaboliteView() {
 	this.initComponent = function () {
 		this.component = Ext.widget(
 			{
-				xtype: "container",
+				xtype: 'container', cls: "contentbox",
 				padding: '3', border: 0, maxWidth: 1900,
 				layout: 'column',
 				renderTo: document.body,
@@ -4386,10 +4384,9 @@ function PA_Step3MetaboliteView() {
 				items: [
 					{
 						xtype: "gridpanel",
-						cls: "contentbox",
+						width: getWidth(),
 						autoScroll: true,
 						store: userStore,
-						width: getWidth(),
 						height: 350,
 						header: {
 							xtype: 'box',
@@ -4550,7 +4547,7 @@ function PA_Step3MetaboliteView() {
 					{
 						xtype: 'box',
 						cls: "contentbox",
-						style: "margin-top:10px;width: 49%;background:#fff",
+						style: "width: 49%;background:#fff",
 						flex: 1,
 						padding: '30',
 						height: 350,

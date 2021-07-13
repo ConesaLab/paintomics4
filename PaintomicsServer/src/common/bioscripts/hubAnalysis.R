@@ -5,15 +5,15 @@ SignificanceTestbyMetabolite<- function(UserDataset, UserDEfeatures,dir,iter){
   # Step 1: Removing interactions with  Map
   #dim(kegg_interactions) # 122875 x 9
   hknomap1<-kegg_interactions[kegg_interactions$entry_type_1 != "map",]
-  humanKeggNoMap<-hknomap1[hknomap1$entry_type_2 != "map",]
-  table(humanKeggNoMap$entry_type_1)
-  table(humanKeggNoMap$entry_type_2)
-  dim(humanKeggNoMap) # 120667 x 9... 122875 - 120667 = 2208 map links eliminated
+  keggNoMap<-hknomap1[hknomap1$entry_type_2 != "map",]
+  table(keggNoMap$entry_type_1)
+  table(keggNoMap$entry_type_2)
+  dim(keggNoMap) # 120667 x 9... 122875 - 120667 = 2208 map links eliminated
   
   ################################################
   # Determining the number of differentially expressed metabolites 
-  prety1<-unique(humanKeggNoMap[,c("entry_type_1","entry_name_1")])
-  prety2<-unique(humanKeggNoMap[,c("entry_type_2","entry_name_2")])
+  prety1<-unique(keggNoMap[,c("entry_type_1","entry_name_1")])
+  prety2<-unique(keggNoMap[,c("entry_type_2","entry_name_2")])
   colnames(prety1) =colnames(prety2) = c("type", "name")
   types<-unique(rbind(prety1,prety2))
   rownames(types)<-seq(1:nrow(types))

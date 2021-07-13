@@ -1166,7 +1166,7 @@ class PathwayAcquisitionJob(Job):
 
         expressionValueComp = defaultdict(list)
         mappingComp = {}
-        for value in valuesSet:
+        for value in self.inputCompoundsData:
             expressionValueComp[value] = self.inputCompoundsData.get(value).omicsValues[0].values
             mappingComp[value] = self.inputCompoundsData.get(value).omicsValues[0].inputName
 
@@ -1193,7 +1193,23 @@ class PathwayAcquisitionJob(Job):
         return self.mappingComp, self.pValueInDict, self.classificationDict, self.exprssionMetabolites, self.adjustPvalue, self.totalRelevantFeaturesInCategory, self.featureSummary, self.compoundRegulateFeatures
 
     def getGlobalExpressionData(self):
+        globalExpressionDataGene = defaultdict(dict)
+        globalExpressionDataComp = defaultdict(dict)
         globalExpressionData = defaultdict(dict)
+
+
+        for j in self.inputCompoundsData:
+            expressionID = self.inputCompoundsData[j].ID
+            expressionDetail = {
+                'keggName': self.inputCompoundsData[j].name,
+                'inputName': self.inputCompoundsData[j].omicsValues[0].inputName,
+                'originalName': self.inputCompoundsData[j].omicsValues[0].originalName,
+                'isRelevant': self.inputCompoundsData[j].omicsValues[0].relevant,
+                'isRelevantAssociation': self.inputCompoundsData[j].omicsValues[0].relevantAssociation,
+                'values': self.inputCompoundsData[j].omicsValues[0].values
+            }
+            globalExpressionDataComp[expressionID] = expressionDetail
+
         for i in self.inputGenesData:
             expressionID = self.inputGenesData[i].ID
             expressionDetail = {
@@ -1204,8 +1220,11 @@ class PathwayAcquisitionJob(Job):
                 'isRelevantAssociation': self.inputGenesData[i].omicsValues[0].relevantAssociation,
                 'values': self.inputGenesData[i].omicsValues[0].values
             }
-            globalExpressionData[expressionID] = expressionDetail
+            globalExpressionDataGene[expressionID] = expressionDetail
 
+        globalExpressionData["inputGene"] = globalExpressionDataGene
+        globalExpressionData["inputCompound"] = globalExpressionDataComp
+        self.globalExpressionData = globalExpressionData
         return self.globalExpressionData
 
     def hubAnalysis(self, ROOT_DIRECTORY):
