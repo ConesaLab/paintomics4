@@ -4127,7 +4127,7 @@ function PA_Step3HubAnalysis () {
 
 		this.component = Ext.widget(
 			{
-				xtype: 'container', cls: "contentbox",
+				xtype: 'container',
 				padding: '3', border: 0, maxWidth: 1900,
 				layout: 'column',
 				renderTo: document.body,
@@ -4135,7 +4135,14 @@ function PA_Step3HubAnalysis () {
 				items: [
 					{
 						xtype: "gridpanel",
-						width:getWidth2(),
+						cls: "contentbox",
+						width:screen.width/1.66,
+						maxWidth:1530,
+						layout:{
+							type:'fit',
+							align:'stretch',
+							pack:'start'
+						},
 						store: userStore,
 						height: 350,
 						header: {
@@ -4204,18 +4211,23 @@ function PA_Step3HubAnalysis () {
 								flex: 20 / 100,
 								sortable: true,
 								dataIndex: "RPercentage"
+
 							},
 							{
 								text: "P value",
 								flex: 20 / 100,
 								sortable: true,
-								dataIndex: "P_value"
+								dataIndex: "P_value",
+								renderer: renderFunctionLimit
+
+
 							},
 							{
 								text: "P adjusted",
 								flex: 20 / 100,
 								sortable: true,
-								dataIndex: "P_adjusted"
+								dataIndex: "P_adjusted",
+								renderer: renderFunctionLimit
 							}
 						]
 					}
@@ -4309,74 +4321,12 @@ function PA_Step3MetaboliteView() {
 			data: dataShow2
 		});
 	}
-	var renderFunction = function (value, metadata, record) {
-		var myToolTipText = "<b style='display:block; width:200px'>" + "Metabolism" + "</b>";
-		metadata.style = "height: 33px; font-size:10px;"
 
-		//IF THERE IS NOT DATA FOR THIS PATHWAY, FOR THIS OMIC, PRINT A '-'
-		if (value === "-" || value == undefined || isNaN(value)) {
-			myToolTipText = myToolTipText + "<i>No data for this pathway</i>";
-			metadata.tdAttr = 'data-qtip="' + myToolTipText + '"';
-			metadata.style += "background-color:#D4D4D4;";
-			return "-";
-		}
-		//ELSE, GENERATE SUMMARY TIP
-
-		//RENDER THE VALUE -> IF LESS THAN 0.05, USE SCIENTIFIC NOTATION
-		var renderedValue = (value > 0.001 || value === 0) ? parseFloat(value).toFixed(5) : parseFloat(value).toExponential(4);
-		var omicName = "-" + metadata.column.text.toLowerCase().replace(/ /g, "-").replace(/<\/br>/g, "-");
-
-		if (value <= 0.065) {
-			var color = Math.round(225 * (value / 0.065));
-			metadata.style += "background-color:rgb(255, " + color + "," + color + ");";
-		}
-
-		try {
-			var totalFeatures = record.data.totalFeatures;
-			var totalRelevant = record.data.relevantFeatures;
-
-			// Keep compatibility with old jobs
-			var foundFeatures = record.data.foundFeatures;
-			var foundRelevant = record.data.foundRelevant;
-
-			var foundNotRelevant = foundFeatures - foundRelevant;
-			var notFoundRelevant = totalRelevant - foundRelevant;
-			var notFoundNotRelev = (totalFeatures - foundFeatures) - notFoundRelevant;
-
-			if (foundRelevant !== undefined) {
-				myToolTipText +=
-					'<b>p-value:</b>' + (value === -1 ? "-" : renderedValue) + "</br>" +
-					"<table class='contingencyTable'>" +
-					' <thead><th></th><th>Relevant</th><th>Not Relevant</th><th></th></thead>' +
-					'  <tr><td>Found</td><td>' + foundRelevant + '</td><td>' + foundNotRelevant + '</td><td>' + foundFeatures + '</td></tr>' +
-					'  <tr><td>Not found</td><td>' + notFoundRelevant + '</td><td>' + notFoundNotRelev + '</td><td>' + (totalFeatures - foundFeatures) + '</td></tr>' +
-					'  <tr><td></td><td>' + totalRelevant + '</td><td>' + (totalFeatures - totalRelevant) + '</td><td>' + (totalFeatures) + '</td></tr>' +
-					'</table>';
-				// myToolTipText = myToolTipText + "Features matched: " + ) + "</br>";
-				// myToolTipText = myToolTipText + "Relevant features matched: " +  + "</br>";
-				metadata.tdAttr = 'data-qtip="' + myToolTipText + '"';
-			}
-
-		} catch (e) {
-			debugger;
-			console.error("Error while creating tooltip");
-		} finally {
-
-		}
-
-		return renderedValue;
-	};
-
-	var statusRenderer = function (value, metadata, record, rowIndex, colIndex, store) {
-		var tooltip = 'your tooltip';
-		metadata.attr = 'ext:qtip="' + tooltip + '"';
-		alter("success")
-	}
 
 	this.initComponent = function () {
 		this.component = Ext.widget(
 			{
-				xtype: 'container', cls: "contentbox",
+				xtype: 'container',
 				padding: '3', border: 0, maxWidth: 1900,
 				layout: 'column',
 				renderTo: document.body,
@@ -4384,10 +4334,16 @@ function PA_Step3MetaboliteView() {
 				items: [
 					{
 						xtype: "gridpanel",
-						width: getWidth(),
+						cls: "contentbox",
+						width:screen.width/3.34,
 						autoScroll: true,
 						store: userStore,
 						height: 350,
+						layout:{
+							type:'fit',
+							align:'stretch',
+							pack:'start'
+						},
 						header: {
 							xtype: 'box',
 							flex: 1,
@@ -4523,7 +4479,7 @@ function PA_Step3MetaboliteView() {
 								flex: 15 / 100,
 								sortable: true,
 								dataIndex: 'pValue',
-								renderer: renderFunction
+								renderer: renderFunctionLimit
 
 							},
 							{
@@ -4531,7 +4487,7 @@ function PA_Step3MetaboliteView() {
 								flex: 15 / 100,
 								sortable: true,
 								dataIndex: "FDR_BH",
-								renderer: renderFunction
+								renderer: renderFunctionLimit
 
 							},
 							{
@@ -4539,7 +4495,7 @@ function PA_Step3MetaboliteView() {
 								flex: 15 / 100,
 								sortable: true,
 								dataIndex: "FDR_BY",
-								renderer: renderFunction
+								renderer: renderFunctionLimit
 
 							}
 						]
@@ -4547,7 +4503,7 @@ function PA_Step3MetaboliteView() {
 					{
 						xtype: 'box',
 						cls: "contentbox",
-						style: "width: 49%;background:#fff",
+						style: "width: 48%;background:#fff",
 						flex: 1,
 						padding: '30',
 						height: 350,
@@ -4572,28 +4528,6 @@ function PA_Step3MetaboliteView() {
 
 PA_Step3MetaboliteView.prototype = new View();
 
-function getWidth () {
-	if ( window.screen.width * window.devicePixelRatio == 3840) {
-		return 730;
-	} else if ( window.screen.width * window.devicePixelRatio == 2880 ) {
-		return 500;
-	} else if (window.screen.width * window.devicePixelRatio == 2400 ) {
-		return 400;
-	} else {
-		return 500;
-	}
-}
-function getWidth2 () {
-	if ( window.screen.width * window.devicePixelRatio == 3840) {
-		return 730*2.1;
-	} else if ( window.screen.width * window.devicePixelRatio == 2880 ) {
-		return 500*2.1;
-	} else if (window.screen.width * window.devicePixelRatio == 2400 ) {
-		return 400*2.1;
-	} else {
-		return 500*2.1;
-	}
-}
 
 /**
 		* This function returns the MIN/MAX values that will be used as references
@@ -4697,3 +4631,60 @@ var getColor = function (limits, value, colorScale) {
 		};
 
 
+var renderFunctionLimit = function (value, metadata, record) {
+		var myToolTipText = "<b style='display:block; width:200px'>" + "Metabolism" + "</b>";
+		metadata.style = "height: 33px; font-size:10px;"
+
+		//IF THERE IS NOT DATA FOR THIS PATHWAY, FOR THIS OMIC, PRINT A '-'
+		if (value === "-" || value == undefined || isNaN(value)) {
+			myToolTipText = myToolTipText + "<i>No data for this pathway</i>";
+			metadata.tdAttr = 'data-qtip="' + myToolTipText + '"';
+			metadata.style += "background-color:#D4D4D4;";
+			return "-";
+		}
+		//ELSE, GENERATE SUMMARY TIP
+
+		//RENDER THE VALUE -> IF LESS THAN 0.05, USE SCIENTIFIC NOTATION
+		var renderedValue = (value > 0.001 || value === 0) ? parseFloat(value).toFixed(5) : parseFloat(value).toExponential(4);
+		var omicName = "-" + metadata.column.text.toLowerCase().replace(/ /g, "-").replace(/<\/br>/g, "-");
+
+		if (value <= 0.065) {
+			var color = Math.round(225 * (value / 0.065));
+			metadata.style += "background-color:rgb(255, " + color + "," + color + ");";
+		}
+
+		try {
+			var totalFeatures = record.data.totalFeatures;
+			var totalRelevant = record.data.relevantFeatures;
+
+			// Keep compatibility with old jobs
+			var foundFeatures = record.data.foundFeatures;
+			var foundRelevant = record.data.foundRelevant;
+
+			var foundNotRelevant = foundFeatures - foundRelevant;
+			var notFoundRelevant = totalRelevant - foundRelevant;
+			var notFoundNotRelev = (totalFeatures - foundFeatures) - notFoundRelevant;
+
+			if (foundRelevant !== undefined) {
+				myToolTipText +=
+					'<b>p-value:</b>' + (value === -1 ? "-" : renderedValue) + "</br>" +
+					"<table class='contingencyTable'>" +
+					' <thead><th></th><th>Relevant</th><th>Not Relevant</th><th></th></thead>' +
+					'  <tr><td>Found</td><td>' + foundRelevant + '</td><td>' + foundNotRelevant + '</td><td>' + foundFeatures + '</td></tr>' +
+					'  <tr><td>Not found</td><td>' + notFoundRelevant + '</td><td>' + notFoundNotRelev + '</td><td>' + (totalFeatures - foundFeatures) + '</td></tr>' +
+					'  <tr><td></td><td>' + totalRelevant + '</td><td>' + (totalFeatures - totalRelevant) + '</td><td>' + (totalFeatures) + '</td></tr>' +
+					'</table>';
+				// myToolTipText = myToolTipText + "Features matched: " + ) + "</br>";
+				// myToolTipText = myToolTipText + "Relevant features matched: " +  + "</br>";
+				metadata.tdAttr = 'data-qtip="' + myToolTipText + '"';
+			}
+
+		} catch (e) {
+			debugger;
+			console.error("Error while creating tooltip");
+		} finally {
+
+		}
+
+		return renderedValue;
+	};

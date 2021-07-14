@@ -51,7 +51,9 @@ SignificanceTestbyMetabolite<- function(UserDataset, UserDEfeatures,dir,iter){
   PRETAB2<-data.frame(PRETAB2)
   rownames(PRETAB2)<-seq(1:nrow(PRETAB2))
   colnames(PRETAB2)<-c("Metabolite", "Step", "DE_neighbors", "not_DE_neighbors","Percentage")
-  PRETAB2
+  PRETAB2$Percentage <- as.numeric(as.character(PRETAB2$Percentage))
+  #PRETAB2 <- na.omit(PRETAB2)
+  
   
   ################################################
   # Randomization of label "Differentially expressed" in the same size and iterated 100X
@@ -77,7 +79,8 @@ SignificanceTestbyMetabolite<- function(UserDataset, UserDEfeatures,dir,iter){
         losNODE <- preNODE[is.element(preNODE,UserDataset)]
         numblosDEs <- length(losDEs)
         numblosNODE <- length(losNODE)
-        prcnt <- formatC(numblosDEs/(numblosDEs+numblosNODE),  format = "e", digits = 2)
+        #prcnt <- formatC(numblosDEs/(numblosDEs+numblosNODE),  format = "e", digits = 2)
+        prcnt <- round(numblosDEs/(numblosDEs+numblosNODE), digits = 2)
         tpretab <- cbind(elcompound,elstep,numblosDEs,numblosNODE,prcnt)
         tPRETAB <- rbind(tPRETAB,tpretab)
       }
@@ -86,7 +89,6 @@ SignificanceTestbyMetabolite<- function(UserDataset, UserDEfeatures,dir,iter){
       #rownames(tPRETAB2)<-seq(1:nrow(tPRETAB2))
       #colnames(tPRETAB2)<-c("Metabolite", "Step", "DE_neighbors", "not_DE_neighbors","Percentage")
     }
-    print("tPRETAB2")
     print(tPRETAB2)
     for (lu in 1:length(unique(tPRETAB2[,2]))){
       elstep<-as.character(unique(tPRETAB2[,2])[lu])
@@ -96,7 +98,7 @@ SignificanceTestbyMetabolite<- function(UserDataset, UserDEfeatures,dir,iter){
       pval <- tryCatch(
         {
           pval <- t.test(x=as.numeric(as.character(vecDEneighbors)),mu=as.numeric(as.character(PRETAB2$DE_neighbors[lu])))$p.value
-          pval <- formatC(pval, format = "e", digits = 2)
+          #pval <- formatC(pval, format = "e", digits = 2)
         }, 
         error = function(e) 
         {
@@ -106,9 +108,12 @@ SignificanceTestbyMetabolite<- function(UserDataset, UserDEfeatures,dir,iter){
       )
       # Agregar Multiple Testing Correction 
       met<-as.character(unique(minitab[,1]))
-      DEn<-round(mean(as.numeric(as.character(minitab[,3]))), digits = 0)
-      notDEn<-round(mean(as.numeric(as.character(minitab[,4]))), digits = 0)
-      prcnt<-formatC(DEn/(DEn+notDEn), format = "e", digits = 2)
+      DEn<-round(mean(as.numeric(as.character(minitab[,3]))), digits = 2)
+      #DEn <- mean(as.numeric(as.character(minitab[,3])))
+      notDEn<-round(mean(as.numeric(as.character(minitab[,4]))), digits = 2)
+      #notDEn <- mean(as.numeric(as.character(minitab[,4])))
+      #prcnt<-formatC(DEn/(DEn+notDEn), format = "e", digits = 2)
+      prcnt <- round(DEn/(DEn+notDEn), digits = 2)
       pretabresumiterations<-cbind(RMetabolite=elcompound,RStep=elstep,RDE_neighbors=DEn,Rnot_DE_neighbors=notDEn,RPercentage=prcnt,P_value=pval)
       
       tabresumiterations<-rbind(tabresumiterations,pretabresumiterations)
@@ -116,13 +121,15 @@ SignificanceTestbyMetabolite<- function(UserDataset, UserDEfeatures,dir,iter){
     }
   }
   tabresumiterations<-data.frame(tabresumiterations)
-  p.adj<-formatC(p.adjust(as.numeric(as.character(tabresumiterations$P_value)), "BH"), format = "e", digits = 2)
+  #p.adj<-formatC(p.adjust(as.numeric(as.character(tabresumiterations$P_value)), "BH"), format = "e", digits = 2)
+  p.adj<- p.adjust(as.numeric(as.character(tabresumiterations$P_value)), "BH")
   tabresumiterations$p.adj<-p.adj
   rownames(tabresumiterations)<-seq(1:nrow(tabresumiterations))
   colnames(tabresumiterations)<-c("RMetabolite", "RStep", "RDE_neighbors", "Rnot_DE_neighbors","RPercentage", "P_value","P_adjusted")
   
   FinalTable<- cbind (PRETAB2,tabresumiterations)
   FinalTable<-FinalTable[,-c(6,7)]
+  FinalTable <- na.omit(FinalTable)
   return (FinalTable)
 }
 
@@ -140,7 +147,7 @@ userDataset = read.table(paste0(args$data_dir,"userDataset.csv"), sep = ',')
 userDataset<- as.vector(t(userDataset))
 userDEfeatures = read.table(paste0(args$data_dir,"userDEfeatures.csv"), sep = ',')
 userDEfeatures <- as.vector(t(userDEfeatures))
-result<-SignificanceTestbyMetabolite(UserDataset=userDataset,UserDEfeatures=userDEfeatures, dir=args$inputDir, iter=5)
+result<-SignificanceTestbyMetabolite(UserDataset=userDataset,UserDEfeatures=userDEfeatures, dir=args$inputDir, iter=100)
 print(result)
 output_file <- paste0(args$data_dir, "/hub_result.csv")
 write.table(result, file=output_file, quote = FALSE, sep="\t", row.names = FALSE, col.names = FALSE)
