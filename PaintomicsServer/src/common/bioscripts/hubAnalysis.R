@@ -26,6 +26,22 @@ SignificanceTestbyMetabolite<- function(UserDataset, UserDEfeatures,dir,iter){
   # Differentially expressed genes
   DEg<-UserDEfeatures[is.element(UserDEfeatures,typesG$name)]
   
+  ####### Map to Metabolites
+  prety1pathway<-unique(keggNoMap[,c("entry_type_1","entry_name_1", "pathway")])
+  prety2pathway<-unique(keggNoMap[,c("entry_type_2","entry_name_2", "pathway")])
+  colnames(prety1pathway) =colnames(prety2pathway) = c("type", "name", "pathway")
+  typesPathway<-unique(rbind(prety1pathway,prety2pathway))
+  typesCpathway<-typesPathway[typesPathway$type == "compound",]
+  mapListC <- list()
+  for (i in as.character(typesCpathway$name)) {
+    if (is.null(mapListC[[i]])) {
+      mapDetect =  as.character(typesCpathway$pathway)[as.character(typesCpathway$name) %in% i]
+      mapListC[[i]] <- mapDetect
+    }
+  }
+  library(rjson)
+  mapListC = toJSON(mapListC)
+  write(mapListC, paste0(args$data_dir, "/compoundToMap.json"))
   
   PRETAB2<-NULL
   for (i in 1: length (DEm) ){
@@ -97,7 +113,7 @@ SignificanceTestbyMetabolite<- function(UserDataset, UserDEfeatures,dir,iter){
       vecNOTDEneighbors<-as.vector(minitab[,4])
       pval <- tryCatch(
         {
-          pval <- t.test(x=as.numeric(as.character(vecDEneighbors)),mu=as.numeric(as.character(PRETAB2$DE_neighbors[lu])))$p.value
+          pval <- t.test(x=as.numeric(as.character(vecDEneighbors)),mu=as.numeric(as.character(PRETAB2[PRETAB2$Metabolite %in% unique(tPRETAB2[,'elcompound'])]$DE_neighbors[lu])))$p.value
           #pval <- formatC(pval, format = "e", digits = 2)
         }, 
         error = function(e) 
@@ -147,8 +163,10 @@ userDataset = read.table(paste0(args$data_dir,"userDataset.csv"), sep = ',')
 userDataset<- as.vector(t(userDataset))
 userDEfeatures = read.table(paste0(args$data_dir,"userDEfeatures.csv"), sep = ',')
 userDEfeatures <- as.vector(t(userDEfeatures))
-result<-SignificanceTestbyMetabolite(UserDataset=userDataset,UserDEfeatures=userDEfeatures, dir=args$inputDir, iter=100)
+result <-SignificanceTestbyMetabolite(UserDataset=userDataset,UserDEfeatures=userDEfeatures, dir=args$inputDir, iter=3)
 print(result)
 output_file <- paste0(args$data_dir, "/hub_result.csv")
+
+
 write.table(result, file=output_file, quote = FALSE, sep="\t", row.names = FALSE, col.names = FALSE)
 
