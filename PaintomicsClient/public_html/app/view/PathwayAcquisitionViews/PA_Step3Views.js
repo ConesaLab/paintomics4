@@ -4081,11 +4081,201 @@ FOR PaintOmics 4
  */
 function PA_Step3HubAnalysis () {
 	let me = this;
-
 	this.name = "PA_Step3HubAnalysis";
 	this.tableData = null;
-	let hubTable =[]
+	let hubTable =[];
+	let globalExpressionGene = [];
+	let globalExpressionComp = [];
+	let compRegulateFeatures = [];
+	let distributionSummaries = null;
+	let visualOptions = null;
 
+
+	let generateHeatmap = function (targetID, omicName, omicsValues, dataDistributionSummaries, visualOptions) {
+		var featureValues, x = 0, y = 0, maxX = -1, series = [], yAxisCat = [], serie;
+
+		for (var i in omicsValues) {
+			//restart the x coordinate
+			x = 0;
+			//Get the values and the name for the new serie
+			featureValues = omicsValues[i].values;
+			var shownameValue = omicsValues[i].inputName != omicsValues[i].originalName && omicsValues[i].originalName !== undefined ?
+				omicsValues[i].originalName + ": " + omicsValues[i].inputName :
+				omicsValues[i].inputName;
+
+			var relevantSymbols = "";
+
+			if (omicsValues[i].isRelevant === true) {
+				relevantSymbols += "* ";
+			}
+			if (omicsValues[i].isRelevantAssociation === true) {
+				relevantSymbols += "^ ";
+			}
+
+			serie = {name: relevantSymbols + omicsValues[i].keggName + "#" + shownameValue, data: []};
+			//Add the name for the row (e.g. MagoHb or "miRNA my_mirnaid_1")
+			yAxisCat.push(relevantSymbols + omicsValues[i].keggName + "#" + shownameValue);
+
+			var limits = getMinMax(dataDistributionSummaries[omicName], visualOptions.colorReferences[omicName]);
+
+			for (var j in featureValues) {
+				serie.data.push({
+					x: x,
+					y: y,
+					value: featureValues[j],
+					color: getColor(limits, featureValues[j], visualOptions.colorScale)
+				});
+				x++;
+				maxX = Math.max(maxX, x);
+			}
+			series.push(serie);
+			y++;
+		}
+
+		var xAxisCat = [];
+		for (var i = 0; i < maxX; i++) {
+			xAxisCat.push("Timepoint " + (i + 1));
+		}
+
+		var replaceSymbols = {
+			"*": '<i class="relevantFeature"></i>',
+			"^": '<i class="relevantAssociationFeature"></i>'
+		};
+
+		var clusterize = omicsValues.length > 5 ? {
+			algorithm: "hierarchical",
+			distance: "euclidean",
+			linkage: "complete",
+			dendogram: false
+		} : false;
+
+		var heatmap = new Highcharts.Chart({
+			chart: {type: 'heatmap', renderTo: targetID},
+			heatmapSelector: {color: '#000', lineWidth: 3},
+			title: null, legend: {enabled: false}, credits: {enabled: false},
+			clusterize: clusterize,
+			tooltip: {
+				borderColor: "#333",
+				formatter: function () {
+					var title = this.point.series.name.split("#");
+					title[1] = (title.length > 1) ? title[1] : "";
+					return "<b>" + title[0].replace(/[\*\^]/g, function(c) { return replaceSymbols[c]; }) + "</b><br/>" + "<i class='tooltipInputName'>" + title[1] + "</i>" + (this.point.value === null ? "No data" : this.point.value);
+				},
+				useHTML: true
+			},
+			xAxis: {categories: xAxisCat, labels: {enabled: false}},
+			yAxis: {
+				categories: yAxisCat, title: null, width: 100,
+				labels: {
+					formatter: function () {
+						var title = this.value.split("#");
+						title[1] = (title.length > 1) ? title[1] : "No data";
+						return '<span style="width: 100px;display: block;   text-align: right;">' + ((title[0].length > 14) ? title[0].substring(0, 14) + "..." : title[0]).replace(/[\*\^]/g, function(c) { return replaceSymbols[c]; }) +
+						'</br><i class="tooltipInputName yAxisLabel">' + ((title[1].length > 14) ? title[1].substring(0, 14) + "..." : title[1]) + '</i></span>';
+					},
+					style: {fontSize: "9px"}, useHTML: true
+				}
+			},
+			series: series,
+			plotOptions: {
+				heatmap: {
+					borderColor: "#000000",
+					borderWidth: 0.5,
+				},
+				series: {
+					point: {
+						events: {
+							mouseOver: function () {
+								var plot = $(this.series.chart.container).parent().next().highcharts();
+								for (var i in plot.series) {
+									if (plot.series[i].name !== this.series.name) {
+										plot.series[i].graph && plot.series[i].graph.attr("stroke", "#E2E2E2");
+										plot.series[i].markerGroup && plot.series[i].markerGroup.attr("visibility", "hidden");
+									}
+								}
+							},
+							mouseOut: function () {
+								var plot = $(this.series.chart.container).parent().next().highcharts();
+								for (var i in plot.series) {
+									plot.series[i].graph && plot.series[i].graph.attr("stroke", plot.series[i].color);
+									plot.series[i].markerGroup && plot.series[i].markerGroup.attr("visibility", "visible");
+								}
+							}
+						}
+					}
+				}
+			}
+		});
+
+		return heatmap;
+	};
+
+	let generatePlot = function (targetID, omicName, omicsValues, dataDistributionSummaries, legendContainerId, visualOptions) {
+		var series = [], maxX = -1;
+		var yAxisItem = {title: null}, omicsValue, auxValues;
+
+		var limits = getMinMax(dataDistributionSummaries[omicName], visualOptions.colorReferences[omicName]);
+
+
+		for (var i in omicsValues) {
+			auxValues = [];
+			omicsValue = omicsValues[i];
+			maxX = Math.max(maxX, omicsValue.values.length);
+
+			for (var j in omicsValue.values) {
+				auxValues.push({y: omicsValue.values[j], marker: ((omicsValue.values[j] > limits.max || omicsValue.values[j] < limits.min) ? {fillColor: '#ff6e00'} : null)});
+			}
+
+			var relevantSymbols = "";
+
+			if (omicsValue.isRelevant === true) {
+				relevantSymbols += "* ";
+			}
+			if (omicsValue.isRelevantAssociation === true) {
+				relevantSymbols += "^ ";
+			}
+
+			series.push({
+				name: relevantSymbols + omicsValue.keggName + "#" + omicsValue.inputName,
+				type: 'spline',
+				data: auxValues
+			});
+		}
+
+		if (limits.max !== limits.absMax && limits.min !== limits.absMin) {
+			yAxisItem.plotLines = [
+				{label: {text: 'min', align: 'right', style: {color: 'gray'}}, color: '#dedede', value: limits.min, width: 1},
+				{label: {text: 'max', align: 'right', style: {color: 'gray'}}, color: '#dedede', value: limits.max, width: 1}
+			];
+		}
+
+		var xAxisCat = [];
+		for (var i = 0; i < maxX; i++) {
+			xAxisCat.push("Timepoint " + (i + 1));
+		}
+		var replaceSymbols = {
+			"*": '<i class="relevantFeature"></i>',
+			"^": '<i class="relevantAssociationFeature"></i>'
+		};
+		var plot = new Highcharts.Chart({
+			chart: {renderTo: targetID},
+			title: null, legend: {enabled: false}, credits: {enabled: false},
+			tooltip: {
+				borderColor: "#333",
+				formatter: function () {
+					var title = this.point.series.name.split("#");
+					title[1] = (title.length > 1) ? title[1] : "";
+					return "<b>" + title[0].replace(/[\*\^]/g, function(c) { return replaceSymbols[c]; }) + "</b><br/>" + "<i class='tooltipInputName'>" + title[1] + "</i>" + (this.point.y === null ? "No data" : this.point.y);
+				},
+				useHTML: true
+			},
+			xAxis: [{categories: xAxisCat, labels: {enabled: false}}],
+			yAxis: yAxisItem,
+			series: series
+		});
+
+		return plot;
+	};
 
 	this.loadModel = function (model) {
 		if (this.model !== null) {
@@ -4098,6 +4288,7 @@ function PA_Step3HubAnalysis () {
 			hubTable.push(
 				{
 					Metabolite: this.model.mappingComp[hubAnalysisResult[keys][0]],
+					ID: hubAnalysisResult[keys][0],
 					Step: hubAnalysisResult[keys][1],
 					DE_neighbors: hubAnalysisResult[keys][2],
 					not_DE_neighbors: hubAnalysisResult[keys][3],
@@ -4110,13 +4301,23 @@ function PA_Step3HubAnalysis () {
 				}
 			)
 		}
+
+		compRegulateFeatures = this.model.compoundRegulateFeatures
+		if (typeof this.model.globalExpressionData['inputCompound'] !== 'undefined') {
+			globalExpressionComp = this.model.globalExpressionData['inputCompound']
+		}
+		if (typeof this.model.globalExpressionData['inputGene'] !== 'undefined') {
+			globalExpressionGene = this.model.globalExpressionData['inputGene']
+		}
+		distributionSummaries = this.model.getDataDistributionSummaries()
+		visualOptions = me.getParent().visualOptions
+
 	}
 
 	this.initComponent = function () {
-		var me = this;
 		Ext.define('User', {
 			extend: 'Ext.data.Model',
-			fields: ['Metabolite', 'Step', "DE_neighbors", "not_DE_neighbors", "Percentage", "RDE_neighbors", "Rnot_DE_neighbors", "RPercentage", "P_value", "P_adjusted"]
+			fields: ['Metabolite', 'ID','Step', "DE_neighbors", "not_DE_neighbors", "Percentage", "RDE_neighbors", "Rnot_DE_neighbors", "RPercentage", "P_value", "P_adjusted"]
 		});
 
 		var userStore = Ext.create('Ext.data.Store', {
@@ -4136,12 +4337,12 @@ function PA_Step3HubAnalysis () {
 					{
 						xtype: "gridpanel",
 						cls: "contentbox",
-						width:screen.width/1.66,
-						maxWidth:1530,
-						layout:{
-							type:'fit',
-							align:'stretch',
-							pack:'start'
+						width: screen.width / 2.34,
+						maxWidth: 1530,
+						layout: {
+							type: 'fit',
+							align: 'stretch',
+							pack: 'start'
 						},
 						store: userStore,
 						height: 350,
@@ -4161,6 +4362,111 @@ function PA_Step3HubAnalysis () {
 
 						columns: [
 							{
+								xtype: 'customactioncolumn',
+								text: "Paint",
+								menuDisabled: true,
+								flex: 8 / 100,
+								items: [{
+									icon: "fa-paint-brush-o",
+									text: "",
+									tooltip: 'Paint this feature',
+									style: "font-size: 20px;",
+									handler: function (grid, rowIndex) {
+										let elem = $("#hubAnalysisPlot");
+										elem.empty();
+										let divWidth = elem.width() - 400;
+										let regulateFeatures = null;
+										let ID = hubTable[rowIndex]['ID'];
+										let step = hubTable[rowIndex]['Step'];
+										if (step == "One_Step" || step == '1') {
+											regulateFeatures = compRegulateFeatures[ID][1]
+										} else if (step == "Two_Steps" || step == '2') {
+											regulateFeatures = compRegulateFeatures[ID][2]
+
+										} else if (step == "Three_Steps" || step == '3') {
+											regulateFeatures = compRegulateFeatures[ID][3]
+
+										} else if (step == 'Four_Steps' || step == '4') {
+											regulateFeatures = compRegulateFeatures[ID][4]
+										}
+										for (key in distributionSummaries) {
+											let omicName = key
+											let divId = key.replace(/\s/g, '_') + 'hubAnlysis'
+											let regulateOmicsValue = []
+											for (let i = 0; i < regulateFeatures.length; i++) {
+												let regulateFeature = regulateFeatures[i]
+												try {
+													if (key == "Gene expression") {
+														regulateOmicsValue.push(globalExpressionGene[regulateFeature])
+													} else if (key == "Metabolomics") {
+														regulateOmicsValue.push(globalExpressionComp[regulateFeature])
+													}
+												} catch (e) {
+													console.log('No expression data for: ' + regulateFeature)
+												}
+											}
+											regulateOmicsValue = regulateOmicsValue.filter(function (x) {
+													return x !== undefined;
+												}
+											);
+											if (regulateOmicsValue.length === 0) {
+												continue;
+											}
+											htmlCode =
+												"<div class='contentbox'>" +
+												"  <h3>" + omicName + "<span><input type='checkbox' id='" + divId + "_cb_relevant' value='" + omicName + "'/>Only relevant</span></h3>" +
+												"  <div class='PA_step5_heatmapContainer' id='" + divId + "'  style='height: " + ((regulateOmicsValue.length * 30) + 100) + "px'><i class='fa fa-cog fa-spin'></i> Loading..</div>" +
+												"  <div class='PA_step5_plotContainer' id='" + divId+ "_plotContainer'  style='width:" + divWidth + "px;height: " + ((regulateOmicsValue.length * 30) + 100) + "px'><i class='fa fa-cog fa-spin'></i> Loading..</div>" +
+												"</div>";
+											elem.append(htmlCode);
+											heatmapGene = generateHeatmap(divId, omicName, regulateOmicsValue, distributionSummaries, visualOptions)
+											plot = generatePlot(divId + "_plotContainer", omicName, regulateOmicsValue, distributionSummaries, divId + "_plotlegendContainer", visualOptions);
+											$("div.contentbox h3 :checkbox").change(function () {
+												let onlyRelevants = $(this).is(":checked");
+
+												// Highcharts does not automatically hide Y labels when hiding series, so it is easier and faster
+												// to recreate the whole graphic.
+												let omicValues = regulateOmicsValue;
+
+												if (onlyRelevants) {
+													omicValues = omicValues.filter(x => x.isRelevant || x.isRelevantAssociation);
+												}
+
+												$('#' + divId + "_heatmapContainer").height(omicValues.length * 30 + 100);
+
+												generateHeatmap(divId, omicName, omicValues, distributionSummaries, visualOptions)
+												generatePlot(divId + "_plotContainer", omicName, omicValues, distributionSummaries, divId + "_plotlegendContainer", visualOptions);
+											})
+										}
+									}
+								}]
+							},
+							{
+								xtype: 'customactioncolumn',
+								text: "Search",
+								menuDisabled: true,
+								flex: 8 / 100,
+								items: [{
+									icon: "fas fa-search",
+									text: "",
+									tooltip: 'Find this feature in pathways',
+									style: "font-size: 20px;",
+									handler: function (grid, rowIndex) {
+										let ID = hubTable[rowIndex]['Metabolite'];
+										$(document).ready(function () {
+												$('#textfield-1060-inputEl')[0].value = ID;
+												if ($('#checkbox-1066').hasClass("x-form-cb-checked")) {
+													document.getElementById('checkbox-1066-inputEl').click()
+													document.getElementById('checkbox-1066-inputEl').click()
+												} else {
+													document.getElementById('checkbox-1066-inputEl').click()
+												}
+											}
+										)
+									}
+								}]
+							},
+							{
 								text: 'Metabolite',
 								flex: 20 / 100,
 								sortable: true,
@@ -4168,8 +4474,15 @@ function PA_Step3HubAnalysis () {
 								dataIndex: 'Metabolite'
 							},
 							{
+								text: 'ID',
+								flex: 15 / 100,
+								sortable: true,
+								hideable: false,
+								dataIndex: 'ID'
+							},
+							{
 								text: 'Step',
-								flex: 20 / 100,
+								flex: 10 / 100,
 								sortable: true,
 								hideable: false,
 								dataIndex: 'Step'
@@ -4189,7 +4502,7 @@ function PA_Step3HubAnalysis () {
 
 							},
 							{
-								text: "Percentage",
+								text: "% DE neighbors",
 								flex: 20 / 100,
 								sortable: true,
 								dataIndex: "Percentage"
@@ -4207,7 +4520,7 @@ function PA_Step3HubAnalysis () {
 								dataIndex: "Rnot_DE_neighbors"
 							},
 							{
-								text: "RPercentage",
+								text: "% RDE neighbors",
 								flex: 20 / 100,
 								sortable: true,
 								dataIndex: "RPercentage"
@@ -4230,6 +4543,17 @@ function PA_Step3HubAnalysis () {
 								renderer: renderFunctionLimit
 							}
 						]
+					},
+					{
+						xtype: 'box',
+						cls: "contentbox",
+						style: "width: 25%;background:#fff",
+						flex: 1,
+						padding: '30',
+						height: 350,
+						html:
+							' <h4>Expression Value<span class="infoTip">Use this tool to <b>show expression details of metabolites regulated features</b></span></h4> ' +
+							' <div id="hubAnalysisPlot" style="height: 100%; overflow: auto;" ></div>'
 					}
 				]
 			}
@@ -4335,7 +4659,7 @@ function PA_Step3MetaboliteView() {
 					{
 						xtype: "gridpanel",
 						cls: "contentbox",
-						width:screen.width/3.34,
+						width:screen.width/2.34,
 						autoScroll: true,
 						store: userStore,
 						height: 350,
@@ -4503,7 +4827,7 @@ function PA_Step3MetaboliteView() {
 					{
 						xtype: 'box',
 						cls: "contentbox",
-						style: "width: 48%;background:#fff",
+						style: "width: 25%;background:#fff",
 						flex: 1,
 						padding: '30',
 						height: 350,
