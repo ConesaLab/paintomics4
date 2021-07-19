@@ -185,6 +185,7 @@ function PA_Step3JobView() {
 
 		this.getController().updateStoredApplicationData("visualOptions", this.visualOptions);
 
+
 		/********************************************************/
 		/* STEP 2.2 GENERATE THE INDEX FOR PATHWAYS             */
 		/********************************************************/
@@ -2991,11 +2992,18 @@ function PA_Step3PathwayDetailsView() {
 
 				var limits = getMinMax(dataDistributionSummaries[omicName], "p10p90");
 
+
 				for (var j in featureValues) {
+					if (visualOptions.colorScale) {
+						var colorGet = getColor(limits, featureValues[j], visualOptions.colorScale)
+
+					} else {
+						var colorGet = getColor(limits, featureValues[j], "bwr")
+					}
 					serie.data.push({
 						x: x, y: y,
 						value: featureValues[j],
-						color: getColor(limits, featureValues[j], "bwr")
+						color : colorGet
 					});
 					x++;
 					maxX = Math.max(maxX, x);
@@ -4116,14 +4124,29 @@ function PA_Step3HubAnalysis () {
 			//Add the name for the row (e.g. MagoHb or "miRNA my_mirnaid_1")
 			yAxisCat.push(relevantSymbols + omicsValues[i].keggName + "#" + shownameValue);
 
-			var limits = getMinMax(dataDistributionSummaries[omicName], visualOptions.colorReferences[omicName]);
+			if (visualOptions.colorReferences) {
+				var limits = getMinMax(dataDistributionSummaries[omicName], visualOptions.colorReferences[omicName]);
+			} else {
+				var limits = getMinMax(dataDistributionSummaries[omicName], "p10p90")
+			}
+
+
+
 
 			for (var j in featureValues) {
+				if (visualOptions.colorScale) {
+					var colorGet = getColor(limits, featureValues[j], visualOptions.colorScale)
+
+				} else {
+					var colorGet = getColor(limits, featureValues[j], "bwr")
+
+				}
+
 				serie.data.push({
 					x: x,
 					y: y,
 					value: featureValues[j],
-					color: getColor(limits, featureValues[j], visualOptions.colorScale)
+					color: colorGet
 				});
 				x++;
 				maxX = Math.max(maxX, x);
@@ -4214,7 +4237,11 @@ function PA_Step3HubAnalysis () {
 		var series = [], maxX = -1;
 		var yAxisItem = {title: null}, omicsValue, auxValues;
 
-		var limits = getMinMax(dataDistributionSummaries[omicName], visualOptions.colorReferences[omicName]);
+		if (visualOptions.colorReferences) {
+			var limits = getMinMax(dataDistributionSummaries[omicName], visualOptions.colorReferences[omicName]);
+		} else {
+			var limits = getMinMax(dataDistributionSummaries[omicName], "p10p90")
+		}
 
 
 		for (var i in omicsValues) {
@@ -4329,21 +4356,15 @@ function PA_Step3HubAnalysis () {
 		this.component = Ext.widget(
 			{
 				xtype: 'container',
-				padding: '3', border: 0, maxWidth: 1900,
-				layout: 'column',
-				renderTo: document.body,
 
+				border: 0,
+				maxWidth: 1900,
+				layout:'column',
 				items: [
 					{
 						xtype: "gridpanel",
 						cls: "contentbox",
-						width: screen.width / 2.34,
-						maxWidth: 1530,
-						layout: {
-							type: 'fit',
-							align: 'stretch',
-							pack: 'start'
-						},
+						columnWidth:0.7,
 						store: userStore,
 						height: 350,
 						header: {
@@ -4365,7 +4386,7 @@ function PA_Step3HubAnalysis () {
 								xtype: 'customactioncolumn',
 								text: "Paint",
 								menuDisabled: true,
-								flex: 8 / 100,
+								width:55,
 								items: [{
 									icon: "fa-paint-brush-o",
 									text: "",
@@ -4445,7 +4466,7 @@ function PA_Step3HubAnalysis () {
 								xtype: 'customactioncolumn',
 								text: "Search",
 								menuDisabled: true,
-								flex: 8 / 100,
+								width: 55,
 								items: [{
 									icon: "fas fa-search",
 									text: "",
@@ -4454,12 +4475,12 @@ function PA_Step3HubAnalysis () {
 									handler: function (grid, rowIndex) {
 										let ID = hubTable[rowIndex]['Metabolite'];
 										$(document).ready(function () {
-												$('#textfield-1060-inputEl')[0].value = ID;
-												if ($('#checkbox-1066').hasClass("x-form-cb-checked")) {
-													document.getElementById('checkbox-1066-inputEl').click()
-													document.getElementById('checkbox-1066-inputEl').click()
+												$("[name = 'searchField']")[0].value = ID
+												if (document.getElementsByClassName("x-field x-table-plain x-form-item x-form-type-checkbox x-field-toolbar x-box-item x-toolbar-item x-field-default-toolbar x-hbox-form-item")[2].classList.contains("x-form-cb-checked")) {
+													document.getElementsByClassName('x-form-field x-form-checkbox x-form-cb')[2].click()
+													document.getElementsByClassName('x-form-field x-form-checkbox x-form-cb')[2].click()
 												} else {
-													document.getElementById('checkbox-1066-inputEl').click()
+													document.getElementsByClassName('x-form-field x-form-checkbox x-form-cb')[2].click()
 												}
 											}
 										)
@@ -4547,8 +4568,8 @@ function PA_Step3HubAnalysis () {
 					{
 						xtype: 'box',
 						cls: "contentbox",
-						style: "width: 25%;background:#fff",
-						flex: 1,
+						columnWidth:0.25,
+						minWidth:400,
 						padding: '30',
 						height: 350,
 						html:
@@ -4651,23 +4672,20 @@ function PA_Step3MetaboliteView() {
 		this.component = Ext.widget(
 			{
 				xtype: 'container',
-				padding: '3', border: 0, maxWidth: 1900,
-				layout: 'column',
-				renderTo: document.body,
+				padding: '10',
+				border: 0,
+				maxWidth: 1900,
+				layout:'column',
 
 				items: [
 					{
 						xtype: "gridpanel",
 						cls: "contentbox",
-						width:screen.width/2.34,
+						columnWidth:0.7,
+
 						autoScroll: true,
 						store: userStore,
 						height: 350,
-						layout:{
-							type:'fit',
-							align:'stretch',
-							pack:'start'
-						},
 						header: {
 							xtype: 'box',
 							flex: 1,
@@ -4684,7 +4702,7 @@ function PA_Step3MetaboliteView() {
 								xtype: 'customactioncolumn',
 								text: "Paint",
 								menuDisabled: true,
-								flex: 8 / 100,
+								width: 55,
 								items: [{
 									icon: "fa-paint-brush-o",
 									text: "",
@@ -4827,8 +4845,8 @@ function PA_Step3MetaboliteView() {
 					{
 						xtype: 'box',
 						cls: "contentbox",
-						style: "width: 25%;background:#fff",
-						flex: 1,
+						columnWidth:0.25,
+						minWidth:400,
 						padding: '30',
 						height: 350,
 						html:

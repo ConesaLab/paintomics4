@@ -26,23 +26,7 @@ SignificanceTestbyMetabolite<- function(UserDataset, UserDEfeatures,dir,iter){
   # Differentially expressed genes
   DEg<-UserDEfeatures[is.element(UserDEfeatures,typesG$name)]
   
-  ####### Map to Metabolites
-  prety1pathway<-unique(keggNoMap[,c("entry_type_1","entry_name_1", "pathway")])
-  prety2pathway<-unique(keggNoMap[,c("entry_type_2","entry_name_2", "pathway")])
-  colnames(prety1pathway) =colnames(prety2pathway) = c("type", "name", "pathway")
-  typesPathway<-unique(rbind(prety1pathway,prety2pathway))
-  typesCpathway<-typesPathway[typesPathway$type == "compound",]
-  mapListC <- list()
-  for (i in as.character(typesCpathway$name)) {
-    if (is.null(mapListC[[i]])) {
-      mapDetect =  as.character(typesCpathway$pathway)[as.character(typesCpathway$name) %in% i]
-      mapListC[[i]] <- mapDetect
-    }
-  }
-  library(rjson)
-  mapListC = toJSON(mapListC)
-  write(mapListC, paste0(args$data_dir, "/compoundToMap.json"))
-  
+
   PRETAB2<-NULL
   for (i in 1: length (DEm) ){
     elcompound<-DEm[i]
