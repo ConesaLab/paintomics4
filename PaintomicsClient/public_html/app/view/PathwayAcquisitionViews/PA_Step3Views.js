@@ -4577,15 +4577,15 @@ function PA_Step3HubAnalysis () {
 										fields: ['Step'],
 										data: [
 											{
-												Step: 'One_Step'
+												Step: 'One Step'
 											}, {
-												Step: 'Two_Steps'
+												Step: 'Two Steps'
 											}, {
-												Step: 'Three_Steps'
+												Step: 'Three Steps'
 											}, {
-												Step: 'Four_Steps'
+												Step: 'Four Steps'
 											}, {
-												Step: 'All_Steps'
+												Step: 'All Steps'
 											}
 										]
 									},
@@ -4594,10 +4594,19 @@ function PA_Step3HubAnalysis () {
 									listeners: {
 										change: function (combo, value) {
 											let grid = this.up('grid'), store = grid.getStore();
-											if (!value || value === 'All_Steps') {
+											if (!value || value === 'All Steps') {
 												store.clearFilter();
 											} else {
 												store.clearFilter();
+												if (value == 'One Step') {
+													value = 1
+												} else if (value == 'Two Steps') {
+													value = 2
+												} else if (value == 'Three Steps') {
+													value = 3
+												} else if (value == 'Four Steps') {
+													value = 4
+												}
 												store.filter([{
 														property: 'Step',
 														value: value
