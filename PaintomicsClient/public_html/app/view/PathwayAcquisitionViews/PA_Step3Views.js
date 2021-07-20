@@ -4344,7 +4344,7 @@ function PA_Step3HubAnalysis () {
 	this.initComponent = function () {
 		Ext.define('User', {
 			extend: 'Ext.data.Model',
-			fields: ['Metabolite', 'ID','Step', "DE_neighbors", "not_DE_neighbors", "Percentage", "RDE_neighbors", "Rnot_DE_neighbors", "RPercentage", "P_value", "P_adjusted"]
+			fields: ['Metabolite', 'ID', 'Step', "DE_neighbors", "not_DE_neighbors", "Percentage", "RDE_neighbors", "Rnot_DE_neighbors", "RPercentage", "P_value", "P_adjusted"]
 		});
 
 		var userStore = Ext.create('Ext.data.Store', {
@@ -4359,12 +4359,12 @@ function PA_Step3HubAnalysis () {
 
 				border: 0,
 				maxWidth: 1900,
-				layout:'column',
+				layout: 'column',
 				items: [
 					{
 						xtype: "gridpanel",
 						cls: "contentbox",
-						columnWidth:0.7,
+						columnWidth: 0.7,
 						store: userStore,
 						height: 350,
 						header: {
@@ -4386,7 +4386,7 @@ function PA_Step3HubAnalysis () {
 								xtype: 'customactioncolumn',
 								text: "Paint",
 								menuDisabled: true,
-								width:55,
+								width: 55,
 								items: [{
 									icon: "fa-paint-brush-o",
 									text: "",
@@ -4437,7 +4437,7 @@ function PA_Step3HubAnalysis () {
 												"<div class='contentbox'>" +
 												"  <h3>" + omicName + "<span><input type='checkbox' id='" + divId + "_cb_relevant' value='" + omicName + "'/>Only relevant</span></h3>" +
 												"  <div class='PA_step5_heatmapContainer' id='" + divId + "'  style='height: " + ((regulateOmicsValue.length * 30) + 100) + "px'><i class='fa fa-cog fa-spin'></i> Loading..</div>" +
-												"  <div class='PA_step5_plotContainer' id='" + divId+ "_plotContainer'  style='width:" + divWidth + "px;height: " + ((regulateOmicsValue.length * 30) + 100) + "px'><i class='fa fa-cog fa-spin'></i> Loading..</div>" +
+												"  <div class='PA_step5_plotContainer' id='" + divId + "_plotContainer'  style='width:" + divWidth + "px;height: " + ((regulateOmicsValue.length * 30) + 100) + "px'><i class='fa fa-cog fa-spin'></i> Loading..</div>" +
 												"</div>";
 											elem.append(htmlCode);
 											heatmapGene = generateHeatmap(divId, omicName, regulateOmicsValue, distributionSummaries, visualOptions)
@@ -4563,13 +4563,58 @@ function PA_Step3HubAnalysis () {
 								dataIndex: "P_adjusted",
 								renderer: renderFunctionLimit
 							}
-						]
+						],
+						bbar: {
+							xtpe: 'toolbar',
+							items: [
+								'-', {
+									xtype: 'combo',
+									fieldLabel: 'Select a step:',
+									labelAlign: 'right',
+									forceSelection: true,
+									emptyText: '--Select--',
+									store: {
+										fields: ['Step'],
+										data: [
+											{
+												Step: 'One_Step'
+											}, {
+												Step: 'Two_Steps'
+											}, {
+												Step: 'Three_Steps'
+											}, {
+												Step: 'Four_Steps'
+											}, {
+												Step: 'All_Steps'
+											}
+										]
+									},
+									displayField: 'Step',
+									valueField: 'Step',
+									listeners: {
+										change: function (combo, value) {
+											let grid = this.up('grid'), store = grid.getStore();
+											if (!value || value === 'All_Steps') {
+												store.clearFilter();
+											} else {
+												store.clearFilter();
+												store.filter([{
+														property: 'Step',
+														value: value
+													}]);
+											}
+										}
+									}
+
+								}
+							]
+						}
 					},
 					{
 						xtype: 'box',
 						cls: "contentbox",
-						columnWidth:0.25,
-						minWidth:400,
+						columnWidth: 0.25,
+						minWidth: 400,
 						padding: '30',
 						height: 350,
 						html:
@@ -4672,7 +4717,6 @@ function PA_Step3MetaboliteView() {
 		this.component = Ext.widget(
 			{
 				xtype: 'container',
-				padding: '10',
 				border: 0,
 				maxWidth: 1900,
 				layout:'column',
