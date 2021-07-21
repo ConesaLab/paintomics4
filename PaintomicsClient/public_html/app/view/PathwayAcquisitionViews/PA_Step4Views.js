@@ -3934,8 +3934,8 @@ function PA_Step4DetailsView() {
 				items: [
 					{xtype: "box", html: '<h2> Features in this set </h2>'},
 					{xtype: "container", itemId: "itemsContainer", style:"padding:10px;", items: []},
-					{xtype: "box", html: '<h2> Values by omic type </h2>'},
 
+					{xtype: "box", html: '<h2> Values by omic type </h2>'},
 					{xtype: 'box', html: "<div id='featureFamilyOverviewContainer'></div>"},
 
 

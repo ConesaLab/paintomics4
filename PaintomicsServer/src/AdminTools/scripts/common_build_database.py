@@ -2025,9 +2025,6 @@ def processReactomePathwaysData():
     for file_name in onlyPNGThumb:
         shutil.move(REACTOME_DIR_PNG_THUMB + file_name, REACTOME_GLOBAL_DIR_THUMB)
 
-
-
-
 def processKEGGPathwaysData():
     FAILED_LINES["KEGG PATHWAYS"] = []
 
