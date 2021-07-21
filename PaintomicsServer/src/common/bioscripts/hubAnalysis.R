@@ -52,6 +52,7 @@ SignificanceTestbyMetabolite<- function(UserDataset, UserDEfeatures,dir,iter){
   rownames(PRETAB2)<-seq(1:nrow(PRETAB2))
   colnames(PRETAB2)<-c("Metabolite", "Step", "DE_neighbors", "not_DE_neighbors","Percentage")
   PRETAB2$Percentage <- as.numeric(as.character(PRETAB2$Percentage))
+  # Remove all NAN in the data
   #PRETAB2 <- na.omit(PRETAB2)
   
   
@@ -98,9 +99,19 @@ SignificanceTestbyMetabolite<- function(UserDataset, UserDEfeatures,dir,iter){
       vecNOTDEneighbors<-as.vector(minitab[,4])
       # value for mu in t-test
       realDeNeighbors <- as.character(PRETAB2[PRETAB2$Metabolite %in% unique(tPRETAB2[,'elcompound']),]$DE_neighbors[lu])
-
-      pval <- t.test(x=as.numeric(as.character(vecDEneighbors)),mu=as.numeric(realDeNeighbors))$p.value
-
+      
+      # avoid constant random select value
+      pval <- tryCatch(
+        {
+          pval <- t.test(x=as.numeric(as.character(vecDEneighbors)),mu=as.numeric(realDeNeighbors))$p.value
+          #pval <- formatC(pval, format = "e", digits = 2)
+        }, 
+        error = function(e) 
+        {
+          pval <- 1
+          return(pval)
+        }
+      )
       met<-as.character(unique(minitab[,1]))
       DEn<-round(mean(as.numeric(as.character(minitab[,3]))), digits = 2)
       #DEn <- mean(as.numeric(as.character(minitab[,3])))
@@ -119,17 +130,15 @@ SignificanceTestbyMetabolite<- function(UserDataset, UserDEfeatures,dir,iter){
   # Adjust p-value based on each step
   tabresumiterations$P_adjusted <- NaN
   for (lu in 1:length(unique(tabresumiterations$RStep))) {
-    adjustValue <- tabresumiterations$P_value[tabresumiterations$RStep == lu]
+    adjustValue <- tabresumiterations$P_value[as.numeric(tabresumiterations$RStep) == lu]
     p.adj<- p.adjust(as.numeric(as.character(adjustValue)), "BH")
-    tabresumiterations$P_adjusted[tabresumiterations$RStep == lu] = p.adj
+    tabresumiterations$P_adjusted[as.numeric(tabresumiterations$RStep) == lu] = p.adj
   }
-  tabresumiterations$p.adj<-p.adj
   rownames(tabresumiterations)<-seq(1:nrow(tabresumiterations))
   colnames(tabresumiterations)<-c("RMetabolite", "RStep", "RDE_neighbors", "Rnot_DE_neighbors","RPercentage", "P_value","P_adjusted")
   
   FinalTable<- cbind (PRETAB2,tabresumiterations)
   FinalTable<-FinalTable[,-c(6,7)]
-  FinalTable <- na.omit(FinalTable)
   return (FinalTable)
 }
 
@@ -147,7 +156,7 @@ userDataset = read.table(paste0(args$data_dir,"userDataset.csv"), sep = ',')
 userDataset<- as.vector(t(userDataset))
 userDEfeatures = read.table(paste0(args$data_dir,"userDEfeatures.csv"), sep = ',')
 userDEfeatures <- as.vector(t(userDEfeatures))
-result <-SignificanceTestbyMetabolite(UserDataset=userDataset,UserDEfeatures=userDEfeatures, dir=args$inputDir, iter=1000)
+result <-SignificanceTestbyMetabolite(UserDataset=userDataset,UserDEfeatures=userDEfeatures, dir=args$inputDir, iter=100)
 print(result)
 output_file <- paste0(args$data_dir, "/hub_result.csv")
 
