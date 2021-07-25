@@ -2021,9 +2021,9 @@ def processReactomePathwaysData():
         os.makedirs(REACTOME_GLOBAL_DIR_THUMB)
 
     for file_name in onlyPNG:
-        shutil.move(REACTOME_DIR_PNG + file_name, REACTOME_GLOBAL_DIR_PNG)
+        shutil.copy(REACTOME_DIR_PNG + file_name, REACTOME_GLOBAL_DIR_PNG)
     for file_name in onlyPNGThumb:
-        shutil.move(REACTOME_DIR_PNG_THUMB + file_name, REACTOME_GLOBAL_DIR_THUMB)
+        shutil.copy(REACTOME_DIR_PNG_THUMB + file_name, REACTOME_GLOBAL_DIR_THUMB)
 
 def processKEGGPathwaysData():
     FAILED_LINES["KEGG PATHWAYS"] = []
