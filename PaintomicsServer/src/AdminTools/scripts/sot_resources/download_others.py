@@ -3,7 +3,7 @@
 import traceback
 from sys import argv, stderr
 import imp
-
+import shutil
 #**************************************************************************
 #STEP 1. READ CONFIGURATION AND PARSE INPUT FILES
 #
@@ -32,34 +32,42 @@ try:
     #STEP 2.1 GET MapMan NCBI ID -> MapMan GENE ID
     # **************************************************************************
     resource = COMMON_BUILD_DB_TOOLS.EXTERNAL_RESOURCES.get("mapman_kegg")[0]
-    COMMON_BUILD_DB_TOOLS.downloadFile(resource.get("url"), resource.get("file"), DESTINATION + resource.get("output"), SERVER_SETTINGS.DOWNLOAD_DELAY_1, SERVER_SETTINGS.MAX_TRIES_1)
+    #COMMON_BUILD_DB_TOOLS.downloadFile(resource.get("url"), resource.get("file"), DESTINATION + resource.get("output"), SERVER_SETTINGS.DOWNLOAD_DELAY_1, SERVER_SETTINGS.MAX_TRIES_1)
+    shutil.copy(resource.get("url") + resource.get("file"), DESTINATION + resource.get("output"))
 
     # **************************************************************************
     # STEP 2.1 GET MapMan GENE ID -> MAPMAN FEATURE ID
     # **************************************************************************
     resource = COMMON_BUILD_DB_TOOLS.EXTERNAL_RESOURCES.get("mapman_gene")[0]
-    COMMON_BUILD_DB_TOOLS.downloadFile(resource.get("url"), resource.get("file"), DESTINATION + resource.get("output"),
-                                       SERVER_SETTINGS.DOWNLOAD_DELAY_1, SERVER_SETTINGS.MAX_TRIES_1)
+    shutil.copy(resource.get("url") + resource.get("file"), DESTINATION + resource.get("output"))
+
+    #COMMON_BUILD_DB_TOOLS.downloadFile(resource.get("url"), resource.get("file"), DESTINATION + resource.get("output"),
+    #                                   SERVER_SETTINGS.DOWNLOAD_DELAY_1, SERVER_SETTINGS.MAX_TRIES_1)
 
 
     #**************************************************************************
     #STEP 2.1 GET MapMan pathways
     # **************************************************************************
     resource = COMMON_BUILD_DB_TOOLS.EXTERNAL_RESOURCES.get("mapman_pathways")[0]
-    COMMON_BUILD_DB_TOOLS.downloadFile(resource.get("url"), resource.get("file"), DESTINATION + resource.get("output"), SERVER_SETTINGS.DOWNLOAD_DELAY_1, SERVER_SETTINGS.MAX_TRIES_1)
+    shutil.copy(resource.get("url") + resource.get("file"), DESTINATION + resource.get("output"))
+    #COMMON_BUILD_DB_TOOLS.downloadFile(resource.get("url"), resource.get("file"), DESTINATION + resource.get("output"), SERVER_SETTINGS.DOWNLOAD_DELAY_1, SERVER_SETTINGS.MAX_TRIES_1)
 
     #**************************************************************************
     #STEP 2.1 GET MapMan pathways classification
     # **************************************************************************
     resource = COMMON_BUILD_DB_TOOLS.EXTERNAL_RESOURCES.get("mapman_classification")[0]
-    COMMON_BUILD_DB_TOOLS.downloadFile(resource.get("url"), resource.get("file"), DESTINATION + resource.get("output"), SERVER_SETTINGS.DOWNLOAD_DELAY_1, SERVER_SETTINGS.MAX_TRIES_1)
+    shutil.copy(resource.get("url") + resource.get("file"), DESTINATION + resource.get("output"))
+
+    #COMMON_BUILD_DB_TOOLS.downloadFile(resource.get("url"), resource.get("file"), DESTINATION + resource.get("output"), SERVER_SETTINGS.DOWNLOAD_DELAY_1, SERVER_SETTINGS.MAX_TRIES_1)
 
 
    #**************************************************************************
     #STEP 2.1 GET MapMan compound dataset
     # **************************************************************************
-    resource = COMMON_BUILD_DB_TOOLS.COMMON_RESOURCES.get("mapman").get("metabolites")
-    COMMON_BUILD_DB_TOOLS.downloadFile(resource.get("url"), resource.get("file"), DESTINATION + resource.get("output"), SERVER_SETTINGS.DOWNLOAD_DELAY_1, SERVER_SETTINGS.MAX_TRIES_1)
+    resource = COMMON_BUILD_DB_TOOLS.EXTERNAL_RESOURCES.get("metabolites")[0]
+    shutil.copy(resource.get("url") + resource.get("file"), DESTINATION + resource.get("output"))
+
+    #COMMON_BUILD_DB_TOOLS.downloadFile(resource.get("url"), resource.get("file"), DESTINATION + resource.get("output"), SERVER_SETTINGS.DOWNLOAD_DELAY_1, SERVER_SETTINGS.MAX_TRIES_1)
 
 
 except Exception as ex:

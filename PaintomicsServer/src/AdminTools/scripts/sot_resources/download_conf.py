@@ -1,7 +1,7 @@
 EXTERNAL_RESOURCES = {
                 "mapman_kegg"   :   [
                     {
-                    "url"           :   "/home/tian/Downloads/mapman",
+                    "url"           :   "/home/tian/mapman/sot/",
                     "file"          :   "sot_pgsc_ncbi.txt",
                     "output"        :   "sot_pgsc_ncbi.list",
                     "description"   :    "Source: <include description>"
@@ -9,7 +9,7 @@ EXTERNAL_RESOURCES = {
                 ],
                 "mapman_gene"   :   [
                     {
-                    "url"           :   "/home/tian/Downloads/mapman",
+                    "url"           :   "/home/tian/mapman/sot/",
                     "file"          :   "sot_mapman_gene.tsv",
                     "output"        :   "sot_mapman_gene.list",
                     "description"   :   "Source: <include description>"
@@ -17,7 +17,7 @@ EXTERNAL_RESOURCES = {
                 ],
                 "mapman_pathways"   :   [
                     {
-                    "url"           :   "/home/tian/Downloads/mapman",
+                    "url"           :   "/home/tian/mapman/sot/",
                     "file"          :   "mapman_pathways.tar.gz",
                     "output"        :   "mapman_pathways.tar.gz",
                     "description"   :   "Source: <include description>"
@@ -25,7 +25,7 @@ EXTERNAL_RESOURCES = {
                 ],
                 "mapman_classification"   :   [
                     {
-                    "url"           :   "/home/tian/Downloads/mapman",
+                    "url"           :   "/home/tian/mapman/sot/",
                     "file"          :   "mapman_classification.txt",
                     "output"        :   "mapman_classification.txt",
                     "description"   :   "Source: <include description>"
@@ -33,7 +33,7 @@ EXTERNAL_RESOURCES = {
                 ],
                 "metabolites"	:	[                    
                     {
-                    "url"           :   "/home/tian/Downloads/mapman",
+                    "url"           :   "/home/tian/mapman/sot/",
                     "file"          :   "mapman_metabolites.txt",
                     "output"        :   "mapman_metabolites.txt",
                     "description"   :   "Source: <include description>"
