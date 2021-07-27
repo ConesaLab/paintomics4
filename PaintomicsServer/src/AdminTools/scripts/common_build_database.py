@@ -1073,7 +1073,8 @@ def processMapManPathwaysData():
         exit(1)
 
     # Make sure to create the thumbnail directory
-    os.makedirs(MAPMAN_DIR + "/png/thumbnails/")
+    if not os.path.exists(os.path.dirname(MAPMAN_DIR + "/png/thumbnails/")):
+        os.makedirs(MAPMAN_DIR + "/png/thumbnails/")
 
     # Process the clasiffication file
     classiffication_mapping_dict = defaultdict(list)

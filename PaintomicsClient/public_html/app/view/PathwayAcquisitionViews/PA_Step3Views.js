@@ -709,7 +709,7 @@ function PA_Step3JobView() {
 							}
 						}
 				},
-				me.hubAnalysisView.getComponent(),
+				(!this.getModel().foundCompounds.length?null:me.hubAnalysisView.getComponent()),
 				(!this.getModel().foundCompounds.length?null:me.metaboliteView.getComponent()),
 				me.pathwayTableView.getComponent() //THE TABLE PANEL
 			],
@@ -4124,11 +4124,13 @@ function PA_Step3HubAnalysis () {
 		}
 
 		compRegulateFeatures = this.model.compoundRegulateFeatures
-		if (typeof this.model.globalExpressionData['inputCompound'] !== 'undefined') {
-			globalExpressionComp = this.model.globalExpressionData['inputCompound']
-		}
-		if (typeof this.model.globalExpressionData['inputGene'] !== 'undefined') {
+		if (this.model.globalExpressionData) {
+			if (typeof this.model.globalExpressionData['inputCompound'] !== 'undefined') {
+				globalExpressionComp = this.model.globalExpressionData['inputCompound']
+			}
+			if (typeof this.model.globalExpressionData['inputGene'] !== 'undefined') {
 			globalExpressionGene = this.model.globalExpressionData['inputGene']
+		}
 		}
 		distributionSummaries = this.model.getDataDistributionSummaries()
 		visualOptions = me.getParent().visualOptions

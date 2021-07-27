@@ -5,45 +5,10 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="657be414-0410-416b-82a4-023b644455f2" name="Default Changelist" comment="">
-      <change afterPath="$PROJECT_DIR$/.idea/codeStyles/Project.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/codeStyles/codeStyleConfig.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/other.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../PaintomicsClient/.idea/misc.xml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/../PaintomicsClient/public_html/app/controller/JobController.js" beforeDir="false" afterPath="$PROJECT_DIR$/../PaintomicsClient/public_html/app/controller/JobController.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../PaintomicsClient/public_html/app/model/JobInstanceModels.js" beforeDir="false" afterPath="$PROJECT_DIR$/../PaintomicsClient/public_html/app/model/JobInstanceModels.js" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../PaintomicsClient/public_html/app/view/PathwayAcquisitionViews/PA_Step3Views.js" beforeDir="false" afterPath="$PROJECT_DIR$/../PaintomicsClient/public_html/app/view/PathwayAcquisitionViews/PA_Step3Views.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../PaintomicsClient/public_html/app/view/PathwayAcquisitionViews/PA_Step4Views.js" beforeDir="false" afterPath="$PROJECT_DIR$/../PaintomicsClient/public_html/app/view/PathwayAcquisitionViews/PA_Step4Views.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../PaintomicsClient/public_html/index.html" beforeDir="false" afterPath="$PROJECT_DIR$/../PaintomicsClient/public_html/index.html" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../PaintomicsClient/public_html/resources/css/main.css" beforeDir="false" afterPath="$PROJECT_DIR$/../PaintomicsClient/public_html/resources/css/main.css" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/.name" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/.name" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/PaintomicsServer.iml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/PaintomicsServer.iml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/inspectionProfiles/Project_Default.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/inspectionProfiles/Project_Default.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/misc.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/AdminTools/DBManager.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/AdminTools/DBManager.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/AdminTools/scripts/common_build_database.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/AdminTools/scripts/common_build_database.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/AdminTools/scripts/common_resources/download_conf.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/AdminTools/scripts/common_resources/download_conf.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/AdminTools/scripts/default/build_database.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/AdminTools/scripts/default/build_database.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/AdminTools/scripts/hsa_resources/build_database.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/AdminTools/scripts/hsa_resources/build_database.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/AdminTools/scripts/mmu_resources/build_database.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/AdminTools/scripts/mmu_resources/build_database.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/AdminTools/scripts/mmu_resources/download_others.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/AdminTools/scripts/mmu_resources/download_others.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/AdminTools/scripts/sot_resources/build_database.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/AdminTools/scripts/sot_resources/build_database.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/AdminTools/scripts/sot_resources/download_conf.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/AdminTools/scripts/sot_resources/download_conf.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/classes/Job.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/classes/Job.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/classes/JobInstances/MiRNA2GeneJob.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/classes/JobInstances/MiRNA2GeneJob.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/classes/JobInstances/PathwayAcquisitionJob.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/classes/JobInstances/PathwayAcquisitionJob.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/classes/PathwayGraphicalData.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/classes/PathwayGraphicalData.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/common/JobInformationManager.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/common/JobInformationManager.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/common/KeggInformationManager.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/common/KeggInformationManager.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/common/Statistics.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/common/Statistics.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/common/bioscripts/PCA-GENES.R" beforeDir="false" afterPath="$PROJECT_DIR$/src/common/bioscripts/PCA-GENES.R" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/common/bioscripts/generateMetaGenes.R" beforeDir="false" afterPath="$PROJECT_DIR$/src/common/bioscripts/generateMetaGenes.R" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/common/bioscripts/miRNA2Target.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/common/bioscripts/miRNA2Target.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/conf/logging.cfg" beforeDir="false" afterPath="$PROJECT_DIR$/src/conf/logging.cfg" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/conf/organismDB.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/conf/organismDB.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/paintomicsserver.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/paintomicsserver.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/resources/example_serverconf.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/resources/example_serverconf.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/servlets/MiRNA2GenesServlet.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/servlets/MiRNA2GenesServlet.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/servlets/PathwayAcquisitionServlet.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/servlets/PathwayAcquisitionServlet.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -81,8 +46,8 @@
     </file-type-list>
   </component>
   <component name="HighlightingSettingsPerFile">
-    <setting file="file://$PROJECT_DIR$/../PaintomicsClient/public_html/app/view/PathwayAcquisitionViews/PA_Step3Views.js" root0="FORCE_HIGHLIGHTING" />
     <setting file="file://$PROJECT_DIR$/../PaintomicsClient/public_html/app/view/common/ExtJS_extensions.js" root0="FORCE_HIGHLIGHTING" />
+    <setting file="file://$PROJECT_DIR$/../PaintomicsClient/public_html/app/view/PathwayAcquisitionViews/PA_Step3Views.js" root0="FORCE_HIGHLIGHTING" />
   </component>
   <component name="ProjectId" id="1ljosIq4ejgJ6jM8EDRgsLg5TiU" />
   <component name="ProjectViewState">
@@ -472,6 +437,9 @@
       <workItem from="1623291492799" duration="1807000" />
       <workItem from="1623385803992" duration="1375000" />
       <workItem from="1623753681717" duration="1142000" />
+      <workItem from="1627315288282" duration="1329000" />
+      <workItem from="1627317099980" duration="1084000" />
+      <workItem from="1627378240422" duration="408000" />
     </task>
     <servers />
   </component>
@@ -498,12 +466,12 @@
       <breakpoints>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/src/AdminTools/scripts/common_build_database.py</url>
-          <line>1943</line>
+          <line>1944</line>
           <option name="timeStamp" value="18" />
         </line-breakpoint>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/src/AdminTools/scripts/common_build_database.py</url>
-          <line>1993</line>
+          <line>1994</line>
           <option name="timeStamp" value="20" />
         </line-breakpoint>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
@@ -523,17 +491,17 @@
         </line-breakpoint>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/src/AdminTools/scripts/common_build_database.py</url>
-          <line>1285</line>
+          <line>1286</line>
           <option name="timeStamp" value="67" />
         </line-breakpoint>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/src/AdminTools/scripts/common_build_database.py</url>
-          <line>2348</line>
+          <line>2349</line>
           <option name="timeStamp" value="71" />
         </line-breakpoint>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/src/AdminTools/scripts/common_build_database.py</url>
-          <line>2360</line>
+          <line>2361</line>
           <option name="timeStamp" value="72" />
         </line-breakpoint>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
@@ -543,27 +511,27 @@
         </line-breakpoint>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/src/AdminTools/scripts/common_build_database.py</url>
-          <line>1856</line>
+          <line>1857</line>
           <option name="timeStamp" value="81" />
         </line-breakpoint>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/src/AdminTools/scripts/common_build_database.py</url>
-          <line>1964</line>
+          <line>1965</line>
           <option name="timeStamp" value="82" />
         </line-breakpoint>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/src/AdminTools/scripts/common_build_database.py</url>
-          <line>1301</line>
+          <line>1302</line>
           <option name="timeStamp" value="85" />
         </line-breakpoint>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/src/AdminTools/scripts/common_build_database.py</url>
-          <line>1269</line>
+          <line>1270</line>
           <option name="timeStamp" value="87" />
         </line-breakpoint>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/src/AdminTools/scripts/common_build_database.py</url>
-          <line>1745</line>
+          <line>1746</line>
           <option name="timeStamp" value="91" />
         </line-breakpoint>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
@@ -653,7 +621,7 @@
         </line-breakpoint>
         <line-breakpoint enabled="true" type="javascript">
           <url>file://$PROJECT_DIR$/src/public_html/app/view/PathwayAcquisitionViews/PA_Step3Views.js</url>
-          <line>3508</line>
+          <line>3516</line>
           <option name="timeStamp" value="302" />
         </line-breakpoint>
         <line-breakpoint enabled="true" type="javascript">
@@ -786,6 +754,7 @@
     <SUITE FILE_PATH="coverage/paintomicsserver_py$launch_server.coverage" NAME="launch_server Coverage Results" MODIFIED="1616418573638" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/src" />
     <SUITE FILE_PATH="coverage/launch_server_py$launch_server.coverage" NAME="launch_server Coverage Results" MODIFIED="1623753690084" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/src" />
     <SUITE FILE_PATH="coverage/paintomicsserver_py$paintomicsserver.coverage" NAME="paintomicsserver Coverage Results" MODIFIED="1616383808184" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/src" />
+    <SUITE FILE_PATH="coverage/common_build_database_py$launch_server.coverage" NAME="launch_server Coverage Results" MODIFIED="1627378241741" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/src" />
     <SUITE FILE_PATH="coverage/PathwayAcquisitionServlet_py$launch_server.coverage" NAME="launch_server Coverage Results" MODIFIED="1622967783266" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/src" />
   </component>
 </project>
