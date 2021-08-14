@@ -4521,10 +4521,14 @@ function PA_Step3MetaboliteView() {
 				dataFinal[keys]["pValue"] = tableData.pValueClassification[keys]
 				dataFinal[keys]["FDR BH"] = tableData.adjustPValueBH[keys]
 				dataFinal[keys]["FDR BY"] = tableData.adjustPValueBY[keys]
-				dataFinal[keys]["relevantFeatures"] = tableData.totalRelevantFeaturesInCategory[keys]
 				dataFinal[keys]["expressionVal"].push(tableData.exprssionMetabolites[tableData.classificationDict[keys][elements]])
-				dataFinal[keys]["foundFeatures"] = featureSummary[0]
-				dataFinal[keys]["foundRelevant"] = featureSummary[1]
+
+				dataFinal[keys]["totalFeatures"] = featureSummary[0]
+				dataFinal[keys]["totalRelevant"] = featureSummary[1]
+
+				dataFinal[keys]["foundFeatures"] = tableData.classificationDict[keys].length
+				dataFinal[keys]["foundRelevant"] = tableData.totalRelevantFeaturesInCategory[keys]
+
 				dataFinal[keys]['header'] = headerComp
 			}
 		}
@@ -4533,9 +4537,12 @@ function PA_Step3MetaboliteView() {
 		for (var keys in dataFinal) {
 			dataShow2.push(
 				{
-					name: keys, totalFeatures: dataFinal[keys]["ID"].length, pValue: dataFinal[keys]["pValue"],
-					FDR_BH: dataFinal[keys]["FDR BH"], FDR_BY: dataFinal[keys]["FDR BY"],
-					relevantFeatures: dataFinal[keys]["relevantFeatures"],
+					name: keys,
+					totalFeatures: dataFinal[keys]["totalFeatures"],
+					totalRelevant: dataFinal[keys]["totalRelevant"],
+					pValue: dataFinal[keys]["pValue"],
+					FDR_BH: dataFinal[keys]["FDR BH"],
+					FDR_BY: dataFinal[keys]["FDR BY"],
 					foundFeatures: dataFinal[keys]["foundFeatures"],
 					foundRelevant: dataFinal[keys]["foundRelevant"]
 				}
@@ -4544,7 +4551,7 @@ function PA_Step3MetaboliteView() {
 
 		Ext.define('User', {
 			extend: 'Ext.data.Model',
-			fields: ['name', 'totalFeatures', "pValue", "FDR_BH", "FDR_BY", "relevantFeatures", "foundFeatures", "foundRelevant"]
+			fields: ['name', 'totalFeatures', "totalRelevant", "pValue", "FDR_BH", "FDR_BY", "foundFeatures", "foundRelevant"]
 		});
 
 		userStore = Ext.create('Ext.data.Store', {
@@ -4555,6 +4562,7 @@ function PA_Step3MetaboliteView() {
 		if (typeof this.model.globalExpressionData['inputCompound'] !== 'undefined') {
 			globalExpressionComp = this.model.globalExpressionData['inputCompound']
 		}
+
 		distributionSummaries = this.model.getDataDistributionSummaries()
 		visualOptions = me.getParent().visualOptions
 	}
@@ -4667,11 +4675,11 @@ function PA_Step3MetaboliteView() {
 								dataIndex: 'name'
 							},
 							{
-								text: 'Features',
+								text: 'Unique Features',
 								flex: 15 / 100,
 								sortable: true,
 								hideable: false,
-								dataIndex: 'totalFeatures'
+								dataIndex: 'foundFeatures'
 							},
 							{
 								text: "P Value",
@@ -4848,7 +4856,7 @@ var renderFunctionLimit = function (value, metadata, record) {
 
 		try {
 			var totalFeatures = record.data.totalFeatures;
-			var totalRelevant = record.data.relevantFeatures;
+			var totalRelevant = record.data.totalRelevant;
 
 			// Keep compatibility with old jobs
 			var foundFeatures = record.data.foundFeatures;

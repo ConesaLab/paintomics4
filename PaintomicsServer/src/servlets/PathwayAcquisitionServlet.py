@@ -357,7 +357,6 @@ def pathwayAcquisitionStep2_PART2(jobID, userID, selectedCompounds, clusterNumbe
 
         logging.info("STEP2 - GENERATE COMPOUND CLASSIFICATION")
 
-
         if selectedCompounds:
             mappingComp, pValueInDict, classificationDict, exprssionMetabolites, adjustPvalue, totalRelevantFeaturesInCategory, featureSummary, compoundRegulateFeatures = jobInstance.compundsClassification()
             # Creat Global expression information for all genes
