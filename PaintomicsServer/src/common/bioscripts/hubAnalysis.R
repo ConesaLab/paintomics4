@@ -1,6 +1,8 @@
 #!/usr/bin/env Rscript
+options(scipen=200)
 
-SignificanceTestbyMetabolite<- function(UserDataset, UserDEfeatures,dir,iter){
+SignificanceTestbyMetabolite<- function(UserDataset, UserDEfeatures, dir, iter, GeneCount, MetaCount, GeneCountSig, MetaCountSig){
+  
   ################################################
   # Step 1: Removing interactions with  Map
   #dim(kegg_interactions) # 122875 x 9
@@ -20,18 +22,18 @@ SignificanceTestbyMetabolite<- function(UserDataset, UserDEfeatures,dir,iter){
   typesC<-types[types$type == "compound",]
   typesG<-types[!(types$type == "compound"),]
   
-  # Differentially expressed metabolites
+  # Differential expressed metabolites
   DEm<-UserDEfeatures[is.element(UserDEfeatures,typesC$name)] 
   
-  # Differentially expressed genes
+  # Differential expressed genes
   DEg<-UserDEfeatures[is.element(UserDEfeatures,typesG$name)]
   
-
   PRETAB2<-NULL
+  PRETAB_ALL2 <- NULL
+  
   for (i in 1: length (DEm) ){
     elcompound<-DEm[i]
     load(paste(dir,"/",elcompound,".RData",sep=''))
-    theTables
     pretab<-PRETAB<-NULL
     for (ii in 1: length(theTables)){
       elstep<-names(theTables[[ii]])
@@ -46,9 +48,22 @@ SignificanceTestbyMetabolite<- function(UserDataset, UserDEfeatures,dir,iter){
       pretab<-cbind(elcompound,elstep,numblosDEs,numblosNODE,prcnt)
       PRETAB<-rbind(PRETAB,pretab)
     }
-    PRETAB2<-rbind(PRETAB2,PRETAB)
+    PRETAB2<-rbind(PRETAB2, PRETAB)
   }
   PRETAB2<-data.frame(PRETAB2)
+  
+  ##################### Fisher's exact test ###########################
+  PRETAB2_ALL <- PRETAB2[,1:4]
+  PRETAB2_ALL$numblosDEsNF <- GeneCountSig + MetaCountSig - (as.numeric(as.character(PRETAB2_ALL$numblosDEs)))
+  PRETAB2_ALL$numblosNODENF <- GeneCount + MetaCount - (GeneCountSig + MetaCountSig) - (as.numeric(as.character(PRETAB2_ALL$numblosNODE)))
+
+  fisher <- NULL
+  for (i in 1 : nrow(PRETAB2_ALL)) {
+    fisher[i] <-  fisher.test(matrix(as.numeric(t(PRETAB2_ALL[i,3:6])),nrow = 2))$p.value
+  }
+  PRETAB2_ALL$fisher <- fisher
+  ###############################
+  
   rownames(PRETAB2)<-seq(1:nrow(PRETAB2))
   colnames(PRETAB2)<-c("Metabolite", "Step", "DE_neighbors", "not_DE_neighbors","Percentage")
   PRETAB2$Percentage <- as.numeric(as.character(PRETAB2$Percentage))
@@ -127,15 +142,25 @@ SignificanceTestbyMetabolite<- function(UserDataset, UserDEfeatures,dir,iter){
   tabresumiterations<-data.frame(tabresumiterations)
   #p.adj<-formatC(p.adjust(as.numeric(as.character(tabresumiterations$P_value)), "BH"), format = "e", digits = 2)
   
+  
   # Adjust p-value based on each step
   tabresumiterations$P_adjusted <- NaN
+  tabresumiterations$fisher <- fisher
+  
+  tabresumiterations$fisher_adjusted<-NaN
   for (lu in 1:length(unique(tabresumiterations$RStep))) {
+    # Fisher
+    adjustValue_Fisher <- tabresumiterations$fisher[as.numeric(tabresumiterations$RStep) == lu]
+    p.adj_Fisher<- p.adjust(as.numeric(as.character(adjustValue_Fisher)), "BH")
+    tabresumiterations$fisher_adjusted[as.numeric(tabresumiterations$RStep) == lu] = p.adj_Fisher
+    
+    # normal 
     adjustValue <- tabresumiterations$P_value[as.numeric(tabresumiterations$RStep) == lu]
     p.adj<- p.adjust(as.numeric(as.character(adjustValue)), "BH")
     tabresumiterations$P_adjusted[as.numeric(tabresumiterations$RStep) == lu] = p.adj
   }
   rownames(tabresumiterations)<-seq(1:nrow(tabresumiterations))
-  colnames(tabresumiterations)<-c("RMetabolite", "RStep", "RDE_neighbors", "Rnot_DE_neighbors","RPercentage", "P_value","P_adjusted")
+  colnames(tabresumiterations)<-c("RMetabolite", "RStep", "RDE_neighbors", "Rnot_DE_neighbors","RPercentage", "P_value","P_adjusted", "Fisher", "Fisher_adjusted")
   
   FinalTable<- cbind (PRETAB2,tabresumiterations)
   FinalTable<-FinalTable[,-c(6,7)]
@@ -156,7 +181,22 @@ userDataset = read.table(paste0(args$data_dir,"userDataset.csv"), sep = ',')
 userDataset<- as.vector(t(userDataset))
 userDEfeatures = read.table(paste0(args$data_dir,"userDEfeatures.csv"), sep = ',')
 userDEfeatures <- as.vector(t(userDEfeatures))
-result <-SignificanceTestbyMetabolite(UserDataset=userDataset,UserDEfeatures=userDEfeatures, dir=args$inputDir, iter=100)
+
+geneCount = as.numeric(args$geneCount)
+geneCountSig = as.numeric(args$geneCountSig)
+
+metaCount = as.numeric(args$metaCount)
+metaCountSig = as.numeric(args$metaCountSig)
+
+result <-SignificanceTestbyMetabolite(UserDataset = userDataset,
+                                      UserDEfeatures = userDEfeatures,
+                                      dir=args$inputDir,
+                                      GeneCount = geneCount,
+                                      MetaCount = metaCount,
+                                      MetaCountSig = metaCountSig,
+                                      GeneCountSig = geneCountSig,
+                                      iter=100)
+
 output_file <- paste0(args$data_dir, "/hub_result.csv")
 
 write.table(result, file=output_file, quote = FALSE, sep="\t", row.names = FALSE, col.names = FALSE)

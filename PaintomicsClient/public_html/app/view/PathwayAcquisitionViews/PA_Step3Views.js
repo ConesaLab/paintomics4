@@ -4118,7 +4118,9 @@ function PA_Step3HubAnalysis () {
 					Rnot_DE_neighbors: hubAnalysisResult[keys][6],
 					RPercentage: hubAnalysisResult[keys][7],
 					P_value: hubAnalysisResult[keys][8],
-					P_adjusted: hubAnalysisResult[keys][9]
+					P_adjusted: hubAnalysisResult[keys][9],
+					fisher: hubAnalysisResult[keys][10],
+					fisher_adjusted: hubAnalysisResult[keys][10]
 				}
 			)
 		}
@@ -4140,7 +4142,7 @@ function PA_Step3HubAnalysis () {
 	this.initComponent = function () {
 		Ext.define('User', {
 			extend: 'Ext.data.Model',
-			fields: ['Metabolite', 'ID', 'Step', "DE_neighbors", "not_DE_neighbors", "Percentage", "RDE_neighbors", "Rnot_DE_neighbors", "RPercentage", "P_value", "P_adjusted"]
+			fields: ['Metabolite', 'ID', 'Step', "DE_neighbors", "not_DE_neighbors", "Percentage", "RDE_neighbors", "Rnot_DE_neighbors", "RPercentage", "P_value", "P_adjusted", "fisher", "fisher_adjusted"]
 		});
 
 		var userStore = Ext.create('Ext.data.Store', {
@@ -4335,12 +4337,14 @@ function PA_Step3HubAnalysis () {
 								dataIndex: "not_DE_neighbors"
 
 							},
+							/*
 							{
 								text: "% DE neighbors",
 								flex: 20 / 100,
 								sortable: true,
 								dataIndex: "Percentage"
 							},
+							*/
 							{
 								text: "RDE neighbors",
 								flex: 20 / 100,
@@ -4353,6 +4357,7 @@ function PA_Step3HubAnalysis () {
 								sortable: true,
 								dataIndex: "Rnot_DE_neighbors"
 							},
+							/*
 							{
 								text: "% RDE neighbors",
 								flex: 20 / 100,
@@ -4360,6 +4365,7 @@ function PA_Step3HubAnalysis () {
 								dataIndex: "RPercentage"
 
 							},
+							*/
 							{
 								text: "P value",
 								flex: 20 / 100,
@@ -4374,6 +4380,20 @@ function PA_Step3HubAnalysis () {
 								flex: 20 / 100,
 								sortable: true,
 								dataIndex: "P_adjusted",
+								renderer: renderFunctionLimit
+							},
+							{
+								text: "fisher",
+								flex: 20 / 100,
+								sortable: true,
+								dataIndex: "fisher",
+								renderer: renderFunctionLimit
+							},
+							{
+								text: "fisher adjusted",
+								flex: 20 / 100,
+								sortable: true,
+								dataIndex: "fisher_adjusted",
 								renderer: renderFunctionLimit
 							}
 						],

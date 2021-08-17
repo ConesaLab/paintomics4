@@ -361,7 +361,6 @@ def pathwayAcquisitionStep2_PART2(jobID, userID, selectedCompounds, clusterNumbe
             mappingComp, pValueInDict, classificationDict, exprssionMetabolites, adjustPvalue, totalRelevantFeaturesInCategory, featureSummary, compoundRegulateFeatures = jobInstance.compundsClassification()
             # Creat Global expression information for all genes
             globalExpressionData = jobInstance.getGlobalExpressionData()
-            hubAnalysisResult = jobInstance.hubAnalysis(ROOT_DIRECTORY)
 
 
         #****************************************************************
@@ -369,6 +368,9 @@ def pathwayAcquisitionStep2_PART2(jobID, userID, selectedCompounds, clusterNumbe
         #****************************************************************
         logging.info("STEP2 - GENERATING PATHWAYS INFORMATION...")
         summary = jobInstance.generatePathwaysList()
+        if selectedCompounds:
+            hubAnalysisResult = jobInstance.hubAnalysis(ROOT_DIRECTORY)
+
         logging.info("STEP2 - GENERATING PATHWAYS INFORMATION...DONE")
 
         #****************************************************************
