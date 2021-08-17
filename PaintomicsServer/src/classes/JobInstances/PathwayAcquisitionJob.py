@@ -674,6 +674,8 @@ class PathwayAcquisitionJob(Job):
         @param {type}
         @returns
         """
+        totalFeaturesID = set()
+        totalFeaturesIDSig = set()
         totalFeaturesByOmic = defaultdict(Counter)
         totalRelevantFeaturesByOmic = defaultdict(Counter)
         totalAssociationsByOmic = defaultdict(Counter)
@@ -704,9 +706,18 @@ class PathwayAcquisitionJob(Job):
                     # Only for association enrichment type the relevant feature must come from the associations files.
                     relevantValue = omicValue.isRelevantAssociation() if enrichmentType == 'associations' else omicValue.isRelevant()
 
-                    counterNames[feature.getMatchingDB()][omicValue.getOmicName()][enrichmentProperty] = (
+                    #counterNames[feature.getMatchingDB()][omicValue.getOmicName()][enrichmentProperty] = (
+                    #            counterNames[feature.getMatchingDB()][omicValue.getOmicName()][
+                    #                enrichmentProperty] or relevantValue)
+
+                    counterNames[feature.getMatchingDB()][omicValue.getOmicName()][feature.getID()] = (
                                 counterNames[feature.getMatchingDB()][omicValue.getOmicName()][
-                                    enrichmentProperty] or relevantValue)
+                                   feature.getID()] or relevantValue)
+
+                    if feature.getMatchingDB() == 'KEGG':
+                        totalFeaturesID.add(feature.getID())
+                        if relevantValue:
+                            totalFeaturesIDSig.add(feature.getID())
             else:
                 logging.error("STEP2 - Feature not present in at least one pathway " + feature.getID())
 
