@@ -4120,7 +4120,7 @@ function PA_Step3HubAnalysis () {
 					P_value: hubAnalysisResult[keys][8],
 					P_adjusted: hubAnalysisResult[keys][9],
 					fisher: hubAnalysisResult[keys][10],
-					fisher_adjusted: hubAnalysisResult[keys][10]
+					fisher_adjusted: hubAnalysisResult[keys][11]
 				}
 			)
 		}
