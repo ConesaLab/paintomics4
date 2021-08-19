@@ -4111,11 +4111,11 @@ function PA_Step3HubAnalysis () {
 					Metabolite: this.model.mappingComp[hubAnalysisResult[keys][0]],
 					ID: hubAnalysisResult[keys][0],
 					Step: hubAnalysisResult[keys][1],
-					DE_neighbors: hubAnalysisResult[keys][2],
-					not_DE_neighbors: hubAnalysisResult[keys][3],
+					DE_neighbors: parseInt(hubAnalysisResult[keys][2]),
+					not_DE_neighbors: parseInt(hubAnalysisResult[keys][3]),
 					Percentage: hubAnalysisResult[keys][4],
-					RDE_neighbors: hubAnalysisResult[keys][5],
-					Rnot_DE_neighbors: hubAnalysisResult[keys][6],
+					RDE_neighbors: parseInt(hubAnalysisResult[keys][5]),
+					Rnot_DE_neighbors: parseInt(hubAnalysisResult[keys][6]),
 					RPercentage: hubAnalysisResult[keys][7],
 					P_value: hubAnalysisResult[keys][8],
 					P_adjusted: hubAnalysisResult[keys][9],
@@ -4195,6 +4195,11 @@ function PA_Step3HubAnalysis () {
 										elem.empty();
 										let divWidth = elem.width() - 400;
 
+										let hubTable = {};
+
+										for (let i = 0; i < grid.getStore().data.items.length; i++) {
+											hubTable[i] = grid.getStore().data.items[i].data
+										}
 										// Expression value of this set
 										let ID = hubTable[rowIndex]['ID'];
 										let compExpression = globalExpressionComp[ID]
@@ -4288,6 +4293,12 @@ function PA_Step3HubAnalysis () {
 									tooltip: 'Find this feature in pathways',
 									style: "font-size: 20px;",
 									handler: function (grid, rowIndex) {
+
+										//update hubTable 
+										let hubTable = {};
+										for (let i = 0; i < grid.getStore().data.items.length; i++) {
+											hubTable[i] = grid.getStore().data.items[i].data
+										}
 										let ID = hubTable[rowIndex]['Metabolite'];
 										$(document).ready(function () {
 												$("[name = 'searchField']")[0].value = ID
@@ -4410,13 +4421,13 @@ function PA_Step3HubAnalysis () {
 										fields: ['Step'],
 										data: [
 											{
-												Step: 'One Step'
+												Step: 'One_Step'
 											}, {
-												Step: 'Two Steps'
+												Step: 'Two_Steps'
 											}, {
-												Step: 'Three Steps'
+												Step: 'Three_Steps'
 											}, {
-												Step: 'Four Steps'
+												Step: 'Four_Steps'
 											}, {
 												Step: 'All Steps'
 											}
