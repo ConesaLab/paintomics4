@@ -4219,15 +4219,15 @@ function PA_Step3HubAnalysis () {
 										// Expression value of regulate features
 										let regulateFeatures = null;
 										let step = hubTable[rowIndex]['Step'];
-										if (step == "One_Step" || step == '1') {
+										if (step == "One Step" || step == '1') {
 											regulateFeatures = compRegulateFeatures[ID][1]
-										} else if (step == "Two_Steps" || step == '2') {
+										} else if (step == "Two Steps" || step == '2') {
 											regulateFeatures = compRegulateFeatures[ID][2]
 
-										} else if (step == "Three_Steps" || step == '3') {
+										} else if (step == "Three Steps" || step == '3') {
 											regulateFeatures = compRegulateFeatures[ID][3]
 
-										} else if (step == 'Four_Steps' || step == '4') {
+										} else if (step == 'Four Steps' || step == '4') {
 											regulateFeatures = compRegulateFeatures[ID][4]
 										}
 										for (key in distributionSummaries) {
@@ -4421,13 +4421,13 @@ function PA_Step3HubAnalysis () {
 										fields: ['Step'],
 										data: [
 											{
-												Step: 'One_Step'
+												Step: 'One Step'
 											}, {
-												Step: 'Two_Steps'
+												Step: 'Two Steps'
 											}, {
-												Step: 'Three_Steps'
+												Step: 'Three Steps'
 											}, {
-												Step: 'Four_Steps'
+												Step: 'Four Steps'
 											}, {
 												Step: 'All Steps'
 											}
