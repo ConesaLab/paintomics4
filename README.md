@@ -13,7 +13,7 @@ PaintOmics 4 official instance: [http://bioinfo.cipf.es/paintomics/](http://bioi
 
 Anyway, a short description of the application...
 
-**PaintOmics 4** is a web tool for the integrative visualization of multiple omic datasets onto KEGG pathways.
+**PaintOmics 4** is a web tool for the integrative visualization of multiple omic datasets onto KEGG Reactome and MapMan pathways.
 
 PaintOmics 4 consists of three simple steps:
 
