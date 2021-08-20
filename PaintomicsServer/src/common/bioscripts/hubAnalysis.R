@@ -59,7 +59,7 @@ SignificanceTestbyMetabolite<- function(UserDataset, UserDEfeatures, dir, iter, 
 
   fisher <- NULL
   for (i in 1 : nrow(PRETAB2_ALL)) {
-    fisher[i] <-  fisher.test(matrix(as.numeric(t(PRETAB2_ALL[i,3:6])),nrow = 2))$p.value
+    fisher[i] <-  fisher.test(matrix(as.numeric(t(PRETAB2_ALL[i,3:6])),nrow = 2), alternative = "greater")$p.value
   }
   PRETAB2_ALL$fisher <- fisher
   ###############################
