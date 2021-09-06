@@ -1,8 +1,44 @@
 #!/usr/bin/env Rscript
-options(scipen=200)
+library(purrr)
 
-SignificanceTestbyMetabolite<- function(UserDataset, UserDEfeatures, dir, iter, GeneCount, MetaCount, GeneCountSig, MetaCountSig){
-  
+args <- commandArgs(T)
+parseArgs <- function(x) strsplit(sub("^--", "", gsub("\"", "", x)), "=")
+argsDF <- as.data.frame(do.call("rbind", parseArgs(args)), stringsAsFactors=F)
+argsL <- as.list(as.character(argsDF$V2))
+names(argsL) <- argsDF$V1
+args <- as.data.frame(argsL, stringsAsFactors=F)
+
+kegg_interactions = read.csv(paste0(args$inputDir,"kegg_interaction.csv"), sep = ',')
+userDataset = as.character(as.vector(t(read.table(paste0(args$data_dir,"userDataset.csv"), sep = ','))))
+userDEfeatures = as.character(as.vector(t(read.table(paste0(args$data_dir,"userDEfeatures.csv"), sep = ','))))
+
+all_met_neigh <- list()
+for (i in 1: length(dir(args$inputDir))) {
+  if(grepl(".RData", dir(args$inputDir)[i], fixed=TRUE)){
+    load(paste0(args$inputDir,dir(args$inputDir)[i]))
+    theTablesFlat <- flatten(theTables)
+    all_met_neigh[[i]] <- theTablesFlat
+    names(all_met_neigh)[i] <- names(theTables)[1]
+    names(all_met_neigh[[i]]) <- paste(names(theTables)[1], 1:4, sep = "_")
+  }
+}
+
+PercDEinMetaboliteNeighbours <- function (neighbours, genes, DEG) {
+  # This function calculate the number of DEG among a given metabolite gene neighbours
+  if (class(neighbours) == "list") {neighbours = neighbours[[1]]}
+  measured_neighbours <- intersect(neighbours, genes)
+  DEneigbhours <- intersect(measured_neighbours, DEG) # neighbours that are DE
+  notDEneigbhours <- setdiff(measured_neighbours, DEneigbhours) # neighbours that are notDE
+  neigh <- length (neighbours)
+  measured_neigh <- length (measured_neighbours)
+  DEN <- length(DEneigbhours)
+  noDEN <- length(notDEneigbhours)
+  percDEN <- round(DEN/(noDEN+DEN),4)
+  result <- c(KEEG_neighbours = neigh, InDataset_neighbours = measured_neigh,
+              DEN = DEN, noDEN = noDEN, percDEN = percDEN)
+  result
+}
+prepare_KEGG <- function (kegg_interactions, features, significant_features) {
   ################################################
   # Step 1: Removing interactions with  Map
   #dim(kegg_interactions) # 122875 x 9
@@ -14,190 +50,109 @@ SignificanceTestbyMetabolite<- function(UserDataset, UserDEfeatures, dir, iter, 
   
   ################################################
   # Determining the number of differentially expressed metabolites 
-  prety1<-unique(keggNoMap[,c("entry_type_1","entry_name_1")])
-  prety2<-unique(keggNoMap[,c("entry_type_2","entry_name_2")])
-  colnames(prety1) =colnames(prety2) = c("type", "name")
-  types<-unique(rbind(prety1,prety2))
-  rownames(types)<-seq(1:nrow(types))
-  typesC<-types[types$type == "compound",]
-  typesG<-types[!(types$type == "compound"),]
+  prety1 <- unique(keggNoMap[,c("entry_type_1","entry_name_1")])
+  prety2 <- unique(keggNoMap[,c("entry_type_2","entry_name_2")])
+  colnames(prety1) = colnames(prety2) = c("type", "name")
+  types <- unique(rbind(prety1,prety2))
+  rownames(types) <- seq(1:nrow(types))
+  typesC <- types[types$type == "compound",]
+  typesG <- types[(types$type == "gene"),]
   
-  # Differential expressed metabolites
-  DEm<-UserDEfeatures[is.element(UserDEfeatures,typesC$name)] 
+  # Measured metabolites that are in KEGG
+  metabolites <- intersect(features,as.character(typesC$name))
   
-  # Differential expressed genes
-  DEg<-UserDEfeatures[is.element(UserDEfeatures,typesG$name)]
+  # Measured genes that are in KEGG
+  genes <- intersect(features ,as.character(typesG$name))
   
-  PRETAB2<-NULL
-  PRETAB_ALL2 <- NULL
+  # Differentially expressed metabolites that are in KEGG
+  DEM <- intersect(significant_features,typesC$name)
   
-  for (i in 1: length (DEm) ){
-    elcompound<-DEm[i]
-    load(paste(dir,"/",elcompound,".RData",sep=''))
-    pretab<-PRETAB<-NULL
-    for (ii in 1: length(theTables)){
-      elstep<-names(theTables[[ii]])
-      losnodos<-theTables[[ii]][[1]]
-      losDEs<-losnodos[is.element(losnodos,UserDEfeatures)]
-      preNODE<-losnodos[!(is.element(losnodos,UserDEfeatures))]
-      losNODE<-preNODE[is.element(preNODE,UserDataset)]
-      numblosDEs<-length(losDEs)
-      numblosNODE<-length(losNODE)
-      
-      prcnt<-round(numblosDEs/(numblosDEs+numblosNODE), digits = 3)
-      pretab<-cbind(elcompound,elstep,numblosDEs,numblosNODE,prcnt)
-      PRETAB<-rbind(PRETAB,pretab)
-    }
-    PRETAB2<-rbind(PRETAB2, PRETAB)
-  }
-  PRETAB2<-data.frame(PRETAB2)
+  # Differentially expressed genes that are in KEGG
+  DEG <- intersect(significant_features ,typesG$name)
   
-  ##################### Fisher's exact test ###########################
-  PRETAB2_ALL <- PRETAB2[,1:4]
-  PRETAB2_ALL$numblosDEsNF <- GeneCountSig + MetaCountSig - (as.numeric(as.character(PRETAB2_ALL$numblosDEs)))
-  PRETAB2_ALL$numblosNODENF <- GeneCount + MetaCount - (GeneCountSig + MetaCountSig) - (as.numeric(as.character(PRETAB2_ALL$numblosNODE)))
-
-  fisher <- NULL
-  for (i in 1 : nrow(PRETAB2_ALL)) {
-    fisher[i] <-  fisher.test(matrix(as.numeric(t(PRETAB2_ALL[i,3:6])),nrow = 2), alternative = "greater")$p.value
-  }
-  PRETAB2_ALL$fisher <- fisher
-  ###############################
-  
-  rownames(PRETAB2)<-seq(1:nrow(PRETAB2))
-  colnames(PRETAB2)<-c("Metabolite", "Step", "DE_neighbors", "not_DE_neighbors","Percentage")
-  PRETAB2$Percentage <- as.numeric(as.character(PRETAB2$Percentage))
-  # Remove all NAN in the data
-  #PRETAB2 <- na.omit(PRETAB2)
-  
-  
-  ################################################
-  # Randomization of label "Differentially expressed" in the same size and iterated 100X
-  
-  BIGtabresumiterations<-NULL
-  tabresumiterations<-NULL
-  for(i in 1: length(DEm)) {
-    elcompound<-DEm[i]
-    load(paste(dir,"/",elcompound,".RData",sep=''))
-    
-    tpretab<-tPRETAB<-tPRETAB2<-NULL
-    
-    for (ii in 1: length(theTables)){
-      elstep<-names(theTables[[ii]])
-      losnodos<-theTables[[ii]][[1]]
-      
-      for (r in 1: iter){
-        #print (paste("iter",r, sep =" ") )
-        SupposedUserDEfeatures<-sample(x = UserDataset,size = length(UserDEfeatures)-1)
-        SupposedUserDEfeatures<-c(elcompound,SupposedUserDEfeatures)
-        losDEs <- losnodos[is.element(losnodos,SupposedUserDEfeatures)]
-        preNODE <- losnodos[!(is.element(losnodos,SupposedUserDEfeatures))]
-        losNODE <- preNODE[is.element(preNODE,UserDataset)]
-        numblosDEs <- length(losDEs)
-        numblosNODE <- length(losNODE)
-        #prcnt <- formatC(numblosDEs/(numblosDEs+numblosNODE),  format = "e", digits = 2)
-        prcnt <- round(numblosDEs/(numblosDEs+numblosNODE), digits = 2)
-        tpretab <- cbind(elcompound,elstep,numblosDEs,numblosNODE,prcnt)
-        tPRETAB <- rbind(tPRETAB,tpretab)
-      }
-      tPRETAB2 <- tPRETAB
-      #tPRETAB2<-data.frame(tPRETAB2)
-      #rownames(tPRETAB2)<-seq(1:nrow(tPRETAB2))
-      #colnames(tPRETAB2)<-c("Metabolite", "Step", "DE_neighbors", "not_DE_neighbors","Percentage")
-    }
-    #print(tPRETAB2)
-    # For each step
-    for (lu in 1:length(unique(tPRETAB2[,2]))){
-      elstep<-as.character(unique(tPRETAB2[,2])[lu])
-      minitab<-tPRETAB2[tPRETAB2[,2] == elstep,]
-      vecDEneighbors<-as.vector(minitab[,3])
-      vecNOTDEneighbors<-as.vector(minitab[,4])
-      # value for mu in t-test
-      realDeNeighbors <- as.character(PRETAB2[PRETAB2$Metabolite %in% unique(tPRETAB2[,'elcompound']),]$DE_neighbors[lu])
-      
-      # avoid constant random select value
-      pval <- tryCatch(
-        {
-          pval <- t.test(x=as.numeric(as.character(vecDEneighbors)),mu=as.numeric(realDeNeighbors))$p.value
-          #pval <- formatC(pval, format = "e", digits = 2)
-        }, 
-        error = function(e) 
-        {
-          pval <- 1
-          return(pval)
-        }
-      )
-      met<-as.character(unique(minitab[,1]))
-      DEn<-round(mean(as.numeric(as.character(minitab[,3]))), digits = 2)
-      #DEn <- mean(as.numeric(as.character(minitab[,3])))
-      notDEn<-round(mean(as.numeric(as.character(minitab[,4]))), digits = 2)
-      #notDEn <- mean(as.numeric(as.character(minitab[,4])))
-      #prcnt<-formatC(DEn/(DEn+notDEn), format = "e", digits = 2)
-      prcnt <- round(DEn/(DEn+notDEn), digits = 2)
-      pretabresumiterations<-cbind(RMetabolite=elcompound,RStep=elstep,RDE_neighbors=DEn,Rnot_DE_neighbors=notDEn,RPercentage=prcnt,P_value=pval)
-      tabresumiterations<-rbind(tabresumiterations,pretabresumiterations)
-      colnames(tabresumiterations)<- colnames(pretabresumiterations)
-    }
-  }
-  tabresumiterations<-data.frame(tabresumiterations)
-  #p.adj<-formatC(p.adjust(as.numeric(as.character(tabresumiterations$P_value)), "BH"), format = "e", digits = 2)
-  
-  
-  # Adjust p-value based on each step
-  tabresumiterations$P_adjusted <- NaN
-  tabresumiterations$fisher <- fisher
-  
-  tabresumiterations$fisher_adjusted<-NaN
-  for (lu in 1:length(unique(tabresumiterations$RStep))) {
-    # Fisher
-    adjustValue_Fisher <- tabresumiterations$fisher[as.numeric(tabresumiterations$RStep) == lu]
-    p.adj_Fisher<- p.adjust(as.numeric(as.character(adjustValue_Fisher)), "BH")
-    tabresumiterations$fisher_adjusted[as.numeric(tabresumiterations$RStep) == lu] = p.adj_Fisher
-    
-    # normal 
-    adjustValue <- tabresumiterations$P_value[as.numeric(tabresumiterations$RStep) == lu]
-    p.adj<- p.adjust(as.numeric(as.character(adjustValue)), "BH")
-    tabresumiterations$P_adjusted[as.numeric(tabresumiterations$RStep) == lu] = p.adj
-  }
-  rownames(tabresumiterations)<-seq(1:nrow(tabresumiterations))
-  colnames(tabresumiterations)<-c("RMetabolite", "RStep", "RDE_neighbors", "Rnot_DE_neighbors","RPercentage", "P_value","P_adjusted", "Fisher", "Fisher_adjusted")
-  
-  FinalTable<- cbind (PRETAB2,tabresumiterations)
-  FinalTable<-FinalTable[,-c(6,7)]
-  return (FinalTable)
+  result <- list(metabolites = metabolites, 
+              genes = genes,
+              DEM = DEM,
+              DEG = DEG)
+  result
 }
 
-args <- commandArgs(T)
-parseArgs <- function(x) strsplit(sub("^--", "", gsub("\"", "", x)), "=")
-#args = parseArgs(args)
+mydata <- prepare_KEGG (kegg_interactions = kegg_interactions, features = userDataset,
+                        significant_features = userDEfeatures)
+DEm <- mydata$DEM
+myfunction <- function (x) {
+  as.data.frame(purrr::map(x, PercDEinMetaboliteNeighbours, 
+                           genes = mydata["genes"][[1]], DEG = mydata["DEG"][[1]])) }
+all.perc <- purrr::map(all_met_neigh, myfunction)
 
-argsDF <- as.data.frame(do.call("rbind", parseArgs(args)), stringsAsFactors=F)
-argsL <- as.list(as.character(argsDF$V2))
-names(argsL) <- argsDF$V1
-args <- as.data.frame(argsL, stringsAsFactors=F)
+extract.per <- function (x, step) {
+  value <- x[5,step]
+  value
+}
 
-kegg_interactions = read.csv(paste0(args$inputDir,"kegg_interaction.csv"), sep = ',')
-userDataset = read.table(paste0(args$data_dir,"userDataset.csv"), sep = ',')
-userDataset<- as.vector(t(userDataset))
-userDEfeatures = read.table(paste0(args$data_dir,"userDEfeatures.csv"), sep = ',')
-userDEfeatures <- as.vector(t(userDEfeatures))
+step1 <- purrr::map_dbl( all.perc, extract.per, step = 1)
+step2 <- purrr::map_dbl( all.perc, extract.per, step = 2)
+step3 <- purrr::map_dbl( all.perc, extract.per, step = 3)
+step4 <- purrr::map_dbl( all.perc, extract.per, step = 4)
 
-geneCount = as.numeric(args$geneCount)
-geneCountSig = as.numeric(args$geneCountSig)
+processData = function(stepNumber) {
+  stepNumber <- as.matrix(stepNumber)
+  stepNumber[is.na(stepNumber)[,1],] <- 0
+  stepNumber_DEm <-as.data.frame(stepNumber[rownames(stepNumber) %in% DEm,])
+  stepNumber_except_DEm <- as.data.frame(stepNumber[!rownames(stepNumber) %in% DEm,])
+  colnames(stepNumber_DEm) = colnames(stepNumber_except_DEm) = "Density"
+  stepNumber_DEm$name = rownames(stepNumber_DEm)
+  stepNumber_95 <- as.numeric(quantile(stepNumber_except_DEm$Density, .95))
+  return(list(stepNumber_except_DEm, stepNumber_DEm, stepNumber_95))
+}
+step1_result <- processData(step1)
+step1_except_DEm <-step1_result[[1]]
+step1_DEm <- step1_result[[2]]
+step1_95 <- step1_result[[3]]
+step1_DEm$Metabolite <- rownames(step1_DEm)
+step1_DEm$Step <- 1
+step1_DEm$Percentile <- step1_DEm$Density
+step1_DEm$Threshold <- step1_95
 
-metaCount = as.numeric(args$metaCount)
-metaCountSig = as.numeric(args$metaCountSig)
+step2_result <- processData(step2)
+step2_except_DEm <-step2_result[[1]]
+step2_DEm <- step2_result[[2]]
+step2_95 <- step2_result[[3]]
+step2_DEm$Metabolite <- rownames(step2_DEm)
+step2_DEm$Step <- 2
+step2_DEm$Percentile <- step2_DEm$Density
+step2_DEm$Threshold <- step2_95
 
-result <-SignificanceTestbyMetabolite(UserDataset = userDataset,
-                                      UserDEfeatures = userDEfeatures,
-                                      dir=args$inputDir,
-                                      GeneCount = geneCount,
-                                      MetaCount = metaCount,
-                                      MetaCountSig = metaCountSig,
-                                      GeneCountSig = geneCountSig,
-                                      iter=100)
+step3_result <- processData(step3)
+step3_except_DEm <-step3_result[[1]]
+step3_DEm <- step3_result[[2]]
+step3_95 <- step3_result[[3]]
+step3_DEm$Metabolite <- rownames(step3_DEm)
+step3_DEm$Step <- 3
+step3_DEm$Percentile <- step3_DEm$Density
+step3_DEm$Threshold <- step3_95
+
+step4_result <- processData(step4)
+step4_except_DEm <-step4_result[[1]]
+step4_DEm <- step4_result[[2]]
+step4_95 <- step4_result[[3]]
+step4_DEm$Metabolite <- rownames(step4_DEm)
+step4_DEm$Step <- 4
+step4_DEm$Percentile <- step4_DEm$Density
+step4_DEm$Threshold <- step4_95
+
+
+final_result <- rbind(step1_DEm, step2_DEm, step3_DEm, step4_DEm)
+final_result <- final_result[,3:6]
+
+#ggplot(step1_except_DEm, aes(x=Density)) + 
+#  geom_vline(aes(xintercept=step1_95),
+#             color="blue", linetype="dashed", size=1)+
+#  geom_density() + 
+#  geom_point(data = step1_DEm, aes(Density,2),
+#             position = position_jitter(width = 0, height= 1, seed = 2))+
+#  geom_text(data = step1_DEm, aes(Density, 2,label= name), position =position_jitter(width = 0, height= 1, seed = 2),vjust=-1, size=6)
+
 
 output_file <- paste0(args$data_dir, "/hub_result.csv")
-
-write.table(result, file=output_file, quote = FALSE, sep="\t", row.names = FALSE, col.names = FALSE)
-
+write.table(final_result, file=output_file, quote = FALSE, sep="\t", row.names = FALSE, col.names =FALSE)
