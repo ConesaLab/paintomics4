@@ -1243,16 +1243,14 @@ class PathwayAcquisitionJob(Job):
         userDEfeatures = []
         userDataset = []
 
-        geneCount = self.summary[4]['KEGG']['Gene expression']
-        metaCount = self.summary[4]['KEGG']['Metabolomics']
-        geneCountSig = self.summary[5]['KEGG']['Gene expression']
-        metaCountSig = self.summary[5]['KEGG']['Metabolomics']
-
-
         for i in self.inputGenesData:
-            if self.inputGenesData[i].omicsValues[0].relevant:
-                userDEfeatures.append(i)
-            userDataset.append(i)
+            for k in self.inputGenesData[i].omicsValues:
+                if k.omicName == 'Gene expression':
+                    if k.relevant or k.relevantAssociation:
+                        userDEfeatures.append( i )
+                    userDataset.append( i )
+
+
 
         for j in self.inputCompoundsData:
             if self.inputCompoundsData[j].omicsValues[0].relevant:
@@ -1272,11 +1270,7 @@ class PathwayAcquisitionJob(Job):
             [
                 ROOT_DIRECTORY + "common/bioscripts/hubAnalysis.R",
                 '--data_dir="' + self.outputDir + '"',
-                '--inputDir="' + KEGG_DATA_DIR + 'current/' + self.organism + '/hubData/' + '"',
-                '--metaCount="' + str( metaCount ) + '"',
-                '--geneCount="' + str(geneCount) + '"',
-                '--metaCountSig="' + str( metaCountSig ) + '"',
-                '--geneCountSig="' + str( geneCountSig ) + '"',
+                '--inputDir="' + KEGG_DATA_DIR + 'current/' + self.organism + '/hubData/' + '"'
             ], stderr=STDOUT
         )
 
