@@ -4108,10 +4108,13 @@ function PA_Step3HubAnalysis () {
 		for (keys in hubAnalysisResult) {
 			hubTable.push(
 				{
-					Metabolite: this.model.mappingComp[hubAnalysisResult[keys][0]],
-					ID: hubAnalysisResult[keys][0],
-					Step: hubAnalysisResult[keys][1],
-					Percentile: hubAnalysisResult[keys][2]
+					Metabolite: this.model.mappingComp[hubAnalysisResult[keys][1]],
+					ID: hubAnalysisResult[keys][1],
+					Step: hubAnalysisResult[keys][3],
+					Percentage: hubAnalysisResult[keys][0],
+					Percentile: hubAnalysisResult[keys][2],
+					DEN: hubAnalysisResult[keys][4],
+					noDEN:hubAnalysisResult[keys][5]
 				}
 			)
 		}
@@ -4133,7 +4136,7 @@ function PA_Step3HubAnalysis () {
 	this.initComponent = function () {
 		Ext.define('User', {
 			extend: 'Ext.data.Model',
-			fields: ['Metabolite', 'ID', 'Step', "Percentile"]
+			fields: ['Metabolite', 'ID', 'Step', 'Percentage', "Percentile", 'DEN', 'noDEN']
 		});
 
 		var userStore = Ext.create('Ext.data.Store', {
@@ -4277,7 +4280,7 @@ function PA_Step3HubAnalysis () {
 								xtype: 'customactioncolumn',
 								text: "Search",
 								menuDisabled: true,
-								width: 55,
+								width: 66,
 								items: [{
 									icon: "fas fa-search",
 									text: "",
@@ -4306,31 +4309,53 @@ function PA_Step3HubAnalysis () {
 							},
 							{
 								text: 'Metabolite',
-								flex: 20 / 100,
+								flex: 12 / 100,
 								sortable: true,
 								hideable: false,
 								dataIndex: 'Metabolite'
 							},
 							{
 								text: 'ID',
-								flex: 15 / 100,
+								flex: 8 / 100,
 								sortable: true,
 								hideable: false,
 								dataIndex: 'ID'
 							},
 							{
 								text: 'Step',
-								flex: 10 / 100,
+								flex: 6 / 100,
 								sortable: true,
 								hideable: false,
 								dataIndex: 'Step'
 							},
 							{
-								text: 'Percentile',
-								flex: 10/100,
+							    text: 'DE neighbors',
+								flex: 10 / 100,
 								sortable: true,
 								hideable: false,
-								dataIndex: 'Percentile'
+								dataIndex: 'DEN'
+							},
+							{
+								text: 'not DE neighbors',
+								flex: 12 / 100,
+								sortable: true,
+								hideable: false,
+								dataIndex: 'noDEN'
+							},
+							{
+								text: 'Percentage',
+								flex: 10 / 100,
+								sortable: true,
+								hideable: false,
+								dataIndex: 'Percentage'
+							},
+							{
+								text: 'Percentile',
+								flex: 10 / 100,
+								sortable: true,
+								hideable: false,
+								dataIndex: 'Percentile',
+								renderer: renderFunctionHub
 							}
 
 							/*
@@ -4923,6 +4948,28 @@ var renderFunctionLimit = function (value, metadata, record) {
 		return renderedValue;
 	};
 
+var renderFunctionHub= function (value, metadata, record) {
+		var myToolTipText = "<b style='display:block; width:200px'>" + "Metabolism" + "</b>";
+
+		metadata.style = "height: 33px; font-size:10px;"
+
+		//IF THERE IS NOT DATA FOR THIS PATHWAY, FOR THIS OMIC, PRINT A '-'
+		if (value === "-" || value == undefined || isNaN(value)) {
+			myToolTipText = myToolTipText + "<i>No data for this metabolite</i>";
+			metadata.tdAttr = 'data-qtip="' + myToolTipText + '"';
+			metadata.style += "background-color:#D4D4D4;";
+			return "-";
+		}
+
+		var renderedValue = parseFloat(value).toFixed(2);
+
+		if (value >= 0.90) {
+			var color = Math.round(225 * ( 1-value / 0.05));
+			metadata.style += "background-color:rgb(255, " + color + "," + color + ");";
+		}
+		
+		return renderedValue;
+	};
 
 
 let generateHeatmap = function (targetID, omicName, omicsValues, dataDistributionSummaries, visualOptions) {

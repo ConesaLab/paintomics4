@@ -83,6 +83,7 @@ DEm <- mydata$DEM
 myfunction <- function (x) {
   as.data.frame(purrr::map(x, PercDEinMetaboliteNeighbours, 
                            genes = mydata["genes"][[1]], DEG = mydata["DEG"][[1]])) }
+
 all.perc <- purrr::map(all_met_neigh, myfunction)
 
 extract.per <- function (x, step) {
@@ -101,49 +102,36 @@ processData = function(stepNumber) {
   stepNumber_DEm <-as.data.frame(stepNumber[rownames(stepNumber) %in% DEm,])
   stepNumber_except_DEm <- as.data.frame(stepNumber[!rownames(stepNumber) %in% DEm,])
   colnames(stepNumber_DEm) = colnames(stepNumber_except_DEm) = "Density"
-  stepNumber_DEm$name = rownames(stepNumber_DEm)
-  stepNumber_95 <- as.numeric(quantile(stepNumber_except_DEm$Density, .95))
-  return(list(stepNumber_except_DEm, stepNumber_DEm, stepNumber_95))
+  #Calculate percentile for each DEm
+  percentile <- as.vector(apply(stepNumber_DEm, 1,  function(x) ecdf(stepNumber_except_DEm$Density)(x)))
+  stepNumber_DEm$Name = rownames(stepNumber_DEm)
+  stepNumber_DEm$Percentile <- percentile
+  return(stepNumber_DEm)
 }
-step1_result <- processData(step1)
-step1_except_DEm <-step1_result[[1]]
-step1_DEm <- step1_result[[2]]
-step1_95 <- step1_result[[3]]
-step1_DEm$Metabolite <- rownames(step1_DEm)
+step1_DEm <- processData(step1)
 step1_DEm$Step <- 1
-step1_DEm$Percentile <- step1_DEm$Density
-step1_DEm$Threshold <- step1_95
 
-step2_result <- processData(step2)
-step2_except_DEm <-step2_result[[1]]
-step2_DEm <- step2_result[[2]]
-step2_95 <- step2_result[[3]]
-step2_DEm$Metabolite <- rownames(step2_DEm)
+step2_DEm <- processData(step2)
 step2_DEm$Step <- 2
-step2_DEm$Percentile <- step2_DEm$Density
-step2_DEm$Threshold <- step2_95
 
-step3_result <- processData(step3)
-step3_except_DEm <-step3_result[[1]]
-step3_DEm <- step3_result[[2]]
-step3_95 <- step3_result[[3]]
-step3_DEm$Metabolite <- rownames(step3_DEm)
+step3_DEm <- processData(step3)
 step3_DEm$Step <- 3
-step3_DEm$Percentile <- step3_DEm$Density
-step3_DEm$Threshold <- step3_95
 
-step4_result <- processData(step4)
-step4_except_DEm <-step4_result[[1]]
-step4_DEm <- step4_result[[2]]
-step4_95 <- step4_result[[3]]
-step4_DEm$Metabolite <- rownames(step4_DEm)
+step4_DEm <- processData(step4)
 step4_DEm$Step <- 4
-step4_DEm$Percentile <- step4_DEm$Density
-step4_DEm$Threshold <- step4_95
-
 
 final_result <- rbind(step1_DEm, step2_DEm, step3_DEm, step4_DEm)
-final_result <- final_result[,3:6]
+
+final_result$DEN <- NA
+final_result$noDEN <- NA
+#extract DE/noDE neighbors
+for (i in 1:nrow(final_result)){
+  neighbors <- as.data.frame(all.perc[final_result$Name[i]])[3:4,final_result$Step[i]]
+  DEN = neighbors[1]
+  noDEN = neighbors[2]
+  final_result$DEN[i] <- DEN
+  final_result$noDEN[i] <- noDEN
+}
 
 #ggplot(step1_except_DEm, aes(x=Density)) + 
 #  geom_vline(aes(xintercept=step1_95),
@@ -156,3 +144,6 @@ final_result <- final_result[,3:6]
 
 output_file <- paste0(args$data_dir, "/hub_result.csv")
 write.table(final_result, file=output_file, quote = FALSE, sep="\t", row.names = FALSE, col.names =FALSE)
+
+
+
