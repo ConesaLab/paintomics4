@@ -2994,9 +2994,12 @@ function PA_Step3PathwayDetailsView() {
 
 
 				for (var j in featureValues) {
+					if (typeof visualOptions != "undefined") {
+
 					if (visualOptions.colorScale) {
 						var colorGet = getColor(limits, featureValues[j], visualOptions.colorScale)
 
+					}
 					} else {
 						var colorGet = getColor(limits, featureValues[j], "bwr")
 					}
@@ -5007,8 +5010,12 @@ let generateHeatmap = function (targetID, omicName, omicsValues, dataDistributio
 
 
 		for (var j in featureValues) {
-			if (visualOptions.colorScale) {
-				var colorGet = getColor(limits, featureValues[j], visualOptions.colorScale)
+			if (typeof visualOptions != 'undefined') {
+
+				if (visualOptions.colorScale) {
+
+					var colorGet = getColor(limits, featureValues[j], visualOptions.colorScale)
+			}
 
 			} else {
 				var colorGet = getColor(limits, featureValues[j], "bwr")
