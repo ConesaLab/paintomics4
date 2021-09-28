@@ -5007,15 +5007,10 @@ let generateHeatmap = function (targetID, omicName, omicsValues, dataDistributio
 		}
 
 
-
-
 		for (var j in featureValues) {
-			if (typeof visualOptions != 'undefined') {
 
-				if (visualOptions.colorScale) {
-
-					var colorGet = getColor(limits, featureValues[j], visualOptions.colorScale)
-			}
+			if (visualOptions.colorScale) {
+				var colorGet = getColor(limits, featureValues[j], visualOptions.colorScale)
 
 			} else {
 				var colorGet = getColor(limits, featureValues[j], "bwr")
