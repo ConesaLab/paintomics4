@@ -1941,7 +1941,7 @@ function MiRNAOmicSubmittingPanel(nElem, options) {
 				{
 					xtype: "myFilesSelectorButton",
 					fieldLabel: "Associations file",
-					namePrefix: this.namePrefix + '__annotations',
+					namePrefix: this.namePrefix + '_annotations',
 					itemId: "mirnaTargetsFileSelector",
 					helpTip: "Upload the reference file that relates each feature (i.e. miRNA) with its potential targets. This information is usually extracted from popular databases such as miRbase for miRNAs. See above the accepted format for the file."
 				}, {
