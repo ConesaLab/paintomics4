@@ -5,7 +5,7 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="657be414-0410-416b-82a4-023b644455f2" name="Default Changelist" comment="">
-      <change beforePath="$PROJECT_DIR$/../PaintomicsClient/public_html/app/view/PathwayAcquisitionViews/PA_Step1Views.js" beforeDir="false" afterPath="$PROJECT_DIR$/../PaintomicsClient/public_html/app/view/PathwayAcquisitionViews/PA_Step1Views.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../PaintomicsClient/public_html/app/view/PathwayAcquisitionViews/PA_Step3Views.js" beforeDir="false" afterPath="$PROJECT_DIR$/../PaintomicsClient/public_html/app/view/PathwayAcquisitionViews/PA_Step3Views.js" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -471,6 +471,9 @@
       <workItem from="1633456443568" duration="641000" />
       <workItem from="1633963001691" duration="1053000" />
       <workItem from="1634028309939" duration="7859000" />
+      <workItem from="1634048198095" duration="17000" />
+      <workItem from="1634584896597" duration="509000" />
+      <workItem from="1634735327989" duration="2665000" />
     </task>
     <servers />
   </component>
@@ -702,12 +705,12 @@
         </line-breakpoint>
         <line-breakpoint enabled="true" type="javascript">
           <url>file://$PROJECT_DIR$/src/public_html/app/view/PathwayAcquisitionViews/PA_Step3Views.js</url>
-          <line>3519</line>
+          <line>3520</line>
           <option name="timeStamp" value="302" />
         </line-breakpoint>
         <line-breakpoint enabled="true" type="javascript">
           <url>file://$PROJECT_DIR$/../PaintomicsClient/public_html/app/view/PathwayAcquisitionViews/PA_Step3Views.js</url>
-          <line>3051</line>
+          <line>3052</line>
           <option name="timeStamp" value="324" />
         </line-breakpoint>
         <line-breakpoint enabled="true" type="javascript">
@@ -817,27 +820,27 @@
         </line-breakpoint>
         <line-breakpoint enabled="true" type="javascript">
           <url>file://$PROJECT_DIR$/../PaintomicsClient/public_html/app/view/PathwayAcquisitionViews/PA_Step3Views.js</url>
-          <line>4074</line>
+          <line>4075</line>
           <option name="timeStamp" value="490" />
         </line-breakpoint>
         <line-breakpoint enabled="true" type="javascript">
           <url>file://$PROJECT_DIR$/../PaintomicsClient/public_html/app/view/PathwayAcquisitionViews/PA_Step3Views.js</url>
-          <line>3763</line>
+          <line>3764</line>
           <option name="timeStamp" value="498" />
         </line-breakpoint>
         <line-breakpoint enabled="true" type="javascript">
           <url>file://$PROJECT_DIR$/../PaintomicsClient/public_html/app/view/PathwayAcquisitionViews/PA_Step3Views.js</url>
-          <line>3836</line>
+          <line>3837</line>
           <option name="timeStamp" value="499" />
         </line-breakpoint>
         <line-breakpoint enabled="true" type="javascript">
           <url>file://$PROJECT_DIR$/../PaintomicsClient/public_html/app/view/PathwayAcquisitionViews/PA_Step3Views.js</url>
-          <line>4890</line>
+          <line>4891</line>
           <option name="timeStamp" value="500" />
         </line-breakpoint>
         <line-breakpoint enabled="true" type="javascript">
           <url>file://$PROJECT_DIR$/../PaintomicsClient/public_html/app/view/PathwayAcquisitionViews/PA_Step3Views.js</url>
-          <line>4944</line>
+          <line>4945</line>
           <option name="timeStamp" value="501" />
         </line-breakpoint>
       </breakpoints>
@@ -855,7 +858,7 @@
     <SUITE FILE_PATH="coverage/paintomicsserver_py$launch_server.coverage" NAME="launch_server Coverage Results" MODIFIED="1616418573638" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/src" />
     <SUITE FILE_PATH="coverage/launch_server_py$launch_server.coverage" NAME="launch_server Coverage Results" MODIFIED="1623753690084" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/src" />
     <SUITE FILE_PATH="coverage/paintomicsserver_py$paintomicsserver.coverage" NAME="paintomicsserver Coverage Results" MODIFIED="1616383808184" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/src" />
-    <SUITE FILE_PATH="coverage/common_build_database_py$launch_server.coverage" NAME="launch_server Coverage Results" MODIFIED="1634046412574" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/src" />
+    <SUITE FILE_PATH="coverage/common_build_database_py$launch_server.coverage" NAME="launch_server Coverage Results" MODIFIED="1634735355388" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/src" />
     <SUITE FILE_PATH="coverage/PathwayAcquisitionServlet_py$launch_server.coverage" NAME="launch_server Coverage Results" MODIFIED="1622967783266" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/src" />
   </component>
 </project>
