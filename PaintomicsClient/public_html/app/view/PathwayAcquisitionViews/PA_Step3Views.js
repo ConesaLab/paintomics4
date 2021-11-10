@@ -3263,6 +3263,23 @@ function PA_Step3PathwayTableView() {
 			return(Array.from(allIdentifiers).join('|'));
 		};
 
+		let classificationDataReactome = this.getParent().getClassificationData("Reactome");
+		let reactomeClidren = {};
+		let classes = this.model.getClasses();
+
+		// ADD Reactome class enrichment part: PaintOmics 4
+		if (this.model.databases.includes("Reactome")) {
+				// creat a dictionary with class name as key and pathway name as children.
+				for (className in classificationDataReactome) {
+					for (classDetail in classificationDataReactome[className].children) {
+						if (typeof reactomeClidren[className] == "undefined") {
+							reactomeClidren[className] = [];
+						}
+ 						reactomeClidren[className] =  [...reactomeClidren[className], ...classificationDataReactome[className].children[classDetail].children];
+					}
+				}
+		}
+
 		for (var i in pathways) {
 			pathwayModel = pathways[i];
 
@@ -3313,6 +3330,38 @@ function PA_Step3PathwayTableView() {
 					pathwayData["adjustedCombinedSignificancePvalue" + m + k] = adjustedCombinedSignificanceValues[m][k];
 				}
 			}
+			// ADD Reactome class enrichment
+			if (this.model.databases.includes("Reactome")) {
+				let foundKey = false
+				for (className in reactomeClidren) {
+					foundKey = reactomeClidren[className].includes(pathwayData.pathwayID);
+					if (foundKey) {
+						break;
+					}
+				}
+				if (foundKey) {
+					for (reactomeClass in classes) {
+						if (classes[reactomeClass].ID.toLowerCase().replace(/\s/g,'_') == className) {
+							let significanceValuesCombine = classes[reactomeClass].combinedSignificancePvalues
+							for (let m in significanceValuesCombine) {
+								pathwayData["classSignificanePvalue" + m] = significanceValuesCombine[m];
+							}
+							break;
+						}else {
+							for (let m in combinedSignificanceValues) {
+								pathwayData["classSignificanePvalue" + m] = '';
+							}
+						}
+					}
+				} else {
+					for (let m in combinedSignificanceValues) {
+						pathwayData["classSignificanePvalue" + m] = '';
+					}
+				}
+			}
+
+
+
 			this.tableData.push(pathwayData);
 
 			significativePathways += (combinedSignificanceValues[defaultCombinedPvaluesMethod] <= 0.05) ? 1 : 0;
@@ -3413,7 +3462,7 @@ function PA_Step3PathwayTableView() {
 			title: {name: "title", defaultValue: ''},
 			matchedGenes: {name: "matchedGenes", defaultValue: '0'},
 			matchedCompounds: {name: "matchedCompounds", defaultValue: '0'},
-			// combinedSignificancePvalues: {name: "combinedSignificancePvalues", defaultValue: ''},
+			//combinedSignificancePvalue: {name: "combinedSignificancePvalue", defaultValue: ''},
 			mainCategory: {name: "mainCategory",defaultValue: ''},
 			secCategory: {name: "secCategory",defaultValue: ''},
 			visible: {name: "visible", defaultValue: true},
@@ -3471,6 +3520,7 @@ function PA_Step3PathwayTableView() {
 
 				// The adjusted combined values should have the same methods
 				adjustedPvalueMethods.forEach(function(fdr) {
+
 					rowModel['adjustedCombinedSignificancePvalue' + m + fdr] = {
 						name: 'adjustedCombinedSignificancePvalue' + m + fdr,
 						defaultValue: "-"
@@ -3485,6 +3535,24 @@ function PA_Step3PathwayTableView() {
 					});
 				});
 			});
+
+
+			combinedPvaluesMethods.forEach(function(m) {
+
+				rowModel['classSignificanePvalue' + m] = {
+					name: 'classSignificanePvalue' + m,
+					defaultValue: "-"
+				};
+
+				secondaryColumns.push({
+					text: 'Reactome Class</br>pValue</br>(' + m + ')', cls:"header-45deg",
+					dataIndex: 'classSignificanePvalue' + m,
+					sortable: true, filter: {type: 'numeric'}, align: "center",
+					minWidth: 100, flex:1, height:75, hidden: (m != defaultCombinedPvaluesMethod),
+					renderer: rendererMethod
+				});
+			});
+
 		}
 		//GROUP ALL COLUMNS INTO A NEW COLUMN 'Significance tests'
 		columns.push({text: 'Significance tests', columns: secondaryColumns});

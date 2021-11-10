@@ -394,6 +394,11 @@ def pathwayAcquisitionStep2_PART2(jobID, userID, selectedCompounds, clusterNumbe
         matchedPathwaysJSONList = []
         for matchedPathway in jobInstance.getMatchedPathways().values():
             matchedPathwaysJSONList.append(matchedPathway.toBSON())
+
+        matchedClassJSONList = []
+        for matchedclass in jobInstance.getMatchedClass().values():
+            matchedClassJSONList.append(matchedclass.toBSON())
+
         if selectedCompounds:
             RESPONSE.setContent({
                 "success": True,
@@ -401,6 +406,8 @@ def pathwayAcquisitionStep2_PART2(jobID, userID, selectedCompounds, clusterNumbe
                 "jobID":jobInstance.getJobID(),
                 "summary" : summary,
                 "pathwaysInfo" : matchedPathwaysJSONList,
+                # PaintOmics 4
+                "classInfo": matchedClassJSONList,
                 "geneBasedInputOmics":jobInstance.getGeneBasedInputOmics(),
                 "compoundBasedInputOmics": jobInstance.getCompoundBasedInputOmics(),
                 "databases": jobInstance.getDatabases(),
@@ -428,6 +435,8 @@ def pathwayAcquisitionStep2_PART2(jobID, userID, selectedCompounds, clusterNumbe
                 "jobID": jobInstance.getJobID(),
                 "summary": summary,
                 "pathwaysInfo": matchedPathwaysJSONList,
+                # PaintOmics 4
+                "classInfo": matchedClassJSONList,
                 "geneBasedInputOmics": jobInstance.getGeneBasedInputOmics(),
                 "compoundBasedInputOmics": jobInstance.getCompoundBasedInputOmics(),
                 "databases": jobInstance.getDatabases(),

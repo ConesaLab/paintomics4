@@ -312,6 +312,7 @@ function JobController() {
 						jobModel.setOrganism(response.organism);  //UPDATE ORGANISM
 						jobModel.setDatabases(response.databases); //UPDATE DATABASES
 						jobModel.setName(response.name);
+						jobModel.setClasses(response.classInfo)
 
 						jobModel.setCompoundBasedInputOmics(response.compoundBasedInputOmics);
 						jobModel.setGeneBasedInputOmics(response.geneBasedInputOmics);
@@ -355,6 +356,7 @@ function JobController() {
 						if (response.hubAnalysisResult) {
 							jobModel.setHubAnalysisResult(response.hubAnalysisResult)
 						}
+
 
 
 						//TODO: IF IS THE SECOND TIME THAT THE PREVIOUS STEP WAS EXECUTED AND NOTHING CHANGES, AVOID RESENDING?
@@ -465,8 +467,11 @@ function JobController() {
 						jobModel.setDatabases(response.databases);
 						jobModel.setTimestamp(response.timestamp);
 
+						jobModel.setClasses(response.classInfo);
+
 						var pathways = response.pathwaysInfo;
 						var pathway = null;
+
 						jobModel.setPathways([]);
 						for (var i in pathways) {
 							pathway = new Pathway(i);
@@ -726,6 +731,7 @@ function JobController() {
 						jobModel.setTimestamp(response.timestamp);
 						jobModel.setAllowSharing(response.allowSharing);
 						jobModel.setReadOnly(response.readOnly);
+						jobModel.setClasses(response.classInfo);
 
 						jobModel.setFoundCompounds([]);
 						var matchedMetabolites = response.matchedMetabolites;
@@ -757,6 +763,7 @@ function JobController() {
 						}
 
 						var pathways = response.pathwaysInfo;
+
 						var pathway = null;
 						jobModel.setPathways([]);
 						for (var i in pathways) {
@@ -809,6 +816,9 @@ function JobController() {
 						if (response.hubAnalysisResult) {
 							jobModel.setHubAnalysisResult(response.hubAnalysisResult)
 						}
+
+
+
 
 
 						me.cleanStoredApplicationData();
@@ -972,6 +982,7 @@ function JobController() {
 								
 								// Override the pathway info and update stored session data
 								var pathways = response.pathwaysInfo;
+
 								var pathway = null
 								jobModel.setClusterNumber(null);
 								jobModel.setPathways([]);

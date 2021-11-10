@@ -71,6 +71,9 @@ class PathwayAcquisitionJob(Job):
         self.globalExpressionData = None
         self.hubAnalysisResult = None
 
+        self.matchedClass = {}
+
+        #self.reactomeClass = defaultdict(set)
     # ******************************************************************************************************************
     # GETTERS AND SETTER
     # ******************************************************************************************************************
@@ -85,6 +88,19 @@ class PathwayAcquisitionJob(Job):
 
     def getTest(self):
         return self.test
+
+    #PaintOmics 4
+    def setMatchedClass(self, matchedClass):
+        self.matchedClass = matchedClass
+
+    def getMatchedClass(self):
+        return self.matchedClass
+
+    #def setReactomeClass(self, reactomeClass):
+    #    self.reactomeClass = reactomeClass
+
+    #def getReactomeClass(self):
+    #    return  self.reactomeClass
 
     def setMatchedPathways(self, matchedPathways):
         self.matchedPathways = matchedPathways
@@ -522,6 +538,25 @@ class PathwayAcquisitionJob(Job):
             organismGenes[pathway["source"]][pathwayID], organismCompounds[pathway["source"]][
                 pathwayID] = KeggInformationManager().getAllFeatureIDsByPathwayID(self.getOrganism(), pathwayID)
 
+        # Add new function to classify Reactome pathways based on category: PaintOmics 4
+        reactomeClass = defaultdict(set)
+
+        if 'Reactome' in self.databases:
+            reactomePathways = organismGenes['Reactome'].keys()
+            for pathwayID in reactomePathways:
+                className = KeggInformationManager().getPathwayClassificationByID(self.organism, pathwayID).split(';')[0]
+                reactomeClass[className].add(pathwayID)
+
+
+            classGene = defaultdict(set)
+            classComp = defaultdict(set)
+            for key,pathwaySetName in enumerate(reactomeClass):
+                classGene[pathwaySetName] = set()
+                classComp[pathwaySetName] = set()
+                for pathwayName in reactomeClass[pathwaySetName]:
+                    classGene[pathwaySetName].update(organismGenes['Reactome'][pathwayName])
+
+
         # Calculate the total number of genes and compounds per database
         totalGenes = {sourceDB: set(chain.from_iterable(pathways.values())) for sourceDB, pathways in
                       organismGenes.items()}
@@ -562,6 +597,10 @@ class PathwayAcquisitionJob(Job):
                 genesInPathway = genesInAllPathways.get(pathwayID)
                 compoundsInPathway = compoundsInAllPathways.get(pathwayID)
                 sourceDB = keggInformationManager.getPathwaySourceByID(jobInstance.getOrganism(), pathwayID)
+
+                # Add PaintOmics 4 sourceDB
+                if "Unknown Pathway" in sourceDB:
+                    sourceDB = 'Reactome'
 
                 # genesInPathway, compoundsInPathway = keggInformationManager.getAllFeatureIDsByPathwayID(jobInstance.getOrganism(), pathwayID)
                 isValidPathway, pathway = self.testPathwaySignificance(genesInPathway, compoundsInPathway, inputGenes,
@@ -608,6 +647,25 @@ class PathwayAcquisitionJob(Job):
             threadsList.append(thread)
             thread.start()
 
+        # Add class enrichment for PaintOmics 4
+        if 'Reactome' in self.databases:
+            matchedClass = manager.dict()  # WILL STORE THE OUTPUT FROM THE THREADS
+            nClassPerThread = int(
+                ceil(
+                    len( classGene.keys() ) / nThreads ) ) + 1  # GET THE NUMBER OF PATHWAYS TO BE PROCESSED PER THREAD
+            classListParts = chunks( list( classGene.keys() ), nClassPerThread )  # SPLIT THE ARRAY IN n PARTS
+            threadsList = []
+
+            for classNameList in classListParts:
+                thread = Process( target=matchPathways, args=(
+                    self, classNameList, classGene, classComp, inputGenes, inputCompounds,
+                    totalFeaturesByOmic, totalRelevantFeaturesByOmic, matchedClass, mappedRatiosByOmic,
+                    enrichmentByOmic) )
+                threadsList.append( thread )
+                thread.start()
+
+
+
         # WAIT UNTIL ALL THREADS FINISH
         for thread in threadsList:
             thread.join(MAX_WAIT_THREADS)
@@ -625,6 +683,11 @@ class PathwayAcquisitionJob(Job):
 
         self.setMatchedPathways(dict(matchedPathways))
         totalMatchedKeggPathways = len(self.getMatchedPathways())
+
+        #PaintOmics 4
+        if 'Reactome' in self.databases:
+            self.setMatchedClass(dict(matchedClass))
+            #self.setReactomeClass(reactomeClass)
 
         # Get the adjusted p-values (they need to be passed as a whole)
         pvalues_list = defaultdict(dict)

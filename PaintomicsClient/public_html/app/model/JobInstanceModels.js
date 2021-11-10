@@ -31,6 +31,8 @@ function JobInstance(jobID) {
 	this.organism = null;
 	this.name = null;
 
+
+
 	this.pathways = [];
 	this.databases = null;
 	this.clusters = null;
@@ -61,6 +63,9 @@ function JobInstance(jobID) {
 	this.compoundRegulateFeatures =null;
 	this.globalExpressionData = null;
 	this.hubAnalysisResult = null;
+
+	// PaintOmics 4
+	this.classes = [];
 
 
 	/*****************************
@@ -114,6 +119,30 @@ function JobInstance(jobID) {
 	this.getOrganism = function () {
 		return this.organism;
 	};
+
+	this.setClasses = function (classes) {
+		this.classes = classes;
+	}
+
+	this.getClasses = function () {
+		return this.classes;
+	}
+
+	//this.getClass = function (classID) {
+	//	for (var i in this.classes) {
+	//		if (classID == this.classes[i].getID()) {
+	//			return this.classes[i];
+	//		}
+	//	}
+	//	return null;
+	//};
+
+	//this.addClass = function (classID) {
+	//	this.classes.push(classID);
+	//};
+
+
+
 	this.setPathways = function (pathways) {
 		this.pathways = pathways;
 	};
@@ -156,7 +185,6 @@ function JobInstance(jobID) {
 		if (! this.databases || ! this.databases.length) {
 			// Check databases present in pathways
 			var pathways = this.getPathways();
-
 			// ES6/ES2015
 			this.databases = [...new Set(pathways.map(item => item.getSource()))];
 		}
