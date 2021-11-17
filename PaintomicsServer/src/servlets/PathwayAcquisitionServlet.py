@@ -552,19 +552,19 @@ def pathwayAcquisitionRecoverJob(request, response, QUEUE_INSTANCE):
         jobInstance = JobInformationManager().loadJobInstance(jobID)
         queueJob = QUEUE_INSTANCE.fetch_job(jobID)
 
-        if(queueJob is not None and not queueJob.is_finished()):
+        if queueJob is not None and not queueJob.is_finished():
             logging.info("RECOVER_JOB - JOB " + jobID + " HAS NOT FINISHED ")
             response.setContent({"success": False, "message": "Your job " + jobID + " is still running in the queue. Please, try again later to check if it has finished."})
             return response
 
-        if(jobInstance == None):
+        if jobInstance == None:
             #TODO DIAS BORRADO?
             logging.info("RECOVER_JOB - JOB " + jobID + " NOT FOUND AT DATABASE.")
             response.setContent({"success": False, "errorMessage": "Job " + jobID + " not found at database.<br>Please, note that jobs are automatically removed after 7 days for guests and 14 days for registered users."})
             return response
 
         # Allow "no user" jobs to be viewed by anyone, logged or not
-        if(str(jobInstance.getUserID()) != 'None' and jobInstance.getUserID() != userID and not jobInstance.getAllowSharing()):
+        if str( jobInstance.getUserID() ) != 'None' and jobInstance.getUserID() != userID and not jobInstance.getAllowSharing():
             logging.info("RECOVER_JOB - JOB " + jobID + " DOES NOT BELONG TO USER " + str(userID) + " JOB HAS USER " + str(jobInstance.getUserID()))
             response.setContent({"success": False, "errorMessage": "Invalid Job ID (" + jobID + ") for current user.<br>Please, check the Job ID and try again."})
             return response
@@ -573,15 +573,18 @@ def pathwayAcquisitionRecoverJob(request, response, QUEUE_INSTANCE):
 
         matchedCompoundsJSONList = list(map(lambda foundFeature: foundFeature.toBSON(), jobInstance.getFoundCompounds()))
 
+        logging.info("RECOVER_JOB - GENERATING PATHWAYS CLASS INFORMATION...DONE")
+
         matchedPathwaysJSONList = []
         for matchedPathway in jobInstance.getMatchedPathways().values():
             matchedPathwaysJSONList.append(matchedPathway.toBSON())
+        
         logging.info("RECOVER_JOB - GENERATING PATHWAYS INFORMATION...DONE")
 
-        if (len(matchedCompoundsJSONList) == 0 and jobInstance.getLastStep() == 2 and len(jobInstance.getCompoundBasedInputOmics()) > 0):
+        if len( matchedCompoundsJSONList ) == 0 and jobInstance.getLastStep() == 2 and len( jobInstance.getCompoundBasedInputOmics() ) > 0:
             logging.info("RECOVER_JOB - JOB " + jobID + " DOES NOT CONTAINS FOUND COMPOUNDS (STEP 2: OLD FORMAT?).")
             response.setContent({"success": False, "errorMessage": "Job " + jobID + " does not contains saved information about the found compounds, please run it again."})
-        elif(len(matchedPathwaysJSONList) == 0 and jobInstance.getLastStep() > 2):
+        elif len( matchedPathwaysJSONList ) == 0 and jobInstance.getLastStep() > 2:
             logging.info("RECOVER_JOB - JOB " + jobID + " DOES NOT CONTAINS PATHWAYS.")
             response.setContent( {"success": False, "errorMessage":"Job " + jobID + " does not contains information about pathways. Please, run it again."})
         else:

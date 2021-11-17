@@ -3339,6 +3339,7 @@ function PA_Step3PathwayTableView() {
 						break;
 					}
 				}
+
 				if (foundKey) {
 					for (reactomeClass in classes) {
 						if (classes[reactomeClass].ID.toLowerCase().replace(/\s/g,'_') == className) {
@@ -3347,7 +3348,7 @@ function PA_Step3PathwayTableView() {
 								pathwayData["classSignificanePvalue" + m] = significanceValuesCombine[m];
 							}
 							break;
-						}else {
+						} else {
 							for (let m in combinedSignificanceValues) {
 								pathwayData["classSignificanePvalue" + m] = '';
 							}
