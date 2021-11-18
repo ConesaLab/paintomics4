@@ -3537,8 +3537,8 @@ function PA_Step3PathwayTableView() {
 				});
 			});
 
-
-			combinedPvaluesMethods.forEach(function(m) {
+			if (this.model.databases.includes("Reactome")) {
+				combinedPvaluesMethods.forEach(function(m) {
 
 				rowModel['classSignificanePvalue' + m] = {
 					name: 'classSignificanePvalue' + m,
@@ -3553,6 +3553,8 @@ function PA_Step3PathwayTableView() {
 					renderer: rendererMethod
 				});
 			});
+
+			}
 
 		}
 		//GROUP ALL COLUMNS INTO A NEW COLUMN 'Significance tests'
