@@ -654,15 +654,13 @@ class PathwayAcquisitionJob(Job):
                 ceil(
                     len( classGene.keys() ) / nThreads ) ) + 1  # GET THE NUMBER OF PATHWAYS TO BE PROCESSED PER THREAD
             classListParts = chunks( list( classGene.keys() ), nClassPerThread )  # SPLIT THE ARRAY IN n PARTS
-            threadsList = []
-
             for classNameList in classListParts:
-                thread = Process( target=matchPathways, args=(
+                threadClass = Process( target=matchPathways, args=(
                     self, classNameList, classGene, classComp, inputGenes, inputCompounds,
                     totalFeaturesByOmic, totalRelevantFeaturesByOmic, matchedClass, mappedRatiosByOmic,
                     enrichmentByOmic) )
-                threadsList.append( thread )
-                thread.start()
+                threadsList.append( threadClass )
+                threadClass.start()
 
 
 
