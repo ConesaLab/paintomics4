@@ -581,6 +581,10 @@ def pathwayAcquisitionRecoverJob(request, response, QUEUE_INSTANCE):
         
         logging.info("RECOVER_JOB - GENERATING PATHWAYS INFORMATION...DONE")
 
+        matchedClassJSONList = []
+        for matchedclass in jobInstance.getMatchedClass().values():
+            matchedClassJSONList.append( matchedclass.toBSON() )
+
         if len( matchedCompoundsJSONList ) == 0 and jobInstance.getLastStep() == 2 and len( jobInstance.getCompoundBasedInputOmics() ) > 0:
             logging.info("RECOVER_JOB - JOB " + jobID + " DOES NOT CONTAINS FOUND COMPOUNDS (STEP 2: OLD FORMAT?).")
             response.setContent({"success": False, "errorMessage": "Job " + jobID + " does not contains saved information about the found compounds, please run it again."})
