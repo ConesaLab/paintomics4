@@ -122,4 +122,8 @@ class UserDAO(DAO):
     def getNextUserID(self):
         collection = self.dbManager.getCollection("counters")
         sequenceDocument = collection.find_and_modify(query={"_id": 'userID'}, update = {"$inc":{"sequence_value":1}}, new=True )
-        return int(sequenceDocument["sequence_value"])
+        # If there is nobody Sign in PaintOmics before
+        if sequenceDocument is None:
+            return 1
+        else:
+            return int(sequenceDocument["sequence_value"])
