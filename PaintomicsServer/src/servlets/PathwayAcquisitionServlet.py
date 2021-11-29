@@ -613,7 +613,6 @@ def pathwayAcquisitionRecoverJob(request, response, QUEUE_INSTANCE):
                     "omicsValuesID": jobInstance.getValueIdTable(),
                     #PaintOmics 4
                     "classInfo": matchedClassJSONList,
-
                     "mappingComp": jobInstance.mappingComp,
                     "classificationDict": jobInstance.classificationDict,
                     "pValueInDict": jobInstance.pValueInDict,

@@ -51,13 +51,13 @@ class UserDAO(DAO):
     def findByEmail(self, email, otherParams=None):
         queryParams={"email" : email}
 
-        if(otherParams != None and "password" in otherParams):
+        if otherParams is not None and "password" in otherParams:
             queryParams["password"] = otherParams["password"]
 
         collection = self.dbManager.getCollection(self.collectionName)
 
         match = collection.find_one(queryParams)
-        if(match != None):
+        if match is not None:
             match = self.adaptBSON(match)
             userInstance = User("")
             userInstance.parseBSON(match)

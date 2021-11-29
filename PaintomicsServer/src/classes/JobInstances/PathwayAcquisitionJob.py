@@ -19,6 +19,7 @@
 # **************************************************************
 
 import logging
+import math
 from os import path as os_path, system as os_system, makedirs as os_makedirs
 from csv import reader as csv_reader
 from zipfile import ZipFile as zipFile
@@ -1218,9 +1219,13 @@ class PathwayAcquisitionJob(Job):
         totalRelevantFeatures = sum(totalRelevantFeaturesInCategory.values())
 
         for key in classificationDict:
-            pValueInDict[key] = round(
-                calculateSignificance(self.test, totalFeatures, totalRelevantFeatures, totalFeaturesInCategory.get(key),
-                                      totalRelevantFeaturesInCategory.get(key)), 4)
+            import math, scipy
+            z_score: float = (totalRelevantFeaturesInCategory.get(key)/totalFeaturesInCategory.get(key)-0.5)/math.sqrt(0.25/totalFeaturesInCategory.get(key))
+            pValueInDict[key] = scipy.stats.norm.sf(z_score)
+                
+                #round(
+                #calculateSignificance(self.test, totalFeatures, totalRelevantFeatures, totalFeaturesInCategory.get(key),
+                #                      totalRelevantFeaturesInCategory.get(key)), 4)
 
         featureSummary = [totalFeatures, totalRelevantFeatures]
 
