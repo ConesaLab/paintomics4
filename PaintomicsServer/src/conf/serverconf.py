@@ -8,8 +8,8 @@ ADMIN_ACCOUNTS            = "admin"
 
 #FILES SETTINGS
 ROOT_DIRECTORY            = "" ##THE LOCATION FOR THE PAINTOMICS FILES, LEAVE BLANK TO AUTO DETECT
-CLIENT_TMP_DIR            = "/home/tian/Downloads/database/CLIENT_TMP/"
-KEGG_DATA_DIR             = "/home/tian/Downloads/database/KEGG_DATA/"
+CLIENT_TMP_DIR            = "/home/tian/database/CLIENT_TMP/"
+KEGG_DATA_DIR             = "/home/tian/database/KEGG_DATA/"
 MAX_CLIENT_SPACE          = 20 * pow(1024,2) #MAX_CLIENT_SPACE IN MB
 MAX_GUEST_DAYS            = 90
 MAX_JOB_DAYS              = 365
