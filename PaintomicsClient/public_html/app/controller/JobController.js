@@ -1234,7 +1234,7 @@ function JobController() {
 					sessionStorage.setItem(key, JSON.stringify(data, replacerFn));
 				}
 				catch (err) {
-					showErrorMessage("Too much data", "The data to put in local storage exceeded the browser quota. Please, try to reload the job and if this problem persists contact with us. Thank you.");
+					showInfoMessage("Too much data", {message:"</br>The data to put in local storage exceeded the browser quota.</br> If you want to change the job sharing option, it will work. If not, please, try to reload the job and if this problem persists contact us.</br>Thank you.</br>",showButton: true});
 				}
 			}
 		}
