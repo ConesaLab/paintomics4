@@ -6,9 +6,9 @@
   <component name="ChangeListManager">
     <list default="true" id="657be414-0410-416b-82a4-023b644455f2" name="Default Changelist" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/classes/JobInstances/PathwayAcquisitionJob.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/classes/JobInstances/PathwayAcquisitionJob.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/common/DAO/UserDAO.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/common/DAO/UserDAO.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/servlets/PathwayAcquisitionServlet.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/servlets/PathwayAcquisitionServlet.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/common/Util.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/common/Util.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/conf/serverconf.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/conf/serverconf.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/servlets/UserManagementServlet.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/servlets/UserManagementServlet.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -529,16 +529,6 @@
     <breakpoint-manager>
       <breakpoints>
         <line-breakpoint suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/src/AdminTools/scripts/common_build_database.py</url>
-          <line>1944</line>
-          <option name="timeStamp" value="18" />
-        </line-breakpoint>
-        <line-breakpoint suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/src/AdminTools/scripts/common_build_database.py</url>
-          <line>1994</line>
-          <option name="timeStamp" value="20" />
-        </line-breakpoint>
-        <line-breakpoint suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/src/AdminTools/scripts/hsa_resources/build_database.py</url>
           <line>52</line>
           <option name="timeStamp" value="21" />
@@ -554,49 +544,9 @@
           <option name="timeStamp" value="53" />
         </line-breakpoint>
         <line-breakpoint suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/src/AdminTools/scripts/common_build_database.py</url>
-          <line>1286</line>
-          <option name="timeStamp" value="67" />
-        </line-breakpoint>
-        <line-breakpoint suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/src/AdminTools/scripts/common_build_database.py</url>
-          <line>2349</line>
-          <option name="timeStamp" value="71" />
-        </line-breakpoint>
-        <line-breakpoint suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/src/AdminTools/scripts/common_build_database.py</url>
-          <line>2361</line>
-          <option name="timeStamp" value="72" />
-        </line-breakpoint>
-        <line-breakpoint suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/src/AdminTools/scripts/sot_resources/build_database.py</url>
           <line>53</line>
           <option name="timeStamp" value="80" />
-        </line-breakpoint>
-        <line-breakpoint suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/src/AdminTools/scripts/common_build_database.py</url>
-          <line>1857</line>
-          <option name="timeStamp" value="81" />
-        </line-breakpoint>
-        <line-breakpoint suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/src/AdminTools/scripts/common_build_database.py</url>
-          <line>1965</line>
-          <option name="timeStamp" value="82" />
-        </line-breakpoint>
-        <line-breakpoint suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/src/AdminTools/scripts/common_build_database.py</url>
-          <line>1302</line>
-          <option name="timeStamp" value="85" />
-        </line-breakpoint>
-        <line-breakpoint suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/src/AdminTools/scripts/common_build_database.py</url>
-          <line>1270</line>
-          <option name="timeStamp" value="87" />
-        </line-breakpoint>
-        <line-breakpoint suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/src/AdminTools/scripts/common_build_database.py</url>
-          <line>1746</line>
-          <option name="timeStamp" value="91" />
         </line-breakpoint>
         <line-breakpoint suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/src/common/DAO/PathwayAcquisitionJobDAO.py</url>
@@ -639,11 +589,6 @@
           <option name="timeStamp" value="286" />
         </line-breakpoint>
         <line-breakpoint suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/src/classes/JobInstances/PathwayAcquisitionJob.py</url>
-          <line>1312</line>
-          <option name="timeStamp" value="503" />
-        </line-breakpoint>
-        <line-breakpoint suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/src/src/classes/JobInstances/MiRNA2GeneJob.py</url>
           <line>231</line>
           <option name="timeStamp" value="504" />
@@ -652,11 +597,6 @@
           <url>file://$PROJECT_DIR$/src/src/classes/JobInstances/MiRNA2GeneJob.py</url>
           <line>233</line>
           <option name="timeStamp" value="505" />
-        </line-breakpoint>
-        <line-breakpoint suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/src/classes/JobInstances/PathwayAcquisitionJob.py</url>
-          <line>387</line>
-          <option name="timeStamp" value="508" />
         </line-breakpoint>
         <line-breakpoint suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/src/src/servlets/MiRNA2GenesServlet.py</url>
@@ -712,11 +652,6 @@
           <url>file://$PROJECT_DIR$/src/src/common/bioscripts/miRNA2Target.py</url>
           <line>108</line>
           <option name="timeStamp" value="520" />
-        </line-breakpoint>
-        <line-breakpoint suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/src/classes/JobInstances/PathwayAcquisitionJob.py</url>
-          <line>890</line>
-          <option name="timeStamp" value="530" />
         </line-breakpoint>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/src/src/servlets/PathwayAcquisitionServlet.py</url>
@@ -906,9 +841,10 @@
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/PathwayAcquisitionServlet_py$PathwayAcquisitionJob.coverage" NAME="PathwayAcquisitionJob Coverage Results" MODIFIED="1617156985027" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/src" />
     <SUITE FILE_PATH="coverage/paintomicsserver_py$launch_server.coverage" NAME="launch_server Coverage Results" MODIFIED="1616418573638" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/src" />
+    <SUITE FILE_PATH="coverage/common_build_database_py$build_database.coverage" NAME="launch_server Coverage Results" MODIFIED="1638732508704" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/src" />
     <SUITE FILE_PATH="coverage/launch_server_py$launch_server.coverage" NAME="launch_server Coverage Results" MODIFIED="1623753690084" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/src" />
     <SUITE FILE_PATH="coverage/paintomicsserver_py$paintomicsserver.coverage" NAME="paintomicsserver Coverage Results" MODIFIED="1616383808184" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/src" />
-    <SUITE FILE_PATH="coverage/common_build_database_py$launch_server.coverage" NAME="launch_server Coverage Results" MODIFIED="1638222168560" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/src" />
+    <SUITE FILE_PATH="coverage/common_build_database_py$launch_server.coverage" NAME="launch_server Coverage Results" MODIFIED="1639091241579" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/src" />
     <SUITE FILE_PATH="coverage/PathwayAcquisitionServlet_py$launch_server.coverage" NAME="launch_server Coverage Results" MODIFIED="1622967783266" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/src" />
   </component>
 </project>
