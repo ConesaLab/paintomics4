@@ -1,5 +1,5 @@
 site_name: Paintomics v3.0 Documentation
-nav:
+pages:
    - Home: 'index.md'
    - 'Getting started':
       - 'Step-by-step guide': '8_step_by_step.md'
