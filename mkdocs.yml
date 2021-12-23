@@ -12,7 +12,7 @@ pages:
    - FAQ:
       - 'Frequently asked questions': '9_faq.md'
    - 'Additional information':
-      - 'The KEGG Pathways database': '1_kegg.md'
+      - 'The KEGG Pathways database': '1_1_kegg.md'
    - Install:
       - 'Installing PaintOmics 3': '0_install.md'
    - About:

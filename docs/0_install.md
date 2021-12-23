@@ -1,15 +1,17 @@
+
+
 <div class="imageContainer" style="" >
     <img src="paintomics_150x690.png" title="Paintomics LOGO." style=" height: 70px !important; margin-bottom: 20px; ">
 </div>
 
-# Installing PaintOmics 3
+# Installing PaintOmics 4
 
-In addition to using the public PaintOmics 3 servers, you can install your own instance of PaintOmics 3.
-PaintOmics 3 is distributed under **GNU General Public License, Version 3**.
+In addition to using the public PaintOmics 4 servers, you can install your own instance of PaintOmics 4.
+PaintOmics 4 is distributed under **GNU General Public License, Version 3**.
 
 ## Requirements
 * UNIX/Linux
-* Python 2.7
+* Python 3.7
 * Git (optional - see below)
 * GNU Make, gcc to compile and install tool dependencies
 * MongoDB

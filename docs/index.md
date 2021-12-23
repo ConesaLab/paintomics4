@@ -4,11 +4,11 @@
 
 **Integrative visualization of multiple *omic* data**
 
-For any question on PaintOmics, users can send a mail to [paintomics@cipf.es](mailto:paintomics@cipf.es).
+For any question on PaintOmics, users can send a mail to paintomics4@outlook.com
 
-**Welcome to PaintOmics v3.0 documentation.**
+**Welcome to PaintOmics v4.0 documentation.**
 
-**PaintOmics** is a web tool for the integrative visualization of multiple omic datasets onto KEGG pathways. Currently Paintomics supports integrated visualization of multiple species of different biological kingdoms and offers user the possibility to request any other organism present in the KEGG database.
+**PaintOmics** is a web tool for the integrative visualization of multiple omic datasets onto KEGG, Reactome, and MapMan pathways. Currently Paintomics supports integrated visualization of multiple species of different biological kingdoms and offers user the possibility to request any other organism present in the KEGG database.
 
 PaintOmics  is easy to run because the application itself guides you through the three different steps that are detailed next:
 
