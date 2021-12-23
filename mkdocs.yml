@@ -14,7 +14,7 @@ pages:
       - 'Frequently asked questions': '9_faq.md'
    - 'Additional information':
       - 'The KEGG pathways database': '1_1_kegg.md'
-      - 'The Reactome pathways database': '1_1_reactome.md'
+      - 'The Reactome pathways database': '1_2_reactome.md'
    - Install:
       - 'Installing PaintOmics 4': '0_install.md'
    - About:
