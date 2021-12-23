@@ -9,12 +9,12 @@ nav:
      - 'Hierarchical classifications for pathways':'4_2_kegg_categories.md'
      - 'The pathways interaction network':'4_3_pathways_network.md'
      - 'Multi-omic pathway-based visualisation':'5_1_browsing_pathways.md'
-   - 'FAQ':
+   - FAQ:
      - 'Frequently asked questions': '9_faq.md'
    - 'Additional information':
      - 'The KEGG Pathways database':'1_kegg.md'
-   - 'Install':
+   - Install:
      - 'Installing PaintOmics 3':'0_install.md'
-   - 'About':
+   - About:
      - 'License':'7_license.md'
 theme: readthedocs
