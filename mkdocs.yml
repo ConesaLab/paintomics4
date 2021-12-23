@@ -1,20 +1,20 @@
 site_name: Paintomics v3.0 Documentation
 nav:
-   - Home:'index.md'
+   - Home: 'index.md'
    - 'Getting started':
-      - 'Step-by-step guide':'8_step_by_step.md'
-      - 'Accepted input data':'2_1_accepted_input.md'
-      - 'Cloud Drive':'2_2_cloud_drive.md'
-      - 'Pathway Enrichment Analysis (PEA)':'4_1_pathway_enrichment.md'
-      - 'Hierarchical classifications for pathways':'4_2_kegg_categories.md'
-      - 'The pathways interaction network':'4_3_pathways_network.md'
-      - 'Multi-omic pathway-based visualisation':'5_1_browsing_pathways.md'
+      - 'Step-by-step guide': '8_step_by_step.md'
+      - 'Accepted input data': '2_1_accepted_input.md'
+      - 'Cloud Drive': '2_2_cloud_drive.md'
+      - 'Pathway Enrichment Analysis (PEA)': '4_1_pathway_enrichment.md'
+      - 'Hierarchical classifications for pathways': '4_2_kegg_categories.md'
+      - 'The pathways interaction network': '4_3_pathways_network.md'
+      - 'Multi-omic pathway-based visualisation': '5_1_browsing_pathways.md'
    - FAQ:
       - 'Frequently asked questions': '9_faq.md'
    - 'Additional information':
-      - 'The KEGG Pathways database':'1_kegg.md'
+      - 'The KEGG Pathways database': '1_kegg.md'
    - Install:
-      - 'Installing PaintOmics 3':'0_install.md'
+      - 'Installing PaintOmics 3': '0_install.md'
    - About:
-      - 'License':'7_license.md'
+      - 'License': '7_license.md'
 theme: readthedocs
