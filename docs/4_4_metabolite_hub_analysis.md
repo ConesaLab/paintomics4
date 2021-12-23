@@ -14,7 +14,7 @@ Metabolite hub analysis finds differentially expressed metabolite (DEM) with a h
 In the database installation step, Paintomics 4 extracted the relationship between each metabolite and their neighbors across total pathways in the KEGG database for a given number of steps (typically 4) and generated a JSON file containing such information (Figure 1). 
 
 <div class="imageContainer" style="box-shadow: 0px 0px 20px #D0D0D0; text-align:center; font-size:10px; color:#898989" >
-    <img src="metabolite_hub_analysis_figure_2"/>
+    <img src="metabolite_hub_analysis_figure_2.png"/>
     <p class="imageLegend"><b>Figure 2:</b> the method reaveals metabolite hotspot that accumulate a high umber of significant genes in their neighboring metabolic network</p>
 </div>
 
