@@ -97,7 +97,7 @@ In the pathway enrichment table you can see every pathway that had at least one 
 
 The header of the table has some filtering options to quickly search through the table. Note that this "live search" is not permanent, will not be saved and will not affect the number of found & significant pathways, unlike filtering by category as explained in the classification panel section.
 
-The visible columns can be individually adjusted by hovering the column block (i.e. "Significance tests"), then clicking at the arrow that will appear on the right side. Depending on the job there can also be some additional selectboxes to change the method for adjusted p-values or the method for combined p-values; in the last case, selecting 'Stouffer' has method will enable the configure button allowing to use custom weights for the calculation.
+The visible columns can be individually adjusted by hovering the column block (i.e. "Significance tests"), then clicking at the arrow that will appear on the right side. Depending on the job there can also be some additional select boxes to change the method for adjusted p-values or the method for combined p-values; in the last case, selecting 'Stouffer' has method will enable the configure button allowing to use of custom weights for the calculation.
 
 Clicking on the paint column icon (<img src="paintpathways.png"  style="vertical-align: middle; height: 24px;margin: 0;"/>) will load the detailed pathway view.
 
@@ -111,9 +111,9 @@ Clicking on the paint column icon (<img src="paintpathways.png"  style="vertical
 
 The main component of the detailed pathway view is the KEGG diagram showing all the nodes and relationships between them.
 
-Matches are represented by boxes painted over those nodes, containing a heatmap with the record values. One box can have more than one gene or feature associated to it, symbolized by a plus icon. If at least one of these features is significant, a star symbol will also be visible.
+Matches are represented by boxes painted over those nodes, containing a heatmap with the record values. One box can have more than one gene or feature associated with it, symbolized by a plus icon. If at least one of these features is significant, a star symbol will also be visible.
 
-Placing the cursor over these boxes will open up a tooltip window expanding the info. If multiple features are associated to it, a "Prev/Next" links will appear in the lower part of that window allowing to iterate overt them.
+Placing the cursor over these boxes will open up a tooltip window expanding the info. If multiple features are associated with it, a "Prev/Next" link will appear in the lower part of that window allowing it to iterate over them.
 
 
 
@@ -124,4 +124,4 @@ Placing the cursor over these boxes will open up a tooltip window expanding the 
 
 
 <br/>
-For any question on Paintomics, users can send a mail to [paintomics@cipf.es](mailto:paintomics@cipf.es).
+For any question on PaintOmics, users can send a mail to [paintomics4@outlook.com](mailto:paintomics4@outlook.com).

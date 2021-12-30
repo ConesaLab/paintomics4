@@ -51,17 +51,17 @@ git clone https://github.com/fikipollo/paintomics3.git
 ls $PWD/paintomics3
 ```
 
-If you don't have Git (and thus can't run the git command), you can download PaintOmics 3 in an archive instead: [zipped](https://github.com/fikipollo/paintomics3/archive/master.zip) or [tar/gzipped](https://github.com/fikipollo/paintomics3/archive/master.tar.gz). However, this makes it more difficult to stay up to date in the future since there's no simple way to update your copy.
+If you don't have Git (and thus can't run the git command), you can download PaintOmics 4 in an archive instead: [zipped](https://github.com/fikipollo/paintomics3/archive/master.zip) or [tar/gzipped](https://github.com/fikipollo/paintomics3/archive/master.tar.gz). However, this makes it more difficult to stay up to date in the future since there's no simple way to update your copy.
 
 ## Configure the server
 Copy the example configuration file to a new *serverconf.py* file and adapt the values for the settings.
-If you are not sure about the values for an option, leave the default value or contact us for more info ([paintomics@cipf.es](mailto:paintomics@cipf.es).).
+If you are not sure about the values for an option, leave the default value or contact us for more info ([paintomics4@outlook.com](mailto:paintomics4@outlook.com).).
 
 ```bash
-cp $PWD/paintomics3/PaintomicsServer/src/conf/example_serverconf.py $PWD/paintomics3/PaintomicsServer/src/conf/serverconf.py
-vi $PWD/paintomics3/PaintomicsServer/src/conf/serverconf.py
+cp $PWD/paintomics4/PaintomicsServer/src/conf/example_serverconf.py $PWD/paintomics4/PaintomicsServer/src/conf/serverconf.py
+vi $PWD/paintomics4/PaintomicsServer/src/conf/serverconf.py
 ```
-Following are the options that should be changed when setting up a new PaintOmics 3 instance.
+Following are the options that should be changed when setting up a new PaintOmics 4 instance.
 
 * **SERVER SETTINGS**
   * **SERVER_HOST_NAME**: the IP address where PaintOmics will run, default "0.0.0.0" to access over the network
@@ -99,4 +99,4 @@ Following are the options that should be changed when setting up a new PaintOmic
   * **smpt_username** : The sender email, depends on the SMTP settings
   * **smpt_pass** : the sender pass in MD5 codification, depends on the SMTP settings. There are plenty of tools to do that, a random example would be [this]{http://www.md5hashgenerator.com/}
   * **smpt_sender** : the sender email
-  * **smpt_sender_name** : the sender name, e.g. "Paintomics 3"
+  * **smpt_sender_name** : the sender name, e.g. "Paintomics 4"

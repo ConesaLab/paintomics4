@@ -16,13 +16,14 @@ This program is distributed in the hope that it will be useful, but **WITHOUT AN
 
 You should have received a copy of the GNU General Public License along with this program. If not, see [http://www.gnu.org/licenses](http://www.gnu.org/licenses).
 
-
-**Paintomics** v3.0 is part of the [STATegra Project](http://stategra.eu) and was developed by the [Genomics of Gene Expression Lab](http://bioinfo.cipf.es/aconesawp/) at [Príncipe Felipe Research Centre](http://www.cipf.es/).
+**Paintomics** v4.0 is part of the [STATegra Project](http://stategra.eu) and was developed by the [Genomics of Gene Expression Lab](http://bioinfo.cipf.es/aconesawp/) at [Príncipe Felipe Research Centre](http://www.cipf.es/).
 
 ## Contact
+
+** Tianyuan Liu **, Main Developer.
 
 ** Rafael Hernández de Diego **, Main Developer.
 
 ** Ana Conesa, PhD. **, Head Genomics of Gene Expression Lab.
 
-For any question on Paintomics, users can send a mail to [paintomics@cipf.es](mailto:paintomics@cipf.es).
+For any question on Paintomics, users can send a mail to [paintomics4@outlook.com](mailto:paintomics4@outlook.com).

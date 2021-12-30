@@ -4,4 +4,4 @@
 
 
 # Paintomics, integrative visualization of multiple *omic* data
-For any question on Paintomics, users can send a mail to [paintomics@cipf.es](mailto:paintomics@cipf.es).
+For any question on Paintomics, users can send a mail to [paintomics4@outlook.com](mailto:paintomics4@outlook.com).

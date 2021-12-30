@@ -8,13 +8,15 @@ pages:
       - 'Pathway Enrichment Analysis (PEA)': '4_1_pathway_enrichment.md'
       - 'Hierarchical classifications for pathways': '4_2_kegg_categories.md'
       - 'The pathways interaction network': '4_3_pathways_network.md'
-      - 'Metablite hub analysis': '4_4_metabolite_hub_analysis.md'
+      - 'Metabolite hub analysis': '4_4_metabolite_hub_analysis.md'
+      - 'Metabolite class activity analysis': '4_5_metabolite_class_activity_analysis.md'
       - 'Multi-omic pathway-based visualisation': '5_1_browsing_pathways.md'
    - FAQ:
       - 'Frequently asked questions': '9_faq.md'
    - 'Additional information':
       - 'The KEGG pathways database': '1_1_kegg.md'
       - 'The Reactome pathways database': '1_2_reactome.md'
+      - 'The MapMan pathways database': '1_3_mapman.md'
    - Install:
       - 'Installing PaintOmics 4': '0_install.md'
    - About:

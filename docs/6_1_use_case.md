@@ -4,14 +4,15 @@
 
 
 ## Starting with PaintOmics
-**Paintomics** is a web tool for the integrative visualization of multiple omic datasets onto KEGG pathways.To start working with PaintOmics, open your browser (Google Chrome or Firefox preferably) and access to the following URL: [**http://bioinfo.cipf.es/paintomics/**](http://bioinfo.cipf.es/paintomics/) First you need to create a new account, choose the option **"Sign up now"** and fill the form with your data; or choose **"Start Guest Session",** to start a new guest session (please note that all data submitted by Guest users will keep on the system a maximum of 7 days). **Do not forget your password!!**  Explore the different options at main menu (left side of the window).
+**Paintomics** is a web tool for the integrative visualization of multiple omic datasets onto KEGG pathways. To start working with PaintOmics, open your browser (Google Chrome or Firefox preferably) and access the following URL: [**https://paintomics.top**](https://paintomics.top) First you need to create a new account, choose the option **"Sign up now"** and fill the form with your data; or choose **"Start Guest Session",** to start a new guest session (please note that all data submitted by Guest users will keep on the system a maximum of 7 days). **Do not forget your password!!**  Explore the different options at main menu (left side of the window).
+
 ## Preparing the data for PaintOmics
 Paintomics supports lot of different omic data types, however there are few considerations before start working:
 - -- **Files must contain** [**tab-separated values**](https://en.wikipedia.org/wiki/Tab-separated_values).
-- -- **Values must indicate differential changes between conditions** , e.g. differential expression or any method that you prefer for your omics data, but always:
-  - ooPositive values indicate enrichment (e.g. overexpression in transcriptomics)
-  - ooNegative values indicate reduction  (e.g. underexpression in transcriptomics
- As an illustrative example let's adapt the following files which contain RNA-seq data and DNase-seq.
+- -- **Values must indicate differential changes between conditions**, e.g. differential expression or any method that you prefer for your omics data, but always:
+  - positive values indicate enrichment (e.g. overexpression in transcriptomics)
+  - negative values indicate reduction  (e.g. underexpression in transcriptomics
+   As an illustrative example let's adopt the following files which contain RNA-seq data and DNase-seq.
 ### Preparing RNA-SEQ Data
 Download the **Gene expression file (RNAseq\_CQN.txt).**This file contains gene expression quantification values for a subset of mouse genes, conveniently normalized in logarithmic scale.The file has 37 columns, separated by spaces, where:
 - --First column indicates the gene name (ENSEMBL gene ID)
@@ -56,7 +57,7 @@ Download the **DNAse-seq file (DNaseSeq.txt).**This file contains quantification
   - oo **Chromosome** indicates the Chromosome number
   - oo **Start** indicates the position of the first bp of the region in the genome
   - oo **End** indicates the position of the last bp of the region in the genome
-e.g_. 1\_172490322\_172490824_
+  e.g_. 1\_172490322\_172490824_
 - --One column for each combination **"Condition", "Time-point"** and **"Number of replicate"**
 i.e. 2 Conditions (Control, Ikaros) \* 6 time-points (0h, 2h, 6h, 12h, 18h , 24h) \* 3 replicates per time-point = **36 columns.**
 
@@ -97,7 +98,7 @@ For a real experiment, it would be necessary to prepare the files for the remain
 ## Feature ID/Name conversion
 A typical problem when working in bioinformatics is the conversion between different domains of names or ids of genomic features (genes, proteins, etc.).In order to minimize the efforts when adapting the input for Paintomics, version 3.0 includes a powerful Name/ID converter that translates automatically, when possible, our data into the appropriate name domain, i.e. the accepted set of feature ids for the current organism in KEGG.
 ### Mapping Regions to Genes
-As the example files include some DNAse-seq regions, the first step in the process includes matching the genomic regions to the corresponding genes (closest gene) by using the tool _RGMatch_, included into Paintomics 3.0.By default, _RGMatch_ will report any region that overlaps to any gene area (Upstream, Promoter, TSS, etc.), however, Paintomics 3.0 extends this idea so we can easily discriminate those regions that overlap areas of interest of the gene._E.g. Given the following DNAse-seq regions that overlap different areas of a gene, if we are interested only in those regions that match at the Promoter and TSS areas of the gene, Paintomics will calculate a value of quantification for that gene as the mean of the quantification of all regions that overlap the desired areas, i.e. the mean of the quantification for Region 1, Region 2 and Region 3_. Feature Name/Ids translationAfter regions translation, PaintOmics will start with ID conversion.For the example files, we are working with Ensembl gene IDs for Mus Musculus (Gene Expression, DNase-seq and miRNA-seq), Gene Symbols (Proteomics) and default metabolite names (Metabolomics), while, by default, KEGG information for Mouse uses Entrez Gene ID, therefore, it's necessary a translation.
+As the example files include some DNAse-seq regions, the first step in the process includes matching the genomic regions to the corresponding genes (closest gene) by using the tool _RGMatch_, included in Paintomics 4.0. By default, _RGMatch_ will report any region that overlaps to any gene area (Upstream, Promoter, TSS, etc.), however, Paintomics 4.0 extends this idea so we can easily discriminate those regions that overlap areas of interest of the gene._E.g. Given the following DNAse-seq regions that overlap different areas of a gene, if we are interested only in those regions that match at the Promoter and TSS areas of the gene, Paintomics will calculate a value of quantification for that gene as the mean of the quantification of all regions that overlap the desired areas, i.e. the mean of the quantification for Region 1, Region 2 and Region 3_. Feature Name/Ids translationAfter regions translation, PaintOmics will start with ID conversion.For the example files, we are working with Ensembl gene IDs for Mus Musculus (Gene Expression, DNase-seq and miRNA-seq), Gene Symbols (Proteomics) and default metabolite names (Metabolomics), while, by default, KEGG information for Mouse uses Entrez Gene ID, therefore, it's necessary a translation.
 
 | Input name/id | Translated id |
 | --- | --- |
