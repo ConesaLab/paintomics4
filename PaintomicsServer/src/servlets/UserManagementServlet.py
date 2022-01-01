@@ -15,7 +15,7 @@
 #  along with Paintomics.  If not, see <http://www.gnu.org/licenses/>.
 #
 #  More info http://bioinfo.cipf.es/paintomics
-#  Technical contact paintomics@cipf.es
+#  Technical contact paintomics4@outlook.com
 #**************************************************************
 import logging
 import logging.config
@@ -166,13 +166,13 @@ def userManagementSignUp(request, response, ROOT_DIRECTORY):
             message += "  <img src='" + "http://www.paintomics.org/" + "resources/images/paintomics_white_300x66' border='0' width='150' height='33' alt='Paintomics 4 logo'>"
             message += "</a>"
             message += "<div style='width:100%; height:10px; border-top: 1px dotted #333; margin-top:20px; margin-bottom:30px;'></div>"
-            message += "<h1>Welcome to Paintomics 3!</h1>"
+            message += "<h1>Welcome to Paintomics 4!</h1>"
             message += "<p>Thanks for joining, " + userInstance.getUserName() + "! You're already able to work with Paintomics.</p>"
             message += "<p>Your user name is as follows:</p>"
             message += "<p><b>Username:</b> " + userInstance.getEmail() + "</p></br>"
-            message += "<p>Login in to Paintomics 3 at </p><a href='" + "http://www.paintomics.org/" + "'>" + "http://www.paintomics.org/" + "</a>"
+            message += "<p>Login in to Paintomics 4 at </p><a href='" + "http://www.paintomics.org/" + "'>" + "http://www.paintomics.org/" + "</a>"
             message += "<div style='width:100%; height:10px; border-top: 1px dotted #333; margin-top:20px; margin-bottom:30px;'></div>"
-            message += "<p>Problems? E-mail <a href='mailto:" + "paintomics@cipf.es" + "'>" + "paintomics@cipf.es" + "</a></p>"
+            message += "<p>Problems? E-mail <a href='mailto:" + "paintomics4@outlook.com" + "'>" + "paintomics4@outlook.com" + "</a></p>"
             message += '</body></html>'
 
             sendEmail(ROOT_DIRECTORY, userInstance.getEmail(), userInstance.getUserName(), "Welcome to Paintomics 3", message, isHTML=True)
@@ -367,7 +367,7 @@ def userManagementResetPassword(request, response, ROOT_DIRECTORY):
                 message += "<p>After restore your account, please use follow password to login.</p>"
                 message += "<h4>PASSWORD: " + randomPassword + "</h4>"
                 message += "<div style='width:100%; height:10px; border-top: 1px dotted #333; margin-top:20px; margin-bottom:30px;'></div>"
-                message += "<p>Problems? E-mail <a href='mailto:" + "paintomics@cipf.es" + "'>" + "paintomics4@outlook.com" + "</a></p>"
+                message += "<p>Problems? E-mail <a href='mailto:" + "paintomics4@outlook.com" + "'>" + "paintomics4@outlook.com" + "</a></p>"
                 message += '</body></html>'
 
                 sendEmail(ROOT_DIRECTORY, userEmail, userInstance.getUserName(), "Reset password for Paintomics 4 account", message, isHTML=True)

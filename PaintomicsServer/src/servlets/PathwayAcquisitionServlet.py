@@ -59,8 +59,8 @@ def pathwayAcquisitionStep1_PART1(REQUEST, RESPONSE, QUEUE_INSTANCE, JOB_ID, EXA
     @param {Boolean} exampleMode
     @returns Response
     """
-    #TODO:ALLOWED_EXTENSIONS http://flask.pocoo.org/docs/0.10/patterns/fileuploads/
-    #TODO: secure_filename
+    # TODO: ALLOWED_EXTENSIONS http://flask.pocoo.org/docs/0.10/patterns/fileuploads/
+    # TODO: secure_filename
     #****************************************************************
     #Step 0. VARIABLE DECLARATION
     #The following variables are defined:

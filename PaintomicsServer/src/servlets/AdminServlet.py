@@ -15,7 +15,7 @@
 #  along with Paintomics.  If not, see <http://www.gnu.org/licenses/>.
 #
 #  More info http://bioinfo.cipf.es/paintomics
-#  Technical contact paintomics@cipf.es
+#  Technical contact paintomics4@outlook.com
 #**************************************************************
 import logging
 import logging.config
@@ -644,7 +644,7 @@ def adminServletSendReport(request, response, ROOT_DIRECTORY):
         message += "<p>Best regards,</p>"
         message += "<p>The Paintomics developers team.</p>"
         message += "<div style='width:100%; height:10px; border-top: 1px dotted #333; margin-top:20px; margin-bottom:30px;'></div>"
-        message += "<p>Problems? E-mail <a href='mailto:" + "paintomics@cipf.es" + "'>" + "paintomics@cipf.es" + "</a></p>"
+        message += "<p>Problems? E-mail <a href='mailto:" + "paintomics4@outlook.com" + "'>" + "paintomics4@outlook.com" + "</a></p>"
         message += '</body></html>'
 
         sendEmail(ROOT_DIRECTORY, smpt_sender, smpt_sender_name, type, message, fromEmail=userEmail, fromName=userName, isHTML=True)

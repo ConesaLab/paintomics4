@@ -5,7 +5,12 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="657be414-0410-416b-82a4-023b644455f2" name="Default Changelist" comment="">
-      <change beforePath="$PROJECT_DIR$/../PaintomicsClient/public_html/app/view/PathwayAcquisitionViews/PA_Step1Views.js" beforeDir="false" afterPath="$PROJECT_DIR$/../PaintomicsClient/public_html/app/view/PathwayAcquisitionViews/PA_Step1Views.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../PaintomicsClient/public_html/app/controller/JobController.js" beforeDir="false" afterPath="$PROJECT_DIR$/../PaintomicsClient/public_html/app/controller/JobController.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/servlets/AdminServlet.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/servlets/AdminServlet.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/servlets/PathwayAcquisitionServlet.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/servlets/PathwayAcquisitionServlet.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/servlets/UserManagementServlet.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/servlets/UserManagementServlet.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/test.py" beforeDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -501,6 +506,7 @@
       <workItem from="1637251301967" duration="1558000" />
       <workItem from="1637770804080" duration="3815000" />
       <workItem from="1637938654946" duration="4075000" />
+      <workItem from="1641080025918" duration="304000" />
     </task>
     <servers />
   </component>
@@ -551,11 +557,6 @@
           <option name="timeStamp" value="98" />
         </line-breakpoint>
         <line-breakpoint suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/test.py</url>
-          <line>62</line>
-          <option name="timeStamp" value="106" />
-        </line-breakpoint>
-        <line-breakpoint suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/src/common/bioscripts/miRNA2Target.py</url>
           <line>165</line>
           <option name="timeStamp" value="152" />
@@ -599,16 +600,6 @@
           <url>file://$PROJECT_DIR$/src/src/servlets/MiRNA2GenesServlet.py</url>
           <line>185</line>
           <option name="timeStamp" value="509" />
-        </line-breakpoint>
-        <line-breakpoint suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/src/servlets/MiRNA2GenesServlet.py</url>
-          <line>78</line>
-          <option name="timeStamp" value="510" />
-        </line-breakpoint>
-        <line-breakpoint suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/src/servlets/MiRNA2GenesServlet.py</url>
-          <line>79</line>
-          <option name="timeStamp" value="511" />
         </line-breakpoint>
         <line-breakpoint suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/src/src/servlets/MiRNA2GenesServlet.py</url>
@@ -796,7 +787,7 @@
     <SUITE FILE_PATH="coverage/common_build_database_py$build_database.coverage" NAME="launch_server Coverage Results" MODIFIED="1638732508704" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/src" />
     <SUITE FILE_PATH="coverage/launch_server_py$launch_server.coverage" NAME="launch_server Coverage Results" MODIFIED="1623753690084" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/src" />
     <SUITE FILE_PATH="coverage/paintomicsserver_py$paintomicsserver.coverage" NAME="paintomicsserver Coverage Results" MODIFIED="1616383808184" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/src" />
-    <SUITE FILE_PATH="coverage/common_build_database_py$launch_server.coverage" NAME="launch_server Coverage Results" MODIFIED="1640991784431" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/src" />
+    <SUITE FILE_PATH="coverage/common_build_database_py$launch_server.coverage" NAME="launch_server Coverage Results" MODIFIED="1641080320148" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/src" />
     <SUITE FILE_PATH="coverage/PathwayAcquisitionServlet_py$launch_server.coverage" NAME="launch_server Coverage Results" MODIFIED="1622967783266" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/src" />
   </component>
 </project>

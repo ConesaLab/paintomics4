@@ -64,8 +64,8 @@ function JobController() {
 						var message = "Running job " + jobID;
 						
 						if (showURL) {
-							var jobURL = 'http://' + window.location.host + window.location.pathname + "?jobID=" + jobID;
-							message += ".<br/> You will we able to access it from the URL: <br/><br /><a href=\"" + jobURL  + "\" target=\"_blank\">" + jobURL + "</a>";
+							var jobURL = 'https://' + window.location.host + window.location.pathname + "?jobID=" + jobID;
+							message += ".<br/> You will be able to access it from the URL: <br/><br/><a href=\"" + jobURL  + "\" target=\"_blank\">" + jobURL + "</a>";
 						}
 
 						showInfoMessage(message, {logMessage: "Job " + jobID + " still running.", showSpin: true, append: other.multipleJobs, itemId: jobID, icon: "play"});
