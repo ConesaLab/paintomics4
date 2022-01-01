@@ -163,7 +163,7 @@ def userManagementSignUp(request, response, ROOT_DIRECTORY):
             #TODO: SERVER ADDRESS AND ADMIN EMAIL
             message = '<html><body>'
             message +=  "<a href='" + "http://www.paintomics.org/" + "' target='_blank'>"
-            message += "  <img src='" + "http://www.paintomics.org/" + "resources/images/paintomics_white_300x66' border='0' width='150' height='33' alt='Paintomics 3 logo'>"
+            message += "  <img src='" + "http://www.paintomics.org/" + "resources/images/paintomics_white_300x66' border='0' width='150' height='33' alt='Paintomics 4 logo'>"
             message += "</a>"
             message += "<div style='width:100%; height:10px; border-top: 1px dotted #333; margin-top:20px; margin-bottom:30px;'></div>"
             message += "<h1>Welcome to Paintomics 3!</h1>"
@@ -354,17 +354,18 @@ def userManagementResetPassword(request, response, ROOT_DIRECTORY):
             try:
 
                 restoreLink = url_for('resetPasswordHandler', emailToken = emailToken, userEmail = userEmail)
-
                 #TODO: SERVER ADDRESS AND ADMIN EMAIL
                 message = '<html><body>'
                 message +=  "<a href='" + "http://www.paintomics.org/" + "' target='_blank'>"
-                message += "  <img src='" + "http://www.paintomics.org/" + "resources/images/paintomics_white_300x66' border='0' width='150' height='33' alt='Paintomics 3 logo'>"
+                message += "  <img src='" + "http://www.paintomics.org/" + "resources/images/paintomics_white_300x66' border='0' width='150' height='33' alt='Paintomics 4 logo'>"
                 message += "</a>"
                 message += "<div style='width:100%; height:10px; border-top: 1px dotted #333; margin-top:20px; margin-bottom:30px;'></div>"
                 message += "<h1>Reset your Paintomics 4 acccount password</h1>"
                 message += "<p>You have requested to reset your account password, if not, please ignore this e-mail.</p>"
                 message += "<p>To restore your account please follow this link:</p>"
-                message += "<p><a href=\"" + restoreLink + "\">Reset password link</a></p>"
+                message += "<p><a href=\"" + "https://paintomics.top" + restoreLink + "\">Reset password link</a></p>"
+                message += "<p>After restore your account, please use follow password to login.</p>"
+                message += "<h4>PASSWORD: " + randomPassword + "</h4>"
                 message += "<div style='width:100%; height:10px; border-top: 1px dotted #333; margin-top:20px; margin-bottom:30px;'></div>"
                 message += "<p>Problems? E-mail <a href='mailto:" + "paintomics@cipf.es" + "'>" + "paintomics4@outlook.com" + "</a></p>"
                 message += '</body></html>'

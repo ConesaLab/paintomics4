@@ -254,7 +254,7 @@ function PA_Step1JobView() {
 				html: '<div id="about">' +
 				' <h2>Welcome to PaintOmics (' + APP_VERSION + ')</h2>' +
 				' <p>' +
-				'   <b>Paintomics</b>  is a web tool for the integrative visualization of multiple omic datasets onto KEGG pathways. Currently Paintomics supports integrated visualization of multiple species of different biological kingdoms and offers user the possibility to request any other organism present in the KEGG database.<br/><br/>' +
+				'   <b>Paintomics</b>  is a web tool for the integrative visualization of multiple omic datasets onto KEGG, Reactome and MapMan pathways. Currently Paintomics supports integrated visualization of multiple species of different biological kingdoms and offers user the possibility to request any other organism present in the KEGG database.<br/><br/>' +
 				'   <b>Paintomics</b> is easy to run because the application itself guides you through the three different steps that are detailed next:' +
 				' </p>' +
 				' <ul style="float: left;width: 65%;"> ' +
