@@ -4,12 +4,7 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="657be414-0410-416b-82a4-023b644455f2" name="Default Changelist" comment="">
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/common/Util.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/common/Util.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/conf/serverconf.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/conf/serverconf.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/servlets/UserManagementServlet.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/servlets/UserManagementServlet.py" afterDir="false" />
-    </list>
+    <list default="true" id="657be414-0410-416b-82a4-023b644455f2" name="Default Changelist" comment="" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -655,7 +650,7 @@
         </line-breakpoint>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/src/src/servlets/PathwayAcquisitionServlet.py</url>
-          <line>393</line>
+          <line>397</line>
           <option name="timeStamp" value="567" />
         </line-breakpoint>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
@@ -674,18 +669,8 @@
           <option name="timeStamp" value="575" />
         </line-breakpoint>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/src/servlets/PathwayAcquisitionServlet.py</url>
-          <line>362</line>
-          <option name="timeStamp" value="576" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/src/servlets/PathwayAcquisitionServlet.py</url>
-          <line>357</line>
-          <option name="timeStamp" value="577" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/src/src/servlets/PathwayAcquisitionServlet.py</url>
-          <line>360</line>
+          <line>362</line>
           <option name="timeStamp" value="578" />
         </line-breakpoint>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
@@ -697,11 +682,6 @@
           <url>file://$PROJECT_DIR$/src/src/classes/JobInstances/PathwayAcquisitionJob.py</url>
           <line>1220</line>
           <option name="timeStamp" value="581" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" type="javascript">
-          <url>file://$PROJECT_DIR$/src/public_html/app/view/PathwayAcquisitionViews/PA_Step3Views.js</url>
-          <line>3574</line>
-          <option name="timeStamp" value="302" />
         </line-breakpoint>
         <line-breakpoint enabled="true" type="javascript">
           <url>file://$PROJECT_DIR$/../PaintomicsClient/public_html/app/view/PathwayAcquisitionViews/PA_Step4Views.js</url>
@@ -793,36 +773,6 @@
           <line>1683</line>
           <option name="timeStamp" value="409" />
         </line-breakpoint>
-        <line-breakpoint enabled="true" type="javascript">
-          <url>file://$PROJECT_DIR$/../PaintomicsClient/public_html/app/controller/JobController.js</url>
-          <line>480</line>
-          <option name="timeStamp" value="487" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" type="javascript">
-          <url>file://$PROJECT_DIR$/../PaintomicsClient/public_html/app/controller/JobController.js</url>
-          <line>479</line>
-          <option name="timeStamp" value="488" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" type="javascript">
-          <url>file://$PROJECT_DIR$/../PaintomicsClient/public_html/app/controller/JobController.js</url>
-          <line>478</line>
-          <option name="timeStamp" value="489" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" type="javascript">
-          <url>file://$PROJECT_DIR$/../PaintomicsClient/public_html/app/view/PathwayAcquisitionViews/PA_Step3Views.js</url>
-          <line>4132</line>
-          <option name="timeStamp" value="490" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" type="javascript">
-          <url>file://$PROJECT_DIR$/../PaintomicsClient/public_html/app/view/PathwayAcquisitionViews/PA_Step3Views.js</url>
-          <line>4948</line>
-          <option name="timeStamp" value="500" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" type="javascript">
-          <url>file://$PROJECT_DIR$/../PaintomicsClient/public_html/app/view/PathwayAcquisitionViews/PA_Step3Views.js</url>
-          <line>5002</line>
-          <option name="timeStamp" value="501" />
-        </line-breakpoint>
       </breakpoints>
       <default-breakpoints>
         <breakpoint type="python-exception">
@@ -844,7 +794,7 @@
     <SUITE FILE_PATH="coverage/common_build_database_py$build_database.coverage" NAME="launch_server Coverage Results" MODIFIED="1638732508704" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/src" />
     <SUITE FILE_PATH="coverage/launch_server_py$launch_server.coverage" NAME="launch_server Coverage Results" MODIFIED="1623753690084" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/src" />
     <SUITE FILE_PATH="coverage/paintomicsserver_py$paintomicsserver.coverage" NAME="paintomicsserver Coverage Results" MODIFIED="1616383808184" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/src" />
-    <SUITE FILE_PATH="coverage/common_build_database_py$launch_server.coverage" NAME="launch_server Coverage Results" MODIFIED="1639091241579" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/src" />
+    <SUITE FILE_PATH="coverage/common_build_database_py$launch_server.coverage" NAME="launch_server Coverage Results" MODIFIED="1640991784431" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/src" />
     <SUITE FILE_PATH="coverage/PathwayAcquisitionServlet_py$launch_server.coverage" NAME="launch_server Coverage Results" MODIFIED="1622967783266" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/src" />
   </component>
 </project>

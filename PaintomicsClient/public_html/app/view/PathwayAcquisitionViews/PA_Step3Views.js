@@ -4723,7 +4723,7 @@ function PA_Step3MetaboliteView() {
 							flex: 1,
 							border: 0,
 							height: 35,
-							html: '<h2 id="EnrichmentSection"> Metabolites class enrichment</h2>',
+							html: '<h2 id="EnrichmentSection"> Metabolite class activity analysis</h2>',
 							style: {
 								backgroundColor: 'white'
 							}
@@ -4982,8 +4982,8 @@ var renderFunctionLimit = function (value, metadata, record) {
 		var renderedValue = (value > 0.001 || value === 0) ? parseFloat(value).toFixed(5) : parseFloat(value).toExponential(4);
 		var omicName = "-" + metadata.column.text.toLowerCase().replace(/ /g, "-").replace(/<\/br>/g, "-");
 
-		if (value <= 0.065) {
-			var color = Math.round(225 * (value / 0.065));
+		if (value <= 0.1) {
+			var color = Math.round(225 * (value / 0.1));
 			metadata.style += "background-color:rgb(255, " + color + "," + color + ");";
 		}
 
@@ -5025,6 +5025,8 @@ var renderFunctionLimit = function (value, metadata, record) {
 
 var renderFunctionHub= function (value, metadata, record) {
 		var myToolTipText = "<b style='display:block; width:200px'>" + "Metabolism" + "</b>";
+
+		value = Number(value)
 
 		metadata.style = "height: 33px; font-size:10px;"
 
