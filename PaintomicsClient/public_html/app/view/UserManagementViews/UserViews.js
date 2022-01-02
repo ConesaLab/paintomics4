@@ -314,10 +314,19 @@ function ForgetPasswordPanel() {
                                               }
                                           }
                                       }},
-                                  {xtype: "box", html:
-                                              '<div style="color: #D22; font-size: 16px;" id="invalidEmailMessage" style="display:none"></div>' +
-                                              '<a class="button exampleButton" id="resetPassLink" style=" width: 195px; text-align: center; margin: 10px 54px; display: block;"><i class="fa fa-sign-in"></i> Reset password</a>' +
-								   			  '<a id="forgetPasswordBackLink" href="javascript:void(0)"><i class="fa fa-arrow-circle-o-left"></i> Back</a>'
+                                  {
+                                      xtype: "box",html:
+                                              '<div style="color: #D22; height:25px;font-size: 16px;" id="invalidEmailMessage" style="display:none"></div>'
+                                  },
+                                  {
+                                    xtype: "box", html:
+                                               '<a class="button exampleButton" id="resetPassLink" style=" width: 195px; text-align: center; margin: 10px 35px; display: block;"><i class="fa fa-sign-in"></i> Reset password</a>'
+
+                                  },
+                                  {
+                                      xtype: "box",html:
+                                      		'<a id="forgetPasswordBackLink" href="javascript:void(0)"><i class="fa fa-arrow-circle-o-left"></i> Back</a>'
+
                                   }
                               ]
                           }
