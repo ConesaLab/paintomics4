@@ -19,7 +19,7 @@
 #     and others
 #
 #  More info http://bioinfo.cipf.es/paintomics
-#  Technical contact paintomics@cipf.es
+#  Technical contact paintomics4@outlook.com
 #
 #**************************************************************
 
