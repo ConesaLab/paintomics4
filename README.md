@@ -3,7 +3,7 @@
 </div>
 
 # Paintomics, integrative visualization of multiple *omic* data                                    
-For any question on PaintOmics 4, users can send a mail to [paintomics@cipf.es](mailto:paintomics@cipf.es).
+For any question on PaintOmics 4, users can send a mail to [paintomics4@outlook.com](mailto:paintomics4@outlook.com).
 
 PaintOmics 4 official instance: [http://bioinfo.cipf.es/paintomics/](http://bioinfo.cipf.es/paintomics/)
 
@@ -38,7 +38,7 @@ Currently PaintOmics 4 supports integrated visualization of multipel species of 
 
 ** Ana Conesa, PhD. **, Head Genomics of Gene Expression Lab.
 
-For any question on STATegraEMS, users can send a mail to [paintomics@cipf.es](mailto:paintomics@cipf.es).
+For any question on STATegraEMS, users can send a mail to [paintomics4@outlook.com](mailto:paintomics4@outlook.com).
 
 
 <div class="imageContainer" style="text-align:center; font-size:10px; color:#898989" >

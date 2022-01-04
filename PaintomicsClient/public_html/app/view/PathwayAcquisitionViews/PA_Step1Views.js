@@ -254,22 +254,23 @@ function PA_Step1JobView() {
 				html: '<div id="about">' +
 				' <h2>Welcome to PaintOmics (' + APP_VERSION + ')</h2>' +
 				' <p>' +
-				'   <b>Paintomics</b>  is a web tool for the integrative visualization of multiple omic datasets onto KEGG, Reactome and MapMan pathways. Currently Paintomics supports integrated visualization of multiple species of different biological kingdoms and offers user the possibility to request any other organism present in the KEGG database.<br/><br/>' +
-				'   <b>Paintomics</b> is easy to run because the application itself guides you through the three different steps that are detailed next:' +
+				'   <b>Paintomics</b>  is a web tool for the integrative visualization of multiple omic datasets onto KEGG, Reactome and MapMan biological pathway maps. Currently, Paintomics supports integrated visualization of multiple species of different biological kingdoms and offers user the possibility to request any other organism present in the KEGG, Reactome and MapMan database.<br/><br/>' +
+				'   <b>Paintomics</b> is easy to run because the application itself guides you through the Four different steps that are detailed next:' +
 				' </p>' +
 				' <ul style="float: left;width: 65%;"> ' +
 				'   <li><b>Data uploading:</b>' +
 				'	<ol>' +
 				'		<li>Choose your organism (see selection box below).</li>' +
+				'		<li>Choose database you want to explore (see checkbox below).</li>'+
 				'		<li>Upload your multi-omic data (see form below). You can <a href="resources/paintomics_example_data.zip">download the example data from here</a> to check the format of the files. You can also load an example (<a class="button btn-secondary btn-inline btn-small" href="javascript:void(0)"><i class="fa fa-file-text-o"></i> Load example</a> button in the upper right corner of the screen) to explore Paintomics functionalities.</li>' +
 				'		<li>Click on <a class="button btn-success btn-inline btn-small" href="javascript:void(0)"><i class="fa fa-play"></i> Run PaintOmics</a> button.</li>' +
 				'	</ol><br/></li> ' +
-				'   <li><b>Identifier and Name Matching and Metabolite assignment:</b> Paintomics requires Entrez IDs for working with KEGG pathways, so the tool will convert the names and identifiers from different sources and databases in user’s the input data. This screen give users information about the number of features successfully mapped to KEGG pathways. It also shows the data distribution that will be used for pathway colouring, which can be modified when visualizing a pathway. Additionally, the metabolite names assignments are displayed and users can choose their favourite option in case of ambiguity. Click <a href="javascript:void(0)" class="button btn-success btn-inline btn-small"><i class="fa fa-play"></i> Next step</a> button when you are ready.<br/><br/></li>' +
+				'   <li><b>Identifier and Name Matching and Metabolite assignment:</b> Paintomics requires Entrez IDs for working with KEGG, Reactome and MapMan biological pathway maps, so the tool will convert the names and identifiers from different sources and databases in user’s the input data. This screen give users information about the number of features successfully mapped to KEGG, Reactome and MapMan biological pathway maps. It also shows the data distribution that will be used for pathway colouring, which can be modified when visualizing a pathway. Additionally, the metabolite names assignments are displayed and users can choose their favourite option in case of ambiguity. Click <a href="javascript:void(0)" class="button btn-success btn-inline btn-small"><i class="fa fa-play"></i> Next step</a> button when you are ready.<br/><br/></li>' +
 				'   <li><b>Results:</b> Pathways summary, Pathways classification, Pathways network, Pathways enrichment, Pathways visualization (by clicking <a href="javascript:void(0)" class="button btn-inline btn-small"  style="background-color:#ADA6A6;font-size: 14px;"><i class="fa fa-paint-brush"></i></a> for any of the displayed pathways in Pathways enrichment section). Read more about these analyses in <a href="http://paintomics.readthedocs.io/en/latest/" target="_blank">our documentation</a>.</li>' +
 				' </ul>' +
 				' <div id="graphicalAbstract" style="float:left;text-align:center;cursor:pointer;width: 34%;"><img style="margin: 30px auto;border:1px solid #222;" src="resources/images/GraphicalAbstract_thumb.png" /></div>' +
 				' <p style="clear:both;">' +
-				'   Please check the <b><a href="http://paintomics.readthedocs.org/en/latest/" target="_blank">User guide</a></b> for further information. For any question on <b>Paintomics</b>, you can send an e-mail to <a href="mailto:paintomics@cipf.es">paintomics@cipf.es</a>.' +
+				'   Please check the <b><a href="http://paintomics.readthedocs.org/en/latest/" target="_blank">User guide</a></b> for further information. For any question on <b>Paintomics</b>, you can send an e-mail to <a href="mailto:paintomics4@outlook.com">paintomics4@outlook.com</a>.' +
 				' </p>' +
 				'</div>'
 			}, {

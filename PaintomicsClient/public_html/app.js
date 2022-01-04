@@ -144,7 +144,7 @@ $(document).ready(function () {
             try {
                 application.launch();
             } catch (error) {
-                showErrorMessage("Oops..Internal error!", {message:"</br>Please try again later.</br>If the error persists, please contact your web <a href='mailto:paintomics@cipf.es' target='_blank'> administrator</a>.", showButton: true});
+                showErrorMessage("Oops..Internal error!", {message:"</br>Please try again later.</br>If the error persists, please contact your web <a href='mailto:paintomics4@outlook.com' target='_blank'> administrator</a>.", showButton: true});
             }
         }});
     Ext.form.field.File.override({
