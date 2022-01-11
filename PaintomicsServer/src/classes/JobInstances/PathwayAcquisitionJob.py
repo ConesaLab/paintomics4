@@ -623,14 +623,14 @@ class PathwayAcquisitionJob(Job):
 
                     matchedPathways[pathwayID] = pathway
 
-        #manager = Manager()
-        #matchedPathways = manager.dict()  # WILL STORE THE OUTPUT FROM THE THREADS
-        matchedPathways = {}
+        manager = Manager()
+        matchedPathways = manager.dict()  # WILL STORE THE OUTPUT FROM THE THREADS
+        #matchedPathways = {}
         nPathwaysPerThread = int(
             ceil(len(pathwaysList) / nThreads)) + 1  # GET THE NUMBER OF PATHWAYS TO BE PROCESSED PER THREAD
 
-        #pathwaysListParts = chunks(list(pathwaysList.keys()), nPathwaysPerThread)  # SPLIT THE ARRAY IN n PARTS
-        pathwaysListParts = list(pathwaysList.keys())
+        pathwaysListParts = chunks(list(pathwaysList.keys()), nPathwaysPerThread)  # SPLIT THE ARRAY IN n PARTS
+        #pathwaysListParts = list(pathwaysList.keys())
         threadsList = []
 
         # Flattened dict
@@ -642,9 +642,9 @@ class PathwayAcquisitionJob(Job):
                                  pathwayID, pathway in
                                  dbPathways.items()}
 
-        matchPathways( self, pathwaysListParts, allGenesInPathway, allCompoundsInPathway, inputGenes, inputCompounds,
-                         totalFeaturesByOmic, totalRelevantFeaturesByOmic, matchedPathways, mappedRatiosByOmic,
-                         enrichmentByOmic )
+        #matchPathways( self, pathwaysListParts, allGenesInPathway, allCompoundsInPathway, inputGenes, inputCompounds,
+        #                 totalFeaturesByOmic, totalRelevantFeaturesByOmic, matchedPathways, mappedRatiosByOmic,
+        #                 enrichmentByOmic )
 
         # LAUNCH THE THREADS
         for pathwayIDsList in pathwaysListParts:

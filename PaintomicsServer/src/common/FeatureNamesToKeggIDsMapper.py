@@ -562,15 +562,15 @@ def mapFeatureNamesToCompoundsIDs(jobID, featureList):
 
     #CONCATENATE THE OUTPUT LISTS
 
-    #matchedFeatures = manager.list()
-    #notMatchedFeatures= manager.list()
-    #foundFeatures= manager.list([0]*nThreads)
+    matchedFeatures = manager.list()
+    notMatchedFeatures= manager.list()
+    foundFeatures= manager.list([0]*nThreads)
 
-    matchedFeatures = list()
-    notMatchedFeatures = list()
-    foundFeatures = list()
-    for compoundListPart in compoundsListParts:
-        mapCompoundsIdentifiers(jobID, compoundListPart, matchedFeatures, notMatchedFeatures, foundFeatures)
+    #matchedFeatures = list()
+    #notMatchedFeatures = list()
+    #foundFeatures = list()
+    #for compoundListPart in compoundsListParts:
+    #    mapCompoundsIdentifiers(jobID, compoundListPart, matchedFeatures, notMatchedFeatures, foundFeatures)
 
     # matchedCompoundIDsTablesList=manager.list() #STORES THE MAPPING RESULTS TO UPDATE LATER THE CACHE
 
