@@ -8,9 +8,28 @@ argsL <- as.list(as.character(argsDF$V2))
 names(argsL) <- argsDF$V1
 args <- as.data.frame(argsL, stringsAsFactors=F)
 
-kegg_interactions = read.csv(paste0(args$inputDir,"kegg_interaction.csv"), sep = ',')
-userDataset = as.character(as.vector(t(read.table(paste0(args$data_dir,"userDataset.csv"), sep = ','))))
-userDEfeatures = as.character(as.vector(t(read.table(paste0(args$data_dir,"userDEfeatures.csv"), sep = ','))))
+
+tryCatch(               
+  expr = {
+    kegg_interactions = read.csv(paste0(args$inputDir,"kegg_interaction.csv"), sep = ',')
+    userDataset = as.character(as.vector(t(read.table(paste0(args$data_dir,"userDataset.csv"), sep = ','))))
+    userDEfeatures = as.character(as.vector(t(read.table(paste0(args$data_dir,"userDEfeatures.csv"), sep = ','))))
+    print("STEP0: Finish Reading data...")
+  },
+  error = function(e){
+    userDEfeatures = c()
+    print("No compounds relevant/expression data...")
+  },
+  
+  warning = function(w){      
+    print("There was a warning message.")
+  },
+  
+  finally = {            
+    print("Next Step...")
+  }
+)
+
 
 all_met_neigh <- list()
 for (i in 1: length(dir(args$inputDir))) {

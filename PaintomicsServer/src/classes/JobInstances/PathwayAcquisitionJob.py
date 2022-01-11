@@ -510,7 +510,7 @@ class PathwayAcquisitionJob(Job):
         return True
 
     def generatePathwaysList(self):
-        """
+        """selectedCompounds
         This function gets a list of selected compounds and the list of matched genes and
         find out all the pathways which contain at least one feature.
 
@@ -623,11 +623,14 @@ class PathwayAcquisitionJob(Job):
 
                     matchedPathways[pathwayID] = pathway
 
-        manager = Manager()
-        matchedPathways = manager.dict()  # WILL STORE THE OUTPUT FROM THE THREADS
+        #manager = Manager()
+        #matchedPathways = manager.dict()  # WILL STORE THE OUTPUT FROM THE THREADS
+        matchedPathways = {}
         nPathwaysPerThread = int(
             ceil(len(pathwaysList) / nThreads)) + 1  # GET THE NUMBER OF PATHWAYS TO BE PROCESSED PER THREAD
-        pathwaysListParts = chunks(list(pathwaysList.keys()), nPathwaysPerThread)  # SPLIT THE ARRAY IN n PARTS
+
+        #pathwaysListParts = chunks(list(pathwaysList.keys()), nPathwaysPerThread)  # SPLIT THE ARRAY IN n PARTS
+        pathwaysListParts = list(pathwaysList.keys())
         threadsList = []
 
         # Flattened dict
@@ -638,6 +641,10 @@ class PathwayAcquisitionJob(Job):
         allCompoundsInPathway = {pathwayID: pathway for dbSource, dbPathways in organismCompounds.items() for
                                  pathwayID, pathway in
                                  dbPathways.items()}
+
+        matchPathways( self, pathwaysListParts, allGenesInPathway, allCompoundsInPathway, inputGenes, inputCompounds,
+                         totalFeaturesByOmic, totalRelevantFeaturesByOmic, matchedPathways, mappedRatiosByOmic,
+                         enrichmentByOmic )
 
         # LAUNCH THE THREADS
         for pathwayIDsList in pathwaysListParts:
@@ -662,8 +669,6 @@ class PathwayAcquisitionJob(Job):
                     enrichmentByOmic) )
                 threadsList.append( threadClass )
                 threadClass.start()
-
-
 
         # WAIT UNTIL ALL THREADS FINISH
         for thread in threadsList:
@@ -1316,12 +1321,14 @@ class PathwayAcquisitionJob(Job):
                         userDEfeatures.append( i )
                     userDataset.append( i )
 
-
-
         for j in self.inputCompoundsData:
             if self.inputCompoundsData[j].omicsValues[0].relevant:
                 userDEfeatures.append(j)
             userDataset.append(j)
+
+        # IF there is no relevant features, we can not do metabolite hub analysis
+        if not userDEfeatures:
+            return False
 
         import csv
         with open(self.outputDir + "userDataset.csv", 'w') as w:
