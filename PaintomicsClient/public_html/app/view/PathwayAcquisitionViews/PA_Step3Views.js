@@ -4185,11 +4185,13 @@ function PA_Step3HubAnalysis () {
 				{
 					Metabolite: this.model.mappingComp[hubAnalysisResult[keys][1]],
 					ID: hubAnalysisResult[keys][1],
-					Step: hubAnalysisResult[keys][3],
+					Step: hubAnalysisResult[keys][5],
 					Percentage: hubAnalysisResult[keys][0],
 					Percentile: hubAnalysisResult[keys][2],
-					DEN: hubAnalysisResult[keys][4],
-					noDEN:hubAnalysisResult[keys][5]
+					DEN: hubAnalysisResult[keys][6],
+					noDEN:hubAnalysisResult[keys][7],
+					pvalue: hubAnalysisResult[keys][3],
+					padjust: hubAnalysisResult[keys][4]
 				}
 			)
 		}
@@ -4211,7 +4213,7 @@ function PA_Step3HubAnalysis () {
 	this.initComponent = function () {
 		Ext.define('User', {
 			extend: 'Ext.data.Model',
-			fields: ['Metabolite', 'ID', 'Step', 'Percentage', "Percentile", 'DEN', 'noDEN']
+			fields: ['Metabolite', 'ID', 'Step', 'Percentage', "Percentile", 'DEN', 'noDEN', 'pvalue', 'padjust']
 		});
 
 		var userStore = Ext.create('Ext.data.Store', {
@@ -4431,6 +4433,22 @@ function PA_Step3HubAnalysis () {
 								hideable: false,
 								dataIndex: 'Percentile',
 								renderer: renderFunctionHub
+							},
+							{
+								text: 'p-value',
+								flex:10/100,
+								sortable: true,
+								hideable: false,
+								dataIndex: 'pvalue',
+								renderer: renderFunctionLimit
+							},
+							{
+								text: 'FDR BH',
+								flex:10/100,
+								sortable: true,
+								hideable: false,
+								dataIndex: 'padjust',
+								renderer: renderFunctionLimit
 							}
 
 							/*

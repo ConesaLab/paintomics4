@@ -1,76 +1,21 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="ChangeListManager">
-    <list default="true" id="5a98010e-8d12-4920-b7f7-d74a483e827a" name="Default" comment="" />
-    <ignored path="PaintomicsClient.iws" />
-    <ignored path=".idea/workspace.xml" />
-    <option name="EXCLUDED_CONVERTED_TO_IGNORED" value="true" />
-    <option name="TRACKING_ENABLED" value="true" />
+    <list default="true" id="5a98010e-8d12-4920-b7f7-d74a483e827a" name="Default" comment="">
+      <change beforePath="$PROJECT_DIR$/../PaintomicsServer/src/classes/JobInstances/PathwayAcquisitionJob.py" beforeDir="false" afterPath="$PROJECT_DIR$/../PaintomicsServer/src/classes/JobInstances/PathwayAcquisitionJob.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../PaintomicsServer/src/common/bioscripts/hubAnalysis.R" beforeDir="false" afterPath="$PROJECT_DIR$/../PaintomicsServer/src/common/bioscripts/hubAnalysis.R" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../PaintomicsServer/src/servlets/PathwayAcquisitionServlet.py" beforeDir="false" afterPath="$PROJECT_DIR$/../PaintomicsServer/src/servlets/PathwayAcquisitionServlet.py" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
     <option name="LAST_RESOLUTION" value="IGNORE" />
   </component>
-  <component name="ChangesViewManager" flattened_view="true" show_ignored="false" />
   <component name="CreatePatchCommitExecutor">
     <option name="PATCH_PATH" value="" />
   </component>
-  <component name="ExecutionTargetManager" SELECTED_TARGET="default_target" />
-  <component name="FavoritesManager">
-    <favorites_list name="PaintomicsClient" />
-  </component>
-  <component name="FileEditorManager">
-    <leaf>
-      <file leaf-file-name="PA_Step5Views.js" pinned="false" current-in-tab="true">
-        <entry file="file://$PROJECT_DIR$/public_html/app/view/PathwayAcquisitionViews/PA_Step5Views.js">
-          <provider selected="true" editor-type-id="text-editor">
-            <state vertical-scroll-proportion="0.25382933">
-              <caret line="349" column="55" selection-start-line="349" selection-start-column="55" selection-end-line="349" selection-end-column="55" />
-              <folding>
-                <element signature="e#20401#23507#0" expanded="false" />
-                <element signature="e#24984#28050#0" expanded="false" />
-                <element signature="e#28214#29527#0" expanded="false" />
-                <element signature="e#31452#35328#0" expanded="false" />
-                <element signature="e#35443#39904#0" expanded="false" />
-                <element signature="e#40035#41348#0" expanded="false" />
-                <marker date="1430389760482" expanded="true" signature="17057:17070" placeholder="..." />
-                <marker date="1430389760482" expanded="true" signature="17326:17339" placeholder="..." />
-                <marker date="1430389760482" expanded="true" signature="26049:26098" placeholder="..." />
-                <marker date="1430389760482" expanded="true" signature="26200:26209" placeholder="..." />
-                <marker date="1430389760482" expanded="true" signature="37870:37919" placeholder="..." />
-                <marker date="1430389760482" expanded="true" signature="38021:38030" placeholder="..." />
-                <marker date="1430389760482" expanded="true" signature="41557:41610" placeholder="..." />
-              </folding>
-            </state>
-          </provider>
-        </entry>
-      </file>
-      <file leaf-file-name="PA_Step3Views.js" pinned="false" current-in-tab="false">
-        <entry file="file://$PROJECT_DIR$/public_html/app/view/PathwayAcquisitionViews/PA_Step3Views.js">
-          <provider selected="true" editor-type-id="text-editor">
-            <state vertical-scroll-proportion="0.0">
-              <caret line="275" column="64" selection-start-line="275" selection-start-column="64" selection-end-line="275" selection-end-column="64" />
-              <folding>
-                <marker date="1430387518194" expanded="true" signature="7349:7375" placeholder="..." />
-                <marker date="1430387518194" expanded="true" signature="10063:10089" placeholder="..." />
-                <marker date="1430387518194" expanded="true" signature="12918:12929" placeholder="..." />
-                <marker date="1430387518194" expanded="true" signature="13056:13067" placeholder="..." />
-              </folding>
-            </state>
-          </provider>
-        </entry>
-      </file>
-      <file leaf-file-name="main.css" pinned="false" current-in-tab="false">
-        <entry file="file://$PROJECT_DIR$/public_html/resources/css/main.css">
-          <provider selected="true" editor-type-id="text-editor">
-            <state vertical-scroll-proportion="0.0">
-              <caret line="697" column="9" selection-start-line="697" selection-start-column="9" selection-end-line="697" selection-end-column="9" />
-              <folding />
-            </state>
-          </provider>
-        </entry>
-      </file>
-    </leaf>
+  <component name="Git.Settings">
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$/.." />
   </component>
   <component name="IdeDocumentHistory">
     <option name="CHANGED_PATHS">
@@ -85,25 +30,14 @@
   <component name="JsGulpfileManager">
     <detection-done>true</detection-done>
   </component>
-  <component name="NamedScopeManager">
-    <order />
-  </component>
   <component name="ProjectFrameBounds">
     <option name="x" value="-2" />
     <option name="y" value="25" />
     <option name="width" value="1924" />
     <option name="height" value="1057" />
   </component>
-  <component name="ProjectLevelVcsManager" settingsEditedManually="false">
-    <OptionsSetting value="true" id="Add" />
-    <OptionsSetting value="true" id="Remove" />
-    <OptionsSetting value="true" id="Checkout" />
-    <OptionsSetting value="true" id="Update" />
-    <OptionsSetting value="true" id="Status" />
-    <OptionsSetting value="true" id="Edit" />
-    <ConfirmationsSetting value="0" id="Add" />
-    <ConfirmationsSetting value="0" id="Remove" />
-  </component>
+  <component name="ProjectId" id="23pxX6qcIy2RHggO3Quetqa2xgK" />
+  <component name="ProjectLevelVcsManager" settingsEditedManually="true" />
   <component name="ProjectView">
     <navigator currentView="ProjectPane" proportions="" version="1">
       <flattenPackages />
@@ -262,14 +196,14 @@
     </panes>
   </component>
   <component name="PropertiesComponent">
+    <property name="FullScreen" value="false" />
+    <property name="HbShouldOpenHtmlAsHb" value="" />
     <property name="WebServerToolWindowFactoryState" value="false" />
     <property name="last_opened_file_path" value="$PROJECT_DIR$" />
-    <property name="HbShouldOpenHtmlAsHb" value="" />
     <property name="settings.editor.selected.configurable" value="project.propVCSSupport.Mappings" />
     <property name="settings.editor.splitter.proportion" value="0.2" />
-    <property name="FullScreen" value="false" />
   </component>
-  <component name="ShelveChangesManager" show_recycled="false" />
+  <component name="SpellCheckerSettings" RuntimeDictionaries="0" Folders="0" CustomDictionaries="0" DefaultDictionary="application-level" UseSingleDictionary="true" transferred="true" />
   <component name="SvnConfiguration">
     <configuration />
   </component>
@@ -278,6 +212,7 @@
       <changelist id="5a98010e-8d12-4920-b7f7-d74a483e827a" name="Default" comment="" />
       <created>1430386958520</created>
       <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
       <updated>1430386958520</updated>
     </task>
     <servers />
@@ -315,10 +250,6 @@
   </component>
   <component name="VcsContentAnnotationSettings">
     <option name="myLimit" value="2678400000" />
-  </component>
-  <component name="XDebuggerManager">
-    <breakpoint-manager />
-    <watches-manager />
   </component>
   <component name="editorHistoryManager">
     <entry file="file://$PROJECT_DIR$/public_html/app/view/PathwayAcquisitionViews/PA_Step5Views.js">

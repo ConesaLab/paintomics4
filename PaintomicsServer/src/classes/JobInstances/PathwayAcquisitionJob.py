@@ -1311,20 +1311,27 @@ class PathwayAcquisitionJob(Job):
 
     def hubAnalysis(self, ROOT_DIRECTORY):
 
-        userDEfeatures = []
-        userDataset = []
+        userDEfeatures = set()
+        userDataset = set()
+        userGenePathway = set()
+
+        # Only test gene inside the pathway
+        for pathway in self.matchedPathways:
+            for gene in self.matchedPathways[pathway].matchedGenes:
+                userGenePathway.add(gene)
 
         for i in self.inputGenesData:
             for k in self.inputGenesData[i].omicsValues:
                 if k.omicName == 'Gene expression':
-                    if k.relevant or k.relevantAssociation:
-                        userDEfeatures.append( i )
-                    userDataset.append( i )
+                    if i in userGenePathway:
+                        if k.relevant or k.relevantAssociation:
+                            userDEfeatures.add( i )
+                        userDataset.add( i )
 
         for j in self.inputCompoundsData:
             if self.inputCompoundsData[j].omicsValues[0].relevant:
-                userDEfeatures.append(j)
-            userDataset.append(j)
+                userDEfeatures.add(j)
+            userDataset.add(j)
 
         # IF there is no relevant features, we can not do metabolite hub analysis
         if not userDEfeatures:
