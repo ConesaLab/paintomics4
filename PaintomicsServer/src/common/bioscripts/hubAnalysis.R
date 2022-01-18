@@ -83,7 +83,7 @@ prepare_KEGG <- function (kegg_interactions, features, significant_features) {
   metabolites <- intersect(features,as.character(typesC$name))
   
   # Measured genes that are in KEGG
-  genes <- intersect(features ,as.character(typesG$name))
+  genes <- intersect(as.character(features) ,as.character(typesG$name))
   
   # Differentially expressed metabolites that are in KEGG
   DEM <- intersect(significant_features,typesC$name)
@@ -135,10 +135,10 @@ step2den <- purrr::map_dbl( all.perc, extract.den, step = 2)
 step3den <- purrr::map_dbl( all.perc, extract.den, step = 3)
 step4den <- purrr::map_dbl( all.perc, extract.den, step = 4)
 
-step1noDen <- purrr::map_dbl( all.perc, extract.noDen, step = 1)
-step2noDen <- purrr::map_dbl( all.perc, extract.noDen, step = 2)
-step3noDen <- purrr::map_dbl( all.perc, extract.noDen, step = 3)
-step4noDen <- purrr::map_dbl( all.perc, extract.noDen, step = 4)
+step1noDen <- purrr::map_dbl( all.perc, extract.noDen, step = 1) + step1den
+step2noDen <- purrr::map_dbl( all.perc, extract.noDen, step = 2) + step2den
+step3noDen <- purrr::map_dbl( all.perc, extract.noDen, step = 3) + step3den
+step4noDen <- purrr::map_dbl( all.perc, extract.noDen, step = 4) + step4den
 
 step1 = data.frame('per'=step1per, 'den'=step1den, 'noDen'= step1noDen)
 step2 = data.frame('per'=step2per, 'den'=step2den, 'noDen'= step2noDen)

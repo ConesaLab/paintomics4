@@ -1313,20 +1313,20 @@ class PathwayAcquisitionJob(Job):
 
         userDEfeatures = set()
         userDataset = set()
-        userGenePathway = set()
+        #userGenePathway = set()
 
         # Only test gene inside the pathway
-        for pathway in self.matchedPathways:
-            for gene in self.matchedPathways[pathway].matchedGenes:
-                userGenePathway.add(gene)
+        #for pathway in self.matchedPathways:
+        #    for gene in self.matchedPathways[pathway].matchedGenes:
+        #        userGenePathway.add(gene)
 
         for i in self.inputGenesData:
             for k in self.inputGenesData[i].omicsValues:
                 if k.omicName == 'Gene expression':
-                    if i in userGenePathway:
-                        if k.relevant or k.relevantAssociation:
-                            userDEfeatures.add( i )
-                        userDataset.add( i )
+                    #if i in userGenePathway:
+                    if k.relevant or k.relevantAssociation:
+                      userDEfeatures.add( i )
+                    userDataset.add( i )
 
         for j in self.inputCompoundsData:
             if self.inputCompoundsData[j].omicsValues[0].relevant:
