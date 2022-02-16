@@ -1060,6 +1060,10 @@ class PathwayAcquisitionJob(Job):
                     metagenesFileName: object = self.getTemporalDir() + "/" + inputOmic.get("omicName") + "_metagenes" + \
                                                 ("_" + str(dbname).lower() + ".tab" if dbname != "KEGG" else ".tab")
 
+                    # Clean previous metagene
+                    for line in self.matchedPathways:
+                        self.matchedPathways[line].metagenes = dict()
+
                     with open(metagenesFileName, 'rU') as inputDataFile:
                         for line in csv_reader(inputDataFile, delimiter="\t"):
                             if line[0] in self.matchedPathways:
@@ -1073,6 +1077,8 @@ class PathwayAcquisitionJob(Job):
             except CalledProcessError as ex:
                 logging.error("STEP2 - Error while generating metagenes information for " + inputOmic.get("omicName"))
 
+
+        call("rm " +  self.getOutputDir()  + "*.png", shell=True)
         call("mv " + self.getTemporalDir() + "/" + "*.png " + self.getOutputDir(), shell=True)
         return self
 

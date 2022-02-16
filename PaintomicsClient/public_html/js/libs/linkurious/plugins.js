@@ -1556,7 +1556,7 @@
 		if (nodeColorIndex[color] !== prefix + '-node')
 		  nodes[i].setAttribute('class', nodes[i].getAttribute('class') + ' ' + nodeColorIndex[color]);
 		  
-        nodes[i].removeAttribute('fill');
+          nodes[i].removeAttribute('fill');
       }
 
       f = false;
