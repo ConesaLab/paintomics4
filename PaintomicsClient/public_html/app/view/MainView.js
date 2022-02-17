@@ -126,7 +126,13 @@ function MainView() {
 
 	this.showSignInDialog = function () {
 		var loggedIn = Ext.util.Cookies.get("userID") !== null;
-		var noLogin = Ext.util.Cookies.get("nologin") !== null;
+
+		//var noLogin = Ext.util.Cookies.get("nologin") !== null;
+		if (Ext.util.Cookies.get("nologin") == null && loggedIn !== true) {
+			var noLogin = true;
+		} else {
+			var noLogin = false;
+		}
 
 		/* Show the login form only when there is no session or nologin session enabled */
 		if (loggedIn !== true && noLogin !== true) {
@@ -143,9 +149,13 @@ function MainView() {
 		sessionInfoBar.setController(application.getController("UserController"));
 		sessionInfoBar.getComponent().updateLoginState();
 
-		var noLogin = Ext.util.Cookies.get("nologin") !== null;
-		// allow user to use the application without login
-		var nologin = true
+		var loggedIn = Ext.util.Cookies.get("userID") !== null;
+		//var noLogin = Ext.util.Cookies.get("nologin") !== null;
+		if (Ext.util.Cookies.get("nologin") == null && loggedIn !== true) {
+			var noLogin = true;
+		} else {
+			var noLogin = false;
+		}
 
 		this.component = Ext.create('Ext.container.Viewport', {
 			id: 'mainView',

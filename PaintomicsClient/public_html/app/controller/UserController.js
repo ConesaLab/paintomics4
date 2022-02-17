@@ -279,7 +279,14 @@ function UserController() {
         * @returns {undefined}
         */
         this.signOutButtonClickHandler = function (userView) {
-            var noLogin = Ext.util.Cookies.get("nologin") !== null;
+            //var noLogin = Ext.util.Cookies.get("nologin") !== null;
+            var loggedIn = Ext.util.Cookies.get("userID") !== null;
+            if (Ext.util.Cookies.get("nologin") == null && loggedIn !== true) {
+                var noLogin = true;
+            } else {
+                var noLogin = false;
+            }
+
 
             if (noLogin != true) {
               $.ajax({
@@ -341,7 +348,15 @@ function UserController() {
         this.startNoLoginSessionButtonClickHandler = function (userView) {
             var me = this;
 
-            var noLogin = Ext.util.Cookies.get("nologin") !== null;
+            //var noLogin = Ext.util.Cookies.get("nologin") !== null;
+            //var noLogin = true;
+            var loggedIn = Ext.util.Cookies.get("userID") !== null;
+            if (Ext.util.Cookies.get("nologin") == null && loggedIn !== true) {
+                var noLogin = true;
+            } else {
+                var noLogin = false;
+            }
+
 
             /* If we are already in a "noLogin" session, close the dialog */
             if (noLogin == true) {
