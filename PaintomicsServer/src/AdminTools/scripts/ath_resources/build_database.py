@@ -8,7 +8,7 @@ from subprocess import CalledProcessError, check_call
 #
 # DO NOT CHANGE THIS CODE
 #**************************************************************************
-#SPECIE = "sot"
+#SPECIE = "ath"
 #ROOT_DIR = '/home/tian/paintomics/paintomics4/PaintomicsServer/src/AdminTools/'
 #DATA_DIR = '/home/tian/database/KEGG_DATA/current/sot/'
 #LOG_FILE = "/home/tian/database/KEGG_DATA/current/install.log"

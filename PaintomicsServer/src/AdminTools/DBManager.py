@@ -336,7 +336,7 @@ def install_command(inputfile=None, specie=None, common=0, hub=0):
     Install the information for given species
     Usage: AdminTools.py install <options>
     Examples:
-              ./DBManager.py install --specie=mmu --common=0
+              ./DBManager.py install --specie=mmu --common=0 --hub=0
 
     Keyword arguments:
         from_file -- a file containing a list of a list of species IDs (one per line) to be installed
