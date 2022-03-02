@@ -112,8 +112,6 @@ def fromMiRNAtoGenes_STEP1(REQUEST, RESPONSE, QUEUE_INSTANCE, JOB_ID, EXAMPLE_FI
             jobInstance.addGeneBasedInputOmic({"omicName": "Gene expression", "inputDataFile": EXAMPLE_FILES_DIR + "gene_expression_values.tab", "isExample" : True})
             #jobInstance.addReferenceInput({"omicName": omicName, "fileType":  "Reference file", "inputDataFile": EXAMPLE_FILES_DIR + "sorted_mmu.gtf"})
             jobInstance.addReferenceInput({"omicName": omicName, "fileType": "Reference file", "inputDataFile": EXAMPLE_FILES_DIR + "mmu_mirBase_to_ensembl.tab", "isExample" : True})
-
-
             jobInstance.setOrganism("mmu")
         else:
             raise NotImplementedError

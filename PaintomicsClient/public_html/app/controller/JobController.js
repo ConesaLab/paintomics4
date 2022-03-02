@@ -265,7 +265,7 @@ function JobController() {
 			//SEND ALL FORM TO THE QUEUE
 			sendRequest(jobView, specialOmics);
 		} else {
-			showErrorMessage("Invalid form. Please check form errors.", {height: 150, width: 400, showReportButton:true});
+			showErrorMessage("Invalid Form. </br> Please check the form errors.", {height: 150, width: 400, showReportButton:true});
 			return false;
 		}
 	};
@@ -399,7 +399,7 @@ function JobController() {
 				failure: extJSErrorHandler
 			});
 		} else {
-			showErrorMessage("Invalid form. Please check form errors. <br/><br/>Also, please make sure to <span style='color: auto;text-decoration: underline;'>select an organism.</span>", {height: 150, width: 400, showReportButton:false});
+			showErrorMessage("Invalid form. <br/> Please provide at least: <span style='color: auto;text-decoration: underline;'>Gene expression /Metabolomics /Proteomics data.</span> Also, please make sure to <span style='color: auto;text-decoration: underline;'>select an organism.</span>", {height: 150, width: 400, showReportButton:false});
 			return false;
 		}
 	};

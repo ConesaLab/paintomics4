@@ -51,7 +51,7 @@ function PA_Step1JobView() {
 	};
 	/**
 	* This function adds a new OmicSubmittingPanel for the given type.
-	* @param {type} type for the new omic panel.
+	* @param {string} type for the new omic panel.
 	*/
 	this.addNewOmicSubmittingPanel = function(type) {
 		var newElem, submitForm;
@@ -94,6 +94,12 @@ function PA_Step1JobView() {
 			newElem = new RegionBasedOmicSubmittingPanel(this.nFiles);
 		} else if (type === "otheromic") {
 			newElem = new OmicSubmittingPanel(this.nFiles);
+		} else if (type == "transcriptionfactor") {
+			newElem = new OmicSubmittingPanel(this.nFiles, {
+				type: "Transcription factor",
+				fileType: "Transcription factor file",
+				relevantFileType: "Relevant Genes list"
+			});
 		}
 		newElem.setParent(this);
 
@@ -152,13 +158,12 @@ function PA_Step1JobView() {
 			$("#" + omicSubmittingPanels[i].el.id + " a.deleteOmicBox").click();
 		}
 
+		this.addNewOmicSubmittingPanel("transcriptionfactor").setExampleMode();
 		this.addNewOmicSubmittingPanel("mirnaseq").setExampleMode();
 		this.addNewOmicSubmittingPanel("dnaseseq").setExampleMode();
 		this.addNewOmicSubmittingPanel("proteomics").setExampleMode();
 		this.addNewOmicSubmittingPanel("metabolomics").setExampleMode();
 		this.addNewOmicSubmittingPanel("geneexpression").setExampleMode();
-
-
 
 		$("#availableOmicsContainer").css("display", "none");
 		$("#exampleButton").css("display", "none");
@@ -167,11 +172,12 @@ function PA_Step1JobView() {
 		showInfoMessage("About this example", {
 			message: 'The following example data was loaded:' +
 			'<ul>' +
-			'  <li>Gene Expression data: 6337 genes [5524 relevant genes].</li>' +
+			'  <li>Gene Expression data: 37000 genes [5524 relevant genes].</li>' +
 			'  <li>Proteomics data: 1110 proteins [148 relevant proteins].</li>' +
 			'  <li>Metabolomics data: 59 compounds [41 relevant compounds].</li>' +
 			'  <li>DNase-seq data: 5101 regions [3596 relevant regions].</li>'+
 			'  <li>miRNA-seq data: 4998 genes with miRNA values [605 relevant genes].</li>'+
+			' <li>Transcription factor expression data: 2890 transcription factors [2403 relevant transcription factors].</li>'+
 			'</ul>',
 			showButton: true,
 			height: 240
