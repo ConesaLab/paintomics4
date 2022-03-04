@@ -3,12 +3,7 @@
   <component name="ChangeListManager">
     <list default="true" id="37c2dff0-4ca0-47b7-8759-79132bfbc242" name="Default Changelist" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/PaintomicsClient/public_html/app/controller/JobController.js" beforeDir="false" afterPath="$PROJECT_DIR$/PaintomicsClient/public_html/app/controller/JobController.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/PaintomicsClient/public_html/app/view/PathwayAcquisitionViews/PA_Step1Views.js" beforeDir="false" afterPath="$PROJECT_DIR$/PaintomicsClient/public_html/app/view/PathwayAcquisitionViews/PA_Step1Views.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/PaintomicsServer/src/examplefiles/TFSignificant.tab" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/PaintomicsServer/src/examplefiles/TF_expression_data.tab" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/PaintomicsServer/src/servlets/MiRNA2GenesServlet.py" beforeDir="false" afterPath="$PROJECT_DIR$/PaintomicsServer/src/servlets/MiRNA2GenesServlet.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/PaintomicsServer/src/servlets/PathwayAcquisitionServlet.py" beforeDir="false" afterPath="$PROJECT_DIR$/PaintomicsServer/src/servlets/PathwayAcquisitionServlet.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/PaintomicsServer/src/classes/JobInstances/PathwayAcquisitionJob.py" beforeDir="false" afterPath="$PROJECT_DIR$/PaintomicsServer/src/classes/JobInstances/PathwayAcquisitionJob.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -62,14 +57,51 @@
       <option name="presentableId" value="Default" />
       <updated>1646173007460</updated>
       <workItem from="1646173012890" duration="2579000" />
-      <workItem from="1646204987074" duration="4498000" />
+      <workItem from="1646204987074" duration="5148000" />
+      <workItem from="1646398775803" duration="2375000" />
     </task>
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
     <option name="version" value="3" />
   </component>
+  <component name="XDebuggerManager">
+    <breakpoint-manager>
+      <breakpoints>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/PaintomicsServer/src/servlets/PathwayAcquisitionServlet.py</url>
+          <line>379</line>
+          <option name="timeStamp" value="1" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/PaintomicsServer/src/src/classes/JobInstances/PathwayAcquisitionJob.py</url>
+          <line>1059</line>
+          <option name="timeStamp" value="4" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/PaintomicsServer/src/src/classes/JobInstances/PathwayAcquisitionJob.py</url>
+          <line>1066</line>
+          <option name="timeStamp" value="5" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/PaintomicsServer/src/src/classes/JobInstances/PathwayAcquisitionJob.py</url>
+          <line>1076</line>
+          <option name="timeStamp" value="6" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/PaintomicsServer/src/src/classes/JobInstances/PathwayAcquisitionJob.py</url>
+          <line>1075</line>
+          <option name="timeStamp" value="7" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/PaintomicsServer/src/src/classes/JobInstances/PathwayAcquisitionJob.py</url>
+          <line>1063</line>
+          <option name="timeStamp" value="8" />
+        </line-breakpoint>
+      </breakpoints>
+    </breakpoint-manager>
+  </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
-    <SUITE FILE_PATH="coverage/paintomics4$launch_server.coverage" NAME="launch_server Coverage Results" MODIFIED="1646213892110" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/PaintomicsServer/src" />
+    <SUITE FILE_PATH="coverage/paintomics4$launch_server.coverage" NAME="launch_server Coverage Results" MODIFIED="1646400960977" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/PaintomicsServer/src" />
   </component>
 </project>

@@ -1054,15 +1054,15 @@ class PathwayAcquisitionJob(Job):
                     # Reset all pathways metagenes for the omic
                     for pathway in self.matchedPathways.values():
                         # Only reset metagenes for current DB
-                        if pathway.getSource().lower() == dbname:
+                        if pathway.getSource().lower() == str(dbname).lower():
                             pathway.resetMetagenes(inputOmic.get("omicName"))
 
                     metagenesFileName: object = self.getTemporalDir() + "/" + inputOmic.get("omicName") + "_metagenes" + \
                                                 ("_" + str(dbname).lower() + ".tab" if dbname != "KEGG" else ".tab")
 
                     # Clean previous metagene
-                    for line in self.matchedPathways:
-                        self.matchedPathways[line].metagenes = dict()
+                    #for line in self.matchedPathways:
+                    #    self.matchedPathways[line].metagenes = dict()
 
                     with open(metagenesFileName, 'rU') as inputDataFile:
                         for line in csv_reader(inputDataFile, delimiter="\t"):
