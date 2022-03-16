@@ -61,16 +61,19 @@ class Feature(Model):
 
     def setOmicsValues(self, omicsValues):
         self.omicsValues = omicsValues
+
     def getOmicsValues(self):
         return self.omicsValues
     def addOmicValue(self, omicValue):
         self.omicsValues.append(omicValue)
+
     def addOmicValues(self, omicValuesList):
         for omicValue in omicValuesList:
             self.omicsValues.append(omicValue)
 
     def setMatchingDB(self, matchingDB):
         self.matchingDB = matchingDB
+
     def getMatchingDB(self):
         return self.matchingDB if self.matchingDB != '' else 'KEGG'
 

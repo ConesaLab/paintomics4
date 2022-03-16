@@ -85,8 +85,8 @@ def findKeggIDByFeatureName(jobID, featureName, organism, db, databaseConvertion
         if(cursor.count() > 0):
             for item in cursor:
                 matchedFeatures.append(item.get("display_id"))
-
         return matchedFeatures, len(matchedFeatures) > 0
+
     except Exception as ex:
         return matchedFeatures, False
 
@@ -570,7 +570,7 @@ def mapFeatureNamesToCompoundsIDs(jobID, featureList):
     #notMatchedFeatures = list()
     #foundFeatures = list()
     #for compoundListPart in compoundsListParts:
-    #    mapCompoundsIdentifiers(jobID, compoundListPart, matchedFeatures, notMatchedFeatures, foundFeatures)
+    #   mapCompoundsIdentifiers(jobID, compoundListPart, matchedFeatures, notMatchedFeatures, foundFeatures)
 
     # matchedCompoundIDsTablesList=manager.list() #STORES THE MAPPING RESULTS TO UPDATE LATER THE CACHE
 

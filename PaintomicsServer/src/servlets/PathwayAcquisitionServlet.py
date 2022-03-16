@@ -196,6 +196,7 @@ def pathwayAcquisitionStep1_PART2(jobInstance, userID, exampleMode, RESPONSE):
         #****************************************************************
         logging.info("STEP1 - PROCESSING FILES..." )
         matchedMetabolites = jobInstance.processFilesContent() #This function processes all the files and returns a checkboxes list to show to the user
+
         logging.info("STEP1 - PROCESSING FILES...DONE" )
 
         #************************************************************************
@@ -353,6 +354,9 @@ def pathwayAcquisitionStep2_PART2(jobID, userID, selectedCompounds, clusterNumbe
         jobInstance.updateSubmitedCompoundsList(selectedCompounds)
         logging.info("STEP2 - UPDATING SELECTED COMPOUNDS LIST...DONE")
 
+        logging.info("STEP2 - GENERATING PATHWAYS INFORMATION...")
+        summary = jobInstance.generatePathwaysList()
+
 
 
         logging.info("STEP2 - GENERATE COMPOUND CLASSIFICATION")
@@ -363,12 +367,22 @@ def pathwayAcquisitionStep2_PART2(jobID, userID, selectedCompounds, clusterNumbe
             globalExpressionData = jobInstance.getGlobalExpressionData()
             hubAnalysisResult = jobInstance.hubAnalysis( ROOT_DIRECTORY )
 
+            # set compound sources to all database
+            #if len(jobInstance.databases) >= 2:
+            #    foundCompoundsCopy = [i for i in jobInstance.foundCompounds]
+            #    foundCompoundsCopy = jobInstance.foundCompounds.copy()
+
+            #    if "Reactome" in jobInstance.databases:
+            #        for compound in foundCompoundsCopy:
+            #            compound.matchingDB = "KEGG"
+
+            #    jobInstance.foundCompounds = jobInstance.foundCompounds + foundCompoundsCopy
+
 
         #****************************************************************
         # Step 2. GENERATING PATHWAYS INFORMATION
         #****************************************************************
-        logging.info("STEP2 - GENERATING PATHWAYS INFORMATION...")
-        summary = jobInstance.generatePathwaysList()
+
         #if selectedCompounds:
         #    hubAnalysisResult = jobInstance.hubAnalysis( ROOT_DIRECTORY )
         logging.info("STEP2 - GENERATING PATHWAYS INFORMATION...DONE")

@@ -17,7 +17,6 @@
 #  More info http://bioinfo.cipf.es/paintomics
 #  Technical contact paintomics4@outlook.com
 # **************************************************************
-
 import logging
 import math
 from os import path as os_path, system as os_system, makedirs as os_makedirs
@@ -525,6 +524,30 @@ class PathwayAcquisitionJob(Job):
         # ****************************************************************
         inputGenes = list(self.getInputGenesData().values())
         inputCompounds = list(self.getInputCompoundsData().values())
+        import copy
+
+        # if there is multi database make compounds available for both database
+        if len(self.databases) >= 2:
+            inputCompoundsCopy = copy.deepcopy(inputCompounds)
+            if "MapMan" in self.databases:
+                for compound in inputCompoundsCopy:
+                    compound.matchingDB = "MapMan"
+
+                for metabolite in self.inputCompoundsData:
+                    self.inputCompoundsData[metabolite].matchingDB = ["KEGG", "MapMan"]
+
+            elif "Reactome" in self.databases:
+
+                for compound in inputCompoundsCopy:
+                    compound.matchingDB = "Reactome"
+
+                for metabolite in self.inputCompoundsData:
+                    self.inputCompoundsData[metabolite].matchingDB = ["KEGG", "Reactome"]
+
+            inputCompounds = inputCompounds + inputCompoundsCopy
+
+        self.inputCompunds = inputCompounds
+
         pathwaysList = KeggInformationManager().getAllPathwaysByOrganism(self.getOrganism())
 
         enrichmentByOmic = {x.get("omicName"): x.get("enrichment", "genes") for x in
@@ -729,8 +752,10 @@ class PathwayAcquisitionJob(Job):
             logging.info("SUMMARY: Total " + key + " Features = " + str(totalFeaturesByOmic.get(key)))
             logging.info("SUMMARY: Total " + key + " Relevant Features = " + str(totalRelevantFeaturesByOmic.get(key)))
 
+        # PaintOmics 4
         self.summary = [totalKeggPathways, totalMatchedKeggPathways, totalInputMatchedGenes, totalInputMatchedCompounds,
                         totalFeaturesByOmic, totalRelevantFeaturesByOmic]
+
         # TODO: REVIEW THE SUMMARY GENERATION
         return self.summary
 
@@ -764,27 +789,32 @@ class PathwayAcquisitionJob(Job):
 
         for feature in chain(self.getInputCompoundsData().values(), self.getInputGenesData().values()):
             # Count only those present in at least one pathway
-            if feature.getID() in totalFeatures.get(feature.getMatchingDB()):
-                for omicValue in feature.getOmicsValues():
-                    # Select the appropriate enrichment property
-                    enrichmentType = enrichmentByOmic[omicValue.getOmicName()]
-                    enrichmentProperty = enrichments.get(enrichmentType)(omicValue).lower()
+            if  type(feature.getMatchingDB()) is str:
+                dbList = [feature.getMatchingDB()]
+            else:
+                dbList = feature.getMatchingDB()
+            for db in dbList:
+                if feature.getID() in totalFeatures.get(db):
+                    for omicValue in feature.getOmicsValues():
+                        # Select the appropriate enrichment property
+                        enrichmentType = enrichmentByOmic[omicValue.getOmicName()]
+                        enrichmentProperty = enrichments.get(enrichmentType)(omicValue).lower()
 
-                    # Only for association enrichment type the relevant feature must come from the associations files.
-                    relevantValue = omicValue.isRelevantAssociation() if enrichmentType == 'associations' else omicValue.isRelevant()
+                        # Only for association enrichment type the relevant feature must come from the associations files.
+                        relevantValue = omicValue.isRelevantAssociation() if enrichmentType == 'associations' else omicValue.isRelevant()
 
-                    #counterNames[feature.getMatchingDB()][omicValue.getOmicName()][enrichmentProperty] = (
-                    #            counterNames[feature.getMatchingDB()][omicValue.getOmicName()][
-                    #                enrichmentProperty] or relevantValue)
+                        #counterNames[feature.getMatchingDB()][omicValue.getOmicName()][enrichmentProperty] = (
+                        #            counterNames[feature.getMatchingDB()][omicValue.getOmicName()][
+                        #                enrichmentProperty] or relevantValue)
 
-                    counterNames[feature.getMatchingDB()][omicValue.getOmicName()][feature.getID()] = (
-                                counterNames[feature.getMatchingDB()][omicValue.getOmicName()][
-                                   feature.getID()] or relevantValue)
+                        counterNames[db][omicValue.getOmicName()][feature.getID()] = (
+                                    counterNames[db][omicValue.getOmicName()][
+                                       feature.getID()] or relevantValue)
 
-                    if feature.getMatchingDB() == 'KEGG':
-                        totalFeaturesID.add(feature.getID())
-                        if relevantValue:
-                            totalFeaturesIDSig.add(feature.getID())
+                        if db == 'KEGG':
+                            totalFeaturesID.add(feature.getID())
+                            if relevantValue:
+                                totalFeaturesIDSig.add(feature.getID())
             else:
                 logging.error("STEP2 - Feature not present in at least one pathway " + feature.getID())
 
@@ -850,9 +880,17 @@ class PathwayAcquisitionJob(Job):
         # Keeps a track of which compounds participates in the pathway, without counting twice compounds that come from the
         # same measurement (it occurs due to disambiguation step).
         # Now, for each compound in the input
+
         for compound in inputCompounds:
+
+            if sourceDB == "Reactome":
+                compound.matchingDB = "Reactome"
+            elif sourceDB == "KEGG":
+                compound.matchingDB = "KEGG"
+
             # Check if the compound participates in the pathway
             if compound.getID().lower() in compoundsInPathway and compound.getMatchingDB() == sourceDB:
+            #if compound.getID().lower() in compoundsInPathway:
                 # If at least one compound participates, then the pathway is valid
                 isValidPathway = True
                 # Register that the compound participates in the pathway
