@@ -154,7 +154,7 @@ def processEnsemblData():
     resource = EXTERNAL_RESOURCES.get("ensembl")[0]
     file_name= DATA_DIR + "mapping/" + resource.get("output")
     if not os.path.isfile(file_name):
-        stderr.write("Unable to find the ENSEMBL MAPPING file: " + file_name + "###########################################333")
+        stderr.write("Unable to find the ENSEMBL MAPPING file: " + file_name)
         exit(1)
 
     #Get line count (for percentage)
@@ -1700,7 +1700,7 @@ def processReactomePathwaysData():
                 entity_reactome_id = entity_reactome['stId']
                 #entry['schemaClass'] = next( item for item in nodesInf if item["dbId"] == entity_id )["schemaClass"]
                 entity_reactome_id_name = entity_reactome['displayName']
-                entity_reactome_id_name_simple = entity_reactome_id_name.rsplit(' ', 1)[0]
+                entity_reactome_id_name_simple = entity_reactome_id_name.rsplit('[', -1)[0]
                 if entity_reactome.get("schemaClass") == 'SimpleEntity':
                     indices = [i for i, x in enumerate(chebi2ReactomeListID) if x == entity_reactome_id]
                     ## Can not find chebi ID
@@ -1843,7 +1843,7 @@ def processReactomePathwaysData():
                         "width": propWidth
                     }
                     ALL_PATHWAYS[pathway_id]["relatedPathways"].append( entry )
-
+                # TODO: What about Genome Encoded Entity class in Reactome. Currently, we do not install them since they are Ghost homologue of a protein.
                 else:
                     continue
 

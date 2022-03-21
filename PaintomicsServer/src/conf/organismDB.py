@@ -1,6 +1,7 @@
 dicDatabases = {
         'mmu'   :   [{'KEGG': 'entrezgene', 'Reactome': 'reactome_gene_id'}, {'KEGG': 'refseq_gene_symbol', 'Reactome': 'reactome_gene_id'}],
         'hsa'   :   [{'KEGG': 'entrezgene', 'Reactome': 'reactome_gene_id'}, {'KEGG': 'refseq_gene_symbol', 'Reactome': 'reactome_gene_id'}],
+        'dme'   :   [{'KEGG': 'kegg_id', 'Reactome': 'reactome_gene_id'}, {'KEGG': 'kegg_gene_symbol', 'Reactome': 'reactome_gene_id'}],
         'bta'   :   [{'KEGG': 'kegg_id', 'Reactome': 'reactome_gene_id'}, {'KEGG': 'kegg_gene_symbol', 'Reactome': 'reactome_gene_id'}],
         #'mmu'   :   [{'KEGG': 'entrezgene'}, {'KEGG': 'refseq_gene_symbol'}],
         #'hsa'   :   [{'KEGG': 'entrezgene'}, {'KEGG': 'refseq_gene_symbol'}],

@@ -1,7 +1,7 @@
 import os
 import json
 from collections import defaultdict
-from subprocess import check_call
+from subprocess import check_call, STDOUT
 from sys import stderr
 import requests
 from src.AdminTools.DBManager import wait, generateThumbnail
@@ -41,6 +41,7 @@ def downloadReactome(specie):
     downloadDir = KEGG_DATA_DIR + "download/"
     DATA_DIR =  downloadDir + SPECIES.lower() + '/'
     REACTOME_DIR = os.path.join(DATA_DIR + "reactome/")
+
     ReactomePathwayHigh = set()
     ReactomePathwayLow = set()
     ReactomePathwayHighList = []

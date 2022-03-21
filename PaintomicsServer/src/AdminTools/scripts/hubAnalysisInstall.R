@@ -1,16 +1,16 @@
 #!/usr/bin/env Rscript
 
-suppressPackageStartupMessages(require(KEGGgraph))
-suppressPackageStartupMessages(require(readr))
-suppressPackageStartupMessages(require(tidyr))
-suppressPackageStartupMessages(require(rvest))
-suppressPackageStartupMessages(require(dplyr))
-suppressPackageStartupMessages(require(xml2))
-suppressPackageStartupMessages(require(stringr))
-suppressPackageStartupMessages(require(qdapRegex))
-suppressPackageStartupMessages(require(gtools))
-suppressPackageStartupMessages(require(jsonlite))
-suppressPackageStartupMessages(require(AnnotationDbi))
+library(KEGGgraph)
+library(readr)
+library(tidyr)
+library(rvest)
+library(dplyr)
+library(xml2)
+library(stringr)
+library(qdapRegex)
+library(gtools)
+library(jsonlite)
+library(AnnotationDbi)
 
 result <- NULL
 

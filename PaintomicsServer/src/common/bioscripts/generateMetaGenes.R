@@ -123,51 +123,55 @@ if (args$database == "") {
 # GET METAGENES  ------------------------------------------------------------------------------------------------
 cat("STEP 4. Obtaining metagenes, ")
 expression_GO <- get(PCA2GO.fun)(input_data, genes2pathway, var.cutoff = args$cutoff, fac.sel =  sel)
-metagenes <- expression_GO$X.sel
 
 
 # ADJUST GENE DIRECTION -----------------------------------------------------------------------------------------
 ##for each metagene
-for (i in 1:length(row.names(metagenes)) ) {
-  cur_pathway_id <- unlist(lapply(strsplit(row.names(metagenes)[i], "_"), function(x) x[1]))
-  #loadings indicates the contribution of each gene to PC1
-  #The loading sign is not arbitrary. 
-  #Positive loading indicates positive correlation of gene expression with the scores while negative loading indicates negative correlation.
-  gene_loadings <- unlist(expression_GO$X.loadings[i])
-  #select genes that contribute most in a given component as
-  # abs(loading del gen)/sum(abs(loadings de todos los genes)
-  nGenes <- length(gene_loadings)
-  loadings_sum <- sum(abs(gene_loadings))
-  has_positives<-0
-  has_negatives<-0
-  selected <- c()
-  for(j in gene_loadings ){
-    #If this value is greater than 1/total_genes, the gene is selected because it has a greater contribution 
-    #than the value of contribution if all the same genes contribute together.
-    if(abs(j)/loadings_sum > 1/nGenes){
-      selected <- c(selected, j)    
-      has_positives<- has_positives + ifelse(j > 0, 1, 0)
-      has_negatives<- has_negatives + ifelse(j < 0, 1, 0)
+adjust.direction <- function (expression_GO) {
+  metagenes <- expression_GO$X.sel
+  for (i in 1:length(row.names(metagenes)) ) {
+    cur_pathway_id <- unlist(lapply(strsplit(row.names(metagenes)[i], "_"), function(x) x[1]))
+    #loadings indicates the contribution of each gene to PC1
+    #The loading sign is not arbitrary. 
+    #Positive loading indicates positive correlation of gene expression with the scores while negative loading indicates negative correlation.
+    gene_loadings <- unlist(expression_GO$X.loadings[i])
+    #select genes that contribute most in a given component as
+    # abs(loading del gen)/sum(abs(loadings de todos los genes)
+    nGenes <- length(gene_loadings)
+    loadings_sum <- sum(abs(gene_loadings))
+    has_positives<-0
+    has_negatives<-0
+    selected <- c()
+    for(j in gene_loadings ){
+      #If this value is greater than 1/total_genes, the gene is selected because it has a greater contribution 
+      #than the value of contribution if all the same genes contribute together.
+      if(abs(j)/loadings_sum > 1/nGenes){
+        selected <- c(selected, j)    
+        has_positives<- has_positives + ifelse(j > 0, 1, 0)
+        has_negatives<- has_negatives + ifelse(j < 0, 1, 0)
+      }
     }
-  }
-  
-  ## Change the direction for the metagene
-  ##If most or all of the genes have a positive loading then
-  if(has_positives > has_negatives ){
-    #leave metagene as it is
-  ##If most or all of the genes have a negative loading then invert metagene
-  }else if(has_negatives > has_positives){
-    metagenes[i,] <-metagenes[i,] * -1 
-  ##If same number of negative and positive loadings then resolve
-  }else if(has_negatives > 0 && has_positives > 0){
-    has_positives <- sum(selected[selected>0])
-    has_negatives <- abs(sum(selected[selected<0]))
-    if(has_negatives > has_positives){
-      ##If negative loadings genes are bigger then invert metagene
+    
+    ## Change the direction for the metagene
+    ##If most or all of the genes have a positive loading then
+    if(has_positives > has_negatives ){
+      #leave metagene as it is
+      ##If most or all of the genes have a negative loading then invert metagene
+    }else if(has_negatives > has_positives){
       metagenes[i,] <-metagenes[i,] * -1 
+      ##If same number of negative and positive loadings then resolve
+    }else if(has_negatives > 0 && has_positives > 0){
+      has_positives <- sum(selected[selected>0])
+      has_negatives <- abs(sum(selected[selected<0]))
+      if(has_negatives > has_positives){
+        ##If negative loadings genes are bigger then invert metagene
+        metagenes[i,] <-metagenes[i,] * -1 
+      }
     }
   }
+  return(metagenes)
 }
+metagenes <- adjust.direction(expression_GO)
 
 # CLUSTERIZE ----------------------------------------------------------------------------------------------------
 data <- metagenes

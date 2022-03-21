@@ -37,5 +37,5 @@ EXTERNAL_RESOURCES = {
                         "output": "reactome_top.json",
                         "description": "Source: Reactome top pathways in JSON. It contains the main pathways to be used to retrieve the others.."
                     }
-                ],
+                ]
         }

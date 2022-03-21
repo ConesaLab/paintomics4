@@ -28,7 +28,7 @@ def download_command(inputfile=None, specie=None, kegg=0, mapping=0, common=0, r
     Download the information for given species
     Usage: AdminTools.py download <options>
     Examples:
-              ./DBManager.py download --specie=mmu --kegg=1 --mapping=1 --common=0
+              ./DBManager.py download --specie=mmu --kegg=1 --mapping=1 --common=0 --reactome=0
 
     Keyword arguments:
         from_file -- a file containing a list of a list of species IDs (one per line), followed by (tabulated)
@@ -331,12 +331,12 @@ def download_command(inputfile=None, specie=None, kegg=0, mapping=0, common=0, r
     else:
         exit(0)
 
-def install_command(inputfile=None, specie=None, common=0, hub=0):
+def install_command(inputfile=None, specie=None, common=0, hub=1):
     """
     Install the information for given species
     Usage: AdminTools.py install <options>
     Examples:
-              ./DBManager.py install --specie=mmu --common=0 --hub=0
+              ./DBManager.py install --specie=mmu --common=0 --hub=1
 
     Keyword arguments:
         from_file -- a file containing a list of a list of species IDs (one per line) to be installed
@@ -410,7 +410,7 @@ def install_command(inputfile=None, specie=None, common=0, hub=0):
                     '--organism="' + specie + '"',
                     '--scriptDir="' + ROOT_DIRECTORY + "AdminTools/scripts/" + '"',
                     '--outputDir="' + hubDir + '"'
-                ]
+                ],stderr=STDOUT
             )
 
 
