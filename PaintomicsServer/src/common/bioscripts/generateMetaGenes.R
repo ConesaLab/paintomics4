@@ -55,7 +55,14 @@ argsL <- as.list(as.character(argsDF$V2))
 names(argsL) <- argsDF$V1
 args <- as.data.frame(argsL, stringsAsFactors=F)
 
-# args <- data.frame(specie="mmu", input_file="Gene expression_matched.txt", output_prefix="res", data_dir="/home/rhernandez/Desktop/caca/test", kegg_dir="/data/KEGG_DATA/", sources_dir="/var/www/paintomics/src/common/bioscripts/", stringsAsFactors = F, cluster="kmeans")
+args <- data.frame(specie="ath",
+                   input_file="Gene expression_matched_test.txt",
+                   output_prefix="res",
+                   data_dir="/home/tian/Downloads/",
+                   kegg_dir='/home/tian/database/KEGG_DATA/',
+                   sources_dir='/home/tian/paintomics/paintomics4/PaintomicsServer/src/common/bioscripts',
+                   stringsAsFactors = F,
+                   cluster="kmeans")
 
 ## cutoff default
 if(is.null(args$cutoff)) {
