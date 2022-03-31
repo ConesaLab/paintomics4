@@ -706,7 +706,7 @@ String.prototype.trunc = String.prototype.trunc ||
                             if (has_negatives > has_positives) {
                                 metagenes[i] = metagenes[i].map(x => x * -1)
                             } else if  (has_negatives == has_positives) {
-                                if (has_negatives_sum > has_positives_sum) {
+                                if (Math.abs(has_negatives_sum) > Math.abs(has_positives_sum)) {
                                     metagenes[i] = metagenes[i].map(x => x * -1)
                                 }
                             }
