@@ -658,32 +658,30 @@ String.prototype.trunc = String.prototype.trunc ||
                         return m;
                     }
 
-                    pcaGenes = new PCA(matrixData);
-                    eigen = pcaGenes.getEigenvalues();
+                    function transpose(matrix) {
+                        return matrix[0].map((col, i) => matrix.map(row => row[i]));
+                    }
+
+                    pcaGenes = new PCA(transpose(matrixData));
                     varExp = pcaGenes.getExplainedVariance();
-                    pcaLoadings = pcaGenes.getLoadings().transpose();
+                    //Metagenes is the score
+                    //Score = centered_dataset * t(loandings)
+                    metagenes_raw = transpose(multiply(pcaGenes.adjustDataset, pcaGenes.getLoadings().transpose()));
                     metagenes = [];
 
                     // Get the loadings for gene direction revert
-                    loadings2 = pcaGenes.getEigenvectors();
-                    Xoff = pcaGenes.getAdjustDataset();
-                    scores2 = multiply(Xoff, loadings2)
-                    sum = (r, a) => r.map((b, i) => a[i] + b)
-
-                    normas2 = math.sqrt(scores2.map(x => x.map (x => Math.pow(x,2))).reduce(sum))
-                    loadings1 = multiply(scores2, math.diag(normas2.map(x => 1 / x)))
-                    loadings_sum = math.abs(loadings1).reduce(sum)
-
+                    pcaLoadings = pcaGenes.getLoadings();
 
                     /* Assuming fac.sel = "single%" */
                     fac = varExp.filter(function (x) {
                         return x >= (varCutoff / Math.sqrt(1))
                     }).length;
 
-
                     /* Avoid returning metagenes when there are none */
                     if (fac) {
-                        metagenes = pcaLoadings.subMatrixColumn(Array.from(Array(fac).keys())).transpose();
+                        for (index in Array.from(Array(fac).keys())) {
+                            metagenes.push(metagenes_raw[index]);
+                        }
 
                         //check directions
                         let has_positives = 0
@@ -692,14 +690,15 @@ String.prototype.trunc = String.prototype.trunc ||
                         let has_negatives_sum = 0
 
                         for (let i = 0; i < fac; i++) {
-                            for (let j = 0; j < loadings1.length; j++) {
-                                if (Math.abs(loadings1[j][i]) / loadings_sum[i] > 1 / loadings1.length) {
-                                    if (loadings1[j][i] > 0) {
+                            loadings_sum = pcaLoadings[i].reduce((a, b) => Math.abs(a) + Math.abs(b), 0)
+                            for (let j = 0; j < pcaLoadings[i].length; j++) {
+                                if (Math.abs(pcaLoadings[i][j]) / loadings_sum > 1 / pcaLoadings[i].length) {
+                                    if (pcaLoadings[i][j] > 0) {
                                         has_positives = has_positives + 1
-                                        has_positives_sum = has_positives_sum + loadings1[j][i]
+                                        has_positives_sum = has_positives_sum + pcaLoadings[i][j]
                                     } else {
                                         has_negatives = has_negatives + 1
-                                        has_negatives_sum = has_negatives_sum + loadings1[j][i]
+                                        has_negatives_sum = has_negatives_sum + pcaLoadings[i][j]
                                     }
                                 }
                             }
@@ -711,6 +710,7 @@ String.prototype.trunc = String.prototype.trunc ||
                                 }
                             }
                         }
+
                     }
                     return (metagenes);
                 }
