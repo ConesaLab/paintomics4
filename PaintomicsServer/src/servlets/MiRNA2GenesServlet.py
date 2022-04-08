@@ -184,7 +184,6 @@ def fromMiRNAtoGenes_STEP2(jobInstance, userID, exampleMode, RESPONSE, formField
         jobInstance.validateInput()
         logging.info("STEP1 - VALIDATING INPUT...DONE" )
 
-
         #****************************************************************
         # Step 1.PROCESS THE FILES DATA
         #****************************************************************
@@ -217,6 +216,8 @@ def fromMiRNAtoGenes_STEP2(jobInstance, userID, exampleMode, RESPONSE, formField
             "compressedFileName": fileNames[0],
             "mainOutputFileName":  fileNames[1],
             "secondOutputFileName":  fileNames[2],
+            "thirdOutputFileName":  fileNames[3],
+            "fourthOutputFileName":  fileNames[4],
             "description": jobInstance.description,
             "enrichment": jobInstance.enrichment
         })

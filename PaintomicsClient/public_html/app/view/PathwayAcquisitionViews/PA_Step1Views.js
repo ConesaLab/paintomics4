@@ -1663,16 +1663,16 @@ function MiRNAOmicSubmittingPanel(nElem, options) {
 			component.queryById("relevantFileTypeSelector").setValue(values.secondaryFileType);
 		}
 		if (values.thirdFile) {
-			component.queryById("thirdFileSelector").setValue(values.secondaryFile);
+			component.queryById("thirdFileSelector").setValue(values.thirdFile);
 		}
 		if (values.thirdFileType) {
-			component.queryById("thirdFileTypeSelector").setValue(values.secondaryFileType);
+			component.queryById("associationsFileTypeSelector").setValue(values.thirdFileType);
 		}
 		if (values.fourthFile) {
-			component.queryById("fourthFileSelector").setValue(values.secondaryFile);
+			component.queryById("fourthFileSelector").setValue(values.fourthFile);
 		}
-		if (values.ourthFileType) {
-			component.queryById("fourthFileTypeSelector").setValue(values.secondaryFileType);
+		if (values.fourthFileType) {
+			component.queryById("associationsRelevantFileTypeSelector").setValue(values.fourthFileType);
 		}
 		if (values.toogleMapRegions) {
 			component.queryById("toogleMapRegions").setVisible(values.toogleMapRegions === true);
@@ -1793,7 +1793,7 @@ function MiRNAOmicSubmittingPanel(nElem, options) {
 					value: "Relevant regulators list (mapped to Genes)",
 					hidden: true,
 					helpTip: "Specify the type of data for uploaded file (Relevant Genes list, Relevant proteins list,...)."
-				},  {
+				}, {
 					xtype: "myFilesSelectorButton",
 					fieldLabel: 'Regulator associations file',
 					namePrefix: this.namePrefix + '_associations',
@@ -1805,6 +1805,20 @@ function MiRNAOmicSubmittingPanel(nElem, options) {
 					name: this.namePrefix + '_associations_file_type',
 					itemId: "associationsFileTypeSelector",
 					value: "Regulator associations",
+					hidden: true,
+					helpTip: "Specify the type of data for uploaded file (Relevant Genes list, Relevant proteins list,...)."
+				}, {
+					xtype: "myFilesSelectorButton",
+					fieldLabel: 'Regulator relevant associations file',
+					namePrefix: this.namePrefix + '_relevant_associations',
+					itemId: "fourthFileSelector",
+					helpTip: "Upload the relevant association list."
+				}, {
+					xtype: "textfield",
+					fieldLabel: 'File Type',
+					name: this.namePrefix + '_associations_relevant_file_type',
+					itemId: "associationsRelevantFileTypeSelector",
+					value: "Regulator relevant associations",
 					hidden: true,
 					helpTip: "Specify the type of data for uploaded file (Relevant Genes list, Relevant proteins list,...)."
 				}, {
@@ -1948,13 +1962,13 @@ function MiRNAOmicSubmittingPanel(nElem, options) {
 				{
 					xtype: "myFilesSelectorButton",
 					fieldLabel: "Associations file",
-					namePrefix: this.namePrefix + '_annotations',
+					namePrefix: this.namePrefix + '_associations',
 					itemId: "mirnaTargetsFileSelector",
 					helpTip: "Upload the reference file that relates each feature (i.e. miRNA) with its potential targets. This information is usually extracted from popular databases such as miRbase for miRNAs. See above the accepted format for the file."
 				}, {
 					xtype: 'textfield',
 					fieldLabel: 'File Type',
-					name: this.namePrefix + '_annotations_file_type',
+					name: this.namePrefix + '_associations_file_type',
 					hidden: true,
 					itemId: "mirnaTargetsFileTypeSelector",
 					value: "Associations file"

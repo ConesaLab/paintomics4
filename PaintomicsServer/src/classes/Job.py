@@ -252,34 +252,26 @@ class Job(Model):
     def processFilesContent(self):
         raise NotImplementedError()
 
-    def  parseGeneBasedFiles(self, inputOmic):
+    def parseGeneBasedFiles(self, inputOmic):
         """
         This function...
-
         @param {type}
         @returns
         """
+
+        #E.G. Gene Expression, Proteomics, My Own gene data...
         omicName = inputOmic.get("omicName")
-        valuesFileName = inputOmic.get( "inputDataFile" )
-        if valuesFileName.find("regulator2Gene_output") != -1:
-            relevantFileName = valuesFileName.replace( "regulator2Gene_output", "regulator2Gene_relevant" )
-            ## We already use the association file in the miRNA2GenesJob.py
-            associationsFileName = None
-            relevantAssociationsFileName = valuesFileName.replace( "regulator2Gene_output_", "regulator_relevant_associations" )
-        else:
-            #E.G. Gene Expression, Proteomics, My Own gene data...
-            relevantFileName= inputOmic.get("relevantFeaturesFile", "")
-            associationsFileName = inputOmic.get("associationsFile", "")
-            relevantAssociationsFileName = inputOmic.get("relevantAssociationsFile", "")
-
-
+        valuesFileName= inputOmic.get("inputDataFile")
+        relevantFileName= inputOmic.get("relevantFeaturesFile", "")
+        associationsFileName = inputOmic.get("associationsFile", "")
+        relevantAssociationsFileName = inputOmic.get("relevantAssociationsFile", "")
         allValues = []  #KEEP ALL VALUES TO CALCULATE PERCENTILES FOR EACH OMIC
 
-        if not inputOmic.get( "isExample", False ):
-            valuesFileName = "{path}{file}".format(path=self.getInputDir(), file=valuesFileName)
-            relevantFileName = "{path}{file}".format(path=self.getInputDir(), file=relevantFileName)
-            associationsFileName = "{path}{file}".format(path=self.getInputDir(), file=associationsFileName)
-            relevantAssociationsFileName = "{path}{file}".format(path=self.getInputDir(), file=relevantAssociationsFileName)
+        if(inputOmic.get("isExample", False) == False):
+            valuesFileName = "{path}/{file}".format(path=self.getInputDir(), file=valuesFileName)
+            relevantFileName = "{path}/{file}".format(path=self.getInputDir(), file=relevantFileName)
+            associationsFileName = "{path}/{file}".format(path=self.getInputDir(), file=associationsFileName)
+            relevantAssociationsFileName = "{path}/{file}".format(path=self.getInputDir(), file=relevantAssociationsFileName)
 
         totalInputFeatures  = set()
         totalMappedFeatures = foundFeatures = 0
@@ -308,6 +300,7 @@ class Job(Model):
         #*************************************************************************
         logging.info("PARSING USER GENE BASED FILE (" + omicName + ")..." )
         parsedFeatures = []
+
         #IF THE USER UPLOADED VALUES FOR GENE EXPRESSION
         if os_path.isfile(valuesFileName):
             with open(valuesFileName, 'rU') as inputDataFile:
@@ -318,7 +311,7 @@ class Job(Model):
                     #*************************************************************************
                     # STEP 2.1 CHECK IF IT IS HEADER, IF SO, IGNORE LINE
                     #*************************************************************************
-                    if nLine == 1 or len( line ) == 0:
+                    if(nLine == 1 or len(line) == 0):
                         try:
                             float(line[1])
                         except Exception:
@@ -351,54 +344,38 @@ class Job(Model):
 
                         # Make sure to use numerical values
                         numericValues = list(map(float, line[1:len(line)]))
-                        numericValues = numpy.nan_to_num(numericValues)
-                        numericValues = numericValues.tolist()
 
                         # If there exists an appropriate association list, use that to retrieve the gene
                         # name as the previous process of matching regions or regulators to genes (rgmatch, etc)
                         # shouldn't have been done, thus leaving the original unmapped features.
                         #
                         # Otherwise split the ID column as it might contain associated_gene:::original_name
-
-
                         if associationFeatures:
-                            geneIDs = associationFeatures.get(line[0], [])
-
+                            columnID = line[0].split(":::")
+                            geneIDs = associationFeatures.get(columnID[1], [])
                             for geneID in geneIDs:
                                 omicValueAux = OmicValue(geneID)
                                 omicValueAux.setOmicName(omicName)
                                 omicValueAux.setRelevant(line[0].lower() in relevantFeatures)
-                                omicValueAux.setRelevantAssociation(':::'.join([geneID, line[0]]).lower() in relevantAssociationFeatures)
+                                omicValueAux.setRelevantAssociation(line[0].lower() in relevantAssociationFeatures)
                                 omicValueAux.setValues(numericValues)
                                 omicValueAux.setOriginalName(line[0])
 
                                 process_omic_value(geneID, omicValueAux)
                         else:
                             columnID = line[0].split(":::")
-                            if line[0].lower() in relevantAssociationFeatures and valuesFileName.find("regulator2Gene_output") != -1:
-                                omicValueAux = OmicValue(columnID[0])
-                                omicValueAux.setOmicName(omicName)
-                                # omicValueAux.setRelevant(relevantFeatures.has_key(omicValueAux.getInputName().lower()))
-                                # TODO: Relevant flag using whole line including original name?
-                                omicValueAux.setRelevant(line[0].lower() in relevantFeatures)
-                                omicValueAux.setValues(numericValues)
-                                if len(columnID) > 1:
-                                    omicValueAux.setOriginalName(columnID[1])
 
-                                process_omic_value(columnID[0], omicValueAux)
+                            omicValueAux = OmicValue(columnID[0])
+                            omicValueAux.setOmicName(omicName)
+                            # omicValueAux.setRelevant(relevantFeatures.has_key(omicValueAux.getInputName().lower()))
+                            # TODO: Relevant flag using whole line including original name?
+                            omicValueAux.setRelevant(line[0].lower() in relevantFeatures)
+                            omicValueAux.setValues(numericValues)
 
-                            elif valuesFileName.find("regulator2Gene_output") == -1:
-                                omicValueAux = OmicValue( columnID[0] )
-                                omicValueAux.setOmicName( omicName )
-                                # omicValueAux.setRelevant(relevantFeatures.has_key(omicValueAux.getInputName().lower()))
-                                # TODO: Relevant flag using whole line including original name?
-                                omicValueAux.setRelevant( line[0].lower() in relevantFeatures )
-                                omicValueAux.setValues( numericValues )
+                            if len(columnID) > 1:
+                                omicValueAux.setOriginalName(columnID[1])
 
-                                if len(columnID) > 1:
-                                    omicValueAux.setOriginalName(columnID[1])
-
-                                process_omic_value(columnID[0], omicValueAux)
+                            process_omic_value(columnID[0], omicValueAux)
 
                 totalInputFeatures = len(totalInputFeatures)
                 logging.info("PARSING USER USER GENE BASED FILE (" + omicName + ")... FINISHED. " + str(totalInputFeatures) + " FEATURES PROCESSED.")
@@ -456,6 +433,7 @@ class Job(Model):
                     summary = summary.tolist() + [numpy_min(numpyArray), numpy_max(numpyArray)]
                 except:
                     summary = summary + [numpy_min(numpyArray), numpy_max(numpyArray)]
+
 
             logging.info("DISTRIBUTION FOR " + omicName  + ": MIN: " + str(summary[0])  + "; p10: " + str(summary[1]) + "; q1: " + str(summary[2]) + ";  MEDIAN: " + str(summary[3])+ "; q1: " + str(summary[4])  + "; p90: " + str(summary[5]) + ";  MAX VALUE: " + str(summary[6]))
             logging.info("DISTRIBUTION FOR " + omicName  + " WITHOUT OUTLIERS: MIN: " + str(summary[7])  + "; MAX: " + str(summary[8])  + "; #OUTLIERS: " + str(numpy_sum(outlierMask)))

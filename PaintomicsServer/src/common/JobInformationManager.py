@@ -178,7 +178,7 @@ class JobInformationManager(metaclass=Singleton):
     #**********************************************
     #*
     #**********************************************
-    def saveFiles (self, uploadedFiles, formFields, userID, jobInstance, CLIENT_TMP_DIR, EXAMPLE_FILES_DIR=""):
+    def saveFiles(self, uploadedFiles, formFields, userID, jobInstance, CLIENT_TMP_DIR, EXAMPLE_FILES_DIR=""):
         nOthers = 1
         uploadedDataFile = None
         uploadedRelevantFile = None
@@ -197,7 +197,7 @@ class JobInformationManager(metaclass=Singleton):
         for uploadedFileName in uploadedFiles.keys():
             #IF THE FILE IS NOT A RELEVANT FEATURES FILE
             fields = {}
-            if uploadedFileName is not None and uploadedFileName.find( "_relevant" ) == -1  and uploadedFileName.find( "annotations_file" ) == -1 and uploadedFileName.find( "_associations_file" ) == -1:
+            if (uploadedFileName is not None and uploadedFileName.find("_relevant") == -1  and uploadedFileName.find("_annotations_file") == -1   and uploadedFileName.find("_associations_file") == -1):
                 ##GET THE MATCHING TYPE: GENE OR COMPOUND
                 # Default matching type: gene
                 matchingType = formFields.get(uploadedFileName.replace("file","match_type"), "gene")
@@ -208,10 +208,10 @@ class JobInformationManager(metaclass=Singleton):
                 fields["description"] =  formFields.get(uploadedFileName.replace("file","description"), "") ##GET THE FILE DESCRIPTION
 
             #IF IS ANNOTATION FILE
-            elif uploadedFileName is not None and uploadedFileName.find( "annotations_file" ) != -1:
+            elif (uploadedFileName is not None and uploadedFileName.find("_annotations_file") != -1):
                 matchingType = "reference_file" ##GET THE MATCHING TYPE: GENE OR COMPOUND
                 omicType =  "Reference file"
-                dataType = formFields.get(uploadedFileName.replace("annotations_file","annotations_file_type"))
+                dataType = formFields.get(uploadedFileName.replace("file","file_type"))
 
                 fields["omicType"] = omicType
                 fields["dataType"] = dataType ##GET THE FILE TYPE: GENE EXPRESSION, ETC.
@@ -223,9 +223,9 @@ class JobInformationManager(metaclass=Singleton):
             uploadedDataFile = uploadedFiles.get(uploadedFileName)
             uploadedRelevantFile = uploadedFiles.get(uploadedFileName.replace("file", "relevant_file"), None)
 
-            uploadedAssociationDataFile = uploadedFiles.get(uploadedFileName.replace("file", "annotations_file"), None)
-            uploadedAssociationRelevantFile = uploadedFiles.get(uploadedFileName.replace("file", "relevant_associations_file"), None)
+            uploadedAssociationDataFile = uploadedFiles.get(uploadedFileName.replace("file", "associations_file"), None)
 
+            uploadedAssociationRelevantFile = uploadedFiles.get(uploadedFileName.replace("file", "relevant_associations_file"), None)
 
             configValues = formFields.get(uploadedFileName.replace("file", "config_args"), None)
             enrichment = formFields.get(uploadedFileName.replace("file", "enrichment"), 'genes')
@@ -234,7 +234,7 @@ class JobInformationManager(metaclass=Singleton):
             logging.info("SAVE FILES - ORIGIN FOR " + uploadedFileName + " IS " + origin)
 
             #GET THE ORIGIN OF THE FILE. IF CLIENT -> SAVE THE FILE
-            if origin == 'client':
+            if(origin == 'client'):
                 #THE NAME WHEN SAVING THE DATA
                 dataFileName = uploadedDataFile.filename
                 dataOmicId = uploadedDataFile.name
@@ -244,26 +244,26 @@ class JobInformationManager(metaclass=Singleton):
                     dataFileName = savedFiles.get(dataOmicId)
                 else:
                     #IF NO FILE WAS PROVIDED, IGNORE
-                    if dataFileName == '':
+                    if(dataFileName == ''):
                        logging.info("\tIGNORING " + omicType + ", EMPTY FILE OR NOT PROVIDED")
                        continue
                     else:
                         ##ELSE, SAVE THE FILE, GET THE NEW NAME IS ALREADY EXISTS
-                        if fields["description"] == "":
+                        if( fields["description"] == ""):
                              fields["description"] = "File uploaded through the submission form."
 
                         # If no user is provided, prepend the jobID to avoid possible conflictions
                         if userID is None:
                             dataFileName = jobInstance.getJobID() + '_' + dataFileName
-
                         savedFiles[dataOmicId] = dataFileName = saveFile(userID, dataFileName, fields, uploadedDataFile, CLIENT_TMP_DIR)
-            elif origin == 'mydata':
+
+            elif(origin == 'mydata'):
                 dataFileName = formFields.get(uploadedFileName.replace("file","filelocation")).replace("[MyData]/","")
                 logging.info("SAVE FILES  - USING ALREADY SUBMITTED FILE (data file) " + dataFileName + " FOR  " + omicType)
-            elif origin == 'inbuilt_gtf':
+            elif(origin == 'inbuilt_gtf'):
                 dataFileName = EXAMPLE_FILES_DIR + "GTF/" + formFields.get(uploadedFileName.replace("file","filelocation")).replace("[inbuilt GTF files]/","")
                 logging.info("SAVE FILES  - USING ALREADY INBUILT GTF FILE " + dataFileName + " FOR  " + omicType)
-            elif 'filelocation' in origin:
+            elif('filelocation' in origin):
                 # The omic references the file of another omic
                 originName = origin.split('_', 1)[0]
                 omicOrigin = formFields.get(originName + "_origin")
@@ -272,7 +272,7 @@ class JobInformationManager(metaclass=Singleton):
                 # If the file is a reference to the file of another omic, keep the reference to that file.
                 # However, as the final filename might be unique, we should save it first and keep a reference
                 # so as to not re-save it again on later loop iterations.
-                if omicOrigin == 'client':
+                if(omicOrigin == 'client'):
                     uploadedDataFile = uploadedFiles.get(originName + "_file")
 
                     dataFileName = uploadedDataFile.filename
@@ -281,12 +281,12 @@ class JobInformationManager(metaclass=Singleton):
                     if dataOmicId in savedFiles:
                         dataFileName = savedFiles.get(uploadedDataFile)
                     else:
-                        if dataFileName == '':
+                        if (dataFileName == ''):
                             logging.info("\tIGNORING " + omicType + ", EMPTY FILE OR NOT PROVIDED")
                             continue
                         else:
                             ##ELSE, SAVE THE FILE, GET THE NEW NAME IF ALREADY EXISTS
-                            if fields["description"] == "":
+                            if (fields["description"] == ""):
                                 fields["description"] = "File referenced through the submission form (" + omicType + ")"
 
                             # If no user is provided, prepend the jobID to avoid possible conflictions
@@ -303,17 +303,16 @@ class JobInformationManager(metaclass=Singleton):
 
             # TODO: move this to a loop? They are the same but changing file properties
             #SAVE THE ASSOCIATED RELEVANT FEATURED FILE (IF ANY)
-            if uploadedRelevantFile is not None and uploadedRelevantFile.filename != "":
+            if (uploadedRelevantFile is not None):
                 relevantFileName = uploadedRelevantFile.filename
                 origin = formFields.get(uploadedFileName.replace("file","relevant") + "_origin") ##GET THE ORIGIN OF THE FILE. IF CLIENT -> SAVE THE FILE
 
-                fieldsRelevant= {"omicType": omicType,
-                                 "dataType": formFields.get( uploadedFileName.replace( "file", "relevant_file_type" ) ),
-                                 "description": formFields.get( uploadedFileName.replace( "file", "description" ),
-                                                                "Uploaded using the submission form." )}
+                fieldsRelevant={"omicType": omicType}
+                fieldsRelevant["dataType"]= formFields.get(uploadedFileName.replace("file","relevant_file_type")) ##GET THE FILE TYPE: GENE EXPRESSION, ETC.
+                fieldsRelevant["description"] =  formFields.get(uploadedFileName.replace("file","description"), "Uploaded using the submission form.")##GET THE FILE DESCRIPTION
 
                 logging.info("STEP1 - ORIGIN FOR " + uploadedFileName.replace("file","relevant") + " IS " + origin)
-                if origin == 'client':
+                if(origin == 'client'):
                     #TODO: GENERATE AUTOMATICALLY THE DATA TYPE (Gene exp, Gene list, etc.) AND THE DESCRIPTION
                     ##SAVE THE FILE, GET THE NEW NAME IF ALREADY EXISTS
                     # If no user is provided, prepend the jobID to avoid possible conflictions
@@ -328,17 +327,16 @@ class JobInformationManager(metaclass=Singleton):
                 relevantFileName = None
 
             #SAVE THE ASSOCIATIONS FILE (IF ANY)
-            if uploadedAssociationDataFile is not None and uploadedAssociationDataFile.filename != "":
+            if (uploadedAssociationDataFile is not None):
                 associationsFileName = uploadedAssociationDataFile.filename
-                origin = formFields.get(uploadedFileName.replace("file", "annotations") + "_origin") ##GET THE ORIGIN OF THE FILE. IF CLIENT -> SAVE THE FILE
+                origin = formFields.get(uploadedFileName.replace("file", "associations") + "_origin") ##GET THE ORIGIN OF THE FILE. IF CLIENT -> SAVE THE FILE
 
-                fieldsAssociations= {"omicType": omicType, "dataType": formFields.get(
-                    uploadedFileName.replace( "file", "annotations_file_type" ) ),
-                                     "description": formFields.get( uploadedFileName.replace( "file", "description" ),
-                                                                    "Uploaded using the submission form." )}
+                fieldsAssociations={"omicType": omicType}
+                fieldsAssociations["dataType"] = formFields.get(uploadedFileName.replace("file","associations_file_type")) ##GET THE FILE TYPE: GENE EXPRESSION, ETC.
+                fieldsAssociations["description"] =  formFields.get(uploadedFileName.replace("file","description"), "Uploaded using the submission form.")##GET THE FILE DESCRIPTION
 
-                logging.info("STEP1 - ORIGIN FOR " + uploadedFileName.replace("file","annotations") + " IS " + origin)
-                if origin == 'client':
+                logging.info("STEP1 - ORIGIN FOR " + uploadedFileName.replace("file","associations") + " IS " + origin)
+                if(origin == 'client'):
                     #TODO: GENERATE AUTOMATICALLY THE DATA TYPE (Gene exp, Gene list, etc.) AND THE DESCRIPTION
                     ##SAVE THE FILE, GET THE NEW NAME IF ALREADY EXISTS
                     # If no user is provided, prepend the jobID to avoid possible conflictions
@@ -352,18 +350,16 @@ class JobInformationManager(metaclass=Singleton):
 
                 # SAVE THE RELEVANT ASSOCIATIONS FILE (IF ANY)
                 # TODO: currently only if the associations file is present
-                if uploadedAssociationRelevantFile is not None and uploadedAssociationRelevantFile.filename != '':
+                if (uploadedAssociationRelevantFile is not None):
                     relevantAssociationsFileName = uploadedAssociationRelevantFile.filename
                     origin = formFields.get(uploadedFileName.replace("file", "relevant_associations") + "_origin")  ##GET THE ORIGIN OF THE FILE. IF CLIENT -> SAVE THE FILE
 
-                    fieldsRelevantAssociations = {"omicType": omicType, "dataType": formFields.get(
-                        uploadedFileName.replace( "file", "relevant_associations_file_type" ) ),
-                                                  "description": formFields.get(
-                                                      uploadedFileName.replace( "file", "description" ),
-                                                      "Uploaded using the submission form." )}
+                    fieldsRelevantAssociations = {"omicType": omicType}
+                    fieldsRelevantAssociations["dataType"] = formFields.get(uploadedFileName.replace("file", "relevant_associations_file_type"))  ##GET THE FILE TYPE: GENE EXPRESSION, ETC.
+                    fieldsRelevantAssociations["description"] = formFields.get(uploadedFileName.replace("file", "description"), "Uploaded using the submission form.")  ##GET THE FILE DESCRIPTION
 
                     logging.info("STEP1 - ORIGIN FOR " + uploadedFileName.replace("file", "relevant_associations") + " IS " + origin)
-                    if origin == 'client':
+                    if (origin == 'client'):
                         # TODO: GENERATE AUTOMATICALLY THE DATA TYPE (Gene exp, Gene list, etc.) AND THE DESCRIPTION
                         ##SAVE THE FILE, GET THE NEW NAME IF ALREADY EXISTS
                         # If no user is provided, prepend the jobID to avoid possible conflictions
@@ -377,14 +373,13 @@ class JobInformationManager(metaclass=Singleton):
             else:
                 relevantAssociationsFileName = associationsFileName = None
 
-            if jobInstance is not None:
-                if matchingType.lower() == "gene":
+            if(jobInstance != None):
+                if(matchingType.lower() == "gene"):
                     jobInstance.addGeneBasedInputOmic({"omicName": omicType, "inputDataFile": dataFileName, "relevantFeaturesFile": relevantFileName, "associationsFile": associationsFileName, "relevantAssociationsFile": relevantAssociationsFileName, "configOptions": configValues, "enrichment": enrichment})
-                elif matchingType.lower() == "compound":
+                elif(matchingType.lower() == "compound"):
                     jobInstance.addCompoundBasedInputOmic({"omicName": omicType, "inputDataFile": dataFileName, "relevantFeaturesFile": relevantFileName, "configOptions": configValues, "enrichment": enrichment})
-                elif matchingType.lower() == "reference_file":
+                elif(matchingType.lower() == "reference_file"):
                     jobInstance.addReferenceInput({"omicName": omicType, "fileType": dataType, "inputDataFile": dataFileName})
-
     def getVisualOptions(self, jobID):
         daoInstance = VisualOptionsDAO()
         visualOptions = daoInstance.findByID(jobID)

@@ -60,7 +60,16 @@ class MiRNA2GeneJob(Job):
 
     def getJobDescription(self, generate=False, dataFile="", relevantFile="", targetsFile="", geneExpressionFile=""):
         if generate:
-            self.description  = "Input data:" + os_path.basename(dataFile) + ";Relevant file: " + os_path.basename(relevantFile)  + ";Targets file: " + os_path.basename(targetsFile) + ";Gene expression file: " + os_path.basename(geneExpressionFile) + ";"
+            # check if the files are in the tmp directory
+            if dataFile is not None and os_path.exists(dataFile):
+                self.description = "Input data:" + os_path.basename(dataFile)
+            if relevantFile is not None and os_path.exists(relevantFile):
+                self.description += "\nInput targets:" + os_path.basename(relevantFile)
+            if targetsFile is not None and os_path.exists(targetsFile):
+                self.description += "\nInput gene expression:" + os_path.basename(targetsFile)
+            if geneExpressionFile is not None and os_path.exists(geneExpressionFile):
+                self.description += "\nInput gene expression:" + os_path.basename(geneExpressionFile)
+
             self.description += "Params:;Report=" + str(self.report) + ";"
             self.description += "Score method=" + str(self.score_method)+ ";"
             self.description += "Selection method=" + str(self.selection_method)+ ";"
@@ -217,27 +226,14 @@ class MiRNA2GeneJob(Job):
         #STEP 1. GET THE FILES PATH AND PREPRARE THE OPTIONS
         logging.info("READING FILES...")
 
-        #inputRef = self.getReferenceInputs()[0]
-
-        #referenceFile = self.getReferenceInputs()[0].get("inputDataFile")
-        #if not inputRef.get( "isExample", False ):
-        #    referenceFile = "{path}/{file}".format(path=self.getInputDir(), file=referenceFile)
-
-        #relevantReferenceFile = self.getReferenceInputs()[0].get("inputDataFile", None)
-        #if not inputRef.get( "isExample", False ):
-        #    relevantReferenceFile = "{path}/{file}".format(path=self.getInputDir(), file=relevantReferenceFile)
-
-
-
         geneDataInputs = self.getGeneBasedInputOmics()
-
         miRNAinputOmic = next((x for x in geneDataInputs if x["omicName"].lower() != "gene expression"))
+
         referenceFile = miRNAinputOmic.get('associationsFile')
         if referenceFile != '':
             referenceFile = "{path}/{file}".format( path=self.getInputDir(), file=referenceFile )
             if not os_path.isfile( referenceFile ):
                 raise Exception( "Reference file not found." )
-
 
         relevantReferenceFile = miRNAinputOmic.get('relevantAssociationsFile')
         if relevantReferenceFile != '':
@@ -245,19 +241,26 @@ class MiRNA2GeneJob(Job):
             if relevantReferenceFile and not os_path.isfile( relevantReferenceFile ):
                 raise Exception( "Relevant reference file not found." )
 
+        if not os_path.isfile(referenceFile):
+            raise Exception("Reference file not found.")
+
+        if relevantReferenceFile and not os_path.isfile(relevantReferenceFile):
+            raise Exception("Relevant reference file not found.")
+
+
         dataFile = miRNAinputOmic.get("inputDataFile")
         relevantFile = miRNAinputOmic.get("relevantFeaturesFile")
-        relevantFileRaw = relevantFile
+
         geneExpressionFile =  None
         if len(geneDataInputs) > 1:
             RNAinputOmic = next((x for x in geneDataInputs if x["omicName"].lower() == "gene expression"))
             geneExpressionFile = RNAinputOmic.get("inputDataFile")
 
-        if not miRNAinputOmic.get( "isExample", False ):
-            dataFile = "{path}{file}".format(path=self.getInputDir(), file=dataFile)
-            relevantFile = "{path}{file}".format(path=self.getInputDir(), file=relevantFile)
-            if geneExpressionFile is not None:
-                geneExpressionFile = "{path}{file}".format(path=self.getInputDir(), file=geneExpressionFile)
+        if(miRNAinputOmic.get("isExample", False) == False):
+            dataFile = "{path}/{file}".format(path=self.getInputDir(), file=dataFile)
+            relevantFile = "{path}/{file}".format(path=self.getInputDir(), file=relevantFile)
+            if geneExpressionFile != None:
+                geneExpressionFile = "{path}/{file}".format(path=self.getInputDir(), file=geneExpressionFile)
 
         if not os_path.isdir(self.getTemporalDir()):
             os_mkdir(self.getTemporalDir())
@@ -287,7 +290,7 @@ class MiRNA2GeneJob(Job):
 
         # If no relevant associations file was provided, the script must generate one using
         # the correlation settings.
-        useCorrelation = relevantReferenceFile is None or relevantReferenceFile == ""
+        useCorrelation = relevantReferenceFile is None
 
         if os_path.isfile(tmpFile):
              with open(tmpFile, 'rU') as inputDataFile:
@@ -306,8 +309,9 @@ class MiRNA2GeneJob(Job):
 
                 for line in csvReader:
                     #STEP 5.1 GET THE mirna ID, THE ASSOCIATED GENE ID AND THE QUANTIFICATION VALUES
-                    mirnaID    = line[0]
-                    geneID     = line[1]
+
+                    mirnaID    = line[0].upper()
+                    geneID     = line[1].upper()
                     score      = float(line[2])
                     score_type = line[3]
                     values     =  map(float, line[4:])
@@ -342,7 +346,7 @@ class MiRNA2GeneJob(Job):
                         #     isRelevantAssociation = False
                         #     #continue
                     else:
-                        isRelevantAssociation = geneID + ':::' + mirnaID in relevantAssociations
+                        isRelevantAssociation = geneID.lower() + ':::' + mirnaID.lower() in relevantAssociations
 
                     #STEP 5.3 CREATE A NEW OMIC VALUE WITH ROW DATA
                     omicValueAux = OmicValue(mirnaID)
@@ -391,7 +395,6 @@ class MiRNA2GeneJob(Job):
                 regulator2genesOutput.write("# Gene name\t"+ header + "\n")
                 #mirna2genesOutput.write("# Gene name\tmiRNA ID\t"+ header + "\n")
                 regulator2genesRelevant.write("# Gene name\tmiRNA ID\n")
-                regulatorRelevantAssociations.write("# Gene name\tmiRNA ID\n")
 
                 logging.info("ORDERING miRNAS BY CORRELATION / FC...")
                 for geneID, gene in self.getInputGenesData().items():
@@ -414,7 +417,7 @@ class MiRNA2GeneJob(Job):
 
                         #WRITE RESULTS TO miRNA2Gene_output FILE -->   gen_id mirna values
                         #TODO: RE-ENABLE THIS CODE
-                        #mirna2genesOutput.write(lineAux + '\t'.join(map(str, omicValue.getValues())) + "\n")
+                        # mirna2genesOutput.write(lineAux + '\t'.join(map(str, omicValue.getValues())) + "\n")
                         # mirna2genesOutput.write(geneID + "\t" + '\t'.join(map(str, omicValue.getValues())) + "\n")
                         regulator2genesOutput.write(":::".join([geneID, omicValue.getOriginalName()]) + "\t" + '\t'.join(map(str, omicValue.getValues())) + "\n")
 
@@ -448,21 +451,11 @@ class MiRNA2GeneJob(Job):
 
                 logging.info("COMPRESSING RESULTS...DONE")
 
-                #TODO: The app can not run if there is no gene expression data
-
-                if geneExpressionFile is not None:
-                    fields = {
-                        "omicType" : miRNAinputOmic.get("omicName"),
-                        "dataType" : miRNAinputOmic.get("omicName").replace("data", "quantification"),
-                        "description" : "File generated using regu2Target tool (regu2Target);" + self.getJobDescription(True, dataFile, relevantFile, referenceFile, geneExpressionFile)
-                    }
-                else:
-                    fields = {
-                        "omicType": miRNAinputOmic.get( "omicName" ),
-                        "dataType": miRNAinputOmic.get( "omicName" ).replace( "data", "quantification" ),
-                        "description": "File generated using regu2Target tool (regu2Target);" + self.getJobDescription(True, dataFile, relevantFile, referenceFile)
-                    }
-
+                fields = {
+                    "omicType" : miRNAinputOmic.get("omicName"),
+                    "dataType" : miRNAinputOmic.get("omicName").replace("data", "quantification"),
+                    "description" : "File generated using regu2Target tool (regu2Target);" + self.getJobDescription(True, dataFile, relevantFile, referenceFile, geneExpressionFile)
+                }
                 mainOutputFileName = copyFile(self.getUserID(), os_path.split(regulator2genesOutput.name)[1], fields, self.getTemporalDir() +  "/", self.getInputDir())
 
                 fields = {
@@ -488,10 +481,6 @@ class MiRNA2GeneJob(Job):
 
                 #TODO: REMOVE FILES IF EXCEPTION
                 inputDataFile.close()
+
                 self.cleanDirectories()
-
-
-
-                return [fileName + ".zip", mainOutputFileName, fourthOutputFileName, thirdOutputFileName,
-                        secondOutputFileName]
-
+                return [fileName + ".zip", mainOutputFileName, secondOutputFileName, thirdOutputFileName, fourthOutputFileName]
