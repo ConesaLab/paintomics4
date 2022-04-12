@@ -30,9 +30,10 @@ from numpy import percentile as numpy_percentile, min as numpy_min, max as numpy
 
 from src.common.Util import Model
 from .Feature import Gene, Compound, OmicValue
-from src.common.FeatureNamesToKeggIDsMapper import mapFeatureNamesToKeggIDs, mapFeatureNamesToCompoundsIDs
+from src.common.FeatureNamesToKeggIDsMapper import mapFeatureNamesToKeggIDs, mapFeatureNamesToCompoundsIDs, mapFeatureIdentifiers
 from zipfile import ZipFile, ZIP_DEFLATED
 from shutil import make_archive as shutil_make_archive
+
 
 class Job(Model):
     #******************************************************************************************************************
@@ -322,7 +323,6 @@ class Job(Model):
                         #*************************************************************************
                         # STEP 2.C.1 CREATE A NEW OMIC VALUE WITH ROW DATA
                         #*************************************************************************
-
                         # Auxiliary function to populate mutable outer values.
                         def process_omic_value(geneName, omicValueVar):
                             # *************************************************************************
@@ -336,11 +336,15 @@ class Job(Model):
                             # ADD THE TEMPORAL GENE INSTANCE TO THE LIST OF GENES
                             # *************************************************************************
                             parsedFeatures.append(geneAux)
-
                             allValues.extend(omicValueVar.getValues())
-
                             # TODO: add third enrichment method
                             totalInputFeatures.add(omicValueVar.getOriginalName() if enrichment == 'features' else omicValueVar.getInputName())
+
+                        def process_omic_value_regulate_feature(geneName, omicValueVar):
+                            geneAux = Gene("")
+                            geneAux.setName(geneName)
+                            geneAux.addOmicValue(omicValueVar)
+                            return geneAux
 
                         # Make sure to use numerical values
                         numericValues = list(map(float, line[1:len(line)]))
@@ -359,12 +363,16 @@ class Job(Model):
                                 omicValueAux.setRelevant(line[0].lower() in relevantFeatures)
                                 omicValueAux.setRelevantAssociation(line[0].lower() in relevantAssociationFeatures)
                                 omicValueAux.setValues(numericValues)
-                                omicValueAux.setOriginalName(line[0])
-
+                                omicValueAux.setOriginalName(columnID[0])
+                                omicValueAux.name = omicValueAux.getOriginalName()
+                                omicValueTemp = process_omic_value_regulate_feature(columnID[0], omicValueAux)
+                                matchedName, notMatchedName, foundName=mapFeatureIdentifiers(self.getJobID(), self.getOrganism(), self.getDatabases(), [omicValueTemp],  [], [], [], enrichment)
+                                if len(matchedName) > 0:
+                                    omicValueAux.setOriginalName(matchedName[0].getName())
                                 process_omic_value(geneID, omicValueAux)
+
                         else:
                             columnID = line[0].split(":::")
-
                             omicValueAux = OmicValue(columnID[0])
                             omicValueAux.setOmicName(omicName)
                             # omicValueAux.setRelevant(relevantFeatures.has_key(omicValueAux.getInputName().lower()))
@@ -397,7 +405,7 @@ class Job(Model):
 
                 with open(temporalFileName + '_unmatched.txt', 'w') as unmatchedFile:
                     for parsedFeature in notMatchedFeatures:
-                        unmatchedFile.write(parsedFeature.getName() + '\t' + '\t' + '\t'.join(map(str,parsedFeature.getOmicsValues()[0].getValues())) + "\n")
+                        unmatchedFile.write(parsedFeature.getName() + '\t' + '\t' + '\t'.join(map(str, parsedFeature.getOmicsValues()[0].getValues())) + "\n")
 
             inputDataFile.close()
             #*************************************************************************

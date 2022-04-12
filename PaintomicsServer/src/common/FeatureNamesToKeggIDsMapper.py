@@ -332,8 +332,15 @@ def mapFeatureNamesToKeggIDs(jobID, organism, databases, featureList, enrichment
     #SPLIT THE ARRAY IN n PARTS
     genesListParts = chunks(featureList, nLinesPerThread)
 
-    manager=Manager()
 
+    #***********************************************************************************
+    #matchedFeatures = list()
+    #notMatchedFeatures = list()
+    #foundFeatures = list()
+    #***********************************************************************************
+
+
+    manager=Manager()
     #CONCATENATE THE OUTPUT LISTS
     matchedFeatures = manager.list()
     notMatchedFeatures= manager.list()
@@ -343,7 +350,7 @@ def mapFeatureNamesToKeggIDs(jobID, organism, databases, featureList, enrichment
     #* STEP 2. START THE MAPPING USING N DIFFERENT THREADS IN PARALLEL
     #***********************************************************************************
     try:
-        # matchedFeatures, notMatchedFeatures, foundFeatures = mapFeatureIdentifiers(jobID, organism, databases, featureList, enrichment)
+        #matchedFeatures, notMatchedFeatures, foundFeatures = mapFeatureIdentifiers(jobID, organism, databases, featureList, enrichment)
         threadsList = []
         i=0
         for genesListPart in genesListParts:

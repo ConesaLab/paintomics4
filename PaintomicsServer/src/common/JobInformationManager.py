@@ -327,7 +327,7 @@ class JobInformationManager(metaclass=Singleton):
                 relevantFileName = None
 
             #SAVE THE ASSOCIATIONS FILE (IF ANY)
-            if (uploadedAssociationDataFile is not None):
+            if uploadedAssociationDataFile is not None:
                 associationsFileName = uploadedAssociationDataFile.filename
                 origin = formFields.get(uploadedFileName.replace("file", "associations") + "_origin") ##GET THE ORIGIN OF THE FILE. IF CLIENT -> SAVE THE FILE
 
@@ -350,7 +350,7 @@ class JobInformationManager(metaclass=Singleton):
 
                 # SAVE THE RELEVANT ASSOCIATIONS FILE (IF ANY)
                 # TODO: currently only if the associations file is present
-                if (uploadedAssociationRelevantFile is not None):
+                if uploadedAssociationRelevantFile is not None and formFields.get(uploadedFileName.replace("file", "relevant_associations") + "_origin") is not None:
                     relevantAssociationsFileName = uploadedAssociationRelevantFile.filename
                     origin = formFields.get(uploadedFileName.replace("file", "relevant_associations") + "_origin")  ##GET THE ORIGIN OF THE FILE. IF CLIENT -> SAVE THE FILE
 

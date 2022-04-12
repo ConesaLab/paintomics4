@@ -126,6 +126,7 @@ class OmicValue(Model):
     #******************************************************************************************************************
     def setInputName(self, inputName):
         self.inputName = inputName
+
     def getInputName(self):
         return self.inputName
 
