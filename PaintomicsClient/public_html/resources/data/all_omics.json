@@ -97,5 +97,6 @@
 	{"name" : "Tn-Seq data"},
 	{"name" : "TraDI-Seq data"},
 	{"name" : "Transcriptomics data"},
+	{"name" :  "Transcription factor"},
 	{"name" : "WIMP-Seq"}
 ]}

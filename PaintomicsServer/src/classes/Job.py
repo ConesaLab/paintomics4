@@ -302,6 +302,52 @@ class Job(Model):
         logging.info("PARSING USER GENE BASED FILE (" + omicName + ")..." )
         parsedFeatures = []
 
+        totalInputTF = []
+        # If there is transcription factor, we need to map it to the gene name
+        if omicName == "Transcription factor":
+            if os_path.isfile(valuesFileName):
+                with open(valuesFileName, 'r') as inputDataFile:
+                    nLine = 0
+                    geneAux = omicValueAux = fileHeader = None
+                    for line in csv_reader(inputDataFile, delimiter='\t'):
+                        nLine += 1
+                        if nLine == 1 or len(line) == 0:
+                            try:
+                                float(line[1])
+                            except Exception:
+                                fileHeader = line
+                                continue
+                        else:
+                            def process_omic_value_regulate_feature(geneName, omicValueVar):
+                                geneAux = Gene("")
+                                geneAux.setName(geneName)
+                                geneAux.addOmicValue(omicValueVar)
+                                totalInputTF.append(geneAux)
+
+                            numericValues = list(map(float, line[1:len(line)]))
+                            if associationFeatures:
+                                columnID = line[0].split(":::")
+                                geneIDs = associationFeatures.get(columnID[1], [])
+                                for geneID in geneIDs:
+                                    omicValueAux = OmicValue(geneID)
+                                    omicValueAux.setOmicName(omicName)
+                                    omicValueAux.setRelevant(line[0].lower() in relevantFeatures)
+                                    omicValueAux.setRelevantAssociation(line[0].lower() in relevantAssociationFeatures)
+                                    omicValueAux.setValues(numericValues)
+                                    omicValueAux.setOriginalName(columnID[0])
+                                    omicValueAux.name = omicValueAux.getOriginalName()
+                                    process_omic_value_regulate_feature(geneID, omicValueAux)
+
+            if len(totalInputTF) > 0:
+                matchedName, notMatchedName, foundName = mapFeatureIdentifiers(self.getJobID(),
+                                                                               self.getOrganism(),
+                                                                               self.getDatabases(),
+                                                                               totalInputTF, [],
+                                                                               [], [], enrichment)
+                if matchedName is not None and len(matchedName) > 0:
+                    # convert matchedName to a dictionary and ID is the key
+                    matchedNameDict = dict(map(lambda x: (x.getID(), x), matchedName))
+
         #IF THE USER UPLOADED VALUES FOR GENE EXPRESSION
         if os_path.isfile(valuesFileName):
             with open(valuesFileName, 'rU') as inputDataFile:
@@ -340,12 +386,6 @@ class Job(Model):
                             # TODO: add third enrichment method
                             totalInputFeatures.add(omicValueVar.getOriginalName() if enrichment == 'features' else omicValueVar.getInputName())
 
-                        def process_omic_value_regulate_feature(geneName, omicValueVar):
-                            geneAux = Gene("")
-                            geneAux.setName(geneName)
-                            geneAux.addOmicValue(omicValueVar)
-                            return geneAux
-
                         # Make sure to use numerical values
                         numericValues = list(map(float, line[1:len(line)]))
 
@@ -363,12 +403,10 @@ class Job(Model):
                                 omicValueAux.setRelevant(line[0].lower() in relevantFeatures)
                                 omicValueAux.setRelevantAssociation(line[0].lower() in relevantAssociationFeatures)
                                 omicValueAux.setValues(numericValues)
-                                omicValueAux.setOriginalName(columnID[0])
-                                omicValueAux.name = omicValueAux.getOriginalName()
-                                omicValueTemp = process_omic_value_regulate_feature(columnID[0], omicValueAux)
-                                matchedName, notMatchedName, foundName=mapFeatureIdentifiers(self.getJobID(), self.getOrganism(), self.getDatabases(), [omicValueTemp],  [], [], [], enrichment)
-                                if len(matchedName) > 0:
-                                    omicValueAux.setOriginalName(matchedName[0].getName())
+                                if len(totalInputTF) > 0 and omicValueAux.getInputName() in matchedNameDict.keys():
+                                    omicValueAux.setOriginalName(matchedNameDict[omicValueAux.getInputName()].name)
+                                else:
+                                    omicValueAux.setOriginalName(columnID[0])
                                 process_omic_value(geneID, omicValueAux)
 
                         else:
