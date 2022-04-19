@@ -134,17 +134,21 @@ function DM_MyDataSummaryPanel() {
 	*/
 	this.updateContent = function(dataSummary) {
 		if (dataSummary.usedSpace !== undefined && dataSummary.usedSpace !== undefined) {
+						// update the color of the pie chart based on the usage
+			this.usageChart.series[0].data[0].color = (this.getUsageColor(dataSummary.usedSpace, dataSummary.availableSpace));
 			this.usageChart.series[0].data[0].update(Math.round(dataSummary.usedSpace / Math.pow(1024, 2) * 100) / 100);
-			this.usageChart.series[0].data[1].update(Math.round(dataSummary.availableSpace / Math.pow(1024, 2) * 100) / 100);
+			this.usageChart.series[0].data[1].update(Math.round(dataSummary.availableSpace / Math.pow(1024, 2) * 100) / 100 - Math.round(dataSummary.usedSpace / Math.pow(1024, 2) * 100) / 100);
 			this.usageChart.setTitle({
 				text: "<b>" + Math.round(dataSummary.usedSpace / Math.pow(1024, 2) * 100) / 100 + "</b> MB",
 				style: {
 					color: this.getUsageColor(dataSummary.usedSpace, dataSummary.availableSpace)
 				}
 			});
+
+
+
 			$('#myDataAvailableSpace').html((Math.round(dataSummary.availableSpace / Math.pow(1024, 2) * 100) / 100) + "MB");
 		}
-
 
 		if (dataSummary.totalFiles !== undefined) {
 			$('#myDataTotalFiles').html(dataSummary.totalFiles);
@@ -179,13 +183,12 @@ function DM_MyDataSummaryPanel() {
 			' <div class="myDataSummaryChartWrapper" id="usedSpaceSummaryPlot"></div>'+
 			' <span class="myDataSummaryCount"><i class="fa fa-file-text-o"></i> <span id="myDataTotalFiles" class="odometer odometer-theme-default">0</span>  Files</span>' +
 			' <span class="myDataSummaryCount"><i class="fa fa-code" style=" background: rgb(255, 182, 28);"></i><span id="myDataTotalJobs" class="odometer odometer-theme-default">0</span> Jobs</span>' +
-   		' <p style="text-align: center;">This is your <b id="myDataAvailableSpace">20 MB</b> personal cloud storage, where you can find all your <b>Files</b> and <b>Jobs</b>.<br>Use it carefully and remember that you can always delete old files to free space.</p>'+
+   		' <p style="text-align: center;">This is your <b id="myDataAvailableSpace"> 200 MB </b> personal cloud storage, where you can find all your <b>Files</b> and <b>Jobs</b>.<br>Use it carefully and remember that you can always delete old files to free space.</p>'+
 			'</div>',
 			listeners: {
 				boxready: function() {
 					new Odometer({el: $("#myDataTotalFiles")[0],value: 0});
 					new Odometer({el: $("#myDataTotalJobs")[0],value: 0});
-
 					me.usageChart = new Highcharts.Chart({
 						credits: {
 							enabled: false
@@ -207,14 +210,14 @@ function DM_MyDataSummaryPanel() {
 							data: [{
 								name: "Used",
 								y: 0,
-								color: me.getUsageColor(me.usedSpace, me.availableSpace)
+								color: '#55BF3B'
 							}, {
 								name: "Available",
 								y: 10,
-								color: "#dedede"
+								color: "#dedede",
 							}],
 							tooltip: {
-								valueSuffix: ' MB'
+								valueSuffix: 'MB'
 							},
 							innerSize: '85%',
 							dataLabels: false
