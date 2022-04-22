@@ -36,8 +36,8 @@ The relevant association file is a subset of the association file that could be 
 
 ### Parameters
 
-***Omic Name:*** The **Omic Mame** parameter allow the user to define the name of its regulators or select from PaintOmics 4 build-in drop-down menu. If the omic name is **Transcription factor**, the transcription factor will map to the PaintOmics databases to find its gene symbol.<br>
-***Enrichment type:*** The **Enrichment type** parameter defines how PaintOmics 4 must do the Fisher contingency table: counting genes, features (i.e., microRNA, proteins...) or associations (combination of genes & features).<br>
+***Omic Name:*** The **Omic Mame** parameter allows the user to define the name of its regulators or select from PaintOmics 4 build-in drop-down menu. If the omic name is **Transcription factor**, the transcription factor will map to the PaintOmics databases to find its gene symbol.<br>
+***Enrichment type:*** The **Enrichment type** parameter defines how PaintOmics 4 must do the Fisher contingency table: counting genes, features (i.e., microRNA, proteins...), or associations (combination of genes & features).<br>
 ***Score method:*** The **score method** parameter defines how PaintOmics 4 calculate correlations between targeted features and regulators (only available when the relevant association file is not provided). As an example in miRNA, usually, a single miRNA has multiple potential target genes, but a certain miRNA is regulating not all targets at a certain moment. Consequently, we need to discriminate the real targets for a miRNA.Suppose Gene expression (GE) data is available. In that case, we calculate the correlation between each miRNA and each target gene and filter out all those miRNAs that have a lower correlation value than a given threshold. If no GE is available, we filter based on the fold-change for the expression of the miRNAs.Default: 'Kendall correlation' if GE is available. 'Fold Change' in other cases.<br>
 
 
