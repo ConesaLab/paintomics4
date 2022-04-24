@@ -10,6 +10,7 @@ pages:
       - 'The pathways interaction network': '4_3_pathways_network.md'
       - 'Metabolite hub analysis': '4_4_metabolite_hub_analysis.md'
       - 'Metabolite class activity analysis': '4_5_metabolite_class_activity_analysis.md'
+      - 'Regulatory omics analysis': '4_6_Regulatory_omics.md'
       - 'Multi-omic pathway-based visualisation': '5_1_browsing_pathways.md'
    - FAQ:
       - 'Frequently asked questions': '9_faq.md'
