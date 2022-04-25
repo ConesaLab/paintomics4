@@ -297,15 +297,28 @@ class Application(object):
             jobInstance = self.queue.fetch_job(jobID)
             # calculate job running time based on the length of the inputGenesData and databases used
             # this is a rough estimation, but it is better than nothing
-            omicType = len(jobInstance.args[0].geneBasedInputOmics)
-            inputGenesDataLen = len(jobInstance.args[0].inputGenesData)
-            databasesLen = len(jobInstance.args[0].databases)
-            jobRunningTime = inputGenesDataLen * databasesLen * omicType / 20000 * 25
+            if hasattr(jobInstance.args[0], 'geneBasedInputOmics'):
+                omicType = len(jobInstance.args[0].geneBasedInputOmics)
+                inputGenesDataLen = len(jobInstance.args[0].inputGenesData)
+                databasesLen = len(jobInstance.args[0].databases)
+                jobRunningTime = inputGenesDataLen * databasesLen * omicType / 20000 * 15
+                startTime = jobInstance.args[0].startTime
+                import time
+                timeSpent = round((time.time() - startTime), 2)
+                jobRunningTime = round(jobRunningTime, 2)
+                if (jobRunningTime - timeSpent) < 0:
+                    jobRunningTime = 0
+                else:
+                    jobRunningTime = round((jobRunningTime - timeSpent), 2)
+
+            #elif hasattr(jobInstance, 'result'):
+            #    inputGenesDataLen = jobInstance.result.content["summary"][2]
+            #    databasesLen = len(jobInstance.result.content["databases"])
+            #    jobRunningTime = inputGenesDataLen * databasesLen / 20000 * 25
+            #    timeSpent = 0
+
             # keep jobRunningTime to 2 digits after the decimal point
-            jobRunningTime = round(jobRunningTime, 2)
-            startTime = jobInstance.args[0].startTime
-            import time
-            timeSpent = round((time.time() - startTime),2)
+
 
             if jobInstance is None:
                 return Response().setStatus(400).setContent({"success": False, "status" : "failed", "message": "Your job is not on the queue anymore. Check your job list, if it's not there the process stopped and you must resend the data again."}).getResponse()
@@ -315,7 +328,10 @@ class Application(object):
                 self.queue.get_result(jobID) #remove job
                 return Response().setStatus(400).setContent({"success": False, "status" : str(jobInstance.get_status()), "message": jobInstance.error_message}).getResponse()
             else:
-                return Response().setContent({"success": False, "status" : str(jobInstance.get_status()), "estimatedFinishTime": jobRunningTime, "timeSpent": timeSpent}).getResponse()
+                if hasattr(jobInstance.args[0], 'geneBasedInputOmics'):
+                    return Response().setContent({"success": False, "status" : str(jobInstance.get_status()), "estimatedFinishTime": jobRunningTime, "timeSpent": timeSpent}).getResponse()
+                else:
+                    return Response().setContent({"success": False, "status" : str(jobInstance.get_status()), "estimatedFinishTime": 0, "timeSpent": 0}).getResponse()
         #*******************************************************************************************
         ##* COMMON JOB HANDLERS - END
         #############################################################################################
