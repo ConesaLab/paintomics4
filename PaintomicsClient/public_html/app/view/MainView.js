@@ -198,9 +198,9 @@ function MainView() {
 				" <ul class='submenu'>" +
 				"     <li class='menuOption externalOption'><a href='http://paintomics.readthedocs.org/en/latest/' target='_blank'><i class='fa fa-book'></i>  Paintomics Documentation</a></li>" +
 				"     <li class='menuOption externalOption'><a href='http://paintomics.org/' target='_blank'><i class='fa fa-external-link'></i>  PaintOmics 3</a></li>" +
-				"	  <li class='menuOption externalOption'><a href='http://www.paintomics.org/resources/paintomics_example_data.zip' target='_blank'><i class='fa fa-download'></i>  Paintomics example data</a></li>" +
-				"	  <li class='menuOption externalOption'><a href='http://www.paintomics.org/resources/rgmatch_example_data.zip' target='_blank'><i class='fa fa-download'></i>  RGmatch example data</a></li>" +
-				"	  <li class='menuOption externalOption'><a href='http://www.paintomics.org/resources/mirna2genes_example_data.zip' target='_blank'><i class='fa fa-download'></i>  miRNA2Genes example data</a></li>" +
+				"	  <li class='menuOption externalOption'><a href='https://www.paintomics.org/resources/paintomics_example_data.zip' target='_blank'><i class='fa fa-download'></i>  Paintomics example data</a></li>" +
+				"	  <li class='menuOption externalOption'><a href='https://www.paintomics.org/resources/rgmatch_example_data.zip' target='_blank'><i class='fa fa-download'></i>  RGmatch example data</a></li>" +
+				"	  <li class='menuOption externalOption'><a href='https://www.paintomics.org/resources/mirna2genes_example_data.zip' target='_blank'><i class='fa fa-download'></i>  miRNA2Genes example data</a></li>" +
 				" </ul></li>" +
 				" <li class='menuOption' ><i class='fa fa-paper-plane-o'></i>  Publications" +
 				" <ul class='submenu'>" +

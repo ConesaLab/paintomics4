@@ -380,6 +380,7 @@ class JobInformationManager(metaclass=Singleton):
                     jobInstance.addCompoundBasedInputOmic({"omicName": omicType, "inputDataFile": dataFileName, "relevantFeaturesFile": relevantFileName, "configOptions": configValues, "enrichment": enrichment})
                 elif(matchingType.lower() == "reference_file"):
                     jobInstance.addReferenceInput({"omicName": omicType, "fileType": dataType, "inputDataFile": dataFileName})
+
     def getVisualOptions(self, jobID):
         daoInstance = VisualOptionsDAO()
         visualOptions = daoInstance.findByID(jobID)

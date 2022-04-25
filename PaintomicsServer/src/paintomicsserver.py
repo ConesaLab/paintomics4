@@ -17,7 +17,6 @@
 #  More info http://bioinfo.cipf.es/paintomics
 #  Technical contact paintomics4@outlook.com
 #**************************************************************
-
 import logging.config
 
 from flask import Flask, request, send_from_directory, jsonify
@@ -296,6 +295,17 @@ class Application(object):
         @self.app.route(SERVER_SUBDOMAIN + '/check_job_status/<path:jobID>', methods=['OPTIONS', 'POST'])
         def checkJobStatus(jobID):
             jobInstance = self.queue.fetch_job(jobID)
+            # calculate job running time based on the length of the inputGenesData and databases used
+            # this is a rough estimation, but it is better than nothing
+            omicType = len(jobInstance.args[0].geneBasedInputOmics)
+            inputGenesDataLen = len(jobInstance.args[0].inputGenesData)
+            databasesLen = len(jobInstance.args[0].databases)
+            jobRunningTime = inputGenesDataLen * databasesLen * omicType / 20000 * 25
+            # keep jobRunningTime to 2 digits after the decimal point
+            jobRunningTime = round(jobRunningTime, 2)
+            startTime = jobInstance.args[0].startTime
+            import time
+            timeSpent = round((time.time() - startTime),2)
 
             if jobInstance is None:
                 return Response().setStatus(400).setContent({"success": False, "status" : "failed", "message": "Your job is not on the queue anymore. Check your job list, if it's not there the process stopped and you must resend the data again."}).getResponse()
@@ -305,7 +315,7 @@ class Application(object):
                 self.queue.get_result(jobID) #remove job
                 return Response().setStatus(400).setContent({"success": False, "status" : str(jobInstance.get_status()), "message": jobInstance.error_message}).getResponse()
             else:
-                return Response().setContent({"success": False, "status" : str(jobInstance.get_status())}).getResponse()
+                return Response().setContent({"success": False, "status" : str(jobInstance.get_status()), "estimatedFinishTime": jobRunningTime, "timeSpent": timeSpent}).getResponse()
         #*******************************************************************************************
         ##* COMMON JOB HANDLERS - END
         #############################################################################################

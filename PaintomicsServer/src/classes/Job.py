@@ -19,6 +19,7 @@
 #**************************************************************
 
 import logging
+import time
 from time import strftime as formatDate
 from os import path as os_path, makedirs as os_makedirs, walk as os_walk
 from shutil import rmtree as shutil_rmtree
@@ -77,6 +78,9 @@ class Job(Model):
         # Sharing options
         self.allowSharing = False
         self.readOnly = False
+
+        # job start time
+        self.startTime = time.time()
 
     #******************************************************************************************************************
     # GETTERS AND SETTER

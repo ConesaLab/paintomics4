@@ -66,8 +66,17 @@ function JobController() {
 						if (showURL) {
 							var jobURL = 'https://' + window.location.host + window.location.pathname + "?jobID=" + jobID;
 							message += ".<br/> You will be able to access it from the URL: <br/><br/><a href=\"" + jobURL  + "\" target=\"_blank\">" + jobURL + "</a>";
-						}
+							// show the timeSpent
+							if (response.timeSpent) {
+								message += "<br/><br/>Time spent: " + response.timeSpent;
+							}
 
+							// show job estimatedFinishTime
+							if (response.estimatedFinishTime) {
+								message += "<br/><br/> Estimated running time: " + response.estimatedFinishTime + " seconds";
+							}
+
+						}
 						showInfoMessage(message, {logMessage: "Job " + jobID + " still running.", showSpin: true, append: other.multipleJobs, itemId: jobID, icon: "play"});
 					}
 					//Check again in N seconds
