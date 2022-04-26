@@ -2,19 +2,8 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="37c2dff0-4ca0-47b7-8759-79132bfbc242" name="Default Changelist" comment="">
-      <change afterPath="$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/dme_resources/build_database.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/dme_resources/download_conf.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/dme_resources/download_others.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/dme_resources/ensembl_mapping.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/PaintomicsClient/public_html/resources/data/all_species.json" beforeDir="false" afterPath="$PROJECT_DIR$/PaintomicsClient/public_html/resources/data/all_species.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/PaintomicsServer/src/AdminTools/DBManager.py" beforeDir="false" afterPath="$PROJECT_DIR$/PaintomicsServer/src/AdminTools/DBManager.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/common_build_database.py" beforeDir="false" afterPath="$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/common_build_database.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/downloadReactome.py" beforeDir="false" afterPath="$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/downloadReactome.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/hsa_resources/download_conf.py" beforeDir="false" afterPath="$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/hsa_resources/download_conf.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/hubAnalysisInstall.R" beforeDir="false" afterPath="$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/hubAnalysisInstall.R" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/PaintomicsServer/src/common/bioscripts/generateMetaGenes.R" beforeDir="false" afterPath="$PROJECT_DIR$/PaintomicsServer/src/common/bioscripts/generateMetaGenes.R" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/PaintomicsServer/src/conf/organismDB.py" beforeDir="false" afterPath="$PROJECT_DIR$/PaintomicsServer/src/conf/organismDB.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/PaintomicsClient/public_html/app/view/MainView.js" beforeDir="false" afterPath="$PROJECT_DIR$/PaintomicsClient/public_html/app/view/MainView.js" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -33,15 +22,18 @@
     </file-type-list>
   </component>
   <component name="HighlightingSettingsPerFile">
-    <setting file="file://$PROJECT_DIR$/PaintomicsServer/src/src/servlets/PathwayAcquisitionServlet.py" root0="FORCE_HIGHLIGHTING" />
-    <setting file="file://$PROJECT_DIR$/PaintomicsServer/src/AdminTools/DBManager.py" root0="FORCE_HIGHLIGHTING" />
     <setting file="file://$PROJECT_DIR$/PaintomicsServer/src/classes/JobInstances/PathwayAcquisitionJob.py" root0="FORCE_HIGHLIGHTING" />
-    <setting file="file://$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/dme_resources/download_conf.py" root0="FORCE_HIGHLIGHTING" />
-    <setting file="file://$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/dme_resources/build_database.py" root0="FORCE_HIGHLIGHTING" />
+    <setting file="file://$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/downloadReactome.py" root0="FORCE_HIGHLIGHTING" />
     <setting file="file://$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/common_build_database.py" root0="FORCE_HIGHLIGHTING" />
     <setting file="file://$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/bta_resources/download_conf.py" root0="FORCE_HIGHLIGHTING" />
-    <setting file="file://$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/downloadReactome.py" root0="FORCE_HIGHLIGHTING" />
+    <setting file="file://$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/dme_resources/download_conf.py" root0="FORCE_HIGHLIGHTING" />
+    <setting file="file://$PROJECT_DIR$/PaintomicsServer/src/AdminTools/DBManager.py" root0="FORCE_HIGHLIGHTING" />
+    <setting file="file://$PROJECT_DIR$/PaintomicsServer/src/src/servlets/PathwayAcquisitionServlet.py" root0="FORCE_HIGHLIGHTING" />
     <setting file="file://$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/hsa_resources/download_conf.py" root0="FORCE_HIGHLIGHTING" />
+    <setting file="file://$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/dme_resources/build_database.py" root0="FORCE_HIGHLIGHTING" />
+  </component>
+  <component name="MarkdownSettingsMigration">
+    <option name="stateVersion" value="1" />
   </component>
   <component name="ProjectId" id="25nq3k7rGmfzUYuP6DJ9fsHd59C" />
   <component name="ProjectLevelVcsManager">
@@ -56,7 +48,7 @@
     <property name="RunOnceActivity.OpenProjectViewOnStart" value="true" />
     <property name="RunOnceActivity.ShowReadmeOnStart" value="true" />
     <property name="WebServerToolWindowFactoryState" value="false" />
-    <property name="last_opened_file_path" value="$PROJECT_DIR$/PaintomicsServer/src/launch_server.py" />
+    <property name="last_opened_file_path" value="$PROJECT_DIR$" />
   </component>
   <component name="RunManager">
     <configuration name="launch_server" type="PythonConfigurationType" factoryName="Python" nameIsGenerated="true">
@@ -102,6 +94,8 @@
       <workItem from="1647857909590" duration="7068000" />
       <workItem from="1647870688067" duration="1161000" />
       <workItem from="1647872348619" duration="4627000" />
+      <workItem from="1650989970045" duration="298000" />
+      <workItem from="1650990276542" duration="414000" />
     </task>
     <servers />
   </component>
@@ -118,7 +112,6 @@
         </entry>
       </map>
     </option>
-    <option name="oldMeFiltersMigrated" value="true" />
   </component>
   <component name="VcsManagerConfiguration">
     <option name="ADD_EXTERNAL_FILES_SILENTLY" value="true" />
@@ -227,7 +220,7 @@
     </breakpoint-manager>
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
+    <SUITE FILE_PATH="coverage/paintomics4$launch_server.coverage" NAME="launch_server Coverage Results" MODIFIED="1650990521807" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/PaintomicsServer/src" />
     <SUITE FILE_PATH="coverage/paintomics4$build_database.coverage" NAME="launch_server Coverage Results" MODIFIED="1647869823942" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/PaintomicsServer/src" />
-    <SUITE FILE_PATH="coverage/paintomics4$launch_server.coverage" NAME="launch_server Coverage Results" MODIFIED="1647878387509" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/PaintomicsServer/src" />
   </component>
 </project>

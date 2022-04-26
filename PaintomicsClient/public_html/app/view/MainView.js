@@ -197,7 +197,7 @@ function MainView() {
 				" <li class='menuOption' ><i class='fa fa-info-circle'></i>  Resources" +
 				" <ul class='submenu'>" +
 				"     <li class='menuOption externalOption'><a href='http://paintomics.readthedocs.org/en/latest/' target='_blank'><i class='fa fa-book'></i>  Paintomics Documentation</a></li>" +
-				"     <li class='menuOption externalOption'><a href='http://paintomics.org/' target='_blank'><i class='fa fa-external-link'></i>  PaintOmics 3</a></li>" +
+				"     <li class='menuOption externalOption'><a href='http://paintomics.top/' target='_blank'><i class='fa fa-external-link'></i>  PaintOmics 3</a></li>" +
 				"	  <li class='menuOption externalOption'><a href='https://www.paintomics.org/resources/paintomics_example_data.zip' target='_blank'><i class='fa fa-download'></i>  Paintomics example data</a></li>" +
 				"	  <li class='menuOption externalOption'><a href='https://www.paintomics.org/resources/rgmatch_example_data.zip' target='_blank'><i class='fa fa-download'></i>  RGmatch example data</a></li>" +
 				"	  <li class='menuOption externalOption'><a href='https://www.paintomics.org/resources/mirna2genes_example_data.zip' target='_blank'><i class='fa fa-download'></i>  miRNA2Genes example data</a></li>" +
@@ -265,12 +265,10 @@ function MainView() {
 								if (response.success === false) {
 									return;
 								}
-								if(response.messageList.length > 0){
-									showInfoMessage("Welcome to PaintOmics 4!", {
-										message: response.messageList[0].message_content,
-										showButton: true
-									})
-								}
+								showInfoMessage("Welcome to PaintOmics 4!", {
+									message: "We are installing new species to PaintOmics 4. Please, if you want to use previous version go and visit <a href=\"http://paintomics.top\"> http://paintomics.top </a>. Thank you for your patience.",
+									showButton: true
+								})
 							},
 							error: ajaxErrorHandler
 						});
