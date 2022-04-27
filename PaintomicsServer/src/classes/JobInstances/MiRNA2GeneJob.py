@@ -290,7 +290,7 @@ class MiRNA2GeneJob(Job):
 
         # If no relevant associations file was provided, the script must generate one using
         # the correlation settings.
-        useCorrelation = relevantReferenceFile is None
+        useCorrelation = relevantReferenceFile is None or relevantReferenceFile == ''
 
         if os_path.isfile(tmpFile):
              with open(tmpFile, 'rU') as inputDataFile:

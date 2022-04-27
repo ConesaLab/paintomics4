@@ -533,6 +533,9 @@ class PathwayAcquisitionJob(Job):
                 for compound in inputCompoundsCopy:
                     compound.matchingDB = "MapMan"
 
+                for inputGene in inputGenes:
+                    inputGene.matchingDB = ["KEGG", "MapMan"]
+
                 for metabolite in self.inputCompoundsData:
                     self.inputCompoundsData[metabolite].matchingDB = ["KEGG", "MapMan"]
 
@@ -540,6 +543,9 @@ class PathwayAcquisitionJob(Job):
 
                 for compound in inputCompoundsCopy:
                     compound.matchingDB = "Reactome"
+
+                for inputGene in inputGenes:
+                     inputGene.matchingDB = ["KEGG", "Reactome"]
 
                 for metabolite in self.inputCompoundsData:
                     self.inputCompoundsData[metabolite].matchingDB = ["KEGG", "Reactome"]
@@ -646,14 +652,14 @@ class PathwayAcquisitionJob(Job):
 
                     matchedPathways[pathwayID] = pathway
 
-        manager = Manager()
-        matchedPathways = manager.dict()  # WILL STORE THE OUTPUT FROM THE THREADS
-        #matchedPathways = {}
+        #manager = Manager()
+        #matchedPathways = manager.dict()  # WILL STORE THE OUTPUT FROM THE THREADS
+        matchedPathways = {}
         nPathwaysPerThread = int(
             ceil(len(pathwaysList) / nThreads)) + 1  # GET THE NUMBER OF PATHWAYS TO BE PROCESSED PER THREAD
 
-        pathwaysListParts = chunks(list(pathwaysList.keys()), nPathwaysPerThread)  # SPLIT THE ARRAY IN n PARTS
-        #pathwaysListParts = list(pathwaysList.keys())
+        #pathwaysListParts = chunks(list(pathwaysList.keys()), nPathwaysPerThread)  # SPLIT THE ARRAY IN n PARTS
+        pathwaysListParts = list(pathwaysList.keys())
         threadsList = []
 
         # Flattened dict
@@ -665,9 +671,9 @@ class PathwayAcquisitionJob(Job):
                                  pathwayID, pathway in
                                  dbPathways.items()}
 
-        #matchPathways( self, pathwaysListParts, allGenesInPathway, allCompoundsInPathway, inputGenes, inputCompounds,
-        #                 totalFeaturesByOmic, totalRelevantFeaturesByOmic, matchedPathways, mappedRatiosByOmic,
-        #                 enrichmentByOmic )
+        matchPathways( self, pathwaysListParts, allGenesInPathway, allCompoundsInPathway, inputGenes, inputCompounds,
+                         totalFeaturesByOmic, totalRelevantFeaturesByOmic, matchedPathways, mappedRatiosByOmic,
+                         enrichmentByOmic )
 
         # LAUNCH THE THREADS
         for pathwayIDsList in pathwaysListParts:
@@ -789,7 +795,7 @@ class PathwayAcquisitionJob(Job):
 
         for feature in chain(self.getInputCompoundsData().values(), self.getInputGenesData().values()):
             # Count only those present in at least one pathway
-            if  type(feature.getMatchingDB()) is str:
+            if type(feature.getMatchingDB()) is str:
                 dbList = [feature.getMatchingDB()]
             else:
                 dbList = feature.getMatchingDB()
@@ -859,7 +865,7 @@ class PathwayAcquisitionJob(Job):
         # TODO: RETURN AS A SET IN KEGG INFORMATION MANAGER
         genesInPathway = set([x.lower() for x in genesInPathway])
         for gene in inputGenes:
-            if gene.getID().lower() in genesInPathway and gene.getMatchingDB() == sourceDB:
+            if gene.getID().lower() in genesInPathway and (gene.getMatchingDB() == sourceDB or sourceDB in gene.getMatchingDB()):
                 isValidPathway = True
                 pathwayInstance.addMatchedGeneID(gene.getID())
                 for omicValue in gene.getOmicsValues():

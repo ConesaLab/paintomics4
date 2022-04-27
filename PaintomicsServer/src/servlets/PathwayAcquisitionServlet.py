@@ -357,8 +357,6 @@ def pathwayAcquisitionStep2_PART2(jobID, userID, selectedCompounds, clusterNumbe
         logging.info("STEP2 - GENERATING PATHWAYS INFORMATION...")
         summary = jobInstance.generatePathwaysList()
 
-
-
         logging.info("STEP2 - GENERATE COMPOUND CLASSIFICATION")
 
         if selectedCompounds:
