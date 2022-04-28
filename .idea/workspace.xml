@@ -1,13 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="ChangeListManager">
-    <list default="true" id="37c2dff0-4ca0-47b7-8759-79132bfbc242" name="Default Changelist" comment="">
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/PaintomicsServer/src/classes/Job.py" beforeDir="false" afterPath="$PROJECT_DIR$/PaintomicsServer/src/classes/Job.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/PaintomicsServer/src/classes/JobInstances/MiRNA2GeneJob.py" beforeDir="false" afterPath="$PROJECT_DIR$/PaintomicsServer/src/classes/JobInstances/MiRNA2GeneJob.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/PaintomicsServer/src/classes/JobInstances/PathwayAcquisitionJob.py" beforeDir="false" afterPath="$PROJECT_DIR$/PaintomicsServer/src/classes/JobInstances/PathwayAcquisitionJob.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/PaintomicsServer/src/servlets/PathwayAcquisitionServlet.py" beforeDir="false" afterPath="$PROJECT_DIR$/PaintomicsServer/src/servlets/PathwayAcquisitionServlet.py" afterDir="false" />
-    </list>
+    <list default="true" id="37c2dff0-4ca0-47b7-8759-79132bfbc242" name="Default Changelist" comment="" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -101,6 +95,7 @@
       <workItem from="1650990276542" duration="738000" />
       <workItem from="1651004214174" duration="4803000" />
       <workItem from="1651046929870" duration="8788000" />
+      <workItem from="1651136799957" duration="375000" />
     </task>
     <servers />
   </component>
