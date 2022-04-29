@@ -257,7 +257,7 @@ class Job(Model):
     def processFilesContent(self):
         raise NotImplementedError()
 
-    def parseGeneBasedFiles(self, inputOmic):
+    def  parseGeneBasedFiles(self, inputOmic):
         """
         This function...
         @param {type}
@@ -306,41 +306,22 @@ class Job(Model):
         logging.info("PARSING USER GENE BASED FILE (" + omicName + ")..." )
         parsedFeatures = []
 
-        totalInputTF = []
+
         # If there is transcription factor, we need to map it to the gene name
         if omicName == "Transcription factor":
-            if os_path.isfile(valuesFileName):
-                with open(valuesFileName, 'r') as inputDataFile:
-                    nLine = 0
-                    geneAux = omicValueAux = fileHeader = None
-                    for line in csv_reader(inputDataFile, delimiter='\t'):
-                        nLine += 1
-                        if nLine == 1 or len(line) == 0:
-                            try:
-                                float(line[1])
-                            except Exception:
-                                fileHeader = line
-                                continue
-                        else:
-                            def process_omic_value_regulate_feature(geneName, omicValueVar):
-                                geneAux = Gene("")
-                                geneAux.setName(geneName)
-                                geneAux.addOmicValue(omicValueVar)
-                                totalInputTF.append(geneAux)
+            totalInputTF = []
+            matchedNameDict = {}
 
-                            numericValues = list(map(float, line[1:len(line)]))
-                            if associationFeatures:
-                                columnID = line[0].split(":::")
-                                geneIDs = associationFeatures.get(columnID[1], [])
-                                for geneID in geneIDs:
-                                    omicValueAux = OmicValue(geneID)
-                                    omicValueAux.setOmicName(omicName)
-                                    omicValueAux.setRelevant(line[0].lower() in relevantFeatures)
-                                    omicValueAux.setRelevantAssociation(line[0].lower() in relevantAssociationFeatures)
-                                    omicValueAux.setValues(numericValues)
-                                    omicValueAux.setOriginalName(columnID[0])
-                                    omicValueAux.name = omicValueAux.getOriginalName()
-                                    process_omic_value_regulate_feature(geneID, omicValueAux)
+            def process_omic_value_regulate_feature(geneName, omicValueVar):
+                geneAux = Gene("")
+                geneAux.setName(geneName)
+                geneAux.addOmicValue(omicValueVar)
+                totalInputTF.append(geneAux)
+
+            if associationFeatures:
+                for tfName in associationFeatures.keys():
+                    omicValueAux = OmicValue(tfName)
+                    process_omic_value_regulate_feature(tfName, omicValueAux)
 
             if len(totalInputTF) > 0:
                 matchedName, notMatchedName, foundName = mapFeatureIdentifiers(self.getJobID(),
@@ -350,7 +331,8 @@ class Job(Model):
                                                                                [], [], enrichment)
                 if matchedName is not None and len(matchedName) > 0:
                     # convert matchedName to a dictionary and ID is the key
-                    matchedNameDict = dict(map(lambda x: (x.name, x), matchedName))
+                    matchedNameDict = dict(map(lambda x: (x.ID, x), matchedName))
+
 
         #IF THE USER UPLOADED VALUES FOR GENE EXPRESSION
         if os_path.isfile(valuesFileName):
@@ -373,6 +355,7 @@ class Job(Model):
                         #*************************************************************************
                         # STEP 2.C.1 CREATE A NEW OMIC VALUE WITH ROW DATA
                         #*************************************************************************
+
                         # Auxiliary function to populate mutable outer values.
                         def process_omic_value(geneName, omicValueVar):
                             # *************************************************************************
@@ -386,7 +369,9 @@ class Job(Model):
                             # ADD THE TEMPORAL GENE INSTANCE TO THE LIST OF GENES
                             # *************************************************************************
                             parsedFeatures.append(geneAux)
+
                             allValues.extend(omicValueVar.getValues())
+
                             # TODO: add third enrichment method
                             totalInputFeatures.add(omicValueVar.getOriginalName() if enrichment == 'features' else omicValueVar.getInputName())
 
@@ -400,21 +385,22 @@ class Job(Model):
                         # Otherwise split the ID column as it might contain associated_gene:::original_name
                         if associationFeatures:
                             columnID = line[0].split(":::")
-                            geneIDs = associationFeatures.get(columnID[1], [])
-                            for geneID in geneIDs:
-                                omicValueAux = OmicValue(geneID)
-                                omicValueAux.setOmicName(omicName)
-                                omicValueAux.setRelevant(line[0].lower() in relevantFeatures)
-                                omicValueAux.setRelevantAssociation(line[0].lower() in relevantAssociationFeatures)
-                                omicValueAux.setValues(numericValues)
-                                if len(totalInputTF) > 0 and omicValueAux.getInputName() in matchedNameDict.keys():
-                                    omicValueAux.setOriginalName(matchedNameDict[omicValueAux.getInputName()].name)
-                                else:
-                                    omicValueAux.setOriginalName(columnID[0])
-                                process_omic_value(geneID, omicValueAux)
+                            # The gene name is the zero element of the association list
+                            omicValueAux = OmicValue(columnID[0])
+                            omicValueAux.setOmicName(omicName)
+                            omicValueAux.setRelevant(line[0].lower() in relevantFeatures)
+                            omicValueAux.setRelevantAssociation(line[0].lower() in relevantAssociationFeatures)
+                            omicValueAux.setValues(numericValues)
+                            # The transcription factor (miRNA) name is the first column (change to gene symbol when processing transcription factors)
+                            if omicName == "Transcription factor" and columnID[1] in matchedNameDict.keys():
+                                omicValueAux.setOriginalName(matchedNameDict[columnID[1]].name)
+                            else:
+                                omicValueAux.setOriginalName(columnID[1])
+                            process_omic_value(columnID[0], omicValueAux)
 
                         else:
                             columnID = line[0].split(":::")
+
                             omicValueAux = OmicValue(columnID[0])
                             omicValueAux.setOmicName(omicName)
                             # omicValueAux.setRelevant(relevantFeatures.has_key(omicValueAux.getInputName().lower()))
@@ -447,7 +433,7 @@ class Job(Model):
 
                 with open(temporalFileName + '_unmatched.txt', 'w') as unmatchedFile:
                     for parsedFeature in notMatchedFeatures:
-                        unmatchedFile.write(parsedFeature.getName() + '\t' + '\t' + '\t'.join(map(str, parsedFeature.getOmicsValues()[0].getValues())) + "\n")
+                        unmatchedFile.write(parsedFeature.getName() + '\t' + '\t' + '\t'.join(map(str,parsedFeature.getOmicsValues()[0].getValues())) + "\n")
 
             inputDataFile.close()
             #*************************************************************************
@@ -484,7 +470,6 @@ class Job(Model):
                 except:
                     summary = summary + [numpy_min(numpyArray), numpy_max(numpyArray)]
 
-
             logging.info("DISTRIBUTION FOR " + omicName  + ": MIN: " + str(summary[0])  + "; p10: " + str(summary[1]) + "; q1: " + str(summary[2]) + ";  MEDIAN: " + str(summary[3])+ "; q1: " + str(summary[4])  + "; p90: " + str(summary[5]) + ";  MAX VALUE: " + str(summary[6]))
             logging.info("DISTRIBUTION FOR " + omicName  + " WITHOUT OUTLIERS: MIN: " + str(summary[7])  + "; MAX: " + str(summary[8])  + "; #OUTLIERS: " + str(numpy_sum(outlierMask)))
 
@@ -499,7 +484,6 @@ class Job(Model):
 
         else:
             logging.error("PARSING USER GENE BASED FILE (" + omicName + ")... FAILED. File " + valuesFileName + " NOT FOUND")
-
     def parseCompoundBasedFile(self, inputOmic, checkBoxesData):
         """
         This function is used for parsing a file containing data matched to Compounds IDs

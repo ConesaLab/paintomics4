@@ -166,7 +166,6 @@ def findGeneSymbolByFeatureID(jobID, featureID, organism, db, databaseConvertion
     except Exception as ex:
         return None, False
 
-# def mapFeatureIdentifiers(jobID, organism, databases, featureList, matchedFeatures, notMatchedFeatures, foundFeatures, enrichment):
 def mapFeatureIdentifiers(jobID, organism, databases, featureList,  matchedFeatures, notMatchedFeatures, foundFeatures, enrichment):
     """
     This function is used to query the database in different threads.
