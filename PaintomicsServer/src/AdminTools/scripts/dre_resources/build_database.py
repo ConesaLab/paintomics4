@@ -1,16 +1,7 @@
 import imp
 import traceback
-import pymongo
 from sys import argv, stderr
-from subprocess import CalledProcessError
-
-#**************************************************************************
-#STEP 1. READ CONFIGURATION AND PARSE INPUT FILES
-#
-# DO NOT CHANGE THIS CODE
-#**************************************************************************
-
-
+from subprocess import CalledProcessError, check_call
 
 SPECIE      = argv[1]
 ROOT_DIR    = argv[2].rstrip("/") + "/"      #Should be src/AdminTools
@@ -25,7 +16,6 @@ COMMON_BUILD_DB_TOOLS.ROOT_DIR= ROOT_DIR
 COMMON_BUILD_DB_TOOLS.EXTERNAL_RESOURCES = imp.load_source('download_conf',  ROOT_DIR + "scripts/" + SPECIE + "_resources/download_conf.py").EXTERNAL_RESOURCES
 COMMON_BUILD_DB_TOOLS.COMMON_RESOURCES = imp.load_source('download_conf',  ROOT_DIR + "scripts/common_resources/download_conf.py").EXTERNAL_RESOURCES
 COMMON_BUILD_DB_TOOLS.SERVER_SETTINGS = imp.load_source('serverconf.py',  ROOT_DIR + "../conf/serverconf.py")
-
 #**************************************************************************
 # CHANGE THE CODE FROM HERE
 #
@@ -39,17 +29,19 @@ try:
     COMMON_BUILD_DB_TOOLS.processRefSeqData()
     COMMON_BUILD_DB_TOOLS.processUniProtData()
     COMMON_BUILD_DB_TOOLS.processRefSeqGeneSymbolData()
+    # COMMON_BUILD_DB_TOOLS.processVegaData()
+    #COMMON_BUILD_DB_TOOLS.processKEGGMappingData()
+
 
     #**************************************************************************
-    # STEP 2. PROCESS THE KEGG  & OTHER DATABASES
+    # STEP 2. PROCESS THE KEGG And Reactome DATABASE
     #**************************************************************************
     COMMON_BUILD_DB_TOOLS.processKEGGPathwaysData()
     COMMON_BUILD_DB_TOOLS.processReactomePathwaysData()
     COMMON_BUILD_DB_TOOLS.mergeNetworkFiles()
 
-
     #**************************************************************************
-    # RESULTS
+    # STEP 3. Print Result
     #**************************************************************************
     COMMON_BUILD_DB_TOOLS.printResults()
 
@@ -59,7 +51,6 @@ try:
     COMMON_BUILD_DB_TOOLS.dumpDatabase()
     COMMON_BUILD_DB_TOOLS.dumpErrors()
     COMMON_BUILD_DB_TOOLS.createDatabase()
-
 
 except CalledProcessError as ex:
     stderr.write("FAILED WHILE PROCESSING DATA " + str(ex))

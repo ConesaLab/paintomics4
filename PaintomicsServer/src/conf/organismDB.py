@@ -9,7 +9,7 @@ dicDatabases = {
         'sly'   :   [{'KEGG': 'entrezgene'}, {'KEGG': 'kegg_gene_symbol'}],
         'rno'   :   [{'KEGG': 'entrezgene'}, {'KEGG': 'refseq_gene_symbol'}],
         'sot'   :   [{'KEGG': 'kegg_id', 'MapMan': 'mapman_gene_id'}, {'KEGG': 'kegg_gene_symbol', 'MapMan': 'mapman_gene_id'}],
-        'ath'   :   [{'KEGG': 'kegg_id', 'MapMan': 'mapman_gene_id'}, {'KEGG': 'kegg_gene_symbol', 'MapMan': 'mapman_gene_id'}],
+        'ath'   :   [{'KEGG': 'kegg_id', 'MapMan': 'mapman_gene_id'}, {'KEGG': 'kegg_gene_symbol', 'MapMan': 'kegg_gene_symbol'}],
         'sce'   :   [{'KEGG': "kegg_id"}, {'KEGG': "kegg_gene_symbol"}]
     }
     

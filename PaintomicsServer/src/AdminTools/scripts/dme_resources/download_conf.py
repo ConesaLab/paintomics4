@@ -29,13 +29,5 @@ EXTERNAL_RESOURCES = {
                     "output"        :   "uniprot_mapping.list",
                     "description"   :    "Source: UniProt idmapping_selected.tab. Downloaded from UniProt FTP. Tab-delimited table which includes the multiple mappings between UniProt Accession and external databases."
                     }
-                ],
-                "reactome": [
-                    {
-                        "url": "https://reactome.org/ContentService/data/pathways/top/7227",
-                        "file": "",
-                        "output": "reactome_top.json",
-                        "description": "Source: Reactome top pathways in JSON. It contains the main pathways to be used to retrieve the others.."
-                    }
-                ],
+                ]
         }

@@ -10,7 +10,7 @@ from subprocess import CalledProcessError, check_call
 #**************************************************************************
 #SPECIE = "ath"
 #ROOT_DIR = '/home/tian/paintomics/paintomics4/PaintomicsServer/src/AdminTools/'
-#DATA_DIR = '/home/tian/database/KEGG_DATA/current/sot/'
+#DATA_DIR = '/home/tian/database/KEGG_DATA/current/' + SPECIE + '/'
 #LOG_FILE = "/home/tian/database/KEGG_DATA/current/install.log"
 
 
@@ -34,8 +34,12 @@ try:
     #**************************************************************************
     # STEP 1. EXTRACT THE MAPPING DATABASE
     #**************************************************************************
+    COMMON_BUILD_DB_TOOLS.processEnsemblData()
+    COMMON_BUILD_DB_TOOLS.processRefSeqData()
+    COMMON_BUILD_DB_TOOLS.processUniProtData()
+    COMMON_BUILD_DB_TOOLS.processRefSeqGeneSymbolData()
+
     COMMON_BUILD_DB_TOOLS.processMapManMappingData()
-    COMMON_BUILD_DB_TOOLS.processKEGGMappingData()
     #**************************************************************************
     # STEP 2. PROCESS THE KEGG DATABASE
     #**************************************************************************
@@ -44,8 +48,7 @@ try:
     # This must be after KEGG to avoid trying to process missing kgml files
     # (will not fail though)
     COMMON_BUILD_DB_TOOLS.processMapManPathwaysData()
-
-    #COMMON_BUILD_DB_TOOLS.mergeNetworkFiles()
+    COMMON_BUILD_DB_TOOLS.mergeNetworkFiles()
 
     #**************************************************************************
     # DUMP AND INSTALL

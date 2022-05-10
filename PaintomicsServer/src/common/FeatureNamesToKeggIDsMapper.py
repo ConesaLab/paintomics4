@@ -227,7 +227,6 @@ def mapFeatureIdentifiers(jobID, organism, databases, featureList,  matchedFeatu
                 cacheFeatureIDS.update(newFeatureIDs)
                 cacheSymbolsIDS.update(newSymbolIDs)
 
-
             total = len(featureList)
             current = 0
             prev = -1
@@ -244,7 +243,7 @@ def mapFeatureIdentifiers(jobID, organism, databases, featureList,  matchedFeatu
                 originalName = feature.getName()
                 featureIDs = cacheFeatureIDS.get(originalName, None)
 
-                if (featureIDs):
+                if featureIDs:
                     # matches+=1
                     # Increase the counter on the matching database, and keep track of the total
                     # counting only once the features. In this scenario the feature will only have one omic value
@@ -259,7 +258,7 @@ def mapFeatureIdentifiers(jobID, organism, databases, featureList,  matchedFeatu
                     if feature in notMatchedFeatures:
                         notMatchedFeatures.remove(feature)
 
-                    for featureID in featureIDs:
+                    for featureID in set(featureIDs):
                         featureClone = feature.clone()  # IF MORE THAN 1 MATCH, CLONE THE FEATURE
                         featureClone.setID(featureID)
 
@@ -315,9 +314,7 @@ def mapFeatureNamesToKeggIDs(jobID, organism, databases, featureList, enrichment
     # Avoid unnecesary calculations when there are no features
     if len(featureList) < 1:
         logging.info("NO FEATURES GIVEN. SKIPPING MAPPING - JOB: " + str(jobID))
-
         return [dict.fromkeys(databases, 0), [], []]
-
 
     nThreads = MAX_THREADS
 
@@ -349,7 +346,7 @@ def mapFeatureNamesToKeggIDs(jobID, organism, databases, featureList, enrichment
     #* STEP 2. START THE MAPPING USING N DIFFERENT THREADS IN PARALLEL
     #***********************************************************************************
     try:
-        #matchedFeatures, notMatchedFeatures, foundFeatures = mapFeatureIdentifiers(jobID, organism, databases, featureList, enrichment)
+        #matchedFeatures, notMatchedFeatures, foundFeatures = mapFeatureIdentifiers(jobID, organism, databases, featureList, matchedFeatures, notMatchedFeatures, foundFeatures, enrichment)
         threadsList = []
         i=0
         for genesListPart in genesListParts:

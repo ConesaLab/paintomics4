@@ -10,9 +10,6 @@ import imp
 # DO NOT CHANGE THIS CODE
 #**************************************************************************
 
-#SPECIE = 'mmu'
-#ROOT_DIR = '/home/tian/paintomics/paintomics4/PaintomicsServer/src/AdminTools/'
-#DESTINATION = "/home/tian/mmu"
 
 
 SPECIE      = argv[1]
@@ -44,13 +41,6 @@ try:
     index =1
     for aux in resource:
         COMMON_BUILD_DB_TOOLS.downloadFile(aux.get("url"), aux.get("file"), DESTINATION + aux.get("output"), SERVER_SETTINGS.DOWNLOAD_DELAY_1, SERVER_SETTINGS.MAX_TRIES_1)
-
-
-    #**************************************************************************
-    #STEP 2.3 GET UNIPROT TRANSCRIPTS, PEPTIDES -> ENTREZ GENES
-    stderr.write( "STEP3 DOWNLOAD UNIPROT" + "\n")
-    resource = COMMON_BUILD_DB_TOOLS.EXTERNAL_RESOURCES.get("uniprot")[0]
-    COMMON_BUILD_DB_TOOLS.downloadFile(resource.get("url"), resource.get("file"), DESTINATION + resource.get("output"),  SERVER_SETTINGS.DOWNLOAD_DELAY_1, SERVER_SETTINGS.MAX_TRIES_1)
 
     #*************************************************************************
 

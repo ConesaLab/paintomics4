@@ -1,6 +1,6 @@
 #!/usr/bin/env Rscript
+library(stringr)
 
-args <- commandArgs(T)
 args <- commandArgs(T)
 parseArgs <- function(x) strsplit(sub("^--", "", gsub("\"", "", x)), "=")
 #args = parseArgs(args)
@@ -15,8 +15,6 @@ ROOT <- args$root
 #specie = 'hsa'
 #ROOT = '/home/tian/Downloads/database/KEGG_DATA/current/common/'
 ROOT_REACTOME = paste0(ROOT, "../", specie ,"/mapping/reactome/")
-
-library(stringr)
 
 cat("STEP 1 LOODING FILES...")
 #ChEBI2Reactome = read.csv(file = paste0(ROOT, "ChEBI2Reactome_PE_All_Levels.txt"), sep = '\t', header = FALSE)

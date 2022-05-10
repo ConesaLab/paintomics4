@@ -23,12 +23,12 @@ VERSION=0.12
 #------------------------------------------------------------------------------------------
 #------------------------------------------------------------------------------------------
 
-def download_command(inputfile=None, specie=None, kegg=0, mapping=0, common=0, retry=0, reactome = 0):
+def download_command(inputfile=None, specie=None, kegg=0, mapping=0, common=0, retry=0, reactome = 0, updateReactome = 0):
     """
     Download the information for given species
     Usage: AdminTools.py download <options>
     Examples:
-              ./DBManager.py download --specie=mmu --kegg=1 --mapping=1 --common=0 --reactome=0
+              ./DBManager.py download --specie=mmu --kegg=1 --mapping=1 --common=0 --reactome=0 --updateReactome=0
 
     Keyword arguments:
         from_file -- a file containing a list of a list of species IDs (one per line), followed by (tabulated)
@@ -77,7 +77,7 @@ def download_command(inputfile=None, specie=None, kegg=0, mapping=0, common=0, r
         SPECIES_DOWNLOAD= readFile(inputfile) #THE IDS FOR THE SPECIES TO UPDATE
 
     log("######################################################################" )
-    log("### PAINTOMICS 3.0 - DATABASE KEGG DOWNLOADER ")
+    log("### PAINTOMICS 4.0 - DATABASE KEGG DOWNLOADER ")
     log("### v."+ str(VERSION))
     log("######################################################################" )
     log("")
@@ -89,8 +89,6 @@ def download_command(inputfile=None, specie=None, kegg=0, mapping=0, common=0, r
 
     if((common==None and confirm(prompt='Download common KEGG information (pathway names, classifications, PNG images,...)?', resp=False)) or (common== "1")):
         common = True
-
-
 
     #********************************************************************************
     #STEP 2. IF WE CHOSE TO DOWNLOAD THE GENERAL DATA (PATHWAYS CLASSIFICATION, ETC.) -> GO TO 2.A
@@ -113,6 +111,12 @@ def download_command(inputfile=None, specie=None, kegg=0, mapping=0, common=0, r
             log('')
             log("New data will be stored at " + datadir)
             log("STEP " + str(currentStep) + ". DOWNLOAD THE COMMON KEGG INFORMATION")
+            
+            if updateReactome:
+            	checkExists = False
+            else:
+            	checkExists = True
+           
 
             if reactome:
                 reactomeURL = "https://reactome.org/download/current/"
@@ -121,35 +125,35 @@ def download_command(inputfile=None, specie=None, kegg=0, mapping=0, common=0, r
                               outputName=datadir + "ReactomePathwaysRelation.list",
                               delay=DOWNLOAD_DELAY_1,
                               maxTries=MAX_TRIES_1,
-                              checkIfExists=True )
+                              checkIfExists=checkExists )
 
                 downloadFile( URL=reactomeURL,
                               fileName="UniProt2Reactome_PE_All_Levels.txt",
                               outputName=datadir + "UniProt2Reactome_PE_All_Levels.txt",
                               delay=DOWNLOAD_DELAY_1,
                               maxTries=MAX_TRIES_1,
-                              checkIfExists=True )
+                              checkIfExists=checkExists )
 
                 downloadFile( URL=reactomeURL,
                               fileName="ChEBI2Reactome_PE_All_Levels.txt",
                               outputName=datadir + "ChEBI2Reactome_PE_All_Levels.txt",
                               delay=DOWNLOAD_DELAY_1,
                               maxTries=MAX_TRIES_1,
-                              checkIfExists=True )
+                              checkIfExists=checkExists )
 
                 downloadFile( URL=reactomeURL,
                               fileName="Ensembl2Reactome_PE_All_Levels.txt",
                               outputName=datadir + "Ensembl2Reactome_PE_All_Levels.txt",
                               delay=DOWNLOAD_DELAY_1,
                               maxTries=MAX_TRIES_1,
-                              checkIfExists=True )
+                              checkIfExists=checkExists )
 
                 downloadFile( URL=reactomeURL,
                               fileName="NCBI2Reactome_PE_All_Levels.txt",
                               outputName=datadir + "NCBI2Reactome_PE_All_Levels.txt",
                               delay=DOWNLOAD_DELAY_1,
                               maxTries=MAX_TRIES_1,
-                              checkIfExists=True )
+                              checkIfExists=checkExists )
 
                 downloadFile( URL="rest.kegg.jp/conv/compound/",
                               fileName="chebi",
@@ -355,6 +359,8 @@ def install_command(inputfile=None, specie=None, common=0, hub=1):
     currentDataDir = os.path.join(KEGG_DATA_DIR, "current/")
     downloadDir = os.path.join(KEGG_DATA_DIR, "download/")
     oldDataDir = os.path.join(KEGG_DATA_DIR, "old/")
+    if not os.path.exists(oldDataDir):
+        os.mkdir(oldDataDir)
 
     # Add hub analysis result dir
     hubDir = os.path.join(downloadDir, specie.lower() + "/hubData/")
@@ -367,7 +373,7 @@ def install_command(inputfile=None, specie=None, common=0, hub=1):
     currentStep = 1;
 
     log("######################################################################" )
-    log("### PAINTOMICS 3.0 - DATABASE INSTALLER ")
+    log("### PAINTOMICS 4.0 - DATABASE INSTALLER ")
     log("### v." + str(VERSION))
     log("######################################################################" )
     log("")
@@ -765,9 +771,12 @@ def getCurrentInstalledSpecies():
             mapping_date = db.versions.find({"name": "MAPPING"})[0].get("date")
             acceptedIDs = db.versions.find({"name": "ACCEPTED_IDS"})
 
-            if acceptedIDs.count() > 0:
-                acceptedIDs = acceptedIDs[0].get("ids")
-            else:
+            try:
+                if acceptedIDs.count() > 0:
+                    acceptedIDs = acceptedIDs[0].get("ids")
+                else:
+                    acceptedIDs = ""
+            except Exception as ex:
                 acceptedIDs = ""
 
             # Step 2.4 Check if the organism has non installed data available

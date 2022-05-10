@@ -38,8 +38,6 @@ KeggParser<- function (Pathways) {
   # pathway: This is the pathway KEGG code.
   
   suppressWarnings({ 
-    
-    
     ParserData<-NULL
     # Loop over all KEGG pathways in the input data
     for (path in 1:length(Pathways)) {
@@ -306,6 +304,11 @@ KeggParser<- function (Pathways) {
       RelationTable5<-separate_rows(RelationTable5,entry_name_2,sep=" ") #Esta es
       RelationTable5$entry_name_2<-sapply(strsplit(RelationTable5$entry_name_2, split=':', fixed=TRUE), function(x) (x[2]))
       RelationTable5$pathway<-rep(Pathways[path], nrow(RelationTable5))
+      
+      # replace NA
+      RelationTable5[is.na(RelationTable5)] <- ''
+      
+ 
       
       ##### Working woth groups of proteins
       if (any(RelationTable5$entry_type_1 == "group" | RelationTable5$entry_type_2=="group" )) {

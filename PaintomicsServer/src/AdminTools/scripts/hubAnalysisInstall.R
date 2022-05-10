@@ -1,5 +1,6 @@
 #!/usr/bin/env Rscript
-
+flibrary <- library
+library <- function(...) suppressPackageStartupMessages(flibrary(...))
 library(KEGGgraph)
 library(readr)
 library(tidyr)
@@ -11,11 +12,10 @@ library(qdapRegex)
 library(gtools)
 library(jsonlite)
 library(AnnotationDbi)
-
 result <- NULL
 
 hubAnalysisInstall <- function(organism, scriptDir, outputDir) {
-  print(paste0("#######################STEP 0 ", "Load source data"))
+  print(paste0("#######################STEP 0 ", "Start install hub analysis data...", "#######################"))
   source (paste0(scriptDir, "/GalaxyNetworkFunctionsv2.R"))
   
   print(paste0("#######################STEP 1 ", "Downloading pathway information..."))
@@ -24,7 +24,7 @@ hubAnalysisInstall <- function(organism, scriptDir, outputDir) {
   pathway_df <- read.delim(paste0(outputDir,"/pathway_list.list"), header = F)
   Kegg_pathways<-unlist(sapply(strsplit(as.character(pathway_df$V1), split=':'), function (x) x[[2]]) )
   print(paste0("#######################STEP 2 ", "Parsering pathway information..."))
-  invisible(kegg_interactions <- KeggParser(Pathways=Kegg_pathways))
+  kegg_interactions <- KeggParser(Pathways=Kegg_pathways)
   
   print(paste0("#######################STEP 3 ", " Removing interactions with map..."))
   hknomap1<-kegg_interactions[kegg_interactions$entry_type_1 != "map",]
@@ -64,8 +64,16 @@ hubAnalysisInstall <- function(organism, scriptDir, outputDir) {
     
     prelist<-tabelita<-list()
     theTables<-NULL
+    
+    saveProcess <- 0 # track the process
+    currentProcess <- 0
+    
     for (i in 1:length (allcompounds)){
-      print(paste0(round(i/length(allcompounds)*100),'% completed'))
+      currentProcess <- round(i/length(allcompounds)*100)
+      if (currentProcess != saveProcess && currentProcess %% 10 == 0) {
+        print(paste0(currentProcess,'% completed'))
+        saveProcess = currentProcess
+      }
       actor<-allcompounds[i]
       t1<-Allintersnorepeated[Allintersnorepeated$entry_name_1 == actor,]
       colnames(t1)<-c("Var1","Var2")

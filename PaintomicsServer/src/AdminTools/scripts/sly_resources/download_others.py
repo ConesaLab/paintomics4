@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-
+import shutil
 import traceback
 from sys import argv, stderr
 import imp
@@ -35,6 +35,43 @@ try:
     #STEP 2.2 SWISSPROT ACC -> TREMBL ACC -> RAPDB TRANSCRIPT ID
     resource = COMMON_BUILD_DB_TOOLS.EXTERNAL_RESOURCES.get("ensembl")[1]
     COMMON_BUILD_DB_TOOLS.queryBiomart(resource.get("url"), ROOT_DIR + "scripts/" + resource.get("file"), DESTINATION + resource.get("output"),  SERVER_SETTINGS.DOWNLOAD_DELAY_1, SERVER_SETTINGS.MAX_TRIES_1)
+    
+    resource = COMMON_BUILD_DB_TOOLS.EXTERNAL_RESOURCES.get("mapman_kegg")[0]
+    #COMMON_BUILD_DB_TOOLS.downloadFile(resource.get("url"), resource.get("file"), DESTINATION + resource.get("output"), SERVER_SETTINGS.DOWNLOAD_DELAY_1, SERVER_SETTINGS.MAX_TRIES_1)
+    shutil.copy(resource.get("url") + resource.get("file"), DESTINATION + resource.get("output"))
+
+    # **************************************************************************
+    # STEP 2.1 GET MapMan GENE ID -> MAPMAN FEATURE ID
+    # **************************************************************************
+    resource = COMMON_BUILD_DB_TOOLS.EXTERNAL_RESOURCES.get("mapman_gene")[0]
+    shutil.copy(resource.get("url") + resource.get("file"), DESTINATION + resource.get("output"))
+
+    #COMMON_BUILD_DB_TOOLS.downloadFile(resource.get("url"), resource.get("file"), DESTINATION + resource.get("output"),
+    #                                   SERVER_SETTINGS.DOWNLOAD_DELAY_1, SERVER_SETTINGS.MAX_TRIES_1)
+
+
+    #**************************************************************************
+    #STEP 2.1 GET MapMan pathways
+    # **************************************************************************
+    resource = COMMON_BUILD_DB_TOOLS.EXTERNAL_RESOURCES.get("mapman_pathways")[0]
+    shutil.copy(resource.get("url") + resource.get("file"), DESTINATION + resource.get("output"))
+    #COMMON_BUILD_DB_TOOLS.downloadFile(resource.get("url"), resource.get("file"), DESTINATION + resource.get("output"), SERVER_SETTINGS.DOWNLOAD_DELAY_1, SERVER_SETTINGS.MAX_TRIES_1)
+
+    #**************************************************************************
+    #STEP 2.1 GET MapMan pathways classification
+    # **************************************************************************
+    resource = COMMON_BUILD_DB_TOOLS.EXTERNAL_RESOURCES.get("mapman_classification")[0]
+    shutil.copy(resource.get("url") + resource.get("file"), DESTINATION + resource.get("output"))
+
+    #COMMON_BUILD_DB_TOOLS.downloadFile(resource.get("url"), resource.get("file"), DESTINATION + resource.get("output"), SERVER_SETTINGS.DOWNLOAD_DELAY_1, SERVER_SETTINGS.MAX_TRIES_1)
+
+
+   #**************************************************************************
+    #STEP 2.1 GET MapMan compound dataset
+    # **************************************************************************
+    resource = COMMON_BUILD_DB_TOOLS.EXTERNAL_RESOURCES.get("metabolites")[0]
+    shutil.copy(resource.get("url") + resource.get("file"), DESTINATION + resource.get("output"))
+
 
 except Exception as ex:
     stderr.write("FAILED WHILE DOWNLOADING DATA " + str(ex))

@@ -38,12 +38,12 @@ try:
     #**************************************************************************
     # STEP 1. EXTRACT THE MAPPING DATABASE
     #**************************************************************************
-    #COMMON_BUILD_DB_TOOLS.processEnsemblData()
-    #COMMON_BUILD_DB_TOOLS.processRefSeqData()
-    #COMMON_BUILD_DB_TOOLS.processUniProtData()
-    #COMMON_BUILD_DB_TOOLS.processRefSeqGeneSymbolData()
+    COMMON_BUILD_DB_TOOLS.processEnsemblData()
+    COMMON_BUILD_DB_TOOLS.processRefSeqData()
+    COMMON_BUILD_DB_TOOLS.processUniProtData()
+    COMMON_BUILD_DB_TOOLS.processRefSeqGeneSymbolData()
     # COMMON_BUILD_DB_TOOLS.processVegaData()
-    COMMON_BUILD_DB_TOOLS.processKEGGMappingData()
+    #COMMON_BUILD_DB_TOOLS.processKEGGMappingData()
 
 
     #**************************************************************************
