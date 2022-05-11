@@ -2,12 +2,9 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="37c2dff0-4ca0-47b7-8759-79132bfbc242" name="Default Changelist" comment="">
-      <change afterPath="$PROJECT_DIR$/docs/1_4_id.md" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/docs/1_4_id/paintomics_150x690.png" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/PaintomicsClient/public_html/app/view/PathwayAcquisitionViews/PA_Step1Views.js" beforeDir="false" afterPath="$PROJECT_DIR$/PaintomicsClient/public_html/app/view/PathwayAcquisitionViews/PA_Step1Views.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/sly_resources/ensembl_mapping.xml" beforeDir="false" afterPath="$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/sly_resources/ensembl_mapping.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/sly_resources/uniprot_mapping.xml" beforeDir="false" afterPath="$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/sly_resources/uniprot_mapping.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/mkdocs.yml" beforeDir="false" afterPath="$PROJECT_DIR$/mkdocs.yml" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -110,7 +107,7 @@
       <workItem from="1652020365018" duration="12070000" />
       <workItem from="1652194404845" duration="15638000" />
       <workItem from="1652221262328" duration="44000" />
-      <workItem from="1652252867410" duration="2601000" />
+      <workItem from="1652252867410" duration="5467000" />
     </task>
     <servers />
   </component>
