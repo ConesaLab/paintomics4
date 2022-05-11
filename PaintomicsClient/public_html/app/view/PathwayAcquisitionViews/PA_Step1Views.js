@@ -364,7 +364,7 @@ function PA_Step1JobView() {
 								{
 									xtype: "box", flex: 1, html:
 									'<span class="infoTip" style=" font-size: 12px; margin: 0 20px 10px 190px;">'+
-									' For <span style="color: rgb(211, 21, 108);">some</span> species more than one database might be available. Choose which ones do you want to include in the analysis.' +
+									' For <span style="color: rgb(211, 21, 108);">some</span> species more than one database might be available. Please check<b><a href="https://paintomics.readthedocs.io/en/latest/1_4_id/" target="_blank">Supported ID and databases</a></b>. Choose which ones do you want to include in the analysis.' +
 									'</span>'
 								}
 								]
