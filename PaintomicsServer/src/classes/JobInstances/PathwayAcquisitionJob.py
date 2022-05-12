@@ -524,10 +524,9 @@ class PathwayAcquisitionJob(Job):
         # ****************************************************************
         inputGenes = list(self.getInputGenesData().values())
         inputCompounds = list(self.getInputCompoundsData().values())
-        import copy
-
         # if there is multi database make compounds available for both database
         if len(self.databases) >= 2:
+            import copy
             inputCompoundsCopy = copy.deepcopy(inputCompounds)
             if "MapMan" in self.databases:
                 for compound in inputCompoundsCopy:
@@ -551,6 +550,10 @@ class PathwayAcquisitionJob(Job):
                     self.inputCompoundsData[metabolite].matchingDB = ["KEGG", "Reactome"]
 
             inputCompounds = inputCompounds + inputCompoundsCopy
+        else:
+            # make sure the compound database in the inputCompunds is the as the one in the self.databases
+            for compound in inputCompounds:
+                compound.matchingDB = self.databases
 
         self.inputCompunds = inputCompounds
 
@@ -627,6 +630,10 @@ class PathwayAcquisitionJob(Job):
                 genesInPathway = genesInAllPathways.get(pathwayID)
                 compoundsInPathway = compoundsInAllPathways.get(pathwayID)
                 sourceDB = keggInformationManager.getPathwaySourceByID(jobInstance.getOrganism(), pathwayID)
+
+                # check if totalFeaturesByOmic contains the sourceDB as key
+                if sourceDB not in totalFeaturesByOmic:
+                    continue
 
                 # Add PaintOmics 4 sourceDB
                 if "Unknown Pathway" in sourceDB:
@@ -1215,7 +1222,7 @@ class PathwayAcquisitionJob(Job):
                 bson[attr] = value
         return bson
 
-    def compundsClassification(self):
+    def compundsClassification(self,metaboliteClassThreshold):
 
         import json, os
         from collections import defaultdict
@@ -1274,13 +1281,17 @@ class PathwayAcquisitionJob(Job):
         totalRelevantFeatures = sum(totalRelevantFeaturesInCategory.values())
 
         for key in classificationDict:
-            import math, scipy
-            z_score: float = (totalRelevantFeaturesInCategory.get(key)/totalFeaturesInCategory.get(key)-0.5)/math.sqrt(0.25/totalFeaturesInCategory.get(key))
-            pValueInDict[key] = scipy.stats.norm.sf(z_score)
-                
-                #round(
-                #calculateSignificance(self.test, totalFeatures, totalRelevantFeatures, totalFeaturesInCategory.get(key),
-                #                      totalRelevantFeaturesInCategory.get(key)), 4)
+            from scipy import stats
+            try:
+                if float(metaboliteClassThreshold.get("thresholdMetaboliteClass")) <= 1 and float(metaboliteClassThreshold.get("thresholdMetaboliteClass")) > 0:
+                    pValueInDict[key] = stats.binom_test(totalRelevantFeaturesInCategory.get(key),
+                                                         n=totalFeaturesInCategory.get(key),
+                                                         p=float(metaboliteClassThreshold.get("thresholdMetaboliteClass")), alternative='greater')
+                else:
+                    pValueInDict[key] = stats.binom_test(totalRelevantFeaturesInCategory.get(key), n=totalFeaturesInCategory.get(key), p=totalRelevantFeatures/totalFeatures, alternative='greater')
+
+            except Exception as e:
+                pValueInDict[key] = stats.binom_test(totalRelevantFeaturesInCategory.get(key), n=totalFeaturesInCategory.get(key), p=totalRelevantFeatures/totalFeatures, alternative='greater')
 
         featureSummary = [totalFeatures, totalRelevantFeatures]
 

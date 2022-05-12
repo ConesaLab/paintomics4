@@ -286,13 +286,14 @@ def pathwayAcquisitionStep2_PART1(REQUEST, RESPONSE, QUEUE_INSTANCE, ROOT_DIRECT
         # Retrieve the number of cluster on a per omic basis
         # Note: this will contain the omic name transformed to remove spaces and special chars
         clusterNumber = {key.replace("clusterNumber:", ""): value for key, value in formFields.items() if key.startswith("clusterNumber:")}
+        metaboliteClassThreshold = {key.replace("clusterNumber:", ""): value for key, value in formFields.items() if key.startswith("thresholdMetaboliteClass")}
 
         #************************************************************************
         # Step 3. Queue job
         #************************************************************************
         QUEUE_INSTANCE.enqueue(
             fn=pathwayAcquisitionStep2_PART2,
-            args=(jobID, userID, selectedCompounds, clusterNumber, RESPONSE, ROOT_DIRECTORY,),
+            args=(jobID, userID, selectedCompounds, clusterNumber, RESPONSE, ROOT_DIRECTORY, metaboliteClassThreshold),
             timeout=600,
             job_id= jobID
         )
@@ -310,7 +311,7 @@ def pathwayAcquisitionStep2_PART1(REQUEST, RESPONSE, QUEUE_INSTANCE, ROOT_DIRECT
     finally:
         return RESPONSE
 
-def pathwayAcquisitionStep2_PART2(jobID, userID, selectedCompounds, clusterNumber, RESPONSE, ROOT_DIRECTORY):
+def pathwayAcquisitionStep2_PART2(jobID, userID, selectedCompounds, clusterNumber, RESPONSE, ROOT_DIRECTORY, metaboliteClassThreshold):
     """
     This function corresponds to SECOND PART of the SECOND step in the Pathways acquisition process.
     Given a JOB INSTANCE, first processes the uploaded files (identifiers matching and compound list generation)
@@ -360,7 +361,7 @@ def pathwayAcquisitionStep2_PART2(jobID, userID, selectedCompounds, clusterNumbe
         logging.info("STEP2 - GENERATE COMPOUND CLASSIFICATION")
 
         if selectedCompounds:
-            mappingComp, pValueInDict, classificationDict, exprssionMetabolites, adjustPvalue, totalRelevantFeaturesInCategory, featureSummary, compoundRegulateFeatures = jobInstance.compundsClassification()
+            mappingComp, pValueInDict, classificationDict, exprssionMetabolites, adjustPvalue, totalRelevantFeaturesInCategory, featureSummary, compoundRegulateFeatures = jobInstance.compundsClassification(metaboliteClassThreshold)
             # Creat Global expression information for all genes
             globalExpressionData = jobInstance.getGlobalExpressionData()
             hubAnalysisResult = jobInstance.hubAnalysis( ROOT_DIRECTORY )

@@ -85,7 +85,8 @@ function DM_MyDataListView() {
 						layout: 'column',
 						style: "max-width:1300px; margin: 5px 10px; margin-top:50px;",
 						items: [{
-							xtype: 'box',cls: "contentbox omicSummaryBox", minHeight: 230, html:
+							xtype: 'box',cls: "" +
+								"contentbox omicSummaryBox", minHeight: 230, html:
 							'<div id="about">'+
 							'  <h2>My Data</h2>'+
 							'   <table id="myDataUserDetails"><tbody>' +
