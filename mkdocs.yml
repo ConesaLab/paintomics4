@@ -18,7 +18,7 @@ pages:
       - 'The KEGG pathways database': '1_1_kegg.md'
       - 'The Reactome pathways database': '1_2_reactome.md'
       - 'The MapMan pathways database': '1_3_mapman.md'
-      - 'Supported ID and databases': '1_4_id.md'
+      - 'The supported ID and database': '1_4_id.md'
    - Install:
       - 'Installing PaintOmics 4': '0_install.md'
    - About:

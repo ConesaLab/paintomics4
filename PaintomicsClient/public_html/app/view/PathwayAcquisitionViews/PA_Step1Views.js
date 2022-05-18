@@ -276,7 +276,7 @@ function PA_Step1JobView() {
 				' </ul>' +
 				' <div id="graphicalAbstract" style="float:left;text-align:center;cursor:pointer;width: 34%;"><img style="margin: 30px auto;border:1px solid #222;" src="resources/images/GraphicalAbstract_thumb.png" /></div>' +
 				' <p style="clear:both;">' +
-				'   Please check the <b><a href="http://paintomics.readthedocs.org/en/latest/" target="_blank">User guide</a></b> for further information. For any question on <b>Paintomics</b>, you can send an e-mail to <a href="mailto:paintomics4@outlook.com">paintomics4@outlook.com</a>, or go to our <a href="https://github.com/ConesaLab/paintomics4/"> GitHub page</a>' + "." +
+				'   Please check the <b><a href="http://paintomics.readthedocs.org/en/latest/" target="_blank">User guide</a></b> for further information. For any question on <b>Paintomics</b>, you can send an e-mail to <a href="mailto:paintomics4@outlook.com">paintomics4@outlook.com</a>, or go to our <a href="https://github.com/ConesaLab/paintomics4/"> GitHub page </a>' + "." +
 				' </p>' +
 				'</div>'
 			}, {
@@ -364,7 +364,7 @@ function PA_Step1JobView() {
 								{
 									xtype: "box", flex: 1, html:
 									'<span class="infoTip" style=" font-size: 12px; margin: 0 20px 10px 190px;">'+
-									' For <span style="color: rgb(211, 21, 108);">some</span> species more than one database might be available. Please check<b><a href="https://paintomics.readthedocs.io/en/latest/1_4_id/" target="_blank"> Supported ID and databases</a></b>. Choose which ones do you want to include in the analysis.' +
+									' For <span style="color: rgb(211, 21, 108);">some</span> species more than one database might be available. Please check <b><a href="https://paintomics.readthedocs.io/en/latest/1_4_id/" target="_blank"> Supported ID and databases</a></b>. Choose which ones do you want to include in the analysis.' +
 									'</span>'
 								}
 								]

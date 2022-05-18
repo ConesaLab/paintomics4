@@ -1,5 +1,3 @@
-
-
 <div class="imageContainer" style="" >
     <img src="paintomics_150x690.png" title="Paintomics LOGO." style=" height: 70px !important; margin-bottom: 20px; ">
 </div>

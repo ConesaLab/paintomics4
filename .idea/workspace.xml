@@ -2,8 +2,36 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="37c2dff0-4ca0-47b7-8759-79132bfbc242" name="Default Changelist" comment="">
+      <change afterPath="$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/gga_resources/build_database.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/gga_resources/download_conf.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/gga_resources/download_others.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/gga_resources/ensembl_mapping.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/mtu_resources/build_database.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/mtu_resources/download_conf.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/pfa_resources/build_database.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/pfa_resources/download_conf.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/pfa_resources/download_others.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/sce_resources/build_database.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/sce_resources/download_conf.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/sce_resources/download_others.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/spo_resources/build_database.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/spo_resources/download_conf.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/spo_resources/download_others.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/ssc_resources/build_database.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/ssc_resources/download_conf.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/ssc_resources/download_others.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/ssc_resources/ensembl_mapping.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/xtr_resources/build_database.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/xtr_resources/download_others.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/xtr_resources/ensembl_mapping.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/PaintomicsClient/public_html/app/view/PathwayAcquisitionViews/PA_Step1Views.js" beforeDir="false" afterPath="$PROJECT_DIR$/PaintomicsClient/public_html/app/view/PathwayAcquisitionViews/PA_Step1Views.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/dme_resources/download_others.py" beforeDir="false" afterPath="$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/dme_resources/download_others.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/hsa_resources/__init__.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/rno_resources/build_database.py" beforeDir="false" afterPath="$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/rno_resources/build_database.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/rno_resources/ensembl_mapping.xml" beforeDir="false" afterPath="$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/rno_resources/ensembl_mapping.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/0_install.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/0_install.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/1_4_id.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/1_4_id.md" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/mkdocs.yml" beforeDir="false" afterPath="$PROJECT_DIR$/mkdocs.yml" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -49,22 +77,24 @@
     <property name="RunOnceActivity.OpenProjectViewOnStart" value="true" />
     <property name="RunOnceActivity.ShowReadmeOnStart" value="true" />
     <property name="WebServerToolWindowFactoryState" value="false" />
+    <property name="last_opened_file_path" value="$PROJECT_DIR$/PaintomicsServer/src/launch_server.py" />
+    <property name="settings.editor.selected.configurable" value="preferences.pathVariables" />
   </component>
   <component name="RunManager">
-    <configuration name="download_others" type="PythonConfigurationType" factoryName="Python" nameIsGenerated="true">
-      <module name="paintomics4" />
+    <configuration name="launch_server" type="PythonConfigurationType" factoryName="Python" nameIsGenerated="true">
       <option name="INTERPRETER_OPTIONS" value="" />
       <option name="PARENT_ENVS" value="true" />
       <envs>
         <env name="PYTHONUNBUFFERED" value="1" />
       </envs>
-      <option name="SDK_HOME" value="/usr/bin/python3.8" />
-      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/mmu_resources" />
-      <option name="IS_MODULE_SDK" value="false" />
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/PaintomicsServer/src" />
+      <option name="IS_MODULE_SDK" value="true" />
       <option name="ADD_CONTENT_ROOTS" value="true" />
       <option name="ADD_SOURCE_ROOTS" value="true" />
+      <module name="" />
       <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
-      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/mmu_resources/download_others.py" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/PaintomicsServer/src/launch_server.py" />
       <option name="PARAMETERS" value="" />
       <option name="SHOW_COMMAND_LINE" value="false" />
       <option name="EMULATE_TERMINAL" value="false" />
@@ -108,6 +138,7 @@
       <workItem from="1652194404845" duration="15638000" />
       <workItem from="1652221262328" duration="44000" />
       <workItem from="1652252867410" duration="5467000" />
+      <workItem from="1652872151935" duration="6537000" />
     </task>
     <servers />
   </component>
