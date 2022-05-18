@@ -91,6 +91,38 @@ function PA_Step2JobView() {
 		var compoundOmics = me.getModel().getCompoundBasedInputOmics().map(x => x.omicName);
 		var matchingPerDB = {};
 		var numberOfClusters = [];
+		var thresholdMetaboliteClass = [];
+
+		if ("Metabolomics" in dataDistribution) {
+			thresholdMetaboliteClass.push({
+					xtype: 'combo',
+					fieldLabel: 'Metabolite class activity threshold',
+					name: 'thresholdMetaboliteClass',
+					value: 'default',
+					displayField: 'name', valueField: 'value',
+					editable: true,
+					allowBlank: false,
+					labelWidth: 300,
+					width: 300,
+					store: Ext.create('Ext.data.ArrayStore', {
+						fields: ['name', 'value'],
+						data: [['Generate automatically', 'default'],
+						['0.1', 0.1],
+						['0.2', 0.2],
+						['0.3', 0.3],
+						['0.4', 0.4],
+						['0.5', 0.5],
+						['0.6', 0.6],
+						['0.7', 0.7],
+						['0.8', 0.8],
+						['0.9', 0.9],
+						['1.0', 1.0]]
+					}),
+					helpTip: "If the value is set to 'Generate automatically', the threshold will base on the proportion of significant metabolites in the dataset. The threshold is from 0 to 1."
+				});
+
+		}
+
 
 		for (var omicName in dataDistribution) {
 			// Get total features
@@ -212,6 +244,32 @@ function PA_Step2JobView() {
 
 		var compoundsComponents = [];
 		if (me.items.length > 0) {
+			// create a box named "Configure the metabolite class activity threshold"
+			omicSummaryPanelComponents.splice(2, 0, {
+				xtype: 'container',
+				layout: {type: 'vbox', align: 'stretch'},
+				cls: "contentbox", minHeight: 240, id: "threshold_box",
+				items: [{
+					html: '<h2 style="width: 100%;">Configure the metabolite class activity threshold</h2>'
+				}, {
+					html: '<p>To test the hypothesis of a\n' +
+						'metabolite class being regulated, PaintOmics implements\n' +
+						'a metabolite class activity analysis tool, where a binomial\n' +
+						'test is used to assess the hypothesis of the proportion of significant compounds in a given measured metabolite class\n' +
+						'being higher than a user-defined threshold. In case the user\n' +
+						'does not define an activity threshold, PaintOmics will use\n' +
+						'the average percentage of significant metabolites as threshold for the "Generate automatically".</p>'
+				},{
+					xtype: 'form',
+					maxWidth: 600,
+					bodyCls: "divForm",
+					style: "margin: 0 auto 20px auto;",
+					layout: {type: 'vbox', align: 'stretch'},
+					defaults: {labelAlign: "right", border: false},
+					items: thresholdMetaboliteClass
+				}]
+			}, {xtype: 'container', html:'<div style="display: none;"></div>'});
+
 			compoundsComponents.push({
 				xtype: 'box', cls: "contentbox omicSummaryBox",
 				html: '<div id="about">' +
