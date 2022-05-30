@@ -331,7 +331,7 @@ class Job(Model):
                                                                                [], [], enrichment)
                 if matchedName is not None and len(matchedName) > 0:
                     # convert matchedName to a dictionary and ID is the key
-                    matchedNameDict = dict(map(lambda x: (x.ID, x), matchedName))
+                    matchedNameDict = dict(map(lambda x: (x.omicsValues[0].inputName, x), matchedName))
 
 
         #IF THE USER UPLOADED VALUES FOR GENE EXPRESSION

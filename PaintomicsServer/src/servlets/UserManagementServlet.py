@@ -170,7 +170,7 @@ def userManagementSignUp(request, response, ROOT_DIRECTORY):
             message += "<p>Thanks for joining, " + userInstance.getUserName() + "! You're already able to work with Paintomics.</p>"
             message += "<p>Your user name is as follows:</p>"
             message += "<p><b>Username:</b> " + userInstance.getEmail() + "</p></br>"
-            message += "<p>Login in to Paintomics 4 at </p><a href='" + "https://www.paintomics.top/" + "'>" + "https://www.paintomics.top/" + "</a>"
+            message += "<p>Login in to Paintomics 4 at </p><a href='" + "https://www.paintomics.org/" + "'>" + "https://www.paintomics.org/" + "</a>"
             message += "<div style='width:100%; height:10px; border-top: 1px dotted #333; margin-top:20px; margin-bottom:30px;'></div>"
             message += "<p>Problems? E-mail <a href='mailto:" + "paintomics4@outlook.com" + "'>" + "paintomics4@outlook.com" + "</a></p>"
             message += '</body></html>'
@@ -363,7 +363,7 @@ def userManagementResetPassword(request, response, ROOT_DIRECTORY):
                 message += "<h1>Reset your Paintomics 4 acccount password</h1>"
                 message += "<p>You have requested to reset your account password, if not, please ignore this e-mail.</p>"
                 message += "<p>To restore your account please follow this link:</p>"
-                message += "<p><a href=\"" + "https://paintomics.top" + restoreLink + "\">Reset password link</a></p>"
+                message += "<p><a href=\"" + "https://paintomics.org" + restoreLink + "\">Reset password link</a></p>"
                 message += "<p>After restore your account, please use follow password to login.</p>"
                 message += "<h4>PASSWORD: " + randomPassword + "</h4>"
                 message += "<div style='width:100%; height:10px; border-top: 1px dotted #333; margin-top:20px; margin-bottom:30px;'></div>"

@@ -4,7 +4,7 @@
 
 
 ## Starting with PaintOmics
-**Paintomics** is a web tool for the integrative visualization of multiple omic datasets onto KEGG pathways. To start working with PaintOmics, open your browser (Google Chrome or Firefox preferably) and access the following URL: [**https://paintomics.top**](https://paintomics.top) First you need to create a new account, choose the option **"Sign up now"** and fill the form with your data; or choose **"Start Guest Session",** to start a new guest session (please note that all data submitted by Guest users will keep on the system a maximum of 7 days). **Do not forget your password!!**  Explore the different options at main menu (left side of the window).
+**Paintomics** is a web tool for the integrative visualization of multiple omic datasets onto KEGG pathways. To start working with PaintOmics, open your browser (Google Chrome or Firefox preferably) and access the following URL: [**https://paintomics.org**](https://paintomics.org) First you need to create a new account, choose the option **"Sign up now"** and fill the form with your data; or choose **"Start Guest Session",** to start a new guest session (please note that all data submitted by Guest users will keep on the system a maximum of 7 days). **Do not forget your password!!**  Explore the different options at main menu (left side of the window).
 
 ## Preparing the data for PaintOmics
 Paintomics supports lot of different omic data types, however there are few considerations before start working:

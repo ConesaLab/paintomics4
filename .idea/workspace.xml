@@ -2,37 +2,14 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="37c2dff0-4ca0-47b7-8759-79132bfbc242" name="Default Changelist" comment="">
-      <change afterPath="$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/gga_resources/build_database.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/gga_resources/download_conf.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/gga_resources/download_others.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/gga_resources/ensembl_mapping.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/mtu_resources/build_database.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/mtu_resources/download_conf.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/pfa_resources/build_database.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/pfa_resources/download_conf.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/pfa_resources/download_others.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/sce_resources/build_database.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/sce_resources/download_conf.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/sce_resources/download_others.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/spo_resources/build_database.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/spo_resources/download_conf.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/spo_resources/download_others.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/ssc_resources/build_database.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/ssc_resources/download_conf.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/ssc_resources/download_others.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/ssc_resources/ensembl_mapping.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/xtr_resources/build_database.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/xtr_resources/download_others.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/xtr_resources/ensembl_mapping.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/PaintomicsClient/public_html/app/view/MainView.js" beforeDir="false" afterPath="$PROJECT_DIR$/PaintomicsClient/public_html/app/view/MainView.js" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/PaintomicsClient/public_html/app/view/PathwayAcquisitionViews/PA_Step1Views.js" beforeDir="false" afterPath="$PROJECT_DIR$/PaintomicsClient/public_html/app/view/PathwayAcquisitionViews/PA_Step1Views.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/dme_resources/download_others.py" beforeDir="false" afterPath="$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/dme_resources/download_others.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/hsa_resources/__init__.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/rno_resources/build_database.py" beforeDir="false" afterPath="$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/rno_resources/build_database.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/rno_resources/ensembl_mapping.xml" beforeDir="false" afterPath="$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/rno_resources/ensembl_mapping.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/0_install.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/0_install.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/1_4_id.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/1_4_id.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/mkdocs.yml" beforeDir="false" afterPath="$PROJECT_DIR$/mkdocs.yml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/PaintomicsClient/public_html/app/view/PathwayAcquisitionViews/PA_Step2Views.js" beforeDir="false" afterPath="$PROJECT_DIR$/PaintomicsClient/public_html/app/view/PathwayAcquisitionViews/PA_Step2Views.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/PaintomicsServer/src/classes/Job.py" beforeDir="false" afterPath="$PROJECT_DIR$/PaintomicsServer/src/classes/Job.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/PaintomicsServer/src/classes/JobInstances/PathwayAcquisitionJob.py" beforeDir="false" afterPath="$PROJECT_DIR$/PaintomicsServer/src/classes/JobInstances/PathwayAcquisitionJob.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/PaintomicsServer/src/servlets/UserManagementServlet.py" beforeDir="false" afterPath="$PROJECT_DIR$/PaintomicsServer/src/servlets/UserManagementServlet.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/6_1_use_case.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/6_1_use_case.md" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -51,16 +28,22 @@
     </file-type-list>
   </component>
   <component name="HighlightingSettingsPerFile">
-    <setting file="file://$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/downloadReactome.py" root0="FORCE_HIGHLIGHTING" />
-    <setting file="file://$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/ath_resources/build_database.py" root0="FORCE_HIGHLIGHTING" />
-    <setting file="file://$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/common_build_database.py" root0="FORCE_HIGHLIGHTING" />
-    <setting file="file://$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/bta_resources/download_conf.py" root0="FORCE_HIGHLIGHTING" />
-    <setting file="file://$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/dme_resources/download_conf.py" root0="FORCE_HIGHLIGHTING" />
-    <setting file="file://$PROJECT_DIR$/PaintomicsServer/src/classes/Job.py" root0="FORCE_HIGHLIGHTING" />
     <setting file="file://$PROJECT_DIR$/PaintomicsServer/src/AdminTools/DBManager.py" root0="FORCE_HIGHLIGHTING" />
+    <setting file="file://$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/ath_resources/build_database.py" root0="FORCE_HIGHLIGHTING" />
+    <setting file="file://$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/bta_resources/download_conf.py" root0="FORCE_HIGHLIGHTING" />
+    <setting file="file://$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/common_build_database.py" root0="FORCE_HIGHLIGHTING" />
     <setting file="file://$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/dme_resources/build_database.py" root0="FORCE_HIGHLIGHTING" />
+    <setting file="file://$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/dme_resources/download_conf.py" root0="FORCE_HIGHLIGHTING" />
+    <setting file="file://$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/downloadReactome.py" root0="FORCE_HIGHLIGHTING" />
     <setting file="file://$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/hsa_resources/download_conf.py" root0="FORCE_HIGHLIGHTING" />
+    <setting file="file://$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/src/classes/JobInstances/PathwayAcquisitionJob.py" root0="FORCE_HIGHLIGHTING" />
+    <setting file="file://$PROJECT_DIR$/PaintomicsServer/src/AdminTools/src/AdminTools/scripts/ath_resources/build_database.py" root0="FORCE_HIGHLIGHTING" />
+    <setting file="file://$PROJECT_DIR$/PaintomicsServer/src/AdminTools/src/AdminTools/scripts/src/classes/JobInstances/PathwayAcquisitionJob.py" root0="FORCE_HIGHLIGHTING" />
+    <setting file="file://$PROJECT_DIR$/PaintomicsServer/src/classes/Job.py" root0="FORCE_HIGHLIGHTING" />
     <setting file="file://$PROJECT_DIR$/PaintomicsServer/src/classes/JobInstances/PathwayAcquisitionJob.py" root0="FORCE_HIGHLIGHTING" />
+    <setting file="file://$PROJECT_DIR$/PaintomicsServer/src/src/classes/Job.py" root0="FORCE_HIGHLIGHTING" />
+    <setting file="file://$PROJECT_DIR$/PaintomicsServer/src/src/classes/JobInstances/PathwayAcquisitionJob.py" root0="FORCE_HIGHLIGHTING" />
+    <setting file="file://$PROJECT_DIR$/PaintomicsServer/src/src/servlets/PathwayAcquisitionServlet.py" root0="FORCE_HIGHLIGHTING" />
   </component>
   <component name="MarkdownSettingsMigration">
     <option name="stateVersion" value="1" />
@@ -73,13 +56,12 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent">
-    <property name="RunOnceActivity.OpenProjectViewOnStart" value="true" />
-    <property name="RunOnceActivity.ShowReadmeOnStart" value="true" />
-    <property name="WebServerToolWindowFactoryState" value="false" />
-    <property name="last_opened_file_path" value="$PROJECT_DIR$/PaintomicsServer/src/launch_server.py" />
-    <property name="settings.editor.selected.configurable" value="preferences.pathVariables" />
-  </component>
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "WebServerToolWindowFactoryState": "false",
+    "nodejs_package_manager_path": "npm"
+  }
+}]]></component>
   <component name="RunManager">
     <configuration name="launch_server" type="PythonConfigurationType" factoryName="Python" nameIsGenerated="true">
       <option name="INTERPRETER_OPTIONS" value="" />
@@ -87,9 +69,9 @@
       <envs>
         <env name="PYTHONUNBUFFERED" value="1" />
       </envs>
-      <option name="SDK_HOME" value="" />
+      <option name="SDK_HOME" value="/usr/bin/python3.8" />
       <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/PaintomicsServer/src" />
-      <option name="IS_MODULE_SDK" value="true" />
+      <option name="IS_MODULE_SDK" value="false" />
       <option name="ADD_CONTENT_ROOTS" value="true" />
       <option name="ADD_SOURCE_ROOTS" value="true" />
       <module name="" />
@@ -139,6 +121,7 @@
       <workItem from="1652221262328" duration="44000" />
       <workItem from="1652252867410" duration="5467000" />
       <workItem from="1652872151935" duration="6537000" />
+      <workItem from="1653907350033" duration="7647000" />
     </task>
     <servers />
   </component>
@@ -167,25 +150,15 @@
           <line>415</line>
           <option name="timeStamp" value="24" />
         </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+        <line-breakpoint suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/PaintomicsServer/src/servlets/PathwayAcquisitionServlet.py</url>
           <line>395</line>
           <option name="timeStamp" value="37" />
         </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+        <line-breakpoint suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/PaintomicsServer/src/src/classes/JobInstances/PathwayAcquisitionJob.py</url>
           <line>525</line>
           <option name="timeStamp" value="49" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/PaintomicsServer/src/src/classes/JobInstances/PathwayAcquisitionJob.py</url>
-          <line>538</line>
-          <option name="timeStamp" value="58" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/PaintomicsServer/src/src/classes/JobInstances/PathwayAcquisitionJob.py</url>
-          <line>595</line>
-          <option name="timeStamp" value="59" />
         </line-breakpoint>
         <line-breakpoint suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/dme_resources/build_database.py</url>
@@ -257,155 +230,180 @@
           <line>485</line>
           <option name="timeStamp" value="84" />
         </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+        <line-breakpoint suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/PaintomicsServer/src/servlets/PathwayAcquisitionServlet.py</url>
           <line>359</line>
           <option name="timeStamp" value="87" />
         </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+        <line-breakpoint suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/PaintomicsServer/src/servlets/PathwayAcquisitionServlet.py</url>
           <line>294</line>
           <option name="timeStamp" value="89" />
         </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/PaintomicsServer/src/src/classes/JobInstances/PathwayAcquisitionJob.py</url>
-          <line>529</line>
-          <option name="timeStamp" value="90" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+        <line-breakpoint suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/PaintomicsServer/src/src/classes/JobInstances/PathwayAcquisitionJob.py</url>
           <line>552</line>
           <option name="timeStamp" value="91" />
         </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+        <line-breakpoint suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/PaintomicsServer/src/src/classes/JobInstances/PathwayAcquisitionJob.py</url>
           <line>831</line>
           <option name="timeStamp" value="94" />
         </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/PaintomicsServer/src/src/servlets/PathwayAcquisitionServlet.py</url>
-          <line>357</line>
-          <option name="timeStamp" value="95" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+        <line-breakpoint suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/PaintomicsServer/src/servlets/PathwayAcquisitionServlet.py</url>
           <line>197</line>
           <option name="timeStamp" value="96" />
         </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+        <line-breakpoint suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/PaintomicsServer/src/AdminTools/src/AdminTools/scripts/src/classes/JobInstances/PathwayAcquisitionJob.py</url>
           <line>386</line>
           <option name="timeStamp" value="97" />
         </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+        <line-breakpoint suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/src/classes/JobInstances/PathwayAcquisitionJob.py</url>
           <line>673</line>
           <option name="timeStamp" value="98" />
         </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/PaintomicsServer/src/src/classes/JobInstances/PathwayAcquisitionJob.py</url>
-          <line>673</line>
-          <option name="timeStamp" value="99" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+        <line-breakpoint suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/PaintomicsServer/src/classes/Job.py</url>
           <line>304</line>
           <option name="timeStamp" value="100" />
         </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/PaintomicsServer/src/src/classes/JobInstances/PathwayAcquisitionJob.py</url>
-          <line>386</line>
-          <option name="timeStamp" value="104" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/PaintomicsServer/src/src/classes/Job.py</url>
-          <line>310</line>
-          <option name="timeStamp" value="110" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+        <line-breakpoint suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/common_build_database.py</url>
           <line>758</line>
           <option name="timeStamp" value="117" />
         </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+        <line-breakpoint suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/PaintomicsServer/src/AdminTools/src/AdminTools/scripts/ath_resources/build_database.py</url>
           <line>45</line>
           <option name="timeStamp" value="119" />
         </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+        <line-breakpoint suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/common_build_database.py</url>
           <line>1233</line>
           <option name="timeStamp" value="121" />
         </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+        <line-breakpoint suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/common_build_database.py</url>
           <line>1270</line>
           <option name="timeStamp" value="123" />
         </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+        <line-breakpoint suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/common_build_database.py</url>
           <line>1286</line>
           <option name="timeStamp" value="124" />
         </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+        <line-breakpoint suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/common_build_database.py</url>
           <line>1302</line>
           <option name="timeStamp" value="125" />
         </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+        <line-breakpoint suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/common_build_database.py</url>
           <line>700</line>
           <option name="timeStamp" value="126" />
         </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+        <line-breakpoint suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/ath_resources/build_database.py</url>
           <line>36</line>
           <option name="timeStamp" value="127" />
         </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+        <line-breakpoint suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/common_build_database.py</url>
           <line>814</line>
           <option name="timeStamp" value="128" />
         </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/PaintomicsServer/src/src/classes/Job.py</url>
-          <line>422</line>
-          <option name="timeStamp" value="131" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/PaintomicsServer/src/src/classes/Job.py</url>
-          <line>421</line>
-          <option name="timeStamp" value="132" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+        <line-breakpoint suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/PaintomicsServer/src/common/FeatureNamesToKeggIDsMapper.py</url>
           <line>351</line>
           <option name="timeStamp" value="133" />
         </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/PaintomicsServer/src/src/classes/Job.py</url>
-          <line>325</line>
-          <option name="timeStamp" value="136" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/PaintomicsServer/src/src/classes/Job.py</url>
-          <line>326</line>
-          <option name="timeStamp" value="138" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+        <line-breakpoint suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/PaintomicsServer/src/src/common/FeatureNamesToKeggIDsMapper.py</url>
           <line>229</line>
           <option name="timeStamp" value="141" />
         </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+        <line-breakpoint suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/PaintomicsServer/src/src/common/FeatureNamesToKeggIDsMapper.py</url>
           <line>250</line>
           <option name="timeStamp" value="144" />
         </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+        <line-breakpoint suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/common_build_database.py</url>
           <line>790</line>
           <option name="timeStamp" value="154" />
+        </line-breakpoint>
+        <line-breakpoint suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/PaintomicsServer/src/src/servlets/PathwayAcquisitionServlet.py</url>
+          <line>363</line>
+          <option name="timeStamp" value="157" />
+        </line-breakpoint>
+        <line-breakpoint suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/PaintomicsServer/src/src/servlets/PathwayAcquisitionServlet.py</url>
+          <line>362</line>
+          <option name="timeStamp" value="158" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/PaintomicsServer/src/src/servlets/PathwayAcquisitionServlet.py</url>
+          <line>358</line>
+          <option name="timeStamp" value="162" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/PaintomicsServer/src/src/classes/JobInstances/PathwayAcquisitionJob.py</url>
+          <line>574</line>
+          <option name="timeStamp" value="163" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/PaintomicsServer/src/src/classes/JobInstances/PathwayAcquisitionJob.py</url>
+          <line>583</line>
+          <option name="timeStamp" value="165" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/PaintomicsServer/src/src/classes/JobInstances/PathwayAcquisitionJob.py</url>
+          <line>598</line>
+          <option name="timeStamp" value="167" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/PaintomicsServer/src/src/classes/JobInstances/PathwayAcquisitionJob.py</url>
+          <line>694</line>
+          <option name="timeStamp" value="168" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/PaintomicsServer/src/classes/Job.py</url>
+          <line>310</line>
+          <option name="timeStamp" value="169" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/src/AdminTools/scripts/src/classes/JobInstances/PathwayAcquisitionJob.py</url>
+          <line>386</line>
+          <option name="timeStamp" value="170" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/src/AdminTools/scripts/src/servlets/PathwayAcquisitionServlet.py</url>
+          <line>197</line>
+          <option name="timeStamp" value="171" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/PaintomicsServer/src/src/classes/JobInstances/PathwayAcquisitionJob.py</url>
+          <line>386</line>
+          <option name="timeStamp" value="172" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/PaintomicsServer/src/src/classes/Job.py</url>
+          <line>310</line>
+          <option name="timeStamp" value="174" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/PaintomicsServer/src/src/classes/Job.py</url>
+          <line>326</line>
+          <option name="timeStamp" value="177" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/PaintomicsServer/src/src/classes/Job.py</url>
+          <line>331</line>
+          <option name="timeStamp" value="178" />
         </line-breakpoint>
       </breakpoints>
       <default-breakpoints>
@@ -418,7 +416,8 @@
     </breakpoint-manager>
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
-    <SUITE FILE_PATH="coverage/paintomics4$launch_server.coverage" NAME="build_database Coverage Results" MODIFIED="1652053905176" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/default" />
     <SUITE FILE_PATH="coverage/paintomics4$build_database.coverage" NAME="download_others Coverage Results" MODIFIED="1652200081383" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/PaintomicsServer/src/AdminTools/scripts/mmu_resources" />
+    <SUITE FILE_PATH="coverage/paintomics4$launch_server.coverage" NAME="launch_server Coverage Results" MODIFIED="1653751004328" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/PaintomicsServer/src" />
+    <SUITE FILE_PATH="coverage/1_4_id_md$launch_server.coverage" NAME="launch_server Coverage Results" MODIFIED="1653951367990" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/PaintomicsServer/src" />
   </component>
 </project>

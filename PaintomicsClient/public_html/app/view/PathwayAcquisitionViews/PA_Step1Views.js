@@ -2273,7 +2273,7 @@ window.cookieconsent.initialise({
 		allow: 'Allow cookies',
 		deny: 'Decline',
 		link: 'Learn more',
-		href: 'https://paintomics.top//conditions.html',
+		href: 'https://paintomics.org//conditions.html',
 		close: '&#x274c;',
 		policy: 'Cookie Policy',
 		target: '_blank',

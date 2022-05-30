@@ -631,13 +631,13 @@ class PathwayAcquisitionJob(Job):
                 compoundsInPathway = compoundsInAllPathways.get(pathwayID)
                 sourceDB = keggInformationManager.getPathwaySourceByID(jobInstance.getOrganism(), pathwayID)
 
-                # check if totalFeaturesByOmic contains the sourceDB as key
-                if sourceDB not in totalFeaturesByOmic:
-                    continue
-
                 # Add PaintOmics 4 sourceDB
                 if "Unknown Pathway" in sourceDB:
                     sourceDB = 'Reactome'
+
+                # check if totalFeaturesByOmic contains the sourceDB as key
+                if sourceDB not in totalFeaturesByOmic:
+                    continue
 
                 # genesInPathway, compoundsInPathway = keggInformationManager.getAllFeatureIDsByPathwayID(jobInstance.getOrganism(), pathwayID)
                 isValidPathway, pathway = self.testPathwaySignificance(genesInPathway, compoundsInPathway, inputGenes,
@@ -807,7 +807,7 @@ class PathwayAcquisitionJob(Job):
             else:
                 dbList = feature.getMatchingDB()
             for db in dbList:
-                if feature.getID() in totalFeatures.get(db):
+                if feature.getID() in totalFeatures.get(db) or feature.getName() in totalFeatures.get(db):
                     for omicValue in feature.getOmicsValues():
                         # Select the appropriate enrichment property
                         enrichmentType = enrichmentByOmic[omicValue.getOmicName()]

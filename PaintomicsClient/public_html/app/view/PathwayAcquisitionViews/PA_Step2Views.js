@@ -93,37 +93,6 @@ function PA_Step2JobView() {
 		var numberOfClusters = [];
 		var thresholdMetaboliteClass = [];
 
-		if ("Metabolomics" in dataDistribution) {
-			thresholdMetaboliteClass.push({
-					xtype: 'combo',
-					fieldLabel: 'Metabolite class activity threshold',
-					name: 'thresholdMetaboliteClass',
-					value: 'default',
-					displayField: 'name', valueField: 'value',
-					editable: true,
-					allowBlank: false,
-					labelWidth: 300,
-					width: 300,
-					store: Ext.create('Ext.data.ArrayStore', {
-						fields: ['name', 'value'],
-						data: [['Generate automatically', 'default'],
-						['0.1', 0.1],
-						['0.2', 0.2],
-						['0.3', 0.3],
-						['0.4', 0.4],
-						['0.5', 0.5],
-						['0.6', 0.6],
-						['0.7', 0.7],
-						['0.8', 0.8],
-						['0.9', 0.9],
-						['1.0', 1.0]]
-					}),
-					helpTip: "If the value is set to 'Generate automatically', the threshold will base on the proportion of significant metabolites in the dataset. The threshold is from 0 to 1."
-				});
-
-		}
-
-
 		for (var omicName in dataDistribution) {
 			// Get total features
 			var totalFeatures = dataDistribution[omicName][1];
@@ -147,7 +116,7 @@ function PA_Step2JobView() {
 					}});
 			});
 			
-			if ( ! isCompoundBased) {
+			if (!isCompoundBased) {
 				numberOfClusters.push({
 					xtype: 'combo',
 					fieldLabel: omicName,
@@ -178,10 +147,38 @@ function PA_Step2JobView() {
 				});
 			}
 
+			if (isCompoundBased) {
+				thresholdMetaboliteClass.push({
+					xtype: 'combo',
+					fieldLabel: 'Metabolite class activity threshold',
+					name: 'thresholdMetaboliteClass',
+					value: 'default',
+					displayField: 'name', valueField: 'value',
+					editable: true,
+					allowBlank: false,
+					labelWidth: 300,
+					width: 300,
+					store: Ext.create('Ext.data.ArrayStore', {
+						fields: ['name', 'value'],
+						data: [['Generate automatically', 'default'],
+							['0.1', 0.1],
+							['0.2', 0.2],
+							['0.3', 0.3],
+							['0.4', 0.4],
+							['0.5', 0.5],
+							['0.6', 0.6],
+							['0.7', 0.7],
+							['0.8', 0.8],
+							['0.9', 0.9],
+							['1.0', 1.0]]
+					}),
+					helpTip: "If the value is set to 'Generate automatically', the threshold will base on the proportion of significant metabolites in the dataset. The threshold is from 0 to 1."
+				});
+
+			}
 			omicSummaryPanelComponents.push(new PA_OmicSummaryPanel(omicName, dataDistribution[omicName], isCompoundBased).getComponent());
 		}
-		
-		
+
 		if (numberOfClusters.length) {
 			/* Add an empty container to restore "odd" position of next sibling elements */
 			omicSummaryPanelComponents.splice(2, 0, {
@@ -243,9 +240,10 @@ function PA_Step2JobView() {
 		}
 
 		var compoundsComponents = [];
+
 		if (me.items.length > 0) {
 			// create a box named "Configure the metabolite class activity threshold"
-			omicSummaryPanelComponents.splice(2, 0, {
+			omicSummaryPanelComponents.splice(5, 0, {
 				xtype: 'container',
 				layout: {type: 'vbox', align: 'stretch'},
 				cls: "contentbox", minHeight: 240, id: "threshold_box",
