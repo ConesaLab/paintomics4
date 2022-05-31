@@ -743,7 +743,7 @@ Ext.define('Ext.view.override.Grid', {
                 var w = cm[i].getEl().getWidth();
                 totalWidthInPixels += w;
 
-                if (cm[i].text === "") {
+                if (cm[i].text === "" && cm[i].dataIndex !== "sourcedb") {
                     cellType.push("None");
                     cellTypeClass.push("");
                     ++visibleColumnCountReduction;
@@ -751,7 +751,11 @@ Ext.define('Ext.view.override.Grid', {
                     colXml += '<Column ss:AutoFitWidth="1" ss:Width="' + w + '" />';
                     headerXml += '<Cell ss:StyleID="headercell"><Data ss:Type="String">' + colTitle + '</Data><NamedCell ss:Name="Print_Titles"></NamedCell></Cell>';
 
-                    var fld = this.getModelField(cm[i].dataIndex);
+                    if (cm[i].dataIndex === "sourcedb") {
+                        var fld = this.getModelField('source');
+                    } else {
+                        var fld = this.getModelField(cm[i].dataIndex);
+                    }
                     switch (fld.type.type) {
                         case "int":
                             cellType.push("Number");
@@ -829,7 +833,12 @@ Ext.define('Ext.view.override.Grid', {
             var k = 0;
             for (var j = 0; j < colCount; j++) {
                 if (ignoreColumns.indexOf(j + 1) === -1 && cm[j].xtype != 'actioncolumn' && (cm[j].dataIndex != '') && (includeHidden || !cm[j].hidden)) {
-                    var v = r[cm[j].dataIndex];
+
+                    if (cm[j].dataIndex === 'sourcedb') {
+                        var v = r['source'];
+                    } else {
+                        var v = r[cm[j].dataIndex];
+                    }
                     var celltype = cellType[k];
                     //TRY TO GET THE CEL TYPE WHEN IS NOT DEFINED (auto type)
                     if (v && !isNaN(v)) {

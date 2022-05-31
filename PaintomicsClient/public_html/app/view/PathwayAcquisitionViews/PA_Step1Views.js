@@ -246,7 +246,8 @@ function PA_Step1JobView() {
 			xtype: "container",
 			minHeight: 800,
 			padding: '10',
-			items: [{
+			items: [
+				{
 				xtype: "box",
 				cls: "toolbar secondTopToolbar",
 				html:
@@ -254,9 +255,27 @@ function PA_Step1JobView() {
 				'<a class="button btn-success btn-right" id="submitButton"><i class="fa fa-play"></i> Run PaintOmics</a>' +
 				'<a class="button btn-secondary btn-right" id="exampleButton"><i class="fa fa-file-text-o"></i> Load example</a>'
 			}, {
+					xtype: 'box',
+					cls: "contentbox",
+					style: "margin-top:50px; max-width:1300px",
+					html: '<div id="news">' +
+						' <h2> News & Updates </h2>' +
+						'<p>' +
+						'We are updating <b>PaintOmics</b> weekly. Please find more details bellow:'+
+						'</p>' +
+						' <ul style="float: left;width: 65%;"> ' +
+						'   <li>Release of <b> PaintOmics </b> (' + APP_VERSION + ')  (05/31/2022) &#x1F525 &#x1F525 &#x1F525</li>' +
+						'   <li>Check out our updated <a href="http://paintomics.readthedocs.org/en/latest/" target="_blank">User guide</a> for <b> PaintOmics </b> (' + APP_VERSION + ') release (05/31/2022) &#x1F525 &#x1F525 </li>' +
+						'   <li>Check out other bioinformatics tools developed in our group <a href="https://github.com/ConesaLab/"> GitHub page </a>(05/31/2022) &#x1F525</li>' +
+						'</ul>' +
+						' <p style="clear:both;">' +
+						'If you wish to view the update history, please <a href="https://paintomics.readthedocs.io/en/latest/1_5_updateHistory/" target="_blank"> read more here... </a>' +
+						' </p>' +
+						'</div>'
+			}, {
 				xtype: 'box',
 				cls: "contentbox",
-				style: "margin-top:50px; max-width:1300px",
+				style: "margin-top:4px; max-width:1300px",
 				html: '<div id="about">' +
 				' <h2>Welcome to PaintOmics (' + APP_VERSION + ')</h2>' +
 				' <p>' +
