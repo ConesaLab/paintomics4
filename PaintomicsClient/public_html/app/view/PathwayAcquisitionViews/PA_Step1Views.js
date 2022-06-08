@@ -262,11 +262,15 @@ function PA_Step1JobView() {
 						' <h2> News & Updates </h2>' +
 						'<p>' +
 						'We are updating <b>PaintOmics</b> weekly. Please find more details bellow:'+
+
+
+
+
 						'</p>' +
 						' <ul style="float: left;width: 65%;"> ' +
 						'   <li>Release of <b> PaintOmics </b> (' + APP_VERSION + ')  (05/31/2022) &#x1F525 &#x1F525 &#x1F525</li>' +
 						'   <li>Check out our updated <a href="http://paintomics.readthedocs.org/en/latest/" target="_blank">User guide</a> for <b> PaintOmics </b> (' + APP_VERSION + ') release (05/31/2022) &#x1F525 &#x1F525 </li>' +
-						'   <li>Check out other bioinformatics tools developed in our group <a href="https://github.com/ConesaLab/"> GitHub page </a>(05/31/2022) &#x1F525</li>' +
+						'   <li>Check out other bioinformatics tools developed by our group <a href="https://github.com/ConesaLab/"> GitHub page </a>(05/31/2022) &#x1F525</li>' +
 						'</ul>' +
 						' <p style="clear:both;">' +
 						'If you wish to view the update history, please <a href="https://paintomics.readthedocs.io/en/latest/1_5_updateHistory/" target="_blank"> read more here... </a>' +

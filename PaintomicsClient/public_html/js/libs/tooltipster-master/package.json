@@ -1,15 +1,15 @@
 {
 	"author": {
-		"name" : "Caleb Jacob",
-		"email" : "hello@calebjacob.com",
-		"url" : "http://calebjacob.com"
+		"name": "Caleb Jacob",
+		"email": "hello@calebjacob.com",
+		"url": "http://calebjacob.com"
 	},
 	"bugs": {
 		"url": "https://github.com/iamceege/tooltipster/issues"
 	},
 	"description": "A flexible and extensible jQuery plugin for modern tooltips.",
 	"devDependencies": {
-		"grunt": "1.0.1",
+		"grunt": "^1.5.3",
 		"grunt-contrib-clean": "1.0.0",
 		"grunt-contrib-compress": "1.2.0",
 		"grunt-contrib-concat": "1.0.1",
@@ -28,11 +28,13 @@
 	],
 	"license": "MIT",
 	"main": "dist/js/tooltipster.bundle.min.js",
-	"maintainers": [{
-		"name" : "Louis Ameline",
-		"email" : "evangun2001@yahoo.fr",
-		"url" : "https://github.com/louisameline"
-	}],
+	"maintainers": [
+		{
+			"name": "Louis Ameline",
+			"email": "evangun2001@yahoo.fr",
+			"url": "https://github.com/louisameline"
+		}
+	],
 	"name": "tooltipster",
 	"peerDependencies": {
 		"jquery": ">=1.11.0"
