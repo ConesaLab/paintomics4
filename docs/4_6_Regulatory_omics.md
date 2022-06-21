@@ -13,7 +13,7 @@ PaintOmics 3 provided the Regulatory Omics option designed to upload data on fea
     <p class="imageLegend"><b>Figure 1:</b> The pipeline of Regulatory Omics analysis in PaintOmics 4</p>
 </div>
 
-## Input data and parameters
+## Input data, visualisation and parameters
 
 ### Regulators expression and relevant files
 
@@ -26,12 +26,27 @@ Table 1 A shows the example of regulator expression files. The first column must
 
 ### Association and relevant associaiton file
 
-Table 2 shows the example of the association file. The first column contains the feature name of the targeted features (gene name/metabolite name), and the second column contains the identifier of the regulators. This information is usually extracted from popular databases such as miRbase for miRNAs. See above the accepted format for the file.
-The relevant association file is a subset of the association file that could be directly uploaded by the user or automatically selected using correlation (the correlation between targeted features and regulators) in PaintOmics 4. 
+Table 2 shows the example of the association file. The first column contains the identifier of the regulators, and the second column contains the feature name of the targeted features (gene name/metabolite name). This information is usually extracted from popular databases such as miRbase for miRNAs. See above the accepted format for the file.
 
 <div class="imageContainer" style="box-shadow: 0px 0px 20px #D0D0D0; text-align:center; font-size:10px; color:#898989" >
     <img src="paintomics_regulatory_omics_figure3.png"/>
     <p class="imageLegend"><b>Table 2: Example for association file </b> The first column is associated features, and the second column is the regulator.</p>
+</div>
+
+The relevant association file is a subset of the association file that could be directly uploaded by the user or automatically selected using correlation (the correlation between targeted features and regulators) in PaintOmics 4 (Figure 2B). 
+
+<div class="imageContainer" style="box-shadow: 0px 0px 20px #D0D0D0; text-align:center; font-size:10px; color:#898989" >
+    <img src="paintomics_regulatory_omics_figure5.png"/>
+    <p class="imageLegend"><b>Figure 2: the relevant file upload panel (A) and relevant association file upload panel (B)</b></p>
+</div>
+
+### Regulatory omics visualisation
+
+Figure 3A and 3B show the visualisation of the regulatory omics inside the pathway. The feature with a yellow star symbol indicates a relevant association between the feature and its regulators, and the feature with a red symbol indicates that its regulators are significant.
+
+<div class="imageContainer" style="box-shadow: 0px 0px 20px #D0D0D0; text-align:center; font-size:10px; color:#898989" >
+    <img src="paintomics_regulatory_omics_figure4.png"/>
+    <p class="imageLegend"><b>Figure 3: visualisation of the regulatory omics in the main panel (A) and auxiliary panel shows the expression of regulators of the feature (B)</b></p>
 </div>
 
 ### Parameters

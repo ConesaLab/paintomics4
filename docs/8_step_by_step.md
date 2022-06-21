@@ -17,7 +17,9 @@ However, before starting to use the application you must choose between starting
 
 The main page shows a data uploading form with 2 sections. In the first one a combobox (**Figure 1.A**) is provided to allow you to select the organism from an alphabetically ordered list, supporting partial filtering by writing in it. If the species is not present you can use the link to request it and we will install it as soon as possible.
 
-The second section contains two parts. In the right one (**Figure 1.B**) you can enter the input data for each omic to include in the analysis. For doing so the "Browse" button opens a menu with 3 options:
+The second section allows you to select analysis databases (**Figure 1.B**). For some species, more than one database might be available.
+
+The third section contains two parts. In the right one (**Figure 1.D**) you can enter the input data for each omic to include in the analysis. For doing so the "Browse" button opens a menu with 3 options:
 
 1. **Upload file from my PC**: conventional approach to select the file from your computer.
 2. **Use a file from 'My data'**: only available for registered users. Read more at <a href="http://paintomics.readthedocs.io/en/latest/2_2_cloud_drive/" target="_blank">Cloud Drive</a> section.
