@@ -37,12 +37,12 @@ Once everything is ready, press the button "Run paintomics" in the upper left co
 
 <div class="imageContainer" style="box-shadow: 0px 0px 20px #D0D0D0; text-align:center; font-size:10px; color:#898989" >
     <img src="paintomics_input_figure1.png"/>
-    <p class="imageLegend"><b>Figure 1. Input data form.</b> Organism selection (A). Input data for chosen omics (B). Available omics panel (C).</p>
+    <p class="imageLegend"><b>Figure 1. Input data form.</b> Organism selection (A). Database selection (B). Available omics panel (C). Input data for chosen omics (D).</p>
 </div>
 
 # Step 2: matching summaries and metabolite assignment
 
-Paintomics processes your files and offers you different plots showing the results of matching the identifiers of your files to the KEGG ids (read more <a href="http://paintomics.readthedocs.io/en/latest/2_1_accepted_input/#identifier-and-name-conversion" target="_blank">here</a>). You can also view diverse information of your data by hovering the data distribution plot with the mouse cursor (**Figure 2**).
+Paintomics processes your files and offers you different plots showing the results of matching the identifiers of your files to the KEGG/Reactome/MapMan ids (read more <a href="http://paintomics.readthedocs.io/en/latest/2_1_accepted_input/#identifier-and-name-conversion" target="_blank">here</a>). You can also view diverse information of your data by hovering the data distribution plot with the mouse cursor (**Figure 2**).
 
 <div class="imageContainer" style="box-shadow: 0px 0px 20px #D0D0D0; text-align:center; font-size:10px; color:#898989" >
     <img src="step2_up.png"/>
@@ -74,6 +74,15 @@ This panel shows you the job ID as well as the link you must use to access it. Y
     <p class="imageLegend"><b>Figure 4. Summary panel showing the job ID as well as the found pathways.</b></p>
 </div>
 
+### Databases summary
+
+This panel shows you the summary of the pathway enrichment result from multiple databases, and the panel only occurs when multiple  databases are used.
+
+<div class="imageContainer" style="box-shadow: 0px 0px 20px #D0D0D0; text-align:center; font-size:10px; color:#898989" >
+    <img src="database_summary.png"/>
+    <p class="imageLegend"><b>Figure 5. Summary panel showing the job ID as well as the found pathways.</b></p>
+</div>
+
 ### Pathways classification
 
 Each KEGG pathway is associated to a primary category and subcategory (see more <a href="http://paintomics.readthedocs.io/en/latest/4_2_kegg_categories/" target="_blank">here</a>). In this panel you can access that information by expanding the elements of the tree, with options to show or hide individual nodes or entire branches by clicking on the checkboxes or the links that appear when hovering over the options, then the "Apply" button.
@@ -81,7 +90,7 @@ Each KEGG pathway is associated to a primary category and subcategory (see more 
 
 <div class="imageContainer" style="box-shadow: 0px 0px 20px #D0D0D0; text-align:center; font-size:10px; color:#898989" >
     <img src="pathway_classification.png"/>
-    <p class="imageLegend"><b>Figure 5. Classification of each KEGG pathway with filtering options.</b></p>
+    <p class="imageLegend"><b>Figure 6. Classification of each KEGG pathway with filtering options.</b></p>
 </div>
 
 ### Pathways network
@@ -90,7 +99,7 @@ The pathway interaction network is built according to the process described in <
 
 <div class="imageContainer" style="box-shadow: 0px 0px 20px #D0D0D0; text-align:center; font-size:10px; color:#898989" >
     <img src="pathway_network.png"/>
-    <p class="imageLegend"><b>Figure 6. Pathway interaction network.</b></p>
+    <p class="imageLegend"><b>Figure 7. Pathway interaction network.</b></p>
 </div>
 
 ### Pathway enrichment
@@ -106,7 +115,7 @@ Clicking on the paint column icon (<img src="paintpathways.png"  style="vertical
 
 <div class="imageContainer" style="box-shadow: 0px 0px 20px #D0D0D0; text-align:center; font-size:10px; color:#898989" >
     <img src="pathway_enrichment.png"/>
-    <p class="imageLegend"><b>Figure 7. Pathway enrichment table.</b></p>
+    <p class="imageLegend"><b>Figure 8. Pathway enrichment table.</b></p>
 </div>
 
 ## Detailed pathway view
@@ -121,7 +130,7 @@ Placing the cursor over these boxes will open up a tooltip window expanding the 
 
 <div class="imageContainer" style="box-shadow: 0px 0px 20px #D0D0D0; text-align:center; font-size:10px; color:#898989" >
     <img src="pathway_detailed.png"/>
-    <p class="imageLegend"><b>Figure 7. Detailed pathway view.</b></p>
+    <p class="imageLegend"><b>Figure 9. Detailed pathway view.</b></p>
 </div>
 
 
