@@ -10,6 +10,9 @@ module.exports = function heading(state, startLine, endLine, silent) {
       pos = state.bMarks[startLine] + state.tShift[startLine],
       max = state.eMarks[startLine];
 
+  // if it's indented more than 3 spaces, it should be a code block
+  if (state.sCount[startLine] - state.blkIndent >= 4) { return false; }
+
   ch  = state.src.charCodeAt(pos);
 
   if (ch !== 0x23/* # */ || pos >= max) { return false; }
@@ -22,7 +25,7 @@ module.exports = function heading(state, startLine, endLine, silent) {
     ch = state.src.charCodeAt(++pos);
   }
 
-  if (level > 6 || (pos < max && ch !== 0x20/* space */)) { return false; }
+  if (level > 6 || (pos < max && !isSpace(ch))) { return false; }
 
   if (silent) { return true; }
 

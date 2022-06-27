@@ -1,8 +1,6 @@
 'use strict';
 
 
-var parseLinkDestination = require('../helpers/parse_link_destination');
-var parseLinkTitle       = require('../helpers/parse_link_title');
 var normalizeReference   = require('../common/utils').normalizeReference;
 var isSpace              = require('../common/utils').isSpace;
 
@@ -17,6 +15,7 @@ module.exports = function reference(state, startLine, _endLine, silent) {
       l,
       label,
       labelEnd,
+      oldParentType,
       res,
       start,
       str,
@@ -27,6 +26,9 @@ module.exports = function reference(state, startLine, _endLine, silent) {
       pos = state.bMarks[startLine] + state.tShift[startLine],
       max = state.eMarks[startLine],
       nextLine = startLine + 1;
+
+  // if it's indented more than 3 spaces, it should be a code block
+  if (state.sCount[startLine] - state.blkIndent >= 4) { return false; }
 
   if (state.src.charCodeAt(pos) !== 0x5B/* [ */) { return false; }
 
@@ -45,6 +47,9 @@ module.exports = function reference(state, startLine, _endLine, silent) {
 
   // jump line-by-line until empty one or EOF
   terminatorRules = state.md.block.ruler.getRules('reference');
+
+  oldParentType = state.parentType;
+  state.parentType = 'reference';
 
   for (; nextLine < endLine && !state.isEmpty(nextLine); nextLine++) {
     // this would be a code block normally, but after paragraph
@@ -102,7 +107,7 @@ module.exports = function reference(state, startLine, _endLine, silent) {
 
   // [label]:   destination   'title'
   //            ^^^^^^^^^^^ parse this
-  res = parseLinkDestination(str, pos, max);
+  res = state.md.helpers.parseLinkDestination(str, pos, max);
   if (!res.ok) { return false; }
 
   href = state.md.normalizeLink(res.str);
@@ -131,7 +136,7 @@ module.exports = function reference(state, startLine, _endLine, silent) {
 
   // [label]:   destination   'title'
   //                          ^^^^^^^ parse this
-  res = parseLinkTitle(str, pos, max);
+  res = state.md.helpers.parseLinkTitle(str, pos, max);
   if (pos < max && start !== pos && res.ok) {
     title = res.str;
     pos = res.pos;
@@ -185,6 +190,8 @@ module.exports = function reference(state, startLine, _endLine, silent) {
   if (typeof state.env.references[label] === 'undefined') {
     state.env.references[label] = { title: title, href: href };
   }
+
+  state.parentType = oldParentType;
 
   state.line = startLine + lines + 1;
   return true;

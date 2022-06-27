@@ -5,8 +5,14 @@
 
 module.exports = function lheading(state, startLine, endLine/*, silent*/) {
   var content, terminate, i, l, token, pos, max, level, marker,
-      nextLine = startLine + 1,
+      nextLine = startLine + 1, oldParentType,
       terminatorRules = state.md.block.ruler.getRules('paragraph');
+
+  // if it's indented more than 3 spaces, it should be a code block
+  if (state.sCount[startLine] - state.blkIndent >= 4) { return false; }
+
+  oldParentType = state.parentType;
+  state.parentType = 'paragraph'; // use paragraph to match terminatorRules
 
   // jump line-by-line until empty one or EOF
   for (; nextLine < endLine && !state.isEmpty(nextLine); nextLine++) {
@@ -70,6 +76,8 @@ module.exports = function lheading(state, startLine, endLine/*, silent*/) {
 
   token          = state.push('heading_close', 'h' + String(level), -1);
   token.markup   = String.fromCharCode(marker);
+
+  state.parentType = oldParentType;
 
   return true;
 };
