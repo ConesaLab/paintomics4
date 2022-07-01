@@ -4,6 +4,10 @@
 
 # Pathway enrichment analysis
 Pathway analysis is a powerful tool for understanding the biology underlying the data contained in large lists of differentially-expressed genes, metabolites, and proteins resulting from modern high-throughput profiling technologies. The central idea of this approach is to group these long lists of individual features into smaller sets of related biological features (genes and metabolites), usually based on biological processes or cellular components in which genes, proteins, and metabolites are known to be involved.
+<div class="imageContainer" style="box-shadow: 0px 0px 20px #D0D0D0; text-align:center; font-size:10px; color:#898989" >
+    <img src="paintomics_pathways_analysis_figure0.png"/>
+    <p class="imageLegend"><b>Figure 1.Pathway analysis gains mechanistic insight into a long list of genes and/or metabolites by grouping them into a smaller set of related biological features based on pathways.</p>
+</div>
 
 One popular method for pathway analysis is *pathway enrichment analysis* , which is the approach adopted by the current version of PaintOmics 4. Figure 1 depicts the process followed to determine the set of significantly enriched pathways for the input data. First, the tool identifies the subset of genes, proteins, and metabolites that participate in a particular KEGG pathway for the input. Then, it evaluates the fraction of those biological features which overlaps with the set of features that the researcher considered significant, usually features showing significant changes in expression or concentration (e.g. the differentially-expressed genes). In the final step, the tool computes the significance of the overlap using the Fisher exact test. The p-value obtained can be interpreted as a measurement of the confidence that this overlap is due to chance (null hypothesis). The smaller the p-value, the more likely that the association between the features of interest and the pathway is not random, i.e. an overrepresentation of the significant biological features of that pathway may exist. As a general rule, a p-value of 0.05 is accepted as the threshold indicating a statistically significant association.
 
@@ -18,10 +22,10 @@ Figure 2 shows an example of the visual representation of the ranking as a table
 
 <div class="imageContainer" style="box-shadow: 0px 0px 20px #D0D0D0; text-align:center; font-size:10px; color:#898989" >
     <img src="paintomics_pathways_analysis_figure1.png"/>
-    <p class="imageLegend"><b>Figure 1. Significance evaluation for the Glutamatergic synapse KEGG pathway.</b> The Glutamatergic synapse pathway contains a total of 150 genes and 10 metabolites that are known to participate in the biological processes. First, PaintOmics 4 finds the intersection between the features in the pathway and the features at each input data type. Next, the tool evaluates the fraction of relevant features that fall into the intersection. PaintOmics 4 uses these values to calculate a significance value for each omics data type. Lastly, a combined p-value is calculated using the Fisher combined probability test. </p>
+    <p class="imageLegend"><b>Figure 2. Significance evaluation for the Glutamatergic synapse KEGG pathway.</b> The Glutamatergic synapse pathway contains a total of 150 genes and 10 metabolites that are known to participate in the biological processes. First, PaintOmics 4 finds the intersection between the features in the pathway and the features at each input data type. Next, the tool evaluates the fraction of relevant features that fall into the intersection. PaintOmics 4 uses these values to calculate a significance value for each omics data type. Lastly, a combined p-value is calculated using the Fisher combined probability test. </p>
 </div>
 
 <div class="imageContainer" style="box-shadow: 0px 0px 20px #D0D0D0; text-align:center; font-size:10px; color:#898989" >
     <img src="paintomics_pathways_analysis_figure2.png"/>
-    <p class="imageLegend"><b>Figure 2. Pathways found for an experiment combining data from Gene Expression, Proteomics, and DNase-seq.</b> </p>
+    <p class="imageLegend"><b>Figure 3. Pathways found for an experiment combining data from Gene Expression, Proteomics, and DNase-seq.</b> </p>
 </div>

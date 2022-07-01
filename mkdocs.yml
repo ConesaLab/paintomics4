@@ -1,4 +1,4 @@
-site_name: Paintomics v4.0 Documentation
+site_name: Paintomics Documentation
 pages:
    - Home: 'index.md'
    - 'Getting started':
@@ -11,6 +11,7 @@ pages:
       - 'Metabolite hub analysis': '4_4_metabolite_hub_analysis.md'
       - 'Metabolite class activity analysis': '4_5_metabolite_class_activity_analysis.md'
       - 'Regulatory omics analysis': '4_6_Regulatory_omics.md'
+      - 'Metagenes': '4_7_Metagenes.md'
       - 'Multi-omic pathway-based visualisation': '5_1_browsing_pathways.md'
    - FAQ:
       - 'Frequently asked questions': '9_faq.md'
@@ -19,6 +20,7 @@ pages:
       - 'The Reactome pathways database': '1_2_reactome.md'
       - 'The MapMan pathways database': '1_3_mapman.md'
       - 'The supported ID and database': '1_4_id.md'
+      - 'The update history': '1_5_update_history.md'
    - Install:
       - 'Installing PaintOmics 4': '0_install.md'
    - About:

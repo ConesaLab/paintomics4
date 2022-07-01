@@ -273,7 +273,7 @@ function PA_Step1JobView() {
 						'   <li>Check out other bioinformatics tools developed by our group <a href="https://github.com/ConesaLab/"> GitHub page </a>(05/31/2022) &#x1F525</li>' +
 						'</ul>' +
 						' <p style="clear:both;">' +
-						'If you wish to view the update history, please <a href="https://paintomics.readthedocs.io/en/latest/1_5_updateHistory/" target="_blank"> read more here... </a>' +
+						'If you wish to view the update history, please <a href="https://paintomics.readthedocs.io/en/latest/1_5_update_history/" target="_blank"> read more here... </a>' +
 						' </p>' +
 						'</div>'
 			}, {
