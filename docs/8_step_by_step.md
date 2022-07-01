@@ -79,7 +79,7 @@ This panel shows you the job ID as well as the link you must use to access it. Y
 This panel shows you the summary of the pathway enrichment result from multiple databases, and the panel only occurs when multiple  databases are used.
 
 <div class="imageContainer" style="box-shadow: 0px 0px 20px #D0D0D0; text-align:center; font-size:10px; color:#898989" >
-    <img src="database_summary.png"/>
+    <img src="database_summary.PNG"/>
     <p class="imageLegend"><b>Figure 5. Summary panel showing the job ID as well as the found pathways.</b></p>
 </div>
 

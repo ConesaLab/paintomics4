@@ -7,7 +7,7 @@ dicDatabases = {
         #'hsa'   :   [{'KEGG': 'entrezgene'}, {'KEGG': 'refseq_gene_symbol'}],
         'dosa'  :   [{'KEGG': 'ensembl_transcript'}, {'KEGG': 'kegg_gene_symbol'}],
         'sly'   :   [{'KEGG': 'entrezgene'}, {'KEGG': 'kegg_gene_symbol'}],
-        'rno'   :   [{'KEGG': 'entrezgene'}, {'KEGG': 'refseq_gene_symbol'}],
+        'rno'   :   [{'KEGG': 'entrezgene', 'Reactome': 'reactome_gene_id'}, {'KEGG': 'refseq_gene_symbol', 'Reactome': 'reactome_gene_id'}],
         'sot'   :   [{'KEGG': 'kegg_id', 'MapMan': 'mapman_gene_id'}, {'KEGG': 'kegg_gene_symbol', 'MapMan': 'mapman_gene_id'}],
         'ath'   :   [{'KEGG': 'kegg_id', 'MapMan': 'mapman_gene_id'}, {'KEGG': 'kegg_gene_symbol', 'MapMan': 'kegg_gene_symbol'}],
         'sce'   :   [{'KEGG': "kegg_id"}, {'KEGG': "kegg_gene_symbol"}]

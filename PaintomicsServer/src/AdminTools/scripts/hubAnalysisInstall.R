@@ -143,7 +143,7 @@ argsDF <- as.data.frame(do.call("rbind", parseArgs(args)), stringsAsFactors=F)
 argsL <- as.list(as.character(argsDF$V2))
 names(argsL) <- argsDF$V1
 args <- as.data.frame(argsL, stringsAsFactors=F)
-result <- hubAnalysisInstall(organism = args$organism, scriptDir=args$scriptDir, outputDir=args$outputDir)
+result <- hubAnalysisInstall(organism = args$organism, scriptDir = args$scriptDir, outputDir = args$outputDir)
 
 print(paste0("#######################STEP 5 ", "Saving installation data..."))
 jsonResult <- jsonlite::toJSON(result, pretty = FALSE)
