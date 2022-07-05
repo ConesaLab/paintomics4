@@ -42,7 +42,7 @@ The relevant association file is a subset of the association file that could be 
 
 ### Regulatory omics visualisation
 
-Figure 3A and 3B show the visualisation of the regulatory omics inside the pathway. The feature with a yellow star symbol indicates a relevant association between the feature and its regulators, and the feature with a red symbol indicates that its regulators are significant.
+Figure 3A and 3B show the visualisation of the regulatory omics inside the pathway. The feature with a yellow star symbol indicates a relevant association between the feature and its regulators, and the feature with a red star symbol indicates that its regulators are significant.
 
 <div class="imageContainer" style="box-shadow: 0px 0px 20px #D0D0D0; text-align:center; font-size:10px; color:#898989" >
     <img src="paintomics_regulatory_omics_figure4.png"/>
