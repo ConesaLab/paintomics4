@@ -39,7 +39,7 @@ try:
     COMMON_BUILD_DB_TOOLS.processRefSeqData()
     COMMON_BUILD_DB_TOOLS.processRefSeqGeneSymbolData()
 
-    COMMON_BUILD_DB_TOOLS.processKEGGMappingData()
+    #COMMON_BUILD_DB_TOOLS.processKEGGMappingData()
 
 
     #**************************************************************************

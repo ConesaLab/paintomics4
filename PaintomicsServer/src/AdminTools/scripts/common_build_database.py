@@ -649,24 +649,25 @@ def processMapManMappingData():
 
     # File containing MapMan metabolites to MapMan feature IDs
 
+    mapman_cpd_resource = EXTERNAL_RESOURCES.get("metabolites")[0]
+    mapman_cpd_file_name = mapman_cpd_resource.get("url") + mapman_cpd_resource.get("file")
 
-
-    mapman_cpd_resource = COMMON_RESOURCES.get("mapman").get("metabolites")
-    mapman_cpd_file_name = DATA_DIR + "mapping/" + mapman_cpd_resource.get("output")
     if not os.path.isfile(mapman_cpd_file_name):
         stderr.write("\n\nUnable to find the MapMan Compound 2 MapMan ID MAPPING file: " + mapman_cpd_file_name + "\n")
         exit(1)
 
     # File containing MapMan genes to MapMan feature IDs
     mapman_resource = EXTERNAL_RESOURCES.get("mapman_gene")[0]
-    mapman_file_name = DATA_DIR + "mapping/" + mapman_resource.get("output")
+    mapman_file_name = mapman_resource.get("url") + mapman_resource.get("file")
+
     if not os.path.isfile(mapman_file_name):
         stderr.write("\n\nUnable to find the MapMan Gene 2 MapMan ID MAPPING file: " + mapman_file_name + "\n")
         exit(1)
 
     # File containing MapMan genes to NCBI genes
     mapman_kegg_resource = EXTERNAL_RESOURCES.get("mapman_kegg")[0]
-    mapman_kegg_file_name = DATA_DIR + "mapping/" + mapman_kegg_resource.get("output")
+    mapman_kegg_file_name = mapman_kegg_resource.get("url") + mapman_kegg_resource.get("file")
+
     if not os.path.isfile(mapman_kegg_file_name):
         stderr.write("Unable to find the MapMan Gene to KEGG ID MAPPING file: " + mapman_kegg_file_name)
         exit(1)
@@ -1038,7 +1039,7 @@ def processMapManPathwaysData():
 
     # Check if classification file exists
     mapman_classification_resource = EXTERNAL_RESOURCES.get("mapman_classification")[0]
-    mapman_classification_file_name = DATA_DIR + "mapping/" + mapman_classification_resource.get("output")
+    mapman_classification_file_name = mapman_classification_resource.get("url") + mapman_classification_resource.get("file")
 
     if not os.path.isfile(mapman_classification_file_name):
         stderr.write("\n\nUnable to find the MapMan classification file: " + mapman_classification_file_name + "\n")
@@ -1059,7 +1060,7 @@ def processMapManPathwaysData():
         os.makedirs(MAPMAN_DIR)
 
     mapman_pathways = EXTERNAL_RESOURCES.get("mapman_pathways")[0]
-    pathways_file_name = DATA_DIR + "mapping/" + mapman_pathways.get("output")
+    pathways_file_name = mapman_pathways.get("url") + mapman_pathways.get("file")
 
     # Try to extract the archive on the final dir, if there is an error
     # rename the previous dir

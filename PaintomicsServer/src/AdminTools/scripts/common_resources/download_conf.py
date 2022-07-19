@@ -6,14 +6,5 @@ EXTERNAL_RESOURCES = {
                         "graph_url"   :   "https://reactome.org/download/current/diagram/{}.graph.json",
                         "entity_url"  :   "https://reactome.org/ContentService/data/participants/{}/referenceEntities",
                         "events_url"  :   "https://reactome.org/ContentService/data/pathway/{}/containedEvents"
-                    },
-                "mapman"      : {
-                        "metabolites":
-                            {
-                            "url"           :   "http://localhost/",
-                            "file"          :   "mapman_metabolites.txt",
-                            "output"        :   "mapman_metabolites.txt",
-                            "description"   :   "Source: <include description>"
-                            }
-                }
+                    }
         }

@@ -836,8 +836,9 @@ def generateAvailableSpeciesFile(VALID_SPECIES, INVALID_SPECIES, species_file, i
                         name+=","
                     file_content += name + '\n'
                 else:
-                    errorlog("Error while writting specie files" + specieCode)
-                    raise Exception()
+                    continue
+                    #errorlog("Error while writting specie files" + specieCode)
+                    #raise Exception()
     except Exception as ex:
         errorlog(traceback.extract_stack())
         raise Exception("Error while writting specie " + specieCode)

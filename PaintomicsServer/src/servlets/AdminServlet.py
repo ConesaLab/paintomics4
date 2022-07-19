@@ -647,7 +647,8 @@ def adminServletSendReport(request, response, ROOT_DIRECTORY):
         message += "<p>Problems? E-mail <a href='mailto:" + "paintomics4@outlook.com" + "'>" + "paintomics4@outlook.com" + "</a></p>"
         message += '</body></html>'
 
-        sendEmail(ROOT_DIRECTORY, smpt_sender, smpt_sender_name, type, message, fromEmail=userEmail, fromName=userName, isHTML=True)
+        paintomicsEmail = formFields.get("fromEmail", smpt_sender)
+        sendEmail(ROOT_DIRECTORY, smpt_sender, smpt_sender_name, type, message, fromEmail=paintomicsEmail, fromName=userName, isHTML=True)
 
         response.setContent({"success": True})
 

@@ -30,7 +30,6 @@ COMMON_BUILD_DB_TOOLS = imp.load_source('common_build_database', ROOT_DIR + "scr
 COMMON_BUILD_DB_TOOLS.SPECIE= SPECIE
 COMMON_BUILD_DB_TOOLS.DATA_DIR= DATA_DIR
 COMMON_BUILD_DB_TOOLS.EXTERNAL_RESOURCES = imp.load_source('download_conf',  ROOT_DIR + "scripts/" + SPECIE + "_resources/download_conf.py").EXTERNAL_RESOURCES
-
 #**************************************************************************
 # CHANGE THE CODE FROM HERE
 #
