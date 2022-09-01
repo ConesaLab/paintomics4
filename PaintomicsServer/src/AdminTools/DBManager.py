@@ -419,7 +419,6 @@ def install_command(inputfile=None, specie=None, common=0, hub=1):
                 ],stderr=STDOUT
             )
 
-
         #********************************************************************************
         #STEP 2.A.1 IF WE CHOOSED TO DONWLOAD THE GENERAL DATA (PATHWAYS CLASSIFICATION, ETC.)
         #********************************************************************************
@@ -481,7 +480,7 @@ def install_command(inputfile=None, specie=None, common=0, hub=1):
     #**************************************************************************
     log("")
     log("STEP " + str(currentStep) + ". CREATING THE species.json FILE")
-    generateAvailableSpeciesFile(INSTALLED_PREVIOUS + INSTALLED_SPECIES, ERRONEOUS_SPECIES, currentDataDir + "common/organisms_all.list", currentDataDir + "species.json")
+    generateAvailableSpeciesFile(INSTALLED_PREVIOUS + INSTALLED_SPECIES, currentDataDir + "common/organisms_all.list", currentDataDir + "species.json")
 
     currentStep+=1
 
@@ -802,7 +801,7 @@ def getCurrentInstalledSpecies():
     client.close()
     return databaseList
 
-def generateAvailableSpeciesFile(VALID_SPECIES, INVALID_SPECIES, species_file, installed_species_file):
+def generateAvailableSpeciesFile(VALID_SPECIES, species_file, installed_species_file):
     try:
         #rootName, "organisms_all.list",
         import csv
@@ -836,9 +835,9 @@ def generateAvailableSpeciesFile(VALID_SPECIES, INVALID_SPECIES, species_file, i
                         name+=","
                     file_content += name + '\n'
                 else:
-                    continue
-                    #errorlog("Error while writting specie files" + specieCode)
-                    #raise Exception()
+                    #continue
+                    errorlog("Error while writting specie files" + specieCode)
+                    raise Exception()
     except Exception as ex:
         errorlog(traceback.extract_stack())
         raise Exception("Error while writting specie " + specieCode)
@@ -904,12 +903,11 @@ def readFile(path, options=None):
     return data
 
 def confirm(prompt=None, resp=False):
-    """prompts for yes or no response from the user. Returns True for yes and
+    """
+    prompts for yes or no response from the user. Returns True for yes and
     False for no.
-
     'resp' should be set to the default value assumed by the caller when
     user simply types ENTER.
-
     >>> confirm(prompt='Create Directory?', resp=True)
     Create Directory? [y]|n:
     True
@@ -919,7 +917,6 @@ def confirm(prompt=None, resp=False):
     >>>
     Create Directory? [n]|y: y
     True
-
     """
 
     if prompt is None:

@@ -326,7 +326,7 @@ class Bed2GeneJob(Job):
                 #TODO: (OPTIONAL) if result ordered by gene id -> reduce processing time
                 csvReader = csv_reader(inputDataFile, delimiter="\t")
                 #IGNORE THE HEADER
-                line = csvReader.next()
+                line = next(csvReader)
                 #SAVE THE NAME OF THE CONDITIONS (e.g. COND1, COND2,...)
                 header = "\t".join(line[11:])
 

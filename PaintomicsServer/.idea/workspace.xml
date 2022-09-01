@@ -5,10 +5,12 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="657be414-0410-416b-82a4-023b644455f2" name="Default Changelist" comment="">
+      <change beforePath="$PROJECT_DIR$/../PaintomicsClient/public_html/resources/data/all_species.json" beforeDir="false" afterPath="$PROJECT_DIR$/../PaintomicsClient/public_html/resources/data/all_species.json" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/classes/JobInstances/PathwayAcquisitionJob.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/classes/JobInstances/PathwayAcquisitionJob.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/common/FeatureNamesToKeggIDsMapper.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/common/FeatureNamesToKeggIDsMapper.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/common/bioscripts/hubAnalysis.R" beforeDir="false" afterPath="$PROJECT_DIR$/src/common/bioscripts/hubAnalysis.R" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/AdminTools/DBManager.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/AdminTools/DBManager.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/AdminTools/scripts/default/build_database.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/AdminTools/scripts/default/build_database.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/classes/JobInstances/Bed2GeneJob.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/classes/JobInstances/Bed2GeneJob.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/common/bioscripts/DHS_exon_association.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/common/bioscripts/DHS_exon_association.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -45,20 +47,22 @@
       <filtered-out-file-type name="COMMIT_BY_MESSAGE" />
     </file-type-list>
   </component>
+  <component name="MarkdownSettingsMigration">
+    <option name="stateVersion" value="1" />
+  </component>
   <component name="ProjectId" id="1ljosIq4ejgJ6jM8EDRgsLg5TiU" />
   <component name="ProjectViewState">
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent">
-    <property name="ASKED_ADD_EXTERNAL_FILES" value="true" />
-    <property name="RunOnceActivity.OpenProjectViewOnStart" value="true" />
-    <property name="RunOnceActivity.ShowReadmeOnStart" value="true" />
-    <property name="SHARE_PROJECT_CONFIGURATION_FILES" value="true" />
-    <property name="WebServerToolWindowFactoryState" value="false" />
-    <property name="last_opened_file_path" value="$PROJECT_DIR$" />
-    <property name="settings.editor.selected.configurable" value="com.jetbrains.python.configuration.PyActiveSdkModuleConfigurable" />
-  </component>
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;RunOnceActivity.OpenProjectViewOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;WebServerToolWindowFactoryState&quot;: &quot;false&quot;,
+    &quot;last_opened_file_path&quot;: &quot;/home/tian/paintomics/paintomics4/PaintomicsServer&quot;
+  }
+}</component>
   <component name="RecentsManager">
     <key name="CopyFile.RECENT_KEYS">
       <recent name="$PROJECT_DIR$/src/AdminTools/scripts" />
@@ -505,6 +509,8 @@
       <workItem from="1641818815943" duration="627000" />
       <workItem from="1641820651455" duration="4887000" />
       <workItem from="1641850730075" duration="9591000" />
+      <workItem from="1661961514522" duration="607000" />
+      <workItem from="1662024168718" duration="9645000" />
     </task>
     <servers />
   </component>
@@ -524,7 +530,6 @@
         </entry>
       </map>
     </option>
-    <option name="oldMeFiltersMigrated" value="true" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
@@ -684,12 +689,12 @@
           <line>283</line>
           <option name="timeStamp" value="588" />
         </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+        <line-breakpoint suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/src/src/servlets/PathwayAcquisitionServlet.py</url>
           <line>370</line>
           <option name="timeStamp" value="591" />
         </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+        <line-breakpoint suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/src/src/classes/JobInstances/PathwayAcquisitionJob.py</url>
           <line>572</line>
           <option name="timeStamp" value="596" />
@@ -699,7 +704,7 @@
           <line>623</line>
           <option name="timeStamp" value="597" />
         </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+        <line-breakpoint suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/src/src/classes/JobInstances/PathwayAcquisitionJob.py</url>
           <line>644</line>
           <option name="timeStamp" value="598" />
@@ -714,10 +719,20 @@
           <line>197</line>
           <option name="timeStamp" value="601" />
         </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+        <line-breakpoint suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/src/src/classes/JobInstances/PathwayAcquisitionJob.py</url>
           <line>542</line>
           <option name="timeStamp" value="605" />
+        </line-breakpoint>
+        <line-breakpoint suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/src/src/classes/JobInstances/Bed2GeneJob.py</url>
+          <line>445</line>
+          <option name="timeStamp" value="608" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/src/servlets/Bed2GenesServlet.py</url>
+          <line>213</line>
+          <option name="timeStamp" value="616" />
         </line-breakpoint>
         <line-breakpoint type="javascript">
           <url>file://$PROJECT_DIR$/../PaintomicsClient/public_html/app/view/PathwayAcquisitionViews/PA_Step4Views.js</url>
@@ -825,12 +840,12 @@
     </watches-manager>
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
-    <SUITE FILE_PATH="coverage/PathwayAcquisitionServlet_py$PathwayAcquisitionJob.coverage" NAME="PathwayAcquisitionJob Coverage Results" MODIFIED="1617156985027" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/src" />
-    <SUITE FILE_PATH="coverage/paintomicsserver_py$launch_server.coverage" NAME="launch_server Coverage Results" MODIFIED="1616418573638" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/src" />
+    <SUITE FILE_PATH="coverage/paintomicsserver_py$paintomicsserver.coverage" NAME="paintomicsserver Coverage Results" MODIFIED="1616383808184" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/src" />
+    <SUITE FILE_PATH="coverage/common_build_database_py$launch_server.coverage" NAME="launch_server Coverage Results" MODIFIED="1662033956980" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/src" />
     <SUITE FILE_PATH="coverage/common_build_database_py$build_database.coverage" NAME="launch_server Coverage Results" MODIFIED="1638732508704" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/src" />
     <SUITE FILE_PATH="coverage/launch_server_py$launch_server.coverage" NAME="launch_server Coverage Results" MODIFIED="1623753690084" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/src" />
-    <SUITE FILE_PATH="coverage/paintomicsserver_py$paintomicsserver.coverage" NAME="paintomicsserver Coverage Results" MODIFIED="1616383808184" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/src" />
-    <SUITE FILE_PATH="coverage/common_build_database_py$launch_server.coverage" NAME="launch_server Coverage Results" MODIFIED="1641903210751" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/src" />
+    <SUITE FILE_PATH="coverage/paintomicsserver_py$launch_server.coverage" NAME="launch_server Coverage Results" MODIFIED="1616418573638" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/src" />
     <SUITE FILE_PATH="coverage/PathwayAcquisitionServlet_py$launch_server.coverage" NAME="launch_server Coverage Results" MODIFIED="1622967783266" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/src" />
+    <SUITE FILE_PATH="coverage/PathwayAcquisitionServlet_py$PathwayAcquisitionJob.coverage" NAME="PathwayAcquisitionJob Coverage Results" MODIFIED="1617156985027" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/src" />
   </component>
 </project>

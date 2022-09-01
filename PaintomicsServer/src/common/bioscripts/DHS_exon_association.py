@@ -1405,9 +1405,13 @@ def run(gtf, dhs, outputfile, match_table, options, managed_queue):
         salida.close()
 
         # CODE ADDED BY RAFA
-        keys = allTranscripts.keys()
+        keys = list( allTranscripts.keys() )
         for i in keys:
             del allTranscripts[i]
+
+        #keys = allTranscripts.keys()
+        #for i in keys:
+        #    del allTranscripts[i]
 
         import gc
         gc.collect()
