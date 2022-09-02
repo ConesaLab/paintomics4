@@ -561,9 +561,10 @@ def adminServletSystemInformation(request, response):
         try:
             df = subprocess.Popen(["df", "-h"], stdout=subprocess.PIPE)
             output = df.communicate()[0]
-            output = output.split("\n")
+            output = output.split(b"\n")
             output.pop(0)
             for line in output:
+                line = line.decode("utf-8")
                 disk_use.append(line.split())
         except Exception as e:
             pass

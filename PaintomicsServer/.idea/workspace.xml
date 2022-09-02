@@ -5,12 +5,9 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="657be414-0410-416b-82a4-023b644455f2" name="Default Changelist" comment="">
-      <change beforePath="$PROJECT_DIR$/../PaintomicsClient/public_html/resources/data/all_species.json" beforeDir="false" afterPath="$PROJECT_DIR$/../PaintomicsClient/public_html/resources/data/all_species.json" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/AdminTools/DBManager.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/AdminTools/DBManager.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/AdminTools/scripts/default/build_database.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/AdminTools/scripts/default/build_database.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/classes/JobInstances/Bed2GeneJob.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/classes/JobInstances/Bed2GeneJob.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/common/bioscripts/DHS_exon_association.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/common/bioscripts/DHS_exon_association.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/conf/serverconf.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/conf/serverconf.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/servlets/AdminServlet.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/servlets/AdminServlet.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -510,7 +507,8 @@
       <workItem from="1641820651455" duration="4887000" />
       <workItem from="1641850730075" duration="9591000" />
       <workItem from="1661961514522" duration="607000" />
-      <workItem from="1662024168718" duration="9645000" />
+      <workItem from="1662024168718" duration="11478000" />
+      <workItem from="1662117408804" duration="3444000" />
     </task>
     <servers />
   </component>
@@ -681,7 +679,7 @@
         </line-breakpoint>
         <line-breakpoint suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/src/servlets/AdminServlet.py</url>
-          <line>597</line>
+          <line>598</line>
           <option name="timeStamp" value="582" />
         </line-breakpoint>
         <line-breakpoint suspend="THREAD" type="python-line">
@@ -733,6 +731,26 @@
           <url>file://$PROJECT_DIR$/src/servlets/Bed2GenesServlet.py</url>
           <line>213</line>
           <option name="timeStamp" value="616" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/src/common/UserSessionManager.py</url>
+          <line>56</line>
+          <option name="timeStamp" value="617" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/src/servlets/AdminServlet.py</url>
+          <line>61</line>
+          <option name="timeStamp" value="618" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/src/paintomicsserver.py</url>
+          <line>458</line>
+          <option name="timeStamp" value="619" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/src/src/servlets/AdminServlet.py</url>
+          <line>571</line>
+          <option name="timeStamp" value="620" />
         </line-breakpoint>
         <line-breakpoint type="javascript">
           <url>file://$PROJECT_DIR$/../PaintomicsClient/public_html/app/view/PathwayAcquisitionViews/PA_Step4Views.js</url>
@@ -841,7 +859,7 @@
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/paintomicsserver_py$paintomicsserver.coverage" NAME="paintomicsserver Coverage Results" MODIFIED="1616383808184" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/src" />
-    <SUITE FILE_PATH="coverage/common_build_database_py$launch_server.coverage" NAME="launch_server Coverage Results" MODIFIED="1662033956980" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/src" />
+    <SUITE FILE_PATH="coverage/common_build_database_py$launch_server.coverage" NAME="launch_server Coverage Results" MODIFIED="1662121151467" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/src" />
     <SUITE FILE_PATH="coverage/common_build_database_py$build_database.coverage" NAME="launch_server Coverage Results" MODIFIED="1638732508704" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/src" />
     <SUITE FILE_PATH="coverage/launch_server_py$launch_server.coverage" NAME="launch_server Coverage Results" MODIFIED="1623753690084" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/src" />
     <SUITE FILE_PATH="coverage/paintomicsserver_py$launch_server.coverage" NAME="launch_server Coverage Results" MODIFIED="1616418573638" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/src" />
