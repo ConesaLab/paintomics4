@@ -661,7 +661,21 @@ String.prototype.trunc = String.prototype.trunc ||
                     function transpose(matrix) {
                         return matrix[0].map((col, i) => matrix.map(row => row[i]));
                     }
-
+                    // if the matrixdata is one dimensional, we use mean value as metagene
+                    if (matrixData[0].length === 1) {
+                        pcaGenes = transpose(matrixData)[0];
+                        // filter the outliers inside pcaGenes
+                        var mean = pcaGenes.reduce((a, b) => a + b) / pcaGenes.length;
+                        var std = Math.sqrt(pcaGenes.map(x => Math.pow(x - mean, 2)).reduce((a, b) => a + b) / pcaGenes.length);
+                        var filteredGenes = pcaGenes.filter(x => Math.abs(x - mean) < 3 * std);
+                        // make sure the filteredGenes have at least 2 elements
+                        if (filteredGenes.length < 2) {
+                            return [filteredGenes];
+                        }
+                        // calculate the mean value of filteredGenes
+                        var meanValue = filteredGenes.reduce((a, b) => a + b) / filteredGenes.length;
+                        return [[meanValue]];
+                    }
                     pcaGenes = new PCA(transpose(matrixData));
                     varExp = pcaGenes.getExplainedVariance();
                     //Metagenes is the score

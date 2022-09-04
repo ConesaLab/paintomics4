@@ -1112,11 +1112,9 @@ function PA_Step4KeggDiagramFeatureSetView() {
 			omicNames.forEach(function(omic) {
 				// Use all values of the same omic in all features associated to the box.
 				var omicValues = this.model.getAllOmicValues(omic).map(x => x.getValues());
-
-				// It is important that the featureType contains gene or compound word, as it 
+				// It is important that the featureType contains gene or compound word, as it
 				// will be used later to filter.
 				var featureType = "metagene"; //geneOmicNames.includes(omic) ? "gene" : "compound";
-
 				this.model.addOmicMetagenes(omic, featureType, mlPCA.generateMetagenes(omicValues));
 			}.bind(this));
 
