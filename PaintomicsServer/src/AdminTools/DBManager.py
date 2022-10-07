@@ -9,7 +9,7 @@ import logging.config
 from PIL import Image
 from textwrap import wrap
 from time import strftime, sleep, time
-from subprocess import check_call, CalledProcessError
+from subprocess import check_call, CalledProcessError, DEVNULL
 
 from conf.serverconf import KEGG_DATA_DIR, CLIENT_TMP_DIR, DOWNLOAD_DELAY_1, DOWNLOAD_DELAY_2, MAX_TRIES_1, MAX_TRIES_2
 from scripts.downloadReactome import *
@@ -403,25 +403,34 @@ def install_command(inputfile=None, specie=None, common=0, hub=1):
         common = True
 
     #**************************************************************************
-    #STEP 2. INSTALLING KEGG GLOBAL DATA
+    #STEP 2. INSTALLING KEGG GLOBAL/HUB DATA
     #**************************************************************************
+
+    #********************************************************************************
+    #STEP 2.A.1 IF WE CHOOSED TO install THE hub analysis data
+    #********************************************************************************
     try:
-        #********************************************************************************
-        #STEP 2.A.1 IF WE CHOOSED TO install THE hub analysis data
-        #********************************************************************************
         if hub:
+            log("STEP EXTRA: INSTALLING HUB ANALYSIS INFORMATION...")
             check_call(
                 [
                     ROOT_DIRECTORY + "AdminTools/scripts/hubAnalysisInstall.R",
                     '--organism="' + specie + '"',
                     '--scriptDir="' + ROOT_DIRECTORY + "AdminTools/scripts/" + '"',
                     '--outputDir="' + hubDir + '"'
-                ],stderr=STDOUT
+                ],stderr=STDOUT,stdout=DEVNULL
             )
+    except Exception as e:
+        log("        FAILED WHILE INSTALLING HUB ANALYSIS INFORMATION. UNABLE TO CONTINUE. ABORTING!!")
+        summary.write('FAILED WHILE INSTALLING HUB ANALYSIS INFORMATION. UNABLE TO CONTINUE. ABORTING!!')
+        errorlog(e)
+        summary.close()
+        exit(1)
 
-        #********************************************************************************
-        #STEP 2.A.1 IF WE CHOOSED TO DONWLOAD THE GENERAL DATA (PATHWAYS CLASSIFICATION, ETC.)
-        #********************************************************************************
+    #********************************************************************************
+    #STEP 2.A.1 IF WE CHOOSED TO DONWLOAD THE GENERAL DATA (PATHWAYS CLASSIFICATION, ETC.)
+    #********************************************************************************
+    try:
         if common:
             log("STEP " + str(currentStep) + ". INSTALLING COMMON KEGG INFORMATION")
             replaceNewVersionData(downloadDir, currentDataDir, "common", oldDataDir)
