@@ -303,8 +303,16 @@ KeggParser<- function (Pathways) {
       RelationTable5$entry_name_2<- id_name$name[match(RelationTable5$node_id_2, id_name$id)]
       RelationTable5<-separate_rows(RelationTable5,entry_name_2,sep=" ") #Esta es
       RelationTable5$entry_name_2<-sapply(strsplit(RelationTable5$entry_name_2, split=':', fixed=TRUE), function(x) (x[2]))
-      RelationTable5$pathway<-rep(Pathways[path], nrow(RelationTable5))
-      
+      RelationTable5$pathway<-as.character(rep(Pathways[path], nrow(RelationTable5)))
+
+      RelationTable5$node_id_1 <- as.character(RelationTable5$node_id_1)
+      RelationTable5$node_id_2 <- as.character(RelationTable5$node_id_2)
+      RelationTable5$relationship <- as.character(RelationTable5$relationship)
+      RelationTable5$relationship_suptype <- as.character(RelationTable5$relationship_suptype)
+      RelationTable5$entry_type_1 <- as.character(RelationTable5$entry_type_1)
+      RelationTable5$entry_type_2 <- as.character(RelationTable5$entry_type_2)
+      RelationTable5$entry_name_1 <- as.character(RelationTable5$entry_name_1)
+      RelationTable5$entry_name_2 <- as.character(RelationTable5$entry_name_2)
       # replace NA
       RelationTable5[is.na(RelationTable5)] <- ''
       
