@@ -87,10 +87,8 @@ prepare_KEGG <- function (kegg_interactions, features, significant_features) {
   
   # Differentially expressed metabolites that are in KEGG
   DEM <- intersect(significant_features,typesC$name)
-  
   # Differentially expressed genes that are in KEGG
   DEG <- intersect(significant_features ,typesG$name)
-  
   result <- list(metabolites = metabolites,
                  genes = genes,
                  DEM = DEM,
@@ -104,6 +102,11 @@ mydata <- prepare_KEGG (kegg_interactions = kegg_interactions, features = userDa
 globalSigPer <- length(mydata$DEG)/length(mydata$genes)
 
 DEm <- mydata$DEM
+if (length(DEm) == 0 && length(mydata$metabolites)) {
+  print("No DEm input. Consider all input metabolites are relevant.")
+  DEm = mydata$metabolites 
+}
+
 myfunction <- function (x) {
   as.data.frame(purrr::map(x, PercDEinMetaboliteNeighbours,
                            genes = mydata["genes"][[1]], DEG = mydata["DEG"][[1]])) }
