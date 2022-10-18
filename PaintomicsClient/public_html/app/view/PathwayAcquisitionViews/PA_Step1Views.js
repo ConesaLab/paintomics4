@@ -282,7 +282,7 @@ function PA_Step1JobView() {
 				'   <b>Paintomics</b>  is a web tool for the integrative visualization of multiple omic datasets onto KEGG (102.0 April 1 2022), Reactome (Version 76 21 March 2021) and MapMan (GoMapMan 25 May 2018) biological pathway maps. Currently, Paintomics supports integrated visualization of multiple species of different biological kingdoms and offers user the possibility to request any other organism present in the KEGG, Reactome and MapMan database. We will update all those databases annually.<br/><br/>' +
 				'   <b>Paintomics</b> is easy to run because the application itself guides you through the Four different steps that are detailed next:' +
 				' </p>' +
-				' <ul style="float: left;width: 65%;"> ' +
+				' <ul style="float: left;width: 100%;"> ' +
 				'   <li><b>Data uploading:</b>' +
 				'	<ol>' +
 				'		<li>Choose your organism (see selection box below).</li>' +
@@ -293,11 +293,15 @@ function PA_Step1JobView() {
 				'   <li><b>Identifier and Name Matching and Metabolite assignment:</b> Paintomics requires Entrez IDs for working with KEGG, Reactome and MapMan biological pathway maps, so the tool will convert the names and identifiers from different sources and databases in user’s the input data. This screen give users information about the number of features successfully mapped to KEGG, Reactome and MapMan biological pathway maps. It also shows the data distribution that will be used for pathway colouring, which can be modified when visualizing a pathway. Additionally, the metabolite names assignments are displayed and users can choose their favourite option in case of ambiguity. Click <a href="javascript:void(0)" class="button btn-success btn-inline btn-small"><i class="fa fa-play"></i> Next step</a> button when you are ready.<br/><br/></li>' +
 				'   <li><b>Results:</b> Pathways summary, Pathways classification, Pathways network, Pathways enrichment, Pathways visualization (by clicking <a href="javascript:void(0)" class="button btn-inline btn-small"  style="background-color:#ADA6A6;font-size: 14px;"><i class="fa fa-paint-brush"></i></a> for any of the displayed pathways in Pathways enrichment section). Read more about these analyses in <a href="http://paintomics.readthedocs.io/en/latest/" target="_blank">our documentation</a>.</li>' +
 				' </ul>' +
-				' <iframe width=448 frameborder="0.5" z-index: 99 height=252 src="https://www.youtube.com/embed/iUy0SJG7JCM" title="YouTube video player" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>' +
 				' <p style="clear:both;">' +
 				'   Please check the <b><a href="http://paintomics.readthedocs.org/en/latest/" target="_blank">User guide</a></b> for further information. For any question on <b>Paintomics</b>, you can send an e-mail to <a href="mailto:paintomics4@outlook.com">paintomics4@outlook.com</a>, or go to our <a href="https://github.com/ConesaLab/paintomics4/"> GitHub page </a>' + "." +
 				' </p>' +
-				'</div>'
+					// center the video
+				' <div style="text-align:center;">' +
+				' <iframe width="560" height="315" src="https://www.youtube.com/embed/brvToUmL1n4" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>' +
+				' <iframe width="560" height="315" src="https://www.youtube.com/embed/4XxPKqAubsA" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>' +
+				' </div>' +
+				' </div>'
 			}, {
 				xtype: 'form',
 				maxWidth: 1300,

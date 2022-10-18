@@ -3962,7 +3962,7 @@ function PA_Step3PathwayTableView() {
 	this.initComponent = function() {
 		var me = this;
 		this.component = Ext.widget({
-			xtype: 'container', cls: "contentbox", items: [
+			xtype: 'container', cls: "contentbox", overflowX: 'scroll', items: [
 				{xtype: 'box', flex: 1, html: '<h2 id="pathwayEnrichmentSection">Pathway enrichment</h2>'},
 				{
 					xtype: "livesearchgrid", itemId: 'pathwaysGridPanel',
@@ -4025,7 +4025,7 @@ function PA_Step3PathwayTableView() {
 								me.tipComponent = Ext.create('Ext.tip.Tip', {
 									closable: true,
 									maxWidth: 200,
-									width: 200,
+									width: 100,
 									itemId: 'stoufferTip',
 									renderTo: "mainViewCenterPanel",
 									items: [
@@ -4242,8 +4242,8 @@ function PA_Step3HubAnalysis () {
 							border: 0,
 							height: 70,
 							html: '<h2 id="EnrichmentSection"> Metabolites Hub Analysis</h2>' +
-								' <span class="infoTip">The analysis is between <b> deferentially expressed metabolites</b> compared to <b> randomly selected metabolites</b></span> ' +
-								' <span class="infoTip">The idea is to generate a table with the real values and the values after iterate the data and an associated p-value</span>',
+								' <span class="infoTip">Neighbouring genes for each metabolite at <b> 1 to 4 network steps </b> are identified.</b></span> ' +
+								' <span class="infoTip">The percentile and binomial tests are used to identify metabolites with a high density of DEGs in their proximal network.</span>',
 
 							style: {
 								backgroundColor: 'white'

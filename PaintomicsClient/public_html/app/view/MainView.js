@@ -196,7 +196,7 @@ function MainView() {
 				" </ul></li>" +
 				" <li class='menuOption' ><i class='fa fa-info-circle'></i>  Resources" +
 				" <ul class='submenu'>" +
-				"     <li class='menuOption externalOption'><a href='https://youtu.be/iUy0SJG7JCM' target='_blank'><i class=\"fa fa-youtube\"></i>  Paintomics tutorial video</a></li>" +
+				"     <li class='menuOption externalOption'><a href='https://www.youtube.com/channel/UCSoQ3LSli9ZxOQTX56_WJeA' target='_blank'><i class=\"fa fa-youtube\"></i>  Paintomics tutorial video</a></li>" +
 				"     <li class='menuOption externalOption'><a href='http://paintomics.readthedocs.org/en/latest/' target='_blank'><i class='fa fa-book'></i>  Paintomics Documentation</a></li>" +
 				"     <li class='menuOption externalOption'><a href='http://188.166.42.44/' target='_blank'><i class='fa fa-external-link'></i> PaintOmics 3 </a></li>" +
 				"	  <li class='menuOption externalOption'><a href='https://www.paintomics.org/resources/paintomics_example_data.zip' target='_blank'><i class='fa fa-download'></i>  Paintomics example data</a></li>" +

@@ -5,8 +5,6 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="657be414-0410-416b-82a4-023b644455f2" name="Default Changelist" comment="">
-      <change beforePath="$PROJECT_DIR$/../PaintomicsClient/public_html/app/view/PathwayAcquisitionViews/PA_Step4Views.js" beforeDir="false" afterPath="$PROJECT_DIR$/../PaintomicsClient/public_html/app/view/PathwayAcquisitionViews/PA_Step4Views.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../PaintomicsClient/public_html/app/view/common/Util.js" beforeDir="false" afterPath="$PROJECT_DIR$/../PaintomicsClient/public_html/app/view/common/Util.js" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -511,6 +509,8 @@
       <workItem from="1662117408804" duration="3610000" />
       <workItem from="1662129527031" duration="2402000" />
       <workItem from="1662278343884" duration="6745000" />
+      <workItem from="1662314144603" duration="8000" />
+      <workItem from="1662373330573" duration="14000" />
     </task>
     <servers />
   </component>
@@ -847,7 +847,6 @@
         <line-breakpoint enabled="true" type="javascript">
           <url>file://$PROJECT_DIR$/../PaintomicsClient/public_html/app/view/PathwayAcquisitionViews/PA_Step4Views.js</url>
           <line>3620</line>
-          <properties lambdaOrdinal="-1" />
           <option name="timeStamp" value="621" />
         </line-breakpoint>
       </breakpoints>
