@@ -15,7 +15,7 @@ For any question on **PaintOmics 4**, users can send a mail to [paintomics4@outl
 
 * **Data uploading**: typically data matrices, containing, for example, gene expression, metabolite levels, and metabolite levels for the same set of samples.
 * **Identifier and Name Matching and Metabolite assignment**: as PaintOmics requires Entrez IDs for working with KEGG pathways, the tool will try to convert the names and identifiers from different sources and databases for the input data. Additionally, it's necessary to specify metabolite assignments in ambiguous cases.
-* **Results:** Pathways summary, Pathways classification, Pathways network, Metabolite hub analysis, Metabolite class enrichment, Pathways enrichment, Pathways visualization (by clicking for any of the displayed pathways in the Pathways enrichment section). Read more about these analyses in [our documentation](http://paintomics.readthedocs.io/en/latest/) or [video tutorial](https://www.youtube.com/channel/UCSoQ3LSli9ZxOQTX56_WJeA).
+* **Results:** Pathways summary, Pathways classification, Pathways network, Metabolite hub analysis, Metabolite class enrichment, Pathways enrichment, Pathways visualization (by clicking for any of the displayed pathways in the Pathways enrichment section). Understand more about these analyses in [our documentation](http://paintomics.readthedocs.io/en/latest/) or [video tutorial](https://www.youtube.com/channel/UCSoQ3LSli9ZxOQTX56_WJeA).
 
 Currently, **PaintOmics 4** supports integrated visualization of multiple species of different biological kingdoms and allows users to request any other organism present in the [KEGG](https://www.genome.jp/kegg/), [Reactome](https://reactome.org/), and [MapMan](http://www.gomapman.org/) databases.
 
@@ -47,8 +47,6 @@ check the full [PaintOmics concepts tutorial](https://youtu.be/brvToUmL1n4)
 
 The PaintOmics step-by-step tutorial helps you learn how to analyze different data types supported by PaintOmics step-by-step. 
 
-The video contains 4 sections: 
-
 1. [0:00](https://www.youtube.com/watch?v=4XxPKqAubsA&t=0s) Introduction of **PaintOmics 4**
 2. [0:59](https://www.youtube.com/watch?v=4XxPKqAubsA&t=59s) Overview of the video
 3. [3:34](https://www.youtube.com/watch?v=4XxPKqAubsA&t=214s) How to analyze gene/metabolomics data 
@@ -61,7 +59,7 @@ check the full [PaintOmics step-by-step tutorial](https://youtu.be/4XxPKqAubsA)
 
 **Tian-Yuan Liu**, Main Developer.
 
-**Ana Conesa, Ph.D. **, Head Genomics of Gene Expression Lab.
+**Ana Conesa, Ph.D.**, Head Genomics of Gene Expression Lab.
 
 For any question on STATegraEMS, users can send a mail to [paintomics4@outlook.com](mailto:paintomics4@outlook.com).
 
