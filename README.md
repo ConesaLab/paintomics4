@@ -23,7 +23,8 @@ Currently, **PaintOmics 4** supports integrated visualization of multiple specie
 
 <div class="imageContainer" style="text-align:center; font-size:10px; color:#898989" >
     <img src="docs/img/gplv3-127x51.png" title="GNU GENERAL PUBLIC LICENSE Version 3 logo."/>
-</div>         
+</div>
+
 **Paintomics 4** is part of the [STATegra Project](https://cordis.europa.eu/project/id/306000/reporting) and was developed by the [Genomics of Gene Expression Lab](http://conesalab.org/) at [Príncipe Felipe Research Centre](http://www.cipf.es/).
 
 ## Video tutorial 
@@ -40,9 +41,7 @@ The PaintOmics concepts tutorial helps you understand why and how we conduct dif
 6. [10:09](https://www.youtube.com/watch?v=brvToUmL1n4&t=609s) Pathway Interactions Network 
 7. [13:00](https://www.youtube.com/watch?v=brvToUmL1n4&t=780s) Regulatory Omics
 
-```html
-<iframe width="560" height="630" src="https://www.youtube.com/embed/brvToUmL1n4" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
-```
+check the full [PaintOmics concepts tutorial](https://youtu.be/brvToUmL1n4)
 
 **PaintOmics step-by-step tutorial**
 
@@ -56,9 +55,7 @@ The video contains 4 sections:
 4. [16:11](https://www.youtube.com/watch?v=4XxPKqAubsA&t=971s) How to analyze region-based omics data
 5. [19:20](https://www.youtube.com/watch?v=4XxPKqAubsA&t=1160s) How to analyze regulatory omics analysis
 
-```html
-<iframe width="560" height="630" src="https://www.youtube.com/embed/4XxPKqAubsA" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
-```
+check the full [PaintOmics step-by-step tutorial](https://youtu.be/4XxPKqAubsA)
 
 ## Contact
 
