@@ -81,7 +81,7 @@ KeggParser<- function (Pathways) {
           subtypetableTest<-try (bind_rows(lapply(xml_attrs(subtype[i]), function(x) data.frame(as.list(x), stringsAsFactors=FALSE))) ,silent = TRUE)
           
           
-          if (class(subtypetableTest) == "try-error" |length(subtypetableTest)==0 ) {
+          if (length(subtypetableTest) == 0 || class(subtypetableTest) == "try-error") {
             #print(paste("Atrape un error de subtype repetido en ", relation[i]), sep=" ")
             relation2<-as.character(relation)
             prerelation1<-unlist(strsplit(relation2 [i], split='=\"'))

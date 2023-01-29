@@ -19,6 +19,8 @@
 # **************************************************************
 import logging
 import math
+from chardet import detect # get the encoding of a file
+
 from os import path as os_path, system as os_system, makedirs as os_makedirs
 from csv import reader as csv_reader
 from zipfile import ZipFile as zipFile
@@ -288,10 +290,23 @@ class PathwayAcquisitionJob(Job):
 
         # IF THE USER UPLOADED VALUES FOR GENE EXPRESSION
         if os_path.isfile(valuesFileName):
-            with open(valuesFileName, 'rU') as inputDataFile:
+            # get file encoding type
+            def get_encoding_type(file):
+                with open( file, 'rb' ) as f:
+                    raw_data = f.read()
+                return detect( raw_data )['encoding']
+
+            fileEncodingType = get_encoding_type( valuesFileName )
+            # convert file to utf-8
+            if fileEncodingType != 'utf-8':
+                with open( valuesFileName, 'r', encoding=fileEncodingType ) as f:
+                    text = f.read()
+                with open( valuesFileName, 'w', encoding='utf-8' ) as f:
+                    f.write( text )
+
+            with open(valuesFileName, newline='', encoding='utf-8' ) as inputDataFile:
                 nLine = -1
                 erroneousLines = {}
-
                 for line in csv_reader(inputDataFile, delimiter="\t"):
                     nLine = nLine + 1
                     # TODO: HACER ALGO CON EL HEADER?
