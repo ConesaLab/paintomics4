@@ -1,17 +1,10 @@
 #!/usr/bin/env Rscript
 flibrary <- library
 library <- function(...) suppressPackageStartupMessages(flibrary(...))
-library(KEGGgraph)
-library(readr)
-library(tidyr)
-library(rvest)
-library(dplyr)
-library(xml2)
-library(stringr)
-library(qdapRegex)
-library(gtools)
-library(jsonlite)
-library(AnnotationDbi)
+
+lapply(c("KEGGgraph", "readr", "tidyr", "rvest", "dplyr", "xml2", "stringr", "qdapRegex", "gtools", "jsonlite", "AnnotationDbi"), library, character.only = TRUE)
+options(timeout = 300) # Set timeout for the R session
+
 result <- NULL
 
 hubAnalysisInstall <- function(organism, scriptDir, outputDir) {
@@ -20,9 +13,11 @@ hubAnalysisInstall <- function(organism, scriptDir, outputDir) {
   
   print(paste0("#######################STEP 1 ", "Downloading pathway information..."))
   download.file(sprintf("http://rest.kegg.jp/list/pathway/%s", organism),
-                paste0(outputDir,"/pathway_list.list"))
-  pathway_df <- read.delim(paste0(outputDir,"/pathway_list.list"), header = F)
-  Kegg_pathways<-unlist(sapply(strsplit(as.character(pathway_df$V1), split=':'), function (x) x[[2]]) )
+                paste0(outputDir,"pathway_list.list"), method = "wget")
+  pathway_df <- read.delim(paste0(outputDir,"pathway_list.list"), header = F)
+  #Kegg_pathways<-unlist(sapply(strsplit(as.character(pathway_df$V1), split=':'), function (x) x[[2]]) )
+
+  Kegg_pathways <- as.character(pathway_df$V1)
   print(paste0("#######################STEP 2 ", "Parsering pathway information..."))
   kegg_interactions <- KeggParser(Pathways=Kegg_pathways)
   

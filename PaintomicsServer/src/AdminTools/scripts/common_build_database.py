@@ -1462,7 +1462,7 @@ def processReactomePathwaysData():
     chebi2ReactomeList = list()
     chebi2ReactomeListID = list()
 
-    with open (DATA_DIR + "../common/ChEBI2Reactome.list") as ChEBI2Reactome:
+    with open (DATA_DIR + "../common/ChEBI2Reactome_PE_All_Levels.txt") as ChEBI2Reactome:
         chebi2Reactome = csv.reader(ChEBI2Reactome, delimiter='\t')
         for row in chebi2Reactome:
             chebi2ReactomeList.append(row[0])
@@ -1471,7 +1471,7 @@ def processReactomePathwaysData():
     kegg2chebiList = list()
     kegg2chebiListID = list()
 
-    with open (DATA_DIR + "../common/kegg2chebi") as KEGG2ChEBI:
+    with open (DATA_DIR + "../common/kegg2chebi.list") as KEGG2ChEBI:
         kegg2chebi = csv.reader(KEGG2ChEBI, delimiter='\t')
         for row in kegg2chebi:
             row[0] = row[0].split(":")[1]
@@ -2029,13 +2029,12 @@ def processReactomePathwaysData():
 
 def processKEGGPathwaysData():
     FAILED_LINES["KEGG PATHWAYS"] = []
-
     #STEP 1. PROCESS THE pathways.list FILE
     file_name= DATA_DIR + "pathways.list"
     file = open(file_name, 'r')
     for line in file:
         line = line.rstrip().split("\t")
-        pathway_id   = line[0].replace("path:","")
+        pathway_id   = line[0]
         pathway_name = line[1]
         pathway_name = pathway_name[0:pathway_name.rfind(" - ")]
 
@@ -2049,7 +2048,6 @@ def processKEGGPathwaysData():
     mainClassification=""; secondClassification="";
     for line in file:
         line = line.rstrip().split("  ")
-
         if line[0][0] == "A": #main classification
             mainClassification=line[0][1:]
         elif line[0][0] == "B":
@@ -2151,7 +2149,7 @@ def generatePathwaysNetwork(ALL_PATHWAYS):
     with open(file_name, "r") as csvfile:
         rows = csv.reader(csvfile, delimiter='\t')
         for row in rows:
-            path_id = row[0].replace("path:map","")
+            path_id = row[0].replace("map","")
             path_name = row[1]
             NODES[path_id] = {"data": {"id": SPECIE + path_id, "label": path_name, "total_features": 0}, "group" : "nodes"}
     csvfile.close()
@@ -2183,7 +2181,7 @@ def generatePathwaysNetwork(ALL_PATHWAYS):
             NODES[str(secondClassificationID) + "B"] = {"data": {"id": secondClassification.lower().replace(" ","_"), "parent" : mainClassification.lower().replace(" ","_"), "label": secondClassification, "is_classification" : "B"}, "group" : "nodes"}
         elif line[0][0] == "C":
             pathway_id   = line[2]
-            NODES[pathway_id]["data"]["parent"] = mainClassification.lower().replace(" ","_"),
+            NODES[pathway_id]["data"]["parent"] = mainClassification.lower().replace(" ", "_"),
 
     csvfile.close()
     #***********************************************************************************

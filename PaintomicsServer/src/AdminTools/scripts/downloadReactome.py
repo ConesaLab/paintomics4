@@ -4,38 +4,35 @@ from collections import defaultdict
 from subprocess import check_call, STDOUT
 from sys import stderr
 import requests
-from src.AdminTools.DBManager import wait, generateThumbnail
+from src.AdminTools.DBManager import wait, generateThumbnail, log
 from src.AdminTools.scripts.common_resources.download_conf import EXTERNAL_RESOURCES
 from src.conf.serverconf import KEGG_DATA_DIR
 
 
 def showPercentageSimple(n, total):
     percen = int( n / float( total ) * 10 )
-    stderr.write(
-        "0%[" + ("#" * percen) + (" " * (10 - percen)) + "]100% [" + str( n ) + "/" + str( total ) + "]\t \n" )
+    log(
+        "                      0%[" + ("#" * percen) + (" " * (10 - percen)) + "]100% [" + str( n ) + "/" + str( total ) + "]\t \n" )
     return percen
 
 
 def downloadFile(URL, fileName, outputName, delay, maxTries, checkIfExists=False):
-    # stderr.write("DOWNLOADING " + URL + fileName + "\n")
-
     # If the file already exists, avoid downloading it again
-
-    if checkIfExists and os.path.isfile( outputName ) and os.stat( outputName ).st_size > 0:
-    	return True
+    if checkIfExists and os.path.isfile(outputName) and os.stat(outputName).st_size > 0:
+        return True
 
     nTry = 1
     while nTry <= maxTries:
-        wait( delay )
+        wait(delay)
         try:
-            check_call( ["curl", "--connect-timeout", "90", "--max-time", "1000", URL + fileName, "-o", outputName] )
+            check_call(["curl", "-s", "--connect-timeout", "90", "--max-time", "1000", URL + fileName, "-o", outputName])
             return True
         except Exception as e:
             nTry += 1
-    raise Exception( 'Unable to retrieve ' + fileName + " from " + URL + "\n" )
+    raise Exception('Unable to retrieve ' + fileName + " from " + URL + "\n")
 
 
-def downloadReactome(specie):
+def downloadReactome( specie ):
 
     SPECIES = specie.upper()
     downloadDir = KEGG_DATA_DIR + "download/"
@@ -47,8 +44,10 @@ def downloadReactome(specie):
     ReactomePathwayHighList = []
     ReactomePathwayLowList = []
     ReactomePathwayList = []
-    if os.path.isdir(DATA_DIR + "/../common/ReactomePathwaysRelation.list"):
-        ReactomePathwaysRelationFile = DATA_DIR + "/../common/ReactomePathwaysRelation.list"
+
+
+    if os.path.isdir(DATA_DIR + "../common/"):
+        ReactomePathwaysRelationFile = DATA_DIR + "../../download/common/ReactomePathwaysRelation.list"
     else:
         ReactomePathwaysRelationFile = DATA_DIR + "/../../current/common/ReactomePathwaysRelation.list"
 
@@ -72,7 +71,7 @@ def downloadReactome(specie):
     #stderr.write("ReactomePathwaysRelationFile"+str(ReactomePathwaysRelationFile))
     #stderr.write("ReactomePathwaysRelation"+str(ReactomePathwaysRelation))
 
-    stderr.write("DOWNLOADING REACTOME " + "STEP(1/2)" + "\n")
+    log("                      *DOWNLOADING REACTOME " + SPECIES + " STEP(1/2)..." + "\n")
 
 
     def downloadPathwayInf(pathway_id, PathwayList):
@@ -118,9 +117,7 @@ def downloadReactome(specie):
     #for pathway_id in test:
 
         i += 1
-        stderr.write('\n')
-
-        stderr.write("Start Downloading: " + pathway_id + "   ")
+        log("                      Start Downloading: " + pathway_id + "   ")
         showPercentageSimple(i, len(ReactomePathwayLast))
 
 
@@ -147,9 +144,6 @@ def downloadReactome(specie):
         ID = PathwayHighList[PathwayLowList.index( ID )]
         return findHighLevelPathway( ID, hierachy, PathwayHighList, PathwayLowList )
 
-
-
-
     with open(ReactomePathwaysRelationFile, 'r') as ReactomePathwaysRelation:
         for row in ReactomePathwaysRelation:
             if SPECIES in row:
@@ -168,13 +162,12 @@ def downloadReactome(specie):
 
     ReactomeHierarchyPathway = defaultdict(list)
 
-    stderr.write("\n" + "DOWNLOADING " + "STEP(2/2)" + "\n")
+    log("                      *DOWNLOADING REACTOME " + SPECIES + "STEP(2/2)" + "\n")
 
     i=0
     for pathway_id in PATHWAY_ID:
         i += 1
-        stderr.write('\n')
-        stderr.write("Start Downloading: " + pathway_id + "   ")
+        log("                      Start Downloading: " + pathway_id + "   ")
         showPercentageSimple( i, len( PATHWAY_ID ) )
         try:
             # Find Higher Level Pathway information and download them
