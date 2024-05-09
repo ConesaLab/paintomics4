@@ -5,7 +5,7 @@
 # Paintomics, integrative visualization of multiple *omic* data                                    
 For any question on **PaintOmics 4**, users can send a mail to [paintomics4@outlook.com](mailto:paintomics4@outlook.com).
 
-**PaintOmics 4** official instance: [https://www.paintomics.org/](https://www.paintomics.org/)
+**PaintOmics 4** official instance: [http://paintomics.org/](http://paintomics.org/) [https://paintomics.uv.es](https://paintomics.uv.es/)
 
 ## Welcome to PaintOmics 4 documentation.
 
