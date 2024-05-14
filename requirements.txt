@@ -6,7 +6,7 @@ wrapt==1.12.1
 
 APScheduler==3.6.3
 cairocffi==1.1.0
-CairoSVG==2.4.2
+CairoSVG==2.7.0
 cffi==1.14.3
 click==7.1.2
 cssselect2==0.3.0
