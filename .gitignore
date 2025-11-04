@@ -114,3 +114,18 @@ Thumbs.db
 *.tmp
 
 
+
+# Large genome / sequence data files (should not be committed)
+# Common FASTA/GTF/GFF patterns and compressed variants
+*.fa
+*.fasta
+*.fa.gz
+*.fasta.gz
+*.gtf
+*.gff
+
+# Example data directories that may contain large files
+PaintomicsServer/src/examplefiles/
+PaintomicsServer/src/examplefiles/GTF/
+
+
