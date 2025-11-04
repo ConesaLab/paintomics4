@@ -413,7 +413,7 @@ function PA_Step1JobView() {
 					}*/,
 					{
 						xtype: "box",
-						html: '<h3>2. Choose the files to upload <a class="button btn-right btn-small" href="http://www.paintomics.org/resources/paintomics_example_data.zip"><i class="fa fa-download"></i> Download example data</a></h3>'
+						html: '<h3>2. Choose the files to upload <a class="button btn-right btn-small" href="https://paintomics.uv.es/resources/paintomics_example_data.zip"><i class="fa fa-download"></i> Download example data</a></h3>'
 					},
 					{
 						xtype: "container",
@@ -2296,7 +2296,7 @@ window.cookieconsent.initialise({
 		allow: 'Allow cookies',
 		deny: 'Decline',
 		link: 'Learn more',
-		href: 'https://paintomics.org//conditions.html',
+		href: 'https://paintomics.uv.es/conditions.html',
 		close: '&#x274c;',
 		policy: 'Cookie Policy',
 		target: '_blank',

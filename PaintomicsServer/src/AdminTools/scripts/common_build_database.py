@@ -870,7 +870,8 @@ def processKEGG2GeneSymbolMappingData(display_file_name, file_name, kegg_gene_sy
             prev = showPercentage(i, total_lines, prev, errorMessage)
             try:
                 kegg_gi      = row[0].replace(SPECIE + ":", "")
-                gene_symbol  = row[1]
+                # Handle both old 2-column format (ID, SYMBOL;description) and new 4-column format (ID, TYPE, LOCATION, SYMBOL;description)
+                gene_symbol  = row[3] if len(row) >= 4 else row[1]
 
                 gene_symbol = gene_symbol.split(";")
                 if len(gene_symbol) < 2: #it means that the line only contains a description, not a gene symbol
@@ -1005,10 +1006,14 @@ def processKEGG2CompoundSymbolMappingData(file_name):
                 kegg_id      = row[0].replace("cpd:", "")
                 compound_symbols  = row[1]
 
-                compound_symbols = compound_symbols.split("; ")
+                # Ensure pure KEGG IDs (e.g. C00002) are searchable alongside textual compound names.
+                compound_symbols = [kegg_id] + compound_symbols.split("; ")
                 for compound_symbol in compound_symbols:
+                    compound_symbol = compound_symbol.strip()
+                    if compound_symbol == "":
+                        continue
                     # KEGG_COMPOUNDS.append({"id" : kegg_id, "name" : compound_symbol.lstrip()})
-                    KEGG_COMPOUNDS[compound_symbol.lstrip()] = kegg_id
+                    KEGG_COMPOUNDS[compound_symbol] = kegg_id
             except Exception as ex:
                 errorMessage = "FAILED WHILE PROCESSING KEGG 2 Compound MAPPING FILE [line " + str(i) + "]: "+ str(ex)
     csvfile.close()

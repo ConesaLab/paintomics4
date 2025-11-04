@@ -38,7 +38,7 @@ try:
     COMMON_BUILD_DB_TOOLS.processEnsemblData()
     COMMON_BUILD_DB_TOOLS.processRefSeqData()
     #COMMON_BUILD_DB_TOOLS.processUniProtData()
-    COMMON_BUILD_DB_TOOLS.processRefSeqGeneSymbolData()
+    #processRefSeqGeneSymbolData()
 
     #**************************************************************************
     # STEP 2. PROCESS THE KEGG  & OTHER DATABASES
