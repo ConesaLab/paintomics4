@@ -1,0 +1,14 @@
+title = "Paintomics secret scanning"
+
+[allowlist]
+description = "Ignore third-party/vendor and minified code to reduce false positives"
+paths = [
+  '''^PaintomicsClient/public_html/js/libs/''',
+  '''^PaintomicsClient/public_html/admin/lib/bootstrap/node_modules/''',
+  '''^.*node_modules/''',
+  '''^.*vendor/''',
+  '''^.*\.min\.js$''',
+  '''^\.idea/'''
+]
+
+# You can run: gitleaks detect --config=.gitleaks.toml

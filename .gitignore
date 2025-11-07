@@ -79,7 +79,9 @@ target/
 
 # Environment variables
 .env
-.env.*
+.env.local
+.env.*.local
+!.env.example
 
 # Configuration files
 /serverconf.py
@@ -100,6 +102,14 @@ Thumbs.db
 .vscode/
 *.sublime-workspace
 *.sublime-project
+*.iml
+
+# JavaScript/Node
+node_modules/
+**/node_modules/
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
 
 # Logs
 *.log
@@ -127,5 +137,4 @@ Thumbs.db
 # Example data directories that may contain large files
 PaintomicsServer/src/examplefiles/
 PaintomicsServer/src/examplefiles/GTF/
-
 
