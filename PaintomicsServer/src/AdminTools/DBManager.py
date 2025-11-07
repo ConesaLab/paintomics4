@@ -349,7 +349,9 @@ def install_command(inputfile=None, specie=None, common=0, hub=1):
 
     # Add hub analysis result dir
     hubDir = os.path.join(downloadDir, specie.lower() + "/hubData/")
+    currentHubDir = os.path.join(currentDataDir, specie.lower() + "/hubData/")
 
+    # Create download hub directory if it doesn't exist
     if not os.path.exists(hubDir):
         os.makedirs(hubDir)
 
@@ -390,6 +392,30 @@ def install_command(inputfile=None, specie=None, common=0, hub=1):
         common = True
 
     # **************************************************************************
+    # STEP 1.5. VALIDATE THAT SPECIES DATA EXISTS (either in download or current)
+    # **************************************************************************
+    for specie_to_check in SPECIES_INSTALL.keys():
+        if specie_to_check[0] == "#":
+            continue
+
+        downloadSpecieDir = os.path.join(downloadDir, specie_to_check)
+        currentSpecieDir = os.path.join(currentDataDir, specie_to_check)
+
+        # Check if data exists in either download or current directory
+        if not os.path.isdir(downloadSpecieDir) and not os.path.isdir(currentSpecieDir):
+            error_msg = f"ERROR: Cannot find data for species '{specie_to_check}' in either download ({downloadSpecieDir}) or current ({currentSpecieDir}) directories. Please download the species data first using the download command."
+            log(error_msg)
+            summary.write(error_msg + '\n')
+            summary.close()
+            exit(1)
+
+        # Log which directory will be used
+        if os.path.isdir(downloadSpecieDir):
+            log(f"Species '{specie_to_check}': will use new data from download directory")
+        else:
+            log(f"Species '{specie_to_check}': will reinstall using existing data from current directory")
+
+    # **************************************************************************
     # STEP 2. INSTALLING KEGG GLOBAL/HUB DATA
     # **************************************************************************
 
@@ -398,22 +424,33 @@ def install_command(inputfile=None, specie=None, common=0, hub=1):
     # ********************************************************************************
     try:
         if hub:
-            log("STEP EXTRA: INSTALLING HUB ANALYSIS INFORMATION...")
-            check_call(
-                [
-                    ROOT_DIRECTORY + "AdminTools/scripts/hubAnalysisInstall.R",
-                    '--organism="' + specie + '"',
-                    '--scriptDir="' + ROOT_DIRECTORY + "AdminTools/scripts/" + '"',
-                    '--outputDir="' + hubDir + '"'
-                ], stderr=STDOUT, stdout=DEVNULL
-            )
+            # Check if hub data already exists in current directory (for reinstalls)
+            if os.path.exists(currentHubDir) and os.listdir(currentHubDir):
+                log("STEP EXTRA: Hub data already exists in current directory, skipping regeneration...")
+            # check if hub directory is empty in download directory
+            elif not os.listdir(hubDir):
+                log("STEP EXTRA: INSTALLING HUB ANALYSIS INFORMATION...")
+                check_call(
+                    [
+                        ROOT_DIRECTORY + "AdminTools/scripts/hubAnalysisInstall.R",
+                        '--organism="' + specie + '"',
+                        '--scriptDir="' + ROOT_DIRECTORY + 'AdminTools/scripts/' + '"',
+                        '--outputDir="' + hubDir + '"'
+                    ], stderr=STDOUT, stdout=DEVNULL
+                )
+            else:
+                log("Hub directory is not empty in download, skipping regeneration...")
     except Exception as e:
         log("        FAILED WHILE INSTALLING HUB ANALYSIS INFORMATION. UNABLE TO CONTINUE. ABORTING!!")
-        summary.write('FAILED WHILE INSTALLING HUB ANALYSIS INFORMATION. UNABLE TO CONTINUE. ABORTING!!')
+        summary.write('FAILED WHILE INSTALLING HUB ANALYSIS INFORMATION. UNABLE TO CONTINUE. ABORTING!!\n')
+        # remove hub directory
+        try:
+            os.rmdir(hubDir)
+        except OSError as rm_error:
+            log(f"Failed to remove hub directory: {rm_error}")
         errorlog(e)
         summary.close()
         exit(1)
-
     # ********************************************************************************
     # STEP 2.A.1 IF WE CHOOSED TO DONWLOAD THE GENERAL DATA (PATHWAYS CLASSIFICATION, ETC.)
     # ********************************************************************************
@@ -558,6 +595,11 @@ def findolder_command(nDays):
 # ------------------------------------------------------------------------------------------
 
 def replaceNewVersionData(origin, destination, dirname, backup_dir):
+    """
+    Replace data in destination with data from origin.
+    If origin data doesn't exist, check if we're doing a reinstall (data already in destination).
+    """
+    # Check if new data exists in download directory
     if os.path.isdir(origin + dirname) and os.path.isdir(destination) and os.path.isdir(backup_dir):
         # Remove previous old data
         if os.path.isdir(backup_dir + dirname):
@@ -567,6 +609,15 @@ def replaceNewVersionData(origin, destination, dirname, backup_dir):
             shutil.move(destination + dirname, backup_dir)
         # Move the new data to current dir
         shutil.move(origin + dirname, destination)
+    elif os.path.isdir(destination + dirname):
+        # Download directory doesn't have data, but current directory does
+        # This is a reinstall scenario - data is already in place
+        log(f"No new data found in {origin + dirname}, using existing data in {destination + dirname} for reinstall")
+    else:
+        # Neither download nor current has the data
+        error_msg = f"ERROR: Cannot find data for '{dirname}' in either download ({origin + dirname}) or current ({destination + dirname}) directories"
+        log(error_msg)
+        raise Exception(error_msg)
 
 
 def restorePreviousVersionData(origin, destination, dirname, backup_dir):

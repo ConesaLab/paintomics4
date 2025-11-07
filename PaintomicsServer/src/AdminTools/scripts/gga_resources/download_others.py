@@ -10,9 +10,9 @@ import imp
 # DO NOT CHANGE THIS CODE
 #**************************************************************************
 
-#SPECIE = 'mmu'
+#SPECIE = 'gga'
 #ROOT_DIR = '/home/tian/paintomics/paintomics4/PaintomicsServer/src/AdminTools/'
-#DESTINATION = "/home/tian/mmu"
+#DESTINATION = "/home/tian/database/KEGG_DATA/old/gga"
 
 
 SPECIE      = argv[1]
@@ -54,9 +54,9 @@ try:
 
     #*************************************************************************
 
-    #resource = COMMON_BUILD_DB_TOOLS.EXTERNAL_RESOURCES.get("reactome")[0]
-    #COMMON_BUILD_DB_TOOLS.downloadFile(resource.get("url"), resource.get("file"), DESTINATION + resource.get("output"),
-    #                                   SERVER_SETTINGS.DOWNLOAD_DELAY_1, SERVER_SETTINGS.MAX_TRIES_1)
+    resource = COMMON_BUILD_DB_TOOLS.EXTERNAL_RESOURCES.get("reactome")[0]
+    COMMON_BUILD_DB_TOOLS.downloadFile(resource.get("url"), resource.get("file"), DESTINATION + resource.get("output"),
+                                       SERVER_SETTINGS.DOWNLOAD_DELAY_1, SERVER_SETTINGS.MAX_TRIES_1)
 
 except Exception as ex:
     stderr.write("FAILED WHILE DOWNLOADING DATA " + str(ex))

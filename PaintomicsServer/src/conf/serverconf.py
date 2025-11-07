@@ -22,12 +22,12 @@ MONGODB_DATABASE  = "PaintomicsDB"
 
 #MULTI-THREADING OPTIONS
 MAX_THREADS      = 6
-MAX_WAIT_THREADS = 300 #IN SECONDS
+MAX_WAIT_THREADS = 900 #IN SECONDS
 N_WORKERS        = 4
 
 #CACHE SIZES
-JOB_CACHE_MAX_SIZE  = 10
-KEGG_CACHE_MAX_SIZE = 5
+JOB_CACHE_MAX_SIZE  = 50
+KEGG_CACHE_MAX_SIZE = 25
 
 #DOWNLOAD SETTINGS
 DOWNLOAD_DELAY_1    =2
@@ -35,13 +35,41 @@ DOWNLOAD_DELAY_2    =2
 MAX_TRIES_1 = 3
 MAX_TRIES_2 = 5
 
-#SMTP CONFIGURATION
-smtp_host       = "smtp-mail.outlook.com"    #Sets Gmail, Office... as the SMTP server
-smtp_port       = 587                        #Set the SMTP port for the GMAIL
-use_smtp_auth   = True                       #Enable SMTP authentication
-use_smtp_ssl    = False                      #Whether use normal SMTP or SMTP_SSL
-smtp_secure     = "tls"                      #Use tls, etc.
-smpt_username   = "paintomics4@outlook.com"  #THE SENDER EMAIL, DEPENDS ON THE SMTP SETTINGS
-smpt_pass       = "UGFpbnQzMjEj"             #THE SENDER PASS IN BASE64 CODIFICATION, DEPENDS ON THE SMTP SETTINGS
-smpt_sender     = "paintomics4@outlook.com"  #Sender email (From value at the email)
-smpt_sender_name= "Paintomics 4"             #Sender name (From value at the email)
+#SMTP CONFIGURATION (DEPRECATED - kept for reference)
+# smtp_host       = "smtp-mail.outlook.com"    #Sets Gmail, Office... as the SMTP server
+# smtp_port       = 587                        #Set the SMTP port for the GMAIL
+# use_smtp_auth   = True                       #Enable SMTP authentication
+# use_smtp_ssl    = False                      #Whether use normal SMTP or SMTP_SSL
+# smtp_secure     = "tls"                      #Use tls, etc.
+# smpt_username   = "paintomics4@outlook.com"  #THE SENDER EMAIL, DEPENDS ON THE SMTP SETTINGS
+# smpt_pass       = "<redacted>"                # Do not commit credentials. Provide via environment/secrets manager.
+# smpt_sender     = "paintomics4@outlook.com"  #Sender email (From value at the email)
+# smpt_sender_name= "Paintomics 4"             #Sender name (From value at the email)
+
+#SENDGRID EMAIL CONFIGURATION
+import os
+from urllib.parse import urlparse
+EMAIL_PROVIDER      = "http_sendgrid"                        #Email provider type
+EMAIL_FROM_ADDRESS  = "paintomics4@outlook.com"              #Sender email address (must match verified sender in SendGrid)
+EMAIL_FROM_DISPLAY  = "PaintOmics"                           #Sender display name
+SENDGRID_API_KEY    = os.getenv("SENDGRID_API_KEY", "")      #SendGrid API key (read from environment)
+
+# Web-facing constants
+PAINTOMICS_BASE_URL        = os.getenv("PAINTOMICS_BASE_URL", "https://paintomics.uv.es").rstrip("/")
+PAINTOMICS_LOGO_PATH       = os.getenv("PAINTOMICS_LOGO_PATH", "/resources/images/paintomics_white_300x66")
+PAINTOMICS_LOGO_URL        = f"{PAINTOMICS_BASE_URL}{PAINTOMICS_LOGO_PATH}"
+PAINTOMICS_LOGIN_URL       = os.getenv("PAINTOMICS_LOGIN_URL", f"{PAINTOMICS_BASE_URL}/")
+PAINTOMICS_DOCS_URL        = os.getenv("PAINTOMICS_DOCS_URL", "https://paintomics.readthedocs.io/en/latest/")
+PAINTOMICS_EMAIL_DOMAIN    = os.getenv(
+    "PAINTOMICS_EMAIL_DOMAIN",
+    urlparse(PAINTOMICS_BASE_URL).netloc or "paintomics.uv.es"
+)
+EMAIL_REPORT_RECIPIENTS    = [
+    email.strip()
+    for email in os.getenv("EMAIL_REPORT_RECIPIENTS", "paintomics4@outlook.com").split(",")
+    if email.strip()
+]
+
+# Backwards compatibility for legacy SMTP-based imports
+smpt_sender      = EMAIL_FROM_ADDRESS
+smpt_sender_name = EMAIL_FROM_DISPLAY

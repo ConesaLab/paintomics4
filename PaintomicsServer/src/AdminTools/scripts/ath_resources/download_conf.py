@@ -1,7 +1,7 @@
 EXTERNAL_RESOURCES = {
                 "ensembl"   :   [
                     {
-                    "url"           :   "https://www.ensembl.org/biomart/martservice",
+                    "url"           :   "https://plants.ensembl.org/biomart/martservice",
                     "file"          :   "ath_resources/ensembl_mapping.xml",
                     "output"        :   "ensembl_mapping.list",
                     "description"   :   "Source: Ensembl Mammals databases. Downloaded from Biomart."

@@ -199,9 +199,9 @@ function MainView() {
 				"     <li class='menuOption externalOption'><a href='https://www.youtube.com/channel/UCSoQ3LSli9ZxOQTX56_WJeA' target='_blank'><i class=\"fa fa-youtube\"></i>  Paintomics tutorial video</a></li>" +
 				"     <li class='menuOption externalOption'><a href='http://paintomics.readthedocs.org/en/latest/' target='_blank'><i class='fa fa-book'></i>  Paintomics Documentation</a></li>" +
 				"     <li class='menuOption externalOption'><a href='http://188.166.42.44/' target='_blank'><i class='fa fa-external-link'></i> PaintOmics 3 </a></li>" +
-				"	  <li class='menuOption externalOption'><a href='https://www.paintomics.org/resources/paintomics_example_data.zip' target='_blank'><i class='fa fa-download'></i>  Paintomics example data</a></li>" +
-				"	  <li class='menuOption externalOption'><a href='https://www.paintomics.org/resources/rgmatch_example_data.zip' target='_blank'><i class='fa fa-download'></i>  RGmatch example data</a></li>" +
-				"	  <li class='menuOption externalOption'><a href='https://www.paintomics.org/resources/mirna2genes_example_data.zip' target='_blank'><i class='fa fa-download'></i>  miRNA2Genes example data</a></li>" +
+				"	  <li class='menuOption externalOption'><a href='https://paintomics.uv.es/resources/paintomics_example_data.zip' target='_blank'><i class='fa fa-download'></i>  Paintomics example data</a></li>" +
+				"	  <li class='menuOption externalOption'><a href='https://paintomics.uv.es/resources/rgmatch_example_data.zip' target='_blank'><i class='fa fa-download'></i>  RGmatch example data</a></li>" +
+				"	  <li class='menuOption externalOption'><a href='https://paintomics.uv.es/resources/mirna2genes_example_data.zip' target='_blank'><i class='fa fa-download'></i>  miRNA2Genes example data</a></li>" +
 				" </ul></li>" +
 				" <li class='menuOption' ><i class='fa fa-paper-plane-o'></i>  Publications" +
 				" <ul class='submenu'>" +
@@ -268,7 +268,7 @@ function MainView() {
 									return;
 								}
 								showInfoMessage("Welcome to PaintOmics 4!", {
-									message: "We are installing new species to PaintOmics 4. Please, if you want to use previous version go and visit <a href=\"http://188.166.42.44/\"> http://188.166.42.44/ </a>. Thank you for your patience.",
+									message: "PaintOmics 4 is now hosted on the University of Valencia's server. For any inquiries, please contact us at <a href=\"mailto:paintomics4@outlook.com\">paintomics4@outlook.com</a>",
 									showButton: true
 								})
 							},

@@ -13,13 +13,13 @@ EXTERNAL_RESOURCES = {
                     "file"          :   "gene2refseq.gz",
                     "output"        :   "refseq_gene2refseq.gz",
                     "description"   :   "Source: NCBI Gene. Downloaded from NCBI FTP. Tab-delimited one line per genomic/RNA/protein set of RefSeqs",
-                    "specie-code"   :   10090
+                    "specie-code"   :   9031
                     },{
                     "url"           :   "ftp://ftp.ncbi.nih.gov/gene/DATA/GENE_INFO/Non-mammalian_vertebrates/",
                     "file"          :   "Gallus_gallus.gene_info.gz",
                     "output"        :   "refseq_gene2genesymbol.gz",
                     "description"   :   "Source: NCBI Gene. Downloaded from NCBI FTP. Tab-delimited one line per gene id/gene symbol/.../synonyms/... from RefSeqs",
-                    "specie-code"   :   10090
+                    "specie-code"   :   9031
                     }
                 ],
                  "uniprot"   :   [
@@ -28,6 +28,14 @@ EXTERNAL_RESOURCES = {
                     "file"          :   "CHICK_9031_idmapping_selected.tab.gz",
                     "output"        :   "uniprot_mapping.list",
                     "description"   :    "Source: UniProt idmapping_selected.tab. Downloaded from UniProt FTP. Tab-delimited table which includes the multiple mappings between UniProt Accession and external databases."
+                    }
+                ],
+                "reactome": [
+                    {
+                        "url": "https://reactome.org/ContentService/data/pathways/top/9031",
+                        "file": "",
+                        "output": "reactome_top.json",
+                        "description": "Source: Reactome top pathways in JSON. It contains the main pathways to be used to retrieve the others.."
                     }
                 ]
         }
