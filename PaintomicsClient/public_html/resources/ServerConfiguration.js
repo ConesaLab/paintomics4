@@ -4,6 +4,7 @@
 APP_VERSION = "v1.0.0";
 SERVER_URL = "";
 //SERVER_PORT = ":8080";
+PAINTOMICS_EMAIL_DOMAIN = "paintomics.uv.es";
 /*********************************************************************
  * PATHWAY ACQUISITION SERVICES URLS         *************************
  *********************************************************************/

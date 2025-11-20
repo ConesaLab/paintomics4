@@ -5,7 +5,18 @@ import logging.config
 
 import datetime
 from pymongo import MongoClient
-from conf.serverconf import MONGODB_HOST, MONGODB_PORT, MONGODB_DATABASE, CLIENT_TMP_DIR, ADMIN_ACCOUNTS, MAX_GUEST_DAYS, MAX_JOB_DAYS
+from pymongo.errors import OperationFailure
+from conf.serverconf import (
+    MONGODB_HOST,
+    MONGODB_PORT,
+    MONGODB_DATABASE,
+    CLIENT_TMP_DIR,
+    ADMIN_ACCOUNTS,
+    MAX_GUEST_DAYS,
+    MAX_JOB_DAYS,
+    PAINTOMICS_BASE_URL,
+    PAINTOMICS_LOGO_URL,
+)
 
 from src.common.Util import sendEmail
 
@@ -174,21 +185,22 @@ def remindJobByJobID(connection, user_id, job_id, ROOT_DIRECTORY):
         user_data = connection[MONGODB_DATABASE]['userCollection'].find_one({"userID": user_id})
 
         message = '<html><body>'
-        message += "<a href='" + "http://www.paintomics.org/" + "' target='_blank'>"
-        message += "  <img src='" + "http://www.paintomics.org/" + "resources/images/paintomics_white_300x66' border='0' width='150' height='33' alt='Paintomics 3 logo'>"
+        message += "<a href='" + PAINTOMICS_BASE_URL + "/' target='_blank'>"
+        message += "  <img src='" + PAINTOMICS_LOGO_URL + "' border='0' width='150' height='33' alt='PaintOmics logo'>"
         message += "</a>"
         message += "<div style='width:100%; height:10px; border-top: 1px dotted #333; margin-top:20px; margin-bottom:30px;'></div>"
         message += "<h1>Your Paintomics job " + job_id + " will be deleted soon!</h1>"
         message += "<p>Hello, " + user_data["userName"] + "! Your job with ID " + job_id + " will be deleted in one week.</p>"
         message += "<p>To avoid it, please visit the following link to update the accession date:</p>"
-        message += "<p><a target='_blank' href='http://www.paintomics.org/?jobID=" + job_id + "'>http://www.paintomics.org/?jobID=" + job_id + "</a></p></br>"
+        reminder_link = PAINTOMICS_BASE_URL + "/?jobID=" + job_id
+        message += "<p><a target='_blank' href='" + reminder_link + "'>" + reminder_link + "</a></p></br>"
         message += "<div style='width:100%; height:10px; border-top: 1px dotted #333; margin-top:20px; margin-bottom:30px;'></div>"
         message += "<p>Problems? E-mail <a href='mailto:" + "paintomics4@outlook.com" + "'>" + "paintomics4@outlook.com" + "</a></p>"
         message += "<p>Legal notice: you are receiving this e-mail because you accepted Paintomics conditions. Your data will be stored for the"
         message += "solely purpose of informing you about actions involving your jobs."
         message += '</body></html>'
 
-        sendEmail(ROOT_DIRECTORY_CORRECTED, user_data["email"], user_data["userName"], "Paintomics 3: one job is going to expire soon",
+        sendEmail(ROOT_DIRECTORY_CORRECTED, user_data["email"], user_data["userName"], "PaintOmics 4: one job is going to expire soon",
                   message, isHTML=True)
     except Exception as e:
         logging.error("Failed to send the email.")
@@ -239,16 +251,27 @@ def fixUserDataByUserID(connection, user_id):
     #STEP 3. CREATE THE DIRECTORIES
     dir = CLIENT_TMP_DIR.rstrip("/") + "/" + str(user_id)
     log("Creating directories at " + dir)
-    os.mkdir(dir)
-    os.mkdir(dir + "/inputData")
-    os.mkdir(dir + "/jobsData/")
-    os.mkdir(dir + "/tmp/")
+    paths = [
+        dir,
+        os.path.join(dir, "inputData"),
+        os.path.join(dir, "jobsData"),
+        os.path.join(dir, "tmp"),
+    ]
+    for path in paths:
+        os.makedirs(path, exist_ok=True)
 
 def rebuildIndexes(connection):
     dbs = ['userCollection', 'jobInstanceCollection', 'foundFeaturesCollection', 'featuresCollection', 'pathwaysCollection', 'visualOptionsCollection', 'fileCollection', 'messageCollection']
+    existing_collections = set(connection[MONGODB_DATABASE].list_collection_names())
     for db in dbs:
+        if db not in existing_collections:
+            log("Skipping index rebuild for database " + db + " (collection missing)")
+            continue
         log("Rebuilding indexes for database " + db)
-        connection[MONGODB_DATABASE][db].reindex()
+        try:
+            connection[MONGODB_DATABASE][db].reindex()
+        except OperationFailure as err:
+            log("Failed to rebuild indexes for database " + db + ": " + str(err))
 
 def log(msg):
     print(msg)

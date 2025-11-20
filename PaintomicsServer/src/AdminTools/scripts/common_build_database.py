@@ -6,6 +6,19 @@ from time import sleep, strftime
 from sys import argv, stdout, stderr, path
 from subprocess import check_call, check_output, CalledProcessError
 from urllib.request import urlopen
+import sys
+
+# Configure CSV field size limit to handle large fields in mapping data
+# Use a safe approach that works across different platforms
+field_size_limit = sys.maxsize
+while True:
+    try:
+        csv.field_size_limit(field_size_limit)
+        break
+    except OverflowError:
+        # On some platforms (Windows), sys.maxsize is too large
+        # Progressively reduce until we find a value that works
+        field_size_limit = int(field_size_limit / 10)
 
 path.insert(0, os.path.dirname(os.path.realpath(__file__)) + "/../")
 
@@ -325,6 +338,13 @@ def processRefSeqGeneSymbolData():
     """
     FAILED_LINES["REFSEQ GENE SYMBOL"]=[]
 
+    # Processing statistics counters
+    genes_processed = 0
+    genes_successfully_mapped = 0
+    genes_skipped_no_transcript = 0
+    genes_skipped_empty_symbol = 0
+    genes_failed_other = 0
+
     stderr.write("\n\nPROCESSING REFSEQ GENE SYMBOL MAPPING FILE...\n")
 
     #Get settings for the file
@@ -371,13 +391,19 @@ def processRefSeqGeneSymbolData():
                 gene_symbol  = row[2]
                 synonyms     = row[4]
 
+                genes_processed += 1
+
+                # Skip genes with empty symbols
                 if gene_symbol == "-":
-                    raise Exception("Empty REFSEQ Gene Symbol value.")
+                    genes_skipped_empty_symbol += 1
+                    continue
 
                 #CHECK ENTREZ ID WAS PREVIOSLY REGISTERED
+                # If not found, this gene lacks RefSeq transcripts - skip silently
                 entrez_gi = findXREF(entrez_gi, entrezgene_db_id)
                 if entrez_gi == None:
-                    raise Exception("ENTREZ ID not found at database.")
+                    genes_skipped_no_transcript += 1
+                    continue
 
                 #GET THE SYNONYMS IN A LIST(IF ANY)
                 if synonyms == "-":
@@ -409,12 +435,40 @@ def processRefSeqGeneSymbolData():
                     for gene_symbol in gene_symbols:
                         insertTR_XREF(gene_symbol, transcript_id)
 
+                # Successfully processed this gene
+                genes_successfully_mapped += 1
+
             except Exception as ex:
+                genes_failed_other += 1
                 errorMessage= "FAILED WHILE PROCESSING REFSEQ GENE SYMBOL MAPPING FILE [line " + str(i) + "]: "+ str(ex)
                 FAILED_LINES["REFSEQ GENE SYMBOL"].append([errorMessage] + row)
 
     csvfile.close()
     os.remove("/tmp/build.tmp")
+
+    # Print processing summary
+    stderr.write("\n" + "="*80 + "\n")
+    stderr.write("RefSeq Gene Symbol Processing Summary:\n")
+    stderr.write("="*80 + "\n")
+    stderr.write("  Total genes in file: {}\n".format(total_lines))
+    stderr.write("  Genes processed: {}\n".format(genes_processed))
+    stderr.write("    - Successfully mapped: {} ({:.1f}%)\n".format(
+        genes_successfully_mapped,
+        100.0 * genes_successfully_mapped / genes_processed if genes_processed > 0 else 0))
+    stderr.write("    - Skipped (no RefSeq transcript): {} ({:.1f}%)\n".format(
+        genes_skipped_no_transcript,
+        100.0 * genes_skipped_no_transcript / genes_processed if genes_processed > 0 else 0))
+    stderr.write("    - Skipped (empty gene symbol): {} ({:.1f}%)\n".format(
+        genes_skipped_empty_symbol,
+        100.0 * genes_skipped_empty_symbol / genes_processed if genes_processed > 0 else 0))
+    stderr.write("    - Failed (other errors): {} ({:.1f}%)\n".format(
+        genes_failed_other,
+        100.0 * genes_failed_other / genes_processed if genes_processed > 0 else 0))
+    stderr.write("\n")
+    stderr.write("  NOTE: Genes without RefSeq transcripts are expected and normal.\n")
+    stderr.write("  They are not included in the database because PaintOmics requires\n")
+    stderr.write("  transcript-level data for pathway analysis.\n")
+    stderr.write("="*80 + "\n\n")
 
     TOTAL_FEATURES["REFSEQ GENE SYMBOL"]=total_lines
 
@@ -871,29 +925,33 @@ def processKEGG2GeneSymbolMappingData(display_file_name, file_name, kegg_gene_sy
             try:
                 kegg_gi      = row[0].replace(SPECIE + ":", "")
                 # Handle both old 2-column format (ID, SYMBOL;description) and new 4-column format (ID, TYPE, LOCATION, SYMBOL;description)
-                gene_symbol  = row[3] if len(row) >= 4 else row[1]
+                gene_symbol_raw  = row[3] if len(row) >= 4 else row[1]
 
-                gene_symbol = gene_symbol.split(";")
+                # Always insert the KEGG ID regardless of gene symbol presence
+                kegg_gi = insertXREF(XREF_Entry(kegg_gi, kegg_id_db_id, "Extracted from KEGG Database (" + display_file_name + " file)"))
+
+                transcript_id= kegg_id_2_refseq_tid.get(kegg_gi, generateRandomID()) #Try to reuse the ids for random transcripts
+                kegg_id_2_refseq_tid[kegg_gi] = transcript_id
+                insertTR_XREF(kegg_gi, transcript_id)
+
+                # Process gene symbol if it exists (format: "symbol;description" or just "description")
+                gene_symbol = gene_symbol_raw.split(";")
                 if len(gene_symbol) < 2: #it means that the line only contains a description, not a gene symbol
-                    continue
+                    continue  # Skip gene symbol processing but KEGG ID is already inserted
 
                 gene_synonyms = gene_symbol[0].split(", ") #COULD BE A LIST OF GENE SYMBOLS
                 gene_symbol   = gene_synonyms.pop(0)
 
                 if len(gene_symbol) > 15: #discard long ids -> could be a description
-                    continue
+                    continue  # Skip gene symbol processing but KEGG ID is already inserted
 
-                kegg_gi = insertXREF(XREF_Entry(kegg_gi, kegg_id_db_id, "Extracted from KEGG Database (" + display_file_name + " file)"))
                 gene_symbol = insertXREF(XREF_Entry(gene_symbol, kegg_gene_symbol_db_id, "Extracted from KEGG Database (" + display_file_name + " file)"))
 
                 gene_synonyms_aux=[gene_symbol]
-                for gene_symbol in gene_synonyms:
-                    gene_synonyms_aux.append(insertXREF(XREF_Entry(gene_symbol, kegg_gene_symbol_synonyms_db_id, "Extracted from KEGG Database (" + display_file_name + " file)")))
+                for gene_synonym in gene_synonyms:
+                    gene_synonyms_aux.append(insertXREF(XREF_Entry(gene_synonym, kegg_gene_symbol_synonyms_db_id, "Extracted from KEGG Database (" + display_file_name + " file)")))
 
-                transcript_id= kegg_id_2_refseq_tid.get(kegg_gi, generateRandomID()) #Try to reuse the ids for random transcripts
-                kegg_id_2_refseq_tid[kegg_gi] = transcript_id
-
-                insertTR_XREF(kegg_gi, transcript_id)
+                # Link gene symbols to the same transcript
                 for gene_symbol in gene_synonyms_aux:
                     insertTR_XREF(gene_symbol, transcript_id)
 
@@ -1017,6 +1075,34 @@ def processKEGG2CompoundSymbolMappingData(file_name):
             except Exception as ex:
                 errorMessage = "FAILED WHILE PROCESSING KEGG 2 Compound MAPPING FILE [line " + str(i) + "]: "+ str(ex)
     csvfile.close()
+
+    # STEP 1.5. Load CHEBI to KEGG mapping
+    stderr.write("\nPROCESSING CHEBI TO KEGG MAPPING FILE...\n")
+    kegg2chebi_file = os.path.dirname(file_name) + "/kegg2chebi.list"
+    if os.path.exists(kegg2chebi_file):
+        try:
+            with open(kegg2chebi_file, "r") as chebi_file:
+                chebi_rows = csv.reader(chebi_file, delimiter='\t')
+                chebi_count = 0
+                for row in chebi_rows:
+                    try:
+                        # File format: chebi:XXXXX\tcpd:CXXXXX
+                        chebi_id = row[0].split(":")[1] if ":" in row[0] else row[0]
+                        kegg_id = row[1].split(":")[1] if ":" in row[1] else row[1]
+
+                        # Add mapping from CHEBI ID to KEGG compound ID
+                        # Store both with and without "chebi:" prefix for flexibility
+                        KEGG_COMPOUNDS["chebi:" + chebi_id] = kegg_id
+                        KEGG_COMPOUNDS[chebi_id] = kegg_id
+                        chebi_count += 1
+                    except Exception as ex:
+                        stderr.write(f"\nWarning: Failed to process CHEBI mapping line: {row} - {str(ex)}\n")
+                        continue
+                stderr.write(f"\nLoaded {chebi_count} CHEBI to KEGG mappings.\n")
+        except Exception as ex:
+            stderr.write(f"\nWarning: Failed to load CHEBI mapping file: {str(ex)}\n")
+    else:
+        stderr.write(f"\nWarning: CHEBI mapping file not found at {kegg2chebi_file}\n")
 
     #STEP 2. DUMP THE TABLE INTO A FILE
     file = open("/tmp/compounds.tmp", 'w')
@@ -1357,6 +1443,13 @@ def processReactomePathwaysData():
     TOTAL_FEATURES["REACTOME PATHWAYS"] = 0
     NODES = {}
     EDGES = []
+
+    # Entity processing counters for tracking identifier sources
+    entities_processed = 0
+    entities_with_geneNames = 0
+    entities_fallback_mapping = 0
+    entities_fallback_displayName = 0
+    entities_skipped_no_identifier = 0
     #
     #if not len(ALL_ENTRIES):
     #    stderr.write("The mapping entries dictionary is not filled. Mapping of KEGG & auxiliary files must be processed first.")
@@ -1426,7 +1519,19 @@ def processReactomePathwaysData():
 
     command = ROOT_DIR + "/scripts/processReactomeData.R" + " --specie=" + SPECIE + " --root=" + DATA_DIR + "/../common/"
 
-    check_call(command ,shell=True)
+    print("Processing Reactome data with R script...")
+    print("Command: " + command)
+    try:
+        # Redirect stderr to stdout so we can capture all output
+        output = check_output(command + " 2>&1", shell=True, universal_newlines=True)
+        print(output)  # Print R script output
+        print("Reactome R script completed successfully")
+    except CalledProcessError as e:
+        print("ERROR: Reactome R script failed with exit code: " + str(e.returncode))
+        if hasattr(e, 'output') and e.output:
+            print("Output from R script:")
+            print(e.output)
+        raise Exception("Failed to process Reactome data. Check memory usage and R installation.")
 
 
     #In the first step, we need to process the mapping data
@@ -1774,14 +1879,57 @@ def processReactomePathwaysData():
                         other_ids.add(uniprotList[i])
                         other_ids.add(uniprotSymbol[i])
 
-                    # IF this is not a gene, we should skip it
-                    try:
-                        total_feature[pathway_id].add( entity_reactome.get( 'geneNames' ).copy()[0] )
-                        gene_ids = entity_reactome.get('geneNames').copy()
-                    except Exception as ex:
+                    # Try to get gene identifier from multiple sources with fallback hierarchy
+                    gene_names = entity_reactome.get('geneNames')
+                    gene_id = None
+                    gene_ids = []
+
+                    # Source 1: geneNames field (primary - existing behavior)
+                    if gene_names and len(gene_names) > 0:
+                        gene_ids = gene_names.copy()
+                        gene_id = gene_ids.pop(0).upper()
+                        entities_with_geneNames += 1
+
+                    # Source 2: External mapping files (fallback - Ensembl > NCBI > UniProt)
+                    elif len(indicesEnsembl) > 0 or len(indicesNcbi) > 0 or len(indicesUniPort) > 0:
+                        # Prefer Ensembl symbols (most authoritative)
+                        if len(indicesEnsembl) > 0 and ensemblSymbol[indicesEnsembl[0]]:
+                            gene_id = ensemblSymbol[indicesEnsembl[0]].upper()
+                            gene_ids = [ensemblSymbol[i].upper() for i in indicesEnsembl[1:] if i < len(ensemblSymbol) and ensemblSymbol[i]]
+                            entities_fallback_mapping += 1
+                        # Then try NCBI symbols
+                        elif len(indicesNcbi) > 0 and ncbiSymbol[indicesNcbi[0]]:
+                            gene_id = ncbiSymbol[indicesNcbi[0]].upper()
+                            gene_ids = [ncbiSymbol[i].upper() for i in indicesNcbi[1:] if i < len(ncbiSymbol) and ncbiSymbol[i]]
+                            entities_fallback_mapping += 1
+                        # Finally try UniProt symbols
+                        elif len(indicesUniPort) > 0 and uniprotSymbol[indicesUniPort[0]]:
+                            gene_id = uniprotSymbol[indicesUniPort[0]].upper()
+                            gene_ids = [uniprotSymbol[i].upper() for i in indicesUniPort[1:] if i < len(uniprotSymbol) and uniprotSymbol[i]]
+                            entities_fallback_mapping += 1
+
+                    # Source 3: DisplayName (last resort - parse name before [location])
+                    if not gene_id:
+                        displayName = entity_reactome.get('displayName', '')
+                        if displayName:
+                            displayName_simple = displayName.rsplit('[', 1)[0].strip()
+                            if displayName_simple:
+                                gene_id = displayName_simple.upper()
+                                gene_ids = []
+                                entities_fallback_displayName += 1
+                                stderr.write("Warning: Using displayName for {}: {}\n".format(entity_reactome_id, gene_id))
+
+                    # Skip only if all methods fail
+                    if not gene_id:
+                        entities_skipped_no_identifier += 1
+                        stderr.write("Error: No identifier found for {}\n".format(entity_reactome_id))
+                        FAILED_LINES["REACTOME PATHWAYS"].append(
+                            ["No gene identifier", entity_reactome_id, entity_reactome.get('displayName', '')])
                         continue
 
-                    gene_id = gene_ids.pop( 0 ).upper()
+                    # Track entity as processed successfully
+                    entities_processed += 1
+                    total_feature[pathway_id].add(gene_id)
 
 
 
@@ -1941,6 +2089,30 @@ def processReactomePathwaysData():
             except:
                 stderr.write(
                     "Pathways " + current_path + " or " + other_path + " not found in Reactome network values.\n")
+
+    # ***********************************************************************************
+    # * ENTITY PROCESSING SUMMARY
+    # ***********************************************************************************
+    stderr.write("\n" + "="*80 + "\n")
+    stderr.write("Reactome Entity Processing Summary:\n")
+    stderr.write("="*80 + "\n")
+    total_entities = (entities_with_geneNames + entities_fallback_mapping +
+                     entities_fallback_displayName + entities_skipped_no_identifier)
+    stderr.write("  Total EntityWithAccessionedSequence nodes: {}\n".format(total_entities))
+    stderr.write("  Successfully processed: {}\n".format(entities_processed))
+    stderr.write("    - With geneNames field: {} ({:.1f}%)\n".format(
+        entities_with_geneNames,
+        100.0 * entities_with_geneNames / total_entities if total_entities > 0 else 0))
+    stderr.write("    - Rescued via mapping files: {} ({:.1f}%)\n".format(
+        entities_fallback_mapping,
+        100.0 * entities_fallback_mapping / total_entities if total_entities > 0 else 0))
+    stderr.write("    - Rescued via displayName: {} ({:.1f}%)\n".format(
+        entities_fallback_displayName,
+        100.0 * entities_fallback_displayName / total_entities if total_entities > 0 else 0))
+    stderr.write("  Skipped (no identifier): {} ({:.1f}%)\n".format(
+        entities_skipped_no_identifier,
+        100.0 * entities_skipped_no_identifier / total_entities if total_entities > 0 else 0))
+    stderr.write("="*80 + "\n\n")
 
     # ***********************************************************************************
     # * GET THE NUMBER OF GENES FOR EACH PATHWAY

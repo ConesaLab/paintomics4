@@ -208,6 +208,9 @@ def mapFeatureIdentifiers(jobID, organism, databases, featureList,  matchedFeatu
         featureNames = set(map(attrgetter('name'), featureList))
         featureNamesBatches = chunks(list(featureNames), 2000)
 
+        # Cache all database results upfront
+        allCacheFeatureIDS = {}
+        allCacheSymbolsIDS = {}
 
         for databaseConvertion_name in databases:
             # Reset the cache per database
@@ -218,33 +221,58 @@ def mapFeatureIdentifiers(jobID, organism, databases, featureList,  matchedFeatu
             databaseConvertion_id = databaseConvertion_ids.get(databaseConvertion_name)
             databaseGeneSymbol_id = databaseGeneSymbol_ids.get(databaseConvertion_name)
 
+            # Check if ID and symbol databases are the same to avoid duplicate queries
+            # This happens with Reactome where both map to 'reactome_gene_id'
+            sameDatabase = (gene_databases.get(databaseConvertion_name) ==
+                          symbol_databases.get(databaseConvertion_name))
+
             # Populate the feature and symbol cache
             for featureNameBatch in featureNamesBatches:
                 newFeatureIDs = findIDsByFeaturesName(jobID, featureNameBatch, db, databaseConvertion_id)
-                newSymbolIDs = findIDsByFeaturesName(jobID, list(chain.from_iterable(newFeatureIDs.values())), db,
-                                                     databaseGeneSymbol_id)
-
                 cacheFeatureIDS.update(newFeatureIDs)
+
+                # Only query for symbols if the database is different from the ID database
+                # Otherwise, reuse the ID results as symbols
+                if sameDatabase:
+                    # Reuse the feature IDs as symbols (they're the same database)
+                    newSymbolIDs = newFeatureIDs
+                else:
+                    # Query for symbols separately
+                    newSymbolIDs = findIDsByFeaturesName(jobID, list(chain.from_iterable(newFeatureIDs.values())), db,
+                                                         databaseGeneSymbol_id)
+
                 cacheSymbolsIDS.update(newSymbolIDs)
 
-            total = len(featureList)
-            current = 0
-            prev = -1
-            aux = 0
+            allCacheFeatureIDS[databaseConvertion_name] = cacheFeatureIDS
+            allCacheSymbolsIDS[databaseConvertion_name] = cacheSymbolsIDS
 
-            for feature in featureList:
-                current += 1
-                if (current * 100 / total) % 20 == 0:
-                    aux = (current * 100 / total)
-                    if aux != prev:
-                        prev = aux
-                        print( "Processed " + str(prev) + "% of " + str(total) + " total features (DB " + databaseConvertion_name + ")")
+        # Now process all features once, checking all databases for each feature
+        # Use a set to track which features matched in any database (O(1) lookups)
+        localMatchedFeatures = set()
 
-                originalName = feature.getName()
+        total = len(featureList)
+        current = 0
+        prev = -1
+
+        for feature in featureList:
+            current += 1
+            if (current * 100 / total) % 20 == 0:
+                aux = (current * 100 / total)
+                if aux != prev:
+                    prev = aux
+                    print("Processed " + str(prev) + "% of " + str(total) + " total features")
+
+            originalName = feature.getName()
+            featureMatchedInAnyDB = False
+
+            # Check all databases for this feature
+            for databaseConvertion_name in databases:
+                cacheFeatureIDS = allCacheFeatureIDS[databaseConvertion_name]
+                cacheSymbolsIDS = allCacheSymbolsIDS[databaseConvertion_name]
                 featureIDs = cacheFeatureIDS.get(originalName, None)
 
                 if featureIDs:
-                    # matches+=1
+                    featureMatchedInAnyDB = True
                     # Increase the counter on the matching database, and keep track of the total
                     # counting only once the features. In this scenario the feature will only have one omic value
                     # containing the original name.
@@ -252,11 +280,6 @@ def mapFeatureIdentifiers(jobID, organism, databases, featureList,  matchedFeatu
                         feature.getOmicsValues()[0].getOriginalName() if featureEnrichment else feature.getName())
                     matches["Total"].add(
                         feature.getOmicsValues()[0].getOriginalName() if featureEnrichment else feature.getName())
-
-                    # Remove the feature from not matched features in case in wasn't found in
-                    # the previous database (when multiple databases are selected)
-                    if feature in notMatchedFeatures:
-                        notMatchedFeatures.remove(feature)
 
                     for featureID in set(featureIDs):
                         featureClone = feature.clone()  # IF MORE THAN 1 MATCH, CLONE THE FEATURE
@@ -270,8 +293,13 @@ def mapFeatureIdentifiers(jobID, organism, databases, featureList,  matchedFeatu
 
                         featureClone.setName(featureName)
                         matchedFeatures.append(featureClone)
-                else:
-                    notMatchedFeatures.append(feature)
+
+            # Only add to notMatchedFeatures if it didn't match in ANY database
+            if not featureMatchedInAnyDB:
+                notMatchedFeatures.append(feature)
+            else:
+                # Track that this feature was matched (for deduplication if needed)
+                localMatchedFeatures.add(originalName)
 
         #*************************************************************************************
         # STORE THE RESULTS

@@ -1243,7 +1243,7 @@ class PathwayAcquisitionJob(Job):
         from collections import defaultdict
 
         brPath = os.path.dirname(__file__) + "/../../common/br08001.json"
-        interactionJSONPath = self.inputDir + "../../../KEGG_DATA/current/" + self.organism + '/hubData/kegg_interaction.json'
+        interactionJSONPath = os.path.join(KEGG_DATA_DIR, "current", self.organism, "hubData", "kegg_interaction.json")
 
         # Load classification File
         with open(brPath, 'r') as f:

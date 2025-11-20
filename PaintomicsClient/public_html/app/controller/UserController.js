@@ -326,7 +326,7 @@ function UserController() {
                 url: SERVER_URL_UM_NEWGUESTSESSION,
                 success: function (response) {
                     /*1. Set the cookies*/
-                    Ext.util.Cookies.set("lastEmail", response.userName + "@paintomics.org", null, location.pathname);
+                    Ext.util.Cookies.set("lastEmail", response.userName + "@" + PAINTOMICS_EMAIL_DOMAIN, null, location.pathname);
                     Ext.util.Cookies.set("sessionToken", response.sessionToken, null, location.pathname);
                     Ext.util.Cookies.set("userID", response.userID, null, location.pathname);
                     Ext.util.Cookies.set("userName", response.userName, null, location.pathname);
@@ -334,7 +334,7 @@ function UserController() {
 
                     /*2. Show Credentials dialog*/
                     //TODO: REVISAR ESTO, SEGURO?
-                    me.showGuestSessionDialog(response.userName + "@paintomics.org", response.p);
+                    me.showGuestSessionDialog(response.userName + "@" + PAINTOMICS_EMAIL_DOMAIN, response.p);
                 },
                 error: ajaxErrorHandler
             });
