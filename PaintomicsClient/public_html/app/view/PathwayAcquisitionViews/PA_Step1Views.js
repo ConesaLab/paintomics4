@@ -294,7 +294,7 @@ function PA_Step1JobView() {
 				'   <li><b>Results:</b> Pathways summary, Pathways classification, Pathways network, Pathways enrichment, Pathways visualization (by clicking <a href="javascript:void(0)" class="button btn-inline btn-small"  style="background-color:#ADA6A6;font-size: 14px;"><i class="fa fa-paint-brush"></i></a> for any of the displayed pathways in Pathways enrichment section). Read more about these analyses in <a href="http://paintomics.readthedocs.io/en/latest/" target="_blank">our documentation</a>.</li>' +
 				' </ul>' +
 				' <p style="clear:both;">' +
-				'   Please check the <b><a href="http://paintomics.readthedocs.org/en/latest/" target="_blank">User guide</a></b> for further information. For any question on <b>Paintomics</b>, you can send an e-mail to <a href="mailto:paintomics4@outlook.com">paintomics4@outlook.com</a>, or go to our <a href="https://github.com/ConesaLab/paintomics4/"> GitHub page </a>' + "." +
+				'   Please check the <b><a href="http://paintomics.readthedocs.org/en/latest/" target="_blank">User guide</a></b> for further information. For any question on <b>Paintomics</b>, you can send an e-mail to <a href="mailto:paintomics4@gmail.com">paintomics4@gmail.com</a>, or go to our <a href="https://github.com/ConesaLab/paintomics4/"> GitHub page </a>' + "." +
 				' </p>' +
 					// center the video
 				' <div style="text-align:center;">' +

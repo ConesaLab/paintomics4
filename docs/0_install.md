@@ -53,7 +53,7 @@ If you don't have Git (and thus can't run the git command), you can download Pai
 
 ## Configure the server
 Copy the example configuration file to a new *serverconf.py* file and adapt the values for the settings.
-If you are not sure about the values for an option, leave the default value or contact us for more info ([paintomics4@outlook.com](mailto:paintomics4@outlook.com).).
+If you are not sure about the values for an option, leave the default value or contact us for more info ([paintomics4@gmail.com](mailto:paintomics4@gmail.com).).
 
 ```bash
 cp $PWD/paintomics4/PaintomicsServer/src/conf/example_serverconf.py $PWD/paintomics4/PaintomicsServer/src/conf/serverconf.py

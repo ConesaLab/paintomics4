@@ -135,4 +135,4 @@ Placing the cursor over these boxes will open up a tooltip window expanding the 
 
 
 <br/>
-For any question on PaintOmics, users can send a mail to [paintomics4@outlook.com](mailto:paintomics4@outlook.com).
+For any question on PaintOmics, users can send a mail to [paintomics4@gmail.com](mailto:paintomics4@gmail.com).

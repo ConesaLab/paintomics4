@@ -3,7 +3,7 @@
 </div>
 
 # Paintomics, integrative visualization of multiple *omic* data                                    
-For any question on **PaintOmics 4**, users can send a mail to [paintomics4@outlook.com](mailto:paintomics4@outlook.com).
+For any question on **PaintOmics 4**, users can send a mail to [paintomics4@gmail.com](mailto:paintomics4@gmail.com).
 
 **PaintOmics 4** official instance: [https://paintomics.uv.es](https://paintomics.uv.es/)
 
@@ -61,7 +61,7 @@ check the full [PaintOmics step-by-step tutorial](https://youtu.be/4XxPKqAubsA)
 
 **Ana Conesa, Ph.D.**, Head Genomics of Gene Expression Lab.
 
-For any question on STATegraEMS, users can send a mail to [paintomics4@outlook.com](mailto:paintomics4@outlook.com).
+For any question on STATegraEMS, users can send a mail to [paintomics4@gmail.com](mailto:paintomics4@gmail.com).
 
 
 <div class="imageContainer" style="text-align:center; font-size:10px; color:#898989" >
