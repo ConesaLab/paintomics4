@@ -4,6 +4,7 @@ from collections import defaultdict
 from subprocess import check_call, STDOUT
 from sys import stderr
 import requests
+from requests.exceptions import RequestException
 from src.AdminTools.DBManager import wait, generateThumbnail, log
 from src.AdminTools.scripts.common_resources.download_conf import EXTERNAL_RESOURCES
 from src.conf.serverconf import KEGG_DATA_DIR
@@ -30,6 +31,24 @@ def downloadFile(URL, fileName, outputName, delay, maxTries, checkIfExists=False
         except Exception as e:
             nTry += 1
     raise Exception('Unable to retrieve ' + fileName + " from " + URL + "\n")
+
+def get_status_with_retry(url, tries=5, delay=3):
+    """
+    Requests the given URL with a few retries to tolerate transient network drops
+    (e.g., Connection reset by peer from Reactome).
+    """
+    last_exc = None
+    for attempt in range(1, tries + 1):
+        try:
+            resp = requests.get(url, timeout=120)
+            return resp.status_code
+        except RequestException as exc:
+            last_exc = exc
+            log(f"                      Connection issue ({attempt}/{tries}) for {url}: {exc}")
+            wait(delay)
+    if last_exc:
+        raise last_exc
+    return 500
 
 
 def downloadReactome( specie ):
@@ -78,7 +97,13 @@ def downloadReactome( specie ):
         nodes_url = EXTERNAL_RESOURCES['reactome'].get( "nodes_url" ).format( pathway_id )
         nodes_tmp_file = REACTOME_DIR + "/" + pathway_id + ".json"
 
-        if requests.get( nodes_url ).status_code == 404:
+        try:
+            status_code = get_status_with_retry(nodes_url)
+        except RequestException as exc:
+            log(f"                      Skipping {pathway_id} after repeated connection errors: {exc}")
+            return
+
+        if status_code == 404:
             for item in PathwayList:
                 if item[1] == pathway_id:
                     downloadPathwayInf( item[0], ReactomePathwayList )  # get the upper pathway id

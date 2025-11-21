@@ -46,13 +46,17 @@ MAX_TRIES_2 = 5
 # smpt_sender     = "paintomics4@outlook.com"  #Sender email (From value at the email)
 # smpt_sender_name= "Paintomics 4"             #Sender name (From value at the email)
 
-#SENDGRID EMAIL CONFIGURATION
+#EMAIL CONFIGURATION (SMTP via SendGrid)
 import os
 from urllib.parse import urlparse
-EMAIL_PROVIDER      = "http_sendgrid"                        #Email provider type
-EMAIL_FROM_ADDRESS  = "paintomics4@outlook.com"              #Sender email address (must match verified sender in SendGrid)
-EMAIL_FROM_DISPLAY  = "PaintOmics"                           #Sender display name
-SENDGRID_API_KEY    = os.getenv("SENDGRID_API_KEY", "")      #SendGrid API key (read from environment)
+EMAIL_PROVIDER      = "smtp"                                           #Email provider type
+EMAIL_FROM_ADDRESS  = "paintomics4@outlook.com"                        #Sender email address
+EMAIL_FROM_DISPLAY  = "PaintOmics"                                     #Sender display name
+SMTP_HOST           = os.getenv("SMTP_HOST", "smtp.sendgrid.net")      #SMTP server hostname
+SMTP_PORT           = int(os.getenv("SMTP_PORT", "587"))               #SMTP server port (587 for TLS)
+SMTP_USERNAME       = os.getenv("SMTP_USERNAME", "apikey")             #SMTP username
+SMTP_PASSWORD       = os.getenv("SMTP_PASSWORD", "")                   #SMTP password (SendGrid API key)
+SMTP_USE_TLS        = True                                             #Use TLS encryption
 
 # Web-facing constants
 PAINTOMICS_BASE_URL        = os.getenv("PAINTOMICS_BASE_URL", "https://paintomics.uv.es").rstrip("/")

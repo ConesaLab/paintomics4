@@ -82,10 +82,12 @@ target/
 .env.local
 .env.*.local
 !.env.example
+.venv/
 
 # Configuration files
 /serverconf.py
 /local_serverconf.py
+paintomics4.ini
 **/config.ini
 
 # OS generated files
@@ -137,4 +139,3 @@ pnpm-lock.yaml
 # Example data directories that may contain large files
 PaintomicsServer/src/examplefiles/
 PaintomicsServer/src/examplefiles/GTF/
-

@@ -16,38 +16,49 @@ ROOT <- args$root
 #ROOT = '/home/tian/Downloads/database/KEGG_DATA/current/common/'
 ROOT_REACTOME = paste0(ROOT, "../", specie ,"/mapping/reactome/")
 
-cat("STEP 1 LOODING FILES...")
-#ChEBI2Reactome = read.csv(file = paste0(ROOT, "ChEBI2Reactome_PE_All_Levels.txt"), sep = '\t', header = FALSE)
-Ensembl2Reactome = read.csv(file = paste0(ROOT, "Ensembl2Reactome_PE_All_Levels.txt"), sep = '\t', header = FALSE)
-NCBI2Reactome = read.csv(file = paste0(ROOT, "NCBI2Reactome_PE_All_Levels.txt"), sep = '\t', header = FALSE)
-UniProt2Reactome = read.csv(file = paste0(ROOT, "UniProt2Reactome_PE_All_Levels.txt"), sep = '\t', header = FALSE)
+# Create output directory if needed
+if (!dir.exists(ROOT_REACTOME)) {
+  dir.create(ROOT_REACTOME, recursive = TRUE)
+}
 
-Ensembl2Reactome$V8 = as.factor(Ensembl2Reactome$V8)
-Ensembl2Reactome$V3 = sub(" .*", "", Ensembl2Reactome$V3)
+# Function to process a single file - loads, processes, writes, and frees memory
+processFile <- function(fileName, outputName, specie) {
+  cat(paste0("Processing ", fileName, "...\n"))
 
-NCBI2Reactome$V8 = as.factor(NCBI2Reactome$V8)
-NCBI2Reactome$V3 = sub(" .*", "", NCBI2Reactome$V3)
+  # Load file
+  inputData = read.csv(file = paste0(ROOT, fileName, "_PE_All_Levels.txt"), sep = '\t', header = FALSE)
 
-UniProt2Reactome$V8 =  as.factor(UniProt2Reactome$V8)
-UniProt2Reactome$V3 = sub(" .*", "", UniProt2Reactome$V3)
+  # Process data
+  inputData$V8 = as.factor(inputData$V8)
+  inputData$V3 = sub(" .*", "", inputData$V3)
 
-
-processData <- function(inputData, inputDataType, specie) {
-  if (!dir.exists(ROOT_REACTOME)) {
-    dir.create(ROOT_REACTOME)
-  }
-  for (i in levels( inputData$V8 )) {
+  # Filter and write for target species
+  for (i in levels(inputData$V8)) {
     inputDataSave = inputData[inputData$V8 == i,]
     dirName = tolower(paste0(substr(strsplit(as.character(i), " ")[[1]][1], start = 1, stop = 1), substr(strsplit(as.character(i), " ")[[1]][2], start = 1, stop = 2)))
     if (dirName == specie) {
-      write.table(inputDataSave[,1:4], file = paste0(ROOT_REACTOME,inputDataType, ".txt"), row.names = FALSE, col.names = FALSE, quote = FALSE, sep = '\t')
+      write.table(inputDataSave[,1:4], file = paste0(ROOT_REACTOME, outputName, ".txt"), row.names = FALSE, col.names = FALSE, quote = FALSE, sep = '\t')
+      cat(paste0("  Wrote ", nrow(inputDataSave), " rows for ", specie, "\n"))
       break
     }
   }
+
+  # Explicitly free memory
+  rm(inputData, inputDataSave)
+  gc(verbose = FALSE)
+
+  cat(paste0("Completed ", fileName, "\n"))
 }
 
-cat("STEP 2 PROCESS DATA...")
-processData(Ensembl2Reactome, "Ensembl2Reactome", specie)
-processData(NCBI2Reactome, "NCBI2Reactome", specie)
-processData(UniProt2Reactome, "UniProt2Reactome", specie)
+# Process files sequentially to minimize memory usage
+cat("STEP 1: Processing Ensembl2Reactome...\n")
+processFile("Ensembl2Reactome", "Ensembl2Reactome", specie)
+
+cat("STEP 2: Processing NCBI2Reactome...\n")
+processFile("NCBI2Reactome", "NCBI2Reactome", specie)
+
+cat("STEP 3: Processing UniProt2Reactome...\n")
+processFile("UniProt2Reactome", "UniProt2Reactome", specie)
+
+cat("All Reactome data processing completed successfully.\n")
 

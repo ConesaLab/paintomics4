@@ -20,7 +20,13 @@
 import logging
 import logging.config
 
-from src.conf.serverconf import CLIENT_TMP_DIR
+from src.conf.serverconf import (
+    CLIENT_TMP_DIR,
+    PAINTOMICS_BASE_URL,
+    PAINTOMICS_LOGO_URL,
+    PAINTOMICS_LOGIN_URL,
+    PAINTOMICS_EMAIL_DOMAIN,
+)
 
 from src.classes.User import User
 from src.common.DAO.UserDAO import UserDAO
@@ -162,15 +168,15 @@ def userManagementSignUp(request, response, ROOT_DIRECTORY):
         try:
             #TODO: SERVER ADDRESS AND ADMIN EMAIL
             message = '<html><body>'
-            message +=  "<a href='" + "http://www.paintomics.org/" + "' target='_blank'>"
-            message += "  <img src='" + "http://www.paintomics.org/" + "resources/images/paintomics_white_300x66' border='0' width='150' height='33' alt='Paintomics 4 logo'>"
+            message +=  "<a href='" + PAINTOMICS_LOGIN_URL + "' target='_blank'>"
+            message += "  <img src='" + PAINTOMICS_LOGO_URL + "' border='0' width='150' height='33' alt='PaintOmics 4 logo'>"
             message += "</a>"
             message += "<div style='width:100%; height:10px; border-top: 1px dotted #333; margin-top:20px; margin-bottom:30px;'></div>"
             message += "<h1>Welcome to Paintomics 4!</h1>"
             message += "<p>Thanks for joining, " + userInstance.getUserName() + "! You're already able to work with Paintomics.</p>"
             message += "<p>Your user name is as follows:</p>"
             message += "<p><b>Username:</b> " + userInstance.getEmail() + "</p></br>"
-            message += "<p>Login in to Paintomics 4 at </p><a href='" + "https://www.paintomics.org/" + "'>" + "https://www.paintomics.org/" + "</a>"
+            message += "<p>Login in to Paintomics 4 at </p><a href='" + PAINTOMICS_LOGIN_URL + "'>" + PAINTOMICS_LOGIN_URL + "</a>"
             message += "<div style='width:100%; height:10px; border-top: 1px dotted #333; margin-top:20px; margin-bottom:30px;'></div>"
             message += "<p>Problems? E-mail <a href='mailto:" + "paintomics4@outlook.com" + "'>" + "paintomics4@outlook.com" + "</a></p>"
             message += '</body></html>'
@@ -213,14 +219,15 @@ def userManagementNewGuestSession(request, response):
         from random import randrange
         while valid == False:
             userName = "guest" + str(randrange(99999))
-            valid = daoInstance.findByEmail(userName+"@paintomics.org") == None
+            guestEmail = f"{userName}@{PAINTOMICS_EMAIL_DOMAIN}"
+            valid = daoInstance.findByEmail(guestEmail) == None
 
         #****************************************************************
         # Step 2. ADD NEW USER TO DATABASE
         #****************************************************************
         logging.info("STEP2 - CREATING USER INSTANCE AND SAVING TO DATABASE..." )
         userInstance = User("")
-        userInstance.setEmail(userName+"@paintomics.org")
+        userInstance.setEmail(guestEmail)
         from hashlib import sha1
         userInstance.setPassword(sha1(password.encode('ascii')).hexdigest())
         userInstance.setUserName(userName)
@@ -356,14 +363,14 @@ def userManagementResetPassword(request, response, ROOT_DIRECTORY):
                 restoreLink = url_for('resetPasswordHandler', emailToken = emailToken, userEmail = userEmail)
                 #TODO: SERVER ADDRESS AND ADMIN EMAIL
                 message = '<html><body>'
-                message +=  "<a href='" + "http://www.paintomics.org/" + "' target='_blank'>"
-                message += "  <img src='" + "http://www.paintomics.org/" + "resources/images/paintomics_white_300x66' border='0' width='150' height='33' alt='Paintomics 4 logo'>"
+                message +=  "<a href='" + PAINTOMICS_LOGIN_URL + "' target='_blank'>"
+                message += "  <img src='" + PAINTOMICS_LOGO_URL + "' border='0' width='150' height='33' alt='PaintOmics 4 logo'>"
                 message += "</a>"
                 message += "<div style='width:100%; height:10px; border-top: 1px dotted #333; margin-top:20px; margin-bottom:30px;'></div>"
                 message += "<h1>Reset your Paintomics 4 acccount password</h1>"
                 message += "<p>You have requested to reset your account password, if not, please ignore this e-mail.</p>"
                 message += "<p>To restore your account please follow this link:</p>"
-                message += "<p><a href=\"" + "https://paintomics.org" + restoreLink + "\">Reset password link</a></p>"
+                message += "<p><a href=\"" + PAINTOMICS_BASE_URL + restoreLink + "\">Reset password link</a></p>"
                 message += "<p>After restore your account, please use follow password to login.</p>"
                 message += "<h4>PASSWORD: " + randomPassword + "</h4>"
                 message += "<div style='width:100%; height:10px; border-top: 1px dotted #333; margin-top:20px; margin-bottom:30px;'></div>"
@@ -428,4 +435,3 @@ def initializeUserDirectories(userID):
         os.mkdir(CLIENT_TMP_DIR + userID + "/inputData")
         os.mkdir(CLIENT_TMP_DIR + userID + "/jobsData")
         os.mkdir(CLIENT_TMP_DIR + userID + "/tmp")
-

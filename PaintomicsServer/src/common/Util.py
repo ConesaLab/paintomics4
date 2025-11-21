@@ -75,49 +75,85 @@ def unifyAndSort(seq, criteria=None):
 
 
 def sendEmail(ROOT_DIRECTORY, toEmail, toName, subject, _message, fromEmail=None, fromName=None, isHTML=False):
+    """
+    Send email using SMTP via SendGrid.
+
+    Args:
+        ROOT_DIRECTORY: Base directory path (kept for compatibility, not used)
+        toEmail: Recipient email address
+        toName: Recipient name
+        subject: Email subject
+        _message: Email body content (HTML or plain text)
+        fromEmail: Sender email (defaults to config value)
+        fromName: Sender display name (defaults to config value)
+        isHTML: Whether the message is HTML formatted (default: False)
+
+    Raises:
+        Exception: If SMTP credentials are not configured or email sending fails
+    """
     import smtplib
-    from email.mime.multipart import MIMEMultipart
+    import logging
     from email.mime.text import MIMEText
-    from email.mime.image import MIMEImage
-    from src.conf.serverconf import smtp_host, smtp_port, use_smtp_auth, smpt_username, smpt_pass,use_smtp_ssl, smtp_secure, smpt_sender, smpt_sender_name
+    from email.mime.multipart import MIMEMultipart
+    from email.utils import formataddr
+    from src.conf.serverconf import (
+        EMAIL_FROM_ADDRESS, EMAIL_FROM_DISPLAY,
+        SMTP_HOST, SMTP_PORT, SMTP_USERNAME, SMTP_PASSWORD, SMTP_USE_TLS
+    )
 
-    if fromEmail == None:
-        fromEmail = smpt_sender
-    if fromName == None:
-        fromName = smpt_sender_name
+    # Use default sender if not provided
+    if fromEmail is None:
+        fromEmail = EMAIL_FROM_ADDRESS
+    if fromName is None:
+        fromName = EMAIL_FROM_DISPLAY
 
-    # Create message container - the correct MIME type is multipart/alternative.
-    message = MIMEMultipart('alternative')
-    message['Subject'] = subject
-    message['From'] = fromName + " <" + fromEmail + ">"
-    message['To'] = toName + " <" + toEmail+ ">"
+    # Validate SMTP credentials are configured
+    if not SMTP_PASSWORD:
+        error_msg = "SMTP_PASSWORD is not configured. Please set the environment variable."
+        logging.error(error_msg)
+        raise Exception(error_msg)
 
-    if isHTML:
-        message.attach(MIMEText(_message, 'html'))
+    # Create message
+    msg = MIMEMultipart('alternative')
+    msg['Subject'] = subject
+    msg['From'] = formataddr((fromName, fromEmail))
+    msg['To'] = formataddr((toName, toEmail))
 
-        fp = open(ROOT_DIRECTORY + 'public_html/resources/images/paintomics_white_300x66.png', 'rb')
-        msgImage = MIMEImage(fp.read())
-        fp.close()
+    # Attach the message body
+    mime_type = 'html' if isHTML else 'plain'
+    msg.attach(MIMEText(_message, mime_type, 'utf-8'))
 
-        # Define the image's ID as referenced above
-        msgImage.add_header('Content-ID', '<image1>')
-        message.attach(msgImage)
-    else:
-        message.attach(MIMEText(_message, 'plain'))
+    # Send email via SMTP
+    try:
+        # Connect to SMTP server
+        server = smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=30)
+        server.ehlo()
 
-    if use_smtp_ssl == True:
-        server = smtplib.SMTP_SSL(smtp_host, smtp_port)
-    else:
-        server = smtplib.SMTP(smtp_host, smtp_port)
+        # Use TLS if configured
+        if SMTP_USE_TLS:
+            server.starttls()
+            server.ehlo()
 
-    if smtp_secure == "tls":
-       server.starttls()
+        # Authenticate
+        server.login(SMTP_USERNAME, SMTP_PASSWORD)
 
-    if use_smtp_auth == True :
-        import base64
-        server.login(smpt_username, base64.b64decode(smpt_pass).decode())
+        # Send email
+        server.sendmail(fromEmail, toEmail, msg.as_string())
 
-    server.sendmail(fromEmail, toEmail, message.as_string())
+        # Close connection
+        server.quit()
+
+        logging.info(f"Email sent successfully to {toEmail} (Subject: {subject})")
+        return
+
+    except smtplib.SMTPException as e:
+        error_msg = f"SMTP error sending email: {str(e)}"
+        logging.error(error_msg)
+        raise Exception(error_msg)
+    except Exception as e:
+        error_msg = f"Failed to send email via SMTP: {str(e)}"
+        logging.error(error_msg)
+        raise Exception(error_msg)
 
 
 def adapt_string(the_string):

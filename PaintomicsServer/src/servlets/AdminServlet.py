@@ -38,7 +38,20 @@ from src.classes.Message import Message
 
 from src.common.Util import sendEmail
 
-from src.conf.serverconf import MONGODB_HOST, MONGODB_PORT, KEGG_DATA_DIR, CLIENT_TMP_DIR, smpt_sender, smpt_sender_name, MAX_CLIENT_SPACE, MAX_JOB_DAYS, MAX_GUEST_DAYS
+from src.conf.serverconf import (
+    MONGODB_HOST,
+    MONGODB_PORT,
+    KEGG_DATA_DIR,
+    CLIENT_TMP_DIR,
+    smpt_sender,
+    smpt_sender_name,
+    MAX_CLIENT_SPACE,
+    MAX_JOB_DAYS,
+    MAX_GUEST_DAYS,
+    PAINTOMICS_BASE_URL,
+    PAINTOMICS_LOGO_URL,
+    EMAIL_REPORT_RECIPIENTS,
+)
 from src.servlets.DataManagementServlet import dir_total_size
 
 #----------------------------------------------------------------
@@ -615,29 +628,28 @@ def adminServletSendReport(request, response, ROOT_DIRECTORY):
             userEmail = formFields.get("fromEmail", smpt_sender)
             userName = formFields.get("fromName", "No name provided")
 
-        type = formFields.get("type")
+        request_type = formFields.get("type")
         _message = formFields.get("message")
 
-        title = "Other request"
+        subject = "Other request"
+        title = "<h1>Other request</h1>"
         color = "#333"
 
-        if type == "error":
-            type = "Error notification"
+        if request_type == "error":
+            subject = "Error notification"
             title = "<h1>New error notification</h1>"
             color = "#f95959"
-        elif type == "specie_request":
-            type = "New specie requesting"
+        elif request_type == "specie_request":
+            subject = "New organism requested"
             title = "<h1>New organism requested</h1>"
             color = "#0090ff"
-        else:
-            type = "Other request"
 
         message = '<html><body>'
-        message +=  "<a href='" + "http://www.paintomics.org/" + "' target='_blank'>"
-        message += "  <img src='cid:image1' border='0' width='auto' height='50' alt='Paintomics 3 logo'>"
+        message +=  "<a href='" + PAINTOMICS_BASE_URL + "/' target='_blank'>"
+        message += "  <img src='" + PAINTOMICS_LOGO_URL + "' border='0' width='auto' height='50' alt='PaintOmics logo'>"
         message += "</a>"
         message += "<div style='width:100%; height:10px; border-top: 1px dotted #333; margin-top:20px; margin-bottom:30px;'></div>"
-        message += "<h1>"+ title + "</h1>"
+        message += title
         message += "<p>Thanks for the report, " + userName + "!</p>"
         message += "<p><b>Username:</b> " + userEmail + "</p></br>"
         message += "<div style='width:100%; border: 1px solid " + color +"; padding:10px;font-family: monospace;color:"+ color + ";'>" + _message + "</div>"
@@ -648,8 +660,18 @@ def adminServletSendReport(request, response, ROOT_DIRECTORY):
         message += "<p>Problems? E-mail <a href='mailto:" + "paintomics4@outlook.com" + "'>" + "paintomics4@outlook.com" + "</a></p>"
         message += '</body></html>'
 
-
-        sendEmail(ROOT_DIRECTORY, smpt_sender, smpt_sender_name, type, message, fromEmail=smpt_sender, fromName=userName, isHTML=True)
+        recipients = EMAIL_REPORT_RECIPIENTS or [smpt_sender]
+        for recipient in recipients:
+            sendEmail(
+                ROOT_DIRECTORY,
+                recipient,
+                smpt_sender_name,
+                subject,
+                message,
+                fromEmail=smpt_sender,
+                fromName=userName if userName else smpt_sender_name,
+                isHTML=True
+            )
 
         response.setContent({"success": True})
 
@@ -658,4 +680,3 @@ def adminServletSendReport(request, response, ROOT_DIRECTORY):
 
     finally:
         return response
-

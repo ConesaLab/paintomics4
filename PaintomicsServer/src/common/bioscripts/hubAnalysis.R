@@ -152,9 +152,20 @@ processData = function(stepNumber) {
   stepNumber <- as.matrix(stepNumber)
   stepNumber[is.na(stepNumber)] = 0
   stepNumber_density = as.matrix(stepNumber[,1] )
-  stepNumber_DEm <-as.data.frame(stepNumber_density[rownames(stepNumber_density) %in% DEm,])
-  stepNumber_except_DEm <- as.data.frame(stepNumber_density[!rownames(stepNumber_density) %in% DEm,])
+  stepNumber_DEm <-as.data.frame(stepNumber_density[rownames(stepNumber_density) %in% DEm,],
+                                 stringsAsFactors = FALSE)
+  stepNumber_except_DEm <- as.data.frame(stepNumber_density[!rownames(stepNumber_density) %in% DEm,],
+                                         stringsAsFactors = FALSE)
   colnames(stepNumber_DEm) = colnames(stepNumber_except_DEm) = "Density"
+  if (nrow(stepNumber_DEm) == 0) {
+    emptyResult <- data.frame(Density = numeric(0),
+                              Name = character(0),
+                              Percentile = numeric(0),
+                              pvalue = numeric(0),
+                              pvalue_adjust = numeric(0),
+                              stringsAsFactors = FALSE)
+    return(emptyResult)
+  }
   #Calculate percentile for each DEm
   percentile <- as.vector(apply(stepNumber_DEm, 1,  function(x) ecdf(stepNumber_except_DEm$Density)(x)))
   stepNumber_DEm$Name = rownames(stepNumber_DEm)
@@ -181,28 +192,30 @@ processData = function(stepNumber) {
 }
 print('STEP 4: Calculating percentile/p-value for each DEm...')
 step1_DEm <- processData(step1)
-step1_DEm$Step <- 1
+step1_DEm$Step <- rep(1, nrow(step1_DEm))
 
 step2_DEm <- processData(step2)
-step2_DEm$Step <- 2
+step2_DEm$Step <- rep(2, nrow(step2_DEm))
 
 step3_DEm <- processData(step3)
-step3_DEm$Step <- 3
+step3_DEm$Step <- rep(3, nrow(step3_DEm))
 
 step4_DEm <- processData(step4)
-step4_DEm$Step <- 4
+step4_DEm$Step <- rep(4, nrow(step4_DEm))
 
 final_result <- rbind(step1_DEm, step2_DEm, step3_DEm, step4_DEm)
 
-final_result$DEN <- NA
-final_result$noDEN <- NA
+final_result$DEN <- rep(NA_real_, nrow(final_result))
+final_result$noDEN <- rep(NA_real_, nrow(final_result))
 #extract DE/noDE neighbors
-for (i in 1:nrow(final_result)){
-  neighbors <- as.data.frame(all.perc[final_result$Name[i]])[3:4,final_result$Step[i]]
-  DEN = neighbors[1]
-  noDEN = neighbors[2]
-  final_result$DEN[i] <- DEN
-  final_result$noDEN[i] <- noDEN
+if (nrow(final_result) > 0){
+  for (i in seq_len(nrow(final_result))){
+    neighbors <- as.data.frame(all.perc[final_result$Name[i]])[3:4,final_result$Step[i]]
+    DEN = neighbors[1]
+    noDEN = neighbors[2]
+    final_result$DEN[i] <- DEN
+    final_result$noDEN[i] <- noDEN
+  }
 }
 
 #ggplot(step1_except_DEm, aes(x=Density)) +
@@ -216,5 +229,4 @@ for (i in 1:nrow(final_result)){
 
 output_file <- paste0(args$data_dir, "/hub_result.csv")
 write.table(final_result, file=output_file, quote = FALSE, sep="\t", row.names = FALSE, col.names =FALSE)
-
 

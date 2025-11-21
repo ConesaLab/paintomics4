@@ -3,9 +3,20 @@ import sys
 import os
 # sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)) + "/../../")
 
+# Ensure this script always runs inside the expected virtualenv so required packages are available.
+VENV_DIR = "/home/tian/paintomics/paintomics_env"
+VENV_PYTHON = os.path.join(VENV_DIR, "bin", "python3")
+if os.path.exists(VENV_PYTHON) and sys.executable != VENV_PYTHON:
+    os.environ["VIRTUAL_ENV"] = VENV_DIR
+    os.environ["PATH"] = os.path.join(VENV_DIR, "bin") + os.pathsep + os.environ.get("PATH", "")
+    os.execv(VENV_PYTHON, [VENV_PYTHON] + sys.argv)
+
 import datetime, traceback, shutil, inspect
 import logging
 import logging.config
+import requests
+import gzip
+from io import BytesIO
 from PIL import Image
 from textwrap import wrap
 from time import strftime, sleep, time
@@ -132,21 +143,30 @@ def download_command(inputfile=None, specie=None, kegg=0, mapping=0, common=0, r
 
             # STEP 2.A.1 DOWNLOAD THE DATA FILES
             log("    STEP " + str(currentStep) + ". DOWNLOAD THE COMMON KEGG INFORMATION")
-            downloadKEGGFile("              * LIST OF ORGANISMS", downloadLog, "http://rest.kegg.jp/list/organism",
+            downloadKEGGFile("              * LIST OF ORGANISMS", downloadLog, "https://rest.kegg.jp/list/organism",
                              datadir, "organisms_all.list", DOWNLOAD_DELAY_1, MAX_TRIES_1)
             downloadKEGGFile("              * PATHWAYS CLASSIFICATION", downloadLog,
-                             "http://rest.kegg.jp/get/br:br08901", datadir, "pathways_classification.list",
+                             "https://rest.kegg.jp/get/br:br08901", datadir, "pathways_classification.list",
                              DOWNLOAD_DELAY_1, MAX_TRIES_1)
             downloadKEGGFile("              * LIST OF REFERENCE PATHWAYS", downloadLog,
-                             "http://rest.kegg.jp/list/pathway", datadir, "pathways_all.list", DOWNLOAD_DELAY_1,
+                             "https://rest.kegg.jp/list/pathway", datadir, "pathways_all.list", DOWNLOAD_DELAY_1,
                              MAX_TRIES_1)
-            downloadKEGGFile("              * LIST OF COMPOUND NAMES", downloadLog, "http://rest.kegg.jp/list/compound",
+            downloadKEGGFile("              * LIST OF COMPOUND NAMES", downloadLog, "https://rest.kegg.jp/list/compound",
                              datadir, "compounds_all.list", DOWNLOAD_DELAY_1, MAX_TRIES_1)
             downloadKEGGFile("              * PATHWAY to COMPOUND TABLE", downloadLog,
-                             "http://rest.kegg.jp/link/pathway/compound", datadir, "pathway2compound.list",
+                             "https://rest.kegg.jp/link/pathway/compound", datadir, "pathway2compound.list",
                              DOWNLOAD_DELAY_1, MAX_TRIES_1)
-            downloadKEGGFile("             * KEGG TO ChEBI", downloadLog, "http://rest.kegg.jp/conv/compound/chebi",
-                             datadir, "kegg2chebi.list", DOWNLOAD_DELAY_1, MAX_TRIES_1)
+
+            # ChEBI mapping download
+            # KEGG's /conv/compound/chebi endpoint has been deprecated/removed (returns 400 errors)
+            # We now use ChEBI's own database as the source for KEGG-ChEBI mappings
+            try:
+                downloadChEBItoKEGGMapping("             * KEGG TO ChEBI (from ChEBI database)", downloadLog,
+                                          datadir, "kegg2chebi.list", DOWNLOAD_DELAY_1, MAX_TRIES_1)
+            except Exception as e:
+                log("                      WARNING: ChEBI conversion data unavailable")
+                log("                      Continuing without ChEBI mapping - metabolite identification via ChEBI IDs will not be available")
+                errorlog("ChEBI-KEGG mapping download failed but continuing: " + str(e))
 
             # STEP 2.A.2 DOWNLOAD THE PNG IMAGES
             pathways = readFile(datadir + "pathways_all.list", {"forced": True, "forcedColumn": 0})
@@ -160,7 +180,7 @@ def download_command(inputfile=None, specie=None, kegg=0, mapping=0, common=0, r
             for pathway in pathways.keys():
                 pathway = pathway.replace("path:", "")
                 downloadKEGGFile("                     - " + pathway + " [" + str(i) + "/" + str(total) + "]",
-                                 downloadLog, "http://rest.kegg.jp/get/" + pathway + "/image", datadir + "png/",
+                                 downloadLog, "https://rest.kegg.jp/get/" + pathway + "/image", datadir + "png/",
                                  pathway + ".png", DOWNLOAD_DELAY_2, MAX_TRIES_1)
                 generateThumbnail(datadir + "png/" + pathway + ".png")
                 i += 1
@@ -424,22 +444,34 @@ def install_command(inputfile=None, specie=None, common=0, hub=1):
     # ********************************************************************************
     try:
         if hub:
-            # Check if hub data already exists in current directory (for reinstalls)
-            if os.path.exists(currentHubDir) and os.listdir(currentHubDir):
+            current_has_hub = directory_has_contents(currentHubDir)
+            if current_has_hub:
                 log("STEP EXTRA: Hub data already exists in current directory, skipping regeneration...")
-            # check if hub directory is empty in download directory
-            elif not os.listdir(hubDir):
-                log("STEP EXTRA: INSTALLING HUB ANALYSIS INFORMATION...")
-                check_call(
-                    [
-                        ROOT_DIRECTORY + "AdminTools/scripts/hubAnalysisInstall.R",
-                        '--organism="' + specie + '"',
-                        '--scriptDir="' + ROOT_DIRECTORY + 'AdminTools/scripts/' + '"',
-                        '--outputDir="' + hubDir + '"'
-                    ], stderr=STDOUT, stdout=DEVNULL
-                )
             else:
-                log("Hub directory is not empty in download, skipping regeneration...")
+                if not os.path.isdir(hubDir):
+                    log("STEP EXTRA: Hub download directory not found. Creating it so we can reuse or regenerate data...")
+                    os.makedirs(hubDir, exist_ok=True)
+
+                if not directory_has_contents(hubDir):
+                    log("STEP EXTRA: INSTALLING HUB ANALYSIS INFORMATION...")
+                    check_call(
+                        [
+                            ROOT_DIRECTORY + "AdminTools/scripts/hubAnalysisInstall.R",
+                            '--organism="' + specie + '"',
+                            '--scriptDir="' + ROOT_DIRECTORY + 'AdminTools/scripts/' + '"',
+                            '--outputDir="' + hubDir + '"'
+                        ], stderr=STDOUT, stdout=DEVNULL
+                    )
+                else:
+                    log("Hub directory already contains data in download directory, skipping regeneration...")
+
+                if directory_has_contents(hubDir):
+                    log("STEP EXTRA: Transferring hub data to current directory...")
+                    replaceNewVersionData(downloadDir, currentDataDir, specie.lower() + "/hubData", oldDataDir)
+                elif directory_has_contents(currentHubDir):
+                    log("STEP EXTRA: Hub download directory is empty but current directory has data. Continuing with existing hub data.")
+                else:
+                    raise Exception("Hub analysis data is missing in both download and current directories.")
     except Exception as e:
         log("        FAILED WHILE INSTALLING HUB ANALYSIS INFORMATION. UNABLE TO CONTINUE. ABORTING!!")
         summary.write('FAILED WHILE INSTALLING HUB ANALYSIS INFORMATION. UNABLE TO CONTINUE. ABORTING!!\n')
@@ -599,29 +631,136 @@ def replaceNewVersionData(origin, destination, dirname, backup_dir):
     Replace data in destination with data from origin.
     If origin data doesn't exist, check if we're doing a reinstall (data already in destination).
     """
+    source_path = os.path.join(origin, dirname)
+    dest_path = os.path.join(destination, dirname)
+    backup_path = os.path.join(backup_dir, dirname)
+
+    # Ensure paths are absolute
+    source_path = os.path.abspath(source_path)
+    dest_path = os.path.abspath(dest_path)
+    backup_path = os.path.abspath(backup_path)
+
     # Check if new data exists in download directory
-    if os.path.isdir(origin + dirname) and os.path.isdir(destination) and os.path.isdir(backup_dir):
-        # Remove previous old data
-        if os.path.isdir(backup_dir + dirname):
-            shutil.rmtree(backup_dir + dirname)
-        # Move the current data to old dir
-        if os.path.isdir(destination + dirname):
-            shutil.move(destination + dirname, backup_dir)
-        # Move the new data to current dir
-        shutil.move(origin + dirname, destination)
-    elif os.path.isdir(destination + dirname):
+    if os.path.isdir(source_path):
+        # We have new data to install
+        
+        # 1. Handle Backup: If destination exists, move it to backup
+        if os.path.exists(dest_path):
+            # Ensure backup parent directory exists
+            backup_parent = os.path.dirname(backup_path)
+            if not os.path.exists(backup_parent):
+                os.makedirs(backup_parent)
+            
+            # Remove existing backup if it exists
+            if os.path.exists(backup_path):
+                if os.path.isdir(backup_path):
+                    shutil.rmtree(backup_path)
+                else:
+                    os.remove(backup_path)
+            
+            # Move current data to backup
+            shutil.move(dest_path, backup_path)
+            
+        # 2. Move new data to destination
+        # Ensure destination parent directory exists
+        dest_parent = os.path.dirname(dest_path)
+        if not os.path.exists(dest_parent):
+            os.makedirs(dest_parent)
+            
+        # Move source to destination
+        shutil.move(source_path, dest_path)
+        log(f"Installed new data for {dirname}")
+        
+    elif os.path.isdir(dest_path):
         # Download directory doesn't have data, but current directory does
         # This is a reinstall scenario - data is already in place
-        log(f"No new data found in {origin + dirname}, using existing data in {destination + dirname} for reinstall")
+        log(f"No new data found in {source_path}, using existing data in {dest_path} for reinstall")
     else:
         # Neither download nor current has the data
-        error_msg = f"ERROR: Cannot find data for '{dirname}' in either download ({origin + dirname}) or current ({destination + dirname}) directories"
+        error_msg = f"ERROR: Cannot find data for '{dirname}' in either download ({source_path}) or current ({dest_path}) directories"
         log(error_msg)
         raise Exception(error_msg)
 
 
+def directory_has_contents(path):
+    """
+    Returns True if the directory exists and contains at least one file.
+    """
+    return os.path.isdir(path) and bool(os.listdir(path))
+
+
 def restorePreviousVersionData(origin, destination, dirname, backup_dir):
     replaceNewVersionData(origin, destination, dirname, backup_dir)
+
+def downloadChEBItoKEGGMapping(message, logFile, dirName, fileName, delay, maxTries):
+    """
+    Downloads ChEBI database_accession.tsv.gz and extracts KEGG compound mappings.
+    This is an alternative to KEGG's deprecated /conv/compound/chebi endpoint.
+
+    Format: chebi:XXXXX<tab>cpd:CXXXXX
+    """
+    log(message)
+
+    CHEBI_URL = "https://ftp.ebi.ac.uk/pub/databases/chebi/flat_files/database_accession.tsv.gz"
+    KEGG_SOURCE_ID = "45"  # KEGG COMPOUND source ID in ChEBI database
+
+    nTry = 1
+    while nTry <= maxTries:
+        wait(delay)
+        try:
+            # Download the gzipped TSV file
+            response = requests.get(CHEBI_URL, timeout=120)  # Longer timeout for larger file
+            response.raise_for_status()
+
+            # Decompress and parse the TSV file
+            with gzip.open(BytesIO(response.content), 'rt') as f:
+                lines = f.readlines()
+
+            # Extract KEGG compound mappings
+            # Format: id, compound_id, accession_number, type, status_id, source_id
+            # We want: compound_id (ChEBI ID) and accession_number (KEGG ID) where source_id=45
+            kegg_mappings = []
+            for line in lines[1:]:  # Skip header
+                fields = line.strip().split('\t')
+                if len(fields) >= 6:
+                    compound_id = fields[1]
+                    accession_number = fields[2]
+                    source_id = fields[5]
+
+                    # Filter for KEGG COMPOUND entries with valid KEGG ID format (C + 5 digits)
+                    if source_id == KEGG_SOURCE_ID and accession_number.startswith('C') and len(accession_number) == 6:
+                        kegg_mappings.append(f"chebi:{compound_id}\tcpd:{accession_number}\n")
+
+            # Write to output file
+            with open(dirName + fileName, 'w') as f:
+                f.writelines(kegg_mappings)
+
+            # Log success
+            with open(logFile, 'a') as log_file:
+                log_file.write(f"{strftime('%Y-%m-%d %H:%M:%S')} - Downloaded {fileName} from ChEBI database ({len(kegg_mappings)} mappings)\n")
+
+            log(f"                      SUCCESS: {len(kegg_mappings)} ChEBI-KEGG mappings extracted")
+            return True
+
+        except requests.exceptions.RequestException as e:
+            # Log the error details to the log file
+            with open(logFile, 'a') as log_file:
+                log_file.write(f"{strftime('%Y-%m-%d %H:%M:%S')} - Error downloading ChEBI mapping: {str(e)}\n")
+
+            # Only log "Trying again" if we actually will try again
+            if nTry < maxTries:
+                errorlog("FAIL! Trying again... " + str(nTry + 1) + " of " + str(maxTries))
+            nTry += 1
+        except Exception as e:
+            # Handle parsing errors
+            with open(logFile, 'a') as log_file:
+                log_file.write(f"{strftime('%Y-%m-%d %H:%M:%S')} - Error processing ChEBI data: {str(e)}\n")
+
+            if nTry < maxTries:
+                errorlog("FAIL! Trying again... " + str(nTry + 1) + " of " + str(maxTries))
+            nTry += 1
+
+    raise Exception('Unable to retrieve ChEBI-KEGG mapping from ' + CHEBI_URL)
 
 def downloadKEGGFile(message, logFile, URL, dirName, fileName, delay, maxTries):
     log(message)
@@ -630,11 +769,28 @@ def downloadKEGGFile(message, logFile, URL, dirName, fileName, delay, maxTries):
     while nTry <= maxTries:
         wait(delay)
         try:
-            check_call(["wget", "-O", dirName + fileName, "-a", logFile, URL])
+            # Use requests library instead of wget to avoid C-level memory issues
+            response = requests.get(URL, timeout=30)
+            response.raise_for_status()  # Raises HTTPError for bad status codes (4xx, 5xx)
+
+            # Write the content to file
+            with open(dirName + fileName, 'wb') as f:
+                f.write(response.content)
+
+            # Log success to the log file
+            with open(logFile, 'a') as log_file:
+                log_file.write(f"{strftime('%Y-%m-%d %H:%M:%S')} - Downloaded {fileName} from {URL}\n")
+
             return True
-        except Exception as e:
+        except requests.exceptions.RequestException as e:
+            # Log the error details to the log file
+            with open(logFile, 'a') as log_file:
+                log_file.write(f"{strftime('%Y-%m-%d %H:%M:%S')} - Error downloading {fileName}: {str(e)}\n")
+
+            # Only log "Trying again" if we actually will try again
+            if nTry < maxTries:
+                errorlog("FAIL! Trying again... " + str(nTry + 1) + " of " + str(maxTries))
             nTry += 1
-            errorlog("FAIL! Trying again... " + str(nTry) + " of " + str(maxTries))
     raise Exception('Unable to retrieve ' + fileName + " from " + URL)
 
 
@@ -647,9 +803,9 @@ def getSpecieKeggData(specie, downloadLog, dirName, step):
     version.write("# CREATION DATE:\t" + strftime("%Y%m%d %H%M"))
     version.close()
 
-    downloadKEGGFile("              * GENE to PATHWAY TABLE", downloadLog, "http://rest.kegg.jp/link/pathway/" + specie,
+    downloadKEGGFile("              * GENE to PATHWAY TABLE", downloadLog, "https://rest.kegg.jp/link/pathway/" + specie,
                      dirName, "gene2pathway.list", DOWNLOAD_DELAY_1, MAX_TRIES_1)
-    downloadKEGGFile("              * PATHWAYS LIST", downloadLog, "http://rest.kegg.jp/list/pathway/" + specie,
+    downloadKEGGFile("              * PATHWAYS LIST", downloadLog, "https://rest.kegg.jp/list/pathway/" + specie,
                      dirName, "pathways.list", DOWNLOAD_DELAY_1, MAX_TRIES_1)
     # downloadKEGGFile("              * PATHWAY to GENE TABLE", downloadLog,  "http://rest.kegg.jp/link/" + specie + "/pathway", dirName, "pathway2gene.list",  DOWNLOAD_DELAY_1, MAX_TRIES_1)
 
@@ -674,7 +830,7 @@ def getSpecieKeggData(specie, downloadLog, dirName, step):
             try:
                 pathway = pathway.replace("path:", "")
                 downloadKEGGFile("                     - " + pathway + " [" + str(i) + "/" + str(total) + "]",
-                                 downloadLog, "http://rest.kegg.jp/get/" + pathway + "/kgml", dirName + "kgml/",
+                                 downloadLog, "https://rest.kegg.jp/get/" + pathway + "/kgml", dirName + "kgml/",
                                  pathway + ".kgml", DOWNLOAD_DELAY_2, MAX_TRIES_1)
             except Exception as e:
                 error_tolerance -= 1;
@@ -710,7 +866,7 @@ def getSpecieMappingData(specie, downloadLog, dirName, step, scriptsDir):
         if os.path.isfile(scriptsDir + specie + "_resources/download_others.py"):
             log("     * RETRIEVING EXTERNAL MAPPING DATA")
             try:
-                check_call(["python3", scriptsDir + specie + "_resources/download_others.py", specie,
+                check_call([sys.executable, scriptsDir + specie + "_resources/download_others.py", specie,
                             ROOT_DIRECTORY + "AdminTools/", dirName], stdout=downloadLogFile, stderr=downloadLogFile)
             except CalledProcessError as exc:
                 raise Exception(
@@ -721,7 +877,7 @@ def getSpecieMappingData(specie, downloadLog, dirName, step, scriptsDir):
         error_tolerance = 3
         try:
             downloadKEGGFile("             * KEGG TO NCBI GeneID", downloadLog,
-                             "http://rest.kegg.jp/conv/" + specie + "/ncbi-geneid", dirName, "ncbi-geneid2kegg.list",
+                             "https://rest.kegg.jp/conv/" + specie + "/ncbi-geneid", dirName, "ncbi-geneid2kegg.list",
                              DOWNLOAD_DELAY_1, MAX_TRIES_1)
         except Exception as e:
             error_tolerance -= 1;
@@ -733,7 +889,7 @@ def getSpecieMappingData(specie, downloadLog, dirName, step, scriptsDir):
 
         try:
             downloadKEGGFile("             * KEGG TO Uniprot", downloadLog,
-                             "http://rest.kegg.jp/conv/" + specie + "/uniprot", dirName, "uniprot2kegg.list",
+                             "https://rest.kegg.jp/conv/" + specie + "/uniprot", dirName, "uniprot2kegg.list",
                              DOWNLOAD_DELAY_1, MAX_TRIES_1)
         except Exception as e:
             error_tolerance -= 1;
@@ -744,7 +900,7 @@ def getSpecieMappingData(specie, downloadLog, dirName, step, scriptsDir):
             log("                       Failed!! The download process will continue...")
 
         try:
-            downloadKEGGFile("             * KEGG TO Gene Symbol", downloadLog, "http://rest.kegg.jp/list/" + specie,
+            downloadKEGGFile("             * KEGG TO Gene Symbol", downloadLog, "https://rest.kegg.jp/list/" + specie,
                              dirName, "kegg2genesymbol.list", DOWNLOAD_DELAY_1, MAX_TRIES_1)
         except Exception as e:
             error_tolerance -= 1;
@@ -773,7 +929,7 @@ def installSpecieData(specie, downloadLog, dirName, step, scriptsDir):
         if os.path.isfile(scriptsDir + specie + "_resources/build_database.py"):
             log("       * PROCESSING AND INSTALLING CUSTOM AND KEGG DATA ")
             try:
-                check_call(["python3", scriptsDir + specie + "_resources/build_database.py", specie,
+                check_call([sys.executable, scriptsDir + specie + "_resources/build_database.py", specie,
                             ROOT_DIRECTORY + "AdminTools/", dirName, downloadLog], stdout=downloadLogFile,
                            stderr=downloadLogFile)
             except CalledProcessError as exc:
@@ -784,7 +940,7 @@ def installSpecieData(specie, downloadLog, dirName, step, scriptsDir):
         else:
             log("       * PROCESSING AND INSTALLING DEFAULT KEGG DATA ")
             try:
-                check_call(["python3", scriptsDir + "default/build_database.py", specie, ROOT_DIRECTORY + "AdminTools/",
+                check_call([sys.executable, scriptsDir + "default/build_database.py", specie, ROOT_DIRECTORY + "AdminTools/",
                             dirName, downloadLog], stdout=downloadLogFile, stderr=downloadLogFile)
             except CalledProcessError as exc:
                 errorlog(traceback.extract_stack())

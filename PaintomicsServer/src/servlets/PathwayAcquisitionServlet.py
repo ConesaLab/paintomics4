@@ -104,7 +104,15 @@ def pathwayAcquisitionStep1_PART1(REQUEST, RESPONSE, QUEUE_INSTANCE, JOB_ID, EXA
             jobInstance.setOrganism(specie)
             # Check the available databases for species
             organismDB = set(dicDatabases.get(specie, [{}])[0].keys())
-            jobInstance.setDatabases(list(set([u'KEGG']) | set(databases).intersection(organismDB)))
+
+            # Preserve database order: always start with KEGG, then add user-selected databases
+            # Filter to only include valid databases for this organism
+            selectedDatabases = ['KEGG']
+            for db in databases:
+                if db in organismDB and db not in selectedDatabases:
+                    selectedDatabases.append(db)
+
+            jobInstance.setDatabases(selectedDatabases)
             logging.info("STEP1 - SELECTED SPECIES IS " + specie)
 
             logging.info("STEP1 - READING FILES....")
