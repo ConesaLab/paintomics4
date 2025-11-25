@@ -583,6 +583,24 @@ def pathwayAcquisitionRecoverJob(request, response, QUEUE_INSTANCE):
             response.setContent({"success": False, "errorMessage": "Invalid Job ID (" + jobID + ") for current user.<br>Please, check the Job ID and try again."})
             return response
 
+        # Sanitize optional PaintOmics 4 fields that may come back as strings
+        def _as_dict(value):
+            return value if isinstance(value, dict) else {}
+
+        def _as_list(value):
+            return value if isinstance(value, list) else []
+
+        safe_mappingComp = _as_dict(jobInstance.mappingComp)
+        safe_classificationDict = _as_dict(jobInstance.classificationDict)
+        safe_pValueInDict = _as_dict(jobInstance.pValueInDict)
+        safe_exprssionMetabolites = _as_dict(jobInstance.exprssionMetabolites)
+        safe_adjustPvalue = _as_dict(jobInstance.adjustPvalue)
+        safe_totalRelevantFeaturesInCategory = _as_dict(jobInstance.totalRelevantFeaturesInCategory)
+        safe_featureSummary = jobInstance.featureSummary if isinstance(jobInstance.featureSummary, list) else [0, 0]
+        safe_compoundRegulateFeatures = _as_dict(jobInstance.compoundRegulateFeatures)
+        safe_globalExpressionData = _as_dict(jobInstance.getGlobalExpressionData())
+        safe_hubAnalysisResult = _as_dict(jobInstance.hubAnalysisResult)
+
         logging.info("RECOVER_JOB - JOB " + jobInstance.getJobID() + " LOADED SUCCESSFULLY.")
 
         matchedCompoundsJSONList = list(map(lambda foundFeature: foundFeature.toBSON(), jobInstance.getFoundCompounds()))
