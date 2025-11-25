@@ -591,6 +591,24 @@ def pathwayAcquisitionRecoverJob(request, response, QUEUE_INSTANCE):
             response.setContent({"success": False, "errorMessage": "Invalid Job ID (" + jobID + ") for current user.<br>Please, check the Job ID and try again."})
             return response
 
+        # Sanitize optional PaintOmics 4 fields that may come back as strings
+        def _as_dict(value):
+            return value if isinstance(value, dict) else {}
+
+        def _as_list(value):
+            return value if isinstance(value, list) else []
+
+        safe_mappingComp = _as_list(jobInstance.mappingComp)
+        safe_classificationDict = _as_dict(jobInstance.classificationDict)
+        safe_pValueInDict = _as_dict(jobInstance.pValueInDict)
+        safe_exprssionMetabolites = _as_dict(jobInstance.exprssionMetabolites)
+        safe_adjustPvalue = _as_dict(jobInstance.adjustPvalue)
+        safe_totalRelevantFeaturesInCategory = _as_dict(jobInstance.totalRelevantFeaturesInCategory)
+        safe_featureSummary = jobInstance.featureSummary if isinstance(jobInstance.featureSummary, list) else [0, 0]
+        safe_compoundRegulateFeatures = _as_dict(jobInstance.compoundRegulateFeatures)
+        safe_globalExpressionData = _as_dict(jobInstance.getGlobalExpressionData())
+        safe_hubAnalysisResult = _as_dict(jobInstance.hubAnalysisResult)
+
         logging.info("RECOVER_JOB - JOB " + jobInstance.getJobID() + " LOADED SUCCESSFULLY.")
 
         matchedCompoundsJSONList = list(map(lambda foundFeature: foundFeature.toBSON(), jobInstance.getFoundCompounds()))
@@ -635,19 +653,19 @@ def pathwayAcquisitionRecoverJob(request, response, QUEUE_INSTANCE):
                     "omicsValuesID": jobInstance.getValueIdTable(),
                     #PaintOmics 4
                     "classInfo": matchedClassJSONList,
-                    "mappingComp": jobInstance.mappingComp,
-                    "classificationDict": jobInstance.classificationDict,
-                    "pValueInDict": jobInstance.pValueInDict,
-                    "exprssionMetabolites": jobInstance.exprssionMetabolites,
-                    "adjustPvalue": jobInstance.adjustPvalue,
-                    "totalRelevantFeaturesInCategory": jobInstance.totalRelevantFeaturesInCategory,
-                    "featureSummary":jobInstance.featureSummary,
+                    "mappingComp": safe_mappingComp,
+                    "classificationDict": safe_classificationDict,
+                    "pValueInDict": safe_pValueInDict,
+                    "exprssionMetabolites": safe_exprssionMetabolites,
+                    "adjustPvalue": safe_adjustPvalue,
+                    "totalRelevantFeaturesInCategory": safe_totalRelevantFeaturesInCategory,
+                    "featureSummary": safe_featureSummary,
                     # Add compound regulate features
-                    "compoundRegulateFeatures": jobInstance.compoundRegulateFeatures,
+                    "compoundRegulateFeatures": safe_compoundRegulateFeatures,
                     # Add global gene expression information
-                    "globalExpressionData":jobInstance.getGlobalExpressionData(),
+                    "globalExpressionData": safe_globalExpressionData,
                     # Add hub analysis result
-                    'hubAnalysisResult': jobInstance.hubAnalysisResult,
+                    'hubAnalysisResult': safe_hubAnalysisResult,
                 })
             else:
                 response.setContent({
@@ -667,7 +685,19 @@ def pathwayAcquisitionRecoverJob(request, response, QUEUE_INSTANCE):
                     "timestamp": int(time()),
                     "allowSharing": jobInstance.getAllowSharing(),
                     "readOnly": jobInstance.getReadOnly(),
-                    "omicsValuesID": jobInstance.getValueIdTable()
+                    "omicsValuesID": jobInstance.getValueIdTable(),
+                    #PaintOmics 4
+                    "classInfo": matchedClassJSONList,
+                    "mappingComp": safe_mappingComp,
+                    "classificationDict": safe_classificationDict,
+                    "pValueInDict": safe_pValueInDict,
+                    "exprssionMetabolites": safe_exprssionMetabolites,
+                    "adjustPvalue": safe_adjustPvalue,
+                    "totalRelevantFeaturesInCategory": safe_totalRelevantFeaturesInCategory,
+                    "featureSummary": safe_featureSummary,
+                    "compoundRegulateFeatures": safe_compoundRegulateFeatures,
+                    "globalExpressionData": safe_globalExpressionData,
+                    "hubAnalysisResult": safe_hubAnalysisResult,
                 })
 
     except Exception as ex:
