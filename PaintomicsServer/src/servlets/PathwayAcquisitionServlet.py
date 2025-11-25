@@ -598,7 +598,7 @@ def pathwayAcquisitionRecoverJob(request, response, QUEUE_INSTANCE):
         def _as_list(value):
             return value if isinstance(value, list) else []
 
-        safe_mappingComp = _as_list(jobInstance.mappingComp)
+        safe_mappingComp = _as_dict(jobInstance.mappingComp)
         safe_classificationDict = _as_dict(jobInstance.classificationDict)
         safe_pValueInDict = _as_dict(jobInstance.pValueInDict)
         safe_exprssionMetabolites = _as_dict(jobInstance.exprssionMetabolites)
