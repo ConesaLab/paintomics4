@@ -14,12 +14,12 @@
 #  You should have received a copy of the GNU General Public License
 #  along with PaintOmics 3.  If not, see <http://www.gnu.org/licenses/>.
 #  Contributors:
-#     Rafael Hernandez de Diego <paintomics4@gmail.com>
+#     Rafael Hernandez de Diego <paintomics4@outlook.com>
 #     Ana Conesa Cegarra
 #     and others
 #
 #  More info http://bioinfo.cipf.es/paintomics
-#  Technical contact paintomics4@gmail.com
+#  Technical contact paintomics4@outlook.com
 #
 #**************************************************************
 
@@ -84,7 +84,10 @@ class JobInformationManager(metaclass=Singleton):
                     logging.info("UPDATING PathwayAcquisitionJob "  + jobInstance.getJobID() + " TO DATABASE... IS STEP 2")
                     daoInstance = PathwayAcquisitionJobDAO()
                     logging.info("UPDATING JOB INSTANCE...")
-                    daoInstance.update(jobInstance, {"fieldList": ["summary", "lastStep"]})
+                    daoInstance.update(jobInstance, {"fieldList": ["summary", "lastStep",
+                         "mappingComp", "classificationDict", "pValueInDict",
+                         "adjustPvalue", "totalRelevantFeaturesInCategory",
+                         "featureSummary"]})
                     daoInstance = FoundFeatureDAO()
                     logging.info("REMOVING MATCHED METABOLITES FROM DATABASE...")
                     daoInstance.removeAll({"jobID": jobInstance.getJobID()})

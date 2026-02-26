@@ -15,12 +15,10 @@
 #  along with Paintomics.  If not, see <http://www.gnu.org/licenses/>.
 #
 #  More info http://bioinfo.cipf.es/paintomics
-#  Technical contact paintomics4@gmail.com
+#  Technical contact paintomics4@outlook.com
 # **************************************************************
 import logging
 import math
-import shutil
-from tempfile import NamedTemporaryFile
 from chardet import detect # get the encoding of a file
 
 from os import path as os_path, system as os_system, makedirs as os_makedirs
@@ -46,6 +44,20 @@ from src.classes.Pathway import Pathway
 from src.classes.PathwayGraphicalData import PathwayGraphicalData
 
 from src.conf.serverconf import KEGG_DATA_DIR, MAX_THREADS, MAX_WAIT_THREADS, MAX_NUMBER_FEATURES
+
+# Small dict fields safe to persist in the main MongoDB document
+PAINTOMICS4_DICT_FIELDS = {
+    "mappingComp", "classificationDict", "pValueInDict",
+    "adjustPvalue", "totalRelevantFeaturesInCategory", "featureSummary"
+}
+
+# Large dict fields that stay in-memory cache only (too large for a single
+# MongoDB document — compoundRegulateFeatures alone can exceed 60 MB).
+# On cold recovery the safe_* defaults in the servlet return {}/[].
+PAINTOMICS4_LARGE_FIELDS = {
+    "exprssionMetabolites", "compoundRegulateFeatures",
+    "globalExpressionData", "hubAnalysisResult"
+}
 
 
 class PathwayAcquisitionJob(Job):
@@ -269,19 +281,21 @@ class PathwayAcquisitionJob(Job):
         # *************************************************************************
         logging.info("VALIDATING RELEVANT FEATURES FILE (" + omicName + ")...")
         if os_path.isfile(relevantFileName):
-            nLine = 0
-            with open(relevantFileName, 'rU') as f:
-                for line in f:
-                    nLine += 1
-                    if nLine > MAX_NUMBER_FEATURES:
-                        error += " - Errors detected while processing " + inputOmic.get("relevantFeaturesFile",
-                                                                                        "") + ": The file exceeds the maximum number of features allowed (" + str(
-                            MAX_NUMBER_FEATURES) + ")." + "\n"
-                        break
+            f = open(relevantFileName, 'rU')
+            lines = f.readlines()
+
+            # Ensure that relevant features files does not exceed the max number of features
+            if len(lines) > MAX_NUMBER_FEATURES:
+                error += " - Errors detected while processing " + inputOmic.get("relevantFeaturesFile",
+                                                                                "") + ": The file exceeds the maximum number of features allowed (" + str(
+                    MAX_NUMBER_FEATURES) + ")." + "\n"
+            else:
+                for line in lines:
                     if len(line) > 80:
                         error += " - Errors detected while processing " + inputOmic.get("relevantFeaturesFile",
                                                                                         "") + ": The file does not look like a Relevant Features file (some lines are longer than 80 characters)." + "\n"
                         break
+            f.close()
 
         # *************************************************************************
         # STEP 2. VALIDATE THE VALUES FILE
@@ -290,25 +304,21 @@ class PathwayAcquisitionJob(Job):
 
         # IF THE USER UPLOADED VALUES FOR GENE EXPRESSION
         if os_path.isfile(valuesFileName):
-            # get file encoding type using a bounded sample
+            # get file encoding type
             def get_encoding_type(file):
-                with open(file, 'rb') as f:
-                    raw_data = f.read(1024 * 1024)  # read first 1MB to avoid loading huge files
-                detected = detect(raw_data)
-                return detected.get('encoding') if detected else None
+                with open( file, 'rb' ) as f:
+                    raw_data = f.read()
+                return detect( raw_data )['encoding']
 
-            fileEncodingType = get_encoding_type(valuesFileName) or 'utf-8'
+            fileEncodingType = get_encoding_type( valuesFileName )
+            # convert file to utf-8
+            if fileEncodingType != 'utf-8':
+                with open( valuesFileName, 'r', encoding=fileEncodingType ) as f:
+                    text = f.read()
+                with open( valuesFileName, 'w', encoding='utf-8' ) as f:
+                    f.write( text )
 
-            # convert file to utf-8 using streaming to avoid loading large files into memory
-            if fileEncodingType.lower() != 'utf-8':
-                with open(valuesFileName, 'r', encoding=fileEncodingType, errors='replace') as src, \
-                        NamedTemporaryFile('w', delete=False, encoding='utf-8', newline='') as dst:
-                    for chunk in src:
-                        dst.write(chunk)
-                shutil.move(dst.name, valuesFileName)
-                fileEncodingType = 'utf-8'
-
-            with open(valuesFileName, newline='', encoding=fileEncodingType, errors='replace') as inputDataFile:
+            with open(valuesFileName, newline='', encoding='utf-8' ) as inputDataFile:
                 nLine = -1
                 erroneousLines = {}
                 for line in csv_reader(inputDataFile, delimiter="\t"):
@@ -1195,6 +1205,8 @@ class PathwayAcquisitionJob(Job):
                     self.addInputGeneData(geneInstance)
             elif attr == "userID":
                 setattr(self, attr, value if value != 'None' else None)
+            elif attr in PAINTOMICS4_DICT_FIELDS or attr in PAINTOMICS4_LARGE_FIELDS:
+                setattr(self, attr, value)
             elif not isinstance(value, dict):
                 setattr(self, attr, value)
 
@@ -1211,6 +1223,13 @@ class PathwayAcquisitionJob(Job):
             if not isinstance(value, dict) and (
                     ["svgDir", "inputDir", "outputDir", "temporalDir", "foundCompounds"].count(attr) == 0):
                 bson[attr] = value
+
+            elif attr in PAINTOMICS4_DICT_FIELDS:
+                # Ensure all dict keys are strings for MongoDB compatibility
+                if isinstance(value, dict):
+                    bson[attr] = {str(k): v for k, v in value.items()}
+                else:
+                    bson[attr] = value
 
             elif recursive:
                 if attr == "matchedPathways":
@@ -1247,7 +1266,7 @@ class PathwayAcquisitionJob(Job):
         from collections import defaultdict
 
         brPath = os.path.dirname(__file__) + "/../../common/br08001.json"
-        interactionJSONPath = os.path.join(KEGG_DATA_DIR, "current", self.organism, "hubData", "kegg_interaction.json")
+        interactionJSONPath = self.inputDir + "../../../KEGG_DATA/current/" + self.organism + '/hubData/kegg_interaction.json'
 
         # Load classification File
         with open(brPath, 'r') as f:

@@ -15,7 +15,7 @@
 #  along with Paintomics.  If not, see <http://www.gnu.org/licenses/>.
 #
 #  More info http://bioinfo.cipf.es/paintomics
-#  Technical contact paintomics4@gmail.com
+#  Technical contact paintomics4@outlook.com
 #**************************************************************
 import logging
 import logging.config
@@ -104,15 +104,7 @@ def pathwayAcquisitionStep1_PART1(REQUEST, RESPONSE, QUEUE_INSTANCE, JOB_ID, EXA
             jobInstance.setOrganism(specie)
             # Check the available databases for species
             organismDB = set(dicDatabases.get(specie, [{}])[0].keys())
-
-            # Preserve database order: always start with KEGG, then add user-selected databases
-            # Filter to only include valid databases for this organism
-            selectedDatabases = ['KEGG']
-            for db in databases:
-                if db in organismDB and db not in selectedDatabases:
-                    selectedDatabases.append(db)
-
-            jobInstance.setDatabases(selectedDatabases)
+            jobInstance.setDatabases(list(set([u'KEGG']) | set(databases).intersection(organismDB)))
             logging.info("STEP1 - SELECTED SPECIES IS " + specie)
 
             logging.info("STEP1 - READING FILES....")
@@ -685,19 +677,7 @@ def pathwayAcquisitionRecoverJob(request, response, QUEUE_INSTANCE):
                     "timestamp": int(time()),
                     "allowSharing": jobInstance.getAllowSharing(),
                     "readOnly": jobInstance.getReadOnly(),
-                    "omicsValuesID": jobInstance.getValueIdTable(),
-                    #PaintOmics 4
-                    "classInfo": matchedClassJSONList,
-                    "mappingComp": safe_mappingComp,
-                    "classificationDict": safe_classificationDict,
-                    "pValueInDict": safe_pValueInDict,
-                    "exprssionMetabolites": safe_exprssionMetabolites,
-                    "adjustPvalue": safe_adjustPvalue,
-                    "totalRelevantFeaturesInCategory": safe_totalRelevantFeaturesInCategory,
-                    "featureSummary": safe_featureSummary,
-                    "compoundRegulateFeatures": safe_compoundRegulateFeatures,
-                    "globalExpressionData": safe_globalExpressionData,
-                    "hubAnalysisResult": safe_hubAnalysisResult,
+                    "omicsValuesID": jobInstance.getValueIdTable()
                 })
 
     except Exception as ex:
@@ -742,7 +722,7 @@ def pathwayAcquisitionSaveImage(request, response):
 
         if(fileFormat == "png"):
             def createImage(svgData):
-                cairosvg.svg2png(bytestring=svgData.encode('utf-8'), write_to=path + fileName + "." + fileFormat)
+                cairosvg.svg2png(bytestring=svgData, write_to=path + fileName + "." + fileFormat)
             try:
                 logging.info("TRYING...")
                 createImage(svgData=svgData)
