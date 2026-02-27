@@ -84,7 +84,10 @@ class JobInformationManager(metaclass=Singleton):
                     logging.info("UPDATING PathwayAcquisitionJob "  + jobInstance.getJobID() + " TO DATABASE... IS STEP 2")
                     daoInstance = PathwayAcquisitionJobDAO()
                     logging.info("UPDATING JOB INSTANCE...")
-                    daoInstance.update(jobInstance, {"fieldList": ["summary", "lastStep"]})
+                    daoInstance.update(jobInstance, {"fieldList": ["summary", "lastStep",
+                         "mappingComp", "classificationDict", "pValueInDict",
+                         "adjustPvalue", "totalRelevantFeaturesInCategory",
+                         "featureSummary"]})
                     daoInstance = FoundFeatureDAO()
                     logging.info("REMOVING MATCHED METABOLITES FROM DATABASE...")
                     daoInstance.removeAll({"jobID": jobInstance.getJobID()})

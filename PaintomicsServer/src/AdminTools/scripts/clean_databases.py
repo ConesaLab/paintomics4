@@ -195,7 +195,7 @@ def remindJobByJobID(connection, user_id, job_id, ROOT_DIRECTORY):
         reminder_link = PAINTOMICS_BASE_URL + "/?jobID=" + job_id
         message += "<p><a target='_blank' href='" + reminder_link + "'>" + reminder_link + "</a></p></br>"
         message += "<div style='width:100%; height:10px; border-top: 1px dotted #333; margin-top:20px; margin-bottom:30px;'></div>"
-        message += "<p>Problems? E-mail <a href='mailto:" + "paintomics4@outlook.com" + "'>" + "paintomics4@outlook.com" + "</a></p>"
+        message += "<p>Problems? E-mail <a href='mailto:" + "paintomics4@gmail.com" + "'>" + "paintomics4@gmail.com" + "</a></p>"
         message += "<p>Legal notice: you are receiving this e-mail because you accepted Paintomics conditions. Your data will be stored for the"
         message += "solely purpose of informing you about actions involving your jobs."
         message += '</body></html>'

@@ -1108,23 +1108,35 @@ function PA_Step4KeggDiagramFeatureSetView() {
 		// Use of metagenes
 		// If the number of features associated to the box exceeds 5,
 		// we calculate the metagenes and show them instead.
+		var metageneSuccess = false;
+
 		if (features.length > 5) {
-			omicNames.forEach(function(omic) {
-				// Use all values of the same omic in all features associated to the box.
-				var omicValues = this.model.getAllOmicValues(omic).map(x => x.getValues());
-				// It is important that the featureType contains gene or compound word, as it
-				// will be used later to filter.
-				var featureType = "metagene"; //geneOmicNames.includes(omic) ? "gene" : "compound";
-				this.model.addOmicMetagenes(omic, featureType, mlPCA.generateMetagenes(omicValues));
-			}.bind(this));
+			try {
+				omicNames.forEach(function(omic) {
+					// Use all values of the same omic in all features associated to the box.
+					var omicValues = this.model.getAllOmicValues(omic).map(x => x.getValues());
+					// It is important that the featureType contains gene or compound word, as it
+					// will be used later to filter.
+					var featureType = "metagene"; //geneOmicNames.includes(omic) ? "gene" : "compound";
+					this.model.addOmicMetagenes(omic, featureType, mlPCA.generateMetagenes(omicValues));
+				}.bind(this));
 
-			this.switchMetageneMode(true);
+				// Validate metagenes were actually generated before switching mode
+				var generatedMetagenes = this.model.getMetagenes();
+				if (generatedMetagenes && generatedMetagenes.length > 0 && generatedMetagenes[0]) {
+					this.switchMetageneMode(true);
+					this.model.setMainFeature(generatedMetagenes[0]);
+					this.featureView = new PA_Step4KeggDiagramFeatureSetSVGBox().setParent(this).loadModel(this.model.getMainFeature()).setComponentID(pathwayID + "_" + this.model.getX() + "_" + this.model.getY()).setIsUnique(false);
+					metageneSuccess = true;
+				}
+			} catch (e) {
+				console.error("Error generating metagenes, falling back to standard feature display:", e);
+				this.model.setMetagenes(null);
+			}
+		}
 
-			this.model.setMainFeature(this.model.getMetagenes()[0]);
-
-			this.featureView = new PA_Step4KeggDiagramFeatureSetSVGBox().setParent(this).loadModel(this.model.getMainFeature()).setComponentID(pathwayID + "_" + this.model.getX() + "_" + this.model.getY()).setIsUnique(false);
-
-		} else {
+		if (!metageneSuccess) {
+			this.switchMetageneMode(false);
 
 			for(var i in features){
 				if(features[i].getFeature().isRelevant()){
@@ -1320,12 +1332,19 @@ function PA_Step4KeggDiagramFeatureSetTooltip() {
 		var newFeature;
 
 		if (metageneMode) {
-			if (! changeMode) {
-				currentFeaturePos = this.getModel().metagenes.indexOf(this.getModel().getMainFeature());
-				currentFeaturePos = ((currentFeaturePos + sense) + this.getModel().metagenes.length) % this.getModel().metagenes.length;
+			var metagenes = this.getModel().getMetagenes();
+			if (!metagenes || metagenes.length === 0) {
+				console.warn("changeVisibleFeature: metagene mode is active but metagenes are null/empty. Switching off metagene mode.");
+				this.getParent().switchMetageneMode(false);
+				return this;
 			}
 
-			newFeature = this.getModel().metagenes[currentFeaturePos];
+			if (! changeMode) {
+				currentFeaturePos = metagenes.indexOf(this.getModel().getMainFeature());
+				currentFeaturePos = ((currentFeaturePos + sense) + metagenes.length) % metagenes.length;
+			}
+
+			newFeature = metagenes[currentFeaturePos];
 		} else {
 			if (! changeMode) {
 				currentFeaturePos = this.getModel().features.indexOf(this.getModel().getMainFeature());
@@ -3968,9 +3987,15 @@ function PA_Step4DetailsView() {
 						elem.empty();
 						let divWidth = elem.width() - 400;
 
-						let featureID = me.getModel().features[0].feature.ID
-						let compoundRegulateFeatures = me.getParent().getParent().model.compoundRegulateFeatures[featureID]
+						let features = me.getModel().features;
+						if (!features || features.length === 0) { console.warn('No features'); return; }
+						if (!features[0].feature || !features[0].feature.ID) { console.warn('No feature ID'); return; }
+						let featureID = features[0].feature.ID
+						let compoundRegulateFeatures = me.getParent().getParent().model.compoundRegulateFeatures;
+						if (!compoundRegulateFeatures || !compoundRegulateFeatures[featureID]) { console.warn('No regulate data for', featureID); return; }
+						compoundRegulateFeatures = compoundRegulateFeatures[featureID]
 						let inputLevel = document.getElementById('inputLevel').value
+						if (!compoundRegulateFeatures[inputLevel]) { console.warn('No data for input level', inputLevel); return; }
 						let regulateFeatures = compoundRegulateFeatures[inputLevel]
 						let divId = ["Gene_expression_heatmapContainer_regulate", "Compound_expression_heatmapContainer_regulate"]
 						let omicName = ["Gene expression", "Metabolomics"]

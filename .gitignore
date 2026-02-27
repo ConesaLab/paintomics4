@@ -82,7 +82,8 @@ target/
 .env.local
 .env.*.local
 !.env.example
-.venv/
+/.venv
+/.venv/**
 
 # Configuration files
 /serverconf.py

@@ -366,7 +366,12 @@ function JobInstance(jobID) {
 	}
 
 	this.setCompoundRegulateFeatures = function (compoundRegulateFeatures) {
-		this.compoundRegulateFeatures = JSON.parse(compoundRegulateFeatures)
+		if (typeof compoundRegulateFeatures === 'string') {
+			try { this.compoundRegulateFeatures = JSON.parse(compoundRegulateFeatures); }
+			catch (e) { this.compoundRegulateFeatures = {}; }
+		} else {
+			this.compoundRegulateFeatures = compoundRegulateFeatures || {};
+		}
 	}
 	this.getCompoundRegulateFeatures = function () {
 		return this.compoundRegulateFeatures == null ? {} : this.compoundRegulateFeatures

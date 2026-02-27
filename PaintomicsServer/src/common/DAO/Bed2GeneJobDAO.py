@@ -14,12 +14,12 @@
 #  You should have received a copy of the GNU General Public License
 #  along with PaintOmics 3.  If not, see <http://www.gnu.org/licenses/>.
 #  Contributors:
-#     Rafael Hernandez de Diego <paintomics4@outlook.com>
+#     Rafael Hernandez de Diego <paintomics4@gmail.com>
 #     Ana Conesa Cegarra
 #     and others
 #
 #  More info http://bioinfo.cipf.es/paintomics
-#  Technical contact paintomics4@outlook.com
+#  Technical contact paintomics4@gmail.com
 #
 #**************************************************************
 

@@ -268,7 +268,7 @@ function MainView() {
 									return;
 								}
 								showInfoMessage("Welcome to PaintOmics 4!", {
-									message: "PaintOmics 4 is now hosted on the University of Valencia's server. For any inquiries, please contact us at <a href=\"mailto:paintomics4@outlook.com\">paintomics4@outlook.com</a>",
+									message: "PaintOmics 4 is now hosted on the University of Valencia's server. For any inquiries, please contact us at <a href=\"mailto:paintomics4@gmail.com\">paintomics4@gmail.com</a>",
 									showButton: true
 								})
 							},

@@ -430,7 +430,7 @@ function ajaxErrorHandler(responseObj) {
     }
 
     showErrorMessage("Oops..Internal error!", {
-        message: err.message + "</br>Try running it in private mode or clear your web cache in your browser.</br>If the error persists, please contact the <a href='mailto:paintomics4@outlook.com' target='_blank'> administrator</a>.",
+        message: err.message + "</br>Try running it in private mode or clear your web cache in your browser.</br>If the error persists, please contact the <a href='mailto:paintomics4@gmail.com' target='_blank'> administrator</a>.",
         extra: err.extra,
         showButton: true
     });
@@ -458,7 +458,7 @@ function extJSErrorHandler(form, responseObj) {
     }
 
     showErrorMessage("Oops..Internal error!", {
-        message: err.message + "</br>Please try again later.</br>If the error persists, please contact your web <a href='mailto:paintomics4@outlook.com' target='_blank'> administrator</a>.",
+        message: err.message + "</br>Please try again later.</br>If the error persists, please contact your web <a href='mailto:paintomics4@gmail.com' target='_blank'> administrator</a>.",
         showButton: true
     });
 }

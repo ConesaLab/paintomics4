@@ -401,8 +401,10 @@ function FeatureGraphicalData(type) {
      **********************************************************************************/
     this.loadFromJSON = function (jsonObject) {
         //TODO: HACER EN BUCLE AUTOMATICO?
-        if (jsonObject.id !== undefined) {
+        if (jsonObject.id != null && jsonObject.id !== '') {
             this.id = jsonObject.id;
+        } else if (jsonObject.ID != null && jsonObject.ID !== '') {
+            this.id = jsonObject.ID;
         }
         if (jsonObject.x !== undefined) {
             this.x = parseFloat(jsonObject.x);
@@ -416,8 +418,10 @@ function FeatureGraphicalData(type) {
         if (jsonObject.height !== undefined) {
             this.height = parseFloat(jsonObject.height);
         }
-        if (jsonObject.title !== undefined) {
+        if (jsonObject.title != null && jsonObject.title !== '') {
             this.title = jsonObject.title;
+        } else if (jsonObject.name != null && jsonObject.name !== '') {
+            this.title = jsonObject.name;
         }
         if (jsonObject.visible !== undefined) {
             this.visible = jsonObject.visible;

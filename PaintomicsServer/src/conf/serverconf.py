@@ -3,7 +3,7 @@ SERVER_HOST_NAME          = "0.0.0.0" ##THE IP ADDRESS FOR GALAKSIO, LEAVE 0.0.0
 SERVER_PORT_NUMBER        = 8000 ##THE PORT NUMBER THAT GALAKSIO LISTENS FOR REQUESTS
 SERVER_ALLOW_DEBUG        = False ##ENABLE DEBUG, THIS OPTION IS JUST FOR DEVELOPMENT
 SERVER_SUBDOMAIN          = "" ##USE THIS OPTION IF GALAKSIO RUNS UNDER AN SPECIFIC SUBDOMAIN, E.G. myserver.com/paintomics (w/o proxy)
-SERVER_MAX_CONTENT_LENGTH = 200 * pow(1024,2) ##THE MAX SIZE FOR THE REQUESTS SENT BY THE CLIENTS, IN MB
+SERVER_MAX_CONTENT_LENGTH = 100 * pow(1024,2) ##THE MAX SIZE FOR THE REQUESTS SENT BY THE CLIENTS, IN MB
 ADMIN_ACCOUNTS            = "admin"
 
 #FILES SETTINGS
@@ -41,16 +41,16 @@ MAX_TRIES_2 = 5
 # use_smtp_auth   = True                       #Enable SMTP authentication
 # use_smtp_ssl    = False                      #Whether use normal SMTP or SMTP_SSL
 # smtp_secure     = "tls"                      #Use tls, etc.
-# smpt_username   = "paintomics4@outlook.com"  #THE SENDER EMAIL, DEPENDS ON THE SMTP SETTINGS
+# smpt_username   = "paintomics4@gmail.com"  #THE SENDER EMAIL, DEPENDS ON THE SMTP SETTINGS
 # smpt_pass       = "<redacted>"                # Do not commit credentials. Provide via environment/secrets manager.
-# smpt_sender     = "paintomics4@outlook.com"  #Sender email (From value at the email)
+# smpt_sender     = "paintomics4@gmail.com"  #Sender email (From value at the email)
 # smpt_sender_name= "Paintomics 4"             #Sender name (From value at the email)
 
 #EMAIL CONFIGURATION (SMTP via SendGrid)
 import os
 from urllib.parse import urlparse
 EMAIL_PROVIDER      = "smtp"                                           #Email provider type
-EMAIL_FROM_ADDRESS  = "paintomics4@outlook.com"                        #Sender email address
+EMAIL_FROM_ADDRESS  = "paintomics4@gmail.com"                        #Sender email address
 EMAIL_FROM_DISPLAY  = "PaintOmics"                                     #Sender display name
 SMTP_HOST           = os.getenv("SMTP_HOST", "smtp.sendgrid.net")      #SMTP server hostname
 SMTP_PORT           = int(os.getenv("SMTP_PORT", "587"))               #SMTP server port (587 for TLS)
@@ -70,7 +70,7 @@ PAINTOMICS_EMAIL_DOMAIN    = os.getenv(
 )
 EMAIL_REPORT_RECIPIENTS    = [
     email.strip()
-    for email in os.getenv("EMAIL_REPORT_RECIPIENTS", "paintomics4@outlook.com").split(",")
+    for email in os.getenv("EMAIL_REPORT_RECIPIENTS", "paintomics4@gmail.com").split(",")
     if email.strip()
 ]
 

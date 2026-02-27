@@ -45,6 +45,20 @@ from src.classes.PathwayGraphicalData import PathwayGraphicalData
 
 from src.conf.serverconf import KEGG_DATA_DIR, MAX_THREADS, MAX_WAIT_THREADS, MAX_NUMBER_FEATURES
 
+# Small dict fields safe to persist in the main MongoDB document
+PAINTOMICS4_DICT_FIELDS = {
+    "mappingComp", "classificationDict", "pValueInDict",
+    "adjustPvalue", "totalRelevantFeaturesInCategory", "featureSummary"
+}
+
+# Large dict fields that stay in-memory cache only (too large for a single
+# MongoDB document — compoundRegulateFeatures alone can exceed 60 MB).
+# On cold recovery the safe_* defaults in the servlet return {}/[].
+PAINTOMICS4_LARGE_FIELDS = {
+    "exprssionMetabolites", "compoundRegulateFeatures",
+    "globalExpressionData", "hubAnalysisResult"
+}
+
 
 class PathwayAcquisitionJob(Job):
     # ******************************************************************************************************************
@@ -1191,6 +1205,8 @@ class PathwayAcquisitionJob(Job):
                     self.addInputGeneData(geneInstance)
             elif attr == "userID":
                 setattr(self, attr, value if value != 'None' else None)
+            elif attr in PAINTOMICS4_DICT_FIELDS or attr in PAINTOMICS4_LARGE_FIELDS:
+                setattr(self, attr, value)
             elif not isinstance(value, dict):
                 setattr(self, attr, value)
 
@@ -1207,6 +1223,13 @@ class PathwayAcquisitionJob(Job):
             if not isinstance(value, dict) and (
                     ["svgDir", "inputDir", "outputDir", "temporalDir", "foundCompounds"].count(attr) == 0):
                 bson[attr] = value
+
+            elif attr in PAINTOMICS4_DICT_FIELDS:
+                # Ensure all dict keys are strings for MongoDB compatibility
+                if isinstance(value, dict):
+                    bson[attr] = {str(k): v for k, v in value.items()}
+                else:
+                    bson[attr] = value
 
             elif recursive:
                 if attr == "matchedPathways":
@@ -1243,7 +1266,7 @@ class PathwayAcquisitionJob(Job):
         from collections import defaultdict
 
         brPath = os.path.dirname(__file__) + "/../../common/br08001.json"
-        interactionJSONPath = os.path.join(KEGG_DATA_DIR, "current", self.organism, "hubData", "kegg_interaction.json")
+        interactionJSONPath = self.inputDir + "../../../KEGG_DATA/current/" + self.organism + '/hubData/kegg_interaction.json'
 
         # Load classification File
         with open(brPath, 'r') as f:
