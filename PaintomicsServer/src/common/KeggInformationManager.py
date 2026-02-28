@@ -235,7 +235,8 @@ class KeggInformationManager(metaclass=Singleton):
             if pathway != None:
                 return pathway.get("genes", []), pathway.get("compounds", [])
             else:
-                return []
+                # Keep unpacking stable even if the pathway is missing
+                return [], []
         finally:
                 self.lock.release() #UNLOCK CACHE
 

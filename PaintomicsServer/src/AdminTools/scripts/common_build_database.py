@@ -1718,6 +1718,8 @@ def processReactomePathwaysData():
             for subNode in nodesList:
                 try:
                     tempList= next( item for item in nodesInf if item["dbId"] == subNode )['children']
+                    if not tempList:  # Empty children list = leaf node, don't pop
+                        continue
                     nodesList.pop( nodesList.index( subNode ) )
                     nodesList = nodesList + tempList
                 except Exception as ex:
@@ -1728,8 +1730,9 @@ def processReactomePathwaysData():
             if len(nodesList) == length:
                 for subNode in nodesList:
                     try:
-                        next( item for item in nodesInf if item["dbId"] == subNode )['children']
-                        hasSubList = True
+                        children = next( item for item in nodesInf if item["dbId"] == subNode )['children']
+                        if children:  # Only count non-empty children lists
+                            hasSubList = True
                     except Exception as ex:
                         continue
                 if hasSubList:
@@ -1795,10 +1798,12 @@ def processReactomePathwaysData():
 
             # Sometimes the reactome id has subclasses we need to manage them one by one
             if entity_id in nodesHighSet:
-                if reactome_entity['reactomeId'] in highHierarchySet.keys():
-                    nodeIDSet = highHierarchySet[reactome_entity['reactomeId']]
+                if entity_id in highHierarchySet:
+                    nodeIDSet = highHierarchySet[entity_id]
+                elif entity_id in middleHierarchySet:
+                    nodeIDSet = middleHierarchySet[entity_id]
                 else:
-                    nodeIDSet = middleHierarchySet[reactome_entity['reactomeId']]
+                    nodeIDSet = {entity_id}
             else:
                 nodeIDSet = {entity_id}
 

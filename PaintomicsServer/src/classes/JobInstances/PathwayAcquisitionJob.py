@@ -561,9 +561,6 @@ class PathwayAcquisitionJob(Job):
                 for compound in inputCompoundsCopy:
                     compound.matchingDB = "MapMan"
 
-                for inputGene in inputGenes:
-                    inputGene.matchingDB = ["KEGG", "MapMan"]
-
                 for metabolite in self.inputCompoundsData:
                     self.inputCompoundsData[metabolite].matchingDB = ["KEGG", "MapMan"]
 
@@ -572,9 +569,6 @@ class PathwayAcquisitionJob(Job):
                 for compound in inputCompoundsCopy:
                     compound.matchingDB = "Reactome"
 
-                for inputGene in inputGenes:
-                     inputGene.matchingDB = ["KEGG", "Reactome"]
-
                 for metabolite in self.inputCompoundsData:
                     self.inputCompoundsData[metabolite].matchingDB = ["KEGG", "Reactome"]
 
@@ -582,7 +576,7 @@ class PathwayAcquisitionJob(Job):
         else:
             # make sure the compound database in the inputCompunds is the as the one in the self.databases
             for compound in inputCompounds:
-                compound.matchingDB = self.databases
+                compound.matchingDB = self.databases[0]
 
         self.inputCompunds = inputCompounds
 
@@ -835,8 +829,11 @@ class PathwayAcquisitionJob(Job):
                 dbList = [feature.getMatchingDB()]
             else:
                 dbList = feature.getMatchingDB()
+            found_in_any_db = False
             for db in dbList:
-                if feature.getID() in totalFeatures.get(db) or feature.getName() in totalFeatures.get(db):
+                db_features = totalFeatures.get(db, set())
+                if feature.getID() in db_features or feature.getName() in db_features:
+                    found_in_any_db = True
                     for omicValue in feature.getOmicsValues():
                         # Select the appropriate enrichment property
                         enrichmentType = enrichmentByOmic[omicValue.getOmicName()]
@@ -844,10 +841,6 @@ class PathwayAcquisitionJob(Job):
 
                         # Only for association enrichment type the relevant feature must come from the associations files.
                         relevantValue = omicValue.isRelevantAssociation() if enrichmentType == 'associations' else omicValue.isRelevant()
-
-                        #counterNames[feature.getMatchingDB()][omicValue.getOmicName()][enrichmentProperty] = (
-                        #            counterNames[feature.getMatchingDB()][omicValue.getOmicName()][
-                        #                enrichmentProperty] or relevantValue)
 
                         counterNames[db][omicValue.getOmicName()][feature.getID()] = (
                                     counterNames[db][omicValue.getOmicName()][
@@ -857,7 +850,7 @@ class PathwayAcquisitionJob(Job):
                             totalFeaturesID.add(feature.getID())
                             if relevantValue:
                                 totalFeaturesIDSig.add(feature.getID())
-            else:
+            if not found_in_any_db:
                 logging.error("STEP2 - Feature not present in at least one pathway " + feature.getID())
 
         for sourceDB, countersDB in counterNames.items():
@@ -901,7 +894,9 @@ class PathwayAcquisitionJob(Job):
         # TODO: RETURN AS A SET IN KEGG INFORMATION MANAGER
         genesInPathway = set([x.lower() for x in genesInPathway])
         for gene in inputGenes:
-            if gene.getID().lower() in genesInPathway and (gene.getMatchingDB() == sourceDB or sourceDB in gene.getMatchingDB()):
+            matchingDB = gene.getMatchingDB()
+            db_matches = sourceDB in matchingDB if isinstance(matchingDB, list) else matchingDB == sourceDB
+            if gene.getID().lower() in genesInPathway and db_matches:
                 isValidPathway = True
                 pathwayInstance.addMatchedGeneID(gene.getID())
                 for omicValue in gene.getOmicsValues():
