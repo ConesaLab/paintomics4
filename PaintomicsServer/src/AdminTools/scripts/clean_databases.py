@@ -167,11 +167,15 @@ def removeJobByJobID(connection, user_id, job_id):
     log("Removing job " + job_id)
     #STEP 1. REMOVE ALL THE FEATURES ASSOCIATED TO JOB
     connection[MONGODB_DATABASE]['featuresCollection'].remove({"jobID": job_id})
-    #STEP 2. REMOVE ALL THE FEATURES ASSOCIATED TO JOB
+    #STEP 2. REMOVE ALL THE VISUAL OPTIONS ASSOCIATED TO JOB
     connection[MONGODB_DATABASE]['visualOptionsCollection'].remove({"jobID": job_id})
-    #STEP 3.REMOVE THE JOB FROM DATABASE
+    #STEP 3. REMOVE ALL THE PATHWAYS ASSOCIATED TO JOB
+    connection[MONGODB_DATABASE]['pathwaysCollection'].remove({"jobID": job_id})
+    #STEP 4. REMOVE ALL THE FOUND FEATURES ASSOCIATED TO JOB
+    connection[MONGODB_DATABASE]['foundFeaturesCollection'].remove({"jobID": job_id})
+    #STEP 5. REMOVE THE JOB FROM DATABASE
     connection[MONGODB_DATABASE]['jobInstanceCollection'].remove({"jobID": job_id})
-    #STEP 4. REMOVE THE JOB DIRECTORY FROM USER DIR
+    #STEP 6. REMOVE THE JOB DIRECTORY FROM USER DIR
     removeDirectoryByUserID(user_id, job_id)
 
 
@@ -272,6 +276,15 @@ def rebuildIndexes(connection):
             connection[MONGODB_DATABASE][db].reindex()
         except OperationFailure as err:
             log("Failed to rebuild indexes for database " + db + ": " + str(err))
+
+    # Create indexes on jobID for collections that are queried by jobID
+    log("Creating jobID indexes...")
+    connection[MONGODB_DATABASE]['jobInstanceCollection'].create_index("jobID")
+    connection[MONGODB_DATABASE]['featuresCollection'].create_index("jobID")
+    connection[MONGODB_DATABASE]['featuresCollection'].create_index([("jobID", 1), ("featureType", 1)])
+    connection[MONGODB_DATABASE]['pathwaysCollection'].create_index("jobID")
+    connection[MONGODB_DATABASE]['foundFeaturesCollection'].create_index("jobID")
+    log("jobID indexes created.")
 
 def log(msg):
     print(msg)
