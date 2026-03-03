@@ -1,15 +1,15 @@
 #SERVER SETTINGS
 SERVER_HOST_NAME          = "0.0.0.0" ##THE IP ADDRESS FOR GALAKSIO, LEAVE 0.0.0.0 FOR LISTENING ALL REQUESTS
 SERVER_PORT_NUMBER        = 8000 ##THE PORT NUMBER THAT GALAKSIO LISTENS FOR REQUESTS
-SERVER_ALLOW_DEBUG        = False ##ENABLE DEBUG, THIS OPTION IS JUST FOR DEVELOPMENT
+SERVER_ALLOW_DEBUG        = True ##ENABLE DEBUG, THIS OPTION IS JUST FOR DEVELOPMENT
 SERVER_SUBDOMAIN          = "" ##USE THIS OPTION IF GALAKSIO RUNS UNDER AN SPECIFIC SUBDOMAIN, E.G. myserver.com/paintomics (w/o proxy)
 SERVER_MAX_CONTENT_LENGTH = 100 * pow(1024,2) ##THE MAX SIZE FOR THE REQUESTS SENT BY THE CLIENTS, IN MB
 ADMIN_ACCOUNTS            = "admin"
 
 #FILES SETTINGS
 ROOT_DIRECTORY            = "" ##THE LOCATION FOR THE PAINTOMICS FILES, LEAVE BLANK TO AUTO DETECT
-CLIENT_TMP_DIR            = "/home/tian/database/CLIENT_TMP/"
-KEGG_DATA_DIR             = "/home/tian/database/KEGG_DATA/"
+CLIENT_TMP_DIR            = "/Users/tianyuan/Desktop/github_dev/paintomics4_data/CLIENT_TMP/"
+KEGG_DATA_DIR             = "/Users/tianyuan/Desktop/github_dev/paintomics4_data/KEGG_DATA/"
 MAX_CLIENT_SPACE          = 200 * pow(1024,2) #MAX_CLIENT_SPACE IN MB
 MAX_GUEST_DAYS            = 90
 MAX_JOB_DAYS              = 365
@@ -59,7 +59,7 @@ SMTP_PASSWORD       = os.getenv("SMTP_PASSWORD", "")                   #SMTP pas
 SMTP_USE_TLS        = True                                             #Use TLS encryption
 
 # Web-facing constants
-PAINTOMICS_BASE_URL        = os.getenv("PAINTOMICS_BASE_URL", "https://paintomics.uv.es").rstrip("/")
+PAINTOMICS_BASE_URL        = os.getenv("PAINTOMICS_BASE_URL", "http://localhost:8000").rstrip("/")
 PAINTOMICS_LOGO_PATH       = os.getenv("PAINTOMICS_LOGO_PATH", "/resources/images/paintomics_white_300x66")
 PAINTOMICS_LOGO_URL        = f"{PAINTOMICS_BASE_URL}{PAINTOMICS_LOGO_PATH}"
 PAINTOMICS_LOGIN_URL       = os.getenv("PAINTOMICS_LOGIN_URL", f"{PAINTOMICS_BASE_URL}/")

@@ -60,6 +60,37 @@ PAINTOMICS4_LARGE_FIELDS = {
 }
 
 
+def _matchPathways(jobInstance, pathwaysList, genesInAllPathways, compoundsInAllPathways, inputGenes,
+                    inputCompounds, totalFeaturesByOmic, totalRelevantFeaturesByOmic, matchedPathways,
+                    mappedRatiosByOmic, enrichmentByOmic):
+    """Module-level wrapper so multiprocessing.Process can pickle the target."""
+    keggInformationManager = KeggInformationManager()
+
+    for pathwayID in pathwaysList:
+        genesInPathway = genesInAllPathways.get(pathwayID)
+        compoundsInPathway = compoundsInAllPathways.get(pathwayID)
+        sourceDB = keggInformationManager.getPathwaySourceByID(jobInstance.getOrganism(), pathwayID)
+
+        if "Unknown Pathway" in sourceDB:
+            sourceDB = 'Reactome'
+
+        if sourceDB not in totalFeaturesByOmic:
+            continue
+
+        isValidPathway, pathway = jobInstance.testPathwaySignificance(
+            genesInPathway, compoundsInPathway, inputGenes, inputCompounds,
+            totalFeaturesByOmic.get(sourceDB), totalRelevantFeaturesByOmic.get(sourceDB),
+            mappedRatiosByOmic, enrichmentByOmic, sourceDB)
+
+        if isValidPathway:
+            pathway.setID(pathwayID)
+            pathway.setName(keggInformationManager.getPathwayNameByID(jobInstance.getOrganism(), pathwayID))
+            pathway.setClassification(
+                keggInformationManager.getPathwayClassificationByID(jobInstance.getOrganism(), pathwayID))
+            pathway.setSource(sourceDB)
+            matchedPathways[pathwayID] = pathway
+
+
 class PathwayAcquisitionJob(Job):
     # ******************************************************************************************************************
     # CONSTRUCTORS
@@ -639,49 +670,6 @@ class PathwayAcquisitionJob(Job):
         nThreads = MAX_THREADS
         logging.info("USING " + str(nThreads) + " THREADS")
 
-        def matchPathways(jobInstance, pathwaysList, genesInAllPathways, compoundsInAllPathways, inputGenes,
-                          inputCompounds, totalFeaturesByOmic, totalRelevantFeaturesByOmic, matchedPathways,
-                          mappedRatiosByOmic, enrichmentByOmic):
-            # ****************************************************************
-            # Step 2.1. FOR EACH PATHWAY IN THE LIST, GET ALL FEATURE IDS
-            #           AND CALCULATE THE SIGNIFICANCE FOR THE PATHWAY
-            # ****************************************************************
-            keggInformationManager = KeggInformationManager()
-
-            genesInPathway = compoundsInPathway = pathway = None
-            for pathwayID in pathwaysList:
-                genesInPathway = genesInAllPathways.get(pathwayID)
-                compoundsInPathway = compoundsInAllPathways.get(pathwayID)
-                sourceDB = keggInformationManager.getPathwaySourceByID(jobInstance.getOrganism(), pathwayID)
-
-                # Add PaintOmics 4 sourceDB
-                if "Unknown Pathway" in sourceDB:
-                    sourceDB = 'Reactome'
-
-                # check if totalFeaturesByOmic contains the sourceDB as key
-                if sourceDB not in totalFeaturesByOmic:
-                    continue
-
-                # genesInPathway, compoundsInPathway = keggInformationManager.getAllFeatureIDsByPathwayID(jobInstance.getOrganism(), pathwayID)
-                isValidPathway, pathway = self.testPathwaySignificance(genesInPathway, compoundsInPathway, inputGenes,
-                                                                       inputCompounds,
-                                                                       totalFeaturesByOmic.get(sourceDB),
-                                                                       totalRelevantFeaturesByOmic.get(sourceDB),
-                                                                       mappedRatiosByOmic,
-                                                                       enrichmentByOmic,
-                                                                       sourceDB)
-                if isValidPathway:
-                    pathway.setID(pathwayID)
-                    pathway.setName(keggInformationManager.getPathwayNameByID(jobInstance.getOrganism(), pathwayID))
-                    pathway.setClassification(
-                        keggInformationManager.getPathwayClassificationByID(jobInstance.getOrganism(), pathwayID))
-                    pathway.setSource(sourceDB)
-
-                    # for omic in jobInstance.getGeneBasedInputOmics()
-                    #
-
-                    matchedPathways[pathwayID] = pathway
-
         manager = Manager()
         matchedPathways = manager.dict()  # WILL STORE THE OUTPUT FROM THE THREADS
         #matchedPathways = {}
@@ -707,7 +695,7 @@ class PathwayAcquisitionJob(Job):
 
         # LAUNCH THE THREADS
         for pathwayIDsList in pathwaysListParts:
-            thread = Process(target=matchPathways, args=(
+            thread = Process(target=_matchPathways, args=(
                 self, pathwayIDsList, allGenesInPathway, allCompoundsInPathway, inputGenes, inputCompounds,
                 totalFeaturesByOmic, totalRelevantFeaturesByOmic, matchedPathways, mappedRatiosByOmic,
                 enrichmentByOmic))
@@ -722,7 +710,7 @@ class PathwayAcquisitionJob(Job):
                     len( classGene.keys() ) / nThreads ) ) + 1  # GET THE NUMBER OF PATHWAYS TO BE PROCESSED PER THREAD
             classListParts = chunks( list( classGene.keys() ), nClassPerThread )  # SPLIT THE ARRAY IN n PARTS
             for classNameList in classListParts:
-                threadClass = Process( target=matchPathways, args=(
+                threadClass = Process( target=_matchPathways, args=(
                     self, classNameList, classGene, classComp, inputGenes, inputCompounds,
                     totalFeaturesByOmic, totalRelevantFeaturesByOmic, matchedClass, mappedRatiosByOmic,
                     enrichmentByOmic) )
@@ -1317,14 +1305,14 @@ class PathwayAcquisitionJob(Job):
             from scipy import stats
             try:
                 if float(metaboliteClassThreshold.get("thresholdMetaboliteClass")) <= 1 and float(metaboliteClassThreshold.get("thresholdMetaboliteClass")) > 0:
-                    pValueInDict[key] = stats.binom_test(totalRelevantFeaturesInCategory.get(key),
+                    pValueInDict[key] = stats.binomtest(totalRelevantFeaturesInCategory.get(key),
                                                          n=totalFeaturesInCategory.get(key),
-                                                         p=float(metaboliteClassThreshold.get("thresholdMetaboliteClass")), alternative='greater')
+                                                         p=float(metaboliteClassThreshold.get("thresholdMetaboliteClass")), alternative='greater').pvalue
                 else:
-                    pValueInDict[key] = stats.binom_test(totalRelevantFeaturesInCategory.get(key), n=totalFeaturesInCategory.get(key), p=totalRelevantFeatures/totalFeatures, alternative='greater')
+                    pValueInDict[key] = stats.binomtest(totalRelevantFeaturesInCategory.get(key), n=totalFeaturesInCategory.get(key), p=totalRelevantFeatures/totalFeatures, alternative='greater').pvalue
 
             except Exception as e:
-                pValueInDict[key] = stats.binom_test(totalRelevantFeaturesInCategory.get(key), n=totalFeaturesInCategory.get(key), p=totalRelevantFeatures/totalFeatures, alternative='greater')
+                pValueInDict[key] = stats.binomtest(totalRelevantFeaturesInCategory.get(key), n=totalFeaturesInCategory.get(key), p=totalRelevantFeatures/totalFeatures, alternative='greater').pvalue
 
         featureSummary = [totalFeatures, totalRelevantFeatures]
 

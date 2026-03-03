@@ -4,12 +4,13 @@ import os
 # sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)) + "/../../")
 
 # Ensure this script always runs inside the expected virtualenv so required packages are available.
-VENV_DIR = "/home/tian/paintomics/paintomics_env"
-VENV_PYTHON = os.path.join(VENV_DIR, "bin", "python3")
-if os.path.exists(VENV_PYTHON) and sys.executable != VENV_PYTHON:
-    os.environ["VIRTUAL_ENV"] = VENV_DIR
-    os.environ["PATH"] = os.path.join(VENV_DIR, "bin") + os.pathsep + os.environ.get("PATH", "")
-    os.execv(VENV_PYTHON, [VENV_PYTHON] + sys.argv)
+# Disabled for local deployment - using conda env instead.
+# VENV_DIR = "/home/tian/paintomics/paintomics_env"
+# VENV_PYTHON = os.path.join(VENV_DIR, "bin", "python3")
+# if os.path.exists(VENV_PYTHON) and sys.executable != VENV_PYTHON:
+#     os.environ["VIRTUAL_ENV"] = VENV_DIR
+#     os.environ["PATH"] = os.path.join(VENV_DIR, "bin") + os.pathsep + os.environ.get("PATH", "")
+#     os.execv(VENV_PYTHON, [VENV_PYTHON] + sys.argv)
 
 import datetime, traceback, shutil, inspect
 import logging

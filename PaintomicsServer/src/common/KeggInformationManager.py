@@ -82,7 +82,7 @@ class KeggInformationManager(metaclass=Singleton):
             self.lock.acquire() #LOCK CACHE
 
             if self.translationCache.get(jobID) == None:
-                return None
+                return {}
 
             selectedDict = self.translationCache.get(jobID)[dbID][type]
 
