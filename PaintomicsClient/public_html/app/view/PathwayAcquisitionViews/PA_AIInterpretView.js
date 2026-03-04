@@ -18,9 +18,11 @@ function PA_AIInterpretView() {
             '<div class="ai-widget" style="display:none;">' +
             '  <div class="ai-widget-panel">' +
             '    <div class="ai-widget-header">' +
-            '      <span>AI Interpretation</span>' +
-            '      <button class="ai-fullscreen-btn" title="Fullscreen">&#x26F6;</button>' +
-            '      <button class="ai-minimize-btn" title="Minimize">&mdash;</button>' +
+            '      <span class="ai-widget-header-title">AI Assistant</span>' +
+            '      <div class="ai-widget-header-actions">' +
+            '        <button class="ai-fullscreen-btn" title="Fullscreen">&#x26F6;</button>' +
+            '        <button class="ai-minimize-btn" title="Minimize">&mdash;</button>' +
+            '      </div>' +
             '    </div>' +
             '    <div class="ai-widget-progress" style="display:none;">' +
             '      <div class="ai-progress-detail">Starting...</div>' +
@@ -216,9 +218,23 @@ function PA_AIInterpretView() {
         });
     };
 
+    this._preprocessMarkdown = function(text) {
+        // Ensure blank line before headings (required by CommonMark)
+        text = text.replace(/([^\n])\n(#{1,6}\s)/g, "$1\n\n$2");
+        // Ensure blank line before horizontal rules
+        text = text.replace(/([^\n])\n(---+)/g, "$1\n\n$2");
+        // Ensure blank line after horizontal rules
+        text = text.replace(/(---+)\n([^\n])/g, "$1\n\n$2");
+        // Fix numbered headings that LLM produces like "### 1. Title" inside lists
+        // Convert "N. ### Title" pattern to "### N. Title"
+        text = text.replace(/^(\d+)\.\s+(#{1,6}\s)/gm, "$2$1. ");
+        return text;
+    };
+
     this.displayReport = function(reportText, papers) {
         var html = "";
         try {
+            reportText = this._preprocessMarkdown(reportText);
             html = marked.parse(reportText);
         } catch(e) {
             html = "<pre>" + reportText + "</pre>";
@@ -249,8 +265,9 @@ function PA_AIInterpretView() {
         var listHtml = '<div class="ai-citations-list" style="display:none;">';
         for (var i = 0; i < papers.length; i++) {
             var p = papers[i];
+            var refLabel = p.ref_index ? '[' + p.ref_index + '] ' : '';
             listHtml += '<div class="ai-citation-item" data-pmid="' + (p.pmid || "") + '">';
-            listHtml += '  <div class="ai-citation-title">' + (p.title || "Untitled") + '</div>';
+            listHtml += '  <div class="ai-citation-title"><span class="ai-citation-ref">' + refLabel + '</span>' + (p.title || "Untitled") + '</div>';
             listHtml += '  <div class="ai-citation-meta">' + (p.first_author || "") + ' et al., ' + (p.journal || "") + ' (' + (p.year || "") + ')</div>';
             listHtml += '  <div class="ai-citation-pmid">PMID: ' + (p.pmid || "N/A") + '</div>';
             listHtml += '</div>';
@@ -293,7 +310,7 @@ function PA_AIInterpretView() {
 
         if (role === "assistant" && !isHtml) {
             try {
-                bubbleContent = marked.parse(content);
+                bubbleContent = marked.parse(this._preprocessMarkdown(content));
             } catch(e) {
                 // fallback to escaped text
             }

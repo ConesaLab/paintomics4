@@ -267,7 +267,7 @@ function MainView() {
 								if (response.success === false) {
 									return;
 								}
-								showInfoMessage("Welcome to PaintOmics 4!", {
+								showInfoMessage("Welcome to PaintOmics AI!", {
 									message: "PaintOmics 4 is now hosted on the University of Valencia's server. For any inquiries, please contact us at <a href=\"mailto:paintomics4@gmail.com\">paintomics4@gmail.com</a>",
 									showButton: true
 								})
