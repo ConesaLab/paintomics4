@@ -734,7 +734,7 @@ def pathwayAcquisitionSaveImage(request, response):
 
         if(fileFormat == "png"):
             def createImage(svgData):
-                cairosvg.svg2png(bytestring=svgData, write_to=path + fileName + "." + fileFormat)
+                cairosvg.svg2png(bytestring=svgData, write_to=path + fileName + "." + fileFormat, unsafe=True)
             try:
                 logging.info("TRYING...")
                 createImage(svgData=svgData)
