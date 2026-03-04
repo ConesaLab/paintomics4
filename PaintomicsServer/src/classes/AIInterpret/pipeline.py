@@ -167,7 +167,6 @@ def run_ai_pipeline(job_id, experiment_design, RESPONSE):
         dao.save_progress(job_id, {"status": "interpreting", "percent": 45,
                                    "detail": "Generating interpretation with evidence extraction..."})
 
-        interpretation_executor = build_interpretation_executor(paper_index, llm)
         batch_reports = []
 
         for batch_start in range(0, len(pathways), AI_PATHWAYS_PER_BATCH):
@@ -180,8 +179,15 @@ def run_ai_pipeline(job_id, experiment_design, RESPONSE):
                 if batch_pathway_names & set(p.get("pathways", [p.get("pathway", "")]))
             ]
 
+            # Use local indices [1, 2, ...] per batch to prevent the LLM from
+            # renumbering citations (it tends to reset to [1] regardless of the
+            # global ref_index).  After the batch report, remap back to global.
+            local_papers, local_to_global = _build_local_paper_index(batch_papers)
+            local_paper_index = {lp["ref_index"]: lp for lp in local_papers}
+            local_executor = build_interpretation_executor(local_paper_index, llm)
+
             prompt = build_two_pass_interpretation_prompt(
-                batch, batch_papers, experiment_design, organism_name)
+                batch, local_papers, experiment_design, organism_name)
 
             # Main agent uses extract_evidence tool to spawn sub-agents
             result = llm.complete_with_tools(
@@ -190,11 +196,14 @@ def run_ai_pipeline(job_id, experiment_design, RESPONSE):
                     {"role": "user", "content": prompt},
                 ],
                 tools=INTERPRETATION_TOOLS,
-                tool_executor=interpretation_executor,
+                tool_executor=local_executor,
                 max_tokens=4000,
                 temperature=AI_TEMPERATURE,
                 max_iterations=15,
             )
+
+            # Remap local [1], [2] back to global [10], [14] etc.
+            result = _remap_citation_indices(result, local_to_global)
             batch_reports.append(result)
 
             pct = 45 + int(30 * (batch_start + len(batch)) / max(len(pathways), 1))
@@ -418,6 +427,56 @@ def _parse_json_verdict(text):
         "actual_text": "",
         "suggested_fix": "",
     }
+
+
+# =========================================================================
+# Phase 3 helpers: local batch indexing
+# =========================================================================
+
+def _build_local_paper_index(batch_papers):
+    """Create locally-numbered copies of batch papers (1, 2, 3, ...).
+
+    LLMs tend to renumber citations starting from 1 regardless of the
+    provided ref_index.  By giving each batch local indices, we work
+    *with* that tendency and remap back to global indices afterward.
+
+    Returns:
+        (local_papers, local_to_global): list of paper copies with local
+        ref_index, and a dict mapping local_idx -> global_idx.
+    """
+    local_papers = []
+    local_to_global = {}
+    for local_idx, p in enumerate(batch_papers, 1):
+        local_paper = dict(p)  # shallow copy — sections dict is shared (read-only)
+        local_paper["ref_index"] = local_idx
+        local_papers.append(local_paper)
+        local_to_global[local_idx] = p["ref_index"]
+    return local_papers, local_to_global
+
+
+def _remap_citation_indices(text, local_to_global):
+    """Remap [N] citation indices from local batch numbering to global numbering.
+
+    Uses a two-pass placeholder approach to avoid collision when e.g.
+    local [1] -> global [3] and local [3] -> global [7].
+    """
+    if not local_to_global:
+        return text
+
+    result = text
+
+    # Pass 1: replace [local] with unique placeholders (process largest first
+    # so [12] is replaced before [1])
+    for local_idx in sorted(local_to_global.keys(), reverse=True):
+        global_idx = local_to_global[local_idx]
+        placeholder = f"__CITE_REMAP_{global_idx}__"
+        result = result.replace(f"[{local_idx}]", placeholder)
+
+    # Pass 2: replace placeholders with final [global] indices
+    for global_idx in set(local_to_global.values()):
+        result = result.replace(f"__CITE_REMAP_{global_idx}__", f"[{global_idx}]")
+
+    return result
 
 
 # =========================================================================

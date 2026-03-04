@@ -91,6 +91,17 @@ SYSTEM_PROMPT_SYNTHESIZE_V2 = """You are an expert molecular biologist creating 
 5. Include a "Key Findings" summary at the top.
 6. End with "Limitations and Caveats" section.
 
+## Markdown Formatting Rules (CRITICAL)
+- Use proper markdown heading hierarchy: # for title, ## for sections, ### for subsections.
+- ALWAYS leave a blank line before and after headings (## and ###).
+- ALWAYS leave a blank line before and after horizontal rules (---).
+- Do NOT mix numbered lists with headings. Use either headings OR numbered lists, not both on the same line.
+  BAD:  "### 1. Some Title"
+  GOOD: "### Some Title" (use heading alone)
+  GOOD: "1. **Some Title**" (use bold in list item)
+- Use bullet points (* or -) for lists within sections.
+- Use **bold** for emphasis within paragraphs, not headings inside lists.
+
 ## Citation Rules (CRITICAL)
 - PRESERVE all [N] citation indices exactly as they appear in the batch reports — do NOT renumber.
 - Compile a unified ### References section from all batch reports.
