@@ -265,50 +265,62 @@ function PA_Step1JobView() {
 					xtype: 'box',
 					cls: "contentbox",
 					style: "margin-top:50px; max-width:1300px",
-					html: '<div id="news">' +
-						' <h2> News & Updates </h2>' +
-						'<p>' +
-						'We are updating <b>PaintOmics</b> weekly. Please find more details bellow:'+
-						'</p>' +
-						' <ul style="float: left;width: 65%;"> ' +
-						'   <li>Release of <b> PaintOmics </b> (' + APP_VERSION + ')  (05/31/2022) &#x1F525 &#x1F525 &#x1F525</li>' +
-						'   <li>Check out our updated <a href="http://paintomics.readthedocs.org/en/latest/" target="_blank">User guide</a> for <b> PaintOmics </b> (' + APP_VERSION + ') release (05/31/2022) &#x1F525 &#x1F525 </li>' +
-						'   <li>Check out other bioinformatics tools developed by our group <a href="https://github.com/ConesaLab/"> GitHub page </a>(05/31/2022) &#x1F525</li>' +
-						'</ul>' +
-						' <p style="clear:both;">' +
-						'If you wish to view the update history, please <a href="https://paintomics.readthedocs.io/en/latest/1_5_update_history/" target="_blank"> read more here... </a>' +
-						' </p>' +
-						'</div>'
+					html: '<div class="po-hero-section">' +
+						'<div class="po-hero">' +
+							'<div class="po-hero-text">' +
+								'<div class="po-hero-badge">Multi-Omics Integration Platform</div>' +
+								'<h1>PaintOmics <span>' + APP_VERSION + '</span></h1>' +
+								'<p class="po-hero-desc">Integrative visualization of multiple omic datasets onto KEGG, Reactome, and MapMan biological pathway maps across multiple species and biological kingdoms.</p>' +
+								'<div class="po-hero-ai-highlight">' +
+									'<div><span class="po-ai-icon"><i class="fa fa-lightbulb-o"></i></span> <strong>AI-Powered Pathway Interpretation</strong></div>' +
+									'<p>Unlock unprecedented systems-biology discoveries with our next-generation multi-agent AI framework. Automatically synthesize cross-omics patterns, identify regulatory cascades, and generate publication-ready biological narratives grounded in current literature.</p>' +
+								'</div>' +
+								'<div class="po-hero-actions">' +
+									'<a href="http://paintomics.readthedocs.org/en/latest/" target="_blank" class="po-btn-primary">Documentation</a>' +
+									'<a href="https://github.com/ConesaLab/paintomics4/" target="_blank" class="po-btn-outline">GitHub</a>' +
+									'<a href="mailto:paintomics4@gmail.com" class="po-btn-outline">Contact</a>' +
+								'</div>' +
+							'</div>' +
+							'<div class="po-hero-visual">' +
+								'<img id="graphicalAbstract" src="resources/images/GraphicalAbstract.png" alt="PaintOmics Graphical Abstract" />' +
+							'</div>' +
+						'</div>' +
+					'</div>'
 			}, {
 				xtype: 'box',
-				cls: "contentbox",
+				cls: "contentbox po-about-section",
 				style: "margin-top:4px; max-width:1300px",
 				html: '<div id="about">' +
-				' <h2>Welcome to PaintOmics (' + APP_VERSION + ')</h2>' +
-				' <p>' +
-				'   <b>Paintomics</b>  is a web tool for the integrative visualization of multiple omic datasets onto KEGG (102.0 April 1 2022), Reactome (Version 76 21 March 2021) and MapMan (GoMapMan 25 May 2018) biological pathway maps. Currently, Paintomics supports integrated visualization of multiple species of different biological kingdoms and offers user the possibility to request any other organism present in the KEGG, Reactome and MapMan database. We will update all those databases annually.<br/><br/>' +
-				'   <b>Paintomics</b> is easy to run because the application itself guides you through the three different steps that are detailed next:' +
-				' </p>' +
-				' <ul style="float: left;width: 100%;"> ' +
-				'   <li><b>Data uploading:</b>' +
-				'	<ol>' +
-				'		<li>Choose your organism (see selection box below).</li>' +
-				'		<li>Choose database you want to explore (see checkbox below).</li>'+
-				'		<li>Upload your multi-omic data (see form below). You can <a href="resources/paintomics_example_data.zip">download the example data from here</a> to check the format of the files. You can also load an example (<a class="button btn-secondary btn-inline btn-small" href="javascript:void(0)"><i class="fa fa-file-text-o"></i> Load example</a> button in the upper right corner of the screen) to explore Paintomics functionalities.</li>' +
-				'		<li>Click on <a class="button btn-success btn-inline btn-small" href="javascript:void(0)"><i class="fa fa-play"></i> Run PaintOmics</a> button.</li>' +
-				'	</ol><br/></li> ' +
-				'   <li><b>Identifier and Name Matching and Metabolite assignment:</b> Paintomics requires Entrez IDs for working with KEGG, Reactome and MapMan biological pathway maps, so the tool will convert the names and identifiers from different sources and databases in user’s the input data. This screen give users information about the number of features successfully mapped to KEGG, Reactome and MapMan biological pathway maps. It also shows the data distribution that will be used for pathway colouring, which can be modified when visualizing a pathway. Additionally, the metabolite names assignments are displayed and users can choose their favourite option in case of ambiguity. Click <a href="javascript:void(0)" class="button btn-success btn-inline btn-small"><i class="fa fa-play"></i> Next step</a> button when you are ready.<br/><br/></li>' +
-				'   <li><b>Results:</b> Pathways summary, Pathways classification, Pathways network, Pathways enrichment, Pathways visualization (by clicking <a href="javascript:void(0)" class="button btn-inline btn-small"  style="background-color:#ADA6A6;font-size: 14px;"><i class="fa fa-paint-brush"></i></a> for any of the displayed pathways in Pathways enrichment section). Read more about these analyses in <a href="http://paintomics.readthedocs.io/en/latest/" target="_blank">our documentation</a>.</li>' +
-				' </ul>' +
-				' <p style="clear:both;">' +
-				'   Please check the <b><a href="http://paintomics.readthedocs.org/en/latest/" target="_blank">User guide</a></b> for further information. For any question on <b>Paintomics</b>, you can send an e-mail to <a href="mailto:paintomics4@gmail.com">paintomics4@gmail.com</a>, or go to our <a href="https://github.com/ConesaLab/paintomics4/"> GitHub page </a>' + "." +
-				' </p>' +
-					// center the video
-				' <div style="text-align:center;">' +
-				' <iframe width="560" height="315" src="https://www.youtube.com/embed/brvToUmL1n4" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>' +
-				' <iframe width="560" height="315" src="https://www.youtube.com/embed/4XxPKqAubsA" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>' +
-				' </div>' +
-				' </div>'
+					'<h2>How It Works</h2>' +
+					'<div class="po-steps-grid">' +
+						'<div class="po-step-card">' +
+							'<div class="po-step-number">1</div>' +
+							'<h3>Data Uploading</h3>' +
+							'<ol>' +
+								'<li>Choose your organism (see selection box below).</li>' +
+								'<li>Choose database you want to explore (see checkbox below).</li>' +
+								'<li>Upload your multi-omic data (see form below). You can <a href="resources/paintomics_example_data.zip">download the example data from here</a> to check the format of the files. You can also load an example (<a class="button btn-secondary btn-inline btn-small" href="javascript:void(0)"><i class="fa fa-file-text-o"></i> Load example</a>) to explore PaintOmics functionalities.</li>' +
+								'<li>Click on <a class="button btn-success btn-inline btn-small" href="javascript:void(0)"><i class="fa fa-play"></i> Run PaintOmics</a> button.</li>' +
+							'</ol>' +
+						'</div>' +
+						'<div class="po-step-card">' +
+							'<div class="po-step-number">2</div>' +
+							'<h3>Identifier &amp; Name Matching</h3>' +
+							'<p>PaintOmics requires Entrez IDs for working with KEGG, Reactome and MapMan biological pathway maps, so the tool will convert the names and identifiers from different sources and databases in your input data. This screen shows the number of features successfully mapped and the data distribution used for pathway colouring. Metabolite name assignments are displayed and users can choose their favourite option in case of ambiguity. Click <a class="button btn-success btn-inline btn-small" href="javascript:void(0)"><i class="fa fa-play"></i> Next step</a> when you are ready.</p>' +
+						'</div>' +
+						'<div class="po-step-card">' +
+							'<div class="po-step-number">3</div>' +
+							'<h3>Explore Results</h3>' +
+							'<p>Pathways summary, Pathways classification, Pathways network, Pathways enrichment, Pathways visualization (by clicking <a href="javascript:void(0)" class="button btn-inline btn-small" style="background-color:#ADA6A6;font-size:14px;"><i class="fa fa-paint-brush"></i></a> for any of the displayed pathways), and <b>AI-powered pathway interpretation</b> (by clicking <a href="javascript:void(0)" class="button btn-inline btn-small" style="background-color:#4a90d9;font-size:14px;color:#fff;"><i class="fa fa-lightbulb-o"></i> AI Interpret</a>). Read more about these analyses in <a href="http://paintomics.readthedocs.io/en/latest/" target="_blank">our documentation</a>.</p>' +
+						'</div>' +
+					'</div>' +
+					'<h2 style="margin-top:24px;">Video Tutorials</h2>' +
+					'<div class="po-tutorials-grid">' +
+						'<iframe width="560" height="315" src="https://www.youtube.com/embed/brvToUmL1n4" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>' +
+						'<iframe width="560" height="315" src="https://www.youtube.com/embed/4XxPKqAubsA" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>' +
+					'</div>' +
+					'<p style="margin-top:16px;">Check the <b><a href="http://paintomics.readthedocs.org/en/latest/" target="_blank">User guide</a></b> for further information. For questions, email <a href="mailto:paintomics4@gmail.com">paintomics4@gmail.com</a> or visit our <a href="https://github.com/ConesaLab/paintomics4/">GitHub page</a>.</p>' +
+				'</div>'
 			}, {
 				xtype: 'form',
 				maxWidth: 1300,
@@ -420,11 +432,15 @@ function PA_Step1JobView() {
 					}*/,
 					{   // AI Interpretation section
 						xtype: "box", flex: 1,
-						html: '<h3>AI Interpretation (Optional)</h3>'
+						html: '<h3><i class="fa fa-lightbulb-o"></i> AI-Powered Pathway Interpretation</h3>'
 					},
 					{
-						xtype: "container", layout: "vbox", style: "margin: 5px 20px;",
+						xtype: "container", layout: "vbox", cls: "po-ai-section-body",
 						items: [
+							{
+								xtype: "box",
+								html: '<p style="color:#555;font-size:13px;margin:0 0 10px 0;line-height:1.55;">PaintOmics offers a revolutionary AI-assisted pathway interpretation driven by the breathtaking computational power of a <b>Next-Generation Agentic AI Swarm</b>. When enabled, your pathway analysis summaries are seamlessly handed off to a hyper-advanced, autonomous network of domain-specialized LLM agents with real-time agentic RAG, live PubMed knowledge retrieval, and chain-of-thought reasoning \u2014 dynamically interfacing with the world\u2019s most powerful Large Language Models to reveal publication-ready biological discoveries at unprecedented speed.</p>'
+							},
 							{
 								xtype: 'checkboxfield',
 								boxLabel: 'Enable AI pathway interpretation (sends analysis summaries to AI service) ' +
@@ -438,20 +454,25 @@ function PA_Step1JobView() {
 											icon.addEventListener("click", function(e) {
 												e.preventDefault();
 												e.stopPropagation();
-												var existing = document.getElementById("aiGdprDisclaimer");
+												var existing = document.getElementById("aiGdprOverlay");
 												if (existing) { existing.remove(); return; }
+												var overlay = document.createElement("div");
+												overlay.id = "aiGdprOverlay";
+												overlay.className = "ai-gdpr-overlay";
 												var disclaimer = document.createElement("div");
 												disclaimer.id = "aiGdprDisclaimer";
 												disclaimer.className = "ai-gdpr-disclaimer";
 												disclaimer.innerHTML =
 													'<div class="ai-gdpr-disclaimer-header">' +
 													'  <strong>Data Privacy &amp; Compliance Notice</strong>' +
-													'  <button class="ai-gdpr-close" onclick="this.parentElement.parentElement.remove()">&times;</button>' +
+													'  <button class="ai-gdpr-close">&times;</button>' +
 													'</div>' +
 													'<div class="ai-gdpr-disclaimer-body">' +
-													'  <p><strong>How it works:</strong> When enabled, aggregated pathway analysis summaries ' +
-													'  (enrichment statistics, gene lists, expression fold-changes) are sent to an external ' +
-													'  Large Language Model (LLM) provider for interpretation. Data is processed on <strong>third-party servers</strong> ' +
+													'  <p><strong>How it works:</strong> When enabled, your aggregated pathway analysis summaries ' +
+													'  (enrichment statistics, gene lists, expression fold-changes) are routed through our ' +
+													'  <strong>Next-Generation Agentic AI Swarm</strong> \u2014 an autonomous network of domain-specialized ' +
+													'  LLM agents with real-time agentic RAG and live PubMed knowledge retrieval. To deliver this ' +
+													'  unprecedented analytical power, data is securely processed on <strong>third-party LLM servers</strong> ' +
 													'  outside the PaintOmics infrastructure.</p>' +
 													'  <hr>' +
 													'  <p><strong>EU Regulatory Framework:</strong></p>' +
@@ -466,14 +487,6 @@ function PA_Step1JobView() {
 													'    relevant, and limited to what is necessary should be processed.</li>' +
 													'  </ul>' +
 													'  <hr>' +
-													'  <p><strong style="color:#2e7d32;">Data suitable for AI analysis:</strong></p>' +
-													'  <ul class="ai-gdpr-safe">' +
-													'    <li>Aggregated gene expression statistics (fold-changes, p-values)</li>' +
-													'    <li>Pathway enrichment results and scores</li>' +
-													'    <li>Anonymised metabolomics profiles</li>' +
-													'    <li>Model organism data (mouse, rat, zebrafish, etc.)</li>' +
-													'    <li>Publicly available dataset identifiers (GEO, ArrayExpress)</li>' +
-													'  </ul>' +
 													'  <p><strong style="color:#c62828;">Data NOT suitable for AI analysis:</strong></p>' +
 													'  <ul class="ai-gdpr-unsafe">' +
 													'    <li>Patient names, clinical record identifiers, or any PII</li>' +
@@ -485,9 +498,17 @@ function PA_Step1JobView() {
 													'  <p style="font-size:11px;color:#666;margin-top:8px;">' +
 													'    By enabling this feature, you confirm that the data submitted does not contain ' +
 													'    personally identifiable or sensitive personal data as defined by GDPR Article 9, ' +
-													'    or that you have obtained appropriate legal basis for its processing.</p>' +
+													'    or that you have obtained appropriate legal basis for its processing. ' +
+													'    For full details, see our <a href="conditions.html" target="_blank">Terms &amp; Conditions</a>.</p>' +
 													'</div>';
-												icon.parentElement.appendChild(disclaimer);
+												overlay.appendChild(disclaimer);
+												document.body.appendChild(overlay);
+												overlay.addEventListener("click", function(ev) {
+													if (ev.target === overlay) { overlay.remove(); }
+												});
+												disclaimer.querySelector(".ai-gdpr-close").addEventListener("click", function() {
+													overlay.remove();
+												});
 											});
 										}, 200);
 									}

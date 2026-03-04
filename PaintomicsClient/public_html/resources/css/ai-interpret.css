@@ -278,6 +278,77 @@
 .ai-msg-assistant .ai-msg-bubble strong {
     color: #2c3e50;
 }
+.ai-msg-assistant .ai-msg-bubble b {
+    color: #2c3e50;
+}
+.ai-msg-assistant .ai-msg-bubble blockquote {
+    border-left: 3px solid #4a90d9;
+    background: #f0f7ff;
+    padding: 8px 12px;
+    margin: 8px 0;
+    font-style: italic;
+    color: #333;
+}
+.ai-msg-assistant .ai-msg-bubble pre {
+    background: #1e1e2e;
+    color: #cdd6f4;
+    padding: 10px 14px;
+    border-radius: 6px;
+    overflow-x: auto;
+    margin: 8px 0;
+    font-size: 12px;
+    line-height: 1.45;
+}
+.ai-msg-assistant .ai-msg-bubble pre code {
+    background: none;
+    padding: 0;
+    color: inherit;
+    font-size: inherit;
+}
+.ai-msg-assistant .ai-msg-bubble table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 8px 0;
+}
+.ai-msg-assistant .ai-msg-bubble th {
+    background: #f0f4f8;
+    padding: 6px 10px;
+    border: 1px solid #dde;
+    font-size: 12px;
+    text-align: left;
+}
+.ai-msg-assistant .ai-msg-bubble td {
+    padding: 6px 10px;
+    border: 1px solid #eee;
+    font-size: 12px;
+}
+.ai-msg-assistant .ai-msg-bubble em {
+    color: #555;
+}
+.ai-msg-assistant .ai-msg-bubble a {
+    color: #4a90d9;
+    text-decoration: none;
+}
+.ai-msg-assistant .ai-msg-bubble a:hover {
+    text-decoration: underline;
+}
+.ai-msg-assistant .ai-msg-bubble ul ul,
+.ai-msg-assistant .ai-msg-bubble ol ol,
+.ai-msg-assistant .ai-msg-bubble ul ol,
+.ai-msg-assistant .ai-msg-bubble ol ul {
+    padding-left: 18px;
+}
+.ai-msg-assistant .ai-msg-bubble h1 strong,
+.ai-msg-assistant .ai-msg-bubble h2 strong,
+.ai-msg-assistant .ai-msg-bubble h3 strong {
+    color: inherit;
+}
+.ai-widget-panel.is-fullscreen .ai-msg-bubble {
+    font-size: 15px;
+    line-height: 1.65;
+    padding: 14px 20px;
+    max-width: 900px;
+}
 
 .ai-msg-label {
     font-size: 10px;
@@ -498,17 +569,29 @@
     vertical-align: middle;
     margin-left: 4px;
 }
-.ai-gdpr-disclaimer {
-    position: absolute;
+.ai-gdpr-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.4);
     z-index: 20000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.ai-gdpr-disclaimer {
+    position: relative;
+    z-index: 20001;
     background: #fff;
     border: 1px solid #ccc;
     border-radius: 8px;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.15);
-    width: 480px;
-    max-height: 500px;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.25);
+    width: 520px;
+    max-width: 90vw;
+    max-height: 80vh;
     overflow-y: auto;
-    margin-top: 8px;
     font-size: 13px;
     line-height: 1.5;
     color: #333;

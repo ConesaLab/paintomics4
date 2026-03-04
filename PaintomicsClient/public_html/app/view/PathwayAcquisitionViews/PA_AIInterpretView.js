@@ -1,5 +1,15 @@
 /* global Ext, $, marked, SERVER_URL_AI_INTERPRET_REPORT, SERVER_URL_AI_INTERPRET_CHAT */
 
+if (typeof marked !== "undefined" && marked.use) {
+    marked.use({
+        gfm: true,
+        breaks: true,
+        pedantic: false,
+        headerIds: false,
+        mangle: false
+    });
+}
+
 function PA_AIInterpretView() {
     this.$root = null;
     this.isExpanded = false;
@@ -225,9 +235,15 @@ function PA_AIInterpretView() {
         text = text.replace(/([^\n])\n(---+)/g, "$1\n\n$2");
         // Ensure blank line after horizontal rules
         text = text.replace(/(---+)\n([^\n])/g, "$1\n\n$2");
+        // Ensure blank line before unordered list starts when preceded by non-list content
+        text = text.replace(/([^\n])\n([-*+] )/g, "$1\n\n$2");
+        // Ensure blank line before ordered list starts when preceded by non-list content
+        text = text.replace(/([^\n])\n(\d+\. )/g, "$1\n\n$2");
         // Fix numbered headings that LLM produces like "### 1. Title" inside lists
         // Convert "N. ### Title" pattern to "### N. Title"
         text = text.replace(/^(\d+)\.\s+(#{1,6}\s)/gm, "$2$1. ");
+        // Normalize excessive blank lines (3+ newlines to 2)
+        text = text.replace(/\n{3,}/g, "\n\n");
         return text;
     };
 

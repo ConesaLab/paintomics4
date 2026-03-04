@@ -1808,9 +1808,250 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
   display: none;
 }
 
+/* =============================================
+   PaintOmics Landing Page - Modernized Styles
+   ============================================= */
 
+/* Hero Section */
+.po-hero-section {
+  padding: 40px 30px;
+  border-bottom: 2px solid #e0e0e0;
+}
 
+.po-hero {
+  display: flex;
+  flex-direction: row;
+  gap: 40px;
+  max-width: 1200px;
+  margin: 0 auto;
+  align-items: center;
+}
 
+.po-hero-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.po-hero-badge {
+  display: inline-block;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  background: rgba(0, 115, 131, 0.08);
+  border: 1px solid rgba(0, 115, 131, 0.3);
+  color: #007383;
+  border-radius: 20px;
+  padding: 5px 14px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.po-hero h1 {
+  font-size: 36px;
+  font-weight: lighter;
+  color: #333;
+  margin: 14px 0;
+  line-height: 1.2;
+}
+
+.po-hero h1 span {
+  font-weight: 600;
+  color: rgb(209, 96, 42);
+}
+
+.po-hero-desc {
+  font-size: 15px;
+  line-height: 1.7;
+  color: #555;
+  margin-bottom: 20px;
+}
+
+.po-hero-ai-highlight {
+  background: #f5fafa;
+  border: 1px solid #c8e0e3;
+  border-left: 3px solid #007383;
+  border-radius: 4px;
+  padding: 14px 18px;
+  margin-bottom: 24px;
+}
+
+.po-hero-ai-highlight .po-ai-icon {
+  font-size: 18px;
+  margin-right: 6px;
+}
+
+.po-hero-ai-highlight strong {
+  color: #007383;
+}
+
+.po-hero-ai-highlight p {
+  color: #666;
+  font-size: 13px;
+  margin: 4px 0 0;
+  line-height: 1.55;
+}
+
+.po-hero-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.po-hero-actions a {
+  padding: 8px 20px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: all 0.2s;
+}
+
+.po-hero-actions .po-btn-primary {
+  background: #007383;
+  color: #fff;
+}
+
+.po-hero-actions .po-btn-primary:hover {
+  background: #005f6b;
+}
+
+.po-hero-actions .po-btn-outline {
+  background: transparent;
+  border: 1px solid #ccc;
+  color: #555;
+}
+
+.po-hero-actions .po-btn-outline:hover {
+  border-color: #007383;
+  color: #007383;
+}
+
+.po-hero-visual {
+  flex: 0 0 340px;
+}
+
+.po-hero-visual img {
+  width: 100%;
+  border-radius: 4px;
+  cursor: pointer;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+  transition: transform 0.3s;
+}
+
+.po-hero-visual img:hover {
+  transform: scale(1.02);
+}
+
+/* About / How It Works Section */
+.po-about-section {
+  padding: 0;
+  margin-top: 4px;
+}
+
+.po-about-section h2 {
+  font-size: 24px;
+  color: #d1602a;
+  margin-bottom: 8px;
+}
+
+.po-steps-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+  margin: 20px 0;
+}
+
+.po-step-card {
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-top: 3px solid #007383;
+  border-radius: 4px;
+  padding: 24px;
+  text-align: center;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.po-step-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.po-step-number {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: rgb(209, 96, 42);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 15px;
+  margin-bottom: 12px;
+}
+
+.po-step-card h3 {
+  font-size: 16px;
+  color: #007383;
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+
+.po-step-card p,
+.po-step-card ol {
+  font-size: 13px;
+  color: #666;
+  line-height: 1.6;
+  text-align: left;
+}
+
+.po-step-card ol {
+  padding-left: 20px;
+  margin: 8px 0 0;
+}
+
+.po-step-card li {
+  margin: 4px 0;
+}
+
+.po-tutorials-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+  margin: 20px 0;
+}
+
+.po-tutorials-grid iframe {
+  width: 100%;
+  border-radius: 4px;
+}
+
+/* AI Section */
+.po-ai-section-body {
+  background: linear-gradient(to bottom, #f8faff, #f2f6fc);
+  border: 1px solid #c8d6e5;
+  border-radius: 8px;
+  padding: 18px 22px;
+  margin: 5px 20px 10px 20px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+/* Responsive */
+@media (max-width: 900px) {
+  .po-hero {
+    flex-direction: column;
+  }
+  .po-hero-visual {
+    flex: 0 0 auto;
+    max-width: 300px;
+  }
+  .po-steps-grid {
+    grid-template-columns: 1fr;
+  }
+  .po-tutorials-grid {
+    grid-template-columns: 1fr;
+  }
+}
 
 
 
