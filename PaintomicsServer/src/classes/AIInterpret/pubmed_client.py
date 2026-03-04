@@ -17,9 +17,10 @@ _pubmed_last_request = 0.0
 
 # Section classification keywords
 _SECTION_KEYWORDS = {
-    "introduction": {"introduction", "background"},
-    "results": {"result", "finding", "observation"},
-    "discussion": {"discussion", "conclusion"},
+    "introduction": {"introduction", "background", "overview"},
+    "results": {"result", "finding", "observation", "analysis", "characterization",
+                "expression", "profiling", "identification"},
+    "discussion": {"discussion", "conclusion", "interpretation", "implication", "significance"},
 }
 _SKIP_SECTIONS = {"method", "material", "experimental", "supplementary", "supplement", "appendix"}
 
@@ -27,7 +28,7 @@ _SKIP_SECTIONS = {"method", "material", "experimental", "supplementary", "supple
 class PubMedClient:
     ESEARCH_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
     EFETCH_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
-    IDCONV_URL = "https://www.ncbi.nlm.nih.gov/pmc/utils/idconv/v1.0/"
+    IDCONV_URL = "https://pmc.ncbi.nlm.nih.gov/tools/idconv/api/v1/articles/"
     PMC_EFETCH_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
     EUROPEPMC_URL = "https://www.ebi.ac.uk/europepmc/webservices/rest"
 
@@ -47,6 +48,34 @@ class PubMedClient:
         if AI_PUBMED_API_KEY:
             params["api_key"] = AI_PUBMED_API_KEY
         return params
+
+    def _request_with_retry(self, method, url, max_retries=2, **kwargs):
+        """HTTP request with retry on transient errors (429, 5xx, connection/timeout).
+
+        Returns the Response object. Raises on persistent failure.
+        """
+        kwargs.setdefault("timeout", 30)
+        last_exc = None
+        for attempt in range(max_retries + 1):
+            try:
+                self._throttle()
+                r = requests.request(method, url, **kwargs)
+                if r.status_code == 429 or r.status_code >= 500:
+                    if attempt < max_retries:
+                        delay = 2 ** attempt  # 1s, 2s
+                        logger.warning(f"Retry {attempt+1}/{max_retries} for {url} (HTTP {r.status_code}), waiting {delay}s")
+                        time.sleep(delay)
+                        continue
+                return r
+            except (requests.ConnectionError, requests.Timeout) as e:
+                last_exc = e
+                if attempt < max_retries:
+                    delay = 2 ** attempt
+                    logger.warning(f"Retry {attempt+1}/{max_retries} for {url} ({type(e).__name__}), waiting {delay}s")
+                    time.sleep(delay)
+                    continue
+                raise
+        raise last_exc  # should not reach here
 
     def search(self, query, max_results=5):
         """ESearch: returns list of PMIDs."""
@@ -101,12 +130,11 @@ class PubMedClient:
         # Batch up to 200 per request
         for i in range(0, len(pmids), 200):
             batch = pmids[i:i + 200]
-            self._throttle()
             try:
-                r = requests.get(self.IDCONV_URL, params={
+                r = self._request_with_retry("GET", self.IDCONV_URL, params={
                     "tool": "paintomics4", "email": AI_PUBMED_EMAIL,
                     "ids": ",".join(batch), "format": "json",
-                }, timeout=15)
+                })
                 r.raise_for_status()
                 data = r.json()
                 for rec in data.get("records", []):
@@ -120,10 +148,9 @@ class PubMedClient:
 
     def fetch_pmc_full_text(self, pmcid):
         """Fetch full text XML from PMC EFetch, parse into sections. Returns dict or None."""
-        self._throttle()
         try:
             params = {**self._base_params(), "db": "pmc", "id": pmcid, "retmode": "xml"}
-            r = requests.get(self.PMC_EFETCH_URL, params=params, timeout=30)
+            r = self._request_with_retry("GET", self.PMC_EFETCH_URL, params=params)
             r.raise_for_status()
             return self._parse_pmc_xml(r.text)
         except Exception as e:
@@ -184,7 +211,7 @@ class PubMedClient:
             for kw in keywords:
                 if kw in title_lower:
                     return key
-        return None  # unrecognized → skip
+        return "other"  # unrecognized non-skip → keep as "other"
 
     @staticmethod
     def _extract_element_text(element):
@@ -196,18 +223,18 @@ class PubMedClient:
                 parts.append(stripped)
         return " ".join(parts)
 
-    def fetch_europepmc_full_text(self, pmid):
-        """Tier 2 fallback: fetch full text XML from Europe PMC. Returns sections dict or None."""
+    def fetch_europepmc_full_text(self, pmcid):
+        """Tier 2 fallback: fetch full text XML from Europe PMC using PMCID. Returns sections dict or None."""
         time.sleep(AI_EUROPEPMC_DELAY)
         try:
-            url = f"{self.EUROPEPMC_URL}/{pmid}/fullTextXML"
-            r = requests.get(url, timeout=30)
+            url = f"{self.EUROPEPMC_URL}/{pmcid}/fullTextXML"
+            r = self._request_with_retry("GET", url)
             if r.status_code == 404:
                 return None
             r.raise_for_status()
             return self._parse_pmc_xml(r.text)
         except Exception as e:
-            logger.warning(f"Europe PMC full-text fetch failed for PMID {pmid}: {e}")
+            logger.warning(f"Europe PMC full-text fetch failed for {pmcid}: {e}")
             return None
 
     def fetch_papers(self, pmids):
@@ -244,7 +271,7 @@ class PubMedClient:
             if pmcid:
                 paper["pmcid"] = pmcid
 
-            # Tier 1: PMC EFetch
+            # Tier 1: PMC EFetch (requires PMCID)
             if pmcid:
                 sections = self.fetch_pmc_full_text(pmcid)
                 if sections:
@@ -252,18 +279,22 @@ class PubMedClient:
                     paper["full_text_available"] = True
                     paper["fetch_tier"] = "pmc"
                     paper["full_text_char_count"] = sum(len(v) for v in paper["sections"].values())
+                    logger.info(f"Paper PMID={pmid}: Tier 1 (PMC EFetch) OK — {len(sections)} sections")
                     continue
 
-            # Tier 2: Europe PMC
-            sections = self.fetch_europepmc_full_text(pmid)
-            if sections:
-                paper["sections"].update(sections)
-                paper["full_text_available"] = True
-                paper["fetch_tier"] = "europepmc"
-                paper["full_text_char_count"] = sum(len(v) for v in paper["sections"].values())
-                continue
+            # Tier 2: Europe PMC (also requires PMCID — fullTextXML endpoint uses PMCID)
+            if pmcid:
+                sections = self.fetch_europepmc_full_text(pmcid)
+                if sections:
+                    paper["sections"].update(sections)
+                    paper["full_text_available"] = True
+                    paper["fetch_tier"] = "europepmc"
+                    paper["full_text_char_count"] = sum(len(v) for v in paper["sections"].values())
+                    logger.info(f"Paper PMID={pmid}: Tier 2 (Europe PMC) OK — {len(sections)} sections")
+                    continue
 
             # Tier 3: abstract only (already set as default)
+            logger.info(f"Paper PMID={pmid}: Tier 3 (abstract only) — no PMCID or full text unavailable")
 
         return list(paper_map.values())
 

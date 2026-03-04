@@ -353,7 +353,7 @@ def _exec_extract_evidence(paper_index, llm, args):
 
     # Build sub-agent context with full paper text (ephemeral)
     paper_text_parts = []
-    for section in ["abstract", "results", "discussion"]:
+    for section in ["abstract", "introduction", "results", "discussion", "other"]:
         text = paper.get("sections", {}).get(section)
         if text:
             paper_text_parts.append(f"## {section.title()}\n{text}")
@@ -443,7 +443,7 @@ VERIFICATION_TOOLS = [
                     },
                     "section": {
                         "type": "string",
-                        "enum": ["abstract", "introduction", "results", "discussion"],
+                        "enum": ["abstract", "introduction", "results", "discussion", "other"],
                         "description": "Which section to retrieve.",
                     },
                 },
@@ -545,7 +545,7 @@ def _exec_fetch_paper_section(paper_index, args):
     if not paper:
         return f"Error: No paper with reference index [{ref_idx}]."
 
-    valid_sections = {"abstract", "introduction", "results", "discussion"}
+    valid_sections = {"abstract", "introduction", "results", "discussion", "other"}
     if section not in valid_sections:
         return f"Error: section must be one of {valid_sections}."
 
