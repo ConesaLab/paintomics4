@@ -286,8 +286,9 @@ class PathwayAcquisitionJob(Job):
         logging.info("VALIDATING ASSOCIATION FILE (" + omicName + ")...")
         if os_path.isfile(associationsFileName):
             nLine = -1
-            with open(associationsFileName, 'rU') as associationDataFile:
-                for line in csv_reader(associationDataFile, delimiter="\t"):
+            assoc_delimiter = Job.detect_delimiter(associationsFileName)
+            with open(associationsFileName, 'r', encoding='utf-8-sig', newline='') as associationDataFile:
+                for line in csv_reader(associationDataFile, delimiter=assoc_delimiter):
                     nLine = nLine + 1
 
                     if nLine > MAX_NUMBER_FEATURES:
@@ -304,8 +305,9 @@ class PathwayAcquisitionJob(Job):
         logging.info("VALIDATING RELEVANT ASSOCIATION FILE (" + omicName + ")...")
         if os_path.isfile(relevantAssociationsFileName):
             nLine = -1
-            with open(relevantAssociationsFileName, 'rU') as relevantAssociationDataFile:
-                for line in csv_reader(relevantAssociationDataFile, delimiter="\t"):
+            rel_assoc_delimiter = Job.detect_delimiter(relevantAssociationsFileName)
+            with open(relevantAssociationsFileName, 'r', encoding='utf-8-sig', newline='') as relevantAssociationDataFile:
+                for line in csv_reader(relevantAssociationDataFile, delimiter=rel_assoc_delimiter):
                     nLine = nLine + 1
 
                     if nLine > MAX_NUMBER_FEATURES:
@@ -325,7 +327,7 @@ class PathwayAcquisitionJob(Job):
         # *************************************************************************
         logging.info("VALIDATING RELEVANT FEATURES FILE (" + omicName + ")...")
         if os_path.isfile(relevantFileName):
-            f = open(relevantFileName, 'rU')
+            f = open(relevantFileName, 'r', encoding='utf-8-sig')
             lines = f.readlines()
 
             # Ensure that relevant features files does not exceed the max number of features
@@ -362,10 +364,11 @@ class PathwayAcquisitionJob(Job):
                 with open( valuesFileName, 'w', encoding='utf-8' ) as f:
                     f.write( text )
 
-            with open(valuesFileName, newline='', encoding='utf-8' ) as inputDataFile:
+            values_delimiter = Job.detect_delimiter(valuesFileName)
+            with open(valuesFileName, newline='', encoding='utf-8-sig' ) as inputDataFile:
                 nLine = -1
                 erroneousLines = {}
-                for line in csv_reader(inputDataFile, delimiter="\t"):
+                for line in csv_reader(inputDataFile, delimiter=values_delimiter):
                     nLine = nLine + 1
                     # TODO: HACER ALGO CON EL HEADER?
                     # *************************************************************************

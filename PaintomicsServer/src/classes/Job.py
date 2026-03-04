@@ -37,6 +37,20 @@ from shutil import make_archive as shutil_make_archive
 
 
 class Job(Model):
+    @staticmethod
+    def detect_delimiter(filename):
+        """Auto-detect whether a file uses tab or comma as delimiter."""
+        with open(filename, 'r', encoding='utf-8-sig') as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    if '\t' in line:
+                        return '\t'
+                    elif ',' in line:
+                        return ','
+                    return '\t'
+        return '\t'
+
     #******************************************************************************************************************
     # CONSTRUCTORS
     #******************************************************************************************************************
@@ -336,10 +350,11 @@ class Job(Model):
 
         #IF THE USER UPLOADED VALUES FOR GENE EXPRESSION
         if os_path.isfile(valuesFileName):
-            with open(valuesFileName, 'rU') as inputDataFile:
+            detected_delimiter = Job.detect_delimiter(valuesFileName)
+            with open(valuesFileName, 'r', encoding='utf-8-sig', newline='') as inputDataFile:
                 nLine = 0
                 geneAux = omicValueAux = fileHeader = None
-                for line in csv_reader(inputDataFile, delimiter="\t"):
+                for line in csv_reader(inputDataFile, delimiter=detected_delimiter):
                     nLine = nLine+1
                     #*************************************************************************
                     # STEP 2.1 CHECK IF IT IS HEADER, IF SO, IGNORE LINE
@@ -522,10 +537,11 @@ class Job(Model):
         if os_path.isfile(valuesFileName):
             inputCompounds = []
             #READ THE FILE LINE BY LINE, CREATE A TEMPORAL COMPOUND WITH THE INFO
-            with open(valuesFileName, 'rU') as inputDataFile:
+            detected_delimiter = Job.detect_delimiter(valuesFileName)
+            with open(valuesFileName, 'r', encoding='utf-8-sig', newline='') as inputDataFile:
                 nLine = 0
                 compoundAux = omicValueAux = fileHeader = None
-                for line in csv_reader(inputDataFile, delimiter="\t"):
+                for line in csv_reader(inputDataFile, delimiter=detected_delimiter):
                     nLine = nLine+1
                     #*************************************************************************
                     # STEP 2.1 CHECK IF IT IS HEADER, IF SO, IGNORE LINE
@@ -606,8 +622,9 @@ class Job(Model):
         #TODO: HEADER
         relevantFeatures = {}
         if os_path.isfile(fileName):
-            with open(fileName, 'rU') as inputDataFile:
-                for line in csv_reader(inputDataFile, delimiter="\t"):
+            detected_delimiter = Job.detect_delimiter(fileName)
+            with open(fileName, 'r', encoding='utf-8-sig', newline='') as inputDataFile:
+                for line in csv_reader(inputDataFile, delimiter=detected_delimiter):
                     if isBedFormat == True:
                         lineProc = line[0] + "_" + line[1] + "_" + line[2]
                     else:
@@ -639,8 +656,9 @@ class Job(Model):
         #TODO: HEADER
         associationFeatures = defaultdict(set)
         if os_path.isfile(fileName):
-            with open(fileName, 'rU') as inputDataFile:
-                for line in csv_reader(inputDataFile, delimiter="\t"):
+            detected_delimiter = Job.detect_delimiter(fileName)
+            with open(fileName, 'r', encoding='utf-8-sig', newline='') as inputDataFile:
+                for line in csv_reader(inputDataFile, delimiter=detected_delimiter):
                     associationFeatures[line[1]].add(line[0])
             inputDataFile.close()
             logging.info("PARSING ASSOCIATIONS FILE (" + fileName + ")... THE FILE CONTAINS " + str(len(associationFeatures.keys())) + " ASSOCIATIONS" );
