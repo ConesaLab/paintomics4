@@ -443,8 +443,8 @@ function PA_Step1JobView() {
 							},
 							{
 								xtype: 'checkboxfield',
-								boxLabel: 'Enable AI pathway interpretation (sends analysis summaries to AI service) ' +
-									'<i class="fa fa-question-circle ai-gdpr-info-icon" id="aiGdprInfoIcon" style="color:#4a90d9;cursor:pointer;font-size:14px;" title="Data privacy information"></i>',
+								boxLabel: 'Enable AI pathway interpretation (<span style="color:#e65100;">sends analysis summaries to external AI service</span>) ' +
+									'<i class="fa fa-exclamation-circle ai-gdpr-info-icon" id="aiGdprInfoIcon" style="color:#e65100;cursor:pointer;font-size:16px;" title="Data privacy &amp; compliance \u2014 click to learn what data is sent"></i>',
 								name: 'aiConsent', inputValue: 'true', uncheckedValue: 'false',
 								listeners: {
 									afterrender: function() {
@@ -469,11 +469,26 @@ function PA_Step1JobView() {
 													'</div>' +
 													'<div class="ai-gdpr-disclaimer-body">' +
 													'  <p><strong>How it works:</strong> When enabled, your aggregated pathway analysis summaries ' +
-													'  (enrichment statistics, gene lists, expression fold-changes) are routed through our ' +
-													'  <strong>Next-Generation Agentic AI Swarm</strong> \u2014 an autonomous network of domain-specialized ' +
-													'  LLM agents with real-time agentic RAG and live PubMed knowledge retrieval. To deliver this ' +
-													'  unprecedented analytical power, data is securely processed on <strong>third-party LLM servers</strong> ' +
-													'  outside the PaintOmics infrastructure.</p>' +
+													'  are routed through our <strong>Next-Generation Agentic AI Swarm</strong> \u2014 an autonomous network ' +
+													'  of domain-specialized LLM agents with real-time agentic RAG and live PubMed knowledge retrieval.</p>' +
+													'  <div style="background:#fff3e0;border-left:4px solid #e65100;padding:10px 14px;margin:10px 0;border-radius:3px;">' +
+													'    <strong style="color:#e65100;">\u26A0 Third-Party Processing:</strong> To deliver this analytical power, ' +
+													'    the following data is sent to <strong>external LLM servers</strong> outside PaintOmics infrastructure:' +
+													'    <ul style="margin:6px 0 0;padding-left:18px;">' +
+													'      <li>Pathway enrichment statistics (p-values, scores)</li>' +
+													'      <li>Gene/protein/metabolite lists per pathway</li>' +
+													'      <li>Expression fold-changes and summary statistics</li>' +
+													'      <li>Your experiment design description (if provided)</li>' +
+													'    </ul>' +
+													'  </div>' +
+													'  <div style="background:#e8f5e9;border-left:4px solid #2e7d32;padding:10px 14px;margin:10px 0;border-radius:3px;">' +
+													'    <strong style="color:#2e7d32;">\u2705 NOT sent to external servers:</strong>' +
+													'    <ul style="margin:6px 0 0;padding-left:18px;">' +
+													'      <li>Raw data files you uploaded</li>' +
+													'      <li>Individual sample-level measurements</li>' +
+													'      <li>Your login credentials or account information</li>' +
+													'    </ul>' +
+													'  </div>' +
 													'  <hr>' +
 													'  <p><strong>EU Regulatory Framework:</strong></p>' +
 													'  <ul>' +
@@ -487,7 +502,7 @@ function PA_Step1JobView() {
 													'    relevant, and limited to what is necessary should be processed.</li>' +
 													'  </ul>' +
 													'  <hr>' +
-													'  <p><strong style="color:#c62828;">Data NOT suitable for AI analysis:</strong></p>' +
+													'  <p><strong style="color:#c62828;">\u26D4 Data you must NEVER submit:</strong></p>' +
 													'  <ul class="ai-gdpr-unsafe">' +
 													'    <li>Patient names, clinical record identifiers, or any PII</li>' +
 													'    <li>Protected Health Information (PHI) under HIPAA/GDPR</li>' +
