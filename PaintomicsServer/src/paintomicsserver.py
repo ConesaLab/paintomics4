@@ -33,6 +33,7 @@ from src.servlets.UserManagementServlet import *
 from src.servlets.Bed2GenesServlet import *
 from src.servlets.MiRNA2GenesServlet import *
 from src.servlets.AdminServlet import *
+from src.servlets.AIInterpretServlet import *
 from src.common.KeggInformationManager import KeggInformationManager
 from src.common.JobInformationManager import JobInformationManager
 
@@ -387,6 +388,33 @@ class Application(object):
             return pathwayAcquisitionMetagenes_PART1(request, Response(), self.queue, self.generateRandomID(), self.ROOT_DIRECTORY).getResponse()
         #*******************************************************************************************
         # PATHWAY SERVLETS HANDLERS - END
+        #############################################################################################
+        #############################################################################################
+        #
+        # AI INTERPRETATION SERVLETS HANDLERS
+        #
+        #*******************************************************************************************
+        @self.app.route(SERVER_SUBDOMAIN + '/ai_interpret_initiate', methods=['OPTIONS', 'POST'])
+        def aiInterpretInitiateHandler():
+            return aiInterpretInitiate(request, Response(), self.queue).getResponse()
+
+        @self.app.route(SERVER_SUBDOMAIN + '/ai_interpret_status', methods=['OPTIONS', 'POST'])
+        def aiInterpretStatusHandler():
+            return aiInterpretStatus(request, Response()).getResponse()
+
+        @self.app.route(SERVER_SUBDOMAIN + '/ai_interpret_report', methods=['OPTIONS', 'POST'])
+        def aiInterpretReportHandler():
+            return aiInterpretReport(request, Response()).getResponse()
+
+        @self.app.route(SERVER_SUBDOMAIN + '/ai_interpret_chat', methods=['OPTIONS', 'POST'])
+        def aiInterpretChatHandler():
+            return aiInterpretChat(request, Response()).getResponse()
+
+        @self.app.route(SERVER_SUBDOMAIN + '/ai_generate_exp_design', methods=['OPTIONS', 'POST'])
+        def aiGenerateExpDesignHandler():
+            return aiGenerateExpDesign(request, Response()).getResponse()
+        #*******************************************************************************************
+        # AI INTERPRETATION SERVLETS HANDLERS - END
         #############################################################################################
         #############################################################################################
         #

@@ -24,6 +24,17 @@ SERVER_URL_ADJUST_PVALUES = SERVER_URL + "pa_adjust_pvalues";
 SERVER_URL_UPDATE_METAGENES = SERVER_URL + "pa_get_clusters";
 
 /*********************************************************************
+ * AI INTERPRETATION SERVICES URLS         **************************
+ *********************************************************************/
+SERVER_URL_AI_INTERPRET_INITIATE = SERVER_URL + "ai_interpret_initiate";
+SERVER_URL_AI_INTERPRET_STATUS = SERVER_URL + "ai_interpret_status";
+SERVER_URL_AI_INTERPRET_REPORT = SERVER_URL + "ai_interpret_report";
+SERVER_URL_AI_INTERPRET_CHAT = SERVER_URL + "ai_interpret_chat";
+SERVER_URL_AI_GENERATE_EXP_DESIGN = SERVER_URL + "ai_generate_exp_design";
+AI_POLL_INTERVAL = 3000;
+CHAT_POLL_INTERVAL = 1500;
+
+/*********************************************************************
  * DATA MANIPULATION SERVICES URLS         ***************************
  *********************************************************************/
 SERVER_URL_DM_UPLOAD_FILE = SERVER_URL + "dm_upload_file";

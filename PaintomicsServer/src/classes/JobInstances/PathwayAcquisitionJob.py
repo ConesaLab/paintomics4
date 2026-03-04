@@ -118,6 +118,10 @@ class PathwayAcquisitionJob(Job):
         self.globalExpressionData = None
         self.hubAnalysisResult = None
 
+        # AI Interpretation
+        self.aiConsent = False
+        self.experimentDesign = ""
+
         self.matchedClass = {}
 
         #self.reactomeClass = defaultdict(set)
@@ -163,6 +167,15 @@ class PathwayAcquisitionJob(Job):
 
     def getFoundCompounds(self):
         return self.foundCompounds
+
+    def getAIConsent(self):
+        return self.aiConsent
+    def setAIConsent(self, v):
+        self.aiConsent = (v == True or v == "true" or v == "True")
+    def getExperimentDesign(self):
+        return self.experimentDesign
+    def setExperimentDesign(self, v):
+        self.experimentDesign = str(v) if v else ""
 
     def getJobDescription(self, generate=False, isExampleJob=False):
         if generate:

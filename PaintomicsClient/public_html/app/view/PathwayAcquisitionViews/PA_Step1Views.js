@@ -168,6 +168,13 @@ function PA_Step1JobView() {
 		$("#availableOmicsContainer").css("display", "none");
 		$("#exampleButton").css("display", "none");
 
+		// Auto-enable AI interpretation for example data
+		var aiCheckbox = this.getComponent().down('[name=aiConsent]');
+		if (aiCheckbox) { aiCheckbox.setValue(true); }
+		var expDesign = this.getComponent().down('[name=experimentDesign]');
+		if (expDesign) {
+			expDesign.setValue("STATegra multi-omics time-course experiment in mouse B3 cell line (Mus musculus, mmu). Ikaros transcription factor expression was induced via tamoxifen treatment to trigger B-cell differentiation. Ikaros-induced vs Control samples were compared across 6 time points (0h, 2h, 6h, 12h, 18h, 24h). Values are log2 fold-changes (Ikaros/Control). Six omics layers: gene expression (RNA-seq, 6337 genes, 5224 DE), proteomics (1110 proteins, 148 DE), metabolomics (59 metabolites, 41 DE), DNase-seq chromatin accessibility (10274 regions, 5101 DE), miRNA-seq (5000 gene-miRNA pairs, 1106 DE), and transcription factor activity (2890 TFs, 2403 DE). Goal: identify pathways and molecular mechanisms driving Ikaros-mediated B-cell differentiation across multiple regulatory levels.");
+		}
 
 		showInfoMessage("About this example", {
 			message: 'The following example data was loaded:' +
@@ -411,6 +418,89 @@ function PA_Step1JobView() {
 								flex: 0
 							}]
 					}*/,
+					{   // AI Interpretation section
+						xtype: "box", flex: 1,
+						html: '<h3>AI Interpretation (Optional)</h3>'
+					},
+					{
+						xtype: "container", layout: "vbox", style: "margin: 5px 20px;",
+						items: [
+							{
+								xtype: 'checkboxfield',
+								boxLabel: 'Enable AI pathway interpretation (sends analysis summaries to AI service) ' +
+									'<i class="fa fa-question-circle ai-gdpr-info-icon" id="aiGdprInfoIcon" style="color:#4a90d9;cursor:pointer;font-size:14px;" title="Data privacy information"></i>',
+								name: 'aiConsent', inputValue: 'true', uncheckedValue: 'false',
+								listeners: {
+									afterrender: function() {
+										setTimeout(function() {
+											var icon = document.getElementById("aiGdprInfoIcon");
+											if (!icon) return;
+											icon.addEventListener("click", function(e) {
+												e.preventDefault();
+												e.stopPropagation();
+												var existing = document.getElementById("aiGdprDisclaimer");
+												if (existing) { existing.remove(); return; }
+												var disclaimer = document.createElement("div");
+												disclaimer.id = "aiGdprDisclaimer";
+												disclaimer.className = "ai-gdpr-disclaimer";
+												disclaimer.innerHTML =
+													'<div class="ai-gdpr-disclaimer-header">' +
+													'  <strong>Data Privacy &amp; Compliance Notice</strong>' +
+													'  <button class="ai-gdpr-close" onclick="this.parentElement.parentElement.remove()">&times;</button>' +
+													'</div>' +
+													'<div class="ai-gdpr-disclaimer-body">' +
+													'  <p><strong>How it works:</strong> When enabled, aggregated pathway analysis summaries ' +
+													'  (enrichment statistics, gene lists, expression fold-changes) are sent to an external ' +
+													'  Large Language Model (LLM) provider for interpretation. Data is processed on <strong>third-party servers</strong> ' +
+													'  outside the PaintOmics infrastructure.</p>' +
+													'  <hr>' +
+													'  <p><strong>EU Regulatory Framework:</strong></p>' +
+													'  <ul>' +
+													'    <li><strong>GDPR (EU 2016/679)</strong> \u2014 Articles 44\u201349 govern international transfers of personal data. ' +
+													'    If your data originates from EU subjects, transferring identifiable data to non-EU processors ' +
+													'    requires appropriate safeguards (e.g., Standard Contractual Clauses).</li>' +
+													'    <li><strong>GDPR Article 9</strong> \u2014 Processing of special categories of data, including ' +
+													'    <em>genetic data</em> and <em>health data</em>, is prohibited unless explicit consent or ' +
+													'    another lawful basis applies.</li>' +
+													'    <li><strong>GDPR Article 5(1)(c)</strong> \u2014 Data minimisation principle: only data adequate, ' +
+													'    relevant, and limited to what is necessary should be processed.</li>' +
+													'  </ul>' +
+													'  <hr>' +
+													'  <p><strong style="color:#2e7d32;">Data suitable for AI analysis:</strong></p>' +
+													'  <ul class="ai-gdpr-safe">' +
+													'    <li>Aggregated gene expression statistics (fold-changes, p-values)</li>' +
+													'    <li>Pathway enrichment results and scores</li>' +
+													'    <li>Anonymised metabolomics profiles</li>' +
+													'    <li>Model organism data (mouse, rat, zebrafish, etc.)</li>' +
+													'    <li>Publicly available dataset identifiers (GEO, ArrayExpress)</li>' +
+													'  </ul>' +
+													'  <p><strong style="color:#c62828;">Data NOT suitable for AI analysis:</strong></p>' +
+													'  <ul class="ai-gdpr-unsafe">' +
+													'    <li>Patient names, clinical record identifiers, or any PII</li>' +
+													'    <li>Protected Health Information (PHI) under HIPAA/GDPR</li>' +
+													'    <li>Raw sequencing reads from identifiable human subjects</li>' +
+													'    <li>Rare genetic variants that could re-identify individuals</li>' +
+													'    <li>Unpublished clinical trial data with patient linkage</li>' +
+													'  </ul>' +
+													'  <p style="font-size:11px;color:#666;margin-top:8px;">' +
+													'    By enabling this feature, you confirm that the data submitted does not contain ' +
+													'    personally identifiable or sensitive personal data as defined by GDPR Article 9, ' +
+													'    or that you have obtained appropriate legal basis for its processing.</p>' +
+													'</div>';
+												icon.parentElement.appendChild(disclaimer);
+											});
+										}, 200);
+									}
+								}
+							},
+							{
+								xtype: "textarea", fieldLabel: "Experiment Design", name: 'experimentDesign',
+								labelWidth: 150, width: 650, height: 60,
+								emptyText: 'e.g., "RNA-seq wildtype vs knockout mouse liver, n=3 per group"',
+								maxLength: 2000
+							}
+						]
+					},
 					{
 						xtype: "box",
 						html: '<h3>2. Choose the files to upload <a class="button btn-right btn-small" href="https://paintomics.uv.es/resources/paintomics_example_data.zip"><i class="fa fa-download"></i> Download example data</a></h3>'

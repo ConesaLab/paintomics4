@@ -107,6 +107,9 @@ def pathwayAcquisitionStep1_PART1(REQUEST, RESPONSE, QUEUE_INSTANCE, JOB_ID, EXA
             jobInstance.setDatabases(list(set([u'KEGG']) | set(databases).intersection(organismDB)))
             logging.info("STEP1 - SELECTED SPECIES IS " + specie)
 
+            jobInstance.setAIConsent(formFields.get("aiConsent", "false"))
+            jobInstance.setExperimentDesign(formFields.get("experimentDesign", ""))
+
             logging.info("STEP1 - READING FILES....")
             JobInformationManager().saveFiles(uploadedFiles, formFields, userID, jobInstance, CLIENT_TMP_DIR)
             logging.info("STEP1 - READING FILES....DONE")
@@ -134,6 +137,9 @@ def pathwayAcquisitionStep1_PART1(REQUEST, RESPONSE, QUEUE_INSTANCE, JOB_ID, EXA
             specie = "mmu"
             jobInstance.setOrganism(specie)
             jobInstance.setDatabases(['KEGG', "Reactome"]) # TODO: cambiar
+
+            jobInstance.setAIConsent(formFields.get("aiConsent", "false"))
+            jobInstance.setExperimentDesign(formFields.get("experimentDesign", ""))
         else:
             raise NotImplementedError
 
@@ -440,6 +446,8 @@ def pathwayAcquisitionStep2_PART2(jobID, userID, selectedCompounds, clusterNumbe
                 "globalExpressionData":globalExpressionData,
                 # Add hub analysis result
                 'hubAnalysisResult': hubAnalysisResult,
+                "aiConsent": jobInstance.getAIConsent(),
+                "experimentDesign": jobInstance.getExperimentDesign(),
                 "timestamp": int(time())
             })
         else:
@@ -459,6 +467,8 @@ def pathwayAcquisitionStep2_PART2(jobID, userID, selectedCompounds, clusterNumbe
                 "mappingComp": None,
                 "pValueInDict": None,
                 "classificationDict": None,
+                "aiConsent": jobInstance.getAIConsent(),
+                "experimentDesign": jobInstance.getExperimentDesign(),
                 "timestamp": int( time() )
             } )
 
@@ -658,6 +668,7 @@ def pathwayAcquisitionRecoverJob(request, response, QUEUE_INSTANCE):
                     "globalExpressionData": safe_globalExpressionData,
                     # Add hub analysis result
                     'hubAnalysisResult': safe_hubAnalysisResult,
+                    "aiConsent": jobInstance.getAIConsent(),
                 })
             else:
                 response.setContent({
@@ -677,7 +688,8 @@ def pathwayAcquisitionRecoverJob(request, response, QUEUE_INSTANCE):
                     "timestamp": int(time()),
                     "allowSharing": jobInstance.getAllowSharing(),
                     "readOnly": jobInstance.getReadOnly(),
-                    "omicsValuesID": jobInstance.getValueIdTable()
+                    "omicsValuesID": jobInstance.getValueIdTable(),
+                    "aiConsent": jobInstance.getAIConsent(),
                 })
 
     except Exception as ex:

@@ -67,6 +67,9 @@ function PA_Step3JobView() {
 	this.metaboliteView = null;
 
 	this.hubAnalysisView = null;
+	this.aiWidget = null;
+	this.aiJobID = null;
+	this.pollTimerID = null;
 
 	/*********************************************************************
 	* GETTERS AND SETTERS
@@ -467,6 +470,8 @@ function PA_Step3JobView() {
 
 		initializeTooltips(".helpTip");
 
+		me.refreshAIWidget();
+
 		return this;
 	};
 
@@ -611,6 +616,77 @@ function PA_Step3JobView() {
 		messageDialog.show();
 	};
 
+	this.pollAIStatus = function() {
+		var me = this;
+		$.ajax({
+			type: "POST", url: SERVER_URL_AI_INTERPRET_STATUS,
+			data: { jobID: me.getModel().getJobID() },
+			success: function(r) {
+				if (r.success && me.aiWidget) {
+					me.aiWidget.updateProgress(r.status, r.percent, r.detail);
+					if (r.status !== "done" && r.status !== "error" && r.status !== "cancelled") {
+						me.pollTimerID = setTimeout(function() { me.pollAIStatus(); }, AI_POLL_INTERVAL);
+					}
+				}
+			}
+		});
+	};
+
+	this.cleanupAIWidget = function() {
+		if (this.pollTimerID) {
+			clearTimeout(this.pollTimerID);
+			this.pollTimerID = null;
+		}
+		if (this.aiWidget) {
+			this.aiWidget.destroy();
+			this.aiWidget = null;
+		}
+		this.aiJobID = null;
+		$("#aiInterpretButton").hide();
+	};
+
+	this.refreshAIWidget = function() {
+		var me = this;
+		var jobID = me.getModel().getJobID();
+		var hasConsent = me.getModel().aiConsent;
+
+		if (!hasConsent || !jobID) {
+			me.cleanupAIWidget();
+			return;
+		}
+
+		// Same job — skip recreation
+		if (me.aiJobID === jobID && me.aiWidget) {
+			return;
+		}
+
+		// Different job or first time — clean old, create new
+		me.cleanupAIWidget();
+		me.aiJobID = jobID;
+
+		$("#aiInterpretButton").show();
+		me.aiWidget = new PA_AIInterpretView();
+		me.aiWidget.init(jobID);
+		me.aiWidget.onRetry = function() {
+			$.ajax({
+				type: "POST", url: SERVER_URL_AI_INTERPRET_INITIATE,
+				data: {
+					jobID: jobID,
+					experimentDesign: me.getModel().experimentDesign || ""
+				},
+				success: function() { me.pollAIStatus(); }
+			});
+		};
+		me.aiWidget.show();
+		me.pollAIStatus();
+	};
+
+	this.toggleAIWidget = function() {
+		if (this.aiWidget) {
+			this.aiWidget.toggle();
+		}
+	};
+
 	/**
 	* This function generates the component (EXTJS) using the content of the
 	* JobInstance model
@@ -639,12 +715,14 @@ function PA_Step3JobView() {
 			xtype: "container",
 			padding: '10', border: 0, maxWidth: 1900,
 			items: [
+				// AI widget is created in boxready handler
 				{ //THE TOOLBAR
 					xtype: "box",cls: "toolbar secondTopToolbar", html:
 					'<a href="javascript:void(0)" class="button btn-danger btn-right" id="resetButton"><i class="fa fa-refresh"></i> Reset view</a>' +
 					//'<a href="javascript:void(0)" class="button btn-default btn-right backButton"><i class="fa fa-arrow-left"></i> Go back</a>'
 					'<a href="javascript:void(0)" class="button btn-default btn-right mappingButton"><i class="fa fa-database"></i> Hide mapping info</a>' +
 					'<a href="javascript:void(0)" class="button btn-default btn-right" id="sharingButton"><i class="fa fa-share-alt"></i> Sharing options</a>' +
+					'<a href="javascript:void(0)" class="button btn-info btn-right" id="aiInterpretButton" style="display:none;"><i class="fa fa-lightbulb-o"></i> AI Interpret</a>' +
 					'<div id="warningMessage" style="display: none;"></div>'
 				},{ //THE SUMMARY PANEL
 					xtype: 'container', itemId: "pathwaysSummaryPanel",
@@ -738,6 +816,11 @@ function PA_Step3JobView() {
 						me.shareHandler();
 					});
 
+					// AI widget lifecycle managed by refreshAIWidget() via updateObserver()
+					$("#aiInterpretButton").click(function() {
+						me.toggleAIWidget();
+					});
+
 					// Show a warning if it is read only
 					if (! me.canEdit()) {
 						$('#warningMessage').text("The current job is read-only, changes will not be saved in the server.").show();
@@ -768,6 +851,7 @@ function PA_Step3JobView() {
 					}
 				},
 				beforedestroy: function() {
+					me.cleanupAIWidget();
 					me.getModel().deleteObserver(me);
 				}
 			}

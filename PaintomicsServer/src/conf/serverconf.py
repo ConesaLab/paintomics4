@@ -77,3 +77,39 @@ EMAIL_REPORT_RECIPIENTS    = [
 # Backwards compatibility for legacy SMTP-based imports
 smpt_sender      = EMAIL_FROM_ADDRESS
 smpt_sender_name = EMAIL_FROM_DISPLAY
+
+# ========== AI INTERPRETATION ==========
+AI_INTERPRETATION_ENABLED = os.getenv("AI_INTERPRETATION_ENABLED", "true").lower() == "true"
+
+# LLM Provider: "dashscope" (Coding Plan: GLM-5/Qwen/Kimi) or "openrouter"
+AI_LLM_PROVIDER = os.getenv("AI_LLM_PROVIDER", "dashscope")
+AI_PROVIDERS = {
+    "dashscope": {
+        "api_base": "https://coding-intl.dashscope.aliyuncs.com/v1",  # Coding Plan endpoint (sk-sp- keys only)
+        "api_key": os.getenv("AI_DASHSCOPE_API_KEY", "sk-sp-26f8a5323e3a4bf49a1a37a4c064a665"),
+        "model": os.getenv("AI_DASHSCOPE_MODEL", "qwen3.5-plus"),  # Try Qwen on Coding Plan endpoint
+    },
+    "openrouter": {
+        "api_base": "https://openrouter.ai/api/v1",
+        "api_key": os.getenv("AI_OPENROUTER_API_KEY", ""),
+        "model": os.getenv("AI_OPENROUTER_MODEL", "anthropic/claude-3.5-sonnet"),
+    },
+}
+
+# PubMed (NCBI E-utilities)
+AI_PUBMED_EMAIL = os.getenv("AI_PUBMED_EMAIL", "paintomics4@gmail.com")
+AI_PUBMED_API_KEY = os.getenv("AI_PUBMED_API_KEY", "")  # 10 req/s with key, 3 without
+
+# Pipeline
+AI_MAX_PATHWAYS = 15
+AI_PATHWAYS_PER_BATCH = 5
+AI_PAPERS_PER_PATHWAY = 5
+AI_TEMPERATURE = 0.3
+AI_MAX_CONCURRENT_PIPELINES = 2
+
+# Full-text fetching & verification
+AI_MAX_SECTION_CHARS = int(os.getenv("AI_MAX_SECTION_CHARS", "12000"))                  # ~3000 tokens/section
+AI_MAX_VERIFICATION_ITERATIONS = int(os.getenv("AI_MAX_VERIFICATION_ITERATIONS", "3"))
+AI_VERIFICATION_FUZZY_THRESHOLD = float(os.getenv("AI_VERIFICATION_FUZZY_THRESHOLD", "0.75"))
+AI_VERIFICATION_PROVIDER = os.getenv("AI_VERIFICATION_PROVIDER", "")                    # optional cheaper model
+AI_EUROPEPMC_DELAY = float(os.getenv("AI_EUROPEPMC_DELAY", "0.2"))

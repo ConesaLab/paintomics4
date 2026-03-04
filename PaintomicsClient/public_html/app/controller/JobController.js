@@ -532,6 +532,28 @@ function JobController() {
 							jobModel.setHubAnalysisResult(response.hubAnalysisResult)
 						}
 
+						// AI Interpretation — set on model BEFORE showJobInstance so Step3 view can see it
+						if (response.aiConsent === true || response.aiConsent === "true") {
+							jobModel.aiConsent = true;
+							jobModel.experimentDesign = response.experimentDesign || "";
+							$.ajax({
+								type: "POST",
+								url: SERVER_URL_AI_INTERPRET_INITIATE,
+								data: {
+									jobID: response.jobID,
+									experimentDesign: response.experimentDesign || ""
+								},
+								success: function(aiResponse) {
+									if (aiResponse.success) {
+										jobModel.aiJobID = aiResponse.aiJobID;
+									}
+								},
+								error: function() {
+									console.warn("AI initiation failed — pathway analysis unaffected");
+								}
+							});
+						}
+
 						me.updateStoredApplicationData("jobModel", jobModel);
 						
 						me.showJobInstance(jobModel);
@@ -826,9 +848,10 @@ function JobController() {
 							jobModel.setHubAnalysisResult(response.hubAnalysisResult)
 						}
 
-
-
-
+						// AI Interpretation — check for recovered jobs
+						if (response.aiConsent === true || response.aiConsent === "true") {
+							jobModel.aiConsent = true;
+						}
 
 						me.cleanStoredApplicationData();
 						me.updateStoredApplicationData("jobModel", jobModel);
