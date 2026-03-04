@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime, timedelta
 
 from src.common.ServerErrorManager import handleException
 from src.common.UserSessionManager import UserSessionManager
@@ -11,6 +12,9 @@ from src.classes.AIInterpret.prompts import SYSTEM_PROMPT_CHAT
 from src.classes.AIInterpret.tools import CHAT_TOOLS, execute_tool
 from src.conf.serverconf import (AI_INTERPRETATION_ENABLED, AI_PROVIDERS,
     AI_LLM_PROVIDER, AI_TEMPERATURE)
+
+# Jobs stuck longer than this are considered dead (e.g. killed by server reload)
+AI_STALE_JOB_TIMEOUT = timedelta(minutes=10)
 
 def aiInterpretInitiate(REQUEST, RESPONSE, QUEUE_INSTANCE):
     """Start or re-check the AI interpretation pipeline for a job."""
@@ -38,11 +42,20 @@ def aiInterpretInitiate(REQUEST, RESPONSE, QUEUE_INSTANCE):
         # Check idempotency: is the AI pipeline already queued/running?
         ai_job_id = "ai_" + jobID
         existingJob = QUEUE_INSTANCE.fetch_job(ai_job_id)
+
+        # Also check if the DB record shows an error (stale job detected by status endpoint)
+        dao_check = AIInterpretDAO()
+        try:
+            db_record = dao_check.find_by_job_id(jobID)
+            db_status = db_record.get("status") if db_record else None
+        finally:
+            dao_check.closeConnection()
+
         if existingJob is not None:
-            if existingJob.status == JobStatus.FINISHED:
+            if existingJob.status == JobStatus.FINISHED and db_status != "error":
                 RESPONSE.setContent({"success": True, "jobID": jobID, "status": "already_finished"})
                 return RESPONSE
-            elif existingJob.status == JobStatus.FAILED:
+            elif existingJob.status == JobStatus.FAILED or db_status == "error":
                 # Allow retry: clear old state and re-queue below
                 dao = AIInterpretDAO()
                 try:
@@ -93,12 +106,31 @@ def aiInterpretStatus(REQUEST, RESPONSE):
             RESPONSE.setContent({"success": True, "jobID": jobID,
                 "status": "not_started", "percent": 0, "detail": "Not started"})
         else:
+            status = record.get("status", "unknown")
+
+            # Detect stale/dead jobs: if a non-terminal status hasn't been
+            # updated in AI_STALE_JOB_TIMEOUT, the worker thread is dead
+            # (e.g. killed by Flask debug reloader or crash without cleanup).
+            if status not in ("done", "error", "cancelled", "not_started"):
+                updated_at = record.get("updatedAt")
+                if updated_at and (datetime.utcnow() - updated_at) > AI_STALE_JOB_TIMEOUT:
+                    logging.warning(
+                        f"AI job {jobID} stale (status={status}, "
+                        f"updatedAt={updated_at}). Marking as error."
+                    )
+                    dao.save_progress(jobID, {
+                        "status": "error", "percent": 0,
+                        "detail": "Pipeline interrupted (no progress for 10 min). Click Retry.",
+                    })
+                    status = "error"
+
             RESPONSE.setContent({
                 "success": True,
                 "jobID": jobID,
-                "status": record.get("status", "unknown"),
-                "percent": record.get("percent", 0),
-                "detail": record.get("detail", ""),
+                "status": status,
+                "percent": record.get("percent", 0) if status != "error" else 0,
+                "detail": record.get("detail", "") if status != "error"
+                    else "Pipeline interrupted (no progress for 10 min). Click Retry.",
             })
     except Exception as ex:
         handleException(RESPONSE, ex, __file__, "aiInterpretStatus", userID=userID)

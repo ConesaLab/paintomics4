@@ -1,10 +1,15 @@
 import json
 import logging
+import re
 import threading
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from src.classes.AIInterpret.llm_client import LLMClient
 from src.classes.AIInterpret.pubmed_client import PubMedClient
 from src.classes.AIInterpret.context_builder import (
-    build_pathway_context, get_organism_name, build_gene_symbol_whitelist)
+    build_pathway_context, get_organism_name, build_gene_symbol_whitelist,
+    triage_pathways, build_cross_omic_matrix,
+)
 from src.classes.AIInterpret.verification import (
     verify_report, redact_unverified,
     verify_report_v2, redact_unverified_v2, parse_references_section,
@@ -14,9 +19,11 @@ from src.classes.AIInterpret.prompts import (
     SYSTEM_PROMPT_INTERPRET, SYSTEM_PROMPT_SYNTHESIZE,
     SYSTEM_PROMPT_INTERPRET_V2, SYSTEM_PROMPT_SYNTHESIZE_V2,
     SYSTEM_PROMPT_VERIFICATION,
+    SYSTEM_PROMPT_SEARCH_PLANNER, SYSTEM_PROMPT_SEARCH_SUBAGENT,
     build_batch_interpretation_prompt, build_synthesis_prompt,
     build_two_pass_interpretation_prompt, build_synthesis_prompt_v2,
     build_verification_prompt, build_correction_prompt,
+    build_search_planner_prompt, build_subagent_filter_prompt,
 )
 from src.classes.AIInterpret.tools import (
     INTERPRETATION_TOOLS, VERIFICATION_TOOLS,
@@ -28,6 +35,9 @@ from src.conf.serverconf import (
     AI_PROVIDERS, AI_LLM_PROVIDER, AI_MAX_PATHWAYS,
     AI_PATHWAYS_PER_BATCH, AI_PAPERS_PER_PATHWAY, AI_TEMPERATURE,
     AI_MAX_CONCURRENT_PIPELINES, AI_MAX_VERIFICATION_ITERATIONS,
+    AI_MAX_SEARCH_TASKS, AI_SEARCH_SUBAGENT_WORKERS,
+    AI_PAPERS_PER_SEARCH_TASK, AI_PAPERS_KEPT_PER_TASK,
+    AI_SEARCH_PLANNER_TEMPERATURE, AI_SEARCH_SUBAGENT_TEMPERATURE,
 )
 
 logger = logging.getLogger(__name__)
@@ -37,11 +47,39 @@ _pipeline_semaphore = threading.Semaphore(AI_MAX_CONCURRENT_PIPELINES)
 _cancel_flags = {}
 
 
+class _Heartbeat:
+    """Background thread that touches updatedAt every interval so stale-job
+    detection can distinguish 'alive but slow' from 'dead'."""
+
+    def __init__(self, job_id, interval=30):
+        self._job_id = job_id
+        self._interval = interval
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._run, daemon=True)
+
+    def start(self):
+        self._thread.start()
+
+    def stop(self):
+        self._stop.set()
+
+    def _run(self):
+        while not self._stop.wait(self._interval):
+            try:
+                dao = AIInterpretDAO()
+                dao.touch(self._job_id)
+                dao.closeConnection()
+            except Exception:
+                pass  # best-effort; don't crash the heartbeat
+
+
 def run_ai_pipeline(job_id, experiment_design, RESPONSE):
     """PySiQ-compatible entry point. MUST return a Response object."""
     dao = None
+    heartbeat = _Heartbeat(job_id)
     try:
         _pipeline_semaphore.acquire()
+        heartbeat.start()
         dao = AIInterpretDAO()
 
         # Load job
@@ -55,46 +93,45 @@ def run_ai_pipeline(job_id, experiment_design, RESPONSE):
         pubmed = PubMedClient()
 
         # =====================================================================
-        # Phase 1: Extract pathway context (0% - 10%)
+        # Phase 1: Context Triage + Cross-Omic Matrix (0% - 10%)
         # =====================================================================
-        dao.save_progress(job_id, {"status": "extracting", "percent": 5, "detail": "Extracting pathway data..."})
+        dao.save_progress(job_id, {"status": "extracting", "percent": 5,
+                                   "detail": "Extracting pathway data..."})
         pathways = build_pathway_context(job_instance, max_pathways=AI_MAX_PATHWAYS)
         gene_whitelist = build_gene_symbol_whitelist(job_instance)
 
         if _cancel_flags.get(job_id):
             raise InterruptedError("Cancelled")
 
+        major_pathways, minor_pathways = triage_pathways(pathways)
+        cross_omic_matrix = build_cross_omic_matrix(major_pathways)
+
+        logger.info(f"[{job_id}] Triage: {len(major_pathways)} major + "
+                    f"{len(minor_pathways)} minor pathways")
+        dao.save_progress(job_id, {"status": "extracting", "percent": 10,
+                                   "detail": f"{len(major_pathways)} major + "
+                                             f"{len(minor_pathways)} minor pathways"})
+
+        if _cancel_flags.get(job_id):
+            raise InterruptedError("Cancelled")
+
         # =====================================================================
-        # Phase 2: Enhanced Paper Fetching (10% - 40%)
+        # Phase 2: Agentic Literature Discovery (10% - 40%)
         # =====================================================================
-        all_papers = []
-        total = len(pathways)
-        for i, pw in enumerate(pathways):
-            dao.save_progress(job_id, {
-                "status": "searching_pubmed", "percent": 10 + int(30 * i / max(total, 1)),
-                "detail": f"Searching PubMed for \"{pw['name']}\" ({i+1}/{total})"
-            })
-            gene_symbols = [g["symbol"] for g in pw["top_genes"][:5]]
-            q1 = f'"{pw["name"]}"[Title/Abstract] AND "{organism_name}"[Title/Abstract]'
-            q2 = (f'({" OR ".join(gene_symbols[:3])}) AND "{pw["name"]}"[Title/Abstract]'
-                  if gene_symbols else None)
+        search_tasks = _run_search_planner(
+            llm, major_pathways, minor_pathways, cross_omic_matrix,
+            gene_whitelist, experiment_design, organism_name, job_id)
 
-            pmids = pubmed.search(q1, max_results=AI_PAPERS_PER_PATHWAY)
-            if q2:
-                pmids += pubmed.search(q2, max_results=3)
-            pmids = list(set(pmids))[:AI_PAPERS_PER_PATHWAY]
+        logger.info(f"[{job_id}] Search planner produced {len(search_tasks)} tasks")
+        dao.save_progress(job_id, {"status": "searching_pubmed", "percent": 15,
+                                   "detail": f"Executing {len(search_tasks)} search tasks..."})
 
-            # Multi-tier fetching: PMC full text -> Europe PMC -> abstract only
-            papers = pubmed.fetch_papers(pmids) if pmids else []
-            for p in papers:
-                p["pathway"] = pw["name"]
-                if "pathways" not in p:
-                    p["pathways"] = []
-                p["pathways"].append(pw["name"])
-            all_papers.extend(papers)
+        if _cancel_flags.get(job_id):
+            raise InterruptedError("Cancelled")
 
-            if _cancel_flags.get(job_id):
-                raise InterruptedError("Cancelled")
+        all_papers = _execute_search_subagents(
+            llm, pubmed, search_tasks, experiment_design, organism_name,
+            job_id, dao)
 
         # Deduplicate and assign global ref_index
         seen = {}
@@ -107,10 +144,10 @@ def run_ai_pipeline(job_id, experiment_design, RESPONSE):
                 seen[p["pmid"]] = p
                 unique_papers.append(p)
             else:
-                # Merge pathway info into existing entry
                 existing = seen[p["pmid"]]
-                if p.get("pathway") and p["pathway"] not in existing.get("pathways", []):
-                    existing.setdefault("pathways", []).append(p["pathway"])
+                for pw_name in p.get("pathways", []):
+                    if pw_name not in existing.get("pathways", []):
+                        existing.setdefault("pathways", []).append(pw_name)
 
         paper_index = {p["ref_index"]: p for p in unique_papers}
 
@@ -293,6 +330,7 @@ def run_ai_pipeline(job_id, experiment_design, RESPONSE):
         from src.common.ServerErrorManager import handleException
         handleException(RESPONSE, ex, __file__, "run_ai_pipeline")
     finally:
+        heartbeat.stop()
         _pipeline_semaphore.release()
         _cancel_flags.pop(job_id, None)
         if dao:
@@ -357,7 +395,6 @@ def _parse_json_verdict(text):
         pass
 
     # Fallback: try to find JSON within the text
-    import re
     json_pattern = re.search(r'\{[^{}]*"text_match"[^{}]*\}', text, re.DOTALL)
     if json_pattern:
         try:
@@ -381,3 +418,331 @@ def _parse_json_verdict(text):
         "actual_text": "",
         "suggested_fix": "",
     }
+
+
+# =========================================================================
+# Phase 2 helpers: Agentic Literature Discovery
+# =========================================================================
+
+def _run_search_planner(llm, major, minor, matrix, whitelist, design, org, job_id):
+    """Use LLM to plan strategic PubMed search tasks for major pathways,
+    then auto-generate simple tasks for minor pathways.
+
+    Returns combined list of search task dicts.
+    """
+    all_tasks = []
+
+    # --- Major pathways: LLM-planned searches ---
+    if major:
+        prompt = build_search_planner_prompt(
+            major, matrix, whitelist, design, org, AI_MAX_SEARCH_TASKS)
+        try:
+            if _cancel_flags.get(job_id):
+                raise InterruptedError("Cancelled")
+
+            raw = llm.complete(
+                messages=[
+                    {"role": "system", "content": SYSTEM_PROMPT_SEARCH_PLANNER.format(
+                        max_tasks=AI_MAX_SEARCH_TASKS)},
+                    {"role": "user", "content": prompt},
+                ],
+                max_tokens=3000,
+                temperature=AI_SEARCH_PLANNER_TEMPERATURE,
+            )
+            planned = _parse_search_plan(raw)
+            if planned:
+                all_tasks.extend(planned)
+                logger.info(f"[{job_id}] Search planner returned {len(planned)} tasks")
+            else:
+                logger.warning(f"[{job_id}] Search planner returned empty plan, using fallback")
+                all_tasks.extend(_build_fallback_search_tasks(major, org))
+        except InterruptedError:
+            raise
+        except Exception as e:
+            logger.warning(f"[{job_id}] Search planner failed: {e}, using fallback")
+            all_tasks.extend(_build_fallback_search_tasks(major, org))
+
+    # --- Minor pathways: auto-generated simple tasks (no LLM) ---
+    for pw in minor:
+        gene_symbols = [g["symbol"] for g in pw.get("top_genes", [])[:5]]
+        queries = [f'"{pw["name"]}"[Title/Abstract] AND "{org}"[Title/Abstract]']
+        if gene_symbols:
+            queries.append(
+                f'({" OR ".join(gene_symbols[:3])}) AND "{pw["name"]}"[Title/Abstract]')
+        all_tasks.append({
+            "task_id": f"minor_{pw['id']}",
+            "query_intent": f"General literature for {pw['name']}",
+            "target_pathways": [pw["name"]],
+            "keywords": gene_symbols[:3],
+            "pubmed_queries": queries,
+        })
+
+    return all_tasks[:AI_MAX_SEARCH_TASKS]
+
+
+def _parse_search_plan(raw_text):
+    """Parse JSON array from search planner LLM output.
+
+    Tries: direct parse → strip markdown fences → regex extract.
+    Returns list of task dicts, or empty list on failure.
+    """
+    text = raw_text.strip()
+
+    # Strip markdown code fences
+    if text.startswith("```"):
+        lines = text.split("\n")
+        lines = [l for l in lines if not l.strip().startswith("```")]
+        text = "\n".join(lines).strip()
+
+    # Try direct JSON parse
+    try:
+        result = json.loads(text)
+        if isinstance(result, list):
+            return [t for t in result if isinstance(t, dict) and t.get("pubmed_queries")]
+    except (json.JSONDecodeError, ValueError):
+        pass
+
+    # Regex fallback: extract JSON array
+    match = re.search(r'\[.*\]', text, re.DOTALL)
+    if match:
+        try:
+            result = json.loads(match.group())
+            if isinstance(result, list):
+                return [t for t in result if isinstance(t, dict) and t.get("pubmed_queries")]
+        except (json.JSONDecodeError, ValueError):
+            pass
+
+    logger.warning(f"Could not parse search plan: {text[:300]}")
+    return []
+
+
+def _build_fallback_search_tasks(pathways, organism_name):
+    """Generate simple keyword-based search tasks (no LLM required).
+
+    Replicates the original rigid Phase 2 query logic as a fallback.
+    """
+    tasks = []
+    for pw in pathways:
+        gene_symbols = [g["symbol"] for g in pw.get("top_genes", [])[:5]]
+        q1 = f'"{pw["name"]}"[Title/Abstract] AND "{organism_name}"[Title/Abstract]'
+        queries = [q1]
+        if gene_symbols:
+            q2 = f'({" OR ".join(gene_symbols[:3])}) AND "{pw["name"]}"[Title/Abstract]'
+            queries.append(q2)
+        tasks.append({
+            "task_id": f"fallback_{pw.get('id', pw['name'])}",
+            "query_intent": f"Literature for {pw['name']}",
+            "target_pathways": [pw["name"]],
+            "keywords": gene_symbols[:3],
+            "pubmed_queries": queries,
+        })
+    return tasks
+
+
+def _execute_search_subagents(llm, pubmed, tasks, design, org, job_id, dao):
+    """Run search sub-agents in parallel via ThreadPoolExecutor.
+
+    Each sub-agent searches PubMed, filters with LLM, and returns abstract-only
+    paper dicts. After all sub-agents finish, a single batch fetch retrieves
+    full text for all unique PMIDs.
+
+    Returns list of paper dicts with full text where available.
+    """
+    if not tasks:
+        return []
+
+    abstract_papers = []  # paper dicts from sub-agents (abstract only)
+    completed = 0
+    total = len(tasks)
+
+    with ThreadPoolExecutor(max_workers=AI_SEARCH_SUBAGENT_WORKERS) as executor:
+        futures = {
+            executor.submit(
+                _search_subagent_worker, llm, pubmed, task, design, org, job_id
+            ): task
+            for task in tasks
+        }
+
+        for future in as_completed(futures):
+            task = futures[future]
+            try:
+                if _cancel_flags.get(job_id):
+                    raise InterruptedError("Cancelled")
+                papers = future.result(timeout=120)
+                abstract_papers.extend(papers)
+            except InterruptedError:
+                raise
+            except Exception as e:
+                logger.warning(f"[{job_id}] Sub-agent failed for task "
+                               f"'{task.get('task_id', '?')}': {e}")
+
+            completed += 1
+            pct = 15 + int(20 * completed / max(total, 1))
+            dao.save_progress(job_id, {
+                "status": "searching_pubmed", "percent": pct,
+                "detail": f"Search tasks: {completed}/{total} complete"
+            })
+
+    if _cancel_flags.get(job_id):
+        raise InterruptedError("Cancelled")
+
+    # Batch full-text fetch for all unique PMIDs (35% → 40%)
+    dao.save_progress(job_id, {"status": "searching_pubmed", "percent": 35,
+                               "detail": "Fetching full text for discovered papers..."})
+
+    # Dedup PMIDs and collect pathway attributions
+    pmid_pathways = {}  # pmid -> set of pathway names
+    for p in abstract_papers:
+        pmid = p["pmid"]
+        pmid_pathways.setdefault(pmid, set()).update(p.get("pathways", []))
+
+    deduped_pmids = list(pmid_pathways.keys())
+    if not deduped_pmids:
+        return []
+
+    # Batch fetch with full text (multi-tier: PMC → Europe PMC → abstract)
+    try:
+        full_papers = pubmed.fetch_papers(deduped_pmids)
+    except Exception as e:
+        logger.warning(f"[{job_id}] Batch full-text fetch failed: {e}, "
+                       f"falling back to abstracts only")
+        full_papers = pubmed.fetch_abstracts(deduped_pmids)
+        for p in full_papers:
+            p["full_text_available"] = False
+            p["fetch_tier"] = "abstract_only"
+            p["sections"] = {"abstract": p.get("abstract", "")}
+            p["full_text_char_count"] = len(p.get("abstract", ""))
+            p["authors_short"] = _format_authors_short_inline(p.get("first_author", ""))
+            p["pathways"] = []
+
+    # Attach pathway attributions to fetched papers
+    for p in full_papers:
+        pw_names = pmid_pathways.get(p["pmid"], set())
+        existing = set(p.get("pathways", []))
+        p["pathways"] = sorted(existing | pw_names)
+
+    return full_papers
+
+
+def _search_subagent_worker(llm, pubmed, task, design, org, job_id):
+    """Single search sub-agent: search PubMed, optionally filter with LLM.
+
+    Returns list of abstract-only paper dicts with pathway attribution.
+    """
+    if _cancel_flags.get(job_id):
+        raise InterruptedError("Cancelled")
+
+    all_pmids = []
+    for query in task.get("pubmed_queries", []):
+        try:
+            pmids = pubmed.search(query, max_results=AI_PAPERS_PER_SEARCH_TASK)
+            all_pmids.extend(pmids)
+        except Exception as e:
+            logger.warning(f"[{job_id}] PubMed search failed for "
+                           f"'{query[:80]}': {e}")
+
+    # Dedup
+    unique_pmids = list(dict.fromkeys(all_pmids))
+    if not unique_pmids:
+        return []
+
+    if _cancel_flags.get(job_id):
+        raise InterruptedError("Cancelled")
+
+    # Fetch abstracts for LLM filtering
+    try:
+        papers = pubmed.fetch_abstracts(unique_pmids)
+    except Exception as e:
+        logger.warning(f"[{job_id}] Abstract fetch failed for task "
+                       f"'{task.get('task_id', '?')}': {e}")
+        return []
+
+    if not papers:
+        return []
+
+    # LLM filter: select top papers by relevance
+    kept_pmids = _llm_filter_papers(llm, task, papers, design, org)
+
+    # Apply filter (or fallback to first N)
+    if kept_pmids:
+        papers = [p for p in papers if p["pmid"] in kept_pmids]
+    else:
+        papers = papers[:AI_PAPERS_KEPT_PER_TASK]
+
+    # Attach pathway attribution
+    target_pathways = task.get("target_pathways", [])
+    for p in papers:
+        p["pathways"] = list(target_pathways)
+
+    return papers
+
+
+def _llm_filter_papers(llm, task, papers, design, org):
+    """Use LLM sub-agent to select the most relevant papers.
+
+    Returns set of PMID strings, or empty set on failure (caller uses fallback).
+    """
+    if len(papers) <= AI_PAPERS_KEPT_PER_TASK:
+        return set()  # No filtering needed
+
+    prompt = build_subagent_filter_prompt(task, papers, design, org, AI_PAPERS_KEPT_PER_TASK)
+
+    try:
+        raw = llm.complete(
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT_SEARCH_SUBAGENT.format(
+                    max_keep=AI_PAPERS_KEPT_PER_TASK)},
+                {"role": "user", "content": prompt},
+            ],
+            max_tokens=500,
+            temperature=AI_SEARCH_SUBAGENT_TEMPERATURE,
+        )
+        selected = _parse_pmid_list(raw)
+        # Validate: only keep PMIDs that are actually in the candidate set
+        candidate_pmids = {p["pmid"] for p in papers}
+        valid = selected & candidate_pmids
+        if valid:
+            return valid
+        logger.warning(f"LLM filter returned no valid PMIDs from candidates")
+        return set()
+    except Exception as e:
+        logger.warning(f"LLM filter failed: {e}")
+        return set()
+
+
+def _parse_pmid_list(raw_text):
+    """Parse a set of PMID strings from LLM output.
+
+    Tries JSON array first, then regex fallback for 7-8 digit numbers.
+    """
+    text = raw_text.strip()
+
+    # Strip markdown fences
+    if text.startswith("```"):
+        lines = text.split("\n")
+        lines = [l for l in lines if not l.strip().startswith("```")]
+        text = "\n".join(lines).strip()
+
+    # Try JSON parse
+    try:
+        result = json.loads(text)
+        if isinstance(result, list):
+            return {str(x) for x in result if str(x).isdigit()}
+    except (json.JSONDecodeError, ValueError):
+        pass
+
+    # Regex fallback: 7-8 digit numbers (PMID format)
+    matches = re.findall(r'\b(\d{7,8})\b', text)
+    return set(matches)
+
+
+def _format_authors_short_inline(first_author):
+    """'John Smith' -> 'Smith, J. et al.' formatting."""
+    if not first_author:
+        return "Unknown"
+    parts = first_author.strip().split()
+    if len(parts) >= 2:
+        last = parts[-1]
+        initials = ".".join(p[0].upper() for p in parts[:-1] if p) + "."
+        return f"{last}, {initials} et al."
+    return f"{first_author} et al."

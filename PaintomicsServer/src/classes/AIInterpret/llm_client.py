@@ -5,6 +5,12 @@ import time
 
 logger = logging.getLogger(__name__)
 
+# Timeout as (connect, read) tuple.
+# - connect: 15s is generous for DNS + TLS handshake
+# - read: 180s per chunk — if the API hasn't sent any data in 3 min, it's hung
+DEFAULT_TIMEOUT = (15, 180)
+
+
 class LLMClient:
     """OpenAI-compatible chat completion via requests. Thread-safe (no global state)."""
 
@@ -14,21 +20,37 @@ class LLMClient:
         self.model = provider_config["model"]
 
     def complete(self, messages, max_tokens=4096, temperature=0.3):
-        for attempt in range(2):  # 1 retry
+        for attempt in range(3):  # 2 retries
             try:
+                logger.info(f"LLM complete: model={self.model}, "
+                            f"msgs={len(messages)}, max_tokens={max_tokens} "
+                            f"(attempt {attempt + 1})")
                 r = requests.post(
                     f"{self.api_base}/chat/completions",
-                    headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"},
+                    headers={"Authorization": f"Bearer {self.api_key}",
+                             "Content-Type": "application/json"},
                     json={"model": self.model, "messages": messages,
                           "max_tokens": max_tokens, "temperature": temperature},
-                    timeout=300,
+                    timeout=DEFAULT_TIMEOUT,
                 )
                 r.raise_for_status()
-                return r.json()["choices"][0]["message"]["content"]
+                content = r.json()["choices"][0]["message"]["content"]
+                logger.info(f"LLM complete: got {len(content)} chars")
+                return content
             except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as e:
-                if attempt == 0:
-                    logger.warning(f"LLM request failed (attempt 1), retrying in 5s: {e}")
-                    time.sleep(5)
+                logger.warning(f"LLM request failed (attempt {attempt + 1}/3): {e}")
+                if attempt < 2:
+                    time.sleep(5 * (attempt + 1))  # 5s, 10s backoff
+                    continue
+                raise
+            except requests.exceptions.HTTPError as e:
+                # Don't retry 4xx errors (auth, bad request) — they won't self-heal
+                if e.response is not None and 400 <= e.response.status_code < 500:
+                    logger.error(f"LLM HTTP {e.response.status_code}: {e.response.text[:500]}")
+                    raise
+                logger.warning(f"LLM server error (attempt {attempt + 1}/3): {e}")
+                if attempt < 2:
+                    time.sleep(5 * (attempt + 1))
                     continue
                 raise
 
@@ -45,9 +67,11 @@ class LLMClient:
         Returns:
             Final text content from the assistant (after all tool calls resolved).
         """
-        for _ in range(max_iterations):
-            for attempt in range(2):  # 1 retry on network errors
+        for iteration in range(max_iterations):
+            for attempt in range(3):  # 2 retries on network errors
                 try:
+                    logger.info(f"LLM tool loop iter={iteration + 1}/{max_iterations}, "
+                                f"msgs={len(messages)} (attempt {attempt + 1})")
                     r = requests.post(
                         f"{self.api_base}/chat/completions",
                         headers={
@@ -61,14 +85,23 @@ class LLMClient:
                             "max_tokens": max_tokens,
                             "temperature": temperature,
                         },
-                        timeout=300,
+                        timeout=DEFAULT_TIMEOUT,
                     )
                     r.raise_for_status()
                     break
                 except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as e:
-                    if attempt == 0:
-                        logger.warning(f"LLM tool request failed (attempt 1), retrying in 5s: {e}")
-                        time.sleep(5)
+                    logger.warning(f"LLM tool request failed (attempt {attempt + 1}/3): {e}")
+                    if attempt < 2:
+                        time.sleep(5 * (attempt + 1))
+                        continue
+                    raise
+                except requests.exceptions.HTTPError as e:
+                    if e.response is not None and 400 <= e.response.status_code < 500:
+                        logger.error(f"LLM HTTP {e.response.status_code}: {e.response.text[:500]}")
+                        raise
+                    logger.warning(f"LLM server error (attempt {attempt + 1}/3): {e}")
+                    if attempt < 2:
+                        time.sleep(5 * (attempt + 1))
                         continue
                     raise
 
@@ -77,7 +110,9 @@ class LLMClient:
 
             if not tool_calls:
                 # No more tool calls — return the final text answer
-                return resp_msg.get("content", "")
+                content = resp_msg.get("content", "")
+                logger.info(f"LLM tool loop done at iter={iteration + 1}, got {len(content)} chars")
+                return content
 
             # Append the assistant message (with tool_calls) to conversation
             messages.append(resp_msg)
@@ -90,7 +125,9 @@ class LLMClient:
                 except (json.JSONDecodeError, KeyError):
                     fn_args = {}
 
+                logger.info(f"LLM tool call: {fn_name}({fn_args})")
                 result_str = tool_executor(fn_name, fn_args)
+                logger.info(f"LLM tool result: {fn_name} -> {len(result_str)} chars")
                 messages.append({
                     "role": "tool",
                     "tool_call_id": tc["id"],
@@ -105,10 +142,11 @@ class LLMClient:
         """Yields text chunks. Used for MongoDB text-buffer approach."""
         r = requests.post(
             f"{self.api_base}/chat/completions",
-            headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"},
+            headers={"Authorization": f"Bearer {self.api_key}",
+                     "Content-Type": "application/json"},
             json={"model": self.model, "messages": messages,
                   "max_tokens": max_tokens, "temperature": temperature, "stream": True},
-            timeout=300, stream=True,
+            timeout=DEFAULT_TIMEOUT, stream=True,
         )
         r.raise_for_status()
         for line in r.iter_lines():

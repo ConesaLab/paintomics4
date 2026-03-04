@@ -120,6 +120,174 @@ SYSTEM_PROMPT_VERIFICATION = (
     "the paper text and fetch specific sections. Respond with a JSON verdict."
 )
 
+# ---------------------------------------------------------------------------
+# Phase 2: Agentic Literature Discovery — Search Planner + Sub-Agent
+# ---------------------------------------------------------------------------
+
+SYSTEM_PROMPT_SEARCH_PLANNER = """You are a strategic PubMed search planner for multi-omics pathway analysis.
+
+Given enriched pathway data, a cross-omic matrix, and experiment context, your job is to
+design targeted PubMed search tasks that will find the most relevant literature.
+
+## Priorities (ranked)
+1. Hub genes appearing in multiple enriched pathways — these are integration points.
+2. Cross-omic contradictions: a gene upregulated in one omic but downregulated in another
+   may reveal post-transcriptional regulation, feedback loops, or compensatory mechanisms.
+3. Cross-pathway themes: shared regulators, upstream signalling cascades, or metabolic crosstalk.
+4. Unexpected or novel patterns: genes showing biphasic dynamics, transient peaks at unusual
+   timepoints, or strong effects in minor pathways.
+
+## Output Format
+Return a JSON array (no markdown fencing). Each element:
+{{
+  "task_id": "<short_slug>",
+  "query_intent": "<1-sentence biological question this search answers>",
+  "target_pathways": ["pathway_name_1", ...],
+  "keywords": ["keyword1", "keyword2", ...],
+  "pubmed_queries": [
+    "<PubMed query string 1>",
+    "<PubMed query string 2 (optional refinement)>"
+  ]
+}}
+
+## PubMed Query Tips
+- Use [Title/Abstract] field tag for precision: "MAPK signaling"[Title/Abstract]
+- Boolean AND/OR/NOT for combining concepts
+- Quote multi-word phrases: "oxidative stress"
+- Organism filter: AND "Mus musculus"[Title/Abstract]
+- Keep queries focused — broad queries return noisy results
+
+Design at most {max_tasks} search tasks. Aim for specificity over breadth."""
+
+SYSTEM_PROMPT_SEARCH_SUBAGENT = """You are a literature relevance filter for multi-omics research.
+
+Given a set of PubMed paper abstracts and a specific biological question, select the papers
+most relevant to answering that question.
+
+## Selection Criteria (ranked)
+1. Direct relevance to the biological question and target pathways
+2. Mechanistic insight (explains *why* a gene/pathway behaves as observed)
+3. Recency (prefer newer papers, all else being equal)
+4. Organism match (same organism > closely related model organism > in vitro)
+
+## Output Format
+Return a JSON array of PMID strings for the top {max_keep} papers.
+Example: ["35486828", "33264437", "28558982"]
+
+If fewer than {max_keep} papers are relevant, return only the relevant ones.
+If none are relevant, return an empty array: []"""
+
+
+def build_search_planner_prompt(pathways, cross_omic_matrix, gene_whitelist,
+                                experiment_design, organism_name, max_tasks):
+    """Build the user prompt for the search planner LLM call.
+
+    Sections: Experiment Context, Cross-Omic Matrix, Enriched Pathways (sorted by
+    significance, top 5 DE genes each), Hub Genes, Task instruction.
+    """
+    lines = []
+
+    # -- Experiment Context --
+    lines.append("## Experiment Context")
+    lines.append(f"Organism: {organism_name}")
+    if experiment_design:
+        lines.append(f"Design: {experiment_design}")
+    lines.append("")
+
+    # -- Cross-Omic Matrix --
+    if cross_omic_matrix:
+        lines.append("## Cross-Omic Matrix (gene-level cheat sheet)")
+        lines.append(cross_omic_matrix)
+        lines.append("")
+
+    # -- Enriched Pathways (sorted by combined p-value) --
+    lines.append("## Enriched Pathways")
+    sorted_pws = sorted(pathways, key=lambda p: p.get("combined_pvalue", 1.0))
+    for pw in sorted_pws:
+        lines.append(f"\n### {pw['name']} ({pw['id']}, source: {pw['source']})")
+        lines.append(f"Combined p-value: {pw['combined_pvalue']:.4e}")
+        lines.append(f"Per-omic significance: {pw['per_omic']}")
+        lines.append(f"Significant omics: {pw.get('significant_omic_count', '?')}")
+        # Top 5 DE genes only (keep prompt compact)
+        de_genes = [g for g in pw.get("top_genes", []) if g.get("relevant")][:5]
+        if de_genes:
+            lines.append("Top DE genes:")
+            for g in de_genes:
+                profiles = g.get("omic_profiles") or []
+                if profiles:
+                    first = profiles[0]
+                    lines.append(
+                        f"  {g['symbol']} (|FC|={g['effect_size']}, "
+                        f"peak={first['peak_value']}@{first['peak_timepoint']}, "
+                        f"pattern={first['pattern']})")
+                else:
+                    lines.append(f"  {g['symbol']} (|FC|={g['effect_size']})")
+
+    # -- Hub Genes (in ≥2 pathways) --
+    gene_pathway_count = {}
+    for pw in pathways:
+        for g in pw.get("top_genes", []):
+            sym = g["symbol"].upper()
+            if sym in gene_whitelist:
+                gene_pathway_count.setdefault(sym, set()).add(pw["name"])
+    hub_genes = {sym: pws for sym, pws in gene_pathway_count.items() if len(pws) >= 2}
+    if hub_genes:
+        lines.append("\n## Hub Genes (appear in ≥2 pathways)")
+        for sym, pws in sorted(hub_genes.items(), key=lambda x: -len(x[1])):
+            lines.append(f"  {sym}: {', '.join(sorted(pws))}")
+
+    # -- Task --
+    lines.append(f"\n## Task")
+    lines.append(f"Design up to {max_tasks} strategic PubMed search tasks.")
+    lines.append("Return ONLY a JSON array — no markdown fencing, no commentary.")
+
+    return "\n".join(lines)
+
+
+def build_subagent_filter_prompt(task, papers_with_abstracts, experiment_design,
+                                 organism_name, max_keep):
+    """Build the user prompt for a search sub-agent filtering papers.
+
+    Args:
+        task: dict with task_id, query_intent, target_pathways, keywords.
+        papers_with_abstracts: list of paper dicts with pmid, title, first_author,
+                               year, journal, abstract.
+        experiment_design: str
+        organism_name: str
+        max_keep: int
+    """
+    lines = []
+
+    lines.append("## Biological Question")
+    lines.append(f"Intent: {task.get('query_intent', 'N/A')}")
+    lines.append(f"Target pathways: {', '.join(task.get('target_pathways', []))}")
+    lines.append(f"Keywords: {', '.join(task.get('keywords', []))}")
+    lines.append("")
+
+    lines.append("## Experiment Context")
+    lines.append(f"Organism: {organism_name}")
+    if experiment_design:
+        lines.append(f"Design: {experiment_design}")
+    lines.append("")
+
+    lines.append("## Candidate Papers")
+    for p in papers_with_abstracts:
+        abstract_trunc = (p.get("abstract") or "")[:400]
+        lines.append(f"\nPMID: {p['pmid']}")
+        lines.append(f"Title: {p.get('title', 'N/A')}")
+        lines.append(f"Authors: {p.get('first_author', 'Unknown')} et al.")
+        lines.append(f"Journal: {p.get('journal', 'N/A')}, {p.get('year', 'N/A')}")
+        if abstract_trunc:
+            lines.append(f"Abstract: {abstract_trunc}")
+
+    lines.append(f"\n## Task")
+    lines.append(f"Select the top {max_keep} most relevant papers for the biological "
+                 f"question above.")
+    lines.append("Return ONLY a JSON array of PMID strings — no markdown fencing.")
+
+    return "\n".join(lines)
+
+
 SYSTEM_PROMPT_CHAT = """You are an expert molecular biologist assistant helping a researcher understand their multi-omics pathway analysis results.
 You have access to the analysis report and can answer follow-up questions about the findings.
 

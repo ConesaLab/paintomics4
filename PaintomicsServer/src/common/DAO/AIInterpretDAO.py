@@ -16,6 +16,14 @@ class AIInterpretDAO(DAO):
             upsert=True
         )
 
+    def touch(self, job_id):
+        """Update only the updatedAt timestamp (used by heartbeat)."""
+        collection = self.dbManager.getCollection(self.collectionName)
+        collection.update_one(
+            {"jobID": job_id},
+            {"$set": {"updatedAt": datetime.utcnow()}}
+        )
+
     def find_by_job_id(self, job_id):
         collection = self.dbManager.getCollection(self.collectionName)
         return collection.find_one({"jobID": job_id})

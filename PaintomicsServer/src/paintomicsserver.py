@@ -569,7 +569,11 @@ class Application(object):
         ##*******************************************************************************************
         ##* LAUNCH APPLICATION
         ##*******************************************************************************************
-        self.app.run(host=SERVER_HOST_NAME, port=SERVER_PORT_NUMBER,  debug=SERVER_ALLOW_DEBUG)
+        # use_reloader=False: the auto-reloader kills background threads
+        # (PySiQ workers, AI pipeline) whenever a .py file changes on disk.
+        # Keep debug=True for nice error pages, but disable the reloader.
+        self.app.run(host=SERVER_HOST_NAME, port=SERVER_PORT_NUMBER,
+                     debug=SERVER_ALLOW_DEBUG, use_reloader=False)
 
     ##*************************************************************************************************************
     # This function returns a new random job id

@@ -1,4 +1,6 @@
-from src.conf.serverconf import KEGG_DATA_DIR
+from src.conf.serverconf import (
+    KEGG_DATA_DIR, AI_MAJOR_PATHWAY_MIN_OMICS, AI_MAJOR_PATHWAY_MAX_PVAL,
+)
 import csv
 import os
 
@@ -21,6 +23,7 @@ def build_pathway_context(job_instance, max_pathways=15):
             "per_omic": _format_significance(pw),
             "top_genes": top_genes,
             "matched_gene_count": len(pw.matchedGenes),
+            "significant_omic_count": _count_significant_omics(pw),
         })
     return pathways
 
@@ -221,6 +224,16 @@ def _format_value_pairs(values, labels):
     return ", ".join(parts)
 
 
+def _count_significant_omics(pw):
+    """Count how many omic layers have p < AI_MAJOR_PATHWAY_MAX_PVAL."""
+    count = 0
+    for omic_name, vals in pw.significanceValues.items():
+        # vals layout: [total_genes, relevant_genes, p_value, ...]
+        if len(vals) >= 3 and vals[2] < AI_MAJOR_PATHWAY_MAX_PVAL:
+            count += 1
+    return count
+
+
 def _best_pval(pw):
     cpvals = pw.combinedSignificancePvalues
     if cpvals:
@@ -261,3 +274,91 @@ def build_gene_symbol_whitelist(job_instance):
             if orig:
                 whitelist.add(orig.upper())
     return whitelist
+
+
+# ---------------------------------------------------------------------------
+# Phase 1 helpers: Triage + Cross-Omic Matrix
+# ---------------------------------------------------------------------------
+
+def triage_pathways(pathways):
+    """Split pathways into major (multi-omic) and minor (single-omic) lists.
+
+    Uses the `significant_omic_count` field added by build_pathway_context().
+
+    Returns:
+        (major_pathways, minor_pathways) — both lists of context dicts.
+    """
+    major, minor = [], []
+    for pw in pathways:
+        if pw.get("significant_omic_count", 0) >= AI_MAJOR_PATHWAY_MIN_OMICS:
+            major.append(pw)
+        else:
+            minor.append(pw)
+    return major, minor
+
+
+def build_cross_omic_matrix(pathways):
+    """Build a compact markdown table of top genes across major pathways.
+
+    Iterates top genes, deduplicates by symbol, reads all omic_profiles, and
+    produces a row per gene with direction arrow + pattern + peak timepoint
+    per omic layer.
+
+    Returns:
+        Markdown table string (empty string if no multi-omic data).
+    """
+    # Collect all omic names across pathways for column headers
+    omic_names = []
+    omic_set = set()
+    gene_data = {}  # symbol -> {omic_name: profile_dict}
+
+    for pw in pathways:
+        for g in pw.get("top_genes", []):
+            sym = g["symbol"]
+            for prof in g.get("omic_profiles") or []:
+                omic = prof["omic_name"]
+                if omic not in omic_set:
+                    omic_set.add(omic)
+                    omic_names.append(omic)
+                # Keep the profile with highest effect for this gene+omic
+                if sym not in gene_data:
+                    gene_data[sym] = {"_effect": g.get("effect_size", 0)}
+                gene_data[sym][omic] = prof
+                # Track max effect across all appearances
+                gene_data[sym]["_effect"] = max(
+                    gene_data[sym]["_effect"], g.get("effect_size", 0))
+
+    if not gene_data or not omic_names:
+        return ""
+
+    # Sort genes by effect size, cap at 30
+    sorted_genes = sorted(gene_data.items(), key=lambda x: -x[1]["_effect"])[:30]
+
+    # Build markdown table
+    header = "| Gene | " + " | ".join(omic_names) + " |"
+    sep = "|------|" + "|".join("------" for _ in omic_names) + "|"
+    rows = [header, sep]
+
+    for sym, data in sorted_genes:
+        cells = []
+        for omic in omic_names:
+            prof = data.get(omic)
+            if prof is None:
+                cells.append("—")
+            else:
+                arrow = _direction_arrow(prof.get("peak_value", 0))
+                pattern = prof.get("pattern", "flat")
+                peak_tp = prof.get("peak_timepoint", "?")
+                cells.append(f"{arrow} {pattern} @{peak_tp}")
+        rows.append(f"| {sym} | " + " | ".join(cells) + " |")
+
+    return "\n".join(rows)
+
+
+def _direction_arrow(peak_value):
+    """Map a peak value to a direction arrow: ↑ (positive), ↓ (negative), → (flat)."""
+    if peak_value > 0.3:
+        return "↑"
+    elif peak_value < -0.3:
+        return "↓"
+    return "→"
