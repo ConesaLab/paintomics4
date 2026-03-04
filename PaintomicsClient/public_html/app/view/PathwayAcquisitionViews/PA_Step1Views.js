@@ -435,7 +435,7 @@ function PA_Step1JobView() {
 						html: '<h3><i class="fa fa-lightbulb-o"></i> AI-Powered Pathway Interpretation</h3>'
 					},
 					{
-						xtype: "container", layout: "vbox", cls: "po-ai-section-body",
+						xtype: "container", layout: "anchor", cls: "po-ai-section-body",
 						items: [
 							{
 								xtype: "box",
