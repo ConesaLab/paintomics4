@@ -118,10 +118,15 @@ AI_EUROPEPMC_DELAY = float(os.getenv("AI_EUROPEPMC_DELAY", "0.2"))
 AI_MAJOR_PATHWAY_MIN_OMICS = int(os.getenv("AI_MAJOR_PATHWAY_MIN_OMICS", "2"))
 AI_MAJOR_PATHWAY_MAX_PVAL = float(os.getenv("AI_MAJOR_PATHWAY_MAX_PVAL", "0.05"))
 
-# Phase 2: Search Planner
+# Phase 2: Search Planner (legacy — kept for backward compat)
 AI_MAX_SEARCH_TASKS = int(os.getenv("AI_MAX_SEARCH_TASKS", "12"))
 AI_SEARCH_SUBAGENT_WORKERS = int(os.getenv("AI_SEARCH_SUBAGENT_WORKERS", "4"))
 AI_PAPERS_PER_SEARCH_TASK = int(os.getenv("AI_PAPERS_PER_SEARCH_TASK", "5"))
 AI_PAPERS_KEPT_PER_TASK = int(os.getenv("AI_PAPERS_KEPT_PER_TASK", "3"))
 AI_SEARCH_PLANNER_TEMPERATURE = float(os.getenv("AI_SEARCH_PLANNER_TEMPERATURE", "0.4"))
 AI_SEARCH_SUBAGENT_TEMPERATURE = float(os.getenv("AI_SEARCH_SUBAGENT_TEMPERATURE", "0.2"))
+
+# V2 Pipeline: Agent-based with evaluation loops
+AI_TRIAGE_MAX_PATHWAYS = int(os.getenv("AI_TRIAGE_MAX_PATHWAYS", "30"))
+AI_MAX_SELECTED_PATHWAYS = int(os.getenv("AI_MAX_SELECTED_PATHWAYS", "5"))
+AI_MAX_EVAL_ITERATIONS = int(os.getenv("AI_MAX_EVAL_ITERATIONS", "1"))

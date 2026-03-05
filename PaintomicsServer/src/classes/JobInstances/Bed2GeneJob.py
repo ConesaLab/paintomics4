@@ -160,7 +160,7 @@ class Bed2GeneJob(Job):
         #*************************************************************************
         logging.info("VALIDATING RELEVANT REGIONS FILE (" + omicName + ")..." )
         if os_path.isfile(relevantFileName):
-            with open(relevantFileName, 'rU') as inputDataFile:
+            with open(relevantFileName, 'r') as inputDataFile:
                 nLine = -1
                 erroneousLines = {}
 
@@ -204,7 +204,7 @@ class Bed2GeneJob(Job):
 
         #IF THE USER UPLOADED VALUES FOR GENE EXPRESSION
         if os_path.isfile(valuesFileName):
-            with open(valuesFileName, 'rU') as inputDataFile:
+            with open(valuesFileName, 'r') as inputDataFile:
                 nLine = -1
                 erroneousLines = {}
 
@@ -321,7 +321,7 @@ class Bed2GeneJob(Job):
         #STEP 4. PARSE GENERATED TEMPORAL FILE, GET THE GENE, REGIONS AND QUANTIFICATION
         logging.info("PROCESSING DHS_exon_association OUTPUT...")
         if os_path.isfile(tmpFile):
-             with open(tmpFile, 'rU') as inputDataFile:
+             with open(tmpFile, 'r') as inputDataFile:
                 regionID = geneID = geneRegion = feature = None
                 #TODO: (OPTIONAL) if result ordered by gene id -> reduce processing time
                 csvReader = csv_reader(inputDataFile, delimiter="\t")

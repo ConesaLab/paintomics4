@@ -52,7 +52,7 @@ class PathwayDAO(DAO):
         instanceBSON = pathwayInstance.toBSON()
         instanceBSON["jobID"] = jobID
 
-        collection.insert(instanceBSON)
+        collection.insert_one(instanceBSON)
         return True
 
     def insertAll(self, instancesList, otherParams=None):
@@ -77,9 +77,9 @@ class PathwayDAO(DAO):
         instanceBSON = pathwayInstance.toBSON()
         instanceBSON["jobID"] = jobID
 
-        collection.update({"jobID" : jobID, "ID" : pathwayInstance.getID()}, instanceBSON)
+        collection.replace_one({"jobID" : jobID, "ID" : pathwayInstance.getID()}, instanceBSON)
 
-        collection.insert(instanceBSON)
+        collection.insert_one(instanceBSON)
         return True
 
     def updateAll(self, instancesList, otherParams=None):
@@ -93,6 +93,6 @@ class PathwayDAO(DAO):
             queryParams["jobID"] = otherParams["jobID"]
 
         collection = self.dbManager.getCollection(self.collectionName)
-        collection.remove(queryParams)
+        collection.delete_many(queryParams)
 
         return True

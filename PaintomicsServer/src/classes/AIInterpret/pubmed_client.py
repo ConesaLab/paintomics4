@@ -138,7 +138,7 @@ class PubMedClient:
                 r.raise_for_status()
                 data = r.json()
                 for rec in data.get("records", []):
-                    pmid = rec.get("pmid", "")
+                    pmid = str(rec.get("pmid", ""))
                     pmcid = rec.get("pmcid")
                     if pmid and pmcid:
                         result[pmid] = pmcid
@@ -172,18 +172,24 @@ class PubMedClient:
         if body is None:
             return None
 
-        for sec in body.findall(".//sec"):
+        # Only iterate DIRECT <sec> children of <body> to avoid classifying
+        # sub-sections independently (e.g. a "Analysis of X" sub-section under
+        # "Materials and methods" would wrongly match "results" keywords).
+        for sec in body:
+            if sec.tag != "sec":
+                continue
             title_el = sec.find("title")
             if title_el is None:
                 continue
             title_text = (title_el.text or "").strip().lower()
 
-            # Classify section by title keywords
+            # Classify top-level section by title keywords
             section_key = self._classify_section(title_text)
             if section_key is None:
                 continue  # skip methods and unrecognized sections
 
-            # Extract all text recursively, strip tags
+            # Extract all text recursively from the entire top-level section
+            # (includes all nested sub-sections)
             text = self._extract_element_text(sec)
             if not text:
                 continue
@@ -191,7 +197,7 @@ class PubMedClient:
             # Truncate to max chars
             text = text[:AI_MAX_SECTION_CHARS]
 
-            # Merge into existing section (multiple sub-sections may map to same key)
+            # Merge into existing section (multiple top-level sections may map to same key)
             if section_key in sections:
                 remaining = AI_MAX_SECTION_CHARS - len(sections[section_key])
                 if remaining > 100:

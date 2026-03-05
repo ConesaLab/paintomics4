@@ -1,43 +1,36 @@
+"""AI interpretation pipeline — agent-based with evaluation loops.
+
+Entry point: run_ai_pipeline() (PySiQ-compatible sync function).
+Internally runs an async pipeline with the OpenAI Agents SDK.
+"""
+import asyncio
 import json
 import logging
 import re
 import threading
-import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from src.classes.AIInterpret.llm_client import LLMClient
-from src.classes.AIInterpret.pubmed_client import PubMedClient
+
+from agents import Runner
+from agents.exceptions import MaxTurnsExceeded
+
+from src.classes.AIInterpret.agents import (
+    configure_sdk, triage_agent, build_pathway_expert,
+    pathway_evaluator, report_writer, report_evaluator,
+)
 from src.classes.AIInterpret.context_builder import (
-    build_pathway_context, get_organism_name, build_gene_symbol_whitelist,
-    triage_pathways, build_cross_omic_matrix,
+    build_enrichment_table, build_feature_name_whitelist,
+    get_organism_name, detect_design_type,
 )
+from src.classes.AIInterpret.models import PipelineContext, TriageResult, EvaluationResult
+from src.classes.AIInterpret.prompts import format_enrichment_table
+from src.classes.AIInterpret.pubmed_client import PubMedClient
 from src.classes.AIInterpret.verification import (
-    verify_report, redact_unverified,
-    verify_report_v2, redact_unverified_v2, parse_references_section,
-    renumber_citations,
-)
-from src.classes.AIInterpret.prompts import (
-    SYSTEM_PROMPT_INTERPRET, SYSTEM_PROMPT_SYNTHESIZE,
-    SYSTEM_PROMPT_INTERPRET_V2, SYSTEM_PROMPT_SYNTHESIZE_V2,
-    SYSTEM_PROMPT_VERIFICATION,
-    SYSTEM_PROMPT_SEARCH_PLANNER, SYSTEM_PROMPT_SEARCH_SUBAGENT,
-    build_batch_interpretation_prompt, build_synthesis_prompt,
-    build_two_pass_interpretation_prompt, build_synthesis_prompt_v2,
-    build_verification_prompt, build_correction_prompt,
-    build_search_planner_prompt, build_subagent_filter_prompt,
-)
-from src.classes.AIInterpret.tools import (
-    INTERPRETATION_TOOLS, VERIFICATION_TOOLS,
-    build_interpretation_executor, build_verification_executor,
+    verify_report_v2, redact_unverified_v2, renumber_citations,
 )
 from src.common.DAO.AIInterpretDAO import AIInterpretDAO
 from src.common.JobInformationManager import JobInformationManager
 from src.conf.serverconf import (
-    AI_PROVIDERS, AI_LLM_PROVIDER, AI_MAX_PATHWAYS,
-    AI_PATHWAYS_PER_BATCH, AI_PAPERS_PER_PATHWAY, AI_TEMPERATURE,
-    AI_MAX_CONCURRENT_PIPELINES, AI_MAX_VERIFICATION_ITERATIONS,
-    AI_MAX_SEARCH_TASKS, AI_SEARCH_SUBAGENT_WORKERS,
-    AI_PAPERS_PER_SEARCH_TASK, AI_PAPERS_KEPT_PER_TASK,
-    AI_SEARCH_PLANNER_TEMPERATURE, AI_SEARCH_SUBAGENT_TEMPERATURE,
+    AI_MAX_CONCURRENT_PIPELINES, AI_TRIAGE_MAX_PATHWAYS,
+    AI_MAX_SELECTED_PATHWAYS, AI_MAX_EVAL_ITERATIONS,
 )
 
 logger = logging.getLogger(__name__)
@@ -70,7 +63,7 @@ class _Heartbeat:
                 dao.touch(self._job_id)
                 dao.closeConnection()
             except Exception:
-                pass  # best-effort; don't crash the heartbeat
+                pass
 
 
 def run_ai_pipeline(job_id, experiment_design, RESPONSE):
@@ -80,257 +73,23 @@ def run_ai_pipeline(job_id, experiment_design, RESPONSE):
     try:
         _pipeline_semaphore.acquire()
         heartbeat.start()
-        dao = AIInterpretDAO()
 
-        # Load job
+        configure_sdk()
+
+        dao = AIInterpretDAO()
         job_instance = JobInformationManager().loadJobInstance(job_id)
         if job_instance is None:
             raise ValueError(f"Job {job_id} not found")
 
-        organism = job_instance.getOrganism()
-        organism_name = get_organism_name(organism)
-        llm = LLMClient(AI_PROVIDERS[AI_LLM_PROVIDER])
-        pubmed = PubMedClient()
-
-        # =====================================================================
-        # Phase 1: Context Triage + Cross-Omic Matrix (0% - 10%)
-        # =====================================================================
-        dao.save_progress(job_id, {"status": "extracting", "percent": 5,
-                                   "detail": "Extracting pathway data..."})
-        pathways = build_pathway_context(job_instance, max_pathways=AI_MAX_PATHWAYS)
-        gene_whitelist = build_gene_symbol_whitelist(job_instance)
-
-        if _cancel_flags.get(job_id):
-            raise InterruptedError("Cancelled")
-
-        major_pathways, minor_pathways = triage_pathways(pathways)
-        cross_omic_matrix = build_cross_omic_matrix(major_pathways)
-
-        logger.info(f"[{job_id}] Triage: {len(major_pathways)} major + "
-                    f"{len(minor_pathways)} minor pathways")
-        dao.save_progress(job_id, {"status": "extracting", "percent": 10,
-                                   "detail": f"{len(major_pathways)} major + "
-                                             f"{len(minor_pathways)} minor pathways"})
-
-        if _cancel_flags.get(job_id):
-            raise InterruptedError("Cancelled")
-
-        # =====================================================================
-        # Phase 2: Agentic Literature Discovery (10% - 40%)
-        # =====================================================================
-        search_tasks = _run_search_planner(
-            llm, major_pathways, minor_pathways, cross_omic_matrix,
-            gene_whitelist, experiment_design, organism_name, job_id)
-
-        logger.info(f"[{job_id}] Search planner produced {len(search_tasks)} tasks")
-        dao.save_progress(job_id, {"status": "searching_pubmed", "percent": 15,
-                                   "detail": f"Executing {len(search_tasks)} search tasks..."})
-
-        if _cancel_flags.get(job_id):
-            raise InterruptedError("Cancelled")
-
-        all_papers = _execute_search_subagents(
-            llm, pubmed, search_tasks, experiment_design, organism_name,
-            job_id, dao)
-
-        # Deduplicate and assign global ref_index
-        seen = {}
-        unique_papers = []
-        ref_counter = 1
-        for p in all_papers:
-            if p["pmid"] not in seen:
-                p["ref_index"] = ref_counter
-                ref_counter += 1
-                seen[p["pmid"]] = p
-                unique_papers.append(p)
-            else:
-                existing = seen[p["pmid"]]
-                for pw_name in p.get("pathways", []):
-                    if pw_name not in existing.get("pathways", []):
-                        existing.setdefault("pathways", []).append(pw_name)
-
-        paper_index = {p["ref_index"]: p for p in unique_papers}
-
-        dao.save_progress(job_id, {
-            "status": "searching_pubmed", "percent": 40,
-            "detail": f"Found {len(unique_papers)} unique papers "
-                      f"({sum(1 for p in unique_papers if p.get('full_text_available'))} with full text)"
-        })
-        dao.save_papers(job_id, unique_papers)
-
-        if _cancel_flags.get(job_id):
-            raise InterruptedError("Cancelled")
-
-        # =====================================================================
-        # Phase 3: Sub-Agent Interpretation (45% - 75%)
-        # =====================================================================
-        dao.save_progress(job_id, {"status": "interpreting", "percent": 45,
-                                   "detail": "Generating interpretation with evidence extraction..."})
-
-        batch_reports = []
-
-        for batch_start in range(0, len(pathways), AI_PATHWAYS_PER_BATCH):
-            batch = pathways[batch_start:batch_start + AI_PATHWAYS_PER_BATCH]
-            batch_pathway_names = {pw["name"] for pw in batch}
-
-            # Get papers relevant to this batch (by pathway overlap)
-            batch_papers = [
-                p for p in unique_papers
-                if batch_pathway_names & set(p.get("pathways", [p.get("pathway", "")]))
-            ]
-
-            # Use local indices [1, 2, ...] per batch to prevent the LLM from
-            # renumbering citations (it tends to reset to [1] regardless of the
-            # global ref_index).  After the batch report, remap back to global.
-            local_papers, local_to_global = _build_local_paper_index(batch_papers)
-            local_paper_index = {lp["ref_index"]: lp for lp in local_papers}
-            local_executor = build_interpretation_executor(local_paper_index, llm)
-
-            prompt = build_two_pass_interpretation_prompt(
-                batch, local_papers, experiment_design, organism_name)
-
-            # Main agent uses extract_evidence tool to spawn sub-agents
-            result = llm.complete_with_tools(
-                messages=[
-                    {"role": "system", "content": SYSTEM_PROMPT_INTERPRET_V2},
-                    {"role": "user", "content": prompt},
-                ],
-                tools=INTERPRETATION_TOOLS,
-                tool_executor=local_executor,
-                max_tokens=4000,
-                temperature=AI_TEMPERATURE,
-                max_iterations=15,
-            )
-
-            # Remap local [1], [2] back to global [10], [14] etc.
-            result = _remap_citation_indices(result, local_to_global)
-            batch_reports.append(result)
-
-            pct = 45 + int(30 * (batch_start + len(batch)) / max(len(pathways), 1))
-            dao.save_progress(job_id, {
-                "status": "interpreting", "percent": pct,
-                "detail": f"Interpreted {min(batch_start + len(batch), len(pathways))}/{len(pathways)} pathways"
-            })
-
-            if _cancel_flags.get(job_id):
-                raise InterruptedError("Cancelled")
-
-        # =====================================================================
-        # Phase 4: Synthesis (78% - 83%)
-        # =====================================================================
-        dao.save_progress(job_id, {"status": "synthesizing", "percent": 78, "detail": "Synthesizing report..."})
-
-        synthesis_prompt = build_synthesis_prompt_v2(
-            batch_reports, experiment_design, organism_name, unique_papers)
-        report = llm.complete(
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT_SYNTHESIZE_V2},
-                {"role": "user", "content": synthesis_prompt},
-            ],
-            max_tokens=6000,
-            temperature=AI_TEMPERATURE,
-        )
-
-        if _cancel_flags.get(job_id):
-            raise InterruptedError("Cancelled")
-
-        # =====================================================================
-        # Phase 5: Agentic Verification Loop (85% - 97%)
-        # =====================================================================
-        dao.save_progress(job_id, {"status": "verifying", "percent": 85, "detail": "Verifying citations..."})
-
-        verification_executor = build_verification_executor(paper_index)
-
-        for iteration in range(AI_MAX_VERIFICATION_ITERATIONS):
-            citations = parse_references_section(report)
-            if not citations:
-                break
-
-            failed_citations = []
-            for citation in citations:
-                if not citation.get("cited_text"):
-                    continue
-
-                verdict = _run_verification_subagent(
-                    llm, verification_executor,
-                    citation["claim_sentence"],
-                    citation["cited_text"],
-                    citation["ref_index"],
-                )
-
-                if not verdict.get("text_match") or not verdict.get("supports_claim"):
-                    failed_citations.append({
-                        "ref_index": citation["ref_index"],
-                        "reason": verdict.get("reasoning", "Verification failed"),
-                        "cited_text": citation["cited_text"],
-                        "claim_sentence": citation["claim_sentence"],
-                        "actual_text": verdict.get("actual_text", ""),
-                        "suggested_fix": verdict.get("suggested_fix", ""),
-                    })
-
-            pct = 85 + int(10 * (iteration + 1) / AI_MAX_VERIFICATION_ITERATIONS)
-            dao.save_progress(job_id, {
-                "status": "verifying", "percent": pct,
-                "detail": f"Verification iteration {iteration + 1}: "
-                          f"{len(failed_citations)} issue(s) found"
-            })
-
-            if not failed_citations:
-                break  # All citations verified
-
-            # Feed issues back to LLM for correction
-            correction_prompt = build_correction_prompt(report, failed_citations)
-            report = llm.complete(
-                messages=[
-                    {"role": "system", "content": SYSTEM_PROMPT_INTERPRET_V2},
-                    {"role": "user", "content": f"Here is your report:\n\n{report}\n\n{correction_prompt}"},
-                ],
-                max_tokens=6000,
-                temperature=AI_TEMPERATURE,
-            )
-
-            if _cancel_flags.get(job_id):
-                raise InterruptedError("Cancelled")
-
-        # Final programmatic safety net
-        final = verify_report_v2(report, gene_whitelist, unique_papers, job_instance)
-        if final["failed_citations"]:
-            report, removed = redact_unverified_v2(report, final["failed_citations"])
-            final["redacted_count"] = removed
-
-        # Renumber citations to be sequential [1], [2], [3]...
-        # This fixes gaps left by redaction or LLM dropping citations during synthesis
-        report, citation_mapping = renumber_citations(report)
-        if citation_mapping:
-            final["citation_mapping"] = {str(k): v for k, v in citation_mapping.items()}
-
-            # Update papers' ref_index to match renumbered report
-            updated_papers = []
-            for p in unique_papers:
-                old_idx = p["ref_index"]
-                if old_idx in citation_mapping:
-                    p["ref_index"] = citation_mapping[old_idx]
-                    updated_papers.append(p)
-            updated_papers.sort(key=lambda p: p["ref_index"])
-            unique_papers = updated_papers
-            dao.save_papers(job_id, unique_papers)
-
-        # =====================================================================
-        # Done
-        # =====================================================================
-        dao.save_progress(job_id, {
-            "status": "done", "percent": 100,
-            "detail": f"Ready — {len(unique_papers)} papers cited "
-                      f"({sum(1 for p in unique_papers if p.get('full_text_available'))} with full text)",
-            "report": report,
-            "verification": final,
-        })
+        # Run async pipeline in a new event loop
+        asyncio.run(_async_pipeline(job_id, experiment_design, job_instance, dao))
 
         RESPONSE.setContent({"success": True, "jobID": job_id, "status": "done"})
 
     except InterruptedError:
         if dao:
-            dao.save_progress(job_id, {"status": "cancelled", "percent": 0, "detail": "Cancelled by user"})
+            dao.save_progress(job_id, {"status": "cancelled", "percent": 0,
+                                       "detail": "Cancelled by user"})
         RESPONSE.setContent({"success": True, "jobID": job_id, "status": "cancelled"})
     except Exception as ex:
         logging.exception(f"AI pipeline failed for job {job_id}")
@@ -347,461 +106,371 @@ def run_ai_pipeline(job_id, experiment_design, RESPONSE):
         return RESPONSE
 
 
-def _run_verification_subagent(llm, tool_executor, claim, cited_text, ref_index, temperature=0.1):
-    """Run a verification sub-agent for a single citation.
+async def _async_pipeline(job_id, experiment_design, job_instance, dao):
+    """Core async pipeline: triage -> expert+eval -> report+eval -> post-process."""
+    organism = job_instance.getOrganism()
+    organism_name = get_organism_name(organism)
 
-    The sub-agent uses search_paper_text and fetch_paper_section tools
-    to verify the cited text exists in the paper and supports the claim.
-    Returns a dict with {text_match, supports_claim, reasoning, actual_text, suggested_fix}.
-    """
-    prompt = build_verification_prompt(claim, cited_text, ref_index)
+    # =====================================================================
+    # Phase 0: Data Prep
+    # =====================================================================
+    dao.save_progress(job_id, {"status": "extracting", "percent": 5,
+                               "detail": "Preparing context..."})
 
-    try:
-        result = llm.complete_with_tools(
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT_VERIFICATION},
-                {"role": "user", "content": prompt},
-            ],
-            tools=VERIFICATION_TOOLS,
-            tool_executor=tool_executor,
-            max_tokens=1000,
-            temperature=temperature,
-            max_iterations=5,
-        )
-        return _parse_json_verdict(result)
-    except Exception as e:
-        logger.warning(f"Verification sub-agent failed for [{ref_index}]: {e}")
-        return {
-            "text_match": False,
-            "supports_claim": False,
-            "reasoning": f"Verification sub-agent error: {e}",
-            "actual_text": "",
-            "suggested_fix": "",
-        }
+    design_type = detect_design_type(job_instance, experiment_design)
+    enrichment_table = build_enrichment_table(job_instance, max_pathways=AI_TRIAGE_MAX_PATHWAYS)
+    whitelist = build_feature_name_whitelist(job_instance)
 
+    ctx = PipelineContext(
+        job_instance=job_instance,
+        job_id=job_id,
+        organism_name=organism_name,
+        design_type=design_type,
+        experiment_design=experiment_design,
+        enrichment_table=enrichment_table,
+        gene_whitelist=whitelist,
+        compound_whitelist=whitelist,  # combined whitelist
+        pubmed_client=PubMedClient(),
+    )
 
-def _parse_json_verdict(text):
-    """Parse JSON verdict from verification sub-agent, with fallback for malformed output."""
-    # Try direct JSON parse
-    text = text.strip()
+    _check_cancel(job_id)
+    logger.info(f"[{job_id}] Phase 0: design={design_type}, "
+                f"{len(enrichment_table)} pathways, {len(whitelist)} features")
 
-    # Strip markdown code fences if present
-    if text.startswith("```"):
-        lines = text.split("\n")
-        lines = [l for l in lines if not l.strip().startswith("```")]
-        text = "\n".join(lines).strip()
+    # =====================================================================
+    # Phase 1: Triage (1 LLM call)
+    # =====================================================================
+    dao.save_progress(job_id, {"status": "triaging", "percent": 8,
+                               "detail": "Selecting pathways..."})
 
-    try:
-        result = json.loads(text)
-        return {
-            "text_match": bool(result.get("text_match", False)),
-            "supports_claim": bool(result.get("supports_claim", False)),
-            "reasoning": str(result.get("reasoning", "")),
-            "actual_text": str(result.get("actual_text", "")),
-            "suggested_fix": str(result.get("suggested_fix", "")),
-        }
-    except (json.JSONDecodeError, ValueError):
-        pass
+    triage_prompt = format_enrichment_table(enrichment_table, experiment_design, organism_name)
+    triage_result = await _run_triage(ctx, triage_prompt)
 
-    # Fallback: try to find JSON within the text
-    json_pattern = re.search(r'\{[^{}]*"text_match"[^{}]*\}', text, re.DOTALL)
-    if json_pattern:
+    selected = [d for d in triage_result.decisions if d.investigate]
+    selected.sort(key=lambda d: d.priority)
+    selected = selected[:AI_MAX_SELECTED_PATHWAYS]
+
+    logger.info(f"[{job_id}] Phase 1: selected {len(selected)} pathways")
+    dao.save_progress(job_id, {"status": "triaging", "percent": 10,
+                               "detail": f"Selected {len(selected)} pathways"})
+    _check_cancel(job_id)
+
+    # =====================================================================
+    # Phase 2: Per-Pathway Expert + Evaluator — PARALLEL (agentic swarm)
+    # =====================================================================
+    async def _analyze_one_pathway(pw_decision, index):
+        """Analyze a single pathway with error isolation."""
+        pw_name = pw_decision.pathway_name
+        pw_data = next((e for e in enrichment_table if e["name"] == pw_name), None)
+        pval_str = ""
+        if pw_data:
+            pval_parts = [f"{k}: {v:.4f}" for k, v in pw_data.get("per_omic_pvalues", {}).items()]
+            pval_str = "; ".join(pval_parts)
+
         try:
-            result = json.loads(json_pattern.group())
-            return {
-                "text_match": bool(result.get("text_match", False)),
-                "supports_claim": bool(result.get("supports_claim", False)),
-                "reasoning": str(result.get("reasoning", "")),
-                "actual_text": str(result.get("actual_text", "")),
-                "suggested_fix": str(result.get("suggested_fix", "")),
-            }
-        except (json.JSONDecodeError, ValueError):
-            pass
-
-    # Final fallback: assume verification failed
-    logger.warning(f"Could not parse verification verdict: {text[:200]}")
-    return {
-        "text_match": False,
-        "supports_claim": False,
-        "reasoning": "Could not parse verification result",
-        "actual_text": "",
-        "suggested_fix": "",
-    }
-
-
-# =========================================================================
-# Phase 3 helpers: local batch indexing
-# =========================================================================
-
-def _build_local_paper_index(batch_papers):
-    """Create locally-numbered copies of batch papers (1, 2, 3, ...).
-
-    LLMs tend to renumber citations starting from 1 regardless of the
-    provided ref_index.  By giving each batch local indices, we work
-    *with* that tendency and remap back to global indices afterward.
-
-    Returns:
-        (local_papers, local_to_global): list of paper copies with local
-        ref_index, and a dict mapping local_idx -> global_idx.
-    """
-    local_papers = []
-    local_to_global = {}
-    for local_idx, p in enumerate(batch_papers, 1):
-        local_paper = dict(p)  # shallow copy — sections dict is shared (read-only)
-        local_paper["ref_index"] = local_idx
-        local_papers.append(local_paper)
-        local_to_global[local_idx] = p["ref_index"]
-    return local_papers, local_to_global
-
-
-def _remap_citation_indices(text, local_to_global):
-    """Remap [N] citation indices from local batch numbering to global numbering.
-
-    Uses a two-pass placeholder approach to avoid collision when e.g.
-    local [1] -> global [3] and local [3] -> global [7].
-    """
-    if not local_to_global:
-        return text
-
-    result = text
-
-    # Pass 1: replace [local] with unique placeholders (process largest first
-    # so [12] is replaced before [1])
-    for local_idx in sorted(local_to_global.keys(), reverse=True):
-        global_idx = local_to_global[local_idx]
-        placeholder = f"__CITE_REMAP_{global_idx}__"
-        result = result.replace(f"[{local_idx}]", placeholder)
-
-    # Pass 2: replace placeholders with final [global] indices
-    for global_idx in set(local_to_global.values()):
-        result = result.replace(f"__CITE_REMAP_{global_idx}__", f"[{global_idx}]")
-
-    return result
-
-
-# =========================================================================
-# Phase 2 helpers: Agentic Literature Discovery
-# =========================================================================
-
-def _run_search_planner(llm, major, minor, matrix, whitelist, design, org, job_id):
-    """Use LLM to plan strategic PubMed search tasks for major pathways,
-    then auto-generate simple tasks for minor pathways.
-
-    Returns combined list of search task dicts.
-    """
-    all_tasks = []
-
-    # --- Major pathways: LLM-planned searches ---
-    if major:
-        prompt = build_search_planner_prompt(
-            major, matrix, whitelist, design, org, AI_MAX_SEARCH_TASKS)
-        try:
-            if _cancel_flags.get(job_id):
-                raise InterruptedError("Cancelled")
-
-            raw = llm.complete(
-                messages=[
-                    {"role": "system", "content": SYSTEM_PROMPT_SEARCH_PLANNER.format(
-                        max_tasks=AI_MAX_SEARCH_TASKS)},
-                    {"role": "user", "content": prompt},
-                ],
-                max_tokens=3000,
-                temperature=AI_SEARCH_PLANNER_TEMPERATURE,
+            report = await _expert_with_evaluation(
+                ctx, pw_name, pval_str, experiment_design, design_type,
+                max_iterations=AI_MAX_EVAL_ITERATIONS,
             )
-            planned = _parse_search_plan(raw)
-            if planned:
-                all_tasks.extend(planned)
-                logger.info(f"[{job_id}] Search planner returned {len(planned)} tasks")
-            else:
-                logger.warning(f"[{job_id}] Search planner returned empty plan, using fallback")
-                all_tasks.extend(_build_fallback_search_tasks(major, org))
-        except InterruptedError:
-            raise
         except Exception as e:
-            logger.warning(f"[{job_id}] Search planner failed: {e}, using fallback")
-            all_tasks.extend(_build_fallback_search_tasks(major, org))
+            logger.error(f"[{job_id}] Pathway '{pw_name}' failed: {e}", exc_info=True)
+            report = f"[Analysis of {pw_name} could not be completed: {type(e).__name__}]"
 
-    # --- Minor pathways: auto-generated simple tasks (no LLM) ---
-    for pw in minor:
-        gene_symbols = [g["symbol"] for g in pw.get("top_genes", [])[:5]]
-        queries = [f'"{pw["name"]}"[Title/Abstract] AND "{org}"[Title/Abstract]']
-        if gene_symbols:
-            queries.append(
-                f'({" OR ".join(gene_symbols[:3])}) AND "{pw["name"]}"[Title/Abstract]')
-        all_tasks.append({
-            "task_id": f"minor_{pw['id']}",
-            "query_intent": f"General literature for {pw['name']}",
-            "target_pathways": [pw["name"]],
-            "keywords": gene_symbols[:3],
-            "pubmed_queries": queries,
+        dao.save_progress(job_id, {
+            "status": "interpreting", "percent": 10 + int(60 * (index + 1) / len(selected)),
+            "detail": f"Analyzed {index + 1}/{len(selected)}: {pw_name}"
         })
+        return report
 
-    return all_tasks[:AI_MAX_SEARCH_TASKS]
+    tasks = [_analyze_one_pathway(pw, i) for i, pw in enumerate(selected)]
+    pathway_reports = list(await asyncio.gather(*tasks))
+
+    # =====================================================================
+    # Phase 3: Report Writer + Evaluator Loop
+    # =====================================================================
+    _check_cancel(job_id)
+    dao.save_progress(job_id, {"status": "synthesizing", "percent": 75,
+                               "detail": "Writing report..."})
+
+    valid_reports = [r for r in pathway_reports if not r.startswith("[Analysis of")]
+    if not valid_reports:
+        raise RuntimeError("All pathway analyses failed. No report generated.")
+
+    report = await _report_with_evaluation(
+        ctx, valid_reports, experiment_design, organism_name,
+        max_iterations=AI_MAX_EVAL_ITERATIONS,
+    )
+
+    dao.save_progress(job_id, {"status": "verifying", "percent": 90,
+                               "detail": "Post-processing..."})
+
+    # =====================================================================
+    # Phase 4: Post-Processing
+    # =====================================================================
+    papers = list(ctx.papers_used.values())
+
+    # Assign ref_index to papers for verification
+    for idx, p in enumerate(papers, 1):
+        p["ref_index"] = idx
+
+    final = verify_report_v2(report, ctx.gene_whitelist, papers, job_instance)
+    if final.get("failed_citations"):
+        report, removed = redact_unverified_v2(report, final["failed_citations"])
+        final["redacted_count"] = removed
+
+    report, citation_mapping = renumber_citations(report)
+    if citation_mapping:
+        final["citation_mapping"] = {str(k): v for k, v in citation_mapping.items()}
+        updated_papers = []
+        for p in papers:
+            old_idx = p["ref_index"]
+            if old_idx in citation_mapping:
+                p["ref_index"] = citation_mapping[old_idx]
+                updated_papers.append(p)
+        updated_papers.sort(key=lambda p: p["ref_index"])
+        papers = updated_papers
+
+    # Save final result
+    dao.save_papers(job_id, papers)
+    dao.save_progress(job_id, {
+        "status": "done", "percent": 100,
+        "detail": f"Ready — {len(papers)} papers cited",
+        "report": report,
+        "verification": final,
+    })
 
 
-def _parse_search_plan(raw_text):
-    """Parse JSON array from search planner LLM output.
+async def _run_triage(ctx, triage_prompt):
+    """Run triage agent. Falls back to JSON parsing if structured output fails."""
+    try:
+        result = await Runner.run(triage_agent, triage_prompt, context=ctx, max_turns=1)
+        if isinstance(result.final_output, TriageResult):
+            return result.final_output
+        # If output_type not supported, try parsing as JSON
+        return _parse_triage_fallback(result.final_output, ctx.enrichment_table)
+    except Exception as e:
+        logger.warning(f"Triage agent failed: {e}, using fallback")
+        return _build_triage_fallback(ctx.enrichment_table)
 
-    Tries: direct parse → strip markdown fences → regex extract.
-    Returns list of task dicts, or empty list on failure.
-    """
-    text = raw_text.strip()
 
-    # Strip markdown code fences
+def _parse_triage_fallback(text, enrichment_table):
+    """Parse triage output as JSON string. Handles various wrapper formats."""
+    text = str(text).strip()
     if text.startswith("```"):
         lines = text.split("\n")
         lines = [l for l in lines if not l.strip().startswith("```")]
         text = "\n".join(lines).strip()
 
-    # Try direct JSON parse
+    # Try to extract JSON from text that may contain prose around it
+    json_match = re.search(r'\{[\s\S]*\}', text)
+    if json_match:
+        text = json_match.group(0)
+
     try:
-        result = json.loads(text)
-        if isinstance(result, list):
-            return [t for t in result if isinstance(t, dict) and t.get("pubmed_queries")]
-    except (json.JSONDecodeError, ValueError):
-        pass
+        data = json.loads(text)
 
-    # Regex fallback: extract JSON array
-    match = re.search(r'\[.*\]', text, re.DOTALL)
-    if match:
-        try:
-            result = json.loads(match.group())
-            if isinstance(result, list):
-                return [t for t in result if isinstance(t, dict) and t.get("pubmed_queries")]
-        except (json.JSONDecodeError, ValueError):
-            pass
+        # Direct TriageResult format: {"decisions": [...]}
+        if isinstance(data, dict) and "decisions" in data:
+            return TriageResult.model_validate(data)
 
-    logger.warning(f"Could not parse search plan: {text[:300]}")
-    return []
+        # Nested wrapper: {"triage_result": {"decisions": [...]}} or similar
+        if isinstance(data, dict):
+            for key, val in data.items():
+                if isinstance(val, dict) and "decisions" in val:
+                    return TriageResult.model_validate(val)
+                if isinstance(val, dict) and "pathways" in val:
+                    # {"triage_result": {"pathways": [...]}}
+                    return TriageResult(decisions=[
+                        _validate_triage_decision(d) for d in val["pathways"] if isinstance(d, dict)
+                    ])
+                if isinstance(val, list):
+                    return TriageResult(decisions=[
+                        _validate_triage_decision(d) for d in val if isinstance(d, dict)
+                    ])
 
+        # Direct list: [{"pathway_id": ...}, ...]
+        if isinstance(data, list):
+            return TriageResult(decisions=[
+                _validate_triage_decision(d) for d in data if isinstance(d, dict)
+            ])
+    except (json.JSONDecodeError, ValueError) as e:
+        logger.warning(f"Triage JSON parsing failed: {e}")
 
-def _build_fallback_search_tasks(pathways, organism_name):
-    """Generate simple keyword-based search tasks (no LLM required).
-
-    Replicates the original rigid Phase 2 query logic as a fallback.
-    """
-    tasks = []
-    for pw in pathways:
-        gene_symbols = [g["symbol"] for g in pw.get("top_genes", [])[:5]]
-        q1 = f'"{pw["name"]}"[Title/Abstract] AND "{organism_name}"[Title/Abstract]'
-        queries = [q1]
-        if gene_symbols:
-            q2 = f'({" OR ".join(gene_symbols[:3])}) AND "{pw["name"]}"[Title/Abstract]'
-            queries.append(q2)
-        tasks.append({
-            "task_id": f"fallback_{pw.get('id', pw['name'])}",
-            "query_intent": f"Literature for {pw['name']}",
-            "target_pathways": [pw["name"]],
-            "keywords": gene_symbols[:3],
-            "pubmed_queries": queries,
-        })
-    return tasks
+    return _build_triage_fallback(enrichment_table)
 
 
-def _execute_search_subagents(llm, pubmed, tasks, design, org, job_id, dao):
-    """Run search sub-agents in parallel via ThreadPoolExecutor.
+def _validate_triage_decision(d):
+    """Validate a single triage decision dict."""
+    from src.classes.AIInterpret.models import TriageDecision
+    return TriageDecision(
+        pathway_id=str(d.get("pathway_id", "")),
+        pathway_name=str(d.get("pathway_name", "")),
+        investigate=bool(d.get("investigate", False)),
+        priority=max(1, min(5, int(d.get("priority", 3)))),
+        reasoning=str(d.get("reasoning", "")),
+    )
 
-    Each sub-agent searches PubMed, filters with LLM, and returns abstract-only
-    paper dicts. After all sub-agents finish, a single batch fetch retrieves
-    full text for all unique PMIDs.
 
-    Returns list of paper dicts with full text where available.
-    """
-    if not tasks:
-        return []
+def _build_triage_fallback(enrichment_table):
+    """Fallback: select top 8 pathways by combined p-value."""
+    from src.classes.AIInterpret.models import TriageDecision
+    decisions = []
+    for i, pw in enumerate(enrichment_table):
+        decisions.append(TriageDecision(
+            pathway_id=pw["id"],
+            pathway_name=pw["name"],
+            investigate=i < AI_MAX_SELECTED_PATHWAYS,
+            priority=min(i + 1, 5),
+            reasoning="Fallback: selected by combined p-value rank",
+        ))
+    return TriageResult(decisions=decisions)
 
-    abstract_papers = []  # paper dicts from sub-agents (abstract only)
-    completed = 0
-    total = len(tasks)
 
-    with ThreadPoolExecutor(max_workers=AI_SEARCH_SUBAGENT_WORKERS) as executor:
-        futures = {
-            executor.submit(
-                _search_subagent_worker, llm, pubmed, task, design, org, job_id
-            ): task
-            for task in tasks
-        }
+async def _expert_with_evaluation(ctx, pathway_name, pval_str, experiment_design,
+                                   design_type, max_iterations=1):
+    """Expert → Critic → Correction. Single pass by default."""
+    expert = build_pathway_expert(pathway_name, design_type)
+    prompt = (
+        f"Investigate: {pathway_name}\n"
+        f"Per-omic p-values: {pval_str}\n"
+        f"Experiment design: {experiment_design}\n"
+        f"Design type: {design_type}"
+    )
 
-        for future in as_completed(futures):
-            task = futures[future]
-            try:
-                if _cancel_flags.get(job_id):
-                    raise InterruptedError("Cancelled")
-                papers = future.result(timeout=120)
-                abstract_papers.extend(papers)
-            except InterruptedError:
-                raise
-            except Exception as e:
-                logger.warning(f"[{job_id}] Sub-agent failed for task "
-                               f"'{task.get('task_id', '?')}': {e}")
-
-            completed += 1
-            pct = 15 + int(20 * completed / max(total, 1))
-            dao.save_progress(job_id, {
-                "status": "searching_pubmed", "percent": pct,
-                "detail": f"Search tasks: {completed}/{total} complete"
-            })
-
-    if _cancel_flags.get(job_id):
-        raise InterruptedError("Cancelled")
-
-    # Batch full-text fetch for all unique PMIDs (35% → 40%)
-    dao.save_progress(job_id, {"status": "searching_pubmed", "percent": 35,
-                               "detail": "Fetching full text for discovered papers..."})
-
-    # Dedup PMIDs and collect pathway attributions
-    pmid_pathways = {}  # pmid -> set of pathway names
-    for p in abstract_papers:
-        pmid = p["pmid"]
-        pmid_pathways.setdefault(pmid, set()).update(p.get("pathways", []))
-
-    deduped_pmids = list(pmid_pathways.keys())
-    if not deduped_pmids:
-        return []
-
-    # Batch fetch with full text (multi-tier: PMC → Europe PMC → abstract)
+    # Step 1: Expert analysis
     try:
-        full_papers = pubmed.fetch_papers(deduped_pmids)
+        expert_result = await Runner.run(expert, prompt, context=ctx, max_turns=20)
+        expert_output = str(expert_result.final_output)
+    except MaxTurnsExceeded:
+        logger.warning(f"Pathway '{pathway_name}' expert exceeded max turns")
+        return f"[Analysis of {pathway_name} was incomplete due to complexity limits.]"
+
+    if max_iterations < 1:
+        return expert_output
+
+    # Step 2: Critic
+    eval_prompt = (
+        f"Review this pathway analysis for accuracy and completeness:\n\n"
+        f"{expert_output}\n\nPathway: {pathway_name}\nDesign type: {design_type}"
+    )
+    eval_output = await _run_evaluator(ctx, eval_prompt, pathway_evaluator)
+
+    if eval_output.approved:
+        logger.info(f"Pathway '{pathway_name}' approved on first pass")
+        return expert_output
+
+    # Step 3: Single correction
+    logger.info(f"Pathway '{pathway_name}': {len(eval_output.issues)} issues, revising once")
+    prev_summary = expert_output[:2000] + "\n... [truncated]" if len(expert_output) > 2000 else expert_output
+    revision_prompt = (
+        f"Your previous analysis of {pathway_name}:\n\n{prev_summary}\n\n"
+        f"Reviewer feedback:\n\n{eval_output.feedback}\n\n"
+        f"Please revise your analysis to address the issues above."
+    )
+    try:
+        expert = build_pathway_expert(pathway_name, design_type)
+        revised = await Runner.run(expert, revision_prompt, context=ctx, max_turns=20)
+        return str(revised.final_output)
+    except MaxTurnsExceeded:
+        logger.warning(f"Pathway '{pathway_name}' revision exceeded max turns, using original")
+        return expert_output
+
+
+async def _report_with_evaluation(ctx, pathway_reports, experiment_design,
+                                   organism_name, max_iterations=3):
+    """Run Report Writer with evaluation loop. Returns final report text."""
+    synth_input = (
+        f"## Experiment Context\nOrganism: {organism_name}\n"
+        f"Design: {experiment_design}\n\n"
+        f"## Individual Pathway Analyses\n\n"
+        + "\n\n---\n\n".join(pathway_reports)
+    )
+
+    report_output = None
+    eval_output = None
+
+    for iteration in range(max_iterations):
+        if iteration == 0:
+            prompt = synth_input
+        else:
+            report_summary = report_output
+            if len(report_summary) > 3000:
+                report_summary = report_summary[:3000] + "\n... [truncated for context]"
+            prompt = (
+                f"Your previous report:\n\n{report_summary}\n\n"
+                f"Reviewer feedback:\n\n{eval_output.feedback}\n\n"
+                f"Please revise the report to address the issues above."
+            )
+
+        result = await Runner.run(report_writer, prompt, context=ctx, max_turns=1)
+        report_output = str(result.final_output)
+
+        # Evaluate
+        eval_prompt = f"Review this synthesis report:\n\n{report_output}"
+        eval_output = await _run_evaluator(ctx, eval_prompt, report_evaluator)
+
+        if eval_output.approved:
+            logger.info(f"Report approved at iteration {iteration + 1}")
+            break
+        else:
+            logger.info(f"Report iteration {iteration + 1}: {len(eval_output.issues)} issues")
+
+    return report_output
+
+
+async def _run_evaluator(ctx, prompt, evaluator_agent):
+    """Run an evaluator agent with fallback for structured output failures."""
+    try:
+        result = await Runner.run(evaluator_agent, prompt, context=ctx, max_turns=8)
+        if isinstance(result.final_output, EvaluationResult):
+            return result.final_output
+        return _parse_evaluation_fallback(result.final_output)
     except Exception as e:
-        logger.warning(f"[{job_id}] Batch full-text fetch failed: {e}, "
-                       f"falling back to abstracts only")
-        full_papers = pubmed.fetch_abstracts(deduped_pmids)
-        for p in full_papers:
-            p["full_text_available"] = False
-            p["fetch_tier"] = "abstract_only"
-            p["sections"] = {"abstract": p.get("abstract", "")}
-            p["full_text_char_count"] = len(p.get("abstract", ""))
-            p["authors_short"] = _format_authors_short_inline(p.get("first_author", ""))
-            p["pathways"] = []
-
-    # Attach pathway attributions to fetched papers
-    for p in full_papers:
-        pw_names = pmid_pathways.get(p["pmid"], set())
-        existing = set(p.get("pathways", []))
-        p["pathways"] = sorted(existing | pw_names)
-
-    return full_papers
-
-
-def _search_subagent_worker(llm, pubmed, task, design, org, job_id):
-    """Single search sub-agent: search PubMed, optionally filter with LLM.
-
-    Returns list of abstract-only paper dicts with pathway attribution.
-    """
-    if _cancel_flags.get(job_id):
-        raise InterruptedError("Cancelled")
-
-    all_pmids = []
-    for query in task.get("pubmed_queries", []):
-        try:
-            pmids = pubmed.search(query, max_results=AI_PAPERS_PER_SEARCH_TASK)
-            all_pmids.extend(pmids)
-        except Exception as e:
-            logger.warning(f"[{job_id}] PubMed search failed for "
-                           f"'{query[:80]}': {e}")
-
-    # Dedup
-    unique_pmids = list(dict.fromkeys(all_pmids))
-    if not unique_pmids:
-        return []
-
-    if _cancel_flags.get(job_id):
-        raise InterruptedError("Cancelled")
-
-    # Fetch abstracts for LLM filtering
-    try:
-        papers = pubmed.fetch_abstracts(unique_pmids)
-    except Exception as e:
-        logger.warning(f"[{job_id}] Abstract fetch failed for task "
-                       f"'{task.get('task_id', '?')}': {e}")
-        return []
-
-    if not papers:
-        return []
-
-    # LLM filter: select top papers by relevance
-    kept_pmids = _llm_filter_papers(llm, task, papers, design, org)
-
-    # Apply filter (or fallback to first N)
-    if kept_pmids:
-        papers = [p for p in papers if p["pmid"] in kept_pmids]
-    else:
-        papers = papers[:AI_PAPERS_KEPT_PER_TASK]
-
-    # Attach pathway attribution
-    target_pathways = task.get("target_pathways", [])
-    for p in papers:
-        p["pathways"] = list(target_pathways)
-
-    return papers
-
-
-def _llm_filter_papers(llm, task, papers, design, org):
-    """Use LLM sub-agent to select the most relevant papers.
-
-    Returns set of PMID strings, or empty set on failure (caller uses fallback).
-    """
-    if len(papers) <= AI_PAPERS_KEPT_PER_TASK:
-        return set()  # No filtering needed
-
-    prompt = build_subagent_filter_prompt(task, papers, design, org, AI_PAPERS_KEPT_PER_TASK)
-
-    try:
-        raw = llm.complete(
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT_SEARCH_SUBAGENT.format(
-                    max_keep=AI_PAPERS_KEPT_PER_TASK)},
-                {"role": "user", "content": prompt},
-            ],
-            max_tokens=500,
-            temperature=AI_SEARCH_SUBAGENT_TEMPERATURE,
+        logger.warning(f"Evaluator failed: {e}, auto-approving")
+        return EvaluationResult(
+            approved=True,
+            issues=[f"Evaluator error: {e}"],
+            suggestions=[],
+            feedback="Auto-approved due to evaluator failure.",
         )
-        selected = _parse_pmid_list(raw)
-        # Validate: only keep PMIDs that are actually in the candidate set
-        candidate_pmids = {p["pmid"] for p in papers}
-        valid = selected & candidate_pmids
-        if valid:
-            return valid
-        logger.warning(f"LLM filter returned no valid PMIDs from candidates")
-        return set()
-    except Exception as e:
-        logger.warning(f"LLM filter failed: {e}")
-        return set()
 
 
-def _parse_pmid_list(raw_text):
-    """Parse a set of PMID strings from LLM output.
-
-    Tries JSON array first, then regex fallback for 7-8 digit numbers.
-    """
-    text = raw_text.strip()
-
-    # Strip markdown fences
+def _parse_evaluation_fallback(text):
+    """Parse evaluation output as JSON when structured output isn't supported."""
+    text = str(text).strip()
     if text.startswith("```"):
         lines = text.split("\n")
         lines = [l for l in lines if not l.strip().startswith("```")]
         text = "\n".join(lines).strip()
 
-    # Try JSON parse
+    # Try to extract JSON object from text
+    json_match = re.search(r'\{[\s\S]*\}', text)
+    json_str = json_match.group(0) if json_match else text
+
     try:
-        result = json.loads(text)
-        if isinstance(result, list):
-            return {str(x) for x in result if str(x).isdigit()}
+        data = json.loads(json_str)
+        if isinstance(data, dict):
+            # Handle nested wrappers like {"evaluation_result": {...}}
+            if "approved" in data:
+                return EvaluationResult.model_validate(data)
+            for key, val in data.items():
+                if isinstance(val, dict) and "approved" in val:
+                    return EvaluationResult.model_validate(val)
     except (json.JSONDecodeError, ValueError):
         pass
 
-    # Regex fallback: 7-8 digit numbers (PMID format)
-    matches = re.findall(r'\b(\d{7,8})\b', text)
-    return set(matches)
+    # Heuristic: if text contains "approved" or "APPROVED", approve
+    lower = text.lower()
+    approved = "approved" in lower and "not approved" not in lower
+    return EvaluationResult(
+        approved=approved,
+        issues=[],
+        suggestions=[],
+        feedback=text[:500],
+    )
 
 
-def _format_authors_short_inline(first_author):
-    """'John Smith' -> 'Smith, J. et al.' formatting."""
-    if not first_author:
-        return "Unknown"
-    parts = first_author.strip().split()
-    if len(parts) >= 2:
-        last = parts[-1]
-        initials = ".".join(p[0].upper() for p in parts[:-1] if p) + "."
-        return f"{last}, {initials} et al."
-    return f"{first_author} et al."
+def _check_cancel(job_id):
+    """Check if the job has been cancelled."""
+    if _cancel_flags.get(job_id):
+        raise InterruptedError("Cancelled")

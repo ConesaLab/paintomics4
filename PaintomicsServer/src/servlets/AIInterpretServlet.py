@@ -7,11 +7,7 @@ from src.common.DAO.AIInterpretDAO import AIInterpretDAO
 from src.common.JobInformationManager import JobInformationManager
 from src.classes.AIInterpret.pipeline import run_ai_pipeline, _cancel_flags
 from src.common.PySiQ import JobStatus
-from src.classes.AIInterpret.llm_client import LLMClient
-from src.classes.AIInterpret.prompts import SYSTEM_PROMPT_CHAT
-from src.classes.AIInterpret.tools import CHAT_TOOLS, execute_tool
-from src.conf.serverconf import (AI_INTERPRETATION_ENABLED, AI_PROVIDERS,
-    AI_LLM_PROVIDER, AI_TEMPERATURE)
+from src.conf.serverconf import AI_INTERPRETATION_ENABLED
 
 # Jobs stuck longer than this are considered dead (e.g. killed by server reload)
 AI_STALE_JOB_TIMEOUT = timedelta(minutes=10)
@@ -212,36 +208,45 @@ def aiInterpretChat(REQUEST, RESPONSE):
         if record is None or record.get("status") != "done":
             raise UserWarning("Report must be completed before chatting.")
 
-        # Build conversation context
-        report = record.get("report", "")
-        conversation = record.get("conversation", [])
-
-        messages = [
-            {"role": "system", "content": SYSTEM_PROMPT_CHAT},
-            {"role": "user", "content": f"Here is the analysis report for context:\n\n{report}"},
-            {"role": "assistant", "content": "I've reviewed the analysis report. What questions do you have?"},
-        ]
-        for msg in conversation:
-            messages.append({"role": msg["role"], "content": msg["content"]})
-        messages.append({"role": "user", "content": userMessage})
-
         # Save user message
         dao.append_chat(jobID, "user", userMessage)
 
-        # Get LLM response (with tool access when job data is available)
-        llm = LLMClient(AI_PROVIDERS[AI_LLM_PROVIDER])
+        report = record.get("report", "")
+        conversation = record.get("conversation", [])
         job_instance = JobInformationManager().loadJobInstance(jobID)
 
-        if job_instance is not None:
-            tool_executor = lambda name, args: execute_tool(name, job_instance, args)
-            reply = llm.complete_with_tools(
-                messages, CHAT_TOOLS, tool_executor,
-                max_tokens=2048, temperature=AI_TEMPERATURE,
-            )
-        else:
-            reply = llm.complete(messages, max_tokens=2048, temperature=AI_TEMPERATURE)
+        # Use Agents SDK for chat
+        from agents import Runner
+        from src.classes.AIInterpret.agents import configure_sdk, build_chat_agent
+        from src.classes.AIInterpret.models import PipelineContext
+        from src.classes.AIInterpret.context_builder import get_organism_name, detect_design_type
+        from src.classes.AIInterpret.pubmed_client import PubMedClient
 
-        # Save assistant reply (only the final text, not intermediate tool messages)
+        configure_sdk()
+        chat_agent = build_chat_agent(report)
+
+        # Build context
+        ctx = PipelineContext(
+            job_instance=job_instance,
+            job_id=jobID,
+            organism_name=get_organism_name(job_instance.getOrganism()) if job_instance else "",
+            design_type=detect_design_type(job_instance) if job_instance else "multi_group",
+            experiment_design="",
+            pubmed_client=PubMedClient(),
+        )
+
+        # Build input from conversation history
+        input_parts = []
+        for msg in conversation:
+            role = "User" if msg["role"] == "user" else "Assistant"
+            input_parts.append(f"{role}: {msg['content']}")
+        input_parts.append(f"User: {userMessage}")
+        full_input = "\n\n".join(input_parts)
+
+        result = Runner.run_sync(chat_agent, full_input, context=ctx, max_turns=10)
+        reply = str(result.final_output)
+
+        # Save assistant reply
         dao.append_chat(jobID, "assistant", reply)
 
         RESPONSE.setContent({"success": True, "jobID": jobID, "response": reply})
@@ -291,11 +296,18 @@ def aiGenerateExpDesign(REQUEST, RESPONSE):
             "that the user can edit. Focus on what biological question these data types typically address together."
         )
 
-        llm = LLMClient(AI_PROVIDERS[AI_LLM_PROVIDER])
-        suggestion = llm.complete([
-            {"role": "system", "content": "You help researchers describe their experiment design concisely."},
-            {"role": "user", "content": prompt}
-        ], max_tokens=300, temperature=0.5)
+        from agents import Agent, Runner, ModelSettings
+        from src.classes.AIInterpret.agents import configure_sdk, _get_model
+        configure_sdk()
+
+        design_agent = Agent(
+            name="Design Helper",
+            model=_get_model(),
+            instructions="You help researchers describe their experiment design concisely.",
+            model_settings=ModelSettings(temperature=0.5),
+        )
+        result = Runner.run_sync(design_agent, prompt, max_turns=1)
+        suggestion = str(result.final_output)
 
         RESPONSE.setContent({"success": True, "jobID": jobID, "suggestion": suggestion})
 

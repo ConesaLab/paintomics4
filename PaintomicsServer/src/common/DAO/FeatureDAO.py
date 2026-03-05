@@ -45,7 +45,7 @@ class FeatureDAO(DAO):
         instanceBSON = featureInstance.toBSON()
         instanceBSON["jobID"] = jobID
 
-        collection.insert(instanceBSON)
+        collection.insert_one(instanceBSON)
         return True
 
     def insertAll(self, instancesList, otherParams=None):
@@ -70,5 +70,5 @@ class FeatureDAO(DAO):
         if("featureType" in otherParams):
             queryParams["featureType"] = otherParams["featureType"]
         collection = self.dbManager.getCollection(self.collectionName)
-        match = collection.remove(queryParams)
+        match = collection.delete_many(queryParams)
         return True

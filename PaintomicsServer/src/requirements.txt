@@ -28,3 +28,5 @@ tzlocal==2.1
 webencodings==0.5.1
 Werkzeug==1.0.1
 wrapt==1.12.1
+openai-agents>=0.1.0
+pydantic>=2.0

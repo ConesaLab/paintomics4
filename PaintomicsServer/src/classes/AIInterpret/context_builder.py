@@ -3,6 +3,7 @@ from src.conf.serverconf import (
 )
 import csv
 import os
+import re
 
 
 def build_pathway_context(job_instance, max_pathways=15):
@@ -362,3 +363,215 @@ def _direction_arrow(peak_value):
     elif peak_value < -0.3:
         return "↓"
     return "→"
+
+
+# ---------------------------------------------------------------------------
+# V2 Pipeline: Design detection, enrichment table, compound support
+# ---------------------------------------------------------------------------
+
+def detect_design_type(job_instance, experiment_design=""):
+    """Detect experimental design type from omic headers and experiment description.
+
+    Returns: "time_series" | "case_control" | "dose_response" | "single_condition" | "multi_group"
+    """
+    # Collect all column labels across gene-based and compound-based omics
+    all_labels = []
+    for omic in job_instance.getGeneBasedInputOmics():
+        headers = omic.get("omicHeader")
+        if headers and isinstance(headers, list) and len(headers) > 1:
+            all_labels.extend(str(h).strip() for h in headers[1:])
+    for omic in job_instance.getCompoundBasedInputOmics():
+        headers = omic.get("omicHeader")
+        if headers and isinstance(headers, list) and len(headers) > 1:
+            all_labels.extend(str(h).strip() for h in headers[1:])
+
+    n_columns = len(all_labels)
+    label_text = " ".join(all_labels).lower()
+    design_text = (experiment_design or "").lower()
+
+    # Check experiment_design string for explicit keywords
+    if any(kw in design_text for kw in ["time series", "time-series", "time course", "timecourse", "temporal"]):
+        return "time_series"
+    if any(kw in design_text for kw in ["case control", "case-control", "case vs control", "treated vs untreated"]):
+        return "case_control"
+    if any(kw in design_text for kw in ["dose response", "dose-response", "concentration"]):
+        return "dose_response"
+
+    # Check column labels for time patterns (0h, 2h, 6h, 12h, 1d, 2d, etc.)
+    time_pattern = re.compile(r'\d+\s*(h|hr|hrs|hour|hours|d|day|days|min|m|wk|week|weeks)\b', re.I)
+    time_matches = [l for l in all_labels if time_pattern.search(l)]
+    if len(time_matches) >= 2:
+        return "time_series"
+
+    # Check for dose patterns (0mg, 1mg, 5ug, 10nM, etc.)
+    dose_pattern = re.compile(r'\d+\s*(mg|ug|ng|nm|um|mm|mol|μm|μg)\b', re.I)
+    dose_matches = [l for l in all_labels if dose_pattern.search(l)]
+    if len(dose_matches) >= 2:
+        return "dose_response"
+
+    # Check for case/control keywords in labels
+    cc_keywords = {"control", "ctrl", "case", "treated", "untreated", "wt", "ko", "wildtype", "mutant"}
+    cc_matches = [l for l in all_labels if any(kw in l.lower() for kw in cc_keywords)]
+    if len(cc_matches) >= 1 and n_columns <= 4:
+        return "case_control"
+
+    # Fallback by column count
+    if n_columns == 0:
+        return "single_condition"
+    if n_columns <= 2:
+        return "case_control"
+    if n_columns <= 4:
+        return "multi_group"
+
+    return "multi_group"
+
+
+def build_enrichment_table(job_instance, max_pathways=30):
+    """Build lightweight enrichment data for triage — no gene/compound details.
+
+    Returns list of dicts with per-omic p-values, feature counts, etc.
+    """
+    matched = job_instance.getMatchedPathways()
+    sorted_pws = sorted(matched.values(), key=lambda pw: _best_pval(pw))[:max_pathways]
+
+    table = []
+    for pw in sorted_pws:
+        per_omic = {}
+        for omic_name, vals in pw.significanceValues.items():
+            if len(vals) >= 3:
+                per_omic[omic_name] = round(vals[2], 6)
+
+        table.append({
+            "id": pw.ID,
+            "name": pw.name,
+            "source": pw.source,
+            "combined_pvalue": _best_pval(pw),
+            "per_omic_pvalues": per_omic,
+            "significant_omic_count": _count_significant_omics(pw),
+            "matched_gene_count": len(pw.matchedGenes),
+            "matched_compound_count": len(pw.matchedCompounds),
+        })
+    return table
+
+
+def build_feature_name_whitelist(job_instance):
+    """Build case-insensitive whitelist from all input genes AND compounds."""
+    whitelist = set()
+    # Gene names
+    for gene_id, gene_obj in job_instance.getInputGenesData().items():
+        name = gene_obj.getName()
+        if name:
+            whitelist.add(name.upper())
+        for ov in gene_obj.getOmicsValues():
+            orig = ov.originalName if hasattr(ov, 'originalName') else ""
+            if orig:
+                whitelist.add(orig.upper())
+    # Compound names
+    for cpd_id, cpd_obj in job_instance.getInputCompoundsData().items():
+        name = cpd_obj.getName()
+        if name:
+            whitelist.add(name.upper())
+    return whitelist
+
+
+def _build_compound_header_map(job_instance):
+    """Map omicName -> [condition_labels] from compound-based input omic headers."""
+    header_map = {}
+    for input_omic in job_instance.getCompoundBasedInputOmics():
+        omic_name = input_omic.get("omicName", "")
+        raw_header = input_omic.get("omicHeader")
+        if not raw_header or not isinstance(raw_header, list) or len(raw_header) < 2:
+            continue
+        labels = []
+        for col in raw_header[1:]:
+            col_str = str(col).strip()
+            parts = col_str.rsplit("_", 1)
+            labels.append(parts[-1] if len(parts) == 2 and parts[-1] else col_str)
+        header_map[omic_name] = labels
+    return header_map
+
+
+def _get_top_compounds(pw, input_compounds, header_map, limit=10):
+    """Build compound entries with per-omic profiles (mirrors _get_top_genes)."""
+    compounds = []
+    for cid in pw.matchedCompounds:
+        cpd = input_compounds.get(cid)
+        if cpd is None:
+            continue
+        name = cpd.getName()
+        if not name:
+            continue
+
+        omics = cpd.getOmicsValues()
+        if not omics:
+            compounds.append({
+                "name": name, "relevant": False,
+                "effect_size": 0, "omic_profiles": [],
+            })
+            continue
+
+        is_relevant = any(ov.isRelevant() for ov in omics)
+        omic_profiles = []
+        max_effect = 0.0
+
+        for ov in omics:
+            omic_name = ov.getOmicName()
+            values = ov.getValues()
+            if not values:
+                continue
+
+            labels = header_map.get(omic_name)
+            if not labels or len(labels) != len(values):
+                labels = _find_matching_labels(header_map, len(values))
+
+            abs_vals = [abs(v) for v in values]
+            peak_idx = max(range(len(abs_vals)), key=lambda i: abs_vals[i])
+            peak_value = round(values[peak_idx], 3)
+            peak_label = labels[peak_idx] if labels else str(peak_idx)
+            pattern = _classify_temporal_pattern(values)
+            value_pairs = _format_value_pairs(values, labels)
+
+            omic_profiles.append({
+                "omic_name": omic_name,
+                "values": value_pairs,
+                "peak_value": peak_value,
+                "peak_timepoint": peak_label,
+                "pattern": pattern,
+            })
+
+            if abs_vals[peak_idx] > max_effect:
+                max_effect = abs_vals[peak_idx]
+
+        compounds.append({
+            "name": name,
+            "relevant": is_relevant,
+            "effect_size": round(max_effect, 2),
+            "omic_profiles": omic_profiles,
+        })
+
+    compounds.sort(key=lambda c: (-c["relevant"], -c["effect_size"]))
+    return compounds[:limit]
+
+
+def classify_expression_pattern(values, design_type):
+    """Design-aware wrapper for expression pattern classification.
+
+    Returns a pattern string appropriate for the design type.
+    """
+    if not values or len(values) < 2:
+        return "flat" if design_type == "time_series" else "unchanged"
+
+    if design_type in ("time_series", "dose_response"):
+        return _classify_temporal_pattern(values)
+
+    if design_type == "case_control":
+        fc = values[-1] - values[0]
+        if fc > 0.3:
+            return "upregulated"
+        elif fc < -0.3:
+            return "downregulated"
+        return "unchanged"
+
+    # multi_group, single_condition
+    val_range = max(values) - min(values)
+    return "variable" if val_range > 0.3 else "stable"

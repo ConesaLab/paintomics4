@@ -83,7 +83,7 @@ class FileDAO(DAO):
         instanceBSON = fileInstance.toBSON()
         #GET THE NEXT USER ID
         instanceBSON["userID"] = otherParams["userID"]
-        collection.insert(instanceBSON)
+        collection.insert_one(instanceBSON)
         return True
 
     def remove(self, id, otherParams=None):
@@ -92,7 +92,7 @@ class FileDAO(DAO):
             return False
         collection = self.dbManager.getCollection(self.collectionName)
 
-        collection.remove({"fileName": fileName, "userID" : otherParams.get("userID")})
+        collection.delete_one({"fileName": fileName, "userID" : otherParams.get("userID")})
 
         return True
 
@@ -101,6 +101,6 @@ class FileDAO(DAO):
             return False
         collection = self.dbManager.getCollection(self.collectionName)
 
-        collection.remove({"userID" : otherParams.get("userID")})
+        collection.delete_many({"userID" : otherParams.get("userID")})
 
         return True

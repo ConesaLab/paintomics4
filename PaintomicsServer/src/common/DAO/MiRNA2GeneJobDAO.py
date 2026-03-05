@@ -43,7 +43,7 @@ class MiRNA2GeneJobDAO(DAO):
 
         instanceBSON["jobType"] = "MiRNA2GeneJob"
 
-        collection.insert(instanceBSON)
+        collection.insert_one(instanceBSON)
 
         return True
 
@@ -55,6 +55,6 @@ class MiRNA2GeneJobDAO(DAO):
             return False
         collection = self.dbManager.getCollection(self.collectionName)
 
-        collection.remove({"jobId": id, "userID" : otherParams.get("userID")})
+        collection.delete_one({"jobId": id, "userID" : otherParams.get("userID")})
 
         return True

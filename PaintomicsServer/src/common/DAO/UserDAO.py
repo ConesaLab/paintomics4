@@ -91,7 +91,7 @@ class UserDAO(DAO):
         #GET THE NEXT USER ID
         userID = self.getNextUserID()
         instanceBSON["userID"] = userID
-        collection.insert(instanceBSON)
+        collection.insert_one(instanceBSON)
         return userID
 
     def update(self, instance, otherParams=None):
@@ -104,18 +104,18 @@ class UserDAO(DAO):
             for i in otherParams.get("fieldList"):
                 setFields[i] = instanceBSON.get(i)
 
-            collection.update({"userID" :userInstance.getUserId()}, {'$set': setFields})
+            collection.update_one({"userID" :userInstance.getUserId()}, {'$set': setFields})
             return True
 
 
-        collection.update({"userID" :userInstance.getUserId()}, instanceBSON)
+        collection.replace_one({"userID" :userInstance.getUserId()}, instanceBSON)
 
         return True
 
     def remove(self, id, otherParams=None):
         userID = id
         collection = self.dbManager.getCollection(self.collectionName)
-        collection.remove({"userID" : userID})
+        collection.delete_one({"userID" : userID})
 
         return True
 

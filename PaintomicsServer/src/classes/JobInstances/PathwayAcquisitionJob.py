@@ -45,6 +45,18 @@ from src.classes.PathwayGraphicalData import PathwayGraphicalData
 
 from src.conf.serverconf import KEGG_DATA_DIR, MAX_THREADS, MAX_WAIT_THREADS, MAX_NUMBER_FEATURES
 
+
+def ensure_utf8(filepath):
+    """Detect file encoding and convert to UTF-8 in-place if needed."""
+    with open(filepath, 'rb') as f:
+        raw_data = f.read()
+    encoding = detect(raw_data)['encoding']
+    if encoding and encoding.lower() != 'utf-8':
+        text = raw_data.decode(encoding)
+        with open(filepath, 'w', encoding='utf-8') as f:
+            f.write(text)
+
+
 # Small dict fields safe to persist in the main MongoDB document
 PAINTOMICS4_DICT_FIELDS = {
     "mappingComp", "classificationDict", "pValueInDict",
@@ -285,6 +297,7 @@ class PathwayAcquisitionJob(Job):
         # *************************************************************************
         logging.info("VALIDATING ASSOCIATION FILE (" + omicName + ")...")
         if os_path.isfile(associationsFileName):
+            ensure_utf8(associationsFileName)
             nLine = -1
             assoc_delimiter = Job.detect_delimiter(associationsFileName)
             with open(associationsFileName, 'r', encoding='utf-8-sig', newline='') as associationDataFile:
@@ -304,6 +317,7 @@ class PathwayAcquisitionJob(Job):
 
         logging.info("VALIDATING RELEVANT ASSOCIATION FILE (" + omicName + ")...")
         if os_path.isfile(relevantAssociationsFileName):
+            ensure_utf8(relevantAssociationsFileName)
             nLine = -1
             rel_assoc_delimiter = Job.detect_delimiter(relevantAssociationsFileName)
             with open(relevantAssociationsFileName, 'r', encoding='utf-8-sig', newline='') as relevantAssociationDataFile:
@@ -327,6 +341,7 @@ class PathwayAcquisitionJob(Job):
         # *************************************************************************
         logging.info("VALIDATING RELEVANT FEATURES FILE (" + omicName + ")...")
         if os_path.isfile(relevantFileName):
+            ensure_utf8(relevantFileName)
             f = open(relevantFileName, 'r', encoding='utf-8-sig')
             lines = f.readlines()
 
@@ -350,19 +365,7 @@ class PathwayAcquisitionJob(Job):
 
         # IF THE USER UPLOADED VALUES FOR GENE EXPRESSION
         if os_path.isfile(valuesFileName):
-            # get file encoding type
-            def get_encoding_type(file):
-                with open( file, 'rb' ) as f:
-                    raw_data = f.read()
-                return detect( raw_data )['encoding']
-
-            fileEncodingType = get_encoding_type( valuesFileName )
-            # convert file to utf-8
-            if fileEncodingType != 'utf-8':
-                with open( valuesFileName, 'r', encoding=fileEncodingType ) as f:
-                    text = f.read()
-                with open( valuesFileName, 'w', encoding='utf-8' ) as f:
-                    f.write( text )
+            ensure_utf8(valuesFileName)
 
             values_delimiter = Job.detect_delimiter(valuesFileName)
             with open(valuesFileName, newline='', encoding='utf-8-sig' ) as inputDataFile:
@@ -1143,7 +1146,7 @@ class PathwayAcquisitionJob(Job):
                     #for line in self.matchedPathways:
                     #    self.matchedPathways[line].metagenes = dict()
 
-                    with open(metagenesFileName, 'rU') as inputDataFile:
+                    with open(metagenesFileName, 'r') as inputDataFile:
                         for line in csv_reader(inputDataFile, delimiter="\t"):
                             if line[0] in self.matchedPathways:
                                 self.matchedPathways.get(line[0]).addMetagenes(inputOmic.get("omicName"),
