@@ -25,6 +25,7 @@ from src.classes.AIInterpret.prompts import format_enrichment_table
 from src.classes.AIInterpret.pubmed_client import PubMedClient
 from src.classes.AIInterpret.verification import (
     verify_report_v2, redact_unverified_v2, renumber_citations,
+    convert_pmid_citations,
 )
 from src.common.DAO.AIInterpretDAO import AIInterpretDAO
 from src.common.JobInformationManager import JobInformationManager
@@ -158,7 +159,9 @@ async def _async_pipeline(job_id, experiment_design, job_instance, dao):
     # =====================================================================
     # Phase 2: Per-Pathway Expert + Evaluator — PARALLEL (agentic swarm)
     # =====================================================================
-    async def _analyze_one_pathway(pw_decision, index):
+    completed = [0]  # mutable container for monotonic counter
+
+    async def _analyze_one_pathway(pw_decision):
         """Analyze a single pathway with error isolation."""
         pw_name = pw_decision.pathway_name
         pw_data = next((e for e in enrichment_table if e["name"] == pw_name), None)
@@ -176,13 +179,15 @@ async def _async_pipeline(job_id, experiment_design, job_instance, dao):
             logger.error(f"[{job_id}] Pathway '{pw_name}' failed: {e}", exc_info=True)
             report = f"[Analysis of {pw_name} could not be completed: {type(e).__name__}]"
 
+        completed[0] += 1
         dao.save_progress(job_id, {
-            "status": "interpreting", "percent": 10 + int(60 * (index + 1) / len(selected)),
-            "detail": f"Analyzed {index + 1}/{len(selected)}: {pw_name}"
+            "status": "interpreting",
+            "percent": 10 + int(60 * completed[0] / len(selected)),
+            "detail": f"Analyzed {completed[0]}/{len(selected)}: {pw_name}"
         })
         return report
 
-    tasks = [_analyze_one_pathway(pw, i) for i, pw in enumerate(selected)]
+    tasks = [_analyze_one_pathway(pw) for pw in selected]
     pathway_reports = list(await asyncio.gather(*tasks))
 
     # =====================================================================
@@ -212,6 +217,9 @@ async def _async_pipeline(job_id, experiment_design, job_instance, dao):
     # Assign ref_index to papers for verification
     for idx, p in enumerate(papers, 1):
         p["ref_index"] = idx
+
+    # Convert [PMID:xxx] citations to [N] format before verification
+    report = convert_pmid_citations(report, papers)
 
     final = verify_report_v2(report, ctx.gene_whitelist, papers, job_instance)
     if final.get("failed_citations"):

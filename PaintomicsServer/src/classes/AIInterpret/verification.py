@@ -69,6 +69,50 @@ def redact_unverified(text, issues):
 
 
 # ---------------------------------------------------------------------------
+# PMID → [N] citation conversion
+# ---------------------------------------------------------------------------
+
+def convert_pmid_citations(report_text, papers):
+    """Convert [PMID:XXXXXXXX] citations to [N] format using paper ref_index.
+
+    Handles variants: [PMID:12345678], [PMID: 12345678], [PMID:12345678, PMID:23456789]
+    """
+    pmid_to_ref = {str(p["pmid"]): p["ref_index"] for p in papers if p.get("ref_index")}
+
+    def _replace_single(match):
+        pmid = match.group(1).strip()
+        ref = pmid_to_ref.get(pmid)
+        if ref is not None:
+            return f"[{ref}]"
+        return match.group(0)
+
+    # Handle single PMID citations: [PMID:12345678] or [PMID: 12345678]
+    result = re.sub(r'\[PMID:\s*(\d{7,8})\]', _replace_single, report_text)
+
+    # Handle comma-separated multi-citations: [PMID:111, PMID:222]
+    def _replace_multi(match):
+        inner = match.group(1)
+        parts = re.split(r',\s*', inner)
+        refs = []
+        for part in parts:
+            m = re.match(r'PMID:\s*(\d{7,8})', part.strip())
+            if m:
+                pmid = m.group(1).strip()
+                ref = pmid_to_ref.get(pmid)
+                if ref is not None:
+                    refs.append(str(ref))
+                else:
+                    return match.group(0)  # can't convert all → leave as-is
+            else:
+                return match.group(0)
+        return "[" + ", ".join(refs) + "]"
+
+    result = re.sub(r'\[(PMID:\s*\d{7,8}(?:\s*,\s*PMID:\s*\d{7,8})+)\]', _replace_multi, result)
+
+    return result
+
+
+# ---------------------------------------------------------------------------
 # V2 verification — [N] citation format with fuzzy text matching
 # ---------------------------------------------------------------------------
 
