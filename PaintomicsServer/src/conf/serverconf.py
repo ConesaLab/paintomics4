@@ -8,8 +8,8 @@ ADMIN_ACCOUNTS            = "admin"
 
 #FILES SETTINGS
 ROOT_DIRECTORY            = "" ##THE LOCATION FOR THE PAINTOMICS FILES, LEAVE BLANK TO AUTO DETECT
-CLIENT_TMP_DIR            = "/Users/tianyuan/Desktop/github_dev/paintomics4_data/CLIENT_TMP/"
-KEGG_DATA_DIR             = "/Users/tianyuan/Desktop/github_dev/paintomics4_data/KEGG_DATA/"
+CLIENT_TMP_DIR            = "/home/leyls/github/paintomics4/PaintomicsServer/tmp/"
+KEGG_DATA_DIR             = "/home/leyls/github/paintomics_data/KEGG_DATA/"
 MAX_CLIENT_SPACE          = 200 * pow(1024,2) #MAX_CLIENT_SPACE IN MB
 MAX_GUEST_DAYS            = 90
 MAX_JOB_DAYS              = 365
