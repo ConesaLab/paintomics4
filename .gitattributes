@@ -1,0 +1,19 @@
+# Set default behavior to automatically normalize line endings.
+* text=auto
+
+# Force LF for all text files (overrides core.autocrlf)
+* text eol=lf
+
+# Denote all files that are truly binary and should not be modified.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.zip binary
+*.pdf binary
+*.ttf binary
+*.otf binary
+*.eot binary
+*.woff binary
+*.woff2 binary
