@@ -1,5 +1,5 @@
 from math import log
-from scipy.stats import chi2, fisher_exact, combine_pvalues
+from scipy.stats import chi2, fisher_exact, combine_pvalues, hypergeom
 from statsmodels.sandbox.stats.multicomp import multipletests
 ##*******************************************************************************************
 ##****AUXLIAR FUNCTION DEFINITION************************************************************
@@ -19,24 +19,31 @@ def calculateCombinedSignificancePvalue(combinedTest, significanceValuesList):
         raise NotImplementedError
 
 def calculateFisher(totalElems, foundElems, totalSignificative, foundSignificative):
-    foundNoSig = foundElems - foundSignificative
-    notFoundSig = totalSignificative - foundSignificative
-    notFoundNoSig = (totalElems - foundElems) - notFoundSig
-
-    #___________| DE | Not DE |
-    #     Found |    |        |
-    # Not Found |    |        |
-    #TODO: WHY RIGHT TAIL?
-    p = fisher_exact([[foundSignificative, foundNoSig],[notFoundSig, notFoundNoSig]], 'greater')[1]
-    return p
+    # Using hypergeom.sf is faster than fisher_exact for right-tailed tests
+    # Population size: totalElems
+    # Number of successes in population: totalSignificative
+    # Sample size: foundElems
+    # Number of successes in sample: foundSignificative
+    # sf(k) = P(X > k)
+    # We want P(X >= foundSignificative) = sf(foundSignificative - 1)
+    if foundSignificative == 0:
+        return 1.0
+    p = hypergeom.sf(foundSignificative - 1, totalElems, totalSignificative, foundElems)
+    # Ensure we don't return absolute 0 for display consistency
+    return max(p, 1e-300)
 
 def calculateCombinedFisher(significanceValuesList):
     #X^2_2k ~ -2 * sum(ln(p_i))
-
+    if not significanceValuesList: return 1.0
 
     accumulatedValue = 0
     for significanceValues in significanceValuesList:
-        accumulatedValue += log(significanceValues[2])
+        # Handle both [nFeatures, nRelevant, pValue] and simple pValue
+        if isinstance(significanceValues, (list, tuple)) and len(significanceValues) >= 3:
+            pVal = significanceValues[2]
+        else:
+            pVal = significanceValues
+        accumulatedValue += log(max(pVal, 1e-300)) # Avoid log(0)
 
     accumulatedValue = accumulatedValue * -2
 
@@ -54,7 +61,13 @@ def adjustPvalues(pvaluesList):
 def calculateStoufferCombinedPvalue(pvalues, weights):
     # Stouffer method cannot deal with p-values equal to 1, returning Nan
     # Prevent that by removing a small value in those cases
-    curatedPvalues = [min(pvalue[2], 0.9999999999) if type(pvalue) is list else min(pvalue, 0.9999999999) for pvalue in pvalues]
+    curatedPvalues = []
+    for pvalue in pvalues:
+        if isinstance(pvalue, (list, tuple)) and len(pvalue) >= 3:
+            val = pvalue[2]
+        else:
+            val = pvalue
+        curatedPvalues.append(min(val, 0.9999999999))
 
     # P-value in third position ([nFeatures, nRelevantFeatures, pValue])
     combinedPvalue = combine_pvalues(curatedPvalues, 'stouffer', weights)

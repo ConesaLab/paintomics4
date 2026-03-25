@@ -446,8 +446,14 @@ function OmicValue() {
 
 		return this;
 	};
-	this.isRelevant = function() {
-		return this.relevant;
+	this.isRelevant = function(index) {
+		if (index !== undefined && Array.isArray(this.relevant)) {
+			return this.relevant[index] === true;
+		}
+		if (Array.isArray(this.relevant)) {
+			return this.relevant.some(x => x === true);
+		}
+		return this.relevant === true;
 	};
 	this.setRelevantAssociation = function(relevant) {
 		this.relevantAssociation = relevant;

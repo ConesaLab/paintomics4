@@ -140,3 +140,22 @@ pnpm-lock.yaml
 # Example data directories that may contain large files
 PaintomicsServer/src/examplefiles/
 PaintomicsServer/src/examplefiles/GTF/
+
+# MkDocs generated site
+site/
+
+# Debug/generated output files
+git_diff_output.txt
+recent_files_output.txt
+pvalue_fix.md
+
+# AI assistant files
+CLAUDE.md
+
+# Temp/test directories
+PaintomicsServer/tmp/
+PaintomicsServer/tmpperf_user/
+PaintomicsServer/tmptest_user/
+
+# Accidental nested directory
+PaintomicsClient/public_html/public_html

@@ -2314,13 +2314,26 @@ function PA_Step4KeggDiagramFeatureSetSVGBox() {
 
 		//FOR EACH SELECTED OMIC
 		for (var i in visibleOmics) {
-			boxWidth = width - boxPadding * 2;
+			var baseBoxWidth = width - boxPadding * 2;
 			omicName = visibleOmics[i].split("#")[0];
 			omicValues = feature.getOmicValues(omicName);
 			//IF THE FEATURE CONTAINS VALUES FOR THE OMIC
 			if (omicValues !== null) {
 				values = omicValues.getValues();
-				boxWidth = boxWidth / values.length;
+				
+				// Calculate adaptive width
+				var minSegmentWidth = 10 * scaleFactor;
+				var currentSegmentWidth = baseBoxWidth / values.length;
+				
+				if (currentSegmentWidth < minSegmentWidth) {
+					// We need to expand the canvas or at least the box drawing area
+					// For now, we adjust the segment width and the total width used
+					currentSegmentWidth = minSegmentWidth;
+					// Note: expanding the canvas itself might be tricky due to coordinates, 
+					// but we'll use the fixed segment width.
+				}
+				
+				var boxWidth = currentSegmentWidth;
 
 				var limits = getMinMax(dataDistributionSummaries[omicName], visualOptions.colorReferences[omicName]);
 
@@ -2332,6 +2345,20 @@ function PA_Step4KeggDiagramFeatureSetSVGBox() {
 					context.lineWidth = 1;
 					context.strokeStyle = '#bcbcbc';
 					context.stroke();
+					
+					// Add per-condition significance star
+					if (omicValues.isRelevant(j)) {
+						context.font = "normal " + (boxHeigth * 0.6) + "px FontAwesome";
+						context.fillStyle = 'white';
+						context.textAlign = "center";
+						context.textBaseline = "middle";
+						// Center the star in the current segment
+						context.fillText('\uf005', xPos + (boxWidth / 2), yPos + (boxHeigth / 2));
+						// Reset text alignment for other drawings
+						context.textAlign = "start";
+						context.textBaseline = "alphabetic";
+					}
+					
 					xPos += boxWidth;
 				}
 				//IF THE FEATURE DOES NOT CONTAIN VALUES, DRAW A GRAY BOX

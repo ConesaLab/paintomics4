@@ -43,6 +43,8 @@ function Pathway(ID) {
     this.combinedSignificancePvalues = null;
     //SIGNIFICANCE ADJUSTED COMBINED VALUE
     this.adjustedCombinedSignificanceValues = null;
+    //GLOBAL OMIC P-VALUES (PaintOmics 4)
+    this.globalOmicPvalues = {};
     //GRAPHICAL INFORMATION
     this.graphicalOptions = null;
     this.totalFeatures = null;
@@ -148,6 +150,15 @@ function Pathway(ID) {
     this.getAdjustedCombinedSignificanceValueByMethod = function (method) {
         return this.adjustedCombinedSignificanceValues[method];
     };
+    this.setGlobalOmicPvalues = function (globalOmicPvalues) {
+        this.globalOmicPvalues = globalOmicPvalues;
+    };
+    this.getGlobalOmicPvalues = function () {
+        return this.globalOmicPvalues || {};
+    };
+    this.getTotalGlobalPvalues = function () {
+        return this.totalGlobalPvalues || {};
+    };
 	this.getAllSignificanceValues = function() {
 		var arrayPvalues = this.getSignificanceValues();
 		
@@ -220,6 +231,12 @@ function Pathway(ID) {
         }
         if (jsonObject.adjustedCombinedSignificanceValues !== undefined) {
             this.adjustedCombinedSignificanceValues = jsonObject.adjustedCombinedSignificanceValues;
+        }
+        if (jsonObject.globalOmicPvalues !== undefined) {
+            this.globalOmicPvalues = jsonObject.globalOmicPvalues;
+        }
+        if (jsonObject.totalGlobalPvalues !== undefined) {
+            this.totalGlobalPvalues = jsonObject.totalGlobalPvalues;
         }
         if (jsonObject.graphicalOptions != null) {
             this.graphicalOptions = new PathwayGraphicalData().loadFromJSON(jsonObject.graphicalOptions);

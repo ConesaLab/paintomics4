@@ -93,6 +93,8 @@ class Job(Model):
         self.allowSharing = False
         self.readOnly = False
 
+        self.conditionNames = []
+
         # job start time
         self.startTime = time.time()
 
@@ -312,7 +314,7 @@ class Job(Model):
 
         logging.info("PARSING RELEVANT ASSOCIATIONS FILE (" + omicName + ")...")
         relevantAssociationFeatures = self.parseSignificativeFeaturesFile(relevantAssociationsFileName)
-        logging.info("PARSING RELEVANT ASSOCIATIONS FILE (" + omicName + ")... DONE. " + str(len(associationFeatures.keys())) + " ASSOCIATIONS PROCESSED.")
+        logging.info("PARSING RELEVANT ASSOCIATIONS FILE (" + omicName + ")... DONE. " + str(len(relevantAssociationFeatures)) + " RELEVANT ASSOCIATIONS PROCESSED.")
 
         #*************************************************************************
         # STEP 2. PARSE THE FILE AND EXTRACT THE INFORMATION
@@ -403,7 +405,11 @@ class Job(Model):
                             # The gene name is the zero element of the association list
                             omicValueAux = OmicValue(columnID[0])
                             omicValueAux.setOmicName(omicName)
-                            omicValueAux.setRelevant(line[0].lower() in relevantFeatures)
+                            # Get multi-condition relevance list
+                            relList = relevantFeatures.get(line[0].lower(), [])
+                            if relList:
+                                logging.info(f"DEBUG: Found relevance for {line[0]}: {relList}")
+                            omicValueAux.setRelevant(relList)
                             omicValueAux.setRelevantAssociation(line[0].lower() in relevantAssociationFeatures)
                             omicValueAux.setValues(numericValues)
                             # The transcription factor (miRNA) name is the first column (change to gene symbol when processing transcription factors)
@@ -418,9 +424,11 @@ class Job(Model):
 
                             omicValueAux = OmicValue(columnID[0])
                             omicValueAux.setOmicName(omicName)
-                            # omicValueAux.setRelevant(relevantFeatures.has_key(omicValueAux.getInputName().lower()))
-                            # TODO: Relevant flag using whole line including original name?
-                            omicValueAux.setRelevant(line[0].lower() in relevantFeatures)
+                            # Get multi-condition relevance list
+                            relList = relevantFeatures.get(line[0].lower(), [])
+                            if relList:
+                                logging.info(f"DEBUG: Found relevance for {line[0]}: {relList}")
+                            omicValueAux.setRelevant(relList)
                             omicValueAux.setValues(numericValues)
 
                             if len(columnID) > 1:
@@ -442,13 +450,24 @@ class Job(Model):
                 with open(temporalFileName + '_matched.txt', 'w') as matchedFile:
                     for parsedFeature in parsedFeatures:
                         self.addInputGeneData(parsedFeature)
-                        matchedFile.write(parsedFeature.getOmicsValues()[
-                                                          0].getInputName() + '\t' + parsedFeature.getName() + '\t' + parsedFeature.getID() + '\t' + parsedFeature.getMatchingDB() + '\t' + '\t'.join(
-                            map(str, parsedFeature.getOmicsValues()[0].getValues())) + "\n")
+                        omicValue = parsedFeature.getOmicsValues()[0]
+                        # Convert boolean list to 1/0 list
+                        relList = omicValue.isRelevant()
+                        if not isinstance(relList, list):
+                            relList = [relList]
+                        relStr = "\t".join(["1" if r else "0" for r in relList])
+                        
+                        matchedFile.write(omicValue.getInputName() + '\t' + parsedFeature.getName() + '\t' + parsedFeature.getID() + '\t' + parsedFeature.getMatchingDB() + '\t' + '\t'.join(
+                            map(str, omicValue.getValues())) + '\t' + relStr + "\n")
 
                 with open(temporalFileName + '_unmatched.txt', 'w') as unmatchedFile:
                     for parsedFeature in notMatchedFeatures:
-                        unmatchedFile.write(parsedFeature.getName() + '\t' + '\t' + '\t'.join(map(str,parsedFeature.getOmicsValues()[0].getValues())) + "\n")
+                        omicValue = parsedFeature.getOmicsValues()[0]
+                        relList = omicValue.isRelevant()
+                        if not isinstance(relList, list):
+                            relList = [relList]
+                        relStr = "\t".join(["1" if r else "0" for r in relList])
+                        unmatchedFile.write(parsedFeature.getName() + '\t' + '\t' + '\t'.join(map(str, omicValue.getValues())) + '\t' + relStr + "\n")
 
             inputDataFile.close()
             #*************************************************************************
@@ -557,7 +576,9 @@ class Job(Model):
                         #STEP 2.C.1 CREATE A NEW OMIC VALUE WITH ROW DATA
                         omicValueAux = OmicValue(line[0].lower())
                         omicValueAux.setOmicName(omicName)
-                        omicValueAux.setRelevant(omicValueAux.getInputName() in relevantFeatures)
+                        # Get multi-condition relevance list
+                        relList = relevantFeatures.get(omicValueAux.getInputName(), [])
+                        omicValueAux.setRelevant(relList)
                         omicValueAux.setValues(list(map(float, line[1:len(line)])))
 
                         #STEP 2.C.2 CREATE A NEW TEMPORAL COMPOUND INSTANCE
@@ -575,12 +596,28 @@ class Job(Model):
             # FOR EACH PARSED COMPOUND, GET THE NAMES FOR KEGG,
             # THEN FOR EACH COMPOUND IN KEGG, ADD CHECKBOXES
             foundFeatures, parsedFeatures, notMatchedFeatures = mapFeatureNamesToCompoundsIDs(self.getJobID(), inputCompounds)
-            for parsedFeature in parsedFeatures:
-                #STEP 2.C.3 ADD THE TEMPORAL COMPOUND INSTANCE TO THE LIST OF COMPOUNDS
-                for compoundAux in parsedFeature.getMainCompounds():
-                    self.addInputCompoundData(compoundAux)
-                for compoundAux in parsedFeature.getOtherCompounds():
-                    self.addInputCompoundData(compoundAux)
+            
+            temporalFileName = self.getTemporalDir() +  "/" + omicName
+            with open(temporalFileName + '_matched.txt', 'w') as matchedFile:
+                for parsedFeature in parsedFeatures:
+                    #STEP 2.C.3 ADD THE TEMPORAL COMPOUND INSTANCE TO THE LIST OF COMPOUNDS
+                    for compoundAux in parsedFeature.getMainCompounds():
+                        self.addInputCompoundData(compoundAux)
+                        omicValue = compoundAux.getOmicsValues()[0]
+                        relList = omicValue.isRelevant()
+                        if not isinstance(relList, list): relList = [relList]
+                        relStr = "\t".join(["1" if r else "0" for r in relList])
+                        matchedFile.write(compoundAux.getID() + '\t' + compoundAux.getName() + '\t' + parsedFeature.getID() + '\t' + "KEGG" + '\t' + '\t'.join(map(str, omicValue.getValues())) + '\t' + relStr + "\n")
+                    for compoundAux in parsedFeature.getOtherCompounds():
+                        self.addInputCompoundData(compoundAux)
+
+            with open(temporalFileName + '_unmatched.txt', 'w') as unmatchedFile:
+                for parsedFeature in notMatchedFeatures:
+                    omicValue = parsedFeature.getOmicsValues()[0]
+                    relList = omicValue.isRelevant()
+                    if not isinstance(relList, list): relList = [relList]
+                    relStr = "\t".join(["1" if r else "0" for r in relList])
+                    unmatchedFile.write(parsedFeature.getName() + '\t' + '\t' + '\t'.join(map(str, omicValue.getValues())) + '\t' + relStr + "\n")
 
             #GENERATE SOME STATISTICS
             summary = numpy_percentile(allValues, [0,10,25,50,75,90,100])
@@ -619,29 +656,67 @@ class Job(Model):
     # @returns
     ##*************************************************************************************************************
     def parseSignificativeFeaturesFile(self, fileName, isBedFormat=False):
-        #TODO: HEADER
+        # TODO: HEADER
         relevantFeatures = {}
-        if os_path.isfile(fileName):
+        if fileName and os_path.isfile(fileName):
             detected_delimiter = Job.detect_delimiter(fileName)
             with open(fileName, 'r', encoding='utf-8-sig', newline='') as inputDataFile:
+                nLine = 0
+                nConditions = 1
                 for line in csv_reader(inputDataFile, delimiter=detected_delimiter):
+                    nLine += 1
                     if isBedFormat == True:
                         lineProc = line[0] + "_" + line[1] + "_" + line[2]
-                    else:
-                        lineProc = line[0]
-
-                    # If the relevants file is not in BED format and contains more than 1 column, it means
-                    # either that the second one contains the original ID or that we are parsing a relevant
-                    # associations file.
-                    if len(line) > 1 and not isBedFormat:
-                        featureID = ":::".join([line[0], line[1]]).lower()
-                    else:
                         featureID = lineProc.lower()
-                    relevantFeatures[featureID] = 1
+                    else:
+                        # Detect number of conditions from header or first line
+                        if nLine == 1:
+                            if len(line) > 1:
+                                nConditions = len(line)
+                                # Detect if first row is a header (condition names)
+                                is_id = any(val.lower().startswith(("at", "cpd:", "k0", "r0")) for val in line)
+                                if not is_id:
+                                    self.conditionNames = [name.strip() for name in line]
+                                    continue
+                                else:
+                                    # First row is data, no header
+                                    self.conditionNames = ["Condition " + str(i+1) for i in range(nConditions)]
+
+                        # Disambiguate 2-column format (Legacy ID+Original vs New Cond1+Cond2)
+                        # If nConditions is 2, and nLine is 1 (after possible header check),
+                        # we check if it's the legacy format.
+                        if nConditions == 2 and not isBedFormat:
+                             # Legacy Paintomics RF: [MappedID, OriginalID]
+                             # We check if the second column is potentially an original feature name
+                             # or if it's strictly a biological ID match to the first.
+                             # Simple heuristic: if first line second column starts with AT/cpd, it's likely a condition.
+                             if nLine == 1 and not line[1].lower().startswith(("at", "cpd:")):
+                                 # This is legacy format, not 2 conditions.
+                                 featureID = ":::".join([line[0], line[1]]).lower()
+                                 relevantFeatures[featureID] = [True]
+                                 nConditions = 1 # Revert to single condition
+                                 continue
+
+                        # Multi-condition logic: Each column (from index 0 to n) contains IDs
+                        if nConditions > 1 and not isBedFormat:
+                            for colIndex, featureID in enumerate(line):
+                                if featureID.strip():
+                                    fID = featureID.lower()
+                                    if fID not in relevantFeatures:
+                                        relevantFeatures[fID] = [False] * nConditions
+                                    relevantFeatures[fID][colIndex] = True
+                            continue
+                        else:
+                            # Standard 1 column format
+                            featureID = line[0].lower()
+                            relevantFeatures[featureID] = [True]
+                            if not self.conditionNames:
+                                self.conditionNames = ["Condition 1"]
             inputDataFile.close()
-            logging.info("PARSING RELEVANT FEATURES FILE (" + fileName + ")... THE FILE CONTAINS " + str(len(relevantFeatures.keys())) + " RELEVANT FEATURES" );
+            logging.info("PARSING RELEVANT FEATURES FILE (" + str(fileName) + ")... THE FILE CONTAINS " + str(
+                len(relevantFeatures.keys())) + " RELEVANT FEATURES")
         else:
-            logging.info("PARSING RELEVANT FEATURES FILE (" + fileName + ")... NO RELEVANT FEATURES FILE SUBMITTED" );
+            logging.info("PARSING RELEVANT FEATURES FILE (" + str(fileName) + ")... NO RELEVANT FEATURES FILE SUBMITTED")
 
         return relevantFeatures
 
@@ -655,7 +730,7 @@ class Job(Model):
     def parseAssociationsFile(self, fileName):
         #TODO: HEADER
         associationFeatures = defaultdict(set)
-        if os_path.isfile(fileName):
+        if fileName and os_path.isfile(fileName):
             detected_delimiter = Job.detect_delimiter(fileName)
             with open(fileName, 'r', encoding='utf-8-sig', newline='') as inputDataFile:
                 for line in csv_reader(inputDataFile, delimiter=detected_delimiter):
@@ -663,7 +738,7 @@ class Job(Model):
             inputDataFile.close()
             logging.info("PARSING ASSOCIATIONS FILE (" + fileName + ")... THE FILE CONTAINS " + str(len(associationFeatures.keys())) + " ASSOCIATIONS" );
         else:
-            logging.info("PARSING ASSOCIATIONS FILE (" + fileName + ")... NO ASSOCIATIONS SUBMITTED" );
+            logging.info("PARSING ASSOCIATIONS FILE (" + str(fileName) + ")... NO ASSOCIATIONS SUBMITTED" );
 
         return associationFeatures
 
@@ -690,7 +765,7 @@ class Job(Model):
                     geneInstance = Gene(geneID)
                     geneInstance.parseBSON(genData)
                     self.addInputGeneData(geneInstance)
-            elif not isinstance(value, dict) :
+            elif not isinstance(value, dict) or attr == "conditionNames":
                 setattr(self, attr, value)
 
     def toBSON(self, recursive= True):

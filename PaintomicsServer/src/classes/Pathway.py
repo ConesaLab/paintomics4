@@ -37,8 +37,10 @@ class Pathway(Model):
         self.matchedGenes = []
         #METAGENES INFORMATION FOR EACH OMIC DATA TYPE
         self.metagenes = {}
-        #SIGNIFICANCE VALUES PER OMIC in format OmicName -> [totalFeatures, totalRelevantFeatures, pValue]
+        #SIGNIFICANCE VALUES PER OMIC in format OmicName -> [[totalFeatures, totalRelevantFeatures, pValue], ...] (one per condition)
         self.significanceValues= {}
+        self.globalOmicPvalues = {}
+        self.totalGlobalPvalues = {}
         self.adjustedSignificanceValues = {}
         #self.combinedSignificancePvalue=1
         self.combinedSignificancePvalues = {}
@@ -106,28 +108,68 @@ class Pathway(Model):
     def addMasterRegulator(self, omic, masterRegulator):
         self.masterRegulators[omic].add(masterRegulator)
 
-    #OmicName -> [totalFeatures, totalRelevantFeatures, pValue]
+    #OmicName -> [[totalFeatures, totalRelevantFeatures, pValue], ...] (one per condition)
     def setSignificanceValues(self, significanceValues):
         self.significanceValues = significanceValues
     def getSignificanceValues(self):
         return self.significanceValues
-    def addSignificanceValues(self, omicName, isRelevantFeature):
-        nFeatures = (self.significanceValues.get(omicName, [0])[0] + 1)
-        nRelevantFeatures = self.significanceValues.get(omicName, [0,0])[1]
-        if(isRelevantFeature):
-            nRelevantFeatures += 1
-        pValue = (self.significanceValues.get(omicName, [0,0,-1])[2])
-        self.significanceValues[omicName] = [nFeatures, nRelevantFeatures, pValue]
+    def addSignificanceValues(self, omicName, isRelevantFeatureList):
+        # Ensure isRelevantFeatureList is a list
+        if not isinstance(isRelevantFeatureList, (list, tuple)):
+            isRelevantFeatureList = [isRelevantFeatureList]
+        
+        nConditionsInput = len(isRelevantFeatureList)
+        currentValues = self.significanceValues.get(omicName)
 
-    def setSignificanceValues(self, adjustedSignificanceValues):
+        if currentValues is None:
+            # Initialize with zeros for each condition
+            currentValues = [[0, 0, -1.0] for _ in range(nConditionsInput)]
+            currentLen = nConditionsInput
+        else:
+            currentLen = len(currentValues)
+        
+        # Use the maximum number of conditions seen so far for this omic
+        nConditions = max(currentLen, nConditionsInput)
+        
+        if currentLen < nConditions:
+            # Catch up new slots with current matched count
+            matchedSoFar = currentValues[0][0] if currentLen > 0 else 0
+            for _ in range(nConditions - currentLen):
+                currentValues.append([matchedSoFar, 0, -1.0])
+
+        for i in range(nConditions):
+            currentValues[i][0] += 1 # totalMatched
+            # Only mark as relevant if the feature actually has a value for this condition slot
+            if i < nConditionsInput and isRelevantFeatureList[i]:
+                currentValues[i][1] += 1 # totalRelevant
+
+        self.significanceValues[omicName] = currentValues
+
+    def setGlobalOmicPvalue(self, omicName, pValue):
+        self.globalOmicPvalues[omicName] = pValue
+    def getGlobalOmicPvalues(self):
+        return self.globalOmicPvalues
+
+    def setTotalGlobalPvalues(self, pValues):
+        self.totalGlobalPvalues = pValues
+    def getTotalGlobalPvalues(self):
+        return self.totalGlobalPvalues
+
+    def setSignificancePvalues(self, adjustedSignificanceValues):
         self.adjustedSignificanceValues = adjustedSignificanceValues
     def getAdjustedSignificanceValues(self):
         return self.adjustedSignificanceValues
     def setOmicAdjustedSignificanceValues(self, omic, adjustedSignificanceValues):
         self.adjustedSignificanceValues[omic] = adjustedSignificanceValues
 
-    def setSignificancePvalue(self, omicName, pValue):
-        self.significanceValues[omicName][2] = pValue
+    def setSignificancePvalue(self, omicName, pValues):
+        # pValues is now a list of p-values for the omic (one per condition)
+        if not isinstance(pValues, list):
+             pValues = [pValues]
+        
+        for i, pVal in enumerate(pValues):
+            if i < len(self.significanceValues[omicName]):
+                self.significanceValues[omicName][i][2] = pVal
 
     # def setCombinedSignificancePvalue(self, pValue):
     #     self.combinedSignificancePvalue = pValue
@@ -153,6 +195,11 @@ class Pathway(Model):
     #******************************************************************************************************************
     # OTHER FUNCTIONS
     #******************************************************************************************************************
+    def parseBSON(self, bsonData):
+        for (attr, value) in bsonData.items():
+            setattr(self, attr, value)
+        return self
+
     def toBSON(self):
         bson = {}
         for attr, value in self.__dict__.items():

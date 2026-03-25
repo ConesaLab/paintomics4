@@ -354,7 +354,17 @@ function PA_Step3JobView() {
 			if(Object.keys(this.model.summary[4]).length > 1){
 				significative += ((pathways[i].isVisible() && pathways[i].getCombinedSignificanceValueByMethod(this.visualOptions.selectedCombinedMethod) <= 0.05) ? 1 : 0);
 			}else{
-				significative += ((pathways[i].isVisible() && pathways[i].getSignificanceValues()[Object.keys(pathways[i].getSignificanceValues())[0]][2] <= 0.05) ? 1 : 0);
+				var omicName = Object.keys(pathways[i].getSignificanceValues())[0];
+				var sigData = pathways[i].getSignificanceValues()[omicName];
+				var pValToCheck = 1.0;
+				if (pathways[i].getGlobalOmicPvalues() && pathways[i].getGlobalOmicPvalues()[omicName] !== undefined) {
+					pValToCheck = pathways[i].getGlobalOmicPvalues()[omicName];
+				} else if (sigData && sigData.length > 0 && Array.isArray(sigData[0])) {
+					pValToCheck = sigData[0][2];
+				} else if (sigData && sigData.length > 2) {
+					pValToCheck = sigData[2];
+				}
+				significative += ((pathways[i].isVisible() && pValToCheck <= 0.05) ? 1 : 0);
 			}
 		}
 
@@ -2934,17 +2944,40 @@ function PA_Step3PathwayDetailsView() {
 			/* STEP 2. Fill the information about matched features and p-values*/
 			/*******************************************************************/
 			if(this.getParent().getName() !== "PA_Step3PathwayNetworkTooltipView"){
-				var htmlCode = '<tbody><tr><th></th><th>Matched<br>features</th><th>p-value</th></tr>';
+				var htmlCode = '<thead><tr><th></th><th>Matched<br>features</th><th>p-value (Global)</th><th></th></tr></thead><tbody>';
 				var significanceValues = this.getModel().getSignificanceValues();
+				var globalOmicPvalues = this.getModel().getGlobalOmicPvalues() || {};
+				var conditionNames = this.getParent("PA_Step3JobView").getModel().conditionNames || [];
+				
 				var PA4View = this.getParent("PA_Step4PathwayView");
 				var foundFeatures = (PA4View !== null) ? PA4View.getMatchedFeatures() : {};
-				var renderedValue;
-				for (var i in significanceValues) {
-					renderedValue = (significanceValues[i][2] > 0.001 || significanceValues[i][2] === 0) ? parseFloat(significanceValues[i][2]).toFixed(6) : parseFloat(significanceValues[i][2]).toExponential(4);
-					htmlCode += '<tr><td>' + i + '</td><td>' + significanceValues[i][0] + ' (' + significanceValues[i][1] + ')</td><td>' + renderedValue + '</td><td class="whiteBackground">' + (! Ext.Object.isEmpty(foundFeatures[i]) ? '<i class="fa fa-plus-square-o expandMatched" data-id="' + i.replace(/ /g, "_") + '"></i>' : '') + '</td></tr>';
+				
+				for (var omicName in significanceValues) {
+					var globalP = (globalOmicPvalues[omicName] !== undefined) ? globalOmicPvalues[omicName] : significanceValues[omicName][0][2]; // Fallback to first condition if global not present
+					var renderedGlobalP = (globalP > 0.001 || globalP === 0) ? parseFloat(globalP).toFixed(6) : parseFloat(globalP).toExponential(4);
+					
+					var omicID = omicName.replace(/ /g, "_");
+					
+					htmlCode += '<tr class="omic-row" data-omic="' + omicID + '"><td>' + omicName + '</td><td>' + significanceValues[omicName][0][0] + ' (' + significanceValues[omicName][0][1] + ')</td><td>' + renderedGlobalP + '</td>' +
+					            '<td class="whiteBackground">' + 
+					            '<i class="fa fa-chevron-right expandConditions" title="Show per-condition p-values" data-omic="' + omicID + '"></i> ' +
+					            (! Ext.Object.isEmpty(foundFeatures[omicName]) ? '<i class="fa fa-plus-square-o expandMatched" data-id="' + omicID + '"></i>' : '') + 
+					            '</td></tr>';
+					
+					// Add per-condition rows (hidden by default)
+					for (var c = 0; c < significanceValues[omicName].length; c++) {
+						var condP = significanceValues[omicName][c][2];
+						var renderedCondP = (condP > 0.001 || condP === 0) ? parseFloat(condP).toFixed(6) : parseFloat(condP).toExponential(4);
+						var condName = conditionNames[c] || ("Condition " + (c+1));
+						
+						htmlCode += '<tr class="condition-row cond-row-' + omicID + '" style="display:none; background-color: #f9f9f9; font-size: 0.9em;">' +
+						            '<td style="padding-left: 20px;"><i>' + condName + '</i></td>' +
+						            '<td>' + significanceValues[omicName][c][0] + ' (' + significanceValues[omicName][c][1] + ')</td>' +
+						            '<td>' + renderedCondP + '</td><td></td></tr>';
+					}
 				}
 				htmlCode+='</tbody>';
-				$(componentID + " .pathwaySummaryTable").html('<table style="padding: 10px;text-align: center;">'+ htmlCode + '</table>');
+				$(componentID + " .pathwaySummaryTable").html('<table class="table table-condensed" style="padding: 10px;text-align: center;">'+ htmlCode + '</table>');
 
 				var detailedHTMLcode = '';
 				Object.keys(foundFeatures).forEach(function(omicName) {
@@ -2990,6 +3023,13 @@ function PA_Step3PathwayDetailsView() {
 
 					el.toggleClass('fa-plus-square-o fa-minus-square-o');
 					$('#matchedlist_' + dataID).toggle();
+				});
+
+				$('i.expandConditions').click(function() {
+					var el = $(this);
+					var omicID = el.attr('data-omic');
+					el.toggleClass('fa-chevron-right fa-chevron-down');
+					$('.cond-row-' + omicID).toggle();
 				});
 			}
 
@@ -3389,9 +3429,28 @@ function PA_Step3PathwayTableView() {
 			significanceValues = pathwayModel.getSignificanceValues();
 			for (var j in significanceValues) {
 				omicName = "-" + j.toLowerCase().replace(/ /g, "-");
-				pathwayData['totalMatched' + omicName] = significanceValues[j][0];
-				pathwayData['totalRelevantMatched' + omicName] = significanceValues[j][1];
-				pathwayData['pValue' + omicName] = significanceValues[j][2];
+				
+				// Keep global backward compatibility
+				pathwayData['totalMatched' + omicName] = significanceValues[j][0][0];
+				pathwayData['totalRelevantMatched' + omicName] = significanceValues[j][0][1];
+				pathwayData['pValue' + omicName] = significanceValues[j][0][2];
+				
+				// Multi-condition support
+				for (var c = 0; c < significanceValues[j].length; c++) {
+					pathwayData['totalMatched_c' + c + omicName] = significanceValues[j][c][0];
+					pathwayData['totalRelevantMatched_c' + c + omicName] = significanceValues[j][c][1];
+					pathwayData['pValue_c' + c + omicName] = significanceValues[j][c][2];
+				}
+			}
+
+			var globalOmicPvalues = pathwayModel.getGlobalOmicPvalues();
+			if (globalOmicPvalues) {
+				for (var j in globalOmicPvalues) {
+					omicName = "-" + j.toLowerCase().replace(/ /g, "-");
+					if (globalOmicPvalues[j] !== undefined) {
+					    pathwayData['pValue' + omicName] = globalOmicPvalues[j];
+					}
+				}
 			}
 
 			adjustedSignificanceValues = pathwayModel.getAdjustedSignificanceValues();
@@ -3404,8 +3463,16 @@ function PA_Step3PathwayTableView() {
 			}
 
 			combinedSignificanceValues = pathwayModel.getCombinedSignificanceValues();
+			var totalGlobalPvalues = pathwayModel.getTotalGlobalPvalues() || {};
 			for (var m in combinedSignificanceValues) {
-				pathwayData["combinedSignificancePvalue" + m] = combinedSignificanceValues[m];
+				var val = totalGlobalPvalues[m];
+				if (val === undefined || val === null) {
+					val = combinedSignificanceValues[m];
+					if (Array.isArray(val)) {
+						val = val[0];
+					}
+				}
+				pathwayData["combinedSignificancePvalue" + m] = val;
 			}
 
 			adjustedCombinedSignificanceValues = pathwayModel.getAdjustedCombinedSignificanceValues();
@@ -3579,13 +3646,19 @@ function PA_Step3PathwayTableView() {
 					return "-";
 				}
 
-				if(value <= 0.065){
-					var color = Math.round(161 * (value/0.065));
+				if (Array.isArray(value)) {
+					value = value[0];
+				}
+				
+				var numericValue = parseFloat(value);
+
+				if(numericValue <= 0.065){
+					var color = Math.round(161 * (numericValue/0.065));
 					metadata.style += "background-color:rgb(255, " + color +"," + color + ");";
 				}
 
 				//RENDER THE VALUE -> IF LESS THAN 0.05, USE SCIENTIFIC NOTATION
-				return (value > 0.001 || value === 0) ? parseFloat(value).toFixed(5) : parseFloat(value).toExponential(4);
+				return (numericValue > 0.001 || numericValue === 0) ? numericValue.toFixed(5) : numericValue.toExponential(4);
 			};
 
 			combinedPvaluesMethods.forEach(function(m) {
@@ -3680,7 +3753,7 @@ function PA_Step3PathwayTableView() {
 			fields: Object.values(rowModel),
 			data: this.tableData,
 			sorters: [{
-				property: ((secondaryColumns.length > 1) ? 'combinedSignificancePvalue' + defaultCombinedPvaluesMethod : secondaryColumns[0].dataIndex),
+				property: (secondaryColumns.length > 1) ? 'combinedSignificancePvalue' + defaultCombinedPvaluesMethod : secondaryColumns[0].dataIndex,
 				direction: 'ASC'
 			}]
 		});
@@ -3689,6 +3762,26 @@ function PA_Step3PathwayTableView() {
 
 		gridPanel.initialConfig.columns = columns;
 		gridPanel.reconfigure(tableStore, columns);
+
+		// Multi-condition column expansion handler
+		gridPanel.el.on('click', function(e, t) {
+			var el = Ext.get(t);
+			if (el.hasCls('expandOmicConditions')) {
+				var omicName = el.getAttribute('data-omic');
+				var isExpanded = el.hasCls('fa-chevron-down');
+				
+				// Toggle icon
+				el.toggleCls('fa-chevron-right');
+				el.toggleCls('fa-chevron-down');
+				
+				// Toggle columns
+				gridPanel.headerCt.getGridColumns().forEach(function(column) {
+					if (column.cls && column.cls.indexOf('condition-column-' + omicName) !== -1) {
+						if (isExpanded) column.hide(); else column.show();
+					}
+				});
+			}
+		}, null, {delegate: '.expandOmicConditions'});
 
 		// Make sure that the updated adjusted p-values layer exists
 		// when at least one database is filtered.
@@ -3915,6 +4008,7 @@ function PA_Step3PathwayTableView() {
 		var me = this;
 
 		var selectedAdjustedMethod = me.getParent().getVisualOptions().selectedAdjustedMethod;
+		var conditionNames = me.model.conditionNames || [];
 
 		//TODO: REMOVE THIS SPAGETTI CODE :/
 		var renderFunction = function(value, metadata, record) {
@@ -3932,7 +4026,14 @@ function PA_Step3PathwayTableView() {
 
 			//RENDER THE VALUE -> IF LESS THAN 0.05, USE SCIENTIFIC NOTATION
 			var renderedValue = (value > 0.001 || value === 0) ? parseFloat(value).toFixed(5) : parseFloat(value).toExponential(4);
-			var omicName = "-" + metadata.column.text.toLowerCase().replace(/ /g, "-").replace(/<\/br>/g, "-");
+			
+			// Detect if it is a condition-specific column
+			var isCondition = metadata.column.dataIndex.indexOf('pValue_c') !== -1;
+			var omicPart = metadata.column.dataIndex.split('pValue')[1];
+			if (isCondition) {
+				omicPart = metadata.column.dataIndex.split(/pValue_c\d+/)[1];
+			}
+			var omicNameSuffix = omicPart;
 
 			if(value <= 0.065){
 				var color = Math.round(225 * (value/0.065));
@@ -3942,18 +4043,37 @@ function PA_Step3PathwayTableView() {
 			try {
 				var sourceDB = record.get("source");
 				var totalFeatures, totalRelevant;
+				
+				var rawOmicName = metadata.column.text.replace(/<\/br>/g, " ");
+				// If it is a condition column, the header might be just the condition name.
+				// We need the omic name to look up total features.
+				if (isCondition) {
+					// We find the omic name by looking at the parent/sibling column or from the dataIndex
+					// For now, we try to extract it from the dataIndex which we know is 'pValue_c' + c + omicName
+					// or we can use the 'omic' property if we added it to the column definition.
+					rawOmicName = metadata.column.omic || rawOmicName;
+				}
 
 				// Keep compatibility with old jobs
 				if (me.model.summary[4].hasOwnProperty(sourceDB)) {
-					totalFeatures = me.model.summary[4][sourceDB][metadata.column.text.replace(/<\/br>/g, " ")] || 0;
-					totalRelevant = me.model.summary[5][sourceDB][metadata.column.text.replace(/<\/br>/g, " ")] || 0;
+					totalFeatures = me.model.summary[4][sourceDB][rawOmicName] || 0;
+					totalRelevant = me.model.summary[5][sourceDB][rawOmicName] || 0;
 				} else {
-					totalFeatures = me.model.summary[4][metadata.column.text.replace(/<\/br>/g, " ")] || 0;
-					totalRelevant = me.model.summary[5][metadata.column.text.replace(/<\/br>/g, " ")] || 0;
+					totalFeatures = me.model.summary[4][rawOmicName] || 0;
+					totalRelevant = me.model.summary[5][rawOmicName] || 0;
 				}
 
-				var foundFeatures = record.get('totalMatched' + omicName);
-				var foundRelevant = record.get('totalRelevantMatched' + omicName);
+				// Handle multi-condition array formats for totalRelevant
+				if (Array.isArray(totalRelevant)) {
+					var condIdx = isCondition ? parseInt(metadata.column.dataIndex.split('_c')[1] || 0) : 0;
+					totalRelevant = totalRelevant[condIdx] !== undefined ? totalRelevant[condIdx] : totalRelevant[0];
+				}
+
+				var prefix = isCondition ? metadata.column.dataIndex.split(omicNameSuffix)[0].replace('pValue', 'totalMatched') : 'totalMatched';
+				var relPrefix = isCondition ? metadata.column.dataIndex.split(omicNameSuffix)[0].replace('pValue', 'totalRelevantMatched') : 'totalRelevantMatched';
+
+				var foundFeatures = record.get(prefix + omicNameSuffix);
+				var foundRelevant = record.get(relPrefix + omicNameSuffix);
 
 				var foundNotRelevant = foundFeatures - foundRelevant;
 				var notFoundRelevant = totalRelevant - foundRelevant;
@@ -3968,30 +4088,79 @@ function PA_Step3PathwayTableView() {
 					'  <tr><td>Not found</td><td>' + notFoundRelevant + '</td><td>' + notFoundNotRelev + '</td><td>' + (totalFeatures - foundFeatures) + '</td></tr>' +
 					'  <tr><td></td><td>' + totalRelevant + '</td><td>' + (totalFeatures - totalRelevant) + '</td><td>' + (totalFeatures) + '</td></tr>' +
 					'</table>';
-					// myToolTipText = myToolTipText + "Features matched: " + ) + "</br>";
-					// myToolTipText = myToolTipText + "Relevant features matched: " +  + "</br>";
 					metadata.tdAttr = 'data-qtip="' + myToolTipText + '"';
 				}
 
 			} catch (e) {
-				debugger;
-				console.error("Error while creating tooltip");
-			} finally {
-
+				console.error("Error while creating tooltip", e);
 			}
 
 			return renderedValue;
 		};
 
 		for (var i in omics) {
-			omicName = "-" + omics[i].omicName.toLowerCase().replace(/ /g, "-");
-			columns.push({
-				text: omics[i].omicName.replace(" ","</br>"), cls:"header-45deg",
+			var omic = omics[i];
+			omicName = "-" + omic.omicName.toLowerCase().replace(/ /g, "-");
+			
+			// Detect number of conditions across all pathways for this omic
+			var nConditions = 0;
+			var allPathways = Object.values(me.model.getPathways());
+			for (var pIdx = 0; pIdx < allPathways.length; pIdx++) {
+				var sigVals = allPathways[pIdx].getSignificanceValues();
+				if (sigVals && sigVals[omic.omicName]) {
+					nConditions = Math.max(nConditions, sigVals[omic.omicName].length);
+				}
+			}
+			if (nConditions === 0 && conditionNames && conditionNames.length > 1) {
+				nConditions = conditionNames.length;
+			} else if (nConditions === 0) {
+				nConditions = 1;
+			}
+
+			var omicColumn = {
+				text: (nConditions > 1 ? '<i class="fa fa-chevron-right expandOmicConditions" style="cursor:pointer;" data-omic="' + omicName + '"></i> ' : '') + omic.omicName.replace(" ","</br>"), 
+				cls:"header-45deg",
 				dataIndex: 'pValue' + omicName, width:90,
 				flex: 1, hidden : hidden, sortable: true, align: "center",
 				filter: {type: 'numeric'},
-				renderer: renderFunction
-			});
+				renderer: renderFunction,
+				omic: omic.omicName // Custom property for the renderer
+			};
+
+			if (nConditions > 1) {
+				var subColumns = [Ext.apply({}, omicColumn)];
+				// Remove the expand icon from the actual data column if we are nesting
+				subColumns[0].text = "Global";
+				subColumns[0].flex = 1;
+				
+				for (var c = 0; c < nConditions; c++) {
+					var condName = conditionNames[c] || ("Cond " + (c+1));
+					subColumns.push({
+						text: condName,
+						dataIndex: 'pValue_c' + c + omicName,
+						width: 90, flex: 1, hidden: true, // Hidden by default
+						sortable: true, align: "center",
+						filter: {type: 'numeric'},
+						renderer: renderFunction,
+						omic: omic.omicName,
+						isCondition: true,
+						cls: "header-45deg condition-column-" + omicName
+					});
+					
+					// Add fields to row model for conditions
+					rowModel['totalMatched_c' + c + omicName] = { name: 'totalMatched_c' + c + omicName, defaultValue: 0 };
+					rowModel['totalRelevantMatched_c' + c + omicName] = { name: 'totalRelevantMatched_c' + c + omicName, defaultValue: 0 };
+					rowModel['pValue_c' + c + omicName] = { name: 'pValue_c' + c + omicName, defaultValue: "-", type: 'floatOrString' };
+				}
+				
+				columns.push({
+					text: (nConditions > 1 ? '<i class="fa fa-chevron-right expandOmicConditions" style="cursor:pointer; margin-right:5px;" data-omic="' + omicName + '"></i> ' : '') + omic.omicName.replace(" ","</br>"),
+					columns: subColumns,
+					omic: omic.omicName
+				});
+			} else {
+				columns.push(omicColumn);
+			}
 
 			//ADD THE CUSTOM FIELD TO ROW MODEL
 			rowModel['totalMatched' + omicName] = {
@@ -4016,7 +4185,8 @@ function PA_Step3PathwayTableView() {
 					flex: 1, hidden: (hidden || selectedAdjustedMethod != m),
 					sortable: true, align: "center",
 					filter: {type: 'numeric'},
-					renderer: renderFunction
+					renderer: renderFunction,
+					omic: omics[i].omicName
 				});
 
 				rowModel['adjpval' + m + omicName] = {
@@ -4357,7 +4527,10 @@ function PA_Step3HubAnalysis () {
 										}
 										// Expression value of this set
 										let ID = hubTable[rowIndex]['ID'];
-										let compExpression = globalExpressionComp[ID]
+										let compExpression = globalExpressionComp[ID];
+										if (compExpression && !(compExpression instanceof OmicValue)) {
+											compExpression = OmicValue.loadFromJSON(compExpression);
+										}
 										let divIdComp = 'divIdComp'
 										htmlCode =
 											'<h2 style="background-color: white"> Metabolite Expression Value</h2>' +
@@ -4392,10 +4565,17 @@ function PA_Step3HubAnalysis () {
 											for (let i = 0; i < regulateFeatures.length; i++) {
 												let regulateFeature = regulateFeatures[i]
 												try {
+													let ov = null;
 													if (key == "Gene expression") {
-														regulateOmicsValue.push(globalExpressionGene[regulateFeature])
+														ov = globalExpressionGene[regulateFeature];
 													} else if (key == "Metabolomics") {
-														regulateOmicsValue.push(globalExpressionComp[regulateFeature])
+														ov = globalExpressionComp[regulateFeature];
+													}
+													if (ov) {
+														if (!(ov instanceof OmicValue)) {
+															ov = OmicValue.loadFromJSON(ov);
+														}
+														regulateOmicsValue.push(ov);
 													}
 												} catch (e) {
 													console.log('No expression data for: ' + regulateFeature)
@@ -4427,7 +4607,7 @@ function PA_Step3HubAnalysis () {
 												// to recreate the whole graphic.
 												let omicValues = regulateOmicsValue;
 												if (onlyRelevants) {
-													omicValues = omicValues.filter(x => x.isRelevant || x.isRelevantAssociation);
+													omicValues = omicValues.filter(x => x.isRelevant() || x.isRelevantAssociation());
 												}
 												$('#' + divId + "_heatmapContainer").height(omicValues.length * 30 + 100);
 												generateHeatmap(divId, omicName, omicValues, distributionSummaries, visualOptions)
@@ -4712,6 +4892,8 @@ function PA_Step3MetaboliteView() {
 	let globalExpressionComp = [];
 	let distributionSummaries = null;
 	let visualOptions = null;
+	let nCond = 1;
+	let conditionNames = [];
 	let me = this;
 
 
@@ -4724,27 +4906,43 @@ function PA_Step3MetaboliteView() {
 		this.model = model;
 		this.model.addObserver(this);
 
+		// Reset data structures to avoid stale data
+		dataFinal = new Object();
+		dataShow2 = [];
+
 		var mappingComp = this.model.mappingComp;
 		var pValueClassification = this.model.getpValueInDict();
 		var classificationDict = this.model.getClassificationDict();
 		var exprssionMetabolites = this.model.getExprssionMetabolites();
-		var adjustPValue = this.model.getAdjustPvalue();
-		var totalRelevantFeaturesInCategory = this.model.getTotalRelevantFeaturesInCategory();
+		var adjustPValue_raw = this.model.getAdjustPvalue();
+		var totalRelevantFeaturesInCategory_raw = this.model.getTotalRelevantFeaturesInCategory();
 		var featureSummary = this.model.getFeatureSummary();
 		var headerComp = this.model.getCompoundBasedInputOmics()[0].omicHeader
 
+		// Handle both single and multi-condition structures
+		var isMulti = Array.isArray(pValueClassification);
+		var pValueClassification_list = isMulti ? pValueClassification : [pValueClassification];
+		
+		// Ensure list is not empty and elements are defined
+		if (pValueClassification_list.length === 0 || pValueClassification_list[0] === undefined || pValueClassification_list[0] === null) {
+			pValueClassification_list = [{}];
+		}
 
-		// metabolites Expression data
-
+		var adjustPValueBH_list = isMulti ? (adjustPValue_raw ? adjustPValue_raw.map(a => a ? a["FDR BH"] : {}) : [{}]) : [adjustPValue_raw ? adjustPValue_raw["FDR BH"] : {}];
+		var adjustPValueBY_list = isMulti ? (adjustPValue_raw ? adjustPValue_raw.map(a => a ? a["FDR BY"] : {}) : [{}]) : [adjustPValue_raw ? adjustPValue_raw["FDR BY"] : {}];
+		var totalRelevantFeaturesInCategory_list = isMulti ? (totalRelevantFeaturesInCategory_raw || [{}]) : [totalRelevantFeaturesInCategory_raw || {}];
+		
+		nCond = pValueClassification_list.length;
+		conditionNames = this.model.conditionNames || [];
 
 		tableData = {
 			mappingComp: mappingComp,
-			pValueClassification: pValueClassification,
 			classificationDict: classificationDict,
 			exprssionMetabolites: exprssionMetabolites,
-			adjustPValueBH: adjustPValue["FDR BH"],
-			adjustPValueBY: adjustPValue["FDR BY"],
-			totalRelevantFeaturesInCategory: totalRelevantFeaturesInCategory
+			pValueClassification_list: pValueClassification_list,
+			adjustPValueBH_list: adjustPValueBH_list,
+			adjustPValueBY_list: adjustPValueBY_list,
+			totalRelevantFeaturesInCategory_list: totalRelevantFeaturesInCategory_list
 		}
 
 		for (var keys in tableData.classificationDict) {
@@ -4753,40 +4951,56 @@ function PA_Step3MetaboliteView() {
 			dataFinal[keys]["expressionVal"] = []
 			for (var elements in tableData.classificationDict[keys]) {
 				dataFinal[keys]["ID"].push(tableData.classificationDict[keys][elements])
-				dataFinal[keys]["pValue"] = tableData.pValueClassification[keys]
-				dataFinal[keys]["FDR BH"] = tableData.adjustPValueBH[keys]
-				dataFinal[keys]["FDR BY"] = tableData.adjustPValueBY[keys]
-				dataFinal[keys]["expressionVal"].push(tableData.exprssionMetabolites[tableData.classificationDict[keys][elements]])
+				
+				// P-values and adjusted P-values per condition
+				for (var c = 0; c < nCond; c++) {
+					var pValObj = tableData.pValueClassification_list[c] || {};
+					var bhObj = tableData.adjustPValueBH_list[c] || {};
+					var byObj = tableData.adjustPValueBY_list[c] || {};
+					var relObj = tableData.totalRelevantFeaturesInCategory_list[c] || {};
 
-				dataFinal[keys]["totalFeatures"] = featureSummary[0]
-				dataFinal[keys]["totalRelevant"] = featureSummary[1]
+					dataFinal[keys]["pValue_c" + c] = pValObj[keys];
+					dataFinal[keys]["FDR BH_c" + c] = bhObj[keys];
+					dataFinal[keys]["FDR BY_c" + c] = byObj[keys];
+					dataFinal[keys]["foundRelevant_c" + c] = relObj[keys];
+				}
 
-				dataFinal[keys]["foundFeatures"] = tableData.classificationDict[keys].length
-				dataFinal[keys]["foundRelevant"] = tableData.totalRelevantFeaturesInCategory[keys]
+				dataFinal[keys]["totalFeatures"] = featureSummary[0];
+				// totalRelevant might be a list too
+				dataFinal[keys]["totalRelevant"] = Array.isArray(featureSummary[1]) ? featureSummary[1] : [featureSummary[1]];
 
+				dataFinal[keys]["foundFeatures"] = tableData.classificationDict[keys].length;
+				
 				dataFinal[keys]['header'] = headerComp
 			}
 		}
 
+		var fields = ['name', 'totalFeatures', 'foundFeatures'];
+		for (var c = 0; c < nCond; c++) {
+			fields.push('pValue_c' + c);
+			fields.push('FDR_BH_c' + c);
+			fields.push('FDR_BY_c' + c);
+			fields.push('foundRelevant_c' + c);
+		}
 
 		for (var keys in dataFinal) {
-			dataShow2.push(
-				{
-					name: keys,
-					totalFeatures: dataFinal[keys]["totalFeatures"],
-					totalRelevant: dataFinal[keys]["totalRelevant"],
-					pValue: dataFinal[keys]["pValue"],
-					FDR_BH: dataFinal[keys]["FDR BH"],
-					FDR_BY: dataFinal[keys]["FDR BY"],
-					foundFeatures: dataFinal[keys]["foundFeatures"],
-					foundRelevant: dataFinal[keys]["foundRelevant"]
-				}
-			)
+			var row = {
+				name: keys,
+				totalFeatures: dataFinal[keys]["totalFeatures"],
+				foundFeatures: dataFinal[keys]["foundFeatures"]
+			};
+			for (var c = 0; c < nCond; c++) {
+				row['pValue_c' + c] = dataFinal[keys]["pValue_c" + c];
+				row['FDR_BH_c' + c] = dataFinal[keys]["FDR BH_c" + c];
+				row['FDR_BY_c' + c] = dataFinal[keys]["FDR BY_c" + c];
+				row['foundRelevant_c' + c] = dataFinal[keys]["foundRelevant_c" + c];
+			}
+			dataShow2.push(row);
 		}
 
 		Ext.define('User', {
 			extend: 'Ext.data.Model',
-			fields: ['name', 'totalFeatures', "totalRelevant", "pValue", "FDR_BH", "FDR_BY", "foundFeatures", "foundRelevant"]
+			fields: fields
 		});
 
 		userStore = Ext.create('Ext.data.Store', {
@@ -4820,6 +5034,30 @@ function PA_Step3MetaboliteView() {
 						autoScroll: true,
 						store: userStore,
 						height: 350,
+						listeners: {
+							afterrender: function(grid) {
+								grid.el.on('click', function(e, t) {
+									var target = $(t);
+									if (target.hasClass('expandMetaboliteConditions')) {
+										var isExpanded = target.hasClass('fa-chevron-down');
+										if (isExpanded) {
+											target.removeClass('fa-chevron-down').addClass('fa-chevron-right');
+										} else {
+											target.removeClass('fa-chevron-right').addClass('fa-chevron-down');
+										}
+										
+										// Toggle visibility of condition columns
+										var columns = grid.headerCt.getGridColumns();
+										columns.forEach(function(col) {
+											if (col.conditionIndex !== undefined) {
+												if (isExpanded) col.hide();
+												else col.show();
+											}
+										});
+									}
+								});
+							}
+						},
 						header: {
 							xtype: 'box',
 							flex: 1,
@@ -4831,116 +5069,143 @@ function PA_Step3MetaboliteView() {
 							}
 						},
 
-						columns: [
-							{
-								xtype: 'customactioncolumn',
-								text: "Paint",
-								menuDisabled: true,
-								width: 55,
-								items: [{
-									icon: "fa-paint-brush-o",
-									text: "",
-									tooltip: 'Paint this classification',
-									style: "font-size: 20px;",
-									handler: function (grid, rowIndex) {
+						columns: (function() {
+							var baseCols = [
+								{
+									xtype: 'customactioncolumn',
+									text: "Paint",
+									menuDisabled: true,
+									width: 55,
+									items: [{
+										icon: "fa-paint-brush-o",
+										text: "",
+										tooltip: 'Paint this classification',
+										style: "font-size: 20px;",
+										handler: function (grid, rowIndex) {
 
-										let elem = $("#classificationPlot");
-										elem.empty();
-										let divWidth = elem.width() - 400;
-										let regulateFeatures = dataFinal[grid.getStore().getAt(rowIndex).data.name].ID;
-										let regulateOmicsValueComp = []
-										let omicName =  "Metabolomics"
-										let divId = "Compound_expression_heatmapContainer_class"
+											let elem = $("#classificationPlot");
+											elem.empty();
+											let divWidth = elem.width() - 400;
+											let regulateFeatures = dataFinal[grid.getStore().getAt(rowIndex).data.name].ID;
+											let regulateOmicsValueComp = []
+											let omicName =  "Metabolomics"
+											let divId = "Compound_expression_heatmapContainer_class"
 
 
-										for (let i = 0; i < regulateFeatures.length; i++) {
-											let regulateFeature = regulateFeatures[i]
-											try {
-												regulateOmicsValueComp.push(globalExpressionComp[regulateFeature])
-											} catch (e) {
-												console.log('No expression data for: ' + regulateFeature)
-											}
-										}
-
-										regulateOmicsValueComp = regulateOmicsValueComp.filter(function (x) {
-												return x !== undefined;
-											}
-										);
-
-										if (regulateOmicsValueComp.length > 0) {
-											htmlCode =
-												"<div class='contentbox'>" +
-												"  <h3>" + omicName + "<span><input type='checkbox' id='" + divId + "_cb_relevant' value='" + omicName + "'/>Only relevant</span></h3>" +
-												"  <div class='PA_step5_heatmapContainer' id='Compound_expression_heatmapContainer_class'  style='height: " + ((regulateOmicsValueComp.length * 30) + 100) + "px'><i class='fa fa-cog fa-spin'></i> Loading..</div>" +
-												"  <div class='PA_step5_plotContainer' id='" + divId + "_plotContainer'  style='width:" + divWidth + "px;height: " + ((regulateOmicsValueComp.length * 30) + 100) + "px'><i class='fa fa-cog fa-spin'></i> Loading..</div>" +
-
-												"</div>";
-											elem.append(htmlCode);
-											heatmapComp = generateHeatmap(divId, omicName, regulateOmicsValueComp, distributionSummaries, visualOptions)
-											plot = generatePlot(divId + "_plotContainer", omicName, regulateOmicsValueComp, distributionSummaries, divId + "_plotlegendContainer", visualOptions);
-
-											$("#" + divId + "_cb_relevant").change(function () {
-												let onlyRelevants = $(this).is(":checked");
-
-												// Highcharts does not automatically hide Y labels when hiding series, so it is easier and faster
-												// to recreate the whole graphic.
-												let omicValues = regulateOmicsValueComp;
-
-												if (onlyRelevants) {
-													omicValues = omicValues.filter(x => x.isRelevant || x.isRelevantAssociation);
+											for (let i = 0; i < regulateFeatures.length; i++) {
+												let regulateFeature = regulateFeatures[i]
+												try {
+													let ov = globalExpressionComp[regulateFeature];
+													if (ov) {
+														if (!(ov instanceof OmicValue)) {
+															ov = OmicValue.loadFromJSON(ov);
+														}
+														regulateOmicsValueComp.push(ov);
+													}
+												} catch (e) {
+													console.log('No expression data for: ' + regulateFeature)
 												}
+											}
 
-												$('#' + divId).height(omicValues.length * 30 + 100);
+											regulateOmicsValueComp = regulateOmicsValueComp.filter(function (x) {
+													return x !== undefined;
+												}
+											);
 
-												heatmapComp = generateHeatmap(divId, omicName, omicValues, distributionSummaries, visualOptions)
-												plot = generatePlot(divId + "_plotContainer", omicName, omicValues, distributionSummaries, divId + "_plotlegendContainer", visualOptions);
+											if (regulateOmicsValueComp.length > 0) {
+												htmlCode =
+													"<div class='contentbox'>" +
+													"  <h3>" + omicName + "<span><input type='checkbox' id='" + divId + "_cb_relevant' value='" + omicName + "'/>Only relevant</span></h3>" +
+													"  <div class='PA_step5_heatmapContainer' id='Compound_expression_heatmapContainer_class'  style='height: " + ((regulateOmicsValueComp.length * 30) + 100) + "px'><i class='fa fa-cog fa-spin'></i> Loading..</div>" +
+													"  <div class='PA_step5_plotContainer' id='" + divId + "_plotContainer'  style='width:" + divWidth + "px;height: " + ((regulateOmicsValueComp.length * 30) + 100) + "px'><i class='fa fa-cog fa-spin'></i> Loading..</div>" +
 
-											});
+													"</div>";
+												elem.append(htmlCode);
+												heatmapComp = generateHeatmap(divId, omicName, regulateOmicsValueComp, distributionSummaries, visualOptions)
+												plot = generatePlot(divId + "_plotContainer", omicName, regulateOmicsValueComp, distributionSummaries, divId + "_plotlegendContainer", visualOptions);
+
+												$("#" + divId + "_cb_relevant").change(function () {
+													let onlyRelevants = $(this).is(":checked");
+
+													// Highcharts does not automatically hide Y labels when hiding series, so it is easier and faster
+													// to recreate the whole graphic.
+													let omicValues = regulateOmicsValueComp;
+
+													if (onlyRelevants) {
+														omicValues = omicValues.filter(x => x.isRelevant() || x.isRelevantAssociation());
+													}
+
+													$('#' + divId).height(omicValues.length * 30 + 100);
+
+													heatmapComp = generateHeatmap(divId, omicName, omicValues, distributionSummaries, visualOptions)
+													plot = generatePlot(divId + "_plotContainer", omicName, omicValues, distributionSummaries, divId + "_plotlegendContainer", visualOptions);
+
+												});
+
+											}
 
 										}
+									}]
+								},
+								{
+									text: 'Name',
+									flex: 25 / 100,
+									sortable: true,
+									hideable: false,
+									dataIndex: 'name'
+								},
+								{
+									text: 'Unique Features',
+									flex: 15 / 100,
+									sortable: true,
+									hideable: false,
+									dataIndex: 'foundFeatures'
+								}
+							];
 
-									}
-								}]
-							},
-							{
-								text: 'Name',
+							var pValueCol = {
+								text: (nCond > 1 ? '<i class="fa fa-chevron-right expandMetaboliteConditions" style="cursor:pointer;"></i> ' : '') + "P Value",
 								flex: 15 / 100,
 								sortable: true,
-								hideable: false,
-								dataIndex: 'name'
-							},
-							{
-								text: 'Unique Features',
-								flex: 15 / 100,
-								sortable: true,
-								hideable: false,
-								dataIndex: 'foundFeatures'
-							},
-							{
-								text: "P Value",
-								flex: 15 / 100,
-								sortable: true,
-								dataIndex: 'pValue',
+								dataIndex: 'pValue_c0',
 								renderer: renderFunctionLimit
+							};
 
-							},
-							{
+							if (nCond > 1) {
+								var subCols = [{
+									text: 'Global',
+									dataIndex: 'pValue_c0', // Placeholder or minimum?
+									flex: 1,
+									renderer: renderFunctionLimit,
+									hidden: false
+								}];
+								for (var c = 0; c < nCond; c++) {
+									subCols.push({
+										text: conditionNames[c] || ("Cond " + (c+1)),
+										dataIndex: 'pValue_c' + c,
+										flex: 1,
+										renderer: renderFunctionLimit,
+										hidden: true,
+										conditionIndex: c
+									});
+								}
+								pValueCol.columns = subCols;
+								pValueCol.flex = (subCols.length) * 10 / 100;
+							}
+
+							baseCols.push(pValueCol);
+							
+							// Add FDR columns (can be simple or expanded too, keep simple for now or expanded if needed)
+							baseCols.push({
 								text: "FDR BH",
 								flex: 15 / 100,
 								sortable: true,
-								dataIndex: "FDR_BH",
+								dataIndex: "FDR_BH_c0",
 								renderer: renderFunctionLimit
-
-							},
-							{
-								text: "FDR BY",
-								flex: 15 / 100,
-								sortable: true,
-								dataIndex: "FDR_BY",
-								renderer: renderFunctionLimit
-
-							}
-						]
+							});
+							
+							return baseCols;
+						})(),
 					},
 					{
 						xtype: 'box',
@@ -5091,11 +5356,12 @@ var renderFunctionLimit = function (value, metadata, record) {
 
 		try {
 			var totalFeatures = record.data.totalFeatures;
-			var totalRelevant = record.data.totalRelevant;
+			var condIdx = metadata.column.conditionIndex;
+			var totalRelevant = (condIdx !== undefined && Array.isArray(record.data.totalRelevant)) ? record.data.totalRelevant[condIdx] : (Array.isArray(record.data.totalRelevant) ? record.data.totalRelevant[0] : record.data.totalRelevant);
 
 			// Keep compatibility with old jobs
 			var foundFeatures = record.data.foundFeatures;
-			var foundRelevant = record.data.foundRelevant;
+			var foundRelevant = (condIdx !== undefined) ? record.get('foundRelevant_c' + condIdx) : record.get('foundRelevant_c0') || record.data.foundRelevant;
 
 			var foundNotRelevant = foundFeatures - foundRelevant;
 			var notFoundRelevant = totalRelevant - foundRelevant;
@@ -5116,10 +5382,7 @@ var renderFunctionLimit = function (value, metadata, record) {
 			}
 
 		} catch (e) {
-			debugger;
-			console.error("Error while creating tooltip");
-		} finally {
-
+			console.error("Error while creating tooltip", e);
 		}
 
 		return renderedValue;
@@ -5155,6 +5418,7 @@ let generateHeatmap = function (targetID, omicName, omicsValues, dataDistributio
 	var featureValues, x = 0, y = 0, maxX = -1, series = [], yAxisCat = [], serie;
 
 	for (var i in omicsValues) {
+		if (!omicsValues[i]) continue;
 		//restart the x coordinate
 		x = 0;
 		//Get the values and the name for the new serie
@@ -5164,13 +5428,13 @@ let generateHeatmap = function (targetID, omicName, omicsValues, dataDistributio
 			omicsValues[i].inputName;
 
 		var relevantSymbols = "";
+if (omicsValues[i].isRelevant()) {
+	relevantSymbols += "* ";
+}
 
-		if (omicsValues[i].isRelevant === true) {
-			relevantSymbols += "* ";
-		}
-		if (omicsValues[i].isRelevantAssociation === true) {
-			relevantSymbols += "^ ";
-		}
+if (omicsValues[i].isRelevantAssociation()) {
+	relevantSymbols += "** ";
+}
 
 		serie = {name: relevantSymbols + omicsValues[i].keggName + "#" + shownameValue, data: []};
 		//Add the name for the row (e.g. MagoHb or "miRNA my_mirnaid_1")
@@ -5296,6 +5560,7 @@ let generatePlot = function (targetID, omicName, omicsValues, dataDistributionSu
 
 
 	for (var i in omicsValues) {
+		if (!omicsValues[i]) continue;
 		auxValues = [];
 		omicsValue = omicsValues[i];
 		maxX = Math.max(maxX, omicsValue.values.length);
@@ -5305,13 +5570,13 @@ let generatePlot = function (targetID, omicName, omicsValues, dataDistributionSu
 		}
 
 		var relevantSymbols = "";
+if (omicsValues[i].isRelevant()) {
+	relevantSymbols += "* ";
+}
 
-		if (omicsValue.isRelevant === true) {
-			relevantSymbols += "* ";
-		}
-		if (omicsValue.isRelevantAssociation === true) {
-			relevantSymbols += "^ ";
-		}
+if (omicsValues[i].isRelevantAssociation()) {
+	relevantSymbols += "** ";
+}
 
 		series.push({
 			name: relevantSymbols + omicsValue.keggName + "#" + omicsValue.inputName,

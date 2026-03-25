@@ -73,9 +73,47 @@ function Application() {
 
           if ((URLjobID == null || URLjobID == sessionJobJSON.jobID) && sessionJobJSON.timestamp && sessionJobJSON.timestamp >= this.timestamp) {
             jobInstanceModel.loadFromJSON(sessionJobJSON);
+            this.continueBoot(jobInstanceModel, URLjobID);
+          } else {
+            this.loadFromIndexedDB(jobInstanceModel, URLjobID);
           }
+        } else {
+            this.loadFromIndexedDB(jobInstanceModel, URLjobID);
         }
+    };
 
+    this.loadFromIndexedDB = function(jobInstanceModel, URLjobID) {
+        var me = this;
+        var db = new Dexie("paintomics");
+        db.version(1).stores({
+            networks: 'id',
+            jobs: 'jobID'
+        });
+
+        var jobIdToLoad = URLjobID;
+        if (!jobIdToLoad) {
+            // If no URL ID, try to find the most recent job in DB
+            db.table("jobs").orderBy('timestamp').last().then(function(sessionJobJSON) {
+                if (sessionJobJSON && sessionJobJSON.timestamp >= me.timestamp) {
+                    jobInstanceModel.loadFromJSON(sessionJobJSON);
+                }
+                me.continueBoot(jobInstanceModel, URLjobID);
+            }).catch(function() {
+                me.continueBoot(jobInstanceModel, URLjobID);
+            });
+        } else {
+            db.table("jobs").get(jobIdToLoad).then(function(sessionJobJSON) {
+                if (sessionJobJSON && sessionJobJSON.timestamp >= me.timestamp) {
+                    jobInstanceModel.loadFromJSON(sessionJobJSON);
+                }
+                me.continueBoot(jobInstanceModel, URLjobID);
+            }).catch(function() {
+                me.continueBoot(jobInstanceModel, URLjobID);
+            });
+        }
+    };
+
+    this.continueBoot = function(jobInstanceModel, URLjobID) {
         /* If the job is not on the last step, avoid loading it from session */
         var loginDialog = Ext.getCmp('userViewsDialog');
 

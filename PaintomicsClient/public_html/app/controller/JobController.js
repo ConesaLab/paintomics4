@@ -469,14 +469,22 @@ function JobController() {
 
 						var jobModel = jobView.getModel();
 						jobModel.setStepNumber(3);   //UPDATE THE STEP NUMBER
-						jobModel.setCompoundBasedInputOmics(response.compoundBasedInputOmics);
-						jobModel.setGeneBasedInputOmics(response.geneBasedInputOmics);
+						
+						if (response.compoundBasedInputOmics) {
+							jobModel.setCompoundBasedInputOmics(response.compoundBasedInputOmics);
+						}
+						if (response.geneBasedInputOmics) {
+							jobModel.setGeneBasedInputOmics(response.geneBasedInputOmics);
+						}
+						
 						jobModel.setSummary(response.summary);
 						jobModel.setOrganism(response.organism);  //UPDATE ORGANISM
 						jobModel.setDatabases(response.databases);
 						jobModel.setTimestamp(response.timestamp);
 
-						jobModel.setClasses(response.classInfo);
+						if (response.classInfo) {
+							jobModel.setClasses(response.classInfo);
+						}
 
 						var pathways = response.pathwaysInfo;
 						var pathway = null;
@@ -1254,6 +1262,15 @@ function JobController() {
 	* @returns {undefined}
 	*/
 	this.updateStoredApplicationData = function (key, data) {
+		if (key === "jobModel" && data != null) {
+			// Ensure we have a jobID for IndexedDB primary key
+			if (data.jobID) {
+				this.updateStoredApplicationDataIndexDB("jobs", data);
+			} else {
+				console.warn("Attempted to save jobModel to IndexedDB but jobID is missing.");
+			}
+		}
+
 		if (window.sessionStorage) {
 			if (data != null) {
 				var replacerFn = function (key, value) {
@@ -1262,11 +1279,15 @@ function JobController() {
 					}
 					return value; // returning undefined omits the key from being serialized
 				};
-				try  {
+				try {
 					sessionStorage.setItem(key, JSON.stringify(data, replacerFn));
 				}
 				catch (err) {
-					showInfoMessage("Too much data", {message:"</br>The data to put in local storage exceeded the browser quota.</br> If you want to change the job sharing option, it will work. If not, please, try to reload the job and if this problem persists contact us.</br>Thank you.</br>",showButton: true});
+					if (key !== "jobModel") {
+						showInfoMessage("Too much data", { message: "</br>The data to put in local storage exceeded the browser quota.</br> If you want to change the job sharing option, it will work. If not, please, try to reload the job and if this problem persists contact us.</br>Thank you.</br>", showButton: true });
+					} else {
+						console.warn("jobModel exceeded sessionStorage quota, but is saved in IndexedDB.");
+					}
 				}
 			}
 		}
@@ -1289,28 +1310,29 @@ function JobController() {
 	this.updateStoredApplicationDataIndexDB = function (storename, data) {
 		
 		var db = new Dexie("paintomics");
-		
+
 		/* "data" should be prepared to include the following fields */
 		db.version(1).stores({
-			networks: 'id'
-		});
-		
+			networks: 'id',
+			jobs: 'jobID'
+		});		
 		db.table(storename).put(data).then(function () {
 			console.log("Data saved using IndexDB");
 		}).catch(function (error) {
-			console.log("Error saving data with IndexDB");
+			console.error("Error saving data with IndexDB in store: " + storename, error);
+			console.log("Data attempted to save:", data);
 		});
 		
 	};
 	
 	this.getStoredApplicationDataIndexDB = function (storename, id, callback) {
 		var db = new Dexie("paintomics");
-		
+
 		/* "data" should be prepared to include the following fields */
 		db.version(1).stores({
-			networks: 'id'
-		});
-		
+			networks: 'id',
+			jobs: 'jobID'
+		});		
 		db.table(storename).get(id).then(function (row) {
 			console.log("Registry successfully retrieved from " + storename + " using the id " + id);
 			return callback(row);

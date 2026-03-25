@@ -378,7 +378,21 @@ function JobInstance(jobID) {
 	}
 
 	this.setGlobalExpressionData = function (globalExpressionData) {
-		this.globalExpressionData = globalExpressionData
+		this.globalExpressionData = { "inputGene": {}, "inputCompound": {} };
+		if (globalExpressionData) {
+			if (globalExpressionData.inputGene) {
+				for (var id in globalExpressionData.inputGene) {
+					var ov = globalExpressionData.inputGene[id];
+					this.globalExpressionData.inputGene[id] = (ov instanceof OmicValue) ? ov : OmicValue.loadFromJSON(ov);
+				}
+			}
+			if (globalExpressionData.inputCompound) {
+				for (var id in globalExpressionData.inputCompound) {
+					var ov = globalExpressionData.inputCompound[id];
+					this.globalExpressionData.inputCompound[id] = (ov instanceof OmicValue) ? ov : OmicValue.loadFromJSON(ov);
+				}
+			}
+		}
 	}
 	this.getGlobalExpressionData = function () {
 		return this.globalExpressionData == null ? {} : this.globalExpressionData
@@ -512,6 +526,18 @@ function JobInstance(jobID) {
 				this.omicsValues = {};
 				for (var i in jsonObject.omicsValues){
 					this.addOmicValue(new Feature(i).loadFromJSON(jsonObject.omicsValues[i]));
+				}
+			}else if(i === "globalExpressionData"){
+				this.globalExpressionData = { "inputGene": {}, "inputCompound": {} };
+				if (jsonObject.globalExpressionData.inputGene) {
+					for (var id in jsonObject.globalExpressionData.inputGene) {
+						this.globalExpressionData.inputGene[id] = OmicValue.loadFromJSON(jsonObject.globalExpressionData.inputGene[id]);
+					}
+				}
+				if (jsonObject.globalExpressionData.inputCompound) {
+					for (var id in jsonObject.globalExpressionData.inputCompound) {
+						this.globalExpressionData.inputCompound[id] = OmicValue.loadFromJSON(jsonObject.globalExpressionData.inputCompound[id]);
+					}
 				}
 			}else{
 				this[i] = jsonObject[i];

@@ -366,10 +366,11 @@ def pathwayAcquisitionStep2_PART2(jobID, userID, selectedCompounds, clusterNumbe
 
         logging.info("STEP2 - GENERATE COMPOUND CLASSIFICATION")
 
+        # Creat Global expression information for all genes
+        globalExpressionData = jobInstance.getGlobalExpressionData()
+
         if selectedCompounds:
             mappingComp, pValueInDict, classificationDict, exprssionMetabolites, adjustPvalue, totalRelevantFeaturesInCategory, featureSummary, compoundRegulateFeatures = jobInstance.compundsClassification(metaboliteClassThreshold)
-            # Creat Global expression information for all genes
-            globalExpressionData = jobInstance.getGlobalExpressionData()
             hubAnalysisResult = jobInstance.hubAnalysis( ROOT_DIRECTORY )
 
             # set compound sources to all database
@@ -411,13 +412,8 @@ def pathwayAcquisitionStep2_PART2(jobID, userID, selectedCompounds, clusterNumbe
         #************************************************************************
         # Step 5. Update the response content
         #************************************************************************
-        matchedPathwaysJSONList = []
-        for matchedPathway in jobInstance.getMatchedPathways().values():
-            matchedPathwaysJSONList.append(matchedPathway.toBSON())
-
-        matchedClassJSONList = []
-        for matchedclass in jobInstance.getMatchedClass().values():
-            matchedClassJSONList.append(matchedclass.toBSON())
+        matchedPathwaysJSON = {pathwayID: pathway.toBSON() for pathwayID, pathway in jobInstance.getMatchedPathways().items()}
+        matchedClassJSON = {classID: matchedclass.toBSON() for classID, matchedclass in jobInstance.getMatchedClass().items()}
 
         if selectedCompounds:
             RESPONSE.setContent({
@@ -425,11 +421,9 @@ def pathwayAcquisitionStep2_PART2(jobID, userID, selectedCompounds, clusterNumbe
                 "organism" : jobInstance.getOrganism(),
                 "jobID":jobInstance.getJobID(),
                 "summary" : summary,
-                "pathwaysInfo" : matchedPathwaysJSONList,
+                "pathwaysInfo" : matchedPathwaysJSON,
                 # PaintOmics 4
-                "classInfo": matchedClassJSONList,
-                "geneBasedInputOmics":jobInstance.getGeneBasedInputOmics(),
-                "compoundBasedInputOmics": jobInstance.getCompoundBasedInputOmics(),
+                "classInfo": matchedClassJSON,
                 "databases": jobInstance.getDatabases(),
                 "omicsValuesID": jobInstance.getValueIdTable(),
                 # Add classification metabolism
@@ -456,17 +450,22 @@ def pathwayAcquisitionStep2_PART2(jobID, userID, selectedCompounds, clusterNumbe
                 "organism": jobInstance.getOrganism(),
                 "jobID": jobInstance.getJobID(),
                 "summary": summary,
-                "pathwaysInfo": matchedPathwaysJSONList,
+                "pathwaysInfo": matchedPathwaysJSON,
                 # PaintOmics 4
-                "classInfo": matchedClassJSONList,
-                "geneBasedInputOmics": jobInstance.getGeneBasedInputOmics(),
-                "compoundBasedInputOmics": jobInstance.getCompoundBasedInputOmics(),
+                "classInfo": matchedClassJSON,
                 "databases": jobInstance.getDatabases(),
                 "omicsValuesID": jobInstance.getValueIdTable(),
                 # Add classification metabolism
-                "mappingComp": None,
-                "pValueInDict": None,
-                "classificationDict": None,
+                "mappingComp": {},
+                "pValueInDict": [],
+                "classificationDict": {},
+                "exprssionMetabolites": {},
+                "adjustPvalue": [],
+                "totalRelevantFeaturesInCategory": [],
+                "featureSummary": [0, 0],
+                "compoundRegulateFeatures": {},
+                "hubAnalysisResult": {},
+                "globalExpressionData": globalExpressionData,
                 "aiConsent": jobInstance.getAIConsent(),
                 "experimentDesign": jobInstance.getExperimentDesign(),
                 "timestamp": int( time() )
@@ -600,12 +599,15 @@ def pathwayAcquisitionRecoverJob(request, response, QUEUE_INSTANCE):
         def _as_list(value):
             return value if isinstance(value, list) else []
 
+        def _as_dict_or_list(value):
+            return value if isinstance(value, (dict, list)) else {}
+
         safe_mappingComp = _as_dict(jobInstance.mappingComp)
         safe_classificationDict = _as_dict(jobInstance.classificationDict)
-        safe_pValueInDict = _as_dict(jobInstance.pValueInDict)
+        safe_pValueInDict = _as_dict_or_list(jobInstance.pValueInDict)
         safe_exprssionMetabolites = _as_dict(jobInstance.exprssionMetabolites)
-        safe_adjustPvalue = _as_dict(jobInstance.adjustPvalue)
-        safe_totalRelevantFeaturesInCategory = _as_dict(jobInstance.totalRelevantFeaturesInCategory)
+        safe_adjustPvalue = _as_dict_or_list(jobInstance.adjustPvalue)
+        safe_totalRelevantFeaturesInCategory = _as_dict_or_list(jobInstance.totalRelevantFeaturesInCategory)
         safe_featureSummary = jobInstance.featureSummary if isinstance(jobInstance.featureSummary, list) else [0, 0]
         safe_compoundRegulateFeatures = _as_dict(jobInstance.compoundRegulateFeatures)
         safe_globalExpressionData = _as_dict(jobInstance.getGlobalExpressionData())
