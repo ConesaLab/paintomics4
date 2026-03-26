@@ -40,6 +40,7 @@ try:
     COMMON_BUILD_DB_TOOLS.processRefSeqGeneSymbolData()
 
     COMMON_BUILD_DB_TOOLS.processMapManMappingData()
+    COMMON_BUILD_DB_TOOLS.processKEGGMappingData()
     #**************************************************************************
     # STEP 2. PROCESS THE KEGG DATABASE
     #**************************************************************************
