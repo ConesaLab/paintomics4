@@ -2947,7 +2947,8 @@ function PA_Step3PathwayDetailsView() {
 				var htmlCode = '<thead><tr><th></th><th>Matched<br>features</th><th>p-value (Global)</th><th></th></tr></thead><tbody>';
 				var significanceValues = this.getModel().getSignificanceValues();
 				var globalOmicPvalues = this.getModel().getGlobalOmicPvalues() || {};
-				var conditionNames = this.getParent("PA_Step3JobView").getModel().conditionNames || [];
+				var jobView = this.getParent("PA_Step3JobView") || this.getParent("PA_Step4JobView");
+				var conditionNames = (jobView !== null) ? (jobView.getModel().conditionNames || []) : [];
 				
 				var PA4View = this.getParent("PA_Step4PathwayView");
 				var foundFeatures = (PA4View !== null) ? PA4View.getMatchedFeatures() : {};

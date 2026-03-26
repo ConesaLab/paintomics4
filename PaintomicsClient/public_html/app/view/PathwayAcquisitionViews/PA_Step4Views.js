@@ -440,8 +440,8 @@ function PA_Step4PathwayView() {
 				matchedFeatures[omicValue.omicName][keggName] = matchedFeatures[omicValue.omicName][keggName] || {isRelevant: false, isRelevantAssociation: false, inputNames: []};
 				
 				matchedFeatures[omicValue.omicName][keggName] = {
-					isRelevant: matchedFeatures[omicValue.omicName][keggName].isRelevant || omicValue.relevant,
-					isRelevantAssociation: matchedFeatures[omicValue.omicName][keggName].isRelevantAssociation || omicValue.relevantAssociation,
+					isRelevant: matchedFeatures[omicValue.omicName][keggName].isRelevant || omicValue.isRelevant(),
+					isRelevantAssociation: matchedFeatures[omicValue.omicName][keggName].isRelevantAssociation || omicValue.isRelevantAssociation(),
 					inputNames: matchedFeatures[omicValue.omicName][keggName].inputNames.concat(omicValue.originalName || omicValue.getInputName())
 				};
 			})
@@ -865,10 +865,24 @@ function PA_Step4KeggDiagramView() {
 		var featureSetElem, pos;
 		var graphicalOptions = this.getModel().getGraphicalOptions();
 		var omicsValues = this.getParent().getOmicsValues();
+		var omicsValuesKeys = Object.keys(omicsValues);
+		var omicsValuesKeysLower = omicsValuesKeys.map(function(x) { return x.toLowerCase(); });
 
 		for (var i in featuresIDs) {
+			var featureID = featuresIDs[i];
+			var featureIDLower = featureID.toLowerCase();
+			var feature = omicsValues[featureID];
+
+			if (feature === undefined) {
+				// Try case-insensitive lookup
+				var indexInKeys = omicsValuesKeysLower.indexOf(featureIDLower);
+				if (indexInKeys !== -1) {
+					feature = omicsValues[omicsValuesKeys[indexInKeys]];
+				}
+			}
+
 			//Get the coordinates etc. for each box for current feature
-			var data = graphicalOptions.findFeatureGraphicalData(featuresIDs[i]);
+			var data = graphicalOptions.findFeatureGraphicalData(featureID);
 
 			//TODO: this code should be removed in future versions, now fixes the problems with not updated species
 			if (!(data instanceof Array)){
@@ -876,15 +890,26 @@ function PA_Step4KeggDiagramView() {
 			}
 
 			for(var k in data){
-				featureSetElem = new FeatureSetElem(omicsValues[featuresIDs[i]], data[k]);
+				featureSetElem = new FeatureSetElem(feature, data[k]);
 
-				//TODO: AQUI ESTA EL PROBLEMA!!
-				//ADD THE ENTRY TO THE SEARCH TABLE (KEGG NAME -> featureSetElem)
-				searchFeatureIndex[omicsValues[featuresIDs[i]].name] = featureSetElem;
-				//ADD THE ENTRY TO THE SEARCH TABLE (INPUT NAME -> featureSetElem)
-				for (var j in omicsValues[featuresIDs[i]].omicsValues) {
-					searchFeatureIndex[omicsValues[featuresIDs[i]].omicsValues[j].inputName] = featureSetElem;
-					searchFeatureIndex[omicsValues[featuresIDs[i]].omicsValues[j].originalName] = featureSetElem;
+				//ADD THE ENTRY TO THE SEARCH TABLE (IDENTIFIER -> featureSetElem)
+				searchFeatureIndex[featureID] = featureSetElem;
+
+				if (feature !== undefined) {
+					//ADD THE ENTRY TO THE SEARCH TABLE (KEGG NAME -> featureSetElem)
+					if (feature.name && feature.name !== "") {
+						searchFeatureIndex[feature.name] = featureSetElem;
+					}
+					//ADD THE ENTRY TO THE SEARCH TABLE (INPUT NAME -> featureSetElem)
+					for (var j in feature.omicsValues) {
+						var omicValue = feature.omicsValues[j];
+						if (omicValue.inputName && omicValue.inputName !== "") {
+							searchFeatureIndex[omicValue.inputName] = featureSetElem;
+						}
+						if (omicValue.originalName && omicValue.originalName !== "") {
+							searchFeatureIndex[omicValue.originalName] = featureSetElem;
+						}
+					}
 				}
 
 				pos = data[k].getX() + "#" + data[k].getY();
@@ -2786,13 +2811,14 @@ function PA_Step4FindFeaturesView() {
 	* @return {PA_Step4FindFeaturesView} the view
 	*/
 	this.searchFeatures = function(searchValue) {
-		var availableTags = this.getParent().searchFeatureIndex;
+		var availableTags = this.getParent().searchFeatureIndex || {};
 
 		var results = {}, elemAux;
 		for (var i in availableTags) {
 			if (i.toLowerCase().indexOf(searchValue.toLowerCase()) !== -1) {
-				elemAux = this.getParent().searchFeatureIndex[i];
-				results[elemAux.getFeature().getName()] = elemAux;
+				elemAux = availableTags[i];
+				var name = (elemAux.getFeature() && elemAux.getFeature().getName()) ? elemAux.getFeature().getName() : i;
+				results[name] = elemAux;
 			}
 		}
 
@@ -2813,12 +2839,13 @@ function PA_Step4FindFeaturesView() {
 	* TODO
 	*/
 	this.updateObserver = function(){
+		var el = $(this.getComponent().el.dom);
 		if(this.searchResultsView === null){
-			this.searchResultsView = Ext.widget({xtype: 'container', renderTo: "resultsContainer", items: []});
+			this.searchResultsView = Ext.widget({xtype: 'container', renderTo: el.find(".resultsContainer")[0], items: []});
 		}
 
-		$("#resultsCounter").text("Found " + this.items.length + " features.");
-		$("#searchResultsWrapper").show();
+		el.find(".resultsCounter").text("Found " + this.items.length + " features.");
+		el.find(".searchResultsWrapper").show();
 
 		this.searchResultsView.removeAll();
 		var components = [];
@@ -2831,13 +2858,9 @@ function PA_Step4FindFeaturesView() {
 
 		for(i in this.items){
 			this.items[i].updateObserver(false, function() {
-				$('#resultsContainer .findInMapButton').click();
+				el.find(".resultsContainer .findInMapButton").click();
 			});
 		}
-		
-		// Raise click event in each result
-		//$("#resultsContainer .geneInfoTitle").click();
-		
 	};
 
 	/**
@@ -2848,21 +2871,29 @@ function PA_Step4FindFeaturesView() {
 	* @return {PA_Step4FindFeaturesView} the view
 	*/
 	this.showPathwayDetails = function(){
-		//TODO: MOVER ESTO AL LOAD MODEL DE ESTA VISTA
+		var el = $(this.getComponent().el.dom);
 		if(this.pathwayDetailsView === null){
 			this.pathwayDetailsView = new PA_Step3PathwayDetailsView();
-			this.pathwayDetailsView.getComponent("patwaysDetailsContainer");
+			this.pathwayDetailsView.getComponent(el.find(".patwaysDetailsContainer")[0]);
 			this.pathwayDetailsView.setParent(this);
 		}
 
-		this.pathwayDetailsView.loadModel(this.getParent().getModel());
+		var pathwayView = this.getParent("PA_Step4PathwayView");
+		var jobView = this.getParent("PA_Step4JobView");
+		
+		if (!pathwayView || !jobView) {
+			console.warn("Could not find pathway or job view for details view.");
+			return this;
+		}
+
+		this.pathwayDetailsView.loadModel(pathwayView.getModel());
 
 		var omicNames = [];
-		var inputOmics = this.getParent().getParent().getModel().getGeneBasedInputOmics();
+		var inputOmics = jobView.getModel().getGeneBasedInputOmics();
 		for(var i in inputOmics){
 			omicNames.push(inputOmics[i].omicName);
 		}
-		this.pathwayDetailsView.updateObserver(omicNames, this.getParent().getParent().getModel().getDataDistributionSummaries(), this.getParent().getVisualOptions());
+		this.pathwayDetailsView.updateObserver(omicNames, jobView.getModel().getDataDistributionSummaries(), pathwayView.getVisualOptions());
 
 		return this;
 	};
@@ -2906,15 +2937,15 @@ function PA_Step4FindFeaturesView() {
 				"<div class='lateralOptionsPanel-body findFeaturesContainer'>" +
 				'  <div>'+
 				'    <h4>Search in this pathway</h4>' +
-				'    <div id="findFeaturesInput" class="input" style="width:170px; display:inline-block;"><input type="text" style="width:160px;"></div>'+
-				'    <a class="button btn-info helpTip" id="findFeatureButton" style="margin: 20px 5px" title="Find features"><i class="fa fa-search"></i> Search</a>' +
-				'    <div class="applyWaitMessage" style="color:#4c4c4c; margin: 10px;"> Searching...<i class="fa fa-cog fa-spin" style=" float: left; margin-right: 10px; "></i></div>' +
+				'    <div class="findFeaturesInput input" style="width:170px; display:inline-block;"><input type="text" style="width:160px;"></div>'+
+				'    <a class="button btn-info findFeatureButton helpTip" style="margin: 20px 5px" title="Find features"><i class="fa fa-search"></i> Search</a>' +
+				'    <div class="applyWaitMessage" style="color:#4c4c4c; margin: 10px; display:none;"> Searching...<i class="fa fa-cog fa-spin" style=" float: left; margin-right: 10px; "></i></div>' +
 				'  </div>'+
-				'  <div id="patwaysDetailsContainer"></div>'+
-				'  <div id="searchResultsWrapper" style="display:none;">'+
-				'    <a href="javascript:void(0)" id="backToPathwayDetailsButton" style="margin: 5px 0px;"><i class="fa fa-long-arrow-left"></i> Back to Pathway details</a>' +
-				'    <h3 id="resultsCounter">Found N features.</h3>' +
-				'    <div id="resultsContainer" style="width:245px; margin-left: 10px; padding-bottom:20px;"></div>'+
+				'  <div class="patwaysDetailsContainer"></div>'+
+				'  <div class="searchResultsWrapper" style="display:none;">'+
+				'    <a href="javascript:void(0)" class="backToPathwayDetailsButton" style="margin: 5px 0px;"><i class="fa fa-long-arrow-left"></i> Back to Pathway details</a>' +
+				'    <h3 class="resultsCounter">Found N features.</h3>' +
+				'    <div class="resultsContainer" style="width:245px; margin-left: 10px; padding-bottom:20px;"></div>'+
 				'  </div>'+
 				"</div>"
 			}
@@ -2923,27 +2954,28 @@ function PA_Step4FindFeaturesView() {
 			boxready: function() {
 				me.showPathwayDetails();
 
-				var availableTags = Object.keys(me.getParent().searchFeatureIndex).sort();
+				var el = $(me.getComponent().el.dom);
+				var index = me.getParent().searchFeatureIndex || {};
+				var availableTags = Object.keys(index).sort();
 				//SOME EVENT HANDLERS
-				$("#hideFindFeaturePanelButton").click(function() {
+				el.find("#hideFindFeaturePanelButton").click(function() {
 					me.toggle(false);
 				});
-				$("#findFeatureButton").click(function() {
+				el.find(".findFeatureButton").click(function() {
 					$(this).next(".applyWaitMessage").fadeIn(400, function() {
-						$("#patwaysDetailsContainer").hide();
-						me.searchFeatures($("#findFeaturesInput > input").val());
+						el.find(".patwaysDetailsContainer").hide();
+						me.searchFeatures(el.find(".findFeaturesInput > input").val());
 						$(this).hide();
 					});
 				});
-				$("#findFeaturesInput > input").autocomplete({
+				el.find(".findFeaturesInput > input").autocomplete({
 					source: availableTags,
 					minLength: 2
 				});
 
-				$("#backToPathwayDetailsButton").click(function() {
-					// me.searchResultsView.setVisible(false);
-					$("#patwaysDetailsContainer").show();
-					$("#searchResultsWrapper").hide();
+				el.find(".backToPathwayDetailsButton").click(function() {
+					el.find(".patwaysDetailsContainer").show();
+					el.find(".searchResultsWrapper").hide();
 				});
 
 				initializeTooltips(".helpTip");
