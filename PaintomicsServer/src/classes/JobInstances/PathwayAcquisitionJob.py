@@ -931,11 +931,7 @@ class PathwayAcquisitionJob(Job):
                         if not isinstance(relevantValue, list):
                             relevantValue = [relevantValue]
                         elif len(relevantValue) == 0:
-                            # Default to False if list is empty
-                            relevantValue = [False]
-                        
-                        # DEBUG: ensure it's a list before access
-                        # print(f"DEBUG: {feature.getID()} relevantValue: {relevantValue}")
+                            relevantValue = [False] * max_conditions
                         
                         if not has_multi_cond:
                             # Scalar fast-path
@@ -986,7 +982,7 @@ class PathwayAcquisitionJob(Job):
                     totalRelevantFeaturesByOmic[sourceDB][omicName] = [sum(all_vals)]
                 else:
                     # List-based multi-condition path
-                    nConditions = len(all_vals[0]) if isinstance(all_vals[0], list) else 1
+                    nConditions = max((len(v) for v in all_vals if isinstance(v, list)), default=1)
                     condition_counts = [0] * nConditions
                     for rel_val in all_vals:
                         if isinstance(rel_val, list):
@@ -1020,6 +1016,12 @@ class PathwayAcquisitionJob(Job):
         isValidPathway = False
         pathwayInstance = Pathway("")
 
+        # Derive max_conditions from totalRelevantFeaturesByOmic for proper padding
+        max_conditions = max(
+            (len(v) for v in (totalRelevantFeaturesByOmic or {}).values() if isinstance(v, list)),
+            default=1
+        )
+
         # counterNames[omicName][enrichmentProperty] = [isRelevant_C1, isRelevant_C2, ...]
         counterNames = defaultdict(lambda: defaultdict(list))
 
@@ -1052,8 +1054,8 @@ class PathwayAcquisitionJob(Job):
                         if not isinstance(relevantValue, list):
                             relevantValue = [relevantValue]
                         elif len(relevantValue) == 0:
-                            relevantValue = [False]
-                        
+                            relevantValue = [False] * max_conditions
+
                         if not has_multi_cond:
                             # Scalar fast-path
                             is_rel = relevantValue[0]
@@ -1098,8 +1100,8 @@ class PathwayAcquisitionJob(Job):
                         if not isinstance(relevantValue, list):
                             relevantValue = [relevantValue]
                         elif len(relevantValue) == 0:
-                            relevantValue = [False]
-                        
+                            relevantValue = [False] * max_conditions
+
                         if not has_multi_cond:
                             # Scalar fast-path
                             is_rel = relevantValue[0]
