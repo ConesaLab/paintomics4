@@ -1936,7 +1936,8 @@ function PA_Step4KeggDiagramFeatureView(showButtons) {
 						serie.data.push({
 							x: x, y: y,
 							value: values[j],
-							color: getColor(limits, values[j], visualOptions.colorScale)
+							color: getColor(limits, values[j], visualOptions.colorScale),
+							isSignificant: omicValues.isRelevant(j)
 						});
 						x++;
 						maxX = Math.max(maxX, x);
@@ -2048,8 +2049,19 @@ function PA_Step4KeggDiagramFeatureView(showButtons) {
 			},
 			series: series,
 			plotOptions: {
-				//TODO: border color if color scale = green-black-red?
-				heatmap: {borderColor: "#000000",borderWidth: 0.5}
+				heatmap: {
+					borderColor: "#000000",
+					borderWidth: 0.5,
+					dataLabels: {
+						enabled: true,
+						useHTML: true,
+						formatter: function() {
+							if (this.point.isSignificant && maxX > 1) {
+								return '<i class="fa fa-star" style="color: white !important; font-size: 8px; padding: 0;"></i>';
+							}
+						}
+					}
+				}
 			}
 		});
 
@@ -2371,18 +2383,18 @@ function PA_Step4KeggDiagramFeatureSetSVGBox() {
 					context.strokeStyle = '#bcbcbc';
 					context.stroke();
 					
-					// Add per-condition significance star
+					/* REMOVED: Significance stars are now only shown in the detailed heatmap */
+					/*
 					if (omicValues.isRelevant(j)) {
 						context.font = "normal " + (boxHeigth * 0.6) + "px FontAwesome";
 						context.fillStyle = 'white';
 						context.textAlign = "center";
 						context.textBaseline = "middle";
-						// Center the star in the current segment
 						context.fillText('\uf005', xPos + (boxWidth / 2), yPos + (boxHeigth / 2));
-						// Reset text alignment for other drawings
 						context.textAlign = "start";
 						context.textBaseline = "alphabetic";
 					}
+					*/
 					
 					xPos += boxWidth;
 				}
