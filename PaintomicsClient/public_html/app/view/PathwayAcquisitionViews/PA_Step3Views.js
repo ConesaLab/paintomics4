@@ -135,6 +135,7 @@ function PA_Step3JobView() {
 			this.indexedPathways[db] = {};
 			this.classificationData[db] = {};
 			this.isFiltered[db] = false;
+			this.significativePathwaysByDB[db] = 0;
 		}).bind(this));
 
 		// Ensure that the visual options timestamp is on par with the model (could be new due to 'Go back' feature)
@@ -218,7 +219,27 @@ function PA_Step3JobView() {
 			pathwayInstance =  pathways[i];
 			pathwayDB = pathwayInstance.getSource();
 
-			if (pathwayInstance.getCombinedSignificanceValueByMethod(this.visualOptions.selectedCombinedMethod) <= 0.05) {
+			var isSignificant = false;
+			var combinedMethod = this.visualOptions.selectedCombinedMethod;
+
+			if (Object.keys(this.model.summary[4]).length > 1) {
+				var totalGlobal = pathwayInstance.getTotalGlobalPvalues();
+				var pVal = (totalGlobal && totalGlobal[combinedMethod] !== undefined) ? totalGlobal[combinedMethod] : pathwayInstance.getCombinedSignificanceValueByMethod(combinedMethod);
+				if (Array.isArray(pVal)) pVal = pVal[0];
+				isSignificant = (pVal !== undefined && pVal !== null && pVal !== "-" && pVal <= 0.05);
+			} else {
+				var omicName = Object.keys(pathwayInstance.getSignificanceValues())[0];
+				var globalOmics = pathwayInstance.getGlobalOmicPvalues();
+				var pVal = (globalOmics && globalOmics[omicName] !== undefined) ? globalOmics[omicName] : pathwayInstance.getSignificanceValues()[omicName];
+				
+				if (Array.isArray(pVal) && pVal.length > 0 && Array.isArray(pVal[0])) pVal = pVal[0][2];
+				else if (Array.isArray(pVal) && pVal.length > 2 && !Array.isArray(pVal[0])) pVal = pVal[2];
+				else if (Array.isArray(pVal)) pVal = pVal[0];
+				
+				isSignificant = (pVal !== undefined && pVal !== null && pVal !== "-" && pVal <= 0.05);
+			}
+
+			if (isSignificant) {
 				this.significativePathways += 1
 				this.significativePathwaysByDB[pathwayDB] += 1
 			}
@@ -349,23 +370,29 @@ function PA_Step3JobView() {
 		var visible = 0;
 		var significative = 0;
 		var pathways = (db == undefined ? this.getModel().getPathways() : this.getModel().getPathwaysByDB(db));
+		var combinedMethod = this.visualOptions.selectedCombinedMethod;
 		for (var i in pathways) {
 			visible += (pathways[i].isVisible() ? 1 : 0);
-			if(Object.keys(this.model.summary[4]).length > 1){
-				significative += ((pathways[i].isVisible() && pathways[i].getCombinedSignificanceValueByMethod(this.visualOptions.selectedCombinedMethod) <= 0.05) ? 1 : 0);
-			}else{
+			if (!pathways[i].isVisible()) continue;
+
+			var isSignificant = false;
+			if (Object.keys(this.model.summary[4]).length > 1) {
+				var totalGlobal = pathways[i].getTotalGlobalPvalues();
+				var pVal = (totalGlobal && totalGlobal[combinedMethod] !== undefined) ? totalGlobal[combinedMethod] : pathways[i].getCombinedSignificanceValueByMethod(combinedMethod);
+				if (Array.isArray(pVal)) pVal = pVal[0];
+				isSignificant = (pVal !== undefined && pVal !== null && pVal !== "-" && pVal <= 0.05);
+			} else {
 				var omicName = Object.keys(pathways[i].getSignificanceValues())[0];
-				var sigData = pathways[i].getSignificanceValues()[omicName];
-				var pValToCheck = 1.0;
-				if (pathways[i].getGlobalOmicPvalues() && pathways[i].getGlobalOmicPvalues()[omicName] !== undefined) {
-					pValToCheck = pathways[i].getGlobalOmicPvalues()[omicName];
-				} else if (sigData && sigData.length > 0 && Array.isArray(sigData[0])) {
-					pValToCheck = sigData[0][2];
-				} else if (sigData && sigData.length > 2) {
-					pValToCheck = sigData[2];
-				}
-				significative += ((pathways[i].isVisible() && pValToCheck <= 0.05) ? 1 : 0);
+				var globalOmics = pathways[i].getGlobalOmicPvalues();
+				var pVal = (globalOmics && globalOmics[omicName] !== undefined) ? globalOmics[omicName] : pathways[i].getSignificanceValues()[omicName];
+				
+				if (Array.isArray(pVal) && pVal.length > 0 && Array.isArray(pVal[0])) pVal = pVal[0][2];
+				else if (Array.isArray(pVal) && pVal.length > 2 && !Array.isArray(pVal[0])) pVal = pVal[2];
+				else if (Array.isArray(pVal)) pVal = pVal[0];
+
+				isSignificant = (pVal !== undefined && pVal !== null && pVal !== "-" && pVal <= 0.05);
 			}
+			significative += isSignificant ? 1 : 0;
 		}
 
 		var visiblePathways = {
