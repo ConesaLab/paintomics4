@@ -4029,7 +4029,8 @@ function PA_Step3PathwayTableView() {
 			var renderedValue = (value > 0.001 || value === 0) ? parseFloat(value).toFixed(5) : parseFloat(value).toExponential(4);
 			
 			// Detect if it is a condition-specific column
-			var isCondition = metadata.column.dataIndex.indexOf('pValue_c') !== -1;
+			var isCondition = metadata.column.isCondition || metadata.column.dataIndex.indexOf('pValue_c') !== -1;
+			var nCond = metadata.column.nConditions || 1;
 			var omicPart = metadata.column.dataIndex.split('pValue')[1];
 			if (isCondition) {
 				omicPart = metadata.column.dataIndex.split(/pValue_c\d+/)[1];
@@ -4081,15 +4082,19 @@ function PA_Step3PathwayTableView() {
 				var notFoundNotRelev = (totalFeatures - foundFeatures) - notFoundRelevant;
 
 				if (foundRelevant !== undefined) {
-					myToolTipText +=
-					'<b>p-value:</b>'  + (value === -1 ? "-" : renderedValue) + "</br>" +
-					"<table class='contingencyTable'>" +
-					' <thead><th></th><th>Relevant</th><th>Not Relevant</th><th></th></thead>' +
-					'  <tr><td>Found</td><td>' + foundRelevant + '</td><td>' + foundNotRelevant + '</td><td>' + foundFeatures + '</td></tr>' +
-					'  <tr><td>Not found</td><td>' + notFoundRelevant + '</td><td>' + notFoundNotRelev + '</td><td>' + (totalFeatures - foundFeatures) + '</td></tr>' +
-					'  <tr><td></td><td>' + totalRelevant + '</td><td>' + (totalFeatures - totalRelevant) + '</td><td>' + (totalFeatures) + '</td></tr>' +
-					'</table>';
-					metadata.tdAttr = 'data-qtip="' + myToolTipText + '"';
+
+					// Only show tooltip for condition-specific columns OR single-condition jobs
+					if (isCondition || nCond <= 1) {
+						myToolTipText += '<b>p-value:</b>'  + (value === -1 ? "-" : renderedValue) + "</br>";
+						myToolTipText +=
+						"<table class='contingencyTable'>" +
+						' <thead><th></th><th>Relevant</th><th>Not Relevant</th><th></th></thead>' +
+						'  <tr><td>Found</td><td>' + foundRelevant + '</td><td>' + foundNotRelevant + '</td><td>' + foundFeatures + '</td></tr>' +
+						'  <tr><td>Not found</td><td>' + notFoundRelevant + '</td><td>' + notFoundNotRelev + '</td><td>' + (totalFeatures - foundFeatures) + '</td></tr>' +
+						'  <tr><td></td><td>' + totalRelevant + '</td><td>' + (totalFeatures - totalRelevant) + '</td><td>' + (totalFeatures) + '</td></tr>' +
+						'</table>';
+						metadata.tdAttr = 'data-qtip="' + myToolTipText + '"';
+					}
 				}
 
 			} catch (e) {
@@ -4125,7 +4130,9 @@ function PA_Step3PathwayTableView() {
 				flex: 1, hidden : hidden, sortable: true, align: "center",
 				filter: {type: 'numeric'},
 				renderer: renderFunction,
-				omic: omic.omicName // Custom property for the renderer
+				omic: omic.omicName, // Custom property for the renderer
+				nConditions: nConditions,
+				isCondition: false
 			};
 
 			if (nConditions > 1) {
@@ -4145,6 +4152,7 @@ function PA_Step3PathwayTableView() {
 						renderer: renderFunction,
 						omic: omic.omicName,
 						isCondition: true,
+						nConditions: nConditions,
 						cls: "header-45deg condition-column-" + omicName
 					});
 					
