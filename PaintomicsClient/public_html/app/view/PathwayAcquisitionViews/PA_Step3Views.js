@@ -1408,6 +1408,15 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 				} else {
 					pValue = matchedPathway.getAllSignificanceValues()[methodSelected];
 				}
+
+				// If pValue is an array (multi-condition), use the minimum (most significant value) or the first element
+				if (Array.isArray(pValue)) {
+					// Paintomics 4: if we have global p-values for this omic/method, they are usually at index 0 or as a single value.
+					// But we take the minimum to ensure if it is significant in ANY condition, it is shown.
+					// pValue = Math.min(...pValue.filter(v => !isNaN(v) && v !== null));
+					// Actually, consistent with other views, we try to use the most representative value.
+					pValue = Math.min.apply(null, pValue.filter(v => !isNaN(v) && v !== null && v !== "-"));
+				}
 			} catch(error) {
 				//pass
 				pValue = 1;
