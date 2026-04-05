@@ -5506,7 +5506,8 @@ if (omicsValues[i].isRelevantAssociation()) {
 				x: x,
 				y: y,
 				value: featureValues[j],
-				color: colorGet
+				color: colorGet,
+				isSignificant: omicsValues[i].isRelevant(j)
 			});
 			x++;
 			maxX = Math.max(maxX, x);
@@ -5564,6 +5565,15 @@ if (omicsValues[i].isRelevantAssociation()) {
 			heatmap: {
 				borderColor: "#000000",
 				borderWidth: 0.5,
+				dataLabels: {
+					enabled: true,
+					useHTML: true,
+					formatter: function() {
+						if (this.point.isSignificant && maxX > 1) {
+							return '<i class="fa fa-star" style="color: white !important; font-size: 8px; padding: 0;"></i>';
+						}
+					}
+				}
 			},
 			series: {
 				point: {
