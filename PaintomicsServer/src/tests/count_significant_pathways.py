@@ -173,6 +173,8 @@ def main():
     parser.add_argument("--threshold", type=float, default=0.05)
     parser.add_argument("--output", default=None)
     parser.add_argument("--tmp-dir", default=CLIENT_TMP_DIR)
+    parser.add_argument("--assert-baseline", action="store_true",
+                        help="Exit non-zero if SIG_FISHER drifts from the pre-refactor baseline (33).")
     args = parser.parse_args()
 
     selected = [s.strip() for s in args.omics.split(",") if s.strip()]
@@ -228,6 +230,22 @@ def main():
         print(f"Wrote {args.output}", flush=True)
 
     job.cleanDirectories(remove_output=True, remove_input=False)
+
+    if args.assert_baseline:
+        # Pre-refactor parity baseline (commit b021f926): 6 omics, KEGG, mmu.
+        # Bug F regression dropped this to 19; the fix restores 33.
+        EXPECTED = {"sig_fisher": 33, "sig_stouffer": 15, "total": 364}
+        actual = {
+            "sig_fisher": result["sig_fisher"],
+            "sig_stouffer": result["sig_stouffer"],
+            "total": result["total_pathways"],
+        }
+        if (result["sig_fisher"] != EXPECTED["sig_fisher"]
+                or result["sig_stouffer"] != EXPECTED["sig_stouffer"]
+                or result["total_pathways"] != EXPECTED["total"]):
+            print(f"REGRESSION: expected {EXPECTED}, got {actual}", flush=True)
+            sys.exit(1)
+        print("BASELINE OK", flush=True)
 
 
 if __name__ == "__main__":
