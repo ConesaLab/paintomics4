@@ -79,6 +79,7 @@ def count_significant(job, threshold=0.05):
     sig_fisher = 0
     sig_stouffer = 0
     sig_adj_bh = 0
+    sig_combined_fisher = 0  # Cross-check: use getCombinedSignificancePvalues like pre-refactor
     pvalue_dump = []
 
     for pw_id, pw in matched.items():
@@ -111,6 +112,14 @@ def count_significant(job, threshold=0.05):
         if p_stouffer is not None and p_stouffer != "-" and p_stouffer <= threshold:
             sig_stouffer += 1
 
+        # Pre-refactor parity check: use getCombinedSignificancePvalues['Fisher']
+        cspv = pw.getCombinedSignificancePvalues() or {}
+        cs_fisher = cspv.get("Fisher")
+        if isinstance(cs_fisher, list):
+            cs_fisher = cs_fisher[0] if cs_fisher else None
+        if cs_fisher is not None and cs_fisher != "-" and cs_fisher <= threshold:
+            sig_combined_fisher += 1
+
         # NOTE: Pathway.py has an attr-name inconsistency: init uses
         # adjustedCombinedSignificanceValues (no "P"); getter
         # getAdjustedCombinedSignificancePvalues reads a different,
@@ -141,6 +150,7 @@ def count_significant(job, threshold=0.05):
         "sig_fisher": sig_fisher,
         "sig_stouffer": sig_stouffer,
         "sig_adj_bh": sig_adj_bh,
+        "sig_combined_fisher": sig_combined_fisher,
         "total_pathways": total,
         "n_omics": n_omics,
         "threshold": threshold,
@@ -167,6 +177,24 @@ def main():
     summary = job.generatePathwaysList()
     print(f"Pipeline summary: total={summary[0]} matched={summary[1]} genes={summary[2]} compounds={summary[3]}", flush=True)
 
+    # Debug: dump per-omic totals
+    from collections import Counter
+    enrichmentByOmic = {}
+    for omic in job.getGeneBasedInputOmics():
+        enrichmentByOmic[omic["omicName"]] = omic.get("enrichment", "genes")
+    for omic in job.getCompoundBasedInputOmics():
+        enrichmentByOmic[omic["omicName"]] = omic.get("enrichment", "features")
+    print(f"DEBUG enrichmentByOmic={enrichmentByOmic}", flush=True)
+
+    # Look at one specific pathway and dump significance values
+    pid_check = "mmu05168"
+    if pid_check in job.getMatchedPathways():
+        pw = job.getMatchedPathways()[pid_check]
+        print(f"DEBUG {pid_check} sigvals={dict(pw.getSignificanceValues())}", flush=True)
+        print(f"DEBUG {pid_check} globalOmicPvalues={dict(pw.getGlobalOmicPvalues())}", flush=True)
+        print(f"DEBUG {pid_check} totalGlobalPvalues={dict(pw.getTotalGlobalPvalues())}", flush=True)
+        print(f"DEBUG {pid_check} combinedSignificancePvalues={dict(pw.getCombinedSignificancePvalues())}", flush=True)
+
     result = count_significant(job, args.threshold)
     result["pipeline_summary"] = {
         "total_kegg_pathways": summary[0],
@@ -181,6 +209,7 @@ def main():
         f"SIG_FISHER={result['sig_fisher']} "
         f"SIG_STOUFFER={result['sig_stouffer']} "
         f"SIG_ADJ_BH={result['sig_adj_bh']} "
+        f"SIG_COMBINED_FISHER={result['sig_combined_fisher']} "
         f"TOTAL={result['total_pathways']}"
     )
     print(line, flush=True)

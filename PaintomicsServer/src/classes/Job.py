@@ -695,6 +695,13 @@ class Job(Model):
             with open(fileName, 'r', encoding='utf-8-sig', newline='') as inputDataFile:
                 nLine = 0
                 nConditions = 1
+                # Once row 1 is recognised as legacy 2-column (e.g. miRNA's
+                # ENSMUSG:::mmu-miR-name pairs), EVERY subsequent row must also
+                # be joined with ":::" instead of falling through to the
+                # single-column branch — otherwise rows 2+ register only line[0]
+                # and silently drop the miRNA suffix, breaking relevance lookups
+                # against values files keyed by the joined ID.
+                isLegacyTwoCol = False
                 for line in csv_reader(inputDataFile, delimiter=detected_delimiter):
                     nLine += 1
                     if isBedFormat == True:
@@ -735,6 +742,7 @@ class Job(Model):
                                  featureID = ":::".join([line[0], line[1]]).lower()
                                  relevantFeatures[featureID] = [True]
                                  nConditions = 1 # Revert to single condition
+                                 isLegacyTwoCol = True
                                  continue
 
                         # Multi-condition logic: Each column (from index 0 to n) contains IDs
@@ -745,6 +753,13 @@ class Job(Model):
                                     if fID not in relevantFeatures:
                                         relevantFeatures[fID] = [False] * nConditions
                                     relevantFeatures[fID][colIndex] = True
+                            continue
+                        elif isLegacyTwoCol and len(line) > 1:
+                            # Legacy [MappedID, OriginalID] file detected on row 1; keep
+                            # joining every subsequent row the same way (matches
+                            # pre-multi-condition behaviour and the values-file ID format).
+                            featureID = ":::".join([line[0], line[1]]).lower()
+                            relevantFeatures[featureID] = [True]
                             continue
                         else:
                             # Standard 1 column format

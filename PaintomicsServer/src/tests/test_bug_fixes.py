@@ -183,20 +183,33 @@ def test_bug_c_mouse_3col_rf_with_header():
 
 
 def test_bug_c_legacy_2col_mirna_format_preserved():
-    """The 2-column legacy [MappedID, OriginalID] format still detected."""
+    """The 2-column legacy [MappedID, OriginalID] format still detected.
+
+    Bug F regression: ALL rows must use ::: join, not just row 1. Pre-refactor
+    behavior was to always join 2-column files; the multi-cond refactor only
+    joined row 1 and silently dropped the suffix on rows 2+, which broke
+    miRNA relevance matching against values files (whose IDs are :::joined).
+    """
     import tempfile
     from src.classes.JobInstances.PathwayAcquisitionJob import PathwayAcquisitionJob
     job = PathwayAcquisitionJob(jobID="test", userID="test", CLIENT_TMP_DIR="/tmp/")
     with tempfile.NamedTemporaryFile(mode="w", suffix=".tab", delete=False) as f:
-        # mirroring real mirna_relevant.tab
+        # mirroring real mirna_relevant.tab — multiple distinct (gene, miRNA) pairs
         f.write("ENSMUSG00000038127\tmmu-miR-3091-3p\n")
         f.write("ENSMUSG00000038127\tmmu-miR-466k\n")
+        f.write("ENSMUSG00000028211\tmmu-miR-106a-5p\n")
         path = f.name
     try:
         result = job.parseSignificativeFeaturesFile(path)
-        # Legacy format combines columns with ":::"
+        # Every row should be ::: joined (not just row 1).
         assert "ensmusg00000038127:::mmu-mir-3091-3p" in result, list(result.keys())
-        assert result["ensmusg00000038127:::mmu-mir-3091-3p"] == [True]
+        assert "ensmusg00000038127:::mmu-mir-466k" in result, list(result.keys())
+        assert "ensmusg00000028211:::mmu-mir-106a-5p" in result, list(result.keys())
+        for k, v in result.items():
+            assert v == [True], f"{k} = {v}"
+        # No accidental single-column entries.
+        assert "ensmusg00000038127" not in result
+        assert "ensmusg00000028211" not in result
     finally:
         os.unlink(path)
 
