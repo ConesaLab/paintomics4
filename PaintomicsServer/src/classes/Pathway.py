@@ -132,16 +132,18 @@ class Pathway(Model):
         nConditions = max(currentLen, nConditionsInput)
         
         if currentLen < nConditions:
-            # Catch up new slots with current matched count
-            matchedSoFar = currentValues[0][0] if currentLen > 0 else 0
+            # New condition slots start at zero. A feature only contributes to
+            # totalMatched of conditions where it actually has a value, so
+            # earlier features (shorter lists) MUST NOT seed later slots.
             for _ in range(nConditions - currentLen):
-                currentValues.append([matchedSoFar, 0, -1.0])
+                currentValues.append([0, 0, -1.0])
 
         for i in range(nConditions):
-            currentValues[i][0] += 1 # totalMatched
-            # Only mark as relevant if the feature actually has a value for this condition slot
-            if i < nConditionsInput and isRelevantFeatureList[i]:
-                currentValues[i][1] += 1 # totalRelevant
+            # Only contribute to a condition when the feature has a slot for it.
+            if i < nConditionsInput:
+                currentValues[i][0] += 1 # totalMatched
+                if isRelevantFeatureList[i]:
+                    currentValues[i][1] += 1 # totalRelevant
 
         self.significanceValues[omicName] = currentValues
 
