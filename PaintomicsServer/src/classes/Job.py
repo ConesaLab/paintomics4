@@ -24,6 +24,7 @@ from time import strftime as formatDate
 from os import path as os_path, makedirs as os_makedirs, walk as os_walk
 from shutil import rmtree as shutil_rmtree
 from csv import reader as csv_reader
+from re import compile as re_compile
 from collections import defaultdict
 
 import numpy
@@ -50,6 +51,37 @@ class Job(Model):
                         return ','
                     return '\t'
         return '\t'
+
+    # Pre-compiled outside the helper to avoid re-compiling every call.
+    _ID_DIGIT_RUN = re_compile(r'\d{4,}')
+
+    @staticmethod
+    def _row_looks_like_data(row):
+        """Organism-agnostic heuristic for row-vs-header detection.
+
+        A cell is considered ID-like (i.e. a row with at least one such cell is
+        a data row, not a header) when it satisfies any of:
+          * Contains 4+ consecutive digits — ENSMUSG00000000028, ENSG..., K00001,
+            AT3G09260, Gm6793, cpd:C00001 all match.
+          * Contains a colon — covers KEGG-style cpd:C00001 even if the digit
+            count is shorter than 4.
+        Header rows (Cond1, WT, Ikaros/Control_0h, Sample_A) intentionally fail
+        the check. A leading '#' on the first cell forces the row to be treated
+        as a header by the caller.
+        """
+        if not row:
+            return False
+        if str(row[0]).strip().startswith('#'):
+            return False
+        for val in row:
+            v = str(val).strip()
+            if not v:
+                continue
+            if ':' in v:
+                return True
+            if Job._ID_DIGIT_RUN.search(v):
+                return True
+        return False
 
     #******************************************************************************************************************
     # CONSTRUCTORS
@@ -673,25 +705,33 @@ class Job(Model):
                         if nLine == 1:
                             if len(line) > 1:
                                 nConditions = len(line)
-                                # Detect if first row is a header (condition names)
-                                is_id = any(val.lower().startswith(("at", "cpd:", "k0", "r0")) for val in line)
-                                if not is_id:
-                                    self.conditionNames = [name.strip() for name in line]
+                                # Detect if first row is a header (condition names) using
+                                # an organism-agnostic heuristic: a data row contains at
+                                # least one cell that looks like a biological ID, where
+                                # "looks like an ID" means it contains 4+ consecutive
+                                # digits (ENSMUSG/ENSG/KEGG/AT3G09260/Gm6793 style) OR a
+                                # colon (cpd:C00001 style) OR starts with `#` (explicit
+                                # comment-marker header). Header rows are short alphanumeric
+                                # condition labels (Cond1, WT, Ikaros/Control_0h) which fail
+                                # all three checks.
+                                is_data = Job._row_looks_like_data(line)
+                                if not is_data:
+                                    self.conditionNames = [name.strip().lstrip('#') for name in line]
                                     continue
                                 else:
                                     # First row is data, no header
                                     self.conditionNames = ["Condition " + str(i+1) for i in range(nConditions)]
 
-                        # Disambiguate 2-column format (Legacy ID+Original vs New Cond1+Cond2)
-                        # If nConditions is 2, and nLine is 1 (after possible header check),
-                        # we check if it's the legacy format.
+                        # Disambiguate 2-column format (Legacy ID+Original vs New Cond1+Cond2).
+                        # Legacy: each row pairs [MappedID, OriginalID] (e.g. mirna ENSMUSG +
+                        # mmu-miR-...); both cells look like biological IDs (digits or special
+                        # tokens). Multi-cond: each cell is a feature ID belonging to its column's
+                        # condition. We treat the file as legacy iff BOTH cells of row 1 look like
+                        # biological IDs — that's the structural difference from a true 2-condition
+                        # file where the same ID typically appears in only one column at a time.
                         if nConditions == 2 and not isBedFormat:
-                             # Legacy Paintomics RF: [MappedID, OriginalID]
-                             # We check if the second column is potentially an original feature name
-                             # or if it's strictly a biological ID match to the first.
-                             # Simple heuristic: if first line second column starts with AT/cpd, it's likely a condition.
-                             if nLine == 1 and not line[1].lower().startswith(("at", "cpd:")):
-                                 # This is legacy format, not 2 conditions.
+                             if nLine == 1 and Job._row_looks_like_data([line[0]]) and Job._row_looks_like_data([line[1]]):
+                                 # Both columns biological IDs → legacy format, not 2 conditions.
                                  featureID = ":::".join([line[0], line[1]]).lower()
                                  relevantFeatures[featureID] = [True]
                                  nConditions = 1 # Revert to single condition
