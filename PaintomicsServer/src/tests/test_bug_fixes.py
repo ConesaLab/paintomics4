@@ -398,6 +398,40 @@ def test_synthetic_multicond_pipeline_per_condition_pvalues():
     assert abs(p2_actual - p2_expected) < 1e-9, f"p2 actual={p2_actual} exp={p2_expected}"
 
 
+# -------------------- Statistics.py: fisher_exact vs hypergeom.sf parity --------------------
+def test_calculateFisher_matches_fisher_exact():
+    """The Statistics.py refactor swapped fisher_exact for hypergeom.sf (faster,
+    same result for right-tail). Verify they agree across random scenarios."""
+    from src.common.Statistics import calculateFisher
+    from scipy.stats import fisher_exact
+    import random
+    random.seed(42)
+
+    mismatches = 0
+    for _ in range(200):
+        totalElems = random.randint(50, 10000)
+        totalSig = random.randint(1, totalElems // 2)
+        foundElems = random.randint(1, totalElems // 2)
+        foundSig = random.randint(0, min(foundElems, totalSig))
+
+        foundNoSig = foundElems - foundSig
+        notFoundSig = totalSig - foundSig
+        notFoundNoSig = (totalElems - foundElems) - notFoundSig
+        if min(foundSig, foundNoSig, notFoundSig, notFoundNoSig) < 0:
+            continue
+
+        p_calc = calculateFisher(totalElems, foundElems, totalSig, foundSig)
+        p_ref = fisher_exact([[foundSig, foundNoSig], [notFoundSig, notFoundNoSig]], 'greater')[1]
+
+        # p_calc has a 1e-300 floor; for normal-magnitude p-values, both should match.
+        if p_ref < 1e-200:
+            continue  # skip extreme-edge cases where floor matters
+        if abs(p_calc - p_ref) > 1e-9:
+            mismatches += 1
+
+    assert mismatches == 0, f"{mismatches} fisher vs hypergeom mismatches"
+
+
 # -------------------- Run all --------------------
 def main():
     tests = [
@@ -420,6 +454,7 @@ def main():
         test_bug_b_BSON_roundtrip_preserves_list,
         test_bug_b_pathwayacquisitionjob_pipeline_writes_list_for_multicond,
         test_synthetic_multicond_pipeline_per_condition_pvalues,
+        test_calculateFisher_matches_fisher_exact,
     ]
     for t in tests:
         _check(t.__name__, t)
