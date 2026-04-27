@@ -13,7 +13,7 @@ import traceback
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from src.classes.Pathway import Pathway
-from src.classes.Feature import OmicValue
+from src.classes.Feature import OmicValue, Gene
 from src.classes.Job import Job
 
 _PASSED = []
@@ -308,6 +308,96 @@ def test_bug_b_pathwayacquisitionjob_pipeline_writes_list_for_multicond():
     assert expected["Bonferroni"] == [0.05, 0.15, 1.00]
 
 
+# -------------------- Synthetic multi-condition pipeline integration --------------------
+def test_synthetic_multicond_pipeline_per_condition_pvalues():
+    """Build an in-memory job with a 3-condition RF and verify the per-condition
+    p-values produced by calculateTotalFeaturesByOmic + testPathwaySignificance
+    match hand-computed hypergeometric expectations."""
+    from src.classes.JobInstances.PathwayAcquisitionJob import PathwayAcquisitionJob
+    from scipy.stats import hypergeom
+
+    job = PathwayAcquisitionJob(jobID="synthetic", userID="test", CLIENT_TMP_DIR="/tmp/")
+    job.setOrganism("test_org")
+    job.setDatabases(["KEGG"])
+
+    # Construct a fake universe of 100 genes; 30 of them are "in our pathway".
+    universe = ["GENE_%03d" % i for i in range(100)]
+    in_pathway = set(universe[:30])
+
+    # Per-condition relevance: cond 0 has 20 relevant, cond 1 has 10, cond 2 has 5.
+    # Of the in-pathway genes (first 30): 12 in cond 0, 6 in cond 1, 3 in cond 2.
+    cond0_relevant = set(universe[:20])
+    cond1_relevant = set(universe[10:20])  # 10 genes; intersect with first 30 = 10
+    cond2_relevant = set(universe[15:20])  # 5 genes;  intersect with first 30 = 5
+
+    # Build Gene + OmicValue instances directly (bypassing file parsing — we already
+    # have explicit unit tests for parseSignificativeFeaturesFile in tests above).
+    for gid in universe:
+        gene = Gene(gid)
+        gene.setName(gid)
+        gene.setMatchingDB("KEGG")
+        ov = OmicValue(gid)
+        ov.setOmicName("Gene expression")
+        ov.setOriginalName(gid)
+        ov.setValues([0.0, 0.0, 0.0])
+        ov.setRelevant([
+            gid in cond0_relevant,
+            gid in cond1_relevant,
+            gid in cond2_relevant,
+        ])
+        gene.addOmicValue(ov)
+        job.addInputGeneData(gene)
+
+    # Run calculateTotalFeaturesByOmic
+    enrichmentByOmic = {"Gene expression": "genes"}
+    totalGenes = {"KEGG": set(universe)}
+    totalCompounds = {"KEGG": set()}
+    totalFeatures, totalRelevant = job.calculateTotalFeaturesByOmic(
+        enrichmentByOmic, totalGenes, totalCompounds
+    )
+    assert totalFeatures["KEGG"]["Gene expression"] == 100
+    # Per-condition relevant counts: 20, 10, 5
+    assert totalRelevant["KEGG"]["Gene expression"] == [20, 10, 5], \
+        f"got {totalRelevant['KEGG']['Gene expression']}"
+
+    # Run testPathwaySignificance using the actual job's gene dict (with relevance attached)
+    is_valid, pw = job.testPathwaySignificance(
+        genesInPathway=list(in_pathway),
+        compoundsInPathway=[],
+        inputGenesDict={g.getID().lower(): g for g in job.getInputGenesData().values()},
+        inputCompoundsDict={},
+        totalFeaturesByOmic=totalFeatures.get("KEGG"),
+        totalRelevantFeaturesByOmic=totalRelevant.get("KEGG"),
+        mappedRatiosByOmic={"Gene expression": 1.0},
+        enrichmentByOmic=enrichmentByOmic,
+        sourceDB="KEGG",
+        has_multi_cond=True,
+    )
+    assert is_valid is True
+    sigvals = pw.getSignificanceValues()["Gene expression"]
+    # foundElems = 30 (matched in pathway)
+    # foundSignificative per condition: cond0=12 (universe[:20] ∩ universe[:30]) = 20→clipped to first 30 = first 20 are relevant cond0; intersect with first 30 = 20.
+    # Hmm actually let me recompute: cond0_relevant=universe[:20], in_pathway=first 30. Intersection=20.
+    # Wait — relevant in cond 0 AND in pathway = universe[:20] ∩ universe[:30] = universe[:20] = 20 features.
+    # cond 1: universe[10:20] ∩ universe[:30] = universe[10:20] = 10
+    # cond 2: universe[15:20] ∩ universe[:30] = universe[15:20] = 5
+    assert sigvals[0][0] == 30 and sigvals[0][1] == 20, sigvals[0]
+    assert sigvals[1][0] == 30 and sigvals[1][1] == 10, sigvals[1]
+    assert sigvals[2][0] == 30 and sigvals[2][1] == 5, sigvals[2]
+
+    # Verify p-values match hand-computed hypergeometric
+    # totalElems=100, foundElems=30, totalSignif per cond=[20,10,5], foundSignif=[20,10,5]
+    p0_expected = hypergeom.sf(20 - 1, 100, 20, 30)
+    p1_expected = hypergeom.sf(10 - 1, 100, 10, 30)
+    p2_expected = hypergeom.sf(5 - 1, 100, 5, 30)
+    p0_actual = sigvals[0][2]
+    p1_actual = sigvals[1][2]
+    p2_actual = sigvals[2][2]
+    assert abs(p0_actual - p0_expected) < 1e-9, f"p0 actual={p0_actual} exp={p0_expected}"
+    assert abs(p1_actual - p1_expected) < 1e-9, f"p1 actual={p1_actual} exp={p1_expected}"
+    assert abs(p2_actual - p2_expected) < 1e-9, f"p2 actual={p2_actual} exp={p2_expected}"
+
+
 # -------------------- Run all --------------------
 def main():
     tests = [
@@ -329,6 +419,7 @@ def main():
         test_bug_e_getter_routes_to_populated_attr,
         test_bug_b_BSON_roundtrip_preserves_list,
         test_bug_b_pathwayacquisitionjob_pipeline_writes_list_for_multicond,
+        test_synthetic_multicond_pipeline_per_condition_pvalues,
     ]
     for t in tests:
         _check(t.__name__, t)

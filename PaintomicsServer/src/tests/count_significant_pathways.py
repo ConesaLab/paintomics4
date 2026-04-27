@@ -142,6 +142,16 @@ def count_significant(job, threshold=0.05):
             })
 
     pvalue_dump.sort(key=lambda x: (x["fisher"] if x["fisher"] is not None else 1.0))
+
+    # Build a complete map of ALL pathways' Fisher p-values for parity checks
+    all_fisher = {}
+    for pw_id, pw in matched.items():
+        cspv = pw.getCombinedSignificancePvalues() or {}
+        f = cspv.get("Fisher")
+        if isinstance(f, list):
+            f = f[0] if f else None
+        all_fisher[pw_id] = float(f) if isinstance(f, (int, float)) else None
+
     return {
         "sig_fisher": sig_fisher,
         "sig_stouffer": sig_stouffer,
@@ -151,6 +161,7 @@ def count_significant(job, threshold=0.05):
         "n_omics": n_omics,
         "threshold": threshold,
         "top_pathways": pvalue_dump[:20],
+        "all_fisher": all_fisher,
     }
 
 
