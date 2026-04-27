@@ -353,7 +353,11 @@ class MiRNA2GeneJob(Job):
                     #TODO: set omic name with chipseq, dnase,...?
                     omicValueAux.setOriginalName(mirnaID)
                     omicValueAux.setValues(values)
-                    omicValueAux.setRelevant(isRelevant)
+                    # OmicValue.relevant contract is list[bool] for multi-condition;
+                    # wrap legacy scalar booleans so downstream length checks (e.g.
+                    # PathwayAcquisitionJob.calculateTotalFeaturesByOmic max_conditions)
+                    # treat this row consistently with the multi-condition path.
+                    omicValueAux.setRelevant([isRelevant])
                     omicValueAux.setRelevantAssociation(isRelevantAssociation)
 
                     #STEP 5.4 CREATE A NEW TEMPORAL GENE INSTANCE

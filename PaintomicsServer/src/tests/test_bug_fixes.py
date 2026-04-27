@@ -13,6 +13,7 @@ import traceback
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from src.classes.Pathway import Pathway
+from src.classes.Feature import OmicValue
 
 _PASSED = []
 _FAILED = []
@@ -79,6 +80,36 @@ def test_bug_a_late_arriving_longer():
     assert sv == [[3, 3, -1.0], [1, 1, -1.0], [1, 0, -1.0]], f"got {sv}"
 
 
+# -------------------- Bug D: legacy setRelevant(scalar) callsites --------------------
+def test_bug_d_mirna_setrelevant_is_list():
+    """MiRNA2GeneJob now wraps the relevance bool in a list."""
+    import inspect
+    from src.classes.JobInstances import MiRNA2GeneJob as mod
+    src = inspect.getsource(mod)
+    assert "setRelevant([isRelevant])" in src, \
+        "MiRNA2GeneJob still calls setRelevant(scalar) — Bug D unfixed"
+
+
+def test_bug_d_bed_setrelevant_is_list():
+    """Bed2GeneJob now wraps the relevance bool in a list."""
+    import inspect
+    from src.classes.JobInstances import Bed2GeneJob as mod
+    src = inspect.getsource(mod)
+    assert "setRelevant([regionID in relevantRegions])" in src, \
+        "Bed2GeneJob still calls setRelevant(scalar) — Bug D unfixed"
+
+
+def test_bug_d_omicvalue_isrelevant_handles_list():
+    """OmicValue.isRelevant() must continue to work with both shapes."""
+    ov = OmicValue("g1")
+    ov.setRelevant([True])
+    assert ov.isRelevant() is True
+    ov.setRelevant([False, True])
+    assert ov.isRelevant() is True  # any() across conditions
+    assert ov.isRelevant(0) is False
+    assert ov.isRelevant(1) is True
+
+
 # -------------------- Run all --------------------
 def main():
     tests = [
@@ -86,6 +117,9 @@ def main():
         test_bug_a_mixed_lengths_no_inflation,
         test_bug_a_uniform_multicond,
         test_bug_a_late_arriving_longer,
+        test_bug_d_mirna_setrelevant_is_list,
+        test_bug_d_bed_setrelevant_is_list,
+        test_bug_d_omicvalue_isrelevant_handles_list,
     ]
     for t in tests:
         _check(t.__name__, t)

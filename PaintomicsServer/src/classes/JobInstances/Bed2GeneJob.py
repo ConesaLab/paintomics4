@@ -345,7 +345,8 @@ class Bed2GeneJob(Job):
                     omicValueAux = OmicValue(regionID)
                     #TODO: set omic name with chipseq, dnase,...?
                     omicValueAux.setOmicName(regionID)
-                    omicValueAux.setRelevant(regionID in relevantRegions)
+                    # OmicValue.relevant contract is list[bool] for multi-condition.
+                    omicValueAux.setRelevant([regionID in relevantRegions])
                     omicValueAux.setValues(values)
                     omicValueAux.setOriginalName(geneRegion)
 
