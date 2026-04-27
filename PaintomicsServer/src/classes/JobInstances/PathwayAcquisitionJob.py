@@ -838,24 +838,39 @@ class PathwayAcquisitionJob(Job):
                                                           {adjust_method: pvalues[pathway_id] for adjust_method, pvalues
                                                            in adjusted_pvalues[omic].items()})
 
-            # Update combined adjusted p-values per condition
+            # Update combined adjusted p-values per condition.
+            # Storage shape: pathway.adjustedCombinedSignificanceValues[method][adjMethod]
+            #   - scalar (single-condition jobs) — preserved for back-compat with old jobs.
+            #   - list[float] (multi-condition jobs) — one entry per condition, ordered by
+            #     condition index. Frontend (PA_Step3Views.js:3515-3520) accepts both shapes
+            #     and emits per-condition keys when a list is detected.
             for method, combined_pvalue in pathway.getCombinedSignificancePvalues().items():
                 if not isinstance(combined_pvalue, list):
                     combined_pvalue = [combined_pvalue]
                 nCond = len(combined_pvalue)
-                
-                # We need to restructure the adjusted values into OmicName -> {Method -> [adjP_c0, adjP_c1, ...]}
-                # but Pathway.py expects Method -> {AdjustMethod -> adjP} for single value
-                # Let's check Pathway.py setMethodAdjustedCombinedSignificanceValues
-                
-                # Temporary fix: store only first condition or global in the legacy adjustedCombinedSignificanceValues
-                # To fully support multi-condition adjusted p-values we'd need to update Pathway.py and frontend.
+
                 first_cond_key = method + "_c0"
-                if first_cond_key in adjusted_combined_pvalues:
-                    pathway.setMethodAdjustedCombinedSignificanceValues(method,
-                                                                        {adjust_method: pvals[pathway_id] for
-                                                                         adjust_method, pvals in
-                                                                         adjusted_combined_pvalues[first_cond_key].items()})
+                if first_cond_key not in adjusted_combined_pvalues:
+                    continue
+                adj_methods = adjusted_combined_pvalues[first_cond_key].keys()
+                if nCond == 1:
+                    # Single-condition: keep scalars (back-compat).
+                    pathway.setMethodAdjustedCombinedSignificanceValues(method, {
+                        adj: adjusted_combined_pvalues[first_cond_key][adj][pathway_id]
+                        for adj in adj_methods
+                    })
+                else:
+                    # Multi-condition: per-condition list, padded with 1.0 if a condition
+                    # had no entry in adjusted_combined_pvalues.
+                    pathway.setMethodAdjustedCombinedSignificanceValues(method, {
+                        adj: [
+                            adjusted_combined_pvalues.get(method + "_c" + str(c), {})
+                                                    .get(adj, {})
+                                                    .get(pathway_id, 1.0)
+                            for c in range(nCond)
+                        ]
+                        for adj in adj_methods
+                    })
 
         logging.info("SUMMARY: " + str(totalMatchedKeggPathways) + " Matched Pathways of " + str(
             totalKeggPathways) + "in KEGG; Total input Genes = " + str(

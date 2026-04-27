@@ -3515,7 +3515,19 @@ function PA_Step3PathwayTableView() {
 			adjustedCombinedSignificanceValues = pathwayModel.getAdjustedCombinedSignificanceValues();
 			for (var m in adjustedCombinedSignificanceValues) {
 				for (var k in adjustedCombinedSignificanceValues[m]) {
-					pathwayData["adjustedCombinedSignificancePvalue" + m + k] = adjustedCombinedSignificanceValues[m][k];
+					var adjVal = adjustedCombinedSignificanceValues[m][k];
+					// Multi-condition jobs send a list (one adjusted p-value per condition);
+					// expose each as adjustedCombinedSignificancePvalue<m><k>_c<n>, and also
+					// keep the legacy scalar key (= condition 0) for back-compat with existing
+					// table column definitions.
+					if (Array.isArray(adjVal)) {
+						pathwayData["adjustedCombinedSignificancePvalue" + m + k] = adjVal.length > 0 ? adjVal[0] : null;
+						for (var c = 0; c < adjVal.length; c++) {
+							pathwayData["adjustedCombinedSignificancePvalue" + m + k + "_c" + c] = adjVal[c];
+						}
+					} else {
+						pathwayData["adjustedCombinedSignificancePvalue" + m + k] = adjVal;
+					}
 				}
 			}
 			// ADD Reactome class enrichment
