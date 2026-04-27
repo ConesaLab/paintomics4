@@ -182,10 +182,15 @@ class Pathway(Model):
     def getCombinedSignificancePvalues(self):
         return self.combinedSignificancePvalues
 
+    # NOTE: the populated attribute is `adjustedCombinedSignificanceValues`
+    # (no "P"); the per-method setter at the bottom writes there. The bulk
+    # setAdjustedCombinedSignificancePvalues() (with "P") below remained for
+    # historical reasons; we route it to the same attribute so the getter
+    # works regardless of which setter was used.
     def setAdjustedCombinedSignificancePvalues(self, pValues):
-        self.adjustedCombinedSignificancePvalues = pValues
+        self.adjustedCombinedSignificanceValues = pValues
     def getAdjustedCombinedSignificancePvalues(self):
-        return self.adjustedCombinedSignificancePvalues
+        return self.adjustedCombinedSignificanceValues
     def setMethodAdjustedCombinedSignificanceValues(self, method, adjustedCombinedSignificanceValues):
         self.adjustedCombinedSignificanceValues[method] = adjustedCombinedSignificanceValues
 

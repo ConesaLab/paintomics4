@@ -182,6 +182,30 @@ def test_bug_c_mouse_3col_rf_with_header():
         os.unlink(path)
 
 
+def test_bug_c_two_condition_with_explicit_header_works():
+    """A genuine 2-condition file with a header row is detected correctly,
+    avoiding the legacy ambiguity. Without a header, 2-col files with both
+    cells looking ID-like fall back to legacy join (matching pre-refactor)."""
+    import tempfile
+    from src.classes.JobInstances.PathwayAcquisitionJob import PathwayAcquisitionJob
+    job = PathwayAcquisitionJob(jobID="test", userID="test", CLIENT_TMP_DIR="/tmp/")
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".tab", delete=False) as f:
+        f.write("WT\tKO\n")  # header (no IDs)
+        f.write("ENSMUSG00000000028\tENSMUSG00000000056\n")
+        f.write("\tENSMUSG00000000079\n")
+        path = f.name
+    try:
+        result = job.parseSignificativeFeaturesFile(path)
+        assert job.conditionNames == ["WT", "KO"], job.conditionNames
+        assert result["ensmusg00000000028"] == [True, False]
+        assert result["ensmusg00000000056"] == [False, True]
+        assert result["ensmusg00000000079"] == [False, True]
+        # Should NOT have any ::: joined keys
+        assert not any(":::" in k for k in result), list(result.keys())
+    finally:
+        os.unlink(path)
+
+
 def test_bug_c_legacy_2col_mirna_format_preserved():
     """The 2-column legacy [MappedID, OriginalID] format still detected.
 
@@ -234,6 +258,20 @@ def test_bug_b_setMethodAdjusted_back_compat_scalar():
     assert p.adjustedCombinedSignificanceValues["Fisher"]["BH"] == 0.04
 
 
+def test_bug_e_getter_routes_to_populated_attr():
+    """Bug E: the with-P getter must read the same attribute the per-method
+    setter writes, otherwise it raises AttributeError on fresh Pathways.
+    """
+    p = Pathway("p1")
+    # On a fresh Pathway, getter must work (return empty dict, not crash).
+    assert p.getAdjustedCombinedSignificancePvalues() == {}
+    p.setMethodAdjustedCombinedSignificanceValues("Fisher", {"BH": 0.04})
+    assert p.getAdjustedCombinedSignificancePvalues()["Fisher"]["BH"] == 0.04
+    # And the bulk setter routes to the same attribute.
+    p.setAdjustedCombinedSignificancePvalues({"Stouffer": {"BH": 0.02}})
+    assert p.getAdjustedCombinedSignificancePvalues()["Stouffer"]["BH"] == 0.02
+
+
 def test_bug_b_BSON_roundtrip_preserves_list():
     """toBSON+parseBSON preserves the list shape."""
     p = Pathway("p1")
@@ -284,9 +322,11 @@ def main():
         test_bug_c_header_detection,
         test_bug_c_mouse_3col_rf_parses,
         test_bug_c_mouse_3col_rf_with_header,
+        test_bug_c_two_condition_with_explicit_header_works,
         test_bug_c_legacy_2col_mirna_format_preserved,
         test_bug_b_setMethodAdjusted_accepts_list,
         test_bug_b_setMethodAdjusted_back_compat_scalar,
+        test_bug_e_getter_routes_to_populated_attr,
         test_bug_b_BSON_roundtrip_preserves_list,
         test_bug_b_pathwayacquisitionjob_pipeline_writes_list_for_multicond,
     ]

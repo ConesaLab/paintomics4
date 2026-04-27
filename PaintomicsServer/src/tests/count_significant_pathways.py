@@ -120,11 +120,7 @@ def count_significant(job, threshold=0.05):
         if cs_fisher is not None and cs_fisher != "-" and cs_fisher <= threshold:
             sig_combined_fisher += 1
 
-        # NOTE: Pathway.py has an attr-name inconsistency: init uses
-        # adjustedCombinedSignificanceValues (no "P"); getter
-        # getAdjustedCombinedSignificancePvalues reads a different,
-        # never-initialized attr. Use the actually-populated one directly.
-        adj = getattr(pw, "adjustedCombinedSignificanceValues", {}) or {}
+        adj = pw.getAdjustedCombinedSignificancePvalues() or {}
         bh_under_thresh = False
         for method_dict in adj.values():
             if isinstance(method_dict, dict):
