@@ -59,7 +59,7 @@ cat(paste("MORE: Loaded target data with", nrow(targetData), "features.\n"))
 cat(paste("MORE: First few target IDs:", paste(head(rownames(targetData), 5), collapse=", "), "\n"))
 
 # 2. Load Regulatory Omics and Associations
-omic_names  <- trimws(unlist(strsplit(opt$omic_names, ",")))
+omic_names  <- gsub(" ", "_", trimws(unlist(strsplit(opt$omic_names, ","))))
 data_paths  <- unlist(strsplit(opt$data_files, ","))
 assoc_paths <- unlist(strsplit(opt$assoc_files, ","))
 
@@ -67,7 +67,7 @@ regulatoryData <- list()
 associations   <- list()
 
 for (i in seq_along(omic_names)) {
-  name <- gsub(" ", "_", omic_names[i])  # Match Python's safe_name sanitisation
+  name <- omic_names[i]  # Already sanitised (spaces→underscores) when omic_names was parsed
 
   # Load Data
   reg_mat <- read_matrix(data_paths[i])

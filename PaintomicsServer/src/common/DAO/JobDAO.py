@@ -2,7 +2,6 @@ from src.common.DAO.DAO import DAO
 from src.classes.Job import Job
 
 from src.common.DAO.Bed2GeneJobDAO import Bed2GeneJobDAO
-from src.common.DAO.MOREJobDAO import MOREJobDAO
 from src.common.DAO.PathwayAcquisitionJobDAO import PathwayAcquisitionJobDAO
 
 class JobDAO(DAO):
@@ -52,6 +51,7 @@ class JobDAO(DAO):
         if jobType == "Bed2GeneJob":
             daoInstance = Bed2GeneJobDAO()
         elif jobType == "MOREJob":
+            from src.common.DAO.MOREJobDAO import MOREJobDAO
             daoInstance = MOREJobDAO()
         else:
             daoInstance = PathwayAcquisitionJobDAO()
