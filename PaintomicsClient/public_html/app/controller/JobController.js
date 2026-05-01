@@ -114,6 +114,7 @@ function JobController() {
 
 			var regionURL = SERVER_URL_DM_FROMBED2GENES;
 			var miRNAURL = SERVER_URL_DM_FROMMIRNA2GENES;
+			var moreURL = SERVER_URL_DM_FROMMORE2GENES;
 
 			if (jobView.isExampleMode() === true) {
 				regionURL = SERVER_URL_DM_EXAMPLE_FROMBED2GENES;
@@ -174,7 +175,14 @@ function JobController() {
 				var temporalForm = Ext.widget({xtype: "form", items: [itemsContainer, ...Object.values(extraElements)]});
 
 				// DEFINE THE URL BASED ON THE TYPE OF OMIC
-				var formURL = subview.cls.search("regionBasedOmic") != -1 ? regionURL : miRNAURL;
+				var formURL;
+				if (subview.cls.search("regionBasedOmic") != -1) {
+					formURL = regionURL;
+				} else if (subview.cls.search("moreBasedOmic") != -1) {
+					formURL = moreURL;
+				} else {
+					formURL = miRNAURL;
+				}
 
 				var _restoreElements = function() {
 					subview.add(temporalForm.queryById("itemsContainer"));
@@ -215,13 +223,14 @@ function JobController() {
 							jobView.pendingRequests--;
 
 							other.subview.setContent("itemsContainerAlt", {
-								mainFile: response.mainOutputFileName,
-								secondaryFile: response.secondOutputFileName,
-								thirdFile: response.thirdOutputFileName || null,
-								fourthFile: response.fourthOutputFileName || null,
+								mainFile: response.mainOutputFileName || response.mainOutputFileName_0,
+								secondaryFile: response.secondOutputFileName || response.secondOutputFileName_0,
+								thirdFile: response.thirdOutputFileName || response.thirdOutputFileName_0 || null,
+								fourthFile: response.fourthOutputFileName || response.fourthOutputFileName_0 || null,
 								title: itemsContainer.queryById("omicNameField").getValue(),
 								configVars: response.description,
-								enrichmentType: response.featureEnrichment
+								enrichmentType: response.featureEnrichment,
+								response: response
 							});
 
 							if (jobView.pendingRequests === 0) {

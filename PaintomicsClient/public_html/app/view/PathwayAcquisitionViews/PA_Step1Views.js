@@ -94,6 +94,8 @@ function PA_Step1JobView() {
 			newElem = new RegionBasedOmicSubmittingPanel(this.nFiles);
 		} else if (type === "otheromic") {
 			newElem = new OmicSubmittingPanel(this.nFiles);
+		} else if (type === "moreanalysis") {
+			newElem = new MORESubmittingPanel(this.nFiles);
 		} else if (type == "transcriptionfactor") {
 			newElem = new OmicSubmittingPanel(this.nFiles, {
 				type: "Transcription factor",
@@ -204,7 +206,7 @@ function PA_Step1JobView() {
 	this.submitFormHandler = function() {
 		var aux, omicBoxes;
 
-		omicBoxes = this.getComponent().queryById("submittingPanelsContainer").query("container[cls=omicbox regionBasedOmic],[cls=omicbox miRNABasedOmic]");
+		omicBoxes = this.getComponent().queryById("submittingPanelsContainer").query("container[cls=omicbox regionBasedOmic],[cls=omicbox miRNABasedOmic],[cls=omicbox moreBasedOmic]");
 		for (var i = omicBoxes.length; i--;) {
 			aux = omicBoxes[i].queryById("itemsContainer");
 			if (aux === null || aux.isDisabled()) {
@@ -226,7 +228,7 @@ function PA_Step1JobView() {
 	this.checkForm = function() {
 		var items, valid, emptyFields;
 
-		items = this.getComponent().query("container[cls=omicbox], container[cls=omicbox regionBasedOmic],[cls=omicbox miRNABasedOmic]");
+		items = this.getComponent().query("container[cls=omicbox], container[cls=omicbox regionBasedOmic],[cls=omicbox miRNABasedOmic],[cls=omicbox moreBasedOmic]");
 		valid = this.getComponent().queryById("speciesCombobox").isValid();
 		for (var i in items) {
 			valid = valid && items[i].isValid();
@@ -556,7 +558,12 @@ function PA_Step1JobView() {
 							'<div class="availableOmicsBox" title="proteomics"><h4><a href="javascript:void(0)"><i class="fa fa-plus-circle"></i></a> Proteomics</h4></div>' +
 							'<div class="availableOmicsBox" title="mirnabasedomic"><h4><a href="javascript:void(0)"><i class="fa fa-plus-circle"></i></a> Regulatory omic</h4></div>' +
 							'<div class="availableOmicsBox" title="bedbasedomic"><h4><a href="javascript:void(0)"><i class="fa fa-plus-circle"></i></a> Region based omic</h4></div>' +
-							'<div class="availableOmicsBox" title="otheromic"><h4><a href="javascript:void(0)"><i class="fa fa-plus-circle"></i></a> Other omics</h4></div>'
+							'<div class="availableOmicsBox" title="otheromic"><h4><a href="javascript:void(0)"><i class="fa fa-plus-circle"></i></a> Other omics</h4></div>' +
+							'<hr style="margin: 10px 0; border-color: #eee;">' +
+							'<div class="availableOmicsBox moreAnalysisBox" title="moreanalysis" style="background-color: #f8f9ff; border: 1px dashed #dcecf7; border-radius: 4px;">' +
+							'    <h4><a href="javascript:void(0)"><i class="fa fa-plus-circle" style="color: #4a90d9;"></i></a> <b>MORE Analysis</b> <i class="fa fa-star" style="color: #ffd700; font-size: 10px; vertical-align: top;"></i></h4>' +
+							'    <p style="font-size: 10px; color: #7f8c8d; margin: -5px 0 5px 30px;">Joint Multi-Omic Regulation</p>' +
+							'</div>'
 						}, {
 							xtype: "container",
 							id: "submittingPanelsContainer",
@@ -2398,6 +2405,514 @@ function MiRNAOmicSubmittingPanel(nElem, options) {
 return this;
 }
 MiRNAOmicSubmittingPanel.prototype = new DefaultSubmittingPanel;
+
+function MORESubmittingPanel(nElem, options) {
+	/*********************************************************************
+	* ATTRIBUTES
+	***********************************************************************/
+	options = (options || {});
+	this.title = "MORE Analysis";
+	this.namePrefix = "omic" + nElem;
+	this.omicName = "MORE Regulatory Omic";
+	this.mapTo = "Gene";
+	this.type = "moreanalysis";
+	this.class = "moreBasedOmic";
+	this.allowToogle = false;
+	this.removable = options.removable !== false;
+
+	/***********************************************************************
+	* OTHER FUNCTIONS
+	***********************************************************************/
+	this.setExampleMode = function(){
+		var component = this.getComponent();
+		component = component.queryById("itemsContainer");
+
+		var field = component.queryById("conditionsFileSelector");
+		field.setValue("example/Condition.txt");
+		field.setDisabled(true);
+
+		field = component.queryById("mainFileSelector");
+		field.setValue("example/TFExpression.txt");
+		field.setDisabled(true);
+
+		field = component.queryById("moreAssociationsFileSelector");
+		field.setValue("example/Associations_logFC.txt");
+		field.setDisabled(true);
+
+		field = component.queryById("omicNameField");
+		field.setValue("Transcription Factors");
+		field.setDisabled(true);
+	};
+
+	this.setContent = function(target, values) {
+		var component = this.getComponent().queryById(target);
+		if (values.mainFile !== undefined) {
+			component.queryById("mainFileFieldAlt").setValue(values.mainFile);
+		}
+		if (values.secondaryFile !== undefined) {
+			component.queryById("secondaryFileFieldAlt").setValue(values.secondaryFile);
+		}
+		if (values.thirdFile !== undefined) {
+			component.queryById("thirdFileFieldAlt").setValue(values.thirdFile);
+		}
+		if (values.title !== undefined) {
+			component.queryById("omicNameFieldAlt").setValue(values.title);
+		}
+		if (values.configVars !== undefined) {
+			component.queryById("configVarsFieldAlt").setValue(values.configVars);
+		}
+		if (values.enrichmentType !== undefined) {
+			component.queryById("enrichmentTypeFieldAlt").setValue(values.enrichmentType);
+		}
+		this.toogleContent();
+		return this;
+	};
+
+	/*********************************************************************
+	* COMPONENT DECLARATION
+	***********************************************************************/
+	this.initComponent = function() {
+		var me = this;
+		this.component = Ext.widget({
+			xtype: "container",
+			flex: 1,
+			type: me.type,
+			cls: "omicbox " + this.class,
+			layout: {
+				align: 'stretch',
+				type: 'vbox'
+			},
+			items: [{
+				xtype: "box",
+				flex: 1,
+				cls: "omicboxTitle",
+				html: '<h4><a class="deleteOmicBox" href="javascript:void(0)" style="margin: 0; float:right;  padding-right: 15px;">' +
+				(me.removable ? ' <i class="fa fa-trash"></i></a>' : "</a>") + this.title +
+				'</h4>'
+			},
+			{
+				xtype: "container",
+				itemId: "itemsContainer",
+				layout: {
+					align: 'stretch',
+					type: 'vbox'
+				},
+				padding: 10,
+				defaults: {
+					labelAlign: "right",
+					labelWidth: 150,
+					maxLength: 100,
+					maxWidth: 500
+				},
+				items: [{
+					xtype: 'textfield',
+					name: "name_prefix",
+					hidden: true,
+					itemId: "namePrefix",
+					value: this.namePrefix
+				},
+				{
+					xtype: 'box',
+					html: '<hr><h5>1. Experimental Design</h5>'
+				},
+				{
+					xtype: "myFilesSelectorButton",
+					fieldLabel: 'Conditions file',
+					namePrefix: 'conditions',
+					itemId: "conditionsFileSelector",
+					helpTip: "Upload the Experimental Design / Conditions file mapping samples to conditions."
+				},
+				{
+					xtype: 'box',
+					html: '<hr><h5>2. Target Omic (Gene Expression)</h5>'
+				},
+				{
+					xtype: "myFilesSelectorButton",
+					fieldLabel: "Gene expression dataset",
+					namePrefix: 'rnaseqaux',
+					extraButtons: [{
+						text: 'Use a file from other omic',
+						handler: function() {
+							var me = this;
+							var _callback = function(selectedItem) {
+								if (selectedItem !== null) {
+									me.up("myFilesSelectorButton").queryById("visiblePathField").setValue(selectedItem[0].get("omic") + ": " + selectedItem[0].get("file"));
+									me.up("myFilesSelectorButton").queryById("originField").setValue(selectedItem[0].get("name"));
+								}
+							};
+							Ext.widget("OmicInputSelectorDialog").showDialog(_callback);
+						}
+					}],
+					itemId: "rnaseqauxFileSelector",
+					helpTip: "Upload the target gene expression dataset used for regulatory analysis."
+				},
+				{
+					xtype: 'textfield',
+					fieldLabel: 'File Type',
+					name: 'rnaseqaux_file_type',
+					hidden: true,
+					itemId: "rnaseqauxFileTypeSelector",
+					value: "Gene Expression file"
+				},
+				{
+					xtype: 'box',
+					html: '<hr><h5>3. Regulatory Omic Data</h5>'
+				},
+				{
+					xtype: 'textfield',
+					fieldLabel: 'Omic Name',
+					name: 'omic_name_0',
+					itemId: "omicNameField",
+					emptyText: 'e.g. Transcription Factors',
+					allowBlank: false
+				},
+				{
+					xtype: "myFilesSelectorButton",
+					fieldLabel: 'Regulator Expression',
+					namePrefix: 'file_0',
+					itemId: "mainFileSelector",
+					helpTip: "Upload the quantification file for the regulators."
+				},
+				{
+					xtype: "myFilesSelectorButton",
+					fieldLabel: 'Associations file',
+					namePrefix: 'assoc_file_0',
+					itemId: "moreAssociationsFileSelector",
+					helpTip: "Upload the 2-column or 1-column associations file linking genes to these regulators."
+				},
+				{
+					xtype: "myFilesSelectorButton",
+					fieldLabel: 'Significant regulators (optional)',
+					namePrefix: 'relevant_file_0',
+					itemId: "moreRelevantFileSelector",
+					helpTip: "Upload a list of significantly expressed regulators to display red stars. If omitted, MORE will calculate significance automatically."
+				},
+				{
+					xtype: 'button',
+					text: '<i class="fa fa-plus-circle"></i> Add another Regulatory Omic',
+					margin: '5 0 15 155',
+					width: 250,
+					handler: function(btn) {
+						var container = btn.up('#itemsContainer');
+						if (!container.moreOmicCount) container.moreOmicCount = 0;
+						container.moreOmicCount++;
+						var i = container.moreOmicCount;
+						var insertIdx = container.items.indexOf(btn);
+						
+						container.insert(insertIdx, [
+							{
+								xtype: 'box',
+								html: '<hr><h5>Regulatory Omic Data ' + (i+1) + '</h5>'
+							},
+							{
+								xtype: 'textfield',
+								fieldLabel: 'Omic Name',
+								name: 'omic_name_' + i,
+								emptyText: 'e.g. MicroRNAs',
+								allowBlank: false
+							},
+							{
+								xtype: "myFilesSelectorButton",
+								fieldLabel: 'Regulator Expression',
+								namePrefix: 'file_' + i,
+								helpTip: "Upload the quantification file for the regulators."
+							},
+							{
+								xtype: "myFilesSelectorButton",
+								fieldLabel: 'Associations file',
+								namePrefix: 'assoc_file_' + i,
+								helpTip: "Upload the 2-column or 1-column associations file linking genes to these regulators."
+							},
+							{
+								xtype: "myFilesSelectorButton",
+								fieldLabel: 'Significant regulators (optional)',
+								namePrefix: 'relevant_file_' + i,
+								helpTip: "Upload a list of significantly expressed regulators to display red stars. If omitted, MORE will calculate significance automatically."
+							}
+						]);
+						setTimeout(function() { initializeTooltips(".helpTip"); }, 100);
+					}
+				},
+				{
+					xtype: 'box',
+					html: '<hr><h5>4. MORE Algorithm Parameters</h5>'
+				},
+				{
+					xtype: 'combo',
+					itemId: "moreMethodField",
+					name: 'more_method',
+					fieldLabel: 'Regression Method',
+					editable: false,
+					allowBlank: false,
+					value: "PLS1",
+					displayField: 'label',
+					valueField: 'value',
+					store: Ext.create('Ext.data.ArrayStore', {
+						fields: ['label', 'value'],
+						data: [
+							["PLS1 (Partial Least Squares)", "PLS1"],
+							["MLR (Multiple Linear Regression)", "MLR"]
+						]
+					}),
+					helpTip: "Select the regression model to use for finding significant regulators."
+				},
+				{
+					xtype: 'numberfield',
+					itemId: "moreAlphaField",
+					name: 'more_alpha',
+					fieldLabel: 'Alpha (Significance)',
+					value: 0.05,
+					minValue: 0.0001,
+					maxValue: 1,
+					step: 0.01,
+					allowDecimals: true,
+					allowBlank: false,
+					helpTip: "Significance threshold (alpha)."
+				},
+				{
+					xtype: 'numberfield',
+					itemId: "moreVipField",
+					name: 'more_vip',
+					fieldLabel: 'VIP threshold',
+					value: 0.8,
+					minValue: 0,
+					maxValue: 10,
+					step: 0.1,
+					allowDecimals: true,
+					allowBlank: false,
+					helpTip: "VIP threshold for PLS1 model."
+				},
+				{
+					xtype: 'numberfield',
+					itemId: "moreR2Field",
+					name: 'more_filter_r2',
+					fieldLabel: 'R2 Filter',
+					value: 0.0,
+					minValue: 0,
+					maxValue: 1,
+					step: 0.1,
+					allowDecimals: true,
+					allowBlank: false,
+					helpTip: "R2 filter threshold."
+				}]
+			},
+			{
+				xtype: "container",
+				itemId: "itemsContainerAlt",
+				hidden: true,
+				disabled: true,
+				layout: {
+					align: 'stretch',
+					type: 'vbox'
+				},
+				padding: 10,
+				defaults: {
+					labelAlign: "right",
+					labelWidth: 150,
+					maxLength: 100,
+					maxWidth: 500
+				},
+				items: [{
+					xtype: 'filefield',
+					name: this.namePrefix + '_file_0',
+					hidden: true
+				}, {
+					xtype: 'textfield',
+					name: this.namePrefix + '_origin_0',
+					value: 'mydata',
+					hidden: true
+				}, {
+					xtype: 'textfield',
+					name: this.namePrefix + '_file_type_0',
+					value: 'Gene Expression file',
+					hidden: true
+				}, {
+					xtype: 'filefield',
+					name: this.namePrefix + '_relevant_file_0',
+					hidden: true
+				}, {
+					xtype: 'textfield',
+					name: this.namePrefix + '_relevant_origin_0',
+					value: 'mydata',
+					hidden: true
+				}, {
+					xtype: 'textfield',
+					name: this.namePrefix + '_relevant_file_type_0',
+					value: 'Relevant gene list',
+					hidden: true
+				}, {
+					xtype: 'filefield',
+					name: this.namePrefix + '_associations_file_0',
+					hidden: true
+				}, {
+					xtype: 'textfield',
+					name: this.namePrefix + '_associations_origin_0',
+					value: 'mydata',
+					hidden: true
+				}, {
+					xtype: 'textfield',
+					name: this.namePrefix + '_associations_file_type_0',
+					value: 'Associations file',
+					hidden: true
+				}, {
+					xtype: 'textfield',
+					fieldLabel: 'Omic Name',
+					name: this.namePrefix + '_omic_name_0',
+					hidden: true,
+					itemId: "omicNameFieldAlt",
+					value: this.omicName
+				}, {
+					xtype: 'textfield',
+					fieldLabel: 'Output File',
+					name: this.namePrefix + '_filelocation_0',
+					hidden: true,
+					itemId: "mainFileFieldAlt"
+				}, {
+					xtype: 'textfield',
+					fieldLabel: 'Relevant Regulators File',
+					name: this.namePrefix + '_relevant_filelocation_0',
+					hidden: true,
+					itemId: "secondaryFileFieldAlt"
+				}, {
+					xtype: 'textfield',
+					fieldLabel: 'Relevant Associations File',
+					name: this.namePrefix + '_associations_filelocation_0',
+					hidden: true,
+					itemId: "thirdFileFieldAlt"
+				}, {
+					xtype: 'textfield',
+					fieldLabel: 'Config Vars',
+					name: this.namePrefix + '_config_args_0',
+					hidden: true,
+					itemId: "configVarsFieldAlt"
+				}, {
+					xtype: 'textfield',
+					fieldLabel: 'Enrichment type',
+					name: this.namePrefix + '_enrichment_0',
+					hidden: true,
+					itemId: "enrichmentTypeFieldAlt",
+					value: "associations"
+				}, {
+					xtype: 'textfield',
+					hidden: true,
+					fieldLabel: 'Map to',
+					name: this.namePrefix + '_match_type_0',
+					itemId: "matchTypeSelectorAlt",
+					value: 'gene'
+				}, {
+					xtype: 'box',
+					html: '<h5 style="color: #689F38;"><i class="fa fa-check"></i> Files processed correctly!</h5>'
+				}]
+			}],
+			setContent: function(target, values) {
+				var component = this.queryById(target);
+				if (values.mainFile !== undefined) {
+					component.queryById("mainFileFieldAlt").setValue(values.mainFile);
+				}
+				if (values.secondaryFile !== undefined) {
+					component.queryById("secondaryFileFieldAlt").setValue(values.secondaryFile);
+				}
+				if (values.thirdFile !== undefined) {
+					component.queryById("thirdFileFieldAlt").setValue(values.thirdFile);
+				}
+				if (values.title !== undefined) {
+					component.queryById("omicNameFieldAlt").setValue(values.title);
+				}
+				if (values.configVars !== undefined) {
+					component.queryById("configVarsFieldAlt").setValue(values.configVars);
+				}
+				if (values.enrichmentType !== undefined) {
+					component.queryById("enrichmentTypeFieldAlt").setValue(values.enrichmentType);
+				}
+
+				if (values.response && values.response.omicsCount > 1) {
+					for (var i = 1; i < values.response.omicsCount; i++) {
+						component.add([
+							{ xtype: 'filefield', name: this.namePrefix + '_file_' + i, hidden: true },
+							{ xtype: 'textfield', name: this.namePrefix + '_origin_' + i, value: 'mydata', hidden: true },
+							{ xtype: 'textfield', name: this.namePrefix + '_file_type_' + i, value: 'Gene Expression file', hidden: true },
+							{ xtype: 'filefield', name: this.namePrefix + '_relevant_file_' + i, hidden: true },
+							{ xtype: 'textfield', name: this.namePrefix + '_relevant_origin_' + i, value: 'mydata', hidden: true },
+							{ xtype: 'textfield', name: this.namePrefix + '_relevant_file_type_' + i, value: 'Relevant gene list', hidden: true },
+							{ xtype: 'filefield', name: this.namePrefix + '_associations_file_' + i, hidden: true },
+							{ xtype: 'textfield', name: this.namePrefix + '_associations_origin_' + i, value: 'mydata', hidden: true },
+							{ xtype: 'textfield', name: this.namePrefix + '_associations_file_type_' + i, value: 'Associations file', hidden: true },
+							{ xtype: 'textfield', name: this.namePrefix + '_omic_name_' + i, hidden: true, value: values.response['omicName_' + i] },
+							{ xtype: 'textfield', name: this.namePrefix + '_filelocation_' + i, hidden: true, value: values.response['mainOutputFileName_' + i] },
+							{ xtype: 'textfield', name: this.namePrefix + '_relevant_filelocation_' + i, hidden: true, value: values.response['secondOutputFileName_' + i] },
+							{ xtype: 'textfield', name: this.namePrefix + '_associations_filelocation_' + i, hidden: true, value: values.response['thirdOutputFileName_' + i] },
+							{ xtype: 'textfield', name: this.namePrefix + '_config_args_' + i, hidden: true, value: values.configVars },
+							{ xtype: 'textfield', name: this.namePrefix + '_enrichment_' + i, hidden: true, value: values.enrichmentType },
+							{ xtype: 'textfield', name: this.namePrefix + '_match_type_' + i, hidden: true, value: 'gene' }
+						]);
+					}
+				}
+
+				var isVisible = component.isVisible();
+				component.setVisible(!isVisible);
+				component.setDisabled(isVisible);
+		
+				var mainContainer = this.queryById("itemsContainer");
+				if (mainContainer) {
+					mainContainer.setVisible(isVisible);
+					mainContainer.setDisabled(!isVisible);
+				}
+				return this;
+			},
+			isValid: function() {
+				var valid = true;
+				var component = this.queryById("itemsContainerAlt");
+				if (!component || !component.isVisible()) {
+					component = this.queryById("itemsContainer");
+				}
+				if (!component) return false;
+				var items = component.query("field");
+				for (var i in items) {
+					valid = valid && (this.items[i] || items[i].validate());
+				}
+		
+				if (component.queryById("conditionsFileSelector") && component.queryById("conditionsFileSelector").getValue() === "") {
+					valid = false;
+					component.queryById("conditionsFileSelector").markInvalid("Please, provide the conditions file.");
+				}
+				if (component.queryById("mainFileSelector") && component.queryById("mainFileSelector").getValue() === "") {
+					valid = false;
+					component.queryById("mainFileSelector").markInvalid("Please, provide a regulatory data file.");
+				}
+				if (component.queryById("rnaseqauxFileSelector") && component.queryById("rnaseqauxFileSelector").getValue() === "") {
+					valid = false;
+					component.queryById("rnaseqauxFileSelector").markInvalid("Please, provide the gene expression dataset.");
+				}
+				
+				return valid;
+			},
+			isEmpty: function() {
+				var component = this.queryById("itemsContainerAlt");
+				if (component && component.isVisible()) {
+					return false; // Already processed and has results
+				}
+				component = this.queryById("itemsContainer");
+				if (component && component.queryById("mainFileSelector") && component.queryById("mainFileSelector").getValue() !== "") {
+					return false;
+				}
+				return true;
+			},
+			listeners: {
+				boxready: function() {
+					initializeTooltips(".helpTip");
+					$(this.getEl().dom).find("a.deleteOmicBox").click(function() {
+						me.removeOmicSubmittingPanel();
+					});
+				}
+			}
+		});
+
+		return this.component;
+	};
+
+	return this;
+}
+MORESubmittingPanel.prototype = new DefaultSubmittingPanel;
 
 
 window.cookieconsent.initialise({

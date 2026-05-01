@@ -349,9 +349,9 @@ class PathwayAcquisitionJob(Job):
                             MAX_NUMBER_FEATURES) + ")." + "\n"
                         break
 
-                    if len(line) != 2:
+                    if len(line) != 2 and len(line) != 1:
                         error += " - Errors detected while processing " + inputOmic.get("relevantAssociationsFile",
-                                                                                        "") + ": The file does not look like a relevant associations file (some lines do not have 2 columns)." + "\n"
+                                                                                        "") + ": The file does not look like a relevant associations file (expected 1 or 2 columns)." + "\n"
                         break
 
         # *************************************************************************

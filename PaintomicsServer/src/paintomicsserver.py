@@ -32,6 +32,7 @@ from src.servlets.DataManagementServlet import *
 from src.servlets.UserManagementServlet import *
 from src.servlets.Bed2GenesServlet import *
 from src.servlets.MiRNA2GenesServlet import *
+from src.servlets.MOREServlet import fromMOREtoGenes_STEP1
 from src.servlets.AdminServlet import *
 from src.servlets.AIInterpretServlet import *
 from src.common.KeggInformationManager import KeggInformationManager
@@ -434,6 +435,13 @@ class Application(object):
         @self.app.route(SERVER_SUBDOMAIN + '/dm_fromMiRNAtoGenes', methods=['OPTIONS', 'POST'])
         def fromMiRNAtoGenesHandler(exampleMode=False):
             result = fromMiRNAtoGenes_STEP1(request, Response(), self.queue, self.generateRandomID(), self.EXAMPLE_FILES_DIR, exampleMode).getResponse()
+            return result
+        #*******************************************************************************************
+        # fromMOREtoGenes HANDLERS
+        #*******************************************************************************************
+        @self.app.route(SERVER_SUBDOMAIN + '/dm_fromMOREtoGenes', methods=['OPTIONS', 'POST'])
+        def fromMOREtoGenesHandler(exampleMode=False):
+            result = fromMOREtoGenes_STEP1(request, Response(), self.queue, self.generateRandomID(), self.EXAMPLE_FILES_DIR, exampleMode).getResponse()
             return result
         #*******************************************************************************************
         ##* ALTERNATIVE PIPELINES SERVLETS HANDLERS - END

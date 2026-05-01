@@ -33,6 +33,7 @@ from src.conf.serverconf import JOB_CACHE_MAX_SIZE
 from src.common.DAO.PathwayAcquisitionJobDAO import PathwayAcquisitionJobDAO
 from src.common.DAO.Bed2GeneJobDAO import Bed2GeneJobDAO
 from src.common.DAO.MiRNA2GeneJobDAO import MiRNA2GeneJobDAO
+from src.common.DAO.MOREJobDAO import MOREJobDAO
 from src.common.DAO.FeatureDAO import FeatureDAO
 from src.common.DAO.FoundFeatureDAO import FoundFeatureDAO
 from src.common.DAO.PathwayDAO import PathwayDAO
@@ -65,6 +66,11 @@ class JobInformationManager(metaclass=Singleton):
                 #SAVE THE WHOLE JOB INSTANCE
                 logging.info("SAVING MiRNA2GeneJob "  + jobInstance.getJobID() + " TO DATABASE...")
                 daoInstance = MiRNA2GeneJobDAO()
+                daoInstance.insert(jobInstance)
+
+            elif type(jobInstance).__name__ == "MOREJob":
+                logging.info("SAVING MOREJob "  + jobInstance.getJobID() + " TO DATABASE...")
+                daoInstance = MOREJobDAO()
                 daoInstance.insert(jobInstance)
 
             elif type(jobInstance).__name__ == "PathwayAcquisitionJob":
