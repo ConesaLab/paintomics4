@@ -177,24 +177,19 @@ for (name in omic_names) {
   # Strip prefix added by MORE (e.g. "TF-" from "TF-ID")
   prefix <- paste0(name, "-")
   
-  # A. Relevant Associations File (Yellow Stars)
-  # In MORE, any row in the RPC result is significant
+  # A. Significant Associations File — used as the associationsFile by the PA pipeline.
+  # Must be 2-column TAB-separated (TARGET \t REGULATOR) for parseAssociationsFile to accept it.
   rel_assoc_file <- file.path(opt$output_dir, paste0("MORE_relevant_assoc_", name, "_", opt$date_seed, ".tab"))
-  
+
   if (nrow(omic_df) > 0) {
-    # Strip prefix for relevant file too and JOIN with :::
-    relevant_ids <- sapply(1:nrow(omic_df), function(idx) {
-      g <- as.character(omic_df[idx, "targetF"])
-      r_with_prefix <- as.character(omic_df[idx, "regulator"])
-      
-      if (startsWith(r_with_prefix, prefix)) {
-        r <- substring(r_with_prefix, nchar(prefix) + 1)
-      } else {
-        r <- r_with_prefix
-      }
-      paste0(g, ":::", r)
-    })
-    write.table(unique(relevant_ids), rel_assoc_file, sep="\t", row.names=FALSE, col.names=FALSE, quote=FALSE)
+    rel_assoc_df <- unique(data.frame(
+      target    = as.character(omic_df$targetF),
+      regulator = sapply(as.character(omic_df$regulator), function(r) {
+        if (startsWith(r, prefix)) substring(r, nchar(prefix) + 1) else r
+      }),
+      stringsAsFactors = FALSE
+    ))
+    write.table(rel_assoc_df, rel_assoc_file, sep="\t", row.names=FALSE, col.names=FALSE, quote=FALSE)
   } else {
     file.create(rel_assoc_file) # Empty file
   }
