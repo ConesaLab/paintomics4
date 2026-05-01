@@ -126,14 +126,14 @@ def fromMOREtoGenes_STEP2(jobInstance, userID, exampleMode, RESPONSE, formFields
         
         # 1. Prepare Command
         target_file = jobInstance.targetExpressionFile
-        # Ensure we use absolute paths for the R script
         input_dir = jobInstance.getInputDir()
         output_dir = jobInstance.getOutputDir()
-        
-        # Determine the absolute path to the R script
-        # ROOT_DIRECTORY from serverconf might be empty, so we derive it from this file's path
-        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        r_script = os.path.join(base_dir, "common", "bioscripts", "runMORE.R")
+
+        # Derive server root from CLIENT_TMP_DIR, which is always an absolute path in serverconf.
+        # os.path.abspath(__file__) is unreliable when the server is started from inside src/,
+        # causing __file__ to resolve as a relative path and producing a spurious src/src/ prefix.
+        server_root = os.path.dirname(CLIENT_TMP_DIR.rstrip('/'))
+        r_script = os.path.join(server_root, "src", "common", "bioscripts", "runMORE.R")
         
         cmd = [
             "Rscript", r_script,
@@ -156,32 +156,39 @@ def fromMOREtoGenes_STEP2(jobInstance, userID, exampleMode, RESPONSE, formFields
         subprocess.check_output(cmd, stderr=subprocess.STDOUT)
         
         # 3. Process Outputs and Prepare Summary
+        # Copy each omic's result files from the R output dir into inputData/ so that
+        # JobInformationManager.saveFiles (which prepends inputDir/ to filenames) can
+        # find them when the user proceeds to PA Step 1. Return only the basename.
         results_summary = {}
         for omic in jobInstance.regulatoryOmics:
             name = omic["name"].strip()
-            # Match R script sanitization (strip and underscores)
             safe_name = name.replace(" ", "_")
             rel_assoc_name = f"MORE_relevant_assoc_{safe_name}_{jobInstance.date}.tab"
             out_file_name   = f"MORE_output_{safe_name}_{jobInstance.date}.tab"
-            
+
             if omic.get("relevant"):
                 user_rel_file = os.path.join(input_dir, omic["relevant"])
                 rel_reg_name = os.path.basename(user_rel_file)
-                if os.path.exists(user_rel_file):
-                    shutil.copy2(user_rel_file, os.path.join(output_dir, rel_reg_name))
-                else:
-                    logging.warning(f"MORE_STEP2 - Could not find user relevant file: {user_rel_file}. Falling back to R output.")
+                if not os.path.exists(user_rel_file):
+                    logging.warning(f"MORE_STEP2 - User relevant file not found: {user_rel_file}. Using R output.")
                     rel_reg_name = f"MORE_relevant_reg_{safe_name}_{jobInstance.date}.tab"
             else:
                 rel_reg_name = f"MORE_relevant_reg_{safe_name}_{jobInstance.date}.tab"
-            
+
+            # Copy R outputs into inputData/ so PA Step 1 can reference them by basename
+            for fname in [out_file_name, rel_reg_name, rel_assoc_name]:
+                src_path = os.path.join(output_dir, fname)
+                if os.path.exists(src_path):
+                    shutil.copy2(src_path, os.path.join(input_dir, fname))
+
             results_summary[name] = {
                 "outputFile": out_file_name,
                 "relevantAssociationsFile": rel_assoc_name,
                 "relevantFeaturesFile": rel_reg_name
             }
 
-        # 4. Finalize Response for UI
+        # 4. Finalize Response for UI — return basenames so saveFiles/parseGeneBasedFiles
+        # can prepend inputDir/ to get the full path.
         response_data = {
             "success": True,
             "jobID": jobInstance.getJobID(),
@@ -189,11 +196,11 @@ def fromMOREtoGenes_STEP2(jobInstance, userID, exampleMode, RESPONSE, formFields
             "featureEnrichment": "associations",
             "omicsCount": len(results_summary)
         }
-        
+
         for index, name in enumerate(results_summary.keys()):
-            response_data[f"mainOutputFileName_{index}"] = os.path.join(output_dir, results_summary[name]["outputFile"])
-            response_data[f"secondOutputFileName_{index}"] = os.path.join(output_dir, results_summary[name]["relevantFeaturesFile"])
-            response_data[f"thirdOutputFileName_{index}"] = os.path.join(output_dir, results_summary[name]["relevantAssociationsFile"])
+            response_data[f"mainOutputFileName_{index}"] = results_summary[name]["outputFile"]
+            response_data[f"secondOutputFileName_{index}"] = results_summary[name]["relevantFeaturesFile"]
+            response_data[f"thirdOutputFileName_{index}"] = results_summary[name]["relevantAssociationsFile"]
             response_data[f"omicName_{index}"] = name
         
         RESPONSE.setContent(response_data)

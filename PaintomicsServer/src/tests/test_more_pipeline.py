@@ -112,6 +112,23 @@ def test_servlet_uses_job_information_manager():
 _check("MOREServlet stores job via JobInformationManager", test_servlet_uses_job_information_manager)
 
 
+def test_servlet_uses_client_tmp_dir_for_r_script():
+    import src.servlets.MOREServlet as ms
+    src_code = inspect.getsource(ms.fromMOREtoGenes_STEP2)
+    assert "CLIENT_TMP_DIR" in src_code, "R script path should be derived from CLIENT_TMP_DIR, not __file__"
+
+_check("MOREServlet derives R script path from CLIENT_TMP_DIR", test_servlet_uses_client_tmp_dir_for_r_script)
+
+
+def test_servlet_returns_basenames():
+    import src.servlets.MOREServlet as ms
+    src_code = inspect.getsource(ms.fromMOREtoGenes_STEP2)
+    assert 'results_summary[name]["outputFile"]' in src_code, "Response should use basename, not full output_dir path"
+    assert 'os.path.join(output_dir, results_summary' not in src_code, "Response must not return absolute output_dir paths — saveFiles/parseGeneBasedFiles will double-prefix them"
+
+_check("MOREServlet response uses basenames (not absolute paths)", test_servlet_returns_basenames)
+
+
 def test_morejobdao_has_remove():
     from src.common.DAO.MOREJobDAO import MOREJobDAO
     assert hasattr(MOREJobDAO, "remove"), "MOREJobDAO is missing remove() method"
