@@ -146,6 +146,23 @@ def test_r_script_name_sanitisation():
 _check("runMORE.R sanitises omic names to match Python safe_name", test_r_script_name_sanitisation)
 
 
+def test_frontend_origin_field_names():
+    """saveFiles builds origin keys as `{prefix}_relevant_{i}_origin`, not `{prefix}_relevant_origin_{i}`.
+    The MORESubmittingPanel hidden fields must follow that convention or saveFiles gets None and crashes."""
+    pa_step1 = os.path.join(REPO_ROOT, "PaintomicsClient", "public_html", "app",
+                            "view", "PathwayAcquisitionViews", "PA_Step1Views.js")
+    if not os.path.isfile(pa_step1):
+        raise AssertionError(f"PA_Step1Views.js not found at {pa_step1}")
+    with open(pa_step1) as f:
+        js = f.read()
+    assert "_relevant_origin_0'" not in js and "_relevant_origin_' + i" not in js, \
+        "Found _relevant_origin_0 — should be _relevant_0_origin (saveFiles key order)"
+    assert "_associations_origin_0'" not in js and "_associations_origin_' + i" not in js, \
+        "Found _associations_origin_0 — should be _associations_0_origin (saveFiles key order)"
+
+_check("PA_Step1Views origin field names match saveFiles key convention", test_frontend_origin_field_names)
+
+
 # ─────────────────────────────────────────────────────────────
 # TIER 2 — R script end-to-end
 # ─────────────────────────────────────────────────────────────

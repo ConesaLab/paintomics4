@@ -2732,7 +2732,7 @@ function MORESubmittingPanel(nElem, options) {
 					hidden: true
 				}, {
 					xtype: 'textfield',
-					name: this.namePrefix + '_relevant_origin_0',
+					name: this.namePrefix + '_relevant_0_origin',
 					value: 'mydata',
 					hidden: true
 				}, {
@@ -2746,7 +2746,7 @@ function MORESubmittingPanel(nElem, options) {
 					hidden: true
 				}, {
 					xtype: 'textfield',
-					name: this.namePrefix + '_associations_origin_0',
+					name: this.namePrefix + '_associations_0_origin',
 					value: 'mydata',
 					hidden: true
 				}, {
@@ -2832,10 +2832,10 @@ function MORESubmittingPanel(nElem, options) {
 							{ xtype: 'textfield', name: this.namePrefix + '_origin_' + i, value: 'mydata', hidden: true },
 							{ xtype: 'textfield', name: this.namePrefix + '_file_type_' + i, value: 'Gene Expression file', hidden: true },
 							{ xtype: 'filefield', name: this.namePrefix + '_relevant_file_' + i, hidden: true },
-							{ xtype: 'textfield', name: this.namePrefix + '_relevant_origin_' + i, value: 'mydata', hidden: true },
+							{ xtype: 'textfield', name: this.namePrefix + '_relevant_' + i + '_origin', value: 'mydata', hidden: true },
 							{ xtype: 'textfield', name: this.namePrefix + '_relevant_file_type_' + i, value: 'Relevant gene list', hidden: true },
 							{ xtype: 'filefield', name: this.namePrefix + '_associations_file_' + i, hidden: true },
-							{ xtype: 'textfield', name: this.namePrefix + '_associations_origin_' + i, value: 'mydata', hidden: true },
+							{ xtype: 'textfield', name: this.namePrefix + '_associations_' + i + '_origin', value: 'mydata', hidden: true },
 							{ xtype: 'textfield', name: this.namePrefix + '_associations_file_type_' + i, value: 'Associations file', hidden: true },
 							{ xtype: 'textfield', name: this.namePrefix + '_omic_name_' + i, hidden: true, value: values.response['omicName_' + i] },
 							{ xtype: 'textfield', name: this.namePrefix + '_filelocation_' + i, hidden: true, value: values.response['mainOutputFileName_' + i] },
