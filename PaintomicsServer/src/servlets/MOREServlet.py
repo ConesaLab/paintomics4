@@ -10,12 +10,17 @@ from src.classes.JobInstances.MOREJob import MOREJob
 from src.common.UserSessionManager import UserSessionManager
 from src.common.JobInformationManager import JobInformationManager
 from src.servlets.DataManagementServlet import saveFile
+from src.common.ServerErrorManager import handleException
 from src.conf.serverconf import CLIENT_TMP_DIR, ROOT_DIRECTORY
 
 def fromMOREtoGenes_STEP1(REQUEST, RESPONSE, QUEUE_INSTANCE, JOB_ID, EXAMPLE_FILES_DIR, exampleMode=False):
     """
     Step 1: Receive the MORE submission form, save files, and initialize the job.
     JOB_ID is a randomly generated ID for this pre-processing job.
+
+    When exampleMode == "example" the form is ignored and a hardcoded set of
+    Arabidopsis (ath) example files shipped in EXAMPLE_FILES_DIR is used instead.
+    The example branch mirrors MiRNA2GenesServlet.fromMiRNAtoGenes_STEP1.
     """
     jobInstance = None
     userID = None
@@ -32,70 +37,90 @@ def fromMOREtoGenes_STEP1(REQUEST, RESPONSE, QUEUE_INSTANCE, JOB_ID, EXAMPLE_FIL
         logging.info(f"MORE_STEP1 - NEW MORE JOB {JOB_ID}")
 
         formFields = REQUEST.form
-        uploadedFiles = REQUEST.files
 
-        # 3. Save Gene Expression Dataset
-        rnaseq_file = uploadedFiles.get("rnaseqaux_file")
-        if rnaseq_file:
-            fields = {"omicType": "Gene Expression", "dataType": "Target Data"}
-            jobInstance.targetExpressionFile = saveFile(userID, rnaseq_file.filename, fields, rnaseq_file, jobInstance.getInputDir())
+        if exampleMode == "example":
+            # Hardcoded example: pre-shipped Arabidopsis dataset.
+            # The frontend setExampleMode() displays these names in the form, but the
+            # server is the source of truth — it always uses the absolute paths below.
+            logging.info("MORE_STEP1 - EXAMPLE MODE SELECTED")
+            jobInstance.targetExpressionFile = EXAMPLE_FILES_DIR + "more_target_expression.txt"
+            jobInstance.conditionsFile       = EXAMPLE_FILES_DIR + "more_condition.txt"
+            jobInstance.addRegulatoryOmic(
+                name             = "Transcription Factors",
+                dataFile         = EXAMPLE_FILES_DIR + "more_tf_expression.txt",
+                dataType         = "Regulatory Data",
+                associationsFile = EXAMPLE_FILES_DIR + "more_associations.txt",
+                relevantFile     = EXAMPLE_FILES_DIR + "more_relevant_tf.txt",
+            )
+            jobInstance.organism = "ath"
+        elif not exampleMode:
+            uploadedFiles = REQUEST.files
+
+            # 3. Save Gene Expression Dataset
+            rnaseq_file = uploadedFiles.get("rnaseqaux_file")
+            if rnaseq_file:
+                fields = {"omicType": "Gene Expression", "dataType": "Target Data"}
+                jobInstance.targetExpressionFile = saveFile(userID, rnaseq_file.filename, fields, rnaseq_file, jobInstance.getInputDir())
+            else:
+                jobInstance.targetExpressionFile = formFields.get("rnaseqaux_filelocation", "").replace("[MyData]/", "")
+                if not jobInstance.targetExpressionFile: jobInstance.targetExpressionFile = None
+
+            # 4. Save Experimental Design (Conditions)
+            cond_file = uploadedFiles.get("conditions_file")
+            if cond_file:
+                fields = {"omicType": "Experimental Design", "dataType": "Conditions file"}
+                jobInstance.conditionsFile = saveFile(userID, cond_file.filename, fields, cond_file, jobInstance.getInputDir())
+            else:
+                # Check if it was already uploaded (fast-track/re-run)
+                jobInstance.conditionsFile = formFields.get("conditions_filelocation", "").replace("[MyData]/", "")
+                if not jobInstance.conditionsFile: jobInstance.conditionsFile = None
+
+            # 5. Save Regulatory Omics
+            # We expect a dynamic list of omics from the UI
+            # For simplicity in this rewrite, we look for 'omic_name_X' fields
+            i = 0
+            while f"omic_name_{i}" in formFields:
+                name = formFields.get(f"omic_name_{i}").strip()
+                data_file = uploadedFiles.get(f"file_{i}_file")
+                assoc_file = uploadedFiles.get(f"assoc_file_{i}_file")
+                rel_file = uploadedFiles.get(f"relevant_file_{i}_file")
+
+                data_path = None
+                assoc_path = None
+                rel_path = None
+
+                if data_file:
+                    fields = {"omicType": name, "dataType": "Regulatory Data"}
+                    data_path = saveFile(userID, data_file.filename, fields, data_file, jobInstance.getInputDir())
+                else:
+                    data_path = formFields.get(f"file_{i}_filelocation", "").replace("[MyData]/", "")
+                    if not data_path: data_path = None
+
+                if assoc_file:
+                    fields = {"omicType": name, "dataType": "Associations"}
+                    assoc_path = saveFile(userID, assoc_file.filename, fields, assoc_file, jobInstance.getInputDir())
+                else:
+                    assoc_path = formFields.get(f"assoc_file_{i}_filelocation", "").replace("[MyData]/", "")
+                    if not assoc_path: assoc_path = None
+
+                if rel_file:
+                    fields = {"omicType": name, "dataType": "Relevant Features"}
+                    rel_path = saveFile(userID, rel_file.filename, fields, rel_file, jobInstance.getInputDir())
+                else:
+                    rel_path = formFields.get(f"relevant_file_{i}_filelocation", "").replace("[MyData]/", "")
+                    if not rel_path: rel_path = None
+
+                jobInstance.addRegulatoryOmic(name, data_path, formFields.get(f"omic_type_{i}"), assoc_path, rel_path)
+                i += 1
         else:
-            jobInstance.targetExpressionFile = formFields.get("rnaseqaux_filelocation", "").replace("[MyData]/", "")
-            if not jobInstance.targetExpressionFile: jobInstance.targetExpressionFile = None
-
-        # 4. Save Experimental Design (Conditions)
-        cond_file = uploadedFiles.get("conditions_file")
-        if cond_file:
-            fields = {"omicType": "Experimental Design", "dataType": "Conditions file"}
-            jobInstance.conditionsFile = saveFile(userID, cond_file.filename, fields, cond_file, jobInstance.getInputDir())
-        else:
-            # Check if it was already uploaded (fast-track/re-run)
-            jobInstance.conditionsFile = formFields.get("conditions_filelocation", "").replace("[MyData]/", "")
-            if not jobInstance.conditionsFile: jobInstance.conditionsFile = None
-
-        # 5. Save Regulatory Omics
-        # We expect a dynamic list of omics from the UI
-        # For simplicity in this rewrite, we look for 'omic_name_X' fields
-        i = 0
-        while f"omic_name_{i}" in formFields:
-            name = formFields.get(f"omic_name_{i}").strip()
-            data_file = uploadedFiles.get(f"file_{i}_file")
-            assoc_file = uploadedFiles.get(f"assoc_file_{i}_file")
-            rel_file = uploadedFiles.get(f"relevant_file_{i}_file")
-            
-            data_path = None
-            assoc_path = None
-            rel_path = None
-            
-            if data_file:
-                fields = {"omicType": name, "dataType": "Regulatory Data"}
-                data_path = saveFile(userID, data_file.filename, fields, data_file, jobInstance.getInputDir())
-            else:
-                data_path = formFields.get(f"file_{i}_filelocation", "").replace("[MyData]/", "")
-                if not data_path: data_path = None
-            
-            if assoc_file:
-                fields = {"omicType": name, "dataType": "Associations"}
-                assoc_path = saveFile(userID, assoc_file.filename, fields, assoc_file, jobInstance.getInputDir())
-            else:
-                assoc_path = formFields.get(f"assoc_file_{i}_filelocation", "").replace("[MyData]/", "")
-                if not assoc_path: assoc_path = None
-
-            if rel_file:
-                fields = {"omicType": name, "dataType": "Relevant Features"}
-                rel_path = saveFile(userID, rel_file.filename, fields, rel_file, jobInstance.getInputDir())
-            else:
-                rel_path = formFields.get(f"relevant_file_{i}_filelocation", "").replace("[MyData]/", "")
-                if not rel_path: rel_path = None
-            
-            jobInstance.addRegulatoryOmic(name, data_path, formFields.get(f"omic_type_{i}"), assoc_path, rel_path)
-            i += 1
+            raise NotImplementedError(f"Unknown exampleMode: {exampleMode}")
 
         # 6. Model Parameters
         jobInstance.method = formFields.get("more_method", "PLS1")
         jobInstance.alpha = float(formFields.get("more_alpha", 0.05))
         jobInstance.vip = float(formFields.get("more_vip", 0.8))
         jobInstance.filter_r2 = float(formFields.get("more_filter_r2", 0.0))
+        jobInstance.enrichment = formFields.get("more_enrichment", "genes")
 
         # 7. Queue job
         QUEUE_INSTANCE.enqueue(
@@ -163,46 +188,96 @@ def fromMOREtoGenes_STEP2(jobInstance, userID, exampleMode, RESPONSE, formFields
         for omic in jobInstance.regulatoryOmics:
             name = omic["name"].strip()
             safe_name = name.replace(" ", "_")
-            rel_assoc_name = f"MORE_relevant_assoc_{safe_name}_{jobInstance.date}.tab"
+            rel_assoc_name  = f"MORE_relevant_assoc_{safe_name}_{jobInstance.date}.tab"
+            rel_pairs_name  = f"MORE_relevant_pairs_{safe_name}_{jobInstance.date}.tab"
             out_file_name   = f"MORE_output_{safe_name}_{jobInstance.date}.tab"
 
-            if omic.get("relevant"):
-                user_rel_file = os.path.join(input_dir, omic["relevant"])
-                rel_reg_name = os.path.basename(user_rel_file)
-                if not os.path.exists(user_rel_file):
-                    logging.warning(f"MORE_STEP2 - User relevant file not found: {user_rel_file}. Using R output.")
-                    rel_reg_name = f"MORE_relevant_reg_{safe_name}_{jobInstance.date}.tab"
+            # Build the relevant features file (red-star source) in GENE:::REGULATOR format.
+            # Contract mirrors miRNA2Genes (MiRNA2GeneJob.fromMiRNA2Genes lines 277/321/432-435):
+            # red stars are USER-driven, not algorithm-driven. If the user does NOT supply a
+            # "Significant regulators" file, this file MUST be empty so that no red stars are
+            # painted and pathway enrichment for this omic correctly produces p-value = 1.
+            # parseGeneBasedFiles looks up relevance with the full GENE:::REGULATOR key from
+            # the values file, so the file must contain those pairs (not bare regulator IDs).
+            rel_reg_name = f"MORE_relevant_reg_{safe_name}_{jobInstance.date}.tab"
+            rel_reg_path = os.path.join(output_dir, rel_reg_name)
+
+            user_rel_file = os.path.join(input_dir, omic["relevant"]) if omic.get("relevant") else None
+            if user_rel_file and os.path.exists(user_rel_file):
+                # User supplied a list of relevant regulator IDs (e.g. TFs with FDR < 0.05).
+                # Expand those IDs to all GENE:::REGULATOR pairs present in the values file
+                # (regardless of MORE significance) so that any gene regulated by a
+                # user-flagged TF gets a red star.
+                relevant_tfs = set()
+                with open(user_rel_file) as f:
+                    for line in f:
+                        v = line.strip()
+                        if v:
+                            relevant_tfs.add(v.lower())
+
+                values_src = os.path.join(output_dir, out_file_name)
+                pairs = set()
+                if os.path.exists(values_src) and relevant_tfs:
+                    with open(values_src) as f:
+                        for line in f:
+                            if line.startswith('#') or not line.strip():
+                                continue
+                            first_col = line.split('\t')[0]
+                            if ':::' in first_col:
+                                tf = first_col.split(':::', 1)[1].lower()
+                                if tf in relevant_tfs:
+                                    pairs.add(first_col)
+
+                with open(rel_reg_path, 'w') as f:
+                    for pair in pairs:
+                        f.write(pair + '\n')
+                logging.info(f"MORE_STEP2 - Built {len(pairs)} GENE:::REGULATOR relevant pairs from user file for omic '{name}'")
             else:
-                rel_reg_name = f"MORE_relevant_reg_{safe_name}_{jobInstance.date}.tab"
+                # No user file → no red stars for this omic (matches miRNA2Genes behavior).
+                open(rel_reg_path, 'w').close()
+                logging.info(f"MORE_STEP2 - No user relevant-regulator file for omic '{name}' → empty {rel_reg_name} (no red stars)")
 
             # Copy R outputs into inputData/ so PA Step 1 can reference them by basename
-            for fname in [out_file_name, rel_reg_name, rel_assoc_name]:
+            for fname in [out_file_name, rel_reg_name, rel_assoc_name, rel_pairs_name]:
                 src_path = os.path.join(output_dir, fname)
                 if os.path.exists(src_path):
                     shutil.copy2(src_path, os.path.join(input_dir, fname))
 
             results_summary[name] = {
                 "outputFile": out_file_name,
-                "relevantAssociationsFile": rel_assoc_name,
-                "relevantFeaturesFile": rel_reg_name
+                "associationsFile": rel_assoc_name,
+                "relevantFeaturesFile": rel_reg_name,
+                "relevantAssociationsFile": rel_pairs_name
             }
 
-        # 4. Finalize Response for UI — return basenames so saveFiles/parseGeneBasedFiles
+        # 4. Bundle outputs for the "Download files" link (matches miRNA2Genes contract).
+        # Zip all four files per omic from the R output dir into a single archive in outputDir/
+        # so the existing dm_downloadFile?fileType=job_result handler can serve it.
+        compressed_basename = f"more_results_{jobInstance.date}"
+        compressed_path = os.path.join(jobInstance.getOutputDir(), compressed_basename)
+        # shutil.make_archive auto-appends ".zip"; pass output_dir as root so the zip
+        # contains the bare filenames rather than a nested dir structure.
+        shutil.make_archive(compressed_path, "zip", output_dir)
+        compressed_filename = compressed_basename + ".zip"
+
+        # 5. Finalize Response for UI — return basenames so saveFiles/parseGeneBasedFiles
         # can prepend inputDir/ to get the full path.
         response_data = {
             "success": True,
             "jobID": jobInstance.getJobID(),
             "description": f"MORE Analysis ({jobInstance.method})",
-            "featureEnrichment": "associations",
-            "omicsCount": len(results_summary)
+            "featureEnrichment": jobInstance.enrichment,
+            "omicsCount": len(results_summary),
+            "compressedFileName": compressed_filename
         }
 
         for index, name in enumerate(results_summary.keys()):
-            response_data[f"mainOutputFileName_{index}"] = results_summary[name]["outputFile"]
+            response_data[f"mainOutputFileName_{index}"]   = results_summary[name]["outputFile"]
             response_data[f"secondOutputFileName_{index}"] = results_summary[name]["relevantFeaturesFile"]
-            response_data[f"thirdOutputFileName_{index}"] = results_summary[name]["relevantAssociationsFile"]
+            response_data[f"thirdOutputFileName_{index}"]  = results_summary[name]["associationsFile"]
+            response_data[f"fourthOutputFileName_{index}"] = results_summary[name]["relevantAssociationsFile"]
             response_data[f"omicName_{index}"] = name
-        
+
         RESPONSE.setContent(response_data)
 
         # 5. Save MORE Job via the shared manager (makes it listable and removable)
@@ -210,9 +285,10 @@ def fromMOREtoGenes_STEP2(jobInstance, userID, exampleMode, RESPONSE, formFields
 
     except subprocess.CalledProcessError as e:
         logging.error(f"MORE_STEP2 - R Script failed: {e.output}")
+        jobInstance.cleanDirectories(remove_output=True)
         RESPONSE.setContent({"success": False, "message": "The MORE R analysis failed. Please check your input data formatting."})
-    except Exception:
-        logging.exception("MORE_STEP2 - CRITICAL ERROR")
-        RESPONSE.setContent({"success": False, "message": "An internal error occurred during result processing. Please check the server logs."})
+    except Exception as ex:
+        jobInstance.cleanDirectories(remove_output=True)
+        handleException(RESPONSE, ex, __file__, "fromMOREtoGenes_STEP2")
     finally:
         return RESPONSE

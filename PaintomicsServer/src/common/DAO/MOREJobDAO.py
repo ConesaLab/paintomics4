@@ -40,5 +40,8 @@ class MOREJobDAO(JobDAO):
 
     def remove(self, id, otherParams=None):
         collection = self.dbManager.getCollection(self.collectionName)
-        collection.remove({"jobID": id})
+        if otherParams and "userID" in otherParams:
+            collection.remove({"jobID": id, "userID": otherParams.get("userID")})
+        else:
+            collection.remove({"jobID": id})
         return True

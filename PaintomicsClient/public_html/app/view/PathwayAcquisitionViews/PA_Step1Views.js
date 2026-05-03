@@ -2427,16 +2427,27 @@ function MORESubmittingPanel(nElem, options) {
 		var component = this.getComponent();
 		component = component.queryById("itemsContainer");
 
+		// Display labels are cosmetic — the backend (dm_fromMOREtoGenes/example) ignores
+		// the form and reads the canonical files from EXAMPLE_FILES_DIR. Keep these names
+		// in sync with PaintomicsServer/src/examplefiles/more_*.txt.
 		var field = component.queryById("conditionsFileSelector");
-		field.setValue("example/Condition.txt");
+		field.setValue("more_condition.txt");
+		field.setDisabled(true);
+
+		field = component.queryById("rnaseqauxFileSelector");
+		field.setValue("more_target_expression.txt");
 		field.setDisabled(true);
 
 		field = component.queryById("mainFileSelector");
-		field.setValue("example/TFExpression.txt");
+		field.setValue("more_tf_expression.txt");
 		field.setDisabled(true);
 
 		field = component.queryById("moreAssociationsFileSelector");
-		field.setValue("example/Associations_logFC.txt");
+		field.setValue("more_associations.txt");
+		field.setDisabled(true);
+
+		field = component.queryById("moreRelevantFileSelector");
+		field.setValue("more_relevant_tf.txt");
 		field.setDisabled(true);
 
 		field = component.queryById("omicNameField");
@@ -2454,6 +2465,9 @@ function MORESubmittingPanel(nElem, options) {
 		}
 		if (values.thirdFile !== undefined) {
 			component.queryById("thirdFileFieldAlt").setValue(values.thirdFile);
+		}
+		if (values.fourthFile !== undefined && values.fourthFile !== null) {
+			component.queryById("fourthFileFieldAlt").setValue(values.fourthFile);
 		}
 		if (values.title !== undefined) {
 			component.queryById("omicNameFieldAlt").setValue(values.title);
@@ -2755,6 +2769,20 @@ function MORESubmittingPanel(nElem, options) {
 					value: 'Associations file',
 					hidden: true
 				}, {
+					xtype: 'filefield',
+					name: this.namePrefix + '_relevant_associations_file_0',
+					hidden: true
+				}, {
+					xtype: 'textfield',
+					name: this.namePrefix + '_relevant_associations_0_origin',
+					value: 'mydata',
+					hidden: true
+				}, {
+					xtype: 'textfield',
+					name: this.namePrefix + '_relevant_associations_file_type_0',
+					value: 'Relevant associations file',
+					hidden: true
+				}, {
 					xtype: 'textfield',
 					fieldLabel: 'Omic Name',
 					name: this.namePrefix + '_omic_name_0',
@@ -2775,10 +2803,16 @@ function MORESubmittingPanel(nElem, options) {
 					itemId: "secondaryFileFieldAlt"
 				}, {
 					xtype: 'textfield',
-					fieldLabel: 'Relevant Associations File',
+					fieldLabel: 'Associations File',
 					name: this.namePrefix + '_associations_filelocation_0',
 					hidden: true,
 					itemId: "thirdFileFieldAlt"
+				}, {
+					xtype: 'textfield',
+					fieldLabel: 'Relevant Associations File',
+					name: this.namePrefix + '_relevant_associations_filelocation_0',
+					hidden: true,
+					itemId: "fourthFileFieldAlt"
 				}, {
 					xtype: 'textfield',
 					fieldLabel: 'Config Vars',
@@ -2791,7 +2825,7 @@ function MORESubmittingPanel(nElem, options) {
 					name: this.namePrefix + '_enrichment_0',
 					hidden: true,
 					itemId: "enrichmentTypeFieldAlt",
-					value: "associations"
+					value: "genes"
 				}, {
 					xtype: 'textfield',
 					hidden: true,
@@ -2815,6 +2849,9 @@ function MORESubmittingPanel(nElem, options) {
 				if (values.thirdFile !== undefined) {
 					component.queryById("thirdFileFieldAlt").setValue(values.thirdFile);
 				}
+				if (values.fourthFile !== undefined && values.fourthFile !== null) {
+					component.queryById("fourthFileFieldAlt").setValue(values.fourthFile);
+				}
 				if (values.title !== undefined) {
 					component.queryById("omicNameFieldAlt").setValue(values.title);
 				}
@@ -2837,10 +2874,14 @@ function MORESubmittingPanel(nElem, options) {
 							{ xtype: 'filefield', name: this.namePrefix + '_associations_file_' + i, hidden: true },
 							{ xtype: 'textfield', name: this.namePrefix + '_associations_' + i + '_origin', value: 'mydata', hidden: true },
 							{ xtype: 'textfield', name: this.namePrefix + '_associations_file_type_' + i, value: 'Associations file', hidden: true },
+							{ xtype: 'filefield', name: this.namePrefix + '_relevant_associations_file_' + i, hidden: true },
+							{ xtype: 'textfield', name: this.namePrefix + '_relevant_associations_' + i + '_origin', value: 'mydata', hidden: true },
+							{ xtype: 'textfield', name: this.namePrefix + '_relevant_associations_file_type_' + i, value: 'Relevant associations file', hidden: true },
 							{ xtype: 'textfield', name: this.namePrefix + '_omic_name_' + i, hidden: true, value: values.response['omicName_' + i] },
 							{ xtype: 'textfield', name: this.namePrefix + '_filelocation_' + i, hidden: true, value: values.response['mainOutputFileName_' + i] },
 							{ xtype: 'textfield', name: this.namePrefix + '_relevant_filelocation_' + i, hidden: true, value: values.response['secondOutputFileName_' + i] },
 							{ xtype: 'textfield', name: this.namePrefix + '_associations_filelocation_' + i, hidden: true, value: values.response['thirdOutputFileName_' + i] },
+							{ xtype: 'textfield', name: this.namePrefix + '_relevant_associations_filelocation_' + i, hidden: true, value: values.response['fourthOutputFileName_' + i] },
 							{ xtype: 'textfield', name: this.namePrefix + '_config_args_' + i, hidden: true, value: values.configVars },
 							{ xtype: 'textfield', name: this.namePrefix + '_enrichment_' + i, hidden: true, value: values.enrichmentType },
 							{ xtype: 'textfield', name: this.namePrefix + '_match_type_' + i, hidden: true, value: 'gene' }

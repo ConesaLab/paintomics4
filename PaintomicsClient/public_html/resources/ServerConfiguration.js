@@ -50,6 +50,7 @@ SERVER_URL_DM_FROMMIRNA2GENES = SERVER_URL + "dm_fromMiRNAtoGenes";
 SERVER_URL_DM_EXAMPLE_FROMBED2GENES = SERVER_URL + "dm_fromBEDtoGenes/example";
 SERVER_URL_DM_EXAMPLE_FROMMIRNA2GENES = SERVER_URL + "dm_fromMiRNAtoGenes/example";
 SERVER_URL_DM_FROMMORE2GENES = SERVER_URL + "dm_fromMOREtoGenes";
+SERVER_URL_DM_EXAMPLE_FROMMORE2GENES = SERVER_URL + "dm_fromMOREtoGenes/example";
 SERVER_URL_DM_SEND_REPORT = SERVER_URL + "dm_sendReport";
 /*********************************************************************
  * KEGG DATA URLS                          ***************************

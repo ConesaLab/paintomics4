@@ -171,79 +171,79 @@ if (opt$filter_r2 > 0) {
 rpc_df <- as.data.frame(result_rpc)
 
 for (name in omic_names) {
-  # Significant pairs for this omic
+  # Significance-filtered pairs (used ONLY for the yellow-star file).
+  # The values file and the associations file both need every input pair, not just these.
   omic_df <- rpc_df[rpc_df$omic == name, , drop=FALSE]
-  
-  # Strip prefix added by MORE (e.g. "TF-" from "TF-ID")
-  prefix <- paste0(name, "-")
-  
-  # A. Significant Associations File — used as the associationsFile by the PA pipeline.
-  # Must be 2-column TAB-separated (TARGET \t REGULATOR) for parseAssociationsFile to accept it.
-  rel_assoc_file <- file.path(opt$output_dir, paste0("MORE_relevant_assoc_", name, "_", opt$date_seed, ".tab"))
 
-  if (nrow(omic_df) > 0) {
-    rel_assoc_df <- unique(data.frame(
+  prefix   <- paste0(name, "-")
+  reg_data <- regulatoryData[[name]]
+  assoc_df <- associations[[name]]   # already normalised to columns: target, regulator (or NULL)
+
+  # Build the full pair set: every (target, regulator) from the input association file
+  # whose regulator is present in the regulator expression matrix. This matches the
+  # miRNA2Genes contract — values + associations are an unfiltered snapshot of the
+  # input data; significance only drives the yellow-star overlay.
+  if (!is.null(assoc_df) && nrow(assoc_df) > 0) {
+    keep_rows <- assoc_df$regulator %in% rownames(reg_data)
+    full_pairs <- unique(assoc_df[keep_rows, c("target", "regulator"), drop=FALSE])
+  } else {
+    # No association file → fall back to MORE's significant pairs (best we can do).
+    full_pairs <- unique(data.frame(
       target    = as.character(omic_df$targetF),
       regulator = sapply(as.character(omic_df$regulator), function(r) {
         if (startsWith(r, prefix)) substring(r, nchar(prefix) + 1) else r
       }),
       stringsAsFactors = FALSE
     ))
-    write.table(rel_assoc_df, rel_assoc_file, sep="\t", row.names=FALSE, col.names=FALSE, quote=FALSE)
-  } else {
-    file.create(rel_assoc_file) # Empty file
   }
 
-  # A2. Relevant Regulators File (Red Stars)
-  # List of unique regulators that appear in any significant model
-  rel_reg_file <- file.path(opt$output_dir, paste0("MORE_relevant_reg_", name, "_", opt$date_seed, ".tab"))
-  if (nrow(omic_df) > 0) {
-    unique_regs_with_prefix <- unique(as.character(omic_df$regulator))
-    unique_regs <- sapply(unique_regs_with_prefix, function(r_with_prefix) {
-      if (startsWith(r_with_prefix, prefix)) {
-        substring(r_with_prefix, nchar(prefix) + 1)
-      } else {
-        r_with_prefix
-      }
-    })
-    write.table(unique(unique_regs), rel_reg_file, sep="\t", row.names=FALSE, col.names=FALSE, quote=FALSE)
+  # A. Associations file (full set, 2-column TARGET\tREGULATOR for parseAssociationsFile).
+  rel_assoc_file <- file.path(opt$output_dir, paste0("MORE_relevant_assoc_", name, "_", opt$date_seed, ".tab"))
+  if (nrow(full_pairs) > 0) {
+    write.table(full_pairs, rel_assoc_file, sep="\t", row.names=FALSE, col.names=FALSE, quote=FALSE)
   } else {
-    file.create(rel_reg_file) # Empty file
+    file.create(rel_assoc_file)
   }
-  
-  # B. Values File (Evidence Plots)
+
+  # B. Relevant Pairs File — yellow-star source. Always significance-filtered (omic_df).
+  # NOTE: We deliberately do NOT write MORE_relevant_reg_*.tab here. That file is the
+  # red-star source and follows the miRNA2Genes contract: it only has content when the
+  # user uploads a "Significant regulators" file. The MOREServlet creates it (empty or
+  # expanded) after this script returns.
+  rel_pairs_file <- file.path(opt$output_dir, paste0("MORE_relevant_pairs_", name, "_", opt$date_seed, ".tab"))
+  if (nrow(omic_df) > 0) {
+    pair_ids <- unique(paste0(
+      as.character(omic_df$targetF),
+      ":::",
+      sapply(as.character(omic_df$regulator), function(r) {
+        if (startsWith(r, prefix)) substring(r, nchar(prefix) + 1) else r
+      })
+    ))
+    write.table(pair_ids, rel_pairs_file, sep="\t", row.names=FALSE, col.names=FALSE, quote=FALSE)
+  } else {
+    file.create(rel_pairs_file)
+  }
+
+  # C. Values file — one row per full pair, with the regulator's expression values.
+  # Same set as the associations file so PA Step 1 sees every input pair (independent
+  # of MORE's significance verdict). Header matches miRNA2Genes' "# Gene name\t..." style.
   val_file <- file.path(opt$output_dir, paste0("MORE_output_", name, "_", opt$date_seed, ".tab"))
-  out_lines <- c()
-  
-  reg_data <- regulatoryData[[name]]
-  unique_pairs <- unique(omic_df[, c("targetF", "regulator")])
-  
-  # Strip prefix added by MORE (e.g. "TF-" from "TF-ID")
-  prefix <- paste0(name, "-")
-  
-  if (nrow(unique_pairs) > 0) {
-    for (j in 1:nrow(unique_pairs)) {
-      g <- as.character(unique_pairs[j, "targetF"])
-      r_with_prefix <- as.character(unique_pairs[j, "regulator"])
-      
-      # Strip prefix if it exists
-      if (startsWith(r_with_prefix, prefix)) {
-        r <- substring(r_with_prefix, nchar(prefix) + 1)
-      } else {
-        r <- r_with_prefix
-      }
-      
-      if (r %in% rownames(reg_data)) {
-        vals <- paste(as.character(reg_data[r, ]), collapse="\t")
-        out_lines <- c(out_lines, paste0(g, ":::", r, "\t", vals))
-      }
+  header <- paste(colnames(reg_data), collapse="\t")
+  out_lines <- character(0)
+
+  if (nrow(full_pairs) > 0) {
+    for (j in seq_len(nrow(full_pairs))) {
+      g <- as.character(full_pairs[j, "target"])
+      r <- as.character(full_pairs[j, "regulator"])
+      vals <- paste(as.character(reg_data[r, ]), collapse="\t")
+      out_lines <- c(out_lines, paste0(g, ":::", r, "\t", vals))
     }
   }
-  
-  header <- paste(colnames(reg_data), collapse="\t")
-  writeLines(c(paste0("# ID\t", header), out_lines), val_file)
-  
-  cat(paste("MORE: Generated results for", name, "\n"))
+
+  writeLines(c(paste0("# Gene name\t", header), out_lines), val_file)
+
+  cat(paste("MORE:", name, "— wrote", length(out_lines), "pairs to values file (",
+            nrow(omic_df), "significant for yellow stars)\n"))
 }
 
 cat("MORE: Analysis complete.\n")

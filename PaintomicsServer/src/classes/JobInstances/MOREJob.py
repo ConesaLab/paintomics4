@@ -26,7 +26,11 @@ class MOREJob(Job):
         self.alpha = 0.05
         self.vip = 0.8
         self.filter_r2 = 0.0
-        self.enrichment = "associations"
+        # Pathway enrichment counting unit. Defaults to "genes" because the values file
+        # MORE writes is keyed by GENE:::REGULATOR — the gene side is what gets matched
+        # against KEGG/Reactome pathways. The user may override per-omic via the
+        # `more_enrichment` form field (see MOREServlet.fromMOREtoGenes_STEP1).
+        self.enrichment = "genes"
         
         # Input file set by the servlet before Step 2 runs
         self.targetExpressionFile = None

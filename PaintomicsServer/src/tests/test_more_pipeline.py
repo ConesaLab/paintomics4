@@ -134,8 +134,109 @@ def test_morejobdao_has_remove():
     assert hasattr(MOREJobDAO, "remove"), "MOREJobDAO is missing remove() method"
     src_code = inspect.getsource(MOREJobDAO.remove)
     assert "jobID" in src_code, "remove() does not filter by jobID"
+    assert "userID" in src_code, "remove() does not filter by userID — cross-user deletion is possible"
 
-_check("MOREJobDAO has remove() method", test_morejobdao_has_remove)
+_check("MOREJobDAO has remove() method with userID filter", test_morejobdao_has_remove)
+
+
+def test_servlet_uses_handle_exception():
+    """STEP2 must use the shared handleException + cleanDirectories pattern, not a bare logging.exception,
+    so the user gets a structured error response and stale output dirs are cleaned up."""
+    import src.servlets.MOREServlet as ms
+    src_code = inspect.getsource(ms.fromMOREtoGenes_STEP2)
+    assert "handleException" in src_code, "STEP2 does not use shared handleException — error responses are inconsistent"
+    assert "cleanDirectories" in src_code, "STEP2 does not call cleanDirectories on error — stale output left behind"
+
+_check("MOREServlet STEP2 uses handleException + cleanDirectories", test_servlet_uses_handle_exception)
+
+
+def test_servlet_returns_fourth_output_file():
+    """yellow stars require a fourthOutputFileName_{i} entry pointing at MORE_relevant_pairs_*.tab."""
+    import src.servlets.MOREServlet as ms
+    src_code = inspect.getsource(ms.fromMOREtoGenes_STEP2)
+    assert "fourthOutputFileName_" in src_code, "Response is missing fourthOutputFileName_{i} — yellow stars won't appear"
+    assert "rel_pairs_name" in src_code or "MORE_relevant_pairs_" in src_code, \
+        "Servlet does not surface the relevant_pairs file as fourth output"
+
+_check("MOREServlet returns fourthOutputFileName_{i} for yellow stars", test_servlet_returns_fourth_output_file)
+
+
+def test_servlet_expands_user_tf_to_pairs():
+    """When the user supplies a relevant TF list, STEP2 must expand bare TF IDs into
+    GENE:::TF pairs by scanning the values file — otherwise parseGeneBasedFiles never
+    matches and red stars stay invisible."""
+    import src.servlets.MOREServlet as ms
+    src_code = inspect.getsource(ms.fromMOREtoGenes_STEP2)
+    assert ":::" in src_code, "STEP2 does not build GENE:::REGULATOR pairs from user file"
+    assert "split(':::', 1)" in src_code, "STEP2 does not split values file rows on ::: to extract TF column"
+
+_check("MOREServlet expands user-relevant TFs into GENE:::TF pairs", test_servlet_expands_user_tf_to_pairs)
+
+
+def test_servlet_writes_empty_relevant_reg_without_user_file():
+    """Contract mirrors miRNA2Genes: red stars are user-driven, not algorithm-driven.
+    If the user uploads no "Significant regulators" file for an omic, MORE_relevant_reg_*.tab
+    must be created EMPTY — so parseGeneBasedFiles produces no red stars and pathway
+    enrichment for that omic correctly yields p-value = 1."""
+    import src.servlets.MOREServlet as ms
+    src_code = inspect.getsource(ms.fromMOREtoGenes_STEP2)
+    # The else branch (no user file) must explicitly create an empty rel_reg file.
+    assert "open(rel_reg_path, 'w').close()" in src_code, \
+        "STEP2 does not blank rel_reg_path when no user relevant file is supplied — spurious red stars"
+    # And it must do so in an else branch, not only when R failed to produce one.
+    assert "else:" in src_code.split("user_rel_file", 1)[1], \
+        "STEP2 missing else-branch for the no-user-file case — would fall through and leak R-produced pairs"
+
+
+_check("MOREServlet writes empty relevant_reg when user provides no file", test_servlet_writes_empty_relevant_reg_without_user_file)
+
+
+def test_servlet_returns_compressed_file_name():
+    """Match miRNA2Genes contract: response must include compressedFileName so the
+    JobController 'Download files' link works."""
+    import src.servlets.MOREServlet as ms
+    src_code = inspect.getsource(ms.fromMOREtoGenes_STEP2)
+    assert "compressedFileName" in src_code, "Response missing compressedFileName — Download files link will be broken"
+    assert "make_archive" in src_code, "STEP2 does not zip the outputs into a downloadable bundle"
+
+_check("MOREServlet returns compressedFileName for download bundle", test_servlet_returns_compressed_file_name)
+
+
+def test_r_script_uses_full_assoc_for_values_file():
+    """Match miRNA2Genes contract: the values file (and associations file) must be built
+    from the FULL input association set, filtered only by regulator presence in the
+    expression data — NOT from MORE's significance-filtered omic_df. Otherwise non-
+    significant TFs vanish from the values file and PA Step 1 cannot map them."""
+    with open(R_SCRIPT) as f:
+        r_src = f.read()
+    # The values file loop must iterate over full_pairs (built from associations[[name]]),
+    # not over omic_df / unique_pairs (which are significance-filtered).
+    assert "full_pairs" in r_src, "R script does not build a full_pairs set from the input association"
+    assert "associations[[name]]" in r_src, "R script does not pull associations[[name]] for the full pair set"
+    # Sanity: omic_df should still drive the relevant_pairs (yellow stars) file.
+    assert "rel_pairs_file" in r_src and "omic_df" in r_src, \
+        "R script must keep omic_df as the source for MORE_relevant_pairs (yellow stars)"
+
+_check("runMORE.R writes values + assoc from full input pairs (not significance-filtered)", test_r_script_uses_full_assoc_for_values_file)
+
+
+def test_frontend_fourth_file_field():
+    """itemsContainerAlt must include the fourthFileFieldAlt hidden field (relevant_associations_filelocation)
+    so PA Step 1 receives the fourth output and can apply yellow stars."""
+    pa_step1 = os.path.join(REPO_ROOT, "PaintomicsClient", "public_html", "app",
+                            "view", "PathwayAcquisitionViews", "PA_Step1Views.js")
+    if not os.path.isfile(pa_step1):
+        raise AssertionError(f"PA_Step1Views.js not found at {pa_step1}")
+    with open(pa_step1) as f:
+        js = f.read()
+    assert 'itemId: "fourthFileFieldAlt"' in js, \
+        "MORESubmittingPanel itemsContainerAlt missing fourthFileFieldAlt — yellow stars cannot be wired up"
+    assert "_relevant_associations_filelocation_0" in js, \
+        "Hidden field _relevant_associations_filelocation_0 not declared in MORESubmittingPanel"
+    assert "values.fourthFile" in js, \
+        "MORESubmittingPanel.setContent does not handle values.fourthFile from the response"
+
+_check("PA_Step1Views wires up fourthFile (yellow stars)", test_frontend_fourth_file_field)
 
 
 def test_r_script_name_sanitisation():
@@ -219,21 +320,55 @@ else:
             except subprocess.CalledProcessError as e:
                 raise AssertionError(f"Rscript exited non-zero:\n{e.output.decode(errors='replace')}")
 
-            # Verify the three expected output files are written with underscored names
+            # R writes 3 files per omic: values, associations, and relevant_pairs (yellow stars).
+            # MORE_relevant_reg_*.tab (red stars) is intentionally NOT written by R — it's the
+            # MOREServlet's responsibility, populated only when the user uploads a relevant file.
             expected = [
                 "MORE_output_Transcription_Factors_test.tab",
                 "MORE_relevant_assoc_Transcription_Factors_test.tab",
-                "MORE_relevant_reg_Transcription_Factors_test.tab",
+                "MORE_relevant_pairs_Transcription_Factors_test.tab",
             ]
             for fname in expected:
                 fpath = os.path.join(out_dir, fname)
                 assert os.path.isfile(fpath), f"Expected output file not found: {fname}"
+
+            unwritten = "MORE_relevant_reg_Transcription_Factors_test.tab"
+            assert not os.path.isfile(os.path.join(out_dir, unwritten)), \
+                f"R script must not write {unwritten} — it would silently fabricate red stars from MORE's algorithmic output"
 
             # Values file must have at least a header line
             val_file = os.path.join(out_dir, "MORE_output_Transcription_Factors_test.tab")
             with open(val_file) as f:
                 lines = [l for l in f if l.strip()]
             assert len(lines) >= 1, "Output values file is completely empty"
+
+            # If MORE found any significant pair, the relevant_pairs file must contain GENE:::REGULATOR rows
+            # (and therefore be in 1-column GENE:::REGULATOR format, not bare regulator IDs).
+            rel_pairs_file = os.path.join(out_dir, "MORE_relevant_pairs_Transcription_Factors_test.tab")
+            with open(rel_pairs_file) as f:
+                rel_pairs_lines = [l.strip() for l in f if l.strip()]
+
+            # The values file must contain at least as many data rows as the relevant_pairs file.
+            # The yellow-star file is significance-filtered; the values file is the full input set
+            # and must therefore be a superset (often strictly larger).
+            val_data_lines = [l for l in lines if not l.startswith('#')]
+            assert len(val_data_lines) >= len(rel_pairs_lines), (
+                f"Values file ({len(val_data_lines)} pairs) must be a superset of relevant_pairs "
+                f"({len(rel_pairs_lines)} significant pairs) — significance-filtered values file "
+                f"would drop non-significant TFs and break mapping parity with miRNA2Genes."
+            )
+
+            # The associations file must mirror the values file count (same input pair set).
+            assoc_file = os.path.join(out_dir, "MORE_relevant_assoc_Transcription_Factors_test.tab")
+            with open(assoc_file) as f:
+                assoc_data_lines = [l.strip() for l in f if l.strip()]
+            assert len(assoc_data_lines) == len(val_data_lines), (
+                f"Associations file ({len(assoc_data_lines)}) and values file ({len(val_data_lines)}) "
+                f"must contain the same number of pairs — both are built from the full input association."
+            )
+            for line in rel_pairs_lines:
+                assert ":::" in line, \
+                    f"MORE_relevant_pairs file has rows missing ':::' separator (got {line!r}) — yellow-star lookup will fail"
 
     _check("runMORE.R completes and writes all output files", test_r_script_runs)
 

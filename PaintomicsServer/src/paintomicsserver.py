@@ -439,6 +439,7 @@ class Application(object):
         #*******************************************************************************************
         # fromMOREtoGenes HANDLERS
         #*******************************************************************************************
+        @self.app.route(SERVER_SUBDOMAIN + '/dm_fromMOREtoGenes/<path:exampleMode>', methods=['OPTIONS', 'POST'])
         @self.app.route(SERVER_SUBDOMAIN + '/dm_fromMOREtoGenes', methods=['OPTIONS', 'POST'])
         def fromMOREtoGenesHandler(exampleMode=False):
             result = fromMOREtoGenes_STEP1(request, Response(), self.queue, self.generateRandomID(), self.EXAMPLE_FILES_DIR, exampleMode).getResponse()
