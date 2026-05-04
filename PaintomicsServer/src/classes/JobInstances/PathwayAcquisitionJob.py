@@ -380,8 +380,12 @@ class PathwayAcquisitionJob(Job):
                         # rf_conditions is the number of columns in the RF file (Conditions only)
                         # So we expect nConditions == rf_conditions + 1
                         if rf_conditions > 1 and rf_conditions != (nConditions - 1):
-                             # Special case for backward compatibility (2 columns [ID, Name])
-                             if not (rf_conditions == 2 and nConditions == 2):
+                             # A 2-col file is the legacy [TARGET, REGULATOR] pair-list that
+                             # MiRNA2GenesServlet emits for the Regulatory Omics workflow,
+                             # regardless of how many conditions the values file declares.
+                             # parseSignificativeFeaturesFile (Job.py:740) detects this shape
+                             # via its isLegacyTwoCol branch and produces GENE:::REGULATOR keys.
+                             if rf_conditions != 2:
                                  error += " - Errors detected while processing " + inputOmic.get("relevantFeaturesFile", "") + \
                                           ": The number of columns (" + str(rf_conditions) + ") does not match the number of conditions in the data file (" + str(nConditions - 1) + ").\n"
 

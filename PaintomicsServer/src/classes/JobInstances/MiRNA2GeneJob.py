@@ -282,7 +282,7 @@ class MiRNA2GeneJob(Job):
 
         if relevantReferenceFile:
             logging.info("PROCESSING RELEVANT ASSOCIATIONS FILE...")
-            relevantAssociations = self.parseSignificativeFeaturesFile(relevantReferenceFile, isBedFormat=False)
+            relevantAssociations = self.parseSignificativeFeaturesFile(relevantReferenceFile, isBedFormat=False, forceLegacyTwoCol=True)
             logging.info("PROCESSING RELEVANT ASSOCIATIONS FILE...DONE")
 
         #STEP 4. PARSE GENERATED TEMPORAL FILE, GET THE MIRNAS, TARGET GENES AND QUANTIFICATION

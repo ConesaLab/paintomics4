@@ -345,7 +345,7 @@ class Job(Model):
         logging.info("PARSING ASSOCIATIONS FILE (" + omicName + ")... DONE. " + str(len(associationFeatures.keys())) + " ASSOCIATIONS PROCESSED.")
 
         logging.info("PARSING RELEVANT ASSOCIATIONS FILE (" + omicName + ")...")
-        relevantAssociationFeatures = self.parseSignificativeFeaturesFile(relevantAssociationsFileName)
+        relevantAssociationFeatures = self.parseSignificativeFeaturesFile(relevantAssociationsFileName, forceLegacyTwoCol=True)
         logging.info("PARSING RELEVANT ASSOCIATIONS FILE (" + omicName + ")... DONE. " + str(len(relevantAssociationFeatures)) + " RELEVANT ASSOCIATIONS PROCESSED.")
 
         #*************************************************************************
@@ -693,11 +693,34 @@ class Job(Model):
     # @param {type}
     # @returns
     ##*************************************************************************************************************
-    def parseSignificativeFeaturesFile(self, fileName, isBedFormat=False):
+    def parseSignificativeFeaturesFile(self, fileName, isBedFormat=False, forceLegacyTwoCol=False):
         # TODO: HEADER
+        # forceLegacyTwoCol is set by callers that parse association-shaped slots
+        # (relevant-associations file, miRNA reference file) where the contract is
+        # always [TARGET, REGULATOR] and the multi-condition heuristic does not
+        # apply. Skips header rows and emits joined `target:::regulator` keys.
         relevantFeatures = {}
         if fileName and os_path.isfile(fileName):
             detected_delimiter = Job.detect_delimiter(fileName)
+            if forceLegacyTwoCol and not isBedFormat:
+                with open(fileName, 'r', encoding='utf-8-sig', newline='') as inputDataFile:
+                    for nLine, line in enumerate(csv_reader(inputDataFile, delimiter=detected_delimiter), start=1):
+                        if not line:
+                            continue
+                        # Skip the header (whether `#`-prefixed or a plain
+                        # `Target\tRegulator`-style descriptor) using the same
+                        # ID-shape heuristic as the multi-condition path.
+                        if nLine == 1 and not Job._row_looks_like_data(line):
+                            continue
+                        if len(line) >= 2 and line[0].strip() and line[1].strip():
+                            featureID = ":::".join([line[0], line[1]]).lower()
+                        elif line[0].strip():
+                            featureID = line[0].lower()
+                        else:
+                            continue
+                        relevantFeatures[featureID] = [True]
+                logging.info("PARSING RELEVANT FEATURES FILE (" + str(fileName) + ", legacy-2col)... THE FILE CONTAINS " + str(len(relevantFeatures)) + " RELEVANT FEATURES")
+                return relevantFeatures
             with open(fileName, 'r', encoding='utf-8-sig', newline='') as inputDataFile:
                 nLine = 0
                 nConditions = 1
@@ -708,6 +731,15 @@ class Job(Model):
                 # and silently drop the miRNA suffix, breaking relevance lookups
                 # against values files keyed by the joined ID.
                 isLegacyTwoCol = False
+                # legacyEligible governs whether the 2-col legacy [TARGET, REGULATOR]
+                # detection is allowed to fire on the next data row.
+                #   * True at start  → fires on nLine==1 if both cells look like IDs.
+                #   * Stays True across a `#`-prefixed comment header (e.g. miRNA's
+                #     `# Gene name\tmiRNA ID`), so legacy detection runs on the actual
+                #     first data row.
+                #   * Forced False after a plain condition-name header (e.g. `WT\tKO`),
+                #     which signals a genuine 2-condition relevance file.
+                legacyEligible = True
                 for line in csv_reader(inputDataFile, delimiter=detected_delimiter):
                     nLine += 1
                     if isBedFormat == True:
@@ -729,6 +761,14 @@ class Job(Model):
                                 # all three checks.
                                 is_data = Job._row_looks_like_data(line)
                                 if not is_data:
+                                    # `#`-prefixed headers describe schema (e.g.
+                                    # `# Gene name\tmiRNA ID`) rather than condition
+                                    # names, so legacy 2-col detection is still allowed
+                                    # on the next row. Plain headers (`WT\tKO`) commit
+                                    # the file to the multi-condition interpretation.
+                                    is_comment_header = str(line[0]).strip().startswith('#')
+                                    if not is_comment_header:
+                                        legacyEligible = False
                                     self.conditionNames = [name.strip().lstrip('#') for name in line]
                                     continue
                                 else:
@@ -739,17 +779,20 @@ class Job(Model):
                         # Legacy: each row pairs [MappedID, OriginalID] (e.g. mirna ENSMUSG +
                         # mmu-miR-...); both cells look like biological IDs (digits or special
                         # tokens). Multi-cond: each cell is a feature ID belonging to its column's
-                        # condition. We treat the file as legacy iff BOTH cells of row 1 look like
-                        # biological IDs — that's the structural difference from a true 2-condition
-                        # file where the same ID typically appears in only one column at a time.
+                        # condition. We treat the file as legacy iff BOTH cells of the first
+                        # eligible data row look like biological IDs — that's the structural
+                        # difference from a true 2-condition file where the same ID typically
+                        # appears in only one column at a time.
                         if nConditions == 2 and not isBedFormat:
-                             if nLine == 1 and Job._row_looks_like_data([line[0]]) and Job._row_looks_like_data([line[1]]):
+                             if legacyEligible and Job._row_looks_like_data([line[0]]) and Job._row_looks_like_data([line[1]]):
                                  # Both columns biological IDs → legacy format, not 2 conditions.
                                  featureID = ":::".join([line[0], line[1]]).lower()
                                  relevantFeatures[featureID] = [True]
                                  nConditions = 1 # Revert to single condition
                                  isLegacyTwoCol = True
+                                 legacyEligible = False
                                  continue
+                        legacyEligible = False
 
                         # Multi-condition logic: Each column (from index 0 to n) contains IDs
                         if nConditions > 1 and not isBedFormat:
