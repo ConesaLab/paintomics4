@@ -25,7 +25,7 @@ from os import path as os_path, system as os_system, makedirs as os_makedirs
 from csv import reader as csv_reader
 from zipfile import ZipFile as zipFile
 
-from subprocess import check_call, call, STDOUT, CalledProcessError
+from subprocess import check_call, check_output, call, STDOUT, CalledProcessError
 
 from src.classes.FoundFeature import FoundFeature
 from src.common.Util import unifyAndSort
@@ -1358,16 +1358,24 @@ class PathwayAcquisitionJob(Job):
 
                     logging.info("dbname is " + str(dbname))
 
-                    check_call([
-                        ROOT_DIRECTORY + "common/bioscripts/generateMetaGenes.R",
-                        '--specie="' + self.getOrganism() + '"',
-                        '--input_file="' + inputFile + '"',
-                        '--output_prefix="' + inputOmic.get("omicName") + '"',
-                        '--data_dir="' + self.getTemporalDir() + '"',
-                        '--kegg_dir="' + KEGG_DATA_DIR + '"',
-                        '--sources_dir="' + ROOT_DIRECTORY + 'common/bioscripts/"',
-                        '--kclusters="' + kClusters + '"' if kClusters.isdigit() else '',
-                        '--database="' + dbname + '"' if dbname != "KEGG" else ''], stderr=STDOUT)
+                    try:
+                        output = check_output([
+                            "Rscript",
+                            ROOT_DIRECTORY + "common/bioscripts/generateMetaGenes.R",
+                            '--specie=' + self.getOrganism(),
+                            '--input_file=' + inputFile,
+                            '--output_prefix=' + inputOmic.get("omicName"),
+                            '--data_dir=' + self.getTemporalDir(),
+                            '--kegg_dir=' + KEGG_DATA_DIR,
+                            '--sources_dir=' + ROOT_DIRECTORY + 'common/bioscripts/',
+                            '--kclusters=' + kClusters if kClusters.isdigit() else '',
+                            '--database=' + dbname if dbname != "KEGG" else ''], stderr=STDOUT)
+                    except CalledProcessError as ex:
+                        error_detail = ex.output.decode('utf-8') if ex.output else str(ex)
+                        logging.error("STEP2 - Error while generating metagenes information for " + inputOmic.get("omicName") + " db: " + str(dbname))
+                        logging.error(f"Subprocess output: {error_detail}")
+                        raise RuntimeError(f"Metagenes generation failed for omic '{inputOmic.get('omicName')}' and database '{dbname}'. Details: {error_detail}")
+
                     # STEP 2.2 PROCESS THE RESULTING FILE
 
                     # Reset all pathways metagenes for the omic
@@ -1379,22 +1387,20 @@ class PathwayAcquisitionJob(Job):
                     metagenesFileName: object = self.getTemporalDir() + "/" + inputOmic.get("omicName") + "_metagenes" + \
                                                 ("_" + str(dbname).lower() + ".tab" if dbname != "KEGG" else ".tab")
 
-                    # Clean previous metagene
-                    #for line in self.matchedPathways:
-                    #    self.matchedPathways[line].metagenes = dict()
+                    if os_path.exists(metagenesFileName):
+                        with open(metagenesFileName, 'rU') as inputDataFile:
+                            for line in csv_reader(inputDataFile, delimiter="\t"):
+                                if line[0] in self.matchedPathways:
+                                    self.matchedPathways.get(line[0]).addMetagenes(inputOmic.get("omicName"),
+                                                                                   {"metagene": line[1], "cluster": line[2],
+                                                                                    "values": line[3:]})
+                                    logging.info(
+                                        "pathway:" + str(line[0]) + " metaGene:" + str(line[1]) + " cluster:" + str(
+                                            line[2]) + " values:" + str(line[3:]))
+                        inputDataFile.close()
+                    else:
+                        logging.warning(f"Metagenes file {metagenesFileName} not found. This is expected if no matches were found for db {dbname}.")
 
-                    with open(metagenesFileName, 'rU') as inputDataFile:
-                        for line in csv_reader(inputDataFile, delimiter="\t"):
-                            if line[0] in self.matchedPathways:
-                                self.matchedPathways.get(line[0]).addMetagenes(inputOmic.get("omicName"),
-                                                                               {"metagene": line[1], "cluster": line[2],
-                                                                                "values": line[3:]})
-                                logging.info(
-                                    "pathway:" + str(line[0]) + " metaGene:" + str(line[1]) + " cluster:" + str(
-                                        line[2]) + " values:" + str(line[3:]))
-                    inputDataFile.close()
-                except CalledProcessError as ex:
-                    logging.error("STEP2 - Error while generating metagenes information for " + inputOmic.get("omicName") + " db: " + str(dbname))
                 except IOError as ex:
                     logging.error("STEP2 - File not found or read error for metagenes " + inputOmic.get("omicName") + " db: " + str(dbname))
 

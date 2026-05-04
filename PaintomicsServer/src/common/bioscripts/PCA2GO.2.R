@@ -75,9 +75,11 @@ X.loadings <- vector(mode = "list", length = 0)
 	}
    }
 # Rearrange result
-rownames(X.sel) <- colnames(X)
-names(X.loadings) <- colnames(X.sel)
-X.sel <- t(X.sel)
+if (!is.null(X.sel)) {
+    rownames(X.sel) <- colnames(X)
+    names(X.loadings) <- colnames(X.sel)
+    X.sel <- t(X.sel)
+}
 return(list("X.sel" = X.sel, "X.loadings" = X.loadings,"n.ge" = n.ge,"n.go" = n.go, "go.sel" = go.sel, "total.genes" = total.genes, "var.cutoff" = var.cutoff, "variab" = variab, "tot.variab" = tot.variab, "eigen.val" = eigen.val))
 }
 

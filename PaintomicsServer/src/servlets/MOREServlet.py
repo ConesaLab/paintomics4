@@ -149,20 +149,33 @@ def fromMOREtoGenes_STEP2(jobInstance, userID, exampleMode, RESPONSE, formFields
     try:
         logging.info(f"MORE_STEP2 - RUNNING R SCRIPT for {jobInstance.getJobID()}")
         
-        # 1. Prepare Command
+        # 1. Pre-flight Validation
         target_file = jobInstance.targetExpressionFile
         input_dir = jobInstance.getInputDir()
         output_dir = jobInstance.getOutputDir()
+        temporal_dir = jobInstance.getTemporalDir()
 
+        if not target_file or not os.path.exists(os.path.join(input_dir, target_file)):
+             raise ValueError("Target Gene Expression file is missing. Please ensure it was uploaded in Step 1.")
+        
+        if not jobInstance.conditionsFile or not os.path.exists(os.path.join(input_dir, jobInstance.conditionsFile)):
+             raise ValueError("Experimental Design (Conditions) file is missing.")
+
+        for omic in jobInstance.regulatoryOmics:
+            omic_path = os.path.join(input_dir, omic["file"])
+            if not os.path.exists(omic_path):
+                raise ValueError(f"Regulatory data file for '{omic['name']}' not found: {omic['file']}")
+            if os.path.getsize(omic_path) == 0:
+                raise ValueError(f"Regulatory data file for '{omic['name']}' is empty.")
+
+        # 2. Prepare Command
         # Derive server root from CLIENT_TMP_DIR, which is always an absolute path in serverconf.
-        # os.path.abspath(__file__) is unreliable when the server is started from inside src/,
-        # causing __file__ to resolve as a relative path and producing a spurious src/src/ prefix.
         server_root = os.path.dirname(CLIENT_TMP_DIR.rstrip('/'))
         r_script = os.path.join(server_root, "src", "common", "bioscripts", "runMORE.R")
         
         cmd = [
             "Rscript", r_script,
-            "--target_file", os.path.join(input_dir, target_file) if target_file else "NULL",
+            "--target_file", os.path.join(input_dir, target_file),
             "--condition_file", os.path.join(input_dir, jobInstance.conditionsFile),
             "--omic_names", ",".join([o['name'] for o in jobInstance.regulatoryOmics]),
             "--data_files", ",".join([os.path.join(input_dir, o['file']) for o in jobInstance.regulatoryOmics]),
@@ -177,8 +190,14 @@ def fromMOREtoGenes_STEP2(jobInstance, userID, exampleMode, RESPONSE, formFields
 
         logging.info(f"MORE_STEP2 - Executing command: {' '.join(cmd)}")
 
-        # 2. Execute R — check_output captures stdout+stderr so CalledProcessError.output is non-None
-        subprocess.check_output(cmd, stderr=subprocess.STDOUT)
+        # 3. Execute R — capture output for better error reporting
+        try:
+            subprocess.check_output(cmd, stderr=subprocess.STDOUT)
+        except subprocess.CalledProcessError as e:
+            error_text = e.output.decode() if hasattr(e.output, 'decode') else str(e.output)
+            logging.error(f"MORE_STEP2 - R Script failed with exit code {e.returncode}. Output:\n{error_text}")
+            raise RuntimeError(f"The MORE R analysis failed. Details:\n{error_text}")
+
         
         # 3. Process Outputs and Prepare Summary
         # Copy each omic's result files from the R output dir into inputData/ so that
@@ -251,14 +270,16 @@ def fromMOREtoGenes_STEP2(jobInstance, userID, exampleMode, RESPONSE, formFields
             }
 
         # 4. Bundle outputs for the "Download files" link (matches miRNA2Genes contract).
-        # Zip all four files per omic from the R output dir into a single archive in outputDir/
-        # so the existing dm_downloadFile?fileType=job_result handler can serve it.
+        # Fix recursion bug: create the archive in the temporal directory, then move it to output_dir.
         compressed_basename = f"more_results_{jobInstance.date}"
-        compressed_path = os.path.join(jobInstance.getOutputDir(), compressed_basename)
-        # shutil.make_archive auto-appends ".zip"; pass output_dir as root so the zip
-        # contains the bare filenames rather than a nested dir structure.
-        shutil.make_archive(compressed_path, "zip", output_dir)
+        archive_temp_path = os.path.join(temporal_dir, compressed_basename)
+        
+        logging.info(f"MORE_STEP2 - Creating results archive at {archive_temp_path}.zip")
+        shutil.make_archive(archive_temp_path, "zip", output_dir)
+        
         compressed_filename = compressed_basename + ".zip"
+        shutil.move(archive_temp_path + ".zip", os.path.join(output_dir, compressed_filename))
+
 
         # 5. Finalize Response for UI — return basenames so saveFiles/parseGeneBasedFiles
         # can prepend inputDir/ to get the full path.
@@ -283,12 +304,10 @@ def fromMOREtoGenes_STEP2(jobInstance, userID, exampleMode, RESPONSE, formFields
         # 5. Save MORE Job via the shared manager (makes it listable and removable)
         JobInformationManager().storeJobInstance(jobInstance, 1)
 
-    except subprocess.CalledProcessError as e:
-        logging.error(f"MORE_STEP2 - R Script failed: {e.output}")
-        jobInstance.cleanDirectories(remove_output=True)
-        RESPONSE.setContent({"success": False, "message": "The MORE R analysis failed. Please check your input data formatting."})
     except Exception as ex:
         jobInstance.cleanDirectories(remove_output=True)
+        # Ensure we capture as much detail as possible in the response.
         handleException(RESPONSE, ex, __file__, "fromMOREtoGenes_STEP2")
+
     finally:
         return RESPONSE
