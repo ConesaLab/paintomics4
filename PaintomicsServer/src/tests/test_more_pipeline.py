@@ -94,13 +94,18 @@ def test_jobinformationmanager_dispatch():
 _check("JobInformationManager.storeJobInstance dispatches MOREJob", test_jobinformationmanager_dispatch)
 
 
-def test_servlet_uses_check_output():
+def test_servlet_streams_r_output():
+    """STEP2 must stream R stdout/stderr live (not buffer with check_output)
+    so the operator can see whether MORE is actually progressing or stalled.
+    Output must still be captured to surface in the error response on failure."""
     import src.servlets.MOREServlet as ms
     src_code = inspect.getsource(ms.fromMOREtoGenes_STEP2)
-    assert "check_output" in src_code, "subprocess.check_output not used — R errors won't be captured"
+    assert "subprocess.Popen" in src_code, "STEP2 does not use Popen — R output is buffered until exit, hides stalls"
+    assert "stderr=subprocess.STDOUT" in src_code, "STEP2 does not merge stderr→stdout — R warnings will be invisible"
+    assert "MORE-R" in src_code, "STEP2 does not tag streamed R lines with a MORE-R prefix"
     assert "check_call" not in src_code, "subprocess.check_call still present"
 
-_check("MOREServlet uses check_output (not check_call)", test_servlet_uses_check_output)
+_check("MOREServlet streams R output line-by-line", test_servlet_streams_r_output)
 
 
 def test_servlet_uses_job_information_manager():
@@ -262,6 +267,49 @@ def test_frontend_origin_field_names():
         "Found _associations_origin_0 — should be _associations_0_origin (saveFiles key order)"
 
 _check("PA_Step1Views origin field names match saveFiles key convention", test_frontend_origin_field_names)
+
+
+def test_frontend_multiomic_alt_uses_me_prefix():
+    """The dynamic alt-field block in MORESubmittingPanel.setContent runs as a
+    method of the inner Ext widget — so `this` is the component, NOT the panel.
+    `this.namePrefix` resolves to undefined and the per-omic fields end up named
+    "undefined_file_1" etc. The block must capture the panel via the outer `me`
+    closure and use `me.namePrefix` so omic 2+ share the panel's prefix and
+    saveFiles can pair each omic with its own omic_name/filelocation."""
+    pa_step1 = os.path.join(REPO_ROOT, "PaintomicsClient", "public_html", "app",
+                            "view", "PathwayAcquisitionViews", "PA_Step1Views.js")
+    with open(pa_step1) as f:
+        js = f.read()
+    panel_start = js.find("function MORESubmittingPanel(")
+    assert panel_start != -1, "Could not locate MORESubmittingPanel function"
+    setcontent_start = js.find("setContent: function(target, values)", panel_start)
+    assert setcontent_start != -1, "Could not locate inline setContent in MORESubmittingPanel"
+    setcontent_end = js.find("isValid: function()", setcontent_start)
+    assert setcontent_end != -1, "Could not locate end of inline setContent (isValid follows it)"
+    setcontent_body = js[setcontent_start:setcontent_end]
+    assert "me.namePrefix + '_file_' + i" in setcontent_body, \
+        "Dynamic alt-field block does not use me.namePrefix — falls back to undefined"
+    assert "this.namePrefix + '_file_' + i" not in setcontent_body, \
+        "Dynamic alt-field block still uses this.namePrefix (which is undefined inside the inline setContent)"
+
+_check("MORESubmittingPanel dynamic alt fields use me.namePrefix (not this.namePrefix)",
+       test_frontend_multiomic_alt_uses_me_prefix)
+
+
+def test_frontend_multiomic_summary_visible():
+    """When MORE returns >1 omics, the alt block must surface a user-visible
+    confirmation listing the processed omic names. Otherwise the user only sees
+    'Files processed correctly!' and has no way to know whether the second
+    regulatory omic actually came through."""
+    pa_step1 = os.path.join(REPO_ROOT, "PaintomicsClient", "public_html", "app",
+                            "view", "PathwayAcquisitionViews", "PA_Step1Views.js")
+    with open(pa_step1) as f:
+        js = f.read()
+    assert "regulatory omics processed" in js, \
+        "MORESubmittingPanel does not show a per-omic summary on success — multi-omic outcome is invisible to user"
+
+_check("MORESubmittingPanel shows multi-omic summary after MORE completes",
+       test_frontend_multiomic_summary_visible)
 
 
 # ─────────────────────────────────────────────────────────────

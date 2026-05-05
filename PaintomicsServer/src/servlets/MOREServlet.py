@@ -190,12 +190,32 @@ def fromMOREtoGenes_STEP2(jobInstance, userID, exampleMode, RESPONSE, formFields
 
         logging.info(f"MORE_STEP2 - Executing command: {' '.join(cmd)}")
 
-        # 3. Execute R — capture output for better error reporting
-        try:
-            subprocess.check_output(cmd, stderr=subprocess.STDOUT)
-        except subprocess.CalledProcessError as e:
-            error_text = e.output.decode() if hasattr(e.output, 'decode') else str(e.output)
-            logging.error(f"MORE_STEP2 - R Script failed with exit code {e.returncode}. Output:\n{error_text}")
+        # 3. Execute R — stream output line-by-line so the operator can see exactly
+        # where MORE is in the pipeline (data load, sample alignment, model fitting,
+        # output writing). subprocess.check_output buffers everything until exit,
+        # which makes a long PLS1+Jackknife fit on real data look like a hang. Each
+        # R line is mirrored to the Flask log AND captured for the error response.
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            bufsize=1,
+            universal_newlines=True,
+        )
+        captured = []
+        # bufsize=1 + iter() on the line-buffered stream gives us live output.
+        # MORE's progress bar uses \r within one line, so it won't appear until
+        # the line ends — that's acceptable: every cat() message still streams.
+        for line in iter(proc.stdout.readline, ''):
+            line = line.rstrip()
+            if line:
+                logging.info(f"MORE-R | {line}")
+                captured.append(line)
+        proc.stdout.close()
+        return_code = proc.wait()
+        if return_code != 0:
+            error_text = "\n".join(captured) if captured else f"(no output captured, exit {return_code})"
+            logging.error(f"MORE_STEP2 - R Script failed with exit code {return_code}. Output:\n{error_text}")
             raise RuntimeError(f"The MORE R analysis failed. Details:\n{error_text}")
 
         
