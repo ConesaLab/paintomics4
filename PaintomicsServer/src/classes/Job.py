@@ -444,11 +444,16 @@ class Job(Model):
                             omicValueAux.setRelevant(relList)
                             omicValueAux.setRelevantAssociation(line[0].lower() in relevantAssociationFeatures)
                             omicValueAux.setValues(numericValues)
-                            # The transcription factor (miRNA) name is the first column (change to gene symbol when processing transcription factors)
-                            if omicName == "Transcription factor" and columnID[1] in matchedNameDict.keys():
-                                omicValueAux.setOriginalName(matchedNameDict[columnID[1]].name)
-                            else:
-                                omicValueAux.setOriginalName(columnID[1])
+                            # The transcription factor (miRNA) name is the first column (change to gene symbol when processing transcription factors).
+                            # When the values file uses the legacy "geneID:::TFname" format (output of MiRNA2GeneJob),
+                            # columnID[1] holds the regulator name. For files where line[0] is a single column
+                            # (e.g., user uploads TFExpression.txt directly with just `TF<TAB>values`), there is no
+                            # ":::" suffix — leave originalName at its constructor default (= columnID[0]).
+                            if len(columnID) > 1:
+                                if omicName == "Transcription factor" and columnID[1] in matchedNameDict.keys():
+                                    omicValueAux.setOriginalName(matchedNameDict[columnID[1]].name)
+                                else:
+                                    omicValueAux.setOriginalName(columnID[1])
                             process_omic_value(columnID[0], omicValueAux)
 
                         else:
