@@ -119,7 +119,6 @@ function JobController() {
 			if (jobView.isExampleMode() === true) {
 				regionURL = SERVER_URL_DM_EXAMPLE_FROMBED2GENES;
 				miRNAURL = SERVER_URL_DM_EXAMPLE_FROMMIRNA2GENES;
-				moreURL = SERVER_URL_DM_EXAMPLE_FROMMORE2GENES;
 			}
 
 			/**

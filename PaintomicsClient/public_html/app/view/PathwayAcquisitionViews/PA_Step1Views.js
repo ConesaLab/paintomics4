@@ -2419,38 +2419,6 @@ function MORESubmittingPanel(nElem, options) {
 	/***********************************************************************
 	* OTHER FUNCTIONS
 	***********************************************************************/
-	this.setExampleMode = function(){
-		var component = this.getComponent();
-		component = component.queryById("itemsContainer");
-
-		// Display labels are cosmetic — the backend (dm_fromMOREtoGenes/example) ignores
-		// the form and reads the canonical files from EXAMPLE_FILES_DIR. Keep these names
-		// in sync with PaintomicsServer/src/examplefiles/more_*.txt.
-		var field = component.queryById("conditionsFileSelector");
-		field.setValue("more_condition.txt");
-		field.setDisabled(true);
-
-		field = component.queryById("rnaseqauxFileSelector");
-		field.setValue("more_target_expression.txt");
-		field.setDisabled(true);
-
-		field = component.queryById("mainFileSelector");
-		field.setValue("more_tf_expression.txt");
-		field.setDisabled(true);
-
-		field = component.queryById("moreAssociationsFileSelector");
-		field.setValue("more_associations.txt");
-		field.setDisabled(true);
-
-		field = component.queryById("moreRelevantFileSelector");
-		field.setValue("more_relevant_tf.txt");
-		field.setDisabled(true);
-
-		field = component.queryById("omicNameField");
-		field.setValue("Transcription Factors");
-		field.setDisabled(true);
-	};
-
 	this.setContent = function(target, values) {
 		var component = this.getComponent().queryById(target);
 		if (values.mainFile !== undefined) {
@@ -2541,19 +2509,6 @@ function MORESubmittingPanel(nElem, options) {
 					xtype: "myFilesSelectorButton",
 					fieldLabel: "Gene expression dataset",
 					namePrefix: 'rnaseqaux',
-					extraButtons: [{
-						text: 'Use a file from other omic',
-						handler: function() {
-							var me = this;
-							var _callback = function(selectedItem) {
-								if (selectedItem !== null) {
-									me.up("myFilesSelectorButton").queryById("visiblePathField").setValue(selectedItem[0].get("omic") + ": " + selectedItem[0].get("file"));
-									me.up("myFilesSelectorButton").queryById("originField").setValue(selectedItem[0].get("name"));
-								}
-							};
-							Ext.widget("OmicInputSelectorDialog").showDialog(_callback);
-						}
-					}],
 					itemId: "rnaseqauxFileSelector",
 					helpTip: "Upload the target gene expression dataset used for regulatory analysis."
 				},
@@ -2599,21 +2554,21 @@ function MORESubmittingPanel(nElem, options) {
 					fieldLabel: 'Regulators expression file',
 					namePrefix: 'file_0',
 					itemId: "mainFileSelector",
-					helpTip: "Upload the quantification file for the regulators (i.e. transcription factors, miRNAs)."
-				},
-				{
-					xtype: "myFilesSelectorButton",
-					fieldLabel: 'Associations file',
-					namePrefix: 'assoc_file_0',
-					itemId: "moreAssociationsFileSelector",
-					helpTip: "Upload the 2-column or 1-column associations file linking genes to these regulators."
+					helpTip: "Upload the quantification file (i.e. miRNA Quantification) or choose it from your data folder. See above the accepted format for the file."
 				},
 				{
 					xtype: "myFilesSelectorButton",
 					fieldLabel: 'Relevant regulators file<br>(optional)',
 					namePrefix: 'relevant_file_0',
 					itemId: "moreRelevantFileSelector",
-					helpTip: "Upload a list of significantly expressed regulators."
+					helpTip: "Upload the list of relevant (differentially expressed) features (TAB format) or choose it from your data folder. See above the accepted format for the file."
+				},
+				{
+					xtype: "myFilesSelectorButton",
+					fieldLabel: 'Associations file',
+					namePrefix: 'assoc_file_0',
+					itemId: "moreAssociationsFileSelector",
+					helpTip: "Upload the reference file that relates each feature (i.e. miRNA) with its potential targets. This information is usually extracted from popular databases such as miRbase for miRNAs. See above the accepted format for the file."
 				},
 				{
 					xtype: 'container',
@@ -2664,19 +2619,19 @@ function MORESubmittingPanel(nElem, options) {
 								xtype: "myFilesSelectorButton",
 								fieldLabel: 'Regulators expression file',
 								namePrefix: 'file_' + i,
-								helpTip: "Upload the quantification file for the regulators (i.e. transcription factors, miRNAs)."
-							},
-							{
-								xtype: "myFilesSelectorButton",
-								fieldLabel: 'Associations file',
-								namePrefix: 'assoc_file_' + i,
-								helpTip: "Upload the 2-column or 1-column associations file linking genes to these regulators."
+								helpTip: "Upload the quantification file (i.e. miRNA Quantification) or choose it from your data folder. See above the accepted format for the file."
 							},
 							{
 								xtype: "myFilesSelectorButton",
 								fieldLabel: 'Relevant regulators file<br>(optional)',
 								namePrefix: 'relevant_file_' + i,
-								helpTip: "Upload a list of significantly expressed regulators."
+								helpTip: "Upload the list of relevant (differentially expressed) features (TAB format) or choose it from your data folder. See above the accepted format for the file."
+							},
+							{
+								xtype: "myFilesSelectorButton",
+								fieldLabel: 'Associations file',
+								namePrefix: 'assoc_file_' + i,
+								helpTip: "Upload the reference file that relates each feature (i.e. miRNA) with its potential targets. This information is usually extracted from popular databases such as miRbase for miRNAs. See above the accepted format for the file."
 							}
 						]);
 						setTimeout(function() { initializeTooltips(".helpTip"); }, 100);

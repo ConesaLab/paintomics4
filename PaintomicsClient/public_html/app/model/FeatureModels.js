@@ -448,6 +448,11 @@ function OmicValue() {
 	};
 	this.isRelevant = function(index) {
 		if (index !== undefined && Array.isArray(this.relevant)) {
+			// Per-cell stars only mean something with per-condition relevance.
+			// A single-element list (single-column relevant file) means "relevant
+			// overall" — surface that via the row-label `*` from the no-index
+			// branch below, not a misleading first-cell star.
+			if (this.relevant.length <= 1) return false;
 			return this.relevant[index] === true;
 		}
 		if (Array.isArray(this.relevant)) {
