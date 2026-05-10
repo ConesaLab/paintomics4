@@ -120,6 +120,16 @@ class OmicValue(Model):
         self.relevant  = []
         self.relevantAssociation = False
         self.values    = None
+        # Replicate-aggregation fields. Both default to None so legacy jobs and
+        # files without a detected/uploaded sample mapping behave exactly as
+        # before — the renderer falls back to ``values`` / ``relevant``.
+        # When populated:
+        #   sampleValues   : list[float], one mean per biological sample
+        #                    (length == len(inputOmic["sampleHeader"])).
+        #   sampleRelevant : list[bool], OR-collapsed across the replicates
+        #                    of each sample.
+        self.sampleValues   = None
+        self.sampleRelevant = None
 
     #******************************************************************************************************************
     # GETTERS AND SETTER
@@ -159,6 +169,20 @@ class OmicValue(Model):
     def getValues(self):
         return self.values
 
+    def setSampleValues(self, sampleValues):
+        self.sampleValues = sampleValues
+    def getSampleValues(self):
+        return self.sampleValues
+
+    def setSampleRelevant(self, sampleRelevant):
+        self.sampleRelevant = sampleRelevant
+    def getSampleRelevant(self):
+        return self.sampleRelevant
+
+    def hasSampleAggregation(self):
+        """True if a replicate-collapsed view has been computed for this OmicValue."""
+        return self.sampleValues is not None
+
     #******************************************************************************************************************
     # OTHER FUNCTIONS
     #******************************************************************************************************************
@@ -172,6 +196,16 @@ class OmicValue(Model):
             elif(attr == "relevantAssociation"):
                 value= (value == "True" or value == True)
                 setattr(self, attr, value)
+            elif(attr == "sampleRelevant"):
+                # Mirror the bool-coercion done for `relevant` to handle docs
+                # written by older / cross-environment serializers (e.g. JSON
+                # round-trips that stringify booleans).
+                if value is None:
+                    self.sampleRelevant = None
+                elif isinstance(value, list):
+                    self.sampleRelevant = [(v == "True" or v == True) for v in value]
+                else:
+                    self.sampleRelevant = (value == "True" or value == True)
             else:
                 setattr(self, attr, value)
         return self

@@ -1900,23 +1900,26 @@ function PA_Step4KeggDiagramFeatureView(showButtons) {
 		var x = 0, y = 0, maxX = -1;
 		var series = [], yAxisCat = [], serie, later = [], values, scaledValues, min, max;
 
+		var jobModel = this.getParent("PA_Step4JobView") ? this.getParent("PA_Step4JobView").getModel() : null;
+		var replicateMode = jobModel && jobModel.getReplicateMode ? jobModel.getReplicateMode() : "replicates";
+
 		for (var i = visibleOmics.length - 1; i >= 0; i--) {
 			x = 0;
 			omicName = visibleOmics[i].split("#")[0];
 
 			// Retrieve all omic values
 			allOmicValues = feature.getOmicValues(omicName, true);
-			
+
 			if (allOmicValues !== null) {
 				allOmicValues.forEach(function(omicValues) {
 					x = 0;
-					
+
 					var shownameValue = omicValues.inputName != omicValues.originalName && omicValues.originalName !== undefined ?
 						omicValues.originalName + ": " + omicValues.inputName :
 						omicValues.inputName
 					var relevantSymbols = "";
 
-					if (omicValues.isRelevant() === true) {
+					if (omicValues.isRelevant(undefined, replicateMode) === true) {
 						relevantSymbols += "* ";
 					}
 					if (omicValues.isRelevantAssociation() === true) {
@@ -1926,7 +1929,7 @@ function PA_Step4KeggDiagramFeatureView(showButtons) {
 					serie = {name: relevantSymbols + omicName + "#" + shownameValue};
 					yAxisCat.push(relevantSymbols + omicName + "#" + shownameValue);
 
-					values = omicValues.getValues();
+					values = omicValues.getValues(replicateMode);
 					serie.data = [];
 					scaledValues = [];
 
@@ -1937,12 +1940,12 @@ function PA_Step4KeggDiagramFeatureView(showButtons) {
 							x: x, y: y,
 							value: values[j],
 							color: getColor(limits, values[j], visualOptions.colorScale),
-							isSignificant: omicValues.isRelevant(j)
+							isSignificant: omicValues.isRelevant(j, replicateMode)
 						});
 						x++;
 						maxX = Math.max(maxX, x);
 					}
-					series.push(serie);	
+					series.push(serie);
 					y++;
 				});
 			} else {
@@ -1983,7 +1986,10 @@ function PA_Step4KeggDiagramFeatureView(showButtons) {
 		// Calculate the height based on number of Y elements
 		var chartHeight = Math.max(y * 40, 80);
 		
-		var headers = this.getParent("PA_Step4JobView").getModel().getOmicHeaders();
+		// In samples mode the labels under each cell come from the biological-
+		// sample names (omic.sampleHeader) rather than the raw replicate
+		// columns, so the tooltip stays consistent with what's drawn.
+		var headers = this.getParent("PA_Step4JobView").getModel().getOmicHeaders(null, replicateMode);
 
 		var replaceSymbols = {
 			"*": '<i class="relevantFeature"></i>',
@@ -2089,11 +2095,14 @@ function PA_Step4KeggDiagramFeatureView(showButtons) {
 		yAxis = [],
 		yAxisItem;
 
+		var jobModel = this.getParent("PA_Step4JobView") ? this.getParent("PA_Step4JobView").getModel() : null;
+		var replicateMode = jobModel && jobModel.getReplicateMode ? jobModel.getReplicateMode() : "replicates";
+
 		//1.FILL THE STORE DATA [{name:"timepoint 1", "Gene Expression": -0.8, "Proteomics":-1.2,... },{name:"timepoint2", ...}]
 		for (var i in visibleOmics) {
 			omicName = visibleOmics[i].split("#")[0];
 			allOmicValues = feature.getOmicValues(omicName, true);
-			
+
 			if (allOmicValues !== null) {
 				for (var t = 0; t < allOmicValues.length; t++) {
 					omicValues = allOmicValues[t];
@@ -2102,7 +2111,7 @@ function PA_Step4KeggDiagramFeatureView(showButtons) {
 					var limits = getMinMax(dataDistributionSummaries[omicName], visualOptions.colorReferences[omicName]);
 					var showName =  omicValues.originalName !== undefined && omicValues.originalName !== omicValues.inputName ? omicValues.originalName : null;
 
-					values = omicValues.getValues();
+					values = omicValues.getValues(replicateMode);
 					for (var j in values) {
 						//SCALE THE VALUE
 						tmpValue = scaleValue(values[j], limits.min, limits.max);
@@ -2322,6 +2331,12 @@ function PA_Step4KeggDiagramFeatureSetSVGBox() {
 		var isRelevant = feature.isRelevant();
 		var isRelevantAssociation = feature.isRelevantAssociation();
 
+		// Replicate-display mode: when the user has applied a sample mapping
+		// in Step 2 and toggled "Show samples" in the visual options, every
+		// `getValues` lookup below collapses to per-sample means.
+		var jobModel = this.getParent("PA_Step4JobView") ? this.getParent("PA_Step4JobView").getModel() : null;
+		var replicateMode = jobModel && jobModel.getReplicateMode ? jobModel.getReplicateMode() : "replicates";
+
 		/*FILTER THE LIST OF OMICS TO GET ONLY THE "GENE" BASED OMICS OR THE COMPOUND BASED OMICS*/
 		var visibleOmics = visualOptions.visibleOmics.filter(function(elem) {
 			return elem.indexOf(feature.getFeatureType().toLowerCase().replace("meta", "") + "based") > -1;
@@ -2356,7 +2371,7 @@ function PA_Step4KeggDiagramFeatureSetSVGBox() {
 			omicValues = feature.getOmicValues(omicName);
 			//IF THE FEATURE CONTAINS VALUES FOR THE OMIC
 			if (omicValues !== null) {
-				values = omicValues.getValues();
+				values = omicValues.getValues(replicateMode);
 				
 				// Calculate adaptive width
 				var minSegmentWidth = 10 * scaleFactor;
@@ -2488,6 +2503,9 @@ function PA_Step4KeggDiagramFeatureSetSVGBox() {
 			return elem.indexOf(feature.getFeatureType().toLowerCase() + "based") > -1;
 		});
 
+		var jobModel = this.getParent("PA_Step4JobView") ? this.getParent("PA_Step4JobView").getModel() : null;
+		var replicateMode = jobModel && jobModel.getReplicateMode ? jobModel.getReplicateMode() : "replicates";
+
 		var omicName, omicValues;
 		for (var i in visibleOmics) {
 			omicName = visibleOmics[i].split("#")[0];
@@ -2496,7 +2514,7 @@ function PA_Step4KeggDiagramFeatureSetSVGBox() {
 			if (omicValues == null) {
 				omicValues = "No data";
 			} else {
-				omicValues = omicValues.getValues();
+				omicValues = omicValues.getValues(replicateMode);
 			}
 			omicsValues[omicName] = omicValues;
 		}
@@ -2632,6 +2650,18 @@ function PA_Step4VisualOptionsView() {
 		this.getParent().setVisualOptions("colorScale" , selectedOptions);
 
 		/********************************************************/
+		/* STEP 3b. UPDATE THE REPLICATE DISPLAY MODE          */
+		/* (only present when the toggle was rendered)         */
+		/********************************************************/
+		var $replicateRadio = $("div.lateralOptionsSelector input[name=replicateModeCheckbox]:checked").first();
+		if ($replicateRadio.length) {
+			var jobModel = this.getParent("PA_Step4JobView") ? this.getParent("PA_Step4JobView").getModel() : null;
+			if (jobModel && jobModel.setReplicateMode) {
+				jobModel.setReplicateMode($replicateRadio.val());
+			}
+		}
+
+		/********************************************************/
 		/* STEP 4. NOTIFY THE CHANGES TO PARENT                 */
 		/********************************************************/
 		this.getParent().applyVisualSettings();
@@ -2707,8 +2737,24 @@ function PA_Step4VisualOptionsView() {
 		'    <div class="radio"><img class="colorScaleThumb" src="resources/images/bwrscale_120x18.jpg"><input '+ ((visualOptions.colorScale ==="bwr")?"checked ":"") +'type="radio" id="colorScaleCheckbox1" name="colorScaleCheckbox" value="bwr"><label for="colorScaleCheckbox1">Blue-White-Red</label></div>' +
 		'    <div class="radio"><img class="colorScaleThumb" src="resources/images/gbrscale_120x18.jpg"><input '+ ((visualOptions.colorScale ==="rbg")?"checked ":"") +'type="radio" id="colorScaleCheckbox3" name="colorScaleCheckbox" value="rbg"><label for="colorScaleCheckbox3">Green-Black-Red</label></div>' +
 		//'    <div class="radio"><input type="radio" id="colorScaleCheckbox2" name="colorScaleCheckbox" value="bwr2"><label for="colorScaleCheckbox2">Blue-White-Red (alt.)<img class="colorScaleThumb" src="resources/images/bwr2scale_120x18.jpg"></label></div>' +
-		'  </div>' +
-		'</div>'; //advanceOptionsPanel
+		'  </div>';
+
+		// Replicate-display toggle. Only shown when at least one omic has had
+		// a sample mapping applied — otherwise there's nothing to collapse.
+		var step4JobModel = me.getParent("PA_Step4JobView") ? me.getParent("PA_Step4JobView").getModel() : null;
+		if (step4JobModel && step4JobModel.hasAnyReplicateAggregation && step4JobModel.hasAnyReplicateAggregation()) {
+			var currentMode = step4JobModel.getReplicateMode();
+			windowContent +=
+			'  <h5>Replicate display ' +
+			'    <span class="helpTip" title="Switch between showing every replicate column individually or showing one cell per biological sample (mean across replicates). Configured per-omic in the Step-2 panel."></span>' +
+			'  </h5>' +
+			'  <div>' +
+			'    <div class="radio"><input ' + ((currentMode === "samples") ? "" : "checked ") + 'type="radio" id="replicateModeCheckbox1" name="replicateModeCheckbox" value="replicates"><label for="replicateModeCheckbox1">Show all replicates</label></div>' +
+			'    <div class="radio"><input ' + ((currentMode === "samples") ? "checked " : "") + 'type="radio" id="replicateModeCheckbox2" name="replicateModeCheckbox" value="samples"><label for="replicateModeCheckbox2">Show samples (averaged)</label></div>' +
+			'  </div>';
+		}
+
+		windowContent += '</div>'; //advanceOptionsPanel
 
 		this.component = Ext.widget({
 			xtype: "container", cls: "lateralOptionsPanel",  width: 300, height: ($("#mainViewCenterPanel").height() - 100),
@@ -3140,6 +3186,13 @@ function PA_Step4GlobalHeatmapView() {
 		var omicsValues = this.getParent().getOmicsValues();
 		var matchedFeatures = matchedGenes.concat(matchedCompounds);
 
+		// Read the active replicate-display mode once and bake it into the
+		// data matrix that feeds the global heatmap. Build sites that pull
+		// `getValues()` directly (rather than going through the renderer's
+		// mode-aware path) need to ask for the right view explicitly.
+		var jobModelGH = this.getParent("PA_Step4JobView") ? this.getParent("PA_Step4JobView").getModel() : null;
+		var replicateModeGH = jobModelGH && jobModelGH.getReplicateMode ? jobModelGH.getReplicateMode() : "replicates";
+
 		for (var i = matchedFeatures.length; i--;) {
 			//GET THE VALUES FOR CURRENT GENE
 			featureOmicValues = omicsValues[matchedFeatures[i]].getOmicsValues();
@@ -3151,23 +3204,23 @@ function PA_Step4GlobalHeatmapView() {
 				if (selectedOmics[omicValue.omicName] === undefined) {
 					continue;
 				}
-				
+
 				var featureName = omicsValues[matchedFeatures[i]].getName();
 
 				//PUSH IF USER CHOOSE all OR IF FEATURE IS RELEVANT
-				if (selectedOmics[omicValue.omicName] === "all" || omicValue.isRelevant() || omicValue.isRelevantAssociation()) {
+				if (selectedOmics[omicValue.omicName] === "all" || omicValue.isRelevant(undefined, replicateModeGH) || omicValue.isRelevantAssociation()) {
 					referenceOmics = dataMatrix;
 				} else {
 					referenceOmics = otherDataMatrix;
 				}
 				referenceOmics[omicValue.omicName][featureName] = referenceOmics[omicValue.omicName][featureName] || [];
-				
+
 				referenceOmics[omicValue.omicName][featureName].push({
 					keggName: omicsValues[matchedFeatures[i]].getName(),
 					inputName: omicValue.originalName || omicValue.getInputName(),
-					isRelevant: omicValue.isRelevant(),
+					isRelevant: omicValue.isRelevant(undefined, replicateModeGH),
 					isRelevantAssociation: omicValue.isRelevantAssociation(),
-					values: omicValue.getValues()
+					values: omicValue.getValues(replicateModeGH)
 				});
 			}
 		}
@@ -3712,6 +3765,13 @@ function PA_Step4DetailsView() {
 		var featureType = featureSetElems[0].getFeature().getFeatureType();
 		var entriesTable = {}, entriesTableMetagenes = {};
 
+		// Read the active replicate-display mode once and bake it into the
+		// per-row `values` we collect below. Without this, "Show details"
+		// would always render the raw 16 columns even after the user picked
+		// "Show samples (averaged)" in the visual-options panel.
+		var jobModelDV = this.getParent("PA_Step4JobView") ? this.getParent("PA_Step4JobView").getModel() : null;
+		var replicateModeDV = jobModelDV && jobModelDV.getReplicateMode ? jobModelDV.getReplicateMode() : "replicates";
+
 		/**
 		* This function fills recursively a table ordering by omicType
 		*/
@@ -3721,7 +3781,7 @@ function PA_Step4DetailsView() {
 			featureName = featureSetElems[i].getFeature().getName();
 			omicValues = featureSetElems[i].getFeature().getOmicsValues();
 			for (var j in omicValues) {
-				addTableEntrie(entriesTable, omicValues[j], featureName, "");
+				addTableEntrie(entriesTable, omicValues[j], featureName, "", replicateModeDV);
 			}
 		}
 
@@ -3729,7 +3789,7 @@ function PA_Step4DetailsView() {
 			featureName = metagenesSetElems[i].getFeature().getName();
 			omicValues = metagenesSetElems[i].getFeature().getOmicsValues();
 			for (var j in omicValues) {
-				addTableEntrie(entriesTableMetagenes, omicValues[j], featureName, "");
+				addTableEntrie(entriesTableMetagenes, omicValues[j], featureName, "", replicateModeDV);
 			}
 		}
 
@@ -4198,11 +4258,16 @@ function PA_Step4DetailsView() {
 }
 PA_Step4DetailsView.prototype = new View();
 
-var addTableEntrie = function (entriesValue, omicValue, featureName, entrieName) {
+var addTableEntrie = function (entriesValue, omicValue, featureName, entrieName, replicateMode) {
+			// `replicateMode` was added so the Details panel ("Show details")
+			// honours the visual-options sample/replicate toggle. For compound
+			// omics — which nest OmicValues — `omicValue.getValues()` returns
+			// the inner OmicValues, not numeric arrays, so we don't pass mode
+			// at the outer call (no aggregation lives there).
 			if (omicValue.isCompoundOmicsValue()) {
 				var omicValues = omicValue.getValues();
 				for (var i in omicValues) {
-					addTableEntrie(entriesValue, omicValues[i], featureName, entrieName + omicValue.getName() + "#");
+					addTableEntrie(entriesValue, omicValues[i], featureName, entrieName + omicValue.getName() + "#", replicateMode);
 				}
 			} else if (omicValue.isVisibleAtFeatureFamilyDetails()) {
 				if (entrieName === "") {
@@ -4215,9 +4280,9 @@ var addTableEntrie = function (entriesValue, omicValue, featureName, entrieName)
 					keggName: featureName + ((entrieName === omicValue.getOmicName()) ? "" : " " + omicValue.getOmicName()),
 					inputName: omicValue.inputName,
 					originalName: omicValue.originalName,
-					isRelevant: omicValue.isRelevant(),
+					isRelevant: omicValue.isRelevant(undefined, replicateMode),
 					isRelevantAssociation: omicValue.isRelevantAssociation(),
-					values: omicValue.getValues()
+					values: omicValue.getValues(replicateMode)
 				});
 			}
 		};

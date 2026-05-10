@@ -35,6 +35,7 @@ from itertools import chain
 
 from src.common.Statistics import calculateSignificance, calculateCombinedSignificancePvalues, adjustPvalues
 from src.common.Util import chunks, getImageSize
+from src.common.ReplicateDetection import detect_replicates, aggregate_replicates
 
 from src.common.KeggInformationManager import KeggInformationManager
 
@@ -496,6 +497,145 @@ class PathwayAcquisitionJob(Job):
 
         return nConditions, error
 
+    def _detectReplicatesForOmic(self, omicName, omicHeader):
+        """
+        Run replicate detection on a single omic's column labels.
+
+        ``omicHeader`` is the raw header captured by the parsers — list[str]
+        where index 0 is the ID column and indices 1..n are sample columns.
+        We pass only the sample slice to ``detect_replicates``; an absent or
+        malformed header degrades safely to ``status="none"`` so the rest of
+        the pipeline (which only reads the dict shape) keeps working.
+        """
+        replicateHeader = omicHeader[1:] if omicHeader and len(omicHeader) > 1 else []
+        result = detect_replicates(replicateHeader)
+        logging.info(
+            "REPLICATE DETECTION (%s): status=%s, samples=%d, unmatched=%d",
+            omicName, result["status"], len(result["sampleHeader"]), len(result["unmatched"])
+        )
+        return result
+
+    def _findInputOmicByName(self, omicName):
+        """
+        Locate an inputOmic + its feature dict + feature type by omic name.
+
+        Returns ``(inputOmic, featureDict, featureType)`` or ``(None, None, None)``.
+        Used by both the auto-apply path (this file) and the servlet apply
+        endpoint (PathwayAcquisitionServlet) — kept on the job so the two
+        callers share a single source of truth for the lookup convention.
+        """
+        for inputOmic in self.getGeneBasedInputOmics():
+            if inputOmic.get("omicName") == omicName:
+                return inputOmic, self.getInputGenesData(), "Gene"
+        for inputOmic in self.getCompoundBasedInputOmics():
+            if inputOmic.get("omicName") == omicName:
+                return inputOmic, self.getInputCompoundsData(), "Compound"
+        return None, None, None
+
+    def applyReplicateMappingForOmic(self, omicName, mode, sampleHeader=None,
+                                     mapping=None, groups=None):
+        """
+        Apply (or clear) a replicate→sample mapping for one omic.
+
+        This is the single source of truth for the aggregation step: invoked
+        both by the auto-apply path inside ``processFilesContent`` (mode=auto,
+        no extra args) and by the servlet ``/pa_apply_replicate_mapping``
+        endpoint (mode auto/manual/off). For ``mode="manual"`` the caller is
+        responsible for parsing the design file and supplying ``sampleHeader``,
+        ``mapping`` and ``groups``.
+
+        Mutates:
+        - ``inputOmic`` dict: writes ``replicateSource``, ``sampleHeader``,
+          ``replicateMapping``.
+        - Each affected ``OmicValue``: writes ``sampleValues`` /
+          ``sampleRelevant`` (or clears them when mode="off").
+
+        Returns ``{omicName, status, mode, sampleHeader, mapping,
+        featuresUpdated, featureType}`` for the caller to persist / serialize.
+        """
+        inputOmic, featureDict, featureType = self._findInputOmicByName(omicName)
+        if inputOmic is None:
+            raise ValueError("Omic '%s' not found in this job." % omicName)
+
+        if mode == "off":
+            inputOmic["replicateSource"]   = "off"
+            inputOmic["sampleHeader"]      = []
+            inputOmic["replicateMapping"]  = []
+            n_touched = self._walkAndAggregateOmicValues(
+                featureDict, omicName, mapping=[], groups=[], n_samples=0, clear=True
+            )
+            return {
+                "omicName":         omicName,
+                "status":           "cleared",
+                "mode":             mode,
+                "sampleHeader":     [],
+                "mapping":          [],
+                "featuresUpdated":  n_touched,
+                "featureType":      featureType,
+            }
+
+        if mode == "auto":
+            detection = inputOmic.get("replicateDetection") or {}
+            if detection.get("status") != "complete":
+                raise ValueError(
+                    "Auto-apply not possible for omic '%s' (detection status=%s)."
+                    % (omicName, detection.get("status"))
+                )
+            sampleHeader = detection["sampleHeader"]
+            mapping      = detection["mapping"]
+            groups       = detection["groups"]
+        elif mode == "manual":
+            if not (sampleHeader and mapping is not None and groups is not None):
+                raise ValueError("Manual apply requires sampleHeader, mapping and groups.")
+        else:
+            raise ValueError("Invalid mode '%s'." % mode)
+
+        inputOmic["replicateSource"]   = mode
+        inputOmic["sampleHeader"]      = sampleHeader
+        inputOmic["replicateMapping"]  = mapping
+
+        n_touched = self._walkAndAggregateOmicValues(
+            featureDict, omicName,
+            mapping=mapping, groups=groups, n_samples=len(sampleHeader),
+            clear=False,
+        )
+        return {
+            "omicName":         omicName,
+            "status":           "applied",
+            "mode":             mode,
+            "sampleHeader":     sampleHeader,
+            "mapping":          mapping,
+            "featuresUpdated":  n_touched,
+            "featureType":      featureType,
+        }
+
+    def _walkAndAggregateOmicValues(self, featureDict, omicName, mapping, groups,
+                                    n_samples, clear):
+        """
+        Walk every Feature, find its OmicValue for ``omicName``, and either
+        compute / clear ``sampleValues`` / ``sampleRelevant``. Returns the
+        number of OmicValues touched.
+        """
+        n_touched = 0
+        for feature in featureDict.values():
+            for ov in feature.getOmicsValues():
+                if ov.getOmicName() != omicName:
+                    continue
+                if clear:
+                    ov.setSampleValues(None)
+                    ov.setSampleRelevant(None)
+                else:
+                    sampleValues, sampleRelevant = aggregate_replicates(
+                        values=ov.getValues() or [],
+                        relevant=ov.relevant,
+                        groups=groups,
+                        n_samples=n_samples,
+                    )
+                    ov.setSampleValues(sampleValues)
+                    ov.setSampleRelevant(sampleRelevant)
+                n_touched += 1
+        return n_touched
+
     def processFilesContent(self):
         """
         This function processes all the files and returns a checkboxes list to show to the user
@@ -517,6 +657,11 @@ class PathwayAcquisitionJob(Job):
                 logging.info("   * PROCESSED " + omicName + "...")
                 inputOmic["omicSummary"] = omicSummary
                 inputOmic["omicHeader"] = omicHeader
+                # Replicate detection runs once per omic on the column labels
+                # (omicHeader[1:] — index column stripped). Result is surfaced
+                # to the Step-2 UI so the user can confirm/override; no
+                # aggregation happens here, the values stay per-replicate.
+                inputOmic["replicateDetection"] = self._detectReplicatesForOmic(omicName, omicHeader)
             logging.info("PROCESSING GENE BASED FILES...DONE")
 
             logging.info("PROCESSING COMPOUND BASED FILES...")
@@ -527,11 +672,35 @@ class PathwayAcquisitionJob(Job):
                 logging.info("   * PROCESSED " + omicName + "...")
                 inputOmic["omicSummary"] = omicSummary
                 inputOmic["omicHeader"] = omicHeader
+                inputOmic["replicateDetection"] = self._detectReplicatesForOmic(omicName, omicHeader)
             # REMOVE REPETITIONS AND ORDER ALPHABETICALLY
             # checkBoxesData = unifyAndSort(checkBoxesData, lambda checkBoxData: checkBoxData["title"].lower())
             checkBoxesData = unifyAndSort(checkBoxesData, lambda checkBoxData: checkBoxData.getTitle().lower())
 
             logging.info("PROCESSING COMPOUND BASED FILES...DONE")
+
+            # AUTO-APPLY complete replicate detections so users get the
+            # collapsed view without an extra click in Step 2. The Step-2 panel
+            # still surfaces the detection (and the user can switch back to
+            # "Show all replicates" or upload a custom design), but the default
+            # is the average — most jobs with `_R1/_R2`-style headers want this.
+            for inputOmic in (self.geneBasedInputOmics + self.compoundBasedInputOmics):
+                detection = inputOmic.get("replicateDetection") or {}
+                if detection.get("status") != "complete":
+                    continue
+                try:
+                    res = self.applyReplicateMappingForOmic(inputOmic["omicName"], "auto")
+                    logging.info(
+                        "REPLICATE AUTO-APPLY (%s): %d sample(s), %d feature(s) updated.",
+                        inputOmic["omicName"], len(res["sampleHeader"]), res["featuresUpdated"]
+                    )
+                except Exception as ex:
+                    # Auto-apply must never break Step-1: log and continue, the
+                    # user can still pick a mode in the Step-2 panel.
+                    logging.warning(
+                        "REPLICATE AUTO-APPLY (%s) failed: %s — continuing without aggregation.",
+                        inputOmic.get("omicName"), str(ex)
+                    )
 
             # GENERATE THE COMPRESSED FILE WITH MATCHING, COPY THE FILE AT RESULTS DIR AND CLEAN TEMPORAL FILES
             # COMPRESS THE RESULTING FILES AND CLEAN TEMPORAL DATA

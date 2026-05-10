@@ -29,6 +29,9 @@ from src.common.ServerErrorManager import handleException
 from src.common.UserSessionManager import UserSessionManager
 from src.common.JobInformationManager import JobInformationManager
 from src.common.Statistics import calculateSignificance, calculateCombinedSignificancePvalues, adjustPvalues, calculateStoufferCombinedPvalue
+from src.common.ReplicateDetection import detect_replicates, aggregate_replicates
+from src.common.DAO.PathwayAcquisitionJobDAO import PathwayAcquisitionJobDAO
+from src.common.DAO.FeatureDAO import FeatureDAO
 from src.classes.JobInstances.PathwayAcquisitionJob import PathwayAcquisitionJob
 
 from src.conf.serverconf import CLIENT_TMP_DIR, KEGG_DATA_DIR
@@ -838,6 +841,210 @@ def pathwayAcquisitionSaveSharingOptions(request, response):
         handleException(response, ex, __file__ , "pathwayAcquisitionSaveSharingOptions", userID=userID)
     finally:
         return response
+
+def pathwayAcquisitionApplyReplicateMapping(request, response):
+    """
+    Apply (or clear) a replicate→sample mapping for one omic of a job.
+
+    The user reaches this endpoint from the Step-2 "Replicate detection" panel
+    after their values file has been parsed. The endpoint takes their chosen
+    mode and (for manual mode) a 2-column design file, computes the sample
+    grouping, and writes per-sample aggregated values onto every OmicValue
+    of the targeted omic.
+
+    Request JSON
+    ------------
+    {
+        "jobID":      str,
+        "omicName":   str,                     # must match an inputOmic
+        "mode":       "auto" | "manual" | "off",
+        "design":     str (optional)           # 2-column TSV body, manual mode only.
+                                               # Header row optional. Column 1 must
+                                               # match omicHeader[1:]; column 2 is
+                                               # the biological-sample label.
+    }
+
+    Response JSON
+    -------------
+    {
+        "success":      True,
+        "status":       "applied" | "cleared",
+        "mode":         echo of input mode,
+        "sampleHeader": list[str]              # empty when status == "cleared"
+        "mapping":      list[int]              # parallel to omicHeader[1:]
+        "featuresUpdated": int                 # number of Genes/Compounds touched
+    }
+    """
+    userID = ""
+    jobID = ""
+    try:
+        # ---- Step 0. Session check ----------------------------------------
+        userID = request.cookies.get("userID")
+        sessionToken = request.cookies.get("sessionToken")
+        UserSessionManager().isValidUser(userID, sessionToken)
+
+        # ---- Step 1. Parse and validate input -----------------------------
+        payload = request.get_json() or {}
+        jobID    = payload.get("jobID")
+        omicName = payload.get("omicName")
+        mode     = (payload.get("mode") or "").lower()
+
+        if not jobID:
+            raise Exception("Missing jobID.")
+        if not omicName:
+            raise Exception("Missing omicName.")
+        if mode not in ("auto", "manual", "off"):
+            raise Exception("Invalid mode '%s'; expected 'auto', 'manual', or 'off'." % mode)
+
+        # ---- Step 2. Load job and locate the targeted omic ----------------
+        jobInstance = JobInformationManager().loadJobInstance(jobID)
+        if jobInstance is None:
+            raise Exception("Job %s not found." % jobID)
+        if jobInstance.getReadOnly() and str(jobInstance.getUserID()) != str(userID):
+            raise Exception("Read-only job — replicate mapping cannot be modified by this user.")
+
+        # ---- Step 3. Compute mapping & aggregate via the job's apply method.
+        # The PathwayAcquisitionJob owns the single source of truth for both
+        # the auto-apply path (Step-1 processFilesContent) and this endpoint —
+        # no aggregation logic lives in the servlet.
+        if mode == "manual":
+            # Parse the design file here (servlet-level concern: reading uploaded
+            # text). The job method handles the in-memory aggregation.
+            designBody = payload.get("design") or ""
+            inputOmic, _, featureType = jobInstance._findInputOmicByName(omicName)
+            if inputOmic is None:
+                raise Exception("Omic '%s' not found in this job." % omicName)
+            omicHeader = inputOmic.get("omicHeader") or []
+            replicateHeader = omicHeader[1:] if len(omicHeader) > 1 else []
+            sampleHeader, mapping, groups = _parseDesignFile(designBody, replicateHeader)
+            result = jobInstance.applyReplicateMappingForOmic(
+                omicName, mode="manual",
+                sampleHeader=sampleHeader, mapping=mapping, groups=groups,
+            )
+        else:
+            result = jobInstance.applyReplicateMappingForOmic(omicName, mode=mode)
+
+        sampleHeader     = result["sampleHeader"]
+        mapping          = result["mapping"]
+        featureType      = result["featureType"]
+        featuresUpdated  = result["featuresUpdated"]
+
+        # ---- Step 5. Persist ---------------------------------------------
+        # Update the inputOmic dict on the job document (only the two list
+        # fields can change), then re-emit the affected feature collection.
+        # Reinsert the whole featureType bucket — same heavy-but-safe pattern
+        # used by step-2 storeJobInstance for compounds.
+        jobDAO = PathwayAcquisitionJobDAO()
+        try:
+            jobDAO.update(jobInstance, {"fieldList": ["geneBasedInputOmics", "compoundBasedInputOmics"]})
+        finally:
+            jobDAO.closeConnection()
+
+        featDAO = FeatureDAO()
+        try:
+            featDAO.removeAll({"jobID": jobID, "featureType": featureType})
+            if featureDict:
+                featDAO.insertAll(featureDict.values(), {"jobID": jobID})
+        finally:
+            featDAO.closeConnection()
+
+        response.setContent({
+            "success":          True,
+            "status":           "cleared" if mode == "off" else "applied",
+            "mode":             mode,
+            "sampleHeader":     sampleHeader,
+            "mapping":          mapping,
+            "featuresUpdated":  featuresUpdated,
+        })
+    except Exception as ex:
+        handleException(response, ex, __file__, "pathwayAcquisitionApplyReplicateMapping", userID=userID)
+    finally:
+        return response
+
+
+def _parseDesignFile(body, replicateHeader):
+    """
+    Parse a user-supplied 2-column design file (tab- or comma-separated).
+
+    Format:
+        [optional header row]
+        sample_column_1<sep>sample_label_1
+        sample_column_2<sep>sample_label_2
+        ...
+
+    `sample_column_*` must match (after whitespace strip) one of the column
+    names in ``replicateHeader``. ``sample_label_*`` is the biological-sample
+    name the row collapses into. Sample-label order in the result follows the
+    order in which each label is first seen in the file (so the user controls
+    the display order via row order).
+
+    Validation:
+    - Every entry in ``replicateHeader`` must appear in the file (else hard error).
+    - Sample labels must be non-empty (else hard error).
+
+    Returns ``(sampleHeader, mapping, groups)`` matching the shape produced by
+    :func:`detect_replicates`.
+    """
+    if not body:
+        raise Exception("Design file is empty.")
+
+    # Tab is the canonical separator; fall back to comma if the file has no
+    # tabs (matches PaintOmics's auto-delimiter convention elsewhere).
+    sep = "\t" if "\t" in body else ","
+
+    column_to_sample = {}
+    for raw_line in body.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        parts = [p.strip() for p in line.split(sep)]
+        if len(parts) < 2:
+            # Tolerate trailing empty lines / incomplete rows but skip them.
+            continue
+        col_name, sample_label = parts[0], parts[1]
+        if not col_name:
+            continue
+        # Header detection: first row whose column-1 entry doesn't match any
+        # actual column in the values-file header. We use the same heuristic
+        # the MORE loader does — if it doesn't match, just skip it once.
+        if col_name not in replicateHeader and not column_to_sample:
+            continue
+        if not sample_label:
+            raise Exception("Design file: empty sample label for column '%s'." % col_name)
+        column_to_sample[col_name] = sample_label
+
+    # Sanity: every replicate column in the values file must have a label.
+    missing = [c for c in replicateHeader if c not in column_to_sample]
+    if missing:
+        raise Exception(
+            "Design file is missing entries for columns: %s" % ", ".join(missing[:10])
+            + ("…" if len(missing) > 10 else "")
+        )
+
+    # Build sampleHeader in *file order* — the order the user wrote sample
+    # labels in the design file. This lets users control how samples display
+    # without reordering the values file.
+    sampleHeader = []
+    seen = {}
+    for raw_line in body.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        parts = [p.strip() for p in line.split(sep)]
+        if len(parts) < 2 or parts[0] not in column_to_sample:
+            continue
+        label = column_to_sample[parts[0]]
+        if label not in seen:
+            seen[label] = len(sampleHeader)
+            sampleHeader.append(label)
+
+    mapping = [seen[column_to_sample[c]] for c in replicateHeader]
+    groups = [[] for _ in sampleHeader]
+    for col_idx, s_idx in enumerate(mapping):
+        groups[s_idx].append(col_idx)
+
+    return sampleHeader, mapping, groups
+
 
 def pathwayAcquisitionMetagenes_PART1(REQUEST, RESPONSE, QUEUE_INSTANCE, JOB_ID, ROOT_DIRECTORY):
         # ****************************************************************

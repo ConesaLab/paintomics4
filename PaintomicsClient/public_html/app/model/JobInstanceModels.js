@@ -47,6 +47,12 @@ function JobInstance(jobID) {
 	this.omicsValuesID = null;
 	this.foundCompounds = [];
 
+	// Replicate display mode for the Step-4 visualization. ``null`` means
+	// "use default": getReplicateMode() returns "samples" when any omic has
+	// aggregation applied, "replicates" otherwise. Becomes a string only
+	// when the user explicitly toggles the visual-options switch.
+	this.replicateMode = null;
+
 	this.selectedPathway = null;
 	this.timestamp = null;
 	
@@ -276,17 +282,75 @@ function JobInstance(jobID) {
 		//TODO: CHECK CLASSES?
 		this.foundCompounds.push(compoundSet);
 	};
-	this.getOmicHeaders = function(omicName = null) {	
+	this.getOmicHeaders = function(omicName = null, mode = null) {
+		// In "samples" mode the renderer should label cells with the
+		// biological-sample names from the design (or the auto-detection),
+		// not the original per-replicate column headers. We re-derive a
+		// fresh dict each call in this mode because `sampleHeader` may have
+		// been updated by /pa_apply_replicate_mapping after the page loaded.
+		if (mode === "samples") {
+			var headers = {};
+			this.getGeneBasedInputOmics().concat(this.getCompoundBasedInputOmics()).forEach(function(omic) {
+				if (Array.isArray(omic.sampleHeader) && omic.sampleHeader.length) {
+					// Prepend a placeholder so the lookup convention from
+					// the replicates path (omicHeader[idx + 1]) keeps working
+					// uniformly across modes.
+					headers[omic.omicName] = [""].concat(omic.sampleHeader);
+				} else {
+					headers[omic.omicName] = omic.omicHeader;
+				}
+			});
+			return headers;
+		}
+
 		if (this.omicHeaders == null) {
-			
+
 			this.omicHeaders = {};
-			
+
 			this.getGeneBasedInputOmics().concat(this.getCompoundBasedInputOmics()).map(function(currentValue, index, omics) {
 				this.omicHeaders[currentValue["omicName"]] = currentValue["omicHeader"];
 			}.bind(this));
 		}
-		
+
 		return this.omicHeaders;
+	};
+
+	/**
+	 * Active replicate-display mode for this job ("replicates" or "samples").
+	 *
+	 * Default behaviour: if the user has never explicitly set a mode in this
+	 * session AND at least one omic has a sample mapping applied (server-side
+	 * auto-apply or manual override), default to "samples" — that's the view
+	 * the user is implicitly asking for when they upload `_R1/_R2`-style data.
+	 * Setting the mode explicitly via setReplicateMode() pins it for the rest
+	 * of the session (otherwise toggling back to "replicates" via the visual-
+	 * options panel would be undone on the next read).
+	 */
+	this.getReplicateMode = function() {
+		if (this.replicateMode) return this.replicateMode;
+		return this.hasAnyReplicateAggregation && this.hasAnyReplicateAggregation()
+			? "samples"
+			: "replicates";
+	};
+	this.setReplicateMode = function(mode) {
+		this.replicateMode = (mode === "samples") ? "samples" : "replicates";
+		return this;
+	};
+
+	/**
+	 * Returns true if at least one omic of this job has had a replicate→sample
+	 * mapping applied (auto or manual). The Step-4 toggle is only rendered
+	 * when this is true; a job with no replicates can't aggregate.
+	 */
+	this.hasAnyReplicateAggregation = function() {
+		var omics = this.getGeneBasedInputOmics() || [];
+		omics = omics.concat(this.getCompoundBasedInputOmics() || []);
+		for (var i = 0; i < omics.length; i++) {
+			if (Array.isArray(omics[i].sampleHeader) && omics[i].sampleHeader.length > 0) {
+				return true;
+			}
+		}
+		return false;
 	};
 
 

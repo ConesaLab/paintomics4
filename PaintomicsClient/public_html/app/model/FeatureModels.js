@@ -429,6 +429,11 @@ function OmicValue() {
 	this.relevantAssociation = false;
 	this.values = null;
 	this.isMetagene = false;
+	// Replicate-aggregation fields. Both default to null so legacy jobs and
+	// jobs without an applied sample mapping behave exactly as before — the
+	// renderer falls back to `values` / `relevant`.
+	this.sampleValues = null;     // list[number] — one mean per biological sample
+	this.sampleRelevant = null;   // list[bool]   — OR-collapsed across replicates
 
 	/***********************************************************************
 	* GETTERS AND SETTERS
@@ -446,7 +451,24 @@ function OmicValue() {
 
 		return this;
 	};
-	this.isRelevant = function(index) {
+	this.isRelevant = function(index, mode) {
+		// Mode-aware variant: when mode === "samples" and a sample-aggregation
+		// has been computed for this OmicValue, read from `sampleRelevant`
+		// (one bool per biological sample). All other shapes / modes fall
+		// through to the per-replicate logic below, which is the original
+		// pre-aggregation behaviour.
+		if (mode === "samples" && Array.isArray(this.sampleRelevant)) {
+			if (index !== undefined) {
+				// Mirror the per-replicate guard at line below: a length-≤1
+				// sampleRelevant carries the feature-level "relevant overall"
+				// semantic and surfaces via the row-label `*`, not per-cell
+				// stars. (The server emits length-1 here when the input
+				// relevance file was a single-column / scalar flag.)
+				if (this.sampleRelevant.length <= 1) return false;
+				return this.sampleRelevant[index] === true;
+			}
+			return this.sampleRelevant.some(x => x === true);
+		}
 		if (index !== undefined && Array.isArray(this.relevant)) {
 			// Per-cell stars only mean something with per-condition relevance.
 			// A single-element list (single-column relevant file) means "relevant
@@ -481,8 +503,35 @@ function OmicValue() {
 
 		return this;
 	};
-	this.getValues = function() {
+	this.getValues = function(mode) {
+		// Mode-aware variant: callers that want the replicate-collapsed view
+		// pass mode === "samples". When the OmicValue has a sampleValues array
+		// available, return it; otherwise fall back to the raw replicate values
+		// so the renderer can degrade gracefully on omics where aggregation was
+		// never applied (single-condition data, time courses without reps, …).
+		if (mode === "samples" && Array.isArray(this.sampleValues)) {
+			return this.sampleValues;
+		}
 		return this.values;
+	};
+	this.setSampleValues = function(sampleValues) {
+		this.sampleValues = sampleValues;
+
+		return this;
+	};
+	this.getSampleValues = function() {
+		return this.sampleValues;
+	};
+	this.setSampleRelevant = function(sampleRelevant) {
+		this.sampleRelevant = sampleRelevant;
+
+		return this;
+	};
+	this.getSampleRelevant = function() {
+		return this.sampleRelevant;
+	};
+	this.hasSampleAggregation = function() {
+		return Array.isArray(this.sampleValues);
 	};
 	this.isCompoundOmicsValue = function() {
 		throw Error("Not implemented");
@@ -517,8 +566,26 @@ OmicValue.loadFromJSON = function(jsonObject) {
 		}
 	}
 
+	// Mirror the explicit float/bool coercion done for `values` above so the
+	// aggregation arrays survive round-trips through JSON encoders that
+	// stringify scalars (mongo extended-JSON, legacy serializers, …).
+	if (Array.isArray(jsonObject.sampleValues)) {
+		omicValueInstance.sampleValues = jsonObject.sampleValues.map(function(v) {
+			return parseFloat(v);
+		});
+	} else {
+		omicValueInstance.sampleValues = null;
+	}
+	if (Array.isArray(jsonObject.sampleRelevant)) {
+		omicValueInstance.sampleRelevant = jsonObject.sampleRelevant.map(function(v) {
+			return v === true || v === "True" || v === "true";
+		});
+	} else {
+		omicValueInstance.sampleRelevant = null;
+	}
+
 	for(var i in jsonObject){
-		if(i !== "values"){
+		if(i !== "values" && i !== "sampleValues" && i !== "sampleRelevant"){
 			omicValueInstance[i] = jsonObject[i];
 		}
 	}

@@ -382,6 +382,13 @@ class Application(object):
             return pathwayAcquisitionAdjustPvalues(request, Response()).getResponse()
 
         # *******************************************************************************************
+        # APPLY REPLICATE→SAMPLE MAPPING (Step-2 confirmation panel)
+        # *******************************************************************************************
+        @self.app.route(SERVER_SUBDOMAIN + '/pa_apply_replicate_mapping', methods=['OPTIONS', 'POST'])
+        def applyReplicateMappingHandler():
+            return pathwayAcquisitionApplyReplicateMapping(request, Response()).getResponse()
+
+        # *******************************************************************************************
         # REGENERATE METAGENES HANDLER
         # *******************************************************************************************
         @self.app.route(SERVER_SUBDOMAIN + '/pa_get_clusters', methods=['OPTIONS', 'POST'])

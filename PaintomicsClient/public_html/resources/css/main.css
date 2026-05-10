@@ -2061,6 +2061,73 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
   }
 }
 
+/* ----- Step-2: Replicate detection card ----- */
+.repDetectionBox { width: 100% !important; }
+.repDetectionCard {
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 10px 12px;
+    margin: 10px 0;
+    background: #fafafa;
+}
+.repDetectionCard h3 {
+    margin: 0 0 6px 0;
+    font-size: 14px;
+    color: #333;
+}
+.repDetectionSummary { margin: 0 0 6px 0; color: #555; }
+.repDetectionWarn {
+    color: #b66400;
+    background: #fff7e6;
+    border-left: 3px solid #b66400;
+    padding: 4px 8px;
+    margin: 6px 0;
+}
+.repDetectionPreview {
+    list-style: none;
+    padding: 4px 8px;
+    margin: 6px 0;
+    background: #fff;
+    border: 1px dashed #ccc;
+    max-height: 140px;
+    overflow-y: auto;
+    font-size: 12px;
+}
+.repDetectionPreview li { padding: 1px 0; }
+.repDetectionMore { color: #888; font-style: italic; }
+.repDetectionRadios { margin: 8px 0; }
+.repDetectionRadios label {
+    display: block;
+    padding: 2px 0;
+    cursor: pointer;
+}
+.repDetectionRadios input[type=radio] { margin-right: 6px; }
+.repDetectionRadios input[disabled] + * { color: #aaa; }
+.repDetectionRecommended { color: #2a8a3a; font-size: 12px; }
+.repDetectionManual {
+    margin: 6px 0 6px 22px;
+    padding: 6px 8px;
+    background: #fff;
+    border: 1px solid #e0e0e0;
+}
+.repDetectionFormatHint { font-size: 11px; color: #777; margin: 4px 0 0 0; }
+.repDetectionActions { margin-top: 6px; }
+.repDetectionStatus { margin-left: 12px; font-size: 12px; }
+.repDetectionStatus.repDetectionOK    { color: #2a8a3a; }
+.repDetectionStatus.repDetectionError { color: #c0392b; }
+.repDetectionAppliedBadge {
+    display: inline-block;
+    margin-left: 8px;
+    padding: 1px 6px;
+    font-size: 11px;
+    font-weight: normal;
+    color: #2a8a3a;
+    background: #e6f4ea;
+    border: 1px solid #2a8a3a;
+    border-radius: 3px;
+}
+.repDetectionAppliedBadge i { margin-right: 3px; }
+
 
 
 
