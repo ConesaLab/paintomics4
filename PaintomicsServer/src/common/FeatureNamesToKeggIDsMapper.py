@@ -264,6 +264,15 @@ def mapFeatureIdentifiers(jobID, organism, databases, featureList,  matchedFeatu
 
             originalName = feature.getName()
             featureMatchedInAnyDB = False
+            # Track featureIDs already cloned for THIS feature across the database
+            # loop. When two databases resolve the same input name to the same
+            # featureID (e.g. ath: KEGG and MapMan both return AGI codes), cloning
+            # twice would later collide in addInputGeneData and double every
+            # OmicValue — Gene G1 ends up with [OV_R1, OV_R1, OV_R2, OV_R2] and
+            # the pathway view shows each row twice. PathwayAcquisitionJob already
+            # tags the merged gene with matchingDB=["KEGG","MapMan"] downstream,
+            # so we keep the first DB on the clone and skip subsequent duplicates.
+            seenIDs = set()
 
             # Check all databases for this feature
             for databaseConvertion_name in databases:
@@ -282,6 +291,12 @@ def mapFeatureIdentifiers(jobID, organism, databases, featureList,  matchedFeatu
                         feature.getOmicsValues()[0].getOriginalName() if featureEnrichment else feature.getName())
 
                     for featureID in set(featureIDs):
+                        if featureID in seenIDs:
+                            # Same featureID already cloned from a previous DB —
+                            # cloning again would double OmicValues post-merge.
+                            continue
+                        seenIDs.add(featureID)
+
                         featureClone = feature.clone()  # IF MORE THAN 1 MATCH, CLONE THE FEATURE
                         featureClone.setID(featureID)
 
