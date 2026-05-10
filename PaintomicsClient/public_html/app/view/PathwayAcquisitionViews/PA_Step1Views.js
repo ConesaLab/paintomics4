@@ -32,6 +32,9 @@ function PA_Step1JobView() {
 	this.name = "PA_Step1JobView";
 	this.nFiles = 0;
 	this.exampleMode = false;
+	// Regulatory Omic analysis method, locked once chosen for the whole job.
+	// null until the user picks; "pairwise" or "more" thereafter.
+	this.regulatoryMethod = null;
 
 	/*********************************************************************
 	* GETTERS AND SETTERS
@@ -47,7 +50,50 @@ function PA_Step1JobView() {
 	* This function remove all panels and reset the application.
 	*/
 	this.resetViewHandler = function() {
+		this.regulatoryMethod = null;
 		this.controller.resetButtonClickHandler(this);
+	};
+	/**
+	* Opens the modal that lets the user pick between Pairwise and MORE
+	* the first time they add a Regulatory Omic in this job. Once chosen,
+	* `this.regulatoryMethod` is locked for the rest of the session.
+	*/
+	this.showRegulatoryMethodChooser = function() {
+		var me = this;
+		var pickHandler = function(method) {
+			return function() {
+				me.regulatoryMethod = method;
+				win.close();
+				me.addNewOmicSubmittingPanel("regulatoryomic");
+			};
+		};
+		var win = Ext.create('Ext.window.Window', {
+			title: 'Regulatory Omic — choose analysis method',
+			modal: true,
+			width: 720,
+			closable: true,
+			bodyPadding: 14,
+			layout: { type: 'hbox', align: 'stretch' },
+			defaults: { flex: 1, margin: 6, bodyPadding: 12, border: 1 },
+			items: [{
+				xtype: 'panel',
+				title: 'Pairwise',
+				html: '<p style="min-height: 130px;">Analyse <b>one regulatory omic at a time</b>. ' +
+					'Independent correlation between each regulator and its target gene. ' +
+					'Use this for the classical miRNA-target style of analysis. ' +
+					'You can add several Pairwise panels (one per regulatory omic) in the same job.</p>',
+				bbar: ['->', { xtype: 'button', text: 'Choose Pairwise', handler: pickHandler('pairwise') }]
+			}, {
+				xtype: 'panel',
+				title: 'MORE',
+				html: '<p style="min-height: 130px;">Joint <b>multi-omic regression</b> (PLS / MLR) over one or ' +
+					'more regulators at once, filtered by VIP, &alpha; and R&sup2;. Use this when you want ' +
+					'all regulators integrated into a single model. Only one MORE panel is allowed per job; ' +
+					'use the &ldquo;+ Add another Regulatory Omic&rdquo; button inside the panel to stack regulators.</p>',
+				bbar: ['->', { xtype: 'button', text: 'Choose MORE', handler: pickHandler('more') }]
+			}]
+		});
+		win.show();
 	};
 	/**
 	* This function adds a new OmicSubmittingPanel for the given type.
@@ -89,13 +135,40 @@ function PA_Step1JobView() {
 				relevantFileType: "Relevant DNAse-Seq list"
 			});
 		} else if (type === "mirnabasedomic") {
+			// Legacy entry point — kept for restore-from-saved-job paths.
 			newElem = new MiRNAOmicSubmittingPanel(this.nFiles);
+			if (this.regulatoryMethod === null) { this.regulatoryMethod = "pairwise"; }
 		} else if (type === "bedbasedomic") {
 			newElem = new RegionBasedOmicSubmittingPanel(this.nFiles);
 		} else if (type === "otheromic") {
 			newElem = new OmicSubmittingPanel(this.nFiles);
 		} else if (type === "moreanalysis") {
+			// Legacy entry point — kept for restore-from-saved-job paths.
 			newElem = new MORESubmittingPanel(this.nFiles);
+			if (this.regulatoryMethod === null) { this.regulatoryMethod = "more"; }
+		} else if (type === "regulatoryomic") {
+			// Unified Regulatory Omic entry. First click opens the chooser;
+			// subsequent clicks route to the locked method.
+			if (this.regulatoryMethod === null) {
+				this.showRegulatoryMethodChooser();
+				return null;
+			}
+			if (this.regulatoryMethod === "pairwise") {
+				newElem = new MiRNAOmicSubmittingPanel(this.nFiles, { regulatoryMethod: "pairwise" });
+			} else {
+				// MORE: enforce a single MORE panel per job (joint analysis only).
+				var existingMore = this.getComponent().queryById("submittingPanelsContainer")
+					.query("container[cls=omicbox moreBasedOmic]");
+				if (existingMore.length > 0) {
+					showInfoMessage("MORE Analysis", {
+						message: "You already have a MORE panel in this job. Use the " +
+							"&ldquo;+ Add another Regulatory Omic&rdquo; button inside it to add more regulators.",
+						showButton: true
+					});
+					return null;
+				}
+				newElem = new MORESubmittingPanel(this.nFiles);
+			}
 		} else if (type == "transcriptionfactor") {
 			newElem = new OmicSubmittingPanel(this.nFiles, {
 				type: "Transcription factor",
@@ -108,7 +181,13 @@ function PA_Step1JobView() {
 		submitForm = this.getComponent().queryById("submittingPanelsContainer");
 		submitForm.insert(1, newElem.getComponent()).focus();
 
-		if (type !== "otheromic" && type !== "bedbasedomic" && type !== "mirnabasedomic") {
+		// The Regulatory Omic card stays clickable in Pairwise mode (multi-add)
+		// but is hidden once a MORE panel exists (single-panel rule).
+		var keepCardVisible = (
+			type === "otheromic" || type === "bedbasedomic" || type === "mirnabasedomic" ||
+			(type === "regulatoryomic" && this.regulatoryMethod === "pairwise")
+		);
+		if (!keepCardVisible) {
 			$("div.availableOmicsBox[title=" + type + "]").css("display", "none");
 		}
 
@@ -130,9 +209,25 @@ function PA_Step1JobView() {
 		var submitForm = this.getComponent().queryById("submittingPanelsContainer");
 		submitForm.remove(omicSubmittingPanel.getComponent());
 
-		if (omicSubmittingPanel.type !== "otheromic" && omicSubmittingPanel.type !== "bedbasedomic" &&
-		    omicSubmittingPanel.type !== "mirnabasedomic" && !this.exampleMode) {
-			$("div.availableOmicsBox[title=" + omicSubmittingPanel.type + "]").fadeIn();
+		var removedType = omicSubmittingPanel.type;
+		if (!this.exampleMode) {
+			if (removedType === "moreanalysis") {
+				// MORE panel removed — free up the unified Regulatory Omic card again.
+				$("div.availableOmicsBox[title=regulatoryomic]").fadeIn();
+			} else if (removedType !== undefined &&
+				removedType !== "otheromic" && removedType !== "bedbasedomic" &&
+				removedType !== "mirnabasedomic") {
+				$("div.availableOmicsBox[title=" + removedType + "]").fadeIn();
+			}
+		}
+
+		// Auto-unlock regulatory method when no Regulatory Omic panels remain,
+		// so the user can pick a different method on their next add.
+		var remainingRegulatory = submitForm.query(
+			"container[cls=omicbox miRNABasedOmic],[cls=omicbox moreBasedOmic]"
+		);
+		if (remainingRegulatory.length === 0) {
+			this.regulatoryMethod = null;
 		}
 
 		if (submitForm.items.getCount() === 2 && !this.exampleMode) {
@@ -556,8 +651,7 @@ function PA_Step1JobView() {
 							'<div class="availableOmicsBox" title="geneexpression"><h4><a href="javascript:void(0)"><i class="fa fa-plus-circle"></i></a> Gene Expression</h4></div>' +
 							'<div class="availableOmicsBox" title="metabolomics"><h4><a href="javascript:void(0)"><i class="fa fa-plus-circle"></i></a> Metabolomics</h4></div>' +
 							'<div class="availableOmicsBox" title="proteomics"><h4><a href="javascript:void(0)"><i class="fa fa-plus-circle"></i></a> Proteomics</h4></div>' +
-							'<div class="availableOmicsBox" title="mirnabasedomic"><h4><a href="javascript:void(0)"><i class="fa fa-plus-circle"></i></a> Regulatory omic</h4></div>' +
-							'<div class="availableOmicsBox moreAnalysisBox" title="moreanalysis"><h4><a href="javascript:void(0)"><i class="fa fa-plus-circle"></i></a> MORE Analysis</h4></div>' +
+							'<div class="availableOmicsBox" title="regulatoryomic"><h4><a href="javascript:void(0)"><i class="fa fa-plus-circle"></i></a> Regulatory Omic</h4></div>' +
 							'<div class="availableOmicsBox" title="bedbasedomic"><h4><a href="javascript:void(0)"><i class="fa fa-plus-circle"></i></a> Region based omic</h4></div>' +
 							'<div class="availableOmicsBox" title="otheromic"><h4><a href="javascript:void(0)"><i class="fa fa-plus-circle"></i></a> Other omics</h4></div>'
 						}, {
@@ -1728,7 +1822,9 @@ function MiRNAOmicSubmittingPanel(nElem, options) {
 	***********************************************************************/
 	options = (options || {});
 
-	this.title = "Regulatory omic";
+	this.title = (options.regulatoryMethod === "pairwise")
+		? "Regulatory Omic — Pairwise"
+		: "Regulatory omic";
 	this.namePrefix = "omic" + nElem;
 	this.omicName = "";
 	this.mapTo = "Gene";
@@ -2407,7 +2503,7 @@ function MORESubmittingPanel(nElem, options) {
 	* ATTRIBUTES
 	***********************************************************************/
 	options = (options || {});
-	this.title = "MORE Analysis";
+	this.title = "Regulatory Omic — MORE";
 	this.namePrefix = "omic" + nElem;
 	this.omicName = "MORE Regulatory Omic";
 	this.mapTo = "Gene";
@@ -2466,7 +2562,6 @@ function MORESubmittingPanel(nElem, options) {
 				cls: "omicboxTitle moreBasedFileBox",
 				html: '<h4><a class="deleteOmicBox" href="javascript:void(0)" style="margin: 0; float:right;  padding-right: 15px;">' +
 				(me.removable ? ' <i class="fa fa-trash"></i></a>' : "</a>") + this.title +
-				' <span style="font-size: 13px; font-weight: normal; opacity: 0.85;">— Joint Multi-Omic Regulation</span>' +
 				'</h4>'
 			},
 			{

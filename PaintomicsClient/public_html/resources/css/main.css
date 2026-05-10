@@ -762,7 +762,7 @@ div.omicboxTitle h4 {
 .omicboxTitle.bedbasedFileBox, .availableOmicsBox[title=bedbasedomic] {
 	background: #738B9D;
 }
-.omicboxTitle.miRNAbasedFileBox, .omicboxTitle.moreBasedFileBox, .availableOmicsBox[title=mirnabasedomic], .availableOmicsBox[title=moreanalysis] {
+.omicboxTitle.miRNAbasedFileBox, .omicboxTitle.moreBasedFileBox, .availableOmicsBox[title=regulatoryomic] {
 	background: rgb(154, 150, 78);
 }
 .availableOmicsBox {
