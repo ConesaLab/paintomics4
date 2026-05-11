@@ -1137,13 +1137,33 @@ function PA_Step4KeggDiagramFeatureSetView() {
 
 		if (features.length > 5) {
 			try {
+				// Cached lookup table: omicName → { mapping, nSamples }. Built
+				// once per box so each metagene OmicValue can inherit the
+				// parent omic's replicate→sample aggregation (when active) and
+				// expose per-sample values to "Show samples" mode in Step-4.
+				var jobModel = this.getParent("PA_Step4JobView").getModel();
+				var inputOmicByName = {};
+				jobModel.getGeneBasedInputOmics()
+					.concat(jobModel.getCompoundBasedInputOmics())
+					.forEach(function(o) { inputOmicByName[o.omicName] = o; });
+
 				omicNames.forEach(function(omic) {
 					// Use all values of the same omic in all features associated to the box.
 					var omicValues = this.model.getAllOmicValues(omic).map(x => x.getValues());
 					// It is important that the featureType contains gene or compound word, as it
 					// will be used later to filter.
 					var featureType = "metagene"; //geneOmicNames.includes(omic) ? "gene" : "compound";
-					this.model.addOmicMetagenes(omic, featureType, mlPCA.generateMetagenes(omicValues));
+
+					var inputOmic = inputOmicByName[omic];
+					var mapping = (inputOmic && Array.isArray(inputOmic.replicateMapping))
+						? inputOmic.replicateMapping : null;
+					var nSamples = (inputOmic && Array.isArray(inputOmic.sampleHeader))
+						? inputOmic.sampleHeader.length : 0;
+
+					this.model.addOmicMetagenes(
+						omic, featureType,
+						mlPCA.generateMetagenes(omicValues),
+						mapping, nSamples);
 				}.bind(this));
 
 				// Validate metagenes were actually generated before switching mode
@@ -3411,6 +3431,14 @@ function PA_Step4GlobalHeatmapView() {
 			"^": '<i class="relevantAssociationFeature"></i>'
 		};
 
+		// Resolve the per-omic column labels for the active replicate mode so
+		// the tooltip can name each cell by its sample (or replicate) column
+		// — matches the pathway-box tooltip behaviour. Captured in closure
+		// because the Highcharts formatter loses the surrounding `this`.
+		var jobModelGH_HM = this.getParent("PA_Step4JobView") ? this.getParent("PA_Step4JobView").getModel() : null;
+		var replicateModeGH_HM = jobModelGH_HM && jobModelGH_HM.getReplicateMode ? jobModelGH_HM.getReplicateMode() : "replicates";
+		var omicHeaderGH = jobModelGH_HM ? (jobModelGH_HM.getOmicHeaders(null, replicateModeGH_HM)[omicName] || []) : [];
+
 		//STEP 2. DRAW THE HEATMAP
 		var heatmap = new Highcharts.Chart({
 			chart: {
@@ -3429,6 +3457,18 @@ function PA_Step4GlobalHeatmapView() {
 				borderColor: "#333",
 				formatter: function() {
 					var title = this.point.series.name.split("#");
+					var headerField = omicHeaderGH[this.point.x + 1];
+					if (headerField) {
+						if (title[0].length + headerField.length > 30) {
+							if (title[0].length > 14) {
+								title[0] = title[0].substring(0, 12) + '...';
+							}
+							if (headerField.length > 20) {
+								headerField = headerField.substring(0, 20) + '...';
+							}
+						}
+						title[0] = title[0] + " [" + headerField + "]";
+					}
 					title[1] = (title.length > 1) ? title[1] : "";
 					return "<b>" + title[0].replace(/[\*\^]/g, function(c) { return replaceSymbols[c]; }) + "</b><br/>" + "<i class='tooltipInputName'>" + title[1] + "</i>" + (this.point.value === null ? "No data" : this.point.value);
 				},
@@ -3919,8 +3959,15 @@ function PA_Step4DetailsView() {
 			algorithm: "hierarchical",
 			distance: "euclidean",
 			linkage: "complete",
-			dendogram: false 
+			dendogram: false
 		} : false;
+
+		// Resolve column labels for this omic in the active replicate mode so
+		// the tooltip names the sample (or replicate) under each cell. Same
+		// shape as the pathway-box tooltip and the global-heatmap tooltip.
+		var jobModelDV_HM = this.getParent("PA_Step4JobView") ? this.getParent("PA_Step4JobView").getModel() : null;
+		var replicateModeDV_HM = jobModelDV_HM && jobModelDV_HM.getReplicateMode ? jobModelDV_HM.getReplicateMode() : "replicates";
+		var omicHeaderDV = jobModelDV_HM ? (jobModelDV_HM.getOmicHeaders(null, replicateModeDV_HM)[omicName] || []) : [];
 
 		var heatmap = new Highcharts.Chart({
 			chart: {type: 'heatmap', renderTo: targetID},
@@ -3931,6 +3978,18 @@ function PA_Step4DetailsView() {
 				borderColor: "#333",
 				formatter: function () {
 					var title = this.point.series.name.split("#");
+					var headerField = omicHeaderDV[this.point.x + 1];
+					if (headerField) {
+						if (title[0].length + headerField.length > 30) {
+							if (title[0].length > 14) {
+								title[0] = title[0].substring(0, 12) + '...';
+							}
+							if (headerField.length > 20) {
+								headerField = headerField.substring(0, 20) + '...';
+							}
+						}
+						title[0] = title[0] + " [" + headerField + "]";
+					}
 					title[1] = (title.length > 1) ? title[1] : "";
 					return "<b>" + title[0].replace(/[\*\^]/g, function(c) { return replaceSymbols[c]; }) + "</b><br/>" + "<i class='tooltipInputName'>" + title[1] + "</i>" + (this.point.value === null ? "No data" : this.point.value);
 				},

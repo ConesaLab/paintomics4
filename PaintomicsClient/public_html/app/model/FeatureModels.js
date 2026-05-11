@@ -343,7 +343,7 @@ function FeatureSet(x, y) {
 	this.setMetagenes = function(metagenes) {
 		this.metagenes = metagenes;
 	};
-	this.addOmicMetagenes = function(omic, featureType, metagenes) {
+	this.addOmicMetagenes = function(omic, featureType, metagenes, replicateMapping, nSamples) {
 		if (this.metagenes === null) {
 			this.metagenes = [];
 		}
@@ -351,6 +351,16 @@ function FeatureSet(x, y) {
 		// All metagenes will share the same graphical data
 		var oldFeatureGraphicalData = this.getFeatures()[0].getFeatureGraphicalData();
 		var featureGraphicalData = jQuery.extend({}, oldFeatureGraphicalData).setID("Metagene_" + oldFeatureGraphicalData.getID());
+
+		// When the parent omic has an active replicate→sample mapping (Step-2
+		// auto-detection or manual design file), collapse the per-replicate
+		// metagene vector to one value per biological sample and stash it on
+		// OmicValue.sampleValues. The Step-4 renderer's `getValues("samples")`
+		// then yields N cells for metagenes the same way it does for regular
+		// features — without this the metagene tooltip stays stuck at N×k
+		// cells even when the rest of the visualisation has switched to
+		// "Show samples".
+		var aggregate = Array.isArray(replicateMapping) && nSamples > 0;
 
 		for (var i = 0; i < metagenes.length; i++) {
 
@@ -361,8 +371,18 @@ function FeatureSet(x, y) {
 				this.metagenes[i] = new FeatureSetElem(metageneFeature, featureGraphicalData).setParent(this);
 			}
 
+			var omicValue = new SimpleOmicValue()
+				.setValues(metagenes[i])
+				.setMetagene(true)
+				.setOmicName(omic);
+
+			if (aggregate) {
+				omicValue.setSampleValues(
+					collapseReplicatesByMapping(metagenes[i], replicateMapping, nSamples));
+			}
+
 			// TODO: add support for compound type in simple omic value
-			this.metagenes[i].getFeature().addOmicsValues(new SimpleOmicValue().setValues(metagenes[i]).setMetagene(true).setOmicName(omic));
+			this.metagenes[i].getFeature().addOmicsValues(omicValue);
 		}
 	};
 	this.getAllOmicValues = function(omic) {
@@ -632,3 +652,35 @@ function SimpleOmicValue() {
 
 }
 SimpleOmicValue.prototype = new OmicValue;
+
+/**
+ * Collapse a per-replicate vector to a per-sample vector by averaging the
+ * elements that share a sample index. Mapping convention matches the
+ * server-side aggregation: `mapping[col]` holds the sample index for that
+ * replicate column, or a negative value when the column is unmatched (in
+ * which case it is dropped from the mean). Non-finite inputs are skipped;
+ * a sample with no contributing values yields NaN, which the renderer
+ * already treats as "no data" (same fallback as feature-level sampleValues).
+ *
+ * Kept as a free function rather than an OmicValue method because the
+ * client-side metagene path (PA_Step4Views.js) computes the aggregation
+ * once per metagene vector returned by PCA, before any OmicValue exists.
+ */
+function collapseReplicatesByMapping(values, mapping, nSamples) {
+	var sums = new Array(nSamples).fill(0);
+	var counts = new Array(nSamples).fill(0);
+	var n = Math.min(values.length, mapping.length);
+	for (var i = 0; i < n; i++) {
+		var s = mapping[i];
+		if (s < 0 || s >= nSamples) continue;
+		var v = Number(values[i]);
+		if (!isFinite(v)) continue;
+		sums[s] += v;
+		counts[s] += 1;
+	}
+	var out = new Array(nSamples);
+	for (var j = 0; j < nSamples; j++) {
+		out[j] = counts[j] > 0 ? sums[j] / counts[j] : NaN;
+	}
+	return out;
+}

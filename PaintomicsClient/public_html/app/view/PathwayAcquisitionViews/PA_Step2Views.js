@@ -441,12 +441,6 @@ function PA_Step2ReplicateDetectionView() {
 		var omicId = omic.omicName.replace(/[^a-zA-Z0-9]/g, "_");
 		var nSamples = det.sampleHeader.length;
 		var nReplicates = det.mapping.filter(function(m) { return m >= 0; }).length;
-		// Server auto-applies the auto mapping for `complete` detections, so
-		// the card opens already in the "applied" state. The user can override
-		// to per-replicate or upload a custom design.
-		var alreadyApplied = (det.status === "complete" &&
-			Array.isArray(omic.sampleHeader) && omic.sampleHeader.length > 0 &&
-			omic.replicateSource === "auto");
 
 		// Build a small preview list — capped to keep the UI compact.
 		var previewRows = det.sampleHeader.slice(0, 12).map(function(sample, idx) {
@@ -476,19 +470,11 @@ function PA_Step2ReplicateDetectionView() {
 		var autoChecked   = (det.status === "complete") ? "checked" : "";
 		var offChecked    = (det.status === "complete") ? "" : "checked";
 
-		var appliedBadge = alreadyApplied
-			? '<span class="repDetectionAppliedBadge"><i class="fa fa-check"></i> Applied automatically</span>'
-			: '';
-
 		return '' +
 			'<div class="repDetectionCard" data-omic="' + omic.omicName + '" data-omicid="' + omicId + '">' +
-			'  <h3>' + omic.omicName + ' ' + appliedBadge + '</h3>' +
+			'  <h3>' + omic.omicName + '</h3>' +
 			'  <p class="repDetectionSummary">' +
-			       nSamples + ' sample(s), ' + nReplicates + ' replicate column(s) detected from suffixes.' +
-			       (alreadyApplied
-			          ? ' Each sample will be drawn as one cell (mean of its replicates) in the pathway visualization. ' +
-			            'Use the radios below to override.'
-			          : '') +
+			       nSamples + ' sample(s) detected across ' + nReplicates + ' replicate column(s).' +
 			'  </p>' +
 			   statusNote +
 			'  <ul class="repDetectionPreview">' + previewRows + '</ul>' +
@@ -503,12 +489,7 @@ function PA_Step2ReplicateDetectionView() {
 			'    <input type="file" class="repDetectionFile" accept=".tsv,.txt,.tab,.csv" />' +
 			'    <p class="repDetectionFormatHint">2 columns, tab- or comma-separated: <code>sample_column &lt;TAB&gt; sample_label</code>. Header row optional.</p>' +
 			'  </div>' +
-			'  <div class="repDetectionActions">' +
-			'    <a href="javascript:void(0)" class="button btn-default repDetectionApply">' +
-			       (alreadyApplied ? 'Update' : 'Apply') +
-			'    </a>' +
-			'    <span class="repDetectionStatus"></span>' +
-			'  </div>' +
+			'  <div class="repDetectionStatus"></div>' +
 			'</div>';
 	};
 
@@ -546,8 +527,10 @@ function PA_Step2ReplicateDetectionView() {
 	};
 
 	/**
-	 * Per-card jQuery wiring: radio toggle reveals the file picker,
-	 * Apply button posts the chosen mode to the server.
+	 * Per-card jQuery wiring: switching the auto/off radios applies the
+	 * mode immediately (no explicit Apply step). Switching to "manual"
+	 * just reveals the file picker — the apply call fires once the user
+	 * actually chooses a design file.
 	 */
 	this._wireHandlers = function() {
 		var me = this;
@@ -558,10 +541,15 @@ function PA_Step2ReplicateDetectionView() {
 			$card.find("input[type=radio]").change(function() {
 				var mode = $card.find("input[type=radio]:checked").val();
 				$card.find(".repDetectionManual").toggle(mode === "manual");
-				$card.find(".repDetectionStatus").text("");
+				$card.find(".repDetectionStatus")
+					.removeClass("repDetectionError repDetectionOK")
+					.text("");
+				if (mode === "auto" || mode === "off") {
+					me._applyForCard($card);
+				}
 			});
 
-			$card.find(".repDetectionApply").click(function() {
+			$card.find(".repDetectionFile").change(function() {
 				me._applyForCard($card);
 			});
 		});
