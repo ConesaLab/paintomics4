@@ -1934,9 +1934,20 @@ function PA_Step4KeggDiagramFeatureView(showButtons) {
 				allOmicValues.forEach(function(omicValues) {
 					x = 0;
 
-					var shownameValue = omicValues.inputName != omicValues.originalName && omicValues.originalName !== undefined ?
-						omicValues.originalName + ": " + omicValues.inputName :
-						omicValues.inputName
+					// Per-feature popup is tight on horizontal space, so render just the
+					// best display name without the AGI tail:
+					// 1. Regulator omic — originalName holds the regulator's symbol
+					//    (overridden server-side); use it alone.
+					// 2. Regular omic with a resolved symbol — show feature.name (e.g. ASP4).
+					// 3. No symbol available — fall back to the user's inputName / AGI.
+					var shownameValue;
+					if (omicValues.inputName != omicValues.originalName && omicValues.originalName !== undefined) {
+						shownameValue = omicValues.originalName;
+					} else if (feature.name && feature.name !== omicValues.inputName) {
+						shownameValue = feature.name;
+					} else {
+						shownameValue = omicValues.inputName;
+					}
 					var relevantSymbols = "";
 
 					if (omicValues.isRelevant(undefined, replicateMode) === true) {
@@ -3235,13 +3246,41 @@ function PA_Step4GlobalHeatmapView() {
 				}
 				referenceOmics[omicValue.omicName][featureName] = referenceOmics[omicValue.omicName][featureName] || [];
 
-				referenceOmics[omicValue.omicName][featureName].push({
-					keggName: omicsValues[matchedFeatures[i]].getName(),
-					inputName: omicValue.originalName || omicValue.getInputName(),
-					isRelevant: omicValue.isRelevant(undefined, replicateModeGH),
-					isRelevantAssociation: omicValue.isRelevantAssociation(),
-					values: omicValue.getValues(replicateModeGH)
-				});
+				// For regulator omics (TF, miRNA, methylation, any omic uploaded with
+				// associations), the row is conceptually "this regulator's value at
+				// this target". Show the regulator as the primary identifier and the
+				// target as secondary — the inverse of regular omics where the row IS
+				// the gene. `omicValue.isRegulator` is set server-side whenever the
+				// input line used the `targetID:::regulatorID` format. The regulator's
+				// display name comes from `omicValue.originalName` — either the
+				// resolved gene symbol or, when no symbol mapping exists, the raw
+				// regulator ID (e.g. a miRNA name).
+				//
+				// `linkKey` is the canonical identifier the cross-heatmap hover handler
+				// uses to find sibling rows (e.g. highlight the WRKY40 TF row when the
+				// user hovers the NAC001 gene-expression row). For regular omics the
+				// keggName side of the label already holds it; for swapped regulator
+				// rows we set linkKey explicitly to keep the linkage.
+				var targetName = omicsValues[matchedFeatures[i]].getName();
+				var isRegulatorRow = !!(omicValue.isRegulator);
+				if (isRegulatorRow) {
+					referenceOmics[omicValue.omicName][featureName].push({
+						keggName: omicValue.originalName,
+						inputName: targetName,
+						linkKey: targetName,
+						isRelevant: omicValue.isRelevant(undefined, replicateModeGH),
+						isRelevantAssociation: omicValue.isRelevantAssociation(),
+						values: omicValue.getValues(replicateModeGH)
+					});
+				} else {
+					referenceOmics[omicValue.omicName][featureName].push({
+						keggName: targetName,
+						inputName: omicValue.originalName || omicValue.getInputName(),
+						isRelevant: omicValue.isRelevant(undefined, replicateModeGH),
+						isRelevantAssociation: omicValue.isRelevantAssociation(),
+						values: omicValue.getValues(replicateModeGH)
+					});
+				}
 			}
 		}
 
@@ -3379,7 +3418,11 @@ function PA_Step4GlobalHeatmapView() {
 			serie = {
 				name: relevantSymbols + omicsValues[i].keggName + "#" + shownameValue,
 				data: [],
-				turboThreshold: Number.MAX_VALUE
+				turboThreshold: Number.MAX_VALUE,
+				// linkKey carries the canonical cross-omic identifier (target symbol)
+				// so the mouseOver handler can highlight sibling rows even when the
+				// label's primary side is the regulator symbol (TF rows post-swap).
+				linkKey: omicsValues[i].linkKey
 			};
 			//Add the name for the row (e.g. MagoHb or "miRNA my_mirnaid_1")
 			yAxisCat.push(relevantSymbols + omicsValues[i].keggName + "#" + shownameValue);
@@ -3487,7 +3530,15 @@ function PA_Step4GlobalHeatmapView() {
 						if (this.value.split !== undefined) {
 							var title = this.value.split("#");
 							title[1] = (title.length > 1) ? title[1] : "No data";
-							return '<span style="width: 50px;display: block; text-align: right;">' + ((title[0].length > 10) ? title[0].substring(0, 5) + "..." + title[0].substring(title[0].length - 4, title[0].length) : title[0]).replace(/[\*\^]/g, function(c) { return replaceSymbols[c]; }) + '</br><i class="tooltipInputName yAxisLabel">' + ((title[1].length > 10) ? title[1].substring(0, 5) + "..." + title[1].substring(title[1].length - 4, title[1].length) : title[1]) + '</i></span>';
+							// Regulator rows embed HTML (e.g. "WRKY40<br><span...>AT2G25000</span>")
+							// in title[0]; char-based truncation would slice the markup.
+							// Detect HTML and render the primary side verbatim.
+							var primaryHasHTML = title[0].indexOf("<") >= 0;
+							var renderedPrimary = primaryHasHTML
+								? title[0]
+								: ((title[0].length > 10) ? title[0].substring(0, 5) + "..." + title[0].substring(title[0].length - 4, title[0].length) : title[0]).replace(/[\*\^]/g, function(c) { return replaceSymbols[c]; });
+							var renderedSecondary = (title[1].length > 10) ? title[1].substring(0, 5) + "..." + title[1].substring(title[1].length - 4, title[1].length) : title[1];
+							return '<span style="width: 50px;display: block; text-align: right;">' + renderedPrimary + '</br><i class="tooltipInputName yAxisLabel">' + renderedSecondary + '</i></span>';
 						}
 					},
 					style: {fontSize: "9px"},
@@ -3503,18 +3554,30 @@ function PA_Step4GlobalHeatmapView() {
 						events: {
 							mouseOver: function() {
 								var me = this;
+								// Sibling-row matching across heatmaps. Regular omics encode the
+								// target identifier as the primary side of `name` (left of `#`),
+								// but regulator rows put the regulator there post-swap. The
+								// `linkKey` series option (set in generateHeatmap) carries the
+								// canonical target identifier so cross-heatmap highlighting keeps
+								// working in both directions.
+								var getLinkKey = function(s) {
+									if (s.options && s.options.linkKey) {
+										return s.options.linkKey;
+									}
+									return s.name.split("#")[0].replace(/[\*\^]\s/g, "");
+								};
+								var keggName = getLinkKey(me.series);
 								//FOR EACH HEATMAPS
 								$("div.heatmapContainer").each(function() {
 									var heatmap = $(this).highcharts();
 									var serie = heatmap.series[me.series.index];
-									var keggName = me.series.name.split("#")[0].replace(/[\*\^]\s/g, "");
 
-									if (serie !== undefined && serie.name.split("#")[0].replace(/[\*\^]\s/g, "") === keggName) {
+									if (serie !== undefined && getLinkKey(serie) === keggName) {
 										serie.showHeatmapSelector(undefined, me.y);
 										return true;
 									} else {
 										for (var i in heatmap.series) {
-											if (heatmap.series[i].name.split("#")[0].replace(/[\*\^]\s/g, "") === keggName) {
+											if (getLinkKey(heatmap.series[i]) === keggName) {
 												heatmap.series[i].showHeatmapSelector();
 												return true;
 											}
@@ -4002,8 +4065,15 @@ function PA_Step4DetailsView() {
 					formatter: function () {
 						var title = this.value.split("#");
 						title[1] = (title.length > 1) ? title[1] : "No data";
-						return '<span style="width: 100px;display: block;   text-align: right;">' + ((title[0].length > 14) ? title[0].substring(0, 14) + "..." : title[0]).replace(/[\*\^]/g, function(c) { return replaceSymbols[c]; }) +
-						'</br><i class="tooltipInputName yAxisLabel">' + ((title[1].length > 14) ? title[1].substring(0, 14) + "..." : title[1]) + '</i></span>';
+						// Regulator rows embed multi-line HTML markup in title[0];
+						// skip char-truncation when HTML is present so the markup stays intact.
+						var primaryHasHTML = title[0].indexOf("<") >= 0;
+						var renderedPrimary = primaryHasHTML
+							? title[0]
+							: ((title[0].length > 14) ? title[0].substring(0, 14) + "..." : title[0]).replace(/[\*\^]/g, function(c) { return replaceSymbols[c]; });
+						var renderedSecondary = (title[1].length > 14) ? title[1].substring(0, 14) + "..." : title[1];
+						return '<span style="width: 100px;display: block;   text-align: right;">' + renderedPrimary +
+						'</br><i class="tooltipInputName yAxisLabel">' + renderedSecondary + '</i></span>';
 					},
 					style: {fontSize: "9px"}, useHTML: true
 				}
@@ -4335,10 +4405,29 @@ var addTableEntrie = function (entriesValue, omicValue, featureName, entrieName,
 				if (entriesValue[entrieName] == null) {
 					entriesValue[entrieName] = [];
 				}
+				// Regulator omics (TF / miRNA / methylation / any omic with associations)
+				// flip the primary/secondary roles so the regulator is the row
+				// identifier. Two cases for the secondary side:
+				//   * Symbol resolved → show the regulator's canonical AGI there
+				//     (e.g. "WRKY40#AT2G25000"). Most useful when you want to look
+				//     up the regulator in an external database.
+				//   * Symbol not resolved (e.g. miRNA names) → fall back to the
+				//     target's symbol so the row still carries the regulator→target
+				//     context (e.g. "miR156#NAC001"), matching the global heatmap.
+				// `linkKey` keeps the cross-heatmap hover linkage anchored on the
+				// target symbol (same as gene-expression / other-omic rows).
+				var isRegulatorRow = !!(omicValue.isRegulator);
+				var keggNameSuffix = (entrieName === omicValue.getOmicName()) ? "" : " " + omicValue.getOmicName();
+				var hasResolvedRegulatorID = isRegulatorRow && omicValue.regulatorID && omicValue.regulatorID !== omicValue.originalName;
 				entriesValue[entrieName].push({
-					keggName: featureName + ((entrieName === omicValue.getOmicName()) ? "" : " " + omicValue.getOmicName()),
-					inputName: omicValue.inputName,
-					originalName: omicValue.originalName,
+					keggName: isRegulatorRow
+						? (omicValue.originalName + keggNameSuffix)
+						: (featureName + keggNameSuffix),
+					inputName: isRegulatorRow
+						? (hasResolvedRegulatorID ? omicValue.regulatorID : featureName)
+						: omicValue.inputName,
+					originalName: isRegulatorRow ? undefined : omicValue.originalName,
+					linkKey: featureName,
 					isRelevant: omicValue.isRelevant(undefined, replicateMode),
 					isRelevantAssociation: omicValue.isRelevantAssociation(),
 					values: omicValue.getValues(replicateMode)

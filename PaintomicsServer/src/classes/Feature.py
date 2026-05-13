@@ -130,6 +130,20 @@ class OmicValue(Model):
         #                    of each sample.
         self.sampleValues   = None
         self.sampleRelevant = None
+        # Marks this OmicValue as a regulator-style entry — i.e. the row is
+        # conceptually "this regulator's value at this target" (TF, miRNA,
+        # methylation, any custom regulatory omic). Set whenever the source
+        # line had the `targetID:::regulatorID` format, regardless of whether
+        # the regulator's symbol could be resolved. Drives the Step 4 client to
+        # show the regulator as the primary identifier in the global heatmap
+        # row and the details panel.
+        self.isRegulator    = False
+        # Regulator's canonical ID (e.g. TAIR/AGI) when its symbol was resolved
+        # via the mapper. originalName holds the display symbol; this preserves
+        # the underlying ID so the details panel can render an "(AGI)" line
+        # below the symbol. Empty string when no symbol mapping was found —
+        # in that case originalName already equals the raw regulator ID.
+        self.regulatorID    = ""
 
     #******************************************************************************************************************
     # GETTERS AND SETTER

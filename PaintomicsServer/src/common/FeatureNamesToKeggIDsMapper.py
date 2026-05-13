@@ -200,6 +200,17 @@ def mapFeatureIdentifiers(jobID, organism, databases, featureList,  matchedFeatu
     databaseConvertion_ids = {dbname: db.dbname.find_one({"dbname": gene_databases.get(dbname)}, {"item": 1, "qty": 1}).get("_id") for dbname in databases}
     databaseGeneSymbol_ids = {dbname: db.dbname.find_one({"dbname": symbol_databases.get(dbname)}, {"item": 1, "qty": 1}).get("_id") for dbname in databases}
 
+    # Iterate symbol-capable databases first so the per-featureID dedup below keeps
+    # the clone whose name was resolved against a real gene-symbol database
+    # (e.g. KEGG→refseq_gene_symbol for ath). Otherwise a caller-provided list ordered
+    # with a same-DB symbol entry first (e.g. MapMan) silently wins and the symbol
+    # lookup is skipped. Callers build `databases` from a set in some paths, so the
+    # order is not stable — sort here to make the behavior deterministic.
+    databases = sorted(
+        databases,
+        key=lambda d: gene_databases.get(d) == symbol_databases.get(d)
+    )
+
     try:
         # Save found features for each database, plus the unique between them
         matches = {db: set() for db in databases + ["Total"]}

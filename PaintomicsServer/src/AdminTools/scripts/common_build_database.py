@@ -701,30 +701,27 @@ def processMapManMappingData():
         stderr.write("\n\nUnable to find the NCBI 2 KEGG MAPPING file: " + ncbi_file_name + "\n")
         exit(1)
 
-    # File containing MapMan metabolites to MapMan feature IDs
+    # MapMan input files. Prefer the canonical DATA_DIR/mapping/<output> location
+    # (populated by the download step) and fall back to the configured `url + file`
+    # for legacy installs that keep MapMan source files outside DATA_DIR.
+    def _resolveMapManPath(resource, displayName):
+        candidate = DATA_DIR + "mapping/" + resource.get("output")
+        if os.path.isfile(candidate):
+            return candidate
+        fallback = resource.get("url") + resource.get("file")
+        if os.path.isfile(fallback):
+            return fallback
+        stderr.write("\n\nUnable to find the " + displayName + " file in either " + candidate + " or " + fallback + "\n")
+        exit(1)
 
     mapman_cpd_resource = EXTERNAL_RESOURCES.get("metabolites")[0]
-    mapman_cpd_file_name = mapman_cpd_resource.get("url") + mapman_cpd_resource.get("file")
+    mapman_cpd_file_name = _resolveMapManPath(mapman_cpd_resource, "MapMan Compound 2 MapMan ID MAPPING")
 
-    if not os.path.isfile(mapman_cpd_file_name):
-        stderr.write("\n\nUnable to find the MapMan Compound 2 MapMan ID MAPPING file: " + mapman_cpd_file_name + "\n")
-        exit(1)
-
-    # File containing MapMan genes to MapMan feature IDs
     mapman_resource = EXTERNAL_RESOURCES.get("mapman_gene")[0]
-    mapman_file_name = mapman_resource.get("url") + mapman_resource.get("file")
+    mapman_file_name = _resolveMapManPath(mapman_resource, "MapMan Gene 2 MapMan ID MAPPING")
 
-    if not os.path.isfile(mapman_file_name):
-        stderr.write("\n\nUnable to find the MapMan Gene 2 MapMan ID MAPPING file: " + mapman_file_name + "\n")
-        exit(1)
-
-    # File containing MapMan genes to NCBI genes
     mapman_kegg_resource = EXTERNAL_RESOURCES.get("mapman_kegg")[0]
-    mapman_kegg_file_name = mapman_kegg_resource.get("url") + mapman_kegg_resource.get("file")
-
-    if not os.path.isfile(mapman_kegg_file_name):
-        stderr.write("Unable to find the MapMan Gene to KEGG ID MAPPING file: " + mapman_kegg_file_name)
-        exit(1)
+    mapman_kegg_file_name = _resolveMapManPath(mapman_kegg_resource, "MapMan Gene to KEGG ID MAPPING")
 
     # Insert compounds
     processMapMan2CompoundSymbolMappingData(mapman_cpd_file_name)
@@ -1128,12 +1125,18 @@ def processMapManPathwaysData():
         stderr.write("The MapMan dictionary is not filled. Mapping files must be processed first.")
         exit(1)
 
-    # Check if classification file exists
+    # Check if classification file exists. Prefer DATA_DIR/mapping/<output>
+    # (populated by the download step) and fall back to the configured
+    # `url + file` for legacy installs.
     mapman_classification_resource = EXTERNAL_RESOURCES.get("mapman_classification")[0]
-    mapman_classification_file_name = mapman_classification_resource.get("url") + mapman_classification_resource.get("file")
+    _candidate = DATA_DIR + "mapping/" + mapman_classification_resource.get("output")
+    if os.path.isfile(_candidate):
+        mapman_classification_file_name = _candidate
+    else:
+        mapman_classification_file_name = mapman_classification_resource.get("url") + mapman_classification_resource.get("file")
 
     if not os.path.isfile(mapman_classification_file_name):
-        stderr.write("\n\nUnable to find the MapMan classification file: " + mapman_classification_file_name + "\n")
+        stderr.write("\n\nUnable to find the MapMan classification file in either " + _candidate + " or " + mapman_classification_file_name + "\n")
         exit(1)
 
     # MapMan pathways files are the same for each species, even the XML files.
@@ -1151,7 +1154,9 @@ def processMapManPathwaysData():
         os.makedirs(MAPMAN_DIR)
 
     mapman_pathways = EXTERNAL_RESOURCES.get("mapman_pathways")[0]
-    pathways_file_name = mapman_pathways.get("url") + mapman_pathways.get("file")
+    # Prefer DATA_DIR/mapping/<output>, fall back to configured `url + file`.
+    _candidate = DATA_DIR + "mapping/" + mapman_pathways.get("output")
+    pathways_file_name = _candidate if os.path.isfile(_candidate) else (mapman_pathways.get("url") + mapman_pathways.get("file"))
 
     # Try to extract the archive on the final dir, if there is an error
     # rename the previous dir

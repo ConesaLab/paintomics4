@@ -355,30 +355,37 @@ class Job(Model):
         parsedFeatures = []
 
 
-        # If there is transcription factor, we need to map it to the gene name
-        if omicName == "Transcription factor":
-            totalInputTF = []
-            matchedNameDict = {}
+        # Any omic whose data file uses the `targetID:::regulatorID` format
+        # (signalled by associationFeatures being populated) gets the same
+        # treatment we originally added for "Transcription factor": try to
+        # resolve each regulator's symbol via the mapper so the Step 4 client
+        # can display it alongside / instead of the raw ID. miRNA, methylation
+        # or any custom regulatory omic flows through the same path. When the
+        # lookup misses (e.g. miRNA names like miR156 aren't in the
+        # gene_symbol DBs), the parsing loop below falls back to the raw
+        # regulator ID, preserving previous behavior.
+        matchedNameDict = {}
+        if associationFeatures:
+            totalInputRegulators = []
 
             def process_omic_value_regulate_feature(geneName, omicValueVar):
                 geneAux = Gene("")
                 geneAux.setName(geneName)
                 geneAux.addOmicValue(omicValueVar)
-                totalInputTF.append(geneAux)
+                totalInputRegulators.append(geneAux)
 
-            if associationFeatures:
-                for tfName in associationFeatures.keys():
-                    omicValueAux = OmicValue(tfName)
-                    process_omic_value_regulate_feature(tfName, omicValueAux)
+            for regName in associationFeatures.keys():
+                omicValueAux = OmicValue(regName)
+                process_omic_value_regulate_feature(regName, omicValueAux)
 
-            if len(totalInputTF) > 0:
+            if len(totalInputRegulators) > 0:
                 matchedName, notMatchedName, foundName = mapFeatureIdentifiers(self.getJobID(),
                                                                                self.getOrganism(),
                                                                                self.getDatabases(),
-                                                                               totalInputTF, [],
+                                                                               totalInputRegulators, [],
                                                                                [], [], enrichment)
                 if matchedName is not None and len(matchedName) > 0:
-                    # convert matchedName to a dictionary and ID is the key
+                    # convert matchedName to a dictionary keyed by the raw input
                     matchedNameDict = dict(map(lambda x: (x.omicsValues[0].inputName, x), matchedName))
 
 
@@ -450,9 +457,22 @@ class Job(Model):
                             # (e.g., user uploads TFExpression.txt directly with just `TF<TAB>values`), there is no
                             # ":::" suffix — leave originalName at its constructor default (= columnID[0]).
                             if len(columnID) > 1:
-                                if omicName == "Transcription factor" and columnID[1] in matchedNameDict.keys():
-                                    omicValueAux.setOriginalName(matchedNameDict[columnID[1]].name)
+                                # `:::` format signals a regulator-style row — the
+                                # Step 4 client uses this flag to flip the visual
+                                # primary/secondary so the regulator is the row's
+                                # identifier and the target is context.
+                                omicValueAux.isRegulator = True
+                                if columnID[1] in matchedNameDict.keys():
+                                    matchedReg = matchedNameDict[columnID[1]]
+                                    # Symbol resolved — display name becomes the symbol,
+                                    # canonical ID is stashed for the details "(AGI)" line.
+                                    omicValueAux.setOriginalName(matchedReg.name)
+                                    omicValueAux.regulatorID = matchedReg.ID
                                 else:
+                                    # No symbol mapping (e.g. miRNA names) — keep the
+                                    # raw regulator ID as the display name. regulatorID
+                                    # stays empty so the details panel skips the
+                                    # canonical-ID line.
                                     omicValueAux.setOriginalName(columnID[1])
                             process_omic_value(columnID[0], omicValueAux)
 
