@@ -65,6 +65,7 @@ function PA_Step3JobView() {
 
 
 	this.metaboliteView = null;
+	this.regulationView = null;
 
 	this.hubAnalysisView = null;
 	this.aiWidget = null;
@@ -293,6 +294,16 @@ function PA_Step3JobView() {
 			this.hubAnalysisView.setParent(this);
 		}
 		this.hubAnalysisView.loadModel(model);
+
+		// MORE Regulation panel — instantiate unconditionally; the view itself
+		// self-suppresses when the model has no rpc data, so we don't have to
+		// branch on MORE-vs-Pairwise here.
+		if (this.regulationView === null) {
+			this.regulationView = new PA_Step3RegulationView();
+			this.regulationView.setController(this.getController());
+			this.regulationView.setParent(this);
+		}
+		this.regulationView.loadModel(model);
 
 		this.statsView = new PA_Step3StatsView();
 		this.statsView.loadModel(model);
@@ -827,6 +838,10 @@ function PA_Step3JobView() {
 				},
 				(!this.getModel().foundCompounds.length?null:me.hubAnalysisView.getComponent()),
 				(!this.getModel().foundCompounds.length?null:me.metaboliteView.getComponent()),
+				// MORE Regulation panel — independent of metabolomics presence.
+				// The view returns a hidden container when no rpc data; safe to
+				// always include here.
+				me.regulationView.getComponent(),
 				me.pathwayTableView.getComponent() //THE TABLE PANEL
 			],
 			listeners: {
@@ -5285,6 +5300,291 @@ function PA_Step3MetaboliteView() {
 }
 
 PA_Step3MetaboliteView.prototype = new View();
+
+
+/**
+ * PA_Step3RegulationView — surfaces MORE's RegulationPerCondition table.
+ *
+ * Data shape (set by Job.parseRegulationPerCondition on the server):
+ *   { columns: ["targetF","regulator","omic","area","Group_<cond>",...],
+ *     rows:    [[...], ...],
+ *     truncated: bool }
+ *
+ * The view self-suppresses (returns a hidden container) when the model
+ * carries no rpc data — i.e. for Pairwise jobs or jobs that predate Step 4
+ * deployment. So the wiring in PA_Step3JobView can be unconditional.
+ *
+ * No paint/visualisation column. Regulator coefficients aren't continuous
+ * expression series, so the existing heatmap pattern from Hub / Metabolite
+ * views doesn't apply. The pathway visualisation (Step 4) is the canonical
+ * place where target↔regulator relationships are painted; we don't
+ * duplicate that here.
+ */
+function PA_Step3RegulationView() {
+	this.name = "PA_Step3RegulationView";
+
+	this.loadModel = function (model) {
+		if (this.model !== null && this.model !== undefined) {
+			this.model.deleteObserver(this);
+		}
+		this.model = model;
+		this.model.addObserver(this);
+
+		var payload = model.getRegulationPerConditionData();
+		this.hasData = !!(payload && payload.rows && payload.rows.length);
+		if (this.hasData) {
+			this.columns = payload.columns;
+			this.rows = payload.rows;
+			this.truncated = !!payload.truncated;
+			this.symbols = payload.symbols || {};
+		}
+	};
+
+	// Tolerant blank-cell test: handles real null/undefined, the literal
+	// string "None" (legacy server data — see Step 4 fix note in
+	// PathwayAcquisitionJob.parseRegulationPerCondition), and empty string.
+	var _isBlank = function (v) {
+		return v === null || v === undefined || v === "" || v === "None";
+	};
+
+	// Numeric coefficient renderer: 3 decimals, right-aligned. Treats NaN /
+	// blank / the "None" sentinel as empty.
+	var _coefficientRenderer = function (val) {
+		if (_isBlank(val)) return "";
+		var n = Number(val);
+		if (isNaN(n)) return "";
+		return '<div style="text-align:right">' + n.toFixed(3) + '</div>';
+	};
+
+	var _stringRenderer = function (val) {
+		return _isBlank(val) ? "" : val;
+	};
+
+	this.initComponent = function () {
+		var me = this;
+
+		if (!this.hasData) {
+			// Empty hidden container — the parent view can still grab .getComponent()
+			// without a null check.
+			this.component = Ext.widget({ xtype: "container", hidden: true });
+			return this.component;
+		}
+
+		// Build a dynamic Ext.data.Model from the actual column list. Future
+		// server-side additions to rpc_df (e.g. R^2) won't require a frontend
+		// change. The model name is fixed; Ext.define with overwrite-on-redefine
+		// keeps re-renders safe.
+		var fields = this.columns.map(function (c) {
+			return {
+				name: c,
+				type: c.indexOf("Group_") === 0 ? "float" : "string"
+			};
+		});
+		Ext.define("PA.model.RegulationRow", {
+			extend: "Ext.data.Model",
+			fields: fields
+		});
+
+		// Convert rows-of-arrays → array of dicts keyed by column name.
+		var columns = this.columns;
+		var data = this.rows.map(function (row) {
+			var rec = {};
+			for (var i = 0; i < columns.length; i++) {
+				rec[columns[i]] = row[i];
+			}
+			return rec;
+		});
+
+		var store = Ext.create("Ext.data.Store", {
+			model: "PA.model.RegulationRow",
+			data: data,
+			pageSize: 100
+		});
+
+		// Symbol-aware renderer for Target/Regulator. When the server resolved
+		// a gene symbol (FeatureNamesToKeggIDsMapper), render as "SYMBOL (AGI)"
+		// — keeps the underlying ID visible for sorting/search/paper-ready copy.
+		var symbols = this.symbols || {};
+		var _idRenderer = function (val) {
+			if (_isBlank(val)) return "";
+			var key = String(val).toUpperCase();
+			var symbol = symbols[key];
+			if (symbol && symbol !== val) {
+				return Ext.String.htmlEncode(symbol) +
+				       ' <span style="color:#888;font-size:0.85em;">(' +
+				       Ext.String.htmlEncode(val) + ')</span>';
+			}
+			return Ext.String.htmlEncode(val);
+		};
+
+		// Column definitions — fixed display order regardless of the server-side
+		// column order. Group_* columns are appended in the order they appear in
+		// the data (preserves condition labels from the user's experimental
+		// design, e.g. "22" / "28" or "Control" / "Disease").
+		var displayCols = [
+			{ text: "Target",         dataIndex: "targetF",        flex: 1.4, sortable: true, renderer: _idRenderer },
+			{ text: "Regulator",      dataIndex: "regulator",      flex: 1.4, sortable: true, renderer: _idRenderer },
+			{ text: "Omic",           dataIndex: "omic",           flex: 1.0, sortable: true, renderer: _stringRenderer },
+			{ text: "Area",           dataIndex: "area",           flex: 0.7, sortable: true, renderer: _stringRenderer },
+			{ text: "Representative", dataIndex: "representative", flex: 1.2, sortable: true, renderer: _stringRenderer }
+		];
+		this.columns
+			.filter(function (c) { return c.indexOf("Group_") === 0; })
+			.forEach(function (c) {
+				displayCols.push({
+					text: c.replace(/^Group_/, ""),
+					dataIndex: c,
+					width: 100,
+					sortable: true,
+					renderer: _coefficientRenderer
+				});
+			});
+
+		// --- Filters ---
+		// Combined predicate: omic combo + free-text search. Stored on the
+		// component so each control just updates its slice and re-applies.
+		var filterState = { omic: "__all__", search: "" };
+		var applyFilters = function () {
+			store.clearFilter(true);  // suppress refresh until filterBy runs
+			store.filterBy(function (rec) {
+				if (filterState.omic !== "__all__" && rec.get("omic") !== filterState.omic) {
+					return false;
+				}
+				if (filterState.search) {
+					var s = filterState.search.toLowerCase();
+					var target = String(rec.get("targetF") || "").toLowerCase();
+					var regulator = String(rec.get("regulator") || "").toLowerCase();
+					// Also match resolved symbols so users can search by either
+					// the AGI ID or the gene name they recognise.
+					var tSym = (symbols[String(rec.get("targetF") || "").toUpperCase()] || "").toLowerCase();
+					var rSym = (symbols[String(rec.get("regulator") || "").toUpperCase()] || "").toLowerCase();
+					if (target.indexOf(s) === -1 && regulator.indexOf(s) === -1 &&
+					    tSym.indexOf(s) === -1 && rSym.indexOf(s) === -1) {
+						return false;
+					}
+				}
+				return true;
+			});
+		};
+
+		var omicIdx = this.columns.indexOf("omic");
+		var omicValues = Ext.Array.unique(this.rows.map(function (r) { return r[omicIdx]; }));
+		var omicComboData = [["__all__", "All omics"]].concat(
+			omicValues.map(function (o) { return [o, o]; })
+		);
+
+		var omicCombo = Ext.create("Ext.form.field.ComboBox", {
+			fieldLabel: "Omic",
+			labelWidth: 40,
+			width: 240,
+			store: omicComboData,
+			value: "__all__",
+			editable: false,
+			listeners: {
+				change: function (combo, val) {
+					filterState.omic = val || "__all__";
+					applyFilters();
+				}
+			}
+		});
+
+		var searchField = Ext.create("Ext.form.field.Text", {
+			fieldLabel: "Search",
+			labelWidth: 50,
+			width: 320,
+			emptyText: "Target / Regulator (ID or symbol)",
+			enableKeyEvents: true,
+			listeners: {
+				// Debounce-free: typing is cheap with bufferedRenderer + in-memory store.
+				change: function (field, val) {
+					filterState.search = (val || "").trim();
+					applyFilters();
+				}
+			}
+		});
+
+		// --- TSV download ---
+		// Builds a TSV of the CURRENTLY VISIBLE rows (so the filter state is
+		// honoured — users get exactly what they see). Format matches MORE_rpc_*.tab
+		// on disk, so downloaded files can be diffed against the original.
+		var jobID = this.model.getJobID();
+		var downloadBtn = Ext.create("Ext.button.Button", {
+			text: "Download (TSV)",
+			iconCls: "fa fa-download",
+			handler: function () {
+				var visible = [];
+				store.each(function (rec) { visible.push(rec); });
+				var headerLine = columns.join("\t");
+				var bodyLines = visible.map(function (rec) {
+					return columns.map(function (c) {
+						var v = rec.get(c);
+						if (v === null || v === undefined) return "";
+						return String(v);
+					}).join("\t");
+				});
+				var tsv = headerLine + "\n" + bodyLines.join("\n") + "\n";
+				var blob = new Blob([tsv], { type: "text/tab-separated-values" });
+				var url = URL.createObjectURL(blob);
+				var a = document.createElement("a");
+				a.href = url;
+				a.download = "MORE_RegulationPerCondition_" + jobID + ".tab";
+				document.body.appendChild(a);
+				a.click();
+				document.body.removeChild(a);
+				URL.revokeObjectURL(url);
+			}
+		});
+
+		var bbarItems = [omicCombo, "-", searchField, "->", downloadBtn];
+		var tbar = null;
+		if (this.truncated) {
+			tbar = [{
+				xtype: "tbtext",
+				html: '<i class="fa fa-exclamation-triangle"></i> ' +
+				      'Table truncated to 100,000 rows.'
+			}];
+		}
+
+		this.component = Ext.widget({
+			xtype: "container",
+			border: 0,
+			maxWidth: 1900,
+			items: [{
+				xtype: "gridpanel",
+				cls: "contentbox",
+				store: store,
+				height: 350,
+				autoScroll: true,
+				bufferedRenderer: true,
+				header: {
+					xtype: "box",
+					flex: 2,
+					border: 0,
+					height: 70,
+					html: '<h2 id="MORERegulationSection">MORE Regulation Analysis</h2>' +
+					      ' <span class="infoTip">Per-condition regression coefficients from MORE\'s ' +
+					      '<b>RegulationPerCondition</b>. Each row is a target↔regulator pair; Group columns ' +
+					      'are the coefficients for each experimental condition. Zero means no effect in that condition.</span>',
+					style: { backgroundColor: "white" }
+				},
+				columns: displayCols,
+				bbar: bbarItems,
+				tbar: tbar
+			}]
+		});
+
+		return this.component;
+	};
+
+	this.updateObserver = function () {
+		// No-op for now — the rpc data is immutable for the lifetime of a Step 3
+		// session. If the model is ever re-loaded, PA_Step3JobView will rebuild
+		// the view via loadModel + initComponent.
+	};
+
+	return this;
+}
+PA_Step3RegulationView.prototype = new View();
 
 
 /**

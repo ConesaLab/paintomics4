@@ -170,6 +170,37 @@ if (opt$filter_r2 > 0) {
 
 rpc_df <- as.data.frame(result_rpc)
 
+# Persist the full RegulationPerCondition table so PaintOmics' Step 3 panel
+# can render it. Written here, BEFORE the per-omic loop below strips the
+# `<omic>-` prefix in the yellow-star file — we apply the same prefix strip
+# to the saved copy so what the user sees matches the regulator IDs in the
+# original data file. The loop below still operates on the untouched rpc_df.
+rpc_out_file <- file.path(opt$output_dir, paste0("MORE_rpc_", opt$date_seed, ".tab"))
+
+if (nrow(rpc_df) > 0) {
+  rpc_display <- rpc_df
+  for (.omic in omic_names) {
+    .prefix <- paste0(.omic, "-")
+    .mask <- rpc_display$omic == .omic & startsWith(as.character(rpc_display$regulator), .prefix)
+    if (any(.mask)) {
+      rpc_display$regulator[.mask] <- substring(
+        as.character(rpc_display$regulator[.mask]),
+        nchar(.prefix) + 1
+      )
+    }
+  }
+  write.table(rpc_display, rpc_out_file,
+              sep = "\t", row.names = FALSE, quote = FALSE, na = "")
+  cat(paste0("MORE: wrote RegulationPerCondition table (",
+             nrow(rpc_display), " rows, ", ncol(rpc_display), " cols) to ",
+             basename(rpc_out_file), "\n"))
+} else {
+  # No relevant regulations at all — still create the file so Python can rely
+  # on its existence; an absent file means MORE wasn't run at all.
+  file.create(rpc_out_file)
+  cat("MORE: RegulationPerCondition produced zero rows; wrote empty file.\n")
+}
+
 for (name in omic_names) {
   # Significance-filtered pairs (used ONLY for the yellow-star file).
   # The values file and the associations file both need every input pair, not just these.

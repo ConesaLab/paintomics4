@@ -387,6 +387,10 @@ def pathwayAcquisitionStep2_PART2(jobID, userID, selectedCompounds, clusterNumbe
 
             #    jobInstance.foundCompounds = jobInstance.foundCompounds + foundCompoundsCopy
 
+        # MORE Regulation Analysis: parse the rpc table for the Step 3 panel.
+        # Independent of metabolomics — runs whenever the job has MORE-produced
+        # geneBasedInputOmics. Self-skips otherwise.
+        jobInstance.parseRegulationPerCondition()
 
         #****************************************************************
         # Step 2. GENERATING PATHWAYS INFORMATION
@@ -443,6 +447,9 @@ def pathwayAcquisitionStep2_PART2(jobID, userID, selectedCompounds, clusterNumbe
                 "globalExpressionData":globalExpressionData,
                 # Add hub analysis result
                 'hubAnalysisResult': hubAnalysisResult,
+                # Add MORE RegulationPerCondition table for the Step 3 panel
+                # (None when MORE wasn't run; panel hides itself in that case).
+                "regulationPerConditionData": getattr(jobInstance, "regulationPerConditionData", None),
                 "aiConsent": jobInstance.getAIConsent(),
                 "experimentDesign": jobInstance.getExperimentDesign(),
                 "timestamp": int(time())
@@ -469,6 +476,8 @@ def pathwayAcquisitionStep2_PART2(jobID, userID, selectedCompounds, clusterNumbe
                 "compoundRegulateFeatures": {},
                 "hubAnalysisResult": {},
                 "globalExpressionData": globalExpressionData,
+                # MORE rpc table — populated when MORE was used, even without metabolomics.
+                "regulationPerConditionData": getattr(jobInstance, "regulationPerConditionData", None),
                 "aiConsent": jobInstance.getAIConsent(),
                 "experimentDesign": jobInstance.getExperimentDesign(),
                 "timestamp": int( time() )
@@ -673,6 +682,9 @@ def pathwayAcquisitionRecoverJob(request, response, QUEUE_INSTANCE):
                     "globalExpressionData": safe_globalExpressionData,
                     # Add hub analysis result
                     'hubAnalysisResult': safe_hubAnalysisResult,
+                    # Add MORE RegulationPerCondition table for the Step 3 panel.
+                    # Persisted in Mongo (PAINTOMICS4_DICT_FIELDS), so reloads survive.
+                    "regulationPerConditionData": getattr(jobInstance, "regulationPerConditionData", None),
                     "aiConsent": jobInstance.getAIConsent(),
                 })
             else:

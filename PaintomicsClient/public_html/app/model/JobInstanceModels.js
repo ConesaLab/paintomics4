@@ -69,6 +69,10 @@ function JobInstance(jobID) {
 	this.compoundRegulateFeatures =null;
 	this.globalExpressionData = null;
 	this.hubAnalysisResult = null;
+	// MORE RegulationPerCondition table (Step 3 panel). Shape when populated:
+	// {columns: [...], rows: [[...], ...], truncated: bool}. Stays null when
+	// MORE wasn't used, so the panel hides itself.
+	this.regulationPerConditionData = null;
 
 	// PaintOmics 4
 	this.classes = [];
@@ -467,6 +471,17 @@ function JobInstance(jobID) {
 
 	this.setHubAnalysisResult = function (hubAnalysisResult) {
 		this.hubAnalysisResult = hubAnalysisResult
+	}
+
+	// Returns the rpc payload as-is (null when MORE wasn't used). Step 7's view
+	// branches on truthiness + rows.length, so null is the right sentinel here —
+	// don't default to {} (would yield an empty grid container instead of hide).
+	this.getRegulationPerConditionData = function () {
+		return this.regulationPerConditionData
+	}
+
+	this.setRegulationPerConditionData = function (regulationPerConditionData) {
+		this.regulationPerConditionData = regulationPerConditionData
 	}
 
 	this.setFeatureSummary = function (featureSummary) {

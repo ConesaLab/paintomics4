@@ -266,6 +266,23 @@ def fromMOREtoGenes_STEP2(jobInstance, userID, RESPONSE, formFields):
                 "relevantAssociationsFile": rel_pairs_name
             }
 
+        # Combined RegulationPerCondition table (single file, all omics). The R
+        # script wrote it to output_dir; copy into inputData/ so the
+        # PathwayAcquisitionJob can read it by basename in Step 4 (parse step).
+        # If the R script didn't produce it (e.g. zero relevant regulations),
+        # rpc_file_name is set to None and the response omits the field — the
+        # Step 3 panel then stays hidden, matching the contract for absent data.
+        rpc_file_name = f"MORE_rpc_{jobInstance.date}.tab"
+        rpc_src = os.path.join(output_dir, rpc_file_name)
+        if os.path.exists(rpc_src):
+            shutil.copy2(rpc_src, os.path.join(input_dir, rpc_file_name))
+        else:
+            logging.warning(
+                f"MORE_STEP2 - {rpc_file_name} not produced by R; "
+                "Step 3 regulation panel will be hidden."
+            )
+            rpc_file_name = None
+
         # 4. Bundle outputs for the "Download files" link (matches miRNA2Genes contract).
         # Fix recursion bug: create the archive in the temporal directory, then move it to output_dir.
         compressed_basename = f"more_results_{jobInstance.date}"
@@ -288,6 +305,11 @@ def fromMOREtoGenes_STEP2(jobInstance, userID, RESPONSE, formFields):
             "omicsCount": len(results_summary),
             "compressedFileName": compressed_filename
         }
+
+        # Single combined RegulationPerCondition table (all omics) for the Step 3 panel.
+        # Optional — present only when MORE produced relevant regulations.
+        if rpc_file_name:
+            response_data["regulationPerConditionFile"] = rpc_file_name
 
         for index, name in enumerate(results_summary.keys()):
             response_data[f"mainOutputFileName_{index}"]   = results_summary[name]["outputFile"]

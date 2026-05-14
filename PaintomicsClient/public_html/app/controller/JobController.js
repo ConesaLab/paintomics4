@@ -375,6 +375,10 @@ function JobController() {
 							jobModel.setHubAnalysisResult(response.hubAnalysisResult)
 						}
 
+						if (response.regulationPerConditionData) {
+							jobModel.setRegulationPerConditionData(response.regulationPerConditionData)
+						}
+
 
 
 						//TODO: IF IS THE SECOND TIME THAT THE PREVIOUS STEP WAS EXECUTED AND NOTHING CHANGES, AVOID RESENDING?
@@ -547,6 +551,10 @@ function JobController() {
 
 						if (response.hubAnalysisResult) {
 							jobModel.setHubAnalysisResult(response.hubAnalysisResult)
+						}
+
+						if (response.regulationPerConditionData) {
+							jobModel.setRegulationPerConditionData(response.regulationPerConditionData)
 						}
 
 						// AI Interpretation — set on model BEFORE showJobInstance so Step3 view can see it
@@ -863,6 +871,10 @@ function JobController() {
 
 						if (response.hubAnalysisResult) {
 							jobModel.setHubAnalysisResult(response.hubAnalysisResult)
+						}
+
+						if (response.regulationPerConditionData) {
+							jobModel.setRegulationPerConditionData(response.regulationPerConditionData)
 						}
 
 						// AI Interpretation — check for recovered jobs

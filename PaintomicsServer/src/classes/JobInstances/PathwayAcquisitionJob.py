@@ -49,7 +49,11 @@ from src.conf.serverconf import KEGG_DATA_DIR, MAX_THREADS, MAX_WAIT_THREADS, MA
 # Small dict fields safe to persist in the main MongoDB document
 PAINTOMICS4_DICT_FIELDS = {
     "mappingComp", "classificationDict", "pValueInDict",
-    "adjustPvalue", "totalRelevantFeaturesInCategory", "featureSummary"
+    "adjustPvalue", "totalRelevantFeaturesInCategory", "featureSummary",
+    # MORE rpc table. Bounded at 100k rows by parseRegulationPerCondition,
+    # so worst-case ~5 MB — well under the 16 MB Mongo doc limit and an order
+    # of magnitude smaller than the LARGE_FIELDS set's compoundRegulateFeatures.
+    "regulationPerConditionData",
 }
 
 # Large dict fields that stay in-memory cache only (too large for a single
@@ -130,6 +134,11 @@ class PathwayAcquisitionJob(Job):
 
         self.globalExpressionData = None
         self.hubAnalysisResult = None
+        # MORE RegulationPerCondition table (populated by parseRegulationPerCondition
+        # in Step 4 of the implementation). Stays None if MORE wasn't run, so the
+        # Step 3 client panel hides itself. Shape when populated:
+        #   {"columns": [...], "rows": [[...], ...], "truncated": bool}
+        self.regulationPerConditionData = None
 
         # AI Interpretation
         self.aiConsent = False
@@ -1901,3 +1910,162 @@ class PathwayAcquisitionJob(Job):
         self.hubAnalysisResult = hubResult
 
         return self.hubAnalysisResult
+
+    def parseRegulationPerCondition(self):
+        """Load MORE's RegulationPerCondition table for the Step 3 panel.
+
+        The R side writes one combined file per MORE run named
+        MORE_rpc_<YYYYMMDDHHMM>.tab into the user-scoped inputData/ directory
+        (see runMORE.R and MOREServlet.fromMOREtoGenes_STEP2). We detect MORE
+        was used by scanning this job's geneBasedInputOmics for any file
+        matching MORE_<kind>_<omic>_<date>.tab, extracting the date_seed,
+        and resolving the rpc filename deterministically.
+
+        Self-skips (leaves self.regulationPerConditionData = None) if MORE
+        wasn't run or the file is missing — the Step 3 client panel hides
+        itself in that case.
+
+        Memory note: dtype=str on read avoids pandas' default object/float64
+        churn; Group_* columns are converted to numeric vectorised. itertuples
+        is used instead of iterrows to avoid the per-row Series allocation
+        forbidden by the project's CLAUDE.md guidance.
+        """
+        import re
+
+        # 1. Detect MORE-produced filenames already on this job.
+        pattern = re.compile(
+            r"^MORE_(?:output|relevant_pairs|relevant_assoc|relevant_reg)_.+_(\d{12})\.tab$"
+        )
+        date_seed = None
+        for omic in self.geneBasedInputOmics:
+            for key in ("inputDataFile", "relevantFeaturesFile",
+                        "associationsFile", "relevantAssociationsFile"):
+                fname = omic.get(key)
+                if not fname:
+                    continue
+                m = pattern.match(os_path.basename(fname))
+                if m:
+                    date_seed = m.group(1)
+                    break
+            if date_seed:
+                break
+
+        if not date_seed:
+            return  # No MORE in this job.
+
+        rpc_path = os_path.join(self.getInputDir(), f"MORE_rpc_{date_seed}.tab")
+        if not os_path.exists(rpc_path):
+            logging.warning(
+                f"MORE rpc file expected but missing: {rpc_path}"
+            )
+            return
+
+        # 2. Parse (keep pandas import local — it's heavy and not used elsewhere
+        # in this class).
+        try:
+            import pandas as pd
+        except ImportError:
+            logging.error(
+                "pandas not available; cannot parse RegulationPerCondition."
+            )
+            return
+
+        try:
+            df = pd.read_csv(
+                rpc_path, sep="\t", dtype=str,
+                keep_default_na=False, na_values=[""]
+            )
+        except Exception as ex:
+            logging.error(f"Failed to parse RegulationPerCondition file: {ex}")
+            return
+
+        if df.empty:
+            self.regulationPerConditionData = {
+                "columns": list(df.columns), "rows": [], "truncated": False
+            }
+            return
+
+        # 3. Vectorised numeric coercion for the Group_* columns only.
+        group_cols = [c for c in df.columns if c.startswith("Group_")]
+        for col in group_cols:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+
+        # 4. Sanitise: drop rows missing the two mandatory fields. With
+        # keep_default_na=False, missing values arrive as empty strings.
+        if "targetF" in df.columns and "regulator" in df.columns:
+            df = df[(df["targetF"] != "") & (df["regulator"] != "")]
+
+        # 5. Defensive cap so a runaway model can't bloat the Mongo doc.
+        MAX_ROWS = 100_000
+        truncated = len(df) > MAX_ROWS
+        if truncated:
+            df = df.head(MAX_ROWS)
+
+        # 6. JSON-clean: distinguish missing cells by column type.
+        #   - String columns (Target/Regulator/Omic/Area/Representative): emit ""
+        #     for NaN. We can't use None here because Paintomics' DAO layer
+        #     (DAO.adaptBSON -> Util.adapt_string) runs str() on every non-
+        #     collection, non-numeric value on read, turning Python None into
+        #     the literal string "None" — confusing in the UI and indistinguish-
+        #     able from a real value.
+        #   - Numeric columns (Group_*): emit None for NaN. Round-tripping to
+        #     "None" through adaptBSON would still happen for these, but NaN
+        #     coefficients are rare/absent in practice and the frontend renderer
+        #     handles both None and "None" as missing.
+        # itertuples beats iterrows ~30x (CLAUDE.md performance contract).
+        numeric_col_idxs = {
+            i for i, c in enumerate(df.columns) if c.startswith("Group_")
+        }
+        rows = []
+        for record in df.itertuples(index=False, name=None):
+            row = []
+            for i, v in enumerate(record):
+                if isinstance(v, float) and math.isnan(v):
+                    row.append(None if i in numeric_col_idxs else "")
+                else:
+                    row.append(v)
+            rows.append(row)
+
+        # 7. Build a symbol lookup for Target/Regulator columns. The PA
+        # pipeline already resolved gene names (FeatureNamesToKeggIDsMapper
+        # populates Gene.name with the resolved symbol, falling back to the
+        # raw ID when no symbol is known). We restrict the map to IDs that
+        # actually appear in the rpc table — keeps the payload bounded even
+        # for organisms with huge inputGenesData.
+        symbols = {}
+        try:
+            genes = self.inputGenesData or {}
+            # Collect rpc IDs once. Upper-case keys for case-insensitive lookup
+            # on the client (the rpc is verbatim from R, gene index keys vary).
+            if "targetF" in df.columns and "regulator" in df.columns:
+                rpc_ids = set()
+                rpc_ids.update(df["targetF"].astype(str).str.upper().unique())
+                rpc_ids.update(df["regulator"].astype(str).str.upper().unique())
+
+                for gene_id, gene in genes.items():
+                    if not gene_id:
+                        continue
+                    gid_up = str(gene_id).upper()
+                    if gid_up not in rpc_ids:
+                        continue
+                    name = gene.getName() if hasattr(gene, "getName") else None
+                    # Skip identity mappings — FeatureNamesToKeggIDsMapper
+                    # leaves name == id when no symbol was found. No point
+                    # shipping noise the client would just ignore.
+                    if name and str(name).upper() != gid_up:
+                        symbols[gid_up] = name
+        except Exception as ex:
+            # Symbol lookup is purely cosmetic; never let it kill the panel.
+            logging.warning(f"RegulationPerCondition symbol lookup failed: {ex}")
+
+        self.regulationPerConditionData = {
+            "columns": list(df.columns),
+            "rows": rows,
+            "truncated": truncated,
+            "symbols": symbols,
+        }
+        logging.info(
+            f"Parsed RegulationPerCondition: {len(rows)} rows, "
+            f"{len(df.columns)} cols, {len(symbols)} symbols, "
+            f"truncated={truncated}"
+        )
