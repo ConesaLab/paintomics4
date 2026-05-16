@@ -2026,34 +2026,94 @@ class PathwayAcquisitionJob(Job):
                     row.append(v)
             rows.append(row)
 
-        # 7. Build a symbol lookup for Target/Regulator columns. The PA
-        # pipeline already resolved gene names (FeatureNamesToKeggIDsMapper
-        # populates Gene.name with the resolved symbol, falling back to the
-        # raw ID when no symbol is known). We restrict the map to IDs that
-        # actually appear in the rpc table — keeps the payload bounded even
-        # for organisms with huge inputGenesData.
+        # 7. Build a symbol lookup for Target/Regulator columns.
+        #
+        # Two distinct ID populations live in the rpc:
+        #   - targetF column: canonical target gene IDs. These ARE keys of
+        #     self.inputGenesData (parseGeneBasedFiles stores each parsed
+        #     feature there, keyed by the resolved canonical ID). Gene.name
+        #     holds the resolved symbol.
+        #   - regulator column: TF / miRNA / methylation IDs. These are
+        #     NOT keys of self.inputGenesData. They live one level deeper —
+        #     each Gene's omicsValues[i] carries the regulator metadata for
+        #     a `target:::regulator` row (see Feature.OmicValue.isRegulator,
+        #     regulatorID, originalName, inputName populated in
+        #     Job.parseGeneBasedFiles).
+        #
+        # Earlier versions of this method only walked the top-level dict, so
+        # regulator symbols were missed wholesale (typically >50% of the
+        # rpc IDs). We now harvest from both layers.
+        #
+        # Restrict the emitted map to IDs that actually appear in the rpc —
+        # keeps the payload bounded for organisms with huge inputGenesData.
         symbols = {}
         try:
             genes = self.inputGenesData or {}
-            # Collect rpc IDs once. Upper-case keys for case-insensitive lookup
-            # on the client (the rpc is verbatim from R, gene index keys vary).
+
             if "targetF" in df.columns and "regulator" in df.columns:
+                # Collect rpc IDs once, upper-cased. The rpc is verbatim from
+                # R, so we case-fold here and lookups happen on the client
+                # with the same fold.
                 rpc_ids = set()
                 rpc_ids.update(df["targetF"].astype(str).str.upper().unique())
                 rpc_ids.update(df["regulator"].astype(str).str.upper().unique())
+                # Empty-string can sneak in via sanitised NaN cells; drop it
+                # so we never emit a "" -> "" entry.
+                rpc_ids.discard("")
 
+                # 7.a Top-level pass: targets (and any regulator that also
+                # happens to be a gene-expression feature).
+                # 7.b Inner pass: regulator omicsValues. One gene can carry
+                # many regulator rows when a single target has many TFs/miRNAs
+                # mapped to it; we still scan each omicsValue once. Worst
+                # case ~rows-in-rpc iterations, which the 100k cap above
+                # already bounds.
                 for gene_id, gene in genes.items():
-                    if not gene_id:
-                        continue
-                    gid_up = str(gene_id).upper()
-                    if gid_up not in rpc_ids:
-                        continue
-                    name = gene.getName() if hasattr(gene, "getName") else None
-                    # Skip identity mappings — FeatureNamesToKeggIDsMapper
-                    # leaves name == id when no symbol was found. No point
-                    # shipping noise the client would just ignore.
-                    if name and str(name).upper() != gid_up:
-                        symbols[gid_up] = name
+                    # --- 7.a target / gene-expression symbol -------------
+                    if gene_id:
+                        gid_up = str(gene_id).upper()
+                        if gid_up in rpc_ids and gid_up not in symbols:
+                            name = gene.getName() if hasattr(gene, "getName") else None
+                            # Skip identity mappings — FeatureNamesToKeggIDsMapper
+                            # leaves Gene.name == ID when no symbol was found.
+                            if name and str(name).upper() != gid_up:
+                                symbols[gid_up] = name
+
+                    # --- 7.b regulator symbols from omicsValues ---------
+                    # Important: on a regulator OmicValue (see
+                    # Job.parseGeneBasedFiles), the field naming is misleading
+                    # for our purposes:
+                    #   - omic_val.inputName  == TARGET id (columnID[0])
+                    #   - omic_val.originalName == regulator's display symbol
+                    #     (or, if no symbol was resolved, the raw regulator ID
+                    #     — i.e. an identity mapping with regulatorID == "")
+                    #   - omic_val.regulatorID == canonical regulator ID
+                    #     (e.g. AGI) when the mapper resolved a symbol;
+                    #     empty string otherwise.
+                    # The rpc's `regulator` column carries the regulator's
+                    # canonical/raw form (runMORE.R prefix-strips back to the
+                    # user-uploaded shape, which equals regulatorID when the
+                    # user uploaded canonical IDs — the common case for AGI /
+                    # Ensembl-style organisms).
+                    # We therefore map ONLY regulatorID -> originalName. Using
+                    # inputName here would map the TARGET id to the regulator's
+                    # symbol — surfacing rows like "AT1G19000 (AT4G01310)" in
+                    # the Target column.
+                    omic_values = getattr(gene, "omicsValues", None) or []
+                    for omic_val in omic_values:
+                        if not getattr(omic_val, "isRegulator", False):
+                            continue
+                        symbol = getattr(omic_val, "originalName", "") or ""
+                        reg_id = getattr(omic_val, "regulatorID", "") or ""
+                        if not symbol or not reg_id:
+                            # Unresolved regulator (regulatorID == "") would
+                            # produce an identity entry only — skip.
+                            continue
+                        reg_up = reg_id.upper()
+                        if (reg_up in rpc_ids
+                                and reg_up != symbol.upper()
+                                and reg_up not in symbols):
+                            symbols[reg_up] = symbol
         except Exception as ex:
             # Symbol lookup is purely cosmetic; never let it kill the panel.
             logging.warning(f"RegulationPerCondition symbol lookup failed: {ex}")
