@@ -5347,13 +5347,13 @@ function PA_Step3RegulationView() {
 		return v === null || v === undefined || v === "" || v === "None";
 	};
 
-	// Numeric coefficient renderer: 3 decimals, right-aligned. Treats NaN /
-	// blank / the "None" sentinel as empty.
+	// Numeric coefficient renderer: 3 decimals, left-aligned to match the
+	// string columns. Treats NaN / blank / the "None" sentinel as empty.
 	var _coefficientRenderer = function (val) {
 		if (_isBlank(val)) return "";
 		var n = Number(val);
 		if (isNaN(n)) return "";
-		return '<div style="text-align:right">' + n.toFixed(3) + '</div>';
+		return n.toFixed(3);
 	};
 
 	var _stringRenderer = function (val) {
@@ -5432,9 +5432,9 @@ function PA_Step3RegulationView() {
 			.filter(function (c) { return c.indexOf("Group_") === 0; })
 			.forEach(function (c) {
 				displayCols.push({
-					text: c.replace(/^Group_/, ""),
+					text: c.replace(/^Group_/, "Coef_"),
 					dataIndex: c,
-					width: 100,
+					width: 120,
 					sortable: true,
 					renderer: _coefficientRenderer
 				});
