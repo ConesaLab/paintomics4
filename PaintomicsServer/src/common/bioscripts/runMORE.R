@@ -77,33 +77,70 @@ for (i in seq_along(omic_names)) {
   cat(paste("MORE: Loaded regulatory omic", name, "with", nrow(reg_mat), "features.\n"))
   cat(paste("MORE: First few regulator IDs:", paste(head(rownames(reg_mat), 5), collapse=", "), "\n"))
   
-    # Load Association (Optional)
+    # Load Association (Optional). MORE's documented contract:
+    #   col 1 = target feature ID
+    #   col 2 = regulator ID
+    #   col 3 = interaction type / "area" (OPTIONAL — e.g. PROMOTER, 1st_EXON)
+    # We auto-detect column order using only cols 1-2 so that a 3-col file
+    # keeps its area column intact when a swap is needed. Files with >= 4
+    # columns are rejected outright — silently truncating could hide a
+    # malformed upload.
     a_path <- assoc_paths[i]
     if (a_path != "NULL") {
       assoc_df <- read.table(a_path, header=TRUE, sep="\t", stringsAsFactors=FALSE, check.names=FALSE)
-      cat(paste("MORE: Loaded association file for", name, "with", nrow(assoc_df), "rows.\n"))
+      cat(paste("MORE: Loaded association file for", name, "with", nrow(assoc_df), "rows and", ncol(assoc_df), "columns.\n"))
       cat(paste("MORE: First row of association file:", paste(assoc_df[1,], collapse=" | "), "\n"))
-      
-      # MORE expects [Target, Regulator]. Paintomics often provides [Regulator, Target] or [Target, Regulator].
-      # We check regulator matches to ensure the regulator is in the SECOND column.
-      col1_match_reg <- sum(assoc_df[,1] %in% rownames(reg_mat))
-      col2_match_reg <- sum(assoc_df[,2] %in% rownames(reg_mat))
-      
+
+      n_cols <- ncol(assoc_df)
+      if (n_cols < 2) {
+        stop(paste0("Association file for omic '", name, "' has only ", n_cols,
+                    " column(s). MORE requires 2 columns (target, regulator) ",
+                    "with an optional 3rd column for interaction type."))
+      }
+      if (n_cols > 3) {
+        stop(paste0("Association file for omic '", name, "' has ", n_cols,
+                    " columns. MORE accepts at most 3 columns: target, regulator, ",
+                    "and an optional interaction-type/area column. Please check the file."))
+      }
+
+      # Orientation detection uses ONLY the first two columns.
+      col1_match_reg <- sum(assoc_df[[1]] %in% rownames(reg_mat))
+      col2_match_reg <- sum(assoc_df[[2]] %in% rownames(reg_mat))
+
       cat(paste("MORE: Col 1 matches with reg IDs:", col1_match_reg, "\n"))
       cat(paste("MORE: Col 2 matches with reg IDs:", col2_match_reg, "\n"))
-      
+
       if (col1_match_reg > col2_match_reg) {
-        cat(paste("MORE: Detected Regulator in Column 1. Swapping to [Target, Regulator]...\n"))
-        assoc_df <- assoc_df[, c(2, 1)]
+        cat("MORE: Detected Regulator in Column 1. Swapping to [Target, Regulator(, Area)]...\n")
+        # Swap cols 1 <-> 2 and keep col 3 in place if it exists.
+        if (n_cols == 3) {
+          assoc_df <- assoc_df[, c(2, 1, 3), drop=FALSE]
+        } else {
+          assoc_df <- assoc_df[, c(2, 1), drop=FALSE]
+        }
       }
-      
-      colnames(assoc_df) <- c("target", "regulator")
-      
+
+      # Rename only the columns we own; preserve col 3's user-provided name
+      # if present, or default it to "area" (the column name MORE itself uses
+      # internally — see MORE:::GetAllReg).
+      new_names <- colnames(assoc_df)
+      new_names[1] <- "target"
+      new_names[2] <- "regulator"
+      if (n_cols == 3 && (is.na(new_names[3]) || new_names[3] == "")) {
+        new_names[3] <- "area"
+      }
+      colnames(assoc_df) <- new_names
+
+      if (n_cols == 3) {
+        cat(paste("MORE: Detected optional interaction-type column '",
+                  colnames(assoc_df)[3], "' — will be propagated to RegulationPerCondition.\n", sep=""))
+      }
+
       # Check target overlap too
       target_overlap <- sum(assoc_df$target %in% rownames(targetData))
       cat(paste("MORE: Number of unique targets in association file:", length(unique(assoc_df$target)), "\n"))
       cat(paste("MORE: Number of targets in association file that exist in expression data:", target_overlap, "\n"))
-      
+
       associations[[name]] <- assoc_df
     } else {
       cat(paste("MORE: No association file provided for", name, ". MORE will use all-to-all or internal mapping.\n"))
