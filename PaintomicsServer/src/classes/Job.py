@@ -29,6 +29,11 @@ from collections import defaultdict
 
 import numpy
 from numpy import percentile as numpy_percentile, min as numpy_min, max as numpy_max, asarray, float32, logical_or, invert, sum as numpy_sum
+# NaN-aware variants for omics that legitimately carry missing measurements
+# (e.g. CpG sites not measured in every methylation sample). Without these,
+# a single NaN in `allValues` poisons every percentile and the server emits a
+# JSON response containing the literal `NaN`, which browsers reject in JSON.parse.
+from numpy import nanpercentile as numpy_nanpercentile, nanmin as numpy_nanmin, nanmax as numpy_nanmax, isnan as numpy_isnan
 
 from src.common.Util import Model
 from .Feature import Gene, Compound, OmicValue
@@ -539,31 +544,35 @@ class Job(Model):
             # outliers = []
 
             if len(allValues):
-                # summary = numpy_percentile(allValues, [0, 10, 25, 50, 75, 90, 100])
                 numpyArray = asarray(allValues, dtype=float)
-                summary = numpy_percentile(numpyArray, [0, 10, 25, 50, 75, 90, 100])
+                # Drop NaNs before computing the distribution. NaNs are legitimate
+                # signal (e.g. unmeasured CpG sites in methylation data), but
+                # plain percentile/min/max propagate them and serialize as the
+                # non-standard JSON token "NaN" downstream, breaking the client.
+                # Nan-aware reductions skip them; if every value is NaN we fall
+                # back to a zero-filled summary, matching the empty-file branch.
+                if numpy_isnan(numpyArray).all():
+                    summary = [0] * 9
+                else:
+                    summary = numpy_nanpercentile(numpyArray, [0, 10, 25, 50, 75, 90, 100])
 
-                interquartilRange = summary[4] - summary[2]
-                minVal =  summary[2] - 1.5*interquartilRange
-                maxVal =  summary[4] + 1.5*interquartilRange
+                    interquartilRange = summary[4] - summary[2]
+                    minVal =  summary[2] - 1.5*interquartilRange
+                    maxVal =  summary[4] + 1.5*interquartilRange
 
-                outlierMask = logical_or(numpyArray < minVal, numpyArray > maxVal)
-                # valuesOutliers = numpyArray[outlierMask]
-                # numpyArray = numpyArray[logical_and(numpyArray > minVal, numpyArray < maxVal)]
-                numpyArray = numpyArray[invert(outlierMask)]
+                    # NaN comparisons return False, so NaNs are silently excluded
+                    # from outlier counting — exactly what we want.
+                    outlierMask = logical_or(numpyArray < minVal, numpyArray > maxVal)
+                    numpyArray = numpyArray[invert(outlierMask)]
 
-                # for i in range(len(allValues)-1,-1,-1):
-                #     if(allValues[i] < minVal or allValues[i] > maxVal):
-                #         outliers.append(allValues[i])
-                #         del allValues[i]
-
-                try:
-                    summary = summary.tolist() + [numpy_min(numpyArray), numpy_max(numpyArray)]
-                except:
-                    summary = summary + [numpy_min(numpyArray), numpy_max(numpyArray)]
+                    try:
+                        summary = summary.tolist() + [numpy_nanmin(numpyArray), numpy_nanmax(numpyArray)]
+                    except:
+                        summary = summary + [numpy_nanmin(numpyArray), numpy_nanmax(numpyArray)]
 
             logging.info("DISTRIBUTION FOR " + omicName  + ": MIN: " + str(summary[0])  + "; p10: " + str(summary[1]) + "; q1: " + str(summary[2]) + ";  MEDIAN: " + str(summary[3])+ "; q1: " + str(summary[4])  + "; p90: " + str(summary[5]) + ";  MAX VALUE: " + str(summary[6]))
-            logging.info("DISTRIBUTION FOR " + omicName  + " WITHOUT OUTLIERS: MIN: " + str(summary[7])  + "; MAX: " + str(summary[8])  + "; #OUTLIERS: " + str(numpy_sum(outlierMask)))
+            outlierCount = int(numpy_sum(outlierMask)) if 'outlierMask' in locals() else 0
+            logging.info("DISTRIBUTION FOR " + omicName  + " WITHOUT OUTLIERS: MIN: " + str(summary[7])  + "; MAX: " + str(summary[8])  + "; #OUTLIERS: " + str(outlierCount))
 
             logging.info("PARSING USER GENE BASED FILE (" + omicName + ")... DONE" )
 
@@ -678,22 +687,33 @@ class Job(Model):
                     unmatchedFile.write(parsedFeature.getName() + '\t' + '\t' + '\t'.join(map(str, omicValue.getValues())) + '\t' + relStr + "\n")
 
             #GENERATE SOME STATISTICS
-            summary = numpy_percentile(allValues, [0,10,25,50,75,90,100])
+            # Mirror the NaN-aware handling in parseGeneBasedFiles: nan-aware
+            # percentile/min/max so missing measurements don't poison the
+            # summary and ultimately the JSON response (json.dumps(NaN) → "NaN"
+            # which browsers reject in JSON.parse).
+            arr = asarray(allValues, dtype=float)
+            if numpy_isnan(arr).all():
+                summary = [0] * 9
+                outliers = []
+            else:
+                summary = numpy_nanpercentile(arr, [0,10,25,50,75,90,100])
 
-            interquartilRange = summary[4] - summary[2]
-            minVal =  summary[2] - 1.5*interquartilRange
-            maxVal =  summary[4] + 1.5*interquartilRange
+                interquartilRange = summary[4] - summary[2]
+                minVal =  summary[2] - 1.5*interquartilRange
+                maxVal =  summary[4] + 1.5*interquartilRange
 
-            outliers= []
-            for i in range(len(allValues)-1,-1,-1):
-                if(allValues[i] < minVal or allValues[i] > maxVal):
-                    outliers.append(allValues[i])
-                    del allValues[i]
+                outliers= []
+                for i in range(len(allValues)-1,-1,-1):
+                    v = allValues[i]
+                    # NaN comparisons return False — skip them rather than treating as outliers.
+                    if v == v and (v < minVal or v > maxVal):
+                        outliers.append(v)
+                        del allValues[i]
 
-            try:
-                summary = summary.tolist() + [numpy_min(allValues), numpy_max(allValues)]
-            except:
-                summary = summary + [numpy_min(allValues), numpy_max(allValues)]
+                try:
+                    summary = summary.tolist() + [numpy_nanmin(allValues), numpy_nanmax(allValues)]
+                except:
+                    summary = summary + [numpy_nanmin(allValues), numpy_nanmax(allValues)]
 
             logging.info("DISTRIBUTION FOR " + omicName  + ": MIN: " + str(summary[0])  + "; p10: " + str(summary[1]) + "; q1: " + str(summary[2]) + ";  MEDIAN: " + str(summary[3])+ "; q1: " + str(summary[4])  + "; p90: " + str(summary[5]) + ";  MAX VALUE: " + str(summary[6]))
             logging.info("DISTRIBUTION FOR " + omicName  + "WITHOUT OUTLIERS: MIN: " + str(summary[7])  + "; MAX: " + str(summary[8])  + "; #OUTLIERS: " + str(len(outliers)))

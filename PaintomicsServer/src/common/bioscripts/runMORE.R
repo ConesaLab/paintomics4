@@ -149,14 +149,42 @@ for (i in seq_along(omic_names)) {
 }
 
 # 3. Sample Alignment (CRITICAL)
-# Find common samples across Target, Condition, and ALL Regulatory Omics
+# Strict name-based intersection. We deliberately do NOT fall back to positional
+# alignment the way MORE's R API does: in a web context the user does not see
+# console warnings, and silently aligning differently-named samples by column
+# order is the canonical way to publish statistically meaningless results.
+# Force the user to harmonise sample names upstream so the 1:1 mapping is
+# explicit and verifiable.
 common_samples <- intersect(colnames(targetData), rownames(condition))
 for (mat in regulatoryData) {
   common_samples <- intersect(common_samples, colnames(mat))
 }
 
 cat(paste("MORE: Found", length(common_samples), "common samples among all datasets.\n"))
-if (length(common_samples) == 0) stop("No common samples found across input files.")
+if (length(common_samples) == 0) {
+  # Diagnostic error: surface the first few sample IDs from every input so the
+  # user can spot the naming mismatch without re-opening their files.
+  reg_lines <- sapply(names(regulatoryData), function(n) {
+    paste0("  ", n, " samples: ",
+           paste(head(colnames(regulatoryData[[n]]), 3), collapse=", "),
+           if (ncol(regulatoryData[[n]]) > 3) ", ..." else "")
+  })
+  stop(paste0(
+    "No common sample names across input files.\n",
+    "  Target samples:  ",
+    paste(head(colnames(targetData), 3), collapse=", "),
+    if (ncol(targetData) > 3) ", ..." else "", "\n",
+    "  Condition rows:  ",
+    paste(head(rownames(condition), 3), collapse=", "),
+    if (nrow(condition) > 3) ", ..." else "", "\n",
+    paste(reg_lines, collapse="\n"), "\n",
+    "Paintomics requires the same biological sample to carry the SAME column ",
+    "name in the target expression file, the condition file, and every ",
+    "regulatory omic file. Rename columns in R (e.g. ",
+    "colnames(data.omics$miRNA) <- canonical_names) before saving so the ",
+    "alignment is explicit. Positional alignment is intentionally not used."
+  ))
+}
 
 # Re-order everything
 targetData <- targetData[, common_samples, drop=FALSE]
@@ -303,7 +331,13 @@ for (name in omic_names) {
     for (j in seq_len(nrow(full_pairs))) {
       g <- as.character(full_pairs[j, "target"])
       r <- as.character(full_pairs[j, "regulator"])
-      vals <- paste(as.character(reg_data[r, ]), collapse="\t")
+      # Coerce R's NA → "NaN" so PA Step 1's validator (which calls float() on
+      # every value) accepts the row. float("NA") raises; float("NaN") returns
+      # nan. Real biological signal — e.g. CpG sites not measured in a sample
+      # — would otherwise be silently rejected as "invalid values".
+      v <- reg_data[r, ]
+      v_char <- ifelse(is.na(v), "NaN", as.character(v))
+      vals <- paste(v_char, collapse="\t")
       out_lines <- c(out_lines, paste0(g, ":::", r, "\t", vals))
     }
   }
