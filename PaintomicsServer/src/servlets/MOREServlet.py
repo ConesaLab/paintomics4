@@ -2,6 +2,7 @@
 #  This file is part of Paintomics v4
 #**************************************************************
 
+import json
 import logging
 import os
 import subprocess
@@ -276,6 +277,28 @@ def fromMOREtoGenes_STEP2(jobInstance, userID, RESPONSE, formFields):
         rpc_src = os.path.join(output_dir, rpc_file_name)
         if os.path.exists(rpc_src):
             shutil.copy2(rpc_src, os.path.join(input_dir, rpc_file_name))
+
+            # Sidecar metadata: the MORE filter settings the user picked at
+            # configuration time. PathwayAcquisitionJob.parseRegulationPerCondition
+            # picks this up and embeds it inside regulationPerConditionData so the
+            # Step-3 Regulator-Target Network view can lock its R2 slider to the
+            # floor the user originally chose. MOREJob is a separate Job class —
+            # this file is the only channel by which its settings reach the PA job.
+            filters_meta = {
+                "filter_r2": jobInstance.filter_r2,
+                "alpha":     jobInstance.alpha,
+                "vip":       jobInstance.vip,
+                "method":    jobInstance.method,
+            }
+            filters_name = f"MORE_filters_{jobInstance.date}.json"
+            try:
+                with open(os.path.join(input_dir, filters_name), "w") as fh:
+                    json.dump(filters_meta, fh)
+            except OSError as ex:
+                # Non-fatal: client view falls back to defaults if sidecar missing.
+                logging.warning(
+                    f"MORE_STEP2 - could not write {filters_name}: {ex}"
+                )
         else:
             logging.warning(
                 f"MORE_STEP2 - {rpc_file_name} not produced by R; "
