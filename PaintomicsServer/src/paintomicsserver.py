@@ -639,6 +639,34 @@ class Application(object):
 #################################################################################################################
 ##* SUBCLASSES
 ##*************************************************************************************************************
+import math
+
+
+def _sanitizeForJSON(value):
+    """Recursively convert NaN/Inf floats to None so the response serializes
+    as strict JSON. Python's json.dumps (and Flask's jsonify) emit the literal
+    tokens `NaN` / `Infinity` for these values, which browsers reject in
+    JSON.parse — jQuery then routes the response through the error handler
+    even though the HTTP status was 200, and the user sees a generic
+    "Oops..Internal error!" popup with no message field.
+
+    Omics with legitimate missing measurements (e.g. methylation CpG sites
+    not assayed in every sample) propagate NaN through the response in many
+    places (per-feature `values` arrays, percentile summaries, etc.). Fixing
+    each path individually is whack-a-mole; sanitising once at the response
+    boundary is O(response size) and closes the entire class of bug.
+    """
+    if isinstance(value, float):
+        return None if not math.isfinite(value) else value
+    if isinstance(value, dict):
+        return {k: _sanitizeForJSON(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_sanitizeForJSON(v) for v in value]
+    if isinstance(value, tuple):
+        return tuple(_sanitizeForJSON(v) for v in value)
+    return value
+
+
 class Response(object):
     """This class is used to specify the custom response object"""
 
@@ -656,7 +684,7 @@ class Response(object):
     # GETTERS AND SETTER
     #****************************************************************
     def setContent(self, content):
-        self.content=content
+        self.content = _sanitizeForJSON(content)
         return self
     def getContent(self):
         return self.content

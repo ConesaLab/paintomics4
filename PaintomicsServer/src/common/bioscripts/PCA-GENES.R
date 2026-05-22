@@ -15,7 +15,14 @@ Xoff<-X-(cbind(matrix(1,p,1))%*%rbind(offset))
 
 #eigen command sorts the eigenvalues in decreasing orden.
 
-eigen<-eigen(Xoff%*%t(Xoff)/(p-1))
+# Xoff %*% t(Xoff) is mathematically a Gram matrix and therefore symmetric, but
+# floating-point drift can leave it imperceptibly non-symmetric. Without
+# symmetric=TRUE, eigen() falls back to the general solver and returns COMPLEX
+# eigenvalues with ~1e-15 imaginary parts. Downstream PCA2GO.2.R does
+# `which(eigen$values > 1e-16)`, and comparing complex to real raises
+# "invalid comparison with complex values". The symmetric solver is also faster
+# and numerically more stable for this shape of matrix.
+eigen<-eigen(Xoff%*%t(Xoff)/(p-1), symmetric=TRUE)
 var<-cbind(eigen$values/sum(eigen$values),cumsum(eigen$values/sum(eigen$values)))
 
 loadings2<-eigen$vectors
