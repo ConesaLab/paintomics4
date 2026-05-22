@@ -1960,6 +1960,25 @@ class PathwayAcquisitionJob(Job):
             )
             return
 
+        # Optional sidecar with the MORE filter settings the user picked at
+        # configuration time (filter_r2, alpha, vip, method). Written by
+        # MOREServlet.fromMOREtoGenes_STEP2. Absent for rpc files produced
+        # before that sidecar existed — the Step-3 view falls back to defaults.
+        filters_meta = None
+        filters_path = os_path.join(
+            self.getInputDir(), f"MORE_filters_{date_seed}.json"
+        )
+        if os_path.exists(filters_path):
+            try:
+                import json
+                with open(filters_path) as fh:
+                    filters_meta = json.load(fh)
+            except (OSError, ValueError) as ex:
+                logging.warning(
+                    f"MORE filters sidecar present but unreadable "
+                    f"({filters_path}): {ex}"
+                )
+
         # 2. Parse (keep pandas import local — it's heavy and not used elsewhere
         # in this class).
         try:
@@ -1981,7 +2000,8 @@ class PathwayAcquisitionJob(Job):
 
         if df.empty:
             self.regulationPerConditionData = {
-                "columns": list(df.columns), "rows": [], "truncated": False
+                "columns": list(df.columns), "rows": [], "truncated": False,
+                "filters": filters_meta,
             }
             return
 
@@ -2123,6 +2143,7 @@ class PathwayAcquisitionJob(Job):
             "rows": rows,
             "truncated": truncated,
             "symbols": symbols,
+            "filters": filters_meta,
         }
         logging.info(
             f"Parsed RegulationPerCondition: {len(rows)} rows, "

@@ -235,6 +235,36 @@ if (opt$filter_r2 > 0) {
 
 rpc_df <- as.data.frame(result_rpc)
 
+# Attach per-target R2 to rpc_df so the Step-3 Regulator-Target Network view
+# can apply a post-hoc R2 slider client-side without re-querying the server.
+# In MORE, GlobalSummary$GoodnessOfFit is a flat matrix with rownames = targetF
+# and a method-dependent R2 column: MLR uses "Rsquared", PLS uses "RsquaredY".
+# The R2/R-squared/Adj.R2 candidates are kept as defensive fallbacks in case a
+# future MORE version renames the column.
+gof <- result_more$GlobalSummary$GoodnessOfFit
+.r2_candidates <- c("Rsquared", "RsquaredY", "R2", "R2.adj", "R-squared", "Adj.R2")
+
+if (is.null(gof) || (is.list(gof) && length(gof) == 0)) {
+  warning("MORE: GoodnessOfFit is empty or NULL; rpc table will lack R2")
+} else {
+  gof_df <- as.data.frame(gof)
+  gof_df$targetF <- rownames(gof_df)
+  r2_col <- intersect(.r2_candidates, colnames(gof_df))[1]
+  if (!is.na(r2_col)) {
+    colnames(gof_df)[colnames(gof_df) == r2_col] <- "R2"
+    rpc_df <- merge(rpc_df, gof_df[, c("targetF", "R2")],
+                    by = "targetF", all.x = TRUE, sort = FALSE)
+    cat(paste0("MORE: attached R2 from GoodnessOfFit ('", r2_col, "')\n"))
+  } else {
+    # Surface the actual column names so future drift is debuggable without
+    # source-diving into the MORE package.
+    warning(sprintf(
+      "MORE: no recognised R2 column in GoodnessOfFit (saw: %s); rpc table will lack R2",
+      paste(colnames(gof_df), collapse = ", ")
+    ))
+  }
+}
+
 # Persist the full RegulationPerCondition table so PaintOmics' Step 3 panel
 # can render it. Written here, BEFORE the per-omic loop below strips the
 # `<omic>-` prefix in the yellow-star file — we apply the same prefix strip
