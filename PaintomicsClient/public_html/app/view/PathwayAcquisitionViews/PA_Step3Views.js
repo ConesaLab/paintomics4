@@ -66,6 +66,7 @@ function PA_Step3JobView() {
 
 	this.metaboliteView = null;
 	this.regulationView = null;
+	this.regTargetNetworkView = null;
 
 	this.hubAnalysisView = null;
 	this.aiWidget = null;
@@ -304,6 +305,15 @@ function PA_Step3JobView() {
 			this.regulationView.setParent(this);
 		}
 		this.regulationView.loadModel(model);
+
+		// MORE Regulator–Target Network panel — same self-suppression contract
+		// as the regulation table, so wiring is unconditional.
+		if (this.regTargetNetworkView === null) {
+			this.regTargetNetworkView = new PA_Step3RegTargetNetworkView();
+			this.regTargetNetworkView.setController(this.getController());
+			this.regTargetNetworkView.setParent(this);
+		}
+		this.regTargetNetworkView.loadModel(model);
 
 		this.statsView = new PA_Step3StatsView();
 		this.statsView.loadModel(model);
@@ -842,6 +852,9 @@ function PA_Step3JobView() {
 				// The view returns a hidden container when no rpc data; safe to
 				// always include here.
 				me.regulationView.getComponent(),
+				// MORE Regulator–Target Network — also self-suppresses; mounted
+				// directly under the table for thematic grouping.
+				me.regTargetNetworkView.getComponent(),
 				me.pathwayTableView.getComponent() //THE TABLE PANEL
 			],
 			listeners: {
