@@ -1,11 +1,15 @@
 /**
- * PA_Step3RegTargetNetworkView — bipartite Regulator↔Target network for MORE.
+ * PA_Step3RegTargetNetworkView — Regulator↔Target network for MORE.
  *
- * Renders the RegulationPerCondition rpc table as a sigma.js graph with
- * regulators on top and targets on bottom. Post-hoc filters (R², |coef|,
- * omic toggles, max edges) live in a toolbar / side panel (Steps 6–7).
- * ForceAtlas2 is used for X-axis untangling, with a Y-axis clamp that
- * preserves the bipartite split during and after layout.
+ * Renders the RegulationPerCondition rpc table as a free 2D sigma.js graph.
+ * Role is encoded visually (regulator = larger + omic-colored + labelled;
+ * target = small + gray + label on hover) rather than positionally — FA2
+ * is allowed to run in 2D so that hub regulators land at the centre of
+ * their fan of targets, making "who regulates whom" visually obvious.
+ *
+ * Post-hoc filters (condition, R², |coef|, max edges) live in a toolbar
+ * (Step 6); side panel with omic toggles + legend in Step 7. Default view
+ * is capped at the top 100 strongest edges so the network stays readable.
  *
  * v1 scope: single-condition view, no all-conditions overlay or differential
  * mode (see /home/leyls/github/MORE/network/MORE_RegTargetNetwork_v1_Plan.md).
@@ -24,7 +28,6 @@ function PA_Step3RegTargetNetworkView() {
 	// tear them down deterministically — sigma's web-worker FA2 must be
 	// killed explicitly or it leaks across job switches.
 	this.network         = null;
-	this.clampInterval   = null;
 	this.fa2StopTimer    = null;
 	this.containerId     = "more_regtarget_sigma_" +
 	                       Math.floor(Math.random() * 1e9);
@@ -33,6 +36,8 @@ function PA_Step3RegTargetNetworkView() {
 	this.toolbarId       = "more_regtarget_toolbar_" +
 	                       Math.floor(Math.random() * 1e9);
 	this.subtitleId      = "more_regtarget_subtitle_" +
+	                       Math.floor(Math.random() * 1e9);
+	this.sidePanelId     = "more_regtarget_side_" +
 	                       Math.floor(Math.random() * 1e9);
 	this.currentCondition = null;  // resolved on first render
 	this.adjacency        = null;  // nodeId → { neighborId: true }; built once
@@ -67,16 +72,10 @@ function PA_Step3RegTargetNetworkView() {
 	var DIM_NODE          = "rgba(200, 200, 200, 0.18)";
 	var DIM_EDGE          = "rgba(200, 200, 200, 0.06)";
 
-	// Bipartite zones (sigma-coordinate space). Sigma uses screen-style
-	// coordinates: +y is DOWN. So regulators-on-top means y < 0, and
-	// targets-on-bottom means y > 0. The clamp re-pins every node to its
-	// band each tick — we don't let FA2 move them vertically at all. The
-	// bipartite is a hard constraint; FA2 is purely doing X-axis untangling.
-	var REG_Y_PIN = -1.0;  // top of canvas
-	var TGT_Y_PIN =  1.0;  // bottom of canvas
-	var BAND_JITTER = 0.05; // small visual variation; computed once per node
-	var FA2_DURATION_MS = 3500;
-	var CLAMP_INTERVAL_MS = 60;
+	// FA2 runs free in 2D. Hub regulators end up centred among their targets
+	// because we enable outboundAttractionDistribution (LinLog mode) — that's
+	// the bit that gives a hub-and-spoke look instead of a hairball.
+	var FA2_DURATION_MS = 4500;
 
 	// ---- Model wiring -----------------------------------------------------
 	this.loadModel = function (model) {
@@ -137,6 +136,7 @@ function PA_Step3RegTargetNetworkView() {
 		var regulators = {};
 		var targets    = {};
 		var edges      = [];
+		var omicSet    = {};
 		var globalMaxAbsCoef = 0;
 
 		var rows = this.rows;
@@ -147,6 +147,7 @@ function PA_Step3RegTargetNetworkView() {
 			if (reg == null || reg === "" || tgt == null || tgt === "") continue;
 
 			var omic = (omicIdx != null && row[omicIdx]) || "Unknown";
+			omicSet[omic] = true;
 
 			// Build the per-condition coefficient map and track whether ANY
 			// condition produced a usable value. Rows with all-null coefs
@@ -218,7 +219,8 @@ function PA_Step3RegTargetNetworkView() {
 			targets:    targets,
 			edges:      edges,
 			conditions: conditions,
-			maxAbsCoef: globalMaxAbsCoef
+			maxAbsCoef: globalMaxAbsCoef,
+			omics:      Object.keys(omicSet).sort()
 		};
 	};
 
@@ -246,11 +248,15 @@ function PA_Step3RegTargetNetworkView() {
 		return sym ? sym + " (" + id + ")" : id;
 	};
 
-	// Map node degree → sigma display size. Linear with a floor so leaf nodes
-	// stay visible. Sigma's auto-scaling handles final pixel size; this is
-	// the relative weight.
-	var _nodeSize = function (degree) {
-		return 1 + Math.sqrt(degree);
+	// Role-based node sizing. Regulators carry the visual weight — they're
+	// what the user is looking for — but kept modest so edges stay visible
+	// between clustered regulators. Hubs still grow via √degree so they
+	// stand out without ballooning. Sigma's min/maxNodeSize cap pixel sizes.
+	var _regSize = function (degree) {
+		return 2.0 + Math.sqrt(degree) * 0.8;
+	};
+	var _tgtSize = function (degree) {
+		return 1.0 + Math.sqrt(degree) * 0.25;
 	};
 
 	// Map |coef| → edge thickness. Coefficients in MORE are unbounded but
@@ -263,7 +269,7 @@ function PA_Step3RegTargetNetworkView() {
 
 	// ---- Sigma instantiation ---------------------------------------------
 	// Builds the sigma graph from the prepared {regulators, targets, edges}
-	// triple, sets bipartite initial positions, and instantiates sigma in
+	// triple, places nodes at random scatter, and instantiates sigma in
 	// the supplied DOM container. Called from the panel's afterrender hook
 	// because sigma needs a measurable parent element.
 	this._instantiateSigma = function (containerEl) {
@@ -272,6 +278,7 @@ function PA_Step3RegTargetNetworkView() {
 		// Expose for toolbar / filter logic.
 		this.conditions     = graph.conditions;
 		this.dataMaxAbsCoef = graph.maxAbsCoef || 1;
+		this.dataOmics      = graph.omics || [];
 		// Default current condition to the first one present, unless an
 		// earlier initComponent() already chose it.
 		if (!this.currentCondition && graph.conditions.length > 0) {
@@ -280,14 +287,24 @@ function PA_Step3RegTargetNetworkView() {
 		// Initialise filter state.
 		// R² floor: honour MORE-side filter_r2; user can only tighten it.
 		// |coef| floor: start at 0 — MORE already gated by alpha/VIP.
-		// maxEdges: cap at 500 by default. Plays well with 600px canvas.
+		// maxEdges: default to top 75 by |coef|. The full unfiltered rpc is
+		// a hairball at any meaningful canvas size; the user can lift the
+		// cap. Lower options (50, 75) exist for very tight inspection.
 		var r2Floor = (this.filters && this.filters.filter_r2 != null)
 			? Number(this.filters.filter_r2) : 0;
+		// enabledOmics: all on by default (any-omic union semantics — a
+		// regulator stays visible while ≥1 of its omics is checked, which
+		// drops out naturally because edges are filtered per-omic).
+		var enabledOmics = {};
+		for (var oi = 0; oi < this.dataOmics.length; oi++) {
+			enabledOmics[this.dataOmics[oi]] = true;
+		}
 		this.filterState = {
-			r2Floor:     r2Floor,
-			r2Min:       r2Floor,
-			absCoefMin:  0,
-			maxEdges:    500
+			r2Floor:      r2Floor,
+			r2Min:        r2Floor,
+			absCoefMin:   0,
+			maxEdges:     75,
+			enabledOmics: enabledOmics
 		};
 
 		var regList = Object.keys(graph.regulators).map(function (k) {
@@ -297,45 +314,46 @@ function PA_Step3RegTargetNetworkView() {
 			return graph.targets[k];
 		});
 
-		// Initial X spread — evenly distributed across [-1, 1]. FA2 will then
-		// pull connected nodes together along X. Y is pinned to the bipartite
-		// zone with small jitter so FA2 doesn't see all nodes at identical Y
-		// (which can cause its repulsion to overshoot).
-		// Per-node Y jitter is fixed at creation so the bipartite bands
-		// have a stable visual texture instead of flickering each clamp.
+		// Initial positions: small random scatter around the origin. FA2 with
+		// outboundAttractionDistribution will then pull hubs to the centre
+		// and push leaves outward. Regulators get a tighter inner radius so
+		// the layout already nudges them centre-ward before FA2 even starts;
+		// targets get a slightly wider band — this just gives FA2 a head start
+		// and converges faster than starting everyone on top of each other.
 		var sigmaNodes = [];
-		var nReg = regList.length;
-		regList.forEach(function (reg, idx) {
+		var _randPos = function (radius) {
+			var theta = Math.random() * Math.PI * 2;
+			var r = radius * Math.sqrt(Math.random());
+			return { x: Math.cos(theta) * r, y: Math.sin(theta) * r };
+		};
+		regList.forEach(function (reg) {
 			var primaryOmic = getPrimaryOmic(reg);
 			var color = OMIC_PALETTE[primaryOmic] || DEFAULT_REG_COLOR;
-			var jitter = (Math.random() - 0.5) * BAND_JITTER;
+			var p = _randPos(0.3);
 			sigmaNodes.push({
 				id:    reg.id,
 				label: _label(reg.name, symbols),
-				x:     nReg > 1 ? -1 + 2 * (idx / (nReg - 1)) : 0,
-				y:     REG_Y_PIN + jitter,
-				size:  _nodeSize(reg.degree),
+				x:     p.x,
+				y:     p.y,
+				size:  _regSize(reg.degree),
 				color: color,
 				kind:        "regulator",
-				yPin:        REG_Y_PIN + jitter,
 				rawName:     reg.name,
 				primaryOmic: primaryOmic,
 				omics:       Object.keys(reg.omics),
 				degree:      reg.degree
 			});
 		});
-		var nTgt = tgtList.length;
-		tgtList.forEach(function (tgt, idx) {
-			var jitter = (Math.random() - 0.5) * BAND_JITTER;
+		tgtList.forEach(function (tgt) {
+			var p = _randPos(1.0);
 			sigmaNodes.push({
 				id:    tgt.id,
 				label: _label(tgt.name, symbols),
-				x:     nTgt > 1 ? -1 + 2 * (idx / (nTgt - 1)) : 0,
-				y:     TGT_Y_PIN + jitter,
-				size:  _nodeSize(tgt.degree),
+				x:     p.x,
+				y:     p.y,
+				size:  _tgtSize(tgt.degree),
 				color: TARGET_COLOR,
 				kind:    "target",
-				yPin:    TGT_Y_PIN + jitter,
 				rawName: tgt.name,
 				degree:  tgt.degree
 			});
@@ -374,7 +392,13 @@ function PA_Step3RegTargetNetworkView() {
 				zoomMin: 0.05,
 				zoomMax: 10,
 				zoomingRatio: 1.2,
-				labelThreshold: 8,
+				// labelThreshold gates labels on rendered pixel size. With
+				// minNodeSize=2 / maxNodeSize=14 and the smaller _regSize
+				// formula, regulators land in the 5–14 px range while
+				// targets stay below 4 px — so labelThreshold=6 keeps
+				// regulator labels visible (what the user actually wants to
+				// identify) and leaves targets label-free until hovered.
+				labelThreshold: 6,
 				labelMaxLength: 18,
 				defaultEdgeType: "line",
 				defaultEdgeColor: "default",
@@ -406,41 +430,77 @@ function PA_Step3RegTargetNetworkView() {
 		this._buildToolbar();
 		this._wireToolbar();
 
+		// Side panel (omic toggles + legend + counts) — needs dataOmics +
+		// filterState, both ready by this point.
+		this._buildSidePanel();
+
 		// Wire hover/click highlight + render the top-hubs overlay (consults
 		// current visibility, so it reflects whatever the active filters show).
 		this._bindHighlight();
 		this._renderTopHubs();
 
-		// Run FA2 with hard Y-pin. FA2 untangles X-axis crossings; the clamp
-		// loop pins every node to its precomputed yPin each tick. Effectively
-		// this is a 1D force layout along X with the bipartite as a fixed
-		// constraint. Low gravity + high scaling keeps clusters from
-		// collapsing into the centre into an unreadable hairball.
-		this._startBipartiteClamp();
-		this.network.startForceAtlas2({
-			worker: true,
-			barnesHutOptimize: sigmaNodes.length > 500,
-			barnesHutTheta: 0.6,
-			scalingRatio: 20,
-			slowDown: 3,
-			gravity: 0.05,
-			strongGravityMode: false,
-			edgeWeightInfluence: 0.3,
-			outboundAttractionDistribution: false,
-			adjustSizes: true
-		});
+		// Run FA2 free in 2D. LinLog mode (outboundAttractionDistribution)
+		// makes hubs gravitate centrally with their leaves on the periphery
+		// — the look we want for "this regulator controls all these targets."
+		// edgeWeightInfluence biased on |coef| via _edgeSize means stronger
+		// regulatory links also pull harder.
+		this.network.startForceAtlas2(this._fa2Config(this._visibleNodeCount()));
 
 		var me = this;
 		this.fa2StopTimer = setTimeout(function () {
 			if (me.network && me.network.isForceAtlas2Running()) {
 				me.network.stopForceAtlas2();
 			}
-			// One last clamp + refresh after FA2 stops, then halt the loop
-			// so we're not chewing CPU forever.
-			me._clampOnce();
 			me.network.refresh({ skipIndexation: false });
-			me._stopBipartiteClamp();
 		}, FA2_DURATION_MS);
+	};
+
+	// Count of currently-visible nodes (i.e., not hidden by the filter pipe).
+	// Linkurious sigma's FA2 worker does NOT skip hidden nodes — they still
+	// emit repulsion — so we tune FA2 params off this count rather than the
+	// full graph size, otherwise a tight R² filter leaves visible survivors
+	// being shoved around by thousands of invisible repulsors.
+	this._visibleNodeCount = function () {
+		if (this._lastFilterStats) {
+			return (this._lastFilterStats.visibleRegulators || 0) +
+			       (this._lastFilterStats.visibleTargets    || 0);
+		}
+		return this.network ? this.network.graph.nodes().length : 0;
+	};
+
+	// Adaptive FA2 params shared by initial layout and Resume. Smooth
+	// √n-based interpolation rather than buckets so the transitions feel
+	// natural as the user tightens/loosens filters. strongGravityMode is a
+	// heavy hammer (linear-in-distance pull to centre, overriding repulsion)
+	// — reserve it for truly tiny graphs where survivors would otherwise be
+	// invisible specks at the canvas edge.
+	this._fa2Config = function (nVisibleNodes) {
+		var n = Math.max(nVisibleNodes || 0, 1);
+		var sqrtN = Math.sqrt(n);
+		// Repulsion grows with √n: more nodes → need more breathing room.
+		// Floor at 2 so few-node layouts don't explode; cap at 12 so big
+		// graphs don't push beyond the camera.
+		var scaling = Math.max(2, Math.min(12, sqrtN * 0.6));
+		// Gravity drops as √n grows: dense graphs barely need any pull;
+		// sparse ones need help finding centre. Floor at 0.4 to avoid drift
+		// at the dense end.
+		var gravity = Math.max(0.4, Math.min(2.5, 4 / sqrtN));
+		return {
+			worker: true,
+			barnesHutOptimize: n > 500,
+			barnesHutTheta: 0.6,
+			scalingRatio: scaling,
+			slowDown: 4,
+			gravity: gravity,
+			// strongGravityMode overrides repulsion with a linear-in-distance
+			// pull to centre. It collapses sparse graphs into a black hole
+			// (the exact symptom you saw), so we never enable it — the
+			// gravity floor of 0.4 is enough to keep things together.
+			strongGravityMode: false,
+			edgeWeightInfluence: 0.5,
+			outboundAttractionDistribution: true,
+			adjustSizes: true
+		};
 	};
 
 	// ---- Highlight (hover + click + hub-link) ----------------------------
@@ -603,6 +663,122 @@ function PA_Step3RegTargetNetworkView() {
 		};
 	};
 
+	// ---- Side panel: omic toggles, legend, live counts ------------------
+	// Right-hand strip rendered into this.sidePanelId. Three sections:
+	//   1. Edge sign legend (blue = positive coef, red = negative)
+	//   2. Omic checkboxes — operates per-edge (each edge has a single omic).
+	//      Unchecking an omic hides its edges and any-omic-union semantics
+	//      drop out for free via the orphan-node sweep in _applyFilters.
+	//   3. Live counts (regulators / targets / edges visible) — refreshed
+	//      from _lastFilterStats by _updateSidePanelCounts.
+	this._buildSidePanel = function () {
+		var el = document.getElementById(this.sidePanelId);
+		if (!el) return;
+		var omics = this.dataOmics || [];
+		var state = this.filterState;
+
+		var html = "";
+
+		// Edge sign legend.
+		html +=
+			'<div style="padding:10px 12px;border-bottom:1px solid #e0e0e0;">' +
+				'<div style="font-weight:bold;font-size:0.82em;color:#333;' +
+				'margin-bottom:6px;">Edge sign</div>' +
+				'<div style="font-size:0.78em;display:flex;align-items:center;' +
+				'margin-bottom:3px;">' +
+					'<span style="display:inline-block;width:18px;height:3px;' +
+					'background:#2E86C1;margin-right:8px;"></span>' +
+					'positive coef</div>' +
+				'<div style="font-size:0.78em;display:flex;align-items:center;">' +
+					'<span style="display:inline-block;width:18px;height:3px;' +
+					'background:#C03927;margin-right:8px;"></span>' +
+					'negative coef</div>' +
+			'</div>';
+
+		// Omic toggles (= regulator-side filter via edge omic).
+		html +=
+			'<div style="padding:10px 12px;border-bottom:1px solid #e0e0e0;">' +
+				'<div style="font-weight:bold;font-size:0.82em;color:#333;' +
+				'margin-bottom:6px;">Omics</div>';
+		for (var i = 0; i < omics.length; i++) {
+			var omic = omics[i];
+			var color = OMIC_PALETTE[omic] || DEFAULT_REG_COLOR;
+			var checked = state && state.enabledOmics &&
+			              state.enabledOmics[omic] !== false ? " checked" : "";
+			var safeOmic = Ext.String.htmlEncode(omic);
+			html +=
+				'<div style="font-size:0.78em;display:flex;align-items:center;' +
+				'margin-bottom:3px;line-height:1.4;">' +
+					'<input type="checkbox" data-omic="' + safeOmic + '" ' +
+					'class="more-omic-toggle"' + checked +
+					' style="margin:0 6px 0 0;">' +
+					'<span style="display:inline-block;width:10px;height:10px;' +
+					'background:' + color + ';border-radius:50%;' +
+					'margin-right:6px;flex-shrink:0;"></span>' +
+					'<label style="cursor:pointer;word-break:break-word;">' +
+					safeOmic + '</label>' +
+				'</div>';
+		}
+		html +=
+				'<div style="margin-top:6px;font-size:0.72em;color:#888;' +
+				'line-height:1.3;">' +
+					'Any-omic union: a regulator stays visible while ≥1 of ' +
+					'its omics is checked.' +
+				'</div>' +
+			'</div>';
+
+		// Targets are encoded distinctly (gray). Surface that here so the
+		// canvas legend is self-contained, not just an inferred convention.
+		html +=
+			'<div style="padding:10px 12px;border-bottom:1px solid #e0e0e0;">' +
+				'<div style="font-weight:bold;font-size:0.82em;color:#333;' +
+				'margin-bottom:6px;">Targets</div>' +
+				'<div style="font-size:0.78em;display:flex;align-items:center;">' +
+					'<span style="display:inline-block;width:10px;height:10px;' +
+					'background:' + TARGET_COLOR + ';border-radius:50%;' +
+					'margin-right:8px;"></span>' +
+					'regulated gene</div>' +
+			'</div>';
+
+		// Live counts placeholder — populated by _updateSidePanelCounts.
+		html +=
+			'<div style="padding:10px 12px;">' +
+				'<div style="font-weight:bold;font-size:0.82em;color:#333;' +
+				'margin-bottom:6px;">Visible</div>' +
+				'<div id="' + this.sidePanelId + '_counts" ' +
+				'style="font-size:0.82em;line-height:1.6;color:#444;">' +
+				'<i style="color:#999;">computing…</i></div>' +
+			'</div>';
+
+		el.innerHTML = html;
+
+		// Wire checkboxes. Toggling re-runs the filter pipe — cheap (≲3k edges).
+		var me = this;
+		var boxes = el.querySelectorAll("input.more-omic-toggle");
+		for (var b = 0; b < boxes.length; b++) {
+			boxes[b].onchange = function () {
+				var name = this.getAttribute("data-omic");
+				me.filterState.enabledOmics[name] = this.checked;
+				me._applyFilters();
+			};
+		}
+
+		// First counts paint reflects whatever filter pass already ran.
+		this._updateSidePanelCounts();
+	};
+
+	// Repaint the counts block from _lastFilterStats. Safe to call before
+	// the side panel exists — it's a no-op when the target element is gone.
+	this._updateSidePanelCounts = function () {
+		var el = document.getElementById(this.sidePanelId + "_counts");
+		if (!el) return;
+		var stats = this._lastFilterStats || {};
+		el.innerHTML =
+			'<div>Regulators: <b>' + (stats.visibleRegulators || 0) + '</b></div>' +
+			'<div>Targets: <b>' + (stats.visibleTargets || 0) + '</b></div>' +
+			'<div>Edges: <b>' + (stats.visibleEdges || 0) + '</b></div>';
+	};
+
 	// ---- Condition & filter pipeline ------------------------------------
 	// Apply a new active condition to every edge. Rewrites coef / absCoef /
 	// size / color / originalColor from each edge's coefPerCondition map.
@@ -644,12 +820,19 @@ function PA_Step3RegTargetNetworkView() {
 		var nodes = this.network.graph.nodes();
 
 		// Pass 1.
+		// enabledOmics may be absent on the very first call (built lazily
+		// by the side panel); treat that as "all omics enabled" to keep
+		// the initial render from blanking everything out.
+		var enOmics = state.enabledOmics;
 		var survivors = [];
 		for (var i = 0; i < edges.length; i++) {
 			var e = edges[i];
 			if (e._missingForCondition) { e.hidden = true; continue; }
 			if (e.r2 != null && e.r2 < state.r2Min) { e.hidden = true; continue; }
 			if (e.absCoef < state.absCoefMin) { e.hidden = true; continue; }
+			if (enOmics && e.omic && enOmics[e.omic] === false) {
+				e.hidden = true; continue;
+			}
 			e.hidden = false;
 			survivors.push(e);
 		}
@@ -693,6 +876,7 @@ function PA_Step3RegTargetNetworkView() {
 		this.network.refresh({ skipIndexation: true });
 		this._renderTopHubs();
 		this._updateSubtitle();
+		this._updateSidePanelCounts();
 	};
 
 	// ---- Toolbar build + wire -------------------------------------------
@@ -714,7 +898,7 @@ function PA_Step3RegTargetNetworkView() {
 				+ Ext.String.htmlEncode(c) + '</option>';
 		}, this).join("");
 		var maxEdgeOpts = "";
-		[100, 250, 500, 1000, 2500, "all"].forEach(function (v) {
+		[25, 50, 75, 100, 250, 500, 1000, 2500, "all"].forEach(function (v) {
 			var sel = (String(v) === String(s.maxEdges)) ? " selected" : "";
 			var label = v === "all" ? "All" : v;
 			maxEdgeOpts += '<option value="' + v + '"' + sel + '>' + label + '</option>';
@@ -752,6 +936,18 @@ function PA_Step3RegTargetNetworkView() {
 					  '(R² floor ' + s.r2Floor.toFixed(2) +
 					  ' inherited from MORE)</span>'
 					: '') +
+				// Spacer pushes export/display actions to the right edge so
+				// they're visually separated from the filter controls.
+				'<span style="flex:1;"></span>' +
+				'<button id="' + this.toolbarId + '_png" title="Download as PNG" ' +
+					'style="padding:3px 10px;border:1px solid #aaa;background:white;' +
+					'cursor:pointer;border-radius:3px;">PNG</button>' +
+				'<button id="' + this.toolbarId + '_svg" title="Download as SVG" ' +
+					'style="padding:3px 10px;border:1px solid #aaa;background:white;' +
+					'cursor:pointer;border-radius:3px;">SVG</button>' +
+				'<button id="' + this.toolbarId + '_full" title="Toggle fullscreen" ' +
+					'style="padding:3px 10px;border:1px solid #aaa;background:white;' +
+					'cursor:pointer;border-radius:3px;">⛶ Fullscreen</button>' +
 			'</div>';
 	};
 
@@ -791,41 +987,117 @@ function PA_Step3RegTargetNetworkView() {
 		if (resumeBt) resumeBt.onclick = function () {
 			me._resumeLayout();
 		};
+		var pngBt  = $("_png");
+		var svgBt  = $("_svg");
+		var fullBt = $("_full");
+		if (pngBt)  pngBt.onclick  = function () { me._downloadPng(); };
+		if (svgBt)  svgBt.onclick  = function () { me._downloadSvg(); };
+		if (fullBt) fullBt.onclick = function () { me._toggleFullscreen(); };
 	};
 
 	// ---- Resume layout --------------------------------------------------
-	// Re-run FA2 on the current (possibly filtered) graph. Cheap re-init —
-	// we don't re-randomise X positions, so this is "continue layout from
-	// here" rather than "redo from scratch". With many edges hidden, FA2
-	// will pull the remaining visible nodes into tighter clusters.
+	// Re-run FA2 on the current (possibly filtered) graph. "Continue from
+	// here" semantics: positions aren't reset, so applying a tighter filter
+	// then hitting Resume lets the surviving nodes relax into a cleaner
+	// layout in-place.
 	this._resumeLayout = function () {
 		if (!this.network) return;
 		if (this.network.isForceAtlas2Running()) return;
-		this._clampOnce();
-		this.network.refresh({ skipIndexation: true });
-		this._startBipartiteClamp();
-		this.network.startForceAtlas2({
-			worker: true,
-			barnesHutOptimize: this.network.graph.nodes().length > 500,
-			barnesHutTheta: 0.6,
-			scalingRatio: 20,
-			slowDown: 3,
-			gravity: 0.05,
-			strongGravityMode: false,
-			edgeWeightInfluence: 0.3,
-			outboundAttractionDistribution: false,
-			adjustSizes: true
-		});
+		this.network.startForceAtlas2(this._fa2Config(this._visibleNodeCount()));
 		var me = this;
 		if (this.fa2StopTimer) clearTimeout(this.fa2StopTimer);
 		this.fa2StopTimer = setTimeout(function () {
 			if (me.network && me.network.isForceAtlas2Running()) {
 				me.network.stopForceAtlas2();
 			}
-			me._clampOnce();
 			me.network.refresh({ skipIndexation: false });
-			me._stopBipartiteClamp();
 		}, FA2_DURATION_MS);
+	};
+
+	// ---- Export & fullscreen -------------------------------------------
+	// Resolve a stable filename stem from the active jobID. Falls back to
+	// a timestamp so exports still work when the model is detached (it
+	// shouldn't be at this point, but we don't want a silent NaN filename).
+	this._filenameStem = function () {
+		var jobID = (this.model && this.model.getJobID)
+			? this.model.getJobID() : null;
+		var stem = "more_regtarget_network_" + (jobID || Date.now());
+		// Sanitise — job IDs in PaintOmics are alnum but defensive cleanup
+		// keeps the filename safe if that ever changes.
+		return stem.replace(/[^A-Za-z0-9_-]/g, "_");
+	};
+
+	// PNG export. Sigma's canvas renderer paints across several stacked
+	// canvases (scene = edges/nodes, glyphs = labels, hovers, mouse layer,
+	// etc.). We enumerate every canvas inside the container and composite
+	// them in DOM order = rendering order, so whatever sigma chose to put
+	// on which layer ends up in the export.
+	//
+	// Critically: dimensions are taken from the source canvas's natural
+	// width/height (device pixels), NOT the CSS-pixel container size.
+	// On HiDPI displays devicePixelRatio > 1 so the canvases internally
+	// are e.g. 2× the CSS size; matching CSS pixels would crop the export
+	// to the top-left quadrant — the symptom of the original bug.
+	this._downloadPng = function () {
+		if (!this.network) return;
+		var containerEl = document.getElementById(this.containerId);
+		if (!containerEl) return;
+		var canvases = containerEl.querySelectorAll("canvas");
+		if (!canvases.length) return;
+
+		var w = canvases[0].width;
+		var h = canvases[0].height;
+		var out = document.createElement("canvas");
+		out.width = w; out.height = h;
+		var ctx = out.getContext("2d");
+		// White background — sigma canvases are transparent; without this
+		// the PNG looks broken in viewers that don't checkerboard alpha.
+		ctx.fillStyle = "#ffffff";
+		ctx.fillRect(0, 0, w, h);
+		for (var i = 0; i < canvases.length; i++) {
+			try { ctx.drawImage(canvases[i], 0, 0); }
+			catch (ex) { /* tainted/empty layer — skip */ }
+		}
+
+		var a = document.createElement("a");
+		a.href = out.toDataURL("image/png");
+		a.download = this._filenameStem() + ".png";
+		a.style.display = "none";
+		document.body.appendChild(a);
+		a.click();
+		document.body.removeChild(a);
+	};
+
+	// SVG export. Sigma's toSVG() builds a fresh SVG renderer off-screen,
+	// snapshots, and (with download:true) triggers a save. Vector output —
+	// scales cleanly for publications.
+	this._downloadSvg = function () {
+		if (!this.network || typeof this.network.toSVG !== "function") return;
+		try {
+			this.network.toSVG({
+				download: true,
+				labels:   true,
+				data:     true,
+				filename: this._filenameStem() + ".svg"
+			});
+		} catch (ex) {
+			console.error("RegTargetNetwork SVG export failed:", ex);
+		}
+	};
+
+	// Fullscreen toggle. sigma.plugins.fullScreen escalates the sigma
+	// container to the document's fullscreen element; pressing Esc (or
+	// re-clicking the button) exits. The plugin internally handles
+	// browser-prefix differences (webkit/moz) so we just hand it our
+	// canvas container.
+	this._toggleFullscreen = function () {
+		var containerEl = document.getElementById(this.containerId);
+		if (!containerEl) return;
+		if (sigma && sigma.plugins && sigma.plugins.fullScreen) {
+			sigma.plugins.fullScreen({ container: containerEl });
+		} else {
+			console.warn("RegTargetNetwork: fullScreen plugin not loaded");
+		}
 	};
 
 	// Subtitle reflects the active condition and filter outcome. Called from
@@ -853,35 +1125,6 @@ function PA_Step3RegTargetNetworkView() {
 				", VIP≥" + (f.vip != null ? f.vip : "?"));
 		}
 		el.innerHTML = parts.join(" · ");
-	};
-
-	// Hard-pin every node to its yPin. Sigma is single-threaded for graph
-	// state; the FA2 worker writes node.x/node.y back through postMessage,
-	// so overwriting y here is race-free.
-	this._clampOnce = function () {
-		if (!this.network) return;
-		var nodes = this.network.graph.nodes();
-		for (var i = 0; i < nodes.length; i++) {
-			nodes[i].y = nodes[i].yPin;
-		}
-	};
-
-	this._startBipartiteClamp = function () {
-		var me = this;
-		if (me.clampInterval) clearInterval(me.clampInterval);
-		me.clampInterval = setInterval(function () {
-			me._clampOnce();
-			// skipIndexation keeps the quadtree stable during clamping —
-			// labels stay anchored, edges don't flicker.
-			if (me.network) me.network.refresh({ skipIndexation: true });
-		}, CLAMP_INTERVAL_MS);
-	};
-
-	this._stopBipartiteClamp = function () {
-		if (this.clampInterval) {
-			clearInterval(this.clampInterval);
-			this.clampInterval = null;
-		}
 	};
 
 	// ---- Ext component ---------------------------------------------------
@@ -940,9 +1183,18 @@ function PA_Step3RegTargetNetworkView() {
 				'border-bottom:1px solid #e0e0e0;">' + subtitle + '</div>' +
 				// Hubs overlay strip — populated after sigma is instantiated.
 				'<div id="' + this.hubsContainerId + '"></div>' +
-				'<div id="' + this.containerId + '" ' +
-				'style="width:100%; height:600px; position:relative; ' +
-				'background:#fafafa;"></div>',
+				// Canvas + side panel sit in a flex row. Canvas takes all
+				// remaining width; side panel is fixed at 210px and scrolls
+				// independently when omic lists get long.
+				'<div style="display:flex; width:100%; height:600px;">' +
+					'<div id="' + this.containerId + '" ' +
+					'style="flex:1; height:100%; position:relative; ' +
+					'background:#fafafa;"></div>' +
+					'<div id="' + this.sidePanelId + '" ' +
+					'style="width:210px; height:100%; overflow-y:auto; ' +
+					'background:#f8f8f8; border-left:1px solid #e0e0e0; ' +
+					'box-sizing:border-box;"></div>' +
+				'</div>',
 			listeners: {
 				afterrender: function () {
 					// Defer sigma instantiation until the container DOM is
@@ -982,7 +1234,6 @@ function PA_Step3RegTargetNetworkView() {
 	};
 
 	this._teardown = function () {
-		this._stopBipartiteClamp();
 		if (this.fa2StopTimer) {
 			clearTimeout(this.fa2StopTimer);
 			this.fa2StopTimer = null;
