@@ -5582,7 +5582,25 @@ function PA_Step3RegulationView() {
 				},
 				columns: displayCols,
 				bbar: bbarItems,
-				tbar: tbar
+				tbar: tbar,
+				listeners: {
+					// Bridge to the sibling network view: clicking a row pins
+					// that row's (regulator, target) pair as the network's
+					// highlight. The parent view (PA_Step3JobView) holds both
+					// sibling views, and the network panel's IDs are prefixed
+					// "reg:" / "tgt:" — see PA_Step3RegTargetNetworkView's
+					// buildBipartiteGraph.
+					itemclick: function (grid, record) {
+						var reg = record.get("regulator");
+						var tgt = record.get("targetF");
+						if (!reg || !tgt) return;
+						var parent  = me.getParent && me.getParent();
+						var network = parent && parent.regTargetNetworkView;
+						if (network && network._focusEdge) {
+							network._focusEdge("reg:" + reg, "tgt:" + tgt);
+						}
+					}
+				}
 			}]
 		});
 
