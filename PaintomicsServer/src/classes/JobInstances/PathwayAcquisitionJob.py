@@ -2049,20 +2049,33 @@ class PathwayAcquisitionJob(Job):
         # 7. Build a symbol lookup for Target/Regulator columns.
         #
         # Two distinct ID populations live in the rpc:
-        #   - targetF column: canonical target gene IDs. These ARE keys of
-        #     self.inputGenesData (parseGeneBasedFiles stores each parsed
-        #     feature there, keyed by the resolved canonical ID). Gene.name
-        #     holds the resolved symbol.
-        #   - regulator column: TF / miRNA / methylation IDs. These are
-        #     NOT keys of self.inputGenesData. They live one level deeper —
-        #     each Gene's omicsValues[i] carries the regulator metadata for
-        #     a `target:::regulator` row (see Feature.OmicValue.isRegulator,
-        #     regulatorID, originalName, inputName populated in
-        #     Job.parseGeneBasedFiles).
+        #   - targetF column: target gene IDs in whatever shape R wrote
+        #     them out — which is the rownames of the user-uploaded gene
+        #     expression file, i.e. the user-input form (Ensembl for mmu,
+        #     AGI for ath, …). NOT necessarily the KEGG canonical ID.
+        #   - regulator column: TF / miRNA / methylation IDs, again in
+        #     the user-input form after runMORE.R's prefix-strip.
         #
-        # Earlier versions of this method only walked the top-level dict, so
-        # regulator symbols were missed wholesale (typically >50% of the
-        # rpc IDs). We now harvest from both layers.
+        # On the Python side, self.inputGenesData is keyed by Gene.ID —
+        # the KEGG canonical (EntrezGene for mmu, AGI for ath, …). The
+        # user-input form for each feature lives one level deeper, on
+        # OmicValue.inputName. For organisms where Gene.ID and the user
+        # upload happen to be the same string (AGI-style species), the
+        # canonical-keyed map hits the rpc directly. For organisms where
+        # they diverge (mmu, hsa, rno, dre — anything where KEGG uses
+        # EntrezGene but biologists upload Ensembl/Symbol/RefSeq), the
+        # canonical-keyed entry never matches the rpc's targetF and
+        # every target rendered as a raw Ensembl ID. We therefore emit
+        # TWO entries per gene where applicable: one keyed by Gene.ID
+        # (canonical) and one keyed by OmicValue.inputName (user form).
+        #
+        # Regulator symbols ride on a separate path: each Gene's
+        # omicsValues[i] carries the regulator metadata for a
+        # `target:::regulator` row (see Feature.OmicValue.isRegulator,
+        # regulatorID, originalName, inputName populated in
+        # Job.parseGeneBasedFiles). Earlier versions only walked the
+        # top-level dict, so regulator symbols were missed wholesale
+        # (typically >50% of the rpc IDs).
         #
         # Restrict the emitted map to IDs that actually appear in the rpc —
         # keeps the payload bounded for organisms with huge inputGenesData.
@@ -2082,22 +2095,49 @@ class PathwayAcquisitionJob(Job):
                 rpc_ids.discard("")
 
                 # 7.a Top-level pass: targets (and any regulator that also
-                # happens to be a gene-expression feature).
+                # happens to be a gene-expression feature). Emits both
+                # canonical and user-input forms — see header comment.
                 # 7.b Inner pass: regulator omicsValues. One gene can carry
                 # many regulator rows when a single target has many TFs/miRNAs
                 # mapped to it; we still scan each omicsValue once. Worst
                 # case ~rows-in-rpc iterations, which the 100k cap above
                 # already bounds.
                 for gene_id, gene in genes.items():
-                    # --- 7.a target / gene-expression symbol -------------
-                    if gene_id:
+                    name = gene.getName() if hasattr(gene, "getName") else None
+                    name_up = str(name).upper() if name else ""
+
+                    # --- 7.a-i canonical-keyed symbol (Gene.ID -> name) ---
+                    if gene_id and name:
                         gid_up = str(gene_id).upper()
-                        if gid_up in rpc_ids and gid_up not in symbols:
-                            name = gene.getName() if hasattr(gene, "getName") else None
-                            # Skip identity mappings — FeatureNamesToKeggIDsMapper
-                            # leaves Gene.name == ID when no symbol was found.
-                            if name and str(name).upper() != gid_up:
-                                symbols[gid_up] = name
+                        # Skip identity mappings — FeatureNamesToKeggIDsMapper
+                        # leaves Gene.name == ID when no symbol was found.
+                        if (gid_up in rpc_ids
+                                and gid_up not in symbols
+                                and name_up != gid_up):
+                            symbols[gid_up] = name
+
+                    # --- 7.a-ii user-input-keyed symbol -------------------
+                    # OmicValue.inputName holds the target ID as the user
+                    # typed it (e.g. "ENSMUSG00000029650" while Gene.ID is
+                    # "71706" for mmu). The rpc's targetF column carries
+                    # this user-input form for any non-AGI-style species,
+                    # so without this entry the lookup never hits and the
+                    # Target column renders as a raw Ensembl/RefSeq ID.
+                    # We sweep all omicValues — regulator slots also carry
+                    # the target's inputName (see comment in 7.b), so
+                    # including them is harmless and catches targets that
+                    # only appear via regulator associations.
+                    if name:
+                        omic_values = getattr(gene, "omicsValues", None) or []
+                        for omic_val in omic_values:
+                            input_name = getattr(omic_val, "inputName", "") or ""
+                            if not input_name:
+                                continue
+                            in_up = input_name.upper()
+                            if (in_up in rpc_ids
+                                    and in_up not in symbols
+                                    and in_up != name_up):
+                                symbols[in_up] = name
 
                     # --- 7.b regulator symbols from omicsValues ---------
                     # Important: on a regulator OmicValue (see
