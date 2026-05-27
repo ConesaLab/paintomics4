@@ -31,7 +31,7 @@ function PA_Step3RegTargetNetworkView() {
 	this.fa2StopTimer    = null;
 	this.containerId     = "more_regtarget_sigma_" +
 	                       Math.floor(Math.random() * 1e9);
-	this.hubsContainerId = "more_regtarget_hubs_" +
+	this.hubsPanelId     = "more_regtarget_hubs_" +
 	                       Math.floor(Math.random() * 1e9);
 	this.toolbarId       = "more_regtarget_toolbar_" +
 	                       Math.floor(Math.random() * 1e9);
@@ -327,16 +327,15 @@ function PA_Step3RegTargetNetworkView() {
 		return sym ? sym + " (" + id + ")" : id;
 	};
 
-	// Role-based node sizing. Regulators carry the visual weight — they're
-	// what the user is looking for — but kept modest so edges stay visible
-	// between clustered regulators. Hubs still grow via √degree so they
-	// stand out without ballooning. Sigma's min/maxNodeSize cap pixel sizes.
-	var _regSize = function (degree) {
-		return 2.0 + Math.sqrt(degree) * 0.8;
-	};
-	var _tgtSize = function (degree) {
-		return 1.0 + Math.sqrt(degree) * 0.25;
-	};
+	// Role-based fixed sizing. Size encodes regulator-vs-target, not degree.
+	// Reason: when omics with very different biological out-degree are mixed
+	// (TFs target hundreds of genes, miRNAs/methylation a handful), √degree
+	// sizing made TF hubs dominate the canvas and effectively hid the smaller
+	// regulators from view. Hub-ness is still read off the *visible edge count*
+	// radiating from each node, so the information isn't lost — just moved off
+	// the size channel onto the channel that already carries it.
+	var _regSize = function () { return 5.0; };
+	var _tgtSize = function () { return 3.0; };
 
 	// Map |coef| → edge thickness. Coefficients in MORE are unbounded but
 	// typically |coef| ∈ [0, ~2]. Cap at the 95th-pctl-ish to avoid one
@@ -421,7 +420,7 @@ function PA_Step3RegTargetNetworkView() {
 				label: _label(reg.name, symbols),
 				x:     p.x,
 				y:     p.y,
-				size:  _regSize(reg.degree),
+				size:  _regSize(),
 				color:       color,
 				borderColor: border,
 				kind:        "regulator",
@@ -440,7 +439,7 @@ function PA_Step3RegTargetNetworkView() {
 				label: _label(tgt.name, symbols),
 				x:     p.x,
 				y:     p.y,
-				size:  _tgtSize(tgt.degree),
+				size:  _tgtSize(),
 				color:       TARGET_COLOR,
 				borderColor: targetBorder,
 				kind:    "target",
@@ -504,11 +503,11 @@ function PA_Step3RegTargetNetworkView() {
 				zoomMax: 10,
 				zoomingRatio: 1.2,
 				// labelThreshold gates labels on rendered pixel size. With
-				// minNodeSize=2 / maxNodeSize=14 and the smaller _regSize
-				// formula, regulators land in the 5–14 px range while
-				// targets stay below 4 px — so labelThreshold=6 keeps
-				// regulator labels visible (what the user actually wants to
-				// identify) and leaves targets label-free until hovered.
+				// uniform sizing (regulator raw 5, target raw 3) mapped to
+				// minNodeSize=4 / maxNodeSize=8, regulators render at 8 px
+				// and targets at 4 px — labelThreshold=6 keeps regulator
+				// labels visible (what the user is here to identify) and
+				// leaves targets label-free until hovered.
 				labelThreshold: 6,
 				labelMaxLength: 18,
 				defaultEdgeType: "line",
@@ -516,8 +515,8 @@ function PA_Step3RegTargetNetworkView() {
 				edgeColor: "default",
 				batchEdgesDrawing: true,
 				hideEdgesOnMove: true,
-				minNodeSize:  2,
-				maxNodeSize: 14,
+				minNodeSize:  4,
+				maxNodeSize:  8,
 				minEdgeSize:  0.3,
 				maxEdgeSize:  2.5,
 				defaultLabelSize: 11,
@@ -749,7 +748,7 @@ function PA_Step3RegTargetNetworkView() {
 	// degree — so hubs reflect the active filters, not the unfiltered graph.
 	// Re-called from _applyFilters whenever visibility changes.
 	this._renderTopHubs = function () {
-		var hubsEl = document.getElementById(this.hubsContainerId);
+		var hubsEl = document.getElementById(this.hubsPanelId);
 		if (!hubsEl || !this.network) return;
 
 		var nodes = this.network.graph.nodes();
@@ -779,40 +778,57 @@ function PA_Step3RegTargetNetworkView() {
 			return b.degree - a.degree;
 		}).slice(0, 5);
 
+		// Compact vertical row: symbol/id on the left, edge count on the right.
+		// The whole row is the click target so the user doesn't have to hit
+		// the name pixel-perfectly to highlight the node.
 		var symbols = this.symbols || {};
-		var fmt = function (item) {
+		var fmtRow = function (item) {
 			var sym = symbols[String(item.name).toUpperCase()];
 			var disp = sym ? sym : item.name;
-			return '<a class="more-hub-link" data-node-id="' +
+			return '<div class="more-hub-link" data-node-id="' +
 				Ext.String.htmlEncode(item.id) + '" ' +
-				'style="cursor:pointer;color:#1f77b4;text-decoration:none;' +
-				'margin-right:8px;">' +
-				Ext.String.htmlEncode(disp) +
-				' <span style="color:#888;">(n=' + item.degree + ')</span>' +
-				'</a>';
+				'style="display:flex;justify-content:space-between;' +
+				'align-items:center;font-size:0.78em;line-height:1.4;' +
+				'padding:2px 4px;margin:1px -4px;cursor:pointer;' +
+				'border-radius:2px;color:#1f77b4;" ' +
+				'onmouseover="this.style.background=\'#eef4fb\'" ' +
+				'onmouseout="this.style.background=\'transparent\'">' +
+				'<span style="overflow:hidden;text-overflow:ellipsis;' +
+				'white-space:nowrap;">' + Ext.String.htmlEncode(disp) + '</span>' +
+				'<span style="color:#888;margin-left:6px;flex-shrink:0;">n=' +
+				item.degree + '</span>' +
+			'</div>';
+		};
+		var renderList = function (items) {
+			if (!items.length) {
+				return '<div style="font-size:0.78em;color:#999;' +
+					'margin:3px 0;"><i>none</i></div>';
+			}
+			return items.map(fmtRow).join("");
 		};
 
 		hubsEl.innerHTML =
-			'<div style="padding:6px 14px;font-size:0.85em;color:#555;' +
-			'border-bottom:1px solid #eee;background:#f5f5f5;">' +
-				'<b>Top regulators:</b> ' +
-				(topRegs.length ? topRegs.map(fmt).join("") : '<i>none</i>') +
-				' &nbsp;·&nbsp; ' +
-				'<b>Most-regulated targets:</b> ' +
-				(topTgts.length ? topTgts.map(fmt).join("") : '<i>none</i>') +
-				' &nbsp;<span style="color:#888;font-size:0.9em;">' +
-				'(click to highlight · click again or click empty area to clear)' +
-				'</span>' +
-			'</div>';
+			'<div style="font-weight:bold;font-size:0.82em;color:#333;' +
+			'margin-bottom:4px;">Top hubs</div>' +
+			'<div style="font-size:0.72em;color:#666;text-transform:uppercase;' +
+			'letter-spacing:0.04em;margin:6px 0 2px;">Regulators</div>' +
+			renderList(topRegs) +
+			'<div style="font-size:0.72em;color:#666;text-transform:uppercase;' +
+			'letter-spacing:0.04em;margin:8px 0 2px;">Most-regulated targets</div>' +
+			renderList(topTgts) +
+			'<div style="margin-top:8px;font-size:0.7em;color:#888;' +
+			'line-height:1.3;">Click a row to highlight; click again or ' +
+			'click empty canvas to clear.</div>';
 
 		// Wire clicks. Use the container so we don't have to re-bind if the
-		// overlay ever re-renders.
+		// list ever re-renders.
 		var me = this;
 		hubsEl.onclick = function (ev) {
-			var a = ev.target.closest && ev.target.closest("a.more-hub-link");
-			if (!a) return;
+			var row = ev.target.closest &&
+				ev.target.closest(".more-hub-link");
+			if (!row) return;
 			ev.preventDefault();
-			var nodeId = a.getAttribute("data-node-id");
+			var nodeId = row.getAttribute("data-node-id");
 			if (!nodeId) return;
 			if (me.pinnedHighlight === nodeId) {
 				me.pinnedHighlight = null;
@@ -923,6 +939,18 @@ function PA_Step3RegTargetNetworkView() {
 					'background:' + TARGET_COLOR + ';border-radius:50%;' +
 					'margin-right:8px;"></span>' +
 					'regulated gene</div>' +
+			'</div>';
+
+		// Top-hubs placeholder. _renderTopHubs paints into this every time the
+		// filter pipe runs, so the list reflects whatever the user is currently
+		// looking at. Initial content is a stub — first paint replaces it.
+		html +=
+			'<div id="' + this.hubsPanelId + '" ' +
+			'style="padding:10px 12px;border-bottom:1px solid #e0e0e0;">' +
+				'<div style="font-weight:bold;font-size:0.82em;color:#333;">' +
+				'Top hubs</div>' +
+				'<div style="font-size:0.78em;color:#999;margin-top:4px;">' +
+				'<i>computing…</i></div>' +
 			'</div>';
 
 		// Live counts placeholder — populated by _updateSidePanelCounts.
@@ -1523,8 +1551,9 @@ function PA_Step3RegTargetNetworkView() {
 				'<div id="' + this.subtitleId + '" ' +
 				'style="padding:8px 14px; font-size:0.85em; color:#555; ' +
 				'border-bottom:1px solid #e0e0e0;">' + subtitle + '</div>' +
-				// Hubs overlay strip — populated after sigma is instantiated.
-				'<div id="' + this.hubsContainerId + '"></div>' +
+				// Top-hubs were historically rendered as a strip here, above
+				// the canvas. They now live inside the side panel — see the
+				// "Top hubs" block in _buildSidePanel / _renderTopHubs.
 				// Canvas + side panel sit in a flex row. Canvas takes all
 				// remaining width; side panel is fixed at 210px and scrolls
 				// independently when omic lists get long.
