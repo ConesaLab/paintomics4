@@ -318,13 +318,16 @@ function PA_Step3RegTargetNetworkView() {
 		return "rgb(" + r + "," + g + "," + b + ")";
 	};
 
-	// Symbol-aware label for tooltips/labels. Mirrors PA_Step3RegulationView's
-	// renderer: prefer the resolved gene symbol when available, fall back to
-	// the raw ID. UPPERCASE keys to match server-side normalisation.
+	// Symbol-aware label for tooltips/labels. Prefer the resolved gene symbol
+	// when available, fall back to the raw input ID. We intentionally show the
+	// symbol *alone* (not "symbol (id)") to keep the canvas readable — the full
+	// "symbol (id)" form crowds the graph when many nodes are labelled. The raw
+	// ID stays available on the node object for tooltips/search/exports.
+	// UPPERCASE keys to match server-side normalisation.
 	var _label = function (id, symbols) {
 		if (!id) return "";
 		var sym = symbols && symbols[String(id).toUpperCase()];
-		return sym ? sym + " (" + id + ")" : id;
+		return sym ? sym : id;
 	};
 
 	// Role-based fixed sizing. Size encodes regulator-vs-target, not degree.
@@ -483,12 +486,15 @@ function PA_Step3RegTargetNetworkView() {
 		// Search index for the side-panel "Find node" box. Pre-computed once
 		// and sorted alphabetically by label so the dropdown reads predictably;
 		// lowercased copy stored so the per-keystroke filter is a pure
-		// indexOf() without re-lowercasing N strings every event.
+		// indexOf() without re-lowercasing N strings every event. The raw ID is
+		// folded into `lower` (but not the displayed label) so nodes stay
+		// findable by ID even though the canvas label now shows the symbol only.
 		this.searchIndex = sigmaNodes.map(function (n) {
+			var idStr = n.id == null ? "" : String(n.id);
 			return {
 				id:    n.id,
 				label: n.label,
-				lower: (n.label || "").toLowerCase(),
+				lower: ((n.label || "") + " " + idStr).toLowerCase(),
 				kind:  n.kind
 			};
 		}).sort(function (a, b) {
