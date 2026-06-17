@@ -2666,6 +2666,21 @@ function MORESubmittingPanel(nElem, options) {
 					helpTip: "Upload the reference file that relates each feature (i.e. miRNA) with its potential targets. This information is usually extracted from popular databases such as miRbase for miRNAs. See above the accepted format for the file."
 				},
 				{
+					// Per-omic low-variation filter (MORE `minVariation`). Each
+					// regulatory omic carries its own threshold so heterogeneous
+					// data types (e.g. methylation vs. miRNA) can be filtered
+					// independently. Default 0 = keep all but constant regulators.
+					xtype: 'numberfield',
+					name: 'more_minvar_0',
+					fieldLabel: 'Min. variation',
+					value: 0,
+					minValue: 0,
+					step: 0.01,
+					allowDecimals: true,
+					allowBlank: false,
+					helpTip: "Minimum change in standard deviation (numeric regulators) or proportion (binary) a regulator must show across conditions to avoid being filtered as low-variation. Applied to this regulatory omic only. 0 = keep all but constant regulators."
+				},
+				{
 					xtype: 'container',
 					itemId: 'addOmicWrapper',
 					layout: { type: 'hbox', pack: 'center' },
@@ -2727,6 +2742,19 @@ function MORESubmittingPanel(nElem, options) {
 								fieldLabel: 'Associations file',
 								namePrefix: 'assoc_file_' + i,
 								helpTip: "Upload the reference file that relates each feature (i.e. miRNA) with its potential targets. This information is usually extracted from popular databases such as miRbase for miRNAs. See above the accepted format for the file."
+							},
+							{
+								// Per-omic low-variation filter (MORE `minVariation`).
+								// Mirrors the field on the first regulatory omic above.
+								xtype: 'numberfield',
+								name: 'more_minvar_' + i,
+								fieldLabel: 'Min. variation',
+								value: 0,
+								minValue: 0,
+								step: 0.01,
+								allowDecimals: true,
+								allowBlank: false,
+								helpTip: "Minimum change in standard deviation (numeric regulators) or proportion (binary) a regulator must show across conditions to avoid being filtered as low-variation. Applied to this regulatory omic only. 0 = keep all but constant regulators."
 							}
 						]);
 						setTimeout(function() { initializeTooltips(".helpTip"); }, 100);

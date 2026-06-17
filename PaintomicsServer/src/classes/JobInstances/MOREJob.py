@@ -39,18 +39,21 @@ class MOREJob(Job):
         self.results = {} # {omicName: {outputFile, relevantFile}}
         self.load_model_path = None # For fast-track mode
 
-    def addRegulatoryOmic(self, name, dataFile, dataType, associationsFile=None, relevantFile=None):
+    def addRegulatoryOmic(self, name, dataFile, dataType, associationsFile=None, relevantFile=None, minVariation=0.0):
         """
-        Adds a regulatory omic dataset. 
+        Adds a regulatory omic dataset.
         associationsFile is optional (None -> passed as NULL to R).
         relevantFile is optional (None -> use MORE output for red stars).
+        minVariation is the per-omic low-variation filter passed to MORE's
+        `minVariation` argument (default 0.0 = keep all but constant regulators).
         """
         self.regulatoryOmics.append({
             "name": name,
             "file": dataFile,
             "type": dataType,
             "associations": associationsFile,
-            "relevant": relevantFile
+            "relevant": relevantFile,
+            "minVariation": minVariation
         })
 
     def getTargetExpressionFile(self, mainJob):
