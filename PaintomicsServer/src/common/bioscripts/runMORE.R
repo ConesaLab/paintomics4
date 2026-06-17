@@ -16,6 +16,7 @@ option_list <- list(
   make_option(c("-o", "--omic_names"), type="character", help="Comma-separated names of regulatory omics"),
   make_option(c("-d", "--data_files"), type="character", help="Comma-separated paths to regulatory data files"),
   make_option(c("-a", "--assoc_files"), type="character", help="Comma-separated paths to association files (or 'NULL')"),
+  make_option(c("--min_variation"), type="character", default="0", help="Comma-separated per-omic minVariation (numeric, or 'NA' for the auto threshold). One value per omic, in --omic_names order; a single value applies to all."),
   make_option(c("-m", "--method"), type="character", default="PLS1", help="Model method: PLS1 or MLR"),
   make_option(c("--alpha"), type="numeric", default=0.05, help="Significance threshold (alpha)"),
   make_option(c("--vip"), type="numeric", default=0.8, help="VIP threshold for PLS1"),
@@ -208,8 +209,35 @@ if (opt$method == "MLR") {
   varSel_val <- "EN"
 } else {
   # For PLS1, use Jackknife by default as it is fast and robust
-  varSel_val <- "Jack" 
+  varSel_val <- "Jack"
 }
+
+# Per-omic minVariation: low-variation filter applied independently to each
+# regulatory omic. The servlet sends one token per omic (in omic_names order);
+# "NA"/blank coerces to R's NA, which MORE reads as "auto" (10% of the maximum
+# observed variability across conditions). A single token is recycled to all
+# omics; an unexpected count falls back to 0 (MORE's documented default) rather
+# than risking a silent mis-alignment between thresholds and omics.
+parse_min_variation <- function(raw, omics) {
+  tokens <- trimws(unlist(strsplit(raw, ",")))
+  vals   <- suppressWarnings(as.numeric(tokens))  # "NA"/non-numeric -> NA (auto)
+  if (length(vals) == 1L && length(omics) > 1L) {
+    vals <- rep(vals, length(omics))
+  }
+  if (length(vals) != length(omics)) {
+    warning(sprintf(
+      "MORE: minVariation has %d value(s) for %d omic(s); using 0 for all.",
+      length(vals), length(omics)))
+    vals <- rep(0, length(omics))
+  }
+  names(vals) <- omics  # MORE matches the vector to regulatoryData by name
+  vals
+}
+minVariation_vec <- parse_min_variation(opt$min_variation, names(regulatoryData))
+cat(paste0("MORE: minVariation per omic -> ",
+           paste(names(minVariation_vec),
+                 ifelse(is.na(minVariation_vec), "NA (auto)", minVariation_vec),
+                 sep = "=", collapse = ", "), "\n"))
 
 result_more <- more(
   targetData     = targetData,
@@ -218,6 +246,7 @@ result_more <- more(
   condition      = condition,
   method         = opt$method,
   varSel         = varSel_val,
+  minVariation   = minVariation_vec,
   alfa           = opt$alpha,
   vip            = opt$vip
 )

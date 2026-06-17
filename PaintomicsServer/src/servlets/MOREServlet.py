@@ -90,7 +90,24 @@ def fromMOREtoGenes_STEP1(REQUEST, RESPONSE, QUEUE_INSTANCE, JOB_ID):
                 rel_path = formFields.get(f"relevant_file_{i}_filelocation", "").replace("[MyData]/", "")
                 if not rel_path: rel_path = None
 
-            jobInstance.addRegulatoryOmic(name, data_path, formFields.get(f"omic_type_{i}"), assoc_path, rel_path)
+            # Per-omic low-variation filter (MORE `minVariation`). Blank / "auto" /
+            # "NA" is forwarded to R as the "NA" sentinel, which MORE interprets as
+            # "use 10% of the maximum observed variability across conditions". Any
+            # other value must parse as a non-negative float; malformed input falls
+            # back to 0.0 (MORE's documented default) rather than aborting the job.
+            raw_minvar = (formFields.get(f"more_minvar_{i}") or "").strip()
+            if raw_minvar.lower() in ("", "auto", "na"):
+                min_variation = "NA"
+            else:
+                try:
+                    min_variation = max(0.0, float(raw_minvar))
+                except (TypeError, ValueError):
+                    min_variation = 0.0
+
+            jobInstance.addRegulatoryOmic(
+                name, data_path, formFields.get(f"omic_type_{i}"),
+                assoc_path, rel_path, minVariation=min_variation
+            )
             i += 1
 
         # 6. Model Parameters
@@ -158,6 +175,10 @@ def fromMOREtoGenes_STEP2(jobInstance, userID, RESPONSE, formFields):
             "--omic_names", ",".join([o['name'] for o in jobInstance.regulatoryOmics]),
             "--data_files", ",".join([os.path.join(input_dir, o['file']) for o in jobInstance.regulatoryOmics]),
             "--assoc_files", ",".join([os.path.join(input_dir, o['associations']) if o['associations'] else "NULL" for o in jobInstance.regulatoryOmics]),
+            # Per-omic minVariation, comma-separated in the SAME order as --omic_names.
+            # "NA" tokens are honoured by runMORE.R (auto threshold); missing values
+            # default to MORE's 0.0. Backward-compatible with older jobs lacking the key.
+            "--min_variation", ",".join([str(o.get('minVariation', 0.0)) for o in jobInstance.regulatoryOmics]),
             "--method", jobInstance.method,
             "--alpha", str(jobInstance.alpha),
             "--vip", str(jobInstance.vip),
