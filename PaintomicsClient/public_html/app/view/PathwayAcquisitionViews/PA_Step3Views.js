@@ -4294,6 +4294,31 @@ function PA_Step3PathwayTableView() {
 	};
 
 	/**
+	* Filters this table down to the enriched pathways that contain the given
+	* feature ID (a MORE target or regulator), then scrolls the table into view.
+	* Called by the MORE Regulation panels (PA_Step3RegulationView) so the user
+	* can jump from a regulator↔target pair straight to "which enriched pathways
+	* is this feature in". Reuses the per-row hidden `identifiers` field that
+	* already carries every ID form of each matched gene/compound.
+	* @param {String} featureID  Target/regulator ID to look up.
+	*/
+	this.searchFeatureInPathways = function(featureID) {
+		if (!featureID) {
+			return;
+		}
+		var grid = this.getComponent().queryById("pathwaysGridPanel");
+		if (!grid || !grid.searchByFeatureID) {
+			return;
+		}
+		grid.searchByFeatureID(featureID);
+		// The MORE panels render below this table; bring it back into view.
+		var section = document.getElementById("pathwayEnrichmentSection");
+		if (section && section.scrollIntoView) {
+			section.scrollIntoView({behavior: "smooth", block: "start"});
+		}
+	};
+
+	/**
 	* This function generates the component (EXTJS) using the content of the model
 	* @param {String}  renderTo  the ID for the DOM element where this component should be rendered
 	* @returns {Ext.ComponentView} The visual component
@@ -5453,6 +5478,51 @@ function PA_Step3RegulationView() {
 				});
 			});
 
+		// --- "Find in pathways" hand-off -----------------------------------
+		// Each row exposes two magnifiers that filter the sibling Pathway
+		// Enrichment table down to the enriched pathways containing this row's
+		// target / regulator (see PA_Step3PathwayTableView.searchFeatureInPathways).
+		// Targets are gene-expression features and map onto pathway genes
+		// directly; a regulator only matches when it is itself a pathway gene
+		// (TFs frequently are; miRNA / methylation regulators are not) — the
+		// table then simply shows no rows, which is itself informative.
+		var findInPathways = function (featureID) {
+			if (!featureID) return;
+			var parent    = me.getParent && me.getParent();
+			var tableView = parent && parent.pathwayTableView;
+			if (tableView && tableView.searchFeatureInPathways) {
+				tableView.searchFeatureInPathways(featureID);
+			}
+		};
+		displayCols.push({
+			xtype: "customactioncolumn",
+			text: "In pathways",
+			menuDisabled: true,
+			sortable: false,
+			width: 100,
+			align: "center",
+			items: [
+				{
+					icon: "fa-dot-circle-o",
+					text: "",
+					tooltip: "Show enriched pathways containing this <b>target</b>",
+					style: "font-size:15px;margin-right:10px;",
+					handler: function (grid, rowIndex) {
+						findInPathways(grid.getStore().getAt(rowIndex).get("targetF"));
+					}
+				},
+				{
+					icon: "fa-bolt",
+					text: "",
+					tooltip: "Show enriched pathways containing this <b>regulator</b>",
+					style: "font-size:15px;",
+					handler: function (grid, rowIndex) {
+						findInPathways(grid.getStore().getAt(rowIndex).get("regulator"));
+					}
+				}
+			]
+		});
+
 		// --- Filters ---
 		// Combined predicate: omic combo + free-text search. Stored on the
 		// component so each control just updates its slice and re-applies.
@@ -5590,7 +5660,12 @@ function PA_Step3RegulationView() {
 					// sibling views, and the network panel's IDs are prefixed
 					// "reg:" / "tgt:" — see PA_Step3RegTargetNetworkView's
 					// buildBipartiteGraph.
-					itemclick: function (grid, record) {
+					itemclick: function (grid, record, item, index, e) {
+						// The "In pathways" action icons carry their own handlers;
+						// don't also pin the network edge when one is clicked.
+						if (e && e.getTarget && e.getTarget(".x-action-col-icon")) {
+							return;
+						}
 						var reg = record.get("regulator");
 						var tgt = record.get("targetF");
 						if (!reg || !tgt) return;
