@@ -3103,6 +3103,10 @@ function PA_Step4GlobalHeatmapView() {
 	this.name = "PA_Step4GlobalHeatmapView";
 	this.showConfigurator = false;
 	this.automaticUpdate = true;
+	// Whether to draw the white per-condition significance stars on the
+	// heatmap cells. User-toggleable from the configurator; defaults to true
+	// so existing behaviour is preserved.
+	this.showSignificanceStars = true;
 
 	/***********************************************************************
 	* GETTERS AND SETTERS
@@ -3182,6 +3186,13 @@ function PA_Step4GlobalHeatmapView() {
 
 		// - CHECK IF FORCE ORDER WAS SELECTED
 		var forceOrder = $("#order-check").is(":checked");
+
+		// - CHECK IF PER-CONDITION SIGNIFICANCE STARS SHOULD BE DRAWN. Stored on
+		//   the instance so generateHeatmap (a method on this view) can read it
+		//   without threading an extra parameter through generateContent. The
+		//   `.length` guard keeps the pre-render default (true) when the
+		//   configurator hasn't been rendered yet.
+		this.showSignificanceStars = $("#significance-stars-check").length ? $("#significance-stars-check").is(":checked") : true;
 
 		//*********************************************************************************
 		// STEP 2. CONFIGURE CLUSTERIZE OPTIONS
@@ -3263,6 +3274,16 @@ function PA_Step4GlobalHeatmapView() {
 				// rows we set linkKey explicitly to keep the linkage.
 				var targetName = omicsValues[matchedFeatures[i]].getName();
 				var isRegulatorRow = !!(omicValue.isRegulator);
+				// Per-condition significance, mirroring the pathway-box tooltip
+				// heatmap: one boolean per cell so generateHeatmap can draw the
+				// white star on significant cells in multi-condition data.
+				// isRelevant(j, mode) is an O(1) array lookup (FeatureModels.js),
+				// so building this list per row is effectively free.
+				var ghValues = omicValue.getValues(replicateModeGH);
+				var ghSignificance = [];
+				for (var c = 0; c < (ghValues ? ghValues.length : 0); c++) {
+					ghSignificance.push(omicValue.isRelevant(c, replicateModeGH) === true);
+				}
 				if (isRegulatorRow) {
 					referenceOmics[omicValue.omicName][featureName].push({
 						keggName: omicValue.originalName,
@@ -3270,7 +3291,8 @@ function PA_Step4GlobalHeatmapView() {
 						linkKey: targetName,
 						isRelevant: omicValue.isRelevant(undefined, replicateModeGH),
 						isRelevantAssociation: omicValue.isRelevantAssociation(),
-						values: omicValue.getValues(replicateModeGH)
+						significance: ghSignificance,
+						values: ghValues
 					});
 				} else {
 					referenceOmics[omicValue.omicName][featureName].push({
@@ -3278,7 +3300,8 @@ function PA_Step4GlobalHeatmapView() {
 						inputName: omicValue.originalName || omicValue.getInputName(),
 						isRelevant: omicValue.isRelevant(undefined, replicateModeGH),
 						isRelevantAssociation: omicValue.isRelevantAssociation(),
-						values: omicValue.getValues(replicateModeGH)
+						significance: ghSignificance,
+						values: ghValues
 					});
 				}
 			}
@@ -3427,13 +3450,18 @@ function PA_Step4GlobalHeatmapView() {
 			//Add the name for the row (e.g. MagoHb or "miRNA my_mirnaid_1")
 			yAxisCat.push(relevantSymbols + omicsValues[i].keggName + "#" + shownameValue);
 
+			var featureSignificance = omicsValues[i].significance;
 			if (featureValues !== null) {
 				for (var j in featureValues) {
 					serie.data.push({
 						x: x,
 						y: y,
 						value: featureValues[j],
-						color: getColor(limits, featureValues[j], visualOptions.colorScale)
+						color: getColor(limits, featureValues[j], visualOptions.colorScale),
+						// Per-condition significance for the white star (see dataLabels
+						// below). Falls back to false when the row carries no
+						// significance array (e.g. the gray "no data" rows).
+						isSignificant: featureSignificance ? featureSignificance[j] === true : false
 					});
 					x++;
 					maxX = Math.max(maxX, x);
@@ -3481,6 +3509,11 @@ function PA_Step4GlobalHeatmapView() {
 		var jobModelGH_HM = this.getParent("PA_Step4JobView") ? this.getParent("PA_Step4JobView").getModel() : null;
 		var replicateModeGH_HM = jobModelGH_HM && jobModelGH_HM.getReplicateMode ? jobModelGH_HM.getReplicateMode() : "replicates";
 		var omicHeaderGH = jobModelGH_HM ? (jobModelGH_HM.getOmicHeaders(null, replicateModeGH_HM)[omicName] || []) : [];
+
+		// User toggle from the configurator. Captured here because the dataLabels
+		// formatter below runs with `this` bound to the Highcharts point. Defaults
+		// to showing stars unless explicitly turned off.
+		var showStarsGH = this.showSignificanceStars !== false;
 
 		//STEP 2. DRAW THE HEATMAP
 		var heatmap = new Highcharts.Chart({
@@ -3548,7 +3581,22 @@ function PA_Step4GlobalHeatmapView() {
 			},
 			series: series,
 			plotOptions: {
-				heatmap: {borderColor: "#000000",borderWidth: 0.5},
+				heatmap: {
+					borderColor: "#000000",
+					borderWidth: 0.5,
+					// White star on cells significant for that condition. Guarded by
+					// maxX > 1 so it only shows for multi-condition data (mirrors the
+					// pathway-box tooltip heatmap behaviour).
+					dataLabels: {
+						enabled: true,
+						useHTML: true,
+						formatter: function() {
+							if (showStarsGH && this.point.isSignificant && maxX > 1) {
+								return '<i class="fa fa-star" style="color: white !important; font-size: 8px; padding: 0;"></i>';
+							}
+						}
+					}
+				},
 				series: {
 					point: {
 						events: {
@@ -3652,6 +3700,7 @@ function PA_Step4GlobalHeatmapView() {
 		"<h4>Advanced options</h4>" + //2. GENERATE ADVANCED OPTIONS
 		'<span class="infoTip">Depending on the selected settings, heatmap generation can take up to 10 seconds.</span>' +
 		' <div class="checkbox"><input type="checkbox" id="order-check"><label for="order-check"> Force order for features.</label></div>' + // 2.1 ENABLE / DISABLE ORDERING
+		' <div class="checkbox"><input checked type="checkbox" id="significance-stars-check"><label for="significance-stars-check"> Show per-condition significance stars (<i class="fa fa-star"></i>)</label></div>' + // 2.1b SHOW / HIDE PER-CONDITION STARS
 		' <div class="checkbox"><input checked type="checkbox" id="clusterize-check"><label for="clusterize-check"> Clusterize data</label></div>' + // 2.2 ENABLE / DISABLE CLUSTERING
 		' <div class="lateralOptionsSelector clusterSelection">' +
 		'    <div class="radio"><input checked type="radio" id="clusterize-hcluster" name="clusterize-radio" value="hierarchical"><label for="clusterize-hcluster">Hierarchical clustering </label></div>' +
@@ -3994,12 +4043,16 @@ function PA_Step4DetailsView() {
 
 			var limits = getMinMax(dataDistributionSummaries[omicName], visualOptions.colorReferences[omicName]);
 
+			var featureSignificance = omicsValues[i].significance;
 			for (var j in featureValues) {
 				serie.data.push({
 					x: x,
 					y: y,
 					value: featureValues[j],
-					color: getColor(limits, featureValues[j], visualOptions.colorScale)
+					color: getColor(limits, featureValues[j], visualOptions.colorScale),
+					// Per-condition significance for the white star (see dataLabels
+					// below). Falls back to false when no significance array exists.
+					isSignificant: featureSignificance ? featureSignificance[j] === true : false
 				});
 				x++;
 				maxX = Math.max(maxX, x);
@@ -4083,6 +4136,18 @@ function PA_Step4DetailsView() {
 				heatmap: {
 					borderColor: "#000000",
 					borderWidth: 0.5,
+					// White star on cells significant for that condition. Guarded by
+					// maxX > 1 so it only shows for multi-condition data (mirrors the
+					// pathway-box tooltip and global heatmaps).
+					dataLabels: {
+						enabled: true,
+						useHTML: true,
+						formatter: function() {
+							if (this.point.isSignificant && maxX > 1) {
+								return '<i class="fa fa-star" style="color: white !important; font-size: 8px; padding: 0;"></i>';
+							}
+						}
+					}
 				},
 				series: {
 					point: {
@@ -4419,6 +4484,15 @@ var addTableEntrie = function (entriesValue, omicValue, featureName, entrieName,
 				var isRegulatorRow = !!(omicValue.isRegulator);
 				var keggNameSuffix = (entrieName === omicValue.getOmicName()) ? "" : " " + omicValue.getOmicName();
 				var hasResolvedRegulatorID = isRegulatorRow && omicValue.regulatorID && omicValue.regulatorID !== omicValue.originalName;
+				// Per-condition significance (one boolean per cell) so the Details
+				// heatmap can draw the white star on significant cells in
+				// multi-condition data — same contract as the pathway-box tooltip
+				// and global heatmaps. isRelevant(j, mode) is an O(1) array lookup.
+				var dvValues = omicValue.getValues(replicateMode);
+				var dvSignificance = [];
+				for (var c = 0; c < (dvValues ? dvValues.length : 0); c++) {
+					dvSignificance.push(omicValue.isRelevant(c, replicateMode) === true);
+				}
 				entriesValue[entrieName].push({
 					keggName: isRegulatorRow
 						? (omicValue.originalName + keggNameSuffix)
@@ -4430,7 +4504,8 @@ var addTableEntrie = function (entriesValue, omicValue, featureName, entrieName,
 					linkKey: featureName,
 					isRelevant: omicValue.isRelevant(undefined, replicateMode),
 					isRelevantAssociation: omicValue.isRelevantAssociation(),
-					values: omicValue.getValues(replicateMode)
+					significance: dvSignificance,
+					values: dvValues
 				});
 			}
 		};
