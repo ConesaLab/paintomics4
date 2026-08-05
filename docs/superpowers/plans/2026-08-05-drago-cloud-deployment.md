@@ -1873,7 +1873,7 @@ Decide the launch species list before starting. For a single species (`mmu` show
 
 ```bash
 ssh dragocloud-vm 'cd /opt/paintomics/app && tmux new-session -d -s kegg \
-  "docker compose -f deploy/compose.yaml exec -T app python PaintomicsServer/src/AdminTools/DBManager.py download --specie=mmu --kegg=1 --mapping=1 --common=1 --reactome=0 2>&1 | tee /data/CLIENT_TMP/kegg-mmu.log"'
+  "docker compose -f deploy/compose.yaml exec -T app python /app/PaintomicsServer/src/AdminTools/DBManager.py download --specie=mmu --kegg=1 --mapping=1 --common=0 --reactome=1 2>&1 | tee /data/CLIENT_TMP/kegg-mmu.log"'
 ```
 
 - [ ] **Step 8: Monitor progress**
@@ -2095,7 +2095,7 @@ Hours per species — always use tmux.
 tmux new-session -d -s kegg \
   "docker compose -f deploy/compose.yaml exec -T app \
    python PaintomicsServer/src/AdminTools/DBManager.py \
-   --specie=hsa --kegg=1 --mapping=1 --common=1 --reactome=0"
+   --specie=hsa --kegg=1 --mapping=1 --common=1 --reactome=1"
 ```
 
 Interrupted downloads resume: `DBManager` leaves a `DOWNLOADING` sentinel and

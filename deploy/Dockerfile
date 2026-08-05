@@ -75,6 +75,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         r-cran-amap \
         r-cran-matrix \
         r-cran-biocmanager \
+    # The factoextra / ggpubr dependency chain. Without these, install.packages
+    # drags in FactoMineR -> car -> lme4 -> nloptr and compiles the lot; nloptr
+    # additionally needs CMake and fails outright without it. All of these are
+    # prebuilt for bookworm, which removes ~20 minutes and the CMake dependency.
+        r-cran-factominer \
+        r-cran-rstatix \
+        r-cran-car \
+        r-cran-lme4 \
+        r-cran-nloptr \
+        r-cran-broom \
+        r-cran-ggrepel \
+    # Still needed if any remaining leaf package falls back to a source build.
+        cmake \
     && rm -rf /var/lib/apt/lists/*
 
 # Not packaged for bookworm; these come from a package repository.
