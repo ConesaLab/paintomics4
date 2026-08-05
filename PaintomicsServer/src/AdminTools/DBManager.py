@@ -151,8 +151,9 @@ def download_command(inputfile=None, specie=None, kegg=0, mapping=0, common=0, r
 
             # STEP 2.A.1 DOWNLOAD THE DATA FILES
             log("    STEP " + str(currentStep) + ". DOWNLOAD THE COMMON KEGG INFORMATION")
-            downloadKEGGFile("              * LIST OF ORGANISMS", downloadLog, "https://rest.kegg.jp/list/organism",
-                             datadir, "organisms_all.list", DOWNLOAD_DELAY_1, MAX_TRIES_1)
+            # KEGG retired /list/organism (HTTP 400). See downloadKEGGOrganismList.
+            downloadKEGGOrganismList("              * LIST OF ORGANISMS", downloadLog,
+                                     datadir, "organisms_all.list", DOWNLOAD_DELAY_1, MAX_TRIES_1)
             downloadKEGGFile("              * PATHWAYS CLASSIFICATION", downloadLog,
                              "https://rest.kegg.jp/get/br:br08901", datadir, "pathways_classification.list",
                              DOWNLOAD_DELAY_1, MAX_TRIES_1)
@@ -699,6 +700,72 @@ def directory_has_contents(path):
 
 def restorePreviousVersionData(origin, destination, dirname, backup_dir):
     replaceNewVersionData(origin, destination, dirname, backup_dir)
+
+def downloadKEGGOrganismList(message, logFile, dirName, fileName, delay, maxTries):
+    """
+    Download the KEGG organism list and write it in the layout the rest of the
+    codebase expects.
+
+    KEGG retired /list/organism -- it now answers HTTP 400 -- which made every
+    fresh install abort at "FAILED WHILE DOWNLOADING/COPYING COMMON KEGG
+    INFORMATION". /list/genome replaces it but uses a different shape:
+
+        /list/organism (gone):  T01001<TAB>hsa<TAB>Homo sapiens (human)<TAB>Eukaryotes;...
+        /list/genome  (live):   T01001<TAB>hsa; Homo sapiens (human)
+
+    Rather than change every consumer, convert to the historic four-column form.
+    AdminServlet, common_build_database and AIInterpret's context_builder all
+    read only columns 1 (code) and 2 (name), so the taxonomy column -- which
+    /list/genome does not provide -- is written empty.
+
+    Rows without an organism code (viral and addendum genomes are listed as a
+    bare description) are skipped: they have no KEGG organism to install.
+    """
+    log(message)
+
+    url = "https://rest.kegg.jp/list/genome"
+    outputPath = os.path.join(dirName, fileName)
+
+    lastError = None
+    for attempt in range(1, maxTries + 1):
+        try:
+            response = requests.get(url, timeout=120)
+            response.raise_for_status()
+
+            rows = []
+            for line in response.text.splitlines():
+                if not line.strip():
+                    continue
+                parts = line.split("\t")
+                if len(parts) < 2:
+                    continue
+                entry, description = parts[0], parts[1]
+                # "hsa; Homo sapiens (human)" -> code "hsa", name "Homo sapiens (human)"
+                if "; " not in description:
+                    continue
+                code, name = description.split("; ", 1)
+                code = code.strip()
+                if not code or " " in code:
+                    continue
+                rows.append((entry, code, name.strip()))
+
+            if not rows:
+                raise Exception("no organism rows parsed from " + url)
+
+            with open(outputPath, "w") as handle:
+                for entry, code, name in rows:
+                    handle.write("\t".join([entry, code, name, ""]) + "\n")
+
+            log("                      Parsed " + str(len(rows)) + " organisms from /list/genome")
+            return True
+        except Exception as exc:
+            lastError = exc
+            errorlog("                 FAIL! Trying again... " + str(attempt + 1) + " of " + str(maxTries))
+            wait(delay)
+
+    raise Exception("Unable to retrieve the KEGG organism list from " + url +
+                    ": " + str(lastError) + "\n")
+
 
 def downloadChEBItoKEGGMapping(message, logFile, dirName, fileName, delay, maxTries):
     """
