@@ -82,9 +82,12 @@ def findKeggIDByFeatureName(jobID, featureName, organism, db, databaseConvertion
         mates  = db.xref.find({"display_id": featureName}, {"item" :1, "mates":1, "qty":1})[0].get("mates") #Will fail if not matches
         cursor = db.xref.find({"dbname_id" : databaseConvertion_id, "_id" : { "$in" : mates }}, {"display_id":1})
 
-        if(cursor.count() > 0):
-            for item in cursor:
-                matchedFeatures.append(item.get("display_id"))
+        # No count() guard: Cursor.count() was removed in pymongo 4, and because
+        # this block swallows every exception the AttributeError would have been
+        # invisible -- every lookup would silently report "not found". Iterating
+        # an empty cursor is already a no-op, and this drops a server round-trip.
+        for item in cursor:
+            matchedFeatures.append(item.get("display_id"))
         return matchedFeatures, len(matchedFeatures) > 0
 
     except Exception as ex:
@@ -445,9 +448,10 @@ def findCompoundIDByFeatureName(jobID, featureName, db):
     matchedFeatures=[]
     try:
         cursor = db.kegg_compounds.find({"name": {"$regex" : compile_re(".*" + featureName +".*", IGNORECASE_re) }})
-        if(cursor.count() > 0):
-            for item in cursor:
-                matchedFeatures.append(item)
+        # See findIDsByFeatureName: Cursor.count() is gone in pymongo 4 and the
+        # surrounding except would have hidden the failure entirely.
+        for item in cursor:
+            matchedFeatures.append(item)
 
         return matchedFeatures, len(matchedFeatures) > 0
     except Exception as ex:

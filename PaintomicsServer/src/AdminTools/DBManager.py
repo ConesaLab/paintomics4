@@ -1023,13 +1023,10 @@ def getCurrentInstalledSpecies():
             db = client[database]
             kegg_date = db.versions.find({"name": "KEGG"})[0].get("date")
             mapping_date = db.versions.find({"name": "MAPPING"})[0].get("date")
-            acceptedIDs = db.versions.find({"name": "ACCEPTED_IDS"})
-
+            # count_documents replaces Cursor.count(), removed in pymongo 4.
             try:
-                if acceptedIDs.count() > 0:
-                    acceptedIDs = acceptedIDs[0].get("ids")
-                else:
-                    acceptedIDs = ""
+                acceptedIDsDoc = db.versions.find_one({"name": "ACCEPTED_IDS"})
+                acceptedIDs = acceptedIDsDoc.get("ids") if acceptedIDsDoc else ""
             except Exception as ex:
                 acceptedIDs = ""
 
