@@ -1,0 +1,41 @@
+# Build context exclusions.
+#
+# The symlinks below are excluded and then recreated inside the image by the
+# Dockerfile. They must not be copied:
+#
+#   PaintomicsServer/src/src                    -> ../src
+#   PaintomicsServer/src/AdminTools/src         -> ../../src
+#   PaintomicsServer/src/AdminTools/scripts/src -> ../../../src
+#
+# form cycles (src/src/src/... is infinitely deep), and
+#
+#   PaintomicsServer/src/public_html -> ../../PaintomicsClient/public_html
+#
+# points outside the directory being copied. Copying them produced a malformed
+# layer whose extraction corrupted the image rootfs -- `/bin/sh` went missing,
+# and every later RUN failed with
+#   runc run failed: ... exec: "/bin/sh": stat /bin/sh: no such file or directory
+# which gives no hint that a symlink is responsible.
+#
+# They are load-bearing, not accidental: they are how `from src...`,
+# `conf.serverconf` and `scripts.downloadReactome` all resolve regardless of
+# which directory a script is invoked from. The Dockerfile recreates each one
+# explicitly with `ln -s`.
+PaintomicsServer/src/src
+PaintomicsServer/src/AdminTools/src
+PaintomicsServer/src/AdminTools/scripts/src
+PaintomicsServer/src/AdminTools/conf
+PaintomicsServer/src/public_html
+PaintomicsServer/conf
+PaintomicsServer/log
+
+# Never send secrets or local state into the build context.
+deploy/.env
+deploy/nginx/certs/
+PaintomicsServer/src/conf/serverconf.py
+
+.git/
+**/__pycache__/
+**/*.pyc
+.DS_Store
+*.log
