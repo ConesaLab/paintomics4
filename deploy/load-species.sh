@@ -80,12 +80,29 @@ print('KEGG reachable from the container, %d bytes' % len(data))
 
 DBM="python /app/PaintomicsServer/src/AdminTools/DBManager.py"
 
-# ---------------------------------------------------------------------------
-say "DOWNLOAD hsa (KEGG + Reactome) - hours"
-# ---------------------------------------------------------------------------
-${COMPOSE} exec -T app ${DBM} download \
-    --specie=hsa --kegg=1 --mapping=1 --common=1 --reactome=1 \
-    >"$HOME/hsa-download.log" 2>&1 || die "hsa download (see ~/hsa-download.log)"
+# Download only when it has not already completed.
+#
+# DBManager writes a VERSION file into the species download directory as its
+# last step and removes the DOWNLOADING flag, so VERSION is a reliable
+# completion marker. Re-running the download is not merely wasteful: with
+# --common=1 it shutil.rmtree()s the shared common directory first, so a rerun
+# throws away the 49-minute pathway-image fetch and several GB of Reactome data
+# that were already good. Restarts happen often while debugging the install
+# step, and each one used to cost hours.
+downloadIfNeeded() {
+    specie="$1"; shift
+    marker="/data/KEGG_DATA/download/${specie}/VERSION"
+    if ${COMPOSE} exec -T app test -f "${marker}" 2>/dev/null; then
+        say "DOWNLOAD ${specie} already complete (VERSION present) - skipping"
+        return 0
+    fi
+    say "DOWNLOAD ${specie} (KEGG + Reactome) - hours"
+    ${COMPOSE} exec -T app ${DBM} download --specie="${specie}" "$@" \
+        >"$HOME/${specie}-download.log" 2>&1 \
+        || die "${specie} download (see ~/${specie}-download.log)"
+}
+
+downloadIfNeeded hsa --kegg=1 --mapping=1 --common=1 --reactome=1
 
 say "INSTALL hsa"
 ${COMPOSE} exec -T app ${DBM} install --specie=hsa \
@@ -94,11 +111,8 @@ ${COMPOSE} exec -T app ${DBM} install --specie=hsa \
 # ---------------------------------------------------------------------------
 # --common=0: the shared KEGG reference data is already present from hsa and is
 # by far the slowest part of the download.
-say "DOWNLOAD mmu (KEGG + Reactome, reusing common)"
 # ---------------------------------------------------------------------------
-${COMPOSE} exec -T app ${DBM} download \
-    --specie=mmu --kegg=1 --mapping=1 --common=0 --reactome=1 \
-    >"$HOME/mmu-download.log" 2>&1 || die "mmu download (see ~/mmu-download.log)"
+downloadIfNeeded mmu --kegg=1 --mapping=1 --common=0 --reactome=1
 
 say "INSTALL mmu"
 ${COMPOSE} exec -T app ${DBM} install --specie=mmu \
