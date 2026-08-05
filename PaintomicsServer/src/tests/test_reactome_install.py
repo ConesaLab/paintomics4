@@ -272,6 +272,136 @@ def test_blank_identifiers_are_excluded_from_gene_index():
         f"unexpected identifier set: {other_ids}"
 
 
+# ---------------------------------------------------------------------------
+# Integration: processReactomeData.R
+# ---------------------------------------------------------------------------
+
+_R_SCRIPT = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "AdminTools", "scripts", "processReactomeData.R")
+
+
+def _buildReactomeSource(directory):
+    """Write synthetic *_PE_All_Levels.txt files covering several species.
+
+    Real column order: source id, PE stId, PE name, pathway stId, url, event,
+    evidence code, species.
+    """
+    os.makedirs(directory, exist_ok=True)
+    rows = []
+    for i in range(1, 4):
+        rows.append([f"SRC{i}", f"R-HSA-{1000+i}", f"GENE{i} [nucleoplasm]",
+                     f"R-HSA-{9000+i}", "http://x", "Event", "IEA", "Homo sapiens"])
+    for i in range(1, 3):
+        rows.append([f"MSRC{i}", f"R-MMU-{2000+i}", f"Mgene{i} [cytosol]",
+                     f"R-MMU-{9000+i}", "http://x", "Event", "IEA", "Mus musculus"])
+    # Names that break R's default quote/comment handling.
+    rows.append(["ZSRC1", "R-DRE-3001", "5'-nucleotidase \"partial [cytosol]",
+                 "R-DRE-9001", "http://x", "Event", "IEA", "Danio rerio"])
+    rows.append(["QSRC1", "R-HSA-1099", "\"quoted name [nucleoplasm]",
+                 "R-HSA-9099", "http://x", "Event", "IEA", "Homo sapiens"])
+    rows.append(["HSRC1", "R-HSA-1098", "#hashname [nucleoplasm]",
+                 "R-HSA-9098", "http://x", "Event", "IEA", "Homo sapiens"])
+
+    for name in ("Ensembl2Reactome", "NCBI2Reactome", "UniProt2Reactome"):
+        _writeTsv(directory, name + "_PE_All_Levels.txt", rows)
+
+
+def _runRScript(specie, rootDir):
+    import subprocess
+    return subprocess.run(
+        [_R_SCRIPT, "--specie=" + specie, "--root=" + rootDir],
+        capture_output=True, universal_newlines=True)
+
+
+def test_r_script_extracts_requested_species_only():
+    """hsa and mmu must each yield exactly their own rows, quotes intact."""
+    if not shutil.which("Rscript"):
+        print("      (skipped: Rscript not installed)")
+        return
+
+    tmp = tempfile.mkdtemp()
+    try:
+        common = os.path.join(tmp, "common")
+        _buildReactomeSource(common)
+
+        for specie, expected in (("hsa", 5), ("mmu", 2)):
+            result = _runRScript(specie, common + os.sep)
+            assert result.returncode == 0, \
+                f"{specie} failed ({result.returncode}): {result.stderr}"
+
+            outPath = os.path.join(tmp, specie, "mapping", "reactome", "Ensembl2Reactome.txt")
+            assert os.path.isfile(outPath), f"no output written for {specie}"
+            with open(outPath) as handle:
+                lines = [l for l in handle.read().splitlines() if l.strip()]
+
+            assert len(lines) == expected, \
+                f"{specie}: expected {expected} rows, got {len(lines)}: {lines}"
+            # No other species' rows leaked in.
+            tag = "R-" + specie.upper() + "-"
+            assert all(tag in line for line in lines), \
+                f"{specie}: foreign species rows leaked in: {lines}"
+
+        # The '#' name must survive: R's default comment.char would truncate it.
+        hsaPath = os.path.join(tmp, "hsa", "mapping", "reactome", "Ensembl2Reactome.txt")
+        with open(hsaPath) as handle:
+            content = handle.read()
+        assert "R-HSA-1098" in content, "row with a '#' display name was dropped"
+        assert "R-HSA-1099" in content, "row with a leading quote was dropped"
+    finally:
+        shutil.rmtree(tmp)
+
+
+def test_r_script_fails_loudly_for_species_reactome_lacks():
+    """Silent success was the bug: no output, exit 0, confusing failure later."""
+    if not shutil.which("Rscript"):
+        print("      (skipped: Rscript not installed)")
+        return
+
+    tmp = tempfile.mkdtemp()
+    try:
+        common = os.path.join(tmp, "common")
+        _buildReactomeSource(common)
+
+        # 'sot' (Solanum tuberosum) is a KEGG organism Reactome does not cover.
+        result = _runRScript("sot", common + os.sep)
+        assert result.returncode != 0, \
+            "expected a non-zero exit so check_output raises CalledProcessError"
+
+        combined = result.stdout + result.stderr
+        assert "No rows matched species 'sot'" in combined, \
+            f"unhelpful failure output: {combined}"
+        assert not os.path.isfile(
+            os.path.join(tmp, "sot", "mapping", "reactome", "Ensembl2Reactome.txt")), \
+            "a partial output file was left behind"
+    finally:
+        shutil.rmtree(tmp)
+
+
+def test_r_script_maps_rice_to_dosa_not_osa():
+    """The old first-letter+two heuristic derived 'osa'; KEGG and this repo use 'dosa'."""
+    if not shutil.which("Rscript"):
+        print("      (skipped: Rscript not installed)")
+        return
+
+    tmp = tempfile.mkdtemp()
+    try:
+        common = os.path.join(tmp, "common")
+        os.makedirs(common)
+        rows = [["OS01", "R-OSA-4001", "OsGENE1 [cytosol]", "R-OSA-9001",
+                 "http://x", "Event", "IEA", "Oryza sativa"]]
+        for name in ("Ensembl2Reactome", "NCBI2Reactome", "UniProt2Reactome"):
+            _writeTsv(common, name + "_PE_All_Levels.txt", rows)
+
+        result = _runRScript("dosa", common + os.sep)
+        assert result.returncode == 0, \
+            f"dosa should resolve to 'Oryza sativa': {result.stderr}"
+        outPath = os.path.join(tmp, "dosa", "mapping", "reactome", "Ensembl2Reactome.txt")
+        assert os.path.isfile(outPath), "no output written for dosa"
+    finally:
+        shutil.rmtree(tmp)
+
+
 def main():
     tests = [
         test_index_groups_multiple_rows_per_stid,
@@ -283,6 +413,9 @@ def main():
         test_lookup_is_constant_time_not_linear,
         test_chebi_to_kegg_resolution_is_deterministic,
         test_blank_identifiers_are_excluded_from_gene_index,
+        test_r_script_extracts_requested_species_only,
+        test_r_script_fails_loudly_for_species_reactome_lacks,
+        test_r_script_maps_rice_to_dosa_not_osa,
     ]
     for t in tests:
         _check(t.__name__, t)
