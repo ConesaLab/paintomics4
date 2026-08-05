@@ -86,23 +86,50 @@ def downloadFile(URL, fileName, outputName, delay, maxTries, checkIfExists=False
     return False
 
 
-def get_status_with_retry(url, tries=5, delay=3):
+def fetchPathwayNodes(url, outputPath, tries=5, delay=3):
+    """Fetch a pathway's nodes JSON once, saving it, and return (status, saved).
+
+    The previous flow requested the URL purely to read its status code, threw the
+    body away, and then had curl download the identical file a second time. That
+    doubled the request count for the largest part of the download -- a species
+    with 2000 pathways paid 2000 wasted round-trips.
+
+    404 is a normal answer here: it means the pathway has no diagram at this
+    level and the caller should walk up to its parent. It is returned rather
+    than raised.
     """
-    Requests the given URL with a few retries to tolerate transient network drops
-    (e.g., Connection reset by peer from Reactome).
-    """
+    if isValidDownload(outputPath, expectJson=True):
+        return 200, True
+
+    directory = os.path.dirname(outputPath)
+    if directory:
+        os.makedirs(directory, exist_ok=True)
+
     last_exc = None
     for attempt in range(1, tries + 1):
         try:
             resp = requests.get(url, timeout=120)
-            return resp.status_code
-        except RequestException as exc:
+            if resp.status_code == 404:
+                return 404, False
+            resp.raise_for_status()
+
+            # Parse before writing: Reactome occasionally answers 200 with an
+            # error page, and a malformed file cached on disk would be reused.
+            resp.json()
+
+            tmpPath = outputPath + ".part"
+            with open(tmpPath, "wb") as handle:
+                handle.write(resp.content)
+            os.replace(tmpPath, outputPath)
+            return resp.status_code, True
+        except (RequestException, ValueError) as exc:
             last_exc = exc
             log(f"                      Connection issue ({attempt}/{tries}) for {url}: {exc}")
             wait(delay)
+
     if last_exc:
         raise last_exc
-    return 500
+    return 500, False
 
 
 def readPathwayRelations(relationFile, species):
@@ -190,8 +217,9 @@ def downloadReactome( specie ):
         nodes_url = EXTERNAL_RESOURCES['reactome'].get("nodes_url").format(pathway_id)
         nodes_tmp_file = os.path.join(REACTOME_DIR, pathway_id + ".json")
 
+        # One request, and it keeps the body -- see fetchPathwayNodes.
         try:
-            status_code = get_status_with_retry(nodes_url)
+            status_code, saved = fetchPathwayNodes(nodes_url, nodes_tmp_file, delay=2)
         except RequestException as exc:
             log(f"                      Skipping {pathway_id} after repeated connection errors: {exc}")
             return
@@ -205,11 +233,8 @@ def downloadReactome( specie ):
             downloadPathwayInf(parent, visited)
             return
 
-        try:
-            downloadFile(URL=nodes_url, fileName="", outputName=nodes_tmp_file,
-                         delay=2, maxTries=10, checkIfExists=True)
-        except Exception as exc:
-            log("                      Skipping " + pathway_id + ": nodes download failed: " + str(exc))
+        if not saved:
+            log("                      Skipping " + pathway_id + ": nodes download failed")
             return
 
         # The build reads <id>.graph.json unconditionally, so a pathway missing
