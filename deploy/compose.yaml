@@ -110,6 +110,18 @@ networks:
   # network, never from the host or the internet.
   internal:
     driver: bridge
+    driver_opts:
+      # Must not exceed the host interface MTU. The Drago VM is OpenStack, whose
+      # VXLAN overlay gives ens3 an MTU of 1450; Docker defaults its bridges to
+      # 1500. Oversized packets are dropped with path-MTU discovery blackholed,
+      # so small HTTP responses succeed while large transfers hang and time out.
+      #
+      # That failure is deceptive: the image build reached deb.debian.org fine
+      # and then stalled fetching a 4 MB package index, and it would have
+      # stalled again mid-download during the multi-hour KEGG and Reactome
+      # fetches. Set /etc/docker/daemon.json to {"mtu": 1450} as well, so the
+      # default bridge and `docker build` get it too.
+      com.docker.network.driver.mtu: "1450"
 
 volumes:
   paintomics-data:

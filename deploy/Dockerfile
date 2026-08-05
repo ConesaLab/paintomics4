@@ -91,6 +91,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         r-cran-nloptr \
         r-cran-broom \
         r-cran-ggrepel \
+    # These three are packaged for bookworm too, so only two leaves below need
+    # an external repository at all.
+        r-cran-factoextra \
+        r-cran-ggpubr \
+        r-cran-ggsignif \
     # Still needed if any remaining leaf package falls back to a source build.
         cmake \
     && rm -rf /var/lib/apt/lists/*
@@ -100,22 +105,22 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 #   qdapRegex   -> hubAnalysisInstall.R
 #   ggpubr/ggsignif/visNetwork -> plotting helpers sourced by the above
 #
-# A DATED Posit Package Manager snapshot, not CRAN and not P3M "latest".
+# Only qdapRegex and visNetwork are absent from bookworm. Both are stable and
+# declare R >= 3.x, so plain CRAN serves versions that work on R 4.2 -- unlike
+# factoextra, whose current dependencies (FactoMineR, Matrix) require R >= 4.4
+# and which is therefore taken from Debian above.
 #
-# Bookworm ships R 4.2, but CRAN and P3M "latest" only serve the *current*
-# release of each package. Matrix >= 1.7-0 and current FactoMineR both require
-# R >= 4.4, so installing factoextra from either fails with
-#   "dependencies 'FactoMineR', 'Matrix' are not available".
-# Pinning to a 2024-02 snapshot gets the last versions that support R 4.2, and
-# has the side benefit of making the image reproducible: the same Dockerfile
-# resolves the same package versions a year from now.
+# Keeping this to two leaf packages also means the build barely depends on any
+# external R repository, which matters here: the Drago VM sits behind an
+# OpenStack network where a Docker MTU mismatch silently broke exactly this
+# kind of large download.
 #
 # options(warn = 2) is deliberate. install.packages() reports an unavailable
 # dependency as a *warning* and still exits 0, so without it a missing package
 # sails through the build and only surfaces when a user runs a Metagenes job.
 RUN Rscript -e 'options(warn = 2, Ncpus = parallel::detectCores()); \
-      install.packages(c("factoextra", "qdapRegex", "ggpubr", "ggsignif", "visNetwork"), \
-                       repos = "https://packagemanager.posit.co/cran/__linux__/bookworm/2024-02-01")'
+      install.packages(c("qdapRegex", "visNetwork"), \
+                       repos = "https://cloud.r-project.org")'
 
 # Bioconductor. KEGGgraph and AnnotationDbi are needed by hubAnalysisInstall.R
 # and are not on CRAN.
