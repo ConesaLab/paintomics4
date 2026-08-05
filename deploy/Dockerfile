@@ -73,16 +73,31 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         r-cran-xml2 \
         r-cran-gtools \
         r-cran-amap \
+        r-cran-matrix \
         r-cran-biocmanager \
     && rm -rf /var/lib/apt/lists/*
 
-# Not packaged for bookworm; these must come from CRAN.
+# Not packaged for bookworm; these come from a package repository.
 #   factoextra  -> generateMetaGenes.R
 #   qdapRegex   -> hubAnalysisInstall.R
 #   ggpubr/ggsignif/visNetwork -> plotting helpers sourced by the above
+#
+# A DATED Posit Package Manager snapshot, not CRAN and not P3M "latest".
+#
+# Bookworm ships R 4.2, but CRAN and P3M "latest" only serve the *current*
+# release of each package. Matrix >= 1.7-0 and current FactoMineR both require
+# R >= 4.4, so installing factoextra from either fails with
+#   "dependencies 'FactoMineR', 'Matrix' are not available".
+# Pinning to a 2024-02 snapshot gets the last versions that support R 4.2, and
+# has the side benefit of making the image reproducible: the same Dockerfile
+# resolves the same package versions a year from now.
+#
+# options(warn = 2) is deliberate. install.packages() reports an unavailable
+# dependency as a *warning* and still exits 0, so without it a missing package
+# sails through the build and only surfaces when a user runs a Metagenes job.
 RUN Rscript -e 'options(warn = 2, Ncpus = parallel::detectCores()); \
       install.packages(c("factoextra", "qdapRegex", "ggpubr", "ggsignif", "visNetwork"), \
-                       repos = "https://cloud.r-project.org")'
+                       repos = "https://packagemanager.posit.co/cran/__linux__/bookworm/2024-02-01")'
 
 # Bioconductor. KEGGgraph and AnnotationDbi are needed by hubAnalysisInstall.R
 # and are not on CRAN.
