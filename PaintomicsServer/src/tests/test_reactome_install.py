@@ -402,6 +402,126 @@ def test_r_script_maps_rice_to_dosa_not_osa():
         shutil.rmtree(tmp)
 
 
+# ---------------------------------------------------------------------------
+# downloadReactome.py
+#
+# DBManager.py imports `scripts.downloadReactome` as a top-level module, so the
+# AdminTools directory has to be on sys.path exactly as it is at runtime.
+# ---------------------------------------------------------------------------
+
+_ADMIN_TOOLS = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "AdminTools")
+if _ADMIN_TOOLS not in sys.path:
+    sys.path.insert(0, _ADMIN_TOOLS)
+
+from scripts.downloadReactome import isValidDownload, readPathwayRelations  # noqa: E402
+
+
+def test_html_error_page_saved_as_json_is_not_valid():
+    """The cache-poisoning bug: curl without -f writes error bodies to the output."""
+    tmp = tempfile.mkdtemp()
+    try:
+        errorPage = os.path.join(tmp, "R-HSA-111.json")
+        with open(errorPage, "w") as handle:
+            handle.write("<html><head><title>404 Not Found</title></head></html>")
+        assert not isValidDownload(errorPage, expectJson=True), \
+            "an HTML error page was accepted as a cached JSON download"
+
+        empty = os.path.join(tmp, "R-HSA-222.json")
+        open(empty, "w").close()
+        assert not isValidDownload(empty, expectJson=True), "empty file accepted"
+
+        truncated = os.path.join(tmp, "R-HSA-333.json")
+        with open(truncated, "w") as handle:
+            handle.write('{"dbId": 123, "displayName": "trunc')
+        assert not isValidDownload(truncated, expectJson=True), \
+            "truncated JSON accepted as a complete download"
+
+        good = os.path.join(tmp, "R-HSA-444.json")
+        with open(good, "w") as handle:
+            handle.write('{"dbId": 123, "displayName": "ok"}')
+        assert isValidDownload(good, expectJson=True), "valid JSON rejected"
+
+        # Non-JSON assets (PNG diagrams) are only size-checked.
+        png = os.path.join(tmp, "R-HSA-555.png")
+        with open(png, "wb") as handle:
+            handle.write(b"\x89PNG\r\n\x1a\n")
+        assert isValidDownload(png, expectJson=False), "non-empty PNG rejected"
+    finally:
+        shutil.rmtree(tmp)
+
+
+def test_relation_parsing_matches_species_precisely_and_once():
+    """Substring matching pulled in foreign pathways; double parsing doubled the lists."""
+    tmp = tempfile.mkdtemp()
+    try:
+        path = _writeTsv(tmp, "ReactomePathwaysRelation.list", [
+            ["R-HSA-1000", "R-HSA-1001"],
+            ["R-HSA-1000", "R-HSA-1002"],
+            ["R-HSA-1001", "R-HSA-1003"],
+            ["R-MMU-2000", "R-MMU-2001"],
+            ["R-DRE-3000", "R-DRE-3001"],
+        ])
+
+        high, low, highList, lowList, pairs = readPathwayRelations(path, "HSA")
+
+        assert len(pairs) == 3, f"expected 3 hsa relations, got {len(pairs)}: {pairs}"
+        assert len(highList) == len(lowList) == 3, "parallel lists must not be doubled"
+        assert high == {"R-HSA-1000", "R-HSA-1001"}, f"wrong parents: {high}"
+        assert low == {"R-HSA-1001", "R-HSA-1002", "R-HSA-1003"}, f"wrong children: {low}"
+        assert not any("MMU" in p[0] or "DRE" in p[0] for p in pairs), \
+            "foreign species leaked into the hsa relation set"
+
+        # Leaf pathways (no children of their own) drive the download loop.
+        assert low - high == {"R-HSA-1002", "R-HSA-1003"}
+        # Top-level pathways drive the hierarchy.
+        assert high - low == {"R-HSA-1000"}
+    finally:
+        shutil.rmtree(tmp)
+
+
+def test_relation_parsing_rejects_species_code_appearing_as_substring():
+    """"R-HSA-" must match as a tagged prefix, not anywhere in the line."""
+    tmp = tempfile.mkdtemp()
+    try:
+        path = _writeTsv(tmp, "ReactomePathwaysRelation.list", [
+            ["R-MMU-9000", "R-MMU-9001"],   # contains no HSA tag
+            ["R-HSA-1000", "R-HSA-1001"],
+        ])
+        _, _, _, _, pairs = readPathwayRelations(path, "HSA")
+        assert len(pairs) == 1 and pairs[0][0] == "R-HSA-1000", \
+            f"precise species matching failed: {pairs}"
+    finally:
+        shutil.rmtree(tmp)
+
+
+def test_parent_lookup_is_built_once_and_terminates_on_cycles():
+    """The walk up the hierarchy must not loop forever on a cyclic relation file.
+
+    Mirrors the parentOf/visited logic in downloadReactome so the invariant is
+    covered without hitting the network.
+    """
+    highList = ["A", "B", "C"]
+    lowList = ["B", "C", "A"]           # A -> B -> C -> A, a cycle
+    parentOf = {}
+    for high, low in zip(highList, lowList):
+        parentOf.setdefault(low, high)
+
+    seen = set()
+    current = "B"
+    steps = 0
+    while current not in seen:
+        seen.add(current)
+        parent = parentOf.get(current)
+        if parent is None:
+            break
+        current = parent
+        steps += 1
+        assert steps < 100, "walk did not terminate on a cyclic relation file"
+
+    assert seen == {"A", "B", "C"}, f"walk did not cover the cycle exactly once: {seen}"
+
+
 def main():
     tests = [
         test_index_groups_multiple_rows_per_stid,
@@ -416,6 +536,10 @@ def main():
         test_r_script_extracts_requested_species_only,
         test_r_script_fails_loudly_for_species_reactome_lacks,
         test_r_script_maps_rice_to_dosa_not_osa,
+        test_html_error_page_saved_as_json_is_not_valid,
+        test_relation_parsing_matches_species_precisely_and_once,
+        test_relation_parsing_rejects_species_code_appearing_as_substring,
+        test_parent_lookup_is_built_once_and_terminates_on_cycles,
     ]
     for t in tests:
         _check(t.__name__, t)

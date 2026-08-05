@@ -1,7 +1,7 @@
 import os
 import json
 from collections import defaultdict
-from subprocess import check_call, STDOUT
+from subprocess import check_call, STDOUT, DEVNULL
 from sys import stderr
 import requests
 from requests.exceptions import RequestException
@@ -17,20 +17,74 @@ def showPercentageSimple(n, total):
     return percen
 
 
-def downloadFile(URL, fileName, outputName, delay, maxTries, checkIfExists=False):
-    # If the file already exists, avoid downloading it again
-    if checkIfExists and os.path.isfile(outputName) and os.stat(outputName).st_size > 0:
+def isValidDownload(path, expectJson):
+    """A file counts as downloaded only if it is non-empty and, for .json, parses.
+
+    Reactome serves HTML error pages with a 200 in some failure modes, and curl
+    without -f writes 4xx/5xx bodies to the output file. Checking size alone
+    accepted both as valid.
+    """
+    if not os.path.isfile(path) or os.stat(path).st_size == 0:
+        return False
+    if not expectJson:
+        return True
+    try:
+        with open(path) as handle:
+            json.load(handle)
+        return True
+    except (ValueError, UnicodeDecodeError):
+        return False
+
+
+def downloadFile(URL, fileName, outputName, delay, maxTries, checkIfExists=False, required=True):
+    """Fetch a URL to outputName. Returns True on success.
+
+    Raises when required=True and every attempt failed; returns False otherwise,
+    so optional assets (diagram PNGs) cannot abort a whole species download.
+    """
+    url = URL + fileName
+    expectJson = outputName.endswith(".json")
+
+    # A cached file is only reusable if it is actually valid. The previous check
+    # accepted any non-empty file, so an error page saved as .json was cached
+    # permanently and every later run skipped re-downloading it -- the reason a
+    # failed run stayed broken until the download directory was deleted by hand.
+    if checkIfExists and isValidDownload(outputName, expectJson):
         return True
 
-    nTry = 1
-    while nTry <= maxTries:
+    directory = os.path.dirname(outputName)
+    if directory:
+        os.makedirs(directory, exist_ok=True)
+
+    tmpName = outputName + ".part"
+    lastError = None
+
+    for attempt in range(1, maxTries + 1):
         wait(delay)
         try:
-            check_call(["curl", "-s", "--connect-timeout", "90", "--max-time", "1000", URL + fileName, "-o", outputName])
+            # -f makes curl fail on 4xx/5xx instead of writing the error body to
+            # the output file. Download to .part and rename only after the
+            # content validates, so an interrupted attempt can never leave a
+            # file that looks complete to the next run.
+            check_call(["curl", "-sfS", "--connect-timeout", "90", "--max-time", "1000",
+                        url, "-o", tmpName], stderr=DEVNULL)
+            if not isValidDownload(tmpName, expectJson):
+                raise Exception("empty response or malformed JSON")
+            os.replace(tmpName, outputName)
             return True
-        except Exception as e:
-            nTry += 1
-    raise Exception('Unable to retrieve ' + fileName + " from " + URL + "\n")
+        except Exception as exc:
+            lastError = exc
+        finally:
+            if os.path.exists(tmpName):
+                os.remove(tmpName)
+
+    message = ("Unable to retrieve " + url + " after " + str(maxTries) +
+               " attempts: " + str(lastError))
+    if required:
+        raise Exception(message + "\n")
+    log("                      SKIPPED (optional): " + message)
+    return False
+
 
 def get_status_with_retry(url, tries=5, delay=3):
     """
@@ -51,51 +105,90 @@ def get_status_with_retry(url, tries=5, delay=3):
     return 500
 
 
+def readPathwayRelations(relationFile, species):
+    """Parse ReactomePathwaysRelation.list into the structures the walk needs.
+
+    Matching on "R-<SPECIES>-" rather than a bare substring: the species code can
+    otherwise appear inside an unrelated identifier and pull in foreign pathways.
+    """
+    marker = "R-" + species + "-"
+    high, low = set(), set()
+    highList, lowList, pairs = [], [], []
+
+    with open(relationFile, 'r') as handle:
+        for row in handle:
+            if marker not in row:
+                continue
+            columns = row.rstrip('\n').split('\t')
+            if len(columns) < 2:
+                continue
+            high.add(columns[0])
+            low.add(columns[1])
+            highList.append(columns[0])
+            lowList.append(columns[1])
+            pairs.append(columns)
+
+    return high, low, highList, lowList, pairs
+
+
 def downloadReactome( specie ):
 
     SPECIES = specie.upper()
     downloadDir = KEGG_DATA_DIR + "download/"
     DATA_DIR =  downloadDir + SPECIES.lower() + '/'
-    REACTOME_DIR = os.path.join(DATA_DIR + "reactome/")
-
-    ReactomePathwayHigh = set()
-    ReactomePathwayLow = set()
-    ReactomePathwayHighList = []
-    ReactomePathwayLowList = []
-    ReactomePathwayList = []
-
+    REACTOME_DIR = os.path.join(DATA_DIR, "reactome")
 
     if os.path.isdir(DATA_DIR + "../common/"):
         ReactomePathwaysRelationFile = DATA_DIR + "../../download/common/ReactomePathwaysRelation.list"
     else:
         ReactomePathwaysRelationFile = DATA_DIR + "/../../current/common/ReactomePathwaysRelation.list"
 
+    if not os.path.isfile(ReactomePathwaysRelationFile):
+        raise Exception(
+            "Reactome pathway relations file not found: " + ReactomePathwaysRelationFile +
+            "\nRun the common download step with --reactome=1 first.")
 
+    # Parsed once. This used to be read twice into the same lists, silently
+    # doubling every entry and every downstream loop.
+    (ReactomePathwayHigh, ReactomePathwayLow, ReactomePathwayHighList,
+     ReactomePathwayLowList, ReactomePathwayList) = readPathwayRelations(
+        ReactomePathwaysRelationFile, SPECIES)
 
-    with open( ReactomePathwaysRelationFile, 'r' ) as ReactomePathwaysRelation:
-        for row in ReactomePathwaysRelation:
-            if SPECIES in row:
-                ReactomePathwayHigh.add( row.rstrip( '\n' ).split( '\t' )[0] )
-                ReactomePathwayLow.add( row.rstrip( '\n' ).split( '\t' )[1] )
-                ReactomePathwayHighList.append( row.rstrip( '\n' ).split( '\t' )[0] )
-                ReactomePathwayLowList.append( row.rstrip( '\n' ).split( '\t' )[1] )
-                ReactomePathwayList.append( row.rstrip( '\n' ).split( '\t' ) )
+    if not ReactomePathwayList:
+        raise Exception(
+            "No pathway relations found for species '" + specie + "' in " +
+            ReactomePathwaysRelationFile +
+            "\nReactome does not cover every KEGG organism; install this species with --reactome=0.")
 
+    # Parent lookup: a low-level pathway maps to the first high-level pathway
+    # that lists it. Built once instead of calling list.index() per query.
+    parentOf = {}
+    for high, low in zip(ReactomePathwayHighList, ReactomePathwayLowList):
+        parentOf.setdefault(low, high)
 
-
-    ReactomePathwayLast = ReactomePathwayLow.difference (ReactomePathwayHigh)
-    ReactomePathwayTop = ReactomePathwayHigh.difference (ReactomePathwayLow)
+    ReactomePathwayLast = ReactomePathwayLow.difference(ReactomePathwayHigh)
+    ReactomePathwayTop = ReactomePathwayHigh.difference(ReactomePathwayLow)
     ReactomeHierarchy = dict()
     PATHWAY_ID = set()
-    #stderr.write("ReactomePathwaysRelationFile"+str(ReactomePathwaysRelationFile))
-    #stderr.write("ReactomePathwaysRelation"+str(ReactomePathwaysRelation))
 
     log("                      *DOWNLOADING REACTOME " + SPECIES + " STEP(1/2)..." + "\n")
 
+    for subdirectory in ("", "png", os.path.join("png", "thumbnails")):
+        os.makedirs(os.path.join(REACTOME_DIR, subdirectory), exist_ok=True)
 
-    def downloadPathwayInf(pathway_id, PathwayList):
-        nodes_url = EXTERNAL_RESOURCES['reactome'].get( "nodes_url" ).format( pathway_id )
-        nodes_tmp_file = REACTOME_DIR + "/" + pathway_id + ".json"
+    def downloadPathwayInf(pathway_id, visited):
+        """Download one pathway's node and graph JSON, walking up on 404.
+
+        `visited` bounds the walk. Reactome's relation file contains cycles and
+        diamonds, so the previous unguarded recursion could revisit a pathway
+        forever or fan out exponentially across every parent of every parent.
+        """
+        if pathway_id in visited:
+            return
+        visited.add(pathway_id)
+
+        nodes_url = EXTERNAL_RESOURCES['reactome'].get("nodes_url").format(pathway_id)
+        nodes_tmp_file = os.path.join(REACTOME_DIR, pathway_id + ".json")
 
         try:
             status_code = get_status_with_retry(nodes_url)
@@ -104,80 +197,88 @@ def downloadReactome( specie ):
             return
 
         if status_code == 404:
-            for item in PathwayList:
-                if item[1] == pathway_id:
-                    downloadPathwayInf( item[0], ReactomePathwayList )  # get the upper pathway id
-        else:
-            downloadFile( URL=nodes_url, fileName="", outputName=nodes_tmp_file, delay=2, maxTries=10,
-                          checkIfExists=True )
-            diagram_url = "https://reactome.org/ContentService/exporter/diagram/" + pathway_id + ".png?diagramProfile=Modern&quality=5&margin=0&analysisProfile=Standard&held=false"
-            diagram_filename = REACTOME_DIR + "/png/" + pathway_id + ".png"
-            downloadFile( URL=diagram_url,
-                          fileName="",
-                          outputName=diagram_filename,
-                          delay=2,
-                          maxTries=3,
-                          checkIfExists=True )
-            filenameGraph = REACTOME_DIR + "/" + pathway_id + ".graph.json"
-            downloadFile( URL="https://reactome.org/download/current/diagram/" + pathway_id + ".graph.json",
-                          fileName="",
-                          outputName=filenameGraph,
-                          delay=2,
-                          maxTries=3,
-                          checkIfExists=True )
-            generateThumbnail( diagram_filename )
-            PATHWAY_ID.add( pathway_id )
+            # No diagram at this level; try the parent instead.
+            parent = parentOf.get(pathway_id)
+            if parent is None:
+                log("                      No diagram and no parent for " + pathway_id)
+                return
+            downloadPathwayInf(parent, visited)
+            return
 
-    if not os.path.exists(REACTOME_DIR):
-        os.makedirs(REACTOME_DIR)
-    if not os.path.exists(REACTOME_DIR +"/png"):
-        os.makedirs(REACTOME_DIR +"/png")
-    if not os.path.exists(REACTOME_DIR + "/png/thumbnails"):
-        os.makedirs(REACTOME_DIR + "/png/thumbnails")
+        try:
+            downloadFile(URL=nodes_url, fileName="", outputName=nodes_tmp_file,
+                         delay=2, maxTries=10, checkIfExists=True)
+        except Exception as exc:
+            log("                      Skipping " + pathway_id + ": nodes download failed: " + str(exc))
+            return
+
+        # The build reads <id>.graph.json unconditionally, so a pathway missing
+        # one must not be registered -- that combination used to surface as a
+        # FileNotFoundError halfway through the database build.
+        filenameGraph = os.path.join(REACTOME_DIR, pathway_id + ".graph.json")
+        try:
+            downloadFile(URL=EXTERNAL_RESOURCES['reactome'].get("graph_url").format(pathway_id),
+                         fileName="", outputName=filenameGraph,
+                         delay=2, maxTries=3, checkIfExists=True)
+        except Exception as exc:
+            log("                      Skipping " + pathway_id + ": graph download failed: " + str(exc))
+            return
+
+        # The diagram PNG is presentation only: never fail the species for it.
+        diagram_filename = os.path.join(REACTOME_DIR, "png", pathway_id + ".png")
+        if downloadFile(URL=EXTERNAL_RESOURCES['reactome'].get("diagram_url").format(pathway_id),
+                        fileName="", outputName=diagram_filename,
+                        delay=2, maxTries=3, checkIfExists=True, required=False):
+            try:
+                generateThumbnail(diagram_filename)
+            except Exception as exc:
+                log("                      Thumbnail failed for " + pathway_id + ": " + str(exc))
+
+        PATHWAY_ID.add(pathway_id)
 
     i = 0
-    for pathway_id in ReactomePathwayLast:
-    #import random
-    #test = random.sample(ReactomePathwayLast, 3)
-    #for pathway_id in test:
-
+    for pathway_id in sorted(ReactomePathwayLast):
         i += 1
         log("                      Start Downloading: " + pathway_id + "   ")
         showPercentageSimple(i, len(ReactomePathwayLast))
 
+        # The function downloads the lowest level nodes information. If it cannot
+        # find it, it walks up to the higher level pathway.
+        downloadPathwayInf(pathway_id, set())
 
-        # The function download the lowest level nodes information. If it could not find the nodes information, it will
-        # go to the higher level to find the pathway information.
-        downloadPathwayInf(pathway_id, ReactomePathwayList)
+    if not PATHWAY_ID:
+        raise Exception(
+            "No Reactome pathways could be downloaded for species '" + specie + "'.\n"
+            "Every pathway either lacked a diagram or failed to download; check network access to reactome.org.")
 
+    def findHighLevelPathway(ID, hierachy):
+        """Return [top_level_id, id], downloading the details for both.
 
-    def findHighLevelPathway(ID, hierachy, PathwayHighList, PathwayLowList):
-        for Top, subTop in hierachy.items():
-            if ID in subTop:
-                Top_url = EXTERNAL_RESOURCES['reactome'].get( "details_url" ).format( Top )
-                subTop_url = EXTERNAL_RESOURCES['reactome'].get( "details_url" ).format( ID )
-                TopName = REACTOME_DIR + '/' + Top + "details.json"
-                subTopName = REACTOME_DIR + '/' + ID + "details.json"
-                downloadFile( Top_url, "", TopName,
-                              2, 3,
-                              True)
-                downloadFile( subTop_url, "", subTopName,
-                              2, 3,
-                              True )
-                return [Top, ID]
+        Walks up via parentOf with a visited set. The previous version called
+        PathwayHighList[PathwayLowList.index(ID)], which raised ValueError for a
+        pathway absent from the low column and recursed forever on a cycle --
+        both swallowed by a bare except that substituted a wrong hierarchy.
+        """
+        seen = set()
+        current = ID
 
-        ID = PathwayHighList[PathwayLowList.index( ID )]
-        return findHighLevelPathway( ID, hierachy, PathwayHighList, PathwayLowList )
+        while current not in seen:
+            seen.add(current)
+            for top, subTop in hierachy.items():
+                if current in subTop:
+                    for identifier in (top, current):
+                        downloadFile(
+                            EXTERNAL_RESOURCES['reactome'].get("details_url").format(identifier),
+                            "", os.path.join(REACTOME_DIR, identifier + "details.json"),
+                            2, 3, True)
+                    return [top, current]
 
-    with open(ReactomePathwaysRelationFile, 'r') as ReactomePathwaysRelation:
-        for row in ReactomePathwaysRelation:
-            if SPECIES in row:
-                ReactomePathwayHigh.add(row.rstrip('\n').split('\t')[0])
-                ReactomePathwayLow.add(row.rstrip('\n').split('\t')[1])
-                ReactomePathwayHighList.append(row.rstrip('\n').split('\t')[0])
-                ReactomePathwayLowList.append(row.rstrip('\n').split('\t')[1])
-                ReactomePathwayList.append(row.rstrip('\n').split('\t'))
+            parent = parentOf.get(current)
+            if parent is None:
+                break
+            current = parent
 
+        raise Exception("No top-level pathway found for " + ID)
 
     for key in ReactomePathwayTop:
         ReactomeHierarchy[key] = set()
@@ -189,23 +290,36 @@ def downloadReactome( specie ):
 
     log("                      *DOWNLOADING REACTOME " + SPECIES + "STEP(2/2)" + "\n")
 
-    i=0
-    for pathway_id in PATHWAY_ID:
+    i = 0
+    for pathway_id in sorted(PATHWAY_ID):
         i += 1
         log("                      Start Downloading: " + pathway_id + "   ")
         showPercentageSimple( i, len( PATHWAY_ID ) )
         try:
             # Find Higher Level Pathway information and download them
-            IDList = findHighLevelPathway( pathway_id, ReactomeHierarchy, ReactomePathwayHighList, ReactomePathwayLowList )
+            IDList = findHighLevelPathway( pathway_id, ReactomeHierarchy )
         except Exception as ex:
+            log("                      Using " + pathway_id + " as its own top level: " + str(ex))
             IDList = [pathway_id, pathway_id]
+            # The build opens <id>details.json for both entries, so the
+            # self-referential fallback still needs its details file present.
+            try:
+                downloadFile(
+                    EXTERNAL_RESOURCES['reactome'].get("details_url").format(pathway_id),
+                    "", os.path.join(REACTOME_DIR, pathway_id + "details.json"),
+                    2, 3, True)
+            except Exception as exc:
+                log("                      Details download failed for " + pathway_id + ": " + str(exc))
         ReactomeHierarchyPathway[pathway_id] = IDList
 
     REACTOME_PATHWAY = DATA_DIR + 'ReactomePathway.txt'
     with open(REACTOME_PATHWAY, 'w') as output:
-        for id in PATHWAY_ID:
+        for id in sorted(PATHWAY_ID):
             output.write(id + '\n')
 
     ReactomeHierarchyPathway_DIR = DATA_DIR + "ReactomePathwayHierarchy.json"
     with open(ReactomeHierarchyPathway_DIR, "w") as PATHWAY_HIERARCHY:
         json.dump(ReactomeHierarchyPathway,PATHWAY_HIERARCHY)
+
+    log("                      Reactome download complete: " + str(len(PATHWAY_ID)) +
+        " pathways for " + SPECIES + "\n")
