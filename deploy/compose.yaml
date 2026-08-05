@@ -1,0 +1,118 @@
+# PaintOmics 4 deployment stack.
+#
+#   nginx  -> TLS termination, static limits, reverse proxy
+#   app    -> Flask/uWSGI + the in-process PySiQ job queue
+#   mongo  -> MongoDB 7, internal network only
+#
+# Usage:
+#   cp deploy/env.example deploy/.env   # then fill in the secrets
+#   docker compose -f deploy/compose.yaml up -d --build
+
+name: paintomics
+
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    # No `ports:` mapping, deliberately. MongoDB has no authentication
+    # configured and is reachable only over the internal Compose network.
+    # Publishing it would expose an unauthenticated database to the internet.
+    networks:
+      - internal
+    volumes:
+      - mongo-data:/data/db
+      - mongo-config:/data/configdb
+    command: ["--bind_ip_all", "--wiredTigerCacheSizeGB", "4"]
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    logging: &default-logging
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+  app:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+    networks:
+      - internal
+    environment:
+      MONGODB_HOST: mongo
+      MONGODB_PORT: "27017"
+      MONGODB_DATABASE: PaintomicsDB
+
+      PAINTOMICS_KEGG_DATA: /data/KEGG_DATA
+      PAINTOMICS_CLIENT_TMP: /data/CLIENT_TMP
+
+      SERVER_ALLOW_DEBUG: "false"
+
+      # Embedded in activation emails: must be the externally reachable URL.
+      PAINTOMICS_BASE_URL: ${PAINTOMICS_BASE_URL:?set PAINTOMICS_BASE_URL in deploy/.env}
+
+      EMAIL_FROM_ADDRESS: ${EMAIL_FROM_ADDRESS:-noreply@example.org}
+      SMTP_HOST: ${SMTP_HOST:-smtp.sendgrid.net}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME:-apikey}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+
+      AI_INTERPRETATION_ENABLED: ${AI_INTERPRETATION_ENABLED:-true}
+      AI_LLM_PROVIDER: ${AI_LLM_PROVIDER:-csic}
+      AI_CSIC_API_BASE: ${AI_CSIC_API_BASE:-https://llm.iiia.es/v1}
+      AI_CSIC_API_KEY: ${AI_CSIC_API_KEY:-}
+      AI_CSIC_MODEL: ${AI_CSIC_MODEL:-deepseek-ai/DeepSeek-V4-Flash-0731}
+      AI_PUBMED_EMAIL: ${AI_PUBMED_EMAIL:-}
+      AI_PUBMED_API_KEY: ${AI_PUBMED_API_KEY:-}
+    volumes:
+      # Single volume for both trees. On the Drago VM the Docker root lives on
+      # the 600 GiB Cinder volume mounted at /var/lib/docker, so this is backed
+      # by that disk rather than the 80 GB instance root.
+      - paintomics-data:/data
+    logging: *default-logging
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    depends_on:
+      - app
+    networks:
+      - internal
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/paintomics.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx/certs:/etc/nginx/certs:ro
+      - nginx-cache:/var/cache/nginx
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    logging: *default-logging
+
+networks:
+  # A single user-defined bridge. It is NOT marked `internal: true` because the
+  # app needs outbound access to rest.kegg.jp, reactome.org, PubMed and the LLM
+  # gateway; marking it internal would break the database download entirely.
+  #
+  # Isolation comes from port publishing instead: nginx is the only service with
+  # a `ports:` mapping, so mongo and app are reachable only from inside this
+  # network, never from the host or the internet.
+  internal:
+    driver: bridge
+
+volumes:
+  paintomics-data:
+  mongo-data:
+  mongo-config:
+  nginx-cache:

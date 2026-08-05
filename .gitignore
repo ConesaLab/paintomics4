@@ -85,6 +85,12 @@ target/
 /.venv
 /.venv/**
 
+# Deployment secrets: TLS private keys and the environment file. The .env
+# pattern below already covers deploy/.env; certs need their own rule.
+deploy/nginx/certs/
+*.key
+*.pem
+
 # Configuration files
 # The real server config holds credentials and must never be tracked. The
 # leading-slash patterns below only ever matched the repo root, so the actual
