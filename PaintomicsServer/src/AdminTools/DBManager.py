@@ -73,8 +73,15 @@ def download_command(inputfile=None, specie=None, kegg=0, mapping=0, common=0, r
     DOWNLOADED_SPECIES = []
     FAILED_SPECIES = []
 
-    # Create the log files
-    os.system("touch " + downloadLog)
+    # Create the log files.
+    #
+    # A fresh deployment has an empty KEGG_DATA volume, so this directory does
+    # not exist yet. The previous code shelled out to `touch`, whose failure
+    # os.system() discards, and the error only surfaced on the next line as
+    #   FileNotFoundError: '/data/KEGG_DATA/download/summary.log'
+    # which says nothing about the missing parent directory.
+    os.makedirs(download_dir, exist_ok=True)
+    open(downloadLog, 'a').close()
     summary = open(download_dir + 'summary.log', 'w')
 
     if inputfile is None:
