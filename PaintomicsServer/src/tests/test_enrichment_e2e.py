@@ -44,20 +44,44 @@ def _check(name, fn):
         print(f"ERROR {name}:\n{traceback.format_exc()}")
 
 
-def loadPathwaysFromDb(organism):
-    """{pathway_id: set(gene_ids)} for an installed species."""
+def loadPathwaysFromDb(organism, source=None):
+    """{pathway_id: set(gene_ids)} for an installed species.
+
+    The installer writes one database per organism, named "<organism>-paintomics",
+    with pathways in the `kegg` collection regardless of provenance -- `source`
+    is "KEGG" or "Reactome". Genes are stored as [{"id": ..., "x": ...}, ...],
+    not as bare identifiers.
+
+    Pass source="Reactome" to check that half specifically.
+    """
     from pymongo import MongoClient
     from src.conf.serverconf import MONGODB_HOST, MONGODB_PORT
 
     client = MongoClient(MONGODB_HOST, MONGODB_PORT, serverSelectionTimeoutMS=5000)
-    db = client["PaintomicsDB_" + organism]
+    db = client[organism + "-paintomics"]
 
+    query = {} if source is None else {"source": source}
     pathways = {}
-    for document in db.pathway.find({}, {"_id": 1, "genes": 1}):
-        genes = document.get("genes") or []
+    for document in db.kegg.find(query, {"ID": 1, "genes": 1, "source": 1}):
+        genes = {str(g["id"]) for g in (document.get("genes") or [])
+                 if isinstance(g, dict) and g.get("id")}
         if genes:
-            pathways[document["_id"]] = {str(g) for g in genes}
+            pathways[document.get("ID") or str(document["_id"])] = genes
     return pathways
+
+
+def sourceBreakdown(organism):
+    """{source: pathway count} so a missing Reactome half is visible."""
+    from pymongo import MongoClient
+    from src.conf.serverconf import MONGODB_HOST, MONGODB_PORT
+
+    client = MongoClient(MONGODB_HOST, MONGODB_PORT, serverSelectionTimeoutMS=5000)
+    db = client[organism + "-paintomics"]
+    counts = {}
+    for document in db.kegg.find({}, {"source": 1}):
+        key = document.get("source", "unknown")
+        counts[key] = counts.get(key, 0) + 1
+    return counts
 
 
 def enrich(pathwayGenes, relevantGenes, allGenes):
@@ -76,10 +100,11 @@ def enrich(pathwayGenes, relevantGenes, allGenes):
     return results
 
 
-def runEnrichmentTest(specie):
-    pathwayGenes = loadPathwaysFromDb(specie)
+def runEnrichmentTest(specie, source=None):
+    pathwayGenes = loadPathwaysFromDb(specie, source=source)
     if not pathwayGenes:
-        print(f"      (skipped: species '{specie}' has no installed pathways)")
+        label = source or "any source"
+        print(f"      (skipped: species '{specie}' has no installed pathways for {label})")
         return
 
     allGenes = set().union(*pathwayGenes.values())
@@ -131,11 +156,33 @@ def runEnrichmentTest(specie):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--specie", default="hsa")
+    parser.add_argument("--require-reactome", action="store_true",
+                        help="fail if the species has no Reactome pathways installed")
     args = parser.parse_args()
 
     print(f"species: {args.specie}")
+    try:
+        counts = sourceBreakdown(args.specie)
+        print(f"pathways by source: {counts or '(none installed)'}")
+    except Exception as exc:
+        print(f"could not read pathway counts: {exc}")
+        counts = {}
+
     _check(f"test_enrichment_recovers_planted_signal[{args.specie}]",
            lambda: runEnrichmentTest(args.specie))
+
+    # Reactome is installed through an entirely separate code path, so a KEGG
+    # pass says nothing about it.
+    if counts.get("Reactome"):
+        _check(f"test_enrichment_recovers_planted_signal[{args.specie}/Reactome]",
+               lambda: runEnrichmentTest(args.specie, source="Reactome"))
+    elif args.require_reactome:
+        _check(f"test_reactome_pathways_installed[{args.specie}]",
+               lambda: (_ for _ in ()).throw(AssertionError(
+                   f"no Reactome pathways in {args.specie}-paintomics; "
+                   f"the install ran with --reactome=0 or the Reactome stage failed")))
+    else:
+        print("      (no Reactome pathways installed; pass --require-reactome to make that fatal)")
 
     print()
     print(f"Passed: {len(_PASSED)} / {len(_PASSED)+len(_FAILED)}")
