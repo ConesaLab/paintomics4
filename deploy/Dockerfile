@@ -196,6 +196,31 @@ COPY --chown=paintomics:paintomics PaintomicsClient /app/PaintomicsClient
 # variable. See deploy/entrypoint.sh.
 COPY --chown=paintomics:paintomics deploy/entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY --chown=paintomics:paintomics deploy/uwsgi.ini /app/uwsgi.ini
+
+# Recreate the symlinks .dockerignore excluded. They are load-bearing -- they
+# are how `from src...`, `conf.serverconf` and `scripts.downloadReactome`
+# resolve no matter which directory a script is invoked from -- but three of
+# them are cyclic and one escapes the copied tree, and COPYing them produced a
+# malformed layer that corrupted the rootfs (see .dockerignore).
+RUN set -eux; \
+    ln -sfn src/conf   /app/PaintomicsServer/conf; \
+    ln -sfn src/log    /app/PaintomicsServer/log; \
+    ln -sfn ../src     /app/PaintomicsServer/src/src; \
+    ln -sfn ../../src  /app/PaintomicsServer/src/AdminTools/src; \
+    ln -sfn ../conf    /app/PaintomicsServer/src/AdminTools/conf; \
+    ln -sfn ../../../src /app/PaintomicsServer/src/AdminTools/scripts/src; \
+    ln -sfn ../../PaintomicsClient/public_html /app/PaintomicsServer/src/public_html; \
+    mkdir -p /app/PaintomicsServer/src/log; \
+    chown -h paintomics:paintomics \
+        /app/PaintomicsServer/conf \
+        /app/PaintomicsServer/log \
+        /app/PaintomicsServer/src/src \
+        /app/PaintomicsServer/src/AdminTools/src \
+        /app/PaintomicsServer/src/AdminTools/conf \
+        /app/PaintomicsServer/src/AdminTools/scripts/src \
+        /app/PaintomicsServer/src/public_html; \
+    chown -R paintomics:paintomics /app/PaintomicsServer/src/log
+
 RUN chmod +x /usr/local/bin/entrypoint.sh \
     && chmod +x /app/PaintomicsServer/src/AdminTools/scripts/*.R \
     && chmod +x /app/PaintomicsServer/src/common/bioscripts/*.R
