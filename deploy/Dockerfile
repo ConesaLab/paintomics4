@@ -29,9 +29,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt /tmp/requirements.txt
+# pip is upgraded but setuptools deliberately is not: requirements.txt pins
+# setuptools<81 because APScheduler 3.6.3 imports pkg_resources, which
+# setuptools 82 removed. Upgrading it here would install 82 and then let the
+# pinned version win only by luck of ordering.
 RUN python -m venv /opt/venv \
-    && /opt/venv/bin/pip install --no-cache-dir --upgrade pip setuptools wheel \
-    && /opt/venv/bin/pip install --no-cache-dir -r /tmp/requirements.txt
+    && /opt/venv/bin/pip install --no-cache-dir --upgrade pip wheel \
+    && /opt/venv/bin/pip install --no-cache-dir -r /tmp/requirements.txt \
+    && /opt/venv/bin/python -c "import pkg_resources, apscheduler; print('pkg_resources OK')"
 
 # ---------------------------------------------------------------------------
 # Stage 2: R dependencies
@@ -140,6 +145,13 @@ FROM python:3.9-slim-bookworm AS runtime
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
         r-base-core \
+    # R's "Recommended" packages (cluster, MASS, Matrix, lattice, survival,
+    # nlme, ...) live in /usr/lib/R/library, NOT in either site-library, so the
+    # COPY below does not carry them over from the build stage. r-base-core
+    # alone omits them, and generateMetaGenes.R needs cluster. The smoke test
+    # caught this: the R stage's own import check passed while the runtime
+    # image was missing the package.
+        r-recommended \
         libcairo2 \
         libcurl4 \
         libxml2 \
