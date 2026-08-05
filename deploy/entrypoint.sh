@@ -62,7 +62,14 @@ esac
 # ---------------------------------------------------------------------------
 # Data volume ownership
 # ---------------------------------------------------------------------------
-for directory in /data/KEGG_DATA /data/CLIENT_TMP; do
+# Create the layout the admin tools expect. A fresh volume is empty, and several
+# DBManager commands assume these already exist -- the download step failed with
+# a bare "FileNotFoundError: /data/KEGG_DATA/download/summary.log" that named a
+# file rather than the missing parent directory.
+for directory in /data/KEGG_DATA \
+                 /data/KEGG_DATA/download \
+                 /data/KEGG_DATA/current \
+                 /data/CLIENT_TMP; do
     mkdir -p "${directory}"
 done
 
