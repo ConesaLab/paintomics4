@@ -181,6 +181,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libpng16-16 \
         libtiff6 \
         libjpeg62-turbo \
+    # Shared libraries that COPYed R packages link against. apt pulled these in
+    # automatically in the build stage, but COPYing site-library carries the R
+    # packages and not the C libraries underneath them:
+    #   libuv1   <- fs      <- tidyverse
+    #   libnlopt <- nloptr  <- lme4 <- car <- ggpubr
+    # Missing, they fail only at library() time with
+    #   "unable to load shared object .../fs.so: libuv.so.1: cannot open..."
+    # The ldd check at the end of this stage is what keeps this list honest.
+        libuv1 \
+        libnlopt0 \
         curl \
         wget \
         ca-certificates \
@@ -251,6 +261,43 @@ RUN chmod +x /usr/local/bin/entrypoint.sh \
     && chown paintomics:paintomics /app/uwsgi.ini \
     && chmod +x /app/PaintomicsServer/src/AdminTools/scripts/*.R \
     && chmod +x /app/PaintomicsServer/src/common/bioscripts/*.R
+
+# ---------------------------------------------------------------------------
+# Verify the R stack IN THE RUNTIME IMAGE, not in the build stage.
+#
+# The r-builder has an import check too, but it passes by construction: apt
+# installed every system library there as a dependency. Only this image is what
+# actually ships. Two failures reached production before this check existed --
+# r-recommended (cluster, MASS, Matrix live in /usr/lib/R/library, which no COPY
+# carried) and libuv1/libnlopt0 (C libraries the COPYed R packages link against).
+# Both presented as a working server that failed the moment a user ran a job.
+# ---------------------------------------------------------------------------
+RUN set -eu; \
+    missingLibs="$(find /usr/lib/R /usr/local/lib/R -name '*.so' 2>/dev/null \
+        | while read -r so; do ldd "$so" 2>/dev/null | awk '/not found/ {print $1}'; done \
+        | sort -u)"; \
+    if [ -n "$missingLibs" ]; then \
+        echo "R packages link against missing shared libraries:"; \
+        echo "$missingLibs"; \
+        exit 1; \
+    fi; \
+    echo "every R shared object resolves"
+
+RUN Rscript -e 'pkgs <- c("purrr", "cluster", "mclust", "amap", "factoextra", \
+                          "igraph", "ggplot2", "ggpubr", "ggsignif", "reshape2", \
+                          "gridExtra", "visNetwork", "jsonlite", "tibble", \
+                          "stringr", "dplyr", "tidyr", "readr", "rvest", "xml2", \
+                          "gtools", "qdapRegex", "tidyverse", \
+                          "KEGGgraph", "AnnotationDbi"); \
+      failed <- character(0); \
+      for (p in pkgs) { \
+        ok <- tryCatch({ suppressPackageStartupMessages(library(p, character.only = TRUE)); TRUE }, \
+                       error = function(e) FALSE); \
+        if (!ok) failed <- c(failed, p) \
+      }; \
+      if (length(failed)) stop("R packages fail to LOAD in the runtime image: ", \
+                               paste(failed, collapse = ", ")); \
+      cat("all", length(pkgs), "R packages load in the runtime image\n")'
 
 # DBManager.py is run as a script, so sys.path[0] is its own directory -- that
 # resolves `conf.serverconf` and `scripts.downloadReactome`. But
