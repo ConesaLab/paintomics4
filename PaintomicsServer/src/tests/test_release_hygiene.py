@@ -137,6 +137,10 @@ def test_template_covers_every_setting_the_app_imports():
     for relativePath in _trackedFiles():
         if not relativePath.endswith(".py"):
             continue
+        # This file documents the import form it searches for, so scanning it
+        # would collect the placeholder names out of its own docstring.
+        if os.path.basename(relativePath) == "test_release_hygiene.py":
+            continue
         fullPath = os.path.join(_REPO_ROOT, relativePath)
         if not os.path.isfile(fullPath):
             continue

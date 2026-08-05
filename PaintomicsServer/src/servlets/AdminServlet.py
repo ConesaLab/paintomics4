@@ -131,12 +131,11 @@ def adminServletGetInstalledOrganisms(request, response):
                 db = client[database]
                 kegg_date = db.versions.find({"name": "KEGG"})[0].get("date")
                 mapping_date = db.versions.find({"name": "MAPPING"})[0].get("date")
-                acceptedIDs = db.versions.find({"name": "ACCEPTED_IDS"})
-
-                if acceptedIDs.count() > 0:
-                    acceptedIDs = acceptedIDs[0].get("ids")
-                else:
-                    acceptedIDs = ""
+                # count_documents replaces Cursor.count(), removed in pymongo 4.
+                # find_one does both the existence check and the fetch in one
+                # round-trip.
+                acceptedIDsDoc = db.versions.find_one({"name": "ACCEPTED_IDS"})
+                acceptedIDs = acceptedIDsDoc.get("ids") if acceptedIDsDoc else ""
 
                 # Step 2.4 Check if the organism has non installed data available
                 if os_path.isfile(KEGG_DATA_DIR + 'download/' + organism_code + '/VERSION'):

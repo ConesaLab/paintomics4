@@ -1,0 +1,84 @@
+#!/usr/bin/env bash
+# PaintOmics 4 container entrypoint.
+#
+# Runs as root only long enough to fix ownership of the mounted data volume,
+# then drops to the unprivileged `paintomics` user for the actual process.
+# A named volume is created root-owned by the Docker daemon on first use, so
+# this cannot be baked in at build time.
+set -euo pipefail
+
+APP_USER=paintomics
+APP_UID=1001
+SERVER_DIR=/app/PaintomicsServer
+CONFIG_PATH="${SERVER_DIR}/src/conf/serverconf.py"
+TEMPLATE_PATH="${SERVER_DIR}/src/resources/example_serverconf.py"
+
+log() { printf '[entrypoint] %s\n' "$*"; }
+
+# ---------------------------------------------------------------------------
+# Configuration
+# ---------------------------------------------------------------------------
+# The template reads every setting from the environment with safe defaults and
+# carries no secrets, so installing it verbatim is enough. The real config is
+# gitignored and is never baked into the image.
+if [ ! -f "${CONFIG_PATH}" ]; then
+    log "generating ${CONFIG_PATH} from the template"
+    install -D -m 0644 "${TEMPLATE_PATH}" "${CONFIG_PATH}"
+else
+    log "using the existing ${CONFIG_PATH}"
+fi
+
+# ---------------------------------------------------------------------------
+# Fail fast on misconfiguration
+# ---------------------------------------------------------------------------
+# These produce confusing downstream failures rather than obvious ones, so
+# check them here where the message is visible in `docker compose logs`.
+if [ "${AI_INTERPRETATION_ENABLED:-true}" = "true" ]; then
+    provider="${AI_LLM_PROVIDER:-csic}"
+    case "${provider}" in
+        csic)       key="${AI_CSIC_API_KEY:-}" ;;
+        dashscope)  key="${AI_DASHSCOPE_API_KEY:-}" ;;
+        openrouter) key="${AI_OPENROUTER_API_KEY:-}" ;;
+        *)          key="" ;;
+    esac
+    if [ -z "${key}" ]; then
+        log "WARNING: AI interpretation is enabled with provider '${provider}' but no API key is set."
+        log "WARNING: AI interpretation requests will fail. Set the key, or AI_INTERPRETATION_ENABLED=false."
+    fi
+fi
+
+if [ -z "${SMTP_PASSWORD:-}" ]; then
+    log "WARNING: SMTP_PASSWORD is unset. Registration and password-reset email cannot be sent,"
+    log "WARNING: so new users will not be able to activate their accounts."
+fi
+
+case "${PAINTOMICS_BASE_URL:-}" in
+    ""|*localhost*|*127.0.0.1*)
+        log "WARNING: PAINTOMICS_BASE_URL is '${PAINTOMICS_BASE_URL:-unset}'. This URL is embedded in"
+        log "WARNING: activation emails; anything pointing at localhost breaks registration."
+        ;;
+esac
+
+# ---------------------------------------------------------------------------
+# Data volume ownership
+# ---------------------------------------------------------------------------
+for directory in /data/KEGG_DATA /data/CLIENT_TMP; do
+    mkdir -p "${directory}"
+done
+
+if [ "$(id -u)" = "0" ]; then
+    # Only chown when it is actually wrong. Recursively chowning a populated
+    # KEGG_DATA volume (hundreds of GB, millions of files) on every restart
+    # would add many minutes to each deploy.
+    for directory in /data/KEGG_DATA /data/CLIENT_TMP; do
+        if [ "$(stat -c '%u' "${directory}")" != "${APP_UID}" ]; then
+            log "taking ownership of ${directory} (one time)"
+            chown -R "${APP_USER}:${APP_USER}" "${directory}"
+        fi
+    done
+    log "dropping privileges to ${APP_USER}"
+    exec setpriv --reuid="${APP_UID}" --regid="${APP_UID}" --init-groups -- "$@"
+fi
+
+log "already running as $(id -un)"
+exec "$@"

@@ -166,15 +166,15 @@ def checkRemindJobsForUser(connection, user_id):
 def removeJobByJobID(connection, user_id, job_id):
     log("Removing job " + job_id)
     #STEP 1. REMOVE ALL THE FEATURES ASSOCIATED TO JOB
-    connection[MONGODB_DATABASE]['featuresCollection'].remove({"jobID": job_id})
+    connection[MONGODB_DATABASE]['featuresCollection'].delete_many({"jobID": job_id})
     #STEP 2. REMOVE ALL THE VISUAL OPTIONS ASSOCIATED TO JOB
-    connection[MONGODB_DATABASE]['visualOptionsCollection'].remove({"jobID": job_id})
+    connection[MONGODB_DATABASE]['visualOptionsCollection'].delete_many({"jobID": job_id})
     #STEP 3. REMOVE ALL THE PATHWAYS ASSOCIATED TO JOB
-    connection[MONGODB_DATABASE]['pathwaysCollection'].remove({"jobID": job_id})
+    connection[MONGODB_DATABASE]['pathwaysCollection'].delete_many({"jobID": job_id})
     #STEP 4. REMOVE ALL THE FOUND FEATURES ASSOCIATED TO JOB
-    connection[MONGODB_DATABASE]['foundFeaturesCollection'].remove({"jobID": job_id})
+    connection[MONGODB_DATABASE]['foundFeaturesCollection'].delete_many({"jobID": job_id})
     #STEP 5. REMOVE THE JOB FROM DATABASE
-    connection[MONGODB_DATABASE]['jobInstanceCollection'].remove({"jobID": job_id})
+    connection[MONGODB_DATABASE]['jobInstanceCollection'].delete_many({"jobID": job_id})
     #STEP 6. REMOVE THE JOB DIRECTORY FROM USER DIR
     removeDirectoryByUserID(user_id, job_id)
 
@@ -210,13 +210,13 @@ def remindJobByJobID(connection, user_id, job_id, ROOT_DIRECTORY):
         logging.error("Failed to send the email.")
 
     #STEP 3.REMOVE THE JOB FROM DATABASE
-    connection[MONGODB_DATABASE]['jobInstanceCollection'].update({"jobID": job_id}, {'$set': {"reminderSent": 1}}, upsert=False)
+    connection[MONGODB_DATABASE]['jobInstanceCollection'].update_many({"jobID": job_id}, {'$set': {"reminderSent": 1}}, upsert=False)
 
 
 def removeAllFilesByUserID(connection, user_id, only_db=False):
     log("Removing files for user " + str(user_id) + " from database")
     #STEP 1. REMOVE ALL THE FEATURES ASSOCIATED TO JOB
-    connection[MONGODB_DATABASE]['fileCollection'].remove({"userID": str(user_id)})
+    connection[MONGODB_DATABASE]['fileCollection'].delete_many({"userID": str(user_id)})
     #STEP 2. REMOVE THE DIRECTORIES FOR USER
     if not only_db:
         removeDirectoryByUserID(user_id)
@@ -239,7 +239,7 @@ def removeUserByUserID(connection, user_id):
     user = connection[MONGODB_DATABASE]['userCollection'].find_one({"userID": user_id})
     if not user["userName"] in ADMIN_ACCOUNTS: #prevent admin accounts to be removed
         log("Removing user " + str(user_id) + " from database.")
-        connection[MONGODB_DATABASE]['userCollection'].remove({"userID": user_id})
+        connection[MONGODB_DATABASE]['userCollection'].delete_many({"userID": user_id})
     else:
         log("User " + user["userName"] + " cannot be removed.")
 
