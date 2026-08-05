@@ -58,6 +58,12 @@ pycparser==2.21
 # but was pinned in neither requirements file.
 requests==2.32.5
 
+# --- Input handling ---
+# chardet detects the encoding of uploaded omics files
+# (classes/JobInstances/PathwayAcquisitionJob.py). Also undeclared: the app
+# failed to boot in a clean container with ModuleNotFoundError.
+chardet==5.2.0
+
 # --- AI interpretation pipeline (src/classes/AIInterpret/) ---
 openai==2.25.0
 openai-agents==0.8.4
@@ -69,6 +75,13 @@ openai-agents==0.8.4
 eval_type_backport==0.3.1
 
 # --- Scheduling and utilities ---
+# setuptools 81 deprecated pkg_resources and 82 removed it outright, but
+# APScheduler 3.6.3 imports it at module load:
+#   apscheduler/__init__.py: from pkg_resources import get_distribution
+# A clean image installed setuptools 82 and the app died at start-up with
+# ModuleNotFoundError: No module named 'pkg_resources'. Pin below the removal
+# until APScheduler is upgraded (4.x drops the dependency but changes its API).
+setuptools<81
 APScheduler==3.6.3
 psutil==5.7.2
 python-dateutil==2.9.0.post0
