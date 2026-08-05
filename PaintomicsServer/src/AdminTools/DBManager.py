@@ -21,7 +21,10 @@ from io import BytesIO
 from PIL import Image
 from textwrap import wrap
 from time import strftime, sleep, time
-from subprocess import check_call, CalledProcessError, DEVNULL
+# STDOUT was previously reaching this module only through the wildcard
+# `from scripts.downloadReactome import *` below, which is fragile -- reordering
+# or trimming that import would have broken subprocess calls here at runtime.
+from subprocess import check_call, check_output, CalledProcessError, DEVNULL, STDOUT
 
 from conf.serverconf import KEGG_DATA_DIR, CLIENT_TMP_DIR, DOWNLOAD_DELAY_1, DOWNLOAD_DELAY_2, MAX_TRIES_1, MAX_TRIES_2
 from scripts.downloadReactome import *
@@ -463,14 +466,26 @@ def install_command(inputfile=None, specie=None, common=0, hub=1):
 
                 if not directory_has_contents(hubDir):
                     log("STEP EXTRA: INSTALLING HUB ANALYSIS INFORMATION...")
-                    check_call(
-                        [
-                            ROOT_DIRECTORY + "AdminTools/scripts/hubAnalysisInstall.R",
-                            '--organism="' + specie + '"',
-                            '--scriptDir="' + ROOT_DIRECTORY + 'AdminTools/scripts/' + '"',
-                            '--outputDir="' + hubDir + '"'
-                        ], stderr=STDOUT, stdout=DEVNULL
-                    )
+                    # Capture the output rather than discarding it. This used to
+                    # run with stderr=STDOUT, stdout=DEVNULL, which merges the R
+                    # error into stdout and then throws it away -- so a missing R
+                    # package surfaced only as "returned non-zero exit status 1"
+                    # and had to be reproduced by hand to find out which one.
+                    try:
+                        hubOutput = check_output(
+                            [
+                                ROOT_DIRECTORY + "AdminTools/scripts/hubAnalysisInstall.R",
+                                '--organism="' + specie + '"',
+                                '--scriptDir="' + ROOT_DIRECTORY + 'AdminTools/scripts/' + '"',
+                                '--outputDir="' + hubDir + '"'
+                            ], stderr=STDOUT, universal_newlines=True
+                        )
+                    except CalledProcessError as hubError:
+                        log("        hubAnalysisInstall.R failed (exit " +
+                            str(hubError.returncode) + "). Last output:")
+                        for outputLine in (hubError.output or "").splitlines()[-25:]:
+                            log("          " + outputLine)
+                        raise
                 else:
                     log("Hub directory already contains data in download directory, skipping regeneration...")
 
