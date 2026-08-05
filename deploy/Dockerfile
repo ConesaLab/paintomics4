@@ -175,6 +175,33 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         util-linux \
     && rm -rf /var/lib/apt/lists/*
 
+# Run as a non-root user. The data volume is chowned to this uid by the
+# entrypoint rather than baked in, since it is mounted at run time.
+RUN useradd --create-home --shell /bin/bash --uid 1001 paintomics
+
+# ---------------------------------------------------------------------------
+# ORDERING CONSTRAINT: every COPY from the build context must appear BEFORE the
+# `COPY --from=` cross-stage copies below. Do not reorder these.
+#
+# On the deployment host (Docker 29 / overlay2 / OpenStack VM), a COPY placed
+# after the three cross-stage library copies corrupts the image rootfs. Every
+# following RUN then dies with
+#   runc run failed: ... exec: "/bin/sh": stat /bin/sh: no such file or directory
+# and an exec-form probe shows /usr/bin/ls is missing too, so the whole
+# filesystem is unreadable rather than just the shell.
+#
+# It is not about what is copied: a single-file COPY triggers it just as a
+# 5000-file directory does, and the same COPY against the base image succeeds.
+# It is purely positional -- RUN after those copies is fine, COPY is not.
+# Reproduced with --no-cache and a pruned builder cache; survives switching
+# from the containerd snapshotter to overlay2.
+#
+# Moving the context copies ahead of the cross-stage copies avoids it entirely.
+# ---------------------------------------------------------------------------
+COPY deploy/app.tar /tmp/app.tar
+COPY deploy/entrypoint.sh /usr/local/bin/entrypoint.sh
+COPY deploy/uwsgi.ini /app/uwsgi.ini
+
 COPY --from=python-builder /opt/venv /opt/venv
 COPY --from=r-builder /usr/local/lib/R/site-library /usr/local/lib/R/site-library
 COPY --from=r-builder /usr/lib/R/site-library /usr/lib/R/site-library
@@ -183,45 +210,31 @@ ENV PATH="/opt/venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
 
-# Run as a non-root user. The data volume is chowned to this uid by the
-# entrypoint rather than baked in, since it is mounted at run time.
-RUN useradd --create-home --shell /bin/bash --uid 1001 paintomics
-
 WORKDIR /app
-COPY --chown=paintomics:paintomics PaintomicsServer /app/PaintomicsServer
-COPY --chown=paintomics:paintomics PaintomicsClient /app/PaintomicsClient
 
-# The real config is gitignored and never baked into the image; it is generated
-# from the template at start-up so every secret arrives as an environment
-# variable. See deploy/entrypoint.sh.
-COPY --chown=paintomics:paintomics deploy/entrypoint.sh /usr/local/bin/entrypoint.sh
-COPY --chown=paintomics:paintomics deploy/uwsgi.ini /app/uwsgi.ini
-
-# Recreate the symlinks .dockerignore excluded. They are load-bearing -- they
-# are how `from src...`, `conf.serverconf` and `scripts.downloadReactome`
-# resolve no matter which directory a script is invoked from -- but three of
-# them are cyclic and one escapes the copied tree, and COPYing them produced a
-# malformed layer that corrupted the rootfs (see .dockerignore).
+# The application tree is delivered as a tar (built by deploy/build-image.sh and
+# copied above) rather than as directory COPYs. tar stores symlinks as symlinks,
+# including the cyclic src/src -> ../src and the
+# src/public_html -> ../../PaintomicsClient/public_html that points outside the
+# tree, so they survive with no exclusion list and no `ln -s` recreation.
+#
+# The real serverconf.py is excluded from the archive and never baked into the
+# image; the entrypoint generates it from the template so every secret arrives
+# as an environment variable.
 RUN set -eux; \
-    ln -sfn src/conf   /app/PaintomicsServer/conf; \
-    ln -sfn src/log    /app/PaintomicsServer/log; \
-    ln -sfn ../src     /app/PaintomicsServer/src/src; \
-    ln -sfn ../../src  /app/PaintomicsServer/src/AdminTools/src; \
-    ln -sfn ../conf    /app/PaintomicsServer/src/AdminTools/conf; \
-    ln -sfn ../../../src /app/PaintomicsServer/src/AdminTools/scripts/src; \
-    ln -sfn ../../PaintomicsClient/public_html /app/PaintomicsServer/src/public_html; \
+    mkdir -p /app; \
+    tar -xf /tmp/app.tar -C /app; \
+    rm -f /tmp/app.tar; \
     mkdir -p /app/PaintomicsServer/src/log; \
-    chown -h paintomics:paintomics \
-        /app/PaintomicsServer/conf \
-        /app/PaintomicsServer/log \
-        /app/PaintomicsServer/src/src \
-        /app/PaintomicsServer/src/AdminTools/src \
-        /app/PaintomicsServer/src/AdminTools/conf \
-        /app/PaintomicsServer/src/AdminTools/scripts/src \
-        /app/PaintomicsServer/src/public_html; \
-    chown -R paintomics:paintomics /app/PaintomicsServer/src/log
+    test -L /app/PaintomicsServer/src/src; \
+    test -L /app/PaintomicsServer/src/AdminTools/src; \
+    test -L /app/PaintomicsServer/src/AdminTools/scripts/src; \
+    test -e /app/PaintomicsServer/src/public_html; \
+    test ! -e /app/PaintomicsServer/src/conf/serverconf.py; \
+    chown -R paintomics:paintomics /app
 
 RUN chmod +x /usr/local/bin/entrypoint.sh \
+    && chown paintomics:paintomics /app/uwsgi.ini \
     && chmod +x /app/PaintomicsServer/src/AdminTools/scripts/*.R \
     && chmod +x /app/PaintomicsServer/src/common/bioscripts/*.R
 
