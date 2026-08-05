@@ -96,6 +96,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         r-cran-factoextra \
         r-cran-ggpubr \
         r-cran-ggsignif \
+    # tidyverse is genuinely required, not decorative: GalaxyNetworkFunctionsv2.R
+    # (sourced by hubAnalysisInstall.R) calls library(tidyverse) directly, and
+    # the hsa install aborted at "FAILED WHILE INSTALLING HUB ANALYSIS
+    # INFORMATION" without it. Debian ships it prebuilt, so it is not the slow
+    # source build that skipping it was meant to avoid.
+        r-cran-tidyverse \
     # Still needed if any remaining leaf package falls back to a source build.
         cmake \
     && rm -rf /var/lib/apt/lists/*
@@ -128,13 +134,21 @@ RUN Rscript -e 'options(warn = 2); \
       BiocManager::install(c("KEGGgraph", "AnnotationDbi"), ask = FALSE, update = FALSE)'
 
 # Fail the build now, not at 3am in production, if anything is unimportable.
+#
+# This list is the union of every R dependency in the repository. Deriving it by
+# grepping for `library(` alone is not enough -- hubAnalysisInstall.R loads its
+# packages with lapply(c(...), library, character.only = TRUE), which that
+# pattern silently skips, and GalaxyNetworkFunctionsv2.R is reached only by
+# being source()d. Both gaps produced install failures. When adding an R
+# dependency anywhere, add it here too.
 RUN Rscript -e 'pkgs <- c("purrr", "cluster", "mclust", "amap", "factoextra", \
-                          "igraph", "ggplot2", "reshape2", "gridExtra", "jsonlite", \
+                          "igraph", "ggplot2", "ggpubr", "ggsignif", "reshape2", \
+                          "gridExtra", "visNetwork", "jsonlite", "tibble", \
                           "stringr", "dplyr", "tidyr", "readr", "rvest", "xml2", \
-                          "gtools", "qdapRegex", "KEGGgraph", "AnnotationDbi"); \
-      for (p in pkgs) { \
-        if (!requireNamespace(p, quietly = TRUE)) stop("missing R package: ", p) \
-      }; \
+                          "gtools", "qdapRegex", "tidyverse", \
+                          "KEGGgraph", "AnnotationDbi"); \
+      missing <- pkgs[!vapply(pkgs, requireNamespace, logical(1), quietly = TRUE)]; \
+      if (length(missing)) stop("missing R packages: ", paste(missing, collapse = ", ")); \
       cat("all", length(pkgs), "R packages import cleanly\n")'
 
 # ---------------------------------------------------------------------------
