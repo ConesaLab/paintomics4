@@ -1436,6 +1436,59 @@ def processMapManPathwaysData():
     #
     # file.close()
 
+def loadReactomeMapping(filePath, keyColumn, valueColumns, minColumns,
+                        failedLines=None, specieLabel=""):
+    """
+    Index a Reactome mapping TSV as {key: [tuple(row[c] for c in valueColumns), ...]}.
+
+    Order of appearance is preserved, because callers treat the first hit as the
+    authoritative identifier and the remainder as secondary ones.
+
+    quoting=csv.QUOTE_NONE is required. Reactome display names contain unbalanced
+    double quotes and apostrophes ("5'-phospho...", 'the "open" state'), which the
+    default csv dialect treats as field delimiters. That silently merges columns
+    and shifts every identifier one field to the left, so entities map to the
+    wrong genes rather than failing loudly.
+
+    Raises rather than returning an empty index: an empty mapping means the
+    upstream R step matched no rows for this species, and every downstream lookup
+    would quietly return nothing instead of reporting the real problem.
+    """
+    if failedLines is None:
+        failedLines = []
+
+    if not os.path.isfile(filePath):
+        raise Exception(
+            "Reactome mapping file not found: " + filePath + "\n" +
+            "processReactomeData.R did not produce it. Check that the species code '" +
+            str(specieLabel) + "' matches a species present in the Reactome download.")
+
+    index = defaultdict(list)
+    rowCount = 0
+    with open(filePath) as handle:
+        reader = csv.reader(handle, delimiter='\t', quoting=csv.QUOTE_NONE)
+        for lineNumber, row in enumerate(reader, start=1):
+            # Blank trailing lines are normal; do not log them as failures.
+            if not row or (len(row) == 1 and not row[0].strip()):
+                continue
+            if len(row) < minColumns:
+                failedLines.append(
+                    ["Short row in " + os.path.basename(filePath), str(lineNumber), "\t".join(row)])
+                continue
+            index[row[keyColumn]].append(tuple(row[c] for c in valueColumns))
+            rowCount += 1
+
+    if rowCount == 0:
+        raise Exception(
+            "Reactome mapping file is empty: " + filePath + "\n" +
+            "This usually means processReactomeData.R matched no rows for species '" +
+            str(specieLabel) + "'.")
+
+    stderr.write("Indexed {} rows from {} ({} distinct keys)\n".format(
+        rowCount, os.path.basename(filePath), len(index)))
+    return index
+
+
 def processReactomePathwaysData():
 
     # Declare later used variables
@@ -1534,60 +1587,69 @@ def processReactomePathwaysData():
         raise Exception("Failed to process Reactome data. Check memory usage and R installation.")
 
 
-    #In the first step, we need to process the mapping data
-    ensemblList = list()
-    ensemblListID = list()
-    ensemblSymbol = list()
+    # ------------------------------------------------------------------------
+    # Mapping tables: Reactome physical-entity stId -> external identifiers.
+    #
+    # These used to be kept as parallel lists and searched with
+    #     [i for i, x in enumerate(someList) if x == wanted]
+    # once per entity, per pathway. Each file holds 1e5-7e5 rows and a species
+    # contributes ~1e5 entities, so that is ~1e11 comparisons - the reason a
+    # Reactome install appeared to hang rather than fail. Hash indexes built
+    # once turn every one of those scans into an O(1) dict lookup.
+    #
+    # quoting=csv.QUOTE_NONE is required: Reactome display names contain
+    # unbalanced double quotes and apostrophes ("5'-...", 'sodium "channel"'),
+    # which the default csv dialect treats as field delimiters and silently
+    # merges columns, shifting every identifier one field to the left.
+    # ------------------------------------------------------------------------
+    failedLines = FAILED_LINES["REACTOME PATHWAYS"]
 
-    with open(mapReactomeDir + "Ensembl2Reactome.txt") as Ensembl2Reactome:
-        ensembl2Reactome = csv.reader(Ensembl2Reactome, delimiter='\t')
-        for row in ensembl2Reactome:
-            ensemblList.append(row[0])
-            ensemblListID.append(row[1])
-            ensemblSymbol.append(row[2])
+    # stId -> [(ensembl_id, symbol), ...] and the NCBI / UniProt equivalents.
+    ensemblByStId = loadReactomeMapping(
+        mapReactomeDir + "Ensembl2Reactome.txt", keyColumn=1, valueColumns=(0, 2),
+        minColumns=3, failedLines=failedLines, specieLabel=SPECIE)
+    ncbiByStId = loadReactomeMapping(
+        mapReactomeDir + "NCBI2Reactome.txt", keyColumn=1, valueColumns=(0, 2),
+        minColumns=3, failedLines=failedLines, specieLabel=SPECIE)
+    uniprotByStId = loadReactomeMapping(
+        mapReactomeDir + "UniProt2Reactome.txt", keyColumn=1, valueColumns=(0, 2),
+        minColumns=3, failedLines=failedLines, specieLabel=SPECIE)
 
-    ncbiList = list()
-    ncbiListID = list()
-    ncbiSymbol = list()
+    # stId -> [chebi_id, ...]. This file is NOT species-filtered, so it is the
+    # largest of the five and was the single worst offender in the old scan.
+    chebiByStId = {
+        stId: [value[0] for value in values]
+        for stId, values in loadReactomeMapping(
+            DATA_DIR + "../common/ChEBI2Reactome_PE_All_Levels.txt",
+            keyColumn=1, valueColumns=(0,), minColumns=2,
+            failedLines=failedLines, specieLabel=SPECIE).items()
+    }
 
+    # chebi_id -> [kegg_compound_id, ...]. The source file is written by
+    # downloadChEBItoKEGGMapping() as "chebi:XXXXX<TAB>cpd:CXXXXX", so column 0
+    # is the ChEBI accession and column 1 the KEGG compound - despite the
+    # historical variable names suggesting the opposite.
+    keggByChebi = defaultdict(list)
+    kegg2chebiPath = DATA_DIR + "../common/kegg2chebi.list"
+    if not os.path.isfile(kegg2chebiPath):
+        raise Exception("KEGG-ChEBI mapping file not found: " + kegg2chebiPath)
+    with open(kegg2chebiPath) as KEGG2ChEBI:
+        for lineNumber, row in enumerate(csv.reader(KEGG2ChEBI, delimiter='\t', quoting=csv.QUOTE_NONE), start=1):
+            if len(row) < 2:
+                continue
+            # Entries are namespaced ("chebi:15377"), but tolerate bare ids so a
+            # hand-edited or differently-sourced file cannot raise IndexError.
+            chebiId = row[0].split(":")[-1].strip()
+            keggId = row[1].split(":")[-1].strip()
+            if chebiId and keggId:
+                keggByChebi[chebiId].append(keggId)
 
-    with open(mapReactomeDir + "NCBI2Reactome.txt") as NCBI2Reactome:
-        ncbi2Reactome = csv.reader(NCBI2Reactome, delimiter = '\t')
-        for row in ncbi2Reactome:
-            ncbiList.append(row[0])
-            ncbiListID.append(row[1])
-            ncbiSymbol.append(row[2])
-
-    uniprotList = list()
-    uniprotListID = list()
-    uniprotSymbol = list()
-
-    with open (mapReactomeDir + "UniProt2Reactome.txt") as UniProt2Reactome:
-        uniProt2Reactome = csv.reader(UniProt2Reactome, delimiter='\t')
-        for row in uniProt2Reactome:
-            uniprotList.append(row[0])
-            uniprotListID.append(row[1])
-            uniprotSymbol.append(row[2])
-
-    chebi2ReactomeList = list()
-    chebi2ReactomeListID = list()
-
-    with open (DATA_DIR + "../common/ChEBI2Reactome_PE_All_Levels.txt") as ChEBI2Reactome:
-        chebi2Reactome = csv.reader(ChEBI2Reactome, delimiter='\t')
-        for row in chebi2Reactome:
-            chebi2ReactomeList.append(row[0])
-            chebi2ReactomeListID.append(row[1])
-
-    kegg2chebiList = list()
-    kegg2chebiListID = list()
-
-    with open (DATA_DIR + "../common/kegg2chebi.list") as KEGG2ChEBI:
-        kegg2chebi = csv.reader(KEGG2ChEBI, delimiter='\t')
-        for row in kegg2chebi:
-            row[0] = row[0].split(":")[1]
-            row[1] = row[1].split(":")[1]
-            kegg2chebiList.append(row[0])
-            kegg2chebiListID.append(row[1])
+    # kegg_compound_id -> [display name, ...]. KEGG_COMPOUNDS maps name -> id and
+    # is fully populated by processKEGG2CompoundSymbolMappingData() above; it is
+    # not mutated below, so a single reverse index stays valid for the whole run.
+    keggCompoundNamesById = defaultdict(list)
+    for compoundName, compoundId in KEGG_COMPOUNDS.items():
+        keggCompoundNamesById[compoundId].append(compoundName)
 
 
 
@@ -1605,6 +1667,16 @@ def processReactomePathwaysData():
 
 
     stderr.write("\nClassification part \n")
+
+    # Loaded once: this file is constant for the whole species and was previously
+    # re-opened and re-parsed inside the per-pathway loop below.
+    pathway_hierachy_file = DATA_DIR + "ReactomePathwayHierarchy.json"
+    if not os.path.isfile(pathway_hierachy_file):
+        raise Exception(
+            "Reactome pathway hierarchy not found: " + pathway_hierachy_file + "\n" +
+            "Run the download step with --reactome=1 before building.")
+    with open(pathway_hierachy_file) as HierachyRelation:
+        hierachyRelation = json.load(HierachyRelation)
 
     #pathway_id = ""
     indexFinal = 0
@@ -1630,14 +1702,17 @@ def processReactomePathwaysData():
         #    IDList = findHighLevelPathway(pathway_id, ReactomeHierarchy, ReactomePathwayHighList, ReactomePathwayLowList)
         #except Exception as ex:
         #   IDList = [pathway_id,pathway_id]
-        pathway_hierachy_file = DATA_DIR + "ReactomePathwayHierarchy.json"
-        with open(pathway_hierachy_file) as HierachyRelation:
-            hierachyRelation = json.load(HierachyRelation)
-
         pathway_name = pathway_data.get("displayName")
 
-        ## Some time this could happen
+        ## Some time this could happen: the downloader records a hierarchy entry
+        ## only for pathways it resolved, so a pathway listed in ReactomePathway.txt
+        ## can be missing here. Treating it as its own top level keeps the build
+        ## going instead of raising TypeError on IDList[0].
         IDList = hierachyRelation.get(pathway_id)
+        if not IDList or len(IDList) < 2:
+            FAILED_LINES["REACTOME PATHWAYS"].append(
+                ["Missing hierarchy entry", pathway_id, str(IDList)])
+            IDList = [pathway_id, pathway_id]
         top_pathway_details_filename = REACTOME_DIR + '/' + IDList[0] + "details.json"
         secondary_pathway_details_filename= REACTOME_DIR + '/' + IDList[1] + "details.json"
         try:
@@ -1818,50 +1893,48 @@ def processReactomePathwaysData():
                 entity_reactome_id_name = entity_reactome['displayName']
                 entity_reactome_id_name_simple = entity_reactome_id_name.rsplit('[', -1)[0]
                 if entity_reactome.get("schemaClass") == 'SimpleEntity':
-                    indices = [i for i, x in enumerate(chebi2ReactomeListID) if x == entity_reactome_id]
+                    chebiIds = chebiByStId.get(entity_reactome_id, [])
                     ## Can not find chebi ID
-                    if not indices:
+                    if not chebiIds:
                         #print("Can not find:" + entity_reactome_id)
                         entryAux = entry.copy()
                         entryAux["id"] = entity_reactome_id_name_simple
                         REACTOME_COMPOUNDS[entity_reactome_id_name_simple] = entity_reactome_id
                         ALL_PATHWAYS[pathway_id]["compounds"].append(entryAux)
                     else:
-                        chebiID = set()
-                        for i in indices:
-                            chebiID.add(chebi2ReactomeList[i])
+                        # The first ChEBI id that carries a KEGG compound mapping wins.
+                        # The previous implementation pop()ed from a set, so which id
+                        # won -- and therefore the contents of the built database --
+                        # varied between runs on identical input. Iterating in file
+                        # order makes the build reproducible.
+                        keggIds = []
+                        for subChebiID in chebiIds:
+                            if keggByChebi.get(subChebiID):
+                                keggIds = keggByChebi[subChebiID]
+                                break
 
-                        def findKeggCpdID (chebiID):
-                            subChebiID = chebiID.pop()
-                            indicesFinal = [i for i, x in enumerate(kegg2chebiList) if x == subChebiID]
-                            if not indicesFinal and not chebiID:
-                                return None
-                                #print ("Can not find kegg key for chebi ID:" + subChebiID)
-                            elif not indicesFinal:
-                                return findKeggCpdID(chebiID)
-                            else:
-                                return indicesFinal
-                        keggIndex = findKeggCpdID(chebiID)
-
-                        if not keggIndex:
+                        if not keggIds:
                             entryAux = entry.copy()
                             entryAux["id"] =entity_reactome_id_name_simple
                             REACTOME_COMPOUNDS[entity_reactome_id_name_simple] = entity_reactome_id
                             ALL_PATHWAYS[pathway_id]["compounds"].append(entryAux)
                         else:
-                            keggIndex = keggIndex[0]
-                            keggID = kegg2chebiListID[keggIndex]
+                            keggID = keggIds[0]
 
-                            # Sometimes the kegg id is not present in the kegg_compounds. We need use entity_reactome_id_name to server as the key
-                            try:
-                                ## Get the key from KEGG and use it to save reactome
-                                indicesList = [i for i, x in enumerate( list(KEGG_COMPOUNDS.values()) ) if x == keggID]
-                                for index in indicesList:
-                                    REACTOME_COMPOUNDS[list(KEGG_COMPOUNDS.keys())[index]] = keggID
+                            ## Get the key from KEGG and use it to save reactome
+                            compoundNames = keggCompoundNamesById.get(keggID, [])
+                            if compoundNames:
+                                for compoundName in compoundNames:
+                                    REACTOME_COMPOUNDS[compoundName] = keggID
                                     entryAux = entry.copy()
                                     entryAux["id"] = keggID
                                     ALL_PATHWAYS[pathway_id]["compounds"].append(entryAux)
-                            except Exception as ex:
+                            else:
+                                # Sometimes the kegg id is not present in the kegg_compounds.
+                                # We need use entity_reactome_id_name to serve as the key.
+                                # This fallback previously sat in an `except` clause that could
+                                # never run -- an empty list comprehension raises nothing -- so
+                                # these compounds were silently dropped from the pathway.
                                 REACTOME_COMPOUNDS[entity_reactome_id_name_simple] = keggID
                                 entryAux = entry.copy()
                                 entryAux["id"] = keggID
@@ -1869,20 +1942,19 @@ def processReactomePathwaysData():
 
                 elif entity_reactome.get("schemaClass") == "EntityWithAccessionedSequence":
 
-                    indicesEnsembl = [i for i, x in enumerate(ensemblListID) if x == entity_reactome_id]
-                    indicesNcbi = [i for i, x in enumerate(ncbiListID) if x == entity_reactome_id]
-                    indicesUniPort =  [i for i, x in enumerate(uniprotListID) if x == entity_reactome_id]
+                    ensemblHits = ensemblByStId.get(entity_reactome_id, [])
+                    ncbiHits = ncbiByStId.get(entity_reactome_id, [])
+                    uniprotHits = uniprotByStId.get(entity_reactome_id, [])
                     other_ids = set()
 
-                    for i in indicesEnsembl:
-                        other_ids.add(ensemblList[i])
-                        other_ids.add(ensemblSymbol[i])
-                    for i in indicesNcbi:
-                        other_ids.add(ncbiList[i])
-                        other_ids.add(ncbiSymbol[i])
-                    for i in indicesUniPort:
-                        other_ids.add(uniprotList[i])
-                        other_ids.add(uniprotSymbol[i])
+                    # Blank cells are discarded: an empty identifier used to reach
+                    # pathway2gene/gene2pathway as a real gene key.
+                    for hits in (ensemblHits, ncbiHits, uniprotHits):
+                        for externalId, symbol in hits:
+                            if externalId:
+                                other_ids.add(externalId)
+                            if symbol:
+                                other_ids.add(symbol)
 
                     # Try to get gene identifier from multiple sources with fallback hierarchy
                     gene_names = entity_reactome.get('geneNames')
@@ -1896,21 +1968,21 @@ def processReactomePathwaysData():
                         entities_with_geneNames += 1
 
                     # Source 2: External mapping files (fallback - Ensembl > NCBI > UniProt)
-                    elif len(indicesEnsembl) > 0 or len(indicesNcbi) > 0 or len(indicesUniPort) > 0:
+                    elif ensemblHits or ncbiHits or uniprotHits:
                         # Prefer Ensembl symbols (most authoritative)
-                        if len(indicesEnsembl) > 0 and ensemblSymbol[indicesEnsembl[0]]:
-                            gene_id = ensemblSymbol[indicesEnsembl[0]].upper()
-                            gene_ids = [ensemblSymbol[i].upper() for i in indicesEnsembl[1:] if i < len(ensemblSymbol) and ensemblSymbol[i]]
+                        if ensemblHits and ensemblHits[0][1]:
+                            gene_id = ensemblHits[0][1].upper()
+                            gene_ids = [symbol.upper() for _, symbol in ensemblHits[1:] if symbol]
                             entities_fallback_mapping += 1
                         # Then try NCBI symbols
-                        elif len(indicesNcbi) > 0 and ncbiSymbol[indicesNcbi[0]]:
-                            gene_id = ncbiSymbol[indicesNcbi[0]].upper()
-                            gene_ids = [ncbiSymbol[i].upper() for i in indicesNcbi[1:] if i < len(ncbiSymbol) and ncbiSymbol[i]]
+                        elif ncbiHits and ncbiHits[0][1]:
+                            gene_id = ncbiHits[0][1].upper()
+                            gene_ids = [symbol.upper() for _, symbol in ncbiHits[1:] if symbol]
                             entities_fallback_mapping += 1
                         # Finally try UniProt symbols
-                        elif len(indicesUniPort) > 0 and uniprotSymbol[indicesUniPort[0]]:
-                            gene_id = uniprotSymbol[indicesUniPort[0]].upper()
-                            gene_ids = [uniprotSymbol[i].upper() for i in indicesUniPort[1:] if i < len(uniprotSymbol) and uniprotSymbol[i]]
+                        elif uniprotHits and uniprotHits[0][1]:
+                            gene_id = uniprotHits[0][1].upper()
+                            gene_ids = [symbol.upper() for _, symbol in uniprotHits[1:] if symbol]
                             entities_fallback_mapping += 1
 
                     # Source 3: DisplayName (last resort - parse name before [location])
