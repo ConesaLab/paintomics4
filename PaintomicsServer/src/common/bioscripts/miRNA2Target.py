@@ -98,7 +98,7 @@ def run(referenceFile, relevantReferenceFile, dataFile, geneExpresion, corrOutpu
 
     #STEP 1. GENERATE THE TABLE WITH ALL THE MIRNAS IN THE INPUT
     print("STEP 1. Reading miRNA expression file...")
-    with open(dataFile, 'rU') as inputDataFile:
+    with open(dataFile, 'r') as inputDataFile:
         isFirstLine = True
         for line in csv_reader(inputDataFile, delimiter="\t"):
             if isFirstLine:
@@ -111,7 +111,7 @@ def run(referenceFile, relevantReferenceFile, dataFile, geneExpresion, corrOutpu
     #STEP 2. FILL THE TABLE WITH ALL THE TARGETS FOR EACH MIRNA
     print("STEP 2. Reading miRNA -> targets file...")
 
-    with open(referenceFile, 'rU') as inputDataFile:
+    with open(referenceFile, 'r') as inputDataFile:
         for line in csv_reader(inputDataFile, delimiter="\t"):
             if line[0] in miRNAtable:
                 miRNAtable[line[0]]["targets"].append(line[1])
@@ -128,7 +128,7 @@ def run(referenceFile, relevantReferenceFile, dataFile, geneExpresion, corrOutpu
         # STEP 3. FILL THE TABLE WITH ALL THE GENES
         if geneExpresion is not None:
             print("STEP 3. Processing mRNA expression file...")
-            with open(geneExpresion, 'rU') as inputDataFile:
+            with open(geneExpresion, 'r') as inputDataFile:
                 for line in csv_reader(inputDataFile, delimiter="\t"):
                     geneTable[line[0]] = line[1:]
             inputDataFile.close()
