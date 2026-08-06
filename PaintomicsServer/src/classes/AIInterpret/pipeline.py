@@ -73,10 +73,90 @@ class _Heartbeat:
                 pass  # best-effort; don't crash the heartbeat
 
 
+class _PhaseTimer:
+    """Records wall-clock time per pipeline phase.
+
+    Added because the pipeline's cost was being estimated from the code rather
+    than measured. Each phase is logged as it ends, and a summary line at the
+    end gives the whole breakdown in one place -- so deciding what to simplify
+    can be based on where the time actually goes.
+    """
+
+    def __init__(self, job_id):
+        self.job_id = job_id
+        self.timings = []
+        self._current = None
+        self._started = None
+
+    def start(self, phase):
+        self.stop()
+        self._current = phase
+        self._started = time.time()
+
+    def stop(self):
+        if self._current is None:
+            return
+        elapsed = time.time() - self._started
+        self.timings.append((self._current, elapsed))
+        logger.info(f"[{self.job_id}] PHASE {self._current}: {elapsed:.1f}s")
+        self._current = None
+
+    def summary(self):
+        self.stop()
+        if not self.timings:
+            return ""
+        total = sum(t for _, t in self.timings)
+        parts = ", ".join(f"{name}={seconds:.1f}s "
+                          f"({100 * seconds / total:.0f}%)"
+                          for name, seconds in self.timings)
+        return f"AI pipeline {total:.1f}s total -- {parts}"
+
+
+def _count_significant_pathways(job_instance, threshold=0.05):
+    """How many pathways actually cleared the significance threshold.
+
+    Multi-condition analyses store one p-value per condition, so a pathway
+    counts as significant if it is significant in any condition. Falls back to
+    the configured ceiling if the job exposes nothing usable, so an unexpected
+    shape degrades to the previous fixed behaviour rather than to zero work.
+    """
+    try:
+        matched = job_instance.getMatchedPathways()
+    except Exception:
+        return AI_MAX_PATHWAYS
+    if not matched:
+        return AI_MAX_PATHWAYS
+
+    significant = 0
+    for pathway in matched.values():
+        pvalues = getattr(pathway, "combinedSignificancePvalues", None) or {}
+        for value in pvalues.values():
+            candidates = value if isinstance(value, (list, tuple)) else [value]
+            if any(isinstance(v, (int, float)) and v < threshold for v in candidates):
+                significant += 1
+                break
+    return significant or AI_MAX_PATHWAYS
+
+
+def _adaptive_budgets(significantCount):
+    """Scale the work to how much signal there actually is.
+
+    The fixed ceilings (15 pathways, 12 search tasks) cost the same whether an
+    analysis produced 3 significant pathways or 300. Scaling to the real count
+    avoids paying for searches on pathways that were never interesting, and
+    avoids capping an unusually rich result at an arbitrary 15.
+    """
+    pathways = max(5, min(AI_MAX_PATHWAYS, significantCount))
+    # Roughly one search task per two pathways, within the configured ceiling.
+    searchTasks = max(3, min(AI_MAX_SEARCH_TASKS, (pathways + 1) // 2))
+    return pathways, searchTasks
+
+
 def run_ai_pipeline(job_id, experiment_design, RESPONSE):
     """PySiQ-compatible entry point. MUST return a Response object."""
     dao = None
     heartbeat = _Heartbeat(job_id)
+    timer = _PhaseTimer(job_id)
     try:
         _pipeline_semaphore.acquire()
         heartbeat.start()
@@ -95,9 +175,16 @@ def run_ai_pipeline(job_id, experiment_design, RESPONSE):
         # =====================================================================
         # Phase 1: Context Triage + Cross-Omic Matrix (0% - 10%)
         # =====================================================================
+        timer.start("triage")
         dao.save_progress(job_id, {"status": "extracting", "percent": 5,
                                    "detail": "Extracting pathway data..."})
-        pathways = build_pathway_context(job_instance, max_pathways=AI_MAX_PATHWAYS)
+        # Budgets scale to the analysis: an experiment with 3 significant
+        # pathways should not pay for the same search volume as one with 300.
+        significantCount = _count_significant_pathways(job_instance)
+        maxPathways, maxSearchTasks = _adaptive_budgets(significantCount)
+        logger.info(f"[{job_id}] {significantCount} significant pathways -> "
+                    f"budget {maxPathways} pathways, {maxSearchTasks} search tasks")
+        pathways = build_pathway_context(job_instance, max_pathways=maxPathways)
         gene_whitelist = build_gene_symbol_whitelist(job_instance)
 
         if _cancel_flags.get(job_id):
@@ -118,11 +205,14 @@ def run_ai_pipeline(job_id, experiment_design, RESPONSE):
         # =====================================================================
         # Phase 2: Agentic Literature Discovery (10% - 40%)
         # =====================================================================
+        timer.start("search_planning")
         search_tasks = _run_search_planner(
             llm, major_pathways, minor_pathways, cross_omic_matrix,
-            gene_whitelist, experiment_design, organism_name, job_id)
+            gene_whitelist, experiment_design, organism_name, job_id,
+            maxSearchTasks=maxSearchTasks)
 
         logger.info(f"[{job_id}] Search planner produced {len(search_tasks)} tasks")
+        timer.start("literature_retrieval")
         dao.save_progress(job_id, {"status": "searching_pubmed", "percent": 15,
                                    "detail": f"Executing {len(search_tasks)} search tasks..."})
 
@@ -164,6 +254,7 @@ def run_ai_pipeline(job_id, experiment_design, RESPONSE):
         # =====================================================================
         # Phase 3: Sub-Agent Interpretation (45% - 75%)
         # =====================================================================
+        timer.start("interpretation")
         dao.save_progress(job_id, {"status": "interpreting", "percent": 45,
                                    "detail": "Generating interpretation with evidence extraction..."})
 
@@ -218,6 +309,7 @@ def run_ai_pipeline(job_id, experiment_design, RESPONSE):
         # =====================================================================
         # Phase 4: Synthesis (78% - 83%)
         # =====================================================================
+        timer.start("synthesis")
         dao.save_progress(job_id, {"status": "synthesizing", "percent": 78, "detail": "Synthesizing report..."})
 
         synthesis_prompt = build_synthesis_prompt_v2(
@@ -237,6 +329,7 @@ def run_ai_pipeline(job_id, experiment_design, RESPONSE):
         # =====================================================================
         # Phase 5: Agentic Verification Loop (85% - 97%)
         # =====================================================================
+        timer.start("verification")
         dao.save_progress(job_id, {"status": "verifying", "percent": 85, "detail": "Verifying citations..."})
 
         verification_executor = build_verification_executor(paper_index)
@@ -339,6 +432,11 @@ def run_ai_pipeline(job_id, experiment_design, RESPONSE):
         from src.common.ServerErrorManager import handleException
         handleException(RESPONSE, ex, __file__, "run_ai_pipeline")
     finally:
+        # Log the breakdown regardless of outcome: a run that failed partway is
+        # exactly when knowing which phase consumed the time is most useful.
+        phaseSummary = timer.summary()
+        if phaseSummary:
+            logger.info(f"[{job_id}] {phaseSummary}")
         heartbeat.stop()
         _pipeline_semaphore.release()
         _cancel_flags.pop(job_id, None)
@@ -483,7 +581,8 @@ def _remap_citation_indices(text, local_to_global):
 # Phase 2 helpers: Agentic Literature Discovery
 # =========================================================================
 
-def _run_search_planner(llm, major, minor, matrix, whitelist, design, org, job_id):
+def _run_search_planner(llm, major, minor, matrix, whitelist, design, org, job_id,
+                        maxSearchTasks=AI_MAX_SEARCH_TASKS):
     """Use LLM to plan strategic PubMed search tasks for major pathways,
     then auto-generate simple tasks for minor pathways.
 
@@ -494,7 +593,7 @@ def _run_search_planner(llm, major, minor, matrix, whitelist, design, org, job_i
     # --- Major pathways: LLM-planned searches ---
     if major:
         prompt = build_search_planner_prompt(
-            major, matrix, whitelist, design, org, AI_MAX_SEARCH_TASKS)
+            major, matrix, whitelist, design, org, maxSearchTasks)
         try:
             if _cancel_flags.get(job_id):
                 raise InterruptedError("Cancelled")
