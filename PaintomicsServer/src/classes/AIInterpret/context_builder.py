@@ -225,11 +225,25 @@ def _format_value_pairs(values, labels):
 
 
 def _count_significant_omics(pw):
-    """Count how many omic layers have p < AI_MAJOR_PATHWAY_MAX_PVAL."""
+    """Count how many omic layers have p < AI_MAJOR_PATHWAY_MAX_PVAL.
+
+    The p-value slot holds one value per condition in a multi-condition job, so
+    comparing it directly raised
+
+        TypeError: '<' not supported between instances of 'list' and 'float'
+
+    and killed the pipeline in triage before any work began. An omic counts as
+    significant if it clears the threshold in *any* condition -- a layer that
+    responds at one timepoint is a real signal for a report to discuss, and
+    requiring every condition would discard exactly the time-resolved findings
+    multi-condition analysis exists to surface.
+    """
     count = 0
     for omic_name, vals in pw.significanceValues.items():
         # vals layout: [total_genes, relevant_genes, p_value, ...]
-        if len(vals) >= 3 and vals[2] < AI_MAJOR_PATHWAY_MAX_PVAL:
+        if len(vals) < 3:
+            continue
+        if any(p < AI_MAJOR_PATHWAY_MAX_PVAL for p in _numericValues(vals[2])):
             count += 1
     return count
 
