@@ -33,7 +33,7 @@ class VisualOptionsDAO(DAO):
 
         collection = self.dbManager.getCollection(self.collectionName)
         instance["jobID"] = otherParams["jobID"]
-        collection.insert(instance)
+        collection.insert_one(instance)
         return True
 
     #******************************************************************************************************************
@@ -41,5 +41,5 @@ class VisualOptionsDAO(DAO):
     #******************************************************************************************************************
     def remove(self, jobID, otherParams=None):
         collection = self.dbManager.getCollection(self.collectionName)
-        collection.remove({"jobID": jobID})
+        collection.delete_many({"jobID": jobID})
         return True

@@ -69,7 +69,7 @@ class MessageDAO(DAO):
         messageInstance = instance
         collection = self.dbManager.getCollection(self.collectionName)
         instanceBSON = messageInstance.toBSON()
-        collection.insert(instanceBSON)
+        collection.insert_one(instanceBSON)
         return True
 
     def removeAll(self, otherParams=None):
@@ -77,6 +77,6 @@ class MessageDAO(DAO):
             return False
         collection = self.dbManager.getCollection(self.collectionName)
 
-        collection.remove({"message_type" : otherParams.get("message_type")})
+        collection.delete_many({"message_type" : otherParams.get("message_type")})
 
         return True

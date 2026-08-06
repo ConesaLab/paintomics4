@@ -39,7 +39,7 @@ class GraphicalDataDAO(DAO):
         instanceBSON["pathwayID"] = pathwayID
         instanceBSON["jobID"] = jobID
 
-        collection.insert(instanceBSON)
+        collection.insert_one(instanceBSON)
         return True
 
     def removeAll(self, otherParams=None):
@@ -47,5 +47,5 @@ class GraphicalDataDAO(DAO):
         if("jobID" in otherParams):
             queryParams["jobID"] = otherParams["jobID"]
         collection = self.dbManager.getCollection(self.collectionName)
-        match = collection.remove(queryParams)
+        match = collection.delete_many(queryParams)
         return True

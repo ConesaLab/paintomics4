@@ -61,7 +61,7 @@ class PathwayAcquisitionJobDAO(DAO):
 
         instanceBSON["jobType"] = "PathwayAcquisitionJob"
 
-        collection.insert(instanceBSON)
+        collection.insert_one(instanceBSON)
 
         # Save foundCompounds to be able to retrieve the job from database
         if (len(jobInstance.getFoundCompounds()) > 0):
@@ -94,11 +94,11 @@ class PathwayAcquisitionJobDAO(DAO):
             for i in otherParams.get("fieldList"):
                 setFields[i] = instanceBSON.get(i)
 
-            collection.update({"jobID" :jobInstance.getJobID()}, {'$set': setFields})
+            collection.update_one({"jobID" :jobInstance.getJobID()}, {'$set': setFields})
             return True
 
 
-        collection.update({"jobID" :jobInstance.getJobID()}, instanceBSON)
+        collection.replace_one({"jobID" :jobInstance.getJobID()}, instanceBSON)
 
         #SHOULD NOT CHANGE
         if(otherParams.get("recursive", None) == True):
@@ -119,7 +119,7 @@ class PathwayAcquisitionJobDAO(DAO):
             return False
 
         collection = self.dbManager.getCollection(self.collectionName)
-        collection.remove({"jobID": id, "userID" : otherParams.get("userID")})
+        collection.delete_many({"jobID": id, "userID" : otherParams.get("userID")})
 
         FeatureDAO().removeAll({"jobID": id})
         PathwayDAO(dbManager=self.dbManager).removeAll({"jobID": id})
