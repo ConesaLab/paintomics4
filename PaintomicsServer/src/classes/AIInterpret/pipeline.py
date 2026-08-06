@@ -470,10 +470,28 @@ def run_ai_pipeline(job_id, experiment_design, RESPONSE):
         # =====================================================================
         # Done
         # =====================================================================
+        # "papers cited" used to report len(unique_papers), which is how many
+        # were *retrieved* -- so a report citing none still announced "9 papers
+        # cited". Count the [N] markers the finished report actually carries,
+        # and keep the retrieved total alongside it so a large gap between the
+        # two is visible rather than hidden.
+        knownRefIndices = {p["ref_index"] for p in unique_papers}
+        citedRefIndices = {int(n) for n in re.findall(r'\[(\d+)\]', report)} & knownRefIndices
+        citedWithFullText = sum(1 for p in unique_papers
+                                if p["ref_index"] in citedRefIndices
+                                and p.get("full_text_available"))
+
+        detail = (f"Ready — {len(citedRefIndices)} of {len(unique_papers)} "
+                  f"retrieved papers cited ({citedWithFullText} with full text)")
+        if final.get("quotations_unverifiable"):
+            # Say so rather than let an empty failed_citations read as a pass.
+            detail += " — no References section, so quotations were not checked"
+        elif final.get("citations_checked"):
+            detail += f", {final['citations_checked']} quotation(s) checked"
+
         dao.save_progress(job_id, {
             "status": "done", "percent": 100,
-            "detail": f"Ready — {len(unique_papers)} papers cited "
-                      f"({sum(1 for p in unique_papers if p.get('full_text_available'))} with full text)",
+            "detail": detail,
             "report": report,
             "verification": final,
         })
