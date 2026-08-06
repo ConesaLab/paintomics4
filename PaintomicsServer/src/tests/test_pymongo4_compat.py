@@ -54,18 +54,32 @@ def _pythonSources():
 
 # APIs pymongo removed in 4.0. Anchored on a subscript or attribute access that
 # looks like a collection so dict.update() and list.count() do not match.
+# How a pymongo Collection is actually referred to in this codebase.
+#
+# `collection` is the important one and was the gap: every DAO does
+#   collection = self.dbManager.getCollection(self.collectionName)
+# and then calls collection.insert(...). The old patterns only recognised
+# `db.<name>.` and `...Collection'].`, so all 28 DAO call sites went unnoticed
+# and the server died saving its very first job with
+#   'Collection' object is not callable ... no such method exists
+#
+# Matching every receiver instead is not the answer -- daoInstance.insert() is
+# PaintOmics' own DAO wrapper, and matchedFeatures.update() is a dict. Both are
+# fine. Name the receivers that really are collections.
+_COLLECTION_RECEIVER = r"(?:\bcollection|\bcoll|\bdb\.\w+|Collection'\])"
+
 _REMOVED_APIS = [
-    ("Cursor.count()",         re.compile(r"\bcursor\w*\.count\(\)", re.IGNORECASE)),
-    ("Collection.remove()",    re.compile(r"(?:Collection'\]|\bdb\.\w+)\.remove\(")),
-    ("Collection.insert()",    re.compile(r"(?:Collection'\]|\bdb\.\w+)\.insert\(")),
-    ("Collection.update()",    re.compile(r"(?:Collection'\]|\bdb\.\w+)\.update\(")),
-    ("Collection.save()",      re.compile(r"(?:Collection'\]|\bdb\.\w+)\.save\(")),
-    ("Collection.ensure_index()", re.compile(r"\.ensure_index\(")),
-    ("Database.authenticate()", re.compile(r"\.authenticate\(")),
+    ("Cursor.count()",             re.compile(r"\b(?:cursor\w*|acceptedIDs)\.count\(\)", re.IGNORECASE)),
+    ("Collection.insert()",        re.compile(_COLLECTION_RECEIVER + r"\.insert\(")),
+    ("Collection.save()",          re.compile(_COLLECTION_RECEIVER + r"\.save\(")),
+    ("Collection.remove()",        re.compile(_COLLECTION_RECEIVER + r"\.remove\(")),
+    ("Collection.update()",        re.compile(_COLLECTION_RECEIVER + r"\.update\(")),
+    ("Collection.ensure_index()",  re.compile(r"\.ensure_index\(")),
+    ("Database.authenticate()",    re.compile(r"\.authenticate\(")),
     ("Database.collection_names()", re.compile(r"\.collection_names\(")),
-    ("Database.eval()",        re.compile(r"\bdb\.eval\(")),
-    ("Collection.map_reduce()", re.compile(r"\.map_reduce\(")),
-    ("add_son_manipulator",    re.compile(r"add_son_manipulator")),
+    ("Database.eval()",            re.compile(r"\bdb\.eval\(")),
+    ("Collection.map_reduce()",    re.compile(r"\.map_reduce\(")),
+    ("add_son_manipulator",        re.compile(r"add_son_manipulator")),
 ]
 
 
