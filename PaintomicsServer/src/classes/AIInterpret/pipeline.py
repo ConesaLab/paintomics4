@@ -35,7 +35,7 @@ from src.conf.serverconf import (
     AI_PROVIDERS, AI_LLM_PROVIDER, AI_MAX_PATHWAYS,
     AI_PATHWAYS_PER_BATCH, AI_PAPERS_PER_PATHWAY, AI_TEMPERATURE,
     AI_MAX_CONCURRENT_PIPELINES, AI_MAX_VERIFICATION_ITERATIONS,
-    AI_MAX_SEARCH_TASKS, AI_SEARCH_SUBAGENT_WORKERS,
+    AI_MAX_SEARCH_TASKS, AI_SEARCH_SUBAGENT_WORKERS, AI_VERIFICATION_WORKERS,
     AI_PAPERS_PER_SEARCH_TASK, AI_PAPERS_KEPT_PER_TASK,
     AI_SEARCH_PLANNER_TEMPERATURE, AI_SEARCH_SUBAGENT_TEMPERATURE,
 )
@@ -349,26 +349,47 @@ def run_ai_pipeline(job_id, experiment_design, RESPONSE):
                 break
 
             failed_citations = []
-            for citation in citations:
-                if not citation.get("cited_text"):
-                    continue
+            # Each citation is an independent sub-agent call, so they run
+            # concurrently -- the same pattern and worker count already used for
+            # the search sub-agents. This phase went from a no-op to the largest
+            # in the run once citation parsing was fixed, and it was walking the
+            # citations one at a time.
+            toVerify = [c for c in citations if c.get("cited_text")]
+            with ThreadPoolExecutor(max_workers=AI_VERIFICATION_WORKERS) as executor:
+                futures = {
+                    executor.submit(
+                        _run_verification_subagent,
+                        llm, verification_executor,
+                        citation["claim_sentence"],
+                        citation["cited_text"],
+                        citation["ref_index"],
+                    ): citation
+                    for citation in toVerify
+                }
+                for future in as_completed(futures):
+                    citation = futures[future]
+                    try:
+                        verdict = future.result()
+                    except Exception as ex:
+                        # A sub-agent that dies must not pass its citation off as
+                        # verified; record it as failed so it is corrected or
+                        # redacted like any other unsupported claim.
+                        logger.warning(f"[{job_id}] Verification sub-agent raised for "
+                                       f"[{citation['ref_index']}]: {ex}")
+                        verdict = {"text_match": False, "supports_claim": False,
+                                   "reasoning": f"Verification error: {ex}"}
 
-                verdict = _run_verification_subagent(
-                    llm, verification_executor,
-                    citation["claim_sentence"],
-                    citation["cited_text"],
-                    citation["ref_index"],
-                )
-
-                if not verdict.get("text_match") or not verdict.get("supports_claim"):
-                    failed_citations.append({
-                        "ref_index": citation["ref_index"],
-                        "reason": verdict.get("reasoning", "Verification failed"),
-                        "cited_text": citation["cited_text"],
-                        "claim_sentence": citation["claim_sentence"],
-                        "actual_text": verdict.get("actual_text", ""),
-                        "suggested_fix": verdict.get("suggested_fix", ""),
-                    })
+                    if not verdict.get("text_match") or not verdict.get("supports_claim"):
+                        failed_citations.append({
+                            "ref_index": citation["ref_index"],
+                            "reason": verdict.get("reasoning", "Verification failed"),
+                            "cited_text": citation["cited_text"],
+                            "claim_sentence": citation["claim_sentence"],
+                            "actual_text": verdict.get("actual_text", ""),
+                            "suggested_fix": verdict.get("suggested_fix", ""),
+                        })
+            # as_completed returns out of order; keep reports stable between runs.
+            failed_citations.sort(key=lambda c: c["ref_index"])
 
             pct = 85 + int(10 * (iteration + 1) / AI_MAX_VERIFICATION_ITERATIONS)
             dao.save_progress(job_id, {
