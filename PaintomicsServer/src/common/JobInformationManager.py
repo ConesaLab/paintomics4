@@ -101,6 +101,23 @@ class JobInformationManager(metaclass=Singleton):
                     daoInstance.removeAll({"jobID":jobInstance.getJobID()})
                     logging.info("SAVING PATHWAYS TO DATABASE...")
                     daoInstance.insertAll(jobInstance.getMatchedPathways().values(), {"jobID":jobInstance.getJobID()})
+                    # Reactome class enrichment was computed at step 2, returned
+                    # in the response and then dropped -- it was in neither the
+                    # updated field list above nor any DAO call. So the
+                    # "Reactome Class pValue" column was populated only in the
+                    # session that ran the analysis and showed "-" for every row
+                    # once the job was reopened by its URL.
+                    #
+                    # Classes are Pathway instances, so they go to the same DAO
+                    # and are tagged to be told apart on load. Documents written
+                    # before this change carry no tag and load as pathways,
+                    # exactly as they do today.
+                    matchedClasses = list(jobInstance.getMatchedClass().values())
+                    if matchedClasses:
+                        logging.info("SAVING REACTOME CLASSES TO DATABASE...")
+                        for matchedClassInstance in matchedClasses:
+                            matchedClassInstance.isReactomeClass = True
+                        daoInstance.insertAll(matchedClasses, {"jobID": jobInstance.getJobID()})
             else:
                 raise NotImplementedError
             return True

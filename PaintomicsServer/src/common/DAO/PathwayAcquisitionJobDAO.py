@@ -44,7 +44,14 @@ class PathwayAcquisitionJobDAO(DAO):
             auxDAO = PathwayDAO(dbManager=self.dbManager)
             match = auxDAO.findAll({"jobID":id})
             for feature in match:
-                jobInstance.addMatchedPathway(feature)
+                # Reactome classes share this collection with pathways and are
+                # tagged when written. Anything without the tag -- including
+                # every document stored before classes were persisted at all --
+                # is a pathway, so old jobs load exactly as before.
+                if getattr(feature, "isReactomeClass", False):
+                    jobInstance.addMatchedClass(feature)
+                else:
+                    jobInstance.addMatchedPathway(feature)
 
         return jobInstance
 

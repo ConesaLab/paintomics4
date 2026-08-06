@@ -159,6 +159,10 @@ class PathwayAcquisitionJob(Job):
     def getMatchedClass(self):
         return self.matchedClass
 
+    def addMatchedClass(self, matchedClass):
+        """Counterpart of addMatchedPathway, used when reloading from storage."""
+        self.matchedClass[matchedClass.getID()] = matchedClass
+
     #def setReactomeClass(self, reactomeClass):
     #    self.reactomeClass = reactomeClass
 

@@ -3545,7 +3545,20 @@ function PA_Step3PathwayTableView() {
 						if (classes[reactomeClass].ID.toLowerCase().replace(/\s/g,'_') == className) {
 							let significanceValuesCombine = classes[reactomeClass].combinedSignificancePvalues
 							for (let m in significanceValuesCombine) {
-								pathwayData["classSignificanePvalue" + m] = significanceValuesCombine[m];
+								// Multi-condition jobs hold one value per condition here, as
+								// they do for the combined p-value above. Assigning the array
+								// straight into the cell rendered it as "0.5775,0.6226,0.7325,..."
+								// in a single column. Collapse to the first condition to match
+								// how the combined column behaves, and expose each condition
+								// under its own key for anyone rendering them separately.
+								let classValue = significanceValuesCombine[m];
+								if (Array.isArray(classValue)) {
+									for (let c = 0; c < classValue.length; c++) {
+										pathwayData["classSignificanePvalue" + m + "_c" + c] = classValue[c];
+									}
+									classValue = classValue.length > 0 ? classValue[0] : '';
+								}
+								pathwayData["classSignificanePvalue" + m] = classValue;
 							}
 							break;
 						} else {
