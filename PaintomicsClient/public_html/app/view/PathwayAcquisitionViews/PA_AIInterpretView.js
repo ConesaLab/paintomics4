@@ -19,6 +19,10 @@ function PA_AIInterpretView() {
     this.reportLoaded = false;
     this.onRetry = null;
     this.isFullscreen = false;
+    // id/name/source of the pathways the report was written from, used to turn
+    // pathway mentions into links.
+    this.pathwayIndex = [];
+    this._pathwayRequestInFlight = null;
 
     this.init = function(jobID) {
         this.jobID = jobID;
@@ -75,6 +79,16 @@ function PA_AIInterpretView() {
                 e.preventDefault();
                 me.sendChat();
             }
+        });
+
+        // Delegated so it covers pathway links in the report, in chat replies,
+        // and in per-pathway reports added later. Deliberately not an inline
+        // onclick: the sanitiser strips on* attributes, and this keeps the
+        // rendered report free of executable attributes.
+        this.$root.find(".ai-widget-messages").on("click", ".ai-pathway-link", function(e) {
+            e.preventDefault();
+            me.openPathway($(this).attr("data-pathway-id"),
+                           $(this).attr("data-pathway-name"));
         });
     };
 
@@ -211,7 +225,8 @@ function PA_AIInterpretView() {
             data: { jobID: me.jobID },
             success: function(response) {
                 if (response.success && response.report) {
-                    me.displayReport(response.report, response.papers || []);
+                    me.pathwayIndex = response.pathways || [];
+                    me.displayReport(response.report, response.papers || [], me.pathwayIndex);
                     me.displayCitations(response.papers || []);
                     me.reportLoaded = true;
                 } else if (response.status === "error") {
@@ -247,13 +262,175 @@ function PA_AIInterpretView() {
         return text;
     };
 
-    this.displayReport = function(reportText, papers) {
+    // Tags and attributes allowed to survive sanitising. Everything the report
+    // legitimately uses is markdown, so this covers the full output of marked
+    // plus the two link types we add ourselves.
+    var SANITIZE_ALLOWED_TAGS = {
+        A:1, B:1, BLOCKQUOTE:1, BR:1, CODE:1, DD:1, DEL:1, DIV:1, DL:1, DT:1,
+        EM:1, H1:1, H2:1, H3:1, H4:1, H5:1, H6:1, HR:1, I:1, LI:1, OL:1, P:1,
+        PRE:1, SPAN:1, STRONG:1, SUB:1, SUP:1, TABLE:1, TBODY:1, TD:1, TH:1,
+        THEAD:1, TR:1, UL:1
+    };
+    var SANITIZE_ALLOWED_ATTRS = {
+        href:1, title:1, "class":1, target:1, rel:1,
+        "data-pathway-id":1, "data-pathway-name":1
+    };
+
+    /**
+     * Strip anything executable from report HTML.
+     *
+     * The report text is model output, and the model reads uploaded data and
+     * the user's experiment-design field -- so it is untrusted input that was
+     * being handed to the DOM verbatim. Parsing happens in an inert document
+     * (DOMParser never runs scripts or fetches subresources), then the tree is
+     * walked against a whitelist: unknown elements are unwrapped rather than
+     * dropped so their text survives, every on* handler is removed, and href
+     * values are restricted to http/https/mailto so javascript: URLs cannot
+     * get through.
+     */
+    this._sanitizeHtml = function(html) {
+        var doc;
+        try {
+            doc = new DOMParser().parseFromString("<body>" + html + "</body>", "text/html");
+        } catch (e) {
+            return $("<div>").text(html).html();
+        }
+
+        var walk = function(node) {
+            var children = Array.prototype.slice.call(node.childNodes);
+            for (var i = 0; i < children.length; i++) {
+                var child = children[i];
+                if (child.nodeType === 3) { continue; }          // text: always safe
+                if (child.nodeType !== 1) {                       // comments, CDATA, ...
+                    node.removeChild(child);
+                    continue;
+                }
+                var tag = child.tagName.toUpperCase();
+                if (tag === "SCRIPT" || tag === "STYLE" || tag === "IFRAME" ||
+                    tag === "OBJECT" || tag === "EMBED" || tag === "FORM") {
+                    // Drop these entirely -- their text content is not worth keeping.
+                    node.removeChild(child);
+                    continue;
+                }
+                walk(child);
+                if (!SANITIZE_ALLOWED_TAGS[tag]) {
+                    // Unwrap: keep the text, discard the element.
+                    while (child.firstChild) {
+                        node.insertBefore(child.firstChild, child);
+                    }
+                    node.removeChild(child);
+                    continue;
+                }
+                var attrs = Array.prototype.slice.call(child.attributes);
+                for (var a = 0; a < attrs.length; a++) {
+                    var name = attrs[a].name.toLowerCase();
+                    var value = attrs[a].value;
+                    if (!SANITIZE_ALLOWED_ATTRS[name]) {
+                        child.removeAttribute(attrs[a].name);
+                        continue;
+                    }
+                    if (name === "href" && !/^(https?:|mailto:|#)/i.test(value.replace(/\s/g, ""))) {
+                        child.removeAttribute(attrs[a].name);
+                    }
+                }
+                if (tag === "A" && child.getAttribute("target") === "_blank") {
+                    child.setAttribute("rel", "noopener noreferrer");
+                }
+            }
+        };
+
+        walk(doc.body);
+        return doc.body.innerHTML;
+    };
+
+    /**
+     * Turn pathway names mentioned in the report into links that open the
+     * pathway.
+     *
+     * Matching is done against the pathway index the server analysed, over text
+     * nodes of the already-sanitised DOM -- not with a regex over the HTML
+     * string. Working on text nodes means a pathway name can never be spliced
+     * into a tag or an attribute, and it keeps the matcher from firing inside
+     * existing links, code spans, or the References section.
+     *
+     * Names are matched longest-first so "MAPK signaling pathway" wins over a
+     * shorter pathway whose name is a prefix of it.
+     */
+    this._linkifyPathways = function(rootEl, pathways) {
+        if (!pathways || !pathways.length) return;
+
+        var named = pathways.filter(function(p) { return p && p.id && p.name; });
+        if (!named.length) return;
+        named.sort(function(a, b) { return b.name.length - a.name.length; });
+
+        var byLowerName = {};
+        var alternatives = named.map(function(p) {
+            byLowerName[p.name.toLowerCase()] = p;
+            return p.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        });
+        var pattern = new RegExp("(" + alternatives.join("|") + ")", "gi");
+
+        var SKIP = { A:1, CODE:1, PRE:1 };
+        var linked = 0;
+
+        var walk = function(node) {
+            var child = node.firstChild;
+            while (child) {
+                var next = child.nextSibling;
+                if (child.nodeType === 1) {
+                    if (!SKIP[child.tagName.toUpperCase()]) walk(child);
+                } else if (child.nodeType === 3 && child.nodeValue &&
+                           child.nodeValue.trim().length > 2) {
+                    var text = child.nodeValue;
+                    pattern.lastIndex = 0;
+                    if (pattern.test(text)) {
+                        pattern.lastIndex = 0;
+                        var frag = document.createDocumentFragment();
+                        var cursor = 0, match;
+                        while ((match = pattern.exec(text)) !== null) {
+                            var pw = byLowerName[match[1].toLowerCase()];
+                            if (!pw) continue;
+                            if (match.index > cursor) {
+                                frag.appendChild(document.createTextNode(
+                                    text.slice(cursor, match.index)));
+                            }
+                            var a = document.createElement("a");
+                            a.className = "ai-pathway-link";
+                            a.setAttribute("href", "#");
+                            a.setAttribute("data-pathway-id", pw.id);
+                            a.setAttribute("data-pathway-name", pw.name);
+                            a.setAttribute("title",
+                                "Open " + pw.name + " and interpret it with AI");
+                            a.appendChild(document.createTextNode(match[1]));
+                            frag.appendChild(a);
+                            cursor = match.index + match[1].length;
+                            linked++;
+                        }
+                        if (cursor > 0) {
+                            if (cursor < text.length) {
+                                frag.appendChild(document.createTextNode(text.slice(cursor)));
+                            }
+                            node.replaceChild(frag, child);
+                        }
+                    }
+                }
+                child = next;
+            }
+        };
+
+        walk(rootEl);
+        return linked;
+    };
+
+    this.displayReport = function(reportText, papers, pathways) {
         var html = "";
         try {
             reportText = this._preprocessMarkdown(reportText);
             html = marked.parse(reportText);
         } catch(e) {
-            html = "<pre>" + reportText + "</pre>";
+            // Escape rather than interpolate: this branch previously injected
+            // unparsed model output straight into the DOM.
+            html = "<pre>" + $("<div>").text(reportText).html() + "</pre>";
         }
         // Build ref_index -> pmid mapping and linkify [N] citations
         if (papers && papers.length > 0) {
@@ -271,7 +448,85 @@ function PA_AIInterpretView() {
                 return match;
             });
         }
-        this.addMessage("assistant", html, true);
+
+        html = this._sanitizeHtml(html);
+
+        // Pathway names become links only after sanitising, so the anchors we
+        // add are not themselves subject to the whitelist pass.
+        var holder = document.createElement("div");
+        holder.innerHTML = html;
+        this._linkifyPathways(holder, pathways);
+
+        this.addMessage("assistant", holder.innerHTML, true);
+    };
+
+    /**
+     * Open a pathway from a citation in the report, and interpret it.
+     *
+     * Two things happen together, which is the point of the feature: the
+     * pathway diagram opens in the main view, and a pathway-specific
+     * interpretation is requested and shown in this widget. The widget lives on
+     * document.body rather than inside a step view, so it stays visible over
+     * the pathway once the app switches to step 4.
+     */
+    this.openPathway = function(pathwayID, pathwayName) {
+        if (!pathwayID) return;
+        var me = this;
+        var label = pathwayName || pathwayID;
+
+        this.expand();
+
+        var opened = false;
+        try {
+            var mainView = (typeof application !== "undefined" && application.getMainView)
+                ? application.getMainView() : null;
+            var jobView = mainView ? (mainView.getSubView("PA_Step3JobView") ||
+                                      mainView.getLastJobView()) : null;
+            if (jobView && typeof jobView.paintSelectedPathway === "function") {
+                jobView.paintSelectedPathway(pathwayID);
+                opened = true;
+            }
+        } catch (e) {
+            opened = false;
+        }
+
+        if (!opened) {
+            // Report it rather than silently showing only the text: the user
+            // asked for the pathway, and a missing diagram is a real outcome.
+            this.addMessage("assistant",
+                "I could not open the **" + label + "** diagram from here, but the " +
+                "interpretation below still applies to that pathway.");
+        }
+
+        if (this._pathwayRequestInFlight === pathwayID) return;
+        this._pathwayRequestInFlight = pathwayID;
+
+        this.addMessage("user", "Interpret " + label + " for this experiment.");
+        this.addLoadingIndicator();
+
+        $.ajax({
+            type: "POST",
+            url: SERVER_URL_AI_INTERPRET_PATHWAY,
+            data: { jobID: me.jobID, pathwayID: pathwayID },
+            success: function(response) {
+                me.removeLoadingIndicator();
+                me._pathwayRequestInFlight = null;
+                if (response && response.success && response.report) {
+                    me.displayReport(response.report, response.papers || [],
+                                     me.pathwayIndex || []);
+                } else {
+                    me.addMessage("assistant",
+                        "I could not interpret **" + label + "**: " +
+                        ((response && response.message) || "unknown error") + ".");
+                }
+            },
+            error: function() {
+                me.removeLoadingIndicator();
+                me._pathwayRequestInFlight = null;
+                me.addMessage("assistant",
+                    "The request for **" + label + "** failed. Please try again.");
+            }
+        });
     };
 
     this.displayCitations = function(papers) {
@@ -326,7 +581,14 @@ function PA_AIInterpretView() {
 
         if (role === "assistant" && !isHtml) {
             try {
-                bubbleContent = marked.parse(this._preprocessMarkdown(content));
+                // Chat replies are model output too, so they get the same
+                // sanitising pass as the report, and the same pathway links.
+                var parsed = this._sanitizeHtml(
+                    marked.parse(this._preprocessMarkdown(content)));
+                var holder = document.createElement("div");
+                holder.innerHTML = parsed;
+                this._linkifyPathways(holder, this.pathwayIndex);
+                bubbleContent = holder.innerHTML;
             } catch(e) {
                 // fallback to escaped text
             }
