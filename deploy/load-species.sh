@@ -104,16 +104,23 @@ downloadIfNeeded() {
 
 downloadIfNeeded hsa --kegg=1 --mapping=1 --common=1 --reactome=1
 
-# --common=1 is required for the FIRST species installed.
+# The shared KEGG data has to reach current/common before any species build,
+# because build_database.py reads the pathway classification from there while
+# the download leaves it in download/common. install_command defaults common=0
+# and only performs that move when it is 1, so omitting the flag fails with
+#   FileNotFoundError: '.../current/hsa/../common/pathways_classification.list'
 #
-# install_command defaults common=0, and the move of the shared KEGG data from
-# download/common into current/common only happens when it is 1. Without it the
-# species build fails with
-#   FileNotFoundError: '/data/KEGG_DATA/current/hsa/../common/pathways_classification.list'
-# because build_database.py reads the classification from current/, while the
-# file is still sitting in download/.
-say "INSTALL hsa (with --common=1: moves shared KEGG data into current/)"
-${COMPOSE} exec -T app ${DBM} install --specie=hsa --common=1 \
+# But the flag cannot simply be hardcoded to 1 either: the move is a move, so a
+# rerun after a later failure finds download/common already gone and errors out.
+# Decide from the actual state instead, which makes reruns idempotent.
+if ${COMPOSE} exec -T app test -f /data/KEGG_DATA/current/common/pathways_classification.list 2>/dev/null; then
+    commonFlag="--common=0"
+    say "INSTALL hsa (${commonFlag}: shared KEGG data already in current/)"
+else
+    commonFlag="--common=1"
+    say "INSTALL hsa (${commonFlag}: moving shared KEGG data into current/)"
+fi
+${COMPOSE} exec -T app ${DBM} install --specie=hsa "${commonFlag}" \
     >"$HOME/hsa-install.log" 2>&1 || die "hsa install (see ~/hsa-install.log)"
 
 # ---------------------------------------------------------------------------
