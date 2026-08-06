@@ -1811,7 +1811,12 @@ function PA_Step4KeggDiagramFeatureView(showButtons) {
 			if(featureType.toLowerCase() === "gene"){
 				htmlCode +=
 				"    <li><a href='http://www.kegg.jp/dbget-bin/www_bget?" + specie + ":" + featureID + "' target='_blank'><i class='fa fa-external-link'></i> Search at KEGG Database</a></li>" +
-				"    <li><a class='ensemblGenomesSearch' href='http://ensemblgenomes.org/search/eg/" + featureName + "' target='_blank'><i class='fa fa-external-link'></i> Search at Ensembl Genomes</a></li>" +
+				// Ensembl Genomes retired the /search/eg/<term> path -- it returns 404
+				// for every feature, with or without https and regardless of user
+				// agent, so this link had stopped working entirely. The current form
+				// is taken from the search box on ensemblgenomes.org itself, which
+				// posts to /search/ with the parameter named "query".
+				"    <li><a class='ensemblGenomesSearch' href='https://www.ensemblgenomes.org/search/?query=" + encodeURIComponent(featureName) + "' target='_blank' rel='noopener'><i class='fa fa-external-link'></i> Search at Ensembl Genomes</a></li>" +
 				"    <li><a class='ensemblSearch' href='http://www.ensembl.org/Multi/Search/Results?q=" + encodeURIComponent(featureName) + ";facet_species="+ encodeURIComponent(alternativeName) + "' target='_blank'><i class='fa fa-external-link'></i> Search at Ensembl (vertebrates)</a></li>" +
 				((specie === "hsa") ? "<li><a href='http://www.genecards.org/cgi-bin/carddisp.pl?gene=" + featureName + "' target='_blank'><i class='fa fa-external-link'></i> Search at GeneCards Database</a></li>" : "") +
 				"    <li><a href='http://www.ncbi.nlm.nih.gov/pubmed/?term=" + specieName + "' target='_blank'><i class='fa fa-external-link'></i> Find related publications (PubMed)</a></li>" +

@@ -198,7 +198,13 @@ function MainView() {
 				" <ul class='submenu'>" +
 				"     <li class='menuOption externalOption'><a href='https://www.youtube.com/channel/UCSoQ3LSli9ZxOQTX56_WJeA' target='_blank'><i class=\"fa fa-youtube\"></i>  Paintomics tutorial video</a></li>" +
 				"     <li class='menuOption externalOption'><a href='http://paintomics.readthedocs.org/en/latest/' target='_blank'><i class='fa fa-book'></i>  Paintomics Documentation</a></li>" +
-				"     <li class='menuOption externalOption'><a href='http://188.166.42.44/' target='_blank'><i class='fa fa-external-link'></i> PaintOmics 3 </a></li>" +
+				// The "PaintOmics 3" entry pointed at http://188.166.42.44/, a bare IP
+				// that no longer answers at all (connection failure, not an error
+				// page). Removed rather than repointed: there is no live PaintOmics 3
+				// instance to send people to -- paintomics.org and paintomics.uv.es
+				// both serve PaintOmics 4 -- and the PaintOmics 3 paper is already
+				// linked under Publications. Restore this with a real URL if the
+				// old release gets hosted again.
 				"	  <li class='menuOption externalOption'><a href='https://paintomics.uv.es/resources/paintomics_example_data.zip' target='_blank'><i class='fa fa-download'></i>  Paintomics example data</a></li>" +
 				"	  <li class='menuOption externalOption'><a href='https://paintomics.uv.es/resources/rgmatch_example_data.zip' target='_blank'><i class='fa fa-download'></i>  RGmatch example data</a></li>" +
 				"	  <li class='menuOption externalOption'><a href='https://paintomics.uv.es/resources/mirna2genes_example_data.zip' target='_blank'><i class='fa fa-download'></i>  miRNA2Genes example data</a></li>" +
@@ -206,7 +212,7 @@ function MainView() {
 				" <li class='menuOption' ><i class='fa fa-paper-plane-o'></i>  Publications" +
 				" <ul class='submenu'>" +
 				// "     <li class='menuOption'><a href='https://paintomics.uv.es/' target='_blank'><i class='fa fa-book'></i>  Paintomics Documentation</a></li>"+
-				"     <li class='menuOption externalOption' style='font-size: 9px;'><div style='font-size: 12px; color: white;'>Cite Paintomics 4:</div><a href='https://doi.org/10.1093/nar/gkac352' target='_blank'>Liu, T., Salguero, P., Petek, M., Martinez-Mira, C., Balzano-Nogueira, L., Ramšak, Ž., McIntyre, L., Gruden, K., Tarazona, S. and Conesa, A. <b>PaintOmics 4: new tools for the integrative analysis of multi-omics datasets supported by multiple pathway databases</b>. <i>Nucleic Acids Research</i> 2022).</a><br><a href='resources/images/paintomics3.bib' target='_blank'>BibTeX</a></li>" +
+				"     <li class='menuOption externalOption' style='font-size: 9px;'><div style='font-size: 12px; color: white;'>Cite Paintomics 4:</div><a href='https://doi.org/10.1093/nar/gkac352' target='_blank'>Liu, T., Salguero, P., Petek, M., Martinez-Mira, C., Balzano-Nogueira, L., Ramšak, Ž., McIntyre, L., Gruden, K., Tarazona, S. and Conesa, A. <b>PaintOmics 4: new tools for the integrative analysis of multi-omics datasets supported by multiple pathway databases</b>. <i>Nucleic Acids Research</i> 2022).</a><br><a href='resources/images/paintomics4.bib' target='_blank'>BibTeX</a></li>" +
 				"     <li class='menuOption externalOption' style='font-size: 9px;'><div style='font-size: 12px; color: white;'>Cite Paintomics 3:</div><a href='https://doi.org/10.1093/nar/gky466' target='_blank'>Hernández-de-Diego R, Tarazona S, Martínez-Mira C, Balzano-Nogueira L, Furió-Tarí P, Pappas J G, Conesa A. <b>PaintOmics 3: a web resource for the pathway analysis and visualization of multi-omics data</b>. <i>Nucleic Acids Research</i> 2018).</a><br><a href='resources/images/paintomics3.bib' target='_blank'>BibTeX</a></li>" +
 				"     <li class='menuOption externalOption' style='font-size: 9px;'><div style='font-size: 12px; color: white;'>Cite Paintomics 2:</div><a href='http://bioinformatics.oxfordjournals.org/content/early/2010/11/23/bioinformatics.btq594' target='_blank'>García-Alcalde F, García-López F, Dopazo J, Conesa A. <b>Paintomics: a web based tool for the joint visualization of transcriptomics and metabolomics data</b>. <i>Bioinformatics</i> 2011 27(1): 137–139.</a><br><a href='resources/images/paintomics2-garcia-alcalde.bib' target='_blank'>BibTeX</a></li>" +
 				"     <li class='menuOption externalOption' style='font-size: 9px;'><div style='font-size: 12px; color: white;'>Cite rgmatch:</div><a href='https://bmcbioinformatics.biomedcentral.com/articles/10.1186/s12859-016-1293-1' target='_blank'>Furio-Tari P, Tarazona S, Conesa A. <b>RGmatch: matching genomic regions to proximal genes in omics data integration</b>. <i>BMC Bioinformatics</i> 2016 17(15).</a><br><a href='resources/images/rgmatch.bib' target='_blank'>BibTeX</a></li>" +
