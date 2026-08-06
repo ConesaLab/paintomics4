@@ -44,6 +44,44 @@ root {
   --pa-accent-orange: #B55324;/* was rgb(209,96,42) - 3.59:1 on #F6F6F6 */
   --pa-ink-muted: #757575;    /* was #C9C9C9 (1.66:1) / #B1B0B0 (2.16:1) */
   --pa-bold-blue: #4A78AA;    /* was rgb(105,146,190) - 3.25:1 */
+
+  /* Focus ring. Chosen to clear 3:1 (WCAG 2.4.11) against every surface the
+     ring actually lands on: white panels 3.65:1, the #F2F2F2 button toolbar
+     3.26:1, and the #222 header bar 4.36:1. It is drawn with outline-offset,
+     so it sits on the surface behind a control rather than on the control's
+     own fill - which is why the green and red button fills do not constrain
+     the choice. */
+  --pa-focus-ring: #0A84FF;
+}
+
+/* Keyboard focus ------------------------------------------------------------
+   The vendored ExtJS Neptune theme ships `.x-webkit :focus { outline: none }`,
+   which strips the focus ring from every focusable element in the app -
+   buttons, links, grid rows, form fields alike. Keyboard and screen-magnifier
+   users get no indication of where they are (WCAG 2.4.7 Focus Visible).
+
+   Restored here rather than in the theme file, because that file is vendored
+   and any change to it would be lost on an ExtJS upgrade.
+
+   Three details that matter:
+   - `!important` is unavoidable. Neptune's rule is `outline: none !important`,
+     so neither a later source position nor higher specificity can beat it.
+     Verified in the browser: literal colours, longhand properties and higher
+     specificity all still computed to `outline-style: none`; only `!important`
+     took effect.
+   - `:focus-visible`, not `:focus`. The ring appears for keyboard navigation
+     but not when a control is clicked, which is the visual noise that usually
+     motivates suppressing focus rings in the first place.
+   - The `.x-webkit` prefix on the first selector matches Neptune's own
+     specificity; the bare selector below it covers browsers where ExtJS does
+     not add that class and no suppression exists.
+
+   `outline` is painted outside the border box and takes no space, so this
+   cannot shift any ExtJS layout. */
+.x-webkit :focus-visible,
+:focus-visible {
+	outline: 3px solid var(--pa-focus-ring) !important;
+	outline-offset: 2px;
 }
 
 body {
@@ -2108,6 +2146,41 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
   }
   .po-tutorials-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+/* Reduced motion ------------------------------------------------------------
+   Honour the OS-level "reduce motion" setting, which the app currently ignores
+   entirely. What moves here is the lateral options panel sliding in, the hero
+   image scaling on hover, and the How It Works cards lifting on hover - the
+   sort of transform and slide motion that triggers symptoms for people with
+   vestibular disorders.
+
+   Durations are collapsed to 0.01ms rather than set to `none` so that any
+   `transitionend` or `animationend` listener still fires; killing the
+   transition outright would leave such a handler waiting forever. This block
+   only applies to users who have actually asked for reduced motion.
+
+   The analysis progress indicator is an animated GIF, which CSS cannot pause,
+   so it is swapped for a still frame instead - see below. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  /* loadingpaintomics2.gif loops for the whole analysis, which for the example
+     dataset is around 90 seconds of continuous motion. `content` on a replaced
+     element swaps the rendered image without touching the markup, so the
+     dialog keeps its branded indicator as a still frame. The PNG is frame 5 of
+     the original, extracted because it carries the most colour and so reads as
+     a deliberate graphic rather than a half-drawn one. */
+  #messageDialogSpin img {
+    content: url('../images/loadingpaintomics2-static.png');
   }
 }
 
