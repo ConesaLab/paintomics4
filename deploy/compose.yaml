@@ -93,7 +93,13 @@ services:
       - ./nginx/certs:/etc/nginx/certs:ro
       - nginx-cache:/var/cache/nginx
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost/healthz"]
+      # 127.0.0.1, not localhost. In this image localhost resolves to ::1, while
+      # nginx's `listen 80` binds IPv4 only -- so the check got "connection
+      # refused" on every run and the container sat unhealthy for 18 hours while
+      # serving traffic perfectly. A container that is permanently unhealthy
+      # while healthy is worse than no healthcheck: it trains you to ignore the
+      # status column, and it misleads anything that gates on health.
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1/healthz"]
       interval: 30s
       timeout: 5s
       retries: 3
