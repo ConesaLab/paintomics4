@@ -18,6 +18,9 @@
 #  Technical contact paintomics4@gmail.com
 #**************************************************************
 
+from pymongo import ReturnDocument
+from pymongo.errors import DuplicateKeyError
+
 from .DAO import DAO
 from src.classes.User import User
 
@@ -120,11 +123,41 @@ class UserDAO(DAO):
         return True
 
     def getNextUserID(self):
-        #collection = self.dbManager.getCollection("counters")
-        collection = self.dbManager.getCollection("userCollection")
-        #sequenceDocument = collection.find_and_modify(query={"_id": 'userID'}, update = {"$inc":{"sequence_value":1}}, new=True )
-        sequenceDocument = list()
-        for subDocument in collection.find():
-            sequenceDocument.append(subDocument)
-        # If there is nobody Sign in PaintOmics before
-        return int(sequenceDocument.__len__())
+        """Allocate a user ID from an atomic counter.
+
+        This used to return len(userCollection), which was wrong twice over.
+
+        The first person to register got userID 0, and isValidUser accepted
+        "0" with any session token -- so that account was usable by anyone who
+        sent the cookie. The counter therefore starts at 1 and never issues 0.
+
+        And because a count is not a sequence, IDs were reused: with users
+        0,1,2 present, deleting user 1 left a count of 2, so the next signup
+        was handed ID 2 and collided with the existing account -- two users
+        sharing an identity, and one inheriting the other's jobs and files.
+        $inc on a counter document is atomic, so an ID is never handed out
+        twice regardless of concurrent signups.
+
+        The counter is seeded above the highest ID already in the collection,
+        so an existing deployment keeps working without a migration.
+        """
+        counters = self.dbManager.getCollection("counters")
+
+        if counters.find_one({"_id": "userID"}) is None:
+            highestExisting = 0
+            for document in self.dbManager.getCollection(self.collectionName).find({}, {"userID": 1}):
+                try:
+                    highestExisting = max(highestExisting, int(document.get("userID")))
+                except (TypeError, ValueError):
+                    continue  # malformed or missing userID: cannot raise the floor
+            try:
+                counters.insert_one({"_id": "userID", "sequence_value": highestExisting})
+            except DuplicateKeyError:
+                pass  # another request seeded it first; its value is equally valid
+
+        document = counters.find_one_and_update(
+            {"_id": "userID"},
+            {"$inc": {"sequence_value": 1}},
+            return_document=ReturnDocument.AFTER
+        )
+        return int(document["sequence_value"])

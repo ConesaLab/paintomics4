@@ -45,8 +45,18 @@ class UserSessionManager(object):
 
         def isValidUser(self, user_id, sessionToken):
             user_id = str(user_id)
-            # TODO: security breach? (== 0)check if we are on debug mode
-            if (user_id == "0" or (user_id == 'None' and sessionToken == None)):
+            # A missing userID with no session token is the anonymous "nologin"
+            # mode, which the app supports deliberately -- those jobs live under
+            # CLIENT_TMP/nologin and belong to nobody.
+            #
+            # user_id == "0" used to be accepted here unconditionally, with the
+            # comment "TODO: security breach? (== 0)". It was: UserDAO assigned
+            # IDs as len(userCollection), so the first person to register got
+            # userID 0, and from then on anyone could act as that account by
+            # sending the cookie userID=0 with any token at all -- including
+            # calling dm_delete_job. Verified against a running server before
+            # removing. See UserDAO.getNextUserID, which no longer issues 0.
+            if (user_id == 'None' and sessionToken == None):
                 return True
             if (user_id == 'None' or sessionToken == None or sessionToken != self.logged_users.get(user_id)):
                 raise CredentialException("[b]User not valid[/b]. It looks like your session is not valid, please log-in again.")
