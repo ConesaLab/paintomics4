@@ -2216,6 +2216,62 @@ Let's Encrypt cutover, and the two constraints that must not be relaxed
 
 ---
 
+## Execution log: what actually broke
+
+Recorded because none of these were predicted by the design, and every one of them
+blocks a fresh install rather than being specific to this host.
+
+### External APIs that had moved
+- **KEGG retired `/list/organism`** (HTTP 400). It is the first thing the common
+  download fetches, so *every* new install aborts before reaching any species data.
+  Replaced by `/list/genome`, which returns `T01001<TAB>hsa; Homo sapiens (human)`
+  instead of tab-separated code/name/taxonomy. Converted at the download boundary so
+  the three consumers stay unchanged.
+- `/conv/compound/chebi` was already dead and already worked around, reading ChEBI's
+  own dump from EBI. 18,465 mappings extracted on the live run.
+
+### Assumptions that only hold on a machine that has run PaintOmics before
+- `KEGG_DATA/download/` was assumed to exist. On an empty volume the first download
+  dies on `summary.log`, and because the preceding `touch` ran through `os.system()`
+  its failure was silent, so the error named the wrong file.
+- `mongoimport` is not in `python:3.9-slim`, nor in Debian. The install ran for hours
+  and died at the last step with exit 127.
+- Those `mongoimport` calls passed no `--host`, so they default to localhost. Correct
+  only when MongoDB runs beside the installer; wrong for any containerised deployment.
+
+### Multi-stage image pitfalls
+`COPY`ing R's site-library between stages carries the R packages but neither the
+`/usr/lib/R/library` "Recommended" set nor the C libraries they link against. Both
+gaps shipped a server that worked until a user ran a job. The fix that matters is
+that verification now runs **in the runtime image** -- an `ldd` sweep plus `library()`
+on all 25 packages plus a check for every external command -- because the build
+stage's own check passes by construction.
+
+### Layer count, unexplained
+Adding `RUN` steps past a threshold makes the next step start with an unreadable
+rootfs (`exec /bin/sh: no such file or directory`; an exec-form probe shows
+`/usr/bin/ls` is gone too). Reproducible with `--no-cache` and a pruned builder
+cache, and across both the containerd snapshotter and overlay2. Not explained: 16
+RootFS layers is far under overlay2's limit. Worked around by keeping the trailing
+permission and verification steps merged into one layer. **Do not split them.**
+
+### Operational
+- OpenStack VXLAN gives the host MTU 1450 while Docker defaults bridges to 1500.
+  Small requests succeed and large transfers hang, which would have stranded the
+  multi-hour download rather than failing it. `load-species.sh` preflights this.
+- Docker 29 defaults to the containerd snapshotter, which stores images under
+  `/var/lib/containerd` -- so the 590 GiB volume mounted at `/var/lib/docker` was
+  bypassed entirely and images landed on the 77 GB root.
+- `--common=1` *moves* `download/common` into `current/`, so it is required for the
+  first species and wrong on any rerun. Decide it from state, not position.
+- Re-running a download is destructive: `--common=1` `rmtree`s both the common and
+  species directories first. Gate on the `VERSION` marker.
+
+### Measured results (human)
+1,481 pathways (372 KEGG + 1,109 Reactome) and 1,864,239 xrefs. The 1,109 Reactome
+pathways match the 1,109 downloaded exactly. Enrichment recovers all planted signal
+at p < 5e-23 with no false positives among 477 signal-free pathways.
+
 ## Outstanding external inputs
 
 None of these block Tasks 1–11.
