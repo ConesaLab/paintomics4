@@ -385,10 +385,27 @@ class PathwayAcquisitionJob(Job):
                                  error += " - Errors detected while processing " + inputOmic.get("relevantFeaturesFile", "") + \
                                           ": The number of columns (" + str(rf_conditions) + ") does not match the number of conditions in the data file (" + str(nConditions - 1) + ").\n"
 
+                # Guard against a file that is not a list of identifiers at all.
+                #
+                # This used to reject any line over 80 characters, which was
+                # written when a relevant-features file had one column and a
+                # line was a single ID. A multi-condition file has one column
+                # per condition, so with Ensembl IDs (18 characters) it exceeds
+                # 80 at five conditions and is impossible to satisfy at six --
+                # the column-count check above demands exactly N columns while
+                # this demanded a width only a shorter file could have. The two
+                # rules could not both be met, so multi-condition relevant files
+                # were unusable at realistic condition counts.
+                #
+                # The intent is "every cell should look like an identifier", so
+                # it is now applied per field. Uploading the wrong file is still
+                # caught: a values file has one more column than the conditions
+                # it declares, which the check above rejects.
+                rfDelimiter = Job.detect_delimiter(relevantFileName)
                 for line in lines:
-                    if len(line) > 80:
+                    if any(len(field) > 80 for field in line.strip().split(rfDelimiter)):
                         error += " - Errors detected while processing " + inputOmic.get("relevantFeaturesFile",
-                                                                                        "") + ": The file does not look like a Relevant Features file (some lines are longer than 80 characters)." + "\n"
+                                                                                        "") + ": The file does not look like a Relevant Features file (some identifiers are longer than 80 characters)." + "\n"
                         break
             f.close()
 
