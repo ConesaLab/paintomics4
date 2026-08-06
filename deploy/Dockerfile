@@ -257,22 +257,29 @@ RUN set -eux; \
     test ! -e /app/PaintomicsServer/src/conf/serverconf.py; \
     chown -R paintomics:paintomics /app
 
-RUN chmod +x /usr/local/bin/entrypoint.sh \
-    && chown paintomics:paintomics /app/uwsgi.ini \
-    && chmod +x /app/PaintomicsServer/src/AdminTools/scripts/*.R \
-    && chmod +x /app/PaintomicsServer/src/common/bioscripts/*.R
-
-# ---------------------------------------------------------------------------
-# Verify the R stack IN THE RUNTIME IMAGE, not in the build stage.
+# Application permissions and runtime verification, deliberately in ONE layer.
 #
-# The r-builder has an import check too, but it passes by construction: apt
-# installed every system library there as a dependency. Only this image is what
-# actually ships. Two failures reached production before this check existed --
-# r-recommended (cluster, MASS, Matrix live in /usr/lib/R/library, which no COPY
-# carried) and libuv1/libnlopt0 (C libraries the COPYed R packages link against).
-# Both presented as a working server that failed the moment a user ran a job.
-# ---------------------------------------------------------------------------
-RUN set -eu; \
+# These were three separate RUN steps. Splitting them reintroduced the rootfs
+# corruption described above the COPY block -- adding layers past a threshold
+# makes the next step start with an unreadable filesystem. Keep this merged.
+#
+# The verification runs HERE, in the runtime image, not in the r-builder. That
+# stage's own import check passes by construction because apt installed every
+# system library there as a dependency, so it cannot catch a runtime gap, and
+# only this image ships. Two failures reached production that way:
+# r-recommended (cluster/MASS/Matrix live in /usr/lib/R/library, which no COPY
+# carried) and libuv1/libnlopt0 (C libraries the COPYed R packages link
+# against). Both looked like a healthy server that died the moment a user ran a
+# Metagenes or Hub Analysis job.
+#
+# library() rather than requireNamespace(): attaching is what triggers dyn.load,
+# and it is what the scripts actually do. requireNamespace can succeed where
+# library() fails.
+RUN set -eux; \
+    chmod +x /usr/local/bin/entrypoint.sh; \
+    chown paintomics:paintomics /app/uwsgi.ini; \
+    chmod +x /app/PaintomicsServer/src/AdminTools/scripts/*.R; \
+    chmod +x /app/PaintomicsServer/src/common/bioscripts/*.R; \
     missingLibs="$(find /usr/lib/R /usr/local/lib/R -name '*.so' 2>/dev/null \
         | while read -r so; do ldd "$so" 2>/dev/null | awk '/not found/ {print $1}'; done \
         | sort -u)"; \
@@ -281,9 +288,8 @@ RUN set -eu; \
         echo "$missingLibs"; \
         exit 1; \
     fi; \
-    echo "every R shared object resolves"
-
-RUN Rscript -e 'pkgs <- c("purrr", "cluster", "mclust", "amap", "factoextra", \
+    echo "every R shared object resolves"; \
+    Rscript -e 'pkgs <- c("purrr", "cluster", "mclust", "amap", "factoextra", \
                           "igraph", "ggplot2", "ggpubr", "ggsignif", "reshape2", \
                           "gridExtra", "visNetwork", "jsonlite", "tibble", \
                           "stringr", "dplyr", "tidyr", "readr", "rvest", "xml2", \
