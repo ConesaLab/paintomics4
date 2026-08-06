@@ -159,11 +159,22 @@ def verify_report_v2(report_text, gene_whitelist, unique_papers, job_instance):
 
     score = 0.5 * ref_accuracy + 0.2 * gene_accuracy + 0.3 * (1 - min(len(pval_issues) / 5, 1))
 
+    # Whether the quotations could be checked at all, kept separate from
+    # whether they passed. Roughly two reports in five carry inline [N] markers
+    # but no References section with Cited Text blocks -- there is then nothing
+    # to ground the claims against, so no citation is examined and
+    # failed_citations comes back empty. That is indistinguishable from "all
+    # citations verified" unless it is stated, which is exactly the confusion
+    # the "### References" parsing bug used to cause silently.
+    body_cites_something = bool(body_indices)
     return {
         "score": round(score, 2),
         "failed_citations": failed_citations,
         "gene_accuracy": round(gene_accuracy, 2),
         "ref_accuracy": round(ref_accuracy, 2),
+        "references_section_found": bool(parsed_refs),
+        "citations_checked": len([r for r in parsed_refs if r.get("cited_text")]),
+        "quotations_unverifiable": body_cites_something and not parsed_refs,
     }
 
 
