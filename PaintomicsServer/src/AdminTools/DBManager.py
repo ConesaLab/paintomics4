@@ -1101,7 +1101,21 @@ def getCurrentInstalledSpecies():
             continue
         elif "global-paintomics" == database:
             db = client[database]
-            common_info_date = db.versions.find({"name": "COMMON"})[0].get("date")
+            # find(...)[0] raises IndexError on an empty cursor. The COMMON
+            # version document is written by createGlobalDatabase(), which only
+            # runs during a --common=1 install, so it is legitimately absent
+            # until the first one completes -- and any interruption in between
+            # leaves the database present but this document missing. That made
+            # a later species install die with a bare
+            #   IndexError: no such item for Cursor instance
+            # naming neither the collection nor the reason.
+            commonVersion = db.versions.find_one({"name": "COMMON"})
+            if commonVersion is None:
+                log("            WARNING: no COMMON version in global-paintomics; "
+                    "run an install with --common=1 to populate it")
+                common_info_date = ""
+            else:
+                common_info_date = commonVersion.get("date", "")
         else:
             # Step 2.1 GET THE SPECIE CODE
             organism_code = database.replace("-paintomics", "")
