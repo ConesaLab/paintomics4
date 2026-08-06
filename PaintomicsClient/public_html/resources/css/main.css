@@ -31,6 +31,19 @@ root {
      token instead of hardcoding a family so the UI stays typographically
      consistent. */
   --pa-font-sans: 'SourceSansPro', 'Source Sans Pro', 'Segoe UI', system-ui, sans-serif;
+
+  /* Ink colours --------------------------------------------------------------
+     Every value below clears WCAG 2.1 AA (4.5:1) against the white and #F6F6F6
+     panel backgrounds these are used on, with a little headroom so rounding or
+     a future background tweak does not silently drop them under the bar. Hue
+     and saturation are preserved from the original palette; only lightness
+     moved, so the UI keeps its colour identity. */
+  --pa-link: #0074DE;         /* was #0076E2 - 4.48:1, just under AA */
+  --pa-link-hover: #278466;   /* was #2E9B78 - 3.46:1 */
+  --pa-accent-blue: #2275D3;  /* was #2C7FDD - 4.05:1 */
+  --pa-accent-orange: #B55324;/* was rgb(209,96,42) - 3.59:1 on #F6F6F6 */
+  --pa-ink-muted: #757575;    /* was #C9C9C9 (1.66:1) / #B1B0B0 (2.16:1) */
+  --pa-bold-blue: #4A78AA;    /* was rgb(105,146,190) - 3.25:1 */
 }
 
 body {
@@ -45,10 +58,10 @@ body {
 	-moz-osx-font-smoothing: grayscale;
 }
 span.helpTip {
-	color: #C9C9C9;
+	color: var(--pa-ink-muted);
 }
 span.helpTip:hover {
-	color: #3C9AF5;
+	color: var(--pa-link);
 }
 span.helpTip:before {
 	content: "\f059";
@@ -56,7 +69,7 @@ span.helpTip:before {
 	padding-left: 8px;
 }
 span.infoTip {
-	color: #2C7FDD;
+	color: var(--pa-accent-blue);
 	margin-left: 15px;
 	display: block;
 	font-size: 12px;
@@ -64,12 +77,12 @@ span.infoTip {
 span.infoTip:before {
 	content: "\f05a";
 	font: normal normal normal 12px/1 FontAwesome;
-	color: #3C9AF5;
+	color: var(--pa-accent-blue);
 	margin-left: -15px;
 	margin-right: 4px;
 }
 span.commentTip {
-	color: #B1B0B0;
+	color: var(--pa-ink-muted);
 	display: block;
 	font-style: italic;
 	font-size: 12px;
@@ -79,17 +92,17 @@ span.commentTip {
 .x-body {
 	background-color: #000
 }
-b {color: rgb(105, 146, 190);}
+b {color: var(--pa-bold-blue);}
 
 /*TITLES STYLES*/
 
 h1, h2, h3, h4 {font-weight: lighter;margin: 0;}
-h2 {color: rgb(209, 96, 42);font-size: 23px;}
+h2 {color: var(--pa-accent-orange);font-size: 23px;}
 h3 {font-size: 20px;color: #007383;	margin: 10px 0px;}
 h4 {font-size: 16px;color: #288824; margin: 10px 0px;}
 h5 {font-size: 13px; margin: 10px 0px; color: #056E66; font-weight: lighter;}
-a {text-decoration: none;color: #0076E2;}
-a:hover {color: #2E9B78;}
+a {text-decoration: none;color: var(--pa-link);}
+a:hover {color: var(--pa-link-hover);}
 
 /*****************************************************************************
 **** STYLES FOR HEADER AND TOOLBARS **********************************************
@@ -272,75 +285,75 @@ ul.menu li.loggedOption, ul.menu span.loggedOption {
 	background-color: #286090;
 	border-color: #204d74;
 }
+/* The button palette below is Bootstrap 3's, whose white-on-colour variants all
+   fall short of WCAG AA. Fills are darkened along the same hue so each button
+   keeps its meaning (green = go, red = destructive), except .btn-info and
+   .btn-warning: light cyan and amber cannot carry white text without turning
+   into unrecognisable teal and brown, so those keep their fill and take dark
+   ink instead - the approach Bootstrap itself adopted in v4. */
 .btn-secondary {
 	color: #fff;
-	background-color: #55c9a6;
-	border-color: #53af93;
+	background-color: #2A8368; /* was #55c9a6 - 2.04:1 */
+	border-color: #226B55;
 }
 .btn-secondary:hover {
 	color: #fff;
-	background-color: #59b790;
-	border-color: #419875;
+	background-color: #327358; /* was #59b790 - 2.44:1 */
+	border-color: #295E48;
 }
 .btn-small {
 	font-size: 12px;
 	padding: 4px 6px;
 }
 .btn-info{
-	color: #fff;
+	color: #333; /* dark ink on the light cyan fill - 6.04:1 */
 	background-color: #5bc0de;
 	border-color: #46b8da;
 }
 .btn-info:hover {
-	color: #fff;
+	color: #333; /* 4.99:1 */
 	background-color: #31b0d5;
 	border-color: #269abc;
 }
 .btn-success {
 	color: #fff;
-	background-color: #5cb85c;
-	border-color: #4cae4c;
+	background-color: #3A843A; /* was #5cb85c - 2.48:1 */
+	border-color: #306C30;
 }
 .btn-success:hover {
 	color: #fff;
-	background-color: #449d44;
-	border-color: #398439;
+	background-color: #337533; /* was #449d44 - 3.41:1 */
+	border-color: #2A602A;
 }
 .btn-warning {
-	color: #fff;
+	color: #333; /* dark ink on the amber fill - 6.49:1 */
 	background-color: #f0ad4e;
 	border-color: #eea236;
 }
 .btn-warning:hover {
-	color: #fff;
+	color: #333; /* 5.42:1 */
 	background-color: #ec971f;
 	border-color: #d58512;
 }
 .btn-danger {
 	color: #fff;
-	background-color: #d9534f;
-	border-color: #d43f3a;
-}
-.btn-danger {
-	color: #fff;
-	background-color: #d9534f;
-	border-color: #d43f3a;
+	background-color: #D43E3A; /* was #d9534f - 3.96:1 */
+	border-color: #B62B28;
 }
 .btn-danger:hover {
 	color: #fff;
-	background-color: #c9302c;
-	border-color: #ac2925;
+	background-color: #C32F2B;
+	border-color: #A02723;
 }
 .button.acceptButton {
-	background: #12a22f;
-	color: #ffffff;
-}
-.button.acceptButton {
-	background: #12a22f;
+	background: #0F8827; /* was #12a22f - 3.37:1 */
 	color: #ffffff;
 }
 .acceptButton:hover {
-	background: #23D046;
+	/* Was #23D046, which brightened on hover; no green light enough to read as
+	   "brighter" can carry white text at AA, so this darkens instead, matching
+	   the hover direction of every other button in this file. */
+	background: #0C7020;
 	color: #ffffff;
 }
 .cancelButton:hover {
@@ -754,12 +767,17 @@ div.checkbox label, div.radio label {
 	background: rgb(85, 201, 166);
 	padding-left: 15px;
 }
+/* The six omic fills below are the app's type-coding: users identify an omic by
+   its colour here, in the legends and in the pathway diagrams, so the hues are
+   left exactly as they were. White text on those pastels ran 2.04:1 to 3.55:1;
+   near-black ink clears AA on all six (4.90:1 on the darkest, region-based, up
+   to 8.53:1) without touching a single fill. */
 div.omicboxTitle h4 {
 	font-size: 30px;
-	color: #fff;
+	color: #1A1A1A;
 }
 .omicboxTitle a, .availableOmicsBox a {
-	color: #fff;
+	color: #1A1A1A;
 }
 .availableOmicsBox {
 	cursor: move;
@@ -786,7 +804,7 @@ div.omicboxTitle h4 {
 }
 div.availableOmicsBox h4 {
 	font-size: 20px;
-	color: #fff;
+	color: #1A1A1A;
 }
 .dragHerePanel {
 	display: none;
@@ -1019,8 +1037,8 @@ p[id ^= "step3-network-toolbar-message_"]{
 	line-height: 40px;
 	font-size: 18px;
 	margin: 40px 30%;
-	color: #3C9AF5;
-	border: 1px solid #3C9AF5;
+	color: var(--pa-accent-blue);
+	border: 1px solid var(--pa-accent-blue);
 	border-radius: 5px;
 	text-align: center;
 }
@@ -1058,8 +1076,8 @@ div#tabcontainer_network .x-tab.x-active {
 	border-top-color: gray !important;
 }
 div#tabcontainer_network .x-tab-inner {
-	color: rgb(209, 96, 42);
-	font-family: 'SourceSansPro', sans-serif !important;
+	color: var(--pa-accent-orange);
+	font-family: var(--pa-font-sans) !important;
 	font-size: 23px;
 	font-weight: lighter !important;
 }
@@ -1869,7 +1887,7 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
 
 .po-hero h1 span {
   font-weight: 600;
-  color: rgb(209, 96, 42);
+  color: var(--pa-accent-orange);
 }
 
 .po-hero-desc {
@@ -1963,7 +1981,7 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
 
 .po-about-section h2 {
   font-size: 24px;
-  color: #d1602a;
+  color: var(--pa-accent-orange);
   margin-bottom: 8px;
 }
 
@@ -1995,7 +2013,7 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
   width: 34px;
   height: 34px;
   border-radius: 50%;
-  background: rgb(209, 96, 42);
+  background: var(--pa-accent-orange);
   color: #fff;
   display: inline-flex;
   align-items: center;
