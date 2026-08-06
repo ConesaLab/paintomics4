@@ -463,10 +463,18 @@ def _extract_gene_mentions(text):
 def _check_pvalues(text, job_instance):
     issues = []
     matches = re.findall(r'p[\s-]*(?:value)?[\s=<]*(\d+\.?\d*(?:e[+-]?\d+)?)', text, re.IGNORECASE)
+    # Multi-condition analyses store one p-value per condition rather than a
+    # scalar, so `f"{val:.4f}"` raises
+    #   TypeError: unsupported format string passed to list.__format__
+    # and the whole verification pass dies. Every condition's value is a
+    # legitimate figure for the report to cite, so all of them are registered.
     actual_pvals = {}
     for pw in job_instance.getMatchedPathways().values():
-        for method, val in pw.combinedSignificancePvalues.items():
-            actual_pvals[f"{val:.4f}"] = pw.name
+        for method, val in (pw.combinedSignificancePvalues or {}).items():
+            candidates = val if isinstance(val, (list, tuple)) else [val]
+            for value in candidates:
+                if isinstance(value, (int, float)):
+                    actual_pvals[f"{value:.4f}"] = pw.name
     for claimed in matches[:10]:
         try:
             claimed_f = float(claimed)
