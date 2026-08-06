@@ -53,6 +53,16 @@ def calculateCombinedFisher(significanceValuesList):
 def adjustPvalues(pvaluesList):
     # Returns array [reject, pvals_corrected, alphacSidak, alphacBonf]
     adjust_methods = {'fdr_bh': 'FDR BH', 'fdr_by': 'FDR BY'}
+
+    # multipletests([]) raises ZeroDivisionError: float division by zero, so an
+    # analysis that legitimately matched nothing died in step 2 with a division
+    # error instead of reporting an empty result. Reached by uploading features
+    # that map to no pathway -- a compound-only job whose metabolites are not in
+    # the organism's pathways will do it. There is nothing to correct in that
+    # case, and an empty correction is the right answer.
+    if not pvaluesList:
+        return {label: {} for label in adjust_methods.values()}
+
     adjusted_pvalues = {adjust_methods[adjust_method]: dict(zip(pvaluesList.keys(), multipletests(list(pvaluesList.values()), method = adjust_method)[1].tolist())) for adjust_method in adjust_methods.keys()}
 
     return adjusted_pvalues
