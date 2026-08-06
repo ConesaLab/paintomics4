@@ -113,3 +113,14 @@ which is exactly what the verification procedure for this branch asks for
 re-create its object stores, so the first save after a cache clear always
 fails. It is harmless for the flows tested here and unrelated to any CSS
 change, but it does mean a genuine IndexedDB fault would be easy to miss.
+
+`JobController.js:51` (`checkJobStatus`) polls `check_job_status/<jobID>` every
+5s. That endpoint reports on the *queue*, and a finished job is removed from the
+queue - so if the job completes between two polls, the next poll gets
+`{"status": "failed", "message": "Your job is not on the queue anymore..."}` and
+the UI shows a red "Oops..Internal error!" for a job that actually succeeded.
+Hit once during iteration 3 verification: job `03Eb3w4BGX` reported the error,
+but loading `/?jobID=03Eb3w4BGX` showed a complete Step 2 and went on to render
+Step 3 with the expected 888/44. Distinguishing "finished" from "died" needs a
+completion check before treating a dequeued job as failed. Out of scope here
+(`JobController.js` is owned elsewhere) but it makes a passing run look broken.
