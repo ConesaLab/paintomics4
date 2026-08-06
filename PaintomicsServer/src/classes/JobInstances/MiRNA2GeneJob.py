@@ -229,22 +229,39 @@ class MiRNA2GeneJob(Job):
         geneDataInputs = self.getGeneBasedInputOmics()
         miRNAinputOmic = next((x for x in geneDataInputs if x["omicName"].lower() != "gene expression"))
 
-        referenceFile = miRNAinputOmic.get('associationsFile')
-        if referenceFile != '':
-            referenceFile = "{path}/{file}".format( path=self.getInputDir(), file=referenceFile )
-            if not os_path.isfile( referenceFile ):
-                raise Exception( "Reference file not found." )
+        # An uploaded file is named relative to the job's input directory, while
+        # the example files are absolute paths under examplefiles/. Resolve both,
+        # the same way Bed2GeneJob.fromBED2Genes does for its GTF.
+        def resolveInput(fileName):
+            if not fileName:
+                return ''
+            relative = "{path}/{file}".format(path=self.getInputDir(), file=fileName)
+            if os_path.isfile(relative):
+                return relative
+            if os_path.isfile(fileName):
+                return fileName
+            return ''
 
-        relevantReferenceFile = miRNAinputOmic.get('relevantAssociationsFile')
-        if relevantReferenceFile != '':
-            relevantReferenceFile = "{path}/{file}".format( path=self.getInputDir(), file=relevantReferenceFile )
-            if relevantReferenceFile and not os_path.isfile( relevantReferenceFile ):
-                raise Exception( "Relevant reference file not found." )
+        # Uploads carry the mirBase->Ensembl map on the omic itself, but the
+        # example branch of MiRNA2GenesServlet registers it through
+        # addReferenceInput instead. Reading only associationsFile made that
+        # None, which then formatted into "<inputDir>/None" and failed as
+        # "Reference file not found." -- so the example never ran at all.
+        referenceFileName = miRNAinputOmic.get('associationsFile') or ''
+        if not referenceFileName:
+            referenceInputs = self.getReferenceInputs() or []
+            if referenceInputs:
+                referenceFileName = referenceInputs[0].get('inputDataFile') or ''
 
-        if not os_path.isfile(referenceFile):
+        referenceFile = resolveInput(referenceFileName)
+        if not referenceFile:
             raise Exception("Reference file not found.")
 
-        if relevantReferenceFile and not os_path.isfile(relevantReferenceFile):
+        # Genuinely optional: absent means "derive the associations by
+        # correlation with gene expression", which is what the example does.
+        relevantReferenceFileName = miRNAinputOmic.get('relevantAssociationsFile') or ''
+        relevantReferenceFile = resolveInput(relevantReferenceFileName)
+        if relevantReferenceFileName and not relevantReferenceFile:
             raise Exception("Relevant reference file not found.")
 
 
