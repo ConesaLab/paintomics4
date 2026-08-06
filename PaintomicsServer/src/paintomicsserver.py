@@ -34,6 +34,7 @@ from src.servlets.Bed2GenesServlet import *
 from src.servlets.MiRNA2GenesServlet import *
 from src.servlets.AdminServlet import *
 from src.servlets.AIInterpretServlet import *
+from src.common.LoggingSetup import configureLogging
 from src.common.KeggInformationManager import KeggInformationManager
 from src.common.JobInformationManager import JobInformationManager
 
@@ -602,13 +603,7 @@ class Application(object):
         self.EXAMPLE_FILES_DIR = self.ROOT_DIRECTORY + "examplefiles/"
 
         #PREPARE LOGGING
-        # disable_existing_loggers defaults to True, which switches off every
-        # logging.getLogger(__name__) already created at import time -- that is
-        # every module logger in the AIInterpret package. Their records were
-        # being dropped silently, so the AI pipeline ran with no diagnostics at
-        # all; only calls made through the root logger ever reached a handler.
-        logging.config.fileConfig(self.ROOT_DIRECTORY + 'conf/logging.cfg',
-                                  disable_existing_loggers=False)
+        configureLogging(self.ROOT_DIRECTORY + 'conf/logging.cfg')
 
         #self.app.config['MAX_CONTENT_LENGTH'] = SERVER_MAX_CONTENT_LENGTH * pow(1024, 2)
 
