@@ -115,5 +115,51 @@ class BestPvalTest(unittest.TestCase):
         self.assertIsInstance("%.4e" % _best_pval(pw), str)
 
 
+
+class PvalueLabellingTest(unittest.TestCase):
+    """The context must distinguish best-of-conditions from the global value.
+
+    Reporting min(per-condition) under the bare name "combined p-value" made the
+    narrative disagree with the results table, which headlines the global value:
+    8.42e-4 against 1.80e-07 for mmu00910, with nothing to tell them apart.
+    """
+
+    def _pathway(self, combined, globals_):
+        from src.classes.AIInterpret.context_builder import _conditionPvalues, _globalPval
+
+        class _PW(object):
+            def __init__(self):
+                self.combinedSignificancePvalues = combined
+            def getGlobalOmicPvalues(self):
+                return globals_
+        pw = _PW()
+        return _conditionPvalues(pw), _globalPval(pw)
+
+    def test_per_condition_list_is_exposed(self):
+        conds, _ = self._pathway({"Fisher": [0.02, 0.01, 0.5]}, {})
+        self.assertEqual(conds, [0.02, 0.01, 0.5])
+
+    def test_single_condition_reports_no_per_condition_list(self):
+        # Keeps single-condition prompts byte-for-byte unchanged.
+        conds, _ = self._pathway({"Fisher": [0.02]}, {})
+        self.assertEqual(conds, [])
+
+    def test_scalar_reports_no_per_condition_list(self):
+        conds, _ = self._pathway({"Fisher": 0.02}, {})
+        self.assertEqual(conds, [])
+
+    def test_global_pvalue_is_separate_from_best_condition(self):
+        conds, glob = self._pathway(
+            {"Fisher": [0.0265, 0.0150, 0.0079, 0.0032, 0.000842, 0.135]},
+            {"Gene expression": 1.8041877590172827e-07})
+        self.assertAlmostEqual(min(conds), 0.000842)
+        self.assertAlmostEqual(glob, 1.8041877590172827e-07)
+        self.assertNotAlmostEqual(min(conds), glob)
+
+    def test_missing_globals_yield_none(self):
+        _, glob = self._pathway({"Fisher": [0.02]}, {})
+        self.assertIsNone(glob)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

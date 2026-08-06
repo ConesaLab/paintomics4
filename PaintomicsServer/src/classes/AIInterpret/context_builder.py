@@ -19,7 +19,17 @@ def build_pathway_context(job_instance, max_pathways=15):
         top_genes = _get_top_genes(pw, input_genes, header_map, limit=10)
         pathways.append({
             "name": pw.name, "id": pw.ID, "source": pw.source,
+            # _best_pval is the strongest value across conditions, which is the
+            # right thing to rank by but is NOT the figure the results table
+            # headlines -- that is the global p-value. Reporting the former
+            # under the bare name "combined p-value" made the narrative disagree
+            # with the table by orders of magnitude for the same pathway
+            # (8.42e-4 against 1.80e-07 on mmu00910), with no way for a reader
+            # to tell which they were looking at. Both are carried now so the
+            # prompt can name each one accurately.
             "combined_pvalue": _best_pval(pw),
+            "combined_pvalue_per_condition": _conditionPvalues(pw),
+            "global_pvalue": _globalPval(pw),
             "per_omic": _format_significance(pw),
             "top_genes": top_genes,
             "matched_gene_count": len(pw.matchedGenes),
@@ -271,6 +281,33 @@ def _best_pval(pw):
         return 1.0
     flattened = [v for value in cpvals.values() for v in _numericValues(value)]
     return min(flattened) if flattened else 1.0
+
+
+def _conditionPvalues(pw):
+    """Per-condition combined p-values, or [] for a single-condition job.
+
+    Returned only when a method genuinely carries more than one value, so a
+    single-condition job's prompt is unchanged.
+    """
+    cpvals = getattr(pw, "combinedSignificancePvalues", None) or {}
+    for value in cpvals.values():
+        if isinstance(value, (list, tuple)) and len(value) > 1:
+            return _numericValues(value)
+    return []
+
+
+def _globalPval(pw):
+    """The global p-value the results table headlines, or None.
+
+    Computed across all conditions rather than within one, so it is a different
+    quantity from min(per-condition) and typically much smaller.
+    """
+    try:
+        globals_ = pw.getGlobalOmicPvalues() or {}
+    except Exception:
+        return None
+    numbers = [v for value in globals_.values() for v in _numericValues(value)]
+    return min(numbers) if numbers else None
 
 
 def _format_significance(pw):

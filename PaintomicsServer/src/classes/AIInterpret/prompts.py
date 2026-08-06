@@ -216,7 +216,21 @@ def build_search_planner_prompt(pathways, cross_omic_matrix, gene_whitelist,
     sorted_pws = sorted(pathways, key=lambda p: p.get("combined_pvalue", 1.0))
     for pw in sorted_pws:
         lines.append(f"\n### {pw['name']} ({pw['id']}, source: {pw['source']})")
-        lines.append(f"Combined p-value: {pw['combined_pvalue']:.4e}")
+        # Name each figure for what it is. Calling the best-of-conditions value
+        # "combined p-value" made reports disagree with the results table, which
+        # headlines the global p-value, by orders of magnitude on the same
+        # pathway.
+        perCondition = pw.get("combined_pvalue_per_condition") or []
+        if perCondition:
+            lines.append("Combined p-value, best of %d conditions: %.4e"
+                         % (len(perCondition), pw["combined_pvalue"]))
+            lines.append("Combined p-value per condition: "
+                         + ", ".join("%.4e" % v for v in perCondition))
+        else:
+            lines.append(f"Combined p-value: {pw['combined_pvalue']:.4e}")
+        if pw.get("global_pvalue") is not None:
+            lines.append("Global p-value (the value shown in the results table): "
+                         "%.4e" % pw["global_pvalue"])
         lines.append(f"Per-omic significance: {pw['per_omic']}")
         lines.append(f"Significant omics: {pw.get('significant_omic_count', '?')}")
         # Top 5 DE genes only (keep prompt compact)
@@ -328,7 +342,21 @@ def build_two_pass_interpretation_prompt(pathways, papers, experiment_design, or
     lines.append("## Enriched Pathways")
     for pw in pathways:
         lines.append(f"\n### {pw['name']} ({pw['id']}, source: {pw['source']})")
-        lines.append(f"Combined p-value: {pw['combined_pvalue']:.4e}")
+        # Name each figure for what it is. Calling the best-of-conditions value
+        # "combined p-value" made reports disagree with the results table, which
+        # headlines the global p-value, by orders of magnitude on the same
+        # pathway.
+        perCondition = pw.get("combined_pvalue_per_condition") or []
+        if perCondition:
+            lines.append("Combined p-value, best of %d conditions: %.4e"
+                         % (len(perCondition), pw["combined_pvalue"]))
+            lines.append("Combined p-value per condition: "
+                         + ", ".join("%.4e" % v for v in perCondition))
+        else:
+            lines.append(f"Combined p-value: {pw['combined_pvalue']:.4e}")
+        if pw.get("global_pvalue") is not None:
+            lines.append("Global p-value (the value shown in the results table): "
+                         "%.4e" % pw["global_pvalue"])
         lines.append(f"Per-omic significance: {pw['per_omic']}")
         lines.append(f"Matched genes: {pw['matched_gene_count']}")
         if pw['top_genes']:
@@ -386,7 +414,21 @@ def build_batch_interpretation_prompt(pathways, papers, experiment_design, organ
     lines.append("## Enriched Pathways")
     for pw in pathways:
         lines.append(f"\n### {pw['name']} ({pw['id']}, source: {pw['source']})")
-        lines.append(f"Combined p-value: {pw['combined_pvalue']:.4e}")
+        # Name each figure for what it is. Calling the best-of-conditions value
+        # "combined p-value" made reports disagree with the results table, which
+        # headlines the global p-value, by orders of magnitude on the same
+        # pathway.
+        perCondition = pw.get("combined_pvalue_per_condition") or []
+        if perCondition:
+            lines.append("Combined p-value, best of %d conditions: %.4e"
+                         % (len(perCondition), pw["combined_pvalue"]))
+            lines.append("Combined p-value per condition: "
+                         + ", ".join("%.4e" % v for v in perCondition))
+        else:
+            lines.append(f"Combined p-value: {pw['combined_pvalue']:.4e}")
+        if pw.get("global_pvalue") is not None:
+            lines.append("Global p-value (the value shown in the results table): "
+                         "%.4e" % pw["global_pvalue"])
         lines.append(f"Per-omic significance: {pw['per_omic']}")
         lines.append(f"Matched genes: {pw['matched_gene_count']}")
         if pw['top_genes']:
@@ -597,12 +639,23 @@ def build_pathway_focus_prompt(pathway, papers, experiment_design, organism_name
     lines.append("## Pathway")
     lines.append(f"### {pathway['name']} ({pathway['id']}, source: {pathway['source']})")
 
+    # Same naming discipline as the batch prompts: the best-of-conditions value
+    # and the global value are different quantities and must not both be called
+    # "the combined p-value", or the narrative contradicts the results table.
     pvalue = pathway.get("combined_pvalue")
-    if isinstance(pvalue, (int, float)):
+    perCondition = pathway.get("combined_pvalue_per_condition") or []
+    if perCondition:
+        lines.append("Combined p-value, best of %d conditions: %.4e"
+                     % (len(perCondition), pvalue))
+        lines.append("Combined p-value per condition: "
+                     + ", ".join("%.4e" % v for v in perCondition))
+    elif isinstance(pvalue, (int, float)):
         lines.append(f"Combined p-value: {pvalue:.4e}")
     elif pvalue is not None:
-        # Multi-condition analyses carry one p-value per condition.
         lines.append(f"Combined p-value per condition: {pvalue}")
+    if pathway.get("global_pvalue") is not None:
+        lines.append("Global p-value (the value shown in the results table): %.4e"
+                     % pathway["global_pvalue"])
     lines.append(f"Per-omic significance: {pathway.get('per_omic')}")
     lines.append(f"Matched genes: {pathway.get('matched_gene_count')}")
 
