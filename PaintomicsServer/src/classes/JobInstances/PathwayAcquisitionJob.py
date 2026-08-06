@@ -651,20 +651,28 @@ class PathwayAcquisitionJob(Job):
         inputCompounds = list(self.getInputCompoundsData().values())
         # if there is multi database make compounds available for both database
         if len(self.databases) >= 2:
-            if "MapMan" in self.databases:
-                for metabolite in self.inputCompoundsData:
-                    self.inputCompoundsData[metabolite].matchingDB = ["KEGG", "MapMan"]
-                    
-                for gene_id in self.inputGenesData:
-                    self.inputGenesData[gene_id].matchingDB = ["KEGG", "MapMan"]
+            # Every selected database, not a hardcoded pair.
+            #
+            # This used to be `if "MapMan" ... elif "Reactome" ...`, each
+            # assigning a fixed two-element list. With all three selected
+            # (KEGG + MapMan + Reactome) the elif never ran, so features were
+            # marked eligible for ["KEGG", "MapMan"] only and the downstream
+            # `sourceDB in matchingDB` test rejected every Reactome pathway --
+            # they would all report zero matched features while still being
+            # counted, silently producing an empty Reactome half.
+            #
+            # Note this is an eligibility flag, not a per-database mapping: the
+            # identifier mapping runs once per feature. The per-database loops
+            # later on compute separate enrichment backgrounds, which KEGG and
+            # Reactome genuinely need because their pathway universes differ.
+            selectedDatabases = list(self.databases)
 
-            elif "Reactome" in self.databases:
-                for metabolite in self.inputCompoundsData:
-                    self.inputCompoundsData[metabolite].matchingDB = ["KEGG", "Reactome"]
-                    
-                for gene_id in self.inputGenesData:
-                    self.inputGenesData[gene_id].matchingDB = ["KEGG", "Reactome"]
-                    
+            for metabolite in self.inputCompoundsData:
+                self.inputCompoundsData[metabolite].matchingDB = selectedDatabases
+
+            for gene_id in self.inputGenesData:
+                self.inputGenesData[gene_id].matchingDB = selectedDatabases
+
         else:
             # make sure the database in the inputs is the as the one in the self.databases
             for compound in inputCompounds:
