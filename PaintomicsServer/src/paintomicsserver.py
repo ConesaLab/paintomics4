@@ -20,7 +20,11 @@
 import logging.config
 
 from flask import Flask, request, send_from_directory, jsonify
-from flask.json import JSONEncoder
+try:
+    from flask.json import JSONEncoder
+except ImportError:
+    # Flask >= 2.3 removed JSONEncoder; use stdlib json instead
+    from json import JSONEncoder
 from re import sub
 
 from src.common.PySiQ import Queue
@@ -52,7 +56,9 @@ class Application(object):
         self.app = Flask(__name__)
 
         self.app.config['MAX_CONTENT_LENGTH'] =  SERVER_MAX_CONTENT_LENGTH
-        self.app.json_encoder = MyJSONEncoder
+        # Flask >= 2.3 removed json_encoder attribute
+        if hasattr(self.app, 'json_encoder'):
+            self.app.json_encoder = MyJSONEncoder
 
         KeggInformationManager(KEGG_DATA_DIR) #INITIALIZE THE SINGLETON
         JobInformationManager()#INITIALIZE THE SINGLETON
