@@ -489,11 +489,29 @@ def install_command(inputfile=None, specie=None, common=0, hub=1):
                 else:
                     log("Hub directory already contains data in download directory, skipping regeneration...")
 
+                # Do NOT move hubData into current/ here.
+                #
+                # This used to call replaceNewVersionData for <specie>/hubData
+                # immediately. That put the data in current/<specie>/hubData --
+                # and then the species-level replaceNewVersionData further down
+                # replaced the whole of current/<specie> with download/<specie>,
+                # whose hubData had just been moved away and was therefore empty.
+                # The freshly generated hub data ended up archived under old/ and
+                # current/ was left with an empty directory, so the first Step 2
+                # of any job died with
+                #   FileNotFoundError: .../current/<specie>/hubData/kegg_interaction.json
+                #
+                # Leaving it in download/<specie>/hubData lets the species move
+                # carry it across, which is both simpler and correct.
                 if directory_has_contents(hubDir):
-                    log("STEP EXTRA: Transferring hub data to current directory...")
-                    replaceNewVersionData(downloadDir, currentDataDir, specie.lower() + "/hubData", oldDataDir)
+                    log("STEP EXTRA: Hub data staged in the download directory; "
+                        "the species install below moves it into current/.")
                 elif directory_has_contents(currentHubDir):
-                    log("STEP EXTRA: Hub download directory is empty but current directory has data. Continuing with existing hub data.")
+                    # Reuse case: nothing was regenerated, so stage the existing
+                    # data into the download tree or the species move would
+                    # replace it with an empty directory.
+                    log("STEP EXTRA: Reusing existing hub data; staging it for the species move...")
+                    shutil.copytree(currentHubDir, hubDir, dirs_exist_ok=True)
                 else:
                     raise Exception("Hub analysis data is missing in both download and current directories.")
     except Exception as e:
