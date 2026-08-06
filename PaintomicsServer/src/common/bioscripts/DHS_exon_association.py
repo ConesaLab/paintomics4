@@ -752,10 +752,10 @@ def run(gtf, dhs, outputfile, match_table, options, managed_queue):
         # 1. First, we save all the genes with their positions
         inputGTF = None
         if gtf[-2:] == "gz":
-            aux = gzip.open(gtf, 'rU').read().decode()
+            aux = gzip.open(gtf, 'rb').read().decode()
             inputGTF = aux.split("\n")
         else:
-            inputGTF = open(gtf, 'rU')
+            inputGTF = open(gtf, 'r')
         genes = {}
         allTranscripts = {}
         allGenes  = {}
@@ -870,10 +870,10 @@ def run(gtf, dhs, outputfile, match_table, options, managed_queue):
 
         inputDHS = None
         if dhs[-2:] == "gz":
-            aux = gzip.open(dhs, 'rU').read().decode()
+            aux = gzip.open(dhs, 'rb').read().decode()
             inputDHS = aux.split("\n")
         else:
-            inputDHS = open(dhs, 'rU')
+            inputDHS = open(dhs, 'r')
         myregions = {}
         myheader = []
 

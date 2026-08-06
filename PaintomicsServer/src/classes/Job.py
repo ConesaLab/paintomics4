@@ -710,8 +710,21 @@ class Job(Model):
                 for line in csv_reader(inputDataFile, delimiter=detected_delimiter):
                     nLine += 1
                     if isBedFormat == True:
-                        lineProc = line[0] + "_" + line[1] + "_" + line[2]
-                        featureID = lineProc.lower()
+                        # Store and move on. Before multi-condition support this
+                        # function ended in a single unconditional
+                        # `relevantFeatures[featureID] = 1`, so computing
+                        # featureID here was enough. The rewrite turned that tail
+                        # into an if/elif/else whose final branch recomputes
+                        # `featureID = line[0].lower()` -- for a 3-column BED that
+                        # is the *chromosome*, so the whole file collapsed to
+                        # {"1": [True], "2": [True], ...} and no region ID
+                        # ("1_4780215_4780345") ever matched. Regions2Genes
+                        # reported zero relevant genes as a result.
+                        featureID = (line[0] + "_" + line[1] + "_" + line[2]).lower()
+                        relevantFeatures[featureID] = [True]
+                        if not self.conditionNames:
+                            self.conditionNames = ["Condition 1"]
+                        continue
                     else:
                         # Detect number of conditions from header or first line
                         if nLine == 1:

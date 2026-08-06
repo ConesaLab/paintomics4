@@ -129,7 +129,7 @@ class MiRNA2GeneJob(Job):
         #*************************************************************************
         logging.info("VALIDATING RELEVANT FEATURES FILE (" + omicName + ")..." )
         if os_path.isfile(relevantFileName):
-            f = open(relevantFileName, 'rU')
+            f = open(relevantFileName, 'r')
             lines = f.readlines()
 
             if len(lines) > MAX_NUMBER_FEATURES:
@@ -148,7 +148,7 @@ class MiRNA2GeneJob(Job):
 
         #IF THE USER UPLOADED VALUES FOR GENE EXPRESSION
         if os_path.isfile(valuesFileName):
-            with open(valuesFileName, 'rU') as inputDataFile:
+            with open(valuesFileName, 'r') as inputDataFile:
                 nLine = -1
                 erroneousLines = {}
 
@@ -293,7 +293,7 @@ class MiRNA2GeneJob(Job):
         useCorrelation = relevantReferenceFile is None or relevantReferenceFile == ''
 
         if os_path.isfile(tmpFile):
-             with open(tmpFile, 'rU') as inputDataFile:
+             with open(tmpFile, 'r') as inputDataFile:
                 mirnaID = geneID = score = methodsHasChanged = score_type = sortedScores = None
                 scoresTable = defaultdict(list)
 

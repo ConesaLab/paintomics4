@@ -975,16 +975,22 @@ function RegionBasedOmicSubmittingPanel(nElem, options) {
 
 		component = component.queryById("itemsContainer");
 
+		// These are display-only: the fields are disabled and the server picks
+		// the example files itself (Bed2GenesServlet, exampleOmics =
+		// ["DNase unmapped"]). Name the files the server actually reads --
+		// building them from this.type produced "example/undefined_example.tab"
+		// here, because the Regions2Genes tool constructs this panel with no
+		// type, and named files that have never existed anywhere else.
 		var field = component.queryById("mainFileSelector");
-		field.setValue("example/" + this.type + "_example.tab");
+		field.setValue("example/dnase_unmapped_values.tab");
 		field.setDisabled(true);
 
 		field = component.queryById("secondaryFileSelector");
-		field.setValue("example/" + this.type + "_relevant_example");
+		field.setValue("example/dnase_unmapped_relevant.tab");
 		field.setDisabled(true);
 
 		field = component.queryById("tertiaryFileSelector");
-		field.setValue("example/mmu_reference.gtf");
+		field.setValue("example/GTF/sorted_mmu.gtf");
 		field.setDisabled(true);
 
 		field = component.queryById("omicNameField");

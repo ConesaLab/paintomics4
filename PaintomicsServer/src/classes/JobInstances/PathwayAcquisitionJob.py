@@ -1387,7 +1387,7 @@ class PathwayAcquisitionJob(Job):
                     #for line in self.matchedPathways:
                     #    self.matchedPathways[line].metagenes = dict()
 
-                    with open(metagenesFileName, 'rU') as inputDataFile:
+                    with open(metagenesFileName, 'r') as inputDataFile:
                         for line in csv_reader(inputDataFile, delimiter="\t"):
                             if line[0] in self.matchedPathways:
                                 self.matchedPathways.get(line[0]).addMetagenes(inputOmic.get("omicName"),

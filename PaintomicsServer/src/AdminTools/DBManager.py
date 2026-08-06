@@ -1248,7 +1248,9 @@ def readConfigurationFile():
     global ROOT_DIRECTORY
     ROOT_DIRECTORY = os.path.abspath(os.path.dirname(os.path.realpath(__file__)) + "/../") + "/"
     # PREPARE LOGGING
-    logging.config.fileConfig(ROOT_DIRECTORY + 'conf/logging.cfg')
+    # See paintomicsserver.py: the default disables every module logger.
+    logging.config.fileConfig(ROOT_DIRECTORY + 'conf/logging.cfg',
+                              disable_existing_loggers=False)
 
 
 def readFile(path, options=None):
