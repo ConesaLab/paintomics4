@@ -104,8 +104,16 @@ downloadIfNeeded() {
 
 downloadIfNeeded hsa --kegg=1 --mapping=1 --common=1 --reactome=1
 
-say "INSTALL hsa"
-${COMPOSE} exec -T app ${DBM} install --specie=hsa \
+# --common=1 is required for the FIRST species installed.
+#
+# install_command defaults common=0, and the move of the shared KEGG data from
+# download/common into current/common only happens when it is 1. Without it the
+# species build fails with
+#   FileNotFoundError: '/data/KEGG_DATA/current/hsa/../common/pathways_classification.list'
+# because build_database.py reads the classification from current/, while the
+# file is still sitting in download/.
+say "INSTALL hsa (with --common=1: moves shared KEGG data into current/)"
+${COMPOSE} exec -T app ${DBM} install --specie=hsa --common=1 \
     >"$HOME/hsa-install.log" 2>&1 || die "hsa install (see ~/hsa-install.log)"
 
 # ---------------------------------------------------------------------------
@@ -114,8 +122,10 @@ ${COMPOSE} exec -T app ${DBM} install --specie=hsa \
 # ---------------------------------------------------------------------------
 downloadIfNeeded mmu --kegg=1 --mapping=1 --common=0 --reactome=1
 
+# --common=0 here: the shared data is already in current/ from the hsa install,
+# and re-installing it would discard and rebuild it for no benefit.
 say "INSTALL mmu"
-${COMPOSE} exec -T app ${DBM} install --specie=mmu \
+${COMPOSE} exec -T app ${DBM} install --specie=mmu --common=0 \
     >"$HOME/mmu-install.log" 2>&1 || die "mmu install (see ~/mmu-install.log)"
 
 # ---------------------------------------------------------------------------
