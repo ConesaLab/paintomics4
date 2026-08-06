@@ -80,20 +80,58 @@ print('KEGG reachable from the container, %d bytes' % len(data))
 
 DBM="python /app/PaintomicsServer/src/AdminTools/DBManager.py"
 
-# Download only when it has not already completed.
+# ---------------------------------------------------------------------------
+# Every step below is skipped when its work is already done, because this
+# script gets re-run repeatedly while debugging a later stage and each redundant
+# download costs hours.
 #
-# DBManager writes a VERSION file into the species download directory as its
-# last step and removes the DOWNLOADING flag, so VERSION is a reliable
-# completion marker. Re-running the download is not merely wasteful: with
-# --common=1 it shutil.rmtree()s the shared common directory first, so a rerun
-# throws away the 49-minute pathway-image fetch and several GB of Reactome data
-# that were already good. Restarts happen often while debugging the install
-# step, and each one used to cost hours.
+# The completion markers are subtle, and getting them wrong has cost real time:
+#
+#   * download/<specie>/VERSION marks a finished download -- but a successful
+#     install MOVES that directory into current/, so its absence does not mean
+#     the download is missing. current/<specie>/VERSION must be checked too, or
+#     a rerun re-downloads a species that is already installed.
+#   * current/common/pathways_classification.list appears as soon as the common
+#     data is moved, which is well before createGlobalDatabase() registers the
+#     COMMON version document. Gate on the document, not the file.
+#   * MongoDB is the authority on whether a species is installed. The filesystem
+#     only says what was downloaded.
+# ---------------------------------------------------------------------------
+
+mongoQuery() {
+    ${COMPOSE} exec -T app python -c "$1" 2>/dev/null | tr -d '\r\n '
+}
+
+speciesInstalled() {
+    [ "$(mongoQuery "
+from pymongo import MongoClient
+try:
+    c = MongoClient('mongo', 27017, serverSelectionTimeoutMS=8000)
+    print(c['$1-paintomics'].kegg.count_documents({}))
+except Exception:
+    print(0)
+")" -gt 0 ] 2>/dev/null
+}
+
+commonRegistered() {
+    [ "$(mongoQuery "
+from pymongo import MongoClient
+try:
+    c = MongoClient('mongo', 27017, serverSelectionTimeoutMS=8000)
+    print('yes' if c['global-paintomics'].versions.find_one({'name': 'COMMON'}) else 'no')
+except Exception:
+    print('no')
+")" = "yes" ]
+}
+
 downloadIfNeeded() {
     specie="$1"; shift
-    marker="/data/KEGG_DATA/download/${specie}/VERSION"
-    if ${COMPOSE} exec -T app test -f "${marker}" 2>/dev/null; then
-        say "DOWNLOAD ${specie} already complete (VERSION present) - skipping"
+    if ${COMPOSE} exec -T app test -f "/data/KEGG_DATA/download/${specie}/VERSION" 2>/dev/null; then
+        say "DOWNLOAD ${specie} already complete - skipping"
+        return 0
+    fi
+    if ${COMPOSE} exec -T app test -f "/data/KEGG_DATA/current/${specie}/VERSION" 2>/dev/null; then
+        say "DOWNLOAD ${specie} already installed into current/ - skipping"
         return 0
     fi
     say "DOWNLOAD ${specie} (KEGG + Reactome) - hours"
@@ -102,63 +140,55 @@ downloadIfNeeded() {
         || die "${specie} download (see ~/${specie}-download.log)"
 }
 
-downloadIfNeeded hsa --kegg=1 --mapping=1 --common=1 --reactome=1
-
-# The shared KEGG data has to reach current/common before any species build,
-# because build_database.py reads the pathway classification from there while
-# the download leaves it in download/common. install_command defaults common=0
-# and only performs that move when it is 1, so omitting the flag fails with
-#   FileNotFoundError: '.../current/hsa/../common/pathways_classification.list'
+# Register the shared KEGG data in global-paintomics if that has not happened.
 #
-# But the flag cannot simply be hardcoded to 1 either: the move is a move, so a
-# rerun after a later failure finds download/common already gone and errors out.
-# Decide from the actual state instead, which makes reruns idempotent.
-# Test the DATABASE, not the filesystem. An earlier version checked for
-# current/common/pathways_classification.list, which is present as soon as the
-# *move* succeeds -- but the COMMON version document is written later, by
-# createGlobalDatabase(). A run that moved the files and then died in between
-# left the file check passing while global-paintomics had no versions
-# collection at all, and the next species install failed with
-#   IndexError: no such item for Cursor instance
-# The document is what downstream code actually reads, so gate on it.
-commonInstalled=$(${COMPOSE} exec -T app python -c "
-from pymongo import MongoClient
-try:
-    c = MongoClient('mongo', 27017, serverSelectionTimeoutMS=8000)
-    print('yes' if c['global-paintomics'].versions.find_one({'name': 'COMMON'}) else 'no')
-except Exception:
-    print('no')
-" 2>/dev/null | tr -d '\r\n ')
-
-if [ "${commonInstalled}" = "yes" ]; then
-    commonFlag="--common=0"
-    say "INSTALL hsa (${commonFlag}: COMMON already registered in global-paintomics)"
-else
-    # --common=1 *moves* download/common into current/, so a previous partial
-    # run may have left nothing to move. Restore it from current/ first.
-    if ! ${COMPOSE} exec -T app test -d /data/KEGG_DATA/download/common 2>/dev/null; then
-        say "restoring download/common from current/ so --common=1 has a source"
-        ${COMPOSE} exec -T app sh -c \
-            'cp -a /data/KEGG_DATA/current/common /data/KEGG_DATA/download/common' \
-            >>"${LOG}" 2>&1 || die "could not restage download/common"
+# Done directly rather than through `install --common=1` because that flag also
+# reinstalls a species, and it *moves* download/common, so it cannot be re-run
+# once the move has succeeded. installCommonData() is just a call to
+# processKEGGCommonData(), so invoking it against current/common achieves the
+# registration on its own.
+ensureCommonRegistered() {
+    if commonRegistered; then
+        say "COMMON already registered in global-paintomics - skipping"
+        return 0
     fi
-    commonFlag="--common=1"
-    say "INSTALL hsa (${commonFlag}: registering COMMON in global-paintomics)"
-fi
-${COMPOSE} exec -T app ${DBM} install --specie=hsa "${commonFlag}" \
-    >"$HOME/hsa-install.log" 2>&1 || die "hsa install (see ~/hsa-install.log)"
+    say "REGISTER common KEGG data in global-paintomics"
+    ${COMPOSE} exec -T app python -c "
+import sys
+sys.path.insert(0, '/app/PaintomicsServer/src')
+sys.path.insert(0, '/app/PaintomicsServer/src/AdminTools')
+import imp
+tools = imp.load_source('common_build_database',
+                        '/app/PaintomicsServer/src/AdminTools/scripts/common_build_database.py')
+tools.processKEGGCommonData('/data/KEGG_DATA/current/common/',
+                            '/app/PaintomicsServer/src/')
+print('common data registered')
+" >"$HOME/common-install.log" 2>&1 || die "common registration (see ~/common-install.log)"
 
-# ---------------------------------------------------------------------------
-# --common=0: the shared KEGG reference data is already present from hsa and is
-# by far the slowest part of the download.
-# ---------------------------------------------------------------------------
+    commonRegistered || die "common registration ran but COMMON is still absent"
+    say "COMMON registered"
+}
+
+installIfNeeded() {
+    specie="$1"; shift
+    if speciesInstalled "${specie}"; then
+        say "INSTALL ${specie} already present in MongoDB - skipping"
+        return 0
+    fi
+    say "INSTALL ${specie}"
+    ${COMPOSE} exec -T app ${DBM} install --specie="${specie}" --common=0 \
+        >"$HOME/${specie}-install.log" 2>&1 \
+        || die "${specie} install (see ~/${specie}-install.log)"
+    speciesInstalled "${specie}" || die "${specie} install reported success but MongoDB has no pathways"
+}
+
+downloadIfNeeded hsa --kegg=1 --mapping=1 --common=1 --reactome=1
+ensureCommonRegistered
+installIfNeeded hsa
+
+# --common=0 throughout: the shared data is registered once, above.
 downloadIfNeeded mmu --kegg=1 --mapping=1 --common=0 --reactome=1
-
-# --common=0 here: the shared data is already in current/ from the hsa install,
-# and re-installing it would discard and rebuild it for no benefit.
-say "INSTALL mmu"
-${COMPOSE} exec -T app ${DBM} install --specie=mmu --common=0 \
-    >"$HOME/mmu-install.log" 2>&1 || die "mmu install (see ~/mmu-install.log)"
+installIfNeeded mmu
 
 # ---------------------------------------------------------------------------
 say "VERIFY enrichment (both species, Reactome required)"
