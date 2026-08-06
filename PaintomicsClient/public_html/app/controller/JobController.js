@@ -861,6 +861,14 @@ function JobController() {
 							jobModel.aiConsent = true;
 						}
 
+						// This handler copies the response field by field rather than going
+						// through loadFromJSON, so anything not named here is dropped. The
+						// per-condition columns fall back to "Cond 1..N" without these, which
+						// is what a multi-condition job showed after being reopened by its
+						// URL — the way the results page tells users to come back to a job.
+						jobModel.conditionNames = response.conditionNames || [];
+						jobModel.experimentDesign = response.experimentDesign || "";
+
 						me.cleanStoredApplicationData();
 						me.updateStoredApplicationData("jobModel", jobModel);
 

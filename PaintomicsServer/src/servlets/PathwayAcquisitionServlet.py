@@ -424,6 +424,8 @@ def pathwayAcquisitionStep2_PART2(jobID, userID, selectedCompounds, clusterNumbe
                 "pathwaysInfo" : matchedPathwaysJSON,
                 # PaintOmics 4
                 "classInfo": matchedClassJSON,
+                "geneBasedInputOmics": jobInstance.getGeneBasedInputOmics(),
+                "compoundBasedInputOmics": jobInstance.getCompoundBasedInputOmics(),
                 "databases": jobInstance.getDatabases(),
                 "omicsValuesID": jobInstance.getValueIdTable(),
                 # Add classification metabolism
@@ -442,6 +444,7 @@ def pathwayAcquisitionStep2_PART2(jobID, userID, selectedCompounds, clusterNumbe
                 'hubAnalysisResult': hubAnalysisResult,
                 "aiConsent": jobInstance.getAIConsent(),
                 "experimentDesign": jobInstance.getExperimentDesign(),
+                "conditionNames": getattr(jobInstance, "conditionNames", []),
                 "timestamp": int(time())
             })
         else:
@@ -453,6 +456,8 @@ def pathwayAcquisitionStep2_PART2(jobID, userID, selectedCompounds, clusterNumbe
                 "pathwaysInfo": matchedPathwaysJSON,
                 # PaintOmics 4
                 "classInfo": matchedClassJSON,
+                "geneBasedInputOmics": jobInstance.getGeneBasedInputOmics(),
+                "compoundBasedInputOmics": jobInstance.getCompoundBasedInputOmics(),
                 "databases": jobInstance.getDatabases(),
                 "omicsValuesID": jobInstance.getValueIdTable(),
                 # Add classification metabolism
@@ -468,6 +473,7 @@ def pathwayAcquisitionStep2_PART2(jobID, userID, selectedCompounds, clusterNumbe
                 "globalExpressionData": globalExpressionData,
                 "aiConsent": jobInstance.getAIConsent(),
                 "experimentDesign": jobInstance.getExperimentDesign(),
+                "conditionNames": getattr(jobInstance, "conditionNames", []),
                 "timestamp": int( time() )
             } )
 
@@ -671,6 +677,7 @@ def pathwayAcquisitionRecoverJob(request, response, QUEUE_INSTANCE):
                     # Add hub analysis result
                     'hubAnalysisResult': safe_hubAnalysisResult,
                     "aiConsent": jobInstance.getAIConsent(),
+                    "conditionNames": getattr(jobInstance, "conditionNames", []),
                 })
             else:
                 response.setContent({
@@ -692,6 +699,7 @@ def pathwayAcquisitionRecoverJob(request, response, QUEUE_INSTANCE):
                     "readOnly": jobInstance.getReadOnly(),
                     "omicsValuesID": jobInstance.getValueIdTable(),
                     "aiConsent": jobInstance.getAIConsent(),
+                    "conditionNames": getattr(jobInstance, "conditionNames", []),
                 })
 
     except Exception as ex:
