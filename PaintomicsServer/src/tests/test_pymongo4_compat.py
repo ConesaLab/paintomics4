@@ -66,7 +66,13 @@ def _pythonSources():
 # Matching every receiver instead is not the answer -- daoInstance.insert() is
 # PaintOmics' own DAO wrapper, and matchedFeatures.update() is a dict. Both are
 # fine. Name the receivers that really are collections.
-_COLLECTION_RECEIVER = r"(?:\bcollection|\bcoll|\bdb\.\w+|Collection'\])"
+# getCollection(...) is included because the receiver can be a *method call*
+# rather than a variable:
+#   self.dbManager.getCollection("counters").update({...}, {...}, upsert=True)
+# A pattern keyed only on variable names cannot match that shape, which is how
+# this one survived a second pass and failed the job save again.
+_COLLECTION_RECEIVER = (
+    r"(?:\bcollection|\bcoll|\bdb\.\w+|Collection'\]|getCollection\([^)]*\))")
 
 _REMOVED_APIS = [
     ("Cursor.count()",             re.compile(r"\b(?:cursor\w*|acceptedIDs)\.count\(\)", re.IGNORECASE)),
