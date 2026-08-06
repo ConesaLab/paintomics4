@@ -173,3 +173,51 @@ Two independent fixes, both cheap:
    Using `%s` formatting also makes the line immune to this class of bug.
 2. Have the client skip the recover call entirely when it has no jobID to
    recover, so a cold start never hits the endpoint.
+
+---
+
+## 4. Contrast failures on Steps 3 and 4 that live in JS view files
+
+**Status:** open
+**Raised:** iteration 5 (branch `frontend-modernization`)
+
+Entry 2 covered Step 1 only. Auditing Steps 3 and 4 for the first time found 20
+further failing pairs; 12 were fixed in `main.css`, and these 8 cannot be,
+because the colour is set in a view file this branch does not own. All are
+normal-weight text under 18.66px, so the bar is 4.5:1.
+
+### `PA_Step3Views.js` - database and kingdom badge letters
+
+The single-letter badges in the pathway grid. `R` alone renders 524 times on a
+default Step 3, so this is high-volume, not incidental.
+
+| Letter | Current | On white | Suggested | New |
+|---|---|---|---|---|
+| R (Reactome) | `#4cd964` | 1.84:1 | `#1D872F` | 4.61:1 |
+| K (KEGG) | `#007aff` | 4.02:1 | `#0071EC` | 4.59:1 |
+| M (MapMan) | `#5ac8fb` | 1.89:1 | `#047CB4` | 4.62:1 |
+| H | `#ffcd02` | 1.50:1 | `#8E7200` | 4.61:1 |
+| O | `#c644fc` | 3.73:1 | `#B817FB` | 4.61:1 |
+| G | `#ff2d55` | 3.65:1 | `#EB002D` | 4.59:1 |
+
+Each suggestion keeps the original hue and saturation and moves lightness only,
+so the badges stay mutually distinguishable. `#ffcd02` is the awkward one - no
+yellow carries 4.5:1 as text on white, so it necessarily reads as dark gold; if
+that is unacceptable, give that badge a filled chip with dark text instead.
+
+### `PA_Step4Views.js` - inline panel fills
+
+Both are set as inline `style="background: ..."` on the element, so `main.css`
+cannot reach them without an attribute-selector hack.
+
+| Element | Current fill | White label | Suggested | New |
+|---|---|---|---|---|
+| "History" button | `#d66379` | 3.55:1 | `#CD435D` | 4.61:1 |
+| "Pathway information" panel header | `#5bc0de` | 2.09:1 | `#1F7F9B` | 4.60:1 |
+
+Note for whoever picks this up: **do not** instead darken the shared
+`.lateralOptionsPanel-header h2` ink in `main.css`. The sibling "Download"
+header is filled `#337ab7`, where white already passes at 4.56:1; switching
+that h2 to dark ink would drop it to 3.73:1 and break a currently-conformant
+header to fix a different one. The fill is the right thing to change, and only
+for the cyan panel.
