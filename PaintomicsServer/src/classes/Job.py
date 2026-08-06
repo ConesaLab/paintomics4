@@ -708,6 +708,17 @@ class Job(Model):
                 # against values files keyed by the joined ID.
                 isLegacyTwoCol = False
                 for line in csv_reader(inputDataFile, delimiter=detected_delimiter):
+                    # csv yields [] for an empty line, and a row of empty strings
+                    # for one that is only separators, so `line[0]` raised
+                    # IndexError and killed the job. A trailing blank line is
+                    # ordinary in hand-edited and Windows-exported files, so this
+                    # was reachable with entirely valid data.
+                    #
+                    # Skipped before nLine is incremented: nLine == 1 is what
+                    # marks the header row, and a leading blank line must not
+                    # consume that slot.
+                    if not line or not any(cell.strip() for cell in line):
+                        continue
                     nLine += 1
                     if isBedFormat == True:
                         # Store and move on. Before multi-condition support this
@@ -720,6 +731,11 @@ class Job(Model):
                         # {"1": [True], "2": [True], ...} and no region ID
                         # ("1_4780215_4780345") ever matched. Regions2Genes
                         # reported zero relevant genes as a result.
+                        # A BED region needs chrom/start/end; a shorter row
+                        # cannot name one, and indexing it raised IndexError and
+                        # aborted the job rather than skipping the row.
+                        if len(line) < 3:
+                            continue
                         featureID = (line[0] + "_" + line[1] + "_" + line[2]).lower()
                         relevantFeatures[featureID] = [True]
                         if not self.conditionNames:
@@ -807,6 +823,15 @@ class Job(Model):
             detected_delimiter = Job.detect_delimiter(fileName)
             with open(fileName, 'r', encoding='utf-8-sig', newline='') as inputDataFile:
                 for line in csv_reader(inputDataFile, delimiter=detected_delimiter):
+                    # Same hazard as parseSignificativeFeaturesFile: line[1]
+                    # raises IndexError on a blank line and on any row that
+                    # carries only one column. An associations file is a
+                    # two-column mapping, so a short row has nothing to
+                    # contribute -- skip it rather than abort the job.
+                    if len(line) < 2:
+                        continue
+                    if not line[0].strip() or not line[1].strip():
+                        continue
                     associationFeatures[line[1]].add(line[0])
             inputDataFile.close()
             logging.info("PARSING ASSOCIATIONS FILE (" + fileName + ")... THE FILE CONTAINS " + str(len(associationFeatures.keys())) + " ASSOCIATIONS" );
