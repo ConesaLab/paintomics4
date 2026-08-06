@@ -193,10 +193,27 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libnlopt0 \
         curl \
         wget \
+        gnupg \
         ca-certificates \
     # setpriv, used by the entrypoint to drop privileges after fixing volume
     # ownership.
         util-linux \
+    && rm -rf /var/lib/apt/lists/*
+
+# MongoDB Database Tools, for mongoimport.
+#
+# common_build_database.py bulk-loads every collection with mongoimport rather
+# than pymongo, so without this the install runs for hours and then dies at the
+# very last step with "returned non-zero exit status 127" -- exit 127 being
+# "command not found", which the shell=True call does not explain.
+#
+# Not in Debian: it comes from MongoDB's own repository.
+RUN curl -fsSL https://pgp.mongodb.com/server-7.0.asc \
+        | gpg --dearmor -o /usr/share/keyrings/mongodb-server-7.0.gpg \
+    && echo "deb [ signed-by=/usr/share/keyrings/mongodb-server-7.0.gpg ] https://repo.mongodb.org/apt/debian bookworm/mongodb-org/7.0 main" \
+        > /etc/apt/sources.list.d/mongodb-org-7.0.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends mongodb-database-tools \
     && rm -rf /var/lib/apt/lists/*
 
 # Run as a non-root user. The data volume is chowned to this uid by the
@@ -289,6 +306,12 @@ RUN set -eux; \
         exit 1; \
     fi; \
     echo "every R shared object resolves"; \
+    # External commands the admin tools shell out to. mongoimport was missing
+    # and only surfaced as exit 127 after a multi-hour install.
+    for binary in Rscript mongoimport curl wget gunzip tar; do \
+        command -v "$binary" >/dev/null || { echo "missing command: $binary"; exit 1; }; \
+    done; \
+    echo "every external command the installer needs is present"; \
     Rscript -e 'pkgs <- c("purrr", "cluster", "mclust", "amap", "factoextra", \
                           "igraph", "ggplot2", "ggpubr", "ggsignif", "reshape2", \
                           "gridExtra", "visNetwork", "jsonlite", "tibble", \
