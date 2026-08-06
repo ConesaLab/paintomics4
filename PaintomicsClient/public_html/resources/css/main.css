@@ -24,13 +24,25 @@ root {
 
 :root {
   --main-max-width: 1900px;
+
+  /* Typography ---------------------------------------------------------------
+     SourceSansPro is vendored locally via the @font-face rules above; the
+     fallback chain keeps metrics close if the webfont fails to load. Use this
+     token instead of hardcoding a family so the UI stays typographically
+     consistent. */
+  --pa-font-sans: 'SourceSansPro', 'Source Sans Pro', 'Segoe UI', system-ui, sans-serif;
 }
 
 body {
 	background-color: #000;
-	font-family: 'SourceSansPro', sans-serif !important;
-	text-align: justify;
+	font-family: var(--pa-font-sans) !important;
+	/* Left-aligned rather than justified: the app renders text in narrow ExtJS
+	   panels and table cells, where justification without hyphenation opens
+	   large inter-word "rivers" and hurts readability. */
+	text-align: left;
 	font-size: 14px !important;
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
 }
 span.helpTip {
 	color: #C9C9C9;
@@ -210,7 +222,7 @@ ul.menu li.loggedOption, ul.menu span.loggedOption {
 	background-color: #5b5a59;
 	cursor: pointer;
 	color: #E2E2E2;
-	font-family: Arial;
+	font-family: var(--pa-font-sans);
 	font-size: 14px;
 	padding: 6px 10px;
 	text-decoration: none;
@@ -407,7 +419,9 @@ div.contentbox h3 span {
 }
 div.contentbox p, div.contentbox li {
 	padding: 2px 5px;
-	text-align: justify;
+	/* See the note on `body`: justified text in these narrow columns produces
+	   distracting inter-word gaps, so keep a ragged right edge. */
+	text-align: left;
 }
 
 a.button.twoOptionsButton {
@@ -529,7 +543,7 @@ select {
 	color: #288824;
 }
 #messageDialogBody {
-	text-align: justify;
+	text-align: left;
 	/*max-height: 125px;*/
 	overflow-y: auto;
 }
@@ -1296,7 +1310,7 @@ div[id^=matching_table] table {
 	display: inline-block;
 	cursor: pointer;
 	color: #ffffff;
-	font-family: Arial;
+	font-family: var(--pa-font-sans);
 	font-size: 14px;
 	padding: 5px 10px;
 	text-decoration: none;
@@ -1402,7 +1416,7 @@ div.zoomTool {
 }
 div.zoomTool a {
 	background: rgba(192, 192, 192, 0.55);
-	font-family: Arial;
+	font-family: var(--pa-font-sans);
 	color: #ffffff;
 	font-size: 15px;
 	text-decoration: none;
