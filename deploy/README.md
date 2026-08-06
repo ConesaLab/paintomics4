@@ -81,6 +81,26 @@ Rough sizes: shared common data ~1.4 GB, Reactome shared ~856 MB, and roughly
 about 20 other species. Installing one it does not cover fails with a clear
 message naming the species; use `--reactome=0` for those.
 
+## Reference GTF for the Regions2Genes example
+
+`Supporting tools -> From Regions to Genes -> Load example` reads
+`examplefiles/GTF/sorted_mmu.gtf`, which the repository does not ship — only a
+`GTF/.dummy` placeholder. Without it the tool fails immediately with
+"Reference file not found.":
+
+```bash
+deploy/fetch-example-gtf.sh            # defaults to container paintomics-app-1
+```
+
+It downloads Ensembl GRCm38 (mm10 — the assembly the example BED was called
+against), trims it to the feature types RGMatch reads, and installs it. Takes a
+few minutes and lands ~566 MB.
+
+**Re-run this after every image rebuild.** `examplefiles/` is baked into the
+image rather than mounted from the `paintomics-data` volume, so a rebuilt image
+loses the GTF. The script is idempotent: it exits immediately if the file is
+already in place.
+
 ## Everyday operations
 
 ```bash
