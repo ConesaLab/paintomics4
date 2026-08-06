@@ -2653,19 +2653,33 @@ def dumpErrors():
     finally:
         file.close()
 
+def runMongoImport(database, collection, filePath):
+    """Bulk-load a collection with mongoimport.
+
+    --host and --port are passed explicitly. Without them mongoimport defaults
+    to localhost, which is only correct when MongoDB happens to run beside the
+    installer. In the containerised deployment the database is a separate
+    service, so every import silently targeted the wrong host -- and because
+    these run through `check_call(..., shell=True)`, the only symptom was a
+    non-zero exit status with no indication that the address was the problem.
+    """
+    from conf.serverconf import MONGODB_HOST, MONGODB_PORT
+
+    command = ("mongoimport --host " + str(MONGODB_HOST) +
+               " --port " + str(MONGODB_PORT) +
+               " --db " + database +
+               " --collection " + collection +
+               " --drop --file " + filePath)
+    stderr.write("  " + command + "\n")
+    check_call(command, shell=True)
+
+
 def createDatabase():
     try:
-        command = "mongoimport --db " + SPECIE + "-paintomics --collection xref  --drop --file /tmp/xref.tmp"
-        check_call(command, shell=True)
-
-        command = "mongoimport --db " + SPECIE + "-paintomics --collection dbname  --drop --file /tmp/dbname.tmp"
-        check_call(command, shell=True)
-
-        command = "mongoimport --db " + SPECIE + "-paintomics --collection kegg  --drop --file /tmp/pathways.tmp"
-        check_call(command, shell=True)
-
-        command = "mongoimport --db " + SPECIE + "-paintomics --collection versions  --drop --file /tmp/versions.tmp"
-        check_call(command, shell=True)
+        runMongoImport(SPECIE + "-paintomics", "xref", "/tmp/xref.tmp")
+        runMongoImport(SPECIE + "-paintomics", "dbname", "/tmp/dbname.tmp")
+        runMongoImport(SPECIE + "-paintomics", "kegg", "/tmp/pathways.tmp")
+        runMongoImport(SPECIE + "-paintomics", "versions", "/tmp/versions.tmp")
 
         from pymongo import MongoClient, ASCENDING, TEXT
         from conf.serverconf import MONGODB_HOST, MONGODB_PORT
@@ -2683,8 +2697,7 @@ def createDatabase():
 
 def createGlobalDatabase():
     try:
-        command = "mongoimport --db global-paintomics --collection versions  --drop --file /tmp/versions.tmp"
-        check_call(command, shell=True)
+        runMongoImport("global-paintomics", "versions", "/tmp/versions.tmp")
 
         createCompoundsCollection()
 
@@ -2695,8 +2708,7 @@ def createGlobalDatabase():
 
 def createCompoundsCollection():
     try:
-        command = "mongoimport --db global-paintomics --collection kegg_compounds  --drop --file /tmp/compounds.tmp"
-        check_call(command, shell=True)
+        runMongoImport("global-paintomics", "kegg_compounds", "/tmp/compounds.tmp")
 
         from pymongo import MongoClient, ASCENDING, TEXT
         from conf.serverconf import MONGODB_HOST, MONGODB_PORT
