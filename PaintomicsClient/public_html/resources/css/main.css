@@ -2076,7 +2076,25 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
   white-space: normal;
 }
 
-/* Responsive */
+/* Responsive
+   Two tiers, and they must stay in this order: at equal specificity the later
+   block wins, so the 900px rules below correctly override these once the
+   viewport is narrow enough. */
+
+/* The How It Works cards went straight from three-up to a single column. At
+   901px that left three ~250px columns of running text; one pixel narrower and
+   each became full width. This fills in the missing two-up tier so the step
+   down is gradual, and tightens the hero gap, which by this width is spending
+   40px of a shrinking row on empty space. */
+@media (max-width: 1100px) {
+  .po-steps-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .po-hero {
+    gap: 24px;
+  }
+}
+
 @media (max-width: 900px) {
   .po-hero {
     flex-direction: column;
