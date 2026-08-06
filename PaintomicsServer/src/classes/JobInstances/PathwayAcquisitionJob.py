@@ -643,6 +643,19 @@ class PathwayAcquisitionJob(Job):
         """
         from multiprocessing import Process, cpu_count, Manager
         from math import ceil
+        from time import time as _now
+
+        # Step 2 is the slowest part of a run and its cost was being guessed at
+        # rather than measured. Each stage is timed so the breakdown can be read
+        # straight out of the log.
+        _stageStart = _now()
+        _stageTimings = []
+
+        def _markStage(name):
+            nonlocal _stageStart
+            elapsed = _now() - _stageStart
+            _stageTimings.append((name, elapsed))
+            _stageStart = _now()
 
         # ****************************************************************
         # Step 1. GET THE KEGG DATA AND PREPARE VARIABLES
@@ -691,10 +704,14 @@ class PathwayAcquisitionJob(Job):
         organismGenes = defaultdict(lambda: defaultdict(set))
         organismCompounds = defaultdict(lambda: defaultdict(set))
 
+        _markStage("setup")
+
         # GET THE IDS FOR ALL PATHWAYS FOR CURRENT SPECIE
         for pathwayID, pathway in pathwaysList.items():
             organismGenes[pathway["source"]][pathwayID], organismCompounds[pathway["source"]][
                 pathwayID] = KeggInformationManager().getAllFeatureIDsByPathwayID(self.getOrganism(), pathwayID)
+
+        _markStage("feature_ids_per_pathway")
 
         # Add new function to classify Reactome pathways based on category: PaintOmics 4
         reactomeClass = defaultdict(set)
@@ -714,6 +731,8 @@ class PathwayAcquisitionJob(Job):
                 for pathwayName in reactomeClass[pathwaySetName]:
                     classGene[pathwaySetName].update(organismGenes['Reactome'][pathwayName])
 
+
+        _markStage("reactome_classification")
 
         # Calculate the total number of genes and compounds per database
         totalGenes = {sourceDB: set(chain.from_iterable(pathways.values())) for sourceDB, pathways in
@@ -738,6 +757,8 @@ class PathwayAcquisitionJob(Job):
         #     nThreads = min(cpu_count(), MAX_THREADS)
         # except NotImplementedError as ex:
         #     nThreads = MAX_THREADS
+        _markStage("totals_and_backgrounds")
+
         nThreads = MAX_THREADS
         logging.info("USING " + str(nThreads) + " THREADS")
 
@@ -802,6 +823,8 @@ class PathwayAcquisitionJob(Job):
         if not isFinished:
             raise Exception(
                 'Your data took too long to process and it was killed. Try again later or upload smaller files if it persists.')
+
+        _markStage("enrichment_threads")
 
         self.setMatchedPathways(dict(matchedPathways))
         totalMatchedKeggPathways = len(self.getMatchedPathways())
@@ -879,6 +902,15 @@ class PathwayAcquisitionJob(Job):
                         ]
                         for adj in adj_methods
                     })
+
+        _markStage("pvalue_adjustment")
+
+        _stageTotal = sum(seconds for _, seconds in _stageTimings)
+        logging.info(
+            "STEP2 TIMING generatePathwaysList %.1fs total over %d pathways (%s) -- %s" % (
+                _stageTotal, len(pathwaysList), "+".join(self.databases),
+                ", ".join("%s=%.1fs (%.0f%%)" % (name, seconds, 100 * seconds / max(_stageTotal, 1e-9))
+                          for name, seconds in _stageTimings)))
 
         logging.info("SUMMARY: " + str(totalMatchedKeggPathways) + " Matched Pathways of " + str(
             totalKeggPathways) + "in KEGG; Total input Genes = " + str(

@@ -232,13 +232,23 @@ cat("STEP 5. Generate output files...\n")
 prev_pathway_id <- ""
 
 # function to find medoid in cluster i
+#
+# drop = FALSE is required. R drops a single-row matrix subset to a plain
+# vector, and colMeans then aborts with
+#   Error in colMeans(data[ind, ]) : 'x' must be an array of at least two
+#   dimensions
+# which halts the whole script. Clusters of exactly one gene are common, so
+# this took out metagene generation for an entire omic-and-database pair at a
+# time: on the example job it killed Gene expression for all of KEGG, and the
+# pathway panel then reported "No data for this pathway" for every KEGG
+# pathway even where the omic had matched features.
 clust.centroid = function(method, data, clusters, i) {
   if(method == 'kmeans'){
     ind = (which(clusters$cluster == i))
-    colMeans(data[ind,])
+    colMeans(data[ind, , drop = FALSE])
   }else{ #mclust
     ind = (which(clusters$classification == i))
-    colMeans(data[ind,])
+    colMeans(data[ind, , drop = FALSE])
   }
 }
 
@@ -252,7 +262,13 @@ for (i in 1:args$kclusters){
     pathway_ids <- names(which(clusters$classification==i))
   }
   #GET THE VALUES FOR THESE PATHWAYS
-  values <- as.matrix(dataScaled[pathway_ids,])
+  # drop = FALSE again: for a cluster holding a single pathway the subset
+  # collapses to a vector, and as.matrix() then turns it into an
+  # nConditions x 1 column rather than a 1 x nConditions row. row.names() would
+  # be the condition names, so the length > 1 test below took the multi-line
+  # branch and plotted values[1,] -- one number -- instead of the single
+  # pathway's profile.
+  values <- as.matrix(dataScaled[pathway_ids, , drop = FALSE])
   minMax <- range(values)
   #CREATE THE PNG
   png(paste(args$output_prefix, "_cluster_", i, args$database, ".png", sep=""), height = 150, width = 150)
