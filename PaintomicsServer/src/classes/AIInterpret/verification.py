@@ -289,8 +289,21 @@ def parse_references_section(report_text):
         "title": str,
     }
     """
-    # Find References section
-    ref_match = re.search(r'^### References\s*$', report_text, re.MULTILINE)
+    # Find References section.
+    #
+    # This used to require exactly "### References". The model writes
+    # "## References", so the match failed and this returned [] on every real
+    # report -- which silently disabled the whole citation check: the
+    # verification loop in pipeline.py breaks immediately when there are no
+    # citations, and verify_report_v2's fuzzy grounding pass iterates over
+    # nothing. The stored result was failed_citations = 0, which reads as "all
+    # citations verified" when in fact none were ever examined.
+    #
+    # Heading level, trailing colon, surrounding bold and case all vary between
+    # generations, so match the section rather than one exact spelling.
+    ref_match = re.search(
+        r'^\s*(?:#{1,6}\s*)?\**\s*references\s*\**\s*:?\s*$',
+        report_text, re.MULTILINE | re.IGNORECASE)
     if not ref_match:
         return []
 
