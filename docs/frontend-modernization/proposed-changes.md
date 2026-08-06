@@ -54,3 +54,62 @@ Vendoring the asset itself (creating `js/libs/cookieconsent/`) is inside this
 agent's remit — new files are owned by it. Only the one-line `href` change in
 `index.html` needs the owning agent. Say the word and the vendored file will be
 added so the diff above becomes a one-line apply.
+
+---
+
+## 2. Three WCAG AA contrast failures outside this branch's ownership
+
+**Status:** open
+**Raised:** iteration 2 (branch `frontend-modernization`)
+
+A contrast audit of the live Step 1 page found 16 distinct failing
+colour pairs. Thirteen were fixed in `main.css`. These three cannot be, because
+the colour is not defined in a file this branch owns. Ratios are measured
+against the actual rendered background, and all three carry normal-weight text
+below 18.66px, so the AA threshold is 4.5:1.
+
+| Colour | Used for | On | Ratio | Needs | Defined in |
+|---|---|---|---|---|---|
+| `#4a90d9` fill, white text | "AI Interpret" button | — | 3.34:1 | 4.5:1 | `PA_Step1Views.js` |
+| `#e65100` text | "sends analysis summaries to external AI service" | `#ffffff` | 3.79:1 | 4.5:1 | `PA_Step1Views.js` |
+| `#3892d3` fill, white text | ExtJS `Browse...` split buttons | — | 3.38:1 | 4.5:1 | vendored ExtJS Neptune theme |
+
+### Proposed fixes
+
+**`PA_Step1Views.js`** — darken both values along the same hue. These clear AA
+with headroom and are visually near-indistinguishable from the originals:
+
+```diff
+-  #4a90d9   /* AI Interpret button fill, 3.34:1 */
++  #2F73BC   /* 4.88:1 */
+
+-  #e65100   /* warning text, 3.79:1 */
++  #C44500   /* 5.00:1 */
+```
+
+**ExtJS `Browse...` button** — the `#3892d3` fill lives in
+`js/libs/extjs/resources/ext-theme-neptune/ext-theme-neptune-all.css`, a
+vendored third-party theme. Editing vendored files is out of scope here and
+would be lost on any ExtJS upgrade. Two options, in order of preference:
+
+1. Override it from `main.css` (which loads after the theme) with
+   `.x-btn-default-small { background-color: #287AB6; }`. Deliberately *not*
+   done in this branch: `x-btn-default-small` is a broad theme class applied to
+   many buttons across every screen, Neptune styles its hover/pressed/disabled
+   states separately, and a background-only override risks leaving those states
+   visually inconsistent. It needs its own change with verification across
+   Steps 1-4, not a drive-by edit inside a contrast pass.
+2. Leave as-is and accept the 3.38:1. Note it still clears the 3:1 bar for
+   non-text UI components, so only the button *label* is non-conformant.
+
+---
+
+## Not a proposed change, but worth recording
+
+`JobController.js:1329` logs `Error saving data with IndexDB in store: jobs`
+whenever the `paintomics` IndexedDB database is deleted while the app is open -
+which is exactly what the verification procedure for this branch asks for
+(clear sessionStorage and IndexedDB before each test run). The app does not
+re-create its object stores, so the first save after a cache clear always
+fails. It is harmless for the flows tested here and unrelated to any CSS
+change, but it does mean a genuine IndexedDB fault would be easy to miss.
