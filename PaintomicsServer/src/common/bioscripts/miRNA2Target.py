@@ -94,19 +94,37 @@ def print_usage():
 def run(referenceFile, relevantReferenceFile, dataFile, geneExpresion, corrOutputFile, method="fc"):
     miRNAtable = {}
     geneTable = {}
-    dataFile_header = ""
+    dataFile_header = None
+    rawHeader = None
 
     #STEP 1. GENERATE THE TABLE WITH ALL THE MIRNAS IN THE INPUT
     print("STEP 1. Reading miRNA expression file...")
     with open(dataFile, 'r') as inputDataFile:
-        isFirstLine = True
         for line in csv_reader(inputDataFile, delimiter="\t"):
-            if isFirstLine:
-                dataFile_header = line[1:]
-                isFirstLine = False
-            else:
-                miRNAtable[line[0]] = {"values" : line[1:], "targets" : list()}
+            if rawHeader is None:
+                rawHeader = line
+                continue
+
+            if dataFile_header is None:
+                # Whether the header labels the ID column varies between files:
+                # gene_expression_values.tab opens with "#geneID", while
+                # mirna_unmapped_values.tab goes straight into "I/C_0h". This
+                # used to always drop the first cell, so for the latter the
+                # first condition was consumed as if it were the ID label --
+                # the example emitted 5 condition names above 6 columns of
+                # data, leaving every value mislabelled downstream. Decide from
+                # the width of the first data row instead of assuming.
+                nValues = len(line) - 1
+                if len(rawHeader) == nValues:
+                    dataFile_header = rawHeader          # no label for the ID column
+                else:
+                    dataFile_header = rawHeader[1:]      # first cell labels the ID column
+
+            miRNAtable[line[0]] = {"values" : line[1:], "targets" : list()}
     inputDataFile.close()
+
+    if dataFile_header is None:
+        dataFile_header = rawHeader[1:] if rawHeader else []
 
     #STEP 2. FILL THE TABLE WITH ALL THE TARGETS FOR EACH MIRNA
     print("STEP 2. Reading miRNA -> targets file...")

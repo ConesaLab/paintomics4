@@ -1795,6 +1795,39 @@ function MiRNAOmicSubmittingPanel(nElem, options) {
 			    field.setReadOnly(true);
 			}
 		}
+
+		// Turn on the correlation option, which is what this example actually
+		// runs: MiRNA2GenesServlet's example branch supplies a transcriptomics
+		// file and correlation parameters (kendall / negative_correlation) and
+		// no relevant-associations file. setExampleMode already fills in
+		// rnaseqauxFileSelector for that path but left the checkbox unticked,
+		// so isValid() took the other branch and demanded the associations file
+		// -- a field the form itself labels "(optional)". The example could
+		// therefore never be submitted: it failed with "Invalid form. Please
+		// check form errors." every time.
+		//
+		// The tick has to wait for boxready. The checkbox is raw HTML inside a
+		// box component, and setExampleMode runs before the panel is added to
+		// the form, so it is not in the document yet -- every other field here
+		// is reached through queryById, which works on the unrendered component
+		// tree. Registering the listener now also means it runs after the one
+		// declared in the component config, so the change handler that enables
+		// the correlation options is already bound when the event is triggered.
+		// `this`, not `me`: var me = this is scoped to initComponent.
+		var panel = this;
+		var enableCorrelationMode = function() {
+			var $corr = $("#" + panel.namePrefix + "_corrOptions");
+			if (!$corr.length) return;
+			$corr.prop("checked", true).trigger("change");
+			$corr.prop("disabled", true);
+		};
+
+		var panelComponent = this.getComponent();
+		if (panelComponent.rendered) {
+			enableCorrelationMode();
+		} else {
+			panelComponent.on("boxready", enableCorrelationMode, null, {single: true});
+		}
 	};
 	this.setContent = function(target, values) {
 		var component = this.getComponent().queryById(target);
