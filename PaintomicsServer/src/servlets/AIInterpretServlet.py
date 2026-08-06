@@ -8,10 +8,13 @@ from src.common.JobInformationManager import JobInformationManager
 from src.classes.AIInterpret.pipeline import run_ai_pipeline, _cancel_flags
 from src.common.PySiQ import JobStatus
 from src.classes.AIInterpret.llm_client import LLMClient
-from src.classes.AIInterpret.prompts import SYSTEM_PROMPT_CHAT
+from src.classes.AIInterpret.prompts import (SYSTEM_PROMPT_CHAT,
+    SYSTEM_PROMPT_PATHWAY_FOCUS, build_pathway_focus_prompt)
+from src.classes.AIInterpret.context_builder import (build_pathway_context,
+    get_organism_name)
 from src.classes.AIInterpret.tools import CHAT_TOOLS, execute_tool
 from src.conf.serverconf import (AI_INTERPRETATION_ENABLED, AI_PROVIDERS,
-    AI_LLM_PROVIDER, AI_TEMPERATURE)
+    AI_LLM_PROVIDER, AI_TEMPERATURE, AI_MAX_PATHWAYS)
 
 # Jobs stuck longer than this are considered dead (e.g. killed by server reload)
 AI_STALE_JOB_TIMEOUT = timedelta(minutes=10)
@@ -176,6 +179,9 @@ def aiInterpretReport(REQUEST, RESPONSE):
                 "report": record.get("report", ""),
                 "verification": record.get("verification", {}),
                 "papers": record.get("papers", []),
+                # Lets the client turn pathway names in the report prose into
+                # links that open the pathway. Sent as id/name/source only.
+                "pathways": record.get("pathwayIndex", []),
             })
     except Exception as ex:
         handleException(RESPONSE, ex, __file__, "aiInterpretReport", userID=userID)
@@ -302,4 +308,108 @@ def aiGenerateExpDesign(REQUEST, RESPONSE):
     except Exception as ex:
         handleException(RESPONSE, ex, __file__, "aiGenerateExpDesign", userID=userID)
     finally:
+        return RESPONSE
+
+
+def aiInterpretPathway(REQUEST, RESPONSE):
+    """Return a focused AI interpretation of one pathway.
+
+    Backs the pathway citations in the main report: clicking one opens the
+    pathway and asks for this. Generated lazily and cached, so only pathways a
+    user actually opens cost an LLM call, and opening the same one twice is
+    free.
+    """
+    dao = None
+    userID = None
+    try:
+        userID = REQUEST.cookies.get('userID')
+        sessionToken = REQUEST.cookies.get('sessionToken')
+        UserSessionManager().isValidUser(userID, sessionToken)
+
+        if not AI_INTERPRETATION_ENABLED:
+            raise UserWarning("AI interpretation is not enabled on this server.")
+
+        formFields = REQUEST.form
+        jobID = formFields.get("jobID")
+        pathwayID = formFields.get("pathwayID")
+        regenerate = formFields.get("regenerate", "") == "true"
+
+        if not jobID or not pathwayID:
+            raise UserWarning("Missing jobID or pathwayID parameter.")
+
+        dao = AIInterpretDAO()
+
+        if not regenerate:
+            cached = dao.get_pathway_report(jobID, pathwayID)
+            if cached:
+                RESPONSE.setContent({
+                    "success": True, "jobID": jobID, "pathwayID": pathwayID,
+                    "report": cached.get("report", ""),
+                    "papers": cached.get("papers", []),
+                    "cached": True,
+                })
+                return RESPONSE
+
+        # The main pipeline must have run: its pathway index is what tells us
+        # which pathways were analysed, and its papers are the only literature
+        # we are allowed to cite.
+        pathwayIndex = dao.get_pathway_index(jobID)
+        if not pathwayIndex:
+            raise UserWarning("Run the AI interpretation for this job first.")
+
+        entry = next((p for p in pathwayIndex if p.get("id") == pathwayID), None)
+        if entry is None:
+            raise UserWarning("Pathway " + pathwayID + " was not part of the AI analysis. "
+                              "Only the pathways the report covers can be interpreted.")
+
+        jobInstance = JobInformationManager().loadJobInstance(jobID)
+        if jobInstance is None:
+            raise UserWarning("Job " + jobID + " was not found.")
+
+        record = dao.find_by_job_id(jobID) or {}
+        experimentDesign = record.get("experimentDesign", "")
+
+        # Rebuild the full context and pick this pathway out of it. The stored
+        # index deliberately holds only display fields; the gene-level detail
+        # the prompt needs has to be recomputed.
+        allPathways = build_pathway_context(jobInstance, max_pathways=AI_MAX_PATHWAYS)
+        pathway = next((p for p in allPathways if p.get("id") == pathwayID), None)
+        if pathway is None:
+            raise UserWarning("Pathway " + pathwayID + " is no longer present in this job's results.")
+
+        # Papers are attributed to pathways by name (pipeline.py), so match on
+        # the name rather than the ID.
+        pathwayName = pathway.get("name")
+        papers = [
+            p for p in dao.get_papers_metadata(jobID)
+            if pathwayName in (p.get("pathways") or [])
+        ]
+
+        organismName = get_organism_name(jobInstance.getOrganism())
+        llm = LLMClient(AI_PROVIDERS[AI_LLM_PROVIDER])
+        prompt = build_pathway_focus_prompt(pathway, papers, experimentDesign, organismName)
+
+        report = llm.complete(
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT_PATHWAY_FOCUS},
+                {"role": "user", "content": prompt},
+            ],
+            max_tokens=1500,
+            temperature=AI_TEMPERATURE,
+        )
+
+        citedPapers = [
+            {k: v for k, v in p.items() if k != "sections"} for p in papers
+        ]
+        dao.save_pathway_report(jobID, pathwayID, report, citedPapers)
+
+        RESPONSE.setContent({
+            "success": True, "jobID": jobID, "pathwayID": pathwayID,
+            "report": report, "papers": citedPapers, "cached": False,
+        })
+    except Exception as ex:
+        handleException(RESPONSE, ex, __file__, "aiInterpretPathway", userID=userID)
+    finally:
+        if dao is not None:
+            dao.closeConnection()
         return RESPONSE

@@ -187,6 +187,15 @@ def run_ai_pipeline(job_id, experiment_design, RESPONSE):
         pathways = build_pathway_context(job_instance, max_pathways=maxPathways)
         gene_whitelist = build_gene_symbol_whitelist(job_instance)
 
+        # The report refers to pathways by name. Persist the name -> id/source
+        # mapping so the client can turn those mentions into links that open the
+        # pathway, and so a per-pathway interpretation can be generated later
+        # without rebuilding the whole job context.
+        dao.save_pathway_index(job_id, pathways)
+        # Kept alongside so a later per-pathway request interprets against the
+        # same stated design as the main report, instead of no design at all.
+        dao.save_progress(job_id, {"experimentDesign": experiment_design or ""})
+
         if _cancel_flags.get(job_id):
             raise InterruptedError("Cancelled")
 

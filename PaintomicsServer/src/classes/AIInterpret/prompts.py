@@ -548,3 +548,96 @@ def build_correction_prompt(report, failed_citations):
     lines.append("4. Output the COMPLETE corrected report.")
 
     return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Per-pathway focus report
+#
+# Generated on demand when a user clicks a pathway citation in the main report,
+# then cached. Deliberately narrower than the batch prompt: one pathway, all of
+# its genes, and only the literature already attributed to it -- so the answer
+# is about this pathway rather than a slice of a cross-pathway synthesis.
+# ---------------------------------------------------------------------------
+SYSTEM_PROMPT_PATHWAY_FOCUS = """You are an expert molecular biologist interpreting a single enriched pathway from a multi-omics experiment.
+
+You are given one pathway, the measured genes that map to it, and the literature already gathered for this analysis. Write a focused interpretation of THIS pathway only.
+
+## Citation Rules (CRITICAL)
+- Use numbered citations in the format [N] where N matches the reference index provided.
+- NEVER invent citation numbers — only use [N] indices from the Available Literature.
+- If no literature is provided, write the interpretation without citations and say so plainly.
+
+## Content Rules
+1. ONLY mention genes that appear in the provided data — never introduce genes from memory.
+2. State significance using the exact p-values provided.
+3. Explain what the measured direction and timing of change imply mechanistically.
+4. Where the data is thin or ambiguous, say so rather than overstating.
+5. Do NOT speculate about other pathways; this report covers one pathway.
+
+## Output Format
+Use markdown with these sections, and no top-level title:
+**Summary** — two or three sentences on what this pathway shows in this experiment.
+**Key genes** — the informative genes and what their profiles indicate.
+**Mechanistic interpretation** — how these changes fit known biology.
+**Caveats** — limits of what this pathway result supports.
+
+Keep the whole report under 400 words.
+""" + TEMPORAL_GUIDANCE_BLOCK
+
+
+def build_pathway_focus_prompt(pathway, papers, experiment_design, organism_name):
+    """Build the user prompt for a single-pathway interpretation."""
+    lines = []
+    lines.append("## Experiment Context")
+    lines.append(f"Organism: {organism_name}")
+    if experiment_design:
+        lines.append(f"Design: {experiment_design}")
+    lines.append("")
+
+    lines.append("## Pathway")
+    lines.append(f"### {pathway['name']} ({pathway['id']}, source: {pathway['source']})")
+
+    pvalue = pathway.get("combined_pvalue")
+    if isinstance(pvalue, (int, float)):
+        lines.append(f"Combined p-value: {pvalue:.4e}")
+    elif pvalue is not None:
+        # Multi-condition analyses carry one p-value per condition.
+        lines.append(f"Combined p-value per condition: {pvalue}")
+    lines.append(f"Per-omic significance: {pathway.get('per_omic')}")
+    lines.append(f"Matched genes: {pathway.get('matched_gene_count')}")
+
+    if pathway.get("top_genes"):
+        lines.append("Genes:")
+        for g in pathway["top_genes"]:
+            rel = "DE" if g.get("relevant") else "not-DE"
+            profiles = g.get("omic_profiles") or []
+            if profiles:
+                first = profiles[0]
+                lines.append(f"  {g['symbol']}({rel}, "
+                             f"values=[{first['values']}], "
+                             f"peak={first['peak_value']}@{first['peak_timepoint']}, "
+                             f"pattern={first['pattern']})")
+                for prof in profiles[1:]:
+                    lines.append(f"    {prof['omic_name']}: "
+                                 f"values=[{prof['values']}], "
+                                 f"peak={prof['peak_value']}@{prof['peak_timepoint']}, "
+                                 f"pattern={prof['pattern']}")
+            else:
+                lines.append(f"  {g['symbol']}({rel}, |FC|={g.get('effect_size')})")
+
+    lines.append("\n## Available Literature")
+    if papers:
+        for p in papers:
+            lines.append(f"\n[{p['ref_index']}] {p.get('authors_short', p.get('first_author', ''))} "
+                         f'"{p.get("title", "")}" {p.get("journal", "")}, {p.get("year", "")}')
+            if p.get("abstract"):
+                lines.append(p["abstract"])
+    else:
+        lines.append("None was gathered specifically for this pathway. "
+                     "Write the interpretation from the data alone and state that no "
+                     "pathway-specific literature was retrieved.")
+
+    lines.append("\n## Task")
+    lines.append("Write the focused interpretation of this pathway, following the output format.")
+
+    return "\n".join(lines)

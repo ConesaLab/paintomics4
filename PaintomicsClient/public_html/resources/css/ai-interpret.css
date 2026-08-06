@@ -419,6 +419,29 @@
     text-decoration: underline;
 }
 
+/* ── Inline Pathway Links ── */
+/* Distinct from PubMed citations: these stay inside the app rather than opening
+   an external site, so they are marked with a colour of their own and a dotted
+   underline that reads as "expandable" rather than "leaves the page". */
+.ai-pathway-link {
+    color: #2e8b57;
+    text-decoration: none;
+    font-weight: 600;
+    cursor: pointer;
+    border-bottom: 1px dotted #2e8b57;
+    transition: color 0.2s, background-color 0.2s;
+}
+.ai-pathway-link:hover {
+    color: #1c5f3a;
+    background-color: rgba(46, 139, 87, 0.10);
+    border-bottom-style: solid;
+}
+.ai-pathway-link::after {
+    content: " \25B8";
+    font-size: 0.85em;
+    opacity: 0.7;
+}
+
 /* ── Input Area ── */
 .ai-widget-input-area {
     padding: 10px;

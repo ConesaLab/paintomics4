@@ -410,6 +410,10 @@ class Application(object):
         def aiInterpretChatHandler():
             return aiInterpretChat(request, Response()).getResponse()
 
+        @self.app.route(SERVER_SUBDOMAIN + '/ai_interpret_pathway', methods=['OPTIONS', 'POST'])
+        def aiInterpretPathwayHandler():
+            return aiInterpretPathway(request, Response()).getResponse()
+
         @self.app.route(SERVER_SUBDOMAIN + '/ai_generate_exp_design', methods=['OPTIONS', 'POST'])
         def aiGenerateExpDesignHandler():
             return aiGenerateExpDesign(request, Response()).getResponse()
