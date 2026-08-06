@@ -33,17 +33,24 @@ root {
   --pa-font-sans: 'SourceSansPro', 'Source Sans Pro', 'Segoe UI', system-ui, sans-serif;
 
   /* Ink colours --------------------------------------------------------------
-     Every value below clears WCAG 2.1 AA (4.5:1) against the white and #F6F6F6
-     panel backgrounds these are used on, with a little headroom so rounding or
-     a future background tweak does not silently drop them under the bar. Hue
-     and saturation are preserved from the original palette; only lightness
-     moved, so the UI keeps its colour identity. */
-  --pa-link: #0074DE;         /* was #0076E2 - 4.48:1, just under AA */
-  --pa-link-hover: #278466;   /* was #2E9B78 - 3.46:1 */
-  --pa-accent-blue: #2275D3;  /* was #2C7FDD - 4.05:1 */
-  --pa-accent-orange: #B55324;/* was rgb(209,96,42) - 3.59:1 on #F6F6F6 */
-  --pa-ink-muted: #757575;    /* was #C9C9C9 (1.66:1) / #B1B0B0 (2.16:1) */
-  --pa-bold-blue: #4A78AA;    /* was rgb(105,146,190) - 3.25:1 */
+     Every value below clears WCAG 2.1 AA (4.5:1) with headroom. Hue and
+     saturation are preserved from the original palette; only lightness moved,
+     so the UI keeps its colour identity.
+
+     Measured against #EEEEEE, the darkest light panel fill in this stylesheet,
+     rather than against white. That distinction has already caught this
+     palette out twice: tuning against white alone left every token at
+     4.13-4.48:1 on the grey panels of Step 3, and a retune against #F3F3F3
+     still left them at 4.38-4.41:1 on the #EEEEEE surfaces of Step 4. Tuning
+     against the darkest surface makes every lighter one pass by construction
+     (each is ~5.3:1 on white), so this should not need revisiting when the
+     next screen is audited. */
+  --pa-link: #006ACC;         /* orig #0076E2 4.48:1 */
+  --pa-link-hover: #24785D;   /* orig #2E9B78 3.46:1 */
+  --pa-accent-blue: #1F6BC1;  /* orig #2C7FDD 4.05:1 */
+  --pa-accent-orange: #AD5022;/* orig rgb(209,96,42) 3.59:1 */
+  --pa-ink-muted: #6B6B6B;    /* orig #C9C9C9 1.66:1 / #B1B0B0 2.16:1 */
+  --pa-bold-blue: #446E9B;    /* orig rgb(105,146,190) 3.25:1 */
 
   /* Focus ring. Chosen to clear 3:1 (WCAG 2.4.11) against every surface the
      ring actually lands on: white panels 3.65:1, the #F2F2F2 button toolbar
@@ -481,6 +488,13 @@ a.button.twoOptionsButton {
 	margin: -1px;
 	padding: 5px;
 	background-color: #BDBDBD;
+	/* This is a segmented control (Heatmap / Line chart), not a disabled
+	   button - both halves are clickable, `.selected` just marks the active
+	   one - so both states have to meet AA. It inherited .button's #E2E2E2
+	   label, which gave 1.45:1 on the grey half and 2.51:1 on the blue.
+	   The two fills encode which option is active, so they stay as they are
+	   and the ink goes dark instead: 9.26:1 and 5.35:1. */
+	color: #1A1A1A;
 	border-radius: 0px;
 }
 a.button.twoOptionsButton:first-child {
@@ -995,11 +1009,11 @@ div[id ^= "pathwayNetworkWaitBox_"] {
 	color: #D26430;
 }
 .resumeLayout {
-	color: #3BAF6A !important;
+	color: #2A7D4B !important; /* was #3BAF6A - 2.51:1 */
 }
 .resumeLayout:hover {
 	color: #fff !important;
-	background-color: #3BAF6A !important;
+	background-color: #2A7D4B !important;
 }
 div[id ^= "pathwayClassificationPlot2Box_"] {
 	font-size: 15px;
@@ -1023,7 +1037,7 @@ span.networkClusterImage > i {
 }
 span.networkClusterImage.disabled > i {display:block;}
 .mainInfoPanel {font-size: 12px;}
-.pathwayPlotwrappers h4{color: #D16949;font-size: 13px;margin: 0;margin-top: 5px;}
+.pathwayPlotwrappers h4{color: #B14C2D;/* was #D16949 - 3.60:1 */font-size: 13px;margin: 0;margin-top: 5px;}
 div[id ^= "networkview_"] { max-width:1800px; margin: 5px 10px; }
 div[id ^= "networkClustersContainer_"], div[id ^= "patwaysDetailsWrapper_"]{overflow-y:auto; overflow-x: hidden; padding: 2px 10px;}
 div[id ^= "networkSettingsPanel_"], div[id ^= "networkDetailsPanel_"] {width:260px; float:right; margin:0; margin-left:10px;height: 843px;overflow: auto;}
@@ -1715,7 +1729,12 @@ div.omicSelection div.omicPosition + div {
 }
 .customactioncolumn a {
 	padding: 0px 4px;
-	color: #ADA6A6;
+	/* Was #ADA6A6 - 2.16:1 on the grid's own background, and this is the "Paint
+	   this pathway" brush that opens Step 4, i.e. the primary action of the
+	   whole pathway table. At that contrast it read as a disabled placeholder;
+	   it is the single most repeated failure in the app (~1770 instances on a
+	   default Step 3). #756C6C keeps the warm grey but reaches 4.60:1. */
+	color: #756C6C;
 }
 .x-grid-row-selected .customactioncolumn a, .customactioncolumn a:hover {
 	color: #0076E2;
@@ -1823,11 +1842,14 @@ div.contentbox a.toolbarOption {
 	padding: 4px 5px 0px 5px;
 	margin: 5px 5px;
 	background: none;
-	color: #DA643D;
+	/* Was #DA643D - 3.22:1 on the grey toolbar these sit in. Same hue, 4.63:1.
+	   The hover state inverts to this colour as a fill, so it moves too or the
+	   near-white hover label would sit at 3.36:1. */
+	color: #BB4924;
 }
 div.contentbox a.toolbarOption:hover {
 	color: #F6F6F6;
-	background-color: #DA643D;
+	background-color: #BB4924;
 }
 div.lateralOptionsPanel-header .toolbarOption {
 	font-size: 17px;
