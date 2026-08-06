@@ -292,7 +292,11 @@ ul.menu li.loggedOption, ul.menu span.loggedOption {
 	border-radius: 4px;
 }
 .button:hover {
-	background: #50c0ed;
+	/* Was #50c0ed, which put white on pale cyan at 2.08:1. The base .button is
+	   dark grey with a light label, so hovering used to *lose* contrast - the
+	   label got harder to read at exactly the moment the control was being
+	   pointed at. Same hue, 4.58:1. */
+	background: #117EA9;
 	color: #ffffff;
 }
 .button.btn-sm {
@@ -402,11 +406,11 @@ ul.menu li.loggedOption, ul.menu span.loggedOption {
 	color: #ffffff;
 }
 .cancelButton:hover {
-	background: #E08181;
+	background: #D14242; /* was #E08181 - 2.75:1 */
 	color: #ffffff;
 }
 .warningButton:hover {
-	background: #C28B46;
+	background: #9A6C33; /* was #C28B46 - 2.97:1 */
 	color: #ffffff;
 }
 ul.ui-menu.ui-widget.ui-widget-content {
@@ -587,19 +591,19 @@ select {
 	border-color: rgb(211, 96, 68);
 }
 #messageDialog.errorDialog h4 {
-	color: rgb(211, 96, 68);
+	color: #C84D2F; /* was rgb(211,96,68) - 3.80:1 on the dialog's white fill */
 }
 #messageDialog.warningDialog {
 	border-color: #CB7505;
 }
 #messageDialog.warningDialog h4 {
-	color: #CB7505;
+	color: #AC6304; /* was #CB7505 - 3.45:1 */
 }
 #messageDialog.infoDialog {
 	border-color: rgb(0, 121, 220);
 }
 #messageDialog.infoDialog h4 {
-	color: rgb(0, 121, 220);
+	color: #0076D6; /* was rgb(0,121,220) - 4.40:1 */
 }
 #messageDialog.successDialog {
 	border-color: #288824;
@@ -634,7 +638,7 @@ select {
 	border-bottom: 1px solid #D4D4D4;
 	padding: 4px;
 	text-align: center;
-	color: #0076E2;
+	color: var(--pa-link); /* was #0076E2 - 4.48:1 on the tooltip's white fill */
 }
 .sigma-tooltip > .arrow {
 	border-width: 10px;
@@ -861,7 +865,7 @@ div.availableOmicsBox h4 {
 .dragHerePanel {
 	display: none;
 	text-align: center !important;
-	color: #8B8E93;
+	color: #6D7075; /* was #8B8E93 - 3.04:1 on this panel's own #F6F6F6 fill */
 	font-size: 22px;
 	background: #F6F6F6;
 	padding: 10px;
@@ -1227,7 +1231,7 @@ i.masterRegulator:before {
 	padding-top: 4px;
 }
 .externalLinksContainer a {
-	color: #0076E2;
+	color: var(--pa-link); /* was #0076E2 - 4.48:1, and bypassed the token */
 }
 .step4PathwayBox {
 	display: inline-table;
@@ -1737,7 +1741,11 @@ div.omicSelection div.omicPosition + div {
 	color: #756C6C;
 }
 .x-grid-row-selected .customactioncolumn a, .customactioncolumn a:hover {
-	color: #0076E2;
+	/* Deliberately not --pa-link. A selected grid row is filled #C1DDF1 by the
+	   Neptune theme, and the token only reaches 3.78:1 against that; #0076E2
+	   was 3.17:1. This value clears 4.63:1 on the selected-row fill and 6.53:1
+	   on the white fill the :hover half of this selector sits on. */
+	color: #005DB3;
 }
 .x-toolbar {
 	padding: 5px 0 6px 8px;
