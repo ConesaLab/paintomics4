@@ -234,18 +234,40 @@ def _count_significant_omics(pw):
     return count
 
 
+def _numericValues(value):
+    """Flatten a p-value that may be a scalar or a per-condition list.
+
+    Multi-condition support changed these from a single float to one value per
+    condition. min() over the raw dict values then returns a *list*, and every
+    downstream f"{...:.4e}" raises
+        TypeError: unsupported format string passed to list.__format__
+    which is what crashed the AI pipeline on the example dataset.
+    """
+    if isinstance(value, (list, tuple)):
+        return [v for v in value if isinstance(v, (int, float))]
+    if isinstance(value, (int, float)):
+        return [value]
+    return []
+
+
 def _best_pval(pw):
-    cpvals = pw.combinedSignificancePvalues
-    if cpvals:
-        return min(cpvals.values())
-    return 1.0
+    """Smallest combined p-value across every omic and every condition."""
+    cpvals = getattr(pw, "combinedSignificancePvalues", None)
+    if not cpvals:
+        return 1.0
+    flattened = [v for value in cpvals.values() for v in _numericValues(value)]
+    return min(flattened) if flattened else 1.0
 
 
 def _format_significance(pw):
     parts = []
     for omic_name, vals in pw.significanceValues.items():
         if len(vals) >= 3:
-            parts.append(f"{omic_name}: p={vals[2]:.4f} ({vals[1]}/{vals[0]} relevant)")
+            # vals[2] is a list under multi-condition; report the strongest.
+            pvalues = _numericValues(vals[2])
+            if not pvalues:
+                continue
+            parts.append(f"{omic_name}: p={min(pvalues):.4f} ({vals[1]}/{vals[0]} relevant)")
     return "; ".join(parts)
 
 
