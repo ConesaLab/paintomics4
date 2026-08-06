@@ -343,7 +343,9 @@ def run_ai_pipeline(job_id, experiment_design, RESPONSE):
 
         verification_executor = build_verification_executor(paper_index)
 
+        previousFailureCount = None
         for iteration in range(AI_MAX_VERIFICATION_ITERATIONS):
+            _iterStart = time.time()
             citations = parse_references_section(report)
             if not citations:
                 break
@@ -390,6 +392,7 @@ def run_ai_pipeline(job_id, experiment_design, RESPONSE):
                         })
             # as_completed returns out of order; keep reports stable between runs.
             failed_citations.sort(key=lambda c: c["ref_index"])
+            _checkSeconds = time.time() - _iterStart
 
             pct = 85 + int(10 * (iteration + 1) / AI_MAX_VERIFICATION_ITERATIONS)
             dao.save_progress(job_id, {
@@ -399,9 +402,31 @@ def run_ai_pipeline(job_id, experiment_design, RESPONSE):
             })
 
             if not failed_citations:
+                logger.info(f"[{job_id}] VERIFY iter {iteration + 1}: "
+                            f"{len(toVerify)} citations checked in {_checkSeconds:.1f}s, "
+                            f"0 failed, no correction needed")
                 break  # All citations verified
 
-            # Feed issues back to LLM for correction
+            # Stop once the rewrites stop helping. Measured on the example job:
+            # each correction costs ~40s -- the single largest item in the whole
+            # pipeline -- and the failure count went 4 -> 2 -> 2, so the third
+            # rewrite bought nothing. A rewrite that fails to reduce the count
+            # has shown it cannot fix what remains, and the programmatic safety
+            # net below redacts those citations either way, so the outcome is
+            # identical without the call.
+            if previousFailureCount is not None and len(failed_citations) >= previousFailureCount:
+                logger.info(f"[{job_id}] VERIFY iter {iteration + 1}: "
+                            f"{len(toVerify)} citations checked in {_checkSeconds:.1f}s, "
+                            f"{len(failed_citations)} failed, no improvement on "
+                            f"{previousFailureCount} -- stopping, remaining "
+                            f"citations will be redacted")
+                break
+            previousFailureCount = len(failed_citations)
+
+            # Feed issues back to LLM for correction. This rewrites the whole
+            # report in one call and cannot be parallelised, so it is timed
+            # separately from the per-citation checks above.
+            _correctStart = time.time()
             correction_prompt = build_correction_prompt(report, failed_citations)
             report = llm.complete(
                 messages=[
@@ -411,6 +436,10 @@ def run_ai_pipeline(job_id, experiment_design, RESPONSE):
                 max_tokens=6000,
                 temperature=AI_TEMPERATURE,
             )
+            logger.info(f"[{job_id}] VERIFY iter {iteration + 1}: "
+                        f"{len(toVerify)} citations checked in {_checkSeconds:.1f}s, "
+                        f"{len(failed_citations)} failed, "
+                        f"correction rewrite {time.time() - _correctStart:.1f}s")
 
             if _cancel_flags.get(job_id):
                 raise InterruptedError("Cancelled")
