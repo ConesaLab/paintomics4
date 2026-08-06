@@ -124,3 +124,52 @@ but loading `/?jobID=03Eb3w4BGX` showed a complete Step 2 and went on to render
 Step 3 with the expected 888/44. Distinguishing "finished" from "died" needs a
 completion check before treating a dequeued job as failed. Out of scope here
 (`JobController.js` is owned elsewhere) but it makes a passing run look broken.
+
+---
+
+## 3. `pa_recover_job` crashes on a missing jobID and locks the whole UI
+
+**Status:** open (backend - outside this branch's frontend scope)
+**Raised:** iteration 4 (branch `frontend-modernization`)
+
+`PaintomicsServer/src/servlets/PathwayAcquisitionServlet.py:580`:
+
+```python
+jobID = formFields.get("jobID")
+logging.info("RECOVER_JOB - LOADING JOB " + jobID + "...")
+```
+
+`formFields.get` returns `None` when the field is absent, and `str + None`
+raises. Reproduced directly:
+
+```
+$ curl -sk -X POST https://localhost:8443/pa_recover_job
+{"success": false, "message": "TypeError: AT PathwayAcquisitionServlet.py:
+ pathwayAcquisitionRecoverJob. ERROR MESSAGE: can only concatenate str
+ (not \"NoneType\") to str", "extra": {"exc_line": "580", ...}}
+HTTP 400
+```
+
+This is not cosmetic. The client calls `pa_recover_job` during start-up, so
+when it fires without a usable jobID the 400 surfaces as a full-screen
+"Oops..Internal error!" dialog and **Step 1 never renders at all** - the
+application is unusable until browser storage is cleared. Hit during iteration
+4 verification; recovering required clearing `localStorage` in addition to the
+`sessionStorage` + IndexedDB that the branch's test procedure already
+prescribes. The dialog's own advice ("clear your web cache in your browser")
+is in fact the workaround, which suggests this is a known-but-unfixed rough
+edge.
+
+Two independent fixes, both cheap:
+
+1. Guard the log line and reject cleanly, rather than throwing:
+   ```diff
+   -		logging.info("RECOVER_JOB - LOADING JOB " + jobID + "...")
+   +		if not jobID:
+   +			response.setContent({"success": False, "message": "No job ID supplied."})
+   +			return response
+   +		logging.info("RECOVER_JOB - LOADING JOB %s ...", jobID)
+   ```
+   Using `%s` formatting also makes the line immune to this class of bug.
+2. Have the client skip the recover call entirely when it has no jobID to
+   recover, so a cold start never hits the endpoint.
