@@ -113,12 +113,37 @@ downloadIfNeeded hsa --kegg=1 --mapping=1 --common=1 --reactome=1
 # But the flag cannot simply be hardcoded to 1 either: the move is a move, so a
 # rerun after a later failure finds download/common already gone and errors out.
 # Decide from the actual state instead, which makes reruns idempotent.
-if ${COMPOSE} exec -T app test -f /data/KEGG_DATA/current/common/pathways_classification.list 2>/dev/null; then
+# Test the DATABASE, not the filesystem. An earlier version checked for
+# current/common/pathways_classification.list, which is present as soon as the
+# *move* succeeds -- but the COMMON version document is written later, by
+# createGlobalDatabase(). A run that moved the files and then died in between
+# left the file check passing while global-paintomics had no versions
+# collection at all, and the next species install failed with
+#   IndexError: no such item for Cursor instance
+# The document is what downstream code actually reads, so gate on it.
+commonInstalled=$(${COMPOSE} exec -T app python -c "
+from pymongo import MongoClient
+try:
+    c = MongoClient('mongo', 27017, serverSelectionTimeoutMS=8000)
+    print('yes' if c['global-paintomics'].versions.find_one({'name': 'COMMON'}) else 'no')
+except Exception:
+    print('no')
+" 2>/dev/null | tr -d '\r\n ')
+
+if [ "${commonInstalled}" = "yes" ]; then
     commonFlag="--common=0"
-    say "INSTALL hsa (${commonFlag}: shared KEGG data already in current/)"
+    say "INSTALL hsa (${commonFlag}: COMMON already registered in global-paintomics)"
 else
+    # --common=1 *moves* download/common into current/, so a previous partial
+    # run may have left nothing to move. Restore it from current/ first.
+    if ! ${COMPOSE} exec -T app test -d /data/KEGG_DATA/download/common 2>/dev/null; then
+        say "restoring download/common from current/ so --common=1 has a source"
+        ${COMPOSE} exec -T app sh -c \
+            'cp -a /data/KEGG_DATA/current/common /data/KEGG_DATA/download/common' \
+            >>"${LOG}" 2>&1 || die "could not restage download/common"
+    fi
     commonFlag="--common=1"
-    say "INSTALL hsa (${commonFlag}: moving shared KEGG data into current/)"
+    say "INSTALL hsa (${commonFlag}: registering COMMON in global-paintomics)"
 fi
 ${COMPOSE} exec -T app ${DBM} install --specie=hsa "${commonFlag}" \
     >"$HOME/hsa-install.log" 2>&1 || die "hsa install (see ~/hsa-install.log)"
