@@ -412,7 +412,12 @@ function ajaxErrorHandler(responseObj) {
 
     var err;
     try {
-        err = eval("(" + responseObj.responseText + ")");
+        // Parse, don't eval. The body is JSON from the server and it echoes
+        // user-supplied values back (a rejected pathway ID, a file name), so
+        // eval would execute whatever ends up in there if the escaping were
+        // ever wrong. extJSErrorHandler below already uses JSON.parse; this
+        // keeps both paths consistent and drops the eval entirely.
+        err = JSON.parse(responseObj.responseText);
     } catch (error) {
         err = {message: "Unable to parse the error message."};
     } finally {
@@ -429,8 +434,20 @@ function ajaxErrorHandler(responseObj) {
         return;
     }
 
+    // The server reports its own exceptions with an "extra" block naming the
+    // Python file and exception type. Telling the user to clear their browser
+    // cache for one of those sends them after something they cannot fix -- a
+    // missing reference file or an expired API key on the server is not stale
+    // client state. Keep that advice for errors with no server-side origin,
+    // where a stale cached model genuinely can be the cause.
+    var serverSide = !!(err.extra && (err.extra.file_name || err.extra.exc_type));
+    var adminLink = "If the error persists, please contact the " +
+        "<a href='mailto:paintomics4@gmail.com' target='_blank'> administrator</a>.";
+
     showErrorMessage("Oops..Internal error!", {
-        message: err.message + "</br>Try running it in private mode or clear your web cache in your browser.</br>If the error persists, please contact the <a href='mailto:paintomics4@gmail.com' target='_blank'> administrator</a>.",
+        message: err.message + "</br>" + (serverSide
+            ? "This happened on the server, so retrying in the browser will not help. " + adminLink
+            : "Try running it in private mode or clear your web cache in your browser.</br>" + adminLink),
         extra: err.extra,
         showButton: true
     });
