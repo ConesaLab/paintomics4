@@ -355,6 +355,21 @@ function PA_AIInterpretView() {
      *
      * Names are matched longest-first so "MAPK signaling pathway" wins over a
      * shorter pathway whose name is a prefix of it.
+     *
+     * Two rules keep this from burying the report in links:
+     *
+     * Only the first mention of each pathway is linked. Linking every mention
+     * produced 73 links for 11 pathways on the example job, which reads as
+     * noise rather than as citations.
+     *
+     * Single-word pathway names must match the registered capitalisation.
+     * Several pathways are named after the process they describe -- Apoptosis,
+     * Autophagy, Efferocytosis -- and the report uses those words as ordinary
+     * nouns constantly. "Apoptosis" heading a section is a pathway reference;
+     * "...leading to apoptosis" in prose is not, and linking it would send the
+     * user to a diagram the sentence was not talking about. Multi-word names
+     * ("Cell cycle", "Intrinsic Pathway for Apoptosis") are specific enough
+     * that case does not matter.
      */
     this._linkifyPathways = function(rootEl, pathways) {
         if (!pathways || !pathways.length) return;
@@ -362,6 +377,8 @@ function PA_AIInterpretView() {
         var named = pathways.filter(function(p) { return p && p.id && p.name; });
         if (!named.length) return;
         named.sort(function(a, b) { return b.name.length - a.name.length; });
+
+        var alreadyLinked = {};
 
         var byLowerName = {};
         var alternatives = named.map(function(p) {
@@ -390,6 +407,8 @@ function PA_AIInterpretView() {
                         while ((match = pattern.exec(text)) !== null) {
                             var pw = byLowerName[match[1].toLowerCase()];
                             if (!pw) continue;
+                            if (alreadyLinked[pw.id]) continue;
+                            if (pw.name.indexOf(" ") === -1 && match[1] !== pw.name) continue;
                             if (match.index > cursor) {
                                 frag.appendChild(document.createTextNode(
                                     text.slice(cursor, match.index)));
@@ -403,6 +422,7 @@ function PA_AIInterpretView() {
                                 "Open " + pw.name + " and interpret it with AI");
                             a.appendChild(document.createTextNode(match[1]));
                             frag.appendChild(a);
+                            alreadyLinked[pw.id] = true;
                             cursor = match.index + match[1].length;
                             linked++;
                         }
@@ -418,7 +438,29 @@ function PA_AIInterpretView() {
             }
         };
 
-        walk(rootEl);
+        // Stop at the References heading. Paper titles routinely contain
+        // pathway names ("...link the WWC protein family to Hippo signaling"),
+        // and because only the first mention is linked, a pathway the body
+        // referred to by a shorter name would get its one link inside a
+        // citation instead of in the analysis. marked emits a flat sequence of
+        // block elements, so the heading is a direct child of the root.
+        var stopAt = null;
+        var top = rootEl.children;
+        for (var t = 0; t < top.length; t++) {
+            if (/^H[1-6]$/.test(top[t].tagName) &&
+                /^\s*references\s*$/i.test(top[t].textContent || "")) {
+                stopAt = t;
+                break;
+            }
+        }
+
+        if (stopAt === null) {
+            walk(rootEl);
+        } else {
+            for (var b = 0; b < stopAt; b++) {
+                if (top[b].nodeType === 1) walk(top[b]);
+            }
+        }
         return linked;
     };
 
