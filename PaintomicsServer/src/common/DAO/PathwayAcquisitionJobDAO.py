@@ -80,7 +80,7 @@ class PathwayAcquisitionJobDAO(DAO):
 
         # Increase stats
         for counterID in ["jobID", jobInstance.getOrganism()]:
-            self.dbManager.getCollection("counters").update({'_id': counterID}, {'$inc': { 'counter': 1}}, upsert = True)
+            self.dbManager.getCollection("counters").update_one({'_id': counterID}, {'$inc': { 'counter': 1}}, upsert = True)
 
         return True
 
