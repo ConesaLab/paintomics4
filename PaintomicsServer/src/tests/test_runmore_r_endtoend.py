@@ -121,7 +121,7 @@ class RunMoreEndToEndTest(unittest.TestCase):
         return edges
 
     @staticmethod
-    def runScript(dataDir, outDir, omicName="TF"):
+    def runScript(dataDir, outDir, omicName="TF", method="PLS1"):
         cmd = [
             "Rscript", R_SCRIPT,
             "--target_file", os.path.join(dataDir, "targets.tab"),
@@ -130,7 +130,7 @@ class RunMoreEndToEndTest(unittest.TestCase):
             "--data_files", os.path.join(dataDir, "regulators.tab"),
             "--assoc_files", os.path.join(dataDir, "assoc.tab"),
             "--min_variation", "NA",
-            "--method", "PLS1", "--alpha", "0.05", "--vip", "0.8",
+            "--method", method, "--alpha", "0.05", "--vip", "0.8",
             "--filter_r2", "0.0",
             "--output_dir", outDir, "--date_seed", DATE,
         ]
@@ -235,6 +235,61 @@ class AssociationOrientationTest(unittest.TestCase):
                 os.path.join(outDir, "MORE_rpc_%s.tab" % DATE)))
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
+
+
+@unittest.skipUnless(rHasMore(), "Rscript with MORE and optparse is not available")
+class MLRMethodTest(unittest.TestCase):
+    """The MLR branch is a genuinely different path and was never exercised.
+
+    runMORE.R picks varSel="EN" for MLR and "Jack" for PLS1, and MORE then
+    dispatches to GetMLR rather than GetPLS. The two disagree on their output
+    schema in ways the rest of the stack has to absorb:
+
+      * R2 arrives in GoodnessOfFit as "Rsquared" for MLR and "RsquaredY" for
+        PLS -- the reason runMORE.R carries a candidate list rather than one
+        name. If that list ever loses an entry the table silently ships with
+        no R2 and the Step-3 slider filters on nothing.
+      * MLR's rpc table has an extra "representative" column. Both
+        parseRegulationPerCondition and the Step-3 view read columns
+        dynamically, so this is fine -- pinned here so it stays that way.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.mkdtemp(prefix="runmore_mlr_")
+        dataDir = os.path.join(cls.tmp, "in")
+        cls.outDir = os.path.join(cls.tmp, "out")
+        os.makedirs(dataDir)
+        os.makedirs(cls.outDir)
+        RunMoreEndToEndTest.writeFixture(dataDir)
+        cls.proc = RunMoreEndToEndTest.runScript(dataDir, cls.outDir, method="MLR")
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmp, ignore_errors=True)
+
+    def test_exits_cleanly(self):
+        self.assertEqual(self.proc.returncode, 0,
+                         "MLR run failed:\n%s" % (self.proc.stdout or "")[-3000:])
+
+    def test_resolves_r2_under_its_mlr_specific_column_name(self):
+        self.assertIn("attached R2 from GoodnessOfFit", self.proc.stdout)
+
+    def test_writes_the_same_artefacts_as_pls1(self):
+        """STEP2 rebuilds these names without knowing which method ran."""
+        for name in ("MORE_output_TF_%s.tab" % DATE,
+                     "MORE_relevant_assoc_TF_%s.tab" % DATE,
+                     "MORE_relevant_pairs_TF_%s.tab" % DATE,
+                     "MORE_rpc_%s.tab" % DATE):
+            self.assertTrue(os.path.exists(os.path.join(self.outDir, name)), name)
+
+    def test_rpc_table_keeps_the_cross_method_columns(self):
+        path = os.path.join(self.outDir, "MORE_rpc_%s.tab" % DATE)
+        with open(path) as fh:
+            header = fh.readline().rstrip("\n").split("\t")
+        for column in ("targetF", "regulator", "omic", "R2"):
+            self.assertIn(column, header,
+                          "MLR dropped a column the client needs: %s" % header)
 
 
 if __name__ == "__main__":
