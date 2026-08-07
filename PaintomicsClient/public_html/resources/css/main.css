@@ -1116,8 +1116,20 @@ div.checkbox label, div.radio label {
 	margin: 5px 10px;
 	box-shadow: var(--pa-shadow);
 }
+/* Same weight problem as the rail, and the same answer. A 50px band of
+   saturated colour carrying 30px type made the omic name the loudest thing on
+   the page, louder than the "2. Choose the files to upload" heading that owns
+   the section and far louder than the fields the card actually exists to
+   collect. Nothing about an omic's name needs to be twice the size of the
+   step heading.
+
+   The band comes down to 40px and the name to 20px, which is the same size as
+   the "Available omics" / "Selected omics" panel titles it sits between - so
+   the page now has one heading scale instead of the card shouting over it. The
+   fill is untouched: it is the app's type-coding, used here, in the legends and
+   in the pathway diagrams alike. */
 .omicboxTitle {
-	height: 50px;
+	height: 40px;
 	background: rgb(85, 201, 166);
 	padding-left: 15px;
 }
@@ -1127,7 +1139,7 @@ div.checkbox label, div.radio label {
    near-black ink clears AA on all six (4.90:1 on the darkest, region-based, up
    to 8.53:1) without touching a single fill. */
 div.omicboxTitle h4 {
-	font-size: 30px;
+	font-size: 20px;
 	color: #1A1A1A;
 }
 .omicboxTitle a, .availableOmicsBox a {
@@ -1159,8 +1171,9 @@ div.omicboxTitle h4 {
 	   as the card they become. */
 	border-radius: var(--pa-radius);
 }
+/* The drag sources match the cards they become, so they come down with them. */
 div.availableOmicsBox h4 {
-	font-size: 20px;
+	font-size: 16px;
 	color: #1A1A1A;
 }
 .dragHerePanel {
