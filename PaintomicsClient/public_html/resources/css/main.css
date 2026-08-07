@@ -3059,3 +3059,47 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
 	background: #33343A;
 	color: #FFFFFF;
 }
+
+/*****************************************************************************
+**** EMPTY EXPRESSION-VALUE PANELS *******************************************
+*****************************************************************************/
+/* The Metabolites Hub and Metabolite class analyses each pair a table with a
+   400x350 "Expression Value" panel that stays blank until a row's magnifier is
+   clicked. Until then the page carries two 350px voids containing a heading and
+   one line of help text pinned to the top - the largest empty areas in the
+   application, and the thing that made these two blocks look unfinished.
+
+   The container has to stay: the Highcharts plot renders into it and needs its
+   height reserved, so removing or collapsing it would make the chart appear by
+   shoving the page around. What can change is what the emptiness looks like.
+   `:empty` matches only while no chart has been drawn, so this styles the
+   waiting state and disappears the moment a plot arrives - no JS, and nothing
+   to keep in sync with the code that draws it. */
+#hubAnalysisPlot:empty,
+#classificationPlot:empty {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	min-height: 210px;
+	margin-top: 6px;
+	padding: 20px;
+	border: 1px dashed #D8D9DE;
+	border-radius: var(--pa-radius);
+	background: #FCFCFD;
+}
+#hubAnalysisPlot:empty::before,
+#classificationPlot:empty::before {
+	content: 'Select a row with the magnifier to plot its expression values here.';
+	max-width: 24ch;
+	color: #6B6C74;          /* 5.3:1 on #FCFCFD */
+	font-size: 12.5px;
+	line-height: 1.5;
+	text-align: center;
+}
+/* The heading above them sits flush against the panel edge and reads as a
+   label for nothing; it needs the same breathing room the plot now has. */
+#hubAnalysisPlot:empty ~ h4,
+.contentbox h4 + #hubAnalysisPlot:empty,
+.contentbox h4 + #classificationPlot:empty {
+	margin-top: 10px;
+}
