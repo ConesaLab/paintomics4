@@ -864,6 +864,34 @@ function contrastingInk(fillColor) {
  * worst being #c1502e at 4.71:1, and the mapping keeps working for colours
  * added later.
  */
+/**
+ * Grid cell renderer for narrow text columns.
+ *
+ * The Hub Analysis and metabolite class tables give their name column around
+ * 100px, because nine other columns are competing for the same two thirds of
+ * the page. Chemical names do not fit that at any type size - "gamma-Aminobutyric
+ * acid" and "L-2-Aminoadipic acid" both ellipsise - and widening the column only
+ * moves the problem to whichever column pays for it.
+ *
+ * So the value is left truncated on screen and the full text is attached as a
+ * quick-tip, which makes it recoverable on hover instead of lost. The value is
+ * HTML-encoded on the way through: ExtJS writes cell values as raw markup when
+ * no renderer is set, and these names come from user-supplied input files.
+ */
+function truncatableTextRenderer(value, metadata) {
+    if (value === null || value === undefined || value === "") {
+        return value;
+    }
+
+    var encoded = Ext.String.htmlEncode(String(value));
+
+    // htmlEncode escapes the double quotes, so the attribute cannot be broken
+    // out of by a name containing one.
+    metadata.tdAttr = 'data-qtip="' + encoded + '"';
+
+    return encoded;
+}
+
 function classificationBadgeStyle(color) {
     var ink = contrastingInk(color);
     if (ink === null) {

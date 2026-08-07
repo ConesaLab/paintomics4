@@ -1764,24 +1764,89 @@ div#tabcontainer_network .x-tab button .x-tab-inner {
 div#tabcontainer_network .x-tab-center {
 	margin-top: -10px;
 }
+/* This card holds exactly two things - an explanation and a small summary
+   table - and it used to stack them down the left of a 1300px box, with the
+   prose capped at its reading measure and a 200px min-height propping open the
+   emptiness underneath. Side by side, the measure stays readable and the width
+   is actually used. */
 div#multisource_msg {
-	min-height: 200px;
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	grid-template-areas:
+		"head head"
+		"text summary";
+	column-gap: 40px;
+	align-items: start;
 }
-div#multisource_summary { text-align: center; }
+div#multisource_msg > h2 { grid-area: head; }
+/* The heading is a full-bleed band, so the inset that makes this read as a card
+   goes on the two content areas rather than on the grid. Without it the table's
+   right border landed exactly on the card's own border. */
+div#multisource_msg > p {
+	grid-area: text;
+	padding-left: 20px;
+	margin-bottom: 0;
+}
+div#multisource_summary {
+	grid-area: summary;
+	margin-right: 20px;
+	margin-bottom: 4px;
+}
+
+/* Below this the two columns stop being two columns: the table needs ~300px
+   and the prose stops being readable long before the gap closes. */
+@media (max-width: 1100px) {
+	div#multisource_msg {
+		grid-template-columns: minmax(0, 1fr);
+		grid-template-areas: "head" "text" "summary";
+		row-gap: 16px;
+	}
+	div#multisource_summary { justify-self: start; }
+}
 /* This was `1px solid black` - the only pure-black edge in the application, on
    a table sitting inside an already-bordered card, so it read as a screenshot
    pasted into the page. The cells also had no vertical padding, which is what
    made the two database rows feel cramped against it. */
 div#multisource_summary table {
 	border: 1px solid var(--pa-border);
-	border-radius: var(--pa-radius-sm);
-	margin: 0 auto;
-	padding: 10px;
-	text-align: center;
+	border-radius: var(--pa-radius);
+	border-collapse: separate;
+	border-spacing: 0;
+	overflow: hidden;
+	background-color: #FFFFFF;
+	min-width: 320px;
 }
-div#multisource_summary table th,
+div#multisource_summary table th {
+	padding: 9px 16px;
+	border-bottom: 1px solid var(--pa-border);
+	background-color: #FAFAFA;
+	color: #52525B;
+	font-size: 11.5px;
+	font-weight: 600;
+	text-align: left;
+	white-space: nowrap;
+}
 div#multisource_summary table td {
-	padding: 4px 10px;
+	padding: 10px 16px;
+	border-top: 1px solid #F1F1F3;
+	font-size: 12.5px;
+	color: #27272A;
+}
+div#multisource_summary table tr:first-child td {
+	border-top: 0;
+}
+/* Counts read as a column of magnitudes, so they are right-aligned on lining
+   figures - "368" over "520" should line up digit for digit. */
+div#multisource_summary table th:nth-child(n+3),
+div#multisource_summary table td:nth-child(n+3) {
+	text-align: right;
+	font-variant-numeric: tabular-nums;
+}
+/* The badge column carries no header and no label, only the coloured initial. */
+div#multisource_summary table th:first-child,
+div#multisource_summary table td:first-child {
+	width: 1%;
+	padding-right: 0;
 }
 
 div.onedatabase .x-panel-body-default {
@@ -3288,4 +3353,62 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
 
 .paWeightsTip .x-btn {
 	border-radius: var(--pa-radius-sm);
+}
+
+/* Grid rows ------------------------------------------------------------------
+   Three things every table in the app was missing, all of them about reading a
+   row rather than decorating it.
+
+   Hover: with 888 rows and a dozen columns, tracking one pathway across the
+   full width was unaided - there was no feedback at all under the cursor.
+
+   Lining figures: the p-value and count columns exist to be compared down the
+   column, and proportional digits make "0.00533" and "0.00966" different widths,
+   so the decimal points wander. Tabular figures line them up.
+
+   Selection: Neptune's selected row is a saturated blue fill that fights the
+   omic colour-coding in the same row. A pale tint plus a left marker says the
+   same thing without competing for attention. */
+.x-grid-item-over .x-grid-cell {
+	background-color: #FAFAFA;
+}
+
+.x-grid-cell-inner {
+	font-variant-numeric: tabular-nums;
+}
+
+.x-grid-item-selected .x-grid-cell,
+.x-grid-row-selected .x-grid-cell {
+	background-color: #EEF4FC;
+	border-bottom-color: var(--pa-border);
+}
+
+/* Cells that carry a significance tint set it inline, so it survives both of
+   the rules above - the colour is data, not styling, and must not be
+   overridden by hover or selection. */
+
+/* Wrapping column headers ----------------------------------------------------
+   The Hub Analysis grid sizes its columns with flex percentages chosen for the
+   *data* - a step number, a count, a ratio - while the headers naming them are
+   two and three words long. The result was a header row reading "DE neighbo",
+   "not DE neighb", "Percentage.", "Percentile..": the columns you most need
+   explained were the ones whose explanation was cut off.
+
+   Widening them is not available; the nine data columns already use the full
+   width of a two-thirds panel. So the header text wraps instead, and the header
+   type drops a step below the data it labels - at the body size the labels were
+   taking width the values needed, and "C00042" rendered as "C00...". Still 600
+   weight and near-black, so the band reads as a label row rather than content.
+
+   Scoped by class, because the enrichment grid above uses grouped headers whose
+   heights ExtJS calculates on the assumption of a single line. */
+.paWrapHeaders .x-column-header-text {
+	white-space: normal;
+	overflow: visible;
+	text-overflow: clip;
+	line-height: 1.25;
+	font-size: 11.5px;
+}
+.paWrapHeaders .x-column-header-inner {
+	padding: 6px 5px;
 }
