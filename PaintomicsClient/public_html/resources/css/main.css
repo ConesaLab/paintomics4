@@ -96,12 +96,10 @@ root {
      The gutter is `max()` so that below 1600px it collapses to a normal 20px
      margin and nothing changes - this only does work on displays wide enough to
      have the problem. */
-  /* 1300px, not a value of my own choosing: an existing media-query rule caps
-     .contentbox at exactly that, so the column has to agree with it or the
-     header's contents and the content beneath would sit on two different left
-     edges - which is precisely what the first attempt at this produced, the
-     wordmark at 133px and the content at 284px. */
-  --pa-page-max: 1300px;
+  /* 1560px. Wide enough for the Step 3 enrichment grid, which is the widest
+     thing in the application at ~1400px, and narrow enough to leave a real
+     margin either side on a large display. */
+  --pa-page-max: 1560px;
   --pa-gutter: max(20px, calc((100vw - var(--pa-page-max)) / 2));
 }
 
@@ -1613,15 +1611,36 @@ div[id ^= "networkDetailsPanel_"] {width:270px;}
    the pale end of the palette (#ffff00, #deeaee, #99ffcc and friends), which
    would otherwise dissolve into the page; on the dark end it is imperceptible,
    which is why one flat rgba value covers all 36 colours. */
-/* Every top-level surface centres on the page column. `auto` margins rather
-   than a wrapper element, because these boxes are rendered by a dozen different
-   ExtJS views and there is no single container to constrain. */
+/* The page column ------------------------------------------------------------
+   Centring `.contentbox` was not enough: Step 3 - the results page - builds its
+   analyses inside plain ExtJS containers rather than contentboxes, and those
+   measured 1847px at a 1867px viewport. Full bleed, no margin, exactly the
+   "uses all the space and leaves no space to the side" complaint.
+
+   The column is enforced here instead, on the centre panel, because that is the
+   one ancestor every step shares. Padding rather than max-width: ExtJS writes
+   the inner container's width itself and ignores a max-width on it, but it
+   measures the space *inside* the panel's padding, so padding is the one lever
+   that the layout engine actually respects. Verified - it reflowed the Step 3
+   containers from 1847px to 1547px, centred.
+
+   `.contentbox` no longer caps itself, so surfaces fill the column and every
+   block on the page shares one left and right edge. */
+#mainViewCenterPanel {
+	padding-left: var(--pa-gutter);
+	padding-right: var(--pa-gutter);
+	box-sizing: border-box;
+}
+div.contentbox,
 .contentbox,
 .omicbox,
 .po-hero-section {
-	max-width: var(--pa-page-max);
-	margin-left: auto;
-	margin-right: auto;
+	max-width: none;
+}
+/* Running text does not want a 1560px measure even if the tables do. */
+div.contentbox p,
+div.contentbox li {
+	max-width: 105ch;
 }
 
 i.classificationNameBox {
@@ -2984,3 +3003,59 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
 
 
 
+
+/*****************************************************************************
+**** RESULTS PAGE CONTENTS ***************************************************
+*****************************************************************************/
+/* Step 3 stacks eight analyses down ~2900px of scroll with no way to see what is
+   there or reach any of it. This strip lists them and jumps to them.
+
+   Sticky rather than fixed, so it scrolls with the column and pins under the
+   header only once it reaches it - it belongs to the results, not to the app
+   chrome, and pinning it permanently would have re-created the second bar that
+   folding the step actions into the header just removed. It uses the same pill
+   language as the navigation so the page has one idea of what a link-that-moves
+   -you looks like, but muted, because this is orientation rather than action. */
+.pa-toc {
+	position: sticky;
+	top: 50px;
+	z-index: 150;
+	margin: 0 10px 4px;
+	padding: 8px 0;
+	background: rgba(255, 255, 255, 0.94);
+	backdrop-filter: saturate(180%) blur(8px);
+	-webkit-backdrop-filter: saturate(180%) blur(8px);
+	border-bottom: 1px solid var(--pa-border);
+}
+.pa-toc-list {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 4px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+.pa-toc-link {
+	display: inline-block;
+	padding: 5px 11px;
+	border-radius: 999px;
+	font-size: 12px;
+	line-height: 1.2;
+	color: #55565E;          /* 7.0:1 on white */
+	text-decoration: none;
+	white-space: nowrap;
+	transition: background-color var(--pa-transition), color var(--pa-transition);
+}
+.pa-toc-link:hover {
+	background: #F1F2F4;
+	color: #111111;
+	text-decoration: none;
+}
+/* The analysis the reader is currently inside, set by the IntersectionObserver
+   in buildAnalysisTOC(). Filled rather than merely darker, so it is findable at
+   a glance in a row of a dozen similar pills. */
+.pa-toc-link.current {
+	background: #33343A;
+	color: #FFFFFF;
+}

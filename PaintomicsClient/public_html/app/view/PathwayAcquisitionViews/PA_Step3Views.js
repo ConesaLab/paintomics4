@@ -886,6 +886,13 @@ function PA_Step3JobView() {
 
 						$("#multisource_summary").html(table_html);
 					}
+
+					// Built last, and on a delay, because it reads the headings
+					// that are actually on the page: the classification, network
+					// and enrichment sections are rendered by their own views
+					// after this handler runs, so scanning immediately would find
+					// only the first two and silently produce a short list.
+					$.wait(function () { buildAnalysisTOC('#mainViewCenterPanel'); }, 1.2);
 				},
 				beforedestroy: function() {
 					me.cleanupAIWidget();
