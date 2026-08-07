@@ -195,11 +195,18 @@ function PA_Step4JobView() {
 	* @return {PA_Step4JobView}
 	*/
 	this.toogleHistoryPanel = function(forceHide) {
-		forceHide = (forceHide || false);
-		var currentLeft = $("#pathwayHistoryContainer").css("left");
-		$("#pathwayHistoryContainer").css({
-			"left": ((currentLeft === "0px" || forceHide) ? "-405px" : "0px")
-		});
+		var panel = $("#pathwayHistoryContainer");
+
+		// Visibility used to be read back off an animating `left`, and set by
+		// sliding the panel to -405px. Both were wrong: the read was an
+		// intermediate pixel value for the 250ms the transition ran, and -405px
+		// only clears the window if the panel is anchored at its left edge -
+		// this one is anchored ~680px in, so "closed" left it fully on screen
+		// over the pathway title. The class is the whole state; the stylesheet
+		// decides what visible and hidden look like.
+		var shouldShow = !forceHide && !panel.hasClass("step4HistoryBoxOpen");
+
+		panel.toggleClass("step4HistoryBoxOpen", shouldShow);
 		return this;
 	};
 
@@ -246,7 +253,10 @@ function PA_Step4JobView() {
 					'<a href="javascript:void(0)" class="button btn-primary helpTip" id="showPathwayButton"><i class="fa fa-sitemap"></i>  Show Pathway</a></div>' +
 					'<a href="javascript:void(0)" class="button btn-default backButton"><i class="fa fa-arrow-left"></i> Go back</a>' +
 					'<a href="javascript:void(0)" class="button helpTip" style=" float: left; background-color: #CD435D; color: #fff;" id="showHistoryButton"><i class="fa fa-history"></i> History</a>' +
-					'<div id="pathwayHistoryContainer" class="step4HistoryBox"><h2>History</h2><div></div></div>'
+					// The panel covers the pathway it slides over and had no way out of
+					// its own: closing it meant knowing to press the History button in
+					// the toolbar behind it a second time.
+					'<div id="pathwayHistoryContainer" class="step4HistoryBox"><h2>History<a href="javascript:void(0)" id="hideHistoryButton" class="step4HistoryClose" title="Close history"><i class="fa fa-times"></i></a></h2><div></div></div>'
 				}]
 			}, { //THE CONTAINER FOR THE PATHWAY VIEWS
 				xtype: "container", flex:1,
@@ -289,13 +299,39 @@ function PA_Step4JobView() {
 						me.currentView.showVisualOptionsPanel();
 					});
 
-					$("#showHistoryButton").click(function() {
+					$("#showHistoryButton").click(function(event) {
+						event.stopPropagation();
 						me.toogleHistoryPanel();
+					});
+
+					$("#hideHistoryButton").click(function(event) {
+						event.stopPropagation();
+						me.toogleHistoryPanel(true);
+					});
+
+					// Anything that dismisses an overlay elsewhere in the app should
+					// dismiss this one: clicking away from it, or Escape. Without
+					// these the panel stays over the diagram until it is toggled off
+					// from the toolbar it is covering.
+					$(document).on("click.paHistory", function(event) {
+						if (!$(event.target).closest("#pathwayHistoryContainer").length) {
+							me.toogleHistoryPanel(true);
+						}
+					});
+
+					$(document).on("keydown.paHistory", function(event) {
+						if (event.key === "Escape") {
+							me.toogleHistoryPanel(true);
+						}
 					});
 
 					initializeTooltips(".helpTip");
 				},
 				beforedestroy: function() {
+					// The dismiss handlers are on `document`, which outlives this view.
+					// Namespaced so this removes exactly the two bound above.
+					$(document).off(".paHistory");
+
 					//DESTROY ALL PA_Step4PathwayView AND SUBCOMPONENTS
 					for (var i in this.pathwayViews) {
 						this.pathwayViews[i].getComponent().destroy();

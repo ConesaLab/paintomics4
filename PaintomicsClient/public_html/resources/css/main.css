@@ -2061,25 +2061,66 @@ i.masterRegulator:before {
 
 /*PATHWAYS THUMBNAILS FOR HISTORY PANEL*/
 
+/* This panel slides over the pathway diagram, so it has to read as something
+   laid on top of the page: a flat #EEE rectangle with a hard grey drop shadow
+   and no border read as part of the diagram that had gone wrong. Now a white
+   card with the same border, radius and heading as every other card here, and
+   a shadow with enough spread to sit above the artwork.
+
+   Hiding used to mean `left: -405px`, a magic offset that assumed the panel's
+   offset parent sat at the left edge of the window. It does not: the toolbar it
+   is anchored to starts ~680px in, so -405px slid the panel sideways and left
+   all of it on screen, on top of the pathway title. Closing it looked like it
+   had done nothing. Visibility is a state now, not a coordinate, so it holds
+   wherever the panel happens to be anchored. */
 .step4HistoryBox {
-	max-width: 335px;
-	width: 335px;
+	max-width: 360px;
+	width: 360px;
 	position: absolute;
-	padding: 5px;
+	padding: 0;
 	top: 55px;
-	left: -405px;
-	/*margin-left: 70px;*/
+	left: 0;
 	z-index: 23;
-	background-color: #EEEEEE;
-	box-shadow: 0px 3px 5px #BBBBBB;
-	transition: left .25s ease-in-out;
-	-moz-transition: left .25s ease-in-out;
-	-webkit-transition: left .25s ease-in-out;
+	background-color: #FFFFFF;
+	border: 1px solid var(--pa-border);
+	border-radius: var(--pa-radius);
+	box-shadow: 0 12px 32px rgba(0, 0, 0, 0.16);
+	overflow: hidden;
+	opacity: 0;
+	visibility: hidden;
+	transform: translateY(-8px);
+	/* visibility flips only after the fade finishes, so the panel is not
+	   click-through mid-animation and does not vanish before it has faded. */
+	transition: opacity .18s ease, transform .18s ease, visibility 0s linear .18s;
+}
+.step4HistoryBox.step4HistoryBoxOpen {
+	opacity: 1;
+	visibility: visible;
+	transform: translateY(0);
+	transition: opacity .18s ease, transform .18s ease, visibility 0s;
+}
+/* Eight thumbnails is taller than most viewports over a diagram, so the list
+   scrolls inside the card rather than running off the bottom of the screen. */
+.step4HistoryBox > div {
+	max-height: 58vh;
+	overflow-y: auto;
+	padding: 10px;
 }
 .step4HistoryBox h2 {
-	text-align: center;
+	text-align: left;
+	position: relative;
+	margin: 0;
+	padding: 12px 46px 12px 16px;
+	background-color: #FFFFFF;
+	border-bottom: 1px solid var(--pa-border);
+	border-radius: 0;
+	color: #27272A;
+	font-size: 14px;
+	font-weight: 600;
 }
-.step4ThumbContainer {
+/* Scoped to this panel: the same three classes dress the pathway thumbnails in
+   Step 3's network tooltip, which is laid out differently and must not move. */
+.step4HistoryBox .step4ThumbContainer {
 	position: relative;
 	display: flex;
 	flex-direction: column;
