@@ -120,6 +120,15 @@ def fromMiRNAtoGenes_STEP1(REQUEST, RESPONSE, QUEUE_INSTANCE, JOB_ID, EXAMPLE_FI
         # Step 4. READ PARAMS
         #****************************************************************
         namePrefix = formFields.get("name_prefix")
+
+        # Same hazard as Bed2GenesServlet: every parameter is looked up as
+        # namePrefix + "_something", so a missing prefix raised TypeError on
+        # the first concatenation rather than naming the missing field.
+        if not namePrefix:
+            raise UserWarning(
+                "Missing name_prefix parameter: PaintOmics cannot tell which "
+                "omic's settings to read for the miRNA-to-genes conversion.")
+
         logging.info("STEP2 - INPUT VALUES ARE:")
         jobInstance.omicName= formFields.get(namePrefix + "_omic_name", "miRNA-seq")
         logging.info("  - omicName: " + jobInstance.omicName)

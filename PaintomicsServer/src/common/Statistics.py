@@ -1,4 +1,4 @@
-from math import log
+from math import log, isfinite
 from scipy.stats import chi2, fisher_exact, combine_pvalues, hypergeom
 from statsmodels.sandbox.stats.multicomp import multipletests
 ##*******************************************************************************************
@@ -79,10 +79,37 @@ def calculateStoufferCombinedPvalue(pvalues, weights):
             val = pvalue
         curatedPvalues.append(min(val, 0.9999999999))
 
+    # Nothing to combine: no omic in this pathway carried a usable p-value.
+    if not curatedPvalues:
+        return 1.0
+
+    # Stouffer divides by sqrt(sum(w**2)), so an all-zero weight vector is
+    # 0/0 -> NaN. That is reachable from the interface: the Stouffer weight
+    # sliders have minValue 0, so a user can drag every omic to zero. The NaN
+    # then reaches jsonify, which writes it as the bare token `NaN` -- not
+    # valid JSON (RFC 8259) -- and since the client moved from eval() to
+    # JSON.parse() the whole response is rejected, surfacing as
+    # "Oops..Internal error! Unable to parse the error message".
+    #
+    # With no weight on any omic there is no evidence to combine, so the
+    # honest answer is "not significant", which is also what the rest of the
+    # pipeline stores when a p-value is absent.
+    if weights is not None:
+        weightList = list(weights)
+        if weightList and not any(weightList):
+            return 1.0
+
     # P-value in third position ([nFeatures, nRelevantFeatures, pValue])
     combinedPvalue = combine_pvalues(curatedPvalues, 'stouffer', weights)
 
-    return combinedPvalue[1]
+    result = combinedPvalue[1]
+
+    # Backstop for any other degenerate input: a non-finite float would be
+    # serialised as invalid JSON and break the client the same way.
+    if not isfinite(result):
+        return 1.0
+
+    return result
 
 def calculateCombinedSignificancePvalues(significanceValuesList, stouferWeights):
     combined_methods = {

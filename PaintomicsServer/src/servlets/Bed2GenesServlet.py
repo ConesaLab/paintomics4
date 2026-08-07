@@ -114,6 +114,17 @@ def fromBEDtoGenes_STEP1(REQUEST, RESPONSE, QUEUE_INSTANCE, JOB_ID, EXAMPLE_FILE
         # Step 4. READ PARAMS
         #****************************************************************
         namePrefix = formFields.get("name_prefix")
+
+        # Every parameter below is looked up as namePrefix + "_something", so a
+        # missing prefix raised TypeError on the first concatenation, naming
+        # neither the field nor the tool. Falling back to the defaults instead
+        # would silently run the job with parameters the user never chose,
+        # which is worse than refusing it.
+        if not namePrefix:
+            raise UserWarning(
+                "Missing name_prefix parameter: PaintOmics cannot tell which "
+                "omic's settings to read for the regions-to-genes conversion.")
+
         logging.info("STEP2 - INPUT VALUES ARE:")
         jobInstance.omicName= formFields.get(namePrefix + "_omic_name", "DNase-seq")
         logging.info("  - omicName             :" + jobInstance.omicName)

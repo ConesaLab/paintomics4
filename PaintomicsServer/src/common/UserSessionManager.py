@@ -63,8 +63,28 @@ class UserSessionManager(object):
 
         def isValidAdminUser(self, user_id, user_name, sessionToken):
             self.isValidUser(user_id,sessionToken)
+
+            # isValidUser deliberately lets the anonymous "nologin" case
+            # through: the app supports jobs that belong to nobody. An
+            # administrative route must not inherit that permissiveness.
+            #
+            # Without this check an unauthenticated request reached
+            # UserDAO.findByID(None), which does int(user_id), and the request
+            # failed with
+            #     TypeError: int() argument must be ... not 'NoneType'
+            # So access was refused only as a side effect of a crash rather
+            # than by decision, and the reply handed an unauthenticated caller
+            # a servlet file name and line number instead of saying what was
+            # required. An unknown ID was the same story one line later, where
+            # _user would be None and _user.userName raised AttributeError.
+            if user_id is None or str(user_id) == 'None' or not user_name:
+                raise CredentialException(
+                    "[b]Administrator privileges required[/b]. Please log in with "
+                    "an administrator account to use this feature.")
+
             _user = UserDAO().findByID(user_id)
-            if _user.userName != user_name or not (user_name in ADMIN_ACCOUNTS.split(",")):
+
+            if _user is None or _user.userName != user_name or not (user_name in ADMIN_ACCOUNTS.split(",")):
                 raise Exception("User not allowed")
 
         def getLoggedUsersCount(self):

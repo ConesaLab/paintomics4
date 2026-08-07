@@ -670,7 +670,24 @@ class Response(object):
         return self.content_type
 
     def getResponse(self):
-        return jsonify( self.content ), self.status, self.content_type
+        response = jsonify(self.content)
+
+        # Assign rather than return the dict as a third tuple element.
+        # Werkzeug *extends* the header list with whatever that dict holds, and
+        # jsonify has already set "Content-Type: application/json", so every
+        # JSON response went out carrying the header twice:
+        #
+        #   Content-Type: application/json
+        #   Content-Type: application/json; charset=utf-8
+        #
+        # Repeating Content-Type is invalid (RFC 9110), and nginx resolves it by
+        # keeping the first and discarding the second -- which is the one with
+        # the charset, so the declaration this class exists to add never
+        # actually reached a client. Item assignment replaces instead.
+        for header, value in self.content_type.items():
+            response.headers[header] = value
+
+        return response, self.status
 
 class MyJSONEncoder(JSONEncoder):
     def default(self, obj):
