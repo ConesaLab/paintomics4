@@ -257,6 +257,13 @@ function PA_Step4JobView() {
 			}],
 			listeners: {
 				boxready: function() {
+					/* Step 3 leaves its contents sidebar behind in the centre panel, and
+					   none of the sections it lists exist here - every entry on the final
+					   result page was a link that went nowhere. Rebuilding against this
+					   view finds fewer than three sections and clears it, which also drops
+					   the sidebar's reserved column so the pathway gets the full width. */
+					buildAnalysisTOC('#mainViewCenterPanel');
+
 					//SOME EVENT HANDLERS DECLARATION
 					$(".backButton").click(function() {
 						me.backButtonHandler();

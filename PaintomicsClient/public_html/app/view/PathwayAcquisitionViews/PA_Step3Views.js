@@ -4627,8 +4627,9 @@ function PA_Step3HubAnalysis () {
 				items: [
 					{
 						xtype: "gridpanel",
+						itemId: 'hubAnalysisGrid',
 						cls: "contentbox paWrapHeaders",
-						columnWidth: 0.66,
+						columnWidth: 1,
 						store: userStore,
 						height: 350,
 						header: {
@@ -4657,9 +4658,13 @@ function PA_Step3HubAnalysis () {
 									tooltip: 'Paint this feature',
 									style: "font-size: 20px;",
 									handler: function (grid, rowIndex) {
+										revealPlotPanel('hubAnalysisPlotPanel');
+
 										let elem = $("#hubAnalysisPlot");
 										elem.empty();
-										let divWidth = elem.width() - 400;
+										/* Was elem.width() - 400, which on this panel evaluates to a
+										   negative number and left the plot with no width at all. */
+										let divWidth = Math.max(260, elem.width() - 60);
 
 										let hubTable = {};
 
@@ -4996,9 +5001,12 @@ function PA_Step3HubAnalysis () {
 					},
 					{
 						xtype: 'container',
+						itemId: 'hubAnalysisPlotPanel',
 						cls: "contentbox",
-						columnWidth: 0.25,
-						minWidth: 400,
+						/* Hidden until a row is painted, then full width beneath the table
+						   rather than a 300px column beside it - see revealPlotPanel(). */
+						hidden: true,
+						columnWidth: 1,
 						padding: '30',
 						height: 350,
 						autoScroll: true,
@@ -5175,8 +5183,9 @@ function PA_Step3MetaboliteView() {
 				items: [
 					{
 						xtype: "gridpanel",
+						itemId: 'classificationGrid',
 						cls: "contentbox paWrapHeaders",
-						columnWidth:0.66,
+						columnWidth: 1,
 
 						autoScroll: true,
 						store: userStore,
@@ -5230,9 +5239,11 @@ function PA_Step3MetaboliteView() {
 										style: "font-size: 20px;",
 										handler: function (grid, rowIndex) {
 
+											revealPlotPanel('classificationPlotPanel');
+
 											let elem = $("#classificationPlot");
 											elem.empty();
-											let divWidth = elem.width() - 400;
+											let divWidth = Math.max(260, elem.width() - 60);
 											let regulateFeatures = dataFinal[grid.getStore().getAt(rowIndex).data.name].ID;
 											let regulateOmicsValueComp = []
 											let omicName =  "Metabolomics"
@@ -5356,9 +5367,10 @@ function PA_Step3MetaboliteView() {
 					},
 					{
 						xtype: 'box',
+						itemId: 'classificationPlotPanel',
 						cls: "contentbox",
-						columnWidth: 0.25,
-						minWidth: 400,
+						hidden: true,
+						columnWidth: 1,
 						padding: '30',
 						height: 350,
 						html:
