@@ -763,7 +763,14 @@ function buildAnalysisTOC(containerSelector) {
     if (existing) { existing.remove(); }
 
     var headings = paTocSections();
-    if (headings.length < 3) { return null; }
+    if (headings.length < 3) {
+        // No sidebar means no column reserved for one - the class is what the
+        // stylesheet keys the extra left padding off, so views without a
+        // contents list (the pathway view) get the full width back.
+        root.classList.remove('pa-has-toc');
+        return null;
+    }
+    root.classList.add('pa-has-toc');
 
     var nav = document.createElement('nav');
     nav.className = 'pa-toc';
@@ -864,6 +871,43 @@ function contrastingInk(fillColor) {
  * worst being #c1502e at 4.71:1, and the mapping keeps working for colours
  * added later.
  */
+/**
+ * Reveals one of the "Expression Value" side panels the first time it has
+ * something to plot, and gives the table beside it the freed width until then.
+ *
+ * These panels were laid out at columnWidth 0.25 with minWidth 400. ExtJS
+ * honours the minimum, so the pair needed 0.66 * W + 400px and only fitted when
+ * the container was about 1176px - a viewport of roughly 1600px. On anything
+ * smaller, which is most laptops, the panel wrapped onto its own row and became
+ * a 400px-tall empty card underneath the table, while the 400px of page beside
+ * the table went unused and the table itself was squeezed hard enough to
+ * ellipsise its IDs and p-values.
+ *
+ * Nothing is plotted until a row's paint button is pressed, so there is no
+ * reason to hold the space open before that.
+ *
+ * The panel is also full width and below the table rather than beside it.
+ * Sharing the row serves neither: it leaves the table around 730px, which is
+ * not enough for nine columns without ellipsising the IDs and p-values again,
+ * while giving the plot a ~300px column to draw a heatmap across conditions and
+ * a line chart in. Stacked, both get the whole column.
+ *
+ * @param {String} panelItemId, itemId of the panel holding the plot
+ */
+function revealPlotPanel(panelItemId) {
+    var panel = Ext.ComponentQuery.query("#" + panelItemId)[0];
+
+    if (!panel || !panel.isHidden()) {
+        return;
+    }
+
+    panel.show();
+
+    if (panel.ownerCt) {
+        panel.ownerCt.updateLayout();
+    }
+}
+
 /**
  * Grid cell renderer for narrow text columns.
  *

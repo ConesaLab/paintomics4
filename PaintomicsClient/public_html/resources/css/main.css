@@ -96,11 +96,21 @@ root {
      The gutter is `max()` so that below 1600px it collapses to a normal 20px
      margin and nothing changes - this only does work on displays wide enough to
      have the problem. */
-  /* 1560px. Wide enough for the Step 3 enrichment grid, which is the widest
-     thing in the application at ~1400px, and narrow enough to leave a real
-     margin either side on a large display. */
-  --pa-page-max: 1560px;
-  --pa-gutter: max(20px, calc((100vw - var(--pa-page-max)) / 2));
+  /* 1400px, the width of the Step 3 enrichment grid - the widest thing in the
+     application. It was 1560px, which is wider than the laptop screens most of
+     this is read on, so on a 1440px display the max() below always chose its
+     floor and the whole rule did nothing: the results ran to within 40px of the
+     right edge. The cap now engages at 1480px rather than 1600px, and the floor
+     is a margin you can actually see rather than a hairline. */
+  --pa-page-max: 1400px;
+  --pa-rail: 206px;
+  --pa-gutter: max(40px, calc((100vw - var(--pa-page-max)) / 2));
+
+  /* The contents sidebar is chrome, not content, so the results column is
+     centred in what is left after it - not in the viewport. Padding the left by
+     rail + gutter while padding the right by gutter alone would push the column
+     off-centre by the width of the rail. */
+  --pa-gutter-railed: max(40px, calc((100vw - var(--pa-rail) - var(--pa-page-max)) / 2));
 }
 
 /* Keyboard focus ------------------------------------------------------------
@@ -3145,13 +3155,17 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
    padding grows to make room, so the results keep their full width rather than
    being squeezed. */
 @media (min-width: 1200px) {
-	#mainViewCenterPanel {
-		padding-left: calc(var(--pa-gutter) + 206px);
+	/* Keyed off the class buildAnalysisTOC sets, so the column is only reserved
+	   on views that actually have a contents list. The pathway view has none and
+	   gets the full width. */
+	#mainViewCenterPanel.pa-has-toc {
+		padding-left: calc(var(--pa-rail) + var(--pa-gutter-railed));
+		padding-right: var(--pa-gutter-railed);
 	}
 	.pa-toc {
 		position: fixed;
 		top: 62px;
-		left: var(--pa-gutter);
+		left: var(--pa-gutter-railed);
 		width: 190px;
 		max-height: calc(100vh - 84px);
 		overflow-y: auto;
@@ -3207,46 +3221,15 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
 /*****************************************************************************
 **** EMPTY EXPRESSION-VALUE PANELS *******************************************
 *****************************************************************************/
-/* The Metabolites Hub and Metabolite class analyses each pair a table with a
-   400x350 "Expression Value" panel that stays blank until a row's magnifier is
-   clicked. Until then the page carries two 350px voids containing a heading and
-   one line of help text pinned to the top - the largest empty areas in the
-   application, and the thing that made these two blocks look unfinished.
+/* The two "Expression Value" panels used to be styled here for their empty
+   state, because they sat on the page as 350px voids from the moment it loaded.
+   That is now handled where it belongs - the panels are hidden until a row is
+   painted (see revealPlotPanel in Util.js), so there is no empty state left to
+   dress up, and the table beside them gets the width back until then.
 
-   The container has to stay: the Highcharts plot renders into it and needs its
-   height reserved, so removing or collapsing it would make the chart appear by
-   shoving the page around. What can change is what the emptiness looks like.
-   `:empty` matches only while no chart has been drawn, so this styles the
-   waiting state and disappears the moment a plot arrives - no JS, and nothing
-   to keep in sync with the code that draws it. */
-#hubAnalysisPlot:empty,
-#classificationPlot:empty {
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	min-height: 210px;
-	margin-top: 6px;
-	padding: 20px;
-	border: 1px dashed #D8D9DE;
-	border-radius: var(--pa-radius);
-	background: #FCFCFD;
-}
-#hubAnalysisPlot:empty::before,
-#classificationPlot:empty::before {
-	content: 'Select a row with the magnifier to plot its expression values here.';
-	max-width: 24ch;
-	color: #6B6C74;          /* 5.3:1 on #FCFCFD */
-	font-size: 12.5px;
-	line-height: 1.5;
-	text-align: center;
-}
-/* The heading above them sits flush against the panel edge and reads as a
-   label for nothing; it needs the same breathing room the plot now has. */
-#hubAnalysisPlot:empty ~ h4,
-.contentbox h4 + #hubAnalysisPlot:empty,
-.contentbox h4 + #classificationPlot:empty {
-	margin-top: 10px;
-}
+   The earlier note here claimed the container had to stay so the Highcharts
+   plot would have its height reserved. It does not: the plot is drawn into an
+   element that is created and sized by the same handler that reveals it. */
 
 /*****************************************************************************
 **** GRID TOOLBARS ***********************************************************
