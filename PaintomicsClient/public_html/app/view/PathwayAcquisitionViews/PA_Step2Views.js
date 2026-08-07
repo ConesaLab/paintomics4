@@ -279,14 +279,18 @@ function PA_Step2JobView() {
 			var dbs_message = {
 				xtype: 'box',
 				cls: "contentbox", minHeight: 240, id: "dbs_message",
+				// The <dl> and the closing sentence were both inside the opening <p>.
+				// A description list is not phrasing content, so the parser closed
+				// that paragraph before the list and left the last sentence in no
+				// paragraph at all - which is why it ignored the card's reading
+				// measure and ran the full width of the box while the first sentence
+				// wrapped at 105 characters.
 				html:
 				'<h2>Multiple databases used</h2>' +
 				'<div>' +
-				'  <p>The selected species had more than one database available. Your final analysis contains information about the following databases: ' +
-				'			<dl id="dbs_dl">' + dl_dbs + '</dl>' +
-				'     <br>' +
-				'    The following diagrams combine the matched & unmatched elements considering <b>all</b> databases; for a desambiguation please place the cursor over the graph and check the emerging tooltip.<br>' +
-				'  </p>' +
+				'  <p>The selected species had more than one database available. Your final analysis contains information about the following databases:</p>' +
+				'  <dl id="dbs_dl">' + dl_dbs + '</dl>' +
+				'  <p>The following diagrams combine the matched &amp; unmatched elements considering <b>all</b> databases; for a desambiguation please place the cursor over the graph and check the emerging tooltip.</p>' +
 				'</div>'
 			};
 

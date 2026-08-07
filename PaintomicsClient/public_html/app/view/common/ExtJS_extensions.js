@@ -194,7 +194,19 @@ Ext.define('Ext.grid.LiveSearchGridPanel', {
 		
 		me.viewConfig.stripeRows = this.stripeRows;
 		
-        me.tbar = [
+        // Two docked toolbars, not one.
+        //
+        // These controls need about 1750px to lay out and the grid is rarely
+        // that wide, so as a single row the tail - Show combined p-values,
+        // Configure, Download as XLS - was simply cut off with no way to reach
+        // it. ExtJS positions toolbar items with absolute `left` offsets
+        // computed in JavaScript, so no CSS wrap can help; the split has to
+        // happen here, in the config.
+        //
+        // The seam follows what the controls do: row one is finding things
+        // within the results, row two is choosing what the results contain and
+        // what to do with them.
+        me.paSearchItems = [
 			'Search', {
                 xtype: 'textfield',
                 name: 'searchField',
@@ -221,11 +233,17 @@ Ext.define('Ext.grid.LiveSearchGridPanel', {
                 handler: me.searchByIDToggle,
                 scope: me
             }, 'Search by gene/compound',
-            /* Splice position: -3 */
+            /* The actions ride on row one, pushed right. Row two is the tighter
+               of the two - it carries the database checkboxes and both p-value
+               combos - and with the export on the end it overflowed by a few
+               pixels and clipped it. Row one has the room, and the top-right
+               corner is where an export belongs anyway. */
             '->',
             ((me.download !== false) ? '<a class="downloadXLS" href="javascript:void(0)"><i class="fa fa-file-excel-o"></i> Download as XLS</a>' : ""),
             ((me.multidelete !== false) ? '<a class="multiDelete" style="color:rgb(242, 105, 105);" href="javascript:void(0)"><i class="fa fa-trash"></i> Delete selected</a>' : "")
         ];
+
+        me.paFilterItems = [];
 
         if (me.databases.length > 1) {
           /* Add a separator then the extra checkboxes */
@@ -244,7 +262,7 @@ Ext.define('Ext.grid.LiveSearchGridPanel', {
             }, source);
           });
 
-          me.tbar.splice(-3, 0, ...database_options);
+          me.paFilterItems.splice(0, 0, ...database_options);
         }
 
         if (me.adjustedPvaluesMethods.length || me.combinedPvaluesMethods.length) {
@@ -320,9 +338,27 @@ Ext.define('Ext.grid.LiveSearchGridPanel', {
               });
           }
 
-          pvalue_filter_options.push('-')
+          me.paFilterItems.push(...pvalue_filter_options);
+        }
 
-          me.tbar.splice(-2, 0, ...pvalue_filter_options);
+        // The second row is only worth rendering when there is something to put
+        // on it: a single-database run with no p-value methods has no filters at
+        // all, and an empty bar is worse than none.
+        me.dockedItems = [{
+            xtype: 'toolbar',
+            dock: 'top',
+            cls: 'paGridBar paGridBar-search',
+            items: me.paSearchItems
+        }];
+        if (me.paFilterItems.length > 0) {
+            me.dockedItems.push({
+                xtype: 'toolbar',
+                dock: 'top',
+                cls: 'paGridBar paGridBar-filters',
+                items: me.paFilterItems
+            });
+        } else {
+            me.dockedItems[0].items = me.paSearchItems.concat(me.paFilterItems);
         }
 
         me.callParent(arguments);

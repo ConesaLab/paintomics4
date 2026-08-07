@@ -195,11 +195,18 @@ function PA_Step4JobView() {
 	* @return {PA_Step4JobView}
 	*/
 	this.toogleHistoryPanel = function(forceHide) {
-		forceHide = (forceHide || false);
-		var currentLeft = $("#pathwayHistoryContainer").css("left");
-		$("#pathwayHistoryContainer").css({
-			"left": ((currentLeft === "0px" || forceHide) ? "-405px" : "0px")
-		});
+		var panel = $("#pathwayHistoryContainer");
+
+		// Visibility used to be read back off an animating `left`, and set by
+		// sliding the panel to -405px. Both were wrong: the read was an
+		// intermediate pixel value for the 250ms the transition ran, and -405px
+		// only clears the window if the panel is anchored at its left edge -
+		// this one is anchored ~680px in, so "closed" left it fully on screen
+		// over the pathway title. The class is the whole state; the stylesheet
+		// decides what visible and hidden look like.
+		var shouldShow = !forceHide && !panel.hasClass("step4HistoryBoxOpen");
+
+		panel.toggleClass("step4HistoryBoxOpen", shouldShow);
 		return this;
 	};
 
@@ -245,8 +252,11 @@ function PA_Step4JobView() {
 					'<a href="javascript:void(0)" class="button btn-secondary helpTip" id="globalHeatmapButton"><i class="fa fa-th"></i> Show Heatmap</a>' +
 					'<a href="javascript:void(0)" class="button btn-primary helpTip" id="showPathwayButton"><i class="fa fa-sitemap"></i>  Show Pathway</a></div>' +
 					'<a href="javascript:void(0)" class="button btn-default backButton"><i class="fa fa-arrow-left"></i> Go back</a>' +
-					'<a href="javascript:void(0)" class="button helpTip" style=" float: left; background-color: #D66379; color: #fff;" id="showHistoryButton"><i class="fa fa-history"></i> History</a>' +
-					'<div id="pathwayHistoryContainer" class="step4HistoryBox"><h2>History</h2><div></div></div>'
+					'<a href="javascript:void(0)" class="button helpTip" style=" float: left; background-color: #CD435D; color: #fff;" id="showHistoryButton"><i class="fa fa-history"></i> History</a>' +
+					// The panel covers the pathway it slides over and had no way out of
+					// its own: closing it meant knowing to press the History button in
+					// the toolbar behind it a second time.
+					'<div id="pathwayHistoryContainer" class="step4HistoryBox"><h2>History<a href="javascript:void(0)" id="hideHistoryButton" class="step4HistoryClose" title="Close history"><i class="fa fa-times"></i></a></h2><div></div></div>'
 				}]
 			}, { //THE CONTAINER FOR THE PATHWAY VIEWS
 				xtype: "container", flex:1,
@@ -257,6 +267,13 @@ function PA_Step4JobView() {
 			}],
 			listeners: {
 				boxready: function() {
+					/* Step 3 leaves its contents sidebar behind in the centre panel, and
+					   none of the sections it lists exist here - every entry on the final
+					   result page was a link that went nowhere. Rebuilding against this
+					   view finds fewer than three sections and clears it, which also drops
+					   the sidebar's reserved column so the pathway gets the full width. */
+					buildAnalysisTOC('#mainViewCenterPanel');
+
 					//SOME EVENT HANDLERS DECLARATION
 					$(".backButton").click(function() {
 						me.backButtonHandler();
@@ -282,13 +299,39 @@ function PA_Step4JobView() {
 						me.currentView.showVisualOptionsPanel();
 					});
 
-					$("#showHistoryButton").click(function() {
+					$("#showHistoryButton").click(function(event) {
+						event.stopPropagation();
 						me.toogleHistoryPanel();
+					});
+
+					$("#hideHistoryButton").click(function(event) {
+						event.stopPropagation();
+						me.toogleHistoryPanel(true);
+					});
+
+					// Anything that dismisses an overlay elsewhere in the app should
+					// dismiss this one: clicking away from it, or Escape. Without
+					// these the panel stays over the diagram until it is toggled off
+					// from the toolbar it is covering.
+					$(document).on("click.paHistory", function(event) {
+						if (!$(event.target).closest("#pathwayHistoryContainer").length) {
+							me.toogleHistoryPanel(true);
+						}
+					});
+
+					$(document).on("keydown.paHistory", function(event) {
+						if (event.key === "Escape") {
+							me.toogleHistoryPanel(true);
+						}
 					});
 
 					initializeTooltips(".helpTip");
 				},
 				beforedestroy: function() {
+					// The dismiss handlers are on `document`, which outlives this view.
+					// Namespaced so this removes exactly the two bound above.
+					$(document).off(".paHistory");
+
 					//DESTROY ALL PA_Step4PathwayView AND SUBCOMPONENTS
 					for (var i in this.pathwayViews) {
 						this.pathwayViews[i].getComponent().destroy();
@@ -2797,7 +2840,7 @@ function PA_Step4VisualOptionsView() {
 			items:[{
 				xtype: "box",
 				html:
-				"<div class='lateralOptionsPanel-header' style='background: #d9534f;'>" +
+				"<div class='lateralOptionsPanel-header' style='background: #D43E3A;'>" +
 				'  <div class="lateralOptionsPanel-toolbar">' +
 				'    <a href="javascript:void(0)" class="toolbarOption btn-danger helpTip" id="hideVisualSettingsPanelButton" title="Close this panel"><i class="fa fa-times"></i></a>' +
 				'  </div>' +
@@ -3022,7 +3065,7 @@ function PA_Step4FindFeaturesView() {
 			xtype: "container", cls: "lateralOptionsPanel",  width: 300, height: ($("#mainViewCenterPanel").height() - 100),
 			items:[{
 				xtype: "box", html:
-				"<div class='lateralOptionsPanel-header' style='background: #5bc0de;'>" +
+				"<div class='lateralOptionsPanel-header' style='background: #1F7F9B;'>" +
 				'  <div class="lateralOptionsPanel-toolbar">' +
 				'    <a href="javascript:void(0)" class="toolbarOption btn-info helpTip" id="hideFindFeaturePanelButton" title="Close this panel"><i class="fa fa-times"></i></a>' +
 				'  </div>' +
@@ -3744,7 +3787,7 @@ function PA_Step4GlobalHeatmapView() {
 				}
 			},
 			previousWidth: 400, width: 400, minWidth: 400, html:
-			'<div class="lateralOptionsPanel-header" style="background: #55c9a6;">' +
+			'<div class="lateralOptionsPanel-header" style="background: #2A8368;">' +
 			'  <div class="lateralOptionsPanel-toolbar">' +
 			'    <a href="javascript:void(0)" class="toolbarOption btn-secondary helpTip" id="hideHeatmapPanelButton" title="Hide this panel"><i class="fa fa-times"></i></a>' +
 			'    <a href="javascript:void(0)" class="toolbarOption btn-secondary helpTip" id="configureHeatmapButton" title="Configure heatmap"><i class="fa fa-cogs"></i></a>' +
@@ -4268,7 +4311,7 @@ function PA_Step4DetailsView() {
 			},
 			items: [{
 				xtype: 'box', html:
-				'<div class="lateralOptionsPanel-header" style="background: #55c9a6;">' +
+				'<div class="lateralOptionsPanel-header" style="background: #2A8368;">' +
 				'  <div class="lateralOptionsPanel-toolbar">' +
 				'    <a class="toolbarOption btn-secondary helpTip" id="hideFeatureSetButton" title="Hide this panel"><i class="fa fa-times"></i></a>' +
 				'    <a class="toolbarOption btn-secondary helpTip" id="expandFeatureSetButton" title="Expand this panel"><i class="fa fa-expand"></i></a>' +

@@ -157,27 +157,12 @@ function MainView() {
 			var noLogin = false;
 		}
 
-		this.component = Ext.create('Ext.container.Viewport', {
-			id: 'mainView',
-			border: false,
-			defaults: {border: 0},
-			layout: "border",
-			items: [{
-				xtype: "box",
-				cls: "toolbar mainTopToolbar",
-				region: 'north',
-				html:
-				'<div id="header">'+
-				'  <img src="resources/images/paintomics_150x150.png" alt="Paintomics logo">' +
-				'  <h1> PaintOmics 4 <span style="font-size: 8px; margin-left:10px;">' + APP_VERSION + '</span></h1>' +
-				'</div>' +
-				'<a class="button btn-sm btn-right loggedOption" data-name="logout" id="logoutButton"><i class="fa fa-sign-out"></i> ' + (noLogin !== true ? 'Log out' : 'Sign in/Log in') + '</a>'
-			}, {
-				xtype: "box",
-				id: "lateralMenu",
-				cls: "lateralMenu",
-				region: 'west',
-				html: "<ul class='lateralMenu-body'>" +
+		// The navigation used to be a `west` region: a 65px dark rail down the whole
+		// left edge. It now renders inside the north region instead, so the same
+		// markup and the same `.lateralMenu-body`/`.menuOption`/`.submenu` classes
+		// are reused - only where it is mounted changed. The hover handler further
+		// down still finds it by class.
+		var navHTML = "<ul class='lateralMenu-body'>" +
 				" <li class='menuOption' id='homeButton'><i class='fa fa-paint-brush'></i> Job view</li>" + 
 				" <li class='menuOption loggedOption' ><i class='fa fa-cloud'></i>  Personal storage" +
 				"  <ul class='submenu loggedOption'>" +
@@ -221,7 +206,24 @@ function MainView() {
 				" <ul class='submenu'>" +
 				"     <li class='menuOption' data-name='contactForm'><i class='fa fa-envelope-o'></i>  Contact by email</li>" +
 				" </ul></li>" +
-				"</ul>"
+				"</ul>";
+
+		this.component = Ext.create('Ext.container.Viewport', {
+			id: 'mainView',
+			border: false,
+			defaults: {border: 0},
+			layout: "border",
+			items: [{
+				xtype: "box",
+				cls: "toolbar mainTopToolbar",
+				region: 'north',
+				html:
+				'<div id="header">'+
+				'  <img src="resources/images/paintomics-mark.svg" alt="PaintOmics AI">' +
+				'  <h1> PaintOmics AI <span style="font-size: 8px; margin-left:10px;">' + APP_VERSION + '</span></h1>' +
+				'</div>' +
+				'<nav class="mainNav">' + navHTML + '</nav>' +
+				'<a class="button btn-sm btn-right loggedOption" data-name="logout" id="logoutButton"><i class="fa fa-sign-out"></i> ' + (noLogin !== true ? 'Log out' : 'Sign in/Log in') + '</a>'
 			}, {
 				xtype: 'container', itemId: 'mainViewCenterPanel', id: 'mainViewCenterPanel',
 				flex: 1, region: 'center', overflowY: "auto", style: "background-color:#f3f3f3;",

@@ -361,12 +361,16 @@ function PA_Step1JobView() {
 			}, {
 					xtype: 'box',
 					cls: "contentbox",
-					style: "margin-top:50px; max-width:1300px",
+					/* The page column is already capped and centred by --pa-page-max
+					   on #mainViewCenterPanel. Capping the card again at 1300 left a
+					   100px dead strip down the right of every block on this page,
+					   so the three cards read as pushed to one side. */
+					style: "margin-top:50px",
 					html: '<div class="po-hero-section">' +
 						'<div class="po-hero">' +
 							'<div class="po-hero-text">' +
 								'<div class="po-hero-badge">Multi-Omics Integration Platform</div>' +
-								'<h1>PaintOmics <span>' + APP_VERSION + '</span></h1>' +
+								'<h1>PaintOmics AI <span>' + APP_VERSION + '</span></h1>' +
 								'<p class="po-hero-desc">Integrative visualization of multiple omic datasets onto KEGG, Reactome, and MapMan biological pathway maps across multiple species and biological kingdoms.</p>' +
 								'<div class="po-hero-ai-highlight">' +
 									'<div><span class="po-ai-icon"><i class="fa fa-lightbulb-o"></i></span> <strong>AI-Powered Pathway Interpretation</strong></div>' +
@@ -386,7 +390,7 @@ function PA_Step1JobView() {
 			}, {
 				xtype: 'box',
 				cls: "contentbox po-about-section",
-				style: "margin-top:4px; max-width:1300px",
+				style: "margin-top:4px",
 				html: '<div id="about">' +
 					'<h2>How It Works</h2>' +
 					'<div class="po-steps-grid">' +
@@ -408,7 +412,7 @@ function PA_Step1JobView() {
 						'<div class="po-step-card">' +
 							'<div class="po-step-number">3</div>' +
 							'<h3>Explore Results</h3>' +
-							'<p>Pathways summary, Pathways classification, Pathways network, Pathways enrichment, Pathways visualization (by clicking <a href="javascript:void(0)" class="button btn-inline btn-small" style="background-color:#ADA6A6;font-size:14px;"><i class="fa fa-paint-brush"></i></a> for any of the displayed pathways), and <b>AI-powered pathway interpretation</b> (by clicking <a href="javascript:void(0)" class="button btn-inline btn-small" style="background-color:#4a90d9;font-size:14px;color:#fff;"><i class="fa fa-lightbulb-o"></i> AI Interpret</a>). Read more about these analyses in <a href="http://paintomics.readthedocs.io/en/latest/" target="_blank">our documentation</a>.</p>' +
+							'<p>Pathways summary, Pathways classification, Pathways network, Pathways enrichment, Pathways visualization (by clicking <a href="javascript:void(0)" class="button btn-inline btn-small" style="background-color:#756C6C;font-size:14px;color:#fff;"><i class="fa fa-paint-brush"></i></a> for any of the displayed pathways), and <b>AI-powered pathway interpretation</b> (by clicking <a href="javascript:void(0)" class="button btn-inline btn-small" style="background-color:#2F73BC;font-size:14px;color:#fff;"><i class="fa fa-lightbulb-o"></i> AI Interpret</a>). Read more about these analyses in <a href="http://paintomics.readthedocs.io/en/latest/" target="_blank">our documentation</a>.</p>' +
 						'</div>' +
 					'</div>' +
 					'<h2 style="margin-top:24px;">Video Tutorials</h2>' +
@@ -420,7 +424,13 @@ function PA_Step1JobView() {
 				'</div>'
 			}, {
 				xtype: 'form',
-				maxWidth: 1300,
+				/* The card inset belongs on the panel, not on its body: ExtJS sizes a
+				   body to the panel's content box and writes an explicit width onto
+				   it, so .contentbox's own horizontal margin pushed this body 20px
+				   past its panel and the upload card finished further right than the
+				   two cards above it. */
+				cls: "paStep1Form",
+				margin: '0 10 0 10',
 				bodyCls: "contentbox",
 				layout: {type: 'vbox', align: 'stretch'},
 				defaults: {labelAlign: "right", border: false},
@@ -532,107 +542,118 @@ function PA_Step1JobView() {
 						html: '<h3><i class="fa fa-lightbulb-o"></i> AI-Powered Pathway Interpretation</h3>'
 					},
 					{
-						xtype: "container", layout: "anchor", cls: "po-ai-section-body",
-						items: [
-							{
-								xtype: "box",
-								html: '<p style="color:#555;font-size:13px;margin:0 0 10px 0;line-height:1.55;">PaintOmics offers a revolutionary AI-assisted pathway interpretation driven by the breathtaking computational power of a <b>Next-Generation Agentic AI Swarm</b>. When enabled, your pathway analysis summaries are seamlessly handed off to a hyper-advanced, autonomous network of domain-specialized LLM agents with real-time agentic RAG, live PubMed knowledge retrieval, and chain-of-thought reasoning \u2014 dynamically interfacing with the world\u2019s most powerful Large Language Models to reveal publication-ready biological discoveries at unprecedented speed.</p>'
-							},
-							{
-								xtype: 'checkboxfield',
-								boxLabel: 'Enable AI pathway interpretation (<span style="color:#e65100;">sends analysis summaries to external AI service</span>) ' +
-									'<i class="fa fa-exclamation-circle ai-gdpr-info-icon" id="aiGdprInfoIcon" style="color:#e65100;cursor:pointer;font-size:16px;" title="Data privacy &amp; compliance \u2014 click to learn what data is sent"></i>',
-								name: 'aiConsent', inputValue: 'true', uncheckedValue: 'false',
-								listeners: {
-									afterrender: function() {
-										setTimeout(function() {
-											var icon = document.getElementById("aiGdprInfoIcon");
-											if (!icon) return;
-											icon.addEventListener("click", function(e) {
-												e.preventDefault();
-												e.stopPropagation();
-												var existing = document.getElementById("aiGdprOverlay");
-												if (existing) { existing.remove(); return; }
-												var overlay = document.createElement("div");
-												overlay.id = "aiGdprOverlay";
-												overlay.className = "ai-gdpr-overlay";
-												var disclaimer = document.createElement("div");
-												disclaimer.id = "aiGdprDisclaimer";
-												disclaimer.className = "ai-gdpr-disclaimer";
-												disclaimer.innerHTML =
-													'<div class="ai-gdpr-disclaimer-header">' +
-													'  <strong>Data Privacy &amp; Compliance Notice</strong>' +
-													'  <button class="ai-gdpr-close">&times;</button>' +
-													'</div>' +
-													'<div class="ai-gdpr-disclaimer-body">' +
-													'  <p><strong>How it works:</strong> When enabled, your aggregated pathway analysis summaries ' +
-													'  are routed through our <strong>Next-Generation Agentic AI Swarm</strong> \u2014 an autonomous network ' +
-													'  of domain-specialized LLM agents with real-time agentic RAG and live PubMed knowledge retrieval.</p>' +
-													'  <div style="background:#fff3e0;border-left:4px solid #e65100;padding:10px 14px;margin:10px 0;border-radius:3px;">' +
-													'    <strong style="color:#e65100;">\u26A0 Third-Party Processing:</strong> To deliver this analytical power, ' +
-													'    the following data is sent to <strong>external LLM servers</strong> outside PaintOmics infrastructure:' +
-													'    <ul style="margin:6px 0 0;padding-left:18px;">' +
-													'      <li>Pathway enrichment statistics (p-values, scores)</li>' +
-													'      <li>Gene/protein/metabolite lists per pathway</li>' +
-													'      <li>Expression fold-changes and summary statistics</li>' +
-													'      <li>Your experiment design description (if provided)</li>' +
-													'    </ul>' +
-													'  </div>' +
-													'  <div style="background:#e8f5e9;border-left:4px solid #2e7d32;padding:10px 14px;margin:10px 0;border-radius:3px;">' +
-													'    <strong style="color:#2e7d32;">\u2705 NOT sent to external servers:</strong>' +
-													'    <ul style="margin:6px 0 0;padding-left:18px;">' +
-													'      <li>Raw data files you uploaded</li>' +
-													'      <li>Individual sample-level measurements</li>' +
-													'      <li>Your login credentials or account information</li>' +
-													'    </ul>' +
-													'  </div>' +
-													'  <hr>' +
-													'  <p><strong>EU Regulatory Framework:</strong></p>' +
-													'  <ul>' +
-													'    <li><strong>GDPR (EU 2016/679)</strong> \u2014 Articles 44\u201349 govern international transfers of personal data. ' +
-													'    If your data originates from EU subjects, transferring identifiable data to non-EU processors ' +
-													'    requires appropriate safeguards (e.g., Standard Contractual Clauses).</li>' +
-													'    <li><strong>GDPR Article 9</strong> \u2014 Processing of special categories of data, including ' +
-													'    <em>genetic data</em> and <em>health data</em>, is prohibited unless explicit consent or ' +
-													'    another lawful basis applies.</li>' +
-													'    <li><strong>GDPR Article 5(1)(c)</strong> \u2014 Data minimisation principle: only data adequate, ' +
-													'    relevant, and limited to what is necessary should be processed.</li>' +
-													'  </ul>' +
-													'  <hr>' +
-													'  <p><strong style="color:#c62828;">\u26D4 Data you must NEVER submit:</strong></p>' +
-													'  <ul class="ai-gdpr-unsafe">' +
-													'    <li>Patient names, clinical record identifiers, or any PII</li>' +
-													'    <li>Protected Health Information (PHI) under HIPAA/GDPR</li>' +
-													'    <li>Raw sequencing reads from identifiable human subjects</li>' +
-													'    <li>Rare genetic variants that could re-identify individuals</li>' +
-													'    <li>Unpublished clinical trial data with patient linkage</li>' +
-													'  </ul>' +
-													'  <p style="font-size:11px;color:#666;margin-top:8px;">' +
-													'    By enabling this feature, you confirm that the data submitted does not contain ' +
-													'    personally identifiable or sensitive personal data as defined by GDPR Article 9, ' +
-													'    or that you have obtained appropriate legal basis for its processing. ' +
-													'    For full details, see our <a href="conditions.html" target="_blank">Terms &amp; Conditions</a>.</p>' +
-													'</div>';
-												overlay.appendChild(disclaimer);
-												document.body.appendChild(overlay);
-												overlay.addEventListener("click", function(ev) {
-													if (ev.target === overlay) { overlay.remove(); }
+						xtype: "container", layout: {type: 'hbox', align: 'stretch'}, cls: "po-ai-section-body",
+						/* The callout spans the full card but its prose is capped at a reading
+						   measure, so as one column it filled half the box and left the other
+						   half blank. Two columns give the explanation its measure and put the
+						   two controls in the space the prose cannot use. */
+						items: [{
+							xtype: "container", flex: 3, layout: "anchor",
+							items: [
+								{
+									xtype: "box",
+									html: '<p style="color:#555;font-size:13px;margin:0 0 10px 0;line-height:1.55;">PaintOmics offers a revolutionary AI-assisted pathway interpretation driven by the breathtaking computational power of a <b>Next-Generation Agentic AI Swarm</b>. When enabled, your pathway analysis summaries are seamlessly handed off to a hyper-advanced, autonomous network of domain-specialized LLM agents with real-time agentic RAG, live PubMed knowledge retrieval, and chain-of-thought reasoning \u2014 dynamically interfacing with the world\u2019s most powerful Large Language Models to reveal publication-ready biological discoveries at unprecedented speed.</p>'
+								},
+								{
+									xtype: 'checkboxfield',
+									boxLabel: 'Enable AI pathway interpretation (<span style="color:#C44500;">sends analysis summaries to external AI service</span>) ' +
+										'<i class="fa fa-exclamation-circle ai-gdpr-info-icon" id="aiGdprInfoIcon" style="color:#C44500;cursor:pointer;font-size:16px;" title="Data privacy &amp; compliance \u2014 click to learn what data is sent"></i>',
+									name: 'aiConsent', inputValue: 'true', uncheckedValue: 'false',
+									listeners: {
+										afterrender: function() {
+											setTimeout(function() {
+												var icon = document.getElementById("aiGdprInfoIcon");
+												if (!icon) return;
+												icon.addEventListener("click", function(e) {
+													e.preventDefault();
+													e.stopPropagation();
+													var existing = document.getElementById("aiGdprOverlay");
+													if (existing) { existing.remove(); return; }
+													var overlay = document.createElement("div");
+													overlay.id = "aiGdprOverlay";
+													overlay.className = "ai-gdpr-overlay";
+													var disclaimer = document.createElement("div");
+													disclaimer.id = "aiGdprDisclaimer";
+													disclaimer.className = "ai-gdpr-disclaimer";
+													disclaimer.innerHTML =
+														'<div class="ai-gdpr-disclaimer-header">' +
+														'  <strong>Data Privacy &amp; Compliance Notice</strong>' +
+														'  <button class="ai-gdpr-close">&times;</button>' +
+														'</div>' +
+														'<div class="ai-gdpr-disclaimer-body">' +
+														'  <p><strong>How it works:</strong> When enabled, your aggregated pathway analysis summaries ' +
+														'  are routed through our <strong>Next-Generation Agentic AI Swarm</strong> \u2014 an autonomous network ' +
+														'  of domain-specialized LLM agents with real-time agentic RAG and live PubMed knowledge retrieval.</p>' +
+														'  <div style="background:#fff3e0;border-left:4px solid #C44500;padding:10px 14px;margin:10px 0;border-radius:3px;">' +
+														'    <strong style="color:#C44500;">\u26A0 Third-Party Processing:</strong> To deliver this analytical power, ' +
+														'    the following data is sent to <strong>external LLM servers</strong> outside PaintOmics infrastructure:' +
+														'    <ul style="margin:6px 0 0;padding-left:18px;">' +
+														'      <li>Pathway enrichment statistics (p-values, scores)</li>' +
+														'      <li>Gene/protein/metabolite lists per pathway</li>' +
+														'      <li>Expression fold-changes and summary statistics</li>' +
+														'      <li>Your experiment design description (if provided)</li>' +
+														'    </ul>' +
+														'  </div>' +
+														'  <div style="background:#e8f5e9;border-left:4px solid #2e7d32;padding:10px 14px;margin:10px 0;border-radius:3px;">' +
+														'    <strong style="color:#2e7d32;">\u2705 NOT sent to external servers:</strong>' +
+														'    <ul style="margin:6px 0 0;padding-left:18px;">' +
+														'      <li>Raw data files you uploaded</li>' +
+														'      <li>Individual sample-level measurements</li>' +
+														'      <li>Your login credentials or account information</li>' +
+														'    </ul>' +
+														'  </div>' +
+														'  <hr>' +
+														'  <p><strong>EU Regulatory Framework:</strong></p>' +
+														'  <ul>' +
+														'    <li><strong>GDPR (EU 2016/679)</strong> \u2014 Articles 44\u201349 govern international transfers of personal data. ' +
+														'    If your data originates from EU subjects, transferring identifiable data to non-EU processors ' +
+														'    requires appropriate safeguards (e.g., Standard Contractual Clauses).</li>' +
+														'    <li><strong>GDPR Article 9</strong> \u2014 Processing of special categories of data, including ' +
+														'    <em>genetic data</em> and <em>health data</em>, is prohibited unless explicit consent or ' +
+														'    another lawful basis applies.</li>' +
+														'    <li><strong>GDPR Article 5(1)(c)</strong> \u2014 Data minimisation principle: only data adequate, ' +
+														'    relevant, and limited to what is necessary should be processed.</li>' +
+														'  </ul>' +
+														'  <hr>' +
+														'  <p><strong style="color:#c62828;">\u26D4 Data you must NEVER submit:</strong></p>' +
+														'  <ul class="ai-gdpr-unsafe">' +
+														'    <li>Patient names, clinical record identifiers, or any PII</li>' +
+														'    <li>Protected Health Information (PHI) under HIPAA/GDPR</li>' +
+														'    <li>Raw sequencing reads from identifiable human subjects</li>' +
+														'    <li>Rare genetic variants that could re-identify individuals</li>' +
+														'    <li>Unpublished clinical trial data with patient linkage</li>' +
+														'  </ul>' +
+														'  <p style="font-size:11px;color:#666;margin-top:8px;">' +
+														'    By enabling this feature, you confirm that the data submitted does not contain ' +
+														'    personally identifiable or sensitive personal data as defined by GDPR Article 9, ' +
+														'    or that you have obtained appropriate legal basis for its processing. ' +
+														'    For full details, see our <a href="conditions.html" target="_blank">Terms &amp; Conditions</a>.</p>' +
+														'</div>';
+													overlay.appendChild(disclaimer);
+													document.body.appendChild(overlay);
+													overlay.addEventListener("click", function(ev) {
+														if (ev.target === overlay) { overlay.remove(); }
+													});
+													disclaimer.querySelector(".ai-gdpr-close").addEventListener("click", function() {
+														overlay.remove();
+													});
 												});
-												disclaimer.querySelector(".ai-gdpr-close").addEventListener("click", function() {
-													overlay.remove();
-												});
-											});
-										}, 200);
+											}, 200);
+										}
 									}
 								}
-							},
-							{
-								xtype: "textarea", fieldLabel: "Experiment Design", name: 'experimentDesign',
-								labelWidth: 150, width: 650, height: 60,
-								emptyText: 'e.g., "RNA-seq wildtype vs knockout mouse liver, n=3 per group"',
-								maxLength: 2000
-							}
-						]
+							]
+						}, {
+							xtype: "container", flex: 2, margin: '0 0 0 32', layout: "anchor",
+							items: [
+								{
+									xtype: "textarea", fieldLabel: "Experiment Design", name: 'experimentDesign',
+									labelWidth: 150, anchor: '100%', height: 90,
+									emptyText: 'e.g., "RNA-seq wildtype vs knockout mouse liver, n=3 per group"',
+									maxLength: 2000
+								}
+							]
+						}]
 					},
 					{
 						xtype: "box",
@@ -640,7 +661,15 @@ function PA_Step1JobView() {
 					},
 					{
 						xtype: "container",
-						layout: 'hbox',
+						/* The three columns were 250 + max 600 + max 300, which on a
+						   1360px card left ~190px of the row unclaimed and stopped the
+						   block short of the card's right edge.
+
+						   Deliberately not align:'stretch': the selected-omic panels
+						   carry flex:1, so a stretched column hands them the leftover
+						   height and each omic's coloured header grows a 50px band of
+						   empty colour under its title. */
+						layout: {type: 'hbox'},
 						items: [{
 							xtype: "box",
 							id: "availableOmicsContainer",
@@ -659,9 +688,8 @@ function PA_Step1JobView() {
 							id: "submittingPanelsContainer",
 							minHeight: 150,
 							minWidth: 200,
-							maxWidth: 600,
 							margin: 10,
-							flex: 1,
+							flex: 2,
 							layout: {type: 'vbox',align: "stretch"},
 							items: [
 								{xtype: 'box',html: '<h2  style="text-align:center;">Selected omics</h2>'},
@@ -673,12 +701,12 @@ function PA_Step1JobView() {
 							id: "additionalInfoContainer",
 							minHeight: 150,
 							minWidth: 200,
-							maxWidth: 300,
+							maxWidth: 340,
 							margin: 10,
 							flex: 1,
 							layout: {type: 'vbox',align: "stretch"},
 							items: [
-								{xtype: 'box',html: '<div class="content"><h5><i class="fa fa-info-circle" style="color: #2C7FDD; font-size: 50px;"></i> Help</h5><p>Drag and drop omics from <i>"Available"</i> to <i>"Selected"</i> area or click the <i class="fa fa-plus-circle"  style="font-size: 18px;"></i> button.</p><p>If you do not need them, delete with with <i class="fa fa-trash" style="font-size: 18px;"></i>.</p><p>Once you are done, click on the "Run PaintOmics" button on the upper-right corner.</p><p>Make sure to <span style="text-decoration: underline;">choose an organism</span> from the select box first!</p></div>.'}
+								{xtype: 'box',html: '<div class="content"><h5><i class="fa fa-info-circle" style="color: #2C7FDD; font-size: 50px;"></i> Help</h5><p>Drag and drop omics from <i>"Available"</i> to <i>"Selected"</i> area or click the <i class="fa fa-plus-circle"  style="font-size: 18px;"></i> button.</p><p>If you do not need them, delete with with <i class="fa fa-trash" style="font-size: 18px;"></i>.</p><p>Once you are done, click on the "Run PaintOmics" button on the upper-right corner.</p><p>Make sure to <span style="text-decoration: underline;">choose an organism</span> from the select box first!</p></div>'}
 							]
 						}]
 					}					

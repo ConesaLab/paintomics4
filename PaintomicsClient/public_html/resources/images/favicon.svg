@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-label="PaintOmics AI">
+  <title>PaintOmics AI</title>
+  <!--
+    A favicon renders at 16px, so this is a redrawn variant of the header mark
+    rather than the same file. At that size the header version's six 4.7r nodes
+    on a 1.7 stroke close up into a ring of mush: the gaps between nodes are
+    under a pixel once scaled.
+
+    So the node count drops from six to four, the radius goes up, and the
+    connecting stroke thickens. Same idea - a small network of omic-coloured
+    nodes - resolved for a sixteenth of the size. The four colours are the four
+    omics a user is most likely to have loaded: gene expression, metabolomics,
+    proteomics and region-based.
+
+    The rounded square backdrop is what keeps it legible on both light and dark
+    browser chrome; a bare mark on transparent disappears into a dark tab strip.
+  -->
+  <rect width="48" height="48" rx="11" fill="#33343A"/>
+  <g fill="none" stroke="#FFFFFF" stroke-width="2.6" stroke-linecap="round" opacity="0.55">
+    <path d="M16 16 L32 16 L32 32 L16 32 Z"/>
+  </g>
+  <g>
+    <circle cx="16" cy="16" r="6.2" fill="#55C9A6"/>
+    <circle cx="32" cy="16" r="6.2" fill="#79B0EC"/>
+    <circle cx="32" cy="32" r="6.2" fill="#B4A1DD"/>
+    <circle cx="16" cy="32" r="6.2" fill="#D67F6B"/>
+  </g>
+</svg>
