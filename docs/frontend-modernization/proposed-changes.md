@@ -87,11 +87,6 @@ with headroom and are visually near-indistinguishable from the originals:
 +  #C44500   /* 5.00:1 */
 ```
 
-**ExtJS `Browse...` button** — the `#3892d3` fill lives in
-`js/libs/extjs/resources/ext-theme-neptune/ext-theme-neptune-all.css`, a
-vendored third-party theme. Editing vendored files is out of scope here and
-would be lost on any ExtJS upgrade. Two options, in order of preference:
-
 **Applied in iteration 10.** Both `PA_Step1Views.js` values are now `#2F73BC`
 (4.88:1) and `#C44500` (5.00:1), verified live at 4.88 and 5.00. A third failure
 in the same paragraph, not in the original table, went with them: the
@@ -100,7 +95,10 @@ paint-brush mock button was `#ADA6A6` carrying the `.button` default ink
 being the exact value `main.css` already gives the *real* Paint action in the
 grid, so the illustration and the control it illustrates finally agree.
 
-The `Browse...` button below is still open.
+**ExtJS `Browse...` button — still open.** The `#3892d3` fill lives in
+`js/libs/extjs/resources/ext-theme-neptune/ext-theme-neptune-all.css`, a
+vendored third-party theme. Editing vendored files is out of scope here and
+would be lost on any ExtJS upgrade. Two options, in order of preference:
 
 1. Override it from `main.css` (which loads after the theme) with
    `.x-btn-default-small { background-color: #287AB6; }`. Deliberately *not*
