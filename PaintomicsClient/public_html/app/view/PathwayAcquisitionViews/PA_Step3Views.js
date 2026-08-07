@@ -3979,6 +3979,20 @@ function PA_Step3PathwayTableView() {
 			allRecords.each(function(storeRecord) {
 				var pathwayID = storeRecord.raw.pathwayID;
 
+				/* Skip record if it is from another DB.
+
+				   Without this the outer loop over databases writes every record once
+				   per database: the KEGG pass sets the KEGG pathways correctly, then
+				   the Reactome pass looks each of those same KEGG IDs up in
+				   visualOptions.Reactome.Stouffer, misses, and overwrites them with
+				   undefined. Only the last database in the list kept its combined
+				   p-value; every other database's rows rendered NaN as soon as custom
+				   Stouffer weights were applied. The adjusted p-value loop below has
+				   always had this guard. */
+				if (storeRecord.raw.source != db) {
+					return;
+				}
+
 				storeRecord.set("combinedSignificancePvalueStouffer", restoreRawStouffer ? storeRecord.raw.combinedSignificancePvalueStouffer : visualOptions[db].Stouffer[pathwayID]);
 			});
 
@@ -4339,8 +4353,35 @@ function PA_Step3PathwayTableView() {
 
 								// Calculate the original mapping ratio used as Stouffer weight.
 								Object.keys(mappingInfo).map(function(omic) {
-									defaultValues[omic] = parseFloat((mappingInfo[omic].mapped / (mappingInfo[omic].mapped + mappingInfo[omic].unmapped)).toFixed(1)) * 10
+									// An omic with no features at all would make this 0/0 = NaN, which the
+									// slider silently coerces to its minimum. Resolve it here instead so the
+									// weight that reaches the server is always a number we chose deliberately.
+									var total = mappingInfo[omic].mapped + mappingInfo[omic].unmapped;
+									var ratio = (total > 0) ? (mappingInfo[omic].mapped / total) : 0;
+
+									defaultValues[omic] = Math.max(0, Math.min(10, parseFloat(ratio.toFixed(1)) * 10));
 								});
+
+								// Writes the current weight onto the field label so it is readable without
+								// dragging. The label text itself is untouched, because the Apply handler
+								// maps sliders back to omics through getFieldLabel().
+								var showWeight = function(slider, value) {
+									if (slider.labelEl && slider.labelEl.dom) {
+										slider.labelEl.dom.setAttribute("data-pa-weight", value);
+									}
+								};
+
+								// Pick the stored weight only when one actually exists for this omic.
+								// visualOptions.stoufferWeights is persisted as {} for any job that never
+								// applied custom weights, and {} != undefined, so the previous check sent
+								// every slider to customStouffers[omic] === undefined and the widget
+								// silently clamped it to its minimum. Every weight opened at 0, and
+								// applying that would drop all omics out of the combined p-value.
+								var weightFor = function(omic) {
+									var stored = customStouffers ? customStouffers[omic] : undefined;
+
+									return (stored === undefined || stored === null || isNaN(stored)) ? defaultValues[omic] : stored;
+								};
 
 								// Create an slider for each omic
 								var omicSliders = me.getModel().getOmicNames().map(function(omic) {
@@ -4350,17 +4391,30 @@ function PA_Step3PathwayTableView() {
 										minValue: 0,
 										maxValue: 10,
 										increment: 1,
-										value: (customStouffers != undefined) ? customStouffers[omic] : defaultValues[omic],
-										width: '100%'
+										value: weightFor(omic),
+										// The label needs room for the longest omic name ("Transcription
+										// factor"); whatever is left has to be a draggable track, so both
+										// halves are sized explicitly rather than left to '100%'.
+										labelWidth: 160,
+										width: 320,
+										listeners: {
+											afterrender: function(slider) { showWeight(slider, slider.getValue()); },
+											change: showWeight
+										}
 									})
 								});
 
 								me.tipComponent = Ext.create('Ext.tip.Tip', {
 									closable: true,
-									maxWidth: 200,
-									width: 100,
+									title: 'Stouffer weights',
+									width: 356,
 									itemId: 'stoufferTip',
-									renderTo: "mainViewCenterPanel",
+									cls: 'paWeightsTip',
+									bodyPadding: 4,
+									// Floating to the document body on purpose: rendering into
+									// mainViewCenterPanel puts the tip inside that panel's overflow, so a
+									// panel this tall gets clipped and scrolls away with the table.
+									constrain: true,
 									items: [
 										{
 											xtype: 'container',
@@ -4421,7 +4475,10 @@ function PA_Step3PathwayTableView() {
 								});
 							}
 
-							me.tipComponent.showBy(iconLink, "b-t", [0, 20]);
+							// Drop below the toolbar rather than above it: opening upward covered the
+						// very control the user just clicked. "?" lets Ext flip it back if there
+						// is no room underneath.
+						me.tipComponent.showBy(iconLink, "tl-bl?", [0, 6]);
 						}
 					}
 				}]
