@@ -112,21 +112,47 @@ genes2pathway <- data.frame(read.table(file=args$kegg_dir, header=FALSE, sep="\t
 genes2pathway[,1] <- tolower(genes2pathway[,1])
 
 # Read the input file
-# Example 
-# ENSMUSG00000034875	Nudt19	110959	0.0013615644203	-0.00727757835919	-0.015612884896	-0.0444182798681	-0.132208079869	-0.163256775828
+# Column layout, written by Job.py -- both the gene based writer and the
+# compound based one use the same shape:
+#
+#   1 inputName | 2 featureName | 3 featureID | 4 matchingDB | 5..(4+n) values | last relevance flag
+#
+# Example (n = 6 conditions, so 11 columns):
+# ENSMUSG00000000001	Gnai3	14679	KEGG	0.01523	0.01042	0.04686	0.01663	0.04748	0.04169	0
+#                                                                                                 ^ relevance flag
 input_data <- read.table(file=args$input_file, header=FALSE, sep="\t", quote="")
-# Remove duplicates 
+# Remove duplicates
 # TODO: now we are just ignoring the duplicates and taking the first match, maybe we should calculate mean?
-input_data <- input_data[!duplicated(input_data$V3),]
-# Adapt input data to a data.frame object
-if (args$database == "") {
-  input_data <- data.frame(input_data[,4:ncol(input_data)], row.names=paste(args$specie,":", tolower(input_data[,3]), sep=""))
-  
-  input_data <- input_data[,2:ncol(input_data)]
-  #input_data <- data.frame(input_data[,5:ncol(input_data)], row.names=paste(args$specie, ":", tolower(input_data[,3]), sep=""))
-} else {
-  input_data <- data.frame(input_data[,5:ncol(input_data)], row.names=tolower(input_data[,3]))
+# Deduplicate on the *lowercased* ID because that is what becomes row.names
+# below; two IDs differing only in case would otherwise reach data.frame() as
+# duplicate row names and abort the run.
+input_data <- input_data[!duplicated(tolower(input_data$V3)),]
+
+# Drop the trailing relevance flag. It is a 0/1 significance indicator, NOT a
+# condition. Commit 6c7a7934 ("Add multi-condition support for PaintOmics4")
+# appended it to the mapping files and this script was never updated, so it has
+# been read as an extra condition ever since. A binary column sitting next to
+# log-ratios of order 1e-2 dominates the per-pathway PCA: PC1 degenerates into
+# "how many genes of this pathway are significant", every metagene comes out as
+# a flat line with a spike at the last point, and the cluster thumbnails then
+# differ only in the height of that spike -- which is why they all looked alike.
+#
+# Job.py always writes exactly one flag column (isRelevant() is called with no
+# conditionIndex, so it collapses a per-condition list to a single boolean).
+# test_metagenes_clustering.py pins that contract; if it ever changes, that test
+# fails and points back here.
+n_conditions <- ncol(input_data) - 5
+if (n_conditions < 1) {
+  stop("Input file has no condition columns (only ", ncol(input_data),
+       " columns): ", args$input_file)
 }
+value_cols <- 5:(4 + n_conditions)
+# Adapt input data to a data.frame object
+feature_ids <- tolower(input_data[,3])
+if (args$database == "") {
+  feature_ids <- paste(args$specie, ":", feature_ids, sep="")
+}
+input_data <- data.frame(input_data[, value_cols, drop=FALSE], row.names=feature_ids)
 
 #genes2pathway[which(genes2pathway[,1] %in% rownames(input_data)),]
 # GET METAGENES  ------------------------------------------------------------------------------------------------
@@ -190,11 +216,44 @@ metagenes <- adjust.direction(expression_GO)
 data <- metagenes
 
 library(cluster)
-library(amap) 
+library(amap)
 library(mclust) #new
 library(factoextra) #new
 dataScaled <- t(scale(t(data), center = T, scale = F)) #no do scaling with all subset
-dist.res <- Dist(dataScaled, method = "pearson")
+
+# Matrix the clustering actually runs on: each metagene centred across
+# conditions (above) and then rescaled to unit length. For centred, unit-norm
+# vectors ||x - y||^2 == 2 * (1 - pearson(x, y)), so plain Euclidean k-means on
+# this matrix minimises exactly the pearson dissimilarity the script used to
+# build with amap::Dist(). That is what a metagene profile wants: cluster on the
+# *shape* of the response across conditions, independent of amplitude.
+#
+# This replaces `dist.res <- Dist(dataScaled, method = "pearson")` fed straight
+# into stats::kmeans(). kmeans() opens with as.matrix(x), and as.matrix.dist
+# expands a dist object into the full n x n distance matrix -- so kmeans was
+# clustering the *rows of the distance matrix*, i.e. n points in n dimensions,
+# under Euclidean distance. The pearson metric was never applied, the call was
+# O(n^2) in time and memory, and the partitions came out badly unbalanced: on
+# the example dataset k = 6 gave cluster sizes like 1, 5, 11, 36, 140, 166.
+# Clusters that small routinely have no pathway left after Step 3's p-value
+# filter, and the Step 3 panel only renders clusters that still own a visible
+# pathway (PA_Step3Views.js builds CLUSTERS from surviving nodes), so asking for
+# 6 clusters could display 4.
+#
+# Nothing needs the pairwise distance matrix any more, so it is no longer built:
+# it was O(n^2) memory for a value that is now unused.
+rowNorms <- sqrt(rowSums(dataScaled^2))
+# A metagene that is flat across every condition has zero norm. Leave it at the
+# origin rather than dividing by zero and seeding the matrix with NaN, which
+# kmeans() rejects outright.
+rowNorms[!is.finite(rowNorms) | rowNorms == 0] <- 1
+dataForClustering <- dataScaled / rowNorms
+
+# k-means seeds its centres from a random sample of rows. With no fixed seed the
+# same job produced a different partition on every run, so the thumbnails and
+# the cluster column of the .tab file disagreed between Step 2 and any later
+# recomputation of the same omic.
+set.seed(149)
 
 if(is.null(args$kclusters) || args$kclusters == "dynamic") {
   if (nrow(dataScaled) < 3) {
@@ -208,18 +267,20 @@ if(is.null(args$kclusters) || args$kclusters == "dynamic") {
     if (k.max < 2) k.max <- 2
 
     if(args$cluster=="kmeans"){
-      # Check best cluster using WSS
-      p = fviz_nbclust(x = dataScaled, FUNcluster = stats::kmeans, method = c("wss"), 
-                       diss = dist.res,
-                       k.max = k.max, verbose = TRUE) +
+      # Check best cluster using WSS. Run the elbow over the same matrix the
+      # final clustering uses -- it previously scanned dataScaled while the
+      # clustering ran on the distance matrix, so the chosen k described a
+      # different space than the partition it was chosen for.
+      p = fviz_nbclust(x = dataForClustering, FUNcluster = stats::kmeans, method = c("wss"),
+                       k.max = k.max, nstart = 25, iter.max = 500, verbose = TRUE) +
         labs(title = "Optimal number of clusters")
       args$kclusters <- getBestIndexBy2SlopeLesser1stQuartilSlope(p)
       p <- p + geom_vline(xintercept = args$kclusters, linetype = 2)
       ggsave(plot = p, filename=paste0(args$output_prefix,"_elbow.png"), width = 15, height = 6, dpi = 200, units = "cm")
-      
+
     }else{
       # Compute clusters using Mclust (ML)
-      fit <- Mclust(dist.res, G = 1:k.max)
+      fit <- Mclust(dataForClustering, G = 1:k.max)
       args$kclusters <- fit$G
     }
   }
@@ -227,10 +288,39 @@ if(is.null(args$kclusters) || args$kclusters == "dynamic") {
   args$kclusters = as.integer(args$kclusters)
 }
 
-if(args$cluster=="kmeans"){
-  clusters <- stats::kmeans(dist.res, centers = args$kclusters, iter.max = 500)
+# Clamp k to what the clustering can actually express. stats::kmeans() rejects
+# k >= nrow(x) ("number of cluster centres must lie between 1 and nrow(x)") and,
+# with nstart > 1, k above the number of *distinct* rows ("more cluster centers
+# than distinct data points"). Either one aborts the script and takes the whole
+# omic-and-database pair down with it, which the caller surfaces as a failed
+# job. A secondary database (a MapMan or Reactome subset matching a handful of
+# pathways) reaches that easily as soon as a user drags the Step 3 slider up.
+args$kclusters <- as.integer(args$kclusters)
+if (is.na(args$kclusters) || args$kclusters < 1) args$kclusters <- 1
+nMetagenes <- nrow(dataForClustering)
+maxClusters <- min(nrow(unique(dataForClustering)), nMetagenes - 1L)
+if (args$kclusters > maxClusters) {
+  cat("Requested", args$kclusters, "clusters but only", nMetagenes,
+      "metagenes are available; using", max(maxClusters, 1L), ". ")
+  args$kclusters <- maxClusters
+}
+if (args$kclusters < 1) args$kclusters <- 1
+
+if(nMetagenes < 2 || args$kclusters < 2){
+  # Nothing to partition. Worth special-casing rather than leaving to kmeans():
+  # it cannot express k = nrow(x) at all, so a database matching a single
+  # pathway used to abort here even though the answer is trivially one cluster.
+  # Both member names are supplied so clust.centroid() works for either method.
+  args$kclusters <- 1
+  singleton <- setNames(rep(1L, nMetagenes), rownames(dataForClustering))
+  clusters <- list(cluster = singleton, classification = singleton)
+}else if(args$cluster=="kmeans"){
+  # nstart = 25: a single random start regularly settled in a poor local
+  # optimum, so re-running the same omic could return visibly different clusters.
+  clusters <- stats::kmeans(dataForClustering, centers = args$kclusters,
+                            iter.max = 500, nstart = 25)
 }else{
-  clusters <- fit <- Mclust(dist.res, G = args$kclusters)
+  clusters <- fit <- Mclust(dataForClustering, G = args$kclusters)
 }
 
 
@@ -278,11 +368,24 @@ for (i in 1:args$kclusters){
   # branch and plotted values[1,] -- one number -- instead of the single
   # pathway's profile.
   values <- as.matrix(dataScaled[pathway_ids, , drop = FALSE])
-  minMax <- range(values)
   #CREATE THE PNG
   png(paste(args$output_prefix, "_cluster_", i, args$database, ".png", sep=""), height = 150, width = 150)
   par(mai = rep(0, 4), mar = rep(0.8, 4))
-  
+
+  # An empty cluster makes range() return c(Inf, -Inf), and plot() then aborts
+  # with "need finite 'ylim' values", which would kill the script here -- after
+  # some thumbnails exist but before the .tab file is written. Emit an empty
+  # framed panel instead: the client requests one image per cluster index and a
+  # missing file shows up as a broken image.
+  if(nrow(values) == 0){
+    plot.new()
+    title(main = "0 metagenes")
+    box()
+    dev.off()
+    next
+  }
+  minMax <- range(values)
+
   if(length(row.names(values)) > 1){
     #Plot first cluster
     plot(as.matrix(values[1,]), type="l", col="gray88", main=paste(length(pathway_ids), "metagenes"), axes=F, xlab=NULL, ylim = minMax)
