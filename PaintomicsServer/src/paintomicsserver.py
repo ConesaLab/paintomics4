@@ -45,6 +45,36 @@ from src.common.JobInformationManager import JobInformationManager
 
 import os.path
 
+
+def revalidateEntryDocument(response):
+    """Stop index.html being served from cache without revalidating.
+
+    Client assets are cache-busted by hand, with a version marker in index.html
+    that is bumped when the file changes (``Util.js?v=0.7``). That only works if
+    index.html itself is fetched fresh, and ``send_from_directory`` applies
+    Flask's 12-hour ``SEND_FILE_MAX_AGE_DEFAULT`` to it like any other static
+    file -- so a returning browser kept the old index.html, which still asked
+    for the old ``?v=`` URLs it also still had cached, and the bump reached
+    nobody who had visited before.
+
+    Observed after the frontend work landed: the results page rendered nothing,
+    with ``ReferenceError: truncatableTextRenderer is not defined`` from
+    PA_Step3Views.js. That function is defined in Util.js and was added by the
+    same work, so the browser was running the new views against the old Util.js.
+    A hard reload fixed it, which is why this survives development.
+
+    ``no-cache`` still lets the browser store the file; it just has to
+    revalidate first, and the ETag Flask already sets makes that a 304. Expires
+    is cleared too, because an HTTP/1.0 cache reads it in preference.
+
+    Versioned assets keep their long max-age -- that is what versioning them is
+    for.
+    """
+    response.headers["Cache-Control"] = "no-cache, must-revalidate"
+    response.headers["Expires"] = "0"
+    return response
+
+
 class Application(object):
     #******************************************************************************************************************
     # CONSTRUCTORS
@@ -81,7 +111,8 @@ class Application(object):
         #*******************************************************************************************
         @self.app.route(SERVER_SUBDOMAIN + '/')
         def main():
-            return send_from_directory(self.ROOT_DIRECTORY + 'public_html','index.html')
+            return revalidateEntryDocument(
+                send_from_directory(self.ROOT_DIRECTORY + 'public_html','index.html'))
         ##*******************************************************************************************
         ##* GET THUMBNAILS, PATHWAY IMAGE, etc
         ##*******************************************************************************************
