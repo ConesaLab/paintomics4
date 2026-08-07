@@ -1896,41 +1896,41 @@ div#tabcontainer_network .x-tab button .x-tab-inner {
 div#tabcontainer_network .x-tab-center {
 	margin-top: -10px;
 }
-/* This card holds exactly two things - an explanation and a small summary
-   table. Stacking them down the left of a 1300px box left the right half empty;
-   putting them side by side used the width but weighted the card to one side,
-   because the prose is ten times the table's area and the two have no shared
-   edge to align on.
+/* "Multiple databases used" card.
 
-   So they run down the centre instead: the prose reads at its natural measure,
-   the table sits under the sentence that introduces it ("the pathways summary
-   splitted by databases is the following one"), and the card is symmetric at
-   every width without needing a breakpoint. */
-div#multisource_msg {
-	display: grid;
-	grid-template-columns: minmax(0, 1fr);
-	grid-template-areas:
-		"head"
-		"text"
-		"summary";
-	row-gap: 18px;
+   The markup is master's: a .multisource_body wrapping the prose and the
+   per-database table, which replaced a layout that propped itself open with
+   min-height:200px. What changes here is the arrangement. Side by side used the
+   width but weighted the card to one side - the prose is ten times the table's
+   area and the two share no edge to align on - so they stack, prose first, with
+   the table centred underneath the text that introduces it. Symmetric at every
+   width, and no breakpoint needed.
+
+   The prose is deliberately not capped at a reading measure here: on a 1360px
+   card that leaves a column of text down one side with nothing opposite it,
+   which looks broken rather than composed. */
+div#multisource_msg .multisource_body {
+	display: block;
+	padding: 4px 0 0;
 }
-div#multisource_msg > h2 { grid-area: head; }
-/* The prose runs the full width of the card. It is capped at a reading measure
-   everywhere else, but here that left a column of text down one side of a
-   1360px box with nothing opposite it, and the card looked broken rather than
-   composed. Full width and a centred table balance without needing either. */
-div#multisource_msg > p {
-	grid-area: text;
-	max-width: none;
-	margin: 0;
+div#multisource_msg .multisource_text {
 	padding: 0 var(--pa-card-inset);
 }
+div#multisource_msg .multisource_text p {
+	margin: 0 0 12px;
+	padding: 0;
+	max-width: none;
+	line-height: 1.55;
+}
+div#multisource_msg .multisource_text p:last-child {
+	margin-bottom: 18px;
+}
 div#multisource_summary {
-	grid-area: summary;
-	justify-self: center;
+	display: flex;
+	justify-content: center;
 	margin-bottom: 22px;
 }
+
 /* This was `1px solid black` - the only pure-black edge in the application, on
    a table sitting inside an already-bordered card, so it read as a screenshot
    pasted into the page. The cells also had no vertical padding, which is what
