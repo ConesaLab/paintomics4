@@ -51,6 +51,7 @@ root {
   --pa-accent-orange: #AD5022;/* orig rgb(209,96,42) 3.59:1 */
   --pa-ink-muted: #6B6B6B;    /* orig #C9C9C9 1.66:1 / #B1B0B0 2.16:1 */
   --pa-bold-blue: #446E9B;    /* orig rgb(105,146,190) 3.25:1 */
+  --pa-accent-green: #247B21; /* orig #288824 3.90:1 on #EEEEEE */
 
   /* Focus ring. Chosen to clear 3:1 (WCAG 2.4.11) against every surface the
      ring actually lands on: white panels 3.65:1, the #F2F2F2 button toolbar
@@ -144,7 +145,7 @@ b {color: var(--pa-bold-blue);}
 h1, h2, h3, h4 {font-weight: lighter;margin: 0;}
 h2 {color: var(--pa-accent-orange);font-size: 23px;}
 h3 {font-size: 20px;color: #007383;	margin: 10px 0px;}
-h4 {font-size: 16px;color: #288824; margin: 10px 0px;}
+h4 {font-size: 16px;color: var(--pa-accent-green); margin: 10px 0px;}
 h5 {font-size: 13px; margin: 10px 0px; color: #056E66; font-weight: lighter;}
 a {text-decoration: none;color: var(--pa-link);}
 a:hover {color: var(--pa-link-hover);}
@@ -609,7 +610,10 @@ select {
 	border-color: #288824;
 }
 #messageDialog.successDialog h4 {
-	color: #288824;
+	/* Same green as the global h4. It passed on the dialog's white fill at
+	   4.53:1, but is moved to the token so the two cannot drift apart; the
+	   border above keeps #288824, which clears the 3:1 non-text bar. */
+	color: var(--pa-accent-green);
 }
 #messageDialogBody {
 	text-align: left;
