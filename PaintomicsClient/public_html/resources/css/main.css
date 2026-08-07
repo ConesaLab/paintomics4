@@ -351,6 +351,28 @@ ul.submenu {
 	text-align: left;
 	white-space: normal;
 }
+/* The 8px offset above is a dead zone, and it made every dropdown option
+   unreachable. jQuery binds mouseenter/mouseleave on the top-level item and
+   hides the menu with fadeOut(0); an absolutely positioned child keeps the
+   parent "hovered" while the pointer is over it, but the 8px between the pill's
+   bottom edge and the card's top edge belongs to neither, so moving the mouse
+   down to the menu fired mouseleave and the menu vanished before it could be
+   clicked. Teleporting a cursor straight onto the card hides the bug, which is
+   why it survived the first round of checks - it only appears when the pointer
+   actually travels through the gap.
+
+   This bridges it: a transparent strip, part of the submenu and therefore part
+   of the item's hover subtree, covering exactly the offset. The gap stays
+   visible, it just stops being a hole. */
+.lateralMenu-body ul.submenu::before {
+	content: '';
+	position: absolute;
+	left: 0;
+	right: 0;
+	top: -8px;
+	height: 8px;
+}
+
 /* The last two dropdowns would run off the right edge, so they hang from the
    right of their item instead. */
 .lateralMenu-body > .menuOption:nth-last-child(-n+2) ul.submenu {
@@ -850,8 +872,9 @@ body > .x-mask {
 	box-shadow: 0 12px 28px -8px rgba(24, 24, 27, 0.22), 0 6px 12px -6px rgba(24, 24, 27, 0.14);
 }
 
-/* ExtJS's own Ext.MessageBox - the Yes/No confirmations - is a different window
-   from #messageDialog above and so missed that fix entirely: it still had the
+/* Every other ExtJS window - the Yes/No confirmations, the contact form, the
+   sign-in panel, the upload dialogs - is a different window from #messageDialog
+   above and so missed that fix entirely: it still had the
    5px saturated frame, square-ish corners and no shadow. Same treatment, minus
    the top accent bar, because this window has a real header bar which already
    does that job.
@@ -860,7 +883,7 @@ body > .x-mask {
    stays visible; it just moves from Neptune's #3892d3, where the white title
    sat at 3.38:1, to the #287AB6 the buttons already use. One blue in the app
    instead of two, and the title clears AA at 4.62:1. */
-.x-message-box.x-window-default {
+.x-window-default {
 	border-width: 1px;
 	border-color: var(--pa-border);
 	border-radius: var(--pa-radius);
@@ -877,7 +900,7 @@ body > .x-mask {
    the window's - which is why a blue edge survived hugging the top corners
    after the window frame was already down to a hairline. Zeroed, leaving only
    the divider under the title. */
-.x-message-box > .x-window-header {
+.x-window-default > .x-window-header {
 	background-color: #F6F6F6;
 	background-image: none;
 	border-width: 0 0 1px;
@@ -885,7 +908,11 @@ body > .x-mask {
 	border-color: var(--pa-border);
 	border-radius: var(--pa-radius) var(--pa-radius) 0 0;
 }
-.x-message-box > .x-window-header .x-header-text {
+/* Neptune's window title is white, for the dark blue band it used to sit on.
+   The band is #F6F6F6 now, so every window title has to come with it - scoping
+   this to .x-message-box left the contact form, the sign-in panel and the
+   upload dialogs with a white title on a near-white bar. */
+.x-window-default > .x-window-header .x-header-text {
 	color: #222;
 }
 
@@ -898,12 +925,12 @@ body > .x-mask {
    element so it cannot carry the ::before/::after that would redraw the ✕.
    A muted grey keeps the knocked-out glyph legible and stops the control from
    being the brightest thing in a header whose whole point is now to be quiet. */
-.x-message-box .x-tool-img.x-tool-close {
+.x-window .x-tool-img.x-tool-close {
 	background-color: #8A8B92;
 	border-radius: 3px;
 	transition: background-color var(--pa-transition);
 }
-.x-message-box .x-tool-img.x-tool-close:hover {
+.x-window .x-tool-img.x-tool-close:hover {
 	background-color: #5A5B62;
 }
 
@@ -2655,7 +2682,10 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
 .x-column-header {
 	background-color: #F1F2F4;
 	background-image: none;
-	border-right-color: var(--pa-border);
+	/* Transparent rather than zero-width: ExtJS measures column widths from the
+	   rendered box, so removing the border outright shifts every column. This
+	   keeps the metrics and takes away the line. */
+	border-right-color: transparent;
 }
 .x-column-header .x-column-header-text {
 	/* 700 in #666 was heavy and low-contrast at once - a rare combination to get
@@ -2664,8 +2694,12 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
 	font-weight: 600;
 	color: #1A1A1A;
 }
+/* No vertical rules at all, which is what both reference tables do. A grid ruled
+   on both axes makes the eye read cells; ruled on one it reads rows, and a row
+   here is one pathway - the thing being compared. The header band and the row
+   hairlines carry all the structure that is actually needed. */
 .x-grid-with-col-lines .x-grid-cell {
-	border-right-color: var(--pa-border);
+	border-right-color: transparent;
 }
 .x-grid-with-row-lines .x-grid-cell,
 .x-grid-cell {
