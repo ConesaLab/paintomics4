@@ -3206,3 +3206,86 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
 	border-color: transparent;
 	margin: 0 4px;
 }
+
+/* ---------------------------------------------------------------------------
+   Stouffer weights panel (the "Configure" popover on the enrichment toolbar)
+
+   This opened at 100px wide, which left the sliders with no track to drag and
+   pushed the "Defaults" button off the edge - the panel appeared, but nothing
+   in it could be operated. The width now comes from the component config; what
+   is left here is making it read as a deliberate popover rather than a tooltip,
+   and surfacing each weight as a number so the six omics can be compared
+   without dragging every one of them.
+--------------------------------------------------------------------------- */
+.paWeightsTip {
+	border: 1px solid var(--pa-border);
+	border-radius: var(--pa-radius);
+	box-shadow: 0 6px 20px rgba(0, 0, 0, 0.13);
+	background-color: #FFFFFF;
+}
+
+.paWeightsTip .x-tip-header,
+.paWeightsTip .x-tip-header-default {
+	background: #FAFAFA;
+	border-bottom: 1px solid var(--pa-border);
+	border-radius: var(--pa-radius) var(--pa-radius) 0 0;
+	padding: 7px 10px;
+}
+
+.paWeightsTip .x-tip-header-text {
+	color: #33343A;
+	font-size: 12.5px;
+	font-weight: 600;
+}
+
+.paWeightsTip .x-tip-body,
+.paWeightsTip .x-tip-body-default {
+	background-color: #FFFFFF;
+	padding: 8px 12px 4px;
+}
+
+/* Each row is "omic name .... [n] ---slider---". The number is pinned to the
+   right edge of the label column so the values line up as a scannable column. */
+.paWeightsTip .x-form-item-label {
+	position: relative;
+	padding-right: 30px;
+	box-sizing: border-box;
+	color: #3F3F46;
+	font-size: 12px;
+	line-height: 20px;
+}
+
+.paWeightsTip .x-form-item-label[data-pa-weight]::after {
+	content: attr(data-pa-weight);
+	position: absolute;
+	right: 2px;
+	top: 50%;
+	transform: translateY(-50%);
+	min-width: 20px;
+	padding: 0 4px;
+	border: 1px solid var(--pa-border);
+	border-radius: var(--pa-radius-sm);
+	background-color: #F4F4F5;
+	color: #18181B;
+	font-size: 11px;
+	font-weight: 600;
+	line-height: 17px;
+	text-align: center;
+	font-variant-numeric: tabular-nums;
+}
+
+/* A weight of 0 drops that omic out of the combined p-value entirely, so it
+   gets called out rather than sitting in the row looking like any other value. */
+.paWeightsTip .x-form-item-label[data-pa-weight="0"]::after {
+	border-color: #E0BFBC;
+	background-color: #FCEEEC;
+	color: #B3261E;
+}
+
+.paWeightsTip .x-slider {
+	margin-bottom: 2px;
+}
+
+.paWeightsTip .x-btn {
+	border-radius: var(--pa-radius-sm);
+}
