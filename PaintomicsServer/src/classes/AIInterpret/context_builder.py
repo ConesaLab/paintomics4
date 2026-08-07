@@ -2,6 +2,7 @@ from src.conf.serverconf import (
     KEGG_DATA_DIR, AI_MAJOR_PATHWAY_MIN_OMICS, AI_MAJOR_PATHWAY_MAX_PVAL,
 )
 import csv
+import re
 import os
 
 
@@ -347,6 +348,126 @@ def build_gene_symbol_whitelist(job_instance):
             if orig:
                 whitelist.add(orig.upper())
     return whitelist
+
+
+def render_pathway_table(pathways, max_genes=6):
+    """Render the enrichment result as a markdown table, from the data.
+
+    Same reasoning as ``render_references_section``: this is information the job
+    already holds exactly -- pathway names, p-values, which assays carry them,
+    which differential genes sit in them -- so asking a model to reproduce it
+    buys nothing and costs plenty. Measured: requiring the synthesis to write
+    this table took that phase from ~80s to 206s and pushed runs past the time
+    budget, while writing it in a separate LLM call stripped the biology out
+    (score 17.00 -> 10.00). Rendered here it is complete, costs no wall-clock,
+    and cannot hallucinate a pathway or a p-value.
+
+    The model keeps the part only it can do: interpreting what the pattern
+    means, in prose, in the report body.
+    """
+    if not pathways:
+        return ""
+
+    lines = [
+        "## Enriched Pathway Summary",
+        "",
+        "Complete enrichment result, rendered directly from the analysis. "
+        "Genes listed are those differentially expressed in this experiment.",
+        "",
+        "| Pathway | Source | p-value | Driving omic layers | Differential genes |",
+        "|---|---|---|---|---|",
+    ]
+    for pw in pathways:
+        genes = [g.get("symbol") for g in (pw.get("top_genes") or [])
+                 if g.get("relevant") and g.get("symbol")][:max_genes]
+        per_omic = str(pw.get("per_omic") or "").replace("|", "/").strip()
+        pvalue = pw.get("combined_pvalue")
+        try:
+            pvalue = "%.2e" % float(pvalue)
+        except (TypeError, ValueError):
+            pvalue = str(pvalue)
+        lines.append("| %s | %s | %s | %s | %s |" % (
+            str(pw.get("name", "")).replace("|", "/"),
+            pw.get("source", ""),
+            pvalue,
+            per_omic[:80] or "-",
+            ", ".join(genes) or "none differential",
+        ))
+    return "\n".join(lines)
+
+
+def build_key_regulators_block(job_instance, limit=40):
+    """Features with differential signal in several omic layers.
+
+    The pathway context reaches features through the top enriched pathways and
+    their strongest members, which systematically misses regulators whose signal
+    is real but sits outside those pathways' headline genes. Measured on a
+    STATegra job: Ikzf1 differential in gene expression AND proteomics, Myc,
+    Pax5 and Dok1 in DNase-seq, Srm and Amd1 in two layers each -- none of them
+    reaching the report, which discussed apoptosis and vesicle trafficking
+    instead. Corroboration across independent assays is the strongest evidence
+    the experiment offers, and it was going unused.
+
+    Selection is purely evidential -- omic-layer count, then regulator status --
+    with no list of genes anyone hopes to see. Feed a curated list in here and
+    the report starts reciting expectations rather than reading the data.
+
+    Returns a markdown block, or "" when nothing qualifies.
+    """
+    scored, seen = [], set()
+    for _gene_id, gene in job_instance.getInputGenesData().items():
+        name = (gene.getName() or "").strip()
+        # Skip unresolved accessions and predicted-gene placeholders: a report
+        # cannot say anything useful about "ENSMUSG00000020290", and they crowd
+        # out named genes purely by sorting order.
+        if (not name or name.upper() in seen
+                or re.match(r'^(ENS[A-Z]*\d+|Gm\d+|\d|LOC\d+)', name)
+                or name.endswith("Rik")):
+            continue
+        layers, regulator, effect = set(), False, 0.0
+        for ov in gene.getOmicsValues() or []:
+            try:
+                if not ov.isRelevant():
+                    continue
+                layers.add(ov.getOmicName())
+            except Exception:
+                continue
+            # Separate try blocks on purpose. Sharing one meant a raising
+            # isRegulator() skipped the value loop below it, so every effect
+            # size came out 0.00 and the ranking silently degraded to
+            # alphabetical -- the exact failure this ranking exists to fix.
+            try:
+                regulator = regulator or bool(ov.isRegulator())
+            except Exception:
+                pass
+            try:
+                for v in (ov.getValues() or []):
+                    if isinstance(v, (int, float)):
+                        effect = max(effect, abs(v))
+            except Exception:
+                pass
+        if len(layers) >= 2 or (regulator and layers):
+            seen.add(name.upper())
+            scored.append((len(layers), regulator, effect, name, sorted(layers)))
+
+    if not scored:
+        return ""
+
+    # Corroboration breadth, then effect size. Effect size is what makes this
+    # ranking evidential rather than incidental: with hundreds of genes
+    # differential in exactly two layers, ordering the tie by name meant the
+    # block was chosen by the alphabet -- 45 slots filled from "A", and Ikzf1
+    # never appeared despite being differential in gene expression AND
+    # proteomics. Name survives only as a final tie-break for determinism.
+    scored.sort(key=lambda r: (-r[0], not r[1], -r[2], r[3]))
+    lines = ["## Cross-Layer Regulators (differential in multiple omic layers)",
+             "Corroborated by independent assays -- the experiment's strongest "
+             "evidence. Discuss these where they bear on the pathways below.", ""]
+    for n_layers, regulator, effect, name, layers in scored[:limit]:
+        lines.append("- **%s** — differential in %d layers (%s), peak |value| %.2f%s"
+                     % (name, n_layers, ", ".join(layers), effect,
+                        " [regulator]" if regulator else ""))
+    return "\n".join(lines)
 
 
 # ---------------------------------------------------------------------------

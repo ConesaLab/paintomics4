@@ -33,7 +33,11 @@ class PubMedClient:
     EUROPEPMC_URL = "https://www.ebi.ac.uk/europepmc/webservices/rest"
 
     def __init__(self):
-        self.rate_limit = 0.11 if AI_PUBMED_API_KEY else 0.34  # 10/s or 3/s
+        # NCBI's documented ceiling is 3/s unkeyed, but it throttles over a
+        # sliding window, so pacing exactly at the limit still draws 429s.
+        # Unkeyed runs sit just under it; a key buys both headroom and the
+        # higher 10/s ceiling.
+        self.rate_limit = 0.11 if AI_PUBMED_API_KEY else 0.40
 
     def _throttle(self):
         global _pubmed_last_request
@@ -49,11 +53,20 @@ class PubMedClient:
             params["api_key"] = AI_PUBMED_API_KEY
         return params
 
-    def _request_with_retry(self, method, url, max_retries=2, **kwargs):
+    def _request_with_retry(self, method, url, max_retries=None, **kwargs):
         """HTTP request with retry on transient errors (429, 5xx, connection/timeout).
 
         Returns the Response object. Raises on persistent failure.
+
+        Retry depth depends on whether we hold an API key. Without one NCBI caps
+        us at 3 req/s and throttles bursts hard: measured runs lost 4-6 of 15
+        pathway searches to 429 even with the client's own spacing, and every
+        lost search is literature the report never sees. Since retrieval quality
+        is the binding constraint on report quality, an unkeyed client backs off
+        longer and tries more times rather than dropping the search.
         """
+        if max_retries is None:
+            max_retries = 2 if AI_PUBMED_API_KEY else 4
         kwargs.setdefault("timeout", 30)
         last_exc = None
         for attempt in range(max_retries + 1):
@@ -62,7 +75,14 @@ class PubMedClient:
                 r = requests.request(method, url, **kwargs)
                 if r.status_code == 429 or r.status_code >= 500:
                     if attempt < max_retries:
-                        delay = 2 ** attempt  # 1s, 2s
+                        # Honour Retry-After when NCBI sends one; otherwise
+                        # exponential with a floor, since 1s is below the window
+                        # NCBI actually throttles over.
+                        delay = min(2 ** attempt, 16)
+                        try:
+                            delay = max(delay, int(r.headers.get("Retry-After", 0)))
+                        except (AttributeError, TypeError, ValueError):
+                            pass
                         logger.warning(f"Retry {attempt+1}/{max_retries} for {url} (HTTP {r.status_code}), waiting {delay}s")
                         time.sleep(delay)
                         continue
@@ -77,12 +97,19 @@ class PubMedClient:
                 raise
         raise last_exc  # should not reach here
 
+    # NOTE: both of these went through a bare requests.get + raise_for_status,
+    # bypassing _request_with_retry entirely -- so the retry/backoff logic
+    # existed but the two hottest paths in the client never used it. Every 429
+    # dropped a search outright, and measured runs lost 5-9 searches each,
+    # costing literature the report then could not cite. They now go through
+    # the retrying wrapper like every other call. (_request_with_retry does its
+    # own throttling, so the explicit _throttle() calls are gone.)
+
     def search(self, query, max_results=5):
         """ESearch: returns list of PMIDs."""
-        self._throttle()
         params = {**self._base_params(), "db": "pubmed", "term": query,
                   "retmax": max_results, "retmode": "json"}
-        r = requests.get(self.ESEARCH_URL, params=params, timeout=15)
+        r = self._request_with_retry("GET", self.ESEARCH_URL, params=params, timeout=15)
         r.raise_for_status()
         return r.json().get("esearchresult", {}).get("idlist", [])
 
@@ -90,10 +117,9 @@ class PubMedClient:
         """EFetch: returns list of {pmid, title, abstract, authors, year, journal}."""
         if not pmids:
             return []
-        self._throttle()
         params = {**self._base_params(), "db": "pubmed", "id": ",".join(pmids),
                   "retmode": "xml", "rettype": "abstract"}
-        r = requests.get(self.EFETCH_URL, params=params, timeout=15)
+        r = self._request_with_retry("GET", self.EFETCH_URL, params=params, timeout=15)
         r.raise_for_status()
         return self._parse_xml(r.text)
 
