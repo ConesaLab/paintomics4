@@ -3003,6 +3003,56 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
   transform: scale(1.02);
 }
 
+/* Running-job progress --------------------------------------------------------
+   A job takes minutes, and the only sign it was alive was a spinning GIF with
+   two lines of raw seconds under it. A bar answers the question the reader
+   actually has - how much longer - without making them do the division. */
+.paProgress {
+  margin: 18px auto 4px;
+  max-width: 400px;
+}
+.paProgressTrack {
+  height: 6px;
+  border-radius: 999px;
+  background-color: #E8E8EC;
+  overflow: hidden;
+}
+.paProgressFill {
+  height: 100%;
+  width: 2%;
+  border-radius: 999px;
+  background-color: var(--pa-accent-blue, #2C7FDD);
+  /* Matches the status poll, so the bar walks forward rather than stepping. */
+  transition: width .6s linear;
+}
+/* No usable estimate, or the estimate has been spent: a stripe that keeps
+   moving says "working" without claiming to know how far along it is. */
+.paProgressIndeterminate .paProgressFill {
+  width: 34% !important;
+  transition: none;
+  animation: paProgressSlide 1.5s ease-in-out infinite;
+}
+@keyframes paProgressSlide {
+  0%   { margin-left: -34%; }
+  100% { margin-left: 100%; }
+}
+.paProgressMeta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 8px;
+  color: #71717A;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.paProgressMeta .paProgressEta {
+  color: #52525B;
+}
+@media (prefers-reduced-motion: reduce) {
+  .paProgressFill { transition: none; }
+  .paProgressIndeterminate .paProgressFill { animation: none; margin-left: 0; }
+}
+
 /* Upload controls -------------------------------------------------------------
    The four "Browse..." buttons and "Download example data" were the last stock
    controls in the application: a #287AB6 steel-blue fill with white text and a

@@ -62,22 +62,19 @@ function JobController() {
 				if (response.success === false) {
 					if (response.status === "JobStatus.STARTED" || response.status === "started") {
 						var message = "Running job " + jobID;
-						
+						var progress = null;
+
 						if (showURL) {
 							var jobURL = 'https://' + window.location.host + window.location.pathname + "?jobID=" + jobID;
 							message += ".<br/> You will be able to access it from the URL: <br/><br/><a href=\"" + jobURL  + "\" target=\"_blank\">" + jobURL + "</a>";
-							// show the timeSpent
-							if (response.timeSpent != 0) {
-								message += "<br/><br/>Time spent: " + response.timeSpent + " seconds";
-							}
 
-							// show job estimatedFinishTime
-							if (response.estimatedFinishTime) {
-								message += "<br/><br/> Estimated running time: " + response.estimatedFinishTime + " seconds";
-							}
-
+							// These were two sentences of raw seconds that the reader had to
+							// divide to learn how far along the job was. Handed to the dialog
+							// as numbers instead, so it can draw a bar and say how long is left.
+							progress = {elapsed: response.timeSpent, estimated: response.estimatedFinishTime};
 						}
-						showInfoMessage(message, {logMessage: "Job " + jobID + " still running.", showSpin: true, append: other.multipleJobs, itemId: jobID, icon: "play"});
+
+						showInfoMessage(message, {logMessage: "Job " + jobID + " still running.", showSpin: true, progress: progress, append: other.multipleJobs, itemId: jobID, icon: "play"});
 					}
 					//Check again in N seconds
 					setTimeout(function () {
