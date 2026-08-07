@@ -377,15 +377,35 @@ ul.menu li.loggedOption, ul.menu span.loggedOption {
 .btn-inline {
 	float: none;
 }
+/* The outlined secondary button - "Sharing options", "Show mapping info", the
+   dialog's Close. Its label was never the problem (#333 on white is 12.63:1);
+   its *boundary* was. A white fill on the #F2F2F2 toolbar is nearly the same
+   colour as the toolbar, so the 1px border is the only thing saying "this is a
+   control", and at #ccc it measured 1.43:1 against that toolbar. WCAG 1.4.11
+   asks for 3:1 on exactly this - the visual information required to identify a
+   component.
+
+   Both values are picked against the *pair* of surfaces each state touches, not
+   just one, which is what the old #adadad hover got wrong: it was chosen to sit
+   on white and then used on an #e6e6e6 fill.
+
+     base   #ccc     1.61 on the white fill / 1.43 on the toolbar
+            #878787  3.59 / 3.21
+     hover  #adadad  1.94 on the #e6e6e6 fill / 1.74 on the toolbar
+            #767676  3.64 / 4.06
+
+   Kept to the minimum that clears the bar with a little headroom. A darker
+   outline would pass more comfortably and would also make every secondary
+   button shout, which is not what this application needs. */
 .btn-default {
 	color: #333;
 	background-color: #fff;
-	border-color: #ccc;
+	border-color: #878787;
 }
 .btn-default:hover {
 	color: #333;
 	background-color: #e6e6e6;
-	border-color: #adadad;
+	border-color: #767676;
 }
 .btn-primary {
 	color: #fff;
