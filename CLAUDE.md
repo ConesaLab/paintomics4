@@ -37,3 +37,16 @@ Provide the optimized, cleanly refactored, and heavily commented code.
 
 **4. Validation & Edge Cases:**
 Summarize the edge cases addressed (e.g., NaNs, duplicate IDs) and suggest the next logical step.
+
+## 4. Running the Server Locally
+
+**Prerequisites:** conda environment `paintomics4`, MongoDB running on localhost:27017.
+
+```bash
+cd /Users/tianyuan/Desktop/github_dev/paintomics4/PaintomicsServer
+/Users/tianyuan/miniforge3/envs/paintomics4/bin/python src/launch_server.py
+```
+
+Server runs at **http://localhost:8000/** with debug mode on.
+
+To stop: `kill $(lsof -ti:8000)`
