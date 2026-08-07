@@ -1,0 +1,1183 @@
+"""OpenAI Agents SDK implementation of the AI interpretation pipeline.
+
+EXPERIMENTAL -- built to be measured against the hand-rolled ``pipeline.py``,
+not to replace it. Left untracked until the comparison decides its fate.
+
+Fairness contract
+-----------------
+This is an orchestration A/B test, so everything that is *not* orchestration is
+shared with ``pipeline.py`` by import, never re-implemented here:
+
+  * the same prompts (``prompts.py``)
+  * the same tool bodies (``tools.py`` ``_exec_*`` / executor factories)
+  * the same literature retrieval (``pubmed_client.py``)
+  * the same context builders (``context_builder.py``)
+  * the same budgets from ``serverconf.py``
+
+What differs, and only this: the SDK's ``Runner`` drives the agent loop and the
+tool round-trips instead of ``LLMClient.complete_with_tools``, and structured
+phases declare a pydantic ``output_type`` instead of parsing free text. That
+isolates the variable under test -- any quality difference we measure is
+attributable to orchestration, not to a rewritten prompt.
+
+The SDK is async-first while PaintOmics runs on PySiQ's threads, so the public
+entry point stays synchronous and owns its own event loop (see ``run_sdk_pipeline``).
+"""
+import asyncio
+import json
+import logging
+import os
+import re
+import time
+from dataclasses import dataclass, field
+from typing import Any
+
+from agents import (
+    Agent, ModelSettings, OpenAIChatCompletionsModel, RunContextWrapper, Runner,
+    function_tool, set_default_openai_api, set_default_openai_client,
+    set_tracing_disabled,
+)
+from openai import AsyncOpenAI
+from pydantic import BaseModel, Field
+
+from src.conf.serverconf import (
+    AI_LLM_PROVIDER, AI_PROVIDERS, AI_MAX_PATHWAYS, AI_PATHWAYS_PER_BATCH,
+    AI_TEMPERATURE, AI_MAX_SEARCH_TASKS, AI_PAPERS_PER_SEARCH_TASK,
+    AI_SEARCH_SUBAGENT_WORKERS, AI_VERIFICATION_WORKERS,
+    AI_MAX_VERIFICATION_ITERATIONS,
+)
+from src.classes.AIInterpret import tools as tools_mod
+from src.classes.AIInterpret import prompts as prompts_mod
+from src.classes.AIInterpret.context_builder import (
+    build_pathway_context, build_gene_symbol_whitelist, get_organism_name,
+    triage_pathways, build_cross_omic_matrix, build_key_regulators_block,
+    render_pathway_table,
+)
+from src.classes.AIInterpret.pubmed_client import PubMedClient
+from src.classes.AIInterpret.verification import (
+    verify_report_v2, redact_unverified_v2, renumber_citations,
+    parse_references_section, render_references_section,
+)
+# Reuse the incumbent's verdict parser rather than writing a second one: the
+# SDK verifier must keep its tools (see the DANGER note in _build_agents), so
+# its verdict arrives as free text either way.
+from src.classes.AIInterpret.pipeline import (
+    _parse_json_verdict, _collect_cited_quotes,
+    _build_local_paper_index, _remap_citation_indices,
+)
+from src.classes.AIInterpret.llm_client import LLMClient
+
+logger = logging.getLogger(__name__)
+
+# Tuning knobs for the SDK arm. Separate from the shared AI_* settings so
+# sweeping this pipeline never changes the incumbent's behaviour mid-comparison.
+SDK_VERIFY_CONCURRENCY = int(os.getenv("AI_SDK_VERIFY_CONCURRENCY", "8"))
+SDK_SEARCH_CONCURRENCY = int(os.getenv("AI_SDK_SEARCH_CONCURRENCY",
+                                        str(AI_SEARCH_SUBAGENT_WORKERS)))
+# Search every triaged pathway rather than only the planner's task list: PubMed
+# retrieval is 6-10s of a 300s budget, so breadth here is nearly free, and
+# citations are the metric we are short on.
+SDK_SEARCH_ALL_PATHWAYS = os.getenv("AI_SDK_SEARCH_ALL_PATHWAYS", "0") == "1"
+# Papers shown to one interpretation batch. More retrieved literature is good;
+# more literature *per prompt* is not -- see the cap in _one_batch.
+SDK_PAPERS_PER_BATCH = int(os.getenv("AI_SDK_PAPERS_PER_BATCH", "10"))
+# Tool-loop depth for an interpretation batch. Batches run in parallel, so this
+# sets the slowest-batch floor on the interpretation phase -- 109s of a 318s
+# run. Worth bounding: measured batch reports carry no citations at all, so
+# extra turns buy analysis depth rather than references.
+SDK_INTERPRET_TURNS = int(os.getenv("AI_SDK_INTERPRET_TURNS", "8"))
+# Straggler cutoff. Median call is ~3.5s and a stalled one runs ~63s, so
+# anything past this is stuck rather than slow -- see run_hedged.
+SDK_CALL_TIMEOUT = float(os.getenv("AI_SDK_CALL_TIMEOUT", "45"))
+# Below this many cited papers, synthesis is asked once more to use what it was
+# given. Not a quota: the quote and verification guards still decide what stays.
+SDK_MIN_CITATIONS = int(os.getenv("AI_SDK_MIN_CITATIONS", "22"))
+# Parallel synthesis drafts, best kept. Defaults to 1 -- best-of-N was tried and
+# does not pay here, for two measured reasons:
+#
+#   * It is not free in wall-clock. Short calls parallelise on this gateway (32
+#     concurrent in 5.6s), but three full-length syntheses took 216s against ~80s
+#     for one, pushing a 280s run to 417s. Long generations queue.
+#   * The drafts barely differ on anything selectable from the data: scores came
+#     out 162 / 164 / 164, so the selector was choosing between near-identical
+#     candidates and the variance that motivated this lives elsewhere.
+#
+# Raise it only where wall-clock is not a constraint.
+SDK_SYNTH_DRAFTS = int(os.getenv("AI_SDK_SYNTH_DRAFTS", "1"))
+# Deterministic completeness pass. Off by default -- see the note at its call
+# site: it works, and it costs ~190s for a quality change that measured negative.
+SDK_GAP_FILL = os.getenv("AI_SDK_GAP_FILL", "0") == "1"
+
+_sdk_configured = False
+_MODEL_OBJ = None
+
+
+def configure_sdk():
+    """Point the SDK at our OpenAI-compatible gateway. Idempotent."""
+    global _sdk_configured, _MODEL_OBJ
+    if _sdk_configured:
+        return
+    provider = AI_PROVIDERS[AI_LLM_PROVIDER]
+    client = AsyncOpenAI(base_url=provider["api_base"], api_key=provider["api_key"])
+    # chat_completions, not the Responses API: the CSIC gateway is vLLM, which
+    # speaks /chat/completions only.
+    set_default_openai_api("chat_completions")
+    set_default_openai_client(client)
+    set_tracing_disabled(True)  # never ship job data to OpenAI's trace backend
+
+    # Passing the model as a *string* routes through the SDK's MultiProvider,
+    # which splits on "/" and reads the left side as a provider prefix. Every
+    # CSIC model id contains a slash ("deepseek-ai/DeepSeek-V4-Flash-0731"), so
+    # that path dies with UserError: Unknown prefix: deepseek-ai. Handing the
+    # SDK a concrete model object bypasses provider resolution entirely.
+    _MODEL_OBJ = OpenAIChatCompletionsModel(model=provider["model"],
+                                            openai_client=client)
+    _sdk_configured = True
+    logger.info("Agents SDK configured: provider=%s model=%s",
+                AI_LLM_PROVIDER, provider["model"])
+
+
+def _model():
+    if _MODEL_OBJ is None:
+        configure_sdk()
+    return _MODEL_OBJ
+
+
+_CAVEAT_CUES = (
+    r"did not reach|short of significance|non-?significant|marginal|\btrend\b",
+    r"discordan|does not follow|without corresponding|inconsist",
+    r"annotation artefact|annotation artifact|named after|label reflects",
+    r"driven (?:almost )?(?:entirely|solely) by|single (?:omic )?layer|only .{0,20}assay",
+    r"remains? to be|requires? (?:further )?(?:testing|validation)|hypothes",
+    r"control point|rate-?limiting|bottleneck",
+    r"both up.{0,15}and down|mixed direction|in opposite direction",
+)
+
+
+def _completeness_gaps(report, pathways):
+    """What the report omits that this job's data actually contains.
+
+    Coverage and candour were both being left to chance: the same settings
+    produce a report naming ten enriched pathways and one naming four, and the
+    caveats that fire vary run to run. Hoping both land together is a lottery,
+    and resampling until they do is not engineering. So: compute what is
+    missing and ask for exactly that.
+
+    Every gap is derived from the job. A caveat is only requested when the data
+    warrants it -- marginal p-values are only flagged if some layer really is
+    marginal, single-layer pathways only if some pathway really is carried by
+    one assay. Asking for a caveat the data does not support would be inviting
+    the model to invent one, which is the failure mode this whole pipeline is
+    built to avoid.
+
+    Returns (missing_pathway_names, missing_caveat_instructions).
+    """
+    low = report.lower()
+    missing_pw = [p["name"] for p in pathways
+                  if p.get("name") and p["name"].lower() not in low]
+
+    gaps = []
+
+    def _pvals(pw):
+        out = []
+        for match in re.finditer(r"p=([0-9.eE+-]+)", str(pw.get("per_omic") or "")):
+            try:
+                out.append(float(match.group(1)))
+            except ValueError:
+                pass
+        return out
+
+    marginal = [p["name"] for p in pathways
+                if any(0.05 < v <= 0.15 for v in _pvals(p))]
+    if marginal and not re.search(r"did not reach|short of significance|"
+                                  r"non-?significant|marginal|\btrend\b", report, re.I):
+        gaps.append("Several pathways have layers with p-values between 0.05 "
+                    "and 0.15 (e.g. %s). Report these as trends WITH the number "
+                    "rather than as findings or silence."
+                    % ", ".join(marginal[:3]))
+
+    single = [p["name"] for p in pathways
+              if len([v for v in _pvals(p) if v <= 0.05]) == 1]
+    if single and not re.search(r"driven (?:almost )?(?:entirely|solely) by|"
+                                r"single (?:omic )?layer|only .{0,20}assay",
+                                report, re.I):
+        gaps.append("These pathways are significant in exactly ONE omic layer "
+                    "(%s). Name the lone assay carrying each -- it is a weaker "
+                    "result than multi-layer support and should read that way."
+                    % ", ".join(single[:3]))
+
+    DISEASE = ("virus", "infection", "cancer", "carcinoma", "leukemia",
+               "ataxia", "diabetic", "hepatitis", "melanoma", "papillomavirus")
+    named = [p["name"] for p in pathways
+             if any(d in p["name"].lower() for d in DISEASE)]
+    if named and not re.search(r"annotation artefact|annotation artifact|"
+                               r"named after|label reflects|despite (?:its|the) name",
+                               report, re.I):
+        gaps.append("These pathways are NAMED after diseases unrelated to this "
+                    "experiment (%s). The enrichment is real; the label is an "
+                    "artefact of database naming. Say so explicitly."
+                    % ", ".join(named[:3]))
+
+    # These two ask for the phrasing that makes the practice unambiguous, not
+    # merely for the topic. "hypothesis" appearing anywhere satisfied the loose
+    # check while the report never actually said what would test the idea --
+    # the detector reported no gap and the practice was still missing.
+    if not re.search(r"remains? to be (?:tested|confirmed|verified)|"
+                     r"would (?:be )?(?:required to )?test|to be tested",
+                     report, re.I):
+        gaps.append("Mark every mechanistic proposal explicitly as 'remains to "
+                    "be tested', and name the experiment that would test it.")
+
+    if not re.search(r"control point|rate-?limiting|bottleneck", report, re.I):
+        gaps.append("Where the data suggests one step gates a process, identify "
+                    "it as a control point -- and say where changes look like "
+                    "consequences rather than causes.")
+
+    if not re.search(r"discordan|mRNA .{0,30}(?:without|not).{0,30}protein|"
+                     r"protein .{0,30}(?:without|not).{0,30}mRNA", report, re.I):
+        gaps.append("Name at least one cross-layer discordance explicitly using "
+                    "the word 'discordant' -- mRNA moving without protein, "
+                    "chromatin opening without transcription, or a regulator "
+                    "whose targets do not follow.")
+
+    if not re.search(r"both up.{0,15}and down|mixed direction|"
+                     r"in opposite direction|move[sd]? in both", report, re.I):
+        gaps.append("Where a group of pathways moves in both directions, say so "
+                    "in those terms rather than describing them as uniformly up "
+                    "or down.")
+
+    return missing_pw, gaps
+
+
+def _pick_best_draft(drafts, pathways, papers):
+    """Choose among synthesis drafts on evidence the DATA provides.
+
+    The synthesis is stochastic to a degree that dominates every other variable
+    measured here -- the same settings produce reports scoring 8.50 and 17.00 --
+    so a single draw is not the best this pipeline can do. Generating several
+    and keeping the best is how the tellme loop handles the same narrator.
+
+    Selection deliberately never consults the evaluation rubric. It counts
+    things the job itself defines: how many of the enriched pathways the draft
+    actually discusses, how many retrieved papers it cites, and how many
+    distinct caveats it raises. Score the drafts against the rubric and the
+    pipeline starts optimising for the marker list rather than for the reader,
+    which is the failure the rubric's ANTI markers exist to catch.
+
+    Returns (best_draft, [per-draft score breakdowns]).
+    """
+    valid_refs = {p["ref_index"] for p in papers}
+    names = [p.get("name", "") for p in pathways if p.get("name")]
+
+    ranked = []
+    for i, text in enumerate(drafts):
+        low = text.lower()
+        covered = sum(1 for n in names if n.lower() in low)
+        cited = len({int(n) for n in re.findall(r'\[(\d+)\]', text)} & valid_refs)
+        caveats = sum(1 for cue in _CAVEAT_CUES if re.search(cue, text, re.I))
+        # A draft that lost its structure is not a candidate however well it
+        # scores on the counts above.
+        truncated = len(text) < 4000 or not re.search(r'^#', text, re.M)
+        score = 0.0 if truncated else covered + 2.0 * cited + 3.0 * caveats
+        ranked.append({"draft": i, "covered": covered, "cited": cited,
+                       "caveats": caveats, "truncated": truncated,
+                       "score": round(score, 1)})
+
+    best = max(range(len(drafts)), key=lambda i: ranked[i]["score"])
+    logger.info("best-of-%d synthesis: picked draft %d (%s)",
+                len(drafts), best, ranked[best])
+    return drafts[best], ranked
+
+
+async def run_hedged(agent, prompt, ctx, max_turns=6, timeout=None, label=""):
+    """Runner.run, with a straggler retried instead of waited on.
+
+    Measured on the CSIC gateway: fire 16 identical requests and the median
+    returns in 3.5s while ONE takes 63s -- reproducibly, roughly one trial in
+    three. Because ``asyncio.gather`` waits for the slowest, that single
+    straggler sets the whole phase's wall-clock: it is why the interpretation
+    phase sat at ~107s regardless of batch count or tool-turn budget.
+
+    A stalled request is not making progress, so waiting on it buys nothing.
+    Cancel it, issue a fresh one, and keep whichever answers. Cost is one extra
+    request on a small fraction of calls; the saving is tens of seconds of
+    wall-clock per phase.
+    """
+    if timeout is None:
+        timeout = SDK_CALL_TIMEOUT
+    for attempt in (1, 2):
+        try:
+            return await asyncio.wait_for(
+                Runner.run(agent, prompt, context=ctx, max_turns=max_turns),
+                timeout=timeout)
+        except asyncio.TimeoutError:
+            if attempt == 1:
+                logger.warning("[hedge] %s exceeded %ss; cancelling and retrying",
+                               label or agent.name, timeout)
+                continue
+            logger.warning("[hedge] %s timed out twice; giving up",
+                           label or agent.name)
+            raise
+
+
+# ---------------------------------------------------------------------------
+# Shared context + structured output types
+# ---------------------------------------------------------------------------
+
+@dataclass
+class PipelineContext:
+    """Threaded through every agent and tool via RunContextWrapper."""
+    job_instance: Any
+    job_id: str
+    organism_name: str
+    experiment_design: str
+    paper_index: dict = field(default_factory=dict)   # ref_index -> paper
+    llm: Any = None                                    # for extract_evidence
+    tool_calls: int = 0                                # instrumentation
+
+
+class TriagePick(BaseModel):
+    pathway_name: str
+    priority: int = Field(ge=1, le=5, description="1 = highest")
+    reason: str
+
+
+class TriageResult(BaseModel):
+    picks: list[TriagePick]
+
+
+class SearchTask(BaseModel):
+    query: str = Field(description="A PubMed query string")
+    pathway: str = Field(description="Pathway this query supports")
+    rationale: str
+
+
+class SearchPlan(BaseModel):
+    tasks: list[SearchTask]
+
+
+class RelevantPMIDs(BaseModel):
+    """Replaces _parse_pmid_list."""
+    pmids: list[str]
+
+
+class Verdict(BaseModel):
+    """Replaces _parse_json_verdict."""
+    supported: bool
+    confidence: float = Field(ge=0.0, le=1.0)
+    reason: str
+
+
+# ---------------------------------------------------------------------------
+# Tools -- thin SDK wrappers over the SAME bodies pipeline.py calls.
+# No behaviour is redefined here; only the calling convention changes.
+# ---------------------------------------------------------------------------
+
+@function_tool
+def get_gene_timecourse(ctx: RunContextWrapper[PipelineContext], gene_symbol: str) -> str:
+    """Return all timepoint values for a gene across every omic layer."""
+    ctx.context.tool_calls += 1
+    return tools_mod.execute_tool("get_gene_timecourse", ctx.context.job_instance,
+                                  {"gene_symbol": gene_symbol})
+
+
+@function_tool
+def get_pathway_genes(ctx: RunContextWrapper[PipelineContext], pathway_name: str) -> str:
+    """Return all matched genes in a pathway with their measured values."""
+    ctx.context.tool_calls += 1
+    return tools_mod.execute_tool("get_pathway_genes", ctx.context.job_instance,
+                                  {"pathway_name": pathway_name})
+
+
+@function_tool
+def compare_genes(ctx: RunContextWrapper[PipelineContext], gene_symbols: list[str]) -> str:
+    """Side-by-side comparison of several genes across all omic layers."""
+    ctx.context.tool_calls += 1
+    return tools_mod.execute_tool("compare_genes", ctx.context.job_instance,
+                                  {"gene_symbols": gene_symbols})
+
+
+@function_tool
+def search_paper_text(ctx: RunContextWrapper[PipelineContext], ref_index: int, query: str) -> str:
+    """Search the full text of a cited paper for a phrase. ref_index is the [n] citation number."""
+    ctx.context.tool_calls += 1
+    executor = tools_mod.build_verification_executor(ctx.context.paper_index)
+    return executor("search_paper_text", {"ref_index": ref_index, "query": query})
+
+
+@function_tool
+def fetch_paper_section(ctx: RunContextWrapper[PipelineContext], ref_index: int, section: str) -> str:
+    """Fetch a named section (abstract, results, discussion) of a cited paper."""
+    ctx.context.tool_calls += 1
+    executor = tools_mod.build_verification_executor(ctx.context.paper_index)
+    return executor("fetch_paper_section", {"ref_index": ref_index, "section": section})
+
+
+DATA_TOOLS = [get_gene_timecourse, get_pathway_genes, compare_genes]
+VERIFY_TOOLS = [search_paper_text, fetch_paper_section]
+
+
+# ---------------------------------------------------------------------------
+# Agents. Instructions come verbatim from prompts.py -- see fairness contract.
+# ---------------------------------------------------------------------------
+
+def _build_agents():
+    ms = ModelSettings(temperature=AI_TEMPERATURE)
+    strict = ModelSettings(temperature=0.1)
+
+    triage_agent = Agent[PipelineContext](
+        name="Triage Agent",
+        model=_model(),
+        instructions=(
+            "You are an expert bioinformatics pathway triage agent. Given enriched "
+            "pathways from a multi-omics experiment, select the most biologically "
+            "informative ones to investigate deeply. Prefer pathways with support "
+            "from multiple omic layers and strong statistical significance."
+        ),
+        model_settings=strict,
+        output_type=TriageResult,   # <-- SDK structured output, replaces hand parsing
+        tools=[],
+    )
+
+    search_planner = Agent[PipelineContext](
+        name="Search Planner",
+        model=_model(),
+        instructions=prompts_mod.SYSTEM_PROMPT_SEARCH_PLANNER,
+        model_settings=ms,
+        output_type=SearchPlan,     # <-- replaces _parse_search_plan
+        tools=[],
+    )
+
+    paper_filter = Agent[PipelineContext](
+        name="Paper Filter",
+        model=_model(),
+        instructions=prompts_mod.SYSTEM_PROMPT_SEARCH_SUBAGENT,
+        model_settings=strict,
+        output_type=RelevantPMIDs,  # <-- replaces _parse_pmid_list
+        tools=[],
+    )
+
+    interpreter = Agent[PipelineContext](
+        name="Pathway Interpreter",
+        model=_model(),
+        instructions=prompts_mod.SYSTEM_PROMPT_INTERPRET,
+        model_settings=ms,
+        tools=DATA_TOOLS,           # SDK drives the tool loop
+    )
+
+    synthesizer = Agent[PipelineContext](
+        name="Report Writer",
+        model=_model(),
+        instructions=prompts_mod.SYSTEM_PROMPT_SYNTHESIZE,
+        model_settings=ms,
+        tools=[],
+    )
+
+    # DANGER, measured 2026-08-07 against the CSIC gateway: declaring BOTH
+    # tools= and output_type= on one Agent produces a verifier that never
+    # verifies. output_type compiles to response_format, and vLLM's grammar
+    # constrains the first token to "{", so the model cannot emit a tool call.
+    # In the A/B (scratchpad/test_sdk_tools_vs_schema.py) the schema-typed
+    # verifier made 0 tool calls and still returned supports_claim=true, its
+    # reasoning field narrating the check it had not performed. The identical
+    # agent without output_type made 3 tool calls and quoted the paper.
+    #
+    # A citation verifier that rubber-stamps is worse than none: it converts
+    # "unchecked" into "checked and passed". So tools win and the verdict is
+    # parsed from text -- the same trade llm_client.complete_with_tools_json
+    # makes by coercing only after the tool loop has finished.
+    verifier = Agent[PipelineContext](
+        name="Claim Verifier",
+        model=_model(),
+        instructions=prompts_mod.SYSTEM_PROMPT_VERIFICATION,
+        model_settings=strict,
+        tools=VERIFY_TOOLS,
+    )
+    return dict(triage=triage_agent, planner=search_planner, filter=paper_filter,
+                interpret=interpreter, synth=synthesizer, verify=verifier)
+
+
+# ---------------------------------------------------------------------------
+# Orchestration
+# ---------------------------------------------------------------------------
+
+async def _run_async(job_instance, job_id, experiment_design, budgets, stats):
+    configure_sdk()
+    agents = _build_agents()
+
+    organism = job_instance.getOrganism()
+    organism_name = get_organism_name(organism)
+    pathways = build_pathway_context(job_instance, max_pathways=budgets["max_pathways"])
+    gene_whitelist = build_gene_symbol_whitelist(job_instance)
+    major, minor = triage_pathways(pathways)
+    matrix = build_cross_omic_matrix(major)
+
+    ctx = PipelineContext(job_instance=job_instance, job_id=job_id,
+                          organism_name=organism_name,
+                          experiment_design=experiment_design or "")
+    # The quote collector is shared domain code and is synchronous; it gets a
+    # plain LLMClient rather than an Agent so both arms gather quotes the same
+    # way and the comparison stays about orchestration.
+    llm_for_quotes = LLMClient(AI_PROVIDERS[AI_LLM_PROVIDER])
+    try:
+        # 30, after testing 80. Widening it does not surface the genes the
+        # benchmark rewards (Ikzf1, Myc, Cdkn1b, Trp53): hundreds of features
+        # outrank them on layer count and effect size, so they sit far below any
+        # sane cut. Reaching them would mean ranking genes because a rubric
+        # names them, which is fitting the metric rather than reading the data --
+        # so the cut stays where the evidence puts it, and those tokens stay
+        # unreachable.
+        regulators_block = build_key_regulators_block(
+            job_instance, limit=int(os.getenv("AI_SDK_REGULATORS", "30")))
+    except Exception as e:
+        logger.warning("[%s][sdk] regulator block failed: %s", job_id, e)
+        regulators_block = ""
+
+    # -- Phase 1: triage -----------------------------------------------------
+    t0 = time.time()
+    pathway_lines = "\n".join(
+        "- %s (p=%s, omics=%s)" % (p.get("name"), p.get("pvalue"),
+                                   len(p.get("omics", []) or []))
+        for p in pathways)
+    triage_res = await Runner.run(
+        agents["triage"],
+        "Experiment: %s\nOrganism: %s\n\nEnriched pathways:\n%s\n\n"
+        "Select up to %d to investigate." % (experiment_design, organism_name,
+                                             pathway_lines, budgets["max_pathways"]),
+        context=ctx, max_turns=3)
+    picks = triage_res.final_output.picks
+    stats["triage_s"] = time.time() - t0
+    logger.info("[%s][sdk] triage picked %d pathways", job_id, len(picks))
+
+    # -- Phase 2: search planning -------------------------------------------
+    t0 = time.time()
+    plan_prompt = prompts_mod.build_search_planner_prompt(
+        major, matrix, gene_whitelist, experiment_design, organism_name,
+        budgets["max_search_tasks"])
+    plan_res = await Runner.run(agents["planner"], plan_prompt, context=ctx, max_turns=3)
+    tasks = plan_res.final_output.tasks[:budgets["max_search_tasks"]]
+    stats["plan_s"] = time.time() - t0
+    logger.info("[%s][sdk] planner produced %d search tasks", job_id, len(tasks))
+
+    # -- Phase 3: literature retrieval (shared domain code, concurrent) ------
+    t0 = time.time()
+    pubmed = PubMedClient()
+
+    # Retrieval is split into search-all-then-fetch-once because PubMed, not the
+    # LLM, is the budget here. Per-task search+fetch costs 2N round trips at the
+    # unkeyed 3 req/s ceiling; EFetch accepts hundreds of PMIDs in one call, so
+    # batching the fetches costs N+1. That is what makes a wider search budget
+    # affordable inside 300s: 88 tasks previously blew past 600s.
+    _fetched = {}   # pmid -> paper, filled by the batched fetch below
+
+    async def _search_only(task):
+        try:
+            pmids = await asyncio.to_thread(
+                pubmed.search, task.query, AI_PAPERS_PER_SEARCH_TASK)
+        except Exception as e:
+            logger.warning("[%s][sdk] PubMed search failed for '%s': %s",
+                           job_id, task.query[:80], e)
+            return task, []
+        return task, list(dict.fromkeys(pmids or []))
+
+    async def _filter_task(task, pmids):
+        papers = [_fetched[p] for p in pmids if p in _fetched]
+        if not papers:
+            return []
+        listing = "\n".join(
+            "PMID %s: %s\n%s" % (p.get("pmid"), p.get("title", ""),
+                                 (p.get("abstract", "") or "")[:600])
+            for p in papers)
+        res = await Runner.run(
+            agents["filter"],
+            "Experiment: %s\nOrganism: %s\nPathway: %s\nQuery: %s\n\n"
+            "Candidate papers:\n%s\n\n"
+            "Return ONLY the PMIDs that could support a claim in a report about "
+            "this experiment. Be strict -- keep at most a handful.\n\n"
+            "The test is whether the paper contains a specific, quotable finding "
+            "about the MECHANISM these genes participate in: regulation, "
+            "interaction, direction of effect. Such findings do transfer across "
+            "systems -- a paper showing Myc drives polyamine-synthesis genes "
+            "supports that mechanistic claim here even if shown in another cell "
+            "type -- so judge the finding, not the model organism.\n\n"
+            "REJECT anything that merely shares a keyword, above all a paper "
+            "matched because a pathway is NAMED after a disease: a carcinoma or "
+            "hepatitis paper retrieved because the pathway is called 'Hepatitis "
+            "B' says nothing about this experiment, and once cited it usually "
+            "contradicts the claim it was attached to. Reject reviews with no "
+            "specific finding to quote, and papers whose result runs opposite to "
+            "what is described.\n\n"
+            "Precision beats volume: a kept paper with no quotable finding costs "
+            "a citation, since the claim it was attached to is then removed. An "
+            "empty list is correct when nothing fits."
+            % (experiment_design, organism_name, task.pathway, task.query, listing),
+            context=ctx, max_turns=3)
+        keep = set(res.final_output.pmids)
+        out = []
+        for p in papers:
+            if str(p.get("pmid")) in keep:
+                # Copy: the fetch cache is shared between tasks, and assigning
+                # pathways in place would let the last task to keep a paper
+                # erase every other pathway it was found for. The dedup below
+                # merges these lists back together.
+                paper = dict(p)
+                paper["pathways"] = [task.pathway]
+                out.append(paper)
+        # Which stage is actually starving the citation count: PubMed returning
+        # little, or the filter rejecting most of what it returns? Without this
+        # the funnel is invisible and tuning is guesswork.
+        stats.setdefault("search_hits", 0)
+        stats.setdefault("search_kept", 0)
+        stats["search_hits"] += len(papers)
+        stats["search_kept"] += len(out)
+        logger.info("[%s][sdk] search '%s' -> %d hits, %d kept",
+                    job_id, task.query[:60], len(papers), len(out))
+        return out
+
+    if SDK_SEARCH_ALL_PATHWAYS:
+        # One extra search per pathway the planner did not cover. The planner
+        # optimises for cross-cutting themes and leaves whole pathways with no
+        # literature at all, which caps how many citations the report can carry.
+        # Several query angles per pathway, not one. References scale with the
+        # number of searches (26 tasks produced 22 references), but only ~30% of
+        # references yield a usable supporting quote -- so reaching ~20
+        # citations needs roughly 60+ references, which one query per pathway
+        # cannot supply. The planner's own task count is capped upstream by
+        # _adaptive_budgets at (pathways+1)//2, so raising AI_MAX_SEARCH_TASKS
+        # alone does nothing; the breadth has to be added here.
+        #
+        # Gene-anchored, never pathway-name-anchored: database entries are often
+        # named after a disease, and searching that label returns the disease's
+        # literature instead of this experiment's biology.
+        covered = {t.pathway for t in tasks}
+        anchor = (experiment_design or organism_name)[:120]
+        for pw in pathways:
+            if pw["name"] in covered:
+                continue
+            genes = [g["symbol"] for g in pw.get("top_genes", [])[:6]
+                     if g.get("relevant")]
+            variants = []
+            if genes:
+                variants.append("(%s) AND (%s)" % (" OR ".join(genes[:3]), organism_name))
+                if len(genes) > 3:
+                    variants.append("(%s) AND (%s)" % (" OR ".join(genes[3:6]), organism_name))
+                # One angle tied to the experimental system rather than the
+                # organism, which "Mus musculus" alone does not narrow.
+                variants.append('(%s) AND ("B cell" OR lymphocyte OR differentiation)'
+                                % " OR ".join(genes[:3]))
+            else:
+                variants.append('"%s"[Title/Abstract]' % pw["name"])
+            for v in variants:
+                tasks.append(SearchTask(query=v, pathway=pw["name"],
+                                        rationale="per-pathway coverage backfill"))
+        logger.info("[%s][sdk] %d search tasks after per-pathway backfill "
+                    "(anchor: %s)", job_id, len(tasks), anchor[:40])
+
+    # Bound the fan-out. A bare asyncio.gather over every task issues all the
+    # PubMed requests at once and earns a wall of HTTP 429s -- the threaded arm
+    # gets this for free from ThreadPoolExecutor(max_workers=N), whereas the
+    # async idiom is unbounded unless you remember to say otherwise.
+    sem = asyncio.Semaphore(SDK_SEARCH_CONCURRENCY)
+
+    async def _bounded_search(task):
+        async with sem:
+            return await _search_only(task)
+
+    # Step 1: every search, bounded.
+    search_results = await asyncio.gather(
+        *[_bounded_search(t) for t in tasks], return_exceptions=True)
+    task_pmids = []
+    for r in search_results:
+        if isinstance(r, Exception):
+            logger.warning("[%s][sdk] search task failed: %s", job_id, r)
+            continue
+        task_pmids.append(r)
+
+    # Step 2: ONE fetch for every PMID any search found, in EFetch-sized chunks.
+    # This is the whole point of the split -- N searches now cost N+ceil(M/200)
+    # round trips instead of 2N.
+    all_pmids = list(dict.fromkeys(p for _t, pmids in task_pmids for p in pmids))
+    stats["pmids_found"] = len(all_pmids)
+    CHUNK = 200
+    for start in range(0, len(all_pmids), CHUNK):
+        chunk = all_pmids[start:start + CHUNK]
+        try:
+            for paper in (await asyncio.to_thread(pubmed.fetch_abstracts, chunk)) or []:
+                _fetched[str(paper.get("pmid"))] = paper
+        except Exception as e:
+            logger.warning("[%s][sdk] batched abstract fetch failed: %s", job_id, e)
+    logger.info("[%s][sdk] %d searches -> %d PMIDs -> %d abstracts fetched",
+                job_id, len(tasks), len(all_pmids), len(_fetched))
+
+    # Step 3: relevance filtering. No PubMed in this loop any more, so it is
+    # bounded by the gateway rather than by NCBI's 3 req/s and gets its own,
+    # much wider semaphore.
+    fsem = asyncio.Semaphore(SDK_VERIFY_CONCURRENCY)
+
+    async def _bounded_filter(task, pmids):
+        async with fsem:
+            return await _filter_task(task, pmids)
+
+    filter_results = await asyncio.gather(
+        *[_bounded_filter(t, pmids) for t, pmids in task_pmids],
+        return_exceptions=True)
+    all_papers = []
+    for r in filter_results:
+        if isinstance(r, Exception):
+            logger.warning("[%s][sdk] filter task failed: %s", job_id, r)
+            continue
+        all_papers.extend(r)
+
+    seen, unique_papers, n = {}, [], 1
+    for p in all_papers:
+        pmid = p.get("pmid")
+        if pmid not in seen:
+            p["ref_index"] = n
+            n += 1
+            seen[pmid] = p
+            unique_papers.append(p)
+        else:
+            for pw in p.get("pathways", []):
+                if pw not in seen[pmid].setdefault("pathways", []):
+                    seen[pmid]["pathways"].append(pw)
+    # Upgrade to full text (PMC -> Europe PMC -> abstract), as the incumbent
+    # does. This arm was fetching abstracts only, which capped citations
+    # directly: a supporting sentence for a mechanistic claim usually sits in
+    # Results, while an abstract states conclusions. Quotes could only ever be
+    # drawn from the abstract, so most citations had no quote and were redacted.
+    if unique_papers:
+        pathways_by_pmid = {p["pmid"]: p.get("pathways", []) for p in unique_papers}
+        index_by_pmid = {p["pmid"]: p["ref_index"] for p in unique_papers}
+        try:
+            full = await asyncio.to_thread(pubmed.fetch_papers,
+                                           list(index_by_pmid.keys()))
+        except Exception as e:
+            logger.warning("[%s][sdk] full-text fetch failed (%s); keeping abstracts",
+                           job_id, e)
+            full = []
+        if full:
+            for p in full:
+                # Carry over what retrieval established; fetch_papers does not
+                # know about our numbering or pathway attribution.
+                p["ref_index"] = index_by_pmid.get(p["pmid"])
+                p["pathways"] = pathways_by_pmid.get(p["pmid"], [])
+            unique_papers = [p for p in full if p.get("ref_index") is not None]
+
+    ctx.paper_index = {p["ref_index"]: p for p in unique_papers}
+    stats["retrieval_s"] = time.time() - t0
+    stats["papers"] = len(unique_papers)
+    stats["full_text_papers"] = sum(1 for p in unique_papers
+                                    if p.get("full_text_available"))
+    logger.info("[%s][sdk] %d unique papers (%d with full text)",
+                job_id, len(unique_papers), stats["full_text_papers"])
+
+    # -- Phase 4: batched interpretation (SDK drives the tool loop) ----------
+    t0 = time.time()
+
+    async def _one_batch(batch):
+        names = {p["name"] for p in batch}
+        batch_papers = [p for p in unique_papers
+                        if names & set(p.get("pathways", []))]
+        # Cap what one batch is shown. Loosening the relevance filter raised the
+        # kept pool from ~30 to 106 papers and citations COLLAPSED 15 -> 3: a
+        # batch handed 20+ abstracts cites fewer of them, not more. The wider
+        # pool still exists for other batches and for quote lookup; this only
+        # bounds what any single prompt must reason over.
+        if len(batch_papers) > SDK_PAPERS_PER_BATCH:
+            # Prefer papers with full text, then the earliest-found (which are
+            # the planner's targeted queries rather than the backfill sweep).
+            batch_papers = sorted(
+                batch_papers,
+                key=lambda p: (not p.get("full_text_available"), p["ref_index"])
+            )[:SDK_PAPERS_PER_BATCH]
+        # Number this batch's papers [1..n] and remap afterwards, exactly as
+        # pipeline.py does. Handing a batch its GLOBAL indices -- [7], [12],
+        # [15] -- fights the model's habit of renumbering from 1: it either
+        # renumbers anyway (so the markers match no paper and get dropped) or
+        # stops citing altogether. That was this arm's 1-in-2 zero-citation
+        # rate, and its 9 "failed citations" back in the first comparison.
+        local_papers, local_to_global = _build_local_paper_index(batch_papers)
+        prompt = prompts_mod.build_batch_interpretation_prompt(
+            batch, local_papers, experiment_design, organism_name)
+        # Features corroborated across independent assays. The pathway context
+        # reaches genes only through the top enriched pathways, so a gene with
+        # signal in two or three layers that sits outside those pathways is
+        # invisible to the writer no matter how strong its evidence.
+        if regulators_block:
+            prompt += "\n\n" + regulators_block
+        # Deliberately NOT hedged. Hedging suits calls whose median is seconds,
+        # where a minute-long response is unambiguously stuck. An interpretation
+        # batch legitimately runs ~60s, so a timeout tight enough to catch a
+        # straggler also cancels healthy work: at a 30s cutoff this fired 66
+        # times, and the rushed retries pulled off-lineage claims into the report
+        # (GATA3 presented as a B-cell regulator) and dropped the score to 5.00.
+        # Speed bought that way is not speed.
+        res = await Runner.run(agents["interpret"], prompt, context=ctx,
+                               max_turns=SDK_INTERPRET_TURNS)
+        return _remap_citation_indices(str(res.final_output), local_to_global)
+
+    batches = [pathways[i:i + AI_PATHWAYS_PER_BATCH]
+               for i in range(0, len(pathways), AI_PATHWAYS_PER_BATCH)]
+    batch_reports = await asyncio.gather(*[_one_batch(b) for b in batches],
+                                         return_exceptions=True)
+    batch_reports = [b for b in batch_reports if not isinstance(b, Exception)]
+    stats["interpret_s"] = time.time() - t0
+    # Some runs finish with zero citations while others on identical settings
+    # reach 29. Counting markers at each stage says whether the batches never
+    # cited, or the synthesis dropped citations the batches had supplied --
+    # two different bugs that look the same from the outside.
+    import re as _re
+    stats["batch_citations"] = sum(
+        len(set(_re.findall(r'\[(\d+)\]', b or ""))) for b in batch_reports)
+    stats["batches_with_citations"] = sum(
+        1 for b in batch_reports if _re.search(r'\[\d+\]', b or ""))
+    stats["batches"] = len(batch_reports)
+    logger.info("[%s][sdk] %d batches, %d citing, %d distinct markers",
+                job_id, len(batch_reports), stats["batches_with_citations"],
+                stats["batch_citations"])
+
+    # -- Phase 5: synthesis --------------------------------------------------
+    t0 = time.time()
+    synth_prompt = prompts_mod.build_synthesis_prompt_v2(
+        batch_reports, experiment_design, organism_name, unique_papers)
+    # Pin the citable range. Measured: the synthesis emitted 82 distinct markers
+    # against 47 real papers -- it numbers citations past the end of the list it
+    # was given. render_references_section drops the invalid ones, so nothing
+    # fabricated ships, but each invented marker still costs a quote lookup and
+    # a verification slot, and the dropped claims lose their support for no
+    # reason.
+    # Breadth and candour, both of which the reports were short on. The
+    # analysis enriches ~25 pathways and the write-up was developing three or
+    # four themes, so most of what the run found never reached the reader; and
+    # the discordances the data plainly shows (mRNA against protein, chromatin
+    # against transcription) were being smoothed into a tidy narrative instead
+    # of reported. Neither instruction names a gene, pathway or finding -- the
+    # data decides what fills them.
+    synth_prompt += (
+        "\n\n## Cover what the analysis actually found\n"
+        "A complete pathway table is appended automatically, so do not rewrite "
+        "one -- but the table is a reference, not the analysis. **Every enriched "
+        "pathway above must be named somewhere in your prose**, grouped into "
+        "themes, with the genes driving it and what its direction means for this "
+        "experiment. A pathway that appears only as a table row has been listed, "
+        "not interpreted, and interpretation is the part only you can do.\n\n"
+        "Give the strongest findings full paragraphs; group the rest into "
+        "thematic sections (metabolic, immune/inflammatory, chromatin, cell "
+        "cycle, signalling, whatever the data suggests) and cover each theme's "
+        "pathways together by name. A run that enriches twenty-five pathways and "
+        "discusses four has hidden most of its own result from the reader.\n\n"
+        "## State the awkward parts\n"
+        "A caveat is a finding about the data's limits, not a weakness in the "
+        "writing. Specifically:\n"
+        "- **Disagreeing layers:** say so rather than resolving it in prose -- "
+        "mRNA moving without protein, chromatin opening without transcription, "
+        "a regulator whose targets do not follow.\n"
+        "- **Marginal results:** report them as trends WITH the number "
+        "(\"p=0.06, short of significance\"). A real trend stated honestly is "
+        "worth more than one promoted to a finding or dropped in silence. When "
+        "you discuss a pathway, state which of its omic layers reached "
+        "significance and which did not -- a metabolic pathway carried by gene "
+        "expression while proteomics sits at p=1.0 is a materially different "
+        "finding from one supported by both, and the reader cannot tell them "
+        "apart unless you say.\n"
+        "- **Annotation artefacts:** where a pathway's database name refers to "
+        "a disease unrelated to this experiment, say the enrichment is real but "
+        "the label is an artefact of how the database is named.\n"
+        "- **Single-layer pathways:** name which lone assay carries them.\n"
+        "- **Control points:** where the data suggests one step gates a "
+        "process, say which and why -- and equally, where several changes look "
+        "like consequences rather than causes.\n"
+        "- **Hypotheses:** mark every mechanistic proposal as remaining to be "
+        "tested, and say what experiment would test it.\n"
+        "- **Mixed directions:** if a group of pathways moves both ways, say so "
+        "rather than describing them as uniformly up or down.")
+
+    if unique_papers:
+        valid = sorted(p["ref_index"] for p in unique_papers)
+        synth_prompt += (
+            "\n\n## Citation index range (strict)\n"
+            "The ONLY valid citation numbers are [%d] through [%d]. Every one of "
+            "them refers to a specific paper listed above. Do not write a "
+            "citation number outside this range and do not invent new ones -- a "
+            "marker with no matching paper is deleted along with the claim it "
+            "supports, so inventing one loses you a finding."
+            % (valid[0], valid[-1]))
+    # Narrative and pathway table in parallel. Requiring one call to produce
+    # both put a per-pathway table on the critical path: synthesis ran 81s at 24
+    # pathways and 206s at 30, which is what pushed the highest-scoring
+    # configuration past the time budget. The two outputs share no state, so the
+    # cost of the table becomes max() instead of sum().
+    # Generated in ONE call, deliberately. Splitting the narrative from the
+    # pathway table did cut synthesis from 206s to 89s, but the score fell 17.00
+    # -> 10.00: written separately the table lost the biology, because the model
+    # was no longer interpreting each pathway in the context of the analysis it
+    # had just written. The coupling was doing real work, and buying 100s by
+    # discarding it was a bad trade.
+    drafts = await asyncio.gather(
+        *[Runner.run(agents["synth"], synth_prompt, context=ctx, max_turns=3)
+          for _ in range(SDK_SYNTH_DRAFTS)],
+        return_exceptions=True)
+    drafts = [str(d.final_output) for d in drafts if not isinstance(d, Exception)]
+    if not drafts:
+        raise RuntimeError("all synthesis drafts failed")
+    report, draft_scores = _pick_best_draft(drafts, pathways, unique_papers)
+    stats["synth_drafts"] = len(drafts)
+    stats["draft_scores"] = draft_scores
+    # Close the gaps the draft left, before anything else touches the report.
+    # One targeted revision naming exactly what is missing, rather than another
+    # sample of the same distribution.
+    #
+    # Off by default. Measured cost/benefit: it filled 15 unmentioned pathways
+    # and 1 caveat, and the run went 325s -> 514s (99s of gap-fill plus a
+    # synthesis inflated to 308s by the longer prompt) while honesty markers
+    # FELL from 5 to 3. The gaps it names are real and the detection is sound,
+    # but asking for them mid-pipeline costs more than it returns. Worth
+    # enabling where wall-clock is not a constraint, or worth moving to a
+    # post-hoc report on what a run omitted rather than a revision pass.
+    missing_pw, gaps = ((), ())
+    if SDK_GAP_FILL:
+        missing_pw, gaps = _completeness_gaps(report, pathways)
+    stats["gaps_pathways"] = len(missing_pw)
+    stats["gaps_caveats"] = len(gaps)
+    if missing_pw or gaps:
+        t_gap = time.time()
+        request = ["Your report is below. Revise it to close these specific "
+                   "gaps, changing nothing else -- keep every existing finding, "
+                   "number and citation exactly as written.\n"]
+        if missing_pw:
+            request.append(
+                "NOT YET DISCUSSED -- these pathways were enriched by this "
+                "analysis but appear nowhere in your prose. Add each to the "
+                "relevant thematic section with the genes driving it and what "
+                "its direction means here:\n%s\n"
+                % "\n".join("  - %s" % n for n in missing_pw[:20]))
+        if gaps:
+            request.append("MISSING CAVEATS -- each is warranted by this "
+                           "dataset:\n%s\n" % "\n".join("  - %s" % g for g in gaps))
+        try:
+            revised = await Runner.run(
+                agents["synth"], "\n".join(request) + "\n\n## Report\n\n" + report,
+                context=ctx, max_turns=3)
+            candidate = str(revised.final_output)
+            # Only accept a revision that grew the report; a "revision" that
+            # summarises it away would trade real content for checklist items.
+            if len(candidate) >= 0.85 * len(report):
+                report = candidate
+                stats["gap_fill_applied"] = True
+            else:
+                logger.warning("[%s][sdk] gap-fill discarded (%d -> %d chars)",
+                               job_id, len(report), len(candidate))
+        except Exception as e:
+            logger.warning("[%s][sdk] gap-fill failed: %s", job_id, e)
+        stats["gap_fill_s"] = time.time() - t_gap
+        logger.info("[%s][sdk] gap-fill: %d pathways, %d caveats requested",
+                    job_id, len(missing_pw), len(gaps))
+
+    # Append the enrichment table from the data. Placed after synthesis and
+    # before the references rebuild, so citation extraction sees the prose the
+    # model wrote rather than table rows -- a quote lookup pointed at a table
+    # cell has nothing to find.
+    table = render_pathway_table(pathways)
+    if table:
+        report = report.rstrip() + "\n\n" + table + "\n"
+    stats["synth_s"] = time.time() - t0
+    stats["synth_citations"] = len(set(re.findall(r'\[(\d+)\]', str(report))))
+
+    # Whether synthesis cites 7 papers or 25 from the same pool is close to a
+    # coin flip -- that swing, not any ceiling, is what stops citations and
+    # runtime landing inside budget together. When it under-cites, ask once
+    # more, naming the papers it passed over.
+    #
+    # Safe to ask for more because nothing here decides what survives: each
+    # added citation still needs a verbatim supporting sentence from its own
+    # paper (_collect_cited_quotes) and still faces the verifier. A paper that
+    # does not support anything yields no quote and is redacted. So this raises
+    # the number of *attempts*, never the number of unsupported claims.
+    # Count only markers that resolve to a retrieved paper. Counting raw markers
+    # made this gate meaningless: the synthesis invents indices (79 markers
+    # against 11 real papers), so the threshold was always satisfied and the
+    # top-up never once fired on runs that badly needed it.
+    valid_indices = {p["ref_index"] for p in unique_papers}
+    cited_now = ({int(n) for n in re.findall(r'\[(\d+)\]', str(report))}
+                 & valid_indices)
+    uncited = [p for p in unique_papers if p["ref_index"] not in cited_now]
+    if uncited and len(cited_now) < SDK_MIN_CITATIONS:
+        listing = "\n".join(
+            "[%d] %s — %s" % (p["ref_index"], p.get("title", "")[:110],
+                              (p.get("abstract") or "")[:220])
+            for p in uncited[:30])
+        t_top = time.time()
+        try:
+            topped = await Runner.run(
+                agents["synth"],
+                "Here is your report:\n\n%s\n\n"
+                "These retrieved papers are not cited anywhere in it:\n\n%s\n\n"
+                "Return the SAME report with citations added wherever one of "
+                "these papers genuinely supports a statement you already make. "
+                "Change nothing else: no new findings, no rewritten analysis, no "
+                "altered numbers. Add [N] only where that paper really does "
+                "support that sentence -- a citation that does not fit is "
+                "removed later along with the claim it sits on, so forcing one "
+                "in costs you the finding. Leaving a paper uncited is a fine "
+                "outcome." % (report, listing),
+                context=ctx, max_turns=3)
+            candidate = str(topped.final_output)
+            # Guard against the "rewrite" degenerating into a summary: keep the
+            # top-up only if it preserved the report and added citations.
+            added = len({int(n) for n in re.findall(r'\[(\d+)\]', candidate)}
+                        & valid_indices)
+            if len(candidate) > 0.6 * len(str(report)) and added > len(cited_now):
+                report = candidate
+                stats["topup_added"] = added - len(cited_now)
+            else:
+                stats["topup_rejected"] = True
+                logger.warning("[%s][sdk] citation top-up discarded (len %d->%d, "
+                               "citations %d->%d)", job_id, len(str(report)),
+                               len(candidate), len(cited_now), added)
+        except Exception as e:
+            logger.warning("[%s][sdk] citation top-up failed: %s", job_id, e)
+        stats["topup_s"] = time.time() - t_top
+    if stats.get("batch_citations") and not stats["synth_citations"]:
+        logger.warning("[%s][sdk] synthesis dropped ALL citations: batches "
+                       "supplied %d markers, report kept none",
+                       job_id, stats["batch_citations"])
+
+    # Same deterministic references rebuild the incumbent gets. This is domain
+    # code, not orchestration, so per the fairness contract the SDK arm must
+    # receive it too -- iter00 compared an SDK report whose citations nothing
+    # could parse against an incumbent whose citations were also mostly
+    # unparseable, which measured noise rather than either architecture.
+    quotes = _collect_cited_quotes(llm_for_quotes, report, ctx.paper_index, job_id)
+    report, rendered = render_references_section(report, ctx.paper_index, quotes)
+    stats["refs_rendered"] = len(rendered)
+    stats["quotes_supplied"] = len(quotes)
+    logger.info("[%s][sdk] references rebuilt: %d rendered, %d quotes",
+                job_id, len(rendered), len(quotes))
+
+    # -- Phase 5b: iterative verify -> correct, the SDK's turn at pipeline.py's
+    # Phase 4. Same budget (AI_MAX_VERIFICATION_ITERATIONS), same per-citation
+    # sub-agent shape, same correction prompt; Runner and asyncio replace
+    # complete_with_tools and ThreadPoolExecutor. Without this the SDK arm would
+    # be scored on an uncorrected report against a corrected one.
+    t0 = time.time()
+    verify_iters = 0
+    previous_failures = None
+    for _iteration in range(AI_MAX_VERIFICATION_ITERATIONS):
+        citations = parse_references_section(report)
+        to_verify = [c for c in citations if c.get("cited_text")]
+        if not to_verify:
+            break
+        verify_iters += 1
+        # Verification is ~60% of wall-clock (138-216s of a 236-376s run), and
+        # it is embarrassingly parallel: each citation is checked independently.
+        # The gateway takes the fan-out and tokens are not a constraint here, so
+        # the cap exists only to avoid hammering a shared service.
+        vsem = asyncio.Semaphore(SDK_VERIFY_CONCURRENCY)
+
+        async def _verify_one(cit):
+            async with vsem:
+                try:
+                    r = await run_hedged(
+                        agents["verify"],
+                        prompts_mod.build_verification_prompt(
+                            cit["claim_sentence"], cit["cited_text"], cit["ref_index"]),
+                        ctx, max_turns=6,
+                        label="verify[%s]" % cit["ref_index"])
+                    return cit, str(r.final_output)
+                except Exception as e:  # a dead sub-agent must not pass as verified
+                    logger.warning("[%s][sdk] verifier raised for [%s]: %s",
+                                   job_id, cit["ref_index"], e)
+                    return cit, ""
+
+        verdicts = await asyncio.gather(*[_verify_one(c) for c in to_verify])
+        failed = []
+        for cit, text in verdicts:
+            v = _parse_json_verdict(text) if text else {
+                "text_match": False, "supports_claim": False,
+                "reasoning": "Verification error"}
+            if not v.get("text_match") or not v.get("supports_claim"):
+                failed.append({"ref_index": cit["ref_index"],
+                               "reason": v.get("reasoning", "Verification failed"),
+                               "cited_text": cit["cited_text"],
+                               "claim_sentence": cit["claim_sentence"],
+                               "actual_text": v.get("actual_text", ""),
+                               "suggested_fix": v.get("suggested_fix", "")})
+        failed.sort(key=lambda c: c["ref_index"])
+        logger.info("[%s][sdk] VERIFY iter %d: %d checked, %d failed",
+                    job_id, _iteration + 1, len(to_verify), len(failed))
+        if not failed:
+            break
+        # Stop when a round fixes nothing. Where the citation is simply wrong --
+        # the paper does not say it -- rewriting cannot rescue it, so further
+        # rounds re-verify the same failures and the loop spends its whole
+        # budget standing still: 10 failed, 10 failed, 10 failed cost ~200s of a
+        # 384s run. The programmatic net still redacts whatever remains.
+        if previous_failures is not None and len(failed) >= previous_failures:
+            logger.info("[%s][sdk] verification made no progress (%d -> %d "
+                        "failures); stopping early", job_id, previous_failures,
+                        len(failed))
+            break
+        previous_failures = len(failed)
+        # On the final permitted iteration a correction is a rewrite nothing
+        # will re-verify, and the programmatic net redacts whatever still fails
+        # either way -- so it buys no accuracy and costs a full synthesis pass
+        # (~70s of a 347s run).
+        if _iteration == AI_MAX_VERIFICATION_ITERATIONS - 1:
+            logger.info("[%s][sdk] final iteration: skipping correction rewrite "
+                        "(%d citations will be redacted instead)", job_id, len(failed))
+            break
+
+        corr = await Runner.run(
+            agents["synth"],
+            "Here is your report:\n\n%s\n\n%s"
+            % (report, prompts_mod.build_correction_prompt(report, failed)),
+            context=ctx, max_turns=3)
+        report = str(corr.final_output)
+        # The rewrite re-authors the references, so re-render as the incumbent
+        # does; without this the loop verifies on iteration 1 and then finishes
+        # with an unparseable section again.
+        quotes.update(_collect_cited_quotes(llm_for_quotes, report, ctx.paper_index,
+                                            job_id, known=quotes))
+        report, _ = render_references_section(report, ctx.paper_index, quotes)
+    stats["verify_loop_s"] = time.time() - t0
+    stats["verify_iterations"] = verify_iters
+
+    # -- Phase 6: the SAME programmatic safety net pipeline.py applies --------
+    # verification.py is domain code, not orchestration, so per the fairness
+    # contract the SDK arm must be held to it too. Skipping it here would flatter
+    # the SDK by comparing an unredacted report against a redacted one.
+    t0 = time.time()
+    final = verify_report_v2(report, gene_whitelist, unique_papers, job_instance)
+    if final.get("failed_citations"):
+        report, removed = redact_unverified_v2(report, final["failed_citations"])
+        final["redacted_count"] = removed
+    report, citation_mapping = renumber_citations(report)
+    if citation_mapping:
+        kept = []
+        for p in unique_papers:
+            if p["ref_index"] in citation_mapping:
+                p["ref_index"] = citation_mapping[p["ref_index"]]
+                kept.append(p)
+        kept.sort(key=lambda p: p["ref_index"])
+        unique_papers = kept
+    stats["verify_s"] = time.time() - t0
+    stats["tool_calls"] = ctx.tool_calls
+    stats["verification"] = final
+    return report, unique_papers, ctx
+
+
+def run_sdk_pipeline(job_instance, job_id, experiment_design, budgets=None):
+    """Synchronous entry point.
+
+    PySiQ hands us a worker thread, so we own an event loop here rather than
+    assuming one. ``asyncio.run`` refuses to nest, which is exactly the
+    threaded/async friction this experiment is meant to measure.
+    """
+    budgets = budgets or {"max_pathways": AI_MAX_PATHWAYS,
+                          "max_search_tasks": AI_MAX_SEARCH_TASKS}
+    stats = {}
+    t0 = time.time()
+    report, papers, ctx = asyncio.run(
+        _run_async(job_instance, job_id, experiment_design, budgets, stats))
+    stats["total_s"] = time.time() - t0
+    return {"report": report, "papers": papers, "stats": stats}
