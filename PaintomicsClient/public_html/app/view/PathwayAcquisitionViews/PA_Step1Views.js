@@ -269,7 +269,7 @@ function PA_Step1JobView() {
 						'<div class="po-hero">' +
 							'<div class="po-hero-text">' +
 								'<div class="po-hero-badge">Multi-Omics Integration Platform</div>' +
-								'<h1>PaintOmics <span>' + APP_VERSION + '</span></h1>' +
+								'<h1>PaintOmics AI <span>' + APP_VERSION + '</span></h1>' +
 								'<p class="po-hero-desc">Integrative visualization of multiple omic datasets onto KEGG, Reactome, and MapMan biological pathway maps across multiple species and biological kingdoms.</p>' +
 								'<div class="po-hero-ai-highlight">' +
 									'<div><span class="po-ai-icon"><i class="fa fa-lightbulb-o"></i></span> <strong>AI-Powered Pathway Interpretation</strong></div>' +
