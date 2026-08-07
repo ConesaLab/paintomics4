@@ -1891,9 +1891,49 @@ class PathwayAcquisitionJob(Job):
             temp = json.loads(f.read())
             print(temp)
 
+        # kegg_interaction.json is double-encoded: the top level is a one-element
+        # list holding the JSON *text* of the neighbour map, not the map itself.
+        # decode-then-dumps-then-loads was a round trip that returned that same
+        # list, so every lookup below missed and the client received a list where
+        # it expected a dict. That is why "Metabolite regulates Features" on the
+        # hub analysis rendered as a heading with nothing under it.
+        #
+        # Unwrap until a dict falls out, so a file written either way loads.
         with open(interactionJSONPath, 'r') as e:
-            compoundRegulateFeatures = json.dumps(json.JSONDecoder().decode(e.read()))
-        compoundRegulateFeatures = json.loads(compoundRegulateFeatures)
+            compoundRegulateFeatures = json.loads(e.read())
+
+        for _ in range(4):
+            if isinstance(compoundRegulateFeatures, dict):
+                break
+            if isinstance(compoundRegulateFeatures, list) and len(compoundRegulateFeatures) == 1:
+                compoundRegulateFeatures = compoundRegulateFeatures[0]
+            elif isinstance(compoundRegulateFeatures, str):
+                compoundRegulateFeatures = json.loads(compoundRegulateFeatures)
+            else:
+                break
+
+        if not isinstance(compoundRegulateFeatures, dict):
+            logging.warning("HUB ANALYSIS - %s holds %s, not a compound map; "
+                            "metabolite neighbours will be unavailable.",
+                            interactionJSONPath, type(compoundRegulateFeatures).__name__)
+            compoundRegulateFeatures = {}
+
+        # The file covers every compound KEGG knows about - 79 MB for mmu - and
+        # the whole map used to be handed to the browser on every step 3. Only
+        # the compounds in this analysis can ever be looked up, so the rest is
+        # dropped before it reaches the response or the in-memory job cache.
+        inputCompoundIDs = set(self.inputCompoundsData.keys())
+        matchedNeighbourIDs = inputCompoundIDs & set(compoundRegulateFeatures.keys())
+
+        if compoundRegulateFeatures and not matchedNeighbourIDs:
+            logging.warning("HUB ANALYSIS - none of the %d input compounds appear in %s; "
+                            "check that both use KEGG compound IDs.",
+                            len(inputCompoundIDs), interactionJSONPath)
+
+        compoundRegulateFeatures = {
+            compoundID: compoundRegulateFeatures[compoundID]
+            for compoundID in matchedNeighbourIDs
+        }
 
         temp2 = temp["children"]
 
