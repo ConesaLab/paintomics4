@@ -1074,18 +1074,81 @@ div#tabcontainer_network .x-tab button .x-tab-inner {
 div#tabcontainer_network .x-tab-center {
 	margin-top: -10px;
 }
-div#multisource_msg {
-	min-height: 200px;
+/* "Multiple databases used" panel.
+   Explanatory prose on the left, per-database counts on the right. The old
+   rules leaned on min-height:200px to reserve room for a table that was only
+   incidentally beside the text; this lays the two out properly instead, so the
+   box is exactly as tall as its content. */
+div#multisource_msg .multisource_body {
+	display: flex;
+	align-items: flex-start;
+	gap: 28px;
+	padding: 12px 10px 14px;
 }
-div#multisource_summary { text-align: center; }
+div#multisource_msg .multisource_text {
+	flex: 1 1 auto;
+	min-width: 0;              /* let the prose column shrink before the table */
+}
+div#multisource_msg .multisource_text p {
+	margin: 0 0 10px;
+	padding: 0;
+	line-height: 1.55;
+	max-width: 68ch;           /* keep line length readable on wide monitors */
+}
+div#multisource_msg .multisource_text p:last-child { margin-bottom: 0; }
+
+div#multisource_summary { flex: 0 0 auto; }
 div#multisource_summary table {
-	border: 1px solid black;
-	margin: 0 auto;
-	padding: 10px;
-	text-align: center;
+	border-collapse: collapse;
+	border: 1px solid #e9e9e9;
+	border-radius: 3px;
+	background: #fff;
+	font-size: 12px;
 }
-div#multisource_summary table th {
-	padding: 0 5px;
+div#multisource_summary thead th {
+	padding: 8px 14px;
+	border-bottom: 1px solid #e9e9e9;
+	font-size: 10px;
+	font-weight: 600;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: #8a8a8a;
+	text-align: right;
+	white-space: nowrap;
+}
+div#multisource_summary thead th:first-child { text-align: left; }
+div#multisource_summary tbody td {
+	padding: 7px 14px;
+	border-top: 1px solid #f2f2f2;
+	text-align: right;
+	font-variant-numeric: tabular-nums;   /* digits line up column-wise */
+}
+div#multisource_summary tbody tr:first-child td { border-top: none; }
+div#multisource_summary tbody tr:hover td { background: #fafafa; }
+div#multisource_summary td.db_chip {
+	width: 1px;                /* shrink to the chip */
+	padding-right: 0;
+}
+div#multisource_summary td.db_name {
+	text-align: left;
+	font-weight: 600;
+	white-space: nowrap;
+}
+div#multisource_summary td.db_significant { color: #1a1a1a; font-weight: 600; }
+div#multisource_summary i.classificationNameBox {
+	margin: 0;
+	line-height: 20px;
+	width: 20px;
+	height: 20px;
+	font-size: 11px;
+	vertical-align: middle;
+}
+
+/* Narrow viewports: the table drops under the prose rather than squeezing it. */
+@media (max-width: 900px) {
+	div#multisource_msg .multisource_body { flex-direction: column; gap: 14px; }
+	div#multisource_summary { width: 100%; }
+	div#multisource_summary table { width: 100%; }
 }
 
 div.onedatabase .x-panel-body-default {
