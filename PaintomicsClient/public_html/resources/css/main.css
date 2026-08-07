@@ -762,7 +762,7 @@ div.omicboxTitle h4 {
 .omicboxTitle.bedbasedFileBox, .availableOmicsBox[title=bedbasedomic] {
 	background: #738B9D;
 }
-.omicboxTitle.miRNAbasedFileBox, .availableOmicsBox[title=mirnabasedomic] {
+.omicboxTitle.miRNAbasedFileBox, .omicboxTitle.moreBasedFileBox, .availableOmicsBox[title=regulatoryomic] {
 	background: rgb(154, 150, 78);
 }
 .availableOmicsBox {
@@ -2060,6 +2060,68 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
     grid-template-columns: 1fr;
   }
 }
+
+/* ----- Step-2: Replicate detection card ----- */
+.repDetectionBox { width: 100% !important; }
+.repDetectionCard {
+    padding: 14px 16px;
+    margin: 0;
+    border-top: 1px solid #ececec;
+}
+.repDetectionCard:first-of-type {
+    border-top: none;
+    padding-top: 16px;
+}
+div.repDetectionCard h3 {
+    margin: 0 0 6px 0;
+    padding: 0;
+    background: none;
+    border: none;
+    font-size: 14px;
+    color: #333;
+}
+.repDetectionSummary { margin: 0 0 6px 0; color: #555; }
+.repDetectionWarn {
+    color: #b66400;
+    background: #fff7e6;
+    border-left: 3px solid #b66400;
+    padding: 4px 8px;
+    margin: 6px 0;
+}
+.repDetectionPreview {
+    list-style: none;
+    padding: 4px 8px;
+    margin: 6px 0;
+    background: #fafafa;
+    border: 1px solid #ececec;
+    border-radius: 3px;
+    max-height: 140px;
+    overflow-y: auto;
+    font-size: 12px;
+}
+.repDetectionPreview li { padding: 1px 0; }
+.repDetectionMore { color: #888; font-style: italic; }
+.repDetectionRadios { margin: 8px 0 4px 0; }
+.repDetectionRadios label {
+    display: inline-block;
+    margin-right: 18px;
+    padding: 2px 0;
+    cursor: pointer;
+}
+.repDetectionRadios input[type=radio] { margin-right: 6px; }
+.repDetectionRadios input[disabled] + * { color: #aaa; }
+.repDetectionRecommended { color: #2a8a3a; font-size: 12px; }
+.repDetectionManual {
+    margin: 6px 0 6px 22px;
+    padding: 6px 8px;
+    background: #fafafa;
+    border: 1px solid #ececec;
+    border-radius: 3px;
+}
+.repDetectionFormatHint { font-size: 11px; color: #777; margin: 4px 0 0 0; }
+.repDetectionStatus { font-size: 12px; margin-top: 8px; min-height: 14px; }
+.repDetectionStatus.repDetectionOK    { color: #2a8a3a; }
+.repDetectionStatus.repDetectionError { color: #c0392b; }
 
 
 

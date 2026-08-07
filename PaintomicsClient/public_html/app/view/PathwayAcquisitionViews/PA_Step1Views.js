@@ -32,6 +32,9 @@ function PA_Step1JobView() {
 	this.name = "PA_Step1JobView";
 	this.nFiles = 0;
 	this.exampleMode = false;
+	// Regulatory Omic analysis method, locked once chosen for the whole job.
+	// null until the user picks; "pairwise" or "more" thereafter.
+	this.regulatoryMethod = null;
 
 	/*********************************************************************
 	* GETTERS AND SETTERS
@@ -47,7 +50,50 @@ function PA_Step1JobView() {
 	* This function remove all panels and reset the application.
 	*/
 	this.resetViewHandler = function() {
+		this.regulatoryMethod = null;
 		this.controller.resetButtonClickHandler(this);
+	};
+	/**
+	* Opens the modal that lets the user pick between Pairwise and MORE
+	* the first time they add a Regulatory Omic in this job. Once chosen,
+	* `this.regulatoryMethod` is locked for the rest of the session.
+	*/
+	this.showRegulatoryMethodChooser = function() {
+		var me = this;
+		var pickHandler = function(method) {
+			return function() {
+				me.regulatoryMethod = method;
+				win.close();
+				me.addNewOmicSubmittingPanel("regulatoryomic");
+			};
+		};
+		var win = Ext.create('Ext.window.Window', {
+			title: 'Regulatory Omic — choose analysis method',
+			modal: true,
+			width: 720,
+			closable: true,
+			bodyPadding: 14,
+			layout: { type: 'hbox', align: 'stretch' },
+			defaults: { flex: 1, margin: 6, bodyPadding: 12, border: 1 },
+			items: [{
+				xtype: 'panel',
+				title: 'Pairwise',
+				html: '<p style="min-height: 130px;">Analyse <b>one regulatory omic at a time</b>. ' +
+					'Independent correlation between each regulator and its target gene. ' +
+					'Use this for the classical miRNA-target style of analysis. ' +
+					'You can add several Pairwise panels (one per regulatory omic) in the same job.</p>',
+				bbar: ['->', { xtype: 'button', text: 'Choose Pairwise', handler: pickHandler('pairwise') }]
+			}, {
+				xtype: 'panel',
+				title: 'MORE',
+				html: '<p style="min-height: 130px;">Joint <b>multi-omic regression</b> (PLS / MLR) over one or ' +
+					'more regulators at once, filtered by VIP, &alpha; and R&sup2;. Use this when you want ' +
+					'all regulators integrated into a single model. Only one MORE panel is allowed per job; ' +
+					'use the &ldquo;+ Add another Regulatory Omic&rdquo; button inside the panel to stack regulators.</p>',
+				bbar: ['->', { xtype: 'button', text: 'Choose MORE', handler: pickHandler('more') }]
+			}]
+		});
+		win.show();
 	};
 	/**
 	* This function adds a new OmicSubmittingPanel for the given type.
@@ -89,11 +135,40 @@ function PA_Step1JobView() {
 				relevantFileType: "Relevant DNAse-Seq list"
 			});
 		} else if (type === "mirnabasedomic") {
+			// Legacy entry point — kept for restore-from-saved-job paths.
 			newElem = new MiRNAOmicSubmittingPanel(this.nFiles);
+			if (this.regulatoryMethod === null) { this.regulatoryMethod = "pairwise"; }
 		} else if (type === "bedbasedomic") {
 			newElem = new RegionBasedOmicSubmittingPanel(this.nFiles);
 		} else if (type === "otheromic") {
 			newElem = new OmicSubmittingPanel(this.nFiles);
+		} else if (type === "moreanalysis") {
+			// Legacy entry point — kept for restore-from-saved-job paths.
+			newElem = new MORESubmittingPanel(this.nFiles);
+			if (this.regulatoryMethod === null) { this.regulatoryMethod = "more"; }
+		} else if (type === "regulatoryomic") {
+			// Unified Regulatory Omic entry. First click opens the chooser;
+			// subsequent clicks route to the locked method.
+			if (this.regulatoryMethod === null) {
+				this.showRegulatoryMethodChooser();
+				return null;
+			}
+			if (this.regulatoryMethod === "pairwise") {
+				newElem = new MiRNAOmicSubmittingPanel(this.nFiles, { regulatoryMethod: "pairwise" });
+			} else {
+				// MORE: enforce a single MORE panel per job (joint analysis only).
+				var existingMore = this.getComponent().queryById("submittingPanelsContainer")
+					.query("container[cls=omicbox moreBasedOmic]");
+				if (existingMore.length > 0) {
+					showInfoMessage("MORE Analysis", {
+						message: "You already have a MORE panel in this job. Use the " +
+							"&ldquo;+ Add another Regulatory Omic&rdquo; button inside it to add more regulators.",
+						showButton: true
+					});
+					return null;
+				}
+				newElem = new MORESubmittingPanel(this.nFiles);
+			}
 		} else if (type == "transcriptionfactor") {
 			newElem = new OmicSubmittingPanel(this.nFiles, {
 				type: "Transcription factor",
@@ -106,7 +181,13 @@ function PA_Step1JobView() {
 		submitForm = this.getComponent().queryById("submittingPanelsContainer");
 		submitForm.insert(1, newElem.getComponent()).focus();
 
-		if (type !== "otheromic" && type !== "bedbasedomic" && type !== "mirnabasedomic") {
+		// The Regulatory Omic card stays clickable in Pairwise mode (multi-add)
+		// but is hidden once a MORE panel exists (single-panel rule).
+		var keepCardVisible = (
+			type === "otheromic" || type === "bedbasedomic" || type === "mirnabasedomic" ||
+			(type === "regulatoryomic" && this.regulatoryMethod === "pairwise")
+		);
+		if (!keepCardVisible) {
 			$("div.availableOmicsBox[title=" + type + "]").css("display", "none");
 		}
 
@@ -128,9 +209,25 @@ function PA_Step1JobView() {
 		var submitForm = this.getComponent().queryById("submittingPanelsContainer");
 		submitForm.remove(omicSubmittingPanel.getComponent());
 
-		if (omicSubmittingPanel.type !== "otheromic" && omicSubmittingPanel.type !== "bedbasedomic" &&
-		    omicSubmittingPanel.type !== "mirnabasedomic" && !this.exampleMode) {
-			$("div.availableOmicsBox[title=" + omicSubmittingPanel.type + "]").fadeIn();
+		var removedType = omicSubmittingPanel.type;
+		if (!this.exampleMode) {
+			if (removedType === "moreanalysis") {
+				// MORE panel removed — free up the unified Regulatory Omic card again.
+				$("div.availableOmicsBox[title=regulatoryomic]").fadeIn();
+			} else if (removedType !== undefined &&
+				removedType !== "otheromic" && removedType !== "bedbasedomic" &&
+				removedType !== "mirnabasedomic") {
+				$("div.availableOmicsBox[title=" + removedType + "]").fadeIn();
+			}
+		}
+
+		// Auto-unlock regulatory method when no Regulatory Omic panels remain,
+		// so the user can pick a different method on their next add.
+		var remainingRegulatory = submitForm.query(
+			"container[cls=omicbox miRNABasedOmic],[cls=omicbox moreBasedOmic]"
+		);
+		if (remainingRegulatory.length === 0) {
+			this.regulatoryMethod = null;
 		}
 
 		if (submitForm.items.getCount() === 2 && !this.exampleMode) {
@@ -204,7 +301,7 @@ function PA_Step1JobView() {
 	this.submitFormHandler = function() {
 		var aux, omicBoxes;
 
-		omicBoxes = this.getComponent().queryById("submittingPanelsContainer").query("container[cls=omicbox regionBasedOmic],[cls=omicbox miRNABasedOmic]");
+		omicBoxes = this.getComponent().queryById("submittingPanelsContainer").query("container[cls=omicbox regionBasedOmic],[cls=omicbox miRNABasedOmic],[cls=omicbox moreBasedOmic]");
 		for (var i = omicBoxes.length; i--;) {
 			aux = omicBoxes[i].queryById("itemsContainer");
 			if (aux === null || aux.isDisabled()) {
@@ -226,7 +323,7 @@ function PA_Step1JobView() {
 	this.checkForm = function() {
 		var items, valid, emptyFields;
 
-		items = this.getComponent().query("container[cls=omicbox], container[cls=omicbox regionBasedOmic],[cls=omicbox miRNABasedOmic]");
+		items = this.getComponent().query("container[cls=omicbox], container[cls=omicbox regionBasedOmic],[cls=omicbox miRNABasedOmic],[cls=omicbox moreBasedOmic]");
 		valid = this.getComponent().queryById("speciesCombobox").isValid();
 		for (var i in items) {
 			valid = valid && items[i].isValid();
@@ -554,7 +651,7 @@ function PA_Step1JobView() {
 							'<div class="availableOmicsBox" title="geneexpression"><h4><a href="javascript:void(0)"><i class="fa fa-plus-circle"></i></a> Gene Expression</h4></div>' +
 							'<div class="availableOmicsBox" title="metabolomics"><h4><a href="javascript:void(0)"><i class="fa fa-plus-circle"></i></a> Metabolomics</h4></div>' +
 							'<div class="availableOmicsBox" title="proteomics"><h4><a href="javascript:void(0)"><i class="fa fa-plus-circle"></i></a> Proteomics</h4></div>' +
-							'<div class="availableOmicsBox" title="mirnabasedomic"><h4><a href="javascript:void(0)"><i class="fa fa-plus-circle"></i></a> Regulatory omic</h4></div>' +
+							'<div class="availableOmicsBox" title="regulatoryomic"><h4><a href="javascript:void(0)"><i class="fa fa-plus-circle"></i></a> Regulatory Omic</h4></div>' +
 							'<div class="availableOmicsBox" title="bedbasedomic"><h4><a href="javascript:void(0)"><i class="fa fa-plus-circle"></i></a> Region based omic</h4></div>' +
 							'<div class="availableOmicsBox" title="otheromic"><h4><a href="javascript:void(0)"><i class="fa fa-plus-circle"></i></a> Other omics</h4></div>'
 						}, {
@@ -1731,7 +1828,9 @@ function MiRNAOmicSubmittingPanel(nElem, options) {
 	***********************************************************************/
 	options = (options || {});
 
-	this.title = "Regulatory omic";
+	this.title = (options.regulatoryMethod === "pairwise")
+		? "Regulatory Omic — Pairwise"
+		: "Regulatory omic";
 	this.namePrefix = "omic" + nElem;
 	this.omicName = "";
 	this.mapTo = "Gene";
@@ -2437,6 +2536,607 @@ function MiRNAOmicSubmittingPanel(nElem, options) {
 return this;
 }
 MiRNAOmicSubmittingPanel.prototype = new DefaultSubmittingPanel;
+
+function MORESubmittingPanel(nElem, options) {
+	/*********************************************************************
+	* ATTRIBUTES
+	***********************************************************************/
+	options = (options || {});
+	this.title = "Regulatory Omic — MORE";
+	this.namePrefix = "omic" + nElem;
+	this.omicName = "MORE Regulatory Omic";
+	this.mapTo = "Gene";
+	this.type = "moreanalysis";
+	this.class = "moreBasedOmic";
+	this.allowToogle = false;
+	this.removable = options.removable !== false;
+
+	/***********************************************************************
+	* OTHER FUNCTIONS
+	***********************************************************************/
+	this.setContent = function(target, values) {
+		var component = this.getComponent().queryById(target);
+		if (values.mainFile !== undefined) {
+			component.queryById("mainFileFieldAlt").setValue(values.mainFile);
+		}
+		if (values.secondaryFile !== undefined) {
+			component.queryById("secondaryFileFieldAlt").setValue(values.secondaryFile);
+		}
+		if (values.thirdFile !== undefined) {
+			component.queryById("thirdFileFieldAlt").setValue(values.thirdFile);
+		}
+		if (values.fourthFile !== undefined && values.fourthFile !== null) {
+			component.queryById("fourthFileFieldAlt").setValue(values.fourthFile);
+		}
+		if (values.title !== undefined) {
+			component.queryById("omicNameFieldAlt").setValue(values.title);
+		}
+		if (values.configVars !== undefined) {
+			component.queryById("configVarsFieldAlt").setValue(values.configVars);
+		}
+		if (values.enrichmentType !== undefined) {
+			component.queryById("enrichmentTypeFieldAlt").setValue(values.enrichmentType);
+		}
+		this.toogleContent();
+		return this;
+	};
+
+	/*********************************************************************
+	* COMPONENT DECLARATION
+	***********************************************************************/
+	this.initComponent = function() {
+		var me = this;
+		this.component = Ext.widget({
+			xtype: "container",
+			flex: 1,
+			type: me.type,
+			cls: "omicbox " + this.class,
+			layout: {
+				align: 'stretch',
+				type: 'vbox'
+			},
+			items: [{
+				xtype: "box",
+				flex: 1,
+				cls: "omicboxTitle moreBasedFileBox",
+				html: '<h4><a class="deleteOmicBox" href="javascript:void(0)" style="margin: 0; float:right;  padding-right: 15px;">' +
+				(me.removable ? ' <i class="fa fa-trash"></i></a>' : "</a>") + this.title +
+				'</h4>'
+			},
+			{
+				xtype: "container",
+				itemId: "itemsContainer",
+				layout: {
+					align: 'stretch',
+					type: 'vbox'
+				},
+				padding: 10,
+				defaults: {
+					labelAlign: "right",
+					labelWidth: 150,
+					maxLength: 100,
+					maxWidth: 500
+				},
+				items: [{
+					xtype: 'textfield',
+					name: "name_prefix",
+					hidden: true,
+					itemId: "namePrefix",
+					value: this.namePrefix
+				},
+				{
+					xtype: 'box',
+					html: '<hr><h5>Experimental Design</h5>'
+				},
+				{
+					xtype: "myFilesSelectorButton",
+					fieldLabel: 'Conditions file',
+					namePrefix: 'conditions',
+					itemId: "conditionsFileSelector",
+					helpTip: "Upload the Experimental Design / Conditions file mapping samples to conditions."
+				},
+				{
+					xtype: 'box',
+					html: '<hr><h5>Target Omic (Gene Expression)</h5>'
+				},
+				{
+					xtype: "myFilesSelectorButton",
+					fieldLabel: "Gene expression dataset",
+					namePrefix: 'rnaseqaux',
+					itemId: "rnaseqauxFileSelector",
+					helpTip: "Upload the target gene expression dataset used for regulatory analysis."
+				},
+				{
+					xtype: 'textfield',
+					fieldLabel: 'File Type',
+					name: 'rnaseqaux_file_type',
+					hidden: true,
+					itemId: "rnaseqauxFileTypeSelector",
+					value: "Gene Expression file"
+				},
+				{
+					xtype: 'box',
+					html: '<hr><h5>Regulatory Omic Data</h5>'
+				},
+				{
+					xtype: 'combo',
+					fieldLabel: 'Omic Name',
+					name: 'omic_name_0',
+					itemId: "omicNameField",
+					displayField: 'name',
+					valueField: 'name',
+					emptyText: 'Type or choose the omic type',
+					queryMode: 'local',
+					editable: true,
+					allowBlank: false,
+					store: Ext.create('Ext.data.ArrayStore', {
+						fields: ['name'],
+						autoLoad: true,
+						proxy: {
+							type: 'ajax',
+							url: 'resources/data/all_omics.json',
+							reader: {
+								type: 'json',
+								root: 'omics',
+								successProperty: 'success'
+							}
+						}
+					})
+				},
+				{
+					xtype: "myFilesSelectorButton",
+					fieldLabel: 'Regulators expression file',
+					namePrefix: 'file_0',
+					itemId: "mainFileSelector",
+					helpTip: "Upload the quantification file (i.e. miRNA Quantification) or choose it from your data folder. See above the accepted format for the file."
+				},
+				{
+					xtype: "myFilesSelectorButton",
+					fieldLabel: 'Relevant regulators file<br>(optional)',
+					namePrefix: 'relevant_file_0',
+					itemId: "moreRelevantFileSelector",
+					helpTip: "Upload the list of relevant (differentially expressed) features (TAB format) or choose it from your data folder. See above the accepted format for the file."
+				},
+				{
+					xtype: "myFilesSelectorButton",
+					fieldLabel: 'Associations file',
+					namePrefix: 'assoc_file_0',
+					itemId: "moreAssociationsFileSelector",
+					helpTip: "Upload the reference file that relates each feature (i.e. miRNA) with its potential targets. This information is usually extracted from popular databases such as miRbase for miRNAs. See above the accepted format for the file."
+				},
+				{
+					// Per-omic low-variation filter (MORE `minVariation`). Each
+					// regulatory omic carries its own threshold so heterogeneous
+					// data types (e.g. methylation vs. miRNA) can be filtered
+					// independently. Default 0 = keep all but constant regulators.
+					xtype: 'numberfield',
+					name: 'more_minvar_0',
+					fieldLabel: 'Min. variation',
+					value: 0,
+					minValue: 0,
+					step: 0.01,
+					allowDecimals: true,
+					allowBlank: false,
+					helpTip: "Minimum change in standard deviation (numeric regulators) or proportion (binary) a regulator must show across conditions to avoid being filtered as low-variation. Applied to this regulatory omic only. 0 = keep all but constant regulators."
+				},
+				{
+					xtype: 'container',
+					itemId: 'addOmicWrapper',
+					layout: { type: 'hbox', pack: 'center' },
+					margin: '5 0 15 0',
+					items: [{
+						xtype: 'button',
+						text: '<i class="fa fa-plus-circle"></i> Add another Regulatory Omic',
+						width: 250,
+						handler: function(btn) {
+							var container = btn.up('#itemsContainer');
+							if (!container.moreOmicCount) container.moreOmicCount = 0;
+							container.moreOmicCount++;
+							var i = container.moreOmicCount;
+							var insertIdx = container.items.indexOf(btn.up('#addOmicWrapper'));
+						
+						container.insert(insertIdx, [
+							{
+								xtype: 'box',
+								html: '<hr><h5>Regulatory Omic Data ' + (i+1) + '</h5>'
+							},
+							{
+								xtype: 'combo',
+								fieldLabel: 'Omic Name',
+								name: 'omic_name_' + i,
+								displayField: 'name',
+								valueField: 'name',
+								emptyText: 'Type or choose the omic type',
+								queryMode: 'local',
+								editable: true,
+								allowBlank: false,
+								store: Ext.create('Ext.data.ArrayStore', {
+									fields: ['name'],
+									autoLoad: true,
+									proxy: {
+										type: 'ajax',
+										url: 'resources/data/all_omics.json',
+										reader: {
+											type: 'json',
+											root: 'omics',
+											successProperty: 'success'
+										}
+									}
+								})
+							},
+							{
+								xtype: "myFilesSelectorButton",
+								fieldLabel: 'Regulators expression file',
+								namePrefix: 'file_' + i,
+								helpTip: "Upload the quantification file (i.e. miRNA Quantification) or choose it from your data folder. See above the accepted format for the file."
+							},
+							{
+								xtype: "myFilesSelectorButton",
+								fieldLabel: 'Relevant regulators file<br>(optional)',
+								namePrefix: 'relevant_file_' + i,
+								helpTip: "Upload the list of relevant (differentially expressed) features (TAB format) or choose it from your data folder. See above the accepted format for the file."
+							},
+							{
+								xtype: "myFilesSelectorButton",
+								fieldLabel: 'Associations file',
+								namePrefix: 'assoc_file_' + i,
+								helpTip: "Upload the reference file that relates each feature (i.e. miRNA) with its potential targets. This information is usually extracted from popular databases such as miRbase for miRNAs. See above the accepted format for the file."
+							},
+							{
+								// Per-omic low-variation filter (MORE `minVariation`).
+								// Mirrors the field on the first regulatory omic above.
+								xtype: 'numberfield',
+								name: 'more_minvar_' + i,
+								fieldLabel: 'Min. variation',
+								value: 0,
+								minValue: 0,
+								step: 0.01,
+								allowDecimals: true,
+								allowBlank: false,
+								helpTip: "Minimum change in standard deviation (numeric regulators) or proportion (binary) a regulator must show across conditions to avoid being filtered as low-variation. Applied to this regulatory omic only. 0 = keep all but constant regulators."
+							}
+						]);
+						setTimeout(function() { initializeTooltips(".helpTip"); }, 100);
+						}
+					}]
+				},
+				{
+					xtype: 'box',
+					html: '<hr><h5>MORE Algorithm Parameters</h5>'
+				},
+				{
+					xtype: 'combo',
+					itemId: "moreMethodField",
+					name: 'more_method',
+					fieldLabel: 'Regression Method',
+					editable: false,
+					allowBlank: false,
+					value: "PLS1",
+					displayField: 'label',
+					valueField: 'value',
+					store: Ext.create('Ext.data.ArrayStore', {
+						fields: ['label', 'value'],
+						data: [
+							["PLS1 (Partial Least Squares)", "PLS1"],
+							["MLR (Multiple Linear Regression)", "MLR"]
+						]
+					}),
+					helpTip: "Select the regression model to use for finding significant regulators.",
+					listeners: {
+						change: function(combo, newValue) {
+							var container = combo.up('#itemsContainer');
+							var isPLS1 = newValue === 'PLS1';
+							var alphaField = container.queryById('moreAlphaField');
+							var vipField = container.queryById('moreVipField');
+							if (alphaField) alphaField.setVisible(isPLS1);
+							if (vipField) vipField.setVisible(isPLS1);
+						}
+					}
+				},
+				{
+					xtype: 'numberfield',
+					itemId: "moreAlphaField",
+					name: 'more_alpha',
+					fieldLabel: 'Alpha (Significance)',
+					value: 0.05,
+					minValue: 0.0001,
+					maxValue: 1,
+					step: 0.01,
+					allowDecimals: true,
+					allowBlank: false,
+					helpTip: "Significance threshold (alpha)."
+				},
+				{
+					xtype: 'numberfield',
+					itemId: "moreVipField",
+					name: 'more_vip',
+					fieldLabel: 'VIP threshold',
+					value: 0.8,
+					minValue: 0,
+					maxValue: 10,
+					step: 0.1,
+					allowDecimals: true,
+					allowBlank: false,
+					helpTip: "VIP threshold for PLS1 model."
+				},
+				{
+					xtype: 'numberfield',
+					itemId: "moreR2Field",
+					name: 'more_filter_r2',
+					fieldLabel: 'R2 Filter',
+					value: 0.0,
+					minValue: 0,
+					maxValue: 1,
+					step: 0.1,
+					allowDecimals: true,
+					allowBlank: false,
+					helpTip: "R2 filter threshold."
+				}]
+			},
+			{
+				xtype: "container",
+				itemId: "itemsContainerAlt",
+				hidden: true,
+				disabled: true,
+				layout: {
+					align: 'stretch',
+					type: 'vbox'
+				},
+				padding: 10,
+				defaults: {
+					labelAlign: "right",
+					labelWidth: 150,
+					maxLength: 100,
+					maxWidth: 500
+				},
+				items: [{
+					xtype: 'filefield',
+					name: this.namePrefix + '_file_0',
+					hidden: true
+				}, {
+					xtype: 'textfield',
+					name: this.namePrefix + '_origin_0',
+					value: 'mydata',
+					hidden: true
+				}, {
+					xtype: 'textfield',
+					name: this.namePrefix + '_file_type_0',
+					value: 'Gene Expression file',
+					hidden: true
+				}, {
+					xtype: 'filefield',
+					name: this.namePrefix + '_relevant_file_0',
+					hidden: true
+				}, {
+					xtype: 'textfield',
+					name: this.namePrefix + '_relevant_0_origin',
+					value: 'mydata',
+					hidden: true
+				}, {
+					xtype: 'textfield',
+					name: this.namePrefix + '_relevant_file_type_0',
+					value: 'Relevant gene list',
+					hidden: true
+				}, {
+					xtype: 'filefield',
+					name: this.namePrefix + '_associations_file_0',
+					hidden: true
+				}, {
+					xtype: 'textfield',
+					name: this.namePrefix + '_associations_0_origin',
+					value: 'mydata',
+					hidden: true
+				}, {
+					xtype: 'textfield',
+					name: this.namePrefix + '_associations_file_type_0',
+					value: 'Associations file',
+					hidden: true
+				}, {
+					xtype: 'filefield',
+					name: this.namePrefix + '_relevant_associations_file_0',
+					hidden: true
+				}, {
+					xtype: 'textfield',
+					name: this.namePrefix + '_relevant_associations_0_origin',
+					value: 'mydata',
+					hidden: true
+				}, {
+					xtype: 'textfield',
+					name: this.namePrefix + '_relevant_associations_file_type_0',
+					value: 'Relevant associations file',
+					hidden: true
+				}, {
+					xtype: 'textfield',
+					fieldLabel: 'Omic Name',
+					name: this.namePrefix + '_omic_name_0',
+					hidden: true,
+					itemId: "omicNameFieldAlt",
+					value: this.omicName
+				}, {
+					xtype: 'textfield',
+					fieldLabel: 'Output File',
+					name: this.namePrefix + '_filelocation_0',
+					hidden: true,
+					itemId: "mainFileFieldAlt"
+				}, {
+					xtype: 'textfield',
+					fieldLabel: 'Relevant Regulators File',
+					name: this.namePrefix + '_relevant_filelocation_0',
+					hidden: true,
+					itemId: "secondaryFileFieldAlt"
+				}, {
+					xtype: 'textfield',
+					fieldLabel: 'Associations File',
+					name: this.namePrefix + '_associations_filelocation_0',
+					hidden: true,
+					itemId: "thirdFileFieldAlt"
+				}, {
+					xtype: 'textfield',
+					fieldLabel: 'Relevant Associations File',
+					name: this.namePrefix + '_relevant_associations_filelocation_0',
+					hidden: true,
+					itemId: "fourthFileFieldAlt"
+				}, {
+					xtype: 'textfield',
+					fieldLabel: 'Config Vars',
+					name: this.namePrefix + '_config_args_0',
+					hidden: true,
+					itemId: "configVarsFieldAlt"
+				}, {
+					xtype: 'textfield',
+					fieldLabel: 'Enrichment type',
+					name: this.namePrefix + '_enrichment_0',
+					hidden: true,
+					itemId: "enrichmentTypeFieldAlt",
+					value: "genes"
+				}, {
+					xtype: 'textfield',
+					hidden: true,
+					fieldLabel: 'Map to',
+					name: this.namePrefix + '_match_type_0',
+					itemId: "matchTypeSelectorAlt",
+					value: 'gene'
+				}, {
+					xtype: 'box',
+					html: '<h5 style="color: #689F38;"><i class="fa fa-check"></i> Files processed correctly!</h5>'
+				}]
+			}],
+			setContent: function(target, values) {
+				var component = this.queryById(target);
+				if (values.mainFile !== undefined) {
+					component.queryById("mainFileFieldAlt").setValue(values.mainFile);
+				}
+				if (values.secondaryFile !== undefined) {
+					component.queryById("secondaryFileFieldAlt").setValue(values.secondaryFile);
+				}
+				if (values.thirdFile !== undefined) {
+					component.queryById("thirdFileFieldAlt").setValue(values.thirdFile);
+				}
+				if (values.fourthFile !== undefined && values.fourthFile !== null) {
+					component.queryById("fourthFileFieldAlt").setValue(values.fourthFile);
+				}
+				if (values.title !== undefined) {
+					component.queryById("omicNameFieldAlt").setValue(values.title);
+				}
+				if (values.configVars !== undefined) {
+					component.queryById("configVarsFieldAlt").setValue(values.configVars);
+				}
+				if (values.enrichmentType !== undefined) {
+					component.queryById("enrichmentTypeFieldAlt").setValue(values.enrichmentType);
+				}
+
+				// Multi-omic propagation. `setContent` is a method of the inner Ext
+				// widget, so `this` here is the component, NOT the MORESubmittingPanel
+				// — `this.namePrefix` would resolve to undefined and the alt fields
+				// would be named "undefined_file_1" etc. Use the closure-captured
+				// `me` (the panel) so the per-omic fields share the panel's prefix
+				// and saveFiles can pair each omic 1+ with its omic_name/filelocation.
+				if (values.response && values.response.omicsCount > 1) {
+					for (var i = 1; i < values.response.omicsCount; i++) {
+						component.add([
+							{ xtype: 'filefield', name: me.namePrefix + '_file_' + i, hidden: true },
+							{ xtype: 'textfield', name: me.namePrefix + '_origin_' + i, value: 'mydata', hidden: true },
+							{ xtype: 'textfield', name: me.namePrefix + '_file_type_' + i, value: 'Gene Expression file', hidden: true },
+							{ xtype: 'filefield', name: me.namePrefix + '_relevant_file_' + i, hidden: true },
+							{ xtype: 'textfield', name: me.namePrefix + '_relevant_' + i + '_origin', value: 'mydata', hidden: true },
+							{ xtype: 'textfield', name: me.namePrefix + '_relevant_file_type_' + i, value: 'Relevant gene list', hidden: true },
+							{ xtype: 'filefield', name: me.namePrefix + '_associations_file_' + i, hidden: true },
+							{ xtype: 'textfield', name: me.namePrefix + '_associations_' + i + '_origin', value: 'mydata', hidden: true },
+							{ xtype: 'textfield', name: me.namePrefix + '_associations_file_type_' + i, value: 'Associations file', hidden: true },
+							{ xtype: 'filefield', name: me.namePrefix + '_relevant_associations_file_' + i, hidden: true },
+							{ xtype: 'textfield', name: me.namePrefix + '_relevant_associations_' + i + '_origin', value: 'mydata', hidden: true },
+							{ xtype: 'textfield', name: me.namePrefix + '_relevant_associations_file_type_' + i, value: 'Relevant associations file', hidden: true },
+							{ xtype: 'textfield', name: me.namePrefix + '_omic_name_' + i, hidden: true, value: values.response['omicName_' + i] },
+							{ xtype: 'textfield', name: me.namePrefix + '_filelocation_' + i, hidden: true, value: values.response['mainOutputFileName_' + i] },
+							{ xtype: 'textfield', name: me.namePrefix + '_relevant_filelocation_' + i, hidden: true, value: values.response['secondOutputFileName_' + i] },
+							{ xtype: 'textfield', name: me.namePrefix + '_associations_filelocation_' + i, hidden: true, value: values.response['thirdOutputFileName_' + i] },
+							{ xtype: 'textfield', name: me.namePrefix + '_relevant_associations_filelocation_' + i, hidden: true, value: values.response['fourthOutputFileName_' + i] },
+							{ xtype: 'textfield', name: me.namePrefix + '_config_args_' + i, hidden: true, value: values.configVars },
+							{ xtype: 'textfield', name: me.namePrefix + '_enrichment_' + i, hidden: true, value: values.enrichmentType },
+							{ xtype: 'textfield', name: me.namePrefix + '_match_type_' + i, hidden: true, value: 'gene' }
+						]);
+					}
+
+					// Surface the multi-omic outcome to the user. Without this they
+					// only see "Files processed correctly!" and have no way to know
+					// whether the second omic actually came through to PA Step 1.
+					var processedNames = [values.title || values.response['omicName_0']];
+					for (var k = 1; k < values.response.omicsCount; k++) {
+						processedNames.push(values.response['omicName_' + k]);
+					}
+					component.add({
+						xtype: 'box',
+						html: '<p style="margin: 5px 155px; font-size: 12px; color: #689F38;">' +
+						      '<i class="fa fa-check-circle"></i> ' + values.response.omicsCount +
+						      ' regulatory omics processed: <b>' + processedNames.join(', ') + '</b></p>'
+					});
+				}
+
+				var isVisible = component.isVisible();
+				component.setVisible(!isVisible);
+				component.setDisabled(isVisible);
+		
+				var mainContainer = this.queryById("itemsContainer");
+				if (mainContainer) {
+					mainContainer.setVisible(isVisible);
+					mainContainer.setDisabled(!isVisible);
+				}
+				return this;
+			},
+			isValid: function() {
+				var valid = true;
+				var component = this.queryById("itemsContainerAlt");
+				if (!component || !component.isVisible()) {
+					component = this.queryById("itemsContainer");
+				}
+				if (!component) return false;
+				var items = component.query("field");
+				for (var i in items) {
+					valid = valid && (this.items[i] || items[i].validate());
+				}
+		
+				if (component.queryById("conditionsFileSelector") && component.queryById("conditionsFileSelector").getValue() === "") {
+					valid = false;
+					component.queryById("conditionsFileSelector").markInvalid("Please, provide the conditions file.");
+				}
+				if (component.queryById("mainFileSelector") && component.queryById("mainFileSelector").getValue() === "") {
+					valid = false;
+					component.queryById("mainFileSelector").markInvalid("Please, provide a regulatory data file.");
+				}
+				if (component.queryById("rnaseqauxFileSelector") && component.queryById("rnaseqauxFileSelector").getValue() === "") {
+					valid = false;
+					component.queryById("rnaseqauxFileSelector").markInvalid("Please, provide the gene expression dataset.");
+				}
+				
+				return valid;
+			},
+			isEmpty: function() {
+				var component = this.queryById("itemsContainerAlt");
+				if (component && component.isVisible()) {
+					return false; // Already processed and has results
+				}
+				component = this.queryById("itemsContainer");
+				if (component && component.queryById("mainFileSelector") && component.queryById("mainFileSelector").getValue() !== "") {
+					return false;
+				}
+				return true;
+			},
+			listeners: {
+				boxready: function() {
+					initializeTooltips(".helpTip");
+					$(this.getEl().dom).find("a.deleteOmicBox").click(function() {
+						me.removeOmicSubmittingPanel();
+					});
+				}
+			}
+		});
+
+		return this.component;
+	};
+
+	return this;
+}
+MORESubmittingPanel.prototype = new DefaultSubmittingPanel;
 
 
 window.cookieconsent.initialise({

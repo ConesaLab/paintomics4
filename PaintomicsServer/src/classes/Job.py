@@ -29,6 +29,11 @@ from collections import defaultdict
 
 import numpy
 from numpy import percentile as numpy_percentile, min as numpy_min, max as numpy_max, asarray, float32, logical_or, invert, sum as numpy_sum
+# NaN-aware variants for omics that legitimately carry missing measurements
+# (e.g. CpG sites not measured in every methylation sample). Without these,
+# a single NaN in `allValues` poisons every percentile and the server emits a
+# JSON response containing the literal `NaN`, which browsers reject in JSON.parse.
+from numpy import nanpercentile as numpy_nanpercentile, nanmin as numpy_nanmin, nanmax as numpy_nanmax, isnan as numpy_isnan
 
 from src.common.Util import Model
 from .Feature import Gene, Compound, OmicValue
@@ -345,7 +350,7 @@ class Job(Model):
         logging.info("PARSING ASSOCIATIONS FILE (" + omicName + ")... DONE. " + str(len(associationFeatures.keys())) + " ASSOCIATIONS PROCESSED.")
 
         logging.info("PARSING RELEVANT ASSOCIATIONS FILE (" + omicName + ")...")
-        relevantAssociationFeatures = self.parseSignificativeFeaturesFile(relevantAssociationsFileName)
+        relevantAssociationFeatures = self.parseSignificativeFeaturesFile(relevantAssociationsFileName, forceLegacyTwoCol=True)
         logging.info("PARSING RELEVANT ASSOCIATIONS FILE (" + omicName + ")... DONE. " + str(len(relevantAssociationFeatures)) + " RELEVANT ASSOCIATIONS PROCESSED.")
 
         #*************************************************************************
@@ -355,30 +360,37 @@ class Job(Model):
         parsedFeatures = []
 
 
-        # If there is transcription factor, we need to map it to the gene name
-        if omicName == "Transcription factor":
-            totalInputTF = []
-            matchedNameDict = {}
+        # Any omic whose data file uses the `targetID:::regulatorID` format
+        # (signalled by associationFeatures being populated) gets the same
+        # treatment we originally added for "Transcription factor": try to
+        # resolve each regulator's symbol via the mapper so the Step 4 client
+        # can display it alongside / instead of the raw ID. miRNA, methylation
+        # or any custom regulatory omic flows through the same path. When the
+        # lookup misses (e.g. miRNA names like miR156 aren't in the
+        # gene_symbol DBs), the parsing loop below falls back to the raw
+        # regulator ID, preserving previous behavior.
+        matchedNameDict = {}
+        if associationFeatures:
+            totalInputRegulators = []
 
             def process_omic_value_regulate_feature(geneName, omicValueVar):
                 geneAux = Gene("")
                 geneAux.setName(geneName)
                 geneAux.addOmicValue(omicValueVar)
-                totalInputTF.append(geneAux)
+                totalInputRegulators.append(geneAux)
 
-            if associationFeatures:
-                for tfName in associationFeatures.keys():
-                    omicValueAux = OmicValue(tfName)
-                    process_omic_value_regulate_feature(tfName, omicValueAux)
+            for regName in associationFeatures.keys():
+                omicValueAux = OmicValue(regName)
+                process_omic_value_regulate_feature(regName, omicValueAux)
 
-            if len(totalInputTF) > 0:
+            if len(totalInputRegulators) > 0:
                 matchedName, notMatchedName, foundName = mapFeatureIdentifiers(self.getJobID(),
                                                                                self.getOrganism(),
                                                                                self.getDatabases(),
-                                                                               totalInputTF, [],
+                                                                               totalInputRegulators, [],
                                                                                [], [], enrichment)
                 if matchedName is not None and len(matchedName) > 0:
-                    # convert matchedName to a dictionary and ID is the key
+                    # convert matchedName to a dictionary keyed by the raw input
                     matchedNameDict = dict(map(lambda x: (x.omicsValues[0].inputName, x), matchedName))
 
 
@@ -450,9 +462,22 @@ class Job(Model):
                             # (e.g., user uploads TFExpression.txt directly with just `TF<TAB>values`), there is no
                             # ":::" suffix — leave originalName at its constructor default (= columnID[0]).
                             if len(columnID) > 1:
-                                if omicName == "Transcription factor" and columnID[1] in matchedNameDict.keys():
-                                    omicValueAux.setOriginalName(matchedNameDict[columnID[1]].name)
+                                # `:::` format signals a regulator-style row — the
+                                # Step 4 client uses this flag to flip the visual
+                                # primary/secondary so the regulator is the row's
+                                # identifier and the target is context.
+                                omicValueAux.isRegulator = True
+                                if columnID[1] in matchedNameDict.keys():
+                                    matchedReg = matchedNameDict[columnID[1]]
+                                    # Symbol resolved — display name becomes the symbol,
+                                    # canonical ID is stashed for the details "(AGI)" line.
+                                    omicValueAux.setOriginalName(matchedReg.name)
+                                    omicValueAux.regulatorID = matchedReg.ID
                                 else:
+                                    # No symbol mapping (e.g. miRNA names) — keep the
+                                    # raw regulator ID as the display name. regulatorID
+                                    # stays empty so the details panel skips the
+                                    # canonical-ID line.
                                     omicValueAux.setOriginalName(columnID[1])
                             process_omic_value(columnID[0], omicValueAux)
 
@@ -466,6 +491,7 @@ class Job(Model):
                             if relList:
                                 logging.info(f"DEBUG: Found relevance for {line[0]}: {relList}")
                             omicValueAux.setRelevant(relList)
+                            omicValueAux.setRelevantAssociation(line[0].lower() in relevantAssociationFeatures)
                             omicValueAux.setValues(numericValues)
 
                             if len(columnID) > 1:
@@ -518,31 +544,35 @@ class Job(Model):
             # outliers = []
 
             if len(allValues):
-                # summary = numpy_percentile(allValues, [0, 10, 25, 50, 75, 90, 100])
                 numpyArray = asarray(allValues, dtype=float)
-                summary = numpy_percentile(numpyArray, [0, 10, 25, 50, 75, 90, 100])
+                # Drop NaNs before computing the distribution. NaNs are legitimate
+                # signal (e.g. unmeasured CpG sites in methylation data), but
+                # plain percentile/min/max propagate them and serialize as the
+                # non-standard JSON token "NaN" downstream, breaking the client.
+                # Nan-aware reductions skip them; if every value is NaN we fall
+                # back to a zero-filled summary, matching the empty-file branch.
+                if numpy_isnan(numpyArray).all():
+                    summary = [0] * 9
+                else:
+                    summary = numpy_nanpercentile(numpyArray, [0, 10, 25, 50, 75, 90, 100])
 
-                interquartilRange = summary[4] - summary[2]
-                minVal =  summary[2] - 1.5*interquartilRange
-                maxVal =  summary[4] + 1.5*interquartilRange
+                    interquartilRange = summary[4] - summary[2]
+                    minVal =  summary[2] - 1.5*interquartilRange
+                    maxVal =  summary[4] + 1.5*interquartilRange
 
-                outlierMask = logical_or(numpyArray < minVal, numpyArray > maxVal)
-                # valuesOutliers = numpyArray[outlierMask]
-                # numpyArray = numpyArray[logical_and(numpyArray > minVal, numpyArray < maxVal)]
-                numpyArray = numpyArray[invert(outlierMask)]
+                    # NaN comparisons return False, so NaNs are silently excluded
+                    # from outlier counting — exactly what we want.
+                    outlierMask = logical_or(numpyArray < minVal, numpyArray > maxVal)
+                    numpyArray = numpyArray[invert(outlierMask)]
 
-                # for i in range(len(allValues)-1,-1,-1):
-                #     if(allValues[i] < minVal or allValues[i] > maxVal):
-                #         outliers.append(allValues[i])
-                #         del allValues[i]
-
-                try:
-                    summary = summary.tolist() + [numpy_min(numpyArray), numpy_max(numpyArray)]
-                except:
-                    summary = summary + [numpy_min(numpyArray), numpy_max(numpyArray)]
+                    try:
+                        summary = summary.tolist() + [numpy_nanmin(numpyArray), numpy_nanmax(numpyArray)]
+                    except:
+                        summary = summary + [numpy_nanmin(numpyArray), numpy_nanmax(numpyArray)]
 
             logging.info("DISTRIBUTION FOR " + omicName  + ": MIN: " + str(summary[0])  + "; p10: " + str(summary[1]) + "; q1: " + str(summary[2]) + ";  MEDIAN: " + str(summary[3])+ "; q1: " + str(summary[4])  + "; p90: " + str(summary[5]) + ";  MAX VALUE: " + str(summary[6]))
-            logging.info("DISTRIBUTION FOR " + omicName  + " WITHOUT OUTLIERS: MIN: " + str(summary[7])  + "; MAX: " + str(summary[8])  + "; #OUTLIERS: " + str(numpy_sum(outlierMask)))
+            outlierCount = int(numpy_sum(outlierMask)) if 'outlierMask' in locals() else 0
+            logging.info("DISTRIBUTION FOR " + omicName  + " WITHOUT OUTLIERS: MIN: " + str(summary[7])  + "; MAX: " + str(summary[8])  + "; #OUTLIERS: " + str(outlierCount))
 
             logging.info("PARSING USER GENE BASED FILE (" + omicName + ")... DONE" )
 
@@ -657,22 +687,33 @@ class Job(Model):
                     unmatchedFile.write(parsedFeature.getName() + '\t' + '\t' + '\t'.join(map(str, omicValue.getValues())) + '\t' + relStr + "\n")
 
             #GENERATE SOME STATISTICS
-            summary = numpy_percentile(allValues, [0,10,25,50,75,90,100])
+            # Mirror the NaN-aware handling in parseGeneBasedFiles: nan-aware
+            # percentile/min/max so missing measurements don't poison the
+            # summary and ultimately the JSON response (json.dumps(NaN) → "NaN"
+            # which browsers reject in JSON.parse).
+            arr = asarray(allValues, dtype=float)
+            if numpy_isnan(arr).all():
+                summary = [0] * 9
+                outliers = []
+            else:
+                summary = numpy_nanpercentile(arr, [0,10,25,50,75,90,100])
 
-            interquartilRange = summary[4] - summary[2]
-            minVal =  summary[2] - 1.5*interquartilRange
-            maxVal =  summary[4] + 1.5*interquartilRange
+                interquartilRange = summary[4] - summary[2]
+                minVal =  summary[2] - 1.5*interquartilRange
+                maxVal =  summary[4] + 1.5*interquartilRange
 
-            outliers= []
-            for i in range(len(allValues)-1,-1,-1):
-                if(allValues[i] < minVal or allValues[i] > maxVal):
-                    outliers.append(allValues[i])
-                    del allValues[i]
+                outliers= []
+                for i in range(len(allValues)-1,-1,-1):
+                    v = allValues[i]
+                    # NaN comparisons return False — skip them rather than treating as outliers.
+                    if v == v and (v < minVal or v > maxVal):
+                        outliers.append(v)
+                        del allValues[i]
 
-            try:
-                summary = summary.tolist() + [numpy_min(allValues), numpy_max(allValues)]
-            except:
-                summary = summary + [numpy_min(allValues), numpy_max(allValues)]
+                try:
+                    summary = summary.tolist() + [numpy_nanmin(allValues), numpy_nanmax(allValues)]
+                except:
+                    summary = summary + [numpy_nanmin(allValues), numpy_nanmax(allValues)]
 
             logging.info("DISTRIBUTION FOR " + omicName  + ": MIN: " + str(summary[0])  + "; p10: " + str(summary[1]) + "; q1: " + str(summary[2]) + ";  MEDIAN: " + str(summary[3])+ "; q1: " + str(summary[4])  + "; p90: " + str(summary[5]) + ";  MAX VALUE: " + str(summary[6]))
             logging.info("DISTRIBUTION FOR " + omicName  + "WITHOUT OUTLIERS: MIN: " + str(summary[7])  + "; MAX: " + str(summary[8])  + "; #OUTLIERS: " + str(len(outliers)))
@@ -692,11 +733,34 @@ class Job(Model):
     # @param {type}
     # @returns
     ##*************************************************************************************************************
-    def parseSignificativeFeaturesFile(self, fileName, isBedFormat=False):
+    def parseSignificativeFeaturesFile(self, fileName, isBedFormat=False, forceLegacyTwoCol=False):
         # TODO: HEADER
+        # forceLegacyTwoCol is set by callers that parse association-shaped slots
+        # (relevant-associations file, miRNA reference file) where the contract is
+        # always [TARGET, REGULATOR] and the multi-condition heuristic does not
+        # apply. Skips header rows and emits joined `target:::regulator` keys.
         relevantFeatures = {}
         if fileName and os_path.isfile(fileName):
             detected_delimiter = Job.detect_delimiter(fileName)
+            if forceLegacyTwoCol and not isBedFormat:
+                with open(fileName, 'r', encoding='utf-8-sig', newline='') as inputDataFile:
+                    for nLine, line in enumerate(csv_reader(inputDataFile, delimiter=detected_delimiter), start=1):
+                        if not line:
+                            continue
+                        # Skip the header (whether `#`-prefixed or a plain
+                        # `Target\tRegulator`-style descriptor) using the same
+                        # ID-shape heuristic as the multi-condition path.
+                        if nLine == 1 and not Job._row_looks_like_data(line):
+                            continue
+                        if len(line) >= 2 and line[0].strip() and line[1].strip():
+                            featureID = ":::".join([line[0], line[1]]).lower()
+                        elif line[0].strip():
+                            featureID = line[0].lower()
+                        else:
+                            continue
+                        relevantFeatures[featureID] = [True]
+                logging.info("PARSING RELEVANT FEATURES FILE (" + str(fileName) + ", legacy-2col)... THE FILE CONTAINS " + str(len(relevantFeatures)) + " RELEVANT FEATURES")
+                return relevantFeatures
             with open(fileName, 'r', encoding='utf-8-sig', newline='') as inputDataFile:
                 nLine = 0
                 nConditions = 1
@@ -707,6 +771,15 @@ class Job(Model):
                 # and silently drop the miRNA suffix, breaking relevance lookups
                 # against values files keyed by the joined ID.
                 isLegacyTwoCol = False
+                # legacyEligible governs whether the 2-col legacy [TARGET, REGULATOR]
+                # detection is allowed to fire on the next data row.
+                #   * True at start  → fires on nLine==1 if both cells look like IDs.
+                #   * Stays True across a `#`-prefixed comment header (e.g. miRNA's
+                #     `# Gene name\tmiRNA ID`), so legacy detection runs on the actual
+                #     first data row.
+                #   * Forced False after a plain condition-name header (e.g. `WT\tKO`),
+                #     which signals a genuine 2-condition relevance file.
+                legacyEligible = True
                 for line in csv_reader(inputDataFile, delimiter=detected_delimiter):
                     # csv yields [] for an empty line, and a row of empty strings
                     # for one that is only separators, so `line[0]` raised
@@ -757,6 +830,14 @@ class Job(Model):
                                 # all three checks.
                                 is_data = Job._row_looks_like_data(line)
                                 if not is_data:
+                                    # `#`-prefixed headers describe schema (e.g.
+                                    # `# Gene name\tmiRNA ID`) rather than condition
+                                    # names, so legacy 2-col detection is still allowed
+                                    # on the next row. Plain headers (`WT\tKO`) commit
+                                    # the file to the multi-condition interpretation.
+                                    is_comment_header = str(line[0]).strip().startswith('#')
+                                    if not is_comment_header:
+                                        legacyEligible = False
                                     self.conditionNames = [name.strip().lstrip('#') for name in line]
                                     continue
                                 else:
@@ -767,17 +848,20 @@ class Job(Model):
                         # Legacy: each row pairs [MappedID, OriginalID] (e.g. mirna ENSMUSG +
                         # mmu-miR-...); both cells look like biological IDs (digits or special
                         # tokens). Multi-cond: each cell is a feature ID belonging to its column's
-                        # condition. We treat the file as legacy iff BOTH cells of row 1 look like
-                        # biological IDs — that's the structural difference from a true 2-condition
-                        # file where the same ID typically appears in only one column at a time.
+                        # condition. We treat the file as legacy iff BOTH cells of the first
+                        # eligible data row look like biological IDs — that's the structural
+                        # difference from a true 2-condition file where the same ID typically
+                        # appears in only one column at a time.
                         if nConditions == 2 and not isBedFormat:
-                             if nLine == 1 and Job._row_looks_like_data([line[0]]) and Job._row_looks_like_data([line[1]]):
+                             if legacyEligible and Job._row_looks_like_data([line[0]]) and Job._row_looks_like_data([line[1]]):
                                  # Both columns biological IDs → legacy format, not 2 conditions.
                                  featureID = ":::".join([line[0], line[1]]).lower()
                                  relevantFeatures[featureID] = [True]
                                  nConditions = 1 # Revert to single condition
                                  isLegacyTwoCol = True
+                                 legacyEligible = False
                                  continue
+                        legacyEligible = False
 
                         # Multi-condition logic: Each column (from index 0 to n) contains IDs
                         if nConditions > 1 and not isBedFormat:

@@ -25,7 +25,7 @@ from os import path as os_path, system as os_system, makedirs as os_makedirs
 from csv import reader as csv_reader
 from zipfile import ZipFile as zipFile
 
-from subprocess import check_call, call, STDOUT, CalledProcessError
+from subprocess import check_call, check_output, call, STDOUT, CalledProcessError
 
 from src.classes.FoundFeature import FoundFeature
 from src.common.Util import unifyAndSort
@@ -35,6 +35,7 @@ from itertools import chain
 
 from src.common.Statistics import calculateSignificance, calculateCombinedSignificancePvalues, adjustPvalues
 from src.common.Util import chunks, getImageSize
+from src.common.ReplicateDetection import detect_replicates, aggregate_replicates
 
 from src.common.KeggInformationManager import KeggInformationManager
 
@@ -112,7 +113,11 @@ def ensure_utf8(filepath):
 # Small dict fields safe to persist in the main MongoDB document
 PAINTOMICS4_DICT_FIELDS = {
     "mappingComp", "classificationDict", "pValueInDict",
-    "adjustPvalue", "totalRelevantFeaturesInCategory", "featureSummary"
+    "adjustPvalue", "totalRelevantFeaturesInCategory", "featureSummary",
+    # MORE rpc table. Bounded at 100k rows by parseRegulationPerCondition,
+    # so worst-case ~5 MB — well under the 16 MB Mongo doc limit and an order
+    # of magnitude smaller than the LARGE_FIELDS set's compoundRegulateFeatures.
+    "regulationPerConditionData",
 }
 
 # Large dict fields that stay in-memory cache only (too large for a single
@@ -193,6 +198,11 @@ class PathwayAcquisitionJob(Job):
 
         self.globalExpressionData = None
         self.hubAnalysisResult = None
+        # MORE RegulationPerCondition table (populated by parseRegulationPerCondition
+        # in Step 4 of the implementation). Stays None if MORE wasn't run, so the
+        # Step 3 client panel hides itself. Shape when populated:
+        #   {"columns": [...], "rows": [[...], ...], "truncated": bool}
+        self.regulationPerConditionData = None
 
         # AI Interpretation
         self.aiConsent = False
@@ -432,9 +442,9 @@ class PathwayAcquisitionJob(Job):
                             MAX_NUMBER_FEATURES) + ")." + "\n"
                         break
 
-                    if len(line) != 2:
+                    if len(line) != 2 and len(line) != 1:
                         error += " - Errors detected while processing " + inputOmic.get("relevantAssociationsFile",
-                                                                                        "") + ": The file does not look like a relevant associations file (some lines do not have 2 columns)." + "\n"
+                                                                                        "") + ": The file does not look like a relevant associations file (expected 1 or 2 columns)." + "\n"
                         break
 
         # *************************************************************************
@@ -468,8 +478,12 @@ class PathwayAcquisitionJob(Job):
                         # rf_conditions is the number of columns in the RF file (Conditions only)
                         # So we expect nConditions == rf_conditions + 1
                         if rf_conditions > 1 and rf_conditions != (nConditions - 1):
-                             # Special case for backward compatibility (2 columns [ID, Name])
-                             if not (rf_conditions == 2 and nConditions == 2):
+                             # A 2-col file is the legacy [TARGET, REGULATOR] pair-list that
+                             # MiRNA2GenesServlet emits for the Regulatory Omics workflow,
+                             # regardless of how many conditions the values file declares.
+                             # parseSignificativeFeaturesFile (Job.py:740) detects this shape
+                             # via its isLegacyTwoCol branch and produces GENE:::REGULATOR keys.
+                             if rf_conditions != 2:
                                  error += " - Errors detected while processing " + inputOmic.get("relevantFeaturesFile", "") + \
                                           ": The number of columns (" + str(rf_conditions) + ") does not match the number of conditions in the data file (" + str(nConditions - 1) + ").\n"
 
@@ -589,6 +603,145 @@ class PathwayAcquisitionJob(Job):
 
         return nConditions, error
 
+    def _detectReplicatesForOmic(self, omicName, omicHeader):
+        """
+        Run replicate detection on a single omic's column labels.
+
+        ``omicHeader`` is the raw header captured by the parsers — list[str]
+        where index 0 is the ID column and indices 1..n are sample columns.
+        We pass only the sample slice to ``detect_replicates``; an absent or
+        malformed header degrades safely to ``status="none"`` so the rest of
+        the pipeline (which only reads the dict shape) keeps working.
+        """
+        replicateHeader = omicHeader[1:] if omicHeader and len(omicHeader) > 1 else []
+        result = detect_replicates(replicateHeader)
+        logging.info(
+            "REPLICATE DETECTION (%s): status=%s, samples=%d, unmatched=%d",
+            omicName, result["status"], len(result["sampleHeader"]), len(result["unmatched"])
+        )
+        return result
+
+    def _findInputOmicByName(self, omicName):
+        """
+        Locate an inputOmic + its feature dict + feature type by omic name.
+
+        Returns ``(inputOmic, featureDict, featureType)`` or ``(None, None, None)``.
+        Used by both the auto-apply path (this file) and the servlet apply
+        endpoint (PathwayAcquisitionServlet) — kept on the job so the two
+        callers share a single source of truth for the lookup convention.
+        """
+        for inputOmic in self.getGeneBasedInputOmics():
+            if inputOmic.get("omicName") == omicName:
+                return inputOmic, self.getInputGenesData(), "Gene"
+        for inputOmic in self.getCompoundBasedInputOmics():
+            if inputOmic.get("omicName") == omicName:
+                return inputOmic, self.getInputCompoundsData(), "Compound"
+        return None, None, None
+
+    def applyReplicateMappingForOmic(self, omicName, mode, sampleHeader=None,
+                                     mapping=None, groups=None):
+        """
+        Apply (or clear) a replicate→sample mapping for one omic.
+
+        This is the single source of truth for the aggregation step: invoked
+        both by the auto-apply path inside ``processFilesContent`` (mode=auto,
+        no extra args) and by the servlet ``/pa_apply_replicate_mapping``
+        endpoint (mode auto/manual/off). For ``mode="manual"`` the caller is
+        responsible for parsing the design file and supplying ``sampleHeader``,
+        ``mapping`` and ``groups``.
+
+        Mutates:
+        - ``inputOmic`` dict: writes ``replicateSource``, ``sampleHeader``,
+          ``replicateMapping``.
+        - Each affected ``OmicValue``: writes ``sampleValues`` /
+          ``sampleRelevant`` (or clears them when mode="off").
+
+        Returns ``{omicName, status, mode, sampleHeader, mapping,
+        featuresUpdated, featureType}`` for the caller to persist / serialize.
+        """
+        inputOmic, featureDict, featureType = self._findInputOmicByName(omicName)
+        if inputOmic is None:
+            raise ValueError("Omic '%s' not found in this job." % omicName)
+
+        if mode == "off":
+            inputOmic["replicateSource"]   = "off"
+            inputOmic["sampleHeader"]      = []
+            inputOmic["replicateMapping"]  = []
+            n_touched = self._walkAndAggregateOmicValues(
+                featureDict, omicName, mapping=[], groups=[], n_samples=0, clear=True
+            )
+            return {
+                "omicName":         omicName,
+                "status":           "cleared",
+                "mode":             mode,
+                "sampleHeader":     [],
+                "mapping":          [],
+                "featuresUpdated":  n_touched,
+                "featureType":      featureType,
+            }
+
+        if mode == "auto":
+            detection = inputOmic.get("replicateDetection") or {}
+            if detection.get("status") != "complete":
+                raise ValueError(
+                    "Auto-apply not possible for omic '%s' (detection status=%s)."
+                    % (omicName, detection.get("status"))
+                )
+            sampleHeader = detection["sampleHeader"]
+            mapping      = detection["mapping"]
+            groups       = detection["groups"]
+        elif mode == "manual":
+            if not (sampleHeader and mapping is not None and groups is not None):
+                raise ValueError("Manual apply requires sampleHeader, mapping and groups.")
+        else:
+            raise ValueError("Invalid mode '%s'." % mode)
+
+        inputOmic["replicateSource"]   = mode
+        inputOmic["sampleHeader"]      = sampleHeader
+        inputOmic["replicateMapping"]  = mapping
+
+        n_touched = self._walkAndAggregateOmicValues(
+            featureDict, omicName,
+            mapping=mapping, groups=groups, n_samples=len(sampleHeader),
+            clear=False,
+        )
+        return {
+            "omicName":         omicName,
+            "status":           "applied",
+            "mode":             mode,
+            "sampleHeader":     sampleHeader,
+            "mapping":          mapping,
+            "featuresUpdated":  n_touched,
+            "featureType":      featureType,
+        }
+
+    def _walkAndAggregateOmicValues(self, featureDict, omicName, mapping, groups,
+                                    n_samples, clear):
+        """
+        Walk every Feature, find its OmicValue for ``omicName``, and either
+        compute / clear ``sampleValues`` / ``sampleRelevant``. Returns the
+        number of OmicValues touched.
+        """
+        n_touched = 0
+        for feature in featureDict.values():
+            for ov in feature.getOmicsValues():
+                if ov.getOmicName() != omicName:
+                    continue
+                if clear:
+                    ov.setSampleValues(None)
+                    ov.setSampleRelevant(None)
+                else:
+                    sampleValues, sampleRelevant = aggregate_replicates(
+                        values=ov.getValues() or [],
+                        relevant=ov.relevant,
+                        groups=groups,
+                        n_samples=n_samples,
+                    )
+                    ov.setSampleValues(sampleValues)
+                    ov.setSampleRelevant(sampleRelevant)
+                n_touched += 1
+        return n_touched
+
     def processFilesContent(self):
         """
         This function processes all the files and returns a checkboxes list to show to the user
@@ -610,6 +763,11 @@ class PathwayAcquisitionJob(Job):
                 logging.info("   * PROCESSED " + omicName + "...")
                 inputOmic["omicSummary"] = omicSummary
                 inputOmic["omicHeader"] = omicHeader
+                # Replicate detection runs once per omic on the column labels
+                # (omicHeader[1:] — index column stripped). Result is surfaced
+                # to the Step-2 UI so the user can confirm/override; no
+                # aggregation happens here, the values stay per-replicate.
+                inputOmic["replicateDetection"] = self._detectReplicatesForOmic(omicName, omicHeader)
             logging.info("PROCESSING GENE BASED FILES...DONE")
 
             logging.info("PROCESSING COMPOUND BASED FILES...")
@@ -620,11 +778,35 @@ class PathwayAcquisitionJob(Job):
                 logging.info("   * PROCESSED " + omicName + "...")
                 inputOmic["omicSummary"] = omicSummary
                 inputOmic["omicHeader"] = omicHeader
+                inputOmic["replicateDetection"] = self._detectReplicatesForOmic(omicName, omicHeader)
             # REMOVE REPETITIONS AND ORDER ALPHABETICALLY
             # checkBoxesData = unifyAndSort(checkBoxesData, lambda checkBoxData: checkBoxData["title"].lower())
             checkBoxesData = unifyAndSort(checkBoxesData, lambda checkBoxData: checkBoxData.getTitle().lower())
 
             logging.info("PROCESSING COMPOUND BASED FILES...DONE")
+
+            # AUTO-APPLY complete replicate detections so users get the
+            # collapsed view without an extra click in Step 2. The Step-2 panel
+            # still surfaces the detection (and the user can switch back to
+            # "Show all replicates" or upload a custom design), but the default
+            # is the average — most jobs with `_R1/_R2`-style headers want this.
+            for inputOmic in (self.geneBasedInputOmics + self.compoundBasedInputOmics):
+                detection = inputOmic.get("replicateDetection") or {}
+                if detection.get("status") != "complete":
+                    continue
+                try:
+                    res = self.applyReplicateMappingForOmic(inputOmic["omicName"], "auto")
+                    logging.info(
+                        "REPLICATE AUTO-APPLY (%s): %d sample(s), %d feature(s) updated.",
+                        inputOmic["omicName"], len(res["sampleHeader"]), res["featuresUpdated"]
+                    )
+                except Exception as ex:
+                    # Auto-apply must never break Step-1: log and continue, the
+                    # user can still pick a mode in the Step-2 panel.
+                    logging.warning(
+                        "REPLICATE AUTO-APPLY (%s) failed: %s — continuing without aggregation.",
+                        inputOmic.get("omicName"), str(ex)
+                    )
 
             # GENERATE THE COMPRESSED FILE WITH MATCHING, COPY THE FILE AT RESULTS DIR AND CLEAN TEMPORAL FILES
             # COMPRESS THE RESULTING FILES AND CLEAN TEMPORAL DATA
@@ -1547,16 +1729,24 @@ class PathwayAcquisitionJob(Job):
 
                     logging.info("dbname is " + str(dbname))
 
-                    check_call([
-                        ROOT_DIRECTORY + "common/bioscripts/generateMetaGenes.R",
-                        '--specie="' + self.getOrganism() + '"',
-                        '--input_file="' + inputFile + '"',
-                        '--output_prefix="' + inputOmic.get("omicName") + '"',
-                        '--data_dir="' + self.getTemporalDir() + '"',
-                        '--kegg_dir="' + KEGG_DATA_DIR + '"',
-                        '--sources_dir="' + ROOT_DIRECTORY + 'common/bioscripts/"',
-                        '--kclusters="' + kClusters + '"' if kClusters.isdigit() else '',
-                        '--database="' + dbname + '"' if dbname != "KEGG" else ''], stderr=STDOUT)
+                    try:
+                        output = check_output([
+                            "Rscript",
+                            ROOT_DIRECTORY + "common/bioscripts/generateMetaGenes.R",
+                            '--specie=' + self.getOrganism(),
+                            '--input_file=' + inputFile,
+                            '--output_prefix=' + inputOmic.get("omicName"),
+                            '--data_dir=' + self.getTemporalDir(),
+                            '--kegg_dir=' + KEGG_DATA_DIR,
+                            '--sources_dir=' + ROOT_DIRECTORY + 'common/bioscripts/',
+                            '--kclusters=' + kClusters if kClusters.isdigit() else '',
+                            '--database=' + dbname if dbname != "KEGG" else ''], stderr=STDOUT)
+                    except CalledProcessError as ex:
+                        error_detail = ex.output.decode('utf-8') if ex.output else str(ex)
+                        logging.error("STEP2 - Error while generating metagenes information for " + inputOmic.get("omicName") + " db: " + str(dbname))
+                        logging.error(f"Subprocess output: {error_detail}")
+                        raise RuntimeError(f"Metagenes generation failed for omic '{inputOmic.get('omicName')}' and database '{dbname}'. Details: {error_detail}")
+
                     # STEP 2.2 PROCESS THE RESULTING FILE
 
                     # Reset all pathways metagenes for the omic
@@ -1568,22 +1758,20 @@ class PathwayAcquisitionJob(Job):
                     metagenesFileName: object = self.getTemporalDir() + "/" + inputOmic.get("omicName") + "_metagenes" + \
                                                 ("_" + str(dbname).lower() + ".tab" if dbname != "KEGG" else ".tab")
 
-                    # Clean previous metagene
-                    #for line in self.matchedPathways:
-                    #    self.matchedPathways[line].metagenes = dict()
+                    if os_path.exists(metagenesFileName):
+                        with open(metagenesFileName, 'r') as inputDataFile:
+                            for line in csv_reader(inputDataFile, delimiter="\t"):
+                                if line[0] in self.matchedPathways:
+                                    self.matchedPathways.get(line[0]).addMetagenes(inputOmic.get("omicName"),
+                                                                                   {"metagene": line[1], "cluster": line[2],
+                                                                                    "values": line[3:]})
+                                    logging.info(
+                                        "pathway:" + str(line[0]) + " metaGene:" + str(line[1]) + " cluster:" + str(
+                                            line[2]) + " values:" + str(line[3:]))
+                        inputDataFile.close()
+                    else:
+                        logging.warning(f"Metagenes file {metagenesFileName} not found. This is expected if no matches were found for db {dbname}.")
 
-                    with open(metagenesFileName, 'r') as inputDataFile:
-                        for line in csv_reader(inputDataFile, delimiter="\t"):
-                            if line[0] in self.matchedPathways:
-                                self.matchedPathways.get(line[0]).addMetagenes(inputOmic.get("omicName"),
-                                                                               {"metagene": line[1], "cluster": line[2],
-                                                                                "values": line[3:]})
-                                logging.info(
-                                    "pathway:" + str(line[0]) + " metaGene:" + str(line[1]) + " cluster:" + str(
-                                        line[2]) + " values:" + str(line[3:]))
-                    inputDataFile.close()
-                except CalledProcessError as ex:
-                    logging.error("STEP2 - Error while generating metagenes information for " + inputOmic.get("omicName") + " db: " + str(dbname))
                 except IOError as ex:
                     logging.error("STEP2 - File not found or read error for metagenes " + inputOmic.get("omicName") + " db: " + str(dbname))
 
@@ -1915,3 +2103,283 @@ class PathwayAcquisitionJob(Job):
         self.hubAnalysisResult = hubResult
 
         return self.hubAnalysisResult
+
+    def parseRegulationPerCondition(self):
+        """Load MORE's RegulationPerCondition table for the Step 3 panel.
+
+        The R side writes one combined file per MORE run named
+        MORE_rpc_<YYYYMMDDHHMM>.tab into the user-scoped inputData/ directory
+        (see runMORE.R and MOREServlet.fromMOREtoGenes_STEP2). We detect MORE
+        was used by scanning this job's geneBasedInputOmics for any file
+        matching MORE_<kind>_<omic>_<date>.tab, extracting the date_seed,
+        and resolving the rpc filename deterministically.
+
+        Self-skips (leaves self.regulationPerConditionData = None) if MORE
+        wasn't run or the file is missing — the Step 3 client panel hides
+        itself in that case.
+
+        Memory note: dtype=str on read avoids pandas' default object/float64
+        churn; Group_* columns are converted to numeric vectorised. itertuples
+        is used instead of iterrows to avoid the per-row Series allocation
+        forbidden by the project's CLAUDE.md guidance.
+        """
+        import re
+
+        # 1. Detect MORE-produced filenames already on this job.
+        pattern = re.compile(
+            r"^MORE_(?:output|relevant_pairs|relevant_assoc|relevant_reg)_.+_(\d{12})\.tab$"
+        )
+        date_seed = None
+        for omic in self.geneBasedInputOmics:
+            for key in ("inputDataFile", "relevantFeaturesFile",
+                        "associationsFile", "relevantAssociationsFile"):
+                fname = omic.get(key)
+                if not fname:
+                    continue
+                m = pattern.match(os_path.basename(fname))
+                if m:
+                    date_seed = m.group(1)
+                    break
+            if date_seed:
+                break
+
+        if not date_seed:
+            return  # No MORE in this job.
+
+        rpc_path = os_path.join(self.getInputDir(), f"MORE_rpc_{date_seed}.tab")
+        if not os_path.exists(rpc_path):
+            logging.warning(
+                f"MORE rpc file expected but missing: {rpc_path}"
+            )
+            return
+
+        # Optional sidecar with the MORE filter settings the user picked at
+        # configuration time (filter_r2, alpha, vip, method). Written by
+        # MOREServlet.fromMOREtoGenes_STEP2. Absent for rpc files produced
+        # before that sidecar existed — the Step-3 view falls back to defaults.
+        filters_meta = None
+        filters_path = os_path.join(
+            self.getInputDir(), f"MORE_filters_{date_seed}.json"
+        )
+        if os_path.exists(filters_path):
+            try:
+                import json
+                with open(filters_path) as fh:
+                    filters_meta = json.load(fh)
+            except (OSError, ValueError) as ex:
+                logging.warning(
+                    f"MORE filters sidecar present but unreadable "
+                    f"({filters_path}): {ex}"
+                )
+
+        # 2. Parse (keep pandas import local — it's heavy and not used elsewhere
+        # in this class).
+        try:
+            import pandas as pd
+        except ImportError:
+            logging.error(
+                "pandas not available; cannot parse RegulationPerCondition."
+            )
+            return
+
+        try:
+            df = pd.read_csv(
+                rpc_path, sep="\t", dtype=str,
+                keep_default_na=False, na_values=[""]
+            )
+        except Exception as ex:
+            logging.error(f"Failed to parse RegulationPerCondition file: {ex}")
+            return
+
+        if df.empty:
+            self.regulationPerConditionData = {
+                "columns": list(df.columns), "rows": [], "truncated": False,
+                "filters": filters_meta,
+            }
+            return
+
+        # 3. Vectorised numeric coercion for the Group_* columns only.
+        group_cols = [c for c in df.columns if c.startswith("Group_")]
+        for col in group_cols:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+
+        # 4. Sanitise: drop rows missing the two mandatory fields. With
+        # keep_default_na=False, missing values arrive as empty strings.
+        if "targetF" in df.columns and "regulator" in df.columns:
+            df = df[(df["targetF"] != "") & (df["regulator"] != "")]
+
+        # 5. Defensive cap so a runaway model can't bloat the Mongo doc.
+        MAX_ROWS = 100_000
+        truncated = len(df) > MAX_ROWS
+        if truncated:
+            df = df.head(MAX_ROWS)
+
+        # 6. JSON-clean: distinguish missing cells by column type.
+        #   - String columns (Target/Regulator/Omic/Area/Representative): emit ""
+        #     for NaN. We can't use None here because Paintomics' DAO layer
+        #     (DAO.adaptBSON -> Util.adapt_string) runs str() on every non-
+        #     collection, non-numeric value on read, turning Python None into
+        #     the literal string "None" — confusing in the UI and indistinguish-
+        #     able from a real value.
+        #   - Numeric columns (Group_*): emit None for NaN. Round-tripping to
+        #     "None" through adaptBSON would still happen for these, but NaN
+        #     coefficients are rare/absent in practice and the frontend renderer
+        #     handles both None and "None" as missing.
+        # itertuples beats iterrows ~30x (CLAUDE.md performance contract).
+        numeric_col_idxs = {
+            i for i, c in enumerate(df.columns) if c.startswith("Group_")
+        }
+        rows = []
+        for record in df.itertuples(index=False, name=None):
+            row = []
+            for i, v in enumerate(record):
+                if isinstance(v, float) and math.isnan(v):
+                    row.append(None if i in numeric_col_idxs else "")
+                else:
+                    row.append(v)
+            rows.append(row)
+
+        # 7. Build a symbol lookup for Target/Regulator columns.
+        #
+        # Two distinct ID populations live in the rpc:
+        #   - targetF column: target gene IDs in whatever shape R wrote
+        #     them out — which is the rownames of the user-uploaded gene
+        #     expression file, i.e. the user-input form (Ensembl for mmu,
+        #     AGI for ath, …). NOT necessarily the KEGG canonical ID.
+        #   - regulator column: TF / miRNA / methylation IDs, again in
+        #     the user-input form after runMORE.R's prefix-strip.
+        #
+        # On the Python side, self.inputGenesData is keyed by Gene.ID —
+        # the KEGG canonical (EntrezGene for mmu, AGI for ath, …). The
+        # user-input form for each feature lives one level deeper, on
+        # OmicValue.inputName. For organisms where Gene.ID and the user
+        # upload happen to be the same string (AGI-style species), the
+        # canonical-keyed map hits the rpc directly. For organisms where
+        # they diverge (mmu, hsa, rno, dre — anything where KEGG uses
+        # EntrezGene but biologists upload Ensembl/Symbol/RefSeq), the
+        # canonical-keyed entry never matches the rpc's targetF and
+        # every target rendered as a raw Ensembl ID. We therefore emit
+        # TWO entries per gene where applicable: one keyed by Gene.ID
+        # (canonical) and one keyed by OmicValue.inputName (user form).
+        #
+        # Regulator symbols ride on a separate path: each Gene's
+        # omicsValues[i] carries the regulator metadata for a
+        # `target:::regulator` row (see Feature.OmicValue.isRegulator,
+        # regulatorID, originalName, inputName populated in
+        # Job.parseGeneBasedFiles). Earlier versions only walked the
+        # top-level dict, so regulator symbols were missed wholesale
+        # (typically >50% of the rpc IDs).
+        #
+        # Restrict the emitted map to IDs that actually appear in the rpc —
+        # keeps the payload bounded for organisms with huge inputGenesData.
+        symbols = {}
+        try:
+            genes = self.inputGenesData or {}
+
+            if "targetF" in df.columns and "regulator" in df.columns:
+                # Collect rpc IDs once, upper-cased. The rpc is verbatim from
+                # R, so we case-fold here and lookups happen on the client
+                # with the same fold.
+                rpc_ids = set()
+                rpc_ids.update(df["targetF"].astype(str).str.upper().unique())
+                rpc_ids.update(df["regulator"].astype(str).str.upper().unique())
+                # Empty-string can sneak in via sanitised NaN cells; drop it
+                # so we never emit a "" -> "" entry.
+                rpc_ids.discard("")
+
+                # 7.a Top-level pass: targets (and any regulator that also
+                # happens to be a gene-expression feature). Emits both
+                # canonical and user-input forms — see header comment.
+                # 7.b Inner pass: regulator omicsValues. One gene can carry
+                # many regulator rows when a single target has many TFs/miRNAs
+                # mapped to it; we still scan each omicsValue once. Worst
+                # case ~rows-in-rpc iterations, which the 100k cap above
+                # already bounds.
+                for gene_id, gene in genes.items():
+                    name = gene.getName() if hasattr(gene, "getName") else None
+                    name_up = str(name).upper() if name else ""
+
+                    # --- 7.a-i canonical-keyed symbol (Gene.ID -> name) ---
+                    if gene_id and name:
+                        gid_up = str(gene_id).upper()
+                        # Skip identity mappings — FeatureNamesToKeggIDsMapper
+                        # leaves Gene.name == ID when no symbol was found.
+                        if (gid_up in rpc_ids
+                                and gid_up not in symbols
+                                and name_up != gid_up):
+                            symbols[gid_up] = name
+
+                    # --- 7.a-ii user-input-keyed symbol -------------------
+                    # OmicValue.inputName holds the target ID as the user
+                    # typed it (e.g. "ENSMUSG00000029650" while Gene.ID is
+                    # "71706" for mmu). The rpc's targetF column carries
+                    # this user-input form for any non-AGI-style species,
+                    # so without this entry the lookup never hits and the
+                    # Target column renders as a raw Ensembl/RefSeq ID.
+                    # We sweep all omicValues — regulator slots also carry
+                    # the target's inputName (see comment in 7.b), so
+                    # including them is harmless and catches targets that
+                    # only appear via regulator associations.
+                    if name:
+                        omic_values = getattr(gene, "omicsValues", None) or []
+                        for omic_val in omic_values:
+                            input_name = getattr(omic_val, "inputName", "") or ""
+                            if not input_name:
+                                continue
+                            in_up = input_name.upper()
+                            if (in_up in rpc_ids
+                                    and in_up not in symbols
+                                    and in_up != name_up):
+                                symbols[in_up] = name
+
+                    # --- 7.b regulator symbols from omicsValues ---------
+                    # Important: on a regulator OmicValue (see
+                    # Job.parseGeneBasedFiles), the field naming is misleading
+                    # for our purposes:
+                    #   - omic_val.inputName  == TARGET id (columnID[0])
+                    #   - omic_val.originalName == regulator's display symbol
+                    #     (or, if no symbol was resolved, the raw regulator ID
+                    #     — i.e. an identity mapping with regulatorID == "")
+                    #   - omic_val.regulatorID == canonical regulator ID
+                    #     (e.g. AGI) when the mapper resolved a symbol;
+                    #     empty string otherwise.
+                    # The rpc's `regulator` column carries the regulator's
+                    # canonical/raw form (runMORE.R prefix-strips back to the
+                    # user-uploaded shape, which equals regulatorID when the
+                    # user uploaded canonical IDs — the common case for AGI /
+                    # Ensembl-style organisms).
+                    # We therefore map ONLY regulatorID -> originalName. Using
+                    # inputName here would map the TARGET id to the regulator's
+                    # symbol — surfacing rows like "AT1G19000 (AT4G01310)" in
+                    # the Target column.
+                    omic_values = getattr(gene, "omicsValues", None) or []
+                    for omic_val in omic_values:
+                        if not getattr(omic_val, "isRegulator", False):
+                            continue
+                        symbol = getattr(omic_val, "originalName", "") or ""
+                        reg_id = getattr(omic_val, "regulatorID", "") or ""
+                        if not symbol or not reg_id:
+                            # Unresolved regulator (regulatorID == "") would
+                            # produce an identity entry only — skip.
+                            continue
+                        reg_up = reg_id.upper()
+                        if (reg_up in rpc_ids
+                                and reg_up != symbol.upper()
+                                and reg_up not in symbols):
+                            symbols[reg_up] = symbol
+        except Exception as ex:
+            # Symbol lookup is purely cosmetic; never let it kill the panel.
+            logging.warning(f"RegulationPerCondition symbol lookup failed: {ex}")
+
+        self.regulationPerConditionData = {
+            "columns": list(df.columns),
+            "rows": rows,
+            "truncated": truncated,
+            "symbols": symbols,
+            "filters": filters_meta,
+        }
+        logging.info(
+            f"Parsed RegulationPerCondition: {len(rows)} rows, "
+            f"{len(df.columns)} cols, {len(symbols)} symbols, "
+            f"truncated={truncated}"
+        )

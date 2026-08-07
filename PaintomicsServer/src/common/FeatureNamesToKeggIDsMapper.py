@@ -203,6 +203,17 @@ def mapFeatureIdentifiers(jobID, organism, databases, featureList,  matchedFeatu
     databaseConvertion_ids = {dbname: db.dbname.find_one({"dbname": gene_databases.get(dbname)}, {"item": 1, "qty": 1}).get("_id") for dbname in databases}
     databaseGeneSymbol_ids = {dbname: db.dbname.find_one({"dbname": symbol_databases.get(dbname)}, {"item": 1, "qty": 1}).get("_id") for dbname in databases}
 
+    # Iterate symbol-capable databases first so the per-featureID dedup below keeps
+    # the clone whose name was resolved against a real gene-symbol database
+    # (e.g. KEGG→refseq_gene_symbol for ath). Otherwise a caller-provided list ordered
+    # with a same-DB symbol entry first (e.g. MapMan) silently wins and the symbol
+    # lookup is skipped. Callers build `databases` from a set in some paths, so the
+    # order is not stable — sort here to make the behavior deterministic.
+    databases = sorted(
+        databases,
+        key=lambda d: gene_databases.get(d) == symbol_databases.get(d)
+    )
+
     try:
         # Save found features for each database, plus the unique between them
         matches = {db: set() for db in databases + ["Total"]}
@@ -267,6 +278,15 @@ def mapFeatureIdentifiers(jobID, organism, databases, featureList,  matchedFeatu
 
             originalName = feature.getName()
             featureMatchedInAnyDB = False
+            # Track featureIDs already cloned for THIS feature across the database
+            # loop. When two databases resolve the same input name to the same
+            # featureID (e.g. ath: KEGG and MapMan both return AGI codes), cloning
+            # twice would later collide in addInputGeneData and double every
+            # OmicValue — Gene G1 ends up with [OV_R1, OV_R1, OV_R2, OV_R2] and
+            # the pathway view shows each row twice. PathwayAcquisitionJob already
+            # tags the merged gene with matchingDB=["KEGG","MapMan"] downstream,
+            # so we keep the first DB on the clone and skip subsequent duplicates.
+            seenIDs = set()
 
             # Check all databases for this feature
             for databaseConvertion_name in databases:
@@ -285,6 +305,12 @@ def mapFeatureIdentifiers(jobID, organism, databases, featureList,  matchedFeatu
                         feature.getOmicsValues()[0].getOriginalName() if featureEnrichment else feature.getName())
 
                     for featureID in set(featureIDs):
+                        if featureID in seenIDs:
+                            # Same featureID already cloned from a previous DB —
+                            # cloning again would double OmicValues post-merge.
+                            continue
+                        seenIDs.add(featureID)
+
                         featureClone = feature.clone()  # IF MORE THAN 1 MATCH, CLONE THE FEATURE
                         featureClone.setID(featureID)
 

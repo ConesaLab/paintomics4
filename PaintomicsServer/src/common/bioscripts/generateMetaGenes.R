@@ -11,8 +11,10 @@ getBestIndexBy2SlopeLesser1stQuartilSlope <- function(p) {
       c = c(c,i+2)
     }
   }
+  if (is.null(c)) { return(1) }
   index = which(p$data$y==min(p$data$y[c])) #de los elegidos, el de menor suma de cuadrado
-  return(index)
+  if (length(index) == 0) { return(1) }
+  return(index[1])
 }
 ## Collect arguments   -----------------------------------------------------------------------------------------------
 args <- commandArgs(T)
@@ -130,6 +132,10 @@ if (args$database == "") {
 # GET METAGENES  ------------------------------------------------------------------------------------------------
 cat("STEP 4. Obtaining metagenes, ")
 expression_GO <- get(PCA2GO.fun)(input_data, genes2pathway, var.cutoff = args$cutoff, fac.sel =  sel)
+if (is.null(expression_GO$X.sel)) {
+  cat("No metagenes found for this database and input data. Exiting gracefully.\n")
+  q(save="no", status=0)
+}
 
 
 # ADJUST GENE DIRECTION -----------------------------------------------------------------------------------------
@@ -190,30 +196,33 @@ library(factoextra) #new
 dataScaled <- t(scale(t(data), center = T, scale = F)) #no do scaling with all subset
 dist.res <- Dist(dataScaled, method = "pearson")
 
-if(is.null(args$kclusters)) {
+if(is.null(args$kclusters) || args$kclusters == "dynamic") {
+  if (nrow(dataScaled) < 3) {
+    args$kclusters <- 1
+  } else {
+    ## cutoff default
 
-  ## cutoff default
+    # Compute pairwise distance matrices
 
-  # Compute pairwise distance matrices
+    k.max <- round(sqrt(length(row.names(dataScaled))/2)) + 1
+    if (k.max < 2) k.max <- 2
 
-  k.max <- round(sqrt(length(row.names(dataScaled))/2)) + 1
-
-  if(args$cluster=="kmeans"){
-    # Check best cluster using WSS
-    p = fviz_nbclust(x = dataScaled, FUNcluster = stats::kmeans, method = c("wss"), 
-                     diss = dist.res,
-                     k.max = k.max, verbose = TRUE) +
-      labs(title = "Optimal number of clusters")
-    args$kclusters <- getBestIndexBy2SlopeLesser1stQuartilSlope(p)
-    p <- p + geom_vline(xintercept = args$kclusters, linetype = 2)
-    ggsave(plot = p, filename=paste0(args$output_prefix,"_elbow.png"), width = 15, height = 6, dpi = 200, units = "cm")
-    
-  }else{
-    # Compute clusters using Mclust (ML)
-    fit <- Mclust(dist.res, G = 1:k.max)
-    args$kclusters <- fit$G
+    if(args$cluster=="kmeans"){
+      # Check best cluster using WSS
+      p = fviz_nbclust(x = dataScaled, FUNcluster = stats::kmeans, method = c("wss"), 
+                       diss = dist.res,
+                       k.max = k.max, verbose = TRUE) +
+        labs(title = "Optimal number of clusters")
+      args$kclusters <- getBestIndexBy2SlopeLesser1stQuartilSlope(p)
+      p <- p + geom_vline(xintercept = args$kclusters, linetype = 2)
+      ggsave(plot = p, filename=paste0(args$output_prefix,"_elbow.png"), width = 15, height = 6, dpi = 200, units = "cm")
+      
+    }else{
+      # Compute clusters using Mclust (ML)
+      fit <- Mclust(dist.res, G = 1:k.max)
+      args$kclusters <- fit$G
+    }
   }
-  
 } else {
   args$kclusters = as.integer(args$kclusters)
 }

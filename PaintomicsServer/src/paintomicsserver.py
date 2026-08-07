@@ -36,6 +36,7 @@ from src.servlets.DataManagementServlet import *
 from src.servlets.UserManagementServlet import *
 from src.servlets.Bed2GenesServlet import *
 from src.servlets.MiRNA2GenesServlet import *
+from src.servlets.MOREServlet import fromMOREtoGenes_STEP1
 from src.servlets.AdminServlet import *
 from src.servlets.AIInterpretServlet import *
 from src.common.LoggingSetup import configureLogging
@@ -388,6 +389,13 @@ class Application(object):
             return pathwayAcquisitionAdjustPvalues(request, Response()).getResponse()
 
         # *******************************************************************************************
+        # APPLY REPLICATE→SAMPLE MAPPING (Step-2 confirmation panel)
+        # *******************************************************************************************
+        @self.app.route(SERVER_SUBDOMAIN + '/pa_apply_replicate_mapping', methods=['OPTIONS', 'POST'])
+        def applyReplicateMappingHandler():
+            return pathwayAcquisitionApplyReplicateMapping(request, Response()).getResponse()
+
+        # *******************************************************************************************
         # REGENERATE METAGENES HANDLER
         # *******************************************************************************************
         @self.app.route(SERVER_SUBDOMAIN + '/pa_get_clusters', methods=['OPTIONS', 'POST'])
@@ -445,6 +453,13 @@ class Application(object):
         @self.app.route(SERVER_SUBDOMAIN + '/dm_fromMiRNAtoGenes', methods=['OPTIONS', 'POST'])
         def fromMiRNAtoGenesHandler(exampleMode=False):
             result = fromMiRNAtoGenes_STEP1(request, Response(), self.queue, self.generateRandomID(), self.EXAMPLE_FILES_DIR, exampleMode).getResponse()
+            return result
+        #*******************************************************************************************
+        # fromMOREtoGenes HANDLERS
+        #*******************************************************************************************
+        @self.app.route(SERVER_SUBDOMAIN + '/dm_fromMOREtoGenes', methods=['OPTIONS', 'POST'])
+        def fromMOREtoGenesHandler():
+            result = fromMOREtoGenes_STEP1(request, Response(), self.queue, self.generateRandomID()).getResponse()
             return result
         #*******************************************************************************************
         ##* ALTERNATIVE PIPELINES SERVLETS HANDLERS - END
@@ -635,6 +650,34 @@ class Application(object):
 #################################################################################################################
 ##* SUBCLASSES
 ##*************************************************************************************************************
+import math
+
+
+def _sanitizeForJSON(value):
+    """Recursively convert NaN/Inf floats to None so the response serializes
+    as strict JSON. Python's json.dumps (and Flask's jsonify) emit the literal
+    tokens `NaN` / `Infinity` for these values, which browsers reject in
+    JSON.parse — jQuery then routes the response through the error handler
+    even though the HTTP status was 200, and the user sees a generic
+    "Oops..Internal error!" popup with no message field.
+
+    Omics with legitimate missing measurements (e.g. methylation CpG sites
+    not assayed in every sample) propagate NaN through the response in many
+    places (per-feature `values` arrays, percentile summaries, etc.). Fixing
+    each path individually is whack-a-mole; sanitising once at the response
+    boundary is O(response size) and closes the entire class of bug.
+    """
+    if isinstance(value, float):
+        return None if not math.isfinite(value) else value
+    if isinstance(value, dict):
+        return {k: _sanitizeForJSON(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_sanitizeForJSON(v) for v in value]
+    if isinstance(value, tuple):
+        return tuple(_sanitizeForJSON(v) for v in value)
+    return value
+
+
 class Response(object):
     """This class is used to specify the custom response object"""
 
@@ -652,7 +695,7 @@ class Response(object):
     # GETTERS AND SETTER
     #****************************************************************
     def setContent(self, content):
-        self.content=content
+        self.content = _sanitizeForJSON(content)
         return self
     def getContent(self):
         return self.content

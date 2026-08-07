@@ -343,7 +343,7 @@ function FeatureSet(x, y) {
 	this.setMetagenes = function(metagenes) {
 		this.metagenes = metagenes;
 	};
-	this.addOmicMetagenes = function(omic, featureType, metagenes) {
+	this.addOmicMetagenes = function(omic, featureType, metagenes, replicateMapping, nSamples) {
 		if (this.metagenes === null) {
 			this.metagenes = [];
 		}
@@ -351,6 +351,16 @@ function FeatureSet(x, y) {
 		// All metagenes will share the same graphical data
 		var oldFeatureGraphicalData = this.getFeatures()[0].getFeatureGraphicalData();
 		var featureGraphicalData = jQuery.extend({}, oldFeatureGraphicalData).setID("Metagene_" + oldFeatureGraphicalData.getID());
+
+		// When the parent omic has an active replicate→sample mapping (Step-2
+		// auto-detection or manual design file), collapse the per-replicate
+		// metagene vector to one value per biological sample and stash it on
+		// OmicValue.sampleValues. The Step-4 renderer's `getValues("samples")`
+		// then yields N cells for metagenes the same way it does for regular
+		// features — without this the metagene tooltip stays stuck at N×k
+		// cells even when the rest of the visualisation has switched to
+		// "Show samples".
+		var aggregate = Array.isArray(replicateMapping) && nSamples > 0;
 
 		for (var i = 0; i < metagenes.length; i++) {
 
@@ -361,8 +371,18 @@ function FeatureSet(x, y) {
 				this.metagenes[i] = new FeatureSetElem(metageneFeature, featureGraphicalData).setParent(this);
 			}
 
+			var omicValue = new SimpleOmicValue()
+				.setValues(metagenes[i])
+				.setMetagene(true)
+				.setOmicName(omic);
+
+			if (aggregate) {
+				omicValue.setSampleValues(
+					collapseReplicatesByMapping(metagenes[i], replicateMapping, nSamples));
+			}
+
 			// TODO: add support for compound type in simple omic value
-			this.metagenes[i].getFeature().addOmicsValues(new SimpleOmicValue().setValues(metagenes[i]).setMetagene(true).setOmicName(omic));
+			this.metagenes[i].getFeature().addOmicsValues(omicValue);
 		}
 	};
 	this.getAllOmicValues = function(omic) {
@@ -429,6 +449,11 @@ function OmicValue() {
 	this.relevantAssociation = false;
 	this.values = null;
 	this.isMetagene = false;
+	// Replicate-aggregation fields. Both default to null so legacy jobs and
+	// jobs without an applied sample mapping behave exactly as before — the
+	// renderer falls back to `values` / `relevant`.
+	this.sampleValues = null;     // list[number] — one mean per biological sample
+	this.sampleRelevant = null;   // list[bool]   — OR-collapsed across replicates
 
 	/***********************************************************************
 	* GETTERS AND SETTERS
@@ -446,8 +471,30 @@ function OmicValue() {
 
 		return this;
 	};
-	this.isRelevant = function(index) {
+	this.isRelevant = function(index, mode) {
+		// Mode-aware variant: when mode === "samples" and a sample-aggregation
+		// has been computed for this OmicValue, read from `sampleRelevant`
+		// (one bool per biological sample). All other shapes / modes fall
+		// through to the per-replicate logic below, which is the original
+		// pre-aggregation behaviour.
+		if (mode === "samples" && Array.isArray(this.sampleRelevant)) {
+			if (index !== undefined) {
+				// Mirror the per-replicate guard at line below: a length-≤1
+				// sampleRelevant carries the feature-level "relevant overall"
+				// semantic and surfaces via the row-label `*`, not per-cell
+				// stars. (The server emits length-1 here when the input
+				// relevance file was a single-column / scalar flag.)
+				if (this.sampleRelevant.length <= 1) return false;
+				return this.sampleRelevant[index] === true;
+			}
+			return this.sampleRelevant.some(x => x === true);
+		}
 		if (index !== undefined && Array.isArray(this.relevant)) {
+			// Per-cell stars only mean something with per-condition relevance.
+			// A single-element list (single-column relevant file) means "relevant
+			// overall" — surface that via the row-label `*` from the no-index
+			// branch below, not a misleading first-cell star.
+			if (this.relevant.length <= 1) return false;
 			return this.relevant[index] === true;
 		}
 		if (Array.isArray(this.relevant)) {
@@ -476,8 +523,35 @@ function OmicValue() {
 
 		return this;
 	};
-	this.getValues = function() {
+	this.getValues = function(mode) {
+		// Mode-aware variant: callers that want the replicate-collapsed view
+		// pass mode === "samples". When the OmicValue has a sampleValues array
+		// available, return it; otherwise fall back to the raw replicate values
+		// so the renderer can degrade gracefully on omics where aggregation was
+		// never applied (single-condition data, time courses without reps, …).
+		if (mode === "samples" && Array.isArray(this.sampleValues)) {
+			return this.sampleValues;
+		}
 		return this.values;
+	};
+	this.setSampleValues = function(sampleValues) {
+		this.sampleValues = sampleValues;
+
+		return this;
+	};
+	this.getSampleValues = function() {
+		return this.sampleValues;
+	};
+	this.setSampleRelevant = function(sampleRelevant) {
+		this.sampleRelevant = sampleRelevant;
+
+		return this;
+	};
+	this.getSampleRelevant = function() {
+		return this.sampleRelevant;
+	};
+	this.hasSampleAggregation = function() {
+		return Array.isArray(this.sampleValues);
 	};
 	this.isCompoundOmicsValue = function() {
 		throw Error("Not implemented");
@@ -512,8 +586,26 @@ OmicValue.loadFromJSON = function(jsonObject) {
 		}
 	}
 
+	// Mirror the explicit float/bool coercion done for `values` above so the
+	// aggregation arrays survive round-trips through JSON encoders that
+	// stringify scalars (mongo extended-JSON, legacy serializers, …).
+	if (Array.isArray(jsonObject.sampleValues)) {
+		omicValueInstance.sampleValues = jsonObject.sampleValues.map(function(v) {
+			return parseFloat(v);
+		});
+	} else {
+		omicValueInstance.sampleValues = null;
+	}
+	if (Array.isArray(jsonObject.sampleRelevant)) {
+		omicValueInstance.sampleRelevant = jsonObject.sampleRelevant.map(function(v) {
+			return v === true || v === "True" || v === "true";
+		});
+	} else {
+		omicValueInstance.sampleRelevant = null;
+	}
+
 	for(var i in jsonObject){
-		if(i !== "values"){
+		if(i !== "values" && i !== "sampleValues" && i !== "sampleRelevant"){
 			omicValueInstance[i] = jsonObject[i];
 		}
 	}
@@ -560,3 +652,35 @@ function SimpleOmicValue() {
 
 }
 SimpleOmicValue.prototype = new OmicValue;
+
+/**
+ * Collapse a per-replicate vector to a per-sample vector by averaging the
+ * elements that share a sample index. Mapping convention matches the
+ * server-side aggregation: `mapping[col]` holds the sample index for that
+ * replicate column, or a negative value when the column is unmatched (in
+ * which case it is dropped from the mean). Non-finite inputs are skipped;
+ * a sample with no contributing values yields NaN, which the renderer
+ * already treats as "no data" (same fallback as feature-level sampleValues).
+ *
+ * Kept as a free function rather than an OmicValue method because the
+ * client-side metagene path (PA_Step4Views.js) computes the aggregation
+ * once per metagene vector returned by PCA, before any OmicValue exists.
+ */
+function collapseReplicatesByMapping(values, mapping, nSamples) {
+	var sums = new Array(nSamples).fill(0);
+	var counts = new Array(nSamples).fill(0);
+	var n = Math.min(values.length, mapping.length);
+	for (var i = 0; i < n; i++) {
+		var s = mapping[i];
+		if (s < 0 || s >= nSamples) continue;
+		var v = Number(values[i]);
+		if (!isFinite(v)) continue;
+		sums[s] += v;
+		counts[s] += 1;
+	}
+	var out = new Array(nSamples);
+	for (var j = 0; j < nSamples; j++) {
+		out[j] = counts[j] > 0 ? sums[j] / counts[j] : NaN;
+	}
+	return out;
+}
