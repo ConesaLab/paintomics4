@@ -437,15 +437,28 @@ ul.menu li.loggedOption, ul.menu span.loggedOption {
 	font-size: 12px;
 	padding: 4px 6px;
 }
+/* The label here was fixed earlier; the boundary was not. A #5bc0de fill on
+   white or on the #F2F2F2 toolbar is 1.87-2.09:1, and the old #46b8da border
+   only reached 2.05-2.30:1, so nothing about this button's edge told you it was
+   a button - WCAG 1.4.11 wants 3:1 for exactly that.
+
+   The fill stays. It is doing type-coding work and earlier iterations
+   deliberately kept it, so the border is what carries the boundary instead:
+   #1F7F9B gives 4.60:1 on white and 4.11:1 on the toolbar. That value is not a
+   new colour - it is the Pathway information panel header, reused.
+
+   The border does not darken on hover. The fill already darkens to #31b0d5,
+   which is the feedback; a second moving part would just be one more value to
+   keep in sync. */
 .btn-info{
 	color: #333; /* dark ink on the light cyan fill - 6.04:1 */
 	background-color: #5bc0de;
-	border-color: #46b8da;
+	border-color: #1F7F9B;
 }
 .btn-info:hover {
 	color: #333; /* 4.99:1 */
 	background-color: #31b0d5;
-	border-color: #269abc;
+	border-color: #1F7F9B;
 }
 .btn-success {
 	color: #fff;
