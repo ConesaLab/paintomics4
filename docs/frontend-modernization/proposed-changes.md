@@ -231,7 +231,7 @@ further failing pairs; 12 were fixed in `main.css`, and these 8 cannot be,
 because the colour is set in a view file this branch does not own. All are
 normal-weight text under 18.66px, so the bar is 4.5:1.
 
-### `PA_Step3Views.js` - database and kingdom badge letters
+### ~~`PA_Step3Views.js` - database and kingdom badge letters~~ — RESOLVED (iteration 10)
 
 The single-letter badges in the pathway grid. `R` alone renders 524 times on a
 default Step 3, so this is high-volume, not incidental.
@@ -245,10 +245,13 @@ default Step 3, so this is high-volume, not incidental.
 | O | `#c644fc` | 3.73:1 | `#B817FB` | 4.61:1 |
 | G | `#ff2d55` | 3.65:1 | `#EB002D` | 4.59:1 |
 
-Each suggestion keeps the original hue and saturation and moves lightness only,
-so the badges stay mutually distinguishable. `#ffcd02` is the awkward one - no
-yellow carries 4.5:1 as text on white, so it necessarily reads as dark gold; if
-that is unacceptable, give that badge a filled chip with dark text instead.
+**Fixed, but not this way — see entry 5's resolution.** The darkenings above
+were never applied, because they solve the badge in isolation and break its
+relationship with the chart. `getClassificationColor()` also feeds the
+classification pie chart and the pathway grid's colour stripes, so a badge
+darkened for legibility would no longer match the slice it indexes. Making the
+palette colour the chip *fill* instead of the ink fixes both tables at once and
+leaves the palette untouched.
 
 ### `PA_Step4Views.js` - inline panel fills
 
@@ -292,7 +295,7 @@ fill already uses, so the palette does not gain a new colour.
 
 ## 5. Reactome classification badges - 18 colours, all far below AA
 
-**Status:** open
+**Status:** RESOLVED in iteration 10 — see "How it was actually fixed" below
 **Raised:** iteration 7 (branch `frontend-modernization`)
 
 Every audit before this one measured only what was on screen, and elements
@@ -337,3 +340,37 @@ list. If preserving the pastels matters, the alternative is to stop using these
 colours as *text* and render each badge as a filled chip with dark ink instead -
 the same move already made for the omic boxes in `main.css`, which kept the
 type-coding intact while fixing legibility.
+
+### How it was actually fixed (iteration 10)
+
+The alternative won, and the caveat above turned out to be the deciding
+argument rather than a footnote. Three things ruled out the darkening table:
+
+1. **The palette is shared.** `getClassificationColor()` is read by the
+   classification pie chart (`colors`, `textColor`, `strokeColor`) and by the
+   pathway grid's per-row colour stripe, not only by the badge. Darkening it
+   would have desynchronised every badge from the chart slice it indexes.
+2. **`#008888` / `#009999` had no mechanical answer.** Both darken onto
+   `#008383`, collapsing two classifications into one colour. That needed a hue
+   decision nobody could make from a contrast table.
+3. **Eighteen darkenings would have cost the pastel identity** for a palette
+   whose entire job is to be distinguishable at a glance.
+
+So the colour moved from the ink to the fill. `classificationBadgeStyle()` in
+`Util.js` paints the palette value as the chip background and draws the letter
+in whichever of black or white contrasts better with it, choosing at the
+luminance crossover of 0.1791. **Every palette value is unchanged**, so the
+chart and the stripes are untouched, and the two teals stay distinct.
+
+Verified on the running server (job `24u543f6b7`, mmu, 888/44): 963 badges
+rendered, **34 distinct fill/ink pairs, zero below 4.5:1**. The weakest is
+`#c1502e` with white at 4.71:1. The mapping is computed rather than tabulated,
+so colours added to the palette later are conformant by construction.
+
+`main.css` carries two supporting changes: a 1px `rgba(0,0,0,0.22)` inset ring,
+which only does visible work at the pale end of the palette where a chip would
+otherwise dissolve into the page, and a disabled state rewritten as a flat
+`#E8E8E8` chip with `#595959` ink (5.72:1) — the old rule set ink and border
+only, which on a filled chip left the palette colour showing through.
+
+This also closes the badge half of entry 4.

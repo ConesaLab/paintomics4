@@ -1054,12 +1054,21 @@ div[id ^= "networkClustersContainer_"], div[id ^= "patwaysDetailsWrapper_"]{over
 div[id ^= "networkSettingsPanel_"], div[id ^= "networkDetailsPanel_"] {width:260px; float:right; margin:0; margin-left:10px;height: 843px;overflow: auto;}
 div[id ^= "networkDetailsPanel_"] {width:270px;}
 
+/* Classification / database badge. The fill and the letter colour are set
+   inline by classificationBadgeStyle() in Util.js - see the comment there for
+   why the palette colour is the chip fill rather than the ink.
+
+   The inset ring gives the chip an edge on white. It only does visible work for
+   the pale end of the palette (#ffff00, #deeaee, #99ffcc and friends), which
+   would otherwise dissolve into the page; on the dark end it is imperceptible,
+   which is why one flat rgba value covers all 36 colours. */
 i.classificationNameBox {
 	margin-right: 10px;
 	border-radius: 50%;
 	line-height: 24px;
 	display: inline-block;
 	border: 2px solid;
+	box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.22);
 	font-style: normal;
 	width: 24px;
 	height: 24px;
@@ -1072,7 +1081,11 @@ div[id ^= "pathwayClassificationContainer"] {overflow-y: auto; overflow-x: hidde
 .step3ClassificationsChildrenContainer{display: none; margin-left: 30px;border-left: 1px dotted #B1B1B1;padding-left: 10px;}
 .step3ClassificationsTitle{cursor: pointer;}
 .step3ClassificationsTitle.disabled {color: #BBBBBB;text-decoration: line-through;}
-.step3ClassificationsTitle.disabled >  i.classificationNameBox{color: #D2D2D2 !important; border-color: #D2D2D2 !important;}
+/* Disabled badge: a flat grey chip, matching the filled shape of the enabled
+   one. The old rule set only the ink and the border, which on a filled chip
+   left the palette colour showing through. #595959 on #E8E8E8 is 5.72:1, so the
+   letter stays readable while the chip clearly reads as switched off. */
+.step3ClassificationsTitle.disabled >  i.classificationNameBox{color: #595959 !important; background-color: #E8E8E8 !important; border-color: #E8E8E8 !important;}
 .step3ClassificationsOptions{display: none; margin-left: 10px;font-size: 11px;}
 .step3ClassificationsTitle:hover > .step3ClassificationsOptions{display: inline-block;}
 .step3ClassificationsOptions a {margin: 0px 2px;}
