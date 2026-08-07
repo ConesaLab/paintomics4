@@ -182,8 +182,19 @@ a:hover {color: var(--pa-link-hover);}
 	height: 50px;
 	/*z-index: 100;*/
 }
+/* Chrome weight ---------------------------------------------------------------
+   The header band and the left menu were both #222222, which against the
+   #F3F3F3 page is 14.34:1 - the maximum contrast the palette can produce, spent
+   on navigation rather than on the data. Two near-black masses framing the
+   screen is what made the application feel heavy.
+
+   #33343A is still unambiguously a dark chrome, but at 11.18:1 it stops
+   competing with the analysis. The labels on it stay well clear of AA (#ADADAD
+   is 5.53:1, the wordmark 12.01:1), and the #858585 border added to the Sign in
+   button still measures 3.36:1 against it, so lightening the bar does not undo
+   that fix. */
 .mainTopToolbar {
-	background: #222222;
+	background: #33343A;
 }
 
 /* The Sign in / Log out button is a .button, so it inherits the #5b5a59 fill
@@ -224,7 +235,7 @@ a:hover {color: var(--pa-link-hover);}
 	float: left;
 }
 #header h1 {
-	font-size: 30px;
+	font-size: 26px;
 	margin-left: 47px;
 	font-weight: lighter;
 	color: rgb(255, 251, 242);
@@ -237,12 +248,28 @@ a:hover {color: var(--pa-link-hover);}
 ***STYLES FOR LATERAL MENU** *******************************
 ***********************************************************/
 
+/* Navigation rail -------------------------------------------------------------
+   What made this column feel heavy was its pattern, not its colour. Every item
+   was a 25px icon - larger than any type in the interface it navigates to - with
+   an 11px label underneath that wrapped to two lines for half the entries
+   ("Personal storage", "Supporting tools"), and the active item was marked by a
+   2px strip welded to the left edge of the rail. The result was a dense stack of
+   ragged two-line blocks with a hard bar down one side.
+
+   Rebuilt as a standard rail: each item is a self-contained rounded target with
+   its own padding, the active state is a filled pill rather than an edge strip,
+   and the icon is sized to sit with the label instead of dominating it. Nothing
+   here changes the rail's 65px width, which the ExtJS border layout measures.
+
+   The per-section accent colours are kept but moved from the vanished left
+   border onto the icon, so Job view stays pink, Personal storage yellow and so
+   on - the identity survives the change of shape. */
 .lateralMenu {
-	background-color: #222222;
-	border: 1px solid #E0E0E0;
+	background-color: #33343A;
+	border: 0;
 	z-index: 200;
 	margin: 0;
-	padding: 0;
+	padding: 8px 6px;
 	width: 65px;
 }
 ul.lateralMenu-body, ul.submenu {
@@ -251,32 +278,49 @@ ul.lateralMenu-body, ul.submenu {
 	margin-top: 5px;
 }
 .lateralMenu .menuOption {
-	color: #ADADAD;
-	font-size: 12px;
-	padding: 5px 0px;
+	color: #A8A9B0;
+	font-size: 10px;
+	line-height: 1.3;
+	padding: 9px 2px 8px;
+	margin-bottom: 2px;
 	border: 0;
-	border-left: 2px solid #222222;
+	border-radius: 8px;
 	text-align: center;
 	cursor: pointer;
+	transition: background-color var(--pa-transition), color var(--pa-transition);
 }
-.lateralMenu .menuOption:hover, .lateralMenu .menuOption.selected {
-	border-left: 2px solid #CE3271;
+/* Hover and active are the same shape at two strengths. Both are white at low
+   alpha rather than a fixed grey, so they keep working if the rail's background
+   is ever retuned again. */
+.lateralMenu .menuOption:hover {
 	color: #FFF;
-	background-color: #404040;
+	background-color: rgba(255, 255, 255, 0.08);
 }
-.lateralMenu .menuOption:nth-child(2):hover, .lateralMenu .menuOption:nth-child(2).selected {
-	border-left-color: #CEC232;
+.lateralMenu .menuOption.selected {
+	color: #FFF;
+	background-color: rgba(255, 255, 255, 0.15);
 }
-.lateralMenu .menuOption:nth-child(3):hover, .lateralMenu .menuOption:nth-child(2).selected {
-	border-left-color: #7CC0FF;
+.lateralMenu .menuOption:hover > i.fa,
+.lateralMenu .menuOption.selected > i.fa {
+	color: #CE3271;
 }
-.lateralMenu .menuOption:nth-child(4):hover, .lateralMenu .menuOption:nth-child(2).selected {
-	border-left-color: #84DA91;
+.lateralMenu .menuOption:nth-child(2):hover > i.fa,
+.lateralMenu .menuOption:nth-child(2).selected > i.fa {
+	color: #CEC232;
+}
+.lateralMenu .menuOption:nth-child(3):hover > i.fa,
+.lateralMenu .menuOption:nth-child(3).selected > i.fa {
+	color: #7CC0FF;
+}
+.lateralMenu .menuOption:nth-child(4):hover > i.fa,
+.lateralMenu .menuOption:nth-child(4).selected > i.fa {
+	color: #84DA91;
 }
 li.menuOption i.fa {
 	display: block;
-	font-size: 25px;
-	margin-top: 5px;
+	font-size: 17px;
+	margin: 0 0 5px;
+	transition: color var(--pa-transition);
 }
 ul.submenu {
 	display: none;
@@ -776,10 +820,45 @@ body > .x-mask {
 	border-radius: var(--pa-radius);
 	box-shadow: 0 12px 28px -8px rgba(24, 24, 27, 0.22), 0 6px 12px -6px rgba(24, 24, 27, 0.14);
 }
+/* The first attempt at this made the header *heavier*: moving Neptune's #3892d3
+   to the darker #287AB6 fixed the white title's contrast but a saturated blue
+   band is exactly the weight that needed removing. So the band goes neutral
+   instead - the same #F6F6F6 the section headers inside .contentbox already
+   use, with dark text on it, which is both lighter and consistent with the rest
+   of the application. Contrast stops being a problem rather than being
+   negotiated: #222 on #F6F6F6 is 15.9:1. */
+/* The header carries its own 5px #3892d3 border on three sides, separate from
+   the window's - which is why a blue edge survived hugging the top corners
+   after the window frame was already down to a hairline. Zeroed, leaving only
+   the divider under the title. */
 .x-message-box > .x-window-header {
-	background-color: #287AB6;
+	background-color: #F6F6F6;
 	background-image: none;
+	border-width: 0 0 1px;
+	border-style: solid;
+	border-color: var(--pa-border);
 	border-radius: var(--pa-radius) var(--pa-radius) 0 0;
+}
+.x-message-box > .x-window-header .x-header-text {
+	color: #222;
+}
+
+/* The close control is an <img> whose glyph comes from a sprite laid over a
+   background *colour* - Neptune fills it #3892d3, which was invisible against
+   the old blue header and is a saturated dot against the new light one.
+
+   Only the fill changes. Blanking the sprite instead was tried and is wrong
+   twice over: it leaves a bare coloured square, and an <img> is a replaced
+   element so it cannot carry the ::before/::after that would redraw the ✕.
+   A muted grey keeps the knocked-out glyph legible and stops the control from
+   being the brightest thing in a header whose whole point is now to be quiet. */
+.x-message-box .x-tool-img.x-tool-close {
+	background-color: #8A8B92;
+	border-radius: 3px;
+	transition: background-color var(--pa-transition);
+}
+.x-message-box .x-tool-img.x-tool-close:hover {
+	background-color: #5A5B62;
 }
 
 /* A window carries *two* frames: its own border, and a second one on
