@@ -1528,12 +1528,62 @@ div.availableOmicsBox h4 {
 #clusternumber_box p, #threshold_box p {
 	margin: 20px;
 }
+/* Each database gets a name, a paragraph about it, and the table of what
+   matched in it. The table is the answer the card exists to give, so it is
+   centred under the prose that introduces it rather than left hanging between
+   two unequal margins, and it carries the same treatment as every other table
+   on the results pages - it was the one place left with a pure-black 1px
+   border and cells with no vertical padding. */
 #dbs_message dt {
-	font-weight: bold;
+	font-weight: 600;
+	font-size: 13px;
+	color: #27272A;
 	padding-left: 5px;
+	margin-top: 20px;
 }
 #dbs_message dd {
-
+	margin: 6px 0 0;
+}
+#dbs_message dd > div[id^="matching_table_"] {
+	display: flex;
+	justify-content: center;
+	padding: 18px 0 6px;
+}
+#dbs_message table {
+	border: 1px solid var(--pa-border);
+	border-radius: var(--pa-radius);
+	border-collapse: separate;
+	border-spacing: 0;
+	overflow: hidden;
+	background-color: #FFFFFF;
+	min-width: 340px;
+}
+#dbs_message table th {
+	padding: 9px 18px;
+	border-bottom: 1px solid var(--pa-border);
+	background-color: #FAFAFA;
+	color: #52525B;
+	font-size: 11.5px;
+	font-weight: 600;
+	text-align: left;
+	white-space: nowrap;
+}
+#dbs_message table td {
+	padding: 9px 18px;
+	border-top: 1px solid #F1F1F3;
+	font-size: 12.5px;
+	color: #27272A;
+}
+/* The first row is the <th> header, so the first data row is the second one -
+   without this it draws a second rule directly under the header's. */
+#dbs_message table tr:nth-child(2) td {
+	border-top: 0;
+}
+/* Counts read as a column of magnitudes, so they line up digit for digit. */
+#dbs_message table th:last-child,
+#dbs_message table td:last-child {
+	text-align: right;
+	font-variant-numeric: tabular-nums;
 }
 
 /********************************************************************************
@@ -1815,43 +1865,38 @@ div#tabcontainer_network .x-tab-center {
 	margin-top: -10px;
 }
 /* This card holds exactly two things - an explanation and a small summary
-   table - and it used to stack them down the left of a 1300px box, with the
-   prose capped at its reading measure and a 200px min-height propping open the
-   emptiness underneath. Side by side, the measure stays readable and the width
-   is actually used. */
+   table. Stacking them down the left of a 1300px box left the right half empty;
+   putting them side by side used the width but weighted the card to one side,
+   because the prose is ten times the table's area and the two have no shared
+   edge to align on.
+
+   So they run down the centre instead: the prose reads at its natural measure,
+   the table sits under the sentence that introduces it ("the pathways summary
+   splitted by databases is the following one"), and the card is symmetric at
+   every width without needing a breakpoint. */
 div#multisource_msg {
 	display: grid;
-	grid-template-columns: minmax(0, 1fr) auto;
+	grid-template-columns: minmax(0, 1fr);
 	grid-template-areas:
-		"head head"
-		"text summary";
-	column-gap: 40px;
-	align-items: start;
+		"head"
+		"text"
+		"summary";
+	row-gap: 18px;
 }
 div#multisource_msg > h2 { grid-area: head; }
-/* The heading is a full-bleed band, so the inset that makes this read as a card
-   goes on the two content areas rather than on the grid. Without it the table's
-   right border landed exactly on the card's own border. */
+/* The prose stays left-aligned at its reading measure - centring it too left a
+   475px ribbon of text stranded in the middle of a 1360px card, which is a
+   worse imbalance than the one being fixed. Only the table is centred. */
 div#multisource_msg > p {
 	grid-area: text;
-	padding-left: 20px;
-	margin-bottom: 0;
+	max-width: 105ch;
+	margin: 0;
+	padding: 0 24px;
 }
 div#multisource_summary {
 	grid-area: summary;
-	margin-right: 20px;
-	margin-bottom: 4px;
-}
-
-/* Below this the two columns stop being two columns: the table needs ~300px
-   and the prose stops being readable long before the gap closes. */
-@media (max-width: 1100px) {
-	div#multisource_msg {
-		grid-template-columns: minmax(0, 1fr);
-		grid-template-areas: "head" "text" "summary";
-		row-gap: 16px;
-	}
-	div#multisource_summary { justify-self: start; }
+	justify-self: center;
+	margin-bottom: 22px;
 }
 /* This was `1px solid black` - the only pure-black edge in the application, on
    a table sitting inside an already-bordered card, so it read as a screenshot
