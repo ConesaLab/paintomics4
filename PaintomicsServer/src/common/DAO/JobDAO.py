@@ -50,6 +50,9 @@ class JobDAO(DAO):
 
         if jobType == "Bed2GeneJob":
             daoInstance = Bed2GeneJobDAO()
+        elif jobType == "MOREJob":
+            from src.common.DAO.MOREJobDAO import MOREJobDAO
+            daoInstance = MOREJobDAO()
         else:
             daoInstance = PathwayAcquisitionJobDAO()
 

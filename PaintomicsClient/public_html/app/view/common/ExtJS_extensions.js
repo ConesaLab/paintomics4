@@ -215,6 +215,7 @@ Ext.define('Ext.grid.LiveSearchGridPanel', {
                 scope: me
             }, 'Case sensitive', {
                 xtype: 'checkbox',
+                itemId: 'searchByIdCheckbox',
                 hideLabel: true,
                 margin: '0 0 0 4px',
                 handler: me.searchByIDToggle,
@@ -398,6 +399,36 @@ Ext.define('Ext.grid.LiveSearchGridPanel', {
     searchByIDToggle: function (checkbox, checked) {
         this.searchFor = checked ? 'identifiers' : 'title';
         this.onTextFieldChange();
+    },
+    /**
+     * Programmatic "find this feature in the table" entry point used by sibling
+     * panels (e.g. the MORE Regulation views) to hand off a target/regulator ID.
+     * Switches the live filter to the hidden `identifiers` field — which holds
+     * every ID form of each matched gene/compound (see
+     * PA_Step3PathwayTableView.getIdentifiersFromMatched) — ticks the matching
+     * checkbox so the mode is visible/clearable, and drops `id` into the search
+     * box. Idempotent.
+     * @param {String} id The feature ID to search for.
+     */
+    searchByFeatureID: function (id) {
+        var me = this;
+        if (id === null || id === undefined || id === '') {
+            return;
+        }
+        // Filter against the per-row identifiers, not the pathway title.
+        me.searchFor = 'identifiers';
+        // Reflect the mode in the checkbox without re-triggering its handler —
+        // we set searchFor ourselves and run the filter via setValue below.
+        var checkbox = me.down('#searchByIdCheckbox');
+        if (checkbox) {
+            checkbox.suspendEvents();
+            checkbox.setValue(true);
+            checkbox.resumeEvents();
+        }
+        if (me.textField) {
+            me.textField.setValue(id);
+        }
+        me.onTextFieldChange();
     },
     /**
      * Switch to case sensitive mode.

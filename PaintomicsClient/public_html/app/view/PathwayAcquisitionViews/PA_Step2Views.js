@@ -294,6 +294,23 @@ function PA_Step2JobView() {
 			omicSummaryPanelComponents.splice(2, 0, dbs_message, {xtype: 'container', html:'<div style="display: none;"></div>'});
 		}
 
+		// Replicate-detection card — only renders when at least one omic has
+		// a complete or partial replicate detection result. Built via its own
+		// view so the wiring (radios, file picker, server POST) lives in one
+		// self-contained component instead of leaking into PA_Step2JobView.
+		var replicateDetectionView = new PA_Step2ReplicateDetectionView();
+		replicateDetectionView.loadModel(me.getModel());
+		if (replicateDetectionView.hasContent()) {
+			var repComponent = replicateDetectionView.initComponent();
+			if (repComponent) {
+				// Append after the data-distribution box; pad with an empty
+				// container to keep the column-layout "odd/even" alignment
+				// consistent with the existing Step-2 cards.
+				omicSummaryPanelComponents.push(repComponent,
+					{xtype: 'container', html:'<div style="display: none;"></div>'});
+			}
+		}
+
 		var compoundsComponents = [];
 
 		if (me.items.length > 0) {
@@ -429,6 +446,256 @@ function PA_Step2JobView() {
 	return this;
 }
 PA_Step2JobView.prototype = new View();
+
+/***********************************************************************
+* PA_Step2ReplicateDetectionView
+*
+* Step-2 confirmation panel for the replicate→sample aggregation feature.
+* Renders one card per omic whose values-file column headers match the
+* conservative replicate-suffix detector (see ReplicateDetection.py on the
+* server). Each card lets the user choose between three modes:
+*
+*   - Show all replicates  (the existing visualisation, no aggregation).
+*   - Average replicates    (auto: use the server-detected sample grouping).
+*   - Upload design file    (manual: 2-column TSV mapping each column to a
+*                            biological sample label).
+*
+* On confirm, the panel POSTs to /pa_apply_replicate_mapping per-omic. The
+* server walks every Feature, computes per-sample means, and stores
+* sampleValues/sampleRelevant on each OmicValue. Step-4 reads those when
+* the visualisation toggle flips to "samples" mode.
+***********************************************************************/
+function PA_Step2ReplicateDetectionView() {
+	this.name = "PA_Step2ReplicateDetectionView";
+	this.omics = [];
+
+	this.loadModel = function(jobModel) {
+		this.model = jobModel;
+		// Pull every gene/compound omic. We surface a card whenever the server
+		// produced *any* detection result — including partial — so the user
+		// always has the option to upload an explicit design file.
+		var allOmics = (jobModel.getGeneBasedInputOmics() || [])
+			.concat(jobModel.getCompoundBasedInputOmics() || []);
+		this.omics = allOmics.filter(function(o) {
+			var det = o.replicateDetection;
+			return det && (det.status === "complete" || det.status === "partial");
+		});
+	};
+
+	this.hasContent = function() {
+		return this.omics.length > 0;
+	};
+
+	/**
+	 * Build the contentbox HTML for one omic card. Rendered into a single
+	 * outer box so the styling matches the existing Step-2 cards (the
+	 * `omicSummaryBox` / `contentbox` pattern).
+	 */
+	this._renderOmicCard = function(omic) {
+		var det = omic.replicateDetection;
+		var omicId = omic.omicName.replace(/[^a-zA-Z0-9]/g, "_");
+		var nSamples = det.sampleHeader.length;
+		var nReplicates = det.mapping.filter(function(m) { return m >= 0; }).length;
+
+		// Build a small preview list — capped to keep the UI compact.
+		var previewRows = det.sampleHeader.slice(0, 12).map(function(sample, idx) {
+			var replicateCols = det.groups[idx].map(function(colIdx) {
+				return omic.omicHeader[colIdx + 1];
+			}).join(", ");
+			return '<li><b>' + sample + '</b> ← ' + replicateCols + '</li>';
+		}).join("");
+		if (det.sampleHeader.length > 12) {
+			previewRows += '<li class="repDetectionMore">…and ' + (det.sampleHeader.length - 12) + ' more</li>';
+		}
+
+		var statusNote = "";
+		if (det.status === "partial") {
+			var unmatchedCols = det.unmatched.map(function(idx) {
+				return omic.omicHeader[idx + 1];
+			}).slice(0, 5).join(", ");
+			statusNote =
+				'<p class="repDetectionWarn"><i class="fa fa-exclamation-triangle"></i> ' +
+				'Detection is incomplete — ' + det.unmatched.length + ' column(s) ' +
+				'do not look like replicates (' + unmatchedCols +
+				(det.unmatched.length > 5 ? ', …' : '') +
+				'). Upload a design file to confirm the grouping.</p>';
+		}
+
+		// Default radio: "auto" if complete, otherwise "off".
+		var autoChecked   = (det.status === "complete") ? "checked" : "";
+		var offChecked    = (det.status === "complete") ? "" : "checked";
+
+		return '' +
+			'<div class="repDetectionCard" data-omic="' + omic.omicName + '" data-omicid="' + omicId + '">' +
+			'  <h3>' + omic.omicName + '</h3>' +
+			'  <p class="repDetectionSummary">' +
+			       nSamples + ' sample(s) detected across ' + nReplicates + ' replicate column(s).' +
+			'  </p>' +
+			   statusNote +
+			'  <ul class="repDetectionPreview">' + previewRows + '</ul>' +
+			'  <div class="repDetectionRadios">' +
+			'    <label><input type="radio" name="repMode_' + omicId + '" value="off" ' + offChecked + '> Show all replicates</label>' +
+			'    <label><input type="radio" name="repMode_' + omicId + '" value="auto" ' + autoChecked + ' ' +
+			          (det.status === "complete" ? "" : "disabled") +
+			          '> Average replicates' + (det.status === "complete" ? " <span class=\"repDetectionRecommended\">(recommended)</span>" : "") + '</label>' +
+			'    <label><input type="radio" name="repMode_' + omicId + '" value="manual"> Upload design file</label>' +
+			'  </div>' +
+			'  <div class="repDetectionManual" style="display: none;">' +
+			'    <input type="file" class="repDetectionFile" accept=".tsv,.txt,.tab,.csv" />' +
+			'    <p class="repDetectionFormatHint">2 columns, tab- or comma-separated: <code>sample_column &lt;TAB&gt; sample_label</code>. Header row optional.</p>' +
+			'  </div>' +
+			'  <div class="repDetectionStatus"></div>' +
+			'</div>';
+	};
+
+	this.initComponent = function() {
+		var me = this;
+		if (!this.hasContent()) {
+			return null;
+		}
+
+		var cards = this.omics.map(function(o) { return me._renderOmicCard(o); }).join("");
+
+		this.component = Ext.widget({
+			xtype: 'box',
+			cls: "contentbox omicSummaryBox repDetectionBox",
+			minHeight: 240,
+			html:
+				'<div id="repDetection">' +
+				'  <h2>Replicate detection ' +
+				'    <span class="helpTip" title="When your values file contains technical or biological replicates of the same biological sample (e.g., Ctrl_R1, Ctrl_R2), Paintomics can collapse them to one cell per sample in the pathway visualization. Choose how each omic should be handled below."></span>' +
+				'  </h2>' +
+				'  <p>The column headers below look like <i>replicates</i> of a smaller set of biological samples. ' +
+				'     Choose how Paintomics should display them in the pathway visualization. ' +
+				'     You can change this later from the visualization toolbar.</p>' +
+				   cards +
+				'</div>',
+			listeners: {
+				boxready: function() {
+					me._wireHandlers();
+					initializeTooltips(".helpTip");
+				}
+			}
+		});
+
+		return this.component;
+	};
+
+	/**
+	 * Per-card jQuery wiring: switching the auto/off radios applies the
+	 * mode immediately (no explicit Apply step). Switching to "manual"
+	 * just reveals the file picker — the apply call fires once the user
+	 * actually chooses a design file.
+	 */
+	this._wireHandlers = function() {
+		var me = this;
+
+		$(".repDetectionCard").each(function() {
+			var $card = $(this);
+
+			$card.find("input[type=radio]").change(function() {
+				var mode = $card.find("input[type=radio]:checked").val();
+				$card.find(".repDetectionManual").toggle(mode === "manual");
+				$card.find(".repDetectionStatus")
+					.removeClass("repDetectionError repDetectionOK")
+					.text("");
+				if (mode === "auto" || mode === "off") {
+					me._applyForCard($card);
+				}
+			});
+
+			$card.find(".repDetectionFile").change(function() {
+				me._applyForCard($card);
+			});
+		});
+	};
+
+	this._applyForCard = function($card) {
+		var omicName = $card.attr("data-omic");
+		var mode = $card.find("input[type=radio]:checked").val();
+		var $status = $card.find(".repDetectionStatus");
+
+		$status.removeClass("repDetectionError repDetectionOK").text("Applying…");
+
+		var send = function(designBody) {
+			$.ajax({
+				type: "POST",
+				url: SERVER_URL_PA_APPLY_REPLICATE_MAPPING,
+				contentType: "application/json",
+				data: JSON.stringify({
+					jobID:    this.model.getJobID(),
+					omicName: omicName,
+					mode:     mode,
+					design:   designBody || null
+				}),
+				context: this,
+				success: function(response) {
+					if (response.success) {
+						$status.addClass("repDetectionOK");
+						if (response.status === "cleared") {
+							$status.text("Cleared — replicates will be shown individually.");
+						} else {
+							$status.text(
+								"Applied — " + response.sampleHeader.length + " sample(s), " +
+								response.featuresUpdated + " feature(s) updated."
+							);
+						}
+						// Mirror the result onto the model so Step-4 picks it up
+						// without an extra server round-trip.
+						var omic = this._findInputOmic(omicName);
+						if (omic) {
+							omic.sampleHeader     = response.sampleHeader;
+							omic.replicateMapping = response.mapping;
+							omic.replicateSource  = response.mode;
+						}
+					} else {
+						$status.addClass("repDetectionError");
+						$status.text(response.errorMessage || "Server returned an error.");
+					}
+				},
+				error: function(xhr) {
+					$status.addClass("repDetectionError");
+					var msg = "Network error.";
+					try {
+						var parsed = JSON.parse(xhr.responseText);
+						if (parsed && parsed.errorMessage) msg = parsed.errorMessage;
+					} catch (e) { /* keep default */ }
+					$status.text(msg);
+				}
+			});
+		}.bind(this);
+
+		if (mode === "manual") {
+			var fileInput = $card.find(".repDetectionFile")[0];
+			if (!fileInput || !fileInput.files || !fileInput.files[0]) {
+				$status.addClass("repDetectionError").text("Please choose a design file first.");
+				return;
+			}
+			var reader = new FileReader();
+			reader.onload = function(e) {
+				send(e.target.result);
+			};
+			reader.onerror = function() {
+				$status.addClass("repDetectionError").text("Could not read file.");
+			};
+			reader.readAsText(fileInput.files[0]);
+		} else {
+			send(null);
+		}
+	};
+
+	this._findInputOmic = function(omicName) {
+		var omics = (this.model.getGeneBasedInputOmics() || [])
+			.concat(this.model.getCompoundBasedInputOmics() || []);
+		for (var i = 0; i < omics.length; i++) {
+			if (omics[i].omicName === omicName) return omics[i];
+		}
+		return null;
+	};
+
+	return this;
+}
+PA_Step2ReplicateDetectionView.prototype = new View();
 
 function PA_Step2CompoundSetView() {
 	/***********************************************************************

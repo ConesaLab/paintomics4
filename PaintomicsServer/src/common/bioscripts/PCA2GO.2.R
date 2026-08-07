@@ -3,7 +3,7 @@
 # associated by belonging to a GO, given a selection of GOs
 # It prodices a matrix X.sel with columns the number of
 # conditions and rows the number of GO_genes
-# 
+#
 # Input data
 # X: expression data matrix
 # selection: GO selection object obtained by select.GO
@@ -16,6 +16,29 @@
 #
 # Ana Conesa aconesa@cipf.es 8 September 2007
 ############################################################
+
+# pca4NA: row-mean imputation of NA entries before PCA. Called from PCA2GO.2
+# whenever the per-GO gene submatrix contains any NA, which happens for omics
+# with legitimate missing measurements (e.g. methylation CpG sites not assayed
+# in every sample). PCA.GENES propagates NAs through mean()/eigen() and fails;
+# imputing each NA with its row's mean across observed cells keeps the row's
+# centre intact and lets PC1 still capture between-sample variance. Rows that
+# are entirely NA are dropped — there's no signal to recover. The function was
+# referenced in this script for years but never defined; pre-MORE omics never
+# carried NAs, so the branch was effectively dead code.
+pca4NA <- function(X) {
+  X <- as.matrix(X)
+  row_means <- rowMeans(X, na.rm = TRUE)
+  keep <- !is.nan(row_means) & !is.na(row_means)
+  X <- X[keep, , drop = FALSE]
+  row_means <- row_means[keep]
+  if (nrow(X) == 0) return(X)
+  na_mask <- is.na(X)
+  if (any(na_mask)) {
+    X[na_mask] <- row_means[row(X)[na_mask]]
+  }
+  X
+}
 
 
 PCA2GO.2 <- function (X, annotation, var.cutoff = 2, fac.sel = "rel.abs")
@@ -40,6 +63,10 @@ X.loadings <- vector(mode = "list", length = 0)
       if (length(which(gene.sel)) > 1) {
          gene.sel <- X[gene.sel,]
          if (any(is.na(gene.sel))) { gene.sel <- pca4NA(gene.sel)}
+         # If row-mean imputation dropped every row (all genes for this GO were
+         # entirely NA), skip the GO instead of feeding an empty matrix to
+         # PCA.GENES, which would crash on eigen() of a 0-dim matrix.
+         if (nrow(gene.sel) < 2) next
 		pca.sel <- PCA.GENES(t(gene.sel))  # pca
 		eigen <- pca.sel$eigen$values
 		tot.var <- sum(eigen)
@@ -75,9 +102,11 @@ X.loadings <- vector(mode = "list", length = 0)
 	}
    }
 # Rearrange result
-rownames(X.sel) <- colnames(X)
-names(X.loadings) <- colnames(X.sel)
-X.sel <- t(X.sel)
+if (!is.null(X.sel)) {
+    rownames(X.sel) <- colnames(X)
+    names(X.loadings) <- colnames(X.sel)
+    X.sel <- t(X.sel)
+}
 return(list("X.sel" = X.sel, "X.loadings" = X.loadings,"n.ge" = n.ge,"n.go" = n.go, "go.sel" = go.sel, "total.genes" = total.genes, "var.cutoff" = var.cutoff, "variab" = variab, "tot.variab" = tot.variab, "eigen.val" = eigen.val))
 }
 

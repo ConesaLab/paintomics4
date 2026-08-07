@@ -1137,13 +1137,33 @@ function PA_Step4KeggDiagramFeatureSetView() {
 
 		if (features.length > 5) {
 			try {
+				// Cached lookup table: omicName → { mapping, nSamples }. Built
+				// once per box so each metagene OmicValue can inherit the
+				// parent omic's replicate→sample aggregation (when active) and
+				// expose per-sample values to "Show samples" mode in Step-4.
+				var jobModel = this.getParent("PA_Step4JobView").getModel();
+				var inputOmicByName = {};
+				jobModel.getGeneBasedInputOmics()
+					.concat(jobModel.getCompoundBasedInputOmics())
+					.forEach(function(o) { inputOmicByName[o.omicName] = o; });
+
 				omicNames.forEach(function(omic) {
 					// Use all values of the same omic in all features associated to the box.
 					var omicValues = this.model.getAllOmicValues(omic).map(x => x.getValues());
 					// It is important that the featureType contains gene or compound word, as it
 					// will be used later to filter.
 					var featureType = "metagene"; //geneOmicNames.includes(omic) ? "gene" : "compound";
-					this.model.addOmicMetagenes(omic, featureType, mlPCA.generateMetagenes(omicValues));
+
+					var inputOmic = inputOmicByName[omic];
+					var mapping = (inputOmic && Array.isArray(inputOmic.replicateMapping))
+						? inputOmic.replicateMapping : null;
+					var nSamples = (inputOmic && Array.isArray(inputOmic.sampleHeader))
+						? inputOmic.sampleHeader.length : 0;
+
+					this.model.addOmicMetagenes(
+						omic, featureType,
+						mlPCA.generateMetagenes(omicValues),
+						mapping, nSamples);
 				}.bind(this));
 
 				// Validate metagenes were actually generated before switching mode
@@ -1905,23 +1925,37 @@ function PA_Step4KeggDiagramFeatureView(showButtons) {
 		var x = 0, y = 0, maxX = -1;
 		var series = [], yAxisCat = [], serie, later = [], values, scaledValues, min, max;
 
+		var jobModel = this.getParent("PA_Step4JobView") ? this.getParent("PA_Step4JobView").getModel() : null;
+		var replicateMode = jobModel && jobModel.getReplicateMode ? jobModel.getReplicateMode() : "replicates";
+
 		for (var i = visibleOmics.length - 1; i >= 0; i--) {
 			x = 0;
 			omicName = visibleOmics[i].split("#")[0];
 
 			// Retrieve all omic values
 			allOmicValues = feature.getOmicValues(omicName, true);
-			
+
 			if (allOmicValues !== null) {
 				allOmicValues.forEach(function(omicValues) {
 					x = 0;
-					
-					var shownameValue = omicValues.inputName != omicValues.originalName && omicValues.originalName !== undefined ?
-						omicValues.originalName + ": " + omicValues.inputName :
-						omicValues.inputName
+
+					// Per-feature popup is tight on horizontal space, so render just the
+					// best display name without the AGI tail:
+					// 1. Regulator omic — originalName holds the regulator's symbol
+					//    (overridden server-side); use it alone.
+					// 2. Regular omic with a resolved symbol — show feature.name (e.g. ASP4).
+					// 3. No symbol available — fall back to the user's inputName / AGI.
+					var shownameValue;
+					if (omicValues.inputName != omicValues.originalName && omicValues.originalName !== undefined) {
+						shownameValue = omicValues.originalName;
+					} else if (feature.name && feature.name !== omicValues.inputName) {
+						shownameValue = feature.name;
+					} else {
+						shownameValue = omicValues.inputName;
+					}
 					var relevantSymbols = "";
 
-					if (omicValues.isRelevant() === true) {
+					if (omicValues.isRelevant(undefined, replicateMode) === true) {
 						relevantSymbols += "* ";
 					}
 					if (omicValues.isRelevantAssociation() === true) {
@@ -1931,7 +1965,7 @@ function PA_Step4KeggDiagramFeatureView(showButtons) {
 					serie = {name: relevantSymbols + omicName + "#" + shownameValue};
 					yAxisCat.push(relevantSymbols + omicName + "#" + shownameValue);
 
-					values = omicValues.getValues();
+					values = omicValues.getValues(replicateMode);
 					serie.data = [];
 					scaledValues = [];
 
@@ -1942,12 +1976,12 @@ function PA_Step4KeggDiagramFeatureView(showButtons) {
 							x: x, y: y,
 							value: values[j],
 							color: getColor(limits, values[j], visualOptions.colorScale),
-							isSignificant: omicValues.isRelevant(j)
+							isSignificant: omicValues.isRelevant(j, replicateMode)
 						});
 						x++;
 						maxX = Math.max(maxX, x);
 					}
-					series.push(serie);	
+					series.push(serie);
 					y++;
 				});
 			} else {
@@ -1988,7 +2022,10 @@ function PA_Step4KeggDiagramFeatureView(showButtons) {
 		// Calculate the height based on number of Y elements
 		var chartHeight = Math.max(y * 40, 80);
 		
-		var headers = this.getParent("PA_Step4JobView").getModel().getOmicHeaders();
+		// In samples mode the labels under each cell come from the biological-
+		// sample names (omic.sampleHeader) rather than the raw replicate
+		// columns, so the tooltip stays consistent with what's drawn.
+		var headers = this.getParent("PA_Step4JobView").getModel().getOmicHeaders(null, replicateMode);
 
 		var replaceSymbols = {
 			"*": '<i class="relevantFeature"></i>',
@@ -2094,11 +2131,14 @@ function PA_Step4KeggDiagramFeatureView(showButtons) {
 		yAxis = [],
 		yAxisItem;
 
+		var jobModel = this.getParent("PA_Step4JobView") ? this.getParent("PA_Step4JobView").getModel() : null;
+		var replicateMode = jobModel && jobModel.getReplicateMode ? jobModel.getReplicateMode() : "replicates";
+
 		//1.FILL THE STORE DATA [{name:"timepoint 1", "Gene Expression": -0.8, "Proteomics":-1.2,... },{name:"timepoint2", ...}]
 		for (var i in visibleOmics) {
 			omicName = visibleOmics[i].split("#")[0];
 			allOmicValues = feature.getOmicValues(omicName, true);
-			
+
 			if (allOmicValues !== null) {
 				for (var t = 0; t < allOmicValues.length; t++) {
 					omicValues = allOmicValues[t];
@@ -2107,7 +2147,7 @@ function PA_Step4KeggDiagramFeatureView(showButtons) {
 					var limits = getMinMax(dataDistributionSummaries[omicName], visualOptions.colorReferences[omicName]);
 					var showName =  omicValues.originalName !== undefined && omicValues.originalName !== omicValues.inputName ? omicValues.originalName : null;
 
-					values = omicValues.getValues();
+					values = omicValues.getValues(replicateMode);
 					for (var j in values) {
 						//SCALE THE VALUE
 						tmpValue = scaleValue(values[j], limits.min, limits.max);
@@ -2327,6 +2367,12 @@ function PA_Step4KeggDiagramFeatureSetSVGBox() {
 		var isRelevant = feature.isRelevant();
 		var isRelevantAssociation = feature.isRelevantAssociation();
 
+		// Replicate-display mode: when the user has applied a sample mapping
+		// in Step 2 and toggled "Show samples" in the visual options, every
+		// `getValues` lookup below collapses to per-sample means.
+		var jobModel = this.getParent("PA_Step4JobView") ? this.getParent("PA_Step4JobView").getModel() : null;
+		var replicateMode = jobModel && jobModel.getReplicateMode ? jobModel.getReplicateMode() : "replicates";
+
 		/*FILTER THE LIST OF OMICS TO GET ONLY THE "GENE" BASED OMICS OR THE COMPOUND BASED OMICS*/
 		var visibleOmics = visualOptions.visibleOmics.filter(function(elem) {
 			return elem.indexOf(feature.getFeatureType().toLowerCase().replace("meta", "") + "based") > -1;
@@ -2361,7 +2407,7 @@ function PA_Step4KeggDiagramFeatureSetSVGBox() {
 			omicValues = feature.getOmicValues(omicName);
 			//IF THE FEATURE CONTAINS VALUES FOR THE OMIC
 			if (omicValues !== null) {
-				values = omicValues.getValues();
+				values = omicValues.getValues(replicateMode);
 				
 				// Calculate adaptive width
 				var minSegmentWidth = 10 * scaleFactor;
@@ -2493,6 +2539,9 @@ function PA_Step4KeggDiagramFeatureSetSVGBox() {
 			return elem.indexOf(feature.getFeatureType().toLowerCase() + "based") > -1;
 		});
 
+		var jobModel = this.getParent("PA_Step4JobView") ? this.getParent("PA_Step4JobView").getModel() : null;
+		var replicateMode = jobModel && jobModel.getReplicateMode ? jobModel.getReplicateMode() : "replicates";
+
 		var omicName, omicValues;
 		for (var i in visibleOmics) {
 			omicName = visibleOmics[i].split("#")[0];
@@ -2501,7 +2550,7 @@ function PA_Step4KeggDiagramFeatureSetSVGBox() {
 			if (omicValues == null) {
 				omicValues = "No data";
 			} else {
-				omicValues = omicValues.getValues();
+				omicValues = omicValues.getValues(replicateMode);
 			}
 			omicsValues[omicName] = omicValues;
 		}
@@ -2637,6 +2686,18 @@ function PA_Step4VisualOptionsView() {
 		this.getParent().setVisualOptions("colorScale" , selectedOptions);
 
 		/********************************************************/
+		/* STEP 3b. UPDATE THE REPLICATE DISPLAY MODE          */
+		/* (only present when the toggle was rendered)         */
+		/********************************************************/
+		var $replicateRadio = $("div.lateralOptionsSelector input[name=replicateModeCheckbox]:checked").first();
+		if ($replicateRadio.length) {
+			var jobModel = this.getParent("PA_Step4JobView") ? this.getParent("PA_Step4JobView").getModel() : null;
+			if (jobModel && jobModel.setReplicateMode) {
+				jobModel.setReplicateMode($replicateRadio.val());
+			}
+		}
+
+		/********************************************************/
 		/* STEP 4. NOTIFY THE CHANGES TO PARENT                 */
 		/********************************************************/
 		this.getParent().applyVisualSettings();
@@ -2712,8 +2773,24 @@ function PA_Step4VisualOptionsView() {
 		'    <div class="radio"><img class="colorScaleThumb" src="resources/images/bwrscale_120x18.jpg"><input '+ ((visualOptions.colorScale ==="bwr")?"checked ":"") +'type="radio" id="colorScaleCheckbox1" name="colorScaleCheckbox" value="bwr"><label for="colorScaleCheckbox1">Blue-White-Red</label></div>' +
 		'    <div class="radio"><img class="colorScaleThumb" src="resources/images/gbrscale_120x18.jpg"><input '+ ((visualOptions.colorScale ==="rbg")?"checked ":"") +'type="radio" id="colorScaleCheckbox3" name="colorScaleCheckbox" value="rbg"><label for="colorScaleCheckbox3">Green-Black-Red</label></div>' +
 		//'    <div class="radio"><input type="radio" id="colorScaleCheckbox2" name="colorScaleCheckbox" value="bwr2"><label for="colorScaleCheckbox2">Blue-White-Red (alt.)<img class="colorScaleThumb" src="resources/images/bwr2scale_120x18.jpg"></label></div>' +
-		'  </div>' +
-		'</div>'; //advanceOptionsPanel
+		'  </div>';
+
+		// Replicate-display toggle. Only shown when at least one omic has had
+		// a sample mapping applied — otherwise there's nothing to collapse.
+		var step4JobModel = me.getParent("PA_Step4JobView") ? me.getParent("PA_Step4JobView").getModel() : null;
+		if (step4JobModel && step4JobModel.hasAnyReplicateAggregation && step4JobModel.hasAnyReplicateAggregation()) {
+			var currentMode = step4JobModel.getReplicateMode();
+			windowContent +=
+			'  <h5>Replicate display ' +
+			'    <span class="helpTip" title="Switch between showing every replicate column individually or showing one cell per biological sample (mean across replicates). Configured per-omic in the Step-2 panel."></span>' +
+			'  </h5>' +
+			'  <div>' +
+			'    <div class="radio"><input ' + ((currentMode === "samples") ? "" : "checked ") + 'type="radio" id="replicateModeCheckbox1" name="replicateModeCheckbox" value="replicates"><label for="replicateModeCheckbox1">Show all replicates</label></div>' +
+			'    <div class="radio"><input ' + ((currentMode === "samples") ? "checked " : "") + 'type="radio" id="replicateModeCheckbox2" name="replicateModeCheckbox" value="samples"><label for="replicateModeCheckbox2">Show samples (averaged)</label></div>' +
+			'  </div>';
+		}
+
+		windowContent += '</div>'; //advanceOptionsPanel
 
 		this.component = Ext.widget({
 			xtype: "container", cls: "lateralOptionsPanel",  width: 300, height: ($("#mainViewCenterPanel").height() - 100),
@@ -3031,6 +3108,10 @@ function PA_Step4GlobalHeatmapView() {
 	this.name = "PA_Step4GlobalHeatmapView";
 	this.showConfigurator = false;
 	this.automaticUpdate = true;
+	// Whether to draw the white per-condition significance stars on the
+	// heatmap cells. User-toggleable from the configurator; defaults to true
+	// so existing behaviour is preserved.
+	this.showSignificanceStars = true;
 
 	/***********************************************************************
 	* GETTERS AND SETTERS
@@ -3111,6 +3192,13 @@ function PA_Step4GlobalHeatmapView() {
 		// - CHECK IF FORCE ORDER WAS SELECTED
 		var forceOrder = $("#order-check").is(":checked");
 
+		// - CHECK IF PER-CONDITION SIGNIFICANCE STARS SHOULD BE DRAWN. Stored on
+		//   the instance so generateHeatmap (a method on this view) can read it
+		//   without threading an extra parameter through generateContent. The
+		//   `.length` guard keeps the pre-render default (true) when the
+		//   configurator hasn't been rendered yet.
+		this.showSignificanceStars = $("#significance-stars-check").length ? $("#significance-stars-check").is(":checked") : true;
+
 		//*********************************************************************************
 		// STEP 2. CONFIGURE CLUSTERIZE OPTIONS
 		if (clusterize) {
@@ -3145,6 +3233,13 @@ function PA_Step4GlobalHeatmapView() {
 		var omicsValues = this.getParent().getOmicsValues();
 		var matchedFeatures = matchedGenes.concat(matchedCompounds);
 
+		// Read the active replicate-display mode once and bake it into the
+		// data matrix that feeds the global heatmap. Build sites that pull
+		// `getValues()` directly (rather than going through the renderer's
+		// mode-aware path) need to ask for the right view explicitly.
+		var jobModelGH = this.getParent("PA_Step4JobView") ? this.getParent("PA_Step4JobView").getModel() : null;
+		var replicateModeGH = jobModelGH && jobModelGH.getReplicateMode ? jobModelGH.getReplicateMode() : "replicates";
+
 		for (var i = matchedFeatures.length; i--;) {
 			//GET THE VALUES FOR CURRENT GENE
 			featureOmicValues = omicsValues[matchedFeatures[i]].getOmicsValues();
@@ -3156,24 +3251,64 @@ function PA_Step4GlobalHeatmapView() {
 				if (selectedOmics[omicValue.omicName] === undefined) {
 					continue;
 				}
-				
+
 				var featureName = omicsValues[matchedFeatures[i]].getName();
 
 				//PUSH IF USER CHOOSE all OR IF FEATURE IS RELEVANT
-				if (selectedOmics[omicValue.omicName] === "all" || omicValue.isRelevant() || omicValue.isRelevantAssociation()) {
+				if (selectedOmics[omicValue.omicName] === "all" || omicValue.isRelevant(undefined, replicateModeGH) || omicValue.isRelevantAssociation()) {
 					referenceOmics = dataMatrix;
 				} else {
 					referenceOmics = otherDataMatrix;
 				}
 				referenceOmics[omicValue.omicName][featureName] = referenceOmics[omicValue.omicName][featureName] || [];
-				
-				referenceOmics[omicValue.omicName][featureName].push({
-					keggName: omicsValues[matchedFeatures[i]].getName(),
-					inputName: omicValue.originalName || omicValue.getInputName(),
-					isRelevant: omicValue.isRelevant(),
-					isRelevantAssociation: omicValue.isRelevantAssociation(),
-					values: omicValue.getValues()
-				});
+
+				// For regulator omics (TF, miRNA, methylation, any omic uploaded with
+				// associations), the row is conceptually "this regulator's value at
+				// this target". Show the regulator as the primary identifier and the
+				// target as secondary — the inverse of regular omics where the row IS
+				// the gene. `omicValue.isRegulator` is set server-side whenever the
+				// input line used the `targetID:::regulatorID` format. The regulator's
+				// display name comes from `omicValue.originalName` — either the
+				// resolved gene symbol or, when no symbol mapping exists, the raw
+				// regulator ID (e.g. a miRNA name).
+				//
+				// `linkKey` is the canonical identifier the cross-heatmap hover handler
+				// uses to find sibling rows (e.g. highlight the WRKY40 TF row when the
+				// user hovers the NAC001 gene-expression row). For regular omics the
+				// keggName side of the label already holds it; for swapped regulator
+				// rows we set linkKey explicitly to keep the linkage.
+				var targetName = omicsValues[matchedFeatures[i]].getName();
+				var isRegulatorRow = !!(omicValue.isRegulator);
+				// Per-condition significance, mirroring the pathway-box tooltip
+				// heatmap: one boolean per cell so generateHeatmap can draw the
+				// white star on significant cells in multi-condition data.
+				// isRelevant(j, mode) is an O(1) array lookup (FeatureModels.js),
+				// so building this list per row is effectively free.
+				var ghValues = omicValue.getValues(replicateModeGH);
+				var ghSignificance = [];
+				for (var c = 0; c < (ghValues ? ghValues.length : 0); c++) {
+					ghSignificance.push(omicValue.isRelevant(c, replicateModeGH) === true);
+				}
+				if (isRegulatorRow) {
+					referenceOmics[omicValue.omicName][featureName].push({
+						keggName: omicValue.originalName,
+						inputName: targetName,
+						linkKey: targetName,
+						isRelevant: omicValue.isRelevant(undefined, replicateModeGH),
+						isRelevantAssociation: omicValue.isRelevantAssociation(),
+						significance: ghSignificance,
+						values: ghValues
+					});
+				} else {
+					referenceOmics[omicValue.omicName][featureName].push({
+						keggName: targetName,
+						inputName: omicValue.originalName || omicValue.getInputName(),
+						isRelevant: omicValue.isRelevant(undefined, replicateModeGH),
+						isRelevantAssociation: omicValue.isRelevantAssociation(),
+						significance: ghSignificance,
+						values: ghValues
+					});
+				}
 			}
 		}
 
@@ -3311,18 +3446,27 @@ function PA_Step4GlobalHeatmapView() {
 			serie = {
 				name: relevantSymbols + omicsValues[i].keggName + "#" + shownameValue,
 				data: [],
-				turboThreshold: Number.MAX_VALUE
+				turboThreshold: Number.MAX_VALUE,
+				// linkKey carries the canonical cross-omic identifier (target symbol)
+				// so the mouseOver handler can highlight sibling rows even when the
+				// label's primary side is the regulator symbol (TF rows post-swap).
+				linkKey: omicsValues[i].linkKey
 			};
 			//Add the name for the row (e.g. MagoHb or "miRNA my_mirnaid_1")
 			yAxisCat.push(relevantSymbols + omicsValues[i].keggName + "#" + shownameValue);
 
+			var featureSignificance = omicsValues[i].significance;
 			if (featureValues !== null) {
 				for (var j in featureValues) {
 					serie.data.push({
 						x: x,
 						y: y,
 						value: featureValues[j],
-						color: getColor(limits, featureValues[j], visualOptions.colorScale)
+						color: getColor(limits, featureValues[j], visualOptions.colorScale),
+						// Per-condition significance for the white star (see dataLabels
+						// below). Falls back to false when the row carries no
+						// significance array (e.g. the gray "no data" rows).
+						isSignificant: featureSignificance ? featureSignificance[j] === true : false
 					});
 					x++;
 					maxX = Math.max(maxX, x);
@@ -3363,6 +3507,19 @@ function PA_Step4GlobalHeatmapView() {
 			"^": '<i class="relevantAssociationFeature"></i>'
 		};
 
+		// Resolve the per-omic column labels for the active replicate mode so
+		// the tooltip can name each cell by its sample (or replicate) column
+		// — matches the pathway-box tooltip behaviour. Captured in closure
+		// because the Highcharts formatter loses the surrounding `this`.
+		var jobModelGH_HM = this.getParent("PA_Step4JobView") ? this.getParent("PA_Step4JobView").getModel() : null;
+		var replicateModeGH_HM = jobModelGH_HM && jobModelGH_HM.getReplicateMode ? jobModelGH_HM.getReplicateMode() : "replicates";
+		var omicHeaderGH = jobModelGH_HM ? (jobModelGH_HM.getOmicHeaders(null, replicateModeGH_HM)[omicName] || []) : [];
+
+		// User toggle from the configurator. Captured here because the dataLabels
+		// formatter below runs with `this` bound to the Highcharts point. Defaults
+		// to showing stars unless explicitly turned off.
+		var showStarsGH = this.showSignificanceStars !== false;
+
 		//STEP 2. DRAW THE HEATMAP
 		var heatmap = new Highcharts.Chart({
 			chart: {
@@ -3381,6 +3538,18 @@ function PA_Step4GlobalHeatmapView() {
 				borderColor: "#333",
 				formatter: function() {
 					var title = this.point.series.name.split("#");
+					var headerField = omicHeaderGH[this.point.x + 1];
+					if (headerField) {
+						if (title[0].length + headerField.length > 30) {
+							if (title[0].length > 14) {
+								title[0] = title[0].substring(0, 12) + '...';
+							}
+							if (headerField.length > 20) {
+								headerField = headerField.substring(0, 20) + '...';
+							}
+						}
+						title[0] = title[0] + " [" + headerField + "]";
+					}
 					title[1] = (title.length > 1) ? title[1] : "";
 					return "<b>" + title[0].replace(/[\*\^]/g, function(c) { return replaceSymbols[c]; }) + "</b><br/>" + "<i class='tooltipInputName'>" + title[1] + "</i>" + (this.point.value === null ? "No data" : this.point.value);
 				},
@@ -3399,7 +3568,15 @@ function PA_Step4GlobalHeatmapView() {
 						if (this.value.split !== undefined) {
 							var title = this.value.split("#");
 							title[1] = (title.length > 1) ? title[1] : "No data";
-							return '<span style="width: 50px;display: block; text-align: right;">' + ((title[0].length > 10) ? title[0].substring(0, 5) + "..." + title[0].substring(title[0].length - 4, title[0].length) : title[0]).replace(/[\*\^]/g, function(c) { return replaceSymbols[c]; }) + '</br><i class="tooltipInputName yAxisLabel">' + ((title[1].length > 10) ? title[1].substring(0, 5) + "..." + title[1].substring(title[1].length - 4, title[1].length) : title[1]) + '</i></span>';
+							// Regulator rows embed HTML (e.g. "WRKY40<br><span...>AT2G25000</span>")
+							// in title[0]; char-based truncation would slice the markup.
+							// Detect HTML and render the primary side verbatim.
+							var primaryHasHTML = title[0].indexOf("<") >= 0;
+							var renderedPrimary = primaryHasHTML
+								? title[0]
+								: ((title[0].length > 10) ? title[0].substring(0, 5) + "..." + title[0].substring(title[0].length - 4, title[0].length) : title[0]).replace(/[\*\^]/g, function(c) { return replaceSymbols[c]; });
+							var renderedSecondary = (title[1].length > 10) ? title[1].substring(0, 5) + "..." + title[1].substring(title[1].length - 4, title[1].length) : title[1];
+							return '<span style="width: 50px;display: block; text-align: right;">' + renderedPrimary + '</br><i class="tooltipInputName yAxisLabel">' + renderedSecondary + '</i></span>';
 						}
 					},
 					style: {fontSize: "9px"},
@@ -3409,24 +3586,51 @@ function PA_Step4GlobalHeatmapView() {
 			},
 			series: series,
 			plotOptions: {
-				heatmap: {borderColor: "#000000",borderWidth: 0.5},
+				heatmap: {
+					borderColor: "#000000",
+					borderWidth: 0.5,
+					// White star on cells significant for that condition. Guarded by
+					// maxX > 1 so it only shows for multi-condition data (mirrors the
+					// pathway-box tooltip heatmap behaviour).
+					dataLabels: {
+						enabled: true,
+						useHTML: true,
+						formatter: function() {
+							if (showStarsGH && this.point.isSignificant && maxX > 1) {
+								return '<i class="fa fa-star" style="color: white !important; font-size: 8px; padding: 0;"></i>';
+							}
+						}
+					}
+				},
 				series: {
 					point: {
 						events: {
 							mouseOver: function() {
 								var me = this;
+								// Sibling-row matching across heatmaps. Regular omics encode the
+								// target identifier as the primary side of `name` (left of `#`),
+								// but regulator rows put the regulator there post-swap. The
+								// `linkKey` series option (set in generateHeatmap) carries the
+								// canonical target identifier so cross-heatmap highlighting keeps
+								// working in both directions.
+								var getLinkKey = function(s) {
+									if (s.options && s.options.linkKey) {
+										return s.options.linkKey;
+									}
+									return s.name.split("#")[0].replace(/[\*\^]\s/g, "");
+								};
+								var keggName = getLinkKey(me.series);
 								//FOR EACH HEATMAPS
 								$("div.heatmapContainer").each(function() {
 									var heatmap = $(this).highcharts();
 									var serie = heatmap.series[me.series.index];
-									var keggName = me.series.name.split("#")[0].replace(/[\*\^]\s/g, "");
 
-									if (serie !== undefined && serie.name.split("#")[0].replace(/[\*\^]\s/g, "") === keggName) {
+									if (serie !== undefined && getLinkKey(serie) === keggName) {
 										serie.showHeatmapSelector(undefined, me.y);
 										return true;
 									} else {
 										for (var i in heatmap.series) {
-											if (heatmap.series[i].name.split("#")[0].replace(/[\*\^]\s/g, "") === keggName) {
+											if (getLinkKey(heatmap.series[i]) === keggName) {
 												heatmap.series[i].showHeatmapSelector();
 												return true;
 											}
@@ -3501,6 +3705,7 @@ function PA_Step4GlobalHeatmapView() {
 		"<h4>Advanced options</h4>" + //2. GENERATE ADVANCED OPTIONS
 		'<span class="infoTip">Depending on the selected settings, heatmap generation can take up to 10 seconds.</span>' +
 		' <div class="checkbox"><input type="checkbox" id="order-check"><label for="order-check"> Force order for features.</label></div>' + // 2.1 ENABLE / DISABLE ORDERING
+		' <div class="checkbox"><input checked type="checkbox" id="significance-stars-check"><label for="significance-stars-check"> Show per-condition significance stars (<i class="fa fa-star"></i>)</label></div>' + // 2.1b SHOW / HIDE PER-CONDITION STARS
 		' <div class="checkbox"><input checked type="checkbox" id="clusterize-check"><label for="clusterize-check"> Clusterize data</label></div>' + // 2.2 ENABLE / DISABLE CLUSTERING
 		' <div class="lateralOptionsSelector clusterSelection">' +
 		'    <div class="radio"><input checked type="radio" id="clusterize-hcluster" name="clusterize-radio" value="hierarchical"><label for="clusterize-hcluster">Hierarchical clustering </label></div>' +
@@ -3717,6 +3922,13 @@ function PA_Step4DetailsView() {
 		var featureType = featureSetElems[0].getFeature().getFeatureType();
 		var entriesTable = {}, entriesTableMetagenes = {};
 
+		// Read the active replicate-display mode once and bake it into the
+		// per-row `values` we collect below. Without this, "Show details"
+		// would always render the raw 16 columns even after the user picked
+		// "Show samples (averaged)" in the visual-options panel.
+		var jobModelDV = this.getParent("PA_Step4JobView") ? this.getParent("PA_Step4JobView").getModel() : null;
+		var replicateModeDV = jobModelDV && jobModelDV.getReplicateMode ? jobModelDV.getReplicateMode() : "replicates";
+
 		/**
 		* This function fills recursively a table ordering by omicType
 		*/
@@ -3726,7 +3938,7 @@ function PA_Step4DetailsView() {
 			featureName = featureSetElems[i].getFeature().getName();
 			omicValues = featureSetElems[i].getFeature().getOmicsValues();
 			for (var j in omicValues) {
-				addTableEntrie(entriesTable, omicValues[j], featureName, "");
+				addTableEntrie(entriesTable, omicValues[j], featureName, "", replicateModeDV);
 			}
 		}
 
@@ -3734,7 +3946,7 @@ function PA_Step4DetailsView() {
 			featureName = metagenesSetElems[i].getFeature().getName();
 			omicValues = metagenesSetElems[i].getFeature().getOmicsValues();
 			for (var j in omicValues) {
-				addTableEntrie(entriesTableMetagenes, omicValues[j], featureName, "");
+				addTableEntrie(entriesTableMetagenes, omicValues[j], featureName, "", replicateModeDV);
 			}
 		}
 
@@ -3836,12 +4048,16 @@ function PA_Step4DetailsView() {
 
 			var limits = getMinMax(dataDistributionSummaries[omicName], visualOptions.colorReferences[omicName]);
 
+			var featureSignificance = omicsValues[i].significance;
 			for (var j in featureValues) {
 				serie.data.push({
 					x: x,
 					y: y,
 					value: featureValues[j],
-					color: getColor(limits, featureValues[j], visualOptions.colorScale)
+					color: getColor(limits, featureValues[j], visualOptions.colorScale),
+					// Per-condition significance for the white star (see dataLabels
+					// below). Falls back to false when no significance array exists.
+					isSignificant: featureSignificance ? featureSignificance[j] === true : false
 				});
 				x++;
 				maxX = Math.max(maxX, x);
@@ -3864,8 +4080,15 @@ function PA_Step4DetailsView() {
 			algorithm: "hierarchical",
 			distance: "euclidean",
 			linkage: "complete",
-			dendogram: false 
+			dendogram: false
 		} : false;
+
+		// Resolve column labels for this omic in the active replicate mode so
+		// the tooltip names the sample (or replicate) under each cell. Same
+		// shape as the pathway-box tooltip and the global-heatmap tooltip.
+		var jobModelDV_HM = this.getParent("PA_Step4JobView") ? this.getParent("PA_Step4JobView").getModel() : null;
+		var replicateModeDV_HM = jobModelDV_HM && jobModelDV_HM.getReplicateMode ? jobModelDV_HM.getReplicateMode() : "replicates";
+		var omicHeaderDV = jobModelDV_HM ? (jobModelDV_HM.getOmicHeaders(null, replicateModeDV_HM)[omicName] || []) : [];
 
 		var heatmap = new Highcharts.Chart({
 			chart: {type: 'heatmap', renderTo: targetID},
@@ -3876,6 +4099,18 @@ function PA_Step4DetailsView() {
 				borderColor: "#333",
 				formatter: function () {
 					var title = this.point.series.name.split("#");
+					var headerField = omicHeaderDV[this.point.x + 1];
+					if (headerField) {
+						if (title[0].length + headerField.length > 30) {
+							if (title[0].length > 14) {
+								title[0] = title[0].substring(0, 12) + '...';
+							}
+							if (headerField.length > 20) {
+								headerField = headerField.substring(0, 20) + '...';
+							}
+						}
+						title[0] = title[0] + " [" + headerField + "]";
+					}
 					title[1] = (title.length > 1) ? title[1] : "";
 					return "<b>" + title[0].replace(/[\*\^]/g, function(c) { return replaceSymbols[c]; }) + "</b><br/>" + "<i class='tooltipInputName'>" + title[1] + "</i>" + (this.point.value === null ? "No data" : this.point.value);
 				},
@@ -3888,8 +4123,15 @@ function PA_Step4DetailsView() {
 					formatter: function () {
 						var title = this.value.split("#");
 						title[1] = (title.length > 1) ? title[1] : "No data";
-						return '<span style="width: 100px;display: block;   text-align: right;">' + ((title[0].length > 14) ? title[0].substring(0, 14) + "..." : title[0]).replace(/[\*\^]/g, function(c) { return replaceSymbols[c]; }) +
-						'</br><i class="tooltipInputName yAxisLabel">' + ((title[1].length > 14) ? title[1].substring(0, 14) + "..." : title[1]) + '</i></span>';
+						// Regulator rows embed multi-line HTML markup in title[0];
+						// skip char-truncation when HTML is present so the markup stays intact.
+						var primaryHasHTML = title[0].indexOf("<") >= 0;
+						var renderedPrimary = primaryHasHTML
+							? title[0]
+							: ((title[0].length > 14) ? title[0].substring(0, 14) + "..." : title[0]).replace(/[\*\^]/g, function(c) { return replaceSymbols[c]; });
+						var renderedSecondary = (title[1].length > 14) ? title[1].substring(0, 14) + "..." : title[1];
+						return '<span style="width: 100px;display: block;   text-align: right;">' + renderedPrimary +
+						'</br><i class="tooltipInputName yAxisLabel">' + renderedSecondary + '</i></span>';
 					},
 					style: {fontSize: "9px"}, useHTML: true
 				}
@@ -3899,6 +4141,18 @@ function PA_Step4DetailsView() {
 				heatmap: {
 					borderColor: "#000000",
 					borderWidth: 0.5,
+					// White star on cells significant for that condition. Guarded by
+					// maxX > 1 so it only shows for multi-condition data (mirrors the
+					// pathway-box tooltip and global heatmaps).
+					dataLabels: {
+						enabled: true,
+						useHTML: true,
+						formatter: function() {
+							if (this.point.isSignificant && maxX > 1) {
+								return '<i class="fa fa-star" style="color: white !important; font-size: 8px; padding: 0;"></i>';
+							}
+						}
+					}
 				},
 				series: {
 					point: {
@@ -4203,11 +4457,16 @@ function PA_Step4DetailsView() {
 }
 PA_Step4DetailsView.prototype = new View();
 
-var addTableEntrie = function (entriesValue, omicValue, featureName, entrieName) {
+var addTableEntrie = function (entriesValue, omicValue, featureName, entrieName, replicateMode) {
+			// `replicateMode` was added so the Details panel ("Show details")
+			// honours the visual-options sample/replicate toggle. For compound
+			// omics — which nest OmicValues — `omicValue.getValues()` returns
+			// the inner OmicValues, not numeric arrays, so we don't pass mode
+			// at the outer call (no aggregation lives there).
 			if (omicValue.isCompoundOmicsValue()) {
 				var omicValues = omicValue.getValues();
 				for (var i in omicValues) {
-					addTableEntrie(entriesValue, omicValues[i], featureName, entrieName + omicValue.getName() + "#");
+					addTableEntrie(entriesValue, omicValues[i], featureName, entrieName + omicValue.getName() + "#", replicateMode);
 				}
 			} else if (omicValue.isVisibleAtFeatureFamilyDetails()) {
 				if (entrieName === "") {
@@ -4216,13 +4475,42 @@ var addTableEntrie = function (entriesValue, omicValue, featureName, entrieName)
 				if (entriesValue[entrieName] == null) {
 					entriesValue[entrieName] = [];
 				}
+				// Regulator omics (TF / miRNA / methylation / any omic with associations)
+				// flip the primary/secondary roles so the regulator is the row
+				// identifier. Two cases for the secondary side:
+				//   * Symbol resolved → show the regulator's canonical AGI there
+				//     (e.g. "WRKY40#AT2G25000"). Most useful when you want to look
+				//     up the regulator in an external database.
+				//   * Symbol not resolved (e.g. miRNA names) → fall back to the
+				//     target's symbol so the row still carries the regulator→target
+				//     context (e.g. "miR156#NAC001"), matching the global heatmap.
+				// `linkKey` keeps the cross-heatmap hover linkage anchored on the
+				// target symbol (same as gene-expression / other-omic rows).
+				var isRegulatorRow = !!(omicValue.isRegulator);
+				var keggNameSuffix = (entrieName === omicValue.getOmicName()) ? "" : " " + omicValue.getOmicName();
+				var hasResolvedRegulatorID = isRegulatorRow && omicValue.regulatorID && omicValue.regulatorID !== omicValue.originalName;
+				// Per-condition significance (one boolean per cell) so the Details
+				// heatmap can draw the white star on significant cells in
+				// multi-condition data — same contract as the pathway-box tooltip
+				// and global heatmaps. isRelevant(j, mode) is an O(1) array lookup.
+				var dvValues = omicValue.getValues(replicateMode);
+				var dvSignificance = [];
+				for (var c = 0; c < (dvValues ? dvValues.length : 0); c++) {
+					dvSignificance.push(omicValue.isRelevant(c, replicateMode) === true);
+				}
 				entriesValue[entrieName].push({
-					keggName: featureName + ((entrieName === omicValue.getOmicName()) ? "" : " " + omicValue.getOmicName()),
-					inputName: omicValue.inputName,
-					originalName: omicValue.originalName,
-					isRelevant: omicValue.isRelevant(),
+					keggName: isRegulatorRow
+						? (omicValue.originalName + keggNameSuffix)
+						: (featureName + keggNameSuffix),
+					inputName: isRegulatorRow
+						? (hasResolvedRegulatorID ? omicValue.regulatorID : featureName)
+						: omicValue.inputName,
+					originalName: isRegulatorRow ? undefined : omicValue.originalName,
+					linkKey: featureName,
+					isRelevant: omicValue.isRelevant(undefined, replicateMode),
 					isRelevantAssociation: omicValue.isRelevantAssociation(),
-					values: omicValue.getValues()
+					significance: dvSignificance,
+					values: dvValues
 				});
 			}
 		};
