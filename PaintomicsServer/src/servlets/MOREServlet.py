@@ -190,6 +190,41 @@ def fromMOREtoGenes_STEP2(jobInstance, userID, RESPONSE, formFields):
         if not jobInstance.conditionsFile or not os.path.exists(os.path.join(input_dir, jobInstance.conditionsFile)):
              raise ValueError("Experimental Design (Conditions) file is missing.")
 
+        # --omic_names is a COMMA-JOINED list that runMORE.R splits on comma to
+        # pair each name with its data file, association file and minVariation
+        # by position. A name that is empty or contains a comma desynchronises
+        # those lists, and every failure mode is silent or unreadable:
+        #
+        #   "TF, ChIP"  -> R sees 2 omics and 1 data file, indexes past the end,
+        #                  and dies with "missing value where TRUE/FALSE needed"
+        #   ""  (last)  -> strsplit drops a trailing empty field entirely, so the
+        #                  last omic vanishes and its data file is never read
+        #   duplicates  -> both omics write MORE_output_<name>_<date>.tab and the
+        #                  second silently overwrites the first
+        #
+        # Cheaper to refuse here, naming the omic, than to debug any of those.
+        seenNames = set()
+        for omic in jobInstance.regulatoryOmics:
+            rawName = (omic.get("name") or "").strip()
+            if not rawName:
+                raise ValueError("Every regulatory omic needs a name; one was left blank.")
+            if "," in rawName:
+                raise ValueError(
+                    f"Regulatory omic name '{rawName}' contains a comma, which is used "
+                    "to separate omics internally. Please rename it.")
+            # Collisions are decided on the SANITISED name, because that is what
+            # both sides put in the filename: runMORE.R writes
+            # gsub(" ", "_", trimws(name)) and STEP2 below reconstructs
+            # name.strip().replace(" ", "_"). "TF A" and "TF_A" are distinct
+            # names that produce the same file.
+            safeName = rawName.replace(" ", "_")
+            if safeName in seenNames:
+                raise ValueError(
+                    f"Regulatory omic '{rawName}' collides with another omic: both map "
+                    f"to the file name '{safeName}', so one set of results would "
+                    "overwrite the other. Please give them distinct names.")
+            seenNames.add(safeName)
+
         for omic in jobInstance.regulatoryOmics:
             # STEP1 leaves "file" as None when neither an upload nor a
             # [MyData] location was given. os.path.join would then raise a bare

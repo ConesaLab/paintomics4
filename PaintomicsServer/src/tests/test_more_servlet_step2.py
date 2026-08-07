@@ -188,6 +188,92 @@ class PreflightValidationTest(Step2TestCase):
         self.assertIsNone(FakePopen.lastCommand)
 
 
+class OmicNameValidationTest(Step2TestCase):
+    """--omic_names is a comma-joined list that runMORE.R splits on comma and
+    pairs with --data_files, --assoc_files and --min_variation BY POSITION.
+
+    Nothing checked the names against that encoding, and every way of breaking
+    it failed badly:
+
+      a comma in a name   R sees more omics than data files, indexes past the
+                          end of data_paths, and dies on read_matrix(NA) with
+                          "missing value where TRUE/FALSE needed"
+      a blank name        strsplit drops a trailing empty field, so the last
+                          omic disappears and its data file is never read --
+                          a silently smaller analysis, not an error
+      duplicate names     both omics write MORE_output_<name>_<date>.tab and
+                          the second overwrites the first
+
+    All three are now refused before R is invoked, which is what these assert:
+    the message matters less than lastCommand staying None.
+    """
+
+    def addFile(self, name):
+        path = os.path.join(self.job.getInputDir(), name)
+        with open(path, "w") as fh:
+            fh.write("id\tS1\tS2\nA\t1\t2\n")
+        return name
+
+    def test_a_comma_in_an_omic_name_is_refused(self):
+        self.job = self.makeJob(omics=[("TF, ChIP", "TF.tab", None, "NA")])
+        content = self.run_step2()
+        self.assertFalse(content.get("success", False))
+        self.assertIsNone(FakePopen.lastCommand, "R must not be invoked")
+
+    def test_the_comma_message_names_the_offending_omic(self):
+        self.job = self.makeJob(omics=[("TF, ChIP", "TF.tab", None, "NA")])
+        content = self.run_step2()
+        self.assertIn("TF, ChIP", str(content))
+
+    def test_a_blank_omic_name_is_refused(self):
+        self.job = self.makeJob(omics=[("", "TF.tab", None, "NA")])
+        self.run_step2()
+        self.assertIsNone(FakePopen.lastCommand)
+
+    def test_a_whitespace_only_omic_name_is_refused(self):
+        """runMORE.R trims, so "   " and "" reach R identically."""
+        self.job = self.makeJob(omics=[("   ", "TF.tab", None, "NA")])
+        self.run_step2()
+        self.assertIsNone(FakePopen.lastCommand)
+
+    def test_duplicate_omic_names_are_refused(self):
+        self.job = self.makeJob(omics=[])
+        self.addFile("TF2.tab")
+        for dataFile in ("TF.tab", "TF2.tab"):
+            self.job.addRegulatoryOmic("TF", dataFile, "TF", minVariation="NA")
+        self.run_step2()
+        self.assertIsNone(FakePopen.lastCommand)
+
+    def test_names_colliding_only_after_sanitising_are_refused(self):
+        """Both sides put gsub(" ", "_", name) in the filename, so "TF A" and
+        "TF_A" are distinct names that produce the same output file."""
+        self.job = self.makeJob(omics=[])
+        self.addFile("TFA.tab")
+        for name, dataFile in (("TF A", "TF.tab"), ("TF_A", "TFA.tab")):
+            self.job.addRegulatoryOmic(name, dataFile, name, minVariation="NA")
+        content = self.run_step2()
+        self.assertIsNone(FakePopen.lastCommand)
+        self.assertIn("TF_A", str(content))
+
+    def test_distinct_names_still_run(self):
+        """The guard must not reject the ordinary multi-omic job."""
+        self.job = self.makeJob(omics=[])
+        self.addFile("MIR.tab")
+        for name, dataFile in (("TF", "TF.tab"), ("miRNA", "MIR.tab")):
+            self.job.addRegulatoryOmic(name, dataFile, name, minVariation="NA")
+        self.run_step2()
+        self.assertIsNotNone(FakePopen.lastCommand)
+        names = FakePopen.lastCommand[FakePopen.lastCommand.index("--omic_names") + 1]
+        self.assertEqual(names, "TF,miRNA")
+
+    def test_a_name_with_an_internal_space_still_runs(self):
+        """Spaces are legal -- both sides map them to underscores identically.
+        Only commas break the encoding."""
+        self.job = self.makeJob(omics=[("Transcription Factors", "TF.tab", None, "NA")])
+        self.run_step2()
+        self.assertIsNotNone(FakePopen.lastCommand)
+
+
 class CommandConstructionTest(Step2TestCase):
 
     def test_invokes_rscript_with_runmore(self):
