@@ -2174,6 +2174,47 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
   white-space: normal;
 }
 
+/* Grid toolbar overflow ------------------------------------------------------
+   The Step 3 pathway-enrichment toolbar needs 1753px to lay out its controls.
+   Its box is as wide as the grid, so below roughly 1750px of viewport the tail
+   of the toolbar is simply cut off - at 1280px that is "Show combined
+   p-values", "Configure" and "Download as XLS", i.e. the table's only export.
+
+   None of it was reachable. ExtJS's own answer, `enableOverflow`, collapses the
+   surplus into a `»` menu, but it re-renders those items into a floating menu
+   attached to the document body, and their click handlers are bound with
+   jQuery against the *grid's* element ($("#" + this.el.id + " a.downloadXLS")
+   in ExtJS_extensions.js). Moving them would leave the menu entries inert, so
+   the download would look present and do nothing - worse than being clipped.
+
+   Wrapping is not available either: the box layout positions every toolbar item
+   absolutely with a `left` computed in JavaScript, so no flex-wrap rule can
+   reach them.
+
+   Scrolling the box is what is left, and it is the option that keeps every
+   element exactly where its handler expects it. `auto` means the bar appears
+   only when the toolbar actually overflows, so wide viewports are untouched;
+   the scrollbar is styled because the platform's overlay bar is invisible until
+   moved, which is why the clipping went unnoticed in the first place.
+
+   Deliberately not inside a media query: the overflow depends on the toolbar's
+   own width, not the viewport's, and it already occurs at 1440px. */
+.x-toolbar.x-docked-top > .x-box-inner {
+	overflow-x: auto;
+	scrollbar-width: thin;
+	scrollbar-color: #B0B0B0 transparent;
+}
+.x-toolbar.x-docked-top > .x-box-inner::-webkit-scrollbar {
+	height: 8px;
+}
+.x-toolbar.x-docked-top > .x-box-inner::-webkit-scrollbar-thumb {
+	background: #B0B0B0;
+	border-radius: 4px;
+}
+.x-toolbar.x-docked-top > .x-box-inner::-webkit-scrollbar-track {
+	background: transparent;
+}
+
 /* Responsive
    Two tiers, and they must stay in this order: at equal specificity the later
    block wins, so the 900px rules below correctly override these once the
