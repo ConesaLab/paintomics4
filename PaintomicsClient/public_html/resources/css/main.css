@@ -182,37 +182,40 @@ a:hover {color: var(--pa-link-hover);}
 	height: 50px;
 	/*z-index: 100;*/
 }
-/* Chrome weight ---------------------------------------------------------------
-   The header band and the left menu were both #222222, which against the
-   #F3F3F3 page is 14.34:1 - the maximum contrast the palette can produce, spent
-   on navigation rather than on the data. Two near-black masses framing the
-   screen is what made the application feel heavy.
+/* Chrome ----------------------------------------------------------------------
+   Successive passes lightened this bar from #222222 to #33343A and it still read
+   as heavy, because the weight was never really the shade - it was that two
+   solid dark masses, the header band and the 65px rail, framed the screen on two
+   sides and between them held every piece of navigation in the application.
 
-   #33343A is still unambiguously a dark chrome, but at 11.18:1 it stops
-   competing with the analysis. The labels on it stay well clear of AA (#ADADAD
-   is 5.53:1, the wordmark 12.01:1), and the #858585 border added to the Sign in
-   button still measures 3.36:1 against it, so lightening the bar does not undo
-   that fix. */
+   So the rail is gone: its markup now renders inside this bar (see MainView.js),
+   and the bar itself goes white with a hairline under it. Navigation stops being
+   a coloured region of the layout and becomes a row of controls, which is the
+   pattern the reference site uses and the reason its chrome disappears behind
+   its data.
+
+   The bar keeps its 50px height on purpose: .secondTopToolbar below is pinned
+   with `top: 50px`, so the height is load-bearing, not cosmetic. */
 .mainTopToolbar {
-	background: #33343A;
+	background: #FFFFFF;
+	border-bottom: 1px solid var(--pa-border);
+	display: flex;
+	align-items: center;
+	gap: 16px;
 }
 
-/* The Sign in / Log out button is a .button, so it inherits the #5b5a59 fill
-   that was chosen to sit on light surfaces. Here it sits on #222222 and
-   measures 2.31:1 against it, below the 3:1 that WCAG 1.4.11 asks of the
-   information that identifies a control.
-
-   The fill is deliberately NOT lightened. Raising it to 3:1 against the header
-   drops its own #E2E2E2 label from 5.31:1 to under 4:1 - the two requirements
-   pull in opposite directions on a mid grey, and the label matters more. So the
-   border carries the boundary, as it does for .btn-default and .btn-info:
-   #858585 is 4.31:1 against the header, and fill and label are untouched.
-
-   `.button` already declares `border: 1px solid transparent`, so this colours
-   an existing border rather than adding one - the button's metrics do not
-   change and nothing in the toolbar reflows. */
+/* The Sign in / Log out button sat on a dark bar and needed a #858585 border to
+   reach the 3:1 that WCAG 1.4.11 asks of the information identifying a control.
+   On white its own #5b5a59 fill is 6.88:1 against the bar, so the fill now
+   carries the boundary by itself and the border goes back to transparent -
+   the earlier fix is not reverted so much as made unnecessary by the surface
+   underneath it changing. `margin-left: auto` is what pins it to the right now
+   that the bar is a flex row rather than a float context. */
 .mainTopToolbar .button {
-	border-color: #858585;
+	border-color: transparent;
+	float: none;
+	margin-left: auto;
+	margin-right: 0;
 }
 .secondTopToolbar {
 	position: fixed;
@@ -225,20 +228,27 @@ a:hover {color: var(--pa-link-hover);}
 	box-shadow: 0px 1px 3px #DCDCDC;
 }
 #header {
-	float: left;
-	height: 48px;
+	float: none;
+	flex: 0 0 auto;
+	display: flex;
+	align-items: center;
+	height: 32px;
 	margin-left: -5px;
 	cursor: pointer;
 }
 #header img {
-	height: 32px;
-	float: left;
+	height: 28px;
+	float: none;
 }
+/* Dark ink now that the bar is white. The wordmark also stops being the largest
+   thing in the interface - at 26px it outsized every heading in the analysis
+   below it, which is the same complaint as the omic cards. */
 #header h1 {
-	font-size: 26px;
-	margin-left: 47px;
-	font-weight: lighter;
-	color: rgb(255, 251, 242);
+	font-size: 19px;
+	margin: 0 0 0 9px;
+	font-weight: 400;
+	color: #1A1A1A;
+	white-space: nowrap;
 }
 #footer {
 	max-width: 65px;
@@ -248,110 +258,146 @@ a:hover {color: var(--pa-link-hover);}
 ***STYLES FOR LATERAL MENU** *******************************
 ***********************************************************/
 
-/* Navigation rail -------------------------------------------------------------
-   What made this column feel heavy was its pattern, not its colour. Every item
-   was a 25px icon - larger than any type in the interface it navigates to - with
-   an 11px label underneath that wrapped to two lines for half the entries
-   ("Personal storage", "Supporting tools"), and the active item was marked by a
-   2px strip welded to the left edge of the rail. The result was a dense stack of
-   ragged two-line blocks with a hard bar down one side.
+/* Header navigation -----------------------------------------------------------
+   This was a 65px dark rail down the left edge holding six stacked items. It now
+   lives in the header as a horizontal pill group, which is what finally takes
+   the weight out: the navigation stops occupying a region of the layout and the
+   analysis gets the full width of the window.
 
-   Rebuilt as a standard rail: each item is a self-contained rounded target with
-   its own padding, the active state is a filled pill rather than an edge strip,
-   and the icon is sized to sit with the label instead of dominating it. Nothing
-   here changes the rail's 65px width, which the ExtJS border layout measures.
-
-   The per-section accent colours are kept but moved from the vanished left
-   border onto the icon, so Job view stays pink, Personal storage yellow and so
-   on - the identity survives the change of shape. */
-.lateralMenu {
-	background-color: #33343A;
-	border: 0;
-	z-index: 200;
-	margin: 0;
-	padding: 8px 6px;
-	width: 65px;
+   The markup is unchanged - same <ul class="lateralMenu-body">, same
+   .menuOption items, same .submenu children, so the jQuery in MainView.js that
+   binds clicks and hover still finds everything. Only the mount point and these
+   rules changed. */
+.mainNav {
+	flex: 1 1 auto;
+	display: flex;
+	justify-content: center;
+	min-width: 0;
 }
-ul.lateralMenu-body, ul.submenu {
+ul.lateralMenu-body {
+	display: flex;
+	align-items: center;
+	gap: 2px;
+	margin: 0;
+	padding: 3px;
+	list-style: none;
+	background: #F1F2F4;
+	border-radius: 999px;
+	max-width: 100%;
+}
+ul.submenu {
 	margin: 0;
 	padding: 0;
-	margin-top: 5px;
 }
-.lateralMenu .menuOption {
-	color: #A8A9B0;
-	font-size: 10px;
-	line-height: 1.3;
-	padding: 9px 2px 8px;
-	margin-bottom: 2px;
+/* Top-level items. `position: relative` is what the dropdown below anchors to. */
+.lateralMenu-body > .menuOption {
+	position: relative;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 6px 13px;
 	border: 0;
-	border-radius: 8px;
-	text-align: center;
+	border-radius: 999px;
+	font-size: 13px;
+	line-height: 1;
+	color: #3A3B42;          /* 8.6:1 on #F1F2F4 */
+	white-space: nowrap;
 	cursor: pointer;
 	transition: background-color var(--pa-transition), color var(--pa-transition);
 }
-/* Hover and active are the same shape at two strengths. Both are white at low
-   alpha rather than a fixed grey, so they keep working if the rail's background
-   is ever retuned again. */
-.lateralMenu .menuOption:hover {
-	color: #FFF;
-	background-color: rgba(255, 255, 255, 0.08);
+.lateralMenu-body > .menuOption:hover,
+.lateralMenu-body > .menuOption.selected {
+	background: #FFFFFF;
+	color: #111111;
 }
-.lateralMenu .menuOption.selected {
-	color: #FFF;
-	background-color: rgba(255, 255, 255, 0.15);
-}
-.lateralMenu .menuOption:hover > i.fa,
-.lateralMenu .menuOption.selected > i.fa {
-	color: #CE3271;
-}
-.lateralMenu .menuOption:nth-child(2):hover > i.fa,
-.lateralMenu .menuOption:nth-child(2).selected > i.fa {
-	color: #CEC232;
-}
-.lateralMenu .menuOption:nth-child(3):hover > i.fa,
-.lateralMenu .menuOption:nth-child(3).selected > i.fa {
-	color: #7CC0FF;
-}
-.lateralMenu .menuOption:nth-child(4):hover > i.fa,
-.lateralMenu .menuOption:nth-child(4).selected > i.fa {
-	color: #84DA91;
-}
-li.menuOption i.fa {
-	display: block;
-	font-size: 17px;
-	margin: 0 0 5px;
+/* The icon sat above the label in the rail and has to sit beside it here. */
+.lateralMenu-body > .menuOption > i.fa {
+	display: inline-block;
+	font-size: 13px;
+	margin: 0;
 	transition: color var(--pa-transition);
 }
-ul.submenu {
+/* The per-section accents survive the move: they were on the rail's left border,
+   then on the icon, and stay on the icon here. */
+.lateralMenu-body > .menuOption:hover > i.fa,
+.lateralMenu-body > .menuOption.selected > i.fa { color: #B02A5B; }
+.lateralMenu-body > .menuOption:nth-child(2):hover > i.fa,
+.lateralMenu-body > .menuOption:nth-child(2).selected > i.fa { color: #8A7A18; }
+.lateralMenu-body > .menuOption:nth-child(3):hover > i.fa,
+.lateralMenu-body > .menuOption:nth-child(3).selected > i.fa { color: #2F6FA8; }
+.lateralMenu-body > .menuOption:nth-child(4):hover > i.fa,
+.lateralMenu-body > .menuOption:nth-child(4).selected > i.fa { color: #2E7D3A; }
+
+/* Dropdowns. The rail flew these out sideways at `left: 65px` with a negative
+   top margin; from a header they drop underneath the item that owns them.
+   jQuery toggles display via fadeIn/fadeOut, so `display: none` stays the
+   resting state and nothing about the behaviour changes. */
+.lateralMenu-body ul.submenu {
 	display: none;
 	position: absolute;
-	left: 65px;
-	margin-top: -50px;
-	width: 200px;
-	font-size: 15px;
-	padding-left: 5px;
+	top: 100%;
+	left: 0;
+	margin-top: 8px;
+	width: max-content;
+	min-width: 240px;
+	max-width: 380px;
+	background: #FFFFFF;
+	border: 1px solid var(--pa-border);
+	border-radius: var(--pa-radius);
+	box-shadow: 0 12px 28px -8px rgba(24, 24, 27, 0.22), 0 6px 12px -6px rgba(24, 24, 27, 0.14);
+	padding: 6px;
+	z-index: 300;
+	font-size: 13px;
+	text-align: left;
+	white-space: normal;
+}
+/* The last two dropdowns would run off the right edge, so they hang from the
+   right of their item instead. */
+.lateralMenu-body > .menuOption:nth-last-child(-n+2) ul.submenu {
+	left: auto;
+	right: 0;
 }
 ul.submenu li {
 	list-style-type: none;
-	padding: 10px;
+	padding: 0;
 }
 ul.submenu li.menuOption {
-	border-left: 0 !important;
-	padding: 16px 12px;
-	background-color: #222222;
-	border-bottom: 1px solid #5A5A5A;
+	display: block;
+	padding: 8px 10px;
+	border: 0 !important;
+	border-radius: 6px;
+	background-color: transparent;
+	color: #3A3B42;
 	text-align: left;
+	line-height: 1.45;
+	transition: background-color var(--pa-transition);
+}
+ul.submenu li.menuOption:hover {
+	background-color: #F1F2F4;
 }
 ul.submenu a {
-	color: #ADADAD;
+	color: var(--pa-link);
 }
 ul.submenu a:hover {
-	color: #EDFFB8;
+	color: var(--pa-link-hover);
+	text-decoration: underline;
+}
+/* The citation entries carry `style="color: white"` inline, written for the old
+   dark flyout. On a white dropdown that is invisible, and the inline style beats
+   any normal rule, so this is one of the few places !important is the only tool
+   that works. */
+ul.submenu li.menuOption > div {
+	color: #1A1A1A !important;
+	font-weight: 600;
+	margin-bottom: 2px;
 }
 ul.submenu i.fa {
 	display: inline-block;
-	margin-right: 10px;
-	font-size: 15px;
+	margin-right: 8px;
+	font-size: 13px;
+	width: 14px;
+	text-align: center;
+	color: #6B6C74;
 }
 ul.menu li.loggedOption, ul.menu span.loggedOption {
 	display: none
