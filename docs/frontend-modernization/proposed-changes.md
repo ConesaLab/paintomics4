@@ -390,3 +390,81 @@ otherwise dissolve into the page, and a disabled state rewritten as a flat
 only, which on a filled chip left the palette colour showing through.
 
 This also closes the badge half of entry 4.
+
+---
+
+## 6. The grid toolbar cannot use ExtJS's own overflow handler
+
+**Status:** open (worked around in `main.css`; the proper fix is here)
+**Raised:** iteration 11 (branch `frontend-modernization`)
+
+The Step 3 pathway-enrichment toolbar lays out 1753px of controls. Its box is
+only as wide as the grid, so from about 1750px of viewport downwards the tail is
+clipped with no way to reach it. At 1280px that is **"Show combined p-values",
+"Configure" and "Download as XLS"** - the table's only export. It is already
+happening at 1440px, so this is not a small-screen edge case.
+
+ExtJS solves exactly this with `enableOverflow: true`, which collapses the
+surplus into a `»` menu. **It cannot be used here**, because
+`ExtJS_extensions.js` puts raw HTML anchors in the toolbar:
+
+```js
+me.tbar = [ ... '->',
+    ((me.download !== false) ? '<a class="downloadXLS" ...>Download as XLS</a>' : ""),
+    ((me.multidelete !== false) ? '<a class="multiDelete" ...>Delete selected</a>' : "")
+];
+```
+
+and binds their handlers with jQuery against the grid's own element:
+
+```js
+$("#" + this.el.id + " a.downloadXLS").click(function () { ... });   // line 334
+```
+
+The overflow handler re-renders items into a floating menu attached to the
+document body, i.e. outside `this.el`. The selector would no longer match, so
+the menu entries would render and do nothing - a download button that looks
+present and silently fails, which is worse than one that is visibly clipped.
+
+### Proposed fix
+
+Convert the two anchors into real toolbar buttons with ExtJS handlers, then turn
+on the overflow menu:
+
+```diff
+-me.tbar = [ ... ];
++me.tbar = {
++    enableOverflow: true,
++    items: [ ...
++        (me.download !== false) ? {
++            xtype: 'button', iconCls: 'fa fa-file-excel-o', text: 'Download as XLS',
++            handler: function () { /* body of the current $().click() callback */ }
++        } : null,
++        ... ]
++};
+```
+
+Note `me.tbar.splice(-3, 0, ...)` and `me.tbar.splice(-2, 0, ...)` further down
+become `me.tbar.items.splice(...)`. The same applies to `a.multiDelete`.
+
+Until then, `main.css` gives `.x-toolbar.x-docked-top > .x-box-inner` an
+`overflow-x: auto`, which keeps every element where its handler expects it and
+makes the tail reachable by scrolling. Verified at 1280px: the toolbar scrolls
+590px and "Download as XLS" lands inside the viewport with the anchor still
+inside the grid element. The workaround's one weakness is the reason to do the
+above properly - ExtJS pins the inner box to an inline `height: 24px`, so on
+platforms with classic (space-taking) scrollbars the bar sits over the bottom of
+the control row. On overlay-scrollbar platforms it costs nothing; measured
+`offsetHeight - clientHeight = 0` on macOS/Chromium.
+
+---
+
+## Checked in iteration 11 and found conformant - do not re-investigate
+
+The Step 3 significance cells render a p-value gradient from `rgb(255,0,0)` to
+`rgb(255,161,161)` (`PA_Step3Views.js` lines 3719, 4103, 5424, 5480). At small
+sizes on a saturated red they *look* like dark-red-on-red, and were flagged as a
+suspected contrast failure. They are not: the ink is pure black and the worst
+pair in the whole gradient is `#000000` on `rgb(255,0,0)` at **5.25:1**. Audited
+live across 55 distinct fills; none below 4.5:1. White would be *worse* here
+(4.00:1), so the current choice is already the right one.
