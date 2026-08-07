@@ -857,6 +857,14 @@ ul.ui-menu.ui-widget.ui-widget-content {
 	margin: 5px 10px;
 	box-shadow: var(--pa-shadow);
 }
+/* See the comment on the form in PA_Step1Views: the inset is applied through the
+   panel's own margin config, which ExtJS measures, so the body must not add it
+   again. Scoped to this one panel - every other .contentbox is an element that
+   ExtJS does not size itself, where the margin is correct. */
+.paStep1Form > .x-panel-body.contentbox {
+	margin-left: 0;
+	margin-right: 0;
+}
 /* Card headings ---------------------------------------------------------------
    Every block on the results page - Pathways selection, Pathways summary,
    Multiple databases used, the classification and network panels, both
