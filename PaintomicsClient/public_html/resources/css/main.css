@@ -3029,12 +3029,35 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
 }
 .pa-toc-list {
 	display: flex;
-	flex-wrap: wrap;
+	/* One line, always. Measured: the eight pills a default mmu run produces
+	   come to 1234px against the 1240px available at a 1280px viewport - six
+	   pixels of headroom. Longer section names, a species with more analyses, or
+	   a slightly narrower window all tip that into wrapping, and a wrapped
+	   sticky strip doubles in height and eats the top of the results it is
+	   supposed to help you read. Scrolling keeps it 41px whatever it holds. */
+	flex-wrap: nowrap;
+	overflow-x: auto;
 	align-items: center;
 	gap: 4px;
 	margin: 0;
 	padding: 0;
 	list-style: none;
+	scrollbar-width: thin;
+	scrollbar-color: #C3C5CB transparent;
+	scroll-behavior: smooth;
+}
+.pa-toc-list::-webkit-scrollbar {
+	height: 6px;
+}
+.pa-toc-list::-webkit-scrollbar-thumb {
+	background: #C3C5CB;
+	border-radius: 3px;
+}
+.pa-toc-list::-webkit-scrollbar-track {
+	background: transparent;
+}
+.pa-toc-list > li {
+	flex: 0 0 auto;
 }
 .pa-toc-link {
 	display: inline-block;

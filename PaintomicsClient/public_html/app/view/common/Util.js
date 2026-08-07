@@ -517,30 +517,51 @@ function scaleValue(x, min, max) {
  * headings already carry the *same* id ("EnrichmentSection"), so reusing the
  * existing ids would produce a link that always jumps to the first of the pair.
  */
-function buildAnalysisTOC(containerSelector) {
-    var root = document.querySelector(containerSelector || '#mainViewCenterPanel');
-    if (!root) { return null; }
+/**
+ * The contents strip for the results page.
+ *
+ * Step 3 stacks eight independent analyses down roughly 2900px of scroll with no
+ * way to see what is there or to reach any of it except by scrolling past
+ * everything above. This lists them and jumps to them.
+ *
+ * Split deliberately in two: buildAnalysisTOC() only writes markup, and all the
+ * behaviour lives in one delegated block installed once at the bottom of this
+ * section. Everything is recomputed from the DOM at event time and nothing is
+ * held in a closure, because on this page nothing survives being held:
+ *
+ *   - Heading nodes captured at build time are detached when the classification,
+ *     network and enrichment views re-render, and scrolling a detached element
+ *     is silent rather than an error.
+ *   - An id or data attribute stamped on a heading goes with it.
+ *   - Listeners attached to the strip's own links are dropped when ExtJS
+ *     rebuilds the centre panel - the strip keeps its markup and its labels, so
+ *     it still looks correct while doing nothing at all.
+ *
+ * Sections are matched by heading text, which is the only thing that survives
+ * all three.
+ */
+function paTocRoot() {
+    return document.querySelector('#mainViewCenterPanel');
+}
 
-    // Anything already built for a previous job has to go, or a second run
-    // appends a second strip.
-    var existing = root.querySelector('.pa-toc');
-    if (existing) { existing.remove(); }
+function paTocNorm(el) {
+    return el.textContent.trim().replace(/\s+/g, ' ');
+}
 
-    // One entry per analysis, not per <h2>. The network view labels its own side
-    // panels with h2 as well - "Details", "Tools" - and those are controls
-    // inside an analysis rather than analyses, so listing them made the strip
-    // advertise sections that do not exist. Each analysis is a .contentbox, so
-    // taking the first heading in each box is the reliable boundary; headings
-    // outside any box are kept, since a few sections are not wrapped in one.
+/**
+ * The analyses currently on the page, one entry each.
+ *
+ * One per .contentbox rather than one per <h2>: the network view titles its own
+ * side panels with h2 too - "Details", "Tools" - and those are controls inside
+ * an analysis, not analyses. Read fresh every time, because which sections exist
+ * depends on the omics submitted and the databases chosen.
+ */
+function paTocSections() {
+    var root = paTocRoot();
+    if (!root) { return []; }
     var claimed = [];
-    var headings = Array.prototype.filter.call(root.querySelectorAll('h2'), function (h) {
-        // offsetParent excludes headings inside collapsed or inactive tabs; a
-        // link to something not currently rendered would scroll nowhere.
-        if (h.offsetParent === null || h.textContent.trim().length < 3) { return false; }
-        // The network view titles its own side panels with h2 - "Details",
-        // "Tools" - and those are controls belonging to an analysis, not
-        // analyses. They are not wrapped in a .contentbox either, so the
-        // one-per-box rule below does not catch them; they have to be named.
+    return Array.prototype.filter.call(root.querySelectorAll('h2'), function (h) {
+        if (h.offsetParent === null || paTocNorm(h).length < 3) { return false; }
         if (h.closest('[id^="networkSettingsPanel"], [id^="networkDetailsPanel"], .lateralOptionsPanel')) {
             return false;
         }
@@ -550,6 +571,130 @@ function buildAnalysisTOC(containerSelector) {
         claimed.push(box);
         return true;
     });
+}
+
+/* The page does not scroll the window. MainView gives the centre region
+   `overflowY: auto`, so that panel is the scroller and every window.scrollBy
+   against it is a no-op. */
+function paTocScroller() {
+    var root = paTocRoot();
+    var n = root;
+    while (n && n !== document.body) {
+        var st = window.getComputedStyle(n);
+        if (/(auto|scroll)/.test(st.overflowY) && n.scrollHeight > n.clientHeight) { return n; }
+        n = n.parentElement;
+    }
+    return null;
+}
+
+function paTocOffset() {
+    var header = document.querySelector('.mainTopToolbar');
+    var nav = document.querySelector('.pa-toc');
+    return (header ? header.offsetHeight : 50) + (nav ? nav.offsetHeight : 0) + 12;
+}
+
+function paTocJumpTo(label) {
+    var target = null;
+    paTocSections().forEach(function (h) { if (paTocNorm(h) === label) { target = h; } });
+    if (!target) { return; }
+    var sc = paTocScroller();
+    if (!sc) {
+        window.scrollTo(0, target.getBoundingClientRect().top + window.pageYOffset - paTocOffset());
+        return;
+    }
+    var delta = target.getBoundingClientRect().top - sc.getBoundingClientRect().top;
+    var destination = sc.scrollTop + delta - paTocOffset();
+
+    // scrollTop assignment, not scrollTo({behavior: 'smooth'}). The smooth form
+    // silently does nothing on this element - measured: every value resolves
+    // correctly (scroller found, section matched, offset 103) and scrollTop moves
+    // 7.5 to 8. The same element accepts an instant scroll to 2658 without
+    // complaint, so something in the ExtJS scroller swallows the animated form.
+    // Animated here by hand instead, which cannot be intercepted.
+    var start = sc.scrollTop;
+    var change = destination - start;
+    if (Math.abs(change) < 2) { return; }
+    var began = null;
+    var duration = 300;
+    function step(now) {
+        if (began === null) { began = now; }
+        var t = Math.min(1, (now - began) / duration);
+        // ease-out cubic
+        sc.scrollTop = start + change * (1 - Math.pow(1 - t, 3));
+        if (t < 1) { window.requestAnimationFrame(step); return; }
+
+        // Re-measure and correct once. The enrichment grid renders its rows
+        // lazily, so the page's height changes *while* this animation runs and
+        // the destination computed at click time is stale on arrival - two of
+        // five sections landed several hundred pixels short. Measuring again at
+        // the end and snapping costs one frame and makes the jump exact
+        // wherever the layout settled.
+        var residual = target.getBoundingClientRect().top - sc.getBoundingClientRect().top - paTocOffset();
+        if (Math.abs(residual) > 4) { sc.scrollTop = sc.scrollTop + residual; }
+        paTocMarkCurrent();
+    }
+    window.requestAnimationFrame(step);
+}
+
+function paTocMarkCurrent() {
+    var nav = document.querySelector('.pa-toc');
+    if (!nav) { return; }
+    var list = nav.querySelector('.pa-toc-list');
+    var links = nav.querySelectorAll('.pa-toc-link');
+    // +28, not a few pixels: paTocJumpTo parks a heading 12px *below* the strip,
+    // so with a tight boundary the section just jumped to has not "passed" yet
+    // and the strip highlights the one above it - disagreeing with itself the
+    // moment it is used.
+    var boundary = nav.getBoundingClientRect().bottom + 28;
+    var currentLabel = null;
+    paTocSections().forEach(function (h) {
+        if (h.getBoundingClientRect().top <= boundary) { currentLabel = paTocNorm(h); }
+    });
+    var active = null;
+    Array.prototype.forEach.call(links, function (l) {
+        var isCurrent = l.getAttribute('data-toc-text') === currentLabel;
+        l.classList.toggle('current', isCurrent);
+        if (isCurrent) { active = l; }
+    });
+    // The strip is a single scrolling line, so the pill being marked can sit
+    // outside it - the highlight would be doing its job where it cannot be seen.
+    // Horizontal only; scrollIntoView() would move the page and fight the reader.
+    if (active && list) {
+        var pill = active.getBoundingClientRect();
+        var view = list.getBoundingClientRect();
+        if (pill.left < view.left || pill.right > view.right) {
+            list.scrollLeft += (pill.left - view.left) - (view.width - pill.width) / 2;
+        }
+    }
+}
+
+(function paTocInstall() {
+    var ticking = false;
+    function onScroll() {
+        if (ticking) { return; }
+        ticking = true;
+        window.requestAnimationFrame(function () { ticking = false; paTocMarkCurrent(); });
+    }
+    document.addEventListener('click', function (ev) {
+        var link = ev.target && ev.target.closest ? ev.target.closest('.pa-toc-link') : null;
+        if (!link) { return; }
+        ev.preventDefault();
+        paTocJumpTo(link.getAttribute('data-toc-text'));
+    });
+    // Capture, because the element that scrolls is nested and scroll does not
+    // bubble.
+    document.addEventListener('scroll', onScroll, {passive: true, capture: true});
+    window.addEventListener('resize', onScroll, {passive: true});
+}());
+
+function buildAnalysisTOC(containerSelector) {
+    var root = document.querySelector(containerSelector || '#mainViewCenterPanel');
+    if (!root) { return null; }
+
+    var existing = root.querySelector('.pa-toc');
+    if (existing) { existing.remove(); }
+
+    var headings = paTocSections();
     if (headings.length < 3) { return null; }
 
     var nav = document.createElement('nav');
@@ -559,77 +704,21 @@ function buildAnalysisTOC(containerSelector) {
     var list = document.createElement('ul');
     list.className = 'pa-toc-list';
 
-    headings.forEach(function (h, i) {
-        var anchorId = 'pa-analysis-' + i;
-        h.setAttribute('data-pa-anchor', anchorId);
-
+    headings.forEach(function (h) {
+        var label = paTocNorm(h);
         var li = document.createElement('li');
         var a = document.createElement('a');
         a.className = 'pa-toc-link';
         a.href = 'javascript:void(0)';
-        a.textContent = h.textContent.trim().replace(/\s+/g, ' ');
-        a.setAttribute('data-target', anchorId);
-        a.addEventListener('click', function () {
-            // The heading is looked up at click time rather than closed over.
-            // The section views re-render after this strip is built, which
-            // detaches the original nodes - a handler holding one scrolls to an
-            // element that is no longer in the document, which is silent.
-            var target = document.querySelector('[data-pa-anchor="' + anchorId + '"]');
-            if (!target) { return; }
-
-            // The page does not scroll the window: MainView gives the centre
-            // region `overflowY: auto`, so that panel is the scroller and every
-            // window.scrollBy against it was a no-op. Walk up to whatever
-            // actually scrolls and move that.
-            var scroller = target.parentElement;
-            while (scroller && scroller !== document.body) {
-                var style = window.getComputedStyle(scroller);
-                if (/(auto|scroll)/.test(style.overflowY) && scroller.scrollHeight > scroller.clientHeight) {
-                    break;
-                }
-                scroller = scroller.parentElement;
-            }
-
-            // Two fixed things sit above the content - the header and this strip
-            // - so a plain jump lands the heading behind the very thing that was
-            // clicked. Measured, not guessed: an earlier flat -70px cleared the
-            // 50px header and not the strip on top of it.
-            var header = document.querySelector('.mainTopToolbar');
-            var offset = (header ? header.offsetHeight : 50) + nav.offsetHeight + 12;
-
-            if (!scroller || scroller === document.body) {
-                window.scrollTo({
-                    top: target.getBoundingClientRect().top + window.pageYOffset - offset,
-                    behavior: 'smooth'
-                });
-            } else {
-                var delta = target.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
-                scroller.scrollTo({top: scroller.scrollTop + delta - offset, behavior: 'smooth'});
-            }
-        });
+        a.textContent = label;
+        a.setAttribute('data-toc-text', label);
         li.appendChild(a);
         list.appendChild(li);
     });
 
     nav.appendChild(list);
     root.insertBefore(nav, root.firstChild);
-
-    // Mark whichever analysis the reader is currently inside. IntersectionObserver
-    // rather than a scroll handler so this costs nothing while idle.
-    if (window.IntersectionObserver) {
-        var links = nav.querySelectorAll('.pa-toc-link');
-        var observer = new IntersectionObserver(function (entries) {
-            entries.forEach(function (entry) {
-                if (!entry.isIntersecting) { return; }
-                var id = entry.target.getAttribute('data-pa-anchor');
-                Array.prototype.forEach.call(links, function (l) {
-                    l.classList.toggle('current', l.getAttribute('data-target') === id);
-                });
-            });
-        }, {rootMargin: '-60px 0px -75% 0px'});
-        headings.forEach(function (h) { observer.observe(h); });
-    }
-
+    paTocMarkCurrent();
     return nav;
 }
 
