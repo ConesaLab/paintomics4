@@ -82,6 +82,27 @@ root {
   /* Kept short enough to feel like feedback rather than animation. Collapsed
      to 0.01ms by the prefers-reduced-motion block near the end of this file. */
   --pa-transition: 150ms ease;
+
+  /* Page column ---------------------------------------------------------------
+     The application was pinned to the left edge. On a 1867px viewport the
+     content measured 1300px wide starting at x=20, leaving 547px of dead space
+     down the right - not a wide layout, a narrow one shoved into a corner.
+
+     One column, centred, that the header contents and the content boxes both
+     align to. 1600px because the widest thing in the application is the Step 3
+     enrichment grid at ~1400px, and the column has to hold it without
+     reintroducing the horizontal scrolling that removing the rail just cured.
+
+     The gutter is `max()` so that below 1600px it collapses to a normal 20px
+     margin and nothing changes - this only does work on displays wide enough to
+     have the problem. */
+  /* 1300px, not a value of my own choosing: an existing media-query rule caps
+     .contentbox at exactly that, so the column has to agree with it or the
+     header's contents and the content beneath would sit on two different left
+     edges - which is precisely what the first attempt at this produced, the
+     wordmark at 133px and the content at 284px. */
+  --pa-page-max: 1300px;
+  --pa-gutter: max(20px, calc((100vw - var(--pa-page-max)) / 2));
 }
 
 /* Keyboard focus ------------------------------------------------------------
@@ -202,6 +223,87 @@ a:hover {color: var(--pa-link-hover);}
 	display: flex;
 	align-items: center;
 	gap: 16px;
+	/* The bar stays full-bleed - a centred white strip on a white page would be
+	   invisible - but its contents sit on the page column, so the wordmark lines
+	   up with the left edge of the content beneath it. */
+	padding-left: var(--pa-gutter);
+	padding-right: var(--pa-gutter);
+}
+
+/* One control system for the header row ---------------------------------------
+   Folding the step actions into this row exposed that they had never been
+   designed to sit beside each other. Measured, the bar held:
+
+     Sign in / Log in   #5b5a59 charcoal fill, 10px type, 27px tall
+     Reset              #D43E3A solid red,     14px type, 32px tall
+     Run PaintOmics     solid green,           14px type, 32px tall
+     Load example       solid teal,            14px type, 32px tall
+     Sharing options    white,                 14px type, 32px tall
+     the nav pills      light grey,          12.5px type, 999px radius
+
+   Two heights, two type sizes, four fills and two corner radii, in one row.
+   That is what read as "very different visual effect" - the controls were not
+   disagreeing about hierarchy, they were disagreeing about what a control is.
+
+   So: one shape for everything in this row - the nav's pill, 30px tall, 12.5px
+   type - and hierarchy expressed by weight instead of by everything shouting at
+   once. Exactly one control is filled, the primary action for the step; the
+   rest are ghosts, and destructive intent is carried by red ink rather than a
+   red field. A Reset button does not need to be the loudest thing on screen.
+
+   The border is #878787 on every ghost, not a tinted red for the destructive
+   one: a red pale enough to read as a hint (#D9A6A2, #C08A86) measures 2.12 and
+   2.91 against white and misses the 3:1 that WCAG 1.4.11 wants of a control's
+   boundary, while the neutral makes 3.59. Ink #24252A is 15.29 and the
+   destructive #B3261E is 6.54. */
+.mainTopToolbar .button,
+.secondTopToolbar .button {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	height: 30px;
+	padding: 0 13px;
+	border: 1px solid #878787;
+	border-radius: 999px;
+	background-color: #FFFFFF;
+	color: #24252A;
+	font-size: 12.5px;
+	line-height: 1;
+	white-space: nowrap;
+}
+.mainTopToolbar .button:hover,
+.secondTopToolbar .button:hover {
+	background-color: #F1F2F4;
+	color: #111111;
+	border-color: #767676;
+}
+/* The step's primary action - Run PaintOmics, Next step - is the one thing that
+   stays filled, so the eye still lands on it immediately. */
+.secondTopToolbar .button.btn-success {
+	background-color: #3A843A;   /* white label 4.62:1 */
+	border-color: transparent;
+	color: #FFFFFF;
+}
+.secondTopToolbar .button.btn-success:hover {
+	background-color: #31702F;
+	border-color: transparent;
+	color: #FFFFFF;
+}
+.mainTopToolbar .button.btn-danger,
+.secondTopToolbar .button.btn-danger {
+	background-color: #FFFFFF;
+	color: #B3261E;
+	border-color: #878787;
+}
+.mainTopToolbar .button.btn-danger:hover,
+.secondTopToolbar .button.btn-danger:hover {
+	background-color: #FCF2F1;
+	color: #8F1E17;
+	border-color: #767676;
+}
+/* .btn-sm set 10px, which is where the account button's odd size came from. */
+.mainTopToolbar .button.btn-sm {
+	font-size: 12.5px;
 }
 
 /* The Sign in / Log out button sat on a dark bar and needed a #858585 border to
@@ -245,7 +347,7 @@ a:hover {color: var(--pa-link-hover);}
 	position: fixed;
 	top: 0 !important;
 	left: auto !important;
-	right: 150px !important;
+	right: calc(var(--pa-gutter) + 132px) !important;
 	width: auto !important;
 	height: 50px;
 	padding: 0;
@@ -1511,6 +1613,17 @@ div[id ^= "networkDetailsPanel_"] {width:270px;}
    the pale end of the palette (#ffff00, #deeaee, #99ffcc and friends), which
    would otherwise dissolve into the page; on the dark end it is imperceptible,
    which is why one flat rgba value covers all 36 colours. */
+/* Every top-level surface centres on the page column. `auto` margins rather
+   than a wrapper element, because these boxes are rendered by a dozen different
+   ExtJS views and there is no single container to constrain. */
+.contentbox,
+.omicbox,
+.po-hero-section {
+	max-width: var(--pa-page-max);
+	margin-left: auto;
+	margin-right: auto;
+}
+
 i.classificationNameBox {
 	margin-right: 10px;
 	border-radius: 50%;
