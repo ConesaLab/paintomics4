@@ -3723,7 +3723,8 @@ function PA_Step3PathwayTableView() {
 
 				if(numericValue <= 0.065){
 					var color = Math.round(161 * (numericValue/0.065));
-					metadata.style += "background-color:rgb(255, " + color +"," + color + ");";
+					var tint = 172 + Math.round(color * 0.32);
+				metadata.style += "background-color:rgb(255, " + tint + "," + tint + "); color:#9B1C1C;";
 				}
 
 				//RENDER THE VALUE -> IF LESS THAN 0.05, USE SCIENTIFIC NOTATION
@@ -4107,7 +4108,8 @@ function PA_Step3PathwayTableView() {
 
 			if(value <= 0.065){
 				var color = Math.round(225 * (value/0.065));
-				metadata.style += "background-color:rgb(255, " + color +"," + color + ");";
+				var tint = 172 + Math.round(color * 0.32);
+				metadata.style += "background-color:rgb(255, " + tint + "," + tint + "); color:#9B1C1C;";
 			}
 
 			try {
@@ -5428,7 +5430,8 @@ var renderFunctionLimit = function (value, metadata, record) {
 
 		if (value <= 0.1) {
 			var color = Math.round(225 * (value / 0.1));
-			metadata.style += "background-color:rgb(255, " + color + "," + color + ");";
+			var tint = 172 + Math.round(color * 0.32);
+				metadata.style += "background-color:rgb(255, " + tint + "," + tint + "); color:#9B1C1C;";
 		}
 
 		try {
@@ -5482,9 +5485,20 @@ var renderFunctionHub= function (value, metadata, record) {
 
 		var renderedValue = parseFloat(value).toFixed(2);
 
+		// This was `225 * (1 - value / 0.05)`, which for any percentile in the
+		// [0.90, 1.0] range it guards evaluates to between -3825 and -4275. The
+		// browser clamps that to 0, so every qualifying cell rendered flat pure
+		// red and the intended gradient never existed at all - the formula had
+		// been copied from a p-value renderer, where dividing by 0.05 makes
+		// sense because the values are below it. Here the values are above 0.9.
+		//
+		// Mapped over the range that is actually guarded: 0.90 is barely tinted,
+		// 1.00 is the strongest. Clamped both ends so a value outside the range
+		// can never produce an out-of-gamut channel again.
 		if (value >= 0.90) {
-			var color = Math.round(225 * ( 1-value / 0.05));
-			metadata.style += "background-color:rgb(255, " + color + "," + color + ");";
+			var t = Math.max(0, Math.min(1, (value - 0.90) / 0.10));
+			var tint = 244 - Math.round(t * 72);   // 244 -> 172
+			metadata.style += "background-color:rgb(255, " + tint + "," + tint + "); color:#9B1C1C;";
 		}
 		
 		return renderedValue;
