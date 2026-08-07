@@ -210,14 +210,85 @@ that is unacceptable, give that badge a filled chip with dark text instead.
 Both are set as inline `style="background: ..."` on the element, so `main.css`
 cannot reach them without an attribute-selector hack.
 
-| Element | Current fill | White label | Suggested | New |
-|---|---|---|---|---|
-| "History" button | `#d66379` | 3.55:1 | `#CD435D` | 4.61:1 |
-| "Pathway information" panel header | `#5bc0de` | 2.09:1 | `#1F7F9B` | 4.60:1 |
+`.lateralOptionsPanel-header` has **four** inline fill variants, found by opening
+each of the Step 4 side panels in turn (pathway info, heatmap, settings,
+search). Three of the four fail, and three of the four fixes can reuse a value
+already present in `main.css`, so the palette gains nothing new:
+
+| Element | Current fill | White label | Suggested | New | Reuses |
+|---|---|---|---|---|---|
+| "Download" header | `#337ab7` | 4.56:1 | *(no change)* | - | - |
+| "Global heatmap" header | `#55c9a6` | 2.04:1 | `#2A8368` | 4.62:1 | `.btn-secondary` |
+| "Pathway information" header | `#5bc0de` | 2.09:1 | `#1F7F9B` | 4.60:1 | new |
+| "Visual settings" header | `#d9534f` | 3.96:1 | `#D43E3A` | 4.62:1 | `.btn-danger` |
+| "History" button | `#d66379` | 3.55:1 | `#CD435D` | 4.61:1 | new |
+
+Note the "Visual settings" case in particular: `#d9534f` is the *old* Bootstrap
+danger red, which `main.css` already darkened to `#D43E3A` for `.btn-danger`.
+Because this panel sets the colour inline from JS, it kept the pre-fix value -
+so the same red now appears at two different lightnesses depending on whether
+it came from the stylesheet or from a view file. Applying the suggestion above
+also re-synchronises them.
 
 Note for whoever picks this up: **do not** instead darken the shared
 `.lateralOptionsPanel-header h2` ink in `main.css`. The sibling "Download"
 header is filled `#337ab7`, where white already passes at 4.56:1; switching
 that h2 to dark ink would drop it to 3.73:1 and break a currently-conformant
 header to fix a different one. The fill is the right thing to change, and only
-for the cyan panel.
+for the panels that need it.
+
+**Update (iteration 7):** there is a third inline variant of this header. The
+"Global heatmap" panel, which appears only in the Step 4 heatmap view, is
+filled `#55c9a6` and carries a white label at **2.04:1** - worse than the cyan
+one. Suggested `#2A8368` (4.62:1), which is the same value the `.btn-secondary`
+fill already uses, so the palette does not gain a new colour.
+
+---
+
+## 5. Reactome classification badges - 18 colours, all far below AA
+
+**Status:** open
+**Raised:** iteration 7 (branch `frontend-modernization`)
+
+Every audit before this one measured only what was on screen, and elements
+inside an inactive ExtJS tab have no `offsetParent`, so they were skipped
+silently. Activating the **Reactome** tab of `tabcontainer_network` on Step 3
+revealed 20 further failing pairs, 18 of them distinct classification badge
+letters defined in `PA_Step3Views.js`.
+
+These are the worst contrast values found anywhere in the application. Pure
+yellow on white is effectively invisible.
+
+| Current | On white | Suggested | New |
+|---|---|---|---|
+| `#ffff00` | 1.07:1 | `#797900` | 4.62:1 |
+| `#e0f8d8` | 1.13:1 | `#348618` | 4.60:1 |
+| `#ffef96` | 1.16:1 | `#897400` | 4.60:1 |
+| `#99ffcc` | 1.20:1 | `#008744` | 4.62:1 |
+| `#deeaee` | 1.23:1 | `#497C8D` | 4.61:1 |
+| `#e3eaa7` | 1.27:1 | `#717B1D` | 4.61:1 |
+| `#b5e7a0` | 1.41:1 | `#3F8521` | 4.58:1 |
+| `#d6cbd3` | 1.57:1 | `#8A6D82` | 4.57:1 |
+| `#eca1a6` | 2.06:1 | `#D73944` | 4.61:1 |
+| `#ff9500` | 2.20:1 | `#AB6400` | 4.61:1 |
+| `#b2ad7f` | 2.29:1 | `#7B774A` | 4.59:1 |
+| `#92a8d1` | 2.40:1 | `#5275B6` | 4.59:1 |
+| `#c1946a` | 2.72:1 | `#9A6B40` | 4.61:1 |
+| `#b9936c` | 2.82:1 | `#946E46` | 4.59:1 |
+| `#009999` | 3.49:1 | see note | - |
+| `#269900` | 3.72:1 | `#228800` | 4.58:1 |
+| `#618685` | 3.99:1 | `#597B7A` | 4.63:1 |
+| `#008888` | 4.31:1 | `#008383` | 4.59:1 |
+
+**One caveat that needs a human decision.** `#008888` and `#009999` are already
+near-identical teals, and darkening both to AA converges them on the same
+`#008383` - two distinct classifications would become indistinguishable. Fixing
+that needs a hue shift on one of them, which is a palette decision rather than
+a mechanical contrast fix, so it is left open rather than guessed at.
+
+More broadly: this palette is pastel by design, and eighteen simultaneous
+darkenings will visibly change the character of the Reactome classification
+list. If preserving the pastels matters, the alternative is to stop using these
+colours as *text* and render each badge as a filled chip with dark ink instead -
+the same move already made for the omic boxes in `main.css`, which kept the
+type-coding intact while fixing legibility.
