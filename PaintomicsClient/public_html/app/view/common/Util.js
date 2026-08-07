@@ -219,6 +219,95 @@ Model.prototype = new Observable();
 // Global variable used to show or not AJAX errors in the handlers.
 ignoreOtherErrors = false;
 
+/**
+ * Seconds as something a person reads at a glance: "47s", "3m 05s", "1h 12m".
+ * The server reports job times in raw seconds, which stops being legible around
+ * the three-minute mark - and an example run takes longer than that.
+ */
+function formatDuration(totalSeconds) {
+    var seconds = Math.max(0, Math.round(Number(totalSeconds) || 0));
+
+    if (seconds < 60) {
+        return seconds + "s";
+    }
+
+    var minutes = Math.floor(seconds / 60);
+    if (minutes < 60) {
+        var rest = seconds % 60;
+        return minutes + "m " + (rest < 10 ? "0" : "") + rest + "s";
+    }
+
+    return Math.floor(minutes / 60) + "h " + (minutes % 60) + "m";
+}
+
+// Highest percentage drawn so far, and the elapsed time it was drawn at. See
+// the note on monotonicity in renderProgress; the pair resets when a new job
+// starts, which is the only time elapsed goes backwards.
+var paProgressLastPercent = 0;
+var paProgressLastElapsed = 0;
+
+/**
+ * Draws the running-job bar from the two numbers the status endpoint returns.
+ *
+ * @param {Object} progress {elapsed, estimated} in seconds; estimated may be absent
+ */
+function renderProgress(progress) {
+    var elapsed = Number(progress.elapsed) || 0;
+
+    // `estimatedFinishTime` is the time *remaining*, not the total run time:
+    // check_job_status computes an estimate, subtracts the elapsed time and
+    // clamps the result at zero (see paintomicsserver.py). Reading it as a
+    // total would put a job 68s into a 180s run at 61% instead of 38%, and the
+    // bar would have looked entirely plausible while being wrong.
+    var remaining = Number(progress.estimated) || 0;
+    var total = elapsed + remaining;
+
+    var container = $("#messageDialogProgress");
+    var fill = container.find(".paProgressFill");
+
+    // Once the estimate is spent the server clamps remaining to zero, so there
+    // is nothing left to measure against. A bar pinned at 100% that keeps not
+    // finishing reads as a hang, so it says so and goes back to a moving stripe.
+    var determinate = remaining > 0 && total > 0;
+
+    container.toggleClass("paProgressIndeterminate", !determinate);
+
+    // Elapsed only goes backwards when a different job starts.
+    if (elapsed < paProgressLastElapsed) {
+        paProgressLastPercent = 0;
+    }
+    paProgressLastElapsed = elapsed;
+
+    if (determinate) {
+        // Floor at 2% so it is visibly a bar from the first poll, and cap at
+        // 99% so it never claims to be finished while the job is still running.
+        var percent = Math.max(2, Math.min(99, (elapsed / total) * 100));
+
+        // The server recomputes its estimate on every poll, from job state that
+        // is still changing, so the remaining time can grow - measured on a
+        // live run, the bar slid from 48.7% back to 44.6%. A progress bar that
+        // retreats reads as work being undone. Time only moves one way, so the
+        // bar does too; the figure underneath still reports the new estimate
+        // honestly when it changes.
+        percent = Math.max(percent, paProgressLastPercent);
+        paProgressLastPercent = percent;
+
+        fill.css("width", percent.toFixed(1) + "%");
+        container.find(".paProgressEta").text("about " + formatDuration(remaining) + " left");
+    } else {
+        fill.css("width", "");
+
+        // Two different indeterminate states, and only one of them is "late".
+        // The server's estimate is derived from input the job is still parsing,
+        // so for the first ~30s it has nothing to estimate from and reports no
+        // remaining time - that is not the job overrunning. Having drawn a real
+        // percentage at some point is what tells the two apart.
+        container.find(".paProgressEta").text(paProgressLastPercent > 0 ? "taking longer than estimated" : "");
+    }
+
+    container.find(".paProgressElapsed").text(elapsed > 0 ? "Running for " + formatDuration(elapsed) : "Starting…");
+}
+
 function showMessage(title, data) {
     var message = (data.message || "");
     var extra = (data.extra || "");
@@ -232,6 +321,7 @@ function showMessage(title, data) {
     var width = (data.width || 500);
     var callback = (data.callback || null);
     var showSpin = (data.showSpin || false);
+    var progress = (data.progress || null);
     var append = (data.append || false);
     var itemId = (data.itemId || "div" + Date.now());
 
@@ -274,10 +364,19 @@ function showMessage(title, data) {
         $("#messageDialogBody").html(message.replace(/\n/g, "</br>"));
         $("#hiddenMessageDialogBody").text(extra);
 
-        if (showSpin) {
-            $("#messageDialogSpin").show();
-        } else {
+        // The bar replaces the spinner rather than joining it - two things
+        // moving at once to say the same "still working" is noise.
+        if (progress) {
+            renderProgress(progress);
+            $("#messageDialogProgress").show();
             $("#messageDialogSpin").hide();
+        } else {
+            $("#messageDialogProgress").hide();
+            if (showSpin) {
+                $("#messageDialogSpin").show();
+            } else {
+                $("#messageDialogSpin").hide();
+            }
         }
 
         if (showButton) {
@@ -312,6 +411,18 @@ function showMessage(title, data) {
                 " <h4 id='messageDialogTitle'></h4>" +
                 ' <div id="messageDialogBody"></div>' +
                 ' <div id="hiddenMessageDialogBody" style="display:none;"></div>' +
+                // A running job reported itself as a spinning GIF plus two
+                // sentences of arithmetic ("Time spent: 47 seconds", "Estimated
+                // running time: 180 seconds") that the reader had to divide to
+                // learn anything. The server sends both numbers, so the bar can
+                // just show the answer.
+                ' <div id="messageDialogProgress" class="paProgress">' +
+                '   <div class="paProgressTrack"><div class="paProgressFill"></div></div>' +
+                '   <div class="paProgressMeta">' +
+                '     <span class="paProgressElapsed"></span>' +
+                '     <span class="paProgressEta"></span>' +
+                '   </div>' +
+                ' </div>' +
                 ' <p id="messageDialogSpin" ><img src="resources/images/loadingpaintomics2.gif"></img></p>' +
                 ' <div style="text-align:center; margin-top:10px;">' +
                 '   <a id="reportErrorButton" class="button btn-warning" id="messageDialogButton"><i class="fa fa-bug"></i> Report error</a>' +
