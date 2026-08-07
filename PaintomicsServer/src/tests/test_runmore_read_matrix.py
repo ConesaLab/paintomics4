@@ -44,7 +44,8 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../.
 R_SCRIPT = os.path.abspath(os.path.join(
     os.path.dirname(__file__), "..", "common", "bioscripts", "runMORE.R"))
 
-HELPERS = ("read_matrix", "parse_min_variation")
+HELPERS = ("read_matrix", "parse_min_variation",
+           "strip_omic_prefix", "restore_regulator_ids")
 
 
 def extractFunctions(path, names):
@@ -119,6 +120,28 @@ pv("padded",   " 0.1 , 0.2 ", c("TF","miRNA"))
 pv("toomany",  "0.1,0.2,0.3", c("TF","miRNA"))
 pv("nonnum",   "abc", c("TF","miRNA"))
 pv("zero",     "0", c("TF"))
+
+sp <- function(label, values, prefix, trueIds)
+  cat(sprintf("SP:%s|%s\n", label,
+              paste(strip_omic_prefix(values, prefix, trueIds), collapse=",")))
+sp("strips_when_not_real", c("TF-1"), "TF-", c("1"))
+sp("keeps_a_real_id",      c("TF-1"), "TF-", c("TF-1"))
+sp("leaves_unprefixed",    c("STAT3"), "TF-", c("STAT3"))
+sp("mixed",                c("TF-1","STAT3"), "TF-", c("TF-1"))
+sp("empty",                character(0), "TF-", c("TF-1"))
+
+rr <- function(label, values, trueIds, omics)
+  cat(sprintf("RR:%s|%s\n", label,
+              paste(restore_regulator_ids(values, trueIds, omics), collapse=",")))
+rr("plain",         c("1","2"),     c("TF-1","TF-2"), c("TF"))
+rr("already_true",  c("TF-1"),      c("TF-1","TF-2"), c("TF"))
+rr("nothing_to_do", c("TFA"),       c("TFA","TFB"),   c("TF"))
+rr("collides",      c("1"),         c("TF-1","1"),    c("TF"))
+rr("ambiguous",     c("1"),         c("TF-1","TF-TF-1"), c("TF"))
+rr("second_omic",   c("21"),        c("miRNA-21"),    c("TF","miRNA"))
+rr("no_values",     character(0),   c("TF-1"),        c("TF"))
+rr("no_true_ids",   c("1"),         character(0),     c("TF"))
+rr("unknown_value", c("99"),        c("TF-1"),        c("TF"))
 '''
 
 
@@ -273,6 +296,79 @@ class ParseMinVariationTest(unittest.TestCase):
 
     def test_zero_is_preserved_and_not_treated_as_missing(self):
         self.assertEqual(self.values("zero")[0], "0")
+
+
+@unittest.skipIf(RESULTS is None, "Rscript not available")
+class StripOmicPrefixTest(unittest.TestCase):
+    """MORE prefixes regulators with "<omic>-" only when it had to
+    disambiguate them, so an ID that is already a real regulator must never be
+    stripped -- "TF-1" under an omic named "TF" is a genuine identifier far
+    more often than it is a prefixed "1"."""
+
+    def value(self, label):
+        self.assertIn("SP:" + label, RESULTS)
+        return RESULTS["SP:" + label][0]
+
+    def test_a_prefixed_value_that_is_not_a_real_id_is_stripped(self):
+        self.assertEqual(self.value("strips_when_not_real"), "1")
+
+    def test_a_value_that_is_a_real_id_is_left_alone(self):
+        """Without this the restoration in restore_regulator_ids would be
+        undone on the way out to the pairs file."""
+        self.assertEqual(self.value("keeps_a_real_id"), "TF-1")
+
+    def test_a_value_without_the_prefix_is_untouched(self):
+        self.assertEqual(self.value("leaves_unprefixed"), "STAT3")
+
+    def test_each_value_is_judged_on_its_own(self):
+        self.assertEqual(self.value("mixed"), "TF-1,STAT3")
+
+    def test_an_empty_vector_is_handled(self):
+        self.assertEqual(self.value("empty"), "")
+
+
+@unittest.skipIf(RESULTS is None, "Rscript not available")
+class RestoreRegulatorIdsTest(unittest.TestCase):
+    """Inverting MORE's unanchored gsub. The end-to-end test proves it works on
+    a real run; these pin the branches that run only on awkward ID sets, where
+    guessing wrong would be a fresh corruption rather than a missed repair."""
+
+    def value(self, label):
+        self.assertIn("RR:" + label, RESULTS)
+        return RESULTS["RR:" + label][0]
+
+    def test_truncated_ids_are_restored(self):
+        self.assertEqual(self.value("plain"), "TF-1,TF-2")
+
+    def test_an_intact_id_is_left_alone(self):
+        self.assertEqual(self.value("already_true"), "TF-1")
+
+    def test_ids_that_never_collide_are_untouched(self):
+        self.assertEqual(self.value("nothing_to_do"), "TFA")
+
+    def test_a_mangled_form_that_is_itself_a_real_id_is_not_restored(self):
+        """Both "TF-1" and "1" exist. Restoring "1" to "TF-1" would silently
+        relabel a different regulator's results."""
+        self.assertEqual(self.value("collides"), "1")
+
+    def test_two_ids_mangling_to_the_same_string_are_not_restored(self):
+        """gsub is global, so "TF-1" and "TF-TF-1" both reduce to "1". There is
+        no way to tell which one a "1" came from."""
+        self.assertEqual(self.value("ambiguous"), "1")
+
+    def test_any_omic_name_in_the_pattern_is_inverted(self):
+        """MORE builds the pattern from every omic in the run, not just the
+        one that owns the regulator."""
+        self.assertEqual(self.value("second_omic"), "miRNA-21")
+
+    def test_no_values_is_handled(self):
+        self.assertEqual(self.value("no_values"), "")
+
+    def test_no_known_ids_is_handled(self):
+        self.assertEqual(self.value("no_true_ids"), "1")
+
+    def test_a_value_matching_no_known_id_is_left_alone(self):
+        self.assertEqual(self.value("unknown_value"), "99")
 
 
 if __name__ == "__main__":
