@@ -219,7 +219,7 @@ function MainView() {
 				region: 'north',
 				html:
 				'<div id="header">'+
-				'  <img src="resources/images/paintomics_150x150.png" alt="Paintomics logo">' +
+				'  <img src="resources/images/paintomics-mark.svg" alt="PaintOmics AI">' +
 				'  <h1> PaintOmics AI <span style="font-size: 8px; margin-left:10px;">' + APP_VERSION + '</span></h1>' +
 				'</div>' +
 				'<nav class="mainNav">' + navHTML + '</nav>' +

@@ -217,15 +217,59 @@ a:hover {color: var(--pa-link-hover);}
 	margin-left: auto;
 	margin-right: 0;
 }
+/* One bar, not two -----------------------------------------------------------
+   The step actions - Load example / Run PaintOmics / Reset on Step 1, Go back /
+   Next step on Step 2, the Step 4 view controls - lived in their own 50px band
+   pinned directly under the header. Two stacked bars for what is one row of
+   chrome, and because this band is `position: fixed` it was not occupying
+   layout space but *covering* the first 50px of the content underneath.
+
+   It now sits in the header row itself, right-aligned and clear of the account
+   button. Nothing about the markup changes - the band is still the same fixed
+   element, it just moves up and shrinks to its contents - so every step keeps
+   building its own buttons exactly as before. The content below gains back the
+   50px it was losing to the overlay.
+
+   `row-reverse` preserves the original visual order: these buttons were laid out
+   with `float: right`, so the first in the DOM sat rightmost, and a plain flex
+   row would have reversed them. */
+/* `!important` throughout, and it is load-bearing rather than lazy. On Step 1
+   this band is a plain box, but on Step 4 it is an ExtJS container whose layout
+   the framework manages, and the framework writes `left: 0; width: 1440px; top:
+   0` as *inline* styles. A stylesheet declaration cannot beat an inline one
+   without !important, so without these the Step 4 toolbar stayed full-width,
+   wrapped its five buttons onto two rows and sat on top of the pathway. The
+   inner span is ExtJS's box wrapper and carries the same inline width, which is
+   why it needs the override too. */
 .secondTopToolbar {
 	position: fixed;
-	width: 100%;
-	border-bottom: 1px solid #D8D8D8;
-	background: #F2F2F2;
-	top: 50px;
-	left: 0px;
-	z-index: 199;
-	box-shadow: 0px 1px 3px #DCDCDC;
+	top: 0 !important;
+	left: auto !important;
+	right: 150px !important;
+	width: auto !important;
+	height: 50px;
+	padding: 0;
+	display: flex;
+	flex-direction: row-reverse;
+	align-items: center;
+	gap: 8px;
+	background: transparent;
+	border-bottom: 0;
+	box-shadow: none;
+	z-index: 201;
+}
+/* The buttons were floated; inside a flex row the float is ignored but the
+   margins are not, and they would fight the gap above. */
+.secondTopToolbar > span,
+.secondTopToolbar > span > div {
+	width: auto !important;
+	display: flex !important;
+	align-items: center;
+	gap: 8px;
+}
+.secondTopToolbar .button {
+	float: none;
+	margin: 0;
 }
 #header {
 	float: none;
@@ -268,10 +312,14 @@ a:hover {color: var(--pa-link-hover);}
    .menuOption items, same .submenu children, so the jQuery in MainView.js that
    binds clicks and hover still finds everything. Only the mount point and these
    rules changed. */
+/* The nav sat centred while the header held only a wordmark and an account
+   button. Now that the step actions share this row it moves left, next to the
+   wordmark, so the whole right half is free for them - Step 4 alone contributes
+   five buttons. */
 .mainNav {
-	flex: 1 1 auto;
+	flex: 0 1 auto;
 	display: flex;
-	justify-content: center;
+	justify-content: flex-start;
 	min-width: 0;
 }
 ul.lateralMenu-body {
@@ -294,11 +342,14 @@ ul.submenu {
 	position: relative;
 	display: flex;
 	align-items: center;
-	gap: 6px;
-	padding: 6px 13px;
+	gap: 5px;
+	/* Tightened from 6px 13px when the step actions joined this row - the nav had
+	   to give back roughly 90px so five Step 4 buttons and the account control
+	   could share the header without colliding. */
+	padding: 6px 10px;
 	border: 0;
 	border-radius: 999px;
-	font-size: 13px;
+	font-size: 12.5px;
 	line-height: 1;
 	color: #3A3B42;          /* 8.6:1 on #F1F2F4 */
 	white-space: nowrap;
