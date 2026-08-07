@@ -857,11 +857,43 @@ ul.ui-menu.ui-widget.ui-widget-content {
 	margin: 5px 10px;
 	box-shadow: var(--pa-shadow);
 }
-div.contentbox h2, div.contentbox h3, #clusternumber_box h2, #threshold_box h2 {
-	background-color: #f6f6f6;
-	border-color: var(--pa-border);
-	padding: 6px;
+/* Card headings ---------------------------------------------------------------
+   Every block on the results page - Pathways selection, Pathways summary,
+   Multiple databases used, the classification and network panels, both
+   metabolite analyses, Pathway enrichment - was titled in 23px terracotta at
+   `font-weight: lighter`, which resolves to 100, on a grey band. Thin weight at
+   display size is the most dated thing left on the page: it reads washed out
+   rather than quiet, and at seven repetitions down a 2900px page the colour was
+   doing the shouting instead of the structure.
+
+   A card heading is a label, not a display line. So: near-black at a real
+   weight, sized to sit above its content rather than compete with it, and the
+   grey band replaced by a hairline - the card already has an edge, it does not
+   need a second fill inside it.
+
+   The accent is not lost, only moved to where it carries meaning: links, the
+   contents marker, the significance tints. Put the colour back here by setting
+   `color: var(--pa-accent-orange)` if it is wanted. */
+div.contentbox h2, #clusternumber_box h2, #threshold_box h2 {
+	background-color: #FFFFFF;
+	border-bottom: 1px solid var(--pa-border);
+	border-radius: var(--pa-radius) var(--pa-radius) 0 0;
+	color: #27272A;
+	font-size: 15px;
+	font-weight: 600;
+	letter-spacing: -0.005em;
+	padding: 13px 20px;
 	margin: 0;
+}
+/* A step down again: these sit inside a card that already has an h2. */
+div.contentbox h3 {
+	background-color: transparent;
+	border-color: var(--pa-border);
+	color: #3F3F46;
+	font-size: 13.5px;
+	font-weight: 600;
+	padding: 6px 0;
+	margin: 12px 0 4px;
 }
 div.contentbox h3 span {
 	font-size: small;
