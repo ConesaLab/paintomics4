@@ -915,7 +915,11 @@ function PA_Step3JobView() {
 
 							table_html +=
 							'<tr>' +
-								'<td class="db_chip"><i class="classificationNameBox" id="icon_' + database + '" style="border-color: ' + db_color + '; color: ' + db_color + ';">' + database.charAt(0) + '</i></td>' +
+								// Both sides improved this row: master named the cells so the
+								// stylesheet can address them, and the branch moved the badge colours
+								// into classificationBadgeStyle, which fills the chip and picks ink
+								// that contrasts with the fill rather than outlining it. Keep both.
+								'<td class="db_chip"><i class="classificationNameBox" id="icon_' + database + '" style="' + classificationBadgeStyle(db_color) + '">' + database.charAt(0) + '</i></td>' +
 								'<td class="db_name">' + database + '</td>' +
 								'<td id="foundPathwaysTag_' + database + '">0</td><td class="db_significant" id="significantPathwaysTag_' + database + '">0</td>' +
 							'</tr>';
@@ -925,6 +929,13 @@ function PA_Step3JobView() {
 
 						$("#multisource_summary").html(table_html);
 					}
+
+					// Built last, and on a delay, because it reads the headings
+					// that are actually on the page: the classification, network
+					// and enrichment sections are rendered by their own views
+					// after this handler runs, so scanning immediately would find
+					// only the first two and silently produce a short list.
+					$.wait(function () { buildAnalysisTOC('#mainViewCenterPanel'); }, 1.2);
 				},
 				beforedestroy: function() {
 					me.cleanupAIWidget();
@@ -1023,7 +1034,7 @@ function PA_Step3PathwayClassificationView(db = "KEGG") {
 						enabled: true,  useHTML:true,
 						formatter: function(){
 							if(this.point.drilldown !== undefined){
-								return '<i class="classificationNameBox" style="line-height: 20px;border-color:' + this.point.color + '; color:' + this.point.color + ';">' + this.point.name.charAt(0).toUpperCase() + '</i>' + this.y.toFixed(2) + "%";
+								return '<i class="classificationNameBox" style="line-height: 20px;' + classificationBadgeStyle(this.point.color) + '">' + this.point.name.charAt(0).toUpperCase() + '</i>' + this.y.toFixed(2) + "%";
 							}else{
 								return "<b>" + this.point.name + "</b><br>" + this.y.toFixed(2) + "%";
 							}
@@ -1125,7 +1136,7 @@ function PA_Step3PathwayClassificationView(db = "KEGG") {
 				/********************************************************************/
 				htmlContent +='<div class="step3ClassificationsWrapper'+ (isHiddenMainClass?" disabled":"") +'">' +
 				'  <div class="step3ClassificationsTitle'+ (isHiddenMainClass?" disabled":"") +'">'+
-				'   <i class="classificationNameBox" style="border-color:' + color + '; color:' + color + ';">' + mainClassificationInstance.name.charAt(0).toUpperCase() + '</i>' +
+				'   <i class="classificationNameBox" style="' + classificationBadgeStyle(color) + '">' + mainClassificationInstance.name.charAt(0).toUpperCase() + '</i>' +
 				'   <i class="fa fa-caret-right" style="color: #B1B1B1; margin-right: 5px;"></i>' + mainClassificationInstance.name +
 				'   <div class="step3ClassificationsOptions">'+
 				'     <a class="hideOption'+ (isHiddenMainClass?" selected":"") +'">Hide</a>'+
@@ -1779,7 +1790,7 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 			for (var classificationID in me.getParent().classificationData[me.database]){
 				classification = me.getParent().classificationData[me.database][classificationID];
 				color = color = this.getParent().getClassificationColor(classificationID, []);
-				htmlCode += '<div style="text-align:left;"><i class="classificationNameBox" style="border-color:' + color + '; color:' + color + ';">' + classification.name.charAt(0).toUpperCase() + '</i>' +  classification.name + "</div>";
+				htmlCode += '<div style="text-align:left;"><i class="classificationNameBox" style="' + classificationBadgeStyle(color) + '">' + classification.name.charAt(0).toUpperCase() + '</i>' +  classification.name + "</div>";
 			}
 			$("#networkClustersContainer_" + me.dbid + " div").html(htmlCode);
 			$("#sliderClusterNumberContainer_" + me.dbid).hide();
@@ -3676,18 +3687,23 @@ function PA_Step3PathwayTableView() {
 				filterable: true, width:30, resizable: false,
 				renderer: function(value, metadata, record) {
 					var sourcedb = record.get("source");
-					metadata.style = "height: 33px; padding: 5px 3px;width: 40px;";
+					metadata.style = "height: 40px; padding: 8px 3px;width: 40px;";
 					metadata.tdAttr = 'data-qtip="' + "<b>Database</b><br>" + sourcedb + '"';
 					return '<i class="classificationNameBox" style="' + $('#icon_' + sourcedb).attr('style') + ';line-height: 21px;">' + sourcedb.charAt(0) + '</i>';
 				}
 			}),
 			{
 				text: 'Pathway name', dataIndex: 'title', filterable: true, flex: 1,
+				/* The pathway name is the identifier for the row, and the long
+				   Reactome ones ("Regulation of Insulin-like Growth Factor...")
+				   do not fit any column width this table can afford. Truncated
+				   on screen but recoverable on hover, rather than simply lost. */
+				renderer: truncatableTextRenderer
 			},{
 				text: '', dataIndex: 'classification',
 				filterable: true, width:10, resizable: false,
 				renderer: function(value, metadata, record) {
-					metadata.style = "height: 33px; padding: 0; width: 10px; background-color:"+me.getParent().getClassificationColor(record.get("mainCategory").toLowerCase().replace(/ /g, "_"), [])+";";
+					metadata.style = "height: 40px; padding: 0; width: 10px; background-color:"+me.getParent().getClassificationColor(record.get("mainCategory").toLowerCase().replace(/ /g, "_"), [])+";";
 					metadata.tdAttr = 'data-qtip="' + "<b>Classification</b><br>" + record.get("mainCategory") + "<br>" + record.get("secCategory") + '"';
 					return '';
 				}
@@ -3702,7 +3718,9 @@ function PA_Step3PathwayTableView() {
 				}, {
 					text: 'Unique</br>metabol.', cls:"header-90deg",
 					sortable: true,
-					align: "center", width: 50,
+					/* 50px ellipsised the label to "Unique metabol" - the one header
+					   in this grid that still did not fit its own column. */
+					align: "center", width: 58,
 					filter: {type: 'numeric'},
 					dataIndex: 'matchedCompounds'
 				}]
@@ -3739,7 +3757,7 @@ function PA_Step3PathwayTableView() {
 
 			var rendererMethod = function(value, metadata, record) {
 				var myToolTipText = "<b style='display:block; width:200px'>" + metadata.column.text + "</b>";
-				metadata.style = "height: 33px; font-size:10px;"
+				metadata.style = "height: 40px; font-size:12px;"
 				if (value === '') {
 					myToolTipText = myToolTipText + "<i>No data for this pathway</i>";
 					metadata.tdAttr = 'data-qtip="' + myToolTipText + '"';
@@ -3755,7 +3773,8 @@ function PA_Step3PathwayTableView() {
 
 				if(numericValue <= 0.065){
 					var color = Math.round(161 * (numericValue/0.065));
-					metadata.style += "background-color:rgb(255, " + color +"," + color + ");";
+					var tint = 172 + Math.round(color * 0.32);
+				metadata.style += "background-color:rgb(255, " + tint + "," + tint + "); color:#9B1C1C;";
 				}
 
 				//RENDER THE VALUE -> IF LESS THAN 0.05, USE SCIENTIFIC NOTATION
@@ -4010,6 +4029,20 @@ function PA_Step3PathwayTableView() {
 			allRecords.each(function(storeRecord) {
 				var pathwayID = storeRecord.raw.pathwayID;
 
+				/* Skip record if it is from another DB.
+
+				   Without this the outer loop over databases writes every record once
+				   per database: the KEGG pass sets the KEGG pathways correctly, then
+				   the Reactome pass looks each of those same KEGG IDs up in
+				   visualOptions.Reactome.Stouffer, misses, and overwrites them with
+				   undefined. Only the last database in the list kept its combined
+				   p-value; every other database's rows rendered NaN as soon as custom
+				   Stouffer weights were applied. The adjusted p-value loop below has
+				   always had this guard. */
+				if (storeRecord.raw.source != db) {
+					return;
+				}
+
 				storeRecord.set("combinedSignificancePvalueStouffer", restoreRawStouffer ? storeRecord.raw.combinedSignificancePvalueStouffer : visualOptions[db].Stouffer[pathwayID]);
 			});
 
@@ -4114,7 +4147,7 @@ function PA_Step3PathwayTableView() {
 		//TODO: REMOVE THIS SPAGETTI CODE :/
 		var renderFunction = function(value, metadata, record) {
 			var myToolTipText = "<b style='display:block; width:200px'>" + metadata.column.text.replace(/<\/br>/g, " ") + "</b>";
-			metadata.style = "height: 33px; font-size:10px;"
+			metadata.style = "height: 40px; font-size:12px;"
 
 			//IF THERE IS NOT DATA FOR THIS PATHWAY, FOR THIS OMIC, PRINT A '-'
 			if (value === "-" || value == undefined || isNaN(value)) {
@@ -4139,7 +4172,8 @@ function PA_Step3PathwayTableView() {
 
 			if(value <= 0.065){
 				var color = Math.round(225 * (value/0.065));
-				metadata.style += "background-color:rgb(255, " + color +"," + color + ");";
+				var tint = 172 + Math.round(color * 0.32);
+				metadata.style += "background-color:rgb(255, " + tint + "," + tint + "); color:#9B1C1C;";
 			}
 
 			try {
@@ -4350,7 +4384,12 @@ function PA_Step3PathwayTableView() {
 	this.initComponent = function() {
 		var me = this;
 		this.component = Ext.widget({
-			xtype: 'container', cls: "contentbox", overflowX: 'scroll', items: [
+			/* overflowX was 'scroll' to cope with the toolbar, which needed 1753px to
+			   lay out on one line. It sits on two rows now and fits, but the scroll
+			   was still making the grid size to its content rather than to the card:
+			   1318px inside a 1112px box, so "External links" was only reachable by
+			   scrolling the table sideways. Sized to the card, all nine columns fit. */
+			xtype: 'container', cls: "contentbox", items: [
 				{xtype: 'box', flex: 1, html: '<h2 id="pathwayEnrichmentSection">Pathway enrichment</h2>'},
 				{
 					xtype: "livesearchgrid", itemId: 'pathwaysGridPanel',
@@ -4394,8 +4433,35 @@ function PA_Step3PathwayTableView() {
 
 								// Calculate the original mapping ratio used as Stouffer weight.
 								Object.keys(mappingInfo).map(function(omic) {
-									defaultValues[omic] = parseFloat((mappingInfo[omic].mapped / (mappingInfo[omic].mapped + mappingInfo[omic].unmapped)).toFixed(1)) * 10
+									// An omic with no features at all would make this 0/0 = NaN, which the
+									// slider silently coerces to its minimum. Resolve it here instead so the
+									// weight that reaches the server is always a number we chose deliberately.
+									var total = mappingInfo[omic].mapped + mappingInfo[omic].unmapped;
+									var ratio = (total > 0) ? (mappingInfo[omic].mapped / total) : 0;
+
+									defaultValues[omic] = Math.max(0, Math.min(10, parseFloat(ratio.toFixed(1)) * 10));
 								});
+
+								// Writes the current weight onto the field label so it is readable without
+								// dragging. The label text itself is untouched, because the Apply handler
+								// maps sliders back to omics through getFieldLabel().
+								var showWeight = function(slider, value) {
+									if (slider.labelEl && slider.labelEl.dom) {
+										slider.labelEl.dom.setAttribute("data-pa-weight", value);
+									}
+								};
+
+								// Pick the stored weight only when one actually exists for this omic.
+								// visualOptions.stoufferWeights is persisted as {} for any job that never
+								// applied custom weights, and {} != undefined, so the previous check sent
+								// every slider to customStouffers[omic] === undefined and the widget
+								// silently clamped it to its minimum. Every weight opened at 0, and
+								// applying that would drop all omics out of the combined p-value.
+								var weightFor = function(omic) {
+									var stored = customStouffers ? customStouffers[omic] : undefined;
+
+									return (stored === undefined || stored === null || isNaN(stored)) ? defaultValues[omic] : stored;
+								};
 
 								// Create an slider for each omic
 								var omicSliders = me.getModel().getOmicNames().map(function(omic) {
@@ -4405,17 +4471,30 @@ function PA_Step3PathwayTableView() {
 										minValue: 0,
 										maxValue: 10,
 										increment: 1,
-										value: (customStouffers != undefined) ? customStouffers[omic] : defaultValues[omic],
-										width: '100%'
+										value: weightFor(omic),
+										// The label needs room for the longest omic name ("Transcription
+										// factor"); whatever is left has to be a draggable track, so both
+										// halves are sized explicitly rather than left to '100%'.
+										labelWidth: 160,
+										width: 320,
+										listeners: {
+											afterrender: function(slider) { showWeight(slider, slider.getValue()); },
+											change: showWeight
+										}
 									})
 								});
 
 								me.tipComponent = Ext.create('Ext.tip.Tip', {
 									closable: true,
-									maxWidth: 200,
-									width: 100,
+									title: 'Stouffer weights',
+									width: 356,
 									itemId: 'stoufferTip',
-									renderTo: "mainViewCenterPanel",
+									cls: 'paWeightsTip',
+									bodyPadding: 4,
+									// Floating to the document body on purpose: rendering into
+									// mainViewCenterPanel puts the tip inside that panel's overflow, so a
+									// panel this tall gets clipped and scrolls away with the table.
+									constrain: true,
 									items: [
 										{
 											xtype: 'container',
@@ -4476,7 +4555,10 @@ function PA_Step3PathwayTableView() {
 								});
 							}
 
-							me.tipComponent.showBy(iconLink, "b-t", [0, 20]);
+							// Drop below the toolbar rather than above it: opening upward covered the
+						// very control the user just clicked. "?" lets Ext flip it back if there
+						// is no room underneath.
+						me.tipComponent.showBy(iconLink, "tl-bl?", [0, 6]);
 						}
 					}
 				}]
@@ -4620,8 +4702,9 @@ function PA_Step3HubAnalysis () {
 				items: [
 					{
 						xtype: "gridpanel",
-						cls: "contentbox",
-						columnWidth: 0.66,
+						itemId: 'hubAnalysisGrid',
+						cls: "contentbox paWrapHeaders",
+						columnWidth: 1,
 						store: userStore,
 						height: 350,
 						header: {
@@ -4650,9 +4733,17 @@ function PA_Step3HubAnalysis () {
 									tooltip: 'Paint this feature',
 									style: "font-size: 20px;",
 									handler: function (grid, rowIndex) {
+										revealPlotPanel('hubAnalysisPlotPanel');
+
 										let elem = $("#hubAnalysisPlot");
 										elem.empty();
-										let divWidth = elem.width() - 400;
+										/* The heatmap is a fixed 300px block and the plot sits beside
+										   it, so the plot may only claim what is left. Giving it the
+										   full width pushed it onto its own line, where a 300px strip
+										   above a 1240px chart of the same samples read as a broken
+										   figure. The floor keeps a usable chart if the panel is ever
+										   too narrow for the pair, in which case they stack. */
+										let divWidth = Math.max(260, elem.width() - 400);
 
 										let hubTable = {};
 
@@ -4678,20 +4769,38 @@ function PA_Step3HubAnalysis () {
 										heatmapSite = generateHeatmap(divIdComp, "Metabolomics", [compExpression], distributionSummaries, visualOptions)
 										plotSite = generatePlot(divIdComp + "_plotContainer", "Metabolomics", [compExpression], distributionSummaries, divIdComp + "_plotlegendContainer", visualOptions);
 
-										// Expression value of regulate features
-										let regulateFeatures = null;
-										let step = hubTable[rowIndex]['Step'];
-										if (step == "One Step" || step == '1') {
-											regulateFeatures = compRegulateFeatures[ID][1]
-										} else if (step == "Two Steps" || step == '2') {
-											regulateFeatures = compRegulateFeatures[ID][2]
+										// Expression value of regulate features.
+										//
+										// compRegulateFeatures[ID][step] was indexed without a guard,
+										// so any metabolite missing from the map threw a TypeError
+										// here - after the "Metabolite regulates Features" heading
+										// had already been appended. The section then rendered as a
+										// title with nothing whatsoever under it, which is what the
+										// missing DE neighbours look like from the outside. The map
+										// is absent for every job reopened by its URL, because
+										// compoundRegulateFeatures is not among the fields written
+										// back at step 2 (see PAINTOMICS4_LARGE_FIELDS).
+										let stepNames = {'One Step': 1, 'Two Steps': 2, 'Three Steps': 3, 'Four Steps': 4};
+										let rawStep = hubTable[rowIndex]['Step'];
+										let step = stepNames[rawStep] || parseInt(rawStep, 10);
+										let neighboursByStep = compRegulateFeatures ? compRegulateFeatures[ID] : null;
+										let regulateFeatures = (neighboursByStep && step) ? neighboursByStep[step] : null;
 
-										} else if (step == "Three Steps" || step == '3') {
-											regulateFeatures = compRegulateFeatures[ID][3]
-
-										} else if (step == 'Four Steps' || step == '4') {
-											regulateFeatures = compRegulateFeatures[ID][4]
+										if (!regulateFeatures || !regulateFeatures.length) {
+											elem.append(
+												'<div class="contentbox paEmptyNote">' +
+												'  <p>No expression data is available for the neighbours of this metabolite.</p>' +
+												'  <p>Neighbour identities are held only for the run that produced them, so they are not restored when a job is reopened from its link. Re-run the analysis to see them.</p>' +
+												'</div>');
+											fitPlotPanel('hubAnalysisPlotPanel', 'hubAnalysisPlot');
+											return;
 										}
+
+										// Every omic can legitimately have no measured neighbour, in
+										// which case the loop below draws nothing - the same dangling
+										// heading by another route.
+										let paintedAnyOmic = false;
+
 										for (key in distributionSummaries) {
 											let omicName = key
 											let divId = key.replace(/\s/g, '_') + 'hubAnlysis'
@@ -4722,6 +4831,7 @@ function PA_Step3HubAnalysis () {
 											if (regulateOmicsValue.length === 0) {
 												continue;
 											}
+											paintedAnyOmic = true;
 											htmlCode =
 												"<div class='contentbox'>" +
 												"  <h3>" + omicName + "<span><input type='checkbox' id='" + divId + "_cb_relevant' value='" + omicName + "'/>Only relevant</span></h3>" +
@@ -4748,6 +4858,15 @@ function PA_Step3HubAnalysis () {
 												generatePlot(divId + "_plotContainer", omicName, omicValues, distributionSummaries, divId + "_plotlegendContainer", visualOptions);
 											})
 										}
+
+										if (!paintedAnyOmic) {
+											elem.append(
+												'<div class="contentbox paEmptyNote">' +
+												'  <p>This metabolite has ' + regulateFeatures.length + ' neighbour' + (regulateFeatures.length === 1 ? '' : 's') + ' at ' + step + ' step' + (step === 1 ? '' : 's') + ', but none of them carry measured values in the omics you uploaded.</p>' +
+												'</div>');
+										}
+
+										fitPlotPanel('hubAnalysisPlotPanel', 'hubAnalysisPlot');
 									}
 								}]
 							},
@@ -4784,49 +4903,55 @@ function PA_Step3HubAnalysis () {
 							},
 							{
 								text: 'Metabolite',
-								flex: 12 / 100,
+								flex: 21 / 100,
 								sortable: true,
 								hideable: false,
-								dataIndex: 'Metabolite'
+								dataIndex: 'Metabolite',
+								renderer: truncatableTextRenderer
 							},
 							{
 								text: 'ID',
-								flex: 8 / 100,
+								flex: 9 / 100,
 								sortable: true,
 								hideable: false,
 								dataIndex: 'ID'
 							},
 							{
 								text: 'Step',
-								flex: 6 / 100,
+								flex: 7 / 100,
 								sortable: true,
 								hideable: false,
 								dataIndex: 'Step'
 							},
 							{
 							    text: 'DE neighbors',
-								flex: 10 / 100,
+								flex: 9.5 / 100,
 								sortable: true,
 								hideable: false,
 								dataIndex: 'DEN'
 							},
 							{
 								text: 'not DE neighbors',
-								flex: 12 / 100,
+								flex: 9.5 / 100,
 								sortable: true,
 								hideable: false,
 								dataIndex: 'noDEN'
 							},
+							/* "Percentage" and "Percentile" are single words, so unlike the
+							   neighbour columns they cannot wrap out of a narrow share - they
+							   just ellipsise into "Percentage." and "Percentile..". The width
+							   they need comes from the columns above, whose headers now wrap
+							   and whose values are one or two digits. */
 							{
 								text: 'Percentage',
-								flex: 10 / 100,
+								flex: 13 / 100,
 								sortable: true,
 								hideable: false,
 								dataIndex: 'Percentage'
 							},
 							{
 								text: 'Percentile',
-								flex: 10 / 100,
+								flex: 12 / 100,
 								sortable: true,
 								hideable: false,
 								dataIndex: 'Percentile',
@@ -4842,7 +4967,7 @@ function PA_Step3HubAnalysis () {
 							},
 							{
 								text: 'FDR BH',
-								flex:10/100,
+								flex:9/100,
 								sortable: true,
 								hideable: false,
 								dataIndex: 'padjust',
@@ -4983,9 +5108,12 @@ function PA_Step3HubAnalysis () {
 					},
 					{
 						xtype: 'container',
+						itemId: 'hubAnalysisPlotPanel',
 						cls: "contentbox",
-						columnWidth: 0.25,
-						minWidth: 400,
+						/* Hidden until a row is painted, then full width beneath the table
+						   rather than a 300px column beside it - see revealPlotPanel(). */
+						hidden: true,
+						columnWidth: 1,
 						padding: '30',
 						height: 350,
 						autoScroll: true,
@@ -5162,8 +5290,9 @@ function PA_Step3MetaboliteView() {
 				items: [
 					{
 						xtype: "gridpanel",
-						cls: "contentbox",
-						columnWidth:0.66,
+						itemId: 'classificationGrid',
+						cls: "contentbox paWrapHeaders",
+						columnWidth: 1,
 
 						autoScroll: true,
 						store: userStore,
@@ -5217,9 +5346,15 @@ function PA_Step3MetaboliteView() {
 										style: "font-size: 20px;",
 										handler: function (grid, rowIndex) {
 
+											revealPlotPanel('classificationPlotPanel');
+
 											let elem = $("#classificationPlot");
 											elem.empty();
-											let divWidth = elem.width() - 400;
+											/* Reserve the fixed-width heatmap that sits beside the
+											   plot, as in the hub table above - otherwise the pair
+											   wraps and the strip is left stranded above a chart
+											   four times its width. */
+											let divWidth = Math.max(260, elem.width() - 400);
 											let regulateFeatures = dataFinal[grid.getStore().getAt(rowIndex).data.name].ID;
 											let regulateOmicsValueComp = []
 											let omicName =  "Metabolomics"
@@ -5276,8 +5411,16 @@ function PA_Step3MetaboliteView() {
 
 												});
 
+											} else {
+												// The panel is revealed before the data is checked, so
+												// without this the class opens an empty white box.
+												elem.append(
+													'<div class="contentbox paEmptyNote">' +
+													'  <p>None of the ' + regulateFeatures.length + ' metabolite' + (regulateFeatures.length === 1 ? '' : 's') + ' in this class carry measured values in the omics you uploaded.</p>' +
+													'</div>');
 											}
 
+											fitPlotPanel('classificationPlotPanel', 'classificationPlot');
 										}
 									}]
 								},
@@ -5343,9 +5486,10 @@ function PA_Step3MetaboliteView() {
 					},
 					{
 						xtype: 'box',
+						itemId: 'classificationPlotPanel',
 						cls: "contentbox",
-						columnWidth: 0.25,
-						minWidth: 400,
+						hidden: true,
+						columnWidth: 1,
 						padding: '30',
 						height: 350,
 						html:
@@ -5821,7 +5965,7 @@ var getColor = function (limits, value, colorScale) {
 
 var renderFunctionLimit = function (value, metadata, record) {
 		var myToolTipText = "<b style='display:block; width:200px'>" + "Metabolism" + "</b>";
-		metadata.style = "height: 33px; font-size:10px;"
+		metadata.style = "height: 40px; font-size:12px;"
 
 		//IF THERE IS NOT DATA FOR THIS PATHWAY, FOR THIS OMIC, PRINT A '-'
 		if (value === "-" || value == undefined || isNaN(value)) {
@@ -5838,7 +5982,8 @@ var renderFunctionLimit = function (value, metadata, record) {
 
 		if (value <= 0.1) {
 			var color = Math.round(225 * (value / 0.1));
-			metadata.style += "background-color:rgb(255, " + color + "," + color + ");";
+			var tint = 172 + Math.round(color * 0.32);
+				metadata.style += "background-color:rgb(255, " + tint + "," + tint + "); color:#9B1C1C;";
 		}
 
 		try {
@@ -5880,7 +6025,7 @@ var renderFunctionHub= function (value, metadata, record) {
 
 		value = Number(value)
 
-		metadata.style = "height: 33px; font-size:10px;"
+		metadata.style = "height: 40px; font-size:12px;"
 
 		//IF THERE IS NOT DATA FOR THIS PATHWAY, FOR THIS OMIC, PRINT A '-'
 		if (value === "-" || value == undefined || isNaN(value)) {
@@ -5892,9 +6037,20 @@ var renderFunctionHub= function (value, metadata, record) {
 
 		var renderedValue = parseFloat(value).toFixed(2);
 
+		// This was `225 * (1 - value / 0.05)`, which for any percentile in the
+		// [0.90, 1.0] range it guards evaluates to between -3825 and -4275. The
+		// browser clamps that to 0, so every qualifying cell rendered flat pure
+		// red and the intended gradient never existed at all - the formula had
+		// been copied from a p-value renderer, where dividing by 0.05 makes
+		// sense because the values are below it. Here the values are above 0.9.
+		//
+		// Mapped over the range that is actually guarded: 0.90 is barely tinted,
+		// 1.00 is the strongest. Clamped both ends so a value outside the range
+		// can never produce an out-of-gamut channel again.
 		if (value >= 0.90) {
-			var color = Math.round(225 * ( 1-value / 0.05));
-			metadata.style += "background-color:rgb(255, " + color + "," + color + ");";
+			var t = Math.max(0, Math.min(1, (value - 0.90) / 0.10));
+			var tint = 244 - Math.round(t * 72);   // 244 -> 172
+			metadata.style += "background-color:rgb(255, " + tint + "," + tint + "); color:#9B1C1C;";
 		}
 		
 		return renderedValue;

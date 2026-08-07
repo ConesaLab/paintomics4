@@ -219,6 +219,95 @@ Model.prototype = new Observable();
 // Global variable used to show or not AJAX errors in the handlers.
 ignoreOtherErrors = false;
 
+/**
+ * Seconds as something a person reads at a glance: "47s", "3m 05s", "1h 12m".
+ * The server reports job times in raw seconds, which stops being legible around
+ * the three-minute mark - and an example run takes longer than that.
+ */
+function formatDuration(totalSeconds) {
+    var seconds = Math.max(0, Math.round(Number(totalSeconds) || 0));
+
+    if (seconds < 60) {
+        return seconds + "s";
+    }
+
+    var minutes = Math.floor(seconds / 60);
+    if (minutes < 60) {
+        var rest = seconds % 60;
+        return minutes + "m " + (rest < 10 ? "0" : "") + rest + "s";
+    }
+
+    return Math.floor(minutes / 60) + "h " + (minutes % 60) + "m";
+}
+
+// Highest percentage drawn so far, and the elapsed time it was drawn at. See
+// the note on monotonicity in renderProgress; the pair resets when a new job
+// starts, which is the only time elapsed goes backwards.
+var paProgressLastPercent = 0;
+var paProgressLastElapsed = 0;
+
+/**
+ * Draws the running-job bar from the two numbers the status endpoint returns.
+ *
+ * @param {Object} progress {elapsed, estimated} in seconds; estimated may be absent
+ */
+function renderProgress(progress) {
+    var elapsed = Number(progress.elapsed) || 0;
+
+    // `estimatedFinishTime` is the time *remaining*, not the total run time:
+    // check_job_status computes an estimate, subtracts the elapsed time and
+    // clamps the result at zero (see paintomicsserver.py). Reading it as a
+    // total would put a job 68s into a 180s run at 61% instead of 38%, and the
+    // bar would have looked entirely plausible while being wrong.
+    var remaining = Number(progress.estimated) || 0;
+    var total = elapsed + remaining;
+
+    var container = $("#messageDialogProgress");
+    var fill = container.find(".paProgressFill");
+
+    // Once the estimate is spent the server clamps remaining to zero, so there
+    // is nothing left to measure against. A bar pinned at 100% that keeps not
+    // finishing reads as a hang, so it says so and goes back to a moving stripe.
+    var determinate = remaining > 0 && total > 0;
+
+    container.toggleClass("paProgressIndeterminate", !determinate);
+
+    // Elapsed only goes backwards when a different job starts.
+    if (elapsed < paProgressLastElapsed) {
+        paProgressLastPercent = 0;
+    }
+    paProgressLastElapsed = elapsed;
+
+    if (determinate) {
+        // Floor at 2% so it is visibly a bar from the first poll, and cap at
+        // 99% so it never claims to be finished while the job is still running.
+        var percent = Math.max(2, Math.min(99, (elapsed / total) * 100));
+
+        // The server recomputes its estimate on every poll, from job state that
+        // is still changing, so the remaining time can grow - measured on a
+        // live run, the bar slid from 48.7% back to 44.6%. A progress bar that
+        // retreats reads as work being undone. Time only moves one way, so the
+        // bar does too; the figure underneath still reports the new estimate
+        // honestly when it changes.
+        percent = Math.max(percent, paProgressLastPercent);
+        paProgressLastPercent = percent;
+
+        fill.css("width", percent.toFixed(1) + "%");
+        container.find(".paProgressEta").text("about " + formatDuration(remaining) + " left");
+    } else {
+        fill.css("width", "");
+
+        // Two different indeterminate states, and only one of them is "late".
+        // The server's estimate is derived from input the job is still parsing,
+        // so for the first ~30s it has nothing to estimate from and reports no
+        // remaining time - that is not the job overrunning. Having drawn a real
+        // percentage at some point is what tells the two apart.
+        container.find(".paProgressEta").text(paProgressLastPercent > 0 ? "taking longer than estimated" : "");
+    }
+
+    container.find(".paProgressElapsed").text(elapsed > 0 ? "Running for " + formatDuration(elapsed) : "Starting…");
+}
+
 function showMessage(title, data) {
     var message = (data.message || "");
     var extra = (data.extra || "");
@@ -232,6 +321,7 @@ function showMessage(title, data) {
     var width = (data.width || 500);
     var callback = (data.callback || null);
     var showSpin = (data.showSpin || false);
+    var progress = (data.progress || null);
     var append = (data.append || false);
     var itemId = (data.itemId || "div" + Date.now());
 
@@ -274,10 +364,19 @@ function showMessage(title, data) {
         $("#messageDialogBody").html(message.replace(/\n/g, "</br>"));
         $("#hiddenMessageDialogBody").text(extra);
 
-        if (showSpin) {
-            $("#messageDialogSpin").show();
-        } else {
+        // The bar replaces the spinner rather than joining it - two things
+        // moving at once to say the same "still working" is noise.
+        if (progress) {
+            renderProgress(progress);
+            $("#messageDialogProgress").show();
             $("#messageDialogSpin").hide();
+        } else {
+            $("#messageDialogProgress").hide();
+            if (showSpin) {
+                $("#messageDialogSpin").show();
+            } else {
+                $("#messageDialogSpin").hide();
+            }
         }
 
         if (showButton) {
@@ -312,6 +411,18 @@ function showMessage(title, data) {
                 " <h4 id='messageDialogTitle'></h4>" +
                 ' <div id="messageDialogBody"></div>' +
                 ' <div id="hiddenMessageDialogBody" style="display:none;"></div>' +
+                // A running job reported itself as a spinning GIF plus two
+                // sentences of arithmetic ("Time spent: 47 seconds", "Estimated
+                // running time: 180 seconds") that the reader had to divide to
+                // learn anything. The server sends both numbers, so the bar can
+                // just show the answer.
+                ' <div id="messageDialogProgress" class="paProgress">' +
+                '   <div class="paProgressTrack"><div class="paProgressFill"></div></div>' +
+                '   <div class="paProgressMeta">' +
+                '     <span class="paProgressElapsed"></span>' +
+                '     <span class="paProgressEta"></span>' +
+                '   </div>' +
+                ' </div>' +
                 ' <p id="messageDialogSpin" ><img src="resources/images/loadingpaintomics2.gif"></img></p>' +
                 ' <div style="text-align:center; margin-top:10px;">' +
                 '   <a id="reportErrorButton" class="button btn-warning" id="messageDialogButton"><i class="fa fa-bug"></i> Report error</a>' +
@@ -514,6 +625,516 @@ function scaleValue(x, min, max) {
         b = 1;
     return ((x === 0) ? 0 : ((((b - a) * (x - min)) / (max - min)) + a));
 };
+
+/**
+ * Builds the contents strip for the results page.
+ *
+ * Step 3 stacks eight independent analyses - the pathway summary, the database
+ * breakdown, the classification chart, the network, the metabolite hub and
+ * class analyses, the enrichment table - down roughly 2900px of scroll, with no
+ * way to see what is there or to reach any of it except by scrolling past
+ * everything above it. This reads the headings that are actually on the page and
+ * turns them into a jump list.
+ *
+ * Derived from the DOM rather than from a hardcoded list on purpose: which
+ * analyses appear depends on the omics submitted and on the databases chosen -
+ * a run without metabolomics has no hub analysis, a KEGG-only run has no
+ * Reactome tab - so a fixed list would advertise sections that are not there.
+ *
+ * Anchors are generated because the markup cannot supply them: two of the
+ * headings already carry the *same* id ("EnrichmentSection"), so reusing the
+ * existing ids would produce a link that always jumps to the first of the pair.
+ */
+/**
+ * The contents strip for the results page.
+ *
+ * Step 3 stacks eight independent analyses down roughly 2900px of scroll with no
+ * way to see what is there or to reach any of it except by scrolling past
+ * everything above. This lists them and jumps to them.
+ *
+ * Split deliberately in two: buildAnalysisTOC() only writes markup, and all the
+ * behaviour lives in one delegated block installed once at the bottom of this
+ * section. Everything is recomputed from the DOM at event time and nothing is
+ * held in a closure, because on this page nothing survives being held:
+ *
+ *   - Heading nodes captured at build time are detached when the classification,
+ *     network and enrichment views re-render, and scrolling a detached element
+ *     is silent rather than an error.
+ *   - An id or data attribute stamped on a heading goes with it.
+ *   - Listeners attached to the strip's own links are dropped when ExtJS
+ *     rebuilds the centre panel - the strip keeps its markup and its labels, so
+ *     it still looks correct while doing nothing at all.
+ *
+ * Sections are matched by heading text, which is the only thing that survives
+ * all three.
+ */
+function paTocRoot() {
+    return document.querySelector('#mainViewCenterPanel');
+}
+
+function paTocNorm(el) {
+    return el.textContent.trim().replace(/\s+/g, ' ');
+}
+
+/**
+ * The analyses currently on the page, one entry each.
+ *
+ * One per .contentbox rather than one per <h2>: the network view titles its own
+ * side panels with h2 too - "Details", "Tools" - and those are controls inside
+ * an analysis, not analyses. Read fresh every time, because which sections exist
+ * depends on the omics submitted and the databases chosen.
+ */
+function paTocSections() {
+    var root = paTocRoot();
+    if (!root) { return []; }
+    var claimed = [];
+    var kept = Array.prototype.filter.call(root.querySelectorAll('h2'), function (h) {
+        if (h.offsetParent === null || paTocNorm(h).length < 3) { return false; }
+        if (h.closest('[id^="networkSettingsPanel"], [id^="networkDetailsPanel"], .lateralOptionsPanel')) {
+            return false;
+        }
+        var box = h.closest('.contentbox');
+        if (!box) { return true; }
+        if (claimed.indexOf(box) !== -1) { return false; }
+        claimed.push(box);
+        return true;
+    });
+
+    // Sections laid out side by side are one line in the contents, not two.
+    // "Pathways selection" and "Pathways summary" are the two halves of the same
+    // top row and share a vertical position exactly - measured at -2548 for
+    // both - so listing them separately gave two entries that scroll to the
+    // same place and that no scroll-derived rule could ever tell apart.
+    var lastTop = null;
+    return kept.filter(function (h) {
+        var top = h.getBoundingClientRect().top;
+        if (lastTop !== null && Math.abs(top - lastTop) < 4) { return false; }
+        lastTop = top;
+        return true;
+    });
+}
+
+/* The page does not scroll the window. MainView gives the centre region
+   `overflowY: auto`, so that panel is the scroller and every window.scrollBy
+   against it is a no-op. */
+function paTocScroller() {
+    var root = paTocRoot();
+    var n = root;
+    while (n && n !== document.body) {
+        var st = window.getComputedStyle(n);
+        if (/(auto|scroll)/.test(st.overflowY) && n.scrollHeight > n.clientHeight) { return n; }
+        n = n.parentElement;
+    }
+    return null;
+}
+
+/**
+ * How far below the viewport top a heading has to land to be readable.
+ *
+ * The strip only counts when it is a strip. Above 1200px the contents render as
+ * a fixed column *beside* the results, where they occupy no vertical space at
+ * all - adding their height there put the offset at ~312px instead of ~103px,
+ * and every jump overshot while the highlight tracked the wrong section.
+ * `position: fixed` is what distinguishes the two, set by the media query.
+ */
+function paTocOffset() {
+    var header = document.querySelector('.mainTopToolbar');
+    var nav = document.querySelector('.pa-toc');
+    var navHeight = 0;
+    if (nav && window.getComputedStyle(nav).position !== 'fixed') {
+        navHeight = nav.offsetHeight;
+    }
+    return (header ? header.offsetHeight : 50) + navHeight + 12;
+}
+
+var paTocRaf = null;
+
+/* A click wins over the scroll position for a moment afterwards.
+   "Pathways selection" and "Pathways summary" are the two halves of the same
+   top row, so they sit at the SAME vertical position - no scroll-derived rule
+   can tell them apart, and the spy always resolved to whichever came last.
+   Combined with a jump that is a no-op when you are already at the top, both
+   entries appeared to do nothing at all when clicked. Pinning the clicked one
+   briefly makes the click the authority, which is what a reader means by it. */
+var paTocPinned = null;
+var paTocPinnedUntil = 0;
+
+function paTocJumpTo(label) {
+    var target = null;
+    paTocSections().forEach(function (h) { if (paTocNorm(h) === label) { target = h; } });
+    if (!target) { return; }
+    var sc = paTocScroller();
+    if (!sc) {
+        window.scrollTo(0, target.getBoundingClientRect().top + window.pageYOffset - paTocOffset());
+        return;
+    }
+    var delta = target.getBoundingClientRect().top - sc.getBoundingClientRect().top;
+    var destination = sc.scrollTop + delta - paTocOffset();
+
+    // scrollTop assignment, not scrollTo({behavior: 'smooth'}). The smooth form
+    // silently does nothing on this element - measured: every value resolves
+    // correctly (scroller found, section matched, offset 103) and scrollTop moves
+    // 7.5 to 8. The same element accepts an instant scroll to 2658 without
+    // complaint, so something in the ExtJS scroller swallows the animated form.
+    // Animated here by hand instead, which cannot be intercepted.
+    // Cancel anything still in flight, so two jumps in quick succession do not
+    // animate against each other.
+    if (paTocRaf) { window.cancelAnimationFrame(paTocRaf); paTocRaf = null; }
+
+    var start = sc.scrollTop;
+    var change = destination - start;
+    // Not a silent return when there is nowhere to go: being already at the
+    // target is a successful jump, and the strip still has to say so.
+    if (Math.abs(change) < 2) { paTocMarkCurrent(); return; }
+    var began = null;
+    var duration = 300;
+
+    // Re-measure and correct repeatedly, not once. The grids render their rows
+    // lazily, so arriving somewhere makes content above it materialise and push
+    // the target down again - a single correction landed sections hundreds of
+    // pixels out, and the further down the page the worse it got. This nudges
+    // until the residual stops moving or the budget runs out, which is what
+    // "scroll to this section" has to mean on a page that grows as you scroll
+    // into it.
+    function settle(attempt) {
+        var residual = target.getBoundingClientRect().top - sc.getBoundingClientRect().top - paTocOffset();
+        if (Math.abs(residual) > 3 && attempt < 8) {
+            sc.scrollTop = sc.scrollTop + residual;
+            window.setTimeout(function () { settle(attempt + 1); }, 110);
+            return;
+        }
+        paTocMarkCurrent();
+    }
+    function step(now) {
+        if (began === null) { began = now; }
+        var t = Math.min(1, (now - began) / duration);
+        // ease-out cubic
+        sc.scrollTop = start + change * (1 - Math.pow(1 - t, 3));
+        if (t < 1) { paTocRaf = window.requestAnimationFrame(step); return; }
+        settle(0);
+    }
+    paTocRaf = window.requestAnimationFrame(step);
+}
+
+function paTocMarkCurrent() {
+    var nav = document.querySelector('.pa-toc');
+    if (!nav) { return; }
+    var list = nav.querySelector('.pa-toc-list');
+    var links = nav.querySelectorAll('.pa-toc-link');
+    // +28, not a few pixels: paTocJumpTo parks a heading 12px *below* the strip,
+    // so with a tight boundary the section just jumped to has not "passed" yet
+    // and the strip highlights the one above it - disagreeing with itself the
+    // moment it is used.
+    // Derived from exactly where paTocJumpTo parks a heading, rather than
+    // measured independently. Two separate calculations disagreed the moment
+    // the strip became a sidebar: jumps landed headings at 112 while the
+    // boundary sat at 78, so every jump highlighted the section above the one
+    // it had just moved to. Same basis, plus a little slack, cannot drift.
+    var sc = paTocScroller();
+    var base = sc ? sc.getBoundingClientRect().top : 0;
+    var boundary = base + paTocOffset() + 16;
+    var currentLabel = null;
+    paTocSections().forEach(function (h) {
+        if (h.getBoundingClientRect().top <= boundary) { currentLabel = paTocNorm(h); }
+    });
+    if (paTocPinned && new Date().getTime() < paTocPinnedUntil) {
+        currentLabel = paTocPinned;
+    } else {
+        paTocPinned = null;
+    }
+    var active = null;
+    Array.prototype.forEach.call(links, function (l) {
+        var isCurrent = l.getAttribute('data-toc-text') === currentLabel;
+        l.classList.toggle('current', isCurrent);
+        if (isCurrent) { active = l; }
+    });
+    // The strip is a single scrolling line, so the pill being marked can sit
+    // outside it - the highlight would be doing its job where it cannot be seen.
+    // Horizontal only; scrollIntoView() would move the page and fight the reader.
+    if (active && list) {
+        var pill = active.getBoundingClientRect();
+        var view = list.getBoundingClientRect();
+        if (pill.left < view.left || pill.right > view.right) {
+            list.scrollLeft += (pill.left - view.left) - (view.width - pill.width) / 2;
+        }
+    }
+}
+
+(function paTocInstall() {
+    var ticking = false;
+    function onScroll() {
+        if (ticking) { return; }
+        ticking = true;
+        window.requestAnimationFrame(function () { ticking = false; paTocMarkCurrent(); });
+    }
+    document.addEventListener('click', function (ev) {
+        var link = ev.target && ev.target.closest ? ev.target.closest('.pa-toc-link') : null;
+        if (!link) { return; }
+        ev.preventDefault();
+        var label = link.getAttribute('data-toc-text');
+        paTocPinned = label;
+        paTocPinnedUntil = new Date().getTime() + 1400;
+        paTocMarkCurrent();
+        paTocJumpTo(label);
+    });
+    // Capture, because the element that scrolls is nested and scroll does not
+    // bubble.
+    document.addEventListener('scroll', onScroll, {passive: true, capture: true});
+    window.addEventListener('resize', onScroll, {passive: true});
+}());
+
+/**
+ * Adds or removes the class that reserves the contents sidebar's column, and
+ * makes ExtJS re-measure when it changes.
+ *
+ * ExtJS sizes its panels from the centre panel's content box once, at render,
+ * and does not observe padding changes afterwards. The contents list is built
+ * on a delay - it has to wait for the sections to exist - so the padding lands
+ * after the layout has already run, and everything keeps the width it measured
+ * when the sidebar had no column. The enrichment grid stayed 1318px wide inside
+ * a 1112px card that way, pushing "External links" off the edge.
+ *
+ * @param {Element} root, the centre panel
+ * @param {Boolean} wanted, whether a sidebar is being shown
+ */
+function paTocSyncRail(root, wanted) {
+    if (root.classList.contains('pa-has-toc') === wanted) {
+        return;
+    }
+
+    root.classList.toggle('pa-has-toc', wanted);
+
+    // Deferred a frame so the new padding is in effect before Ext re-measures.
+    requestAnimationFrame(function () {
+        var viewport = window.Ext ? Ext.ComponentQuery.query('viewport')[0] : null;
+
+        if (viewport) {
+            viewport.updateLayout();
+        }
+    });
+}
+
+function buildAnalysisTOC(containerSelector) {
+    var root = document.querySelector(containerSelector || '#mainViewCenterPanel');
+    if (!root) { return null; }
+
+    var existing = root.querySelector('.pa-toc');
+    if (existing) { existing.remove(); }
+
+    var headings = paTocSections();
+    if (headings.length < 3) {
+        // No sidebar means no column reserved for one - the class is what the
+        // stylesheet keys the extra left padding off, so views without a
+        // contents list (the pathway view) get the full width back.
+        paTocSyncRail(root, false);
+        return null;
+    }
+    paTocSyncRail(root, true);
+
+    var nav = document.createElement('nav');
+    nav.className = 'pa-toc';
+    nav.setAttribute('aria-label', 'Analyses on this page');
+
+    var list = document.createElement('ul');
+    list.className = 'pa-toc-list';
+
+    headings.forEach(function (h) {
+        var label = paTocNorm(h);
+        var li = document.createElement('li');
+        var a = document.createElement('a');
+        a.className = 'pa-toc-link';
+        a.href = 'javascript:void(0)';
+        a.textContent = label;
+        a.setAttribute('data-toc-text', label);
+        li.appendChild(a);
+        list.appendChild(li);
+    });
+
+    nav.appendChild(list);
+    root.insertBefore(nav, root.firstChild);
+    paTocMarkCurrent();
+    return nav;
+}
+
+/**
+ * Relative luminance of a colour, per the WCAG 2.1 definition (sRGB with the
+ * gamma expansion applied channel by channel).
+ *
+ * Accepts "#rgb", "#rrggbb", "rrggbb" or "rgb(r, g, b)". Returns null - not a
+ * guessed value - for anything it cannot parse, so callers can fall back to
+ * their previous styling rather than render an unreadable colour pair.
+ */
+function relativeLuminance(color) {
+    var text = String(color || "").trim(),
+        rgb = null,
+        match;
+
+    match = text.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i);
+    if (match) {
+        rgb = [parseInt(match[1], 10), parseInt(match[2], 10), parseInt(match[3], 10)];
+    } else {
+        var hex = text.replace("#", "");
+        if (hex.length === 3) {
+            hex = hex.charAt(0) + hex.charAt(0) + hex.charAt(1) + hex.charAt(1) + hex.charAt(2) + hex.charAt(2);
+        }
+        if (/^[0-9a-fA-F]{6}$/.test(hex)) {
+            rgb = [parseInt(hex.substr(0, 2), 16), parseInt(hex.substr(2, 2), 16), parseInt(hex.substr(4, 2), 16)];
+        }
+    }
+    if (rgb === null || rgb.some(isNaN)) {
+        return null;
+    }
+
+    var linear = rgb.map(function (channel) {
+        var c = channel / 255;
+        return (c <= 0.03928) ? (c / 12.92) : Math.pow((c + 0.055) / 1.055, 2.4);
+    });
+    return (0.2126 * linear[0]) + (0.7152 * linear[1]) + (0.0722 * linear[2]);
+}
+
+/**
+ * Black or white, whichever contrasts better against the supplied fill.
+ *
+ * The two candidates cross over at a relative luminance of
+ * sqrt(1.05 * 0.05) - 0.05 = 0.1791, which is where (L+0.05)/0.05 - the ratio
+ * against black - overtakes 1.05/(L+0.05), the ratio against white. Picking the
+ * better of the two is what guarantees a conformant pair for an arbitrary fill
+ * instead of hoping one fixed ink suits the whole palette.
+ *
+ * Returns null when the fill cannot be parsed.
+ */
+function contrastingInk(fillColor) {
+    var luminance = relativeLuminance(fillColor);
+    if (luminance === null) {
+        return null;
+    }
+    return (luminance > 0.1791) ? "#000000" : "#FFFFFF";
+}
+
+/**
+ * Inline style for a single-letter classification / database badge
+ * (i.classificationNameBox).
+ *
+ * The badge used to be an outlined letter drawn in the classification's own
+ * palette colour. That palette is pastel by design and, as text on white, most
+ * of it sat between 1.07:1 and 3.7:1 - pure yellow was effectively invisible.
+ *
+ * Darkening the palette is not an option: getClassificationColor() also feeds
+ * the classification pie chart and the pathway grid stripes, so a badge tuned
+ * for legibility would no longer match the chart slice it indexes.
+ *
+ * So the colour moves from the ink to the fill. The palette value becomes the
+ * chip background - a large block of colour, which is where it reads best
+ * anyway - and the letter is drawn in whichever of black or white contrasts
+ * better with it. Every one of the 36 palette colours clears AA that way, the
+ * worst being #c1502e at 4.71:1, and the mapping keeps working for colours
+ * added later.
+ */
+/**
+ * Reveals one of the "Expression Value" side panels the first time it has
+ * something to plot, and gives the table beside it the freed width until then.
+ *
+ * These panels were laid out at columnWidth 0.25 with minWidth 400. ExtJS
+ * honours the minimum, so the pair needed 0.66 * W + 400px and only fitted when
+ * the container was about 1176px - a viewport of roughly 1600px. On anything
+ * smaller, which is most laptops, the panel wrapped onto its own row and became
+ * a 400px-tall empty card underneath the table, while the 400px of page beside
+ * the table went unused and the table itself was squeezed hard enough to
+ * ellipsise its IDs and p-values.
+ *
+ * Nothing is plotted until a row's paint button is pressed, so there is no
+ * reason to hold the space open before that.
+ *
+ * The panel is also full width and below the table rather than beside it.
+ * Sharing the row serves neither: it leaves the table around 730px, which is
+ * not enough for nine columns without ellipsising the IDs and p-values again,
+ * while giving the plot a ~300px column to draw a heatmap across conditions and
+ * a line chart in. Stacked, both get the whole column.
+ *
+ * @param {String} panelItemId, itemId of the panel holding the plot
+ */
+function revealPlotPanel(panelItemId) {
+    var panel = Ext.ComponentQuery.query("#" + panelItemId)[0];
+
+    if (!panel || !panel.isHidden()) {
+        return;
+    }
+
+    panel.show();
+
+    if (panel.ownerCt) {
+        panel.ownerCt.updateLayout();
+    }
+}
+
+/**
+ * Resize a plot panel to the figures it just drew.
+ *
+ * These panels carry a fixed 350px height and scroll internally, which was set
+ * when they were a narrow column beside a table. A single metabolite figure is
+ * already taller than that, so the panel opened showing two thirds of one chart
+ * and an inner scrollbar - on a page that scrolls anyway.
+ *
+ * The panel cannot shrink-wrap instead: its content is appended by jQuery after
+ * the layout has run, so ExtJS would measure an empty box. Hence measuring here,
+ * once the charts exist. Every chart container is given an explicit pixel
+ * height before Highcharts draws into it, so the content height is final as
+ * soon as the markup is in the document - no waiting on a render callback.
+ *
+ * The cap keeps a metabolite with several hundred neighbours from producing a
+ * page that cannot be scrolled past; beyond it the panel scrolls as before.
+ */
+function fitPlotPanel(panelItemId, contentSelector) {
+    var panel = Ext.ComponentQuery.query("#" + panelItemId)[0];
+    var content = document.getElementById(contentSelector);
+
+    if (!panel || !content) {
+        return;
+    }
+
+    var chrome = panel.getHeight() - content.clientHeight;
+    var wanted = content.scrollHeight + (chrome > 0 ? chrome : 60);
+
+    panel.setHeight(Math.max(260, Math.min(wanted, 820)));
+}
+
+/**
+ * Grid cell renderer for narrow text columns.
+ *
+ * The Hub Analysis and metabolite class tables give their name column around
+ * 100px, because nine other columns are competing for the same two thirds of
+ * the page. Chemical names do not fit that at any type size - "gamma-Aminobutyric
+ * acid" and "L-2-Aminoadipic acid" both ellipsise - and widening the column only
+ * moves the problem to whichever column pays for it.
+ *
+ * So the value is left truncated on screen and the full text is attached as a
+ * quick-tip, which makes it recoverable on hover instead of lost. The value is
+ * HTML-encoded on the way through: ExtJS writes cell values as raw markup when
+ * no renderer is set, and these names come from user-supplied input files.
+ */
+function truncatableTextRenderer(value, metadata) {
+    if (value === null || value === undefined || value === "") {
+        return value;
+    }
+
+    var encoded = Ext.String.htmlEncode(String(value));
+
+    // htmlEncode escapes the double quotes, so the attribute cannot be broken
+    // out of by a name containing one.
+    metadata.tdAttr = 'data-qtip="' + encoded + '"';
+
+    return encoded;
+}
+
+function classificationBadgeStyle(color) {
+    var ink = contrastingInk(color);
+    if (ink === null) {
+        // Unparseable colour: keep the historical outlined rendering rather
+        // than paint an arbitrary letter onto an unknown fill.
+        return "border-color:" + color + "; color:" + color + ";";
+    }
+    return "background-color:" + color + "; border-color:" + color + "; color:" + ink + ";";
+}
 
 
 /*********************************************************************************
