@@ -755,6 +755,37 @@ function paTocMarkCurrent() {
     window.addEventListener('resize', onScroll, {passive: true});
 }());
 
+/**
+ * Adds or removes the class that reserves the contents sidebar's column, and
+ * makes ExtJS re-measure when it changes.
+ *
+ * ExtJS sizes its panels from the centre panel's content box once, at render,
+ * and does not observe padding changes afterwards. The contents list is built
+ * on a delay - it has to wait for the sections to exist - so the padding lands
+ * after the layout has already run, and everything keeps the width it measured
+ * when the sidebar had no column. The enrichment grid stayed 1318px wide inside
+ * a 1112px card that way, pushing "External links" off the edge.
+ *
+ * @param {Element} root, the centre panel
+ * @param {Boolean} wanted, whether a sidebar is being shown
+ */
+function paTocSyncRail(root, wanted) {
+    if (root.classList.contains('pa-has-toc') === wanted) {
+        return;
+    }
+
+    root.classList.toggle('pa-has-toc', wanted);
+
+    // Deferred a frame so the new padding is in effect before Ext re-measures.
+    requestAnimationFrame(function () {
+        var viewport = window.Ext ? Ext.ComponentQuery.query('viewport')[0] : null;
+
+        if (viewport) {
+            viewport.updateLayout();
+        }
+    });
+}
+
 function buildAnalysisTOC(containerSelector) {
     var root = document.querySelector(containerSelector || '#mainViewCenterPanel');
     if (!root) { return null; }
@@ -767,10 +798,10 @@ function buildAnalysisTOC(containerSelector) {
         // No sidebar means no column reserved for one - the class is what the
         // stylesheet keys the extra left padding off, so views without a
         // contents list (the pathway view) get the full width back.
-        root.classList.remove('pa-has-toc');
+        paTocSyncRail(root, false);
         return null;
     }
-    root.classList.add('pa-has-toc');
+    paTocSyncRail(root, true);
 
     var nav = document.createElement('nav');
     nav.className = 'pa-toc';

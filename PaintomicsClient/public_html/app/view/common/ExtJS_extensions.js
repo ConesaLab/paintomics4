@@ -231,16 +231,18 @@ Ext.define('Ext.grid.LiveSearchGridPanel', {
                 margin: '0 0 0 4px',
                 handler: me.searchByIDToggle,
                 scope: me
-            }, 'Search by gene/compound'
-        ];
-
-        me.paFilterItems = [
-            /* Splice position for the database and p-value controls: before the
-               fill, so they sit left and the actions stay right. */
+            }, 'Search by gene/compound',
+            /* The actions ride on row one, pushed right. Row two is the tighter
+               of the two - it carries the database checkboxes and both p-value
+               combos - and with the export on the end it overflowed by a few
+               pixels and clipped it. Row one has the room, and the top-right
+               corner is where an export belongs anyway. */
             '->',
             ((me.download !== false) ? '<a class="downloadXLS" href="javascript:void(0)"><i class="fa fa-file-excel-o"></i> Download as XLS</a>' : ""),
             ((me.multidelete !== false) ? '<a class="multiDelete" style="color:rgb(242, 105, 105);" href="javascript:void(0)"><i class="fa fa-trash"></i> Delete selected</a>' : "")
         ];
+
+        me.paFilterItems = [];
 
         if (me.databases.length > 1) {
           /* Add a separator then the extra checkboxes */
@@ -335,21 +337,19 @@ Ext.define('Ext.grid.LiveSearchGridPanel', {
               });
           }
 
-          pvalue_filter_options.push('-')
-
-          me.paFilterItems.splice(-3, 0, ...pvalue_filter_options);
+          me.paFilterItems.push(...pvalue_filter_options);
         }
 
-        // The second row is only worth rendering when it has something in it: a
-        // single-database run with no p-value methods leaves it holding just the
-        // export link, which does not deserve a bar of its own.
+        // The second row is only worth rendering when there is something to put
+        // on it: a single-database run with no p-value methods has no filters at
+        // all, and an empty bar is worse than none.
         me.dockedItems = [{
             xtype: 'toolbar',
             dock: 'top',
             cls: 'paGridBar paGridBar-search',
             items: me.paSearchItems
         }];
-        if (me.paFilterItems.length > 3) {
+        if (me.paFilterItems.length > 0) {
             me.dockedItems.push({
                 xtype: 'toolbar',
                 dock: 'top',

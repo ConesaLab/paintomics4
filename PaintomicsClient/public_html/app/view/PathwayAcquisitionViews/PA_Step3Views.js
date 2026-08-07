@@ -4314,7 +4314,12 @@ function PA_Step3PathwayTableView() {
 	this.initComponent = function() {
 		var me = this;
 		this.component = Ext.widget({
-			xtype: 'container', cls: "contentbox", overflowX: 'scroll', items: [
+			/* overflowX was 'scroll' to cope with the toolbar, which needed 1753px to
+			   lay out on one line. It sits on two rows now and fits, but the scroll
+			   was still making the grid size to its content rather than to the card:
+			   1318px inside a 1112px box, so "External links" was only reachable by
+			   scrolling the table sideways. Sized to the card, all nine columns fit. */
+			xtype: 'container', cls: "contentbox", items: [
 				{xtype: 'box', flex: 1, html: '<h2 id="pathwayEnrichmentSection">Pathway enrichment</h2>'},
 				{
 					xtype: "livesearchgrid", itemId: 'pathwaysGridPanel',
