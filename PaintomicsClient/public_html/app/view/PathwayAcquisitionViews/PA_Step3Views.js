@@ -800,8 +800,13 @@ function PA_Step3JobView() {
 					' By default the pathway selection list from below will show pathways from all databases, but a set of checkboxes have been added' +
 					' on the search bar allowing to select which ones should be used. Each pathway row has also a new additional column indicating the' +
 					' source. <br/><br />' +
-					' The pathways summary splitted by databases is the following one:<div id="multisource_summary"></div>' +
+					' The pathways summary splitted by databases is the following one:' +
 					'  </p>' +
+					// Outside the <p>, not inside it. A div is not phrasing content, so the
+					// parser was closing the paragraph early and hoisting this out anyway,
+					// leaving a stray empty <p> behind that the two-column layout then had
+					// to work around.
+					'  <div id="multisource_summary"></div>' +
 					'</div>'
 				}),
 				me.statsView.getComponent(),
@@ -4622,7 +4627,7 @@ function PA_Step3HubAnalysis () {
 				items: [
 					{
 						xtype: "gridpanel",
-						cls: "contentbox",
+						cls: "contentbox paWrapHeaders",
 						columnWidth: 0.66,
 						store: userStore,
 						height: 350,
@@ -4786,49 +4791,55 @@ function PA_Step3HubAnalysis () {
 							},
 							{
 								text: 'Metabolite',
-								flex: 12 / 100,
+								flex: 21 / 100,
 								sortable: true,
 								hideable: false,
-								dataIndex: 'Metabolite'
+								dataIndex: 'Metabolite',
+								renderer: truncatableTextRenderer
 							},
 							{
 								text: 'ID',
-								flex: 8 / 100,
+								flex: 9 / 100,
 								sortable: true,
 								hideable: false,
 								dataIndex: 'ID'
 							},
 							{
 								text: 'Step',
-								flex: 6 / 100,
+								flex: 7 / 100,
 								sortable: true,
 								hideable: false,
 								dataIndex: 'Step'
 							},
 							{
 							    text: 'DE neighbors',
-								flex: 10 / 100,
+								flex: 9.5 / 100,
 								sortable: true,
 								hideable: false,
 								dataIndex: 'DEN'
 							},
 							{
 								text: 'not DE neighbors',
-								flex: 12 / 100,
+								flex: 9.5 / 100,
 								sortable: true,
 								hideable: false,
 								dataIndex: 'noDEN'
 							},
+							/* "Percentage" and "Percentile" are single words, so unlike the
+							   neighbour columns they cannot wrap out of a narrow share - they
+							   just ellipsise into "Percentage." and "Percentile..". The width
+							   they need comes from the columns above, whose headers now wrap
+							   and whose values are one or two digits. */
 							{
 								text: 'Percentage',
-								flex: 10 / 100,
+								flex: 13 / 100,
 								sortable: true,
 								hideable: false,
 								dataIndex: 'Percentage'
 							},
 							{
 								text: 'Percentile',
-								flex: 10 / 100,
+								flex: 12 / 100,
 								sortable: true,
 								hideable: false,
 								dataIndex: 'Percentile',
@@ -4844,7 +4855,7 @@ function PA_Step3HubAnalysis () {
 							},
 							{
 								text: 'FDR BH',
-								flex:10/100,
+								flex:9/100,
 								sortable: true,
 								hideable: false,
 								dataIndex: 'padjust',
@@ -5164,7 +5175,7 @@ function PA_Step3MetaboliteView() {
 				items: [
 					{
 						xtype: "gridpanel",
-						cls: "contentbox",
+						cls: "contentbox paWrapHeaders",
 						columnWidth:0.66,
 
 						autoScroll: true,
