@@ -104,6 +104,38 @@ would be lost on any ExtJS upgrade. Two options, in order of preference:
 
 ---
 
+## Checked and deliberately left alone
+
+### `span.networkClusterImage > i` - do not "fix" this by darkening it
+
+The one contrast flag remaining in `main.css`. It is `#DA643D` on its own
+`rgba(255, 255, 255, 0.54)`, layered over an arbitrary network-cluster
+thumbnail, and it measures 3.58:1 against white.
+
+The obvious fix is wrong. Because the icon's backdrop is 54% white over an
+unknown image, the effective background is *bounded*: `#898989` at the darkest
+(veil over pure black) through `#FFFFFF`. Against that range:
+
+| Colour | On `#898989` | On `#FFFFFF` |
+|---|---|---|
+| `#DA643D` (current) | 1.03:1 | 3.58:1 |
+| `#B04F22` (darker orange) | 1.52:1 | 5.27:1 |
+| `#1A1A1A` (near-black) | 5.02:1 | 17.40:1 |
+
+Darkening the orange *improves the white case and makes the dark case worse* -
+1.03:1 becomes 1.52:1, still nowhere near conformant. No orange clears 4.5:1
+across that span; only a near-black does, and that discards the amber "this
+cluster is disabled" signal the icon exists to convey.
+
+It is also exempt: the rule that reveals it is
+`span.networkClusterImage.disabled > i { display: block }`, so it marks an
+inactive component, which WCAG 1.4.3 does not require to meet the contrast
+minimum.
+
+Left unchanged deliberately. If it is ever revisited, the fix is to give the
+icon an opaque backing so the backdrop stops depending on the image underneath,
+*then* darken the orange - not to darken the orange on its own.
+
 ## Not a proposed change, but worth recording
 
 `JobController.js:1329` logs `Error saving data with IndexDB in store: jobs`
@@ -173,6 +205,19 @@ Two independent fixes, both cheap:
    Using `%s` formatting also makes the line immune to this class of bug.
 2. Have the client skip the recover call entirely when it has no jobID to
    recover, so a cold start never hits the endpoint.
+
+**Update (iteration 9).** `dev` has since landed `929c1dae`, which fixes the
+*messaging* half of this: `ajaxErrorHandler` now checks for an `extra` block
+naming a Python file, and for those says "This happened on the server, so
+retrying in the browser will not help" instead of telling the user to clear
+their cache. That is exactly the misdirection recorded above, so this entry is
+now half-resolved.
+
+The crash itself is unchanged - `PathwayAcquisitionServlet.py` is untouched by
+any commit on `dev`, and the endpoint still returns the same TypeError when
+called without a jobID. Re-confirmed against the running server this iteration.
+So the UI still locks on a cold start with stale storage; it now just explains
+itself honestly while doing so.
 
 ---
 
