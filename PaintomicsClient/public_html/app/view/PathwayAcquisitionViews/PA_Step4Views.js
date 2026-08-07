@@ -1008,7 +1008,7 @@ function PA_Step4KeggDiagramView() {
 			defaults: {border: false},
 			flex: 1, minWidth: 400, previousWidth: 400, width: 400,  height: ($("#mainViewCenterPanel").height() - 100),
 			html:
-			'<div class="lateralOptionsPanel-header" style="background: #337ab7;">' +
+			'<div class="lateralOptionsPanel-header">' +
 			'   <div class="lateralOptionsPanel-toolbar">' +
 			'    <a href="javascript:void(0)" class="toolbarOption btn-primary helpTip" id="hideDiagramPanelButton" title="Hide this panel"><i class="fa fa-times"></i></a>' +
 			'    <a href="javascript:void(0)" class="toolbarOption btn-primary helpTip" id="expandDiagramPanelButton" style="display:none;"  title="Expand this panel"><i class="fa fa-expand"></i></a>' +
@@ -2840,7 +2840,7 @@ function PA_Step4VisualOptionsView() {
 			items:[{
 				xtype: "box",
 				html:
-				"<div class='lateralOptionsPanel-header' style='background: #D43E3A;'>" +
+				"<div class='lateralOptionsPanel-header'>" +
 				'  <div class="lateralOptionsPanel-toolbar">' +
 				'    <a href="javascript:void(0)" class="toolbarOption btn-danger helpTip" id="hideVisualSettingsPanelButton" title="Close this panel"><i class="fa fa-times"></i></a>' +
 				'  </div>' +
