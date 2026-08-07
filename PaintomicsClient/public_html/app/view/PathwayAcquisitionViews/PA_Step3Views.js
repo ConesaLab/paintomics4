@@ -815,14 +815,15 @@ function PA_Step3JobView() {
 					xtype: 'box', cls: "contentbox", style: "max-width:1900px; margin: 5px 10px; margin-top:20px;", html:
 					'<div id="multisource_msg">' +
 					'  <h2>Multiple databases used</h2>' +
-					'  <p>' +
-					'		The selected species has available pathway data from more than one database. In order to view the additional information, a tab panel has been' +
-					' added immediately under this message, giving access to different classification and network analysis for each database.<br/><br/>' +
-					' By default the pathway selection list from below will show pathways from all databases, but a set of checkboxes have been added' +
-					' on the search bar allowing to select which ones should be used. Each pathway row has also a new additional column indicating the' +
-					' source. <br/><br />' +
-					' The pathways summary splitted by databases is the following one:<div id="multisource_summary"></div>' +
-					'  </p>' +
+					'  <div class="multisource_body">' +
+					'    <div class="multisource_text">' +
+					'      <p>This species has pathway data in more than one database. The tabs below give you' +
+					' separate classification and network analysis for each one.</p>' +
+					'      <p>The pathway list shows every database at once by default. Use the checkboxes in the' +
+					' search bar to narrow it down &mdash; each row is labelled with the database it came from.</p>' +
+					'    </div>' +
+					'    <div id="multisource_summary"></div>' +
+					'  </div>' +
 					'</div>'
 				}),
 				me.statsView.getComponent(),
@@ -896,7 +897,17 @@ function PA_Step3JobView() {
 					// SUMMARY PANEL PER DATABASE
 					if (me.getModel().getDatabases().length > 1) {
 						var DB_COLORS = ["#007AFF",  "#4CD964", "#FF2D55", "#FFCD02", "#5AC8FB", "#C644FC"];
-						var table_html = "<table><tr><th></th><th>Database</th><th>Found pathways</th><th>Significant</th></tr>";
+						// The two count cells must stay the sole content of their id'd
+						// element -- the pathway filters refresh them with .html(number)
+						// (see the $("#foundPathwaysTag_" + dbname) calls above), so any
+						// wrapper markup placed inside them would be wiped on first filter.
+						var table_html =
+							'<table>' +
+							'<thead><tr>' +
+								'<th colspan="2">Database</th>' +
+								'<th>Found</th>' +
+								'<th>Significant</th>' +
+							'</tr></thead><tbody>';
 
 						for (var i = 0; i < me.getModel().getDatabases().length; i++) {
 							var database = me.getModel().getDatabases()[i];
@@ -904,13 +915,13 @@ function PA_Step3JobView() {
 
 							table_html +=
 							'<tr>' +
-								'<td><i class="classificationNameBox" id="icon_' + database + '" style="border-color: ' + db_color + '; color: ' + db_color + ';">' + database.charAt(0) + '</i></td>' +
-								'<td>' + database + '</td>' +
-								'<td id="foundPathwaysTag_' + database + '">0</td><td id="significantPathwaysTag_' + database + '">0</td>' +
+								'<td class="db_chip"><i class="classificationNameBox" id="icon_' + database + '" style="border-color: ' + db_color + '; color: ' + db_color + ';">' + database.charAt(0) + '</i></td>' +
+								'<td class="db_name">' + database + '</td>' +
+								'<td id="foundPathwaysTag_' + database + '">0</td><td class="db_significant" id="significantPathwaysTag_' + database + '">0</td>' +
 							'</tr>';
 						}
 
-						table_html += "</table>"
+						table_html += "</tbody></table>"
 
 						$("#multisource_summary").html(table_html);
 					}
