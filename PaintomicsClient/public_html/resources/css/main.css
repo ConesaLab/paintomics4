@@ -1323,14 +1323,20 @@ div#multisource_msg {
 	min-height: 200px;
 }
 div#multisource_summary { text-align: center; }
+/* This was `1px solid black` - the only pure-black edge in the application, on
+   a table sitting inside an already-bordered card, so it read as a screenshot
+   pasted into the page. The cells also had no vertical padding, which is what
+   made the two database rows feel cramped against it. */
 div#multisource_summary table {
-	border: 1px solid black;
+	border: 1px solid var(--pa-border);
+	border-radius: var(--pa-radius-sm);
 	margin: 0 auto;
 	padding: 10px;
 	text-align: center;
 }
-div#multisource_summary table th {
-	padding: 0 5px;
+div#multisource_summary table th,
+div#multisource_summary table td {
+	padding: 4px 10px;
 }
 
 div.onedatabase .x-panel-body-default {
