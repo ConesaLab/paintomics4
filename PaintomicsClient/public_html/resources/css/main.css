@@ -76,6 +76,10 @@ root {
   --pa-radius: 6px;         /* cards, panels, dialogs */
   --pa-radius-sm: 4px;      /* buttons, inputs, chips */
   --pa-border: #E4E4E7;
+  /* How far a card's contents stand off its own border. Body copy used to sit
+     about 5px from the edge while the card's heading sat at 20, so text ran
+     into the frame around it and the two never lined up. One value for both. */
+  --pa-card-inset: 26px;
   --pa-shadow: 0 1px 3px rgba(24, 24, 27, 0.08), 0 1px 2px -1px rgba(24, 24, 27, 0.06);
   --pa-shadow-inset: inset 0 1px 2px rgba(24, 24, 27, 0.14);
 
@@ -890,9 +894,11 @@ div.contentbox h2, #clusternumber_box h2, #threshold_box h2 {
 	font-size: 15px;
 	font-weight: 600;
 	letter-spacing: -0.005em;
-	padding: 13px 20px;
+	padding: 13px var(--pa-card-inset);
 	margin: 0;
 }
+/* The inset for body copy lives on `div.contentbox p, div.contentbox li` further
+   down this file, which is the rule that already owned that padding. */
 /* A step down again: these sit inside a card that already has an h2. */
 div.contentbox h3 {
 	background-color: transparent;
@@ -908,10 +914,27 @@ div.contentbox h3 span {
 	padding-left: 10px;
 }
 div.contentbox p, div.contentbox li {
-	padding: 2px 5px;
+	/* 5px put body copy hard against the card's border while the card's own
+	   heading sat at 20 - the text was framed by an edge it was touching, and
+	   the two never shared a left margin. Both now use --pa-card-inset. */
+	padding: 2px var(--pa-card-inset);
 	/* See the note on `body`: justified text in these narrow columns produces
 	   distracting inter-word gaps, so keep a ragged right edge. */
 	text-align: left;
+}
+/* Lists carry their own marker indent on top of the inset. */
+div.contentbox li {
+	padding-left: 4px;
+}
+/* Blocks that already own their spacing, and would otherwise be inset twice. */
+.po-ai-section-body p,
+.paEmptyNote p,
+.step4HistoryBox p,
+#dbs_message dd p,
+.x-tip p,
+.sigma-tooltip p {
+	padding-left: 0;
+	padding-right: 0;
 }
 
 a.button.twoOptionsButton {
@@ -1514,7 +1537,7 @@ div.availableOmicsBox h4 {
 	width: 100% !important;
 }
 #dbs_message div {
-	padding: 0 5px 5px 5px;
+	padding: 0 var(--pa-card-inset) 10px;
 }
 #clusternumber_box div, #clusternumber_box span, #threshold_box div, #threshold_box span {
 	border: 0 !important;
@@ -1543,6 +1566,11 @@ div.availableOmicsBox h4 {
 }
 #dbs_message dd {
 	margin: 6px 0 0;
+}
+/* Same as the results-page card: the prose uses the card's width rather than a
+   reading measure, so it does not sit as a column with empty space beside it. */
+#dbs_message p {
+	max-width: none;
 }
 #dbs_message dd > div[id^="matching_table_"] {
 	display: flex;
@@ -1884,14 +1912,15 @@ div#multisource_msg {
 	row-gap: 18px;
 }
 div#multisource_msg > h2 { grid-area: head; }
-/* The prose stays left-aligned at its reading measure - centring it too left a
-   475px ribbon of text stranded in the middle of a 1360px card, which is a
-   worse imbalance than the one being fixed. Only the table is centred. */
+/* The prose runs the full width of the card. It is capped at a reading measure
+   everywhere else, but here that left a column of text down one side of a
+   1360px box with nothing opposite it, and the card looked broken rather than
+   composed. Full width and a centred table balance without needing either. */
 div#multisource_msg > p {
 	grid-area: text;
-	max-width: 105ch;
+	max-width: none;
 	margin: 0;
-	padding: 0 24px;
+	padding: 0 var(--pa-card-inset);
 }
 div#multisource_summary {
 	grid-area: summary;
@@ -2049,6 +2078,91 @@ i.masterRegulator:before {
 }
 .step4HistoryBox h2 {
 	text-align: center;
+}
+.step4ThumbContainer {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	width: auto;
+	margin: 0 0 8px;
+	border: 1px solid var(--pa-border);
+	border-radius: var(--pa-radius-sm);
+	overflow: hidden;
+	background-color: #FFFFFF;
+	cursor: pointer;
+	transition: border-color .12s ease, box-shadow .12s ease;
+}
+.step4HistoryBox .step4ThumbContainer:last-child { margin-bottom: 0; }
+.step4HistoryBox .step4ThumbContainer:hover {
+	border-color: #A1A1AA;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.10);
+}
+.step4HistoryBox .step4ThumbWrapper {
+	order: 1;
+	height: 120px;
+	background-position: center;
+}
+/* The name was a near-black panel at 81% opacity, 60px tall, sitting over the
+   image it was labelling - the thumbnail was mostly hidden behind its own
+   caption. It reads as a caption under the image instead. The source order puts
+   it first, so `order` moves it without touching the shared markup. */
+.step4HistoryBox .step4ThumbTitleContainer {
+	order: 2;
+	float: none;
+	width: auto;
+	min-height: 0;
+	padding: 9px 12px;
+	background-color: #FFFFFF;
+	border-top: 1px solid var(--pa-border);
+	color: #27272A;
+	font-size: 12.5px;
+	font-weight: 500;
+	line-height: 1.35;
+	text-align: left;
+}
+/* This was absolutely positioned with no positioned ancestor, so it laid itself
+   out against the panel rather than against its thumbnail: "Open" appeared as
+   30px grey text floating over the middle of the box, attached to nothing. */
+.step4HistoryBox .step4PathwayThumbnailHover {
+	position: absolute;
+	top: 0;
+	left: 0;
+	right: 0;
+	height: 120px;
+	width: auto;
+	padding-top: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background-color: rgba(255, 255, 255, 0.82);
+	color: #27272A;
+	font-size: 14px;
+	font-weight: 600;
+	z-index: 1;
+}
+/* The panel is an overlay across the pathway, so it needs the close control
+   every other overlay here has - it was dismissed only by pressing the toolbar
+   button underneath it a second time. */
+.step4HistoryClose {
+	position: absolute;
+	top: 50%;
+	right: 8px;
+	transform: translateY(-50%);
+	width: 26px;
+	height: 26px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: var(--pa-radius-sm);
+	color: #71717A;
+	font-size: 14px;
+	text-decoration: none;
+	transition: background-color .12s ease, color .12s ease;
+}
+.step4HistoryClose:hover {
+	background-color: rgba(0, 0, 0, 0.07);
+	color: #27272A;
+	text-decoration: none;
 }
 .step4ThumbContainer {
 	margin: 5px;
