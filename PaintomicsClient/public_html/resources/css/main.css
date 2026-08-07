@@ -2494,13 +2494,37 @@ div.omicSelection div.omicPosition + div {
 /**STYLES FOR GENE OVERVIEW* *******************************/
 /***********************************************************/
 
+/* These two are one figure: the strip is the per-sample colour scale and the
+   chart to its right is the same values plotted. Left on the default baseline
+   alignment they sat on different lines whenever the strip's legend was taller
+   than the chart's first row, so the pair is pinned to the top instead. */
 .PA_step5_heatmapContainer {
 	width: 300px;
-	display: inline-block
+	display: inline-block;
+	vertical-align: top;
 }
 .PA_step5_plotContainer {
 	min-width: 300px;
-	display: inline-block
+	display: inline-block;
+	vertical-align: top;
+}
+
+/* Shown where a figure would go when there is nothing to draw. Previously these
+   cases either left a heading with nothing under it or opened an empty white
+   box, both of which read as a failure rather than as an answer. */
+.paEmptyNote {
+	padding: 22px 24px;
+	color: #52525B;
+	font-size: 12.5px;
+	line-height: 1.55;
+}
+.paEmptyNote p {
+	margin: 0;
+	max-width: 78ch;
+}
+.paEmptyNote p + p {
+	margin-top: 8px;
+	color: #71717A;
 }
 .geneInfoTitle {
 	font-size: 15px;

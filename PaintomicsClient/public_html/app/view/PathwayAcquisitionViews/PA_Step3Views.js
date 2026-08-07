@@ -4674,9 +4674,13 @@ function PA_Step3HubAnalysis () {
 
 										let elem = $("#hubAnalysisPlot");
 										elem.empty();
-										/* Was elem.width() - 400, which on this panel evaluates to a
-										   negative number and left the plot with no width at all. */
-										let divWidth = Math.max(260, elem.width() - 60);
+										/* The heatmap is a fixed 300px block and the plot sits beside
+										   it, so the plot may only claim what is left. Giving it the
+										   full width pushed it onto its own line, where a 300px strip
+										   above a 1240px chart of the same samples read as a broken
+										   figure. The floor keeps a usable chart if the panel is ever
+										   too narrow for the pair, in which case they stack. */
+										let divWidth = Math.max(260, elem.width() - 400);
 
 										let hubTable = {};
 
@@ -4702,20 +4706,38 @@ function PA_Step3HubAnalysis () {
 										heatmapSite = generateHeatmap(divIdComp, "Metabolomics", [compExpression], distributionSummaries, visualOptions)
 										plotSite = generatePlot(divIdComp + "_plotContainer", "Metabolomics", [compExpression], distributionSummaries, divIdComp + "_plotlegendContainer", visualOptions);
 
-										// Expression value of regulate features
-										let regulateFeatures = null;
-										let step = hubTable[rowIndex]['Step'];
-										if (step == "One Step" || step == '1') {
-											regulateFeatures = compRegulateFeatures[ID][1]
-										} else if (step == "Two Steps" || step == '2') {
-											regulateFeatures = compRegulateFeatures[ID][2]
+										// Expression value of regulate features.
+										//
+										// compRegulateFeatures[ID][step] was indexed without a guard,
+										// so any metabolite missing from the map threw a TypeError
+										// here - after the "Metabolite regulates Features" heading
+										// had already been appended. The section then rendered as a
+										// title with nothing whatsoever under it, which is what the
+										// missing DE neighbours look like from the outside. The map
+										// is absent for every job reopened by its URL, because
+										// compoundRegulateFeatures is not among the fields written
+										// back at step 2 (see PAINTOMICS4_LARGE_FIELDS).
+										let stepNames = {'One Step': 1, 'Two Steps': 2, 'Three Steps': 3, 'Four Steps': 4};
+										let rawStep = hubTable[rowIndex]['Step'];
+										let step = stepNames[rawStep] || parseInt(rawStep, 10);
+										let neighboursByStep = compRegulateFeatures ? compRegulateFeatures[ID] : null;
+										let regulateFeatures = (neighboursByStep && step) ? neighboursByStep[step] : null;
 
-										} else if (step == "Three Steps" || step == '3') {
-											regulateFeatures = compRegulateFeatures[ID][3]
-
-										} else if (step == 'Four Steps' || step == '4') {
-											regulateFeatures = compRegulateFeatures[ID][4]
+										if (!regulateFeatures || !regulateFeatures.length) {
+											elem.append(
+												'<div class="contentbox paEmptyNote">' +
+												'  <p>No expression data is available for the neighbours of this metabolite.</p>' +
+												'  <p>Neighbour identities are held only for the run that produced them, so they are not restored when a job is reopened from its link. Re-run the analysis to see them.</p>' +
+												'</div>');
+											fitPlotPanel('hubAnalysisPlotPanel', 'hubAnalysisPlot');
+											return;
 										}
+
+										// Every omic can legitimately have no measured neighbour, in
+										// which case the loop below draws nothing - the same dangling
+										// heading by another route.
+										let paintedAnyOmic = false;
+
 										for (key in distributionSummaries) {
 											let omicName = key
 											let divId = key.replace(/\s/g, '_') + 'hubAnlysis'
@@ -4746,6 +4768,7 @@ function PA_Step3HubAnalysis () {
 											if (regulateOmicsValue.length === 0) {
 												continue;
 											}
+											paintedAnyOmic = true;
 											htmlCode =
 												"<div class='contentbox'>" +
 												"  <h3>" + omicName + "<span><input type='checkbox' id='" + divId + "_cb_relevant' value='" + omicName + "'/>Only relevant</span></h3>" +
@@ -4772,6 +4795,15 @@ function PA_Step3HubAnalysis () {
 												generatePlot(divId + "_plotContainer", omicName, omicValues, distributionSummaries, divId + "_plotlegendContainer", visualOptions);
 											})
 										}
+
+										if (!paintedAnyOmic) {
+											elem.append(
+												'<div class="contentbox paEmptyNote">' +
+												'  <p>This metabolite has ' + regulateFeatures.length + ' neighbour' + (regulateFeatures.length === 1 ? '' : 's') + ' at ' + step + ' step' + (step === 1 ? '' : 's') + ', but none of them carry measured values in the omics you uploaded.</p>' +
+												'</div>');
+										}
+
+										fitPlotPanel('hubAnalysisPlotPanel', 'hubAnalysisPlot');
 									}
 								}]
 							},
@@ -5255,7 +5287,11 @@ function PA_Step3MetaboliteView() {
 
 											let elem = $("#classificationPlot");
 											elem.empty();
-											let divWidth = Math.max(260, elem.width() - 60);
+											/* Reserve the fixed-width heatmap that sits beside the
+											   plot, as in the hub table above - otherwise the pair
+											   wraps and the strip is left stranded above a chart
+											   four times its width. */
+											let divWidth = Math.max(260, elem.width() - 400);
 											let regulateFeatures = dataFinal[grid.getStore().getAt(rowIndex).data.name].ID;
 											let regulateOmicsValueComp = []
 											let omicName =  "Metabolomics"
@@ -5312,8 +5348,16 @@ function PA_Step3MetaboliteView() {
 
 												});
 
+											} else {
+												// The panel is revealed before the data is checked, so
+												// without this the class opens an empty white box.
+												elem.append(
+													'<div class="contentbox paEmptyNote">' +
+													'  <p>None of the ' + regulateFeatures.length + ' metabolite' + (regulateFeatures.length === 1 ? '' : 's') + ' in this class carry measured values in the omics you uploaded.</p>' +
+													'</div>');
 											}
 
+											fitPlotPanel('classificationPlotPanel', 'classificationPlot');
 										}
 									}]
 								},

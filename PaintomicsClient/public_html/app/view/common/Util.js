@@ -940,6 +940,37 @@ function revealPlotPanel(panelItemId) {
 }
 
 /**
+ * Resize a plot panel to the figures it just drew.
+ *
+ * These panels carry a fixed 350px height and scroll internally, which was set
+ * when they were a narrow column beside a table. A single metabolite figure is
+ * already taller than that, so the panel opened showing two thirds of one chart
+ * and an inner scrollbar - on a page that scrolls anyway.
+ *
+ * The panel cannot shrink-wrap instead: its content is appended by jQuery after
+ * the layout has run, so ExtJS would measure an empty box. Hence measuring here,
+ * once the charts exist. Every chart container is given an explicit pixel
+ * height before Highcharts draws into it, so the content height is final as
+ * soon as the markup is in the document - no waiting on a render callback.
+ *
+ * The cap keeps a metabolite with several hundred neighbours from producing a
+ * page that cannot be scrolled past; beyond it the panel scrolls as before.
+ */
+function fitPlotPanel(panelItemId, contentSelector) {
+    var panel = Ext.ComponentQuery.query("#" + panelItemId)[0];
+    var content = document.getElementById(contentSelector);
+
+    if (!panel || !content) {
+        return;
+    }
+
+    var chrome = panel.getHeight() - content.clientHeight;
+    var wanted = content.scrollHeight + (chrome > 0 ? chrome : 60);
+
+    panel.setHeight(Math.max(260, Math.min(wanted, 820)));
+}
+
+/**
  * Grid cell renderer for narrow text columns.
  *
  * The Hub Analysis and metabolite class tables give their name column around
