@@ -245,7 +245,7 @@ function PA_Step4JobView() {
 					'<a href="javascript:void(0)" class="button btn-secondary helpTip" id="globalHeatmapButton"><i class="fa fa-th"></i> Show Heatmap</a>' +
 					'<a href="javascript:void(0)" class="button btn-primary helpTip" id="showPathwayButton"><i class="fa fa-sitemap"></i>  Show Pathway</a></div>' +
 					'<a href="javascript:void(0)" class="button btn-default backButton"><i class="fa fa-arrow-left"></i> Go back</a>' +
-					'<a href="javascript:void(0)" class="button helpTip" style=" float: left; background-color: #D66379; color: #fff;" id="showHistoryButton"><i class="fa fa-history"></i> History</a>' +
+					'<a href="javascript:void(0)" class="button helpTip" style=" float: left; background-color: #CD435D; color: #fff;" id="showHistoryButton"><i class="fa fa-history"></i> History</a>' +
 					'<div id="pathwayHistoryContainer" class="step4HistoryBox"><h2>History</h2><div></div></div>'
 				}]
 			}, { //THE CONTAINER FOR THE PATHWAY VIEWS
@@ -2720,7 +2720,7 @@ function PA_Step4VisualOptionsView() {
 			items:[{
 				xtype: "box",
 				html:
-				"<div class='lateralOptionsPanel-header' style='background: #d9534f;'>" +
+				"<div class='lateralOptionsPanel-header' style='background: #D43E3A;'>" +
 				'  <div class="lateralOptionsPanel-toolbar">' +
 				'    <a href="javascript:void(0)" class="toolbarOption btn-danger helpTip" id="hideVisualSettingsPanelButton" title="Close this panel"><i class="fa fa-times"></i></a>' +
 				'  </div>' +
@@ -2945,7 +2945,7 @@ function PA_Step4FindFeaturesView() {
 			xtype: "container", cls: "lateralOptionsPanel",  width: 300, height: ($("#mainViewCenterPanel").height() - 100),
 			items:[{
 				xtype: "box", html:
-				"<div class='lateralOptionsPanel-header' style='background: #5bc0de;'>" +
+				"<div class='lateralOptionsPanel-header' style='background: #1F7F9B;'>" +
 				'  <div class="lateralOptionsPanel-toolbar">' +
 				'    <a href="javascript:void(0)" class="toolbarOption btn-info helpTip" id="hideFindFeaturePanelButton" title="Close this panel"><i class="fa fa-times"></i></a>' +
 				'  </div>' +
@@ -3539,7 +3539,7 @@ function PA_Step4GlobalHeatmapView() {
 				}
 			},
 			previousWidth: 400, width: 400, minWidth: 400, html:
-			'<div class="lateralOptionsPanel-header" style="background: #55c9a6;">' +
+			'<div class="lateralOptionsPanel-header" style="background: #2A8368;">' +
 			'  <div class="lateralOptionsPanel-toolbar">' +
 			'    <a href="javascript:void(0)" class="toolbarOption btn-secondary helpTip" id="hideHeatmapPanelButton" title="Hide this panel"><i class="fa fa-times"></i></a>' +
 			'    <a href="javascript:void(0)" class="toolbarOption btn-secondary helpTip" id="configureHeatmapButton" title="Configure heatmap"><i class="fa fa-cogs"></i></a>' +
@@ -4014,7 +4014,7 @@ function PA_Step4DetailsView() {
 			},
 			items: [{
 				xtype: 'box', html:
-				'<div class="lateralOptionsPanel-header" style="background: #55c9a6;">' +
+				'<div class="lateralOptionsPanel-header" style="background: #2A8368;">' +
 				'  <div class="lateralOptionsPanel-toolbar">' +
 				'    <a class="toolbarOption btn-secondary helpTip" id="hideFeatureSetButton" title="Hide this panel"><i class="fa fa-times"></i></a>' +
 				'    <a class="toolbarOption btn-secondary helpTip" id="expandFeatureSetButton" title="Expand this panel"><i class="fa fa-expand"></i></a>' +
