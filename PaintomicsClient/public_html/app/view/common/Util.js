@@ -560,7 +560,7 @@ function paTocSections() {
     var root = paTocRoot();
     if (!root) { return []; }
     var claimed = [];
-    return Array.prototype.filter.call(root.querySelectorAll('h2'), function (h) {
+    var kept = Array.prototype.filter.call(root.querySelectorAll('h2'), function (h) {
         if (h.offsetParent === null || paTocNorm(h).length < 3) { return false; }
         if (h.closest('[id^="networkSettingsPanel"], [id^="networkDetailsPanel"], .lateralOptionsPanel')) {
             return false;
@@ -569,6 +569,19 @@ function paTocSections() {
         if (!box) { return true; }
         if (claimed.indexOf(box) !== -1) { return false; }
         claimed.push(box);
+        return true;
+    });
+
+    // Sections laid out side by side are one line in the contents, not two.
+    // "Pathways selection" and "Pathways summary" are the two halves of the same
+    // top row and share a vertical position exactly - measured at -2548 for
+    // both - so listing them separately gave two entries that scroll to the
+    // same place and that no scroll-derived rule could ever tell apart.
+    var lastTop = null;
+    return kept.filter(function (h) {
+        var top = h.getBoundingClientRect().top;
+        if (lastTop !== null && Math.abs(top - lastTop) < 4) { return false; }
+        lastTop = top;
         return true;
     });
 }

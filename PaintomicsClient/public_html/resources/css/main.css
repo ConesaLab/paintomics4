@@ -3096,7 +3096,11 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
 		backdrop-filter: none;
 		-webkit-backdrop-filter: none;
 		border-bottom: 0;
-		border-right: 1px solid var(--pa-border);
+		/* No dividing rule. The column is already separated from the results by
+		   the gap between them, so a border only adds a grey line that carries
+		   no information - and the current-item marker is the one line in here
+		   that should draw the eye. */
+		border-right: 0;
 		z-index: 140;
 	}
 	/* A quiet label, so the column reads as a table of contents rather than as
