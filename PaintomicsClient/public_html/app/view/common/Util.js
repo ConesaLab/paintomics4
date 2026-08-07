@@ -499,6 +499,109 @@ function scaleValue(x, min, max) {
 };
 
 /**
+ * Builds the contents strip for the results page.
+ *
+ * Step 3 stacks eight independent analyses - the pathway summary, the database
+ * breakdown, the classification chart, the network, the metabolite hub and
+ * class analyses, the enrichment table - down roughly 2900px of scroll, with no
+ * way to see what is there or to reach any of it except by scrolling past
+ * everything above it. This reads the headings that are actually on the page and
+ * turns them into a jump list.
+ *
+ * Derived from the DOM rather than from a hardcoded list on purpose: which
+ * analyses appear depends on the omics submitted and on the databases chosen -
+ * a run without metabolomics has no hub analysis, a KEGG-only run has no
+ * Reactome tab - so a fixed list would advertise sections that are not there.
+ *
+ * Anchors are generated because the markup cannot supply them: two of the
+ * headings already carry the *same* id ("EnrichmentSection"), so reusing the
+ * existing ids would produce a link that always jumps to the first of the pair.
+ */
+function buildAnalysisTOC(containerSelector) {
+    var root = document.querySelector(containerSelector || '#mainViewCenterPanel');
+    if (!root) { return null; }
+
+    // Anything already built for a previous job has to go, or a second run
+    // appends a second strip.
+    var existing = root.querySelector('.pa-toc');
+    if (existing) { existing.remove(); }
+
+    // One entry per analysis, not per <h2>. The network view labels its own side
+    // panels with h2 as well - "Details", "Tools" - and those are controls
+    // inside an analysis rather than analyses, so listing them made the strip
+    // advertise sections that do not exist. Each analysis is a .contentbox, so
+    // taking the first heading in each box is the reliable boundary; headings
+    // outside any box are kept, since a few sections are not wrapped in one.
+    var claimed = [];
+    var headings = Array.prototype.filter.call(root.querySelectorAll('h2'), function (h) {
+        // offsetParent excludes headings inside collapsed or inactive tabs; a
+        // link to something not currently rendered would scroll nowhere.
+        if (h.offsetParent === null || h.textContent.trim().length < 3) { return false; }
+        // The network view titles its own side panels with h2 - "Details",
+        // "Tools" - and those are controls belonging to an analysis, not
+        // analyses. They are not wrapped in a .contentbox either, so the
+        // one-per-box rule below does not catch them; they have to be named.
+        if (h.closest('[id^="networkSettingsPanel"], [id^="networkDetailsPanel"], .lateralOptionsPanel')) {
+            return false;
+        }
+        var box = h.closest('.contentbox');
+        if (!box) { return true; }
+        if (claimed.indexOf(box) !== -1) { return false; }
+        claimed.push(box);
+        return true;
+    });
+    if (headings.length < 3) { return null; }
+
+    var nav = document.createElement('nav');
+    nav.className = 'pa-toc';
+    nav.setAttribute('aria-label', 'Analyses on this page');
+
+    var list = document.createElement('ul');
+    list.className = 'pa-toc-list';
+
+    headings.forEach(function (h, i) {
+        var anchorId = 'pa-analysis-' + i;
+        h.setAttribute('data-pa-anchor', anchorId);
+
+        var li = document.createElement('li');
+        var a = document.createElement('a');
+        a.className = 'pa-toc-link';
+        a.href = 'javascript:void(0)';
+        a.textContent = h.textContent.trim().replace(/\s+/g, ' ');
+        a.setAttribute('data-target', anchorId);
+        a.addEventListener('click', function () {
+            // scrollIntoView rather than a hash jump: the header is fixed, so a
+            // hash would land the heading underneath it.
+            h.scrollIntoView({block: 'start', behavior: 'smooth'});
+            window.setTimeout(function () { window.scrollBy(0, -70); }, 320);
+        });
+        li.appendChild(a);
+        list.appendChild(li);
+    });
+
+    nav.appendChild(list);
+    root.insertBefore(nav, root.firstChild);
+
+    // Mark whichever analysis the reader is currently inside. IntersectionObserver
+    // rather than a scroll handler so this costs nothing while idle.
+    if (window.IntersectionObserver) {
+        var links = nav.querySelectorAll('.pa-toc-link');
+        var observer = new IntersectionObserver(function (entries) {
+            entries.forEach(function (entry) {
+                if (!entry.isIntersecting) { return; }
+                var id = entry.target.getAttribute('data-pa-anchor');
+                Array.prototype.forEach.call(links, function (l) {
+                    l.classList.toggle('current', l.getAttribute('data-target') === id);
+                });
+            });
+        }, {rootMargin: '-60px 0px -75% 0px'});
+        headings.forEach(function (h) { observer.observe(h); });
+    }
+
+    return nav;
+}
+
+/**
  * Relative luminance of a colour, per the WCAG 2.1 definition (sRGB with the
  * gamma expansion applied channel by channel).
  *
