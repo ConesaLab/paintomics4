@@ -930,9 +930,11 @@ div.contentbox li {
 .po-ai-section-body p,
 .paEmptyNote p,
 .step4HistoryBox p,
-#dbs_message dd p,
 .x-tip p,
-.sigma-tooltip p {
+.sigma-tooltip p,
+/* This card insets its own inner div, so its paragraphs would otherwise sit at
+   52px while the heading above them sat at 26. */
+#dbs_message p {
 	padding-left: 0;
 	padding-right: 0;
 }
@@ -1561,7 +1563,9 @@ div.availableOmicsBox h4 {
 	font-weight: 600;
 	font-size: 13px;
 	color: #27272A;
-	padding-left: 5px;
+	/* Flush with the prose and the heading; 5px left the database names five
+	   pixels adrift of every other line in the card. */
+	padding-left: 0;
 	margin-top: 20px;
 }
 #dbs_message dd {
@@ -2997,6 +3001,74 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
 
 .po-hero-visual img:hover {
   transform: scale(1.02);
+}
+
+/* Upload controls -------------------------------------------------------------
+   The four "Browse..." buttons and "Download example data" were the last stock
+   controls in the application: a #287AB6 steel-blue fill with white text and a
+   #1F608F border, next to the flat neutral controls the results page now uses.
+   Nothing else on the upload page is that colour, so they read as the loudest
+   thing on a page whose actual call to action is "Run PaintOmics".
+
+   Same size and shape, quieter colour. Scoped to the upload panels so no other
+   ExtJS button in the application is touched. */
+#submittingPanelsContainer a.x-btn.x-btn-default-small {
+  background-color: #FFFFFF;
+  background-image: none;
+  border: 1px solid var(--pa-border);
+  border-radius: var(--pa-radius-sm);
+  box-shadow: none;
+}
+#submittingPanelsContainer a.x-btn.x-btn-default-small:hover {
+  background-color: #FAFAFA;
+  border-color: #C4C4CC;
+}
+#submittingPanelsContainer a.x-btn .x-btn-inner {
+  color: #3F3F46;
+  font-weight: 500;
+}
+/* The split arrow and its divider come from the Neptune sprite, drawn light for
+   a dark button - on white they disappear, and with them the only sign that
+   this button opens a menu. Drawn here instead, so they follow the text colour
+   rather than the theme image. */
+#submittingPanelsContainer a.x-btn .x-btn-wrap {
+  background-image: none;
+  position: relative;
+}
+#submittingPanelsContainer a.x-btn .x-btn-wrap::after {
+  content: "";
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  margin-top: -2px;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 5px solid #71717A;
+  pointer-events: none;
+}
+#submittingPanelsContainer a.x-btn .x-btn-wrap::before {
+  content: "";
+  position: absolute;
+  right: 21px;
+  top: 4px;
+  bottom: 4px;
+  border-left: 1px solid var(--pa-border);
+  pointer-events: none;
+}
+/* The only .btn-right.btn-small in the form, and the one control on this page
+   still filled dark grey. */
+.paStep1Form a.button.btn-right.btn-small {
+  background-color: #FFFFFF;
+  border: 1px solid var(--pa-border);
+  border-radius: var(--pa-radius-sm);
+  color: #3F3F46;
+  font-weight: 500;
+  box-shadow: none;
+}
+.paStep1Form a.button.btn-right.btn-small:hover {
+  background-color: #FAFAFA;
+  border-color: #C4C4CC;
+  color: #27272A;
 }
 
 /* About / How It Works Section */
