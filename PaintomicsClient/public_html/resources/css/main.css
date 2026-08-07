@@ -2251,6 +2251,64 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
   white-space: normal;
 }
 
+/*****************************************************************************
+**** VENDORED EXTJS CONTROLS *************************************************
+*****************************************************************************/
+/* index.html loads ext-theme-neptune-all.css at line 28 and this file at line
+   34, so everything below wins at equal specificity - no `!important`, and no
+   edits to the vendored theme, which any ExtJS upgrade would overwrite.
+
+   Two problems, one fix. Neptune paints its default button with a four-stop
+   vertical gradient plus a GIF fallback, which is the single most dated surface
+   left in the app; and its #3892d3 fill carries white at 3.38:1, the last
+   open WCAG failure from entry 2 of proposed-changes.md, deferred at the time
+   precisely because the fill could not be changed without also owning the
+   hover, focus, pressed and disabled states. This owns all of them.
+
+   The ramp keeps Neptune's own direction - each state darker than the last -
+   and its hue, so a Browse... button still reads as the same control. It just
+   clears AA at every step now instead of only when held down:
+
+     base     #3892d3 3.38:1  ->  #287AB6 4.62:1
+     over     #3386c2 3.94:1  ->  #236FA8 5.37:1
+     focus    #3386c2 3.94:1  ->  #236FA8 5.37:1
+     pressed  #2a6d9e 5.56:1  ->  #1D5C89 7.13:1
+
+   `background-image: none` is what removes both the gradient and the GIF. */
+.x-btn-default-small {
+	background-image: none;
+	background-color: #287AB6;
+	border-color: #1F608F;
+	border-radius: var(--pa-radius-sm);
+}
+.x-btn-default-small-over,
+.x-btn-default-small-focus {
+	background-image: none;
+	background-color: #236FA8;
+	border-color: #1A5279;
+}
+.x-btn-default-small-pressed,
+.x-btn-default-small-menu-active {
+	background-image: none;
+	background-color: #1D5C89;
+	border-color: #1A5279;
+}
+/* Disabled keeps Neptune's meaning but loses its gradient GIF, which would
+   otherwise be the one place the old treatment survived. An inactive control
+   is exempt from the contrast minimum, so this is about consistency only. */
+.x-btn-default-small-disabled {
+	background-image: none;
+	background-color: #8FB4CF;
+	border-color: #7CA3C0;
+}
+
+/* Combo and file-field wrappers carried the border while the input inside them
+   carried the radius, so a square frame sat around a rounded field. The frame
+   is the visible edge, so the radius belongs on it. */
+.x-form-trigger-wrap {
+	border-radius: var(--pa-radius-sm);
+}
+
 /* Grid toolbar overflow ------------------------------------------------------
    The Step 3 pathway-enrichment toolbar needs 1753px to lay out its controls.
    Its box is as wide as the grid, so below roughly 1750px of viewport the tail
