@@ -2435,6 +2435,31 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
 	border-radius: var(--pa-radius-sm);
 }
 
+/* Checkboxes and radios ------------------------------------------------------
+   These are the clearest 1.4.11 case in the application and the last one left:
+   a checkbox has no label inside it, so its outline is not merely the thing
+   that identifies the control, it is the entire control. Neptune draws them
+   from a 30x30 sprite whose unchecked outline is #cccccc - 1.47:1 on the
+   #F5F5F5 toolbar where the search filters live, and 1.61:1 on white.
+
+   Because the outline is baked into an image, no CSS rule can recolour it. The
+   ring is drawn *around* the sprite instead: an outset 1px box-shadow, which
+   needs no new asset, leaves the checkmark and the vendored image untouched,
+   and costs no layout because a shadow does not take space. #767676 gives
+   4.17:1 on the toolbar and 4.54:1 on white, and is the grey already used for
+   the segmented control's outline and .btn-default's hover border.
+
+   The radius on the radio is what keeps its ring circular - a box-shadow
+   follows the element's border-radius, and the element itself is square even
+   though the sprite it displays is round. */
+.x-form-checkbox,
+.x-form-radio {
+	box-shadow: 0 0 0 1px #767676;
+}
+.x-form-radio {
+	border-radius: 50%;
+}
+
 /* Grid toolbar overflow ------------------------------------------------------
    The Step 3 pathway-enrichment toolbar needs 1753px to lay out its controls.
    Its box is as wide as the grid, so below roughly 1750px of viewport the tail
