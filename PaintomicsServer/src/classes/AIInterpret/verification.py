@@ -345,14 +345,21 @@ def parse_references_section(report_text):
         title = title_match.group(1) if title_match else ""
         author = header_line.split('"')[0].strip().rstrip('.')
 
-        # Find claim sentence in body that cites this ref
-        claim_sentence = ""
+        # Find the claim sentence in the body that cites this ref.
+        #
+        # Least numeric first, matching how the quote was chosen upstream. A
+        # reference is typically cited several times; taking the first
+        # occurrence meant the quote could be gathered to support one sentence
+        # and then verified against a different one -- usually a sentence full
+        # of this dataset's own measurements, which no paper can corroborate.
+        # The citation then failed for a mismatch we created ourselves.
         ref_tag = f"[{ref_idx}]"
-        body_sentences = re.split(r'(?<=[.!?])\s+', body)
-        for sent in body_sentences:
-            if ref_tag in sent:
-                claim_sentence = sent.strip()
-                break
+        citing = [s.strip() for s in re.split(r'(?<=[.!?])\s+', body)
+                  if ref_tag in s]
+        claim_sentence = min(
+            citing,
+            key=lambda s: sum(c.isdigit() for c in s) / max(len(s), 1),
+            default="")
 
         entries.append({
             "ref_index": ref_idx,
@@ -363,6 +370,77 @@ def parse_references_section(report_text):
         })
 
     return entries
+
+
+def render_references_section(report_text, paper_index, quotes):
+    """Replace whatever the model wrote with a canonical References section.
+
+    ``parse_references_section`` is the inverse of this function, and asking a
+    model to hit its format by prose instruction does not work: across six
+    measured runs the synthesis produced a parseable section exactly once. It
+    omitted the heading entirely, or wrote ``**Cited Text:** foo`` without the
+    double quotes the parser requires, or renumbered as it went. Each failure is
+    silent -- verification then checks zero citations and the run still reports
+    ``done``.
+
+    So the model is no longer asked to format anything. Bibliographic metadata
+    comes from ``paper_index``, which is ground truth; the model supplies only
+    the one thing it alone knows -- which sentence it relied on -- via
+    ``quotes`` (``{ref_index: cited_text}``), and that is what verification then
+    checks against the real paper. Rendering is deterministic.
+
+    Citation markers with no corresponding paper are dropped from the section,
+    not invented: a reference to a paper we never retrieved cannot be verified,
+    and emitting it would manufacture the appearance of support.
+
+    Returns (new_report_text, rendered_ref_indices).
+    """
+    if not paper_index:
+        return report_text, []
+
+    # Drop any section the model wrote, keeping only the body before it.
+    ref_match = re.search(
+        r'^\s*(?:#{1,6}\s*)?\**\s*references\s*\**\s*:?\s*$',
+        report_text, re.MULTILINE | re.IGNORECASE)
+    body = report_text[:ref_match.start()] if ref_match else report_text
+    body = body.rstrip()
+
+    cited = sorted({int(n) for n in re.findall(r'\[(\d+)\]', body)}
+                   & set(paper_index.keys()))
+    if not cited:
+        return body, []
+
+    lines = ["", "### References", ""]
+    for idx in cited:
+        paper = paper_index[idx] or {}
+        author = (paper.get("first_author") or paper.get("author") or "").strip()
+        if author and not author.endswith("et al."):
+            author = "%s et al." % author
+        title = (paper.get("title") or "").strip().rstrip(".")
+        journal = (paper.get("journal") or "").strip()
+        year = str(paper.get("year") or "").strip()
+        pmid = str(paper.get("pmid") or "").strip()
+
+        header = "[%d] " % idx
+        if author:
+            header += "%s " % author
+        header += '"%s."' % title if title else '"Untitled."'
+        tail = ", ".join(x for x in (journal, year) if x)
+        if tail:
+            header += " %s." % tail
+        if pmid:
+            header += " PMID: %s" % pmid
+        lines.append(header)
+
+        quote = (quotes or {}).get(idx) or (quotes or {}).get(str(idx)) or ""
+        # Collapse whitespace and strip embedded double quotes: the parser reads
+        # the quote as a "..."-delimited field, so an inner quote truncates it.
+        quote = re.sub(r'\s+', ' ', str(quote)).replace('"', "'").strip()
+        if quote:
+            lines.append('    **Cited Text:** "%s"' % quote)
+        lines.append("")
+
+    return body + "\n" + "\n".join(lines), cited
 
 
 # ---------------------------------------------------------------------------

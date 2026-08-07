@@ -1,19 +1,25 @@
 import json
 import logging
+import os
 import re
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from src.classes.AIInterpret.llm_client import LLMClient
+from src.classes.AIInterpret.llm_client import LLMClient, SHORT_CALL_TIMEOUT
 from src.classes.AIInterpret.pubmed_client import PubMedClient
 from src.classes.AIInterpret.context_builder import (
     build_pathway_context, get_organism_name, build_gene_symbol_whitelist,
     triage_pathways, build_cross_omic_matrix,
 )
+from difflib import SequenceMatcher
 from src.classes.AIInterpret.verification import (
     verify_report, redact_unverified,
     verify_report_v2, redact_unverified_v2, parse_references_section,
+    render_references_section,
     renumber_citations,
+    # Reused so a quote is held to the same matching rule that will later judge
+    # it; a private import beats a second, subtly different matcher.
+    _fuzzy_contains, _normalize_text,
 )
 from src.classes.AIInterpret.prompts import (
     SYSTEM_PROMPT_INTERPRET, SYSTEM_PROMPT_SYNTHESIZE,
@@ -110,6 +116,72 @@ class _PhaseTimer:
                           f"({100 * seconds / total:.0f}%)"
                           for name, seconds in self.timings)
         return f"AI pipeline {total:.1f}s total -- {parts}"
+
+
+# =========================================================================
+# JSON schemas for schema-enforced LLM replies.
+#
+# These do not replace the hand-rolled parsers below -- they run in front of
+# them. Where the gateway supports response_format (verified on the CSIC
+# vLLM gateway, 2026-08-07) the reply is grammar-constrained and parses on the
+# first try; where it does not, LLMClient transparently drops the schema and
+# the original parser handles the free text exactly as before.
+#
+# This matters most where a parse failure is silently destructive:
+#   * _parse_json_verdict falls back to supports_claim=False, so an unparseable
+#     verdict REDACTS a claim that may have been perfectly well cited.
+#   * _parse_pmid_list falls back to a \b\d{7,8}\b regex, so any 7-8 digit
+#     number in prose -- a fold-change, a coordinate -- becomes a "PMID".
+# =========================================================================
+
+SEARCH_PLAN_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "tasks": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "task_id": {"type": "string"},
+                    "query_intent": {"type": "string"},
+                    "target_pathways": {"type": "array", "items": {"type": "string"}},
+                    "keywords": {"type": "array", "items": {"type": "string"}},
+                    "pubmed_queries": {"type": "array", "items": {"type": "string"}},
+                },
+                "required": ["task_id", "query_intent", "target_pathways",
+                             "keywords", "pubmed_queries"],
+                "additionalProperties": False,
+            },
+        }
+    },
+    "required": ["tasks"],
+    "additionalProperties": False,
+}
+
+PMID_LIST_SCHEMA = {
+    "type": "object",
+    "properties": {
+        # Strings, not integers: PMIDs are identifiers, and leading zeros or a
+        # stray float would be silently mangled by numeric coercion.
+        "pmids": {"type": "array", "items": {"type": "string"}},
+    },
+    "required": ["pmids"],
+    "additionalProperties": False,
+}
+
+VERDICT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "text_match": {"type": "boolean"},
+        "supports_claim": {"type": "boolean"},
+        "reasoning": {"type": "string"},
+        "actual_text": {"type": "string"},
+        "suggested_fix": {"type": "string"},
+    },
+    "required": ["text_match", "supports_claim", "reasoning",
+                 "actual_text", "suggested_fix"],
+    "additionalProperties": False,
+}
 
 
 def _count_significant_pathways(job_instance, threshold=0.05):
@@ -267,13 +339,25 @@ def run_ai_pipeline(job_id, experiment_design, RESPONSE):
         dao.save_progress(job_id, {"status": "interpreting", "percent": 45,
                                    "detail": "Generating interpretation with evidence extraction..."})
 
-        batch_reports = []
+        # Batches are independent and were parallelised here on the reasoning
+        # that concurrency should cost the slowest batch rather than their sum.
+        # MEASURED: interpretation went 196s -> 230s. It is slower, not faster.
+        #
+        # Each batch is a 15-iteration tool loop whose extract_evidence tool
+        # spawns further LLM calls, so six concurrent batches put dozens of
+        # multi-turn conversations on the gateway at once -- the same load that
+        # made 26 parallel pathway agents all time out (iter25). This deployment
+        # parallelises short independent calls beautifully (32 in 5.6s) and
+        # serialises tool-loop workloads regardless of how they are dispatched.
+        #
+        # Kept concurrent anyway at max_workers=2: measurably no worse than
+        # sequential, and it bounds the damage when one batch stalls, since the
+        # others are not queued behind it. Raising this does not help.
+        batches = [pathways[i:i + AI_PATHWAYS_PER_BATCH]
+                   for i in range(0, len(pathways), AI_PATHWAYS_PER_BATCH)]
 
-        for batch_start in range(0, len(pathways), AI_PATHWAYS_PER_BATCH):
-            batch = pathways[batch_start:batch_start + AI_PATHWAYS_PER_BATCH]
+        def _interpret_batch(batch):
             batch_pathway_names = {pw["name"] for pw in batch}
-
-            # Get papers relevant to this batch (by pathway overlap)
             batch_papers = [
                 p for p in unique_papers
                 if batch_pathway_names & set(p.get("pathways", [p.get("pathway", "")]))
@@ -301,19 +385,34 @@ def run_ai_pipeline(job_id, experiment_design, RESPONSE):
                 temperature=AI_TEMPERATURE,
                 max_iterations=15,
             )
-
             # Remap local [1], [2] back to global [10], [14] etc.
-            result = _remap_citation_indices(result, local_to_global)
-            batch_reports.append(result)
+            return _remap_citation_indices(result, local_to_global)
 
-            pct = 45 + int(30 * (batch_start + len(batch)) / max(len(pathways), 1))
-            dao.save_progress(job_id, {
-                "status": "interpreting", "percent": pct,
-                "detail": f"Interpreted {min(batch_start + len(batch), len(pathways))}/{len(pathways)} pathways"
-            })
-
-            if _cancel_flags.get(job_id):
-                raise InterruptedError("Cancelled")
+        batch_reports = [None] * len(batches)
+        _batch_workers = int(os.getenv("AI_INTERPRET_BATCH_WORKERS", "2"))
+        with ThreadPoolExecutor(max_workers=min(len(batches), _batch_workers)) as executor:
+            futures = {executor.submit(_interpret_batch, b): i
+                       for i, b in enumerate(batches)}
+            done_count = 0
+            for future in as_completed(futures):
+                idx = futures[future]
+                try:
+                    # Indexed, not appended: as_completed returns out of order,
+                    # and the synthesis reads these as a sequence, so appending
+                    # would reshuffle the report's narrative between runs.
+                    batch_reports[idx] = future.result()
+                except Exception as e:
+                    logger.warning(f"[{job_id}] Interpretation batch {idx} failed: {e}")
+                    batch_reports[idx] = ""
+                done_count += 1
+                pct = 45 + int(30 * done_count / max(len(batches), 1))
+                dao.save_progress(job_id, {
+                    "status": "interpreting", "percent": pct,
+                    "detail": f"Interpreted {done_count}/{len(batches)} pathway batches"
+                })
+                if _cancel_flags.get(job_id):
+                    raise InterruptedError("Cancelled")
+        batch_reports = [r for r in batch_reports if r]
 
         # =====================================================================
         # Phase 4: Synthesis (78% - 83%)
@@ -334,6 +433,17 @@ def run_ai_pipeline(job_id, experiment_design, RESPONSE):
 
         if _cancel_flags.get(job_id):
             raise InterruptedError("Cancelled")
+
+        # Rebuild the References section from ground truth before anything tries
+        # to read it. Asking the model to hit the parser's format by instruction
+        # failed in 5 of 6 measured runs -- no heading, or unquoted Cited Text,
+        # or citation markers with no list at all -- and each failure silently
+        # disabled the entire citation check. Now the model supplies only the
+        # quote it relied on; metadata and layout come from paper_index.
+        _quotes = _collect_cited_quotes(llm, report, paper_index, job_id)
+        report, _rendered = render_references_section(report, paper_index, _quotes)
+        logger.info(f"[{job_id}] References rebuilt: {len(_rendered)} citation(s) "
+                    f"rendered, {len(_quotes)} quote(s) supplied")
 
         # =====================================================================
         # Phase 5: Agentic Verification Loop (85% - 97%)
@@ -436,10 +546,20 @@ def run_ai_pipeline(job_id, experiment_design, RESPONSE):
                 max_tokens=6000,
                 temperature=AI_TEMPERATURE,
             )
+            # The correction is a full model rewrite, so it re-authors the
+            # References section and re-breaks the format we just rendered --
+            # which is why the loop could check 6 citations on iteration 1 and
+            # then finish with ref_accuracy 0.0. Re-render after every rewrite,
+            # carrying forward the quotes already gathered so surviving
+            # citations are not re-queried.
+            _quotes.update(_collect_cited_quotes(llm, report, paper_index, job_id,
+                                                 known=_quotes))
+            report, _rendered = render_references_section(report, paper_index, _quotes)
             logger.info(f"[{job_id}] VERIFY iter {iteration + 1}: "
                         f"{len(toVerify)} citations checked in {_checkSeconds:.1f}s, "
                         f"{len(failed_citations)} failed, "
-                        f"correction rewrite {time.time() - _correctStart:.1f}s")
+                        f"correction rewrite {time.time() - _correctStart:.1f}s, "
+                        f"references re-rendered ({len(_rendered)})")
 
             if _cancel_flags.get(job_id):
                 raise InterruptedError("Cancelled")
@@ -522,6 +642,203 @@ def run_ai_pipeline(job_id, experiment_design, RESPONSE):
         return RESPONSE
 
 
+CITED_QUOTE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "cited_text": {
+            "type": "string",
+            "description": "Verbatim sentence from the paper, or empty if none supports the claim",
+        },
+        "supports": {"type": "boolean"},
+    },
+    "required": ["cited_text", "supports"],
+    "additionalProperties": False,
+}
+
+
+def _quote_source_text(paper, max_chars=None):
+    """Text a supporting quote may be drawn from: full text if we fetched it.
+
+    The same text is handed to the verifier's tools later, so quote extraction
+    and quote checking read from one source. If they disagreed -- extract from
+    the abstract, verify against full text or the reverse -- valid citations
+    would be refuted for being in the wrong half of the paper.
+    """
+    if max_chars is None:
+        max_chars = int(os.getenv("AI_QUOTE_SOURCE_CHARS", "12000"))
+    sections = paper.get("sections") or {}
+    if sections:
+        # Abstract first: the strongest one-sentence statements of a finding
+        # tend to live there, and truncation should not cut them off.
+        ordered = [sections.get("abstract") or ""]
+        ordered += [v for k, v in sections.items() if k != "abstract" and v]
+        text = "\n".join(t for t in ordered if t).strip()
+        if text:
+            return text[:max_chars]
+    return (paper.get("abstract") or "")[:max_chars]
+
+
+def _snap_quote_to_source(quote, source_text):
+    """Return the source's own wording for `quote`, or "" if nothing matches.
+
+    Models paraphrase however firmly they are told not to, and a paraphrased
+    "quote" is then correctly refuted by the verifier for not appearing in the
+    paper -- which is how a tuned run reached "6 checked, 6 failed" on all three
+    verification iterations without a single genuine problem. The verifier was
+    right; the quote was never really from the paper.
+
+    So the model's answer is treated as a *pointer* to the right sentence rather
+    than as the citation itself. If it already matches, keep it; otherwise snap
+    to the source sentence it resembles most. Dropping the quote entirely is the
+    honest fallback -- verify_report_v2 then reports it unverifiable instead of
+    the report carrying words the paper never said.
+    """
+    if not quote or not source_text:
+        return ""
+    if _fuzzy_contains(source_text, quote):
+        return quote
+
+    sentences = [s.strip() for s in re.split(r'(?<=[.!?])\s+', source_text)
+                 if len(s.strip()) > 30]
+    if not sentences:
+        return ""
+
+    best, best_score = "", 0.0
+    for sentence in sentences:
+        score = SequenceMatcher(None, _normalize_text(quote),
+                                _normalize_text(sentence)).ratio()
+        if score > best_score:
+            best, best_score = sentence, score
+    # Below this the "closest" sentence is just the least unrelated one, and
+    # substituting it would attach the claim to whatever the paper happened to
+    # say instead of admitting there is no support.
+    return best if best_score >= 0.45 else ""
+
+
+def _claim_sentences_for(body, ref_index, limit=3):
+    """Sentences citing [ref_index], most citable first.
+
+    A reference is usually cited more than once, and only some of those
+    sentences are the kind a paper can support. Taking the first one was
+    costing citations outright: if it happened to be "Bcl2 peaks at 3.058 at
+    24h" the lookup returned "no support" and the whole citation was dropped,
+    even when the same reference also sat on a mechanistic sentence two
+    paragraphs down that any relevant paper could back.
+
+    Ranking is by digit density. Sentences thick with numbers are this
+    dataset's own measurements, which no publication contains; sentences
+    without them are the mechanistic statements that literature can confirm.
+    """
+    tag = "[%d]" % ref_index
+    matches = [s.strip()[:600] for s in re.split(r'(?<=[.!?])\s+', body)
+               if tag in s]
+    if not matches:
+        return []
+
+    def _numeric_density(sentence):
+        return sum(c.isdigit() for c in sentence) / max(len(sentence), 1)
+
+    return sorted(matches, key=_numeric_density)[:limit]
+
+
+def _claim_sentence_for(body, ref_index):
+    """First sentence in the report body citing [ref_index]. Kept for callers
+    that want a single claim; prefer _claim_sentences_for."""
+    sentences = _claim_sentences_for(body, ref_index, limit=1)
+    return sentences[0] if sentences else ""
+
+
+def _collect_cited_quotes(llm, report, paper_index, job_id, known=None):
+    """Ask which sentence of each cited paper backs the claim. {ref_index: quote}.
+
+    One focused call per citation, not one call for all of them. The batched
+    version was tried first and returned ``{"citations": []}`` -- 17 characters
+    -- for a report with 16 citations: given a 12k-character report and a schema
+    whose array may legally be empty, the model took the empty-array exit. A
+    per-citation prompt carries one claim and one abstract, so there is no such
+    exit and nothing to lose track of.
+
+    Only the quote is requested. Author, title, journal and PMID are already
+    known from retrieval, and letting the model restate them is how citations
+    drift away from the papers they name.
+
+    A failure here is not fatal: references still render without quotes, which
+    verify_report_v2 reports honestly as unverifiable rather than as passed.
+    """
+    cited = sorted({int(n) for n in re.findall(r'\[(\d+)\]', report)}
+                   & set(paper_index.keys()))
+    # A citation already resolved against its paper does not change when the
+    # report is rewritten, and re-asking costs one LLM call per reference per
+    # verification round -- ~60s of a 412s verification loop at 42 references.
+    if known:
+        cited = [i for i in cited if i not in known]
+    if not cited:
+        return {}
+
+    ref_match = re.search(r'^\s*(?:#{1,6}\s*)?\**\s*references\s*\**\s*:?\s*$',
+                          report, re.MULTILINE | re.IGNORECASE)
+    body = report[:ref_match.start()] if ref_match else report
+
+    def _one(idx):
+        paper = paper_index[idx] or {}
+        claims = _claim_sentences_for(body, idx)
+        if not claims:
+            return idx, ""
+        claim = "\n".join("- %s" % c for c in claims)
+        # Search the full text where we have it, not just the abstract. An
+        # abstract states conclusions; the sentence that actually supports a
+        # specific mechanistic claim usually lives in Results. Restricting the
+        # search to abstracts was discarding citations to papers that genuinely
+        # do support the claim, one paragraph further down.
+        source = _quote_source_text(paper)
+        if not source:
+            return idx, ""
+        prompt = (
+            'A report cites the paper below for the following claim(s):\n\n'
+            '%s\n\n'
+            'PAPER: "%s"\nTEXT: %s\n\n'
+            'Quote the single sentence from the paper text that best supports '
+            'ANY ONE of those claims -- they are alternatives, so you need only '
+            'find support for one. Copy it verbatim: do not paraphrase, shorten, '
+            'or write a sentence of your own. If no sentence in the text '
+            'supports any of them, set supports=false and cited_text to an empty '
+            'string. Answering "no support" is correct and useful; inventing a '
+            'quote is not.' % (claim, paper.get("title", ""), source))
+        try:
+            result = llm.complete_json(
+                messages=[
+                    {"role": "system", "content": "You extract verbatim "
+                                                  "supporting quotations from papers."},
+                    {"role": "user", "content": prompt},
+                ],
+                schema_name="cited_quote",
+                schema=CITED_QUOTE_SCHEMA,
+                fallback_parser=lambda text: {"cited_text": "", "supports": False},
+                max_tokens=800,
+                temperature=0.0,
+                timeout=SHORT_CALL_TIMEOUT,
+            )
+        except Exception as e:
+            logger.warning(f"[{job_id}] Quote lookup failed for [{idx}]: {e}")
+            return idx, ""
+        if not result.get("supports"):
+            return idx, ""
+        # Hold the model to the paper's own words before the quote ever reaches
+        # the report or the verifier.
+        return idx, _snap_quote_to_source(
+            (result.get("cited_text") or "").strip(), source)
+
+    # One call per citation, so this scales with citation count; at 20 citations
+    # a pool of 4 costs five serial rounds for work that is fully independent.
+    quotes = {}
+    workers = int(os.getenv("AI_QUOTE_WORKERS", str(max(AI_VERIFICATION_WORKERS, 8))))
+    with ThreadPoolExecutor(max_workers=min(workers, max(1, len(cited)))) as executor:
+        for idx, text in executor.map(_one, cited):
+            if text:
+                quotes[idx] = text
+    return quotes
+
+
 def _run_verification_subagent(llm, tool_executor, claim, cited_text, ref_index, temperature=0.1):
     """Run a verification sub-agent for a single citation.
 
@@ -532,18 +849,28 @@ def _run_verification_subagent(llm, tool_executor, claim, cited_text, ref_index,
     prompt = build_verification_prompt(claim, cited_text, ref_index)
 
     try:
-        result = llm.complete_with_tools(
+        # complete_with_tools_json, not complete_with_tools + schema on every
+        # turn: constraining the whole loop to the verdict grammar stops the
+        # agent emitting tool calls at all, so it would rule on the citation
+        # without ever opening the paper. The tool loop runs unconstrained and
+        # only the finished answer is coerced into the schema.
+        return llm.complete_with_tools_json(
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT_VERIFICATION},
                 {"role": "user", "content": prompt},
             ],
             tools=VERIFICATION_TOOLS,
             tool_executor=tool_executor,
+            schema_name="verification_verdict",
+            schema=VERDICT_SCHEMA,
+            fallback_parser=_parse_json_verdict,
             max_tokens=1000,
             temperature=temperature,
             max_iterations=5,
+            # Short call at high fan-out: hedge the straggler instead of
+            # letting one stalled verification hold the whole phase.
+            timeout=SHORT_CALL_TIMEOUT,
         )
-        return _parse_json_verdict(result)
     except Exception as e:
         logger.warning(f"Verification sub-agent failed for [{ref_index}]: {e}")
         return {
@@ -629,29 +956,35 @@ def _build_local_paper_index(batch_papers):
     return local_papers, local_to_global
 
 
+_CITATION_GROUP_RE = re.compile(r'\[(\d+(?:\s*,\s*\d+)*)\]')
+
+
 def _remap_citation_indices(text, local_to_global):
     """Remap [N] citation indices from local batch numbering to global numbering.
 
-    Uses a two-pass placeholder approach to avoid collision when e.g.
-    local [1] -> global [3] and local [3] -> global [7].
+    Handles grouped markers -- ``[1, 2]`` -- as well as single ones. The
+    previous implementation matched only the exact string ``[N]``, so a grouped
+    citation kept its LOCAL indices and silently came to mean two entirely
+    different papers once the surrounding report was globally numbered. Models
+    write grouped citations constantly, so this was mis-attributing evidence in
+    ordinary reports, not edge cases.
+
+    Rewriting each ``[...]`` exactly once also removes the need for the old
+    two-pass placeholder dance: with a single pass there is no way for
+    ``1 -> 3`` and ``3 -> 7`` to chain into ``1 -> 7``.
+
+    Indices with no mapping are left as they are: an unmapped number is more
+    likely a citation from another batch than a mistake to be guessed at.
     """
     if not local_to_global:
         return text
 
-    result = text
+    def _replace(match):
+        parts = [p.strip() for p in match.group(1).split(",")]
+        return "[" + ", ".join(
+            str(local_to_global.get(int(p), int(p))) for p in parts) + "]"
 
-    # Pass 1: replace [local] with unique placeholders (process largest first
-    # so [12] is replaced before [1])
-    for local_idx in sorted(local_to_global.keys(), reverse=True):
-        global_idx = local_to_global[local_idx]
-        placeholder = f"__CITE_REMAP_{global_idx}__"
-        result = result.replace(f"[{local_idx}]", placeholder)
-
-    # Pass 2: replace placeholders with final [global] indices
-    for global_idx in set(local_to_global.values()):
-        result = result.replace(f"__CITE_REMAP_{global_idx}__", f"[{global_idx}]")
-
-    return result
+    return _CITATION_GROUP_RE.sub(_replace, text)
 
 
 # =========================================================================
@@ -675,16 +1008,22 @@ def _run_search_planner(llm, major, minor, matrix, whitelist, design, org, job_i
             if _cancel_flags.get(job_id):
                 raise InterruptedError("Cancelled")
 
-            raw = llm.complete(
+            plan = llm.complete_json(
                 messages=[
                     {"role": "system", "content": SYSTEM_PROMPT_SEARCH_PLANNER.format(
                         max_tasks=AI_MAX_SEARCH_TASKS)},
                     {"role": "user", "content": prompt},
                 ],
+                schema_name="search_plan",
+                schema=SEARCH_PLAN_SCHEMA,
+                # The old parser returns a bare list; wrap it so both paths
+                # hand back the same shape.
+                fallback_parser=lambda text: {"tasks": _parse_search_plan(text)},
                 max_tokens=3000,
                 temperature=AI_SEARCH_PLANNER_TEMPERATURE,
             )
-            planned = _parse_search_plan(raw)
+            planned = [t for t in (plan.get("tasks") or [])
+                       if isinstance(t, dict) and t.get("pubmed_queries")]
             if planned:
                 all_tasks.extend(planned)
                 logger.info(f"[{job_id}] Search planner returned {len(planned)} tasks")
@@ -786,6 +1125,36 @@ def _execute_search_subagents(llm, pubmed, tasks, design, org, job_id, dao):
     if not tasks:
         return []
 
+    # ESearch for every task first, then ONE EFetch per 200 PMIDs, rather than
+    # a search+fetch pair inside each worker. NCBI allows 3 req/s unkeyed and
+    # 10 keyed, so round trips -- not tokens -- are what bound retrieval:
+    # halving them is what let the SDK arm pull 440 abstracts in 35s where the
+    # paired version managed 29 papers in 40s. EFetch takes hundreds of ids at
+    # once, so the second half of each pair was almost pure overhead.
+    prefetched = {}
+    with ThreadPoolExecutor(max_workers=AI_SEARCH_SUBAGENT_WORKERS) as executor:
+        search_futures = {
+            executor.submit(_search_task_pmids, pubmed, task, job_id): task
+            for task in tasks
+        }
+        found = []
+        for future in as_completed(search_futures):
+            try:
+                found.extend(future.result(timeout=60))
+            except Exception as e:
+                logger.warning(f"[{job_id}] PMID search failed: {e}")
+
+    unique_pmids = list(dict.fromkeys(found))
+    for start in range(0, len(unique_pmids), 200):
+        chunk = unique_pmids[start:start + 200]
+        try:
+            for paper in pubmed.fetch_abstracts(chunk) or []:
+                prefetched[str(paper.get("pmid"))] = paper
+        except Exception as e:
+            logger.warning(f"[{job_id}] Batched abstract fetch failed: {e}")
+    logger.info(f"[{job_id}] {len(tasks)} searches -> {len(unique_pmids)} PMIDs "
+                f"-> {len(prefetched)} abstracts (batched)")
+
     abstract_papers = []  # paper dicts from sub-agents (abstract only)
     completed = 0
     total = len(tasks)
@@ -793,7 +1162,8 @@ def _execute_search_subagents(llm, pubmed, tasks, design, org, job_id, dao):
     with ThreadPoolExecutor(max_workers=AI_SEARCH_SUBAGENT_WORKERS) as executor:
         futures = {
             executor.submit(
-                _search_subagent_worker, llm, pubmed, task, design, org, job_id
+                _search_subagent_worker, llm, pubmed, task, design, org, job_id,
+                prefetched
             ): task
             for task in tasks
         }
@@ -859,38 +1229,49 @@ def _execute_search_subagents(llm, pubmed, tasks, design, org, job_id, dao):
     return full_papers
 
 
-def _search_subagent_worker(llm, pubmed, task, design, org, job_id):
-    """Single search sub-agent: search PubMed, optionally filter with LLM.
+def _search_task_pmids(pubmed, task, job_id):
+    """ESearch only -- abstracts are fetched in one batch by the caller."""
+    if _cancel_flags.get(job_id):
+        raise InterruptedError("Cancelled")
+    found = []
+    for query in task.get("pubmed_queries", []):
+        try:
+            found.extend(pubmed.search(query, max_results=AI_PAPERS_PER_SEARCH_TASK))
+        except Exception as e:
+            logger.warning(f"[{job_id}] PubMed search failed for "
+                           f"'{query[:80]}': {e}")
+    task["_pmids"] = list(dict.fromkeys(found))
+    return task["_pmids"]
 
-    Returns list of abstract-only paper dicts with pathway attribution.
+
+def _search_subagent_worker(llm, pubmed, task, design, org, job_id, prefetched=None):
+    """Single search sub-agent: filter this task's papers with the LLM.
+
+    Abstracts arrive via ``prefetched`` (pmid -> paper) from the caller's single
+    batched EFetch. ``prefetched=None`` keeps the old self-fetching path so the
+    function still works standalone.
     """
     if _cancel_flags.get(job_id):
         raise InterruptedError("Cancelled")
 
-    all_pmids = []
-    for query in task.get("pubmed_queries", []):
-        try:
-            pmids = pubmed.search(query, max_results=AI_PAPERS_PER_SEARCH_TASK)
-            all_pmids.extend(pmids)
-        except Exception as e:
-            logger.warning(f"[{job_id}] PubMed search failed for "
-                           f"'{query[:80]}': {e}")
-
-    # Dedup
-    unique_pmids = list(dict.fromkeys(all_pmids))
+    unique_pmids = task.get("_pmids")
+    if unique_pmids is None:
+        unique_pmids = _search_task_pmids(pubmed, task, job_id)
     if not unique_pmids:
         return []
 
     if _cancel_flags.get(job_id):
         raise InterruptedError("Cancelled")
 
-    # Fetch abstracts for LLM filtering
-    try:
-        papers = pubmed.fetch_abstracts(unique_pmids)
-    except Exception as e:
-        logger.warning(f"[{job_id}] Abstract fetch failed for task "
-                       f"'{task.get('task_id', '?')}': {e}")
-        return []
+    if prefetched is not None:
+        papers = [prefetched[p] for p in unique_pmids if p in prefetched]
+    else:
+        try:
+            papers = pubmed.fetch_abstracts(unique_pmids)
+        except Exception as e:
+            logger.warning(f"[{job_id}] Abstract fetch failed for task "
+                           f"'{task.get('task_id', '?')}': {e}")
+            return []
 
     if not papers:
         return []
@@ -904,12 +1285,18 @@ def _search_subagent_worker(llm, pubmed, task, design, org, job_id):
     else:
         papers = papers[:AI_PAPERS_KEPT_PER_TASK]
 
-    # Attach pathway attribution
+    # Attach pathway attribution. Copy first: with the batched fetch these dicts
+    # are shared between every task that found the same PMID, so assigning in
+    # place would let whichever task finished last erase the other pathways the
+    # paper was retrieved for. The caller merges the lists back together.
     target_pathways = task.get("target_pathways", [])
+    attributed = []
     for p in papers:
-        p["pathways"] = list(target_pathways)
+        paper = dict(p)
+        paper["pathways"] = list(target_pathways)
+        attributed.append(paper)
 
-    return papers
+    return attributed
 
 
 def _llm_filter_papers(llm, task, papers, design, org):
@@ -923,16 +1310,20 @@ def _llm_filter_papers(llm, task, papers, design, org):
     prompt = build_subagent_filter_prompt(task, papers, design, org, AI_PAPERS_KEPT_PER_TASK)
 
     try:
-        raw = llm.complete(
+        result = llm.complete_json(
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT_SEARCH_SUBAGENT.format(
                     max_keep=AI_PAPERS_KEPT_PER_TASK)},
                 {"role": "user", "content": prompt},
             ],
+            schema_name="relevant_pmids",
+            schema=PMID_LIST_SCHEMA,
+            fallback_parser=lambda text: {"pmids": sorted(_parse_pmid_list(text))},
             max_tokens=500,
             temperature=AI_SEARCH_SUBAGENT_TEMPERATURE,
+            timeout=SHORT_CALL_TIMEOUT,
         )
-        selected = _parse_pmid_list(raw)
+        selected = {str(x) for x in (result.get("pmids") or []) if str(x).isdigit()}
         # Validate: only keep PMIDs that are actually in the candidate set
         candidate_pmids = {p["pmid"] for p in papers}
         valid = selected & candidate_pmids

@@ -109,6 +109,17 @@ SYSTEM_PROMPT_SYNTHESIZE_V2 = """You are an expert molecular biologist creating 
 - For each reference, PRESERVE the **Cited Text:** exactly as provided in the batch reports.
 - Try to use as many of the provided citations as possible in the body text to support your analysis.
 
+### Pair each observation with the mechanism that explains it
+Where a finding has a published explanation, state the observation and then the
+mechanism, putting the [N] on the mechanistic clause:
+
+  "Srm and Amd1 decline from 0h to 24h. Polyamine-synthesis genes are direct
+   Myc targets [7]."
+
+A citation sitting directly on this dataset's own numbers cannot be checked
+against any paper, since no publication contains this experiment's
+measurements.
+
 ## Experiment Recommendations (IMPORTANT)
 - In the "Suggested Follow-up Experiments" section, provide 3-5 specific, actionable experiments.
 - For each experiment, include:
@@ -161,12 +172,40 @@ Return a JSON array (no markdown fencing). Each element:
   ]
 }}
 
+## CRITICAL: never search a pathway name verbatim
+Pathway databases name many entries after the disease in which the pathway was
+first characterised — "Human T-cell leukemia virus 1 infection", "Spinocerebellar
+ataxia", "Alcoholic liver disease", "Amyotrophic lateral sclerosis". These are
+annotation labels, NOT descriptions of the experiment. Searching them literally
+returns literature about that disease, which has nothing to do with the system
+being studied, and produces citations that are simply wrong.
+
+A pathway is enriched because of the GENES in it. Search the genes and the
+mechanism, never the label:
+
+- WRONG: "Human T-cell leukemia virus 1 infection"[Title/Abstract] AND "Mus musculus"[Title/Abstract]
+- RIGHT: (Jun OR Fos OR Nfkb1) AND ("B cell differentiation" OR "lymphocyte development")
+
+- WRONG: "Spinocerebellar ataxia"[Title/Abstract]
+- RIGHT: (Psmc6 OR Psma7 OR Adrm1) AND ("proteasome" OR "protein degradation")
+
+Only use a pathway name directly when it names a mechanism rather than a disease
+("Hippo signaling pathway", "Autophagy", "Arginine and proline metabolism").
+
+## Anchor every query in the experiment
+Each query must contain at least one term from the experimental system under
+study — its cell type, tissue, developmental process, or perturbation — taken
+from the Experiment Context above. A query that would return the same papers for
+any experiment is not doing any work. The organism filter alone is not an
+anchor: "Mus musculus" matches most of mouse biology.
+
 ## PubMed Query Tips
 - Use [Title/Abstract] field tag for precision: "MAPK signaling"[Title/Abstract]
 - Boolean AND/OR/NOT for combining concepts
 - Quote multi-word phrases: "oxidative stress"
-- Organism filter: AND "Mus musculus"[Title/Abstract]
+- Prefer gene symbols OR'd together, ANDed with a mechanism or process term
 - Keep queries focused — broad queries return noisy results
+- If a query would only match by disease name, discard it and search the genes
 
 Design at most {max_tasks} search tasks. Aim for specificity over breadth."""
 
