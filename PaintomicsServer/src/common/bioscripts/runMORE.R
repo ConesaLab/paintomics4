@@ -179,6 +179,23 @@ for (i in seq_along(omic_names)) {
       cat(paste("MORE: Col 1 matches with reg IDs:", col1_match_reg, "\n"))
       cat(paste("MORE: Col 2 matches with reg IDs:", col2_match_reg, "\n"))
 
+      # Neither column names a regulator that exists in the data file. There is
+      # no orientation to detect and nothing MORE can model: every target ends
+      # up with no regulators, the run "succeeds", and the user gets an empty
+      # result with no reason given. Same diagnostic shape as the sample
+      # alignment check below -- show both ID spaces so the mismatch is
+      # visible without reopening the files.
+      if (max(col1_match_reg, col2_match_reg) == 0) {
+        stop(paste0(
+          "Association file for omic '", name, "' shares no regulator IDs with its ",
+          "data file, in either column.\n",
+          "  association col 1: ", paste(head(unique(assoc_df[[1]]), 3), collapse=", "), "\n",
+          "  association col 2: ", paste(head(unique(assoc_df[[2]]), 3), collapse=", "), "\n",
+          "  ", name, " data file: ", paste(head(rownames(reg_mat), 3), collapse=", "), "\n",
+          "Check that both files use the same regulator identifiers, and that the ",
+          "association file has a header row (its first line is read as one)."))
+      }
+
       if (col1_match_reg > col2_match_reg) {
         cat("MORE: Detected Regulator in Column 1. Swapping to [Target, Regulator(, Area)]...\n")
         # Swap cols 1 <-> 2 and keep col 3 in place if it exists.
@@ -209,6 +226,18 @@ for (i in seq_along(omic_names)) {
       target_overlap <- sum(assoc_df$target %in% rownames(targetData))
       cat(paste("MORE: Number of unique targets in association file:", length(unique(assoc_df$target)), "\n"))
       cat(paste("MORE: Number of targets in association file that exist in expression data:", target_overlap, "\n"))
+
+      # Regulators line up but targets do not: every association points at a
+      # feature the expression matrix has never heard of, so again there is
+      # nothing to model and the run would finish empty and unexplained.
+      if (target_overlap == 0) {
+        stop(paste0(
+          "Association file for omic '", name, "' shares no target IDs with the ",
+          "target expression file.\n",
+          "  association targets: ", paste(head(unique(assoc_df$target), 3), collapse=", "), "\n",
+          "  expression features: ", paste(head(rownames(targetData), 3), collapse=", "), "\n",
+          "Both files must identify features the same way (same ID type, same case)."))
+      }
 
       associations[[name]] <- assoc_df
     } else {
