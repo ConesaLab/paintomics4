@@ -291,7 +291,15 @@ def aggregate_replicates(values, relevant, groups, n_samples):
         for s_idx, cols in enumerate(groups):
             if not cols:
                 continue
-            slice_vals = arr[cols] if n_reps else arr  # arr[[]] is fine on arr.size==0
+            # Clamp to the width this row actually has. `groups` is derived from
+            # the *header* (detect_replicates on omicHeader[1:], or the design
+            # file), while `values` is built per row in Job.py as
+            # list(map(float, line[1:])) -- nothing pads the row out to the
+            # header. A row narrower than the header therefore indexes past the
+            # end here and used to kill the whole request with IndexError. The
+            # relevance path below already clamps these same indices.
+            in_range = [c for c in cols if c < n_reps]
+            slice_vals = arr[in_range]
             if slice_vals.size == 0 or np.all(np.isnan(slice_vals)):
                 sampleValues[s_idx] = float("nan")
             else:
