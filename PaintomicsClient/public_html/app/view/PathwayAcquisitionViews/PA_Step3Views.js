@@ -794,19 +794,15 @@ function PA_Step3JobView() {
 					xtype: 'box', cls: "contentbox", style: "max-width:1900px; margin: 5px 10px; margin-top:20px;", html:
 					'<div id="multisource_msg">' +
 					'  <h2>Multiple databases used</h2>' +
-					'  <p>' +
-					'		The selected species has available pathway data from more than one database. In order to view the additional information, a tab panel has been' +
-					' added immediately under this message, giving access to different classification and network analysis for each database.<br/><br/>' +
-					' By default the pathway selection list from below will show pathways from all databases, but a set of checkboxes have been added' +
-					' on the search bar allowing to select which ones should be used. Each pathway row has also a new additional column indicating the' +
-					' source. <br/><br />' +
-					' The pathways summary splitted by databases is the following one:' +
-					'  </p>' +
-					// Outside the <p>, not inside it. A div is not phrasing content, so the
-					// parser was closing the paragraph early and hoisting this out anyway,
-					// leaving a stray empty <p> behind that the two-column layout then had
-					// to work around.
-					'  <div id="multisource_summary"></div>' +
+					'  <div class="multisource_body">' +
+					'    <div class="multisource_text">' +
+					'      <p>This species has pathway data in more than one database. The tabs below give you' +
+					' separate classification and network analysis for each one.</p>' +
+					'      <p>The pathway list shows every database at once by default. Use the checkboxes in the' +
+					' search bar to narrow it down &mdash; each row is labelled with the database it came from.</p>' +
+					'    </div>' +
+					'    <div id="multisource_summary"></div>' +
+					'  </div>' +
 					'</div>'
 				}),
 				me.statsView.getComponent(),
