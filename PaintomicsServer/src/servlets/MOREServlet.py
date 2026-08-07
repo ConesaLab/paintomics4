@@ -5,6 +5,7 @@
 import json
 import logging
 import os
+import re
 import subprocess
 import shutil
 from src.classes.JobInstances.MOREJob import MOREJob
@@ -49,6 +50,41 @@ def _parseMinVariation(rawValue):
         return max(0.0, float(text))
     except (TypeError, ValueError):
         return 0.0
+
+
+# Column names a "significant regulators" export is likely to lead with. Only
+# consulted for the FIRST line, so a regulator legitimately named "regulator"
+# is still kept everywhere else.
+_REGULATOR_HEADERS = frozenset({
+    "regulator", "regulators", "id", "ids", "name", "feature", "features",
+    "tf", "gene", "mirna", "regulatorid", "regulator_id",
+})
+
+
+def _parseRelevantRegulators(path):
+    """Regulator IDs from a user-supplied "significant regulators" file.
+
+    Users build this list by exporting rows from a statistics table, so it
+    arrives with whatever the export produced: a second column of p-values, an
+    Excel-style quoted first field, a header row, semicolons instead of tabs.
+    Reading the whole line as the ID makes every one of those match nothing,
+    and the only symptom is an absence of red stars -- the analysis still
+    completes and reports success.
+
+    So: first field only, split on tab/comma/semicolon, quotes stripped, and a
+    leading header row skipped. Comparison downstream is case-insensitive, so
+    the values are lowered here.
+    """
+    ids = set()
+    with open(path) as handle:
+        for index, line in enumerate(handle):
+            field = re.split(r"[\t,;]", line.strip())[0].strip().strip('"\'')
+            if not field:
+                continue
+            if index == 0 and field.lower() in _REGULATOR_HEADERS:
+                continue
+            ids.add(field.lower())
+    return ids
 
 
 def _nonEmpty(rawValue, default):
@@ -321,12 +357,7 @@ def fromMOREtoGenes_STEP2(jobInstance, userID, RESPONSE, formFields):
                 # Expand those IDs to all GENE:::REGULATOR pairs present in the values file
                 # (regardless of MORE significance) so that any gene regulated by a
                 # user-flagged TF gets a red star.
-                relevant_tfs = set()
-                with open(user_rel_file) as f:
-                    for line in f:
-                        v = line.strip()
-                        if v:
-                            relevant_tfs.add(v.lower())
+                relevant_tfs = _parseRelevantRegulators(user_rel_file)
 
                 values_src = os.path.join(output_dir, out_file_name)
                 pairs = set()
@@ -345,6 +376,24 @@ def fromMOREtoGenes_STEP2(jobInstance, userID, RESPONSE, formFields):
                     for pair in pairs:
                         f.write(pair + '\n')
                 logging.info(f"MORE_STEP2 - Built {len(pairs)} GENE:::REGULATOR relevant pairs from user file for omic '{name}'")
+                if relevant_tfs and not pairs:
+                    # The user asked for red stars and got none. Almost always
+                    # an ID-space mismatch (symbols against Ensembl, say), and
+                    # otherwise indistinguishable from "nothing was relevant".
+                    # Not fatal -- the regulatory analysis itself stands -- but
+                    # it must not pass without a word.
+                    available = sorted({
+                        line.split('\t')[0].split(':::', 1)[1]
+                        for line in open(values_src)
+                        if ':::' in line.split('\t')[0]
+                    })[:3] if os.path.exists(values_src) else []
+                    logging.warning(
+                        "MORE_STEP2 - none of the %d regulator ID(s) in the relevant-regulators "
+                        "file for omic '%s' matched this omic's regulators, so no red stars will "
+                        "be shown. File has: %s. Analysis has: %s",
+                        len(relevant_tfs), name,
+                        ", ".join(sorted(relevant_tfs)[:3]) or "(nothing)",
+                        ", ".join(available) or "(nothing)")
             else:
                 # No user file → no red stars for this omic (matches miRNA2Genes behavior).
                 open(rel_reg_path, 'w').close()
