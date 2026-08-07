@@ -166,6 +166,57 @@ class IsRelevantTest(unittest.TestCase):
         self.assertFalse(OmicValue("G1").isRelevant())
 
 
+class AccessorTest(unittest.TestCase):
+    """The getters, exercised through the getters.
+
+    Every other test in this file reads ``ov.sampleValues`` directly, which is
+    what the aggregation code does. The renderers and the serializer go through
+    the accessors instead, so a getter returning the wrong attribute would be
+    invisible to the rest of this file while breaking the views.
+    """
+
+    def test_get_sample_values_returns_what_was_set(self):
+        ov = OmicValue("G1")
+        ov.setSampleValues([2.0, 15.0])
+        self.assertEqual(ov.getSampleValues(), [2.0, 15.0])
+
+    def test_get_sample_relevant_returns_what_was_set(self):
+        ov = OmicValue("G1")
+        ov.setSampleRelevant([True, False])
+        self.assertEqual(ov.getSampleRelevant(), [True, False])
+
+    def test_the_getters_start_none(self):
+        ov = OmicValue("G1")
+        self.assertIsNone(ov.getSampleValues())
+        self.assertIsNone(ov.getSampleRelevant())
+
+    def test_the_getters_survive_the_round_trip(self):
+        ov = OmicValue("G1")
+        ov.setSampleValues([2.0])
+        ov.setSampleRelevant([True])
+        restored = roundTrip(ov)
+        self.assertEqual(restored.getSampleValues(), [2.0])
+        self.assertEqual(restored.getSampleRelevant(), [True])
+
+    def test_has_sample_aggregation_tracks_sample_values(self):
+        """The flag the renderer branches on to choose replicate columns over
+        raw ones. It keys on sampleValues alone, so an aggregation that
+        produced values but no relevance still counts as aggregated."""
+        ov = OmicValue("G1")
+        self.assertFalse(ov.hasSampleAggregation())
+        ov.setSampleValues([2.0])
+        self.assertTrue(ov.hasSampleAggregation())
+        ov.setSampleValues(None)
+        self.assertFalse(ov.hasSampleAggregation())
+
+    def test_an_empty_aggregation_still_counts_as_aggregated(self):
+        """[] is not None: an omic aggregated to zero samples has been
+        processed, and must not fall back to rendering raw replicates."""
+        ov = OmicValue("G1")
+        ov.setSampleValues([])
+        self.assertTrue(ov.hasSampleAggregation())
+
+
 class FeatureNestingTest(unittest.TestCase):
     """Features serialise their OmicValues; the aggregation must survive that
     nesting too, since that is how it actually reaches Mongo."""
