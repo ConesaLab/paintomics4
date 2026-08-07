@@ -513,7 +513,8 @@ ul.ui-menu.ui-widget.ui-widget-content {
 }
 .container {
 	margin: auto;
-	border: solid 1px #dfdfdf;
+	border: solid 1px var(--pa-border);
+	border-radius: var(--pa-radius);
 	padding: 5px 20px;
 	background-color: #ffffff;
 }
@@ -534,7 +535,7 @@ ul.ui-menu.ui-widget.ui-widget-content {
 }
 div.contentbox h2, div.contentbox h3, #clusternumber_box h2, #threshold_box h2 {
 	background-color: #f6f6f6;
-	border-color: #e9e9e9;
+	border-color: var(--pa-border);
 	padding: 6px;
 	margin: 0;
 }
@@ -928,10 +929,14 @@ div.checkbox label, div.radio label {
 **STYLES FOR STEP 1
 *********************************************************************************/
 
+/* The old shadow here was `0 0 10px #dfdfdf` - a fully opaque grey spreading
+   evenly in every direction, so the panel glowed rather than sat above the
+   page. The token shadow has a direction and an alpha, which is what makes it
+   read as height instead of as a halo. */
 .omicSubmittingPanel {
-	border: solid 1px #dfdfdf;
-	box-shadow: 0px 0px 10px #dfdfdf;
-	border-radius: 5px;
+	border: solid 1px var(--pa-border);
+	box-shadow: var(--pa-shadow);
+	border-radius: var(--pa-radius);
 }
 .step1LateralMenu {
 	padding-right: 20px;
@@ -1005,7 +1010,8 @@ div.availableOmicsBox h4 {
 	font-size: 22px;
 	background: #F6F6F6;
 	padding: 10px;
-	border: 1px solid #E9E9E9;
+	border: 1px solid var(--pa-border);
+	border-radius: var(--pa-radius);
 }
 
 #additionalInfoContainer {
@@ -1015,7 +1021,8 @@ div.availableOmicsBox h4 {
 #additionalInfoContainer div.content {
 	color: #222;
 	height: auto;
-	border: 1px solid #E9E9E9;
+	border: 1px solid var(--pa-border);
+	border-radius: var(--pa-radius);
 	margin: 50px auto;
 	padding: 15px;
 }
@@ -1263,7 +1270,8 @@ div[id ^= "step3-network-toolbar_"] div.menuBody {
 div[id ^= "step3-network-toolbar_"] div[id ^= "reorderOptions"]{
 		position: absolute; width: 200px !important;
 	 	height: 80px !important; margin-top: 35px !important;
-	 	border: 1px solid #dfdfdf !important;
+	 	border: 1px solid var(--pa-border) !important;
+	 	border-radius: var(--pa-radius) !important;
 	 	background: rgba(255, 255, 255, 0.88) !important;
 		min-height: auto !important;
  }
@@ -1579,9 +1587,9 @@ div[id^=matching_table] table {
 }
 .lateralOptionsSelector.omicSelection {
 	padding: 6px;
-	border: solid 1px #E4E4E4;
+	border: solid 1px var(--pa-border);
 	margin: 10px 0px;
-	border-radius: 2px;
+	border-radius: var(--pa-radius-sm);
 	background: #fff;
 	display: block;
 	max-width: 350px;
@@ -2175,7 +2183,8 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
 
 .po-hero-actions .po-btn-outline {
   background: transparent;
-  border: 1px solid #ccc;
+  border: 1px solid var(--pa-border);
+  border-radius: var(--pa-radius-sm);
   color: #555;
 }
 
