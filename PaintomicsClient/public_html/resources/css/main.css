@@ -3182,3 +3182,27 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
 .contentbox h4 + #classificationPlot:empty {
 	margin-top: 10px;
 }
+
+/*****************************************************************************
+**** GRID TOOLBARS ***********************************************************
+*****************************************************************************/
+/* Now that the controls sit on two rows they no longer overflow, so the
+   horizontal scroll added earlier as a workaround has nothing left to do. Kept
+   as `auto` rather than removed: a species with more databases can still push
+   a row past the edge, and a scrollbar that appears only then costs nothing. */
+.paGridBar {
+	background: #FFFFFF;
+	border-bottom: 1px solid var(--pa-border);
+	padding: 6px 10px;
+}
+.paGridBar-filters {
+	/* The second row carries the choices that shape the results, so it reads as
+	   a filter bar rather than as a continuation of the search. */
+	background: #FAFAFB;
+}
+/* Neptune's separators were doing the work of grouping when everything was
+   crammed onto one line. With two rows the grouping is the rows themselves. */
+.paGridBar .x-toolbar-separator {
+	border-color: transparent;
+	margin: 0 4px;
+}
