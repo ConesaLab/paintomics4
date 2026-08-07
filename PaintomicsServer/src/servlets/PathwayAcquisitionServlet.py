@@ -33,6 +33,37 @@ from src.classes.JobInstances.PathwayAcquisitionJob import PathwayAcquisitionJob
 
 from src.conf.serverconf import CLIENT_TMP_DIR, KEGG_DATA_DIR
 from src.conf.organismDB import dicDatabases
+
+
+def loadRequestedJob(jobID, action):
+    """Load the job a request names, or say exactly what was wrong with it.
+
+    Every job endpoint reads a jobID off the request and then immediately
+    either concatenates it into a log line or calls a method on the loaded
+    instance. Neither tolerates a missing or unknown ID, so a malformed request
+    produced one of
+
+        TypeError: can only concatenate str (not "NoneType") to str
+        AttributeError: 'NoneType' object has no attribute 'getReadOnly'
+
+    naming neither the field nor the job. Those reach the browser as an opaque
+    failure the client cannot render into anything a user can act on.
+
+    @param {String} jobID, as read from the request (may be None)
+    @param {String} action, named in the message so the user knows what failed
+    @returns {Job} the loaded job instance
+    """
+    if not jobID:
+        raise UserWarning("Missing jobID parameter for " + action + ".")
+
+    jobInstance = JobInformationManager().loadJobInstance(jobID)
+
+    if jobInstance is None:
+        raise UserWarning("Job " + str(jobID) + " was not found at database.")
+
+    return jobInstance
+
+
 #************************************************************************
 #     _____ _______ ______ _____    __
 #    / ____|__   __|  ____|  __ \  /_ |
@@ -515,12 +546,11 @@ def pathwayAcquisitionStep3(request, response):
         #TODO: IN PREVIOUS STEPS THE USER COULD SPECIFY THE DEFAULT OMICS TO SHOW
         visibleOmics = []
 
+        # Validated before the log line: concatenating a missing jobID here
+        # raised TypeError before the "was not found" check could ever run.
+        jobInstance = loadRequestedJob(jobID, "step 3")
+
         logging.info("STEP3 - LOADING JOB " + jobID + "...")
-
-        jobInstance = JobInformationManager().loadJobInstance(jobID)
-
-        if(jobInstance == None):
-            raise UserWarning("Job " + jobID + " was not found at database.")
 
         logging.info("STEP3 - JOB " + jobInstance.getJobID() + " LOADED SUCCESSFULLY.")
 
@@ -576,6 +606,13 @@ def pathwayAcquisitionRecoverJob(request, response, QUEUE_INSTANCE):
 
         formFields = request.form
         jobID  = formFields.get("jobID")
+
+        # Concatenating a missing jobID into this log line raised TypeError
+        # before any of the checks below could report the real problem. The
+        # "not found" case keeps its own richer message further down, so only
+        # absence is rejected here.
+        if not jobID:
+            raise UserWarning("Missing jobID parameter for recovering a job.")
 
         logging.info("RECOVER_JOB - LOADING JOB " + jobID + "...")
         jobInstance = JobInformationManager().loadJobInstance(jobID)
@@ -730,10 +767,17 @@ def pathwayAcquisitionSaveImage(request, response):
         # UserSessionManager().isValidUser(userID, sessionToken)
 
         jobID = request.form.get("jobID")
-        jobInstance = JobInformationManager().loadJobInstance(jobID)
+        jobInstance = loadRequestedJob(jobID, "saving the image")
 
         svgData = request.form.get("svgCode")
-        fileName = "paintomics_" + request.form.get("fileName").replace(" ", "_").replace("/", "_") + "_" + jobID
+
+        # .replace() straight off the form raised AttributeError when the field
+        # was absent, so a request missing it failed without naming it.
+        requestedFileName = request.form.get("fileName")
+        if not requestedFileName:
+            raise UserWarning("Missing fileName parameter for saving the image.")
+
+        fileName = "paintomics_" + requestedFileName.replace(" ", "_").replace("/", "_") + "_" + jobID
         fileFormat = request.form.get("format")
 
         # userID = jobInstance.getUserID()
@@ -786,7 +830,7 @@ def pathwayAcquisitionSaveVisualOptions(request, response):
         visualOptions = request.get_json()
         jobID  = visualOptions.get("jobID")
 
-        jobInstance = JobInformationManager().loadJobInstance(jobID)
+        jobInstance = loadRequestedJob(jobID, "saving visual options")
 
         if jobInstance.getReadOnly() and str(jobInstance.getUserID()) != str(userID):
             raise Exception("Invalid user for the job saving visual options")
@@ -826,7 +870,7 @@ def pathwayAcquisitionSaveSharingOptions(request, response):
         # Step 1.GET THE INSTANCE OF sharing options
         #****************************************************************
         jobID = request.form.get("jobID")
-        jobInstance = JobInformationManager().loadJobInstance(jobID)
+        jobInstance = loadRequestedJob(jobID, "saving sharing options")
 
         if str(jobInstance.getUserID()) != str(userID):
             raise Exception("Invalid user for this jobID")
@@ -871,7 +915,7 @@ def pathwayAcquisitionMetagenes_PART1(REQUEST, RESPONSE, QUEUE_INSTANCE, JOB_ID,
             # Step 2. LOAD THE JOB INSTANCE AND RETRIEVE FORM INFO
             # ****************************************************************
             savedJobID = REQUEST.form.get("jobID")
-            savedJobInstance = JobInformationManager().loadJobInstance(savedJobID)
+            savedJobInstance = loadRequestedJob(savedJobID, "generating clusters")
 
             if savedJobInstance.getReadOnly() and str(savedJobInstance.getUserID()) != str(userID):
                 raise Exception("Invalid user for the job generating metagenes.")

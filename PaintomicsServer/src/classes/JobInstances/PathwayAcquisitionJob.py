@@ -46,15 +46,67 @@ from src.classes.PathwayGraphicalData import PathwayGraphicalData
 from src.conf.serverconf import KEGG_DATA_DIR, MAX_THREADS, MAX_WAIT_THREADS, MAX_NUMBER_FEATURES
 
 
+# Encoding is decided from a bounded prefix. Omics uploads routinely reach
+# hundreds of megabytes, and running chardet over the whole buffer costs time
+# and memory to answer a question the first chunk already settles.
+_ENCODING_SNIFF_BYTES = 256 * 1024
+
+
+def _decodes_as_utf8(sample, isPartial):
+    """Whether `sample` is valid UTF-8.
+
+    When the sample is only a prefix of a larger file, a multi-byte character
+    can be cut in half at the boundary. That is not evidence of a different
+    encoding, so a failure inside the last three bytes is forgiven.
+    """
+    try:
+        sample.decode('utf-8-sig')
+        return True
+    except UnicodeDecodeError as exc:
+        return isPartial and exc.start >= len(sample) - 3
+
+
 def ensure_utf8(filepath):
-    """Detect file encoding and convert to UTF-8 in-place if needed."""
-    with open(filepath, 'rb') as f:
-        raw_data = f.read()
-    encoding = detect(raw_data)['encoding']
-    if encoding and encoding.lower() != 'utf-8':
-        text = raw_data.decode(encoding)
-        with open(filepath, 'w', encoding='utf-8') as f:
-            f.write(text)
+    """Rewrite `filepath` as UTF-8 in place when it is in some other encoding.
+
+    Returns None on success, or a human-readable reason when the encoding could
+    not be resolved. Callers turn that reason into a validation message: an
+    unreadable upload is bad input, and it used to escape as a bare
+    UnicodeDecodeError.
+
+    UTF-8 is tested directly before chardet is consulted. Guessing first is
+    unsafe: single-byte codecs such as cp1252 accept *any* byte sequence, so a
+    misdetected UTF-8 file would be silently rewritten into mojibake rather
+    than left alone.
+    """
+    with open(filepath, 'rb') as handle:
+        sample = handle.read(_ENCODING_SNIFF_BYTES + 1)
+
+    # An empty file has no encoding to fix; emptiness is reported elsewhere.
+    if not sample:
+        return None
+
+    isPartial = len(sample) > _ENCODING_SNIFF_BYTES
+    if _decodes_as_utf8(sample, isPartial):
+        return None
+
+    detected = detect(sample).get('encoding')
+    if not detected:
+        return "the character encoding could not be determined, please save the file as UTF-8"
+
+    try:
+        with open(filepath, 'rb') as handle:
+            text = handle.read().decode(detected)
+    except (UnicodeDecodeError, LookupError):
+        return ("the file could not be read as " + str(detected) +
+                ", please save it as UTF-8")
+
+    # newline='' keeps the line endings exactly as decoded; the readers below
+    # already cope with CRLF, and rewriting them here would be a silent edit of
+    # the user's file.
+    with open(filepath, 'w', encoding='utf-8', newline='') as handle:
+        handle.write(text)
+    return None
 
 
 # Small dict fields safe to persist in the main MongoDB document
@@ -278,6 +330,15 @@ class PathwayAcquisitionJob(Job):
             if not inputOmic.get("isExample", False) and valuesFileName:
                 valuesFileName = "{path}/{file}".format(path=self.getInputDir(), file=valuesFileName)
                 if os_path.isfile(valuesFileName):
+                    # Normalise the encoding before the first read of the file.
+                    # This loop runs ahead of validateFile(), which is where the
+                    # conversion used to live, so a non-UTF-8 upload raised
+                    # UnicodeDecodeError here before anything could transcode it.
+                    encodingError = ensure_utf8(valuesFileName)
+                    if encodingError is not None:
+                        error += " - Errors detected while processing " + \
+                                 inputOmic.get("inputDataFile", "") + ": " + encodingError + ".\n"
+                        continue
                     values_delimiter = Job.detect_delimiter(valuesFileName)
                     with open(valuesFileName, 'r', encoding='utf-8-sig', newline='') as f:
                         for line in csv_reader(f, delimiter=values_delimiter):
@@ -333,7 +394,11 @@ class PathwayAcquisitionJob(Job):
         # *************************************************************************
         logging.info("VALIDATING ASSOCIATION FILE (" + omicName + ")...")
         if os_path.isfile(associationsFileName):
-            ensure_utf8(associationsFileName)
+            encodingError = ensure_utf8(associationsFileName)
+            if encodingError is not None:
+                error += " - Errors detected while processing " + \
+                         inputOmic.get("associationsFile", "") + ": " + encodingError + ".\n"
+                return nConditions, error
             nLine = -1
             assoc_delimiter = Job.detect_delimiter(associationsFileName)
             with open(associationsFileName, 'r', encoding='utf-8-sig', newline='') as associationDataFile:
@@ -377,7 +442,11 @@ class PathwayAcquisitionJob(Job):
         # *************************************************************************
         logging.info("VALIDATING RELEVANT FEATURES FILE (" + omicName + ")...")
         if os_path.isfile(relevantFileName):
-            ensure_utf8(relevantFileName)
+            encodingError = ensure_utf8(relevantFileName)
+            if encodingError is not None:
+                error += " - Errors detected while processing " + \
+                         inputOmic.get("relevantFeaturesFile", "") + ": " + encodingError + ".\n"
+                return nConditions, error
             f = open(relevantFileName, 'r', encoding='utf-8-sig')
             lines = f.readlines()
 
@@ -435,7 +504,11 @@ class PathwayAcquisitionJob(Job):
 
         # IF THE USER UPLOADED VALUES FOR GENE EXPRESSION
         if os_path.isfile(valuesFileName):
-            ensure_utf8(valuesFileName)
+            encodingError = ensure_utf8(valuesFileName)
+            if encodingError is not None:
+                error += " - Errors detected while processing " + \
+                         inputOmic.get("inputDataFile", "") + ": " + encodingError + ".\n"
+                return nConditions, error
 
             values_delimiter = Job.detect_delimiter(valuesFileName)
             with open(valuesFileName, newline='', encoding='utf-8-sig' ) as inputDataFile:
@@ -598,11 +671,28 @@ class PathwayAcquisitionJob(Job):
         #   e.g. C00075#UTP
         mappedCompounds = set()
         compoundID = compoundName = initialCompound = newCompound = None
+        malformedSelections = []
         for selectedCompound in selectedCompounds:
-            selectedCompound = selectedCompound.split("#")
-            compoundID = selectedCompound[0]
-            compoundName = selectedCompound[1]
-            originalName = selectedCompound[2]
+            # All three parts are required: one compound ID can appear under
+            # several names, so (name, originalName) is what says which box the
+            # user actually ticked.
+            #
+            # Indexing [1] and [2] unconditionally meant a single malformed
+            # entry aborted the whole of step 2 with
+            #     IndexError: list index out of range
+            # throwing away an analysis that had already cost minutes of
+            # enrichment, and naming neither the offending entry nor the field.
+            # An unparseable entry identifies no compound -- the same situation
+            # as an ID that is not in this job, which is skipped a few lines
+            # below -- so it is skipped the same way and reported together.
+            parts = selectedCompound.split("#")
+            if len(parts) < 3:
+                malformedSelections.append(selectedCompound)
+                continue
+
+            compoundID = parts[0]
+            compoundName = parts[1]
+            originalName = parts[2]
             initialCompound = initialCompounds.get(compoundID)
             newCompound = self.getInputCompoundsData().get(compoundID, None)
 
@@ -643,6 +733,17 @@ class PathwayAcquisitionJob(Job):
             #   COMPOUND C00099 (beta-alanine) WILL HAVE 2 OMICS VALUES COMING FROM DIFFERENT COMPOUNDS
             # compoundAux.getOmicsValues()[0].setInputName(compoundAux.getName() + " [" + initialCompoundName + "]")
             # 6. ADD THE COMPOUND TO THE JOB
+
+        if malformedSelections:
+            # Logged rather than raised: the analysis is still valid for every
+            # entry that did parse, and losing it wholesale is the failure this
+            # replaced. The entries are listed so a misbehaving client can be
+            # identified from the log.
+            logging.warning(
+                "STEP2 - IGNORED %d MALFORMED COMPOUND SELECTION(S); EXPECTED "
+                "'ID#name#originalName': %s" % (
+                    len(malformedSelections), ", ".join(
+                        repr(entry) for entry in malformedSelections[:10])))
 
         # Update the omicSummary for the compoundOmic
         # TODO: at the moment it only considers "one whole compound omic" with the same mapped ratio
@@ -1323,8 +1424,28 @@ class PathwayAcquisitionJob(Job):
         # ************************************************************************
         # Step 2. For each provided pathway, get the graphical information
         # ************************************************************************
+        # A pathway the user asks to paint but which this job never matched has
+        # no instance, and the code below dereferences it immediately
+        # (pathwayInstance.getSource()), so an unknown ID raised
+        #     AttributeError: 'NoneType' object has no attribute 'getSource'
+        # naming neither the pathway nor the job. That is reachable from a
+        # stale bookmark or a shared link pointing at a pathway set that has
+        # since changed.
+        #
+        # Unresolvable IDs are skipped so that a mixed selection still paints
+        # what it can; if nothing at all resolved, the request is reported
+        # rather than answered with a silently empty result.
+        unknownPathways = []
+
         for pathwayID in selectedPathways:
             pathwayInstance = self.getMatchedPathways().get(pathwayID)
+
+            if pathwayInstance is None:
+                unknownPathways.append(pathwayID)
+                logging.warning(
+                    "STEP3 - IGNORING PATHWAY " + str(pathwayID) +
+                    ", NOT AMONG THE PATHWAYS MATCHED BY JOB " + str(self.getJobID()))
+                continue
 
             # AQUI RECORRER PARA CADA ELEMENTO DE LA PATHWAY Y VER SI
             #  SI ES GEN Y ESTA EN LA LISTA DE GENES METIDOS -> GUARDAR VALORES, POSICIONES, SIGNIFICATIVO
@@ -1377,6 +1498,14 @@ class PathwayAcquisitionJob(Job):
                 graphicalOptionsInstancesBSON.append(bsonAux)
             # Add the pathway to the list
             selectedPathwayInstances.append(pathwayInstance)
+
+        # Pathways were requested and not one of them belongs to this job:
+        # answering with an empty result would look like a successful paint of
+        # nothing, so say what happened instead.
+        if unknownPathways and not selectedPathwayInstances:
+            raise UserWarning(
+                "None of the requested pathways belong to this job: " +
+                ", ".join(str(pathway) for pathway in unknownPathways[:10]) + ".")
 
         return [selectedPathwayInstances, graphicalOptionsInstancesBSON, omicsValuesSubset]
 

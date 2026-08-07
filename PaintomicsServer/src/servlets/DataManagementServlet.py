@@ -102,6 +102,18 @@ def dataManagementGetMyFiles(request, response, DESTINATION_DIR, MAX_CLIENT_SPAC
         sessionToken  = request.cookies.get('sessionToken')
         UserSessionManager().isValidUser(userID, sessionToken)
 
+        # isValidUser lets the anonymous "nologin" case through, so userID can
+        # still be None here. `DESTINATION_DIR += userID` then raised
+        #     TypeError: can only concatenate str (not "NoneType") to str
+        # rather than the "Log in required" answer the sibling handlers in this
+        # file already give (dm_get_myjobs, dm_delete_job). Only the personal
+        # listing needs an account; the reference/GTF listing is public and
+        # substitutes its own userID just below.
+        if not isReference and userID is None:
+            response.setContent({"success": False,
+                                 "errorMessage": "Log in required</br>Sorry but the feature you are requesting is only available to registered accounts."})
+            return response
+
         if not isReference:
             DESTINATION_DIR += userID
         else:

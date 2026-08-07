@@ -198,6 +198,29 @@ class JobInformationManager(metaclass=Singleton):
     #**********************************************
     #*
     #**********************************************
+    @staticmethod
+    def _requiredOrigin(formFields, fieldName, fileLabel):
+        """Return an upload's `*_origin` form field, or say which one is missing.
+
+        Every uploaded file is paired with an origin field naming where it came
+        from ('client', 'mydata', an inbuilt GTF, or a reference to another
+        omic's file). saveFiles logs that value before branching on it, so a
+        submission that omitted the field failed on `"..." + None` with
+
+            TypeError: can only concatenate str (not "NoneType") to str
+
+        which names neither the field nor the file. The field names are derived
+        from the file field ("omic0_file" -> "omic0_relevant_origin"), so an API
+        client has no way to guess which one it missed from that message.
+        """
+        origin = formFields.get(fieldName)
+        if origin is None:
+            raise UserWarning(
+                "Malformed submission: the form field '" + fieldName +
+                "' is missing, so PaintOmics cannot tell where the " + fileLabel +
+                " was uploaded from.")
+        return origin
+
     def saveFiles(self, uploadedFiles, formFields, userID, jobInstance, CLIENT_TMP_DIR, EXAMPLE_FILES_DIR=""):
         nOthers = 1
         uploadedDataFile = None
@@ -250,7 +273,8 @@ class JobInformationManager(metaclass=Singleton):
             configValues = formFields.get(uploadedFileName.replace("file", "config_args"), None)
             enrichment = formFields.get(uploadedFileName.replace("file", "enrichment"), 'genes')
 
-            origin = formFields.get(uploadedFileName.replace("file","origin"))
+            origin = self._requiredOrigin(
+                formFields, uploadedFileName.replace("file", "origin"), "data file")
             logging.info("SAVE FILES - ORIGIN FOR " + uploadedFileName + " IS " + origin)
 
             #GET THE ORIGIN OF THE FILE. IF CLIENT -> SAVE THE FILE
@@ -325,7 +349,9 @@ class JobInformationManager(metaclass=Singleton):
             #SAVE THE ASSOCIATED RELEVANT FEATURED FILE (IF ANY)
             if (uploadedRelevantFile is not None):
                 relevantFileName = uploadedRelevantFile.filename
-                origin = formFields.get(uploadedFileName.replace("file","relevant") + "_origin") ##GET THE ORIGIN OF THE FILE. IF CLIENT -> SAVE THE FILE
+                origin = self._requiredOrigin(
+                    formFields, uploadedFileName.replace("file", "relevant") + "_origin",
+                    "relevant features file") ##GET THE ORIGIN OF THE FILE. IF CLIENT -> SAVE THE FILE
 
                 fieldsRelevant={"omicType": omicType}
                 fieldsRelevant["dataType"]= formFields.get(uploadedFileName.replace("file","relevant_file_type")) ##GET THE FILE TYPE: GENE EXPRESSION, ETC.
@@ -349,7 +375,9 @@ class JobInformationManager(metaclass=Singleton):
             #SAVE THE ASSOCIATIONS FILE (IF ANY)
             if uploadedAssociationDataFile is not None:
                 associationsFileName = uploadedAssociationDataFile.filename
-                origin = formFields.get(uploadedFileName.replace("file", "associations") + "_origin") ##GET THE ORIGIN OF THE FILE. IF CLIENT -> SAVE THE FILE
+                origin = self._requiredOrigin(
+                    formFields, uploadedFileName.replace("file", "associations") + "_origin",
+                    "associations file") ##GET THE ORIGIN OF THE FILE. IF CLIENT -> SAVE THE FILE
 
                 fieldsAssociations={"omicType": omicType}
                 fieldsAssociations["dataType"] = formFields.get(uploadedFileName.replace("file","associations_file_type")) ##GET THE FILE TYPE: GENE EXPRESSION, ETC.
@@ -372,7 +400,13 @@ class JobInformationManager(metaclass=Singleton):
                 # TODO: currently only if the associations file is present
                 if uploadedAssociationRelevantFile is not None and formFields.get(uploadedFileName.replace("file", "relevant_associations") + "_origin") is not None:
                     relevantAssociationsFileName = uploadedAssociationRelevantFile.filename
-                    origin = formFields.get(uploadedFileName.replace("file", "relevant_associations") + "_origin")  ##GET THE ORIGIN OF THE FILE. IF CLIENT -> SAVE THE FILE
+                    # The enclosing condition already established this field is
+                    # present; going through the same helper as the other three
+                    # keeps every origin lookup uniform rather than leaving one
+                    # site whose safety depends on a guard two lines above.
+                    origin = self._requiredOrigin(
+                        formFields, uploadedFileName.replace("file", "relevant_associations") + "_origin",
+                        "relevant associations file")  ##GET THE ORIGIN OF THE FILE. IF CLIENT -> SAVE THE FILE
 
                     fieldsRelevantAssociations = {"omicType": omicType}
                     fieldsRelevantAssociations["dataType"] = formFields.get(uploadedFileName.replace("file", "relevant_associations_file_type"))  ##GET THE FILE TYPE: GENE EXPRESSION, ETC.
