@@ -26,6 +26,62 @@
 */
 //Ext.require('Ext.chart.*');
 
+/**
+* Normalises the "mapped" slot of an omic summary (omicSummary[0]) into a
+* matched-feature count per database.
+*
+* That slot arrives in two different shapes from the server:
+*
+*   - Gene based omics: a dict of feature-table name -> matched count, e.g.
+*     {"mmu_kegg_genes": 5620, "mmu_reactome_genes": 2827, "Total": 6103}.
+*     The table name embeds the database name, and "Total" holds the unique
+*     count across every database.
+*
+*   - Compound based omics: a plain integer. Compounds are matched once
+*     against KEGG compound IDs and that single set backs every database, so
+*     the server has no per-database breakdown to report.
+*
+* Indexing the dict shape into an integer yields undefined, which is how the
+* "Multiple databases used" table came to print "undefined (NaN%)" for the
+* metabolomics omic.
+*
+* @param {Object|Number} mappedSummary the omicSummary[0] value
+* @param {Array} databases names of the databases used in this analysis
+* @returns {Object} {perDatabase: {dbname: count}, totalMapped: count}
+*/
+function matchedFeaturesByDatabase(mappedSummary, databases) {
+	var perDatabase = {};
+
+	// Compound based omic: one count, shared by every database.
+	if (typeof mappedSummary === "number") {
+		databases.forEach(function (dbname) {
+			perDatabase[dbname] = mappedSummary;
+		});
+		return {perDatabase: perDatabase, totalMapped: mappedSummary};
+	}
+
+	var tableNames = Object.keys(mappedSummary || {});
+
+	databases.forEach(function (dbname) {
+		var featureTable = tableNames.find(function (el) {
+			return el.indexOf(dbname) !== -1;
+		});
+		// An omic with no table for this database matched nothing in it.
+		perDatabase[dbname] = (featureTable !== undefined) ? mappedSummary[featureTable] : 0;
+	});
+
+	// "Total" is the de-duplicated count across databases; with a single
+	// database there is no "Total" entry and the only table is the total.
+	var totalMapped = 0;
+	if (mappedSummary && mappedSummary.hasOwnProperty("Total")) {
+		totalMapped = mappedSummary["Total"];
+	} else if (tableNames.length > 0) {
+		totalMapped = mappedSummary[tableNames[0]];
+	}
+
+	return {perDatabase: perDatabase, totalMapped: totalMapped};
+}
+
 function PA_Step2JobView() {
 	/*********************************************************************
 	* ATTRIBUTES
@@ -94,28 +150,27 @@ function PA_Step2JobView() {
 		var thresholdMetaboliteClass = [];
 
 		for (var omicName in dataDistribution) {
-			// Get total features
-			var totalFeatures = dataDistribution[omicName][1];
 			var isCompoundBased = (compoundOmics.indexOf(omicName) > -1);
 
-			// Add the largest matched set of features or just KEGG if there is only 1 DB		
-			if (dataDistribution[omicName][0].hasOwnProperty("Total")) {
-				totalFeatures += dataDistribution[omicName][0]["Total"];
-			} else {
-				totalFeatures += dataDistribution[omicName][0][0] || dataDistribution[omicName][0][Object.keys(dataDistribution[omicName][0])[0]];
-			}
+			// Matched counts per database, plus the unique count across all of
+			// them; handles both the gene based (dict) and compound based
+			// (integer) shapes of the summary.
+			var matched = matchedFeaturesByDatabase(dataDistribution[omicName][0], databases);
+
+			// Total input features = unmapped + uniquely mapped.
+			var totalFeatures = dataDistribution[omicName][1] + matched.totalMapped;
 
 			databases.forEach(function(dbname) {
-				// Look for DB name in feature table matches ID
-				var featureTable = Object.keys(dataDistribution[omicName][0]).find(function(el) {return el.indexOf(dbname) != -1; });
+				var matchedCount = matched.perDatabase[dbname];
 
 				matchingPerDB[dbname] = $.extend(matchingPerDB[dbname] || {}, {
 					[omicName]: {
-						"matched": dataDistribution[omicName][0][featureTable],
-						"percentage": Math.ceil(dataDistribution[omicName][0][featureTable]/totalFeatures * 100)
+						"matched": matchedCount,
+						// An omic with no input features must not divide by zero.
+						"percentage": (totalFeatures > 0) ? Math.ceil(matchedCount / totalFeatures * 100) : 0
 					}});
 			});
-			
+
 			if (!isCompoundBased) {
 				numberOfClusters.push({
 					xtype: 'combo',
