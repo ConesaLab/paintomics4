@@ -46,15 +46,71 @@ read_matrix <- function(path) {
     return(NULL)
   }
   
-  # Try tab first, then comma
-  data <- tryCatch({
-    read.table(path, header=TRUE, sep="\t", check.names=FALSE, quote="\"", row.names=1)
-  }, error = function(e) {
-    read.table(path, header=TRUE, sep=",", check.names=FALSE, quote="\"", row.names=1)
-  })
-  
-  # Ensure numeric
-  return(as.matrix(data))
+  # Parse under each separator and keep whichever yields the most data columns.
+  #
+  # The previous version only fell back to comma when the tab parse *threw*,
+  # and read.table(sep="\t") does not throw on a comma-separated file: every
+  # line is a single field, row.names=1 consumes it, and the result is a
+  # perfectly valid data frame with ZERO columns. as.matrix() then returned a
+  # 2x0 logical matrix, is.null() was FALSE, and the job proceeded with no
+  # data at all. The same silent path swallowed duplicate feature IDs, which
+  # make the tab parse fail with "duplicate 'row.names' are not allowed" and
+  # hand the comma attempt the same empty result.
+  #
+  # So the separator is chosen by what it produces, not by whether the first
+  # attempt happened to raise, and a parse with no data columns is rejected
+  # rather than propagated.
+  best <- NULL
+  problems <- character(0)
+  for (sep in c("\t", ",")) {
+    parsed <- tryCatch(
+      read.table(path, header=TRUE, sep=sep, check.names=FALSE, quote="\"", row.names=1),
+      error = function(e) {
+        problems <<- c(problems, paste0(if (sep == "\t") "tab" else "comma",
+                                        ": ", conditionMessage(e)))
+        NULL
+      })
+    if (!is.null(parsed) && ncol(parsed) > 0 &&
+        (is.null(best) || ncol(parsed) > ncol(best))) {
+      best <- parsed
+    }
+  }
+
+  if (is.null(best)) {
+    cat(paste0("MORE ERROR: no data columns could be read from ", path,
+               ". Tried tab and comma separators.",
+               if (length(problems) > 0) paste0(" (", paste(problems, collapse="; "), ")")
+               else " Check the separator, and that feature IDs in the first column are unique.",
+               "\n"))
+    return(NULL)
+  }
+
+  # A header with no rows under it parses cleanly and gives a 0-row matrix,
+  # which is not null and so passes every caller's guard. There is no valid
+  # input here for any of the three call sites: no features, no samples.
+  if (nrow(best) == 0) {
+    cat(paste0("MORE ERROR: ", path,
+               " has a header but no data rows.\n"))
+    return(NULL)
+  }
+
+  data <- as.matrix(best)
+
+  # as.matrix coerces the WHOLE matrix to character if any single cell is
+  # non-numeric -- a stray "N/A", a description column, a thousands separator.
+  # MORE then dies somewhere inside the model fit with no reference to the
+  # file that caused it, so name the offending columns here instead.
+  if (!is.numeric(data) && !is.logical(data)) {
+    bad <- names(best)[!vapply(best, function(col) is.numeric(col) || is.logical(col),
+                               logical(1))]
+    cat(paste0("MORE ERROR: ", path, " has non-numeric values in column(s): ",
+               paste(head(bad, 10), collapse=", "),
+               if (length(bad) > 10) paste0(" (+", length(bad) - 10, " more)") else "",
+               ". Expected a numeric matrix with feature IDs in the first column.\n"))
+    return(NULL)
+  }
+
+  return(data)
 }
 
 cat("MORE: Starting analysis...\n")
