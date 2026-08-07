@@ -315,15 +315,42 @@ class Application(object):
             else:
                 jobRunningTime = 0
                 timeSpent = 0
-                if hasattr(jobInstance.args[0], 'geneBasedInputOmics'):
+                jobArgs = jobInstance.args[0]
+
+                if hasattr(jobArgs, 'geneBasedInputOmics'):
                     import time
-                    omicType = len(jobInstance.args[0].geneBasedInputOmics)
-                    inputGenesDataLen = len(jobInstance.args[0].inputGenesData)
-                    databasesLen = len(jobInstance.args[0].databases)
-                    jobRunningTime = inputGenesDataLen * databasesLen * omicType / 20000 * 15
-                    startTime = jobInstance.args[0].startTime
-                    timeSpent = round((time.time() - startTime), 2)
-                    jobRunningTime = max(0, round(jobRunningTime - timeSpent, 2))
+
+                    # inputGenesData is not input: validateInput fills it one omic
+                    # at a time *while this job runs*. So this estimate is near
+                    # zero on the first poll and grows by roughly the omic count
+                    # over the run - which made the reported remainder grow too,
+                    # and the client's progress bar slide backwards mid-job
+                    # (measured: 48.7% -> 44.6%).
+                    #
+                    # The formula is the only estimate available and it converges
+                    # on the right answer as the genes arrive, so what is kept is
+                    # the largest total seen rather than the latest. That total is
+                    # non-decreasing, which stops the remainder jumping back up
+                    # each time another omic lands.
+                    #
+                    # Deliberately not clamping the remainder to fall with the
+                    # clock: tried, and it latches onto the near-zero estimate from
+                    # the first poll and reports "no time left" for the whole job.
+                    # Until the estimate is worth anything the remainder is 0, the
+                    # client shows an indeterminate bar, and it becomes a real
+                    # percentage once there is something to divide by.
+                    omicType = len(jobArgs.geneBasedInputOmics)
+                    inputGenesDataLen = len(jobArgs.inputGenesData)
+                    databasesLen = len(jobArgs.databases)
+
+                    timeSpent = round((time.time() - jobArgs.startTime), 2)
+                    estimatedTotal = inputGenesDataLen * databasesLen * omicType / 20000 * 15
+
+                    estimatedTotal = max(estimatedTotal, getattr(jobArgs, 'maxEstimatedTotal', 0))
+                    jobArgs.maxEstimatedTotal = estimatedTotal
+
+                    jobRunningTime = max(0, round(estimatedTotal - timeSpent, 2))
+
                 return Response().setContent({"success": False, "status" : str(jobInstance.get_status()), "estimatedFinishTime": jobRunningTime, "timeSpent": timeSpent}).getResponse()
         #*******************************************************************************************
         ##* COMMON JOB HANDLERS - END
