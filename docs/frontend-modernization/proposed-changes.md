@@ -59,7 +59,7 @@ added so the diff above becomes a one-line apply.
 
 ## 2. Three WCAG AA contrast failures outside this branch's ownership
 
-**Status:** two of three applied in iteration 10; the ExtJS `Browse...` button stays open
+**Status:** RESOLVED — two applied in iteration 10, the ExtJS `Browse...` button in iteration 12
 **Raised:** iteration 2 (branch `frontend-modernization`)
 
 A contrast audit of the live Step 1 page found 16 distinct failing
@@ -95,20 +95,34 @@ paint-brush mock button was `#ADA6A6` carrying the `.button` default ink
 being the exact value `main.css` already gives the *real* Paint action in the
 grid, so the illustration and the control it illustrates finally agree.
 
-**ExtJS `Browse...` button — still open.** The `#3892d3` fill lives in
-`js/libs/extjs/resources/ext-theme-neptune/ext-theme-neptune-all.css`, a
-vendored third-party theme. Editing vendored files is out of scope here and
-would be lost on any ExtJS upgrade. Two options, in order of preference:
+**ExtJS `Browse...` button — applied in iteration 12.** The `#3892d3` fill lives
+in `js/libs/extjs/resources/ext-theme-neptune/ext-theme-neptune-all.css`, a
+vendored third-party theme, so it is overridden from `main.css` rather than
+edited: `index.html` loads the theme at line 28 and `main.css` at line 34, so
+equal-specificity rules win without `!important` and survive an ExtJS upgrade.
 
-1. Override it from `main.css` (which loads after the theme) with
-   `.x-btn-default-small { background-color: #287AB6; }`. Deliberately *not*
-   done in this branch: `x-btn-default-small` is a broad theme class applied to
-   many buttons across every screen, Neptune styles its hover/pressed/disabled
-   states separately, and a background-only override risks leaving those states
-   visually inconsistent. It needs its own change with verification across
-   Steps 1-4, not a drive-by edit inside a contrast pass.
-2. Leave as-is and accept the 3.38:1. Note it still clears the 3:1 bar for
-   non-text UI components, so only the button *label* is non-conformant.
+The objection recorded here was the right one and is what took this long. Option
+1 was originally rejected because a *background-only* override would leave
+Neptune's separately-styled hover, focus, pressed and disabled states behind. So
+all five states were taken together, keeping Neptune's hue and its
+each-state-darker-than-the-last direction:
+
+| State | Neptune | Ratio | Now | Ratio |
+|---|---|---|---|---|
+| base | `#3892d3` | 3.38:1 | `#287AB6` | 4.62:1 |
+| over | `#3386c2` | 3.94:1 | `#236FA8` | 5.37:1 |
+| focus | `#3386c2` | 3.94:1 | `#236FA8` | 5.37:1 |
+| pressed | `#2a6d9e` | 5.56:1 | `#1D5C89` | 7.13:1 |
+| disabled | GIF | — | `#8FB4CF` | exempt |
+
+It cleared AA only when held down before; it clears it in every state now.
+
+The same override drops Neptune's four-stop vertical gradient and its GIF
+fallback (`background-image: none`), which were the most dated surface left in
+the app, and moves the corner from Neptune's 3px onto the shared
+`--pa-radius-sm`. The split `Browse...` control is a single `.x-btn` element
+with the arrow drawn inside it, not two adjacent boxes, so rounding it leaves no
+seam. Verified live: base 4.62, hover 5.37, and Steps 1, 3 and 4 all render.
 
 ---
 
