@@ -57,12 +57,23 @@ class MOREJob(Job):
         })
 
     def getTargetExpressionFile(self, mainJob):
-        """Finds the main Gene Expression file from the parent PathwayAcquisitionJob."""
-        if hasattr(mainJob, 'getGeneBasedInputOmics'):
-            gene_omics = mainJob.getGeneBasedInputOmics()
-            for omic in gene_omics:
-                if omic.get("omicName", "").lower() == "gene expression":
-                    return omic.get("inputDataFile")
+        """Finds the target omic's data file in the parent PathwayAcquisitionJob.
+
+        Matches against ``self.targetOmicName`` rather than a hardcoded
+        literal, so setting that attribute actually takes effect. The default
+        ("Gene Expression") resolves to exactly the string this used to look
+        for, so the behaviour of an unmodified job is unchanged.
+        """
+        if not hasattr(mainJob, 'getGeneBasedInputOmics'):
+            return None
+
+        target = (self.targetOmicName or "").strip().lower()
+        for omic in mainJob.getGeneBasedInputOmics() or []:
+            # `or ""` rather than dict.get's default: the default only applies
+            # when the key is absent, and an omicName that is present but None
+            # is normal in a partially-populated job document.
+            if (omic.get("omicName") or "").strip().lower() == target:
+                return omic.get("inputDataFile")
         return None
 
     def getValidationErrors(self, mainJob):
@@ -79,5 +90,10 @@ class MOREJob(Job):
     def getJobDescription(self):
         desc = f"MORE Analysis ({self.method})\n"
         desc += f"Alpha: {self.alpha}, VIP: {self.vip}, R2 Filter: {self.filter_r2}\n"
-        desc += f"Regulators: {', '.join([o['name'] for o in self.regulatoryOmics])}"
+        # o.get(), not o['name']: parseBSON performs no shape validation, so a
+        # job restored from a partial document can hold a regulator entry with
+        # no "name" key, and a job description must never be what kills the
+        # request.
+        regulators = [str(o.get("name", "")).strip() for o in self.regulatoryOmics]
+        desc += f"Regulators: {', '.join(r for r in regulators if r)}"
         return desc

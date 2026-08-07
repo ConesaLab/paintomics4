@@ -14,6 +14,49 @@ from src.servlets.DataManagementServlet import saveFile
 from src.common.ServerErrorManager import handleException
 from src.conf.serverconf import CLIENT_TMP_DIR, ROOT_DIRECTORY
 
+def _toFloat(rawValue, default):
+    """Coerce one submitted form field to a float, falling back to ``default``.
+
+    ``dict.get(key, default)`` only yields the default when the key is
+    *absent*. An HTML form posts fields that are present and empty, and this
+    endpoint is reachable by any HTTP client regardless of what the ExtJS
+    ``allowBlank: false`` enforces, so ``""``, ``None`` and junk must all land
+    on the default instead of raising ValueError out of the request handler.
+    """
+    if rawValue is None:
+        return default
+    text = str(rawValue).strip()
+    if not text:
+        return default
+    try:
+        return float(text)
+    except (TypeError, ValueError):
+        return default
+
+
+def _parseMinVariation(rawValue):
+    """Per-omic low-variation filter for MORE's ``minVariation`` argument.
+
+    Blank / "auto" / "NA" become the "NA" sentinel, which MORE reads as "use
+    10% of the maximum observed variability across conditions". Anything else
+    must parse as a non-negative float; malformed input falls back to 0.0
+    (MORE's documented default) rather than aborting the job.
+    """
+    text = str(rawValue or "").strip()
+    if text.lower() in ("", "auto", "na"):
+        return "NA"
+    try:
+        return max(0.0, float(text))
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _nonEmpty(rawValue, default):
+    """A present-but-blank choice field must fall back to its default too."""
+    text = str(rawValue or "").strip()
+    return text or default
+
+
 def fromMOREtoGenes_STEP1(REQUEST, RESPONSE, QUEUE_INSTANCE, JOB_ID):
     """
     Step 1: Receive the MORE submission form, save files, and initialize the job.
@@ -90,19 +133,7 @@ def fromMOREtoGenes_STEP1(REQUEST, RESPONSE, QUEUE_INSTANCE, JOB_ID):
                 rel_path = formFields.get(f"relevant_file_{i}_filelocation", "").replace("[MyData]/", "")
                 if not rel_path: rel_path = None
 
-            # Per-omic low-variation filter (MORE `minVariation`). Blank / "auto" /
-            # "NA" is forwarded to R as the "NA" sentinel, which MORE interprets as
-            # "use 10% of the maximum observed variability across conditions". Any
-            # other value must parse as a non-negative float; malformed input falls
-            # back to 0.0 (MORE's documented default) rather than aborting the job.
-            raw_minvar = (formFields.get(f"more_minvar_{i}") or "").strip()
-            if raw_minvar.lower() in ("", "auto", "na"):
-                min_variation = "NA"
-            else:
-                try:
-                    min_variation = max(0.0, float(raw_minvar))
-                except (TypeError, ValueError):
-                    min_variation = 0.0
+            min_variation = _parseMinVariation(formFields.get(f"more_minvar_{i}"))
 
             jobInstance.addRegulatoryOmic(
                 name, data_path, formFields.get(f"omic_type_{i}"),
@@ -111,11 +142,14 @@ def fromMOREtoGenes_STEP1(REQUEST, RESPONSE, QUEUE_INSTANCE, JOB_ID):
             i += 1
 
         # 6. Model Parameters
-        jobInstance.method = formFields.get("more_method", "PLS1")
-        jobInstance.alpha = float(formFields.get("more_alpha", 0.05))
-        jobInstance.vip = float(formFields.get("more_vip", 0.8))
-        jobInstance.filter_r2 = float(formFields.get("more_filter_r2", 0.0))
-        jobInstance.enrichment = formFields.get("more_enrichment", "genes")
+        # Every one of these goes through a blank-tolerant coercion: the client
+        # hides the alpha/VIP fields when the method is not PLS1, and a hidden
+        # ExtJS field still posts its (possibly cleared) value.
+        jobInstance.method = _nonEmpty(formFields.get("more_method"), "PLS1")
+        jobInstance.alpha = _toFloat(formFields.get("more_alpha"), 0.05)
+        jobInstance.vip = _toFloat(formFields.get("more_vip"), 0.8)
+        jobInstance.filter_r2 = _toFloat(formFields.get("more_filter_r2"), 0.0)
+        jobInstance.enrichment = _nonEmpty(formFields.get("more_enrichment"), "genes")
 
         # 7. Queue job
         QUEUE_INSTANCE.enqueue(
@@ -157,11 +191,17 @@ def fromMOREtoGenes_STEP2(jobInstance, userID, RESPONSE, formFields):
              raise ValueError("Experimental Design (Conditions) file is missing.")
 
         for omic in jobInstance.regulatoryOmics:
+            # STEP1 leaves "file" as None when neither an upload nor a
+            # [MyData] location was given. os.path.join would then raise a bare
+            # TypeError before the message below could explain what to fix.
+            omicName = omic.get("name") or "(unnamed)"
+            if not omic.get("file"):
+                raise ValueError(f"No regulatory data file was provided for '{omicName}'.")
             omic_path = os.path.join(input_dir, omic["file"])
             if not os.path.exists(omic_path):
-                raise ValueError(f"Regulatory data file for '{omic['name']}' not found: {omic['file']}")
+                raise ValueError(f"Regulatory data file for '{omicName}' not found: {omic['file']}")
             if os.path.getsize(omic_path) == 0:
-                raise ValueError(f"Regulatory data file for '{omic['name']}' is empty.")
+                raise ValueError(f"Regulatory data file for '{omicName}' is empty.")
 
         # 2. Prepare Command
         # Derive server root from CLIENT_TMP_DIR, which is always an absolute path in serverconf.

@@ -133,6 +133,28 @@ RUN Rscript -e 'options(warn = 2, Ncpus = parallel::detectCores()); \
 RUN Rscript -e 'options(warn = 2); \
       BiocManager::install(c("KEGGgraph", "AnnotationDbi"), ask = FALSE, update = FALSE)'
 
+# MORE, the regulatory-analysis backend behind runMORE.R. Not on CRAN or
+# Bioconductor -- it is installed from GitHub.
+#
+# The source matters. There are two repositories called MORE:
+#
+#   BiostatOmics/MORE  <- CORRECT. Maintained; more() takes targetData /
+#                         regulatoryData / condition / varSel / minVariation
+#                         and it exports FilterRegulationPerCondition.
+#   ConesaLab/MORE     <- WRONG. Superseded; more() takes GeneExpression /
+#                         data.omics / edesign / min.variation, and has no
+#                         FilterRegulationPerCondition at all.
+#
+# Installing the ConesaLab one builds and imports perfectly cleanly, then
+# every MORE job dies at the model call with "unused arguments". The two are
+# distinguishable only by more()'s signature, which is what
+# src/tests/test_runmore_r_contract.py checks.
+#
+# optparse parses runMORE.R's command line and is CRAN-only.
+RUN Rscript -e 'options(warn = 2, Ncpus = parallel::detectCores()); \
+      install.packages(c("optparse", "remotes"), repos = "https://cloud.r-project.org"); \
+      remotes::install_github("BiostatOmics/MORE", upgrade = "never")'
+
 # Fail the build now, not at 3am in production, if anything is unimportable.
 #
 # This list is the union of every R dependency in the repository. Deriving it by
@@ -146,7 +168,8 @@ RUN Rscript -e 'pkgs <- c("purrr", "cluster", "mclust", "amap", "factoextra", \
                           "gridExtra", "visNetwork", "jsonlite", "tibble", \
                           "stringr", "dplyr", "tidyr", "readr", "rvest", "xml2", \
                           "gtools", "qdapRegex", "tidyverse", \
-                          "KEGGgraph", "AnnotationDbi"); \
+                          "KEGGgraph", "AnnotationDbi", \
+                          "optparse", "MORE"); \
       missing <- pkgs[!vapply(pkgs, requireNamespace, logical(1), quietly = TRUE)]; \
       if (length(missing)) stop("missing R packages: ", paste(missing, collapse = ", ")); \
       cat("all", length(pkgs), "R packages import cleanly\n")'
@@ -317,7 +340,8 @@ RUN set -eux; \
                           "gridExtra", "visNetwork", "jsonlite", "tibble", \
                           "stringr", "dplyr", "tidyr", "readr", "rvest", "xml2", \
                           "gtools", "qdapRegex", "tidyverse", \
-                          "KEGGgraph", "AnnotationDbi"); \
+                          "KEGGgraph", "AnnotationDbi", \
+                          "optparse", "MORE"); \
       failed <- character(0); \
       for (p in pkgs) { \
         ok <- tryCatch({ suppressPackageStartupMessages(library(p, character.only = TRUE)); TRUE }, \

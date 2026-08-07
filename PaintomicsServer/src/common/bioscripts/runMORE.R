@@ -5,6 +5,18 @@
 # Performs regulatory analysis using regression models.
 #***************************************************************
 
+# MORE comes from GitHub, not CRAN or Bioconductor:
+#
+#   remotes::install_github("BiostatOmics/MORE")
+#
+# Install that one specifically. A second, superseded package is also called
+# MORE (ConesaLab/MORE) and installs perfectly cleanly, but its more() takes
+# GeneExpression / data.omics / edesign / min.variation instead of the
+# targetData / regulatoryData / condition / minVariation used below, and it
+# does not export FilterRegulationPerCondition. The mismatch is invisible
+# until a job reaches the model call and dies with "unused arguments", so
+# src/tests/test_runmore_r_contract.py checks the installed signature against
+# this call site.
 suppressPackageStartupMessages({
   library(optparse)
   library(MORE)
@@ -239,6 +251,29 @@ cat(paste0("MORE: minVariation per omic -> ",
                  ifelse(is.na(minVariation_vec), "NA (auto)", minVariation_vec),
                  sep = "=", collapse = ", "), "\n"))
 
+# parallel is deliberately left at its default (FALSE). MORE 1.0.1 can fan the
+# per-target fits out over future/furrr workers, but measured on this workload
+# it is a pessimisation, not a speed-up:
+#
+#     genes   parallel=FALSE   parallel=TRUE
+#        50         15.1 s          41.9 s
+#       200         58.0 s         193.2 s
+#
+# A single target fit takes ~0.29 s, far too little to amortise worker startup
+# and the serialisation of the regulator matrices to every worker, so the
+# overhead dominates and grows with the number of targets.
+#
+# Those numbers are from a 12-core Apple M4 Pro laptop and are the *optimistic*
+# case. The deployment VM is 8 vCPU (every OpenStack flavor available to the
+# project caps there) with slower per-core throughput, so absolute times are
+# longer and parallel is worse, not better: the per-task overhead is unchanged
+# while there are fewer workers to spread it across. PySiQ also runs jobs in
+# the web server's own process, so those workers would contend with request
+# handling for the same 8 vCPUs.
+#
+# Cost is linear in targets and near-flat in samples. Budget from a measured
+# per-gene rate on the target hardware rather than from the figures above, and
+# re-measure before enabling parallel.
 result_more <- more(
   targetData     = targetData,
   regulatoryData = regulatoryData,
