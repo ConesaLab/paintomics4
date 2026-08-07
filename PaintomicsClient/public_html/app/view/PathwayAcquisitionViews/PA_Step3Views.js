@@ -876,7 +876,7 @@ function PA_Step3JobView() {
 
 							table_html +=
 							'<tr>' +
-								'<td><i class="classificationNameBox" id="icon_' + database + '" style="border-color: ' + db_color + '; color: ' + db_color + ';">' + database.charAt(0) + '</i></td>' +
+								'<td><i class="classificationNameBox" id="icon_' + database + '" style="' + classificationBadgeStyle(db_color) + '">' + database.charAt(0) + '</i></td>' +
 								'<td>' + database + '</td>' +
 								'<td id="foundPathwaysTag_' + database + '">0</td><td id="significantPathwaysTag_' + database + '">0</td>' +
 							'</tr>';
@@ -984,7 +984,7 @@ function PA_Step3PathwayClassificationView(db = "KEGG") {
 						enabled: true,  useHTML:true,
 						formatter: function(){
 							if(this.point.drilldown !== undefined){
-								return '<i class="classificationNameBox" style="line-height: 20px;border-color:' + this.point.color + '; color:' + this.point.color + ';">' + this.point.name.charAt(0).toUpperCase() + '</i>' + this.y.toFixed(2) + "%";
+								return '<i class="classificationNameBox" style="line-height: 20px;' + classificationBadgeStyle(this.point.color) + '">' + this.point.name.charAt(0).toUpperCase() + '</i>' + this.y.toFixed(2) + "%";
 							}else{
 								return "<b>" + this.point.name + "</b><br>" + this.y.toFixed(2) + "%";
 							}
@@ -1086,7 +1086,7 @@ function PA_Step3PathwayClassificationView(db = "KEGG") {
 				/********************************************************************/
 				htmlContent +='<div class="step3ClassificationsWrapper'+ (isHiddenMainClass?" disabled":"") +'">' +
 				'  <div class="step3ClassificationsTitle'+ (isHiddenMainClass?" disabled":"") +'">'+
-				'   <i class="classificationNameBox" style="border-color:' + color + '; color:' + color + ';">' + mainClassificationInstance.name.charAt(0).toUpperCase() + '</i>' +
+				'   <i class="classificationNameBox" style="' + classificationBadgeStyle(color) + '">' + mainClassificationInstance.name.charAt(0).toUpperCase() + '</i>' +
 				'   <i class="fa fa-caret-right" style="color: #B1B1B1; margin-right: 5px;"></i>' + mainClassificationInstance.name +
 				'   <div class="step3ClassificationsOptions">'+
 				'     <a class="hideOption'+ (isHiddenMainClass?" selected":"") +'">Hide</a>'+
@@ -1740,7 +1740,7 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 			for (var classificationID in me.getParent().classificationData[me.database]){
 				classification = me.getParent().classificationData[me.database][classificationID];
 				color = color = this.getParent().getClassificationColor(classificationID, []);
-				htmlCode += '<div style="text-align:left;"><i class="classificationNameBox" style="border-color:' + color + '; color:' + color + ';">' + classification.name.charAt(0).toUpperCase() + '</i>' +  classification.name + "</div>";
+				htmlCode += '<div style="text-align:left;"><i class="classificationNameBox" style="' + classificationBadgeStyle(color) + '">' + classification.name.charAt(0).toUpperCase() + '</i>' +  classification.name + "</div>";
 			}
 			$("#networkClustersContainer_" + me.dbid + " div").html(htmlCode);
 			$("#sliderClusterNumberContainer_" + me.dbid).hide();

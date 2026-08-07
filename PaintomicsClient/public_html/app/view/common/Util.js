@@ -498,6 +498,90 @@ function scaleValue(x, min, max) {
     return ((x === 0) ? 0 : ((((b - a) * (x - min)) / (max - min)) + a));
 };
 
+/**
+ * Relative luminance of a colour, per the WCAG 2.1 definition (sRGB with the
+ * gamma expansion applied channel by channel).
+ *
+ * Accepts "#rgb", "#rrggbb", "rrggbb" or "rgb(r, g, b)". Returns null - not a
+ * guessed value - for anything it cannot parse, so callers can fall back to
+ * their previous styling rather than render an unreadable colour pair.
+ */
+function relativeLuminance(color) {
+    var text = String(color || "").trim(),
+        rgb = null,
+        match;
+
+    match = text.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i);
+    if (match) {
+        rgb = [parseInt(match[1], 10), parseInt(match[2], 10), parseInt(match[3], 10)];
+    } else {
+        var hex = text.replace("#", "");
+        if (hex.length === 3) {
+            hex = hex.charAt(0) + hex.charAt(0) + hex.charAt(1) + hex.charAt(1) + hex.charAt(2) + hex.charAt(2);
+        }
+        if (/^[0-9a-fA-F]{6}$/.test(hex)) {
+            rgb = [parseInt(hex.substr(0, 2), 16), parseInt(hex.substr(2, 2), 16), parseInt(hex.substr(4, 2), 16)];
+        }
+    }
+    if (rgb === null || rgb.some(isNaN)) {
+        return null;
+    }
+
+    var linear = rgb.map(function (channel) {
+        var c = channel / 255;
+        return (c <= 0.03928) ? (c / 12.92) : Math.pow((c + 0.055) / 1.055, 2.4);
+    });
+    return (0.2126 * linear[0]) + (0.7152 * linear[1]) + (0.0722 * linear[2]);
+}
+
+/**
+ * Black or white, whichever contrasts better against the supplied fill.
+ *
+ * The two candidates cross over at a relative luminance of
+ * sqrt(1.05 * 0.05) - 0.05 = 0.1791, which is where (L+0.05)/0.05 - the ratio
+ * against black - overtakes 1.05/(L+0.05), the ratio against white. Picking the
+ * better of the two is what guarantees a conformant pair for an arbitrary fill
+ * instead of hoping one fixed ink suits the whole palette.
+ *
+ * Returns null when the fill cannot be parsed.
+ */
+function contrastingInk(fillColor) {
+    var luminance = relativeLuminance(fillColor);
+    if (luminance === null) {
+        return null;
+    }
+    return (luminance > 0.1791) ? "#000000" : "#FFFFFF";
+}
+
+/**
+ * Inline style for a single-letter classification / database badge
+ * (i.classificationNameBox).
+ *
+ * The badge used to be an outlined letter drawn in the classification's own
+ * palette colour. That palette is pastel by design and, as text on white, most
+ * of it sat between 1.07:1 and 3.7:1 - pure yellow was effectively invisible.
+ *
+ * Darkening the palette is not an option: getClassificationColor() also feeds
+ * the classification pie chart and the pathway grid stripes, so a badge tuned
+ * for legibility would no longer match the chart slice it indexes.
+ *
+ * So the colour moves from the ink to the fill. The palette value becomes the
+ * chip background - a large block of colour, which is where it reads best
+ * anyway - and the letter is drawn in whichever of black or white contrasts
+ * better with it. Every one of the 36 palette colours clears AA that way, the
+ * worst being #c1502e at 4.71:1, and the mapping keeps working for colours
+ * added later.
+ */
+function classificationBadgeStyle(color) {
+    var ink = contrastingInk(color);
+    if (ink === null) {
+        // Unparseable colour: keep the historical outlined rendering rather
+        // than paint an arbitrary letter onto an unknown fill.
+        return "border-color:" + color + "; color:" + color + ";";
+    }
+    return "background-color:" + color + "; border-color:" + color + "; color:" + ink + ";";
+}
+
 
 /*********************************************************************************
  * COMMON FUNCTION DECLARATION
