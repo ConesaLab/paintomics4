@@ -375,6 +375,65 @@ class OutputProcessingTest(Step2TestCase):
         self.assertEqual(written, ["GENEA:::STAT3"],
                          "only pairs whose regulator the user flagged")
 
+    def test_a_relevant_file_with_a_pvalue_column_still_expands(self):
+        """Users build this list by exporting rows from a statistics table, so
+        a second column is the common case, not the exotic one. Reading the
+        whole line as the ID matched nothing and the only symptom was an
+        absence of red stars -- the job still reported success."""
+        self.job = self.makeJob(omics=[("TF", "TF.tab", "userrel.txt", "NA")])
+        with open(os.path.join(self.job.getInputDir(), "userrel.txt"), "w") as fh:
+            fh.write("Regulator\tpvalue\nSTAT3\t0.001\n")
+        content = self.run_step2()
+        path = os.path.join(self.job.getInputDir(), content["secondOutputFileName_0"])
+        with open(path) as fh:
+            self.assertEqual([l.strip() for l in fh if l.strip()], ["GENEA:::STAT3"])
+
+    def test_a_quoted_csv_relevant_file_still_expands(self):
+        """What Excel writes."""
+        self.job = self.makeJob(omics=[("TF", "TF.tab", "userrel.txt", "NA")])
+        with open(os.path.join(self.job.getInputDir(), "userrel.txt"), "w") as fh:
+            fh.write('"STAT3",0.001\n"NFKB1",0.02\n')
+        content = self.run_step2()
+        path = os.path.join(self.job.getInputDir(), content["secondOutputFileName_0"])
+        with open(path) as fh:
+            self.assertEqual(sorted(l.strip() for l in fh if l.strip()),
+                             ["GENEA:::STAT3", "GENEB:::NFKB1"])
+
+    def test_a_header_only_relevant_file_yields_no_pairs(self):
+        """The header is skipped, so nothing is flagged -- and in particular
+        "Regulator" is not treated as a regulator ID."""
+        self.job = self.makeJob(omics=[("TF", "TF.tab", "userrel.txt", "NA")])
+        with open(os.path.join(self.job.getInputDir(), "userrel.txt"), "w") as fh:
+            fh.write("Regulator\n")
+        content = self.run_step2()
+        path = os.path.join(self.job.getInputDir(), content["secondOutputFileName_0"])
+        self.assertEqual(os.path.getsize(path), 0)
+
+    def test_a_regulator_actually_named_regulator_is_kept_after_line_one(self):
+        """Header skipping is positional. Only the first line can be a header,
+        so an ID that happens to look like one survives anywhere else."""
+        self.job = self.makeJob(omics=[("TF", "TF.tab", "userrel.txt", "NA")])
+        with open(os.path.join(self.job.getInputDir(), "userrel.txt"), "w") as fh:
+            fh.write("STAT3\nRegulator\n")
+        self.run_step2()
+        # STAT3 still expands; the point is that parsing did not stop or skip.
+        path = os.path.join(self.job.getInputDir(),
+                            "MORE_relevant_reg_TF_%s.tab" % self.job.date)
+        with open(path) as fh:
+            self.assertIn("GENEA:::STAT3", fh.read())
+
+    def test_ids_matching_nothing_are_reported_not_silent(self):
+        """An ID-space mismatch produces an empty red-star file that is
+        indistinguishable from "the user flagged nothing". Not fatal -- the
+        regulatory analysis stands -- but it must not pass without a word."""
+        self.job = self.makeJob(omics=[("TF", "TF.tab", "userrel.txt", "NA")])
+        with open(os.path.join(self.job.getInputDir(), "userrel.txt"), "w") as fh:
+            fh.write("ENSG00000170345\nENSG00000109320\n")
+        with self.assertLogs(level="WARNING") as captured:
+            self.run_step2()
+        self.assertTrue(any("no red stars" in line for line in captured.output),
+                        captured.output)
+
     def test_the_rpc_table_is_exposed_when_r_produced_it(self):
         content = self.run_step2()
         self.assertIn("regulationPerConditionFile", content)
