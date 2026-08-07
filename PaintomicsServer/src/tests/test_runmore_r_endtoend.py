@@ -13,10 +13,11 @@ hard R dependency.
 
 What it covers that the contract test cannot
 --------------------------------------------
-* read_matrix, the association-orientation detection and parse_min_variation
-  are top-level helpers in a script that runs its own argument parsing on
-  source, so they cannot be sourced in isolation -- driving the script is the
-  only way to reach them.
+* The association-orientation detection lives in the script body, not in a
+  function, so driving the script is the only way to reach it.
+  (read_matrix and parse_min_variation ARE functions and are unit-tested in
+  test_runmore_read_matrix.py, which extracts them by brace balancing --
+  sourcing the script would run parse_args and the whole pipeline.)
 * The output file NAMES are a contract with MOREServlet.fromMOREtoGenes_STEP2,
   which reconstructs them independently from omic name and job date. If either
   side changes the pattern, STEP2 silently finds nothing and the user gets an
