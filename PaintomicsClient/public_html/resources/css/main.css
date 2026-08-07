@@ -1340,24 +1340,40 @@ div[id ^= "pathwayNetworkBox_"].fullscreen {
 	height: 100% !important;
 }
 
-.header-45deg .x-column-header-text {
-	-webkit-transform: rotate(-45deg);
-	-moz-transform: rotate(-45deg);
-	-o-transform: rotate(-45deg);
-	font-size: 10px;
-	/*padding: 0px;*/
-	/*width: 40px;*/
-}
+/* Column headers used to be rotated - 45 degrees for the p-value columns and a
+   full 90 for the narrow count columns - because at the old width there was no
+   room to set them straight. Deleting the 65px navigation rail bought that room
+   back, so they read horizontally now and wrap onto two or three short lines
+   instead. Rotated text is the single hardest thing to scan in a table, and it
+   was being used on the two columns this table is sorted by.
+
+   `white-space: normal` is what allows the wrap; ExtJS otherwise keeps header
+   text on one line. */
+.header-45deg .x-column-header-text,
 .header-90deg .x-column-header-text {
-	-webkit-transform: rotate(-90deg);
-	-moz-transform: rotate(-90deg);
-	-o-transform: rotate(-90deg);
-	font-size: 10px;
+	-webkit-transform: none;
+	-moz-transform: none;
+	-o-transform: none;
+	transform: none;
+	display: block;
+	white-space: normal;
+	/* Wrap at spaces only. `break-word` was tried and shredded the two narrow
+	   count columns into "Uniq / ue / gene / s" - at 50px wide they need to
+	   break between "Unique" and "genes", never inside a word. */
+	overflow-wrap: normal;
+	word-break: normal;
+	hyphens: none;
+	line-height: 1.25;
+	text-align: center;
+	font-size: 11px;
 	/*padding: 0px;*/
 	/*width: 40px;*/
 }
+/* 25px of top padding existed to clear the rotated text above. With the headers
+   set straight it just pushed them off centre, so it comes back to a normal
+   cell padding. */
 .x-group-sub-header .x-column-header-inner {
-	padding-top: 25px !important;
+	padding-top: 6px !important;
 }
 /*.sigma-scene, .sigma-labels, .sigma-mouse {
 max-width: 1300px;
@@ -2618,6 +2634,42 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
 }
 .x-form-radio {
 	border-radius: 50%;
+}
+
+/* Data grid -------------------------------------------------------------------
+   The pathway table is the densest thing in the application and was built like a
+   spreadsheet: 34px rows, 11px type, a 700-weight header in #666 grey, and a
+   hard #C0C0C0 rule between every column. Set against the reference table, which
+   runs 53px rows and 14px type with hairline separators, it read as cramped
+   rather than as dense-by-design.
+
+   Rows go to 40px and cell type to 12px (in PA_Step3Views.js, where the row
+   height is written inline per cell) - short of the reference's 53px on purpose,
+   because this table routinely holds 888 rows and its job is comparison across
+   many of them, not a shortlist of twenty.
+
+   Here the header stops shouting and the rules soften: the column rule drops
+   from #C0C0C0 to the shared hairline, so the eye follows rows - which is how
+   this table is actually read - instead of being cut into cells by the stronger
+   of the two axes. */
+.x-column-header {
+	background-color: #F1F2F4;
+	background-image: none;
+	border-right-color: var(--pa-border);
+}
+.x-column-header .x-column-header-text {
+	/* 700 in #666 was heavy and low-contrast at once - a rare combination to get
+	   wrong in both directions. 600 in near-black is lighter on the page and
+	   clearer to read: 15.3:1 against the header fill, up from 5.0:1. */
+	font-weight: 600;
+	color: #1A1A1A;
+}
+.x-grid-with-col-lines .x-grid-cell {
+	border-right-color: var(--pa-border);
+}
+.x-grid-with-row-lines .x-grid-cell,
+.x-grid-cell {
+	border-bottom-color: var(--pa-border);
 }
 
 /* Grid toolbar overflow ------------------------------------------------------
