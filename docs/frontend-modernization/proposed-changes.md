@@ -59,7 +59,7 @@ added so the diff above becomes a one-line apply.
 
 ## 2. Three WCAG AA contrast failures outside this branch's ownership
 
-**Status:** open
+**Status:** two of three applied in iteration 10; the ExtJS `Browse...` button stays open
 **Raised:** iteration 2 (branch `frontend-modernization`)
 
 A contrast audit of the live Step 1 page found 16 distinct failing
@@ -91,6 +91,16 @@ with headroom and are visually near-indistinguishable from the originals:
 `js/libs/extjs/resources/ext-theme-neptune/ext-theme-neptune-all.css`, a
 vendored third-party theme. Editing vendored files is out of scope here and
 would be lost on any ExtJS upgrade. Two options, in order of preference:
+
+**Applied in iteration 10.** Both `PA_Step1Views.js` values are now `#2F73BC`
+(4.88:1) and `#C44500` (5.00:1), verified live at 4.88 and 5.00. A third failure
+in the same paragraph, not in the original table, went with them: the
+paint-brush mock button was `#ADA6A6` carrying the `.button` default ink
+`#E2E2E2`, i.e. 1.85:1. It is now `#756C6C` with white at 5.10:1 - `#756C6C`
+being the exact value `main.css` already gives the *real* Paint action in the
+grid, so the illustration and the control it illustrates finally agree.
+
+The `Browse...` button below is still open.
 
 1. Override it from `main.css` (which loads after the theme) with
    `.x-btn-default-small { background-color: #287AB6; }`. Deliberately *not*
@@ -253,7 +263,13 @@ darkened for legibility would no longer match the slice it indexes. Making the
 palette colour the chip *fill* instead of the ink fixes both tables at once and
 leaves the palette untouched.
 
-### `PA_Step4Views.js` - inline panel fills
+### ~~`PA_Step4Views.js` - inline panel fills~~ — RESOLVED (iteration 10)
+
+All five suggestions below were applied verbatim. Measured live on Step 4 of job
+`24u543f6b7` with every panel open: Download 4.56, Global heatmap 4.62, Pathway
+information 4.60, Visual settings 4.62, History 4.61. The pathway diagram still
+paints and every panel still expands.
+
 
 Both are set as inline `style="background: ..."` on the element, so `main.css`
 cannot reach them without an attribute-selector hack.

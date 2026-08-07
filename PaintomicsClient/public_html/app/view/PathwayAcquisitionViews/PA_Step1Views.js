@@ -311,7 +311,7 @@ function PA_Step1JobView() {
 						'<div class="po-step-card">' +
 							'<div class="po-step-number">3</div>' +
 							'<h3>Explore Results</h3>' +
-							'<p>Pathways summary, Pathways classification, Pathways network, Pathways enrichment, Pathways visualization (by clicking <a href="javascript:void(0)" class="button btn-inline btn-small" style="background-color:#ADA6A6;font-size:14px;"><i class="fa fa-paint-brush"></i></a> for any of the displayed pathways), and <b>AI-powered pathway interpretation</b> (by clicking <a href="javascript:void(0)" class="button btn-inline btn-small" style="background-color:#4a90d9;font-size:14px;color:#fff;"><i class="fa fa-lightbulb-o"></i> AI Interpret</a>). Read more about these analyses in <a href="http://paintomics.readthedocs.io/en/latest/" target="_blank">our documentation</a>.</p>' +
+							'<p>Pathways summary, Pathways classification, Pathways network, Pathways enrichment, Pathways visualization (by clicking <a href="javascript:void(0)" class="button btn-inline btn-small" style="background-color:#756C6C;font-size:14px;color:#fff;"><i class="fa fa-paint-brush"></i></a> for any of the displayed pathways), and <b>AI-powered pathway interpretation</b> (by clicking <a href="javascript:void(0)" class="button btn-inline btn-small" style="background-color:#2F73BC;font-size:14px;color:#fff;"><i class="fa fa-lightbulb-o"></i> AI Interpret</a>). Read more about these analyses in <a href="http://paintomics.readthedocs.io/en/latest/" target="_blank">our documentation</a>.</p>' +
 						'</div>' +
 					'</div>' +
 					'<h2 style="margin-top:24px;">Video Tutorials</h2>' +
@@ -443,8 +443,8 @@ function PA_Step1JobView() {
 							},
 							{
 								xtype: 'checkboxfield',
-								boxLabel: 'Enable AI pathway interpretation (<span style="color:#e65100;">sends analysis summaries to external AI service</span>) ' +
-									'<i class="fa fa-exclamation-circle ai-gdpr-info-icon" id="aiGdprInfoIcon" style="color:#e65100;cursor:pointer;font-size:16px;" title="Data privacy &amp; compliance \u2014 click to learn what data is sent"></i>',
+								boxLabel: 'Enable AI pathway interpretation (<span style="color:#C44500;">sends analysis summaries to external AI service</span>) ' +
+									'<i class="fa fa-exclamation-circle ai-gdpr-info-icon" id="aiGdprInfoIcon" style="color:#C44500;cursor:pointer;font-size:16px;" title="Data privacy &amp; compliance \u2014 click to learn what data is sent"></i>',
 								name: 'aiConsent', inputValue: 'true', uncheckedValue: 'false',
 								listeners: {
 									afterrender: function() {
@@ -471,8 +471,8 @@ function PA_Step1JobView() {
 													'  <p><strong>How it works:</strong> When enabled, your aggregated pathway analysis summaries ' +
 													'  are routed through our <strong>Next-Generation Agentic AI Swarm</strong> \u2014 an autonomous network ' +
 													'  of domain-specialized LLM agents with real-time agentic RAG and live PubMed knowledge retrieval.</p>' +
-													'  <div style="background:#fff3e0;border-left:4px solid #e65100;padding:10px 14px;margin:10px 0;border-radius:3px;">' +
-													'    <strong style="color:#e65100;">\u26A0 Third-Party Processing:</strong> To deliver this analytical power, ' +
+													'  <div style="background:#fff3e0;border-left:4px solid #C44500;padding:10px 14px;margin:10px 0;border-radius:3px;">' +
+													'    <strong style="color:#C44500;">\u26A0 Third-Party Processing:</strong> To deliver this analytical power, ' +
 													'    the following data is sent to <strong>external LLM servers</strong> outside PaintOmics infrastructure:' +
 													'    <ul style="margin:6px 0 0;padding-left:18px;">' +
 													'      <li>Pathway enrichment statistics (p-values, scores)</li>' +
