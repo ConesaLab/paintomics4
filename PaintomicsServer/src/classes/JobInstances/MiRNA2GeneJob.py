@@ -92,15 +92,33 @@ class MiRNA2GeneJob(Job):
         # Look using the name instead of relying in the dictionary order
         geneDataInputs = self.getGeneBasedInputOmics()
 
-        miRNAdataInput = next((x for x in geneDataInputs if x["omicName"].lower() != "gene expression"))
+        # Defaults matter here. A bare next() raises StopIteration, which is not
+        # an error this function knows how to report: it escapes validateInput
+        # entirely, past the message this method exists to build, and reaches
+        # the queue worker as a crash whose str() is the empty string. The user
+        # is then told nothing at all about a job that simply will not run.
+        miRNAdataInput = next(
+            (x for x in geneDataInputs if x["omicName"].lower() != "gene expression"),
+            None)
 
-        logging.info("VALIDATING miRNA-seq BASED FILES..." )
-        nConditions, error = self.validateFile(miRNAdataInput, -1, error)
+        if miRNAdataInput is None:
+            error += (" -  This analysis needs a miRNA omic, but every omic"
+                      " supplied is named \"Gene expression\"")
+        else:
+            logging.info("VALIDATING miRNA-seq BASED FILES..." )
+            nConditions, error = self.validateFile(miRNAdataInput, -1, error)
 
         if len(geneDataInputs) > 1:
             logging.info("VALIDATING RNA-seq BASED FILES..." )
-            RNAdataInput = next((x for x in geneDataInputs if x["omicName"].lower() == "gene expression"))
-            nConditions, error = self.validateFile(RNAdataInput, nConditions, error)
+            RNAdataInput = next(
+                (x for x in geneDataInputs if x["omicName"].lower() == "gene expression"),
+                None)
+            if RNAdataInput is None:
+                error += (" -  More than one omic was supplied but none is named"
+                          " \"Gene expression\", so the miRNA targets have no"
+                          " expression data to pair with")
+            else:
+                nConditions, error = self.validateFile(RNAdataInput, nConditions, error)
 
         if error != "":
             raise Exception("Errors detected in input files, please fix the following issues and try again:" + error)
@@ -187,7 +205,12 @@ class MiRNA2GeneJob(Job):
                     # STEP 2.4 IF CONTAINS NOT VALID VALUES, ADD ERROR
                     #**************************************************************************************
                     try:
-                        map(float, line[1:len(line)])
+                        # list(...) matters: map() is lazy on Python 3, so the
+                        # bare call never converted anything and never raised.
+                        # This whole except branch was unreachable, and a miRNA
+                        # file full of text -- or of comma decimal marks, which
+                        # the branch below exists to name -- validated clean.
+                        list(map(float, line[1:len(line)]))
                     except:
                         if(" ".join(line[1:len(line)]).count(",") > 0):
                             erroneousLines[nLine] = erroneousLines.get(nLine,  "") + "Perhaps you are using commas instead of dots as decimal mark?"
@@ -227,7 +250,14 @@ class MiRNA2GeneJob(Job):
         logging.info("READING FILES...")
 
         geneDataInputs = self.getGeneBasedInputOmics()
-        miRNAinputOmic = next((x for x in geneDataInputs if x["omicName"].lower() != "gene expression"))
+        # See validateInput: a bare next() raises StopIteration, which arrives in
+        # the queue worker as a crash with an empty message. Say what is wrong.
+        miRNAinputOmic = next(
+            (x for x in geneDataInputs if x["omicName"].lower() != "gene expression"),
+            None)
+        if miRNAinputOmic is None:
+            raise Exception("This analysis needs a miRNA omic, but every omic "
+                            "supplied is named \"Gene expression\".")
 
         # An uploaded file is named relative to the job's input directory, while
         # the example files are absolute paths under examplefiles/. Resolve both,
@@ -270,8 +300,20 @@ class MiRNA2GeneJob(Job):
 
         geneExpressionFile =  None
         if len(geneDataInputs) > 1:
-            RNAinputOmic = next((x for x in geneDataInputs if x["omicName"].lower() == "gene expression"))
-            geneExpressionFile = RNAinputOmic.get("inputDataFile")
+            # A second omic that is not gene expression leaves the pairing
+            # undefined; treat it as "no expression data" rather than crashing
+            # with StopIteration. The correlation path below already handles
+            # geneExpressionFile being None.
+            RNAinputOmic = next(
+                (x for x in geneDataInputs if x["omicName"].lower() == "gene expression"),
+                None)
+            if RNAinputOmic is not None:
+                geneExpressionFile = RNAinputOmic.get("inputDataFile")
+            else:
+                logging.warning(
+                    "MIRNA2GENES - %d omics supplied but none named 'Gene "
+                    "expression'; continuing without expression data",
+                    len(geneDataInputs))
 
         if(miRNAinputOmic.get("isExample", False) == False):
             dataFile = "{path}/{file}".format(path=self.getInputDir(), file=dataFile)
@@ -331,7 +373,14 @@ class MiRNA2GeneJob(Job):
                     geneID     = line[1].upper()
                     score      = float(line[2])
                     score_type = line[3]
-                    values     =  map(float, line[4:])
+                    # A list, not map(): on Python 3 map() is a one-shot
+                    # iterator, and this goes on to OmicValue.setValues(). Read
+                    # once it yields the values; read again -- which happens
+                    # whenever addInputGeneData merges a gene that several
+                    # miRNAs target, and miRNA target tables are many-to-one by
+                    # nature -- it yields nothing. It also has no len() and
+                    # cannot be serialised into MongoDB.
+                    values     =  [float(value) for value in line[4:]]
 
                     #EVEN WHEN THE USER HAS CHOOSE THE OPTION "FC", if the conditions do no allow to calculate the
                     #correlation, the script will calculate the FC
