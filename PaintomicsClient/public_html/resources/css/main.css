@@ -185,6 +185,24 @@ a:hover {color: var(--pa-link-hover);}
 .mainTopToolbar {
 	background: #222222;
 }
+
+/* The Sign in / Log out button is a .button, so it inherits the #5b5a59 fill
+   that was chosen to sit on light surfaces. Here it sits on #222222 and
+   measures 2.31:1 against it, below the 3:1 that WCAG 1.4.11 asks of the
+   information that identifies a control.
+
+   The fill is deliberately NOT lightened. Raising it to 3:1 against the header
+   drops its own #E2E2E2 label from 5.31:1 to under 4:1 - the two requirements
+   pull in opposite directions on a mid grey, and the label matters more. So the
+   border carries the boundary, as it does for .btn-default and .btn-info:
+   #858585 is 4.31:1 against the header, and fill and label are untouched.
+
+   `.button` already declares `border: 1px solid transparent`, so this colours
+   an existing border rather than adding one - the button's metrics do not
+   change and nothing in the toolbar reflows. */
+.mainTopToolbar .button {
+	border-color: #858585;
+}
 .secondTopToolbar {
 	position: fixed;
 	width: 100%;
@@ -589,6 +607,14 @@ a.button.twoOptionsButton {
 	margin: -1px;
 	padding: 5px;
 	background-color: #BDBDBD;
+	/* Outer edge. The #BDBDBD half is 1.88:1 against the white panel it sits on,
+	   so the control's extent was hard to see even though the split between its
+	   two halves was obvious. #767676 is 4.54:1 on white. The fills are left
+	   exactly as they are - they encode which option is active, which is the
+	   decision recorded below - and because the two halves overlap by the -1px
+	   margin above, their borders collapse into a single outline rather than
+	   drawing a seam down the middle. */
+	border-color: #767676;
 	/* This is a segmented control (Heatmap / Line chart), not a disabled
 	   button - both halves are clickable, `.selected` just marks the active
 	   one - so both states have to meet AA. It inherited .button's #E2E2E2
