@@ -665,26 +665,78 @@ select {
 	padding: 20px;
 	text-align: center;
 }
+
+/* The modal scrim, and why the dialog looked the way it did ------------------
+   ExtJS masks the page with white at 0.7 opacity. On an app whose page is
+   already #F3F3F3 that does not dim anything - it washes the background out to
+   near-white, leaving the dialog with nothing to sit against. The 5px saturated
+   frame below was compensating for that: it was the only thing separating the
+   dialog from the page.
+
+   Dimming instead of bleaching lets the frame stop shouting. Scoped to
+   `body > .x-mask`, which is where ExtJS puts the modal scrim; panel-level
+   loading masks live inside their own panel and keep the light treatment,
+   because there the point is to grey out content in place, not to push it back.
+
+   0.45 is dark enough to read as modal and light enough to leave the analysis
+   behind it legible, which matters when the dialog is reporting on it. */
+body > .x-mask {
+	background-color: rgba(24, 24, 27, 0.45);
+	opacity: 1;
+}
+
+/* With a working scrim the dialog can be a surface rather than a frame: a hair
+   line border, the shared corner, and real elevation. The type colour moves to
+   a 4px bar along the top, so error / warning / info / success still announce
+   themselves at a glance without a saturated rectangle around the message. The
+   shadow is deeper than the card shadow because a dialog genuinely is above
+   everything else - it is the one place in this UI where that is true. */
+#messageDialog.x-window-default {
+	border-width: 1px;
+	border-top-width: 4px;
+	border-style: solid;
+	border-color: var(--pa-border);
+	border-radius: var(--pa-radius);
+	box-shadow: 0 12px 28px -8px rgba(24, 24, 27, 0.22), 0 6px 12px -6px rgba(24, 24, 27, 0.14);
+}
+
+/* A window carries *two* frames: its own border, and a second one on
+   `.x-window-body` inside it. Neptune paints that inner one 1px #3892d3, so
+   every dialog in the app has a blue rectangle drawn just inside its edge -
+   which, stacked with the outer border, is what read as a single heavy blue
+   frame and sent the first attempt at this chasing the wrong element.
+
+   The outer border is the edge now, so the inner one has nothing left to do.
+   Made transparent rather than zero-width on purpose: the border box still
+   occupies its 1px, so the body's content area does not change size and no
+   dialog relaying-out on open. */
+.x-window-body-default {
+	border-color: transparent;
+}
+
+/* Each of the four below sets `border-top-color` only. They must stay after the
+   rule above: same specificity, so source order is what lets the type colour
+   win the top edge while the other three sides keep the neutral border. */
 #messageDialog.errorDialog {
-	border-color: rgb(211, 96, 68);
+	border-top-color: rgb(211, 96, 68);
 }
 #messageDialog.errorDialog h4 {
 	color: #C84D2F; /* was rgb(211,96,68) - 3.80:1 on the dialog's white fill */
 }
 #messageDialog.warningDialog {
-	border-color: #CB7505;
+	border-top-color: #CB7505;
 }
 #messageDialog.warningDialog h4 {
 	color: #AC6304; /* was #CB7505 - 3.45:1 */
 }
 #messageDialog.infoDialog {
-	border-color: rgb(0, 121, 220);
+	border-top-color: rgb(0, 121, 220);
 }
 #messageDialog.infoDialog h4 {
 	color: #0076D6; /* was rgb(0,121,220) - 4.40:1 */
 }
 #messageDialog.successDialog {
-	border-color: #288824;
+	border-top-color: #288824;
 }
 #messageDialog.successDialog h4 {
 	/* Same green as the global h4. It passed on the dialog's white fill at
