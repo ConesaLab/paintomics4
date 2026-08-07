@@ -2350,7 +2350,8 @@ div[id^=matching_table] table {
 	margin: 15px 0px 15px 10px;
 	background: #fff;
 	overflow-y: hidden;
-	min-height: 845px;
+	/* Was min-height: 845px, which propped the panel open to a fixed height
+	   whatever it contained. Its own height config already sizes it. */
 }
 .lateralOptionsPanel-body {
 	padding: 10px;
@@ -2358,12 +2359,21 @@ div[id^=matching_table] table {
 	/*max-height: 98%;*/
 	overflow-y: auto;
 }
+/* Step 4's two side panels carried their colour inline: #337ab7 for Pathway
+   information and #D43E3A for Visual settings - a Bootstrap blue and a red, the
+   only two panel headers in the application not using the card treatment, and
+   red on a panel that only changes colour scales reads as a warning it is not.
+   Both now match every other heading here. */
 .lateralOptionsPanel-header {
-	padding: 8px;
-	background: #333;
+	padding: 12px var(--pa-card-inset);
+	background: #FFFFFF;
+	border-bottom: 1px solid var(--pa-border);
 }
 .lateralOptionsPanel-header h2 {
-	color: #fff;
+	color: #27272A;
+	font-size: 15px;
+	font-weight: 600;
+	margin: 0;
 }
 .lateralOptionsPanel-toolbar {
 	margin-top: -5px;
@@ -2380,14 +2390,17 @@ div[id^=matching_table] table {
 }
 .step4_plotwrappers{display: inline-block;}
 
+/* These were 18px with a 2px border and steel-blue ink - roughly twice the size
+   of every other control on the page, in a panel that sits beside it. */
 div.lateralOptionsPanel input[type="text"]:not([id^=numberfield]) {
-	margin: 10px;
-	width: 250px;
-	font-size: 18px;
-	padding: 10px;
-	border-radius: 5px;
-	border: 2px solid #E2E2E2;
-	color: #508EBB;
+	margin: 6px 0;
+	width: 100%;
+	max-width: 250px;
+	font-size: 13px;
+	padding: 6px 10px;
+	border-radius: var(--pa-radius-sm);
+	border: 1px solid var(--pa-border);
+	color: #27272A;
 }
 div.lateralOptionsPanel fieldset {
 	margin: 10px auto;
@@ -2834,10 +2847,32 @@ div.contentbox a.toolbarOption:hover {
 	color: #F6F6F6;
 	background-color: #BB4924;
 }
+/* These carry .btn-primary / .btn-danger, which were filled shapes chosen to sit
+   on the old coloured header. On a white header a red-filled close button is the
+   loudest thing in the panel, so they read as icons and colour on hover. */
 div.lateralOptionsPanel-header .toolbarOption {
-	font-size: 17px;
-	padding: 5px 8px 0px 8px;
-	margin: 5px 0px;
+	font-size: 15px;
+	padding: 5px 8px;
+	margin: 0 0 0 4px;
+	background: transparent;
+	border: 1px solid transparent;
+	border-radius: var(--pa-radius-sm);
+	color: #52525B;
+	box-shadow: none;
+	transition: background-color .12s ease, color .12s ease;
+}
+div.lateralOptionsPanel-header .toolbarOption:hover {
+	background: rgba(0, 0, 0, 0.06);
+	color: #27272A;
+}
+/* The download control keeps a label, so it stays a button - just a quiet one. */
+div.lateralOptionsPanel-header .toolbarOption.downloadTool {
+	border-color: var(--pa-border);
+	background: #FFFFFF;
+}
+div.lateralOptionsPanel-header .toolbarOption.downloadTool:hover {
+	background: #FAFAFA;
+	border-color: #C4C4CC;
 }
 .lateralOptionsPanel-toolbar .toolbarOption.downloadTool {
 	font-size: 10px;
