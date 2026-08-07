@@ -570,10 +570,42 @@ function buildAnalysisTOC(containerSelector) {
         a.textContent = h.textContent.trim().replace(/\s+/g, ' ');
         a.setAttribute('data-target', anchorId);
         a.addEventListener('click', function () {
-            // scrollIntoView rather than a hash jump: the header is fixed, so a
-            // hash would land the heading underneath it.
-            h.scrollIntoView({block: 'start', behavior: 'smooth'});
-            window.setTimeout(function () { window.scrollBy(0, -70); }, 320);
+            // The heading is looked up at click time rather than closed over.
+            // The section views re-render after this strip is built, which
+            // detaches the original nodes - a handler holding one scrolls to an
+            // element that is no longer in the document, which is silent.
+            var target = document.querySelector('[data-pa-anchor="' + anchorId + '"]');
+            if (!target) { return; }
+
+            // The page does not scroll the window: MainView gives the centre
+            // region `overflowY: auto`, so that panel is the scroller and every
+            // window.scrollBy against it was a no-op. Walk up to whatever
+            // actually scrolls and move that.
+            var scroller = target.parentElement;
+            while (scroller && scroller !== document.body) {
+                var style = window.getComputedStyle(scroller);
+                if (/(auto|scroll)/.test(style.overflowY) && scroller.scrollHeight > scroller.clientHeight) {
+                    break;
+                }
+                scroller = scroller.parentElement;
+            }
+
+            // Two fixed things sit above the content - the header and this strip
+            // - so a plain jump lands the heading behind the very thing that was
+            // clicked. Measured, not guessed: an earlier flat -70px cleared the
+            // 50px header and not the strip on top of it.
+            var header = document.querySelector('.mainTopToolbar');
+            var offset = (header ? header.offsetHeight : 50) + nav.offsetHeight + 12;
+
+            if (!scroller || scroller === document.body) {
+                window.scrollTo({
+                    top: target.getBoundingClientRect().top + window.pageYOffset - offset,
+                    behavior: 'smooth'
+                });
+            } else {
+                var delta = target.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
+                scroller.scrollTo({top: scroller.scrollTop + delta - offset, behavior: 'smooth'});
+            }
         });
         li.appendChild(a);
         list.appendChild(li);
