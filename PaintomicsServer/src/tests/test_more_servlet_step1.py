@@ -303,5 +303,71 @@ class ErrorPathTest(Step1TestCase):
         self.assertIs(result, self.response)
 
 
+class UploadedAuxiliaryFilesTest(Step1TestCase):
+    """Associations and relevant-features can arrive as uploads, not just as
+    "[MyData]/..." references.
+
+    Line coverage put these two branches among the only uncovered statements in
+    the servlet, and they are the ones most users actually take: the reference
+    form is for files already in the workspace. The upload branch is also the
+    only route by which a relevant-features file reaches
+    _parseRelevantRegulators, and a mistake there is silent -- the job
+    succeeds and simply has no red stars.
+    """
+
+    def filesWithAux(self):
+        files = self.validFiles()
+        files["assoc_file_0_file"] = FakeUpload("TFAssociations.tab")
+        files["relevant_file_0_file"] = FakeUpload("TFSignificant.txt")
+        return files
+
+    def savedFor(self, fileName):
+        hits = [s for s in self.saved if s["fileName"] == fileName]
+        self.assertEqual(len(hits), 1, f"{fileName} was not saved exactly once")
+        return hits[0]
+
+    def test_an_uploaded_association_file_is_saved(self):
+        self.run_step1(self.validForm(), self.filesWithAux())
+        self.savedFor("TFAssociations.tab")
+
+    def test_an_uploaded_association_file_is_tagged_as_associations(self):
+        self.run_step1(self.validForm(), self.filesWithAux())
+        fields = self.savedFor("TFAssociations.tab")["fields"]
+        self.assertEqual(fields["dataType"], "Associations")
+        self.assertEqual(fields["omicType"], "TF")
+
+    def test_an_uploaded_relevant_file_is_saved(self):
+        self.run_step1(self.validForm(), self.filesWithAux())
+        self.savedFor("TFSignificant.txt")
+
+    def test_an_uploaded_relevant_file_is_tagged_as_relevant_features(self):
+        self.run_step1(self.validForm(), self.filesWithAux())
+        fields = self.savedFor("TFSignificant.txt")["fields"]
+        self.assertEqual(fields["dataType"], "Relevant Features")
+        self.assertEqual(fields["omicType"], "TF")
+
+    def test_both_reach_the_queued_job(self):
+        self.run_step1(self.validForm(), self.filesWithAux())
+        omic = self.queuedJob().regulatoryOmics[0]
+        self.assertEqual(omic["associations"], "TFAssociations.tab")
+        self.assertEqual(omic["relevant"], "TFSignificant.txt")
+
+    def test_an_upload_wins_over_a_filelocation_for_the_same_omic(self):
+        # Both supplied: the servlet checks the upload first, so the reference
+        # must not silently override the file the user just sent.
+        form = self.validForm(assoc_file_0_filelocation="[MyData]/Old.tab",
+                              relevant_file_0_filelocation="[MyData]/OldRel.txt")
+        self.run_step1(form, self.filesWithAux())
+        omic = self.queuedJob().regulatoryOmics[0]
+        self.assertEqual(omic["associations"], "TFAssociations.tab")
+        self.assertEqual(omic["relevant"], "TFSignificant.txt")
+
+    def test_without_either_form_the_omic_carries_no_auxiliary_paths(self):
+        self.run_step1(self.validForm(), self.validFiles())
+        omic = self.queuedJob().regulatoryOmics[0]
+        self.assertIsNone(omic["associations"])
+        self.assertIsNone(omic["relevant"])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

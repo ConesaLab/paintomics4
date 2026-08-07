@@ -459,6 +459,42 @@ class OutputProcessingTest(Step2TestCase):
         self.assertEqual(meta["filter_r2"], 0.35)
         self.assertEqual(meta["method"], "PLS1")
 
+    def test_a_sidecar_write_failure_does_not_fail_the_job(self):
+        """The sidecar is a convenience, and its failure must stay non-fatal.
+
+        It only carries the filter settings so Step 3's Regulator-Target
+        Network can lock its R2 slider to the floor the user chose; the client
+        falls back to defaults when it is absent. A regression that let the
+        OSError escape would turn a cosmetic problem into a lost analysis --
+        the R run has already completed and its outputs are already copied by
+        this point.
+
+        The failure is provoked without mocking: a directory sitting where the
+        file should go makes open(..., "w") raise IsADirectoryError, which is
+        an OSError. That is also a real way for this to happen, since the name
+        is derived from job state rather than being unique by construction.
+        """
+        os.mkdir(os.path.join(self.job.getInputDir(),
+                              "MORE_filters_%s.json" % self.job.date))
+        content = self.run_step2()
+        self.assertTrue(content["success"], content.get("message"))
+
+    def test_the_rest_of_the_response_survives_a_sidecar_failure(self):
+        os.mkdir(os.path.join(self.job.getInputDir(),
+                              "MORE_filters_%s.json" % self.job.date))
+        content = self.run_step2()
+        # The rpc table is the thing Step 3 actually needs; it is copied before
+        # the sidecar is attempted and must still be reported.
+        self.assertIn("regulationPerConditionFile", content)
+        self.assertTrue(os.path.exists(os.path.join(
+            self.job.getInputDir(), content["regulationPerConditionFile"])))
+
+    def test_the_job_is_still_stored_after_a_sidecar_failure(self):
+        os.mkdir(os.path.join(self.job.getInputDir(),
+                              "MORE_filters_%s.json" % self.job.date))
+        self.run_step2()
+        self.assertEqual(len(self.stored), 1)
+
     def test_bundles_a_results_archive(self):
         content = self.run_step2()
         self.assertTrue(content["compressedFileName"].endswith(".zip"))
@@ -469,6 +505,70 @@ class OutputProcessingTest(Step2TestCase):
         self.run_step2()
         self.assertEqual(len(self.stored), 1)
         self.assertIs(self.stored[0][0], self.job)
+
+
+class RealisticValuesFileTest(Step2TestCase):
+    """The real MORE_output_<omic>_<date>.tab leads with a comment header.
+
+    runMORE.R writes it as
+
+        # Gene name\tC1\tC2\t...
+        GENEA:::STAT3\t...
+
+    and STEP2 skips any line starting with "#" or blank when it expands the
+    user's relevant regulators into GENE:::REGULATOR pairs. Every other test
+    here writes a headerless fixture, so that skip was the last uncovered
+    branch in the servlet -- and a fixture that does not look like the real
+    file cannot catch a regression in how the real file is read. Were the skip
+    dropped, "# Gene name" contains no ":::" so it would not become a pair,
+    but a blank trailing line would raise IndexError on split, and a future
+    header carrying ":::" would silently paint a star on a non-existent gene.
+    """
+
+    def writeOutputsWithHeader(self, cmd):
+        outDir = cmd[cmd.index("--output_dir") + 1]
+        date = self.job.date
+        for name in [o["name"].replace(" ", "_") for o in self.job.regulatoryOmics]:
+            with open(os.path.join(outDir, "MORE_output_%s_%s.tab" % (name, date)), "w") as fh:
+                fh.write("# Gene name\tC1\tC2\n")
+                fh.write("GENEA:::STAT3\t1.0\t1.1\n")
+                fh.write("\n")                       # trailing blank line
+                fh.write("GENEB:::NFKB1\t2.0\t2.1\n")
+            for prefix in ("MORE_relevant_assoc", "MORE_relevant_pairs"):
+                open(os.path.join(outDir, "%s_%s_%s.tab" % (prefix, name, date)), "w").close()
+        with open(os.path.join(outDir, "MORE_rpc_%s.tab" % date), "w") as fh:
+            fh.write("targetF\tregulator\tomic\tR2\nGENEA\tSTAT3\tTF\t0.9\n")
+
+    def setUp(self):
+        super(RealisticValuesFileTest, self).setUp()
+        self.job = self.makeJob(omics=[("TF", "TF.tab", "userrel.txt", "NA")])
+        with open(os.path.join(self.job.getInputDir(), "userrel.txt"), "w") as fh:
+            fh.write("STAT3\n")
+        FakePopen.writer = self.writeOutputsWithHeader
+
+    def writtenPairs(self):
+        content = self.run_step2()
+        path = os.path.join(self.job.getInputDir(), content["secondOutputFileName_0"])
+        with open(path) as fh:
+            return [l.strip() for l in fh if l.strip()]
+
+    def test_the_comment_header_does_not_become_a_pair(self):
+        self.assertEqual(self.writtenPairs(), ["GENEA:::STAT3"])
+
+    def test_a_blank_line_does_not_break_the_scan(self):
+        # Reached only if the blank line is skipped rather than split.
+        self.assertIn("GENEA:::STAT3", self.writtenPairs())
+
+    def test_rows_after_the_blank_line_are_still_considered(self):
+        with open(os.path.join(self.job.getInputDir(), "userrel.txt"), "w") as fh:
+            fh.write("NFKB1\n")
+        self.assertEqual(self.writtenPairs(), ["GENEB:::NFKB1"])
+
+    def test_both_regulators_expand_when_both_are_flagged(self):
+        with open(os.path.join(self.job.getInputDir(), "userrel.txt"), "w") as fh:
+            fh.write("STAT3\nNFKB1\n")
+        self.assertEqual(sorted(self.writtenPairs()),
+                         ["GENEA:::STAT3", "GENEB:::NFKB1"])
 
 
 if __name__ == "__main__":

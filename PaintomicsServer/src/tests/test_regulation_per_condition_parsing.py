@@ -48,6 +48,37 @@ def hasPandas():
 
 
 @unittest.skipUnless(hasPandas(), "pandas is required by the parser under test")
+class FakeGene(object):
+    """Enough of Gene for the symbol pass: an ID, a name, and omicsValues."""
+
+    def __init__(self, geneID, name):
+        self.geneID = geneID
+        self._name = name
+        self.omicsValues = []
+
+    def getName(self):
+        return self._name
+
+
+class FakeOmicValue(object):
+    """One omicsValue hanging off a gene.
+
+    The field naming is misleading and the code says so: on a *regulator*
+    value, `inputName` is the TARGET's user-input ID, `originalName` is the
+    regulator's display symbol, and `regulatorID` is its canonical ID (empty
+    when the mapper resolved nothing). Only regulatorID -> originalName is a
+    regulator symbol; keying off inputName would put the regulator's symbol on
+    the target.
+    """
+
+    def __init__(self, inputName="", originalName="", regulatorID="",
+                 isRegulator=False):
+        self.inputName = inputName
+        self.originalName = originalName
+        self.regulatorID = regulatorID
+        self.isRegulator = isRegulator
+
+
 class RegulationPerConditionTest(unittest.TestCase):
 
     def setUp(self):
@@ -197,6 +228,131 @@ class RegulationPerConditionTest(unittest.TestCase):
         self.declareMoreOmic()
         self.writeRpc(["targetF", "regulator", "R2"], ["G1", "TFA", "0.9"])
         self.assertIsNone(self.parse()["filters"])
+
+    def test_symbols_map_target_ids_to_gene_names(self):
+        """Step 7 builds an ID -> symbol map so the panel shows names.
+
+        The rpc table is verbatim from R and carries whatever IDs the user
+        supplied. Without this map the Step-3 Regulator-Target Network renders
+        raw identifiers, which is a usable-but-poor panel -- so the failure is
+        quiet, and worth pinning.
+        """
+        self.declareMoreOmic()
+        self.job.inputGenesData = {"G1": FakeGene("G1", "BRCA1")}
+        self.writeRpc(["targetF", "regulator", "omic", "R2"],
+                      ["G1", "TFA", "TF", "0.9"])
+        data = self.parse()
+        self.assertEqual(data["symbols"].get("G1"), "BRCA1")
+
+    def test_symbols_cover_regulators_carried_as_omics_values(self):
+        """Regulators arrive as omicsValues hanging off a gene, not as
+        top-level entries. An earlier version walked only the top-level dict
+        and missed them wholesale -- typically over half the rpc IDs."""
+        self.declareMoreOmic()
+        gene = FakeGene("G1", "BRCA1")
+        gene.omicsValues = [FakeOmicValue(inputName="G1", originalName="STAT3",
+                                          regulatorID="TFA", isRegulator=True)]
+        self.job.inputGenesData = {"G1": gene}
+        self.writeRpc(["targetF", "regulator", "omic", "R2"],
+                      ["G1", "TFA", "TF", "0.9"])
+        data = self.parse()
+        self.assertEqual(data["symbols"].get("TFA"), "STAT3")
+
+    def test_an_unresolved_regulator_contributes_no_symbol(self):
+        """regulatorID == "" means the mapper found no symbol; emitting it
+        would only produce an identity entry."""
+        gene = FakeGene("G1", "BRCA1")
+        gene.omicsValues = [FakeOmicValue(inputName="G1", originalName="TFA",
+                                          regulatorID="", isRegulator=True)]
+        self.declareMoreOmic()
+        self.job.inputGenesData = {"G1": gene}
+        self.writeRpc(["targetF", "regulator", "omic", "R2"],
+                      ["G1", "TFA", "TF", "0.9"])
+        self.assertNotIn("TFA", self.parse()["symbols"])
+
+    def test_a_non_regulator_omics_value_maps_the_target_not_a_regulator(self):
+        """7.a-ii: inputName is the TARGET id as the user typed it, so it maps
+        to the gene's own name -- mapping it to a regulator symbol would put
+        the wrong label in the Target column."""
+        gene = FakeGene("71706", "BRCA1")
+        gene.omicsValues = [FakeOmicValue(inputName="ENSMUSG00000029650")]
+        self.declareMoreOmic()
+        self.job.inputGenesData = {"71706": gene}
+        self.writeRpc(["targetF", "regulator", "omic", "R2"],
+                      ["ENSMUSG00000029650", "TFA", "TF", "0.9"])
+        self.assertEqual(self.parse()["symbols"].get("ENSMUSG00000029650"), "BRCA1")
+
+    def test_symbols_are_restricted_to_ids_the_rpc_mentions(self):
+        """The map is embedded in the Mongo document, so an organism with a
+        large inputGenesData must not drag every gene in with it."""
+        self.declareMoreOmic()
+        self.job.inputGenesData = {
+            "G1": FakeGene("G1", "BRCA1"),
+            "G2": FakeGene("G2", "TP53"),
+        }
+        self.writeRpc(["targetF", "regulator", "omic", "R2"],
+                      ["G1", "TFA", "TF", "0.9"])
+        data = self.parse()
+        self.assertIn("G1", data["symbols"])
+        self.assertNotIn("G2", data["symbols"])
+
+    def test_a_gene_without_a_name_contributes_no_symbol(self):
+        self.declareMoreOmic()
+        self.job.inputGenesData = {"G1": FakeGene("G1", None)}
+        self.writeRpc(["targetF", "regulator", "omic", "R2"],
+                      ["G1", "TFA", "TF", "0.9"])
+        data = self.parse()
+        self.assertNotIn("G1", data["symbols"])
+
+    def test_a_row_cap_protects_the_mongo_document(self):
+        """Step 6 caps the table at 100_000 rows and flags it.
+
+        The cap exists because the whole table is embedded in the job's Mongo
+        document, and a runaway model -- every target against every regulator
+        -- can produce far more rows than that. Existing tests only ever assert
+        `truncated` is False, so the cap itself and the flag that tells the
+        client the view is partial were never executed. Silently exceeding the
+        document limit fails the job at save time, long after the analysis.
+        """
+        self.declareMoreOmic()
+        path = os.path.join(self.inputDir, "MORE_rpc_%s.tab" % DATE)
+        with open(path, "w") as fh:
+            fh.write("targetF\tregulator\tomic\tR2\n")
+            for i in range(100_001):
+                fh.write("G%d\tTF%d\tTF\t0.9\n" % (i, i))
+        data = self.parse()
+        self.assertEqual(len(data["rows"]), 100_000)
+        self.assertTrue(data["truncated"])
+
+    def test_exactly_the_cap_is_not_reported_as_truncated(self):
+        # The comparison is strictly greater-than, so the boundary row count
+        # must come through whole and unflagged.
+        self.declareMoreOmic()
+        path = os.path.join(self.inputDir, "MORE_rpc_%s.tab" % DATE)
+        with open(path, "w") as fh:
+            fh.write("targetF\tregulator\tomic\tR2\n")
+            for i in range(100_000):
+                fh.write("G%d\tTF%d\tTF\t0.9\n" % (i, i))
+        data = self.parse()
+        self.assertEqual(len(data["rows"]), 100_000)
+        self.assertFalse(data["truncated"])
+
+    def test_an_unparseable_rpc_file_is_logged_not_raised(self):
+        """A malformed table must not take the pathway analysis down with it.
+
+        This runs at the end of a completed pathway job; letting the exception
+        escape would discard work that already succeeded, to lose a panel that
+        is supplementary. The row counts here differ per line, which is what
+        makes the C parser give up rather than silently pad.
+        """
+        self.declareMoreOmic()
+        path = os.path.join(self.inputDir, "MORE_rpc_%s.tab" % DATE)
+        with open(path, "w") as fh:
+            fh.write("targetF\tregulator\tomic\tR2\n")
+            fh.write("G1\tTFA\tTF\t0.9\n")
+            fh.write("G2\tTFB\tTF\t0.8\textra\tcolumns\there\n")
+        self.assertIsNone(self.parse())
+        self.assertIsNone(getattr(self.job, "regulationPerConditionData", None))
 
     def test_a_corrupt_sidecar_does_not_break_the_table(self):
         self.declareMoreOmic()
