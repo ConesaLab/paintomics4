@@ -2203,10 +2203,19 @@ class PathwayAcquisitionJob(Job):
         for col in group_cols:
             df[col] = pd.to_numeric(df[col], errors="coerce")
 
-        # 4. Sanitise: drop rows missing the two mandatory fields. With
-        # keep_default_na=False, missing values arrive as empty strings.
+        # 4. Sanitise: drop rows missing either of the two mandatory fields.
+        # The Step-3 panel joins on them, so a blank one renders an anonymous
+        # node/edge rather than failing visibly.
+        #
+        # notna() is load-bearing. read_csv above passes na_values=[""], which
+        # overrides keep_default_na=False *for empty strings specifically*, so a
+        # blank cell arrives as NaN and not as "". `NaN != ""` is True, so the
+        # bare inequality this used to be kept every offending row -- the whole
+        # step was a no-op. Both checks are kept so the filter holds whichever
+        # representation pandas yields.
         if "targetF" in df.columns and "regulator" in df.columns:
-            df = df[(df["targetF"] != "") & (df["regulator"] != "")]
+            df = df[df["targetF"].notna() & (df["targetF"] != "")
+                    & df["regulator"].notna() & (df["regulator"] != "")]
 
         # 5. Defensive cap so a runaway model can't bloat the Mongo doc.
         MAX_ROWS = 100_000
