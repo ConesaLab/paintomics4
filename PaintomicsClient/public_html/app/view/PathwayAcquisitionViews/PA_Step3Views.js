@@ -3637,7 +3637,7 @@ function PA_Step3PathwayTableView() {
 				filterable: true, width:30, resizable: false,
 				renderer: function(value, metadata, record) {
 					var sourcedb = record.get("source");
-					metadata.style = "height: 33px; padding: 5px 3px;width: 40px;";
+					metadata.style = "height: 40px; padding: 8px 3px;width: 40px;";
 					metadata.tdAttr = 'data-qtip="' + "<b>Database</b><br>" + sourcedb + '"';
 					return '<i class="classificationNameBox" style="' + $('#icon_' + sourcedb).attr('style') + ';line-height: 21px;">' + sourcedb.charAt(0) + '</i>';
 				}
@@ -3648,7 +3648,7 @@ function PA_Step3PathwayTableView() {
 				text: '', dataIndex: 'classification',
 				filterable: true, width:10, resizable: false,
 				renderer: function(value, metadata, record) {
-					metadata.style = "height: 33px; padding: 0; width: 10px; background-color:"+me.getParent().getClassificationColor(record.get("mainCategory").toLowerCase().replace(/ /g, "_"), [])+";";
+					metadata.style = "height: 40px; padding: 0; width: 10px; background-color:"+me.getParent().getClassificationColor(record.get("mainCategory").toLowerCase().replace(/ /g, "_"), [])+";";
 					metadata.tdAttr = 'data-qtip="' + "<b>Classification</b><br>" + record.get("mainCategory") + "<br>" + record.get("secCategory") + '"';
 					return '';
 				}
@@ -3700,7 +3700,7 @@ function PA_Step3PathwayTableView() {
 
 			var rendererMethod = function(value, metadata, record) {
 				var myToolTipText = "<b style='display:block; width:200px'>" + metadata.column.text + "</b>";
-				metadata.style = "height: 33px; font-size:10px;"
+				metadata.style = "height: 40px; font-size:12px;"
 				if (value === '') {
 					myToolTipText = myToolTipText + "<i>No data for this pathway</i>";
 					metadata.tdAttr = 'data-qtip="' + myToolTipText + '"';
@@ -4075,7 +4075,7 @@ function PA_Step3PathwayTableView() {
 		//TODO: REMOVE THIS SPAGETTI CODE :/
 		var renderFunction = function(value, metadata, record) {
 			var myToolTipText = "<b style='display:block; width:200px'>" + metadata.column.text.replace(/<\/br>/g, " ") + "</b>";
-			metadata.style = "height: 33px; font-size:10px;"
+			metadata.style = "height: 40px; font-size:12px;"
 
 			//IF THERE IS NOT DATA FOR THIS PATHWAY, FOR THIS OMIC, PRINT A '-'
 			if (value === "-" || value == undefined || isNaN(value)) {
@@ -5404,7 +5404,7 @@ var getColor = function (limits, value, colorScale) {
 
 var renderFunctionLimit = function (value, metadata, record) {
 		var myToolTipText = "<b style='display:block; width:200px'>" + "Metabolism" + "</b>";
-		metadata.style = "height: 33px; font-size:10px;"
+		metadata.style = "height: 40px; font-size:12px;"
 
 		//IF THERE IS NOT DATA FOR THIS PATHWAY, FOR THIS OMIC, PRINT A '-'
 		if (value === "-" || value == undefined || isNaN(value)) {
@@ -5463,7 +5463,7 @@ var renderFunctionHub= function (value, metadata, record) {
 
 		value = Number(value)
 
-		metadata.style = "height: 33px; font-size:10px;"
+		metadata.style = "height: 40px; font-size:12px;"
 
 		//IF THERE IS NOT DATA FOR THIS PATHWAY, FOR THIS OMIC, PRINT A '-'
 		if (value === "-" || value == undefined || isNaN(value)) {
