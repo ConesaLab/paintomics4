@@ -579,7 +579,10 @@ select {
 	box-shadow: 0px 0px 6px #B1B1B1;
 	font-size: 14px;
 	padding: 8px;
-	color: #707070;
+	/* Was #707070. It reads as 4.95:1 if you assume a white field, which is
+	   what an earlier pass in this branch did - but this rule sets its own
+	   #E7E7E7 fill two lines down, where the real figure is 4.00:1. */
+	color: #676767;
 	width: 250px;
 	background: rgb(231, 231, 231);
 	margin-left: 15px;
@@ -1384,7 +1387,7 @@ div[id^=matching_table] table {
 	float: right;
 }
 .visualSettingsButton {
-	background-color: #0079dc;
+	background-color: #0076D6; /* was #0079dc - white label at 4.40:1 */
 	display: inline-block;
 	cursor: pointer;
 	color: #ffffff;
@@ -1475,7 +1478,7 @@ div.applyWaitMessage {
 	clear: both;
 }
 div.lateralOptionsPanel div.updateMessageContainer {
-	color: #BE5325;
+	color: #B34E23; /* was #BE5325 - 4.18:1 on this box's own #FFEFD9 fill */
 	background: #FFEFD9;
 	font-size: 15px;
 	text-align: center;
@@ -1484,7 +1487,7 @@ div.lateralOptionsPanel div.updateMessageContainer {
 	display: none;
 }
 div.lateralOptionsPanel div.updateMessageContainer h3 {
-	color: #CD8627;
+	color: #96621C; /* was #CD8627 - 2.64:1 on the same #FFEFD9 fill */
 }
 div.zoomTool {
 	margin-top: 60px;
@@ -1495,7 +1498,13 @@ div.zoomTool {
 div.zoomTool a {
 	background: rgba(192, 192, 192, 0.55);
 	font-family: var(--pa-font-sans);
-	color: #ffffff;
+	/* The pathway zoom +/- controls. The pill is 55% grey, which composites to
+	   about #DCDCDC over the mostly-white KEGG diagram behind it, so the white
+	   glyphs sat at 1.37:1 - the reason these read as ghosted in screenshots.
+	   Darkening the glyph rather than the pill keeps the control unobtrusive
+	   over the diagram: 12.73:1 on the composited fill, and still comfortable
+	   on the #40AFFF hover fill below. */
+	color: #1A1A1A;
 	font-size: 15px;
 	text-decoration: none;
 	padding: 9px 13px;
@@ -1533,8 +1542,12 @@ ul.ui-menu li.ui-menu-item {
 	padding: 5px 5px;
 }
 ul.ui-menu li.ui-menu-item.ui-state-focus {
+	/* The highlighted row of the organism autocomplete - reached by arrow keys,
+	   so it is precisely the state a keyboard user relies on. White on #40AFFF
+	   was 2.39:1; the fill moves rather than the label so the highlight still
+	   reads as "blue selection". */
 	color: #FFF;
-	background: #40AFFF;
+	background: #0078CE;
 }
 .ui-autocomplete {
 	max-height: 100px;
@@ -1814,7 +1827,7 @@ div.omicSelection div.omicPosition + div {
 	padding-right: 25px;
 }
 span.myDataSummaryCount i {
-	background: rgb(35, 174, 137);
+	background: #1B8468; /* was rgb(35,174,137) - white label at 2.80:1 */
 	color: #fff;
 	line-height: 65px;
 	padding: 0px 18px;
