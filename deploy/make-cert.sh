@@ -5,7 +5,7 @@
 # certificate. Browsers will show a warning; that is expected and is why HSTS
 # stays commented out in nginx/paintomics.conf.
 #
-#   ./deploy/make-cert.sh 161.111.18.82
+#   ./deploy/make-cert.sh 203.0.113.10
 #
 # Output goes to deploy/nginx/certs/, which is gitignored -- the private key
 # must never be committed.
