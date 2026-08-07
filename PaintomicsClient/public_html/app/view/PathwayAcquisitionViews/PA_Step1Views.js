@@ -2828,8 +2828,19 @@ function MORESubmittingPanel(nElem, options) {
 							var isPLS1 = newValue === 'PLS1';
 							var alphaField = container.queryById('moreAlphaField');
 							var vipField = container.queryById('moreVipField');
-							if (alphaField) alphaField.setVisible(isPLS1);
-							if (vipField) vipField.setVisible(isPLS1);
+							// Disable as well as hide. Both fields are allowBlank:false,
+							// and a merely hidden ExtJS field is still validated and still
+							// submitted -- so clearing Alpha and then switching to MLR left
+							// the form permanently invalid with "Invalid Form. Please check
+							// the form errors." and no visible field to correct.
+							// Disabling excludes them from validation and from the POST;
+							// MORE's GetMLR takes neither alfa nor vip, so MLR loses
+							// nothing, and MOREServlet defaults them when absent.
+							[alphaField, vipField].forEach(function(field) {
+								if (!field) { return; }
+								field.setVisible(isPLS1);
+								field.setDisabled(!isPLS1);
+							});
 						}
 					}
 				},
