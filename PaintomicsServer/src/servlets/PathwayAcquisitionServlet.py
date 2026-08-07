@@ -971,13 +971,19 @@ def pathwayAcquisitionApplyReplicateMapping(request, response):
         # The PathwayAcquisitionJob owns the single source of truth for both
         # the auto-apply path (Step-1 processFilesContent) and this endpoint —
         # no aggregation logic lives in the servlet.
+        # Resolve the omic once, for every mode. featureDict is needed further
+        # down to re-emit the affected feature collection; it used to be looked
+        # up only inside the manual branch and discarded into `_`, so the
+        # reinsert below raised NameError *after* the features had already been
+        # deleted.
+        inputOmic, featureDict, featureType = jobInstance._findInputOmicByName(omicName)
+        if inputOmic is None:
+            raise Exception("Omic '%s' not found in this job." % omicName)
+
         if mode == "manual":
             # Parse the design file here (servlet-level concern: reading uploaded
             # text). The job method handles the in-memory aggregation.
             designBody = payload.get("design") or ""
-            inputOmic, _, featureType = jobInstance._findInputOmicByName(omicName)
-            if inputOmic is None:
-                raise Exception("Omic '%s' not found in this job." % omicName)
             omicHeader = inputOmic.get("omicHeader") or []
             replicateHeader = omicHeader[1:] if len(omicHeader) > 1 else []
             sampleHeader, mapping, groups = _parseDesignFile(designBody, replicateHeader)
@@ -1006,9 +1012,14 @@ def pathwayAcquisitionApplyReplicateMapping(request, response):
 
         featDAO = FeatureDAO()
         try:
+            # Materialise the replacement set *before* deleting the old one.
+            # removeAll + insertAll is not atomic, so anything that can fail
+            # between them costs the user their features -- which is exactly
+            # what happened while featureDict was unbound here.
+            featuresToStore = list(featureDict.values()) if featureDict else []
             featDAO.removeAll({"jobID": jobID, "featureType": featureType})
-            if featureDict:
-                featDAO.insertAll(featureDict.values(), {"jobID": jobID})
+            if featuresToStore:
+                featDAO.insertAll(featuresToStore, {"jobID": jobID})
         finally:
             featDAO.closeConnection()
 
