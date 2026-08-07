@@ -3656,6 +3656,11 @@ function PA_Step3PathwayTableView() {
 			}),
 			{
 				text: 'Pathway name', dataIndex: 'title', filterable: true, flex: 1,
+				/* The pathway name is the identifier for the row, and the long
+				   Reactome ones ("Regulation of Insulin-like Growth Factor...")
+				   do not fit any column width this table can afford. Truncated
+				   on screen but recoverable on hover, rather than simply lost. */
+				renderer: truncatableTextRenderer
 			},{
 				text: '', dataIndex: 'classification',
 				filterable: true, width:10, resizable: false,
@@ -3675,7 +3680,9 @@ function PA_Step3PathwayTableView() {
 				}, {
 					text: 'Unique</br>metabol.', cls:"header-90deg",
 					sortable: true,
-					align: "center", width: 50,
+					/* 50px ellipsised the label to "Unique metabol" - the one header
+					   in this grid that still did not fit its own column. */
+					align: "center", width: 58,
 					filter: {type: 'numeric'},
 					dataIndex: 'matchedCompounds'
 				}]
