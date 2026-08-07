@@ -760,6 +760,28 @@ body > .x-mask {
 	box-shadow: 0 12px 28px -8px rgba(24, 24, 27, 0.22), 0 6px 12px -6px rgba(24, 24, 27, 0.14);
 }
 
+/* ExtJS's own Ext.MessageBox - the Yes/No confirmations - is a different window
+   from #messageDialog above and so missed that fix entirely: it still had the
+   5px saturated frame, square-ish corners and no shadow. Same treatment, minus
+   the top accent bar, because this window has a real header bar which already
+   does that job.
+
+   The header keeps a fill rather than going neutral, so the white close tool
+   stays visible; it just moves from Neptune's #3892d3, where the white title
+   sat at 3.38:1, to the #287AB6 the buttons already use. One blue in the app
+   instead of two, and the title clears AA at 4.62:1. */
+.x-message-box.x-window-default {
+	border-width: 1px;
+	border-color: var(--pa-border);
+	border-radius: var(--pa-radius);
+	box-shadow: 0 12px 28px -8px rgba(24, 24, 27, 0.22), 0 6px 12px -6px rgba(24, 24, 27, 0.14);
+}
+.x-message-box > .x-window-header {
+	background-color: #287AB6;
+	background-image: none;
+	border-radius: var(--pa-radius) var(--pa-radius) 0 0;
+}
+
 /* A window carries *two* frames: its own border, and a second one on
    `.x-window-body` inside it. Neptune paints that inner one 1px #3892d3, so
    every dialog in the app has a blue rectangle drawn just inside its edge -
