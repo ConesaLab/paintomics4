@@ -3427,3 +3427,134 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
 .paWrapHeaders .x-column-header-inner {
 	padding: 6px 5px;
 }
+
+/* Grid toolbar controls -------------------------------------------------------
+   The two rows fit and every control is reachable, but the controls themselves
+   were still stock Neptune: sprite-image checkboxes, a search field and two
+   combos at three different heights, and labels that were a mix of plain
+   toolbar text and inline-styled bold spans. Read together they looked like
+   three different toolbars sharing a bar.
+
+   One height (26px), one radius, one border colour, one label style.
+--------------------------------------------------------------------------- */
+.paGridBar .x-toolbar-text {
+	color: #52525B;
+	font-size: 12.5px;
+}
+
+/* The bold inline-styled group labels ("Databases to view:", and the plain-text
+   "Search") become one quiet label voice. The inline font-weight on the spans
+   is in the markup, so it has to be overridden rather than removed. */
+.paGridBar .x-toolbar-text span[style],
+.paGridBar .x-toolbar-text {
+	font-weight: 600 !important;
+	color: #52525B;
+}
+
+/* Text input and combos ------------------------------------------------------ */
+.paGridBar .x-form-text {
+	height: 26px;
+	border: 1px solid #C9C9CE;
+	border-radius: var(--pa-radius-sm);
+	background-image: none;
+	background-color: #FFFFFF;
+	color: #27272A;
+	font-size: 12.5px;
+	padding: 0 8px;
+	transition: border-color var(--pa-transition), box-shadow var(--pa-transition);
+}
+.paGridBar .x-form-text:hover {
+	border-color: #A1A1AA;
+}
+/* Neptune draws the combo's frame on a wrapping table rather than on the field,
+   so the field's own border has to be suppressed there or the two stack up. */
+.paGridBar .x-form-trigger-wrap {
+	border: 1px solid #C9C9CE;
+	border-radius: var(--pa-radius-sm);
+	background-color: #FFFFFF;
+	overflow: hidden;
+}
+.paGridBar .x-form-trigger-wrap .x-form-text {
+	border: 0;
+	border-radius: 0;
+	height: 24px;
+}
+.paGridBar .x-form-trigger {
+	background-color: transparent;
+	border-left: 1px solid var(--pa-border);
+}
+
+/* Checkboxes -----------------------------------------------------------------
+   Neptune draws these as a 15px sprite on an <input type="button">. An input is
+   a replaced element, so it cannot carry the ::after that draws a tick - the
+   box is styled on the input and the tick on its wrapping cell, which is a <td>
+   and can. Same constraint that ruled out restyling the dialog close button. */
+.paGridBar .x-form-checkbox {
+	background-image: none;
+	width: 15px;
+	height: 15px;
+	border: 1px solid #A1A1AA;
+	border-radius: 3px;
+	background-color: #FFFFFF;
+	transition: background-color var(--pa-transition), border-color var(--pa-transition);
+}
+.paGridBar .x-form-checkbox:hover {
+	border-color: var(--pa-accent-blue);
+}
+.paGridBar .x-form-cb-checked .x-form-checkbox {
+	background-color: var(--pa-accent-blue);
+	border-color: var(--pa-accent-blue);
+}
+.paGridBar .x-form-cb-wrap {
+	position: relative;
+}
+.paGridBar .x-form-cb-checked .x-form-cb-wrap::after {
+	content: '';
+	position: absolute;
+	left: 5px;
+	top: 50%;
+	width: 3px;
+	height: 7px;
+	margin-top: -6px;
+	border: solid #FFFFFF;
+	border-width: 0 2px 2px 0;
+	transform: rotate(45deg);
+	/* The tick sits over the input, which is what receives the click. */
+	pointer-events: none;
+}
+.paGridBar .x-form-cb-label {
+	color: #3F3F46;
+	font-size: 12.5px;
+	padding-left: 6px;
+}
+
+/* Actions --------------------------------------------------------------------
+   "Configure" and "Download as XLS" are anchors rather than buttons, and read
+   as two unrelated links. Same ghost-control treatment as the header. */
+.paGridBar a.downloadXLS,
+.paGridBar a.multiDelete,
+.paGridBar #configureButton {
+	display: inline-block;
+	padding: 4px 10px;
+	border: 1px solid transparent;
+	border-radius: var(--pa-radius-sm);
+	font-size: 12.5px;
+	line-height: 16px;
+	transition: background-color var(--pa-transition), border-color var(--pa-transition);
+}
+.paGridBar a.downloadXLS:hover,
+.paGridBar #configureButton:not(.x-item-disabled):hover {
+	background-color: #F4F4F5;
+	border-color: var(--pa-border);
+}
+.paGridBar a.multiDelete:hover {
+	background-color: #FCEEEC;
+	border-color: #E0BFBC;
+}
+/* Disabled Configure - the method is not Stouffer - should read as unavailable
+   rather than as a link that ignores you. */
+.paGridBar #configureButton.x-item-disabled {
+	opacity: 1;
+	color: #9A9AA0;
+	cursor: default;
+}
