@@ -587,11 +587,36 @@ function paTocScroller() {
     return null;
 }
 
+/**
+ * How far below the viewport top a heading has to land to be readable.
+ *
+ * The strip only counts when it is a strip. Above 1200px the contents render as
+ * a fixed column *beside* the results, where they occupy no vertical space at
+ * all - adding their height there put the offset at ~312px instead of ~103px,
+ * and every jump overshot while the highlight tracked the wrong section.
+ * `position: fixed` is what distinguishes the two, set by the media query.
+ */
 function paTocOffset() {
     var header = document.querySelector('.mainTopToolbar');
     var nav = document.querySelector('.pa-toc');
-    return (header ? header.offsetHeight : 50) + (nav ? nav.offsetHeight : 0) + 12;
+    var navHeight = 0;
+    if (nav && window.getComputedStyle(nav).position !== 'fixed') {
+        navHeight = nav.offsetHeight;
+    }
+    return (header ? header.offsetHeight : 50) + navHeight + 12;
 }
+
+var paTocRaf = null;
+
+/* A click wins over the scroll position for a moment afterwards.
+   "Pathways selection" and "Pathways summary" are the two halves of the same
+   top row, so they sit at the SAME vertical position - no scroll-derived rule
+   can tell them apart, and the spy always resolved to whichever came last.
+   Combined with a jump that is a no-op when you are already at the top, both
+   entries appeared to do nothing at all when clicked. Pinning the clicked one
+   briefly makes the click the authority, which is what a reader means by it. */
+var paTocPinned = null;
+var paTocPinnedUntil = 0;
 
 function paTocJumpTo(label) {
     var target = null;
@@ -611,29 +636,43 @@ function paTocJumpTo(label) {
     // 7.5 to 8. The same element accepts an instant scroll to 2658 without
     // complaint, so something in the ExtJS scroller swallows the animated form.
     // Animated here by hand instead, which cannot be intercepted.
+    // Cancel anything still in flight, so two jumps in quick succession do not
+    // animate against each other.
+    if (paTocRaf) { window.cancelAnimationFrame(paTocRaf); paTocRaf = null; }
+
     var start = sc.scrollTop;
     var change = destination - start;
-    if (Math.abs(change) < 2) { return; }
+    // Not a silent return when there is nowhere to go: being already at the
+    // target is a successful jump, and the strip still has to say so.
+    if (Math.abs(change) < 2) { paTocMarkCurrent(); return; }
     var began = null;
     var duration = 300;
+
+    // Re-measure and correct repeatedly, not once. The grids render their rows
+    // lazily, so arriving somewhere makes content above it materialise and push
+    // the target down again - a single correction landed sections hundreds of
+    // pixels out, and the further down the page the worse it got. This nudges
+    // until the residual stops moving or the budget runs out, which is what
+    // "scroll to this section" has to mean on a page that grows as you scroll
+    // into it.
+    function settle(attempt) {
+        var residual = target.getBoundingClientRect().top - sc.getBoundingClientRect().top - paTocOffset();
+        if (Math.abs(residual) > 3 && attempt < 8) {
+            sc.scrollTop = sc.scrollTop + residual;
+            window.setTimeout(function () { settle(attempt + 1); }, 110);
+            return;
+        }
+        paTocMarkCurrent();
+    }
     function step(now) {
         if (began === null) { began = now; }
         var t = Math.min(1, (now - began) / duration);
         // ease-out cubic
         sc.scrollTop = start + change * (1 - Math.pow(1 - t, 3));
-        if (t < 1) { window.requestAnimationFrame(step); return; }
-
-        // Re-measure and correct once. The enrichment grid renders its rows
-        // lazily, so the page's height changes *while* this animation runs and
-        // the destination computed at click time is stale on arrival - two of
-        // five sections landed several hundred pixels short. Measuring again at
-        // the end and snapping costs one frame and makes the jump exact
-        // wherever the layout settled.
-        var residual = target.getBoundingClientRect().top - sc.getBoundingClientRect().top - paTocOffset();
-        if (Math.abs(residual) > 4) { sc.scrollTop = sc.scrollTop + residual; }
-        paTocMarkCurrent();
+        if (t < 1) { paTocRaf = window.requestAnimationFrame(step); return; }
+        settle(0);
     }
-    window.requestAnimationFrame(step);
+    paTocRaf = window.requestAnimationFrame(step);
 }
 
 function paTocMarkCurrent() {
@@ -645,11 +684,23 @@ function paTocMarkCurrent() {
     // so with a tight boundary the section just jumped to has not "passed" yet
     // and the strip highlights the one above it - disagreeing with itself the
     // moment it is used.
-    var boundary = nav.getBoundingClientRect().bottom + 28;
+    // Derived from exactly where paTocJumpTo parks a heading, rather than
+    // measured independently. Two separate calculations disagreed the moment
+    // the strip became a sidebar: jumps landed headings at 112 while the
+    // boundary sat at 78, so every jump highlighted the section above the one
+    // it had just moved to. Same basis, plus a little slack, cannot drift.
+    var sc = paTocScroller();
+    var base = sc ? sc.getBoundingClientRect().top : 0;
+    var boundary = base + paTocOffset() + 16;
     var currentLabel = null;
     paTocSections().forEach(function (h) {
         if (h.getBoundingClientRect().top <= boundary) { currentLabel = paTocNorm(h); }
     });
+    if (paTocPinned && new Date().getTime() < paTocPinnedUntil) {
+        currentLabel = paTocPinned;
+    } else {
+        paTocPinned = null;
+    }
     var active = null;
     Array.prototype.forEach.call(links, function (l) {
         var isCurrent = l.getAttribute('data-toc-text') === currentLabel;
@@ -679,7 +730,11 @@ function paTocMarkCurrent() {
         var link = ev.target && ev.target.closest ? ev.target.closest('.pa-toc-link') : null;
         if (!link) { return; }
         ev.preventDefault();
-        paTocJumpTo(link.getAttribute('data-toc-text'));
+        var label = link.getAttribute('data-toc-text');
+        paTocPinned = label;
+        paTocPinnedUntil = new Date().getTime() + 1400;
+        paTocMarkCurrent();
+        paTocJumpTo(label);
     });
     // Capture, because the element that scrolls is nested and scroll does not
     // bubble.

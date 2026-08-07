@@ -3016,6 +3016,9 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
    folding the step actions into the header just removed. It uses the same pill
    language as the navigation so the page has one idea of what a link-that-moves
    -you looks like, but muted, because this is orientation rather than action. */
+/* Horizontal fallback, used below 1200px where there is no room for a column.
+   Sticky rather than fixed so it belongs to the results and pins under the
+   header only once reached. */
 .pa-toc {
 	position: sticky;
 	top: 50px;
@@ -3029,12 +3032,6 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
 }
 .pa-toc-list {
 	display: flex;
-	/* One line, always. Measured: the eight pills a default mmu run produces
-	   come to 1234px against the 1240px available at a 1280px viewport - six
-	   pixels of headroom. Longer section names, a species with more analyses, or
-	   a slightly narrower window all tip that into wrapping, and a wrapped
-	   sticky strip doubles in height and eats the top of the results it is
-	   supposed to help you read. Scrolling keeps it 41px whatever it holds. */
 	flex-wrap: nowrap;
 	overflow-x: auto;
 	align-items: center;
@@ -3044,23 +3041,13 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
 	list-style: none;
 	scrollbar-width: thin;
 	scrollbar-color: #C3C5CB transparent;
-	scroll-behavior: smooth;
 }
-.pa-toc-list::-webkit-scrollbar {
-	height: 6px;
-}
-.pa-toc-list::-webkit-scrollbar-thumb {
-	background: #C3C5CB;
-	border-radius: 3px;
-}
-.pa-toc-list::-webkit-scrollbar-track {
-	background: transparent;
-}
-.pa-toc-list > li {
-	flex: 0 0 auto;
-}
+.pa-toc-list::-webkit-scrollbar { height: 6px; }
+.pa-toc-list::-webkit-scrollbar-thumb { background: #C3C5CB; border-radius: 3px; }
+.pa-toc-list::-webkit-scrollbar-track { background: transparent; }
+.pa-toc-list > li { flex: 0 0 auto; }
 .pa-toc-link {
-	display: inline-block;
+	display: block;
 	padding: 5px 11px;
 	border-radius: 999px;
 	font-size: 12px;
@@ -3075,12 +3062,77 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
 	color: #111111;
 	text-decoration: none;
 }
-/* The analysis the reader is currently inside, set by the IntersectionObserver
-   in buildAnalysisTOC(). Filled rather than merely darker, so it is findable at
-   a glance in a row of a dozen similar pills. */
 .pa-toc-link.current {
 	background: #33343A;
 	color: #FFFFFF;
+}
+
+/* Sidebar ---------------------------------------------------------------------
+   Above 1200px the contents become a column beside the results instead of a bar
+   above them. Two reasons it is better here than as a strip: eight analyses read
+   as a list rather than as a row of pills competing for one line, and the strip
+   was spending 41px of vertical space on every screen forever, on a page whose
+   whole problem is that it is 2900px long.
+
+   Fixed, not sticky, because the element that scrolls is the centre panel rather
+   than the window - a sticky child would scroll away with the content. It sits
+   in the gutter the centred column already provides, and the panel's left
+   padding grows to make room, so the results keep their full width rather than
+   being squeezed. */
+@media (min-width: 1200px) {
+	#mainViewCenterPanel {
+		padding-left: calc(var(--pa-gutter) + 206px);
+	}
+	.pa-toc {
+		position: fixed;
+		top: 62px;
+		left: var(--pa-gutter);
+		width: 190px;
+		max-height: calc(100vh - 84px);
+		overflow-y: auto;
+		margin: 0;
+		padding: 12px 0 12px 0;
+		background: transparent;
+		backdrop-filter: none;
+		-webkit-backdrop-filter: none;
+		border-bottom: 0;
+		border-right: 1px solid var(--pa-border);
+		z-index: 140;
+	}
+	/* A quiet label, so the column reads as a table of contents rather than as
+	   a stray list of links. */
+	.pa-toc::before {
+		content: 'Analyses';
+		display: block;
+		margin: 0 12px 8px;
+		font-size: 10.5px;
+		font-weight: 600;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		color: #83848C;        /* 4.6:1 on the page */
+	}
+	.pa-toc-list {
+		flex-direction: column;
+		flex-wrap: nowrap;
+		align-items: stretch;
+		overflow-x: visible;
+		gap: 1px;
+		padding-right: 12px;
+	}
+	.pa-toc-link {
+		border-radius: 0 6px 6px 0;
+		padding: 7px 10px 7px 12px;
+		/* Names wrap here rather than being truncated - the column is narrow but
+		   vertical space is what it has plenty of. */
+		white-space: normal;
+		border-left: 2px solid transparent;
+	}
+	.pa-toc-link.current {
+		background: #F1F2F4;
+		color: #111111;
+		border-left-color: #33343A;
+		font-weight: 600;
+	}
 }
 
 /*****************************************************************************
