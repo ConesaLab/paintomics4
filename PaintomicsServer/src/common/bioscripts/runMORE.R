@@ -384,6 +384,85 @@ if (opt$filter_r2 > 0) {
 
 rpc_df <- as.data.frame(result_rpc)
 
+# --- Repair regulator IDs mangled by MORE ------------------------------------
+#
+# MORE 1.0.1's RegulationPerCondition ends with
+#
+#     prefix = paste0(names(output$arguments$omicType), "-", collapse = "|")
+#     myresults$regulator = gsub(prefix, "", myresults$regulator)
+#
+# to remove the "<omic>-" prefix it uses internally. That gsub is unanchored and
+# global, so it deletes the omic name followed by a hyphen ANYWHERE in the ID,
+# however many times it occurs. For an omic named "TF" a regulator genuinely
+# called "TF-1" comes back as "1"; for an omic named "miRNA", "miRNA-21"
+# becomes "21".
+#
+# It is not cosmetic. The values file is written from the input data and keeps
+# the true ID, while the pairs file is written from this table, so the two stop
+# agreeing -- and Job.parseGeneBasedFiles looks a values row up in the pairs
+# file by GENE:::REGULATOR. Every red star for that omic silently disappears,
+# and pathway enrichment moves with it, because enrichment counts significance.
+#
+# Repair by inverting the mangling against the IDs we actually loaded: apply the
+# same substitution to every known regulator and map the result back. Ambiguous
+# cases -- two real regulators mangling to the same string, or a mangled value
+# that is itself a real ID -- are left untouched and reported, since guessing
+# there would be a different silent corruption.
+
+# Strip a leading "<omic>-" from regulator IDs, but never from an ID that is
+# itself a real regulator. MORE only prefixes names it had to disambiguate, so
+# "TF-1" under an omic named "TF" is far more likely to be a genuine ID than a
+# prefixed "1" -- and after restore_regulator_ids has put such an ID back, an
+# unconditional strip here would immediately destroy it again.
+strip_omic_prefix <- function(values, prefix, trueIds) {
+  values <- as.character(values)
+  if (length(values) == 0) return(values)
+  drop <- !(values %in% trueIds) & startsWith(values, prefix)
+  values[drop] <- substring(values[drop], nchar(prefix) + 1)
+  values
+}
+
+restore_regulator_ids <- function(values, trueIds, omicNames) {
+  if (length(values) == 0 || length(trueIds) == 0) return(values)
+  pattern <- paste0(omicNames, "-", collapse = "|")
+  mangled <- gsub(pattern, "", trueIds)
+
+  # Only IDs the substitution actually changes can need repair, and a mangled
+  # form that collides with a real ID is not safely invertible.
+  changed <- mangled != trueIds
+  usable <- changed & !(mangled %in% trueIds) & !(duplicated(mangled) |
+                                                 duplicated(mangled, fromLast = TRUE))
+  if (!any(usable)) return(values)
+
+  lookup <- setNames(trueIds[usable], mangled[usable])
+  hit <- !(values %in% trueIds) & (values %in% names(lookup))
+  if (any(hit)) {
+    values[hit] <- unname(lookup[values[hit]])
+    cat(paste0("MORE: restored ", sum(hit), " regulator ID(s) that MORE's ",
+               "prefix removal had truncated (e.g. '", names(lookup)[1], "' -> '",
+               lookup[[1]], "').\n"))
+  }
+  ambiguous <- changed & !usable
+  if (any(ambiguous)) {
+    cat(paste0("MORE WARNING: ", sum(ambiguous), " regulator ID(s) start with an ",
+               "omic name and a hyphen and cannot be unambiguously restored: ",
+               paste(head(trueIds[ambiguous], 5), collapse = ", "),
+               ". They may appear truncated in the results.\n"))
+  }
+  values
+}
+
+if (nrow(rpc_df) > 0 && "regulator" %in% colnames(rpc_df)) {
+  rpc_df$regulator <- as.character(rpc_df$regulator)
+  for (.omic in omic_names) {
+    .rows <- rpc_df$omic == .omic
+    if (any(.rows)) {
+      rpc_df$regulator[.rows] <- restore_regulator_ids(
+        rpc_df$regulator[.rows], rownames(regulatoryData[[.omic]]), omic_names)
+    }
+  }
+}
+
 # Attach per-target R2 to rpc_df so the Step-3 Regulator-Target Network view
 # can apply a post-hoc R2 slider client-side without re-querying the server.
 # In MORE, GlobalSummary$GoodnessOfFit is a flat matrix with rownames = targetF
@@ -423,14 +502,13 @@ rpc_out_file <- file.path(opt$output_dir, paste0("MORE_rpc_", opt$date_seed, ".t
 
 if (nrow(rpc_df) > 0) {
   rpc_display <- rpc_df
+  rpc_display$regulator <- as.character(rpc_display$regulator)
   for (.omic in omic_names) {
-    .prefix <- paste0(.omic, "-")
-    .mask <- rpc_display$omic == .omic & startsWith(as.character(rpc_display$regulator), .prefix)
-    if (any(.mask)) {
-      rpc_display$regulator[.mask] <- substring(
-        as.character(rpc_display$regulator[.mask]),
-        nchar(.prefix) + 1
-      )
+    .rows <- rpc_display$omic == .omic
+    if (any(.rows)) {
+      rpc_display$regulator[.rows] <- strip_omic_prefix(
+        rpc_display$regulator[.rows], paste0(.omic, "-"),
+        rownames(regulatoryData[[.omic]]))
     }
   }
   write.table(rpc_display, rpc_out_file,
@@ -465,9 +543,7 @@ for (name in omic_names) {
     # No association file → fall back to MORE's significant pairs (best we can do).
     full_pairs <- unique(data.frame(
       target    = as.character(omic_df$targetF),
-      regulator = sapply(as.character(omic_df$regulator), function(r) {
-        if (startsWith(r, prefix)) substring(r, nchar(prefix) + 1) else r
-      }),
+      regulator = strip_omic_prefix(omic_df$regulator, prefix, rownames(reg_data)),
       stringsAsFactors = FALSE
     ))
   }
@@ -490,9 +566,7 @@ for (name in omic_names) {
     pair_ids <- unique(paste0(
       as.character(omic_df$targetF),
       ":::",
-      sapply(as.character(omic_df$regulator), function(r) {
-        if (startsWith(r, prefix)) substring(r, nchar(prefix) + 1) else r
-      })
+      strip_omic_prefix(omic_df$regulator, prefix, rownames(reg_data))
     ))
     write.table(pair_ids, rel_pairs_file, sep="\t", row.names=FALSE, col.names=FALSE, quote=FALSE)
   } else {
