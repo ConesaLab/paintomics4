@@ -35,8 +35,28 @@
 	<link rel="stylesheet" type="text/css" href="js/libs/jquery-ui/jquery-ui.min.css" />
 	<link rel="stylesheet" type="text/css" href="js/libs/tooltipster-master/dist/css/tooltipster.bundle.min.css" />
 	<link rel="stylesheet" type="text/css" href="js/libs/odometer/odometer-theme-default.css" />
-	<link rel="stylesheet" type="text/css" href="resources/css/main.css?v=0.23" />
+	<link rel="stylesheet" type="text/css" href="resources/css/main.css?v=0.24" />
 	<link rel="stylesheet" type="text/css" href="resources/css/ai-interpret.css" />
+	<link rel="stylesheet" type="text/css" href="resources/css/dark.css?v=0.8" />
+
+	<!-- Theme, resolved before the first paint.
+	     Deliberately inline and here rather than in Util.js: the stylesheets
+	     above are already parsed at this point, so setting the attribute now
+	     means the first frame is drawn in the right theme. Doing it from the
+	     application's own start-up instead would paint the whole interface
+	     white and then repaint it dark, which is worse than having no dark
+	     theme at all for anyone who chose it because light hurts to look at.
+	     An explicit choice wins; with no choice stored we follow the operating
+	     system, and keep following it while it stays unset. -->
+	<script type="text/javascript">
+	(function () {
+		var stored = null;
+		try { stored = window.localStorage.getItem("paintomics-theme"); } catch (e) { /* private mode */ }
+		var dark = (stored === "dark") || (stored === null &&
+			window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
+		if (dark) { document.documentElement.setAttribute("data-theme", "dark"); }
+	})();
+	</script>
 
 	<!--Cookies consent -->
 	<link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/cookieconsent@3/build/cookieconsent.min.css" />
@@ -87,14 +107,14 @@
 	<!--SCRIPTS FOR SERVER CONNECTION CONFIGURATION-->
 	<script type="text/javascript" src="resources/ServerConfiguration.js?"></script>
 	<!--CUSTOM SENCHA EXTENSIONS-->
-	<script type="text/javascript" src="app/view/common/Util.js?v=1.0"></script>
+	<script type="text/javascript" src="app/view/common/Util.js?v=1.1"></script>
 	<script type="text/javascript" src="app/view/common/ExtJS_extensions.js?v=0.6"></script>
 	<script type="text/javascript" src="app/view/common/upload/Panel.js?v=0.1"></script>
 
 	<!--MARKDOWN RENDERING LIBRARY -->
 	<script type="text/javascript" src="js/libs/marked/marked.min.js"></script>
 	<!--AI INTERPRETATION VIEW -->
-	<script type="text/javascript" src="app/view/PathwayAcquisitionViews/PA_AIInterpretView.js?v=0.1"></script>
+	<script type="text/javascript" src="app/view/PathwayAcquisitionViews/PA_AIInterpretView.js?v=0.2"></script>
 	<!--MORE REGULATOR–TARGET NETWORK VIEW -->
 	<script type="text/javascript" src="app/view/PathwayAcquisitionViews/PA_Step3RegTargetNetworkView.js?v=0.1"></script>
 

@@ -1,0 +1,617 @@
+/* Dark theme -----------------------------------------------------------------
+   Additive, and deliberately so. Every rule in this file is scoped under
+   [data-theme="dark"], so main.css and ai-interpret.css are untouched and the
+   light build cannot regress from anything here.
+
+   Two halves:
+
+   1. The token block, ported verbatim from the design system's tokens/dark.css.
+      It is derived from the product's own palette rather than invented, so a
+      dark build stays recognisably PaintOmics. Two things deliberately do not
+      change - the six omic fills and the database badge palette - because both
+      are type-coding read against the pathway diagrams, and both already carry
+      near-black ink that reads correctly on a dark surface.
+
+   2. An override layer, which is the part the design system could not supply.
+      The system assumes a tokenised stylesheet; this application is not one.
+      main.css carries 490 literal colour values against 23 tokens, and
+      ai-interpret.css carries 79 against none, so redefining tokens alone would
+      have repainted almost nothing. The rules below therefore restate the
+      surfaces by selector. They cover the application's own chrome and content,
+      plus the ExtJS Neptune widgets it builds on, which ship their own baked-in
+      light palette in a vendor stylesheet nothing here can tokenise.
+
+   Known to stay light: the KEGG and Reactome pathway diagrams. They are raster
+   and SVG artwork served by those databases with white canvases baked in, and
+   inverting them would falsify the data colouring painted onto them - the whole
+   point of the bwr ramp is that white means zero. They are content, not chrome,
+   and content that is white on paper stays white here.
+*/
+[data-theme="dark"]{
+  /* Ink */
+  --pa-ink: #E7E8EA;
+  --pa-ink-strong: #FFFFFF;
+  --pa-ink-title: #EDEEF0;
+  --pa-ink-body: #C9CBD0;
+  --pa-ink-label: #A6A9B0;
+  --pa-ink-soft: #8B8E96;
+  --pa-ink-muted: #8B8E96;
+  --pa-ink-nav: #C9CBD0;
+  --pa-ink-control: #E7E8EA;
+
+  /* Accents — lifted in lightness to clear AA on a dark field. The link-hover
+     quirk survives: it still turns green rather than a darker blue. */
+  --pa-link: #6BB6FF;
+  --pa-link-hover: #6ED3A8;
+  --pa-accent-blue: #6BA8F0;
+  --pa-accent-orange: #E38A5A;
+  --pa-accent-green: #6BC46A;
+  --pa-bold-blue: #8FB3D9;
+  --pa-teal: #4FB6C4;
+  --pa-teal-hover: #7ACBD6;
+  --pa-focus-ring: #4CA6FF;
+
+  /* Surfaces */
+  --pa-surface: #1E1F23;
+  --pa-surface-page: #17181B;
+  --pa-surface-sunken: #232429;
+  --pa-surface-subtle: #202126;
+  --pa-surface-quiet: #2A2C32;
+  --pa-surface-toolbar: #212227;
+  --pa-border: #33353B;
+  --pa-border-row: #2A2C32;
+  --pa-border-control: #6E7178;
+  --pa-border-control-hover: #8A8D95;
+  --pa-border-hover: #4A4D55;
+  --pa-scrim: rgba(0, 0, 0, 0.62);
+
+  /* Buttons — hues held, lightness raised so white ink still clears AA. */
+  --pa-btn-default-bg: #2A2C32;
+  --pa-btn-default-ink: #E7E8EA;
+  --pa-btn-default-bg-hover: #33353B;
+  --pa-btn-primary-bg: #3D82C4;
+  --pa-btn-primary-border: #3D82C4;
+  --pa-btn-primary-bg-hover: #4A91D4;
+  --pa-btn-primary-border-hover: #4A91D4;
+  --pa-btn-secondary-bg: #2E9A78;
+  --pa-btn-secondary-border: #2E9A78;
+  --pa-btn-secondary-bg-hover: #38AC87;
+  --pa-btn-secondary-border-hover: #38AC87;
+  --pa-btn-success-bg: #3F9A3F;
+  --pa-btn-success-border: #3F9A3F;
+  --pa-btn-success-bg-hover: #4BAE4B;
+  --pa-btn-success-border-hover: #4BAE4B;
+  --pa-btn-danger-bg: #DB4B47;
+  --pa-btn-danger-border: #DB4B47;
+  --pa-btn-danger-bg-hover: #E75D59;
+  --pa-btn-danger-border-hover: #E75D59;
+  --pa-btn-neutral-bg: #3A3B41;
+  --pa-btn-neutral-ink: #E7E8EA;
+  --pa-btn-neutral-bg-hover: #1D8CBB;
+  --pa-btn-ghost-danger-ink: #FF8A82;
+  --pa-btn-ghost-danger-ink-hover: #FFA9A3;
+  --pa-btn-ghost-danger-bg-hover: #2E2022;
+
+  /* Status */
+  --pa-status-error: #E4795F;
+  --pa-status-error-ink: #F09A83;
+  --pa-status-warning: #E0952E;
+  --pa-status-warning-ink: #EDAE55;
+  --pa-status-info: #4FA3EE;
+  --pa-status-info-ink: #6FB7F5;
+  --pa-status-success: #4FA84B;
+  --pa-status-success-ink: #6BC46A;
+  --pa-toast-success-bg: #1E2A16;
+  --pa-toast-success-border: #4E7A22;
+  --pa-toast-error-bg: #2E1A1A;
+  --pa-toast-error-border: #A34747;
+  --pa-toast-warning-bg: #2C2415;
+  --pa-toast-warning-border: #9A7420;
+  --pa-toast-ink: #D6D8DC;
+
+  /* Navigation accents */
+  --pa-nav-accent-1: #E4739B;
+  --pa-nav-accent-2: #CBB93E;
+  --pa-nav-accent-3: #6FA9DE;
+  --pa-nav-accent-4: #62B571;
+  --pa-nav-pill-active: #3A3D45;
+  --pa-toc-strip-bg: rgba(23, 24, 27, 0.94);
+  --pa-toc-current-bg: #E7E8EA;
+  --pa-toc-current-ink: #17181B;
+  --pa-toc-marker: #E7E8EA;
+  --pa-tab-edge: #3C5670;
+  --pa-tab-accent: #4E93E0;
+
+  /* Grid */
+  --pa-grid-header-bg: #2A2C32;
+  --pa-grid-header-ink: #EDEEF0;
+  --pa-grid-action: #A79FA3;
+  --pa-grid-action-active: #7FC0FF;
+  --pa-grid-row-selected: #26333F;
+  --pa-grid-row-alt: #1F272E;
+
+  /* Form controls */
+  --pa-invalid-bg: #2E1C21;
+  --pa-invalid-border: #A15C5C;
+  --pa-legacy-field-bg: #23252A;
+  --pa-legacy-field-ink: #B7BAC1;
+  --pa-legacy-field-border: #3B3E45;
+  --pa-legacy-field-shadow: none;
+  --pa-segmented-on: #4E6E92;
+  --pa-segmented-off: #4A4C52;
+  --pa-segmented-ink: #EDEEF0;
+
+  /* AI */
+  --pa-ai-blue: #4A90D9;
+  --pa-ai-blue-hover: #5CA0E6;
+  --pa-ai-panel-bg: #1A1B1F;
+  --pa-ai-bubble-bg: #24262B;
+  --pa-ai-user-bubble: #1F2E3D;
+  --pa-ai-user-bubble-border: #2E4358;
+  --pa-ai-section-border: #2C3E50;
+  --pa-ai-section-bg: linear-gradient(to bottom, #1C2029, #191C23);
+  --pa-ai-pathway-link: #5FC08B;
+  --pa-ai-pathway-link-hover: #85D2A8;
+  --pa-ai-consent-warn: #F08A5D;
+  --pa-ai-progress-bg: #1C2530;
+  --pa-ai-progress-ink: #9FC2E8;
+  --pa-ai-progress-track: #2A3746;
+
+  /* Elevation — shadows on a dark page need more alpha to register at all. */
+  --pa-shadow: 0 1px 3px rgba(0, 0, 0, 0.45), 0 1px 2px -1px rgba(0, 0, 0, 0.35);
+  --pa-shadow-inset: inset 0 1px 2px rgba(0, 0, 0, 0.5);
+  --pa-shadow-overlay: 0 12px 28px -8px rgba(0, 0, 0, 0.7), 0 6px 12px -6px rgba(0, 0, 0, 0.5);
+  --pa-shadow-panel: 0 12px 32px rgba(0, 0, 0, 0.6);
+  --pa-shadow-soft: 0 1px 4px rgba(0, 0, 0, 0.4);
+  --pa-shadow-soft-hover: 0 4px 12px rgba(0, 0, 0, 0.5);
+  --pa-shadow-image: 0 2px 12px rgba(0, 0, 0, 0.5);
+  --pa-shadow-ai-panel: 0 8px 32px rgba(0, 0, 0, 0.55);
+
+  color-scheme: dark;
+}
+
+/* ---------------------------------------------------------------------------
+   1. Page and application chrome
+   --------------------------------------------------------------------------- */
+
+[data-theme="dark"] body,
+[data-theme="dark"] .x-body {
+	background-color: var(--pa-surface-page);
+	color: var(--pa-ink);
+}
+
+/* The centre panel's grey is written inline by MainView's viewport config, so
+   it needs the specificity of an id to come back. */
+[data-theme="dark"] #mainViewCenterPanel {
+	background-color: var(--pa-surface-page) !important;
+}
+
+[data-theme="dark"] .mainTopToolbar {
+	background: var(--pa-surface-toolbar);
+	border-bottom-color: var(--pa-border);
+}
+[data-theme="dark"] #header h1 { color: var(--pa-ink); }
+
+[data-theme="dark"] ul.lateralMenu-body { background: var(--pa-surface-quiet); }
+[data-theme="dark"] .lateralMenu-body > .menuOption { color: var(--pa-ink-nav); }
+[data-theme="dark"] .lateralMenu-body > .menuOption:hover,
+[data-theme="dark"] .lateralMenu-body > .menuOption.selected {
+	background: var(--pa-nav-pill-active);
+	color: var(--pa-ink-strong);
+}
+[data-theme="dark"] .lateralMenu-body ul.submenu {
+	background: var(--pa-surface);
+	border-color: var(--pa-border);
+	box-shadow: var(--pa-shadow-overlay);
+}
+[data-theme="dark"] ul.submenu li.menuOption { color: var(--pa-ink-body); }
+[data-theme="dark"] ul.submenu li.menuOption:hover { background: var(--pa-surface-quiet); }
+[data-theme="dark"] ul.submenu a { color: var(--pa-link); }
+
+/* Header and step-action controls. main.css states the ghost button's fill,
+   ink and border literally, so all three are restated. */
+[data-theme="dark"] .mainTopToolbar .button,
+[data-theme="dark"] .secondTopToolbar .button {
+	background-color: var(--pa-btn-default-bg);
+	color: var(--pa-btn-default-ink);
+	border-color: var(--pa-border-control);
+}
+[data-theme="dark"] .mainTopToolbar .button:hover,
+[data-theme="dark"] .secondTopToolbar .button:hover {
+	background-color: var(--pa-btn-default-bg-hover);
+	color: var(--pa-ink-strong);
+	border-color: var(--pa-border-control-hover);
+}
+[data-theme="dark"] .secondTopToolbar .button.btn-success {
+	background-color: var(--pa-btn-success-bg);
+	border-color: transparent;
+	color: #FFFFFF;
+}
+[data-theme="dark"] .secondTopToolbar .button.btn-success:hover {
+	background-color: var(--pa-btn-success-bg-hover);
+}
+[data-theme="dark"] .mainTopToolbar .button.btn-danger,
+[data-theme="dark"] .secondTopToolbar .button.btn-danger {
+	background-color: transparent;
+	color: var(--pa-btn-ghost-danger-ink);
+	border-color: var(--pa-border-control);
+}
+[data-theme="dark"] .mainTopToolbar .button.btn-danger:hover,
+[data-theme="dark"] .secondTopToolbar .button.btn-danger:hover {
+	background-color: var(--pa-btn-ghost-danger-bg-hover);
+	color: var(--pa-btn-ghost-danger-ink-hover);
+}
+[data-theme="dark"] .mainTopToolbar .button { border-color: transparent; }
+
+/* Contents rail */
+[data-theme="dark"] .pa-toc { background: var(--pa-toc-strip-bg); }
+[data-theme="dark"] .pa-toc-link { color: var(--pa-ink-label); }
+[data-theme="dark"] .pa-toc-link:hover { color: var(--pa-ink-strong); }
+/* The current item inverts in the dark theme - a light pill carrying dark ink -
+   which is the design system's own treatment and the only marker on this rail
+   that has to win against a page of dark surfaces. Both halves are stated
+   together; setting the ink alone left white text on the light pill. */
+[data-theme="dark"] .pa-toc-link.current {
+	background: var(--pa-toc-current-bg);
+	color: var(--pa-toc-current-ink);
+	border-color: var(--pa-toc-marker);
+}
+
+/* ---------------------------------------------------------------------------
+   2. Content surfaces
+   --------------------------------------------------------------------------- */
+
+[data-theme="dark"] .contentbox,
+[data-theme="dark"] .omicSummaryBox,
+[data-theme="dark"] .po-about-section,
+[data-theme="dark"] .po-step-card {
+	background-color: var(--pa-surface);
+	border-color: var(--pa-border);
+	color: var(--pa-ink-body);
+	box-shadow: var(--pa-shadow);
+}
+/* Card headings carry their own white fill and near-black ink, so both have to
+   move together. Recolouring only the ink - which is what a blanket heading
+   rule does - turns "How It Works" into near-white text on a white band, which
+   is worse than leaving it alone.
+
+   Deliberately no blanket h1-h6 rule here. The base heading colours in main.css
+   are already written as var(--pa-accent-orange) and friends, and the token
+   block above has redefined those; overriding the headings wholesale would
+   throw away the accent the theme just supplied. */
+[data-theme="dark"] div.contentbox h2,
+[data-theme="dark"] #clusternumber_box h2,
+[data-theme="dark"] #threshold_box h2,
+[data-theme="dark"] .step4HistoryBox h2 {
+	background-color: var(--pa-surface);
+	border-bottom-color: var(--pa-border);
+	color: var(--pa-ink-title);
+}
+[data-theme="dark"] a { color: var(--pa-link); }
+[data-theme="dark"] a:hover { color: var(--pa-link-hover); }
+[data-theme="dark"] b { color: var(--pa-bold-blue); }
+[data-theme="dark"] span.infoTip,
+[data-theme="dark"] span.infoTip:before { color: var(--pa-accent-blue); }
+[data-theme="dark"] span.commentTip { color: var(--pa-ink-muted); }
+[data-theme="dark"] .sessionAvatar { color: var(--pa-ink-muted); }
+
+/* ---------------------------------------------------------------------------
+   3. ExtJS Neptune widgets
+
+   The vendor stylesheet is loaded before main.css and bakes its own light
+   palette into every widget class. These are the surfaces the analysis actually
+   renders on: panels, grids, headers, toolbars, fields, menus and dialogs.
+   --------------------------------------------------------------------------- */
+
+[data-theme="dark"] .x-panel,
+[data-theme="dark"] .x-panel-body,
+[data-theme="dark"] .x-panel-body-default,
+[data-theme="dark"] .x-container,
+[data-theme="dark"] .x-box-inner {
+	background-color: var(--pa-surface);
+	color: var(--pa-ink-body);
+	border-color: var(--pa-border);
+}
+[data-theme="dark"] .x-panel-header,
+[data-theme="dark"] .x-panel-header-default {
+	background-color: var(--pa-surface) !important;
+	color: var(--pa-ink-title);
+	border-color: var(--pa-border);
+}
+[data-theme="dark"] .x-panel-header-title,
+[data-theme="dark"] .x-panel-header-title-default { color: var(--pa-ink-title); }
+
+/* Grids */
+[data-theme="dark"] .x-grid-body,
+[data-theme="dark"] .x-grid-view,
+[data-theme="dark"] .x-grid-item-container {
+	background-color: var(--pa-surface);
+	border-color: var(--pa-border);
+}
+[data-theme="dark"] .x-column-header,
+[data-theme="dark"] .x-column-header-inner,
+[data-theme="dark"] .x-grid-header-ct {
+	background-color: var(--pa-grid-header-bg) !important;
+	background-image: none !important;
+	color: var(--pa-grid-header-ink);
+	border-color: var(--pa-border) !important;
+}
+[data-theme="dark"] .x-column-header-text,
+[data-theme="dark"] .x-column-header-text-inner { color: var(--pa-grid-header-ink); }
+[data-theme="dark"] .x-grid-cell,
+[data-theme="dark"] .x-grid-td {
+	background-color: transparent;
+	color: var(--pa-ink-body);
+	border-color: var(--pa-border-row) !important;
+}
+[data-theme="dark"] .x-grid-item-alt .x-grid-cell { background-color: var(--pa-grid-row-alt); }
+[data-theme="dark"] .x-grid-item-over .x-grid-cell { background-color: var(--pa-surface-quiet); }
+[data-theme="dark"] .x-grid-item-selected .x-grid-cell { background-color: var(--pa-grid-row-selected); }
+[data-theme="dark"] .x-grid-with-row-lines .x-grid-item { border-color: var(--pa-border-row); }
+
+/* Toolbars, tabs and paging bars */
+[data-theme="dark"] .x-toolbar,
+[data-theme="dark"] .x-toolbar-default,
+[data-theme="dark"] .x-tab-bar,
+[data-theme="dark"] .x-tab-bar-default {
+	background-color: var(--pa-surface-toolbar) !important;
+	background-image: none !important;
+	border-color: var(--pa-border);
+}
+[data-theme="dark"] .x-tab,
+[data-theme="dark"] .x-tab-default {
+	background-color: var(--pa-surface-quiet);
+	background-image: none;
+	border-color: var(--pa-border);
+}
+[data-theme="dark"] .x-tab .x-tab-inner { color: var(--pa-ink-label); }
+[data-theme="dark"] .x-tab-active .x-tab-inner { color: var(--pa-ink-strong); }
+[data-theme="dark"] .x-tab-active { background-color: var(--pa-surface); }
+
+/* Form fields */
+[data-theme="dark"] .x-form-field,
+[data-theme="dark"] .x-form-text,
+[data-theme="dark"] .x-form-textarea,
+[data-theme="dark"] .x-form-trigger-wrap {
+	background-color: var(--pa-legacy-field-bg) !important;
+	background-image: none !important;
+	color: var(--pa-legacy-field-ink) !important;
+	border-color: var(--pa-legacy-field-border) !important;
+}
+[data-theme="dark"] .x-form-item-label,
+[data-theme="dark"] .x-form-item-label-default,
+[data-theme="dark"] .x-form-cb-label { color: var(--pa-ink-label); }
+[data-theme="dark"] .x-form-invalid-field {
+	background-color: var(--pa-invalid-bg) !important;
+	border-color: var(--pa-invalid-border) !important;
+}
+[data-theme="dark"] input::placeholder,
+[data-theme="dark"] textarea::placeholder { color: var(--pa-ink-soft); }
+
+/* Buttons, menus, dialogs and tips */
+[data-theme="dark"] .x-btn-default-small,
+[data-theme="dark"] .x-btn-default-toolbar-small {
+	background-color: var(--pa-btn-default-bg);
+	background-image: none;
+	border-color: var(--pa-border-control);
+	color: var(--pa-btn-default-ink);
+}
+[data-theme="dark"] .x-btn-inner { color: var(--pa-btn-default-ink); }
+[data-theme="dark"] .x-menu,
+[data-theme="dark"] .x-menu-body {
+	background-color: var(--pa-surface);
+	border-color: var(--pa-border);
+}
+[data-theme="dark"] .x-menu-item-text { color: var(--pa-ink-body); }
+[data-theme="dark"] .x-menu-item-active .x-menu-item-link { background-color: var(--pa-surface-quiet); }
+[data-theme="dark"] .x-window,
+[data-theme="dark"] .x-window-body {
+	background-color: var(--pa-surface);
+	border-color: var(--pa-border);
+	color: var(--pa-ink-body);
+}
+[data-theme="dark"] .x-window-header,
+[data-theme="dark"] .x-window-header-title { color: var(--pa-ink-title); }
+[data-theme="dark"] .x-mask { background-color: var(--pa-scrim); }
+[data-theme="dark"] .x-tip,
+[data-theme="dark"] .x-tip-body {
+	background-color: var(--pa-surface-quiet) !important;
+	background-image: none !important;
+	color: var(--pa-ink-body) !important;
+	border-color: var(--pa-border) !important;
+}
+
+/* ---------------------------------------------------------------------------
+   4. AI interpretation surfaces (ai-interpret.css owns these, untokenised)
+   --------------------------------------------------------------------------- */
+
+[data-theme="dark"] .ai-widget-panel {
+	background: var(--pa-ai-panel-bg);
+	border-color: var(--pa-border);
+	box-shadow: var(--pa-shadow-ai-panel);
+}
+[data-theme="dark"] .ai-widget-header { background: var(--pa-ai-blue); }
+[data-theme="dark"] .ai-widget-messages { background: var(--pa-ai-panel-bg); }
+[data-theme="dark"] .ai-msg-bubble {
+	background: var(--pa-ai-bubble-bg);
+	color: var(--pa-ink-body);
+}
+[data-theme="dark"] .ai-msg-user .ai-msg-bubble {
+	background: var(--pa-ai-user-bubble);
+	border-color: var(--pa-ai-user-bubble-border);
+}
+[data-theme="dark"] .ai-widget-input-area {
+	background: var(--pa-surface);
+	border-top-color: var(--pa-border);
+}
+[data-theme="dark"] .ai-widget-input-area textarea {
+	background: var(--pa-legacy-field-bg);
+	color: var(--pa-ink-body);
+	border-color: var(--pa-legacy-field-border);
+}
+[data-theme="dark"] .ai-widget-fab { background: var(--pa-ai-blue); }
+[data-theme="dark"] .ai-progress-track { background: var(--pa-ai-progress-track); }
+[data-theme="dark"] .ai-progress-detail { color: var(--pa-ai-progress-ink); }
+[data-theme="dark"] .ai-pathway-link { color: var(--pa-ai-pathway-link); }
+[data-theme="dark"] .ai-pathway-link:hover { color: var(--pa-ai-pathway-link-hover); }
+[data-theme="dark"] .ai-citations-toggle { color: var(--pa-link); }
+
+/* ---------------------------------------------------------------------------
+   5. The toggle itself
+   --------------------------------------------------------------------------- */
+
+.themeToggle {
+	flex: 0 0 auto;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 30px;
+	height: 30px;
+	margin-left: 8px;
+	border: 1px solid transparent;
+	border-radius: 999px;
+	background: transparent;
+	color: var(--pa-ink-nav, #3A3B42);
+	font-size: 14px;
+	line-height: 1;
+	cursor: pointer;
+}
+.themeToggle:hover {
+	background: var(--pa-surface-quiet, #F1F2F4);
+	color: var(--pa-ink-strong, #111111);
+}
+.themeToggle:focus-visible {
+	outline: 2px solid var(--pa-focus-ring);
+	outline-offset: 2px;
+}
+
+/* ---------------------------------------------------------------------------
+   6. The landing page
+
+   Its hero, step cards and about section predate the token layer entirely and
+   state every colour literally, so none of them moved with the tokens above.
+   Measured on the dark build before these rules, twenty-eight text nodes here
+   sat below 3:1 against their own background - the hero description and the
+   "Data Uploading" headings were the worst, at 2.2 and 1.0.
+   --------------------------------------------------------------------------- */
+
+[data-theme="dark"] .po-hero,
+[data-theme="dark"] .po-hero-section,
+[data-theme="dark"] .po-about-section { background: var(--pa-surface-page); }
+[data-theme="dark"] .po-hero h1 { color: var(--pa-ink-title); }
+[data-theme="dark"] .po-hero h1 span,
+[data-theme="dark"] .po-hero-badge { color: var(--pa-teal); }
+[data-theme="dark"] .po-hero-desc { color: var(--pa-ink-body); }
+[data-theme="dark"] .po-step-card h3 { color: var(--pa-ink-title); }
+[data-theme="dark"] .po-step-card {
+	background: var(--pa-surface);
+	border-color: var(--pa-border);
+	color: var(--pa-ink-body);
+}
+[data-theme="dark"] .po-step-card li,
+[data-theme="dark"] .po-step-card p { color: var(--pa-ink-body); }
+[data-theme="dark"] .po-hero-actions .po-btn-outline {
+	color: var(--pa-ink);
+	border-color: var(--pa-border-control);
+	background: transparent;
+}
+[data-theme="dark"] .po-hero-actions .po-btn-outline:hover {
+	background: var(--pa-surface-quiet);
+	border-color: var(--pa-border-control-hover);
+}
+[data-theme="dark"] .po-hero-ai-highlight {
+	background: var(--pa-ai-section-bg);
+	border-color: var(--pa-ai-section-border);
+}
+[data-theme="dark"] .po-hero-ai-highlight p { color: var(--pa-ink-body); }
+[data-theme="dark"] .po-hero-ai-highlight strong { color: var(--pa-ink-strong); }
+[data-theme="dark"] .po-hero-ai-highlight .po-ai-icon { color: var(--pa-ai-blue); }
+[data-theme="dark"] .po-ai-section-body,
+[data-theme="dark"] .po-ai-section-body p { color: var(--pa-ink-body); }
+[data-theme="dark"] .po-hero-flow-link { color: var(--pa-link); }
+
+/* The hero diagram is inline SVG with its own light fills, drawn to sit on a
+   white card. Nudging the three panel plates and their ink is enough; the omic
+   swatches and the bwr ramp are data colouring and stay exactly as they are. */
+[data-theme="dark"] .po-hero-flow rect[fill="#FFFFFF"] { fill: var(--pa-surface); }
+[data-theme="dark"] .po-hero-flow rect[stroke="#E4E4E7"] { stroke: var(--pa-border); }
+[data-theme="dark"] .po-hero-flow text[fill="#27272A"] { fill: var(--pa-ink-title); }
+[data-theme="dark"] .po-hero-flow text[fill="#3F3F46"] { fill: var(--pa-ink-body); }
+[data-theme="dark"] .po-hero-flow text[fill="#71717A"] { fill: var(--pa-ink-label); }
+
+/* Inline "Load example" / "Run PaintOmics" chips inside the help prose. These
+   are coloured like their real counterparts in the toolbar, which means white
+   ink on a solid fill; the fill is stated inline in PA_Step1Views so only the
+   ink needs restating here. */
+[data-theme="dark"] .button.btn-inline { color: #FFFFFF; }
+
+/* Step 1's omic selection.
+   Only the containers and the card body move. Deliberately NOT
+   .availableOmicsBox or .omicboxTitle: those are the coloured omic chips, and
+   their fills are the same type-coding used in the pathway diagrams. Repainting
+   them dark - which an earlier version of this rule did - left six unlabelled
+   grey slabs, because their near-black ink is chosen against the colour, not
+   against the page. The fills carry their own contrast and stay as they are. */
+[data-theme="dark"] .omicSubmittingPanel,
+[data-theme="dark"] .omicSummaryContainer {
+	background: var(--pa-surface);
+	border-color: var(--pa-border);
+	color: var(--pa-ink-body);
+}
+[data-theme="dark"] .omicbox {
+	background: var(--pa-surface);
+	border-color: var(--pa-border);
+}
+
+/* Step 1's help panel and the numbered section labels around it are plain prose
+   in a box with no class of their own, so they inherit whatever the page gives
+   them - which was near-black. */
+[data-theme="dark"] .paStep1Form,
+[data-theme="dark"] .paStep1Form p,
+[data-theme="dark"] .paStep1Form li,
+[data-theme="dark"] .paStep1Form label,
+[data-theme="dark"] #mainViewCenterPanel .content,
+[data-theme="dark"] #mainViewCenterPanel .content p,
+[data-theme="dark"] #mainViewCenterPanel .content i,
+[data-theme="dark"] #mainViewCenterPanel .content span { color: var(--pa-ink-body); }
+[data-theme="dark"] #mainViewCenterPanel .content h5 { color: var(--pa-ink-title); }
+
+/* The cookie-consent widget ships its own light palette. */
+[data-theme="dark"] .cc-revoke,
+[data-theme="dark"] .cc-window {
+	background: var(--pa-surface-quiet) !important;
+	color: var(--pa-ink-body) !important;
+}
+
+/* ---------------------------------------------------------------------------
+   7. Prose that has no class of its own
+
+   Step 1's section headings and body copy are bare h3/p inside form boxes, so
+   nothing above could reach them by selector and they kept their light-theme
+   near-black: measured at 1.58 and 2.21 against the dark page. Scoped to the
+   centre panel so the header and the contents rail are not caught by it.
+   --------------------------------------------------------------------------- */
+
+[data-theme="dark"] #mainViewCenterPanel h3 { color: var(--pa-ink-title); }
+[data-theme="dark"] #mainViewCenterPanel .paStep1Form p,
+[data-theme="dark"] #mainViewCenterPanel .po-ai-section p,
+[data-theme="dark"] #mainViewCenterPanel .contentbox > p,
+[data-theme="dark"] #mainViewCenterPanel .contentbox div > p { color: var(--pa-ink-body); }
+
+/* The hero badge is the one place --pa-teal is set in small type on the page
+   ground, where it measures 2.33. The hover tint is the same hue two steps
+   lighter and clears 3:1, so the badge borrows it rather than inventing a
+   colour the system does not have. */
+[data-theme="dark"] .po-hero-badge { color: var(--pa-teal-hover); }
+
+/* Two paragraphs in the Step 1 AI section carry their colour as an inline
+   style attribute written by PA_Step1Views.js, so no stylesheet rule can reach
+   them - #555 measures 2.21 against the dark panel. `!important` is the only
+   thing that beats an inline declaration, and the selectors are pinned to the
+   exact values so they stop applying the moment that markup is cleaned up.
+
+   The proper fix is to take the colour out of the markup, but that means
+   choosing a light-theme replacement for a token this stylesheet does not
+   define, and the light build is not what needs changing here. */
+[data-theme="dark"] #mainViewCenterPanel [style*="color:#555"] { color: var(--pa-ink-body) !important; }
+[data-theme="dark"] #mainViewCenterPanel [style*="color:#666"] { color: var(--pa-ink-label) !important; }
