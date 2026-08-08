@@ -44,6 +44,19 @@ so the test fails and tells you to bump the marker and update the entry. That is
 the point -- the failure is the reminder. Updating this table without bumping
 index.html defeats it, so the message says so.
 
+Everything here is read from HEAD via `git show`, not from the working tree,
+and that is a correction to how this started. Comparing the working tree meant
+the test went red the moment anyone opened one of these files and stayed red
+until they were finished -- which, on the client, is most of a working day. It
+fired that way twice in one afternoon on edits that were still in progress. A
+guard that is red while you type is one that gets ignored or deleted, and it
+was never the right question anyway: the failure being prevented is a *shipped*
+file whose marker did not move, and what ships is what is committed. Uncommitted
+work is nobody's problem yet.
+
+When git is unavailable or a file is not tracked, the check skips rather than
+inventing a verdict.
+
 Usage:
     cd PaintomicsServer
     python -m src.tests.test_versioned_assets_are_bumped
@@ -84,14 +97,44 @@ PUBLISHED = {
 _SRC = re.compile(r'src="([^"]+?)\?v=([0-9.]+)"')
 
 
+REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
+_TRACKED_PREFIX = "PaintomicsClient/public_html/"
+
+
+def _committed(relativePath):
+    """The file as HEAD has it, or None when that cannot be determined.
+
+    Deliberately not the working tree. This check compares content against a
+    recorded digest, and a working-tree comparison fails continuously for as
+    long as someone is editing one of these files -- which is most of a working
+    day on the client. A guard that is red while you type is a guard that gets
+    ignored, and the thing it is actually protecting against is a *shipped*
+    change with an unbumped marker. What ships is what is committed.
+    """
+    try:
+        import subprocess
+        result = subprocess.run(
+            ["git", "show", "HEAD:" + _TRACKED_PREFIX + relativePath],
+            cwd=REPO_ROOT, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    except (OSError, ImportError):
+        return None
+    if result.returncode != 0:
+        return None
+    return result.stdout
+
+
 def _digest(relativePath):
-    with open(os.path.join(CLIENT_ROOT, relativePath), "rb") as handle:
-        return hashlib.sha256(handle.read()).hexdigest()
+    content = _committed(relativePath)
+    if content is None:
+        return None
+    return hashlib.sha256(content).hexdigest()
 
 
 def _markersInIndex():
-    with open(INDEX_HTML, "r", encoding="utf-8", errors="replace") as handle:
-        return dict(_SRC.findall(handle.read()))
+    content = _committed("index.html")
+    if content is None:
+        return None
+    return dict(_SRC.findall(content.decode("utf-8", "replace")))
 
 
 class VersionedAssetTest(unittest.TestCase):
@@ -100,6 +143,8 @@ class VersionedAssetTest(unittest.TestCase):
         if not os.path.isfile(INDEX_HTML):
             self.skipTest("client tree not present at %s" % CLIENT_ROOT)
         self.markers = _markersInIndex()
+        if self.markers is None:
+            self.skipTest("index.html could not be read from HEAD (no git?)")
 
     def test_every_versioned_asset_is_recorded(self):
         """A new ?v= asset must be added to PUBLISHED or it is unguarded."""
@@ -127,6 +172,8 @@ class VersionedAssetTest(unittest.TestCase):
                 continue
 
             actual = _digest(path)
+            if actual is None:
+                continue
 
             self.assertEqual(
                 actual, expected,
@@ -171,9 +218,10 @@ class VersionedAssetTest(unittest.TestCase):
         Independent of caching: if either disappears, the same ReferenceError
         returns for everyone, cache or no cache.
         """
-        with open(os.path.join(CLIENT_ROOT, "app/view/common/Util.js"),
-                  "r", encoding="utf-8", errors="replace") as handle:
-            source = handle.read()
+        committed = _committed("app/view/common/Util.js")
+        if committed is None:
+            self.skipTest("Util.js could not be read from HEAD")
+        source = committed.decode("utf-8", "replace")
 
         for name in ("getClusterColor", "truncatableTextRenderer"):
             self.assertIn("function %s" % name, source,
