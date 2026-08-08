@@ -248,15 +248,51 @@ def _count_significant_omics(pw):
     responds at one timepoint is a real signal for a report to discuss, and
     requiring every condition would discard exactly the time-resolved findings
     multi-condition analysis exists to surface.
+
+    The earlier repair guessed the wrong shape. ``significanceValues[omic]`` is
+    a *list of per-condition triples*::
+
+        [[totalMatched, totalRelevant, pValue],   # condition 1
+         [totalMatched, totalRelevant, pValue],   # condition 2
+         ...]
+
+    so ``len(vals)`` is the condition count, not a field count, and ``vals[2]``
+    is the third condition rather than the p-value. Two silent consequences:
+    with one or two conditions every omic was skipped, so nothing was ever
+    counted and no pathway could be triaged as major; with three or more the
+    feature *counts* were compared against the threshold, and a totalMatched of
+    0 is below any p-value threshold, so a pathway matching nothing scored as
+    significant.
     """
     count = 0
     for omic_name, vals in pw.significanceValues.items():
-        # vals layout: [total_genes, relevant_genes, p_value, ...]
-        if len(vals) < 3:
-            continue
-        if any(p < AI_MAJOR_PATHWAY_MAX_PVAL for p in _numericValues(vals[2])):
+        if any(p < AI_MAJOR_PATHWAY_MAX_PVAL for p in _conditionPvaluesOf(vals)):
             count += 1
     return count
+
+
+def _conditionPvaluesOf(vals):
+    """The p-value of each condition in one omic's significance entry.
+
+    Tolerates the legacy flat ``[totalMatched, totalRelevant, pValue]`` shape as
+    well as the per-condition list of triples, because both appear in stored
+    jobs. Slots that still hold the -1.0 sentinel `Pathway` initialises them
+    with are dropped: a p-value is only ever in (0, 1], and a negative left in
+    place would read as the most significant value there is.
+    """
+    if not isinstance(vals, (list, tuple)) or not vals:
+        return []
+
+    if all(isinstance(entry, (list, tuple)) for entry in vals):
+        pvalues = [entry[2] for entry in vals if len(entry) >= 3]
+    else:
+        # Legacy flat triple; its third slot may itself be a per-condition list.
+        pvalues = list(vals[2:3])
+
+    flattened = []
+    for pvalue in pvalues:
+        flattened.extend(_numericValues(pvalue))
+    return [p for p in flattened if 0 <= p <= 1]
 
 
 def _numericValues(value):
@@ -312,15 +348,53 @@ def _globalPval(pw):
 
 
 def _format_significance(pw):
+    """One line per omic for the prompt: strongest p-value and the counts.
+
+    Indexed the same wrong shape `_count_significant_omics` did -- see
+    `_conditionPvaluesOf`. `vals[1]` and `vals[0]` are whole condition triples,
+    not counts, so a three-condition job rendered
+
+        Gene expression: p=0.9000 ([2, 0, 0.8]/[2, 1, 0.7] relevant)
+
+    with lists where the counts belong and, because `min()` then ran over
+    `[totalMatched, totalRelevant, pValue]`, a "p-value" that was usually a
+    feature count -- `p=0.0000` for a pathway whose real p-values were 0.7, 0.8
+    and 0.9. A job with one or two conditions produced no line at all.
+
+    Counts are taken from the strongest condition, which is the one the p-value
+    reported alongside them describes.
+    """
     parts = []
     for omic_name, vals in pw.significanceValues.items():
-        if len(vals) >= 3:
-            # vals[2] is a list under multi-condition; report the strongest.
-            pvalues = _numericValues(vals[2])
-            if not pvalues:
-                continue
-            parts.append(f"{omic_name}: p={min(pvalues):.4f} ({vals[1]}/{vals[0]} relevant)")
+        pvalues = _conditionPvaluesOf(vals)
+        if not pvalues:
+            continue
+
+        best = min(pvalues)
+        matched, relevant = _countsAtBestCondition(vals, best)
+        parts.append(f"{omic_name}: p={best:.4f} ({relevant}/{matched} relevant)")
     return "; ".join(parts)
+
+
+def _countsAtBestCondition(vals, best):
+    """(totalMatched, totalRelevant) for the condition holding `best`.
+
+    Falls back to the first condition when the shape is the legacy flat triple
+    or nothing matches, so this can never be the thing that raises.
+    """
+    if isinstance(vals, (list, tuple)) and vals and all(
+            isinstance(entry, (list, tuple)) for entry in vals):
+        for entry in vals:
+            if len(entry) >= 3 and entry[2] == best:
+                return entry[0], entry[1]
+        first = vals[0]
+        if len(first) >= 2:
+            return first[0], first[1]
+        return 0, 0
+
+    if isinstance(vals, (list, tuple)) and len(vals) >= 2:
+        return vals[0], vals[1]
+    return 0, 0
 
 
 def get_organism_name(organism_code):
