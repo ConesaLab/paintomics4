@@ -2764,10 +2764,20 @@ function PA_Step4VisualOptionsView() {
 		'<div class="lateralOptionsSelector omicSelector">'+
 		'  <h5>Gene based omics</h5>';
 
+		// `viewbox` draws these as an eye rather than a tick: main.css swaps the
+		// glyph to eye-slash in red when off and eye in green when on. The variant
+		// has been in the stylesheet since 2021 and had never been put on anything.
+		//
+		// It belongs here rather than anywhere else. This section is headed "Choose
+		// the omics to draw" and each box binds to visualOptions.visibleOmics, so
+		// what it toggles is whether an omic is drawn - which is what an eye says
+		// and a tick does not. The product already reads eye/eye-slash that way in
+		// three other places: the network cluster toggles, the alternative-compound
+		// Show/Hide, and the My Data actions.
 		var omicsAux = me.getParent().getGeneBasedInputOmics();
 		for (var i in omicsAux) {
 			windowContent +=
-			' <div class="checkbox">'+
+			' <div class="checkbox viewbox">'+
 			'   <input ' + ((visualOptions.visibleOmics.indexOf(omicsAux[i].omicName + "#genebased") > -1) ? "checked" : "") + ' type="checkbox" id="' + omicsAux[i].omicName + '#genebased">'+
 			'   <label for="' + omicsAux[i].omicName + '#genebased">' + omicsAux[i].omicName + '</label>'+
 			' </div>';
@@ -2777,7 +2787,7 @@ function PA_Step4VisualOptionsView() {
 		windowContent += '<h5>Compound based omics</h5>';
 		for (var i in omicsCompounds) {
 			windowContent +=
-			' <div class="checkbox">'+
+			' <div class="checkbox viewbox">'+
 			'  <input ' + ((visualOptions.visibleOmics.indexOf(omicsCompounds[i].omicName + "#compoundbased") > -1) ? "checked" : "") + ' type="checkbox" id="' + omicsCompounds[i].omicName + '#compoundbased' + '">'+
 			'  <label for="' + omicsCompounds[i].omicName + '#compoundbased">' + omicsCompounds[i].omicName + '</label>'+
 			' </div>';
