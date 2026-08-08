@@ -47,11 +47,24 @@ if tar -tf "${ARCHIVE}" | grep -qE 'conf/(local_)?serverconf\.py$'; then
 fi
 
 # The symlinks are load-bearing; verify tar kept them as links.
+#
+# Listed once into a variable rather than piped per link, for two reasons. The
+# archive is ~290 MB, so this walked it three times. And `tar ... | grep -q`
+# cannot work under the `set -o pipefail` above: grep -q exits at the first
+# match, tar takes SIGPIPE on the closed pipe and exits non-zero, and pipefail
+# reports the pipeline as failed. A miss is equally fatal, because then grep
+# itself exits 1. So the check warned on every build whatever the archive
+# contained - it announced all three links missing on a build where all three
+# were present and correct, which is the same as having no check at all.
+listing="$(tar -tvf "${ARCHIVE}")"
 missing=0
 for link in PaintomicsServer/src/src \
             PaintomicsServer/src/AdminTools/src \
             PaintomicsServer/src/AdminTools/scripts/src; do
-    tar -tvf "${ARCHIVE}" | grep -q "^l.* ${link} ->" || { echo "  WARNING: ${link} not stored as a symlink" >&2; missing=1; }
+    case "${listing}" in
+        *" ${link} -> "*) ;;
+        *) echo "  WARNING: ${link} not stored as a symlink" >&2; missing=1 ;;
+    esac
 done
 [ "${missing}" -eq 0 ] && echo "  symlinks preserved"
 
