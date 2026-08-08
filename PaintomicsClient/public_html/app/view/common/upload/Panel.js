@@ -725,12 +725,18 @@ Ext.define('Ext.upload.ItemGridPanel', {
         return this.store.findExact('filename', record.get('filename'));
     },
     statusRenderer: function (value, metaData, record, rowIndex, colIndex, store) {
+        // These five glyphs are the only report on what a file upload is doing,
+        // and two of them were drawn in colours that do not reach the 3:1 WCAG
+        // 1.4.11 asks of a graphic carrying meaning: #a8a8a8 at 2.5:1 and
+        // #5CB85C at 2.48:1, both on white. The palette in main.css was retuned
+        // for exactly this and these inline styles were never part of that
+        // sweep, so they keep the pre-audit values. Tokens now, same meanings.
         if (value === 'ready') {
-            value = '<span style="color:#a8a8a8;display: block;text-align: center;" data-qtip="' + value + '"><i class="fa fa-clock-o"></i></span>';
+            value = '<span style="color:var(--pa-ink-muted);display: block;text-align: center;" data-qtip="' + value + '"><i class="fa fa-clock-o"></i></span>';
         } else if (value === 'uploading') {
             value = '<span style="color:#333;display: block;text-align: center;" data-qtip="' + value + '"><i class="fa fa-spinner fa-pulse"></i></span>';
         } else if (value === 'uploaded') {
-            value = '<span style="color:#5CB85C;display: block;text-align: center;" data-qtip="' + value + '"><i class="fa fa-check"></i></span>';
+            value = '<span style="color:var(--pa-accent-green);display: block;text-align: center;" data-qtip="' + value + '"><i class="fa fa-check"></i></span>';
         } else if (value === 'uploaderror') {
             value = '<span style="color:#dd4744;display: block;text-align: center;" data-qtip="' + value + '"><i class="fa fa-times"></i></span>';
         } else {

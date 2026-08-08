@@ -2938,7 +2938,7 @@ function PA_Step3PathwayNetworkTooltipView() {
 					xtype: "box", html:
 					"  <div style='text-align: center;margin: 10px 0px;'>" +
 					'     <a href="javascript:void(0)" class="button" id="step3TooltipMoreButton" style="float: none;"><i class="fa fa-search-plus"></i> Show details</a>'+
-					'     <a href="javascript:void(0)" class="button" id="step3TooltipPaintButton" style="float: none; background-color:#0076E2;"><i class="fa fa-paint-brush"></i> Paint</a>'+
+					'     <a href="javascript:void(0)" class="button" id="step3TooltipPaintButton" style="float: none; background-color:var(--pa-link);"><i class="fa fa-paint-brush"></i> Paint</a>'+
 					"  </div>"
 				}
 			],

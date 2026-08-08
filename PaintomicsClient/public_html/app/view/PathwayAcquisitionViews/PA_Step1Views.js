@@ -721,7 +721,7 @@ function PA_Step1JobView() {
 							flex: 1,
 							layout: {type: 'vbox',align: "stretch"},
 							items: [
-								{xtype: 'box',html: '<div class="content"><h5><i class="fa fa-info-circle" style="color: #2C7FDD; font-size: 50px;"></i> Help</h5><p>Drag and drop omics from <i>"Available"</i> to <i>"Selected"</i> area or click the <i class="fa fa-plus-circle"  style="font-size: 18px;"></i> button.</p><p>If you do not need them, delete with with <i class="fa fa-trash" style="font-size: 18px;"></i>.</p><p>Once you are done, click on the "Run PaintOmics" button on the upper-right corner.</p><p>Make sure to <span style="text-decoration: underline;">choose an organism</span> from the select box first!</p></div>'}
+								{xtype: 'box',html: '<div class="content"><h5><i class="fa fa-info-circle" style="color: var(--pa-accent-blue); font-size: 50px;"></i> Help</h5><p>Drag and drop omics from <i>"Available"</i> to <i>"Selected"</i> area or click the <i class="fa fa-plus-circle"  style="font-size: 18px;"></i> button.</p><p>If you do not need them, delete with <i class="fa fa-trash" style="font-size: 18px;"></i>.</p><p>Once you are done, click on the "Run PaintOmics" button on the upper-right corner.</p><p>Make sure to <span style="text-decoration: underline;">choose an organism</span> from the select box first!</p></div>'}
 							]
 						}]
 					}					
