@@ -1,19 +1,50 @@
+/* Yes, the family called 'SourceSansPro' is served by the two Myriad Pro faces.
+   That is how this product has always shipped and it is deliberate; the real
+   Source Sans Pro is vendored alongside and is the next name in the fallback
+   chain. Only these two weights exist, so every 500/600 in the UI synthesises
+   up to Semibold.
+
+   `swap` on body text: the fallback renders immediately and is replaced when
+   the webfont arrives, so text is never invisible. Icon fonts below take
+   `block` instead, for the opposite reason. */
 @font-face {
 	font-family: 'SourceSansPro';
 	src: url('fonts/MyriadPro-Light.ttf') format('truetype');
 	font-weight: normal;
 	font-style: normal;
+	font-display: swap;
 }
 @font-face {
 	font-family: 'SourceSansPro';
 	src: url('fonts/MyriadPro-Semibold.ttf') format('truetype');
 	font-weight: bold;
 	font-style: normal;
+	font-display: swap;
 }
+/* Icon fonts ------------------------------------------------------------------
+   `block`, not `swap`. An icon font's codepoints are in a private use area that
+   no fallback font has a glyph for, so swapping to the fallback draws a row of
+   empty boxes: on a cold load this page showed tofu in place of every icon in
+   the header, the toolbars and the upload cards until the font arrived.
+   `block` renders nothing at all for that window, which reads as an icon that
+   has not painted yet rather than as one that is broken. */
 @font-face {
 	font-family: 'CustomIcons';
 	src: url('fonts/CustomIcons.ttf') format('truetype');
 	font-style: normal;
+	font-display: block;
+}
+/* Re-declared here only to add font-display. font-awesome.min.css is vendored,
+   so editing it would lose this on the next upgrade; this file is linked after
+   it in index.html, so the later face wins. Same three sources, same order. */
+@font-face {
+	font-family: 'FontAwesome';
+	src: url('../font-awesome/fonts/fontawesome-webfont.woff2?v=4.4.0') format('woff2'),
+	     url('../font-awesome/fonts/fontawesome-webfont.woff?v=4.4.0') format('woff'),
+	     url('../font-awesome/fonts/fontawesome-webfont.ttf?v=4.4.0') format('truetype');
+	font-weight: normal;
+	font-style: normal;
+	font-display: block;
 }
 
 /*BODY STYLES*/
