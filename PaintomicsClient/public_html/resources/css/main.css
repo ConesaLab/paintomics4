@@ -3291,14 +3291,30 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
   grid-template-columns: repeat(3, 1fr);
   gap: 20px;
   margin: 20px 0;
-  align-items: start;
+  /* Not `start`, which is what this was. These three cards hold unrelated
+     amounts of prose - measured on the deployed page they came out 327, 358
+     and 278px tall - so `start` gave a row of peers three different bottom
+     edges, 80px apart at the extremes, each with its own teal top rule
+     starting level and nothing else agreeing after that.
+
+     `stretch` is the grid default and the right one here: the cards are one
+     row of one kind of thing, and the row reads as a row when it has one
+     baseline top and bottom. The content stays top-aligned inside, so only
+     the white box grows. */
+  align-items: stretch;
 }
 
 .po-step-card {
   background: #fff;
-  border: 1px solid #e0e0e0;
+  /* Was #e0e0e0 at 4px - the neutral grey and the *control* radius. This is a
+     card, and the token block above picked 6px for cards precisely to stop
+     surfaces and controls sharing a corner, so a 4px card is the drift that
+     rule exists to prevent. The border likewise: --pa-border is a touch cooler
+     than a flat grey, which is what makes a card read as defined rather than
+     washed out against the page. */
+  border: 1px solid var(--pa-border);
   border-top: 3px solid #007383;
-  border-radius: 4px;
+  border-radius: var(--pa-radius);
   padding: 24px;
   text-align: center;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
@@ -3385,7 +3401,10 @@ div.po-step-card h3 {
 .po-ai-section-body {
   background: linear-gradient(to bottom, #f8faff, #f2f6fc);
   border: 1px solid #c8d6e5;
-  border-radius: 8px;
+  /* 8px was a fourth corner radius, in a stylesheet whose token block exists
+     because three of them read as unfinished. This is a panel, so it takes the
+     surface radius like every other panel. */
+  border-radius: var(--pa-radius);
   padding: 18px 22px;
   /* --pa-card-inset, not 20px: this callout sits directly under the
      "AI-Powered Pathway Interpretation" heading, so a 6px difference between
