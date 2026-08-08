@@ -1288,25 +1288,57 @@ function JobController() {
 	* @returns {undefined}
 	*/
 	this.updateStoredApplicationData = function (key, data) {
+		// Dropping the observer wiring is what makes the model serialisable at
+		// all: `observers` is the back-reference that makes it circular.
+		// JSON.stringify discards the model's function properties for free.
+		var replacerFn = function (key, value) {
+			if (key === 'observers' || key === 'changed') {
+				return;
+			}
+			return value; // returning undefined omits the key from being serialized
+		};
+
+		// Serialised once and used by both stores below. For a six-omic job
+		// this string is about 10 MB, so doing it twice is not free.
+		var serialised = null;
+		if (data != null) {
+			try {
+				serialised = JSON.stringify(data, replacerFn);
+			} catch (err) {
+				console.warn("Could not serialise " + key + " for storage.", err);
+			}
+		}
+
 		if (key === "jobModel" && data != null) {
 			// Ensure we have a jobID for IndexedDB primary key
 			if (data.jobID) {
-				this.updateStoredApplicationDataIndexDB("jobs", data);
+				// IndexedDB structured-clones whatever it is handed, and the
+				// live job model cannot be cloned: 81 function properties and a
+				// circular FeatureSet reference. So every save failed with
+				//     DataCloneError: function(){} could not be cloned
+				// and the jobs store held zero rows -- read straight out of the
+				// browser's own database to check -- while the warning below
+				// told the user the model had been saved there. It is written
+				// on every job load, so the console carried the error every
+				// time and dumped the whole object graph after it.
+				//
+				// The plain object sessionStorage already builds is clonable,
+				// and a plain JSON round-trip is not enough on its own here:
+				// without the replacer, JSON.stringify throws
+				//     TypeError: Converting circular structure to JSON
+				// on the same model.
+				if (serialised !== null) {
+					this.updateStoredApplicationDataIndexDB("jobs", JSON.parse(serialised));
+				}
 			} else {
 				console.warn("Attempted to save jobModel to IndexedDB but jobID is missing.");
 			}
 		}
 
 		if (window.sessionStorage) {
-			if (data != null) {
-				var replacerFn = function (key, value) {
-					if (key === 'observers' || key === 'changed') {
-						return;
-					}
-					return value; // returning undefined omits the key from being serialized
-				};
+			if (data != null && serialised !== null) {
 				try {
-					sessionStorage.setItem(key, JSON.stringify(data, replacerFn));
+					sessionStorage.setItem(key, serialised);
 				}
 				catch (err) {
 					if (key !== "jobModel") {
