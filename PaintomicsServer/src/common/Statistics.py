@@ -64,6 +64,21 @@ def _usablePvalues(significanceValuesList):
         pVal = _extractPvalue(significanceValues)
         if isinstance(pVal, bool) or not isinstance(pVal, (int, float)):
             continue
+        # NaN is a float, and both comparisons below are False for it, so it
+        # went straight through the range check and out the other side --
+        # despite this function promising p-values in [0, 1]. It is reachable:
+        # calculateFisher returns hypergeom.sf(...), which is NaN whenever the
+        # sample is larger than the population, e.g.
+        #     calculateFisher(10, 20, 5, 8) -> nan
+        # Fisher then combined it into NaN, and a NaN reaching jsonify is
+        # written as the bare token `NaN`, which is not valid JSON (RFC 8259),
+        # so the client's JSON.parse rejects the entire response --
+        # "Oops..Internal error! Unable to parse the error message". That is
+        # the same failure calculateStoufferCombinedPvalue documents and
+        # guards against; Stouffer survived only because of its own isfinite
+        # backstop, which Fisher never had.
+        if not isfinite(pVal):
+            continue
         if pVal < 0 or pVal > 1:
             continue
         pvalues.append(pVal)
@@ -85,7 +100,16 @@ def calculateCombinedFisher(significanceValuesList):
 
     accumulatedValue = accumulatedValue * -2
 
-    return(chi2.sf(accumulatedValue, 2*len(pvalues)))
+    combined = chi2.sf(accumulatedValue, 2*len(pvalues))
+
+    # The same backstop calculateStoufferCombinedPvalue carries, for the same
+    # reason: a non-finite result is serialised as invalid JSON and takes the
+    # whole response down with it. The NaN route in is closed above, so this
+    # only covers anything degenerate that arrives another way.
+    if not isfinite(combined):
+        return 1.0
+
+    return combined
 
 # fdr_bh (default), fdr_by, nada
 def adjustPvalues(pvaluesList):
