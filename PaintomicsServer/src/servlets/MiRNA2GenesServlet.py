@@ -114,7 +114,12 @@ def fromMiRNAtoGenes_STEP1(REQUEST, RESPONSE, QUEUE_INSTANCE, JOB_ID, EXAMPLE_FI
             jobInstance.addReferenceInput({"omicName": omicName, "fileType": "Reference file", "inputDataFile": EXAMPLE_FILES_DIR + "mmu_mirBase_to_ensembl.tab", "isExample" : True})
             jobInstance.setOrganism("mmu")
         else:
-            raise NotImplementedError
+            # See Bed2GenesServlet: a bare NotImplementedError reaches the user
+            # as "ERROR MESSAGE: " with nothing after it.
+            raise NotImplementedError(
+                "Unrecognised example mode %r for miRNA2Genes: expected no "
+                "value for an upload, or 'example' for the bundled dataset."
+                % (exampleMode,))
 
         #****************************************************************
         # Step 4. READ PARAMS

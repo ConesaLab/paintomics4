@@ -108,7 +108,13 @@ def fromBEDtoGenes_STEP1(REQUEST, RESPONSE, QUEUE_INSTANCE, JOB_ID, EXAMPLE_FILE
             specie = "mmu"
             jobInstance.setOrganism(specie)
         else:
-            raise NotImplementedError
+            # `raise NotImplementedError` on its own has an empty str(), and
+            # handleException formats the reply as "ERROR MESSAGE: " + str(ex),
+            # so the user was shown a dialog with nothing after the colon.
+            raise NotImplementedError(
+                "Unrecognised example mode %r for Regions2Genes: expected no "
+                "value for an upload, or 'example' for the bundled dataset."
+                % (exampleMode,))
 
         #****************************************************************
         # Step 4. READ PARAMS

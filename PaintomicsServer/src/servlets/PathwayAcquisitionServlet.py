@@ -175,7 +175,12 @@ def pathwayAcquisitionStep1_PART1(REQUEST, RESPONSE, QUEUE_INSTANCE, JOB_ID, EXA
             jobInstance.setAIConsent(formFields.get("aiConsent", "false"))
             jobInstance.setExperimentDesign(formFields.get("experimentDesign", ""))
         else:
-            raise NotImplementedError
+            # See Bed2GenesServlet: a bare NotImplementedError reaches the user
+            # as "ERROR MESSAGE: " with nothing after it.
+            raise NotImplementedError(
+                "Unrecognised example mode %r: expected no value for an "
+                "upload, or 'example' for the bundled dataset."
+                % (exampleMode,))
 
 
         #************************************************************************
