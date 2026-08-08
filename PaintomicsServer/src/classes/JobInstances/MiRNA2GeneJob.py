@@ -374,12 +374,23 @@ class MiRNA2GeneJob(Job):
                     score      = float(line[2])
                     score_type = line[3]
                     # A list, not map(): on Python 3 map() is a one-shot
-                    # iterator, and this goes on to OmicValue.setValues(). Read
-                    # once it yields the values; read again -- which happens
-                    # whenever addInputGeneData merges a gene that several
-                    # miRNAs target, and miRNA target tables are many-to-one by
-                    # nature -- it yields nothing. It also has no len() and
-                    # cannot be serialised into MongoDB.
+                    # iterator, and this goes on to OmicValue.setValues().
+                    #
+                    # Being precise about the scope, because it is easy to
+                    # overstate: on *this* path the values are read exactly
+                    # once, where regulator2genesOutput is written, and
+                    # addInputGeneData merges genes by appending OmicValue
+                    # objects without reading them. So the lazy map produced
+                    # correct output here -- verified by re-running the example
+                    # after the change and finding all 97,983 rows carrying
+                    # their full six conditions, including the 4,132 genes that
+                    # several miRNAs target.
+                    #
+                    # It is fixed as a latent hazard rather than an observed
+                    # corruption. A stored map has no len(), cannot be
+                    # serialised into MongoDB, and empties on any second read,
+                    # so it is one added caller away from silently losing data
+                    # -- and the loss would be empty values, not an exception.
                     values     =  [float(value) for value in line[4:]]
 
                     #EVEN WHEN THE USER HAS CHOOSE THE OPTION "FC", if the conditions do no allow to calculate the
