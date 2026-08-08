@@ -441,7 +441,10 @@ function PA_Step1JobView() {
 							xtype: "container", layout: { type: "vbox", align: "stretch" }, flex: 0.4, items: [
 							{
 								xtype: 'combo',fieldLabel: 'Organism', name: 'specie',
-								style: "margin: 10px 10px 10px 20px;",
+								/* 26px is --pa-card-inset: this field sits directly under
+								   "1. Organism selection", so it has to start on the same
+								   left edge as that heading. */
+								style: "margin: 10px 10px 10px 26px;",
 								flex: 1,
 								maxWidth: 450,
 								itemId: "speciesCombobox",
@@ -474,7 +477,7 @@ function PA_Step1JobView() {
 							},
 							{
 								xtype: "box", flex: 1, html:
-								'<span class="infoTip" style=" font-size: 12px; margin-left: 190px; margin-bottom: 10px;">'+
+								'<span class="infoTip" style=" font-size: 12px; margin-left: 196px; margin-bottom: 10px;">'+
 								' Not your organism? Request new organisms <a href="javascript:void(0)" id="newOrganismRequest" style="color: rgb(211, 21, 108);">clicking here</a>.' +
 								'</span>'
 							}]
@@ -486,7 +489,7 @@ function PA_Step1JobView() {
 								fieldLabel: "Enter a job description", 
 								allowBlank: true,
 								name: 'jobDescription',
-								style: "margin: 10px 20px;",
+								style: "margin: 10px 26px 10px 20px;",
 								labelWidth: 150,
 								width: 650,
 								flex: 0,
@@ -512,7 +515,7 @@ function PA_Step1JobView() {
 								},
 								{
 									xtype: "box", flex: 1, html:
-									'<span class="infoTip" style=" font-size: 12px; margin: 0 20px 10px 190px;">'+
+									'<span class="infoTip" style=" font-size: 12px; margin: 0 26px 10px 196px;">'+
 									' For <span style="color: rgb(211, 21, 108);">some</span> species more than one database might be available. Please check <b><a href="https://paintomics.readthedocs.io/en/latest/1_4_id/" target="_blank"> Supported ID and databases</a></b>. Choose which ones do you want to include in the analysis.' +
 									'</span>'
 								}
@@ -661,6 +664,7 @@ function PA_Step1JobView() {
 					},
 					{
 						xtype: "container",
+						cls: "po-step1-omics-row",
 						/* The three columns were 250 + max 600 + max 300, which on a
 						   1360px card left ~190px of the row unclaimed and stopped the
 						   block short of the card's right edge.
@@ -881,11 +885,16 @@ function OmicSubmittingPanel(nElem, options) {
 					xtype: "container",
 					layout: {align: 'stretch',type: 'vbox'},
 					padding: 10,
+					/* No maxWidth here, nor in the other panel types that repeat this
+					   block: the "Selected omics" column is ~700px wide, so the 500px cap
+					   this used to carry stopped every row well short of its own box and
+					   left a band of dead white down the right of each omic panel. The
+					   vbox is align:'stretch', so without the cap each field fills the
+					   panel it is in. */
 					defaults: {
 						labelAlign: "right",
 						labelWidth: 150,
-						maxLength: 100,
-						maxWidth: 500
+						maxLength: 100
 					},
 					items: [
 						{
@@ -1213,8 +1222,7 @@ function RegionBasedOmicSubmittingPanel(nElem, options) {
 				defaults: {
 					labelAlign: "right",
 					labelWidth: 150,
-					maxLength: 100,
-					maxWidth: 500
+					maxLength: 100
 				},
 				items: [{
 					xtype: 'combo',
@@ -1314,8 +1322,7 @@ function RegionBasedOmicSubmittingPanel(nElem, options) {
 				defaults: {
 					labelAlign: "right",
 					labelWidth: 150,
-					maxLength: 100,
-					maxWidth: 500
+					maxLength: 100
 				},
 				hidden: true,
 				items: [{
@@ -1429,8 +1436,7 @@ function RegionBasedOmicSubmittingPanel(nElem, options) {
 				defaults: {
 					labelAlign: "right",
 					labelWidth: 150,
-					maxLength: 100,
-					maxWidth: 500
+					maxLength: 100
 				},
 				items: [{
 					xtype: 'textfield',
@@ -2050,8 +2056,7 @@ function MiRNAOmicSubmittingPanel(nElem, options) {
 				defaults: {
 					labelAlign: "right",
 					labelWidth: 150,
-					maxLength: 100,
-					maxWidth: 500
+					maxLength: 100
 				},
 				hidden: true,
 				items: [{
@@ -2181,8 +2186,7 @@ function MiRNAOmicSubmittingPanel(nElem, options) {
 				defaults: {
 					labelAlign: "right",
 					labelWidth: 150,
-					maxLength: 100,
-					maxWidth: 500
+					maxLength: 100
 				},
 				items: [{
 					xtype: 'textfield',
@@ -2330,8 +2334,7 @@ function MiRNAOmicSubmittingPanel(nElem, options) {
 					defaults: {
 						labelAlign: "right",
 						labelWidth: 150,
-						maxLength: 100,
-						maxWidth: 500
+						maxLength: 100
 					},
 					items: [
 						{
@@ -2642,8 +2645,7 @@ function MORESubmittingPanel(nElem, options) {
 				defaults: {
 					labelAlign: "right",
 					labelWidth: 150,
-					maxLength: 100,
-					maxWidth: 500
+					maxLength: 100
 				},
 				items: [{
 					xtype: 'textfield',
@@ -2925,8 +2927,7 @@ function MORESubmittingPanel(nElem, options) {
 				defaults: {
 					labelAlign: "right",
 					labelWidth: 150,
-					maxLength: 100,
-					maxWidth: 500
+					maxLength: 100
 				},
 				items: [{
 					xtype: 'filefield',

@@ -899,14 +899,23 @@ div.contentbox h2, #clusternumber_box h2, #threshold_box h2 {
 }
 /* The inset for body copy lives on `div.contentbox p, div.contentbox li` further
    down this file, which is the rule that already owned that padding. */
-/* A step down again: these sit inside a card that already has an h2. */
+/* A step down again: these sit inside a card that already has an h2.
+
+   The horizontal padding is not decoration: at `6px 0` a sub-heading sat hard
+   against the card's own border while the h2 above it and every paragraph below
+   it were inset by --pa-card-inset. On the data-upload card that put three
+   headings ("1. Organism selection", "AI-Powered Pathway Interpretation",
+   "2. Choose the files to upload") on a left edge no other element shared, so
+   the card read as having no margin at all on the side the eye scans first.
+   Every heading in a card now starts where its body copy starts. Blocks that
+   supply their own inset (.po-step-card, .repDetectionCard) opt out below. */
 div.contentbox h3 {
 	background-color: transparent;
 	border-color: var(--pa-border);
 	color: #3F3F46;
 	font-size: 13.5px;
 	font-weight: 600;
-	padding: 6px 0;
+	padding: 6px var(--pa-card-inset);
 	margin: 12px 0 4px;
 }
 div.contentbox h3 span {
@@ -926,12 +935,21 @@ div.contentbox p, div.contentbox li {
 div.contentbox li {
 	padding-left: 4px;
 }
-/* Blocks that already own their spacing, and would otherwise be inset twice. */
-.po-ai-section-body p,
-.paEmptyNote p,
-.step4HistoryBox p,
-.x-tip p,
-.sigma-tooltip p,
+/* Blocks that already own their spacing, and would otherwise be inset twice.
+
+   Every selector here is written `div.<class> p`, not `.<class> p`. That is not
+   style: `div.contentbox p` above scores (0,1,2) and a bare `.<class> p` scores
+   (0,1,1), so the exceptions lost to the rule they exist to override wherever
+   the block sits inside a card - which is exactly where they are needed. The
+   AI callout on the data-upload page is the case that showed it: its prose was
+   inset 26px while the consent checkbox directly beneath it was not, so the two
+   lines of the same block started on different left edges. `div.` ties the
+   specificity and these rules, being later in the file, win. */
+div.po-ai-section-body p,
+div.paEmptyNote p,
+div.step4HistoryBox p,
+div.x-tip p,
+div.sigma-tooltip p,
 /* This card insets its own inner div, so its paragraphs would otherwise sit at
    52px while the heading above them sat at 26. */
 #dbs_message p {
@@ -3220,11 +3238,17 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
   margin-bottom: 12px;
 }
 
-.po-step-card h3 {
+/* `div.` is load-bearing: this has to out-specify `div.contentbox h3`, which
+   these headings also match - the step cards live inside a .contentbox. */
+div.po-step-card h3 {
   font-size: 16px;
   color: #007383;
   margin-bottom: 6px;
   font-weight: 600;
+  /* The card supplies its own 24px inset, so the card-heading inset from
+     `div.contentbox h3` would be applied a second time here. */
+  padding-left: 0;
+  padding-right: 0;
 }
 
 .po-step-card p,
@@ -3262,9 +3286,26 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
   border: 1px solid #c8d6e5;
   border-radius: 8px;
   padding: 18px 22px;
-  margin: 5px 20px 10px 20px;
+  /* --pa-card-inset, not 20px: this callout sits directly under the
+     "AI-Powered Pathway Interpretation" heading, so a 6px difference between
+     the two left edges is visible as a step. ExtJS's box layout reads this
+     margin off the computed style and subtracts it from the stretched width,
+     so the right edge follows without a second declaration. */
+  margin: 5px var(--pa-card-inset) 10px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
   overflow: visible;
+}
+
+/* The "Available omics / Selected omics / Help" row.
+
+   The three columns already carry 10px of their own (padding on the first,
+   margin on the other two), and that 10px is also the gutter between them - so
+   the row's inset is the card inset less what the columns contribute, and the
+   visible edge of the first and last column lands on --pa-card-inset like
+   everything else in the card. */
+.po-step1-omics-row {
+  margin-left: calc(var(--pa-card-inset) - 10px);
+  margin-right: calc(var(--pa-card-inset) - 10px);
 }
 
 .po-ai-section-body p {
