@@ -67,8 +67,23 @@ def revalidateEntryDocument(response):
     revalidate first, and the ETag Flask already sets makes that a 304. Expires
     is cleared too, because an HTTP/1.0 cache reads it in preference.
 
-    Versioned assets keep their long max-age -- that is what versioning them is
-    for.
+    Versioned assets are unaffected, and it is worth being exact about what the
+    marker buys, because the wording here used to imply it earned them a longer
+    cache. It does not -- measured, every static file gets the same
+    ``max-age=43200``, versioned or not:
+
+        Util.js?v=0.8      Cache-Control: public, max-age=43200
+        PA_Step4Views.js   Cache-Control: public, max-age=43200
+
+    What the marker buys is a *different URL*, so bumping it reaches a returning
+    browser immediately instead of up to twelve hours later. That is the whole
+    mechanism, and it only works if the bump is not forgotten -- which is what
+    ``src/tests/test_versioned_assets_are_bumped.py`` enforces.
+
+    Only the plain script tags here need it. Anything loaded through
+    ``Application.loadModule`` is ``$.ajax({dataType: "script"})``, and jQuery
+    defaults ``cache: false`` for script requests, so those carry their own
+    ``?_=<epoch>`` and are always fresh.
     """
     response.headers["Cache-Control"] = "no-cache, must-revalidate"
     response.headers["Expires"] = "0"
