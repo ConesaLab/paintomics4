@@ -776,10 +776,21 @@ def pathwayAcquisitionSaveImage(request, response):
         #****************************************************************
         # Step 0.CHECK IF VALID USER SESSION
         #****************************************************************
-        # logging.info("STEP0 - CHECK IF VALID USER....")
-        # userID  = request.cookies.get('userID')
-        # sessionToken  = request.cookies.get('sessionToken')
-        # UserSessionManager().isValidUser(userID, sessionToken)
+        # Restored: this was commented out in the 2021 bulk "update new
+        # version" commit, leaving SaveImage the one handler in its family
+        # without the check that SaveVisualOptions and SaveSharingOptions both
+        # perform, while it writes a file into the job's output directory.
+        #
+        # It is a small gain, and worth being precise about: isValidUser admits
+        # the anonymous "nologin" case deliberately, so a request with no
+        # cookies passes either way. What this rejects is a caller presenting a
+        # userID with a wrong or stale token. The value is mostly that the
+        # asymmetry is gone -- nothing in the body told a reader this handler
+        # was the exception, and handlers get copied as templates.
+        logging.info("STEP0 - CHECK IF VALID USER....")
+        userID  = request.cookies.get('userID')
+        sessionToken  = request.cookies.get('sessionToken')
+        UserSessionManager().isValidUser(userID, sessionToken)
 
         jobID = request.form.get("jobID")
         jobInstance = loadRequestedJob(jobID, "saving the image")
