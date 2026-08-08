@@ -26,6 +26,18 @@ and how many, is what these tests are about.
 Skips cleanly when MongoDB has no job carrying a stored AI pathway index --
 i.e. when the main pipeline has not been run.
 
+**These tests write to the real database, unlike the rest of the suite.**
+`test_pymongo4_compat` and `test_user_identity_security` each build a scratch
+database and drop it afterwards, which is the better pattern and the one to
+copy where it is possible. It is not possible here: the handler needs a real
+job -- `loadJobInstance` reads it, `build_pathway_context` recomputes gene-level
+detail from it -- and cloning that means cloning the job across
+jobInstanceCollection, featuresCollection, pathwaysCollection and
+foundFeaturesCollection. So this captures the affected field, restores it, and
+*verifies* the restore, which is weaker than isolation and is stated plainly
+rather than glossed. The cost of the weaker choice is already on the record:
+the cached entry for one job was lost by a run made before the restore existed.
+
 Usage:
     cd PaintomicsServer
     python -m src.tests.test_ai_servlet_handlers
@@ -147,8 +159,18 @@ class _GatewayCase(unittest.TestCase):
             else:
                 cls._pathwayCollection().update_one(
                     {"jobID": cls.jobID}, {"$set": {"pathwayReports": prior}})
-        except Exception:
-            pass    # a cleanup failure must not mask the tests' own result
+        except Exception as exc:
+            raise AssertionError(
+                "could not restore this job's cached pathway reports: %s" % exc)
+
+        # Verify rather than assume. A restore that silently did not happen is
+        # exactly how the cached entry for one job was lost while a row *count*
+        # still matched before and after -- counting is not checking.
+        restored = cls._readPathwayReports()
+        if restored != getattr(cls, "_priorReports", None):
+            raise AssertionError(
+                "the job's cached pathway reports were not restored; the "
+                "database still holds what these tests wrote")
 
     def setUp(self):
         _Handler.served = []

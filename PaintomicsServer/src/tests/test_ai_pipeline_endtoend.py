@@ -28,6 +28,16 @@ metadata is ground truth and only the quotation comes from the model.
 Skips cleanly when MongoDB, a stored job, or the network is unavailable, in the
 manner of test_enrichment_e2e and test_runmore_r_endtoend.
 
+**This writes to the real database, unlike the rest of the suite.**
+`test_pymongo4_compat` and `test_user_identity_security` each build a scratch
+database and drop it afterwards; that is the better pattern and the one to copy
+where it is possible. It is not possible here -- the pipeline loads a real job
+through `loadJobInstance`, and cloning one means cloning it across
+jobInstanceCollection, featuresCollection, pathwaysCollection and
+foundFeaturesCollection. So the stored interpretation is captured, restored, and
+the restore is *verified*. That is weaker than isolation, and is said plainly
+rather than glossed.
+
 Usage:
     cd PaintomicsServer
     python -m src.tests.test_ai_pipeline_endtoend [--jobID XXXX]
@@ -191,8 +201,19 @@ class AiPipelineEndToEndTest(unittest.TestCase):
             else:
                 # There was nothing here before; leave nothing behind.
                 collection.delete_many({"jobID": jobID})
-        except Exception:
-            pass    # a cleanup failure must not mask the test's own result
+        except Exception as exc:
+            raise AssertionError(
+                "could not restore this job's stored interpretation: %s" % exc)
+
+        # Verify rather than assume: a restore that silently did not happen is
+        # how a cached report was lost elsewhere while a row count still
+        # matched either side. Counting is not checking.
+        from src.common.DAO.AIInterpretDAO import AIInterpretDAO
+        current = AIInterpretDAO().find_by_job_id(jobID)
+        if (current or {}).get("report") != (prior or {}).get("report"):
+            raise AssertionError(
+                "the job's stored interpretation was not restored; the "
+                "database still holds what this test wrote")
 
     @classmethod
     def tearDownClass(cls):
