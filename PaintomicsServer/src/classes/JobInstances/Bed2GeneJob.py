@@ -23,6 +23,7 @@ import logging
 from src.classes.Job import Job
 from src.classes.Feature import OmicValue, Gene
 from src.servlets.DataManagementServlet import copyFile
+from src.common.Util import ensure_utf8
 from src.common.bioscripts.DHS_exon_association import run as run_DHS_exon_association
 from src.conf.serverconf import MAX_WAIT_THREADS #MULTITHREADING
 
@@ -158,6 +159,24 @@ class Bed2GeneJob(Job):
         #*************************************************************************
         # STEP 1. VALIDATE THE RELEVANT FEATURES FILE
         #*************************************************************************
+
+        # Normalise the encoding before the first read, exactly as
+        # PathwayAcquisitionJob does for the main upload path. Without it these
+        # files were opened with a bare open(..., 'r'), which decodes using the
+        # locale -- UTF-8 on the server -- so a spreadsheet exported as
+        # cp1252/latin-1 raised
+        #     UnicodeDecodeError: 'utf-8' codec can't decode byte 0xd1
+        # out of a validation routine, reaching the user as an internal error
+        # rather than a message about the file. A gene name with an accent in a
+        # file saved from Excel is enough to do it.
+        for encodingTarget in (relevantFileName, valuesFileName):
+            if os_path.isfile(encodingTarget):
+                encodingError = ensure_utf8(encodingTarget)
+                if encodingError is not None:
+                    error += (" - Errors detected while processing " +
+                              os_path.basename(encodingTarget) + ": " +
+                              encodingError + ".\n")
+
         logging.info("VALIDATING RELEVANT REGIONS FILE (" + omicName + ")..." )
         if os_path.isfile(relevantFileName):
             with open(relevantFileName, 'r') as inputDataFile:

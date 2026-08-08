@@ -18,6 +18,7 @@
 #  Technical contact paintomics4@gmail.com
 #**************************************************************
 from PIL.Image import open as image_open
+from chardet import detect # get the encoding of a file
 
 class Singleton(type):
     _instances = {}
@@ -221,3 +222,66 @@ def adapt_string(the_string):
                 return str(re.sub('[^A-Za-z0-9]+', '', the_string))
             except:
                 return "INVALID STRING"
+
+
+# Encoding is decided from a bounded prefix. Omics uploads routinely reach
+# hundreds of megabytes, and running chardet over the whole buffer costs time
+# and memory to answer a question the first chunk already settles.
+_ENCODING_SNIFF_BYTES = 256 * 1024
+
+
+def _decodes_as_utf8(sample, isPartial):
+    """Whether `sample` is valid UTF-8.
+
+    When the sample is only a prefix of a larger file, a multi-byte character
+    can be cut in half at the boundary. That is not evidence of a different
+    encoding, so a failure inside the last three bytes is forgiven.
+    """
+    try:
+        sample.decode('utf-8-sig')
+        return True
+    except UnicodeDecodeError as exc:
+        return isPartial and exc.start >= len(sample) - 3
+
+
+def ensure_utf8(filepath):
+    """Rewrite `filepath` as UTF-8 in place when it is in some other encoding.
+
+    Returns None on success, or a human-readable reason when the encoding could
+    not be resolved. Callers turn that reason into a validation message: an
+    unreadable upload is bad input, and it used to escape as a bare
+    UnicodeDecodeError.
+
+    UTF-8 is tested directly before chardet is consulted. Guessing first is
+    unsafe: single-byte codecs such as cp1252 accept *any* byte sequence, so a
+    misdetected UTF-8 file would be silently rewritten into mojibake rather
+    than left alone.
+    """
+    with open(filepath, 'rb') as handle:
+        sample = handle.read(_ENCODING_SNIFF_BYTES + 1)
+
+    # An empty file has no encoding to fix; emptiness is reported elsewhere.
+    if not sample:
+        return None
+
+    isPartial = len(sample) > _ENCODING_SNIFF_BYTES
+    if _decodes_as_utf8(sample, isPartial):
+        return None
+
+    detected = detect(sample).get('encoding')
+    if not detected:
+        return "the character encoding could not be determined, please save the file as UTF-8"
+
+    try:
+        with open(filepath, 'rb') as handle:
+            text = handle.read().decode(detected)
+    except (UnicodeDecodeError, LookupError):
+        return ("the file could not be read as " + str(detected) +
+                ", please save it as UTF-8")
+
+    # newline='' keeps the line endings exactly as decoded; the readers below
+    # already cope with CRLF, and rewriting them here would be a silent edit of
+    # the user's file.
+    with open(filepath, 'w', encoding='utf-8', newline='') as handle:
+        handle.write(text)
+    return None

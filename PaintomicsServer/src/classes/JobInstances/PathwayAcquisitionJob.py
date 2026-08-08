@@ -38,6 +38,7 @@ from src.common.Util import chunks, getImageSize
 from src.common.ReplicateDetection import detect_replicates, aggregate_replicates
 
 from src.common.KeggInformationManager import KeggInformationManager
+from src.common import JobProgress
 
 from src.classes.Job import Job
 from src.classes.Feature import Gene, Compound
@@ -47,67 +48,12 @@ from src.classes.PathwayGraphicalData import PathwayGraphicalData
 from src.conf.serverconf import KEGG_DATA_DIR, MAX_THREADS, MAX_WAIT_THREADS, MAX_NUMBER_FEATURES
 
 
-# Encoding is decided from a bounded prefix. Omics uploads routinely reach
-# hundreds of megabytes, and running chardet over the whole buffer costs time
-# and memory to answer a question the first chunk already settles.
-_ENCODING_SNIFF_BYTES = 256 * 1024
-
-
-def _decodes_as_utf8(sample, isPartial):
-    """Whether `sample` is valid UTF-8.
-
-    When the sample is only a prefix of a larger file, a multi-byte character
-    can be cut in half at the boundary. That is not evidence of a different
-    encoding, so a failure inside the last three bytes is forgiven.
-    """
-    try:
-        sample.decode('utf-8-sig')
-        return True
-    except UnicodeDecodeError as exc:
-        return isPartial and exc.start >= len(sample) - 3
-
-
-def ensure_utf8(filepath):
-    """Rewrite `filepath` as UTF-8 in place when it is in some other encoding.
-
-    Returns None on success, or a human-readable reason when the encoding could
-    not be resolved. Callers turn that reason into a validation message: an
-    unreadable upload is bad input, and it used to escape as a bare
-    UnicodeDecodeError.
-
-    UTF-8 is tested directly before chardet is consulted. Guessing first is
-    unsafe: single-byte codecs such as cp1252 accept *any* byte sequence, so a
-    misdetected UTF-8 file would be silently rewritten into mojibake rather
-    than left alone.
-    """
-    with open(filepath, 'rb') as handle:
-        sample = handle.read(_ENCODING_SNIFF_BYTES + 1)
-
-    # An empty file has no encoding to fix; emptiness is reported elsewhere.
-    if not sample:
-        return None
-
-    isPartial = len(sample) > _ENCODING_SNIFF_BYTES
-    if _decodes_as_utf8(sample, isPartial):
-        return None
-
-    detected = detect(sample).get('encoding')
-    if not detected:
-        return "the character encoding could not be determined, please save the file as UTF-8"
-
-    try:
-        with open(filepath, 'rb') as handle:
-            text = handle.read().decode(detected)
-    except (UnicodeDecodeError, LookupError):
-        return ("the file could not be read as " + str(detected) +
-                ", please save it as UTF-8")
-
-    # newline='' keeps the line endings exactly as decoded; the readers below
-    # already cope with CRLF, and rewriting them here would be a silent edit of
-    # the user's file.
-    with open(filepath, 'w', encoding='utf-8', newline='') as handle:
-        handle.write(text)
-    return None
+# ensure_utf8 lives in src/common/Util.py so the data-management jobs can
+# use it too -- Bed2GeneJob and MiRNA2GeneJob read uploads with the same
+# bare open() this was written to protect. Imported here rather than moved
+# out of reach, so the three call sites below and the existing test that
+# imports it from this module are unaffected.
+from src.common.Util import ensure_utf8, _decodes_as_utf8, _ENCODING_SNIFF_BYTES
 
 
 # Small dict fields safe to persist in the main MongoDB document
@@ -765,6 +711,32 @@ class PathwayAcquisitionJob(Job):
                 n_touched += 1
         return n_touched
 
+    def _progressWeightsByOmic(self):
+        """Relative cost of each input omic, for the step-1 progress bar.
+
+        Uses the data file's size on disk. os.path.getsize() is a stat() call, so
+        this is free even for very large uploads, and it degrades safely: a file
+        that cannot be stat'd (missing, permissions) contributes a nominal weight
+        rather than raising, because progress reporting must never fail a job.
+        Omics are keyed by id() since the dicts themselves are not hashable and
+        omic names are not guaranteed unique.
+
+        @returns {Dict} {"sizes": {id(omic): bytes}, "total": int, "count": int}
+        """
+        sizes = {}
+        for inputOmic in (self.geneBasedInputOmics + self.compoundBasedInputOmics):
+            fileName = inputOmic.get("inputDataFile") or ""
+            if not inputOmic.get("isExample", False) and fileName:
+                fileName = "{path}/{file}".format(path=self.getInputDir(), file=fileName)
+            try:
+                # Floor of 1 so an empty or unreadable file still advances the bar
+                # at its boundary instead of contributing nothing.
+                sizes[id(inputOmic)] = max(1, os_path.getsize(fileName))
+            except OSError:
+                sizes[id(inputOmic)] = 1
+
+        return {"sizes": sizes, "total": sum(sizes.values()) or 1, "count": len(sizes)}
+
     def processFilesContent(self):
         """
         This function processes all the files and returns a checkboxes list to show to the user
@@ -779,10 +751,29 @@ class PathwayAcquisitionJob(Job):
         logging.info("CREATING THE TEMPORAL CACHE FOR JOB " + self.getJobID() + "...")
         KeggInformationManager().createTranslationCache(self.getJobID())
 
+        # Progress inside this phase is weighted by input file SIZE rather than by
+        # omic count, because omics differ ~7x in cost: on the bundled example
+        # DNase-seq (10,274 rows) takes 31.9s while Proteomics (1,110 rows) takes
+        # 4.9s. Per-row cost is stable across omics (2.5-4.5 ms), so bytes are a
+        # good proxy — and os.path.getsize() is O(1), where counting rows would
+        # mean reading every file twice.
+        omicWork = self._progressWeightsByOmic()
+        JobProgress.units(self.getJobID(), 0, total=omicWork["total"],
+                          detail="0 of %d omics" % omicWork["count"])
+        doneWork = 0
+
         try:
             logging.info("PROCESSING GENE BASED FILES...")
             for inputOmic in self.geneBasedInputOmics:
+                # span = this omic's own weight, so the mapper children's anchors
+                # interpolate inside it. Without it the bar would step once per
+                # omic — five jumps across an 80s phase.
+                JobProgress.units(self.getJobID(), doneWork,
+                                  span=omicWork["sizes"].get(id(inputOmic), 0),
+                                  detail="mapping " + str(inputOmic.get("omicName", "")))
                 [omicName, omicSummary, omicHeader] = self.parseGeneBasedFiles(inputOmic)
+                doneWork += omicWork["sizes"].get(id(inputOmic), 0)
+                JobProgress.units(self.getJobID(), doneWork)
                 logging.info("   * PROCESSED " + omicName + "...")
                 inputOmic["omicSummary"] = omicSummary
                 inputOmic["omicHeader"] = omicHeader
@@ -796,8 +787,13 @@ class PathwayAcquisitionJob(Job):
             logging.info("PROCESSING COMPOUND BASED FILES...")
             checkBoxesData = []
             for inputOmic in self.compoundBasedInputOmics:
+                JobProgress.units(self.getJobID(), doneWork,
+                                  span=omicWork["sizes"].get(id(inputOmic), 0),
+                                  detail="mapping " + str(inputOmic.get("omicName", "")))
                 [omicName, checkBoxesData, omicSummary, omicHeader] = self.parseCompoundBasedFile(inputOmic,
                                                                                                   checkBoxesData)
+                doneWork += omicWork["sizes"].get(id(inputOmic), 0)
+                JobProgress.units(self.getJobID(), doneWork)
                 logging.info("   * PROCESSED " + omicName + "...")
                 inputOmic["omicSummary"] = omicSummary
                 inputOmic["omicHeader"] = omicHeader
@@ -1764,6 +1760,15 @@ class PathwayAcquisitionJob(Job):
         if database:
             filtered_databases = set(database).intersection(set(filtered_databases))
 
+        # This loop is the whole of the metagenes phase and its size is known
+        # exactly before it starts, so the bar here is a real count rather than a
+        # clock-based guess. It is ~50% of step 2, and without this it showed a
+        # single frozen number for the entire phase.
+        metageneUnits = len(filtered_omics) * max(1, len(filtered_databases))
+        metagenesDone = 0
+        JobProgress.units(self.getJobID(), 0, total=metageneUnits,
+                          detail="0 of %d" % metageneUnits)
+
         for inputOmic in filtered_omics:
             # STEP 2.1 EXECUTE THE R SCRIPT FOR EACH DATABASE
             for dbname in filtered_databases:
@@ -1824,6 +1829,14 @@ class PathwayAcquisitionJob(Job):
                 except IOError as ex:
                     logging.error("STEP2 - File not found or read error for metagenes " + inputOmic.get("omicName") + " db: " + str(dbname))
 
+                # Counted here rather than on the success path: an omic/database
+                # pair that produced no file is still a unit of work that is over,
+                # and the R script exits cleanly without writing when there are no
+                # matches. Counting only successes would stall the bar on exactly
+                # the jobs where it is least obvious what is happening.
+                metagenesDone += 1
+                JobProgress.units(self.getJobID(), metagenesDone,
+                                  detail="%d of %d" % (metagenesDone, metageneUnits))
 
         call("rm " +  self.getOutputDir()  + "*.png", shell=True)
         call("mv " + self.getTemporalDir() + "/" + "*.png " + self.getOutputDir(), shell=True)
