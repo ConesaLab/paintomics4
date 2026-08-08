@@ -118,6 +118,19 @@ PAINTOMICS4_DICT_FIELDS = {
     # so worst-case ~5 MB — well under the 16 MB Mongo doc limit and an order
     # of magnitude smaller than the LARGE_FIELDS set's compoundRegulateFeatures.
     "regulationPerConditionData",
+    # Metabolite hub analysis. Was in LARGE_FIELDS, but it is not large: it is
+    # parsed one-to-one from hub_result.csv, and across all 45 jobs on this
+    # machine that file never exceeds 3819 bytes — 0.02% of the 16 MB limit.
+    # It sat beside compoundRegulateFeatures and inherited a "too large to
+    # store" justification that was only ever true of its neighbours.
+    #
+    # It belongs here rather than in LARGE_FIELDS for a second reason: its keys
+    # are the integer row indices hubAnalysis assigns (`hubResult[i] = line`),
+    # and Mongo rejects those outright —
+    #     InvalidDocument: documents must have only string keys, key was 0
+    # This branch stringifies them. Adding the field to step 2's update without
+    # moving it here would fail the store for every job that selects compounds.
+    "hubAnalysisResult",
 }
 
 # Large dict fields that stay in-memory cache only (too large for a single
@@ -125,7 +138,7 @@ PAINTOMICS4_DICT_FIELDS = {
 # On cold recovery the safe_* defaults in the servlet return {}/[].
 PAINTOMICS4_LARGE_FIELDS = {
     "exprssionMetabolites", "compoundRegulateFeatures",
-    "globalExpressionData", "hubAnalysisResult"
+    "globalExpressionData"
 }
 
 

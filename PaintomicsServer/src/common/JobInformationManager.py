@@ -92,11 +92,20 @@ class JobInformationManager(metaclass=Singleton):
                     logging.info("UPDATING PathwayAcquisitionJob "  + jobInstance.getJobID() + " TO DATABASE... IS STEP 2")
                     daoInstance = PathwayAcquisitionJobDAO()
                     logging.info("UPDATING JOB INSTANCE...")
+                    # hubAnalysisResult is here for the same reason the Reactome
+                    # classes below are: it is computed at step 2, returned in
+                    # that step's response, and was then dropped, because it
+                    # appeared in neither this list nor any DAO call. So the
+                    # Metabolites Hub Analysis table had rows only in the
+                    # session that ran the analysis and was empty for anyone who
+                    # reopened the job by its URL -- discarding an R script's
+                    # output that the user cannot regenerate without re-running
+                    # step 2.
                     daoInstance.update(jobInstance, {"fieldList": ["summary", "lastStep",
                          "mappingComp", "classificationDict", "pValueInDict",
                          "adjustPvalue", "totalRelevantFeaturesInCategory",
                          "featureSummary", "aiConsent", "experimentDesign",
-                         "regulationPerConditionData"]})
+                         "regulationPerConditionData", "hubAnalysisResult"]})
                     daoInstance = FoundFeatureDAO()
                     logging.info("REMOVING MATCHED METABOLITES FROM DATABASE...")
                     daoInstance.removeAll({"jobID": jobInstance.getJobID()})
