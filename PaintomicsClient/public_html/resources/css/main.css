@@ -2439,6 +2439,15 @@ div.lateralOptionsPanel input[type="text"]:not([id^=numberfield]) {
 div.lateralOptionsPanel fieldset {
 	margin: 10px auto;
 }
+/* These panels sit inside a .contentbox, so their headings match
+   `div.contentbox h3` - but they are compact control labels ("Nodes per row:",
+   "Node size:") in a narrow settings column, not card headings, and the card
+   inset would push them off their own controls. `div.` ties the specificity so
+   this rule, being later in the file, wins. */
+div.lateralOptionsPanel h3 {
+	padding-left: 0;
+	padding-right: 0;
+}
 .globalHeatmapConfigurator {
 	padding: 15px;
 	background: #FFF6FF;
@@ -2802,6 +2811,14 @@ div.omicSelection div.omicPosition + div {
 .geneInfoTitle {
 	font-size: 15px;
 	cursor: pointer
+}
+/* The feature panels carry `contentbox`, so their titles match
+   `div.contentbox h3` - but this is a 245px strip in the pathway view, not a
+   card, and the card inset would take a tenth of its width. `div.` ties the
+   specificity so this rule, later in the file, wins. */
+div.mainInfoPanel h3 {
+	padding-left: 0;
+	padding-right: 0;
 }
 .extraInfoPanel {
 	display: none;
