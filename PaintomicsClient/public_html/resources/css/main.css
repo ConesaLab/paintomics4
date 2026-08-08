@@ -532,6 +532,29 @@ ul.submenu {
 	background: #FFFFFF;
 	color: #111111;
 }
+/* Making room for the step actions ------------------------------------------
+   The step actions are `position: fixed` (see .secondTopToolbar), so they take
+   part in no layout and the nav has no way to stop before them - it ran
+   underneath, which is what put the AI Interpret button on top of "Contact".
+
+   MainView.js measures the two and adds these in order, only as far as it has
+   to. `is-compact` buys about 50px by tightening the pills; `is-iconly` gives
+   up the words and keeps the icons, which is worth roughly 400px. Both keep
+   every item present, hoverable and clickable, and the title attribute set in
+   navHTML names the item while its label is hidden. That is the reason the nav
+   compacts instead of clipping: `overflow: hidden` here would also cut off the
+   dropdowns, which are absolutely positioned children of these items. */
+.lateralMenu-body.is-compact > .menuOption {
+	padding: 6px 7px;
+	gap: 4px;
+}
+.lateralMenu-body.is-iconly > .menuOption {
+	padding: 6px 9px;
+	gap: 0;
+}
+.lateralMenu-body.is-iconly > .menuOption > .menuLabel {
+	display: none;
+}
 /* The icon sat above the label in the rail and has to sit beside it here. */
 .lateralMenu-body > .menuOption > i.fa {
 	display: inline-block;
@@ -3154,10 +3177,25 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
   color: #007383;
 }
 
+/* 460px, not the 340 the raster had. The diagram's viewBox is 460 wide, so at
+   this width one SVG unit is one CSS pixel and its 11px labels are drawn at
+   11px. Shrink the column and every label shrinks with it. */
 .po-hero-visual {
-  flex: 0 0 340px;
+  flex: 0 1 460px;
+  min-width: 0;
 }
 
+.po-hero-flow {
+  display: block;
+  width: 100%;
+  height: auto;
+  font-family: var(--pa-font-sans);
+}
+
+/* Kept for the reverse skew of the one above: this stylesheet is cache-busted
+   and PA_Step1Views.js is not, so a returning browser can pair this file with a
+   twelve-hour-old view that still emits the <img>. Without these rules that
+   image would lay out at its natural 1622px and burst the hero. */
 .po-hero-visual img {
   width: 100%;
   border-radius: 4px;
@@ -3168,6 +3206,21 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
 
 .po-hero-visual img:hover {
   transform: scale(1.02);
+}
+
+/* The raster is still the better asset when the full detail matters, so it
+   keeps its click-to-open behaviour -- as a named link rather than as an
+   unlabelled image nobody would think to click. */
+.po-hero-flow-link {
+  display: inline-block;
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--pa-link);
+  cursor: pointer;
+}
+
+.po-hero-flow-link:hover {
+  color: var(--pa-link-hover);
 }
 
 /* Running-job progress --------------------------------------------------------
@@ -3672,7 +3725,7 @@ div.po-step-card h3 {
   }
   .po-hero-visual {
     flex: 0 0 auto;
-    max-width: 300px;
+    max-width: 460px;
   }
   .po-steps-grid {
     grid-template-columns: 1fr;

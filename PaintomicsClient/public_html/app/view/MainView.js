@@ -122,6 +122,25 @@ function MainView() {
 		me.currentView = aView;
 
 		me.getComponent().queryById("mainViewCenterPanel").add(aView.getComponent());
+
+		// The contents rail belongs to the centre panel, not to the view that
+		// filled it: buildAnalysisTOC inserts it into #mainViewCenterPanel, which
+		// outlives every view swap. Only Step 3 and Step 4 ever built one, and
+		// nothing tore it down, so leaving a job left its list of analyses -
+		// Pathways selection, Metabolites Hub Analysis and the rest - pinned down
+		// the side of the upload form, pointing at sections that were no longer on
+		// the page.
+		//
+		// Rebuilding here rather than removing: buildAnalysisTOC drops any
+		// existing rail, and when the new view has fewer than three sections to
+		// list it also hands the reserved column back instead of leaving a gap.
+		// Every view swap in the application comes through this method, including
+		// the ones JobController makes between steps, so this is the one place
+		// that sees them all. Step 3 and Step 4 still build their own afterwards -
+		// their sections arrive on a delay and are not here yet at this point.
+		requestAnimationFrame(function () {
+			buildAnalysisTOC('#mainViewCenterPanel');
+		});
 	};
 
 	this.showSignInDialog = function () {
@@ -162,9 +181,14 @@ function MainView() {
 		// markup and the same `.lateralMenu-body`/`.menuOption`/`.submenu` classes
 		// are reused - only where it is mounted changed. The hover handler further
 		// down still finds it by class.
+		//
+		// Each top-level label is wrapped in its own span so the header can drop
+		// the words and keep the icons when the step actions need the room -- see
+		// fitHeaderNav() below. The title attribute is what names the item once its
+		// label is hidden, so it is load-bearing rather than decoration.
 		var navHTML = "<ul class='lateralMenu-body'>" +
-				" <li class='menuOption' id='homeButton'><i class='fa fa-paint-brush'></i> Job view</li>" + 
-				" <li class='menuOption loggedOption' ><i class='fa fa-cloud'></i>  Personal storage" +
+				" <li class='menuOption' id='homeButton' title='Job view'><i class='fa fa-paint-brush'></i><span class='menuLabel'>Job view</span></li>" + 
+				" <li class='menuOption loggedOption' title='Personal storage'><i class='fa fa-cloud'></i><span class='menuLabel'>Personal storage</span>" +
 				"  <ul class='submenu loggedOption'>" +
 				(noLogin != true ?
 					"     <li class='menuOption' data-name='DM_MyDataListView'><i class='fa fa-file-text'></i>  My files and Jobs</li>" +
@@ -174,12 +198,12 @@ function MainView() {
 				) +
 				// "     <li class='menuOption' data-name='fileEdition'><i class='fa fa-cloud-upload'></i>   File edition</li>"+
 				" </ul></li>" +
-				" <li class='menuOption loggedOption' ><i class='fa fa-rocket'></i>  Supporting tools" +
+				" <li class='menuOption loggedOption' title='Supporting tools'><i class='fa fa-rocket'></i><span class='menuLabel'>Supporting tools</span>" +
 				" <ul class='submenu loggedOption'>" +
 				"     <li class='menuOption' data-name='fromBEDtoGenes'><i class='fa fa-align-center'></i>   From Regions to Genes</li>" +
 				"     <li class='menuOption' data-name='fromMiRNAtoGenes'><i class='fa fa-link'></i>   From miRNA to Genes</li>"+
 				" </ul></li>" +
-				" <li class='menuOption' ><i class='fa fa-info-circle'></i>  Resources" +
+				" <li class='menuOption' title='Resources'><i class='fa fa-info-circle'></i><span class='menuLabel'>Resources</span>" +
 				" <ul class='submenu'>" +
 				"     <li class='menuOption externalOption'><a href='https://www.youtube.com/channel/UCSoQ3LSli9ZxOQTX56_WJeA' target='_blank'><i class=\"fa fa-youtube\"></i>  Paintomics tutorial video</a></li>" +
 				"     <li class='menuOption externalOption'><a href='http://paintomics.readthedocs.org/en/latest/' target='_blank'><i class='fa fa-book'></i>  Paintomics Documentation</a></li>" +
@@ -194,7 +218,7 @@ function MainView() {
 				"	  <li class='menuOption externalOption'><a href='https://paintomics.uv.es/resources/rgmatch_example_data.zip' target='_blank'><i class='fa fa-download'></i>  RGmatch example data</a></li>" +
 				"	  <li class='menuOption externalOption'><a href='https://paintomics.uv.es/resources/mirna2genes_example_data.zip' target='_blank'><i class='fa fa-download'></i>  miRNA2Genes example data</a></li>" +
 				" </ul></li>" +
-				" <li class='menuOption' ><i class='fa fa-paper-plane-o'></i>  Publications" +
+				" <li class='menuOption' title='Publications'><i class='fa fa-paper-plane-o'></i><span class='menuLabel'>Publications</span>" +
 				" <ul class='submenu'>" +
 				// "     <li class='menuOption'><a href='https://paintomics.uv.es/' target='_blank'><i class='fa fa-book'></i>  Paintomics Documentation</a></li>"+
 				"     <li class='menuOption externalOption' style='font-size: 9px;'><div style='font-size: 12px; color: white;'>Cite Paintomics 4:</div><a href='https://doi.org/10.1093/nar/gkac352' target='_blank'>Liu, T., Salguero, P., Petek, M., Martinez-Mira, C., Balzano-Nogueira, L., Ramšak, Ž., McIntyre, L., Gruden, K., Tarazona, S. and Conesa, A. <b>PaintOmics 4: new tools for the integrative analysis of multi-omics datasets supported by multiple pathway databases</b>. <i>Nucleic Acids Research</i> 2022).</a><br><a href='resources/images/paintomics4.bib' target='_blank'>BibTeX</a></li>" +
@@ -202,7 +226,7 @@ function MainView() {
 				"     <li class='menuOption externalOption' style='font-size: 9px;'><div style='font-size: 12px; color: white;'>Cite Paintomics 2:</div><a href='http://bioinformatics.oxfordjournals.org/content/early/2010/11/23/bioinformatics.btq594' target='_blank'>García-Alcalde F, García-López F, Dopazo J, Conesa A. <b>Paintomics: a web based tool for the joint visualization of transcriptomics and metabolomics data</b>. <i>Bioinformatics</i> 2011 27(1): 137–139.</a><br><a href='resources/images/paintomics2-garcia-alcalde.bib' target='_blank'>BibTeX</a></li>" +
 				"     <li class='menuOption externalOption' style='font-size: 9px;'><div style='font-size: 12px; color: white;'>Cite rgmatch:</div><a href='https://bmcbioinformatics.biomedcentral.com/articles/10.1186/s12859-016-1293-1' target='_blank'>Furio-Tari P, Tarazona S, Conesa A. <b>RGmatch: matching genomic regions to proximal genes in omics data integration</b>. <i>BMC Bioinformatics</i> 2016 17(15).</a><br><a href='resources/images/rgmatch.bib' target='_blank'>BibTeX</a></li>" +
 				" </ul></li>" +
-				" <li class='menuOption'><i class='fa fa-envelope-o'></i>  Contact" +
+				" <li class='menuOption' title='Contact'><i class='fa fa-envelope-o'></i><span class='menuLabel'>Contact</span>" +
 				" <ul class='submenu'>" +
 				"     <li class='menuOption' data-name='contactForm'><i class='fa fa-envelope-o'></i>  Contact by email</li>" +
 				" </ul></li>" +
@@ -223,6 +247,7 @@ function MainView() {
 				'  <h1> PaintOmics AI <span style="font-size: 8px; margin-left:10px;">' + APP_VERSION + '</span></h1>' +
 				'</div>' +
 				'<nav class="mainNav">' + navHTML + '</nav>' +
+				'<button class="themeToggle" id="themeToggle" type="button" title="Switch between light and dark" aria-pressed="false"><i class="fa fa-moon-o"></i></button>' +
 				'<a class="button btn-sm btn-right loggedOption" data-name="logout" id="logoutButton"><i class="fa fa-sign-out"></i> ' + (noLogin !== true ? 'Log out' : 'Sign in/Log in') + '</a>'
 			}, {
 				xtype: 'container', itemId: 'mainViewCenterPanel', id: 'mainViewCenterPanel',
@@ -263,6 +288,9 @@ function MainView() {
 							application.getController("JobController").resetButtonClickHandler(null, false);
 					});
 
+					me.watchHeaderFit();
+					me.initThemeToggle();
+
 					//TODO: AQUI
 					if (Ext.util.Cookies.get("silence") != null) {
 						console.log("Message already shown, ignoring.");
@@ -290,12 +318,186 @@ function MainView() {
 					}else{
 						$("#mainViewCenterPanel").removeClass("mobileMode");
 					}
+					me.fitHeaderNav();
 				}
 			}
 
 		});
 
 		return this.component;
+	};
+
+	/* The light/dark switch.
+	 *
+	 * The theme itself is already resolved by the inline script in index.html,
+	 * which runs before the first paint so nobody sees a white flash on the way
+	 * to a dark interface. This only wires the control: it reflects whatever
+	 * that script decided, and writes the user's choice down when they change it.
+	 *
+	 * Storing the choice is what makes it a choice. Until someone touches this
+	 * button nothing is written, and the interface keeps following the operating
+	 * system - including when that changes while the page is open.
+	 */
+	this.initThemeToggle = function () {
+		var root = document.documentElement;
+		var button = document.getElementById("themeToggle");
+		if (!button) {
+			return;
+		}
+
+		var reflect = function () {
+			var dark = root.getAttribute("data-theme") === "dark";
+			button.setAttribute("aria-pressed", dark ? "true" : "false");
+			button.setAttribute("title", dark ? "Switch to light" : "Switch to dark");
+			button.innerHTML = '<i class="fa ' + (dark ? "fa-sun-o" : "fa-moon-o") + '"></i>';
+		};
+
+		button.addEventListener("click", function () {
+			var dark = root.getAttribute("data-theme") !== "dark";
+			if (dark) {
+				root.setAttribute("data-theme", "dark");
+			} else {
+				root.removeAttribute("data-theme");
+			}
+			try {
+				window.localStorage.setItem("paintomics-theme", dark ? "dark" : "light");
+			} catch (e) {
+				// Private browsing refuses the write. The theme still applies for
+				// this page; it just will not be remembered, which is the right
+				// way round to fail.
+			}
+			reflect();
+		});
+
+		if (window.matchMedia) {
+			var query = window.matchMedia("(prefers-color-scheme: dark)");
+			var follow = function (ev) {
+				var stored = null;
+				try { stored = window.localStorage.getItem("paintomics-theme"); } catch (e) { /* private mode */ }
+				if (stored !== null) {
+					return;   // an explicit choice outranks the system
+				}
+				if (ev.matches) {
+					root.setAttribute("data-theme", "dark");
+				} else {
+					root.removeAttribute("data-theme");
+				}
+				reflect();
+			};
+			if (query.addEventListener) {
+				query.addEventListener("change", follow);
+			} else if (query.addListener) {
+				query.addListener(follow);   // Safari < 14
+			}
+		}
+
+		reflect();
+	};
+
+	/* Keep the navigation clear of the step actions.
+	 *
+	 * The header holds two groups that grow towards each other: the nav pills
+	 * from the left, and the step actions - Reset view / Sharing options / AI
+	 * Interpret and, on Step 4, five of them - from the right. The step actions
+	 * are `position: fixed` (main.css explains why: ExtJS writes inline
+	 * left/width/top on the Step 4 container and only !important beats those), so
+	 * they contribute nothing to the header's flex layout. The browser therefore
+	 * has no way to know they are there, and the nav simply ran underneath them:
+	 * on a 1459px window the pills ended 27px past the left edge of the AI
+	 * Interpret button, which is what put that button on top of "Contact".
+	 *
+	 * Measuring is the only option while they are out of flow, so this measures.
+	 * Two stages, in order, and never more than needed: tighten the pill padding
+	 * first, and only drop the labels for the icons if that was not enough. Every
+	 * item stays present and clickable in both states -- the title attribute set
+	 * in navHTML above names it while the label is hidden -- which is the reason
+	 * to compact the nav rather than clip it. Clipping cannot work here anyway:
+	 * `overflow: hidden` on this list would cut off the dropdowns, which are
+	 * absolutely positioned children of the items.
+	 */
+	this.fitHeaderNav = function() {
+		var nav = document.querySelector(".lateralMenu-body");
+		if (!nav) {
+			return;
+		}
+
+		nav.classList.remove("is-compact", "is-iconly");
+
+		// A step's toolbar reports "not on screen" as display:none, and the nav
+		// should go back to full width for the landing page, which has none at
+		// all. The test is getClientRects(), not offsetParent: offsetParent is
+		// null for *every* position:fixed element whether it is visible or not,
+		// so it read as hidden on the very screens this needs to measure.
+		var actions = document.querySelector(".secondTopToolbar");
+		if (!actions || actions.getClientRects().length === 0) {
+			return;
+		}
+
+		var bounds = actions.getBoundingClientRect();
+		if (bounds.width === 0) {
+			return;
+		}
+
+		// 12px so the two groups have a gap rather than merely not overlapping.
+		var limit = bounds.left - 12;
+		if (nav.getBoundingClientRect().right <= limit) {
+			return;
+		}
+
+		nav.classList.add("is-compact");
+		if (nav.getBoundingClientRect().right <= limit) {
+			return;
+		}
+
+		nav.classList.add("is-iconly");
+	};
+
+	/* The step actions are built and torn down by each view as the user moves
+	 * through the analysis, so the fit has to be rechecked when the header's
+	 * contents change and not only when the window does. A MutationObserver on
+	 * the body covers every one of the seven views that mount a toolbar without
+	 * any of them having to know this exists.
+	 */
+	this.watchHeaderFit = function() {
+		var me = this;
+		var pending = null;
+		var observer = null;
+		var WATCHED = {
+			childList: true, subtree: true, attributes: true,
+			attributeFilter: ["class", "style"]
+		};
+
+		var run = function() {
+			pending = null;
+			// Detached while measuring. fitHeaderNav writes classes on the nav,
+			// and an observer still attached would see its own effect, reschedule
+			// itself, and spin once per frame for the life of the page.
+			// Disconnecting also discards the records queued for those writes, so
+			// reconnecting afterwards starts clean.
+			if (observer) {
+				observer.disconnect();
+			}
+			me.fitHeaderNav();
+			if (observer) {
+				observer.observe(document.body, WATCHED);
+			}
+		};
+
+		var recheck = function() {
+			if (pending) {
+				return;
+			}
+			// Coalesced to the next frame: ExtJS mutates the DOM in bursts, and
+			// measuring inside the burst would read a half-built toolbar.
+			pending = window.requestAnimationFrame(run);
+		};
+
+		window.addEventListener("resize", recheck);
+		if (window.MutationObserver) {
+			observer = new MutationObserver(recheck);
+			observer.observe(document.body, WATCHED);
+		}
+		recheck();
 	};
 }
 MainView.prototype = new View;
