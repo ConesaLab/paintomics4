@@ -93,19 +93,18 @@ root {
      down the right - not a wide layout, a narrow one shoved into a corner.
 
      One column, centred, that the header contents and the content boxes both
-     align to. 1600px because the widest thing in the application is the Step 3
-     enrichment grid at ~1400px, and the column has to hold it without
-     reintroducing the horizontal scrolling that removing the rail just cured.
+     align to. 1400px is the width of the Step 3 enrichment grid, the widest
+     thing in the application, so the column holds it without reintroducing the
+     horizontal scrolling that removing the rail just cured.
 
-     The gutter is `max()` so that below 1600px it collapses to a normal 20px
-     margin and nothing changes - this only does work on displays wide enough to
-     have the problem. */
-  /* 1400px, the width of the Step 3 enrichment grid - the widest thing in the
-     application. It was 1560px, which is wider than the laptop screens most of
-     this is read on, so on a 1440px display the max() below always chose its
-     floor and the whole rule did nothing: the results ran to within 40px of the
-     right edge. The cap now engages at 1480px rather than 1600px, and the floor
-     is a margin you can actually see rather than a hairline. */
+     It was 1560px, which is wider than the laptop screens most of this is read
+     on: with the old 20px floor the max() below always chose that floor on a
+     1440px display and the whole rule did nothing, leaving the results within
+     40px of the right edge. The cap engages at 1480px rather than 1600px now,
+     and the floor is a margin you can actually see rather than a hairline.
+
+     The gutter is `max()` so nothing changes below the cap - this only does
+     work on displays wide enough to have the problem. */
   --pa-page-max: 1400px;
   --pa-rail: 206px;
   --pa-gutter: max(40px, calc((100vw - var(--pa-page-max)) / 2));
