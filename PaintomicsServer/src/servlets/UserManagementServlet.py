@@ -347,10 +347,20 @@ def userManagementResetPassword(request, response, ROOT_DIRECTORY):
         # database and change the password.
         # If not, generate one and send an e-mail.
         if not emailToken:
-            import random, string
+            import secrets, string
 
-            emailToken = ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(50))
-            randomPassword = ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(10))
+            # secrets, not random. Both of these gate an account: the token is
+            # emailed as a link and whoever holds it sets the password, and the
+            # password below is what the account is left with. `random` is the
+            # Mersenne Twister, which Python's own documentation says is "not
+            # suitable for security purposes" -- its state is recoverable from
+            # its output, so tokens drawn from it are predictable to anyone who
+            # has seen enough of them.
+            #
+            # Same alphabet and lengths as before; stored tokens keep their
+            # format and any reset link already in flight still works.
+            emailToken = ''.join(secrets.choice(string.ascii_uppercase + string.digits) for _ in range(50))
+            randomPassword = ''.join(secrets.choice(string.ascii_uppercase + string.digits) for _ in range(10))
 
             userInstance.setResetToken(emailToken)
             userInstance.setResetPassword(randomPassword)

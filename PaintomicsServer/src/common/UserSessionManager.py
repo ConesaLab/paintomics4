@@ -29,9 +29,19 @@ class UserSessionManager(object):
 
         def registerNewUser(self, user_id):
             import string
-            import random
+            import secrets
             user_id = str(user_id)
-            sessionToken =''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(50))
+            # secrets, not random: this token is the entirety of what
+            # isValidUser checks a request against, and `random` is the
+            # Mersenne Twister -- reproducible by design and reconstructable
+            # from a run of its own output. Length does not help; a long draw
+            # from a predictable stream is as guessable as the stream. A site
+            # that hands out guest sessions on request hands out samples of
+            # that stream on request too.
+            #
+            # Same alphabet and same length as before, so nothing stored or
+            # sent changes shape and no live session is invalidated.
+            sessionToken =''.join(secrets.choice(string.ascii_uppercase + string.digits) for _ in range(50))
             self.logged_users[user_id] = sessionToken
             return sessionToken
 
