@@ -13,6 +13,9 @@ class KeggInformationManager(metaclass=Singleton):
     def __init__(self, KEGG_DATA_DIR=""):
         logging.info("CREATING NEW INSTANCE FOR KeggInformationManager...")
         self.lock = threading_lock()
+        # Separate from self.lock on purpose: getKeggData holds this across a
+        # MongoDB read, and the translation cache must not wait behind it.
+        self.organismLock = threading_lock()
         self.lastOrganisms = deque([])
         self.translationCache = {}
 
@@ -256,19 +259,40 @@ class KeggInformationManager(metaclass=Singleton):
         @param organism, the organism code e.g. mmu
         @returns an object containing all the KEGG information for the specie
         """
-        for organismData in self.lastOrganisms:
-            if organismData.get("name") == organism:
-                return organismData
+        # This was the one method in the class holding no lock while it touched
+        # shared state -- it scanned lastOrganisms, loaded on a miss, and
+        # appended, all unguarded. Six concurrent callers asking for the same
+        # organism therefore ran loadOrganismData six times and left six copies
+        # of it in a cache bounded at 25 entries, evicting every other
+        # organism. The expensive read repeated exactly when the server was
+        # busiest, and the cache degraded under the load it exists to absorb.
+        #
+        # A lock of its own, not self.lock: loadOrganismData reads pathways from
+        # MongoDB, and holding the shared lock across that would stall every
+        # translation-cache operation for the duration -- trading a duplicate
+        # load for a pause in unrelated work.
+        #
+        # Held across the load as well as the scan, so the second caller waits
+        # and then finds the entry rather than loading its own copy. Serialising
+        # loads of the same organism is the point; after warm-up there is
+        # nothing to contend over.
+        self.organismLock.acquire()
+        try:
+            for organismData in self.lastOrganisms:
+                if organismData.get("name") == organism:
+                    return organismData
 
-        #If we are here is because the organism was not in the list
-        organismData = self.loadOrganismData(organism)
+            #If we are here is because the organism was not in the list
+            organismData = self.loadOrganismData(organism)
 
-        #A SIZE LIMITED STACK TO KEEP TEMPORALY THE ORGANISMS DATA
-        if len(self.lastOrganisms) == KEGG_CACHE_MAX_SIZE:
-            self.lastOrganisms.popleft()
-        self.lastOrganisms.append(organismData)
+            #A SIZE LIMITED STACK TO KEEP TEMPORALY THE ORGANISMS DATA
+            if len(self.lastOrganisms) >= KEGG_CACHE_MAX_SIZE:
+                self.lastOrganisms.popleft()
+            self.lastOrganisms.append(organismData)
 
-        return organismData
+            return organismData
+        finally:
+            self.organismLock.release()
 
     def loadOrganismData(self, organism):
         client, db  = self.getConnectionByOrganismCode(organism)
