@@ -686,7 +686,9 @@ function PA_Step1JobView() {
 							id: "availableOmicsContainer",
 							minHeight: 400,
 							width: 250,
-							padding: 10,
+							/* No padding on the outer side: the row already sits on the card
+							   inset, so the drag sources start where the headings do. */
+							padding: "10 0",
 							html: '<h2 style="text-align:center;">Available omics</h2>' +
 							'<div class="availableOmicsBox" title="geneexpression"><h4><a href="javascript:void(0)"><i class="fa fa-plus-circle"></i></a> Gene Expression</h4></div>' +
 							'<div class="availableOmicsBox" title="metabolomics"><h4><a href="javascript:void(0)"><i class="fa fa-plus-circle"></i></a> Metabolomics</h4></div>' +
@@ -713,7 +715,9 @@ function PA_Step1JobView() {
 							minHeight: 150,
 							minWidth: 200,
 							maxWidth: 340,
-							margin: 10,
+							/* Left margin only - it is the gutter. The right side is the card
+							   inset, which the row already carries. */
+							margin: "10 0 10 10",
 							flex: 1,
 							layout: {type: 'vbox',align: "stretch"},
 							items: [

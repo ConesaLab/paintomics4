@@ -1492,7 +1492,10 @@ div.omicboxTitle h4 {
 .availableOmicsBox {
 	background: rgb(85, 201, 166);
 	padding: 5px 10px;
-	margin: 10px;
+	/* No horizontal margin: the column these sit in is already on the card's
+	   inset, and 10px here put the first thing the eye meets under
+	   "2. Choose the files to upload" on a left edge of its own. */
+	margin: 10px 0;
 	/* These are drag sources for the cards below, so they take the same corner
 	   as the card they become. */
 	border-radius: var(--pa-radius);
@@ -3322,14 +3325,15 @@ div.po-step-card h3 {
 
 /* The "Available omics / Selected omics / Help" row.
 
-   The three columns already carry 10px of their own (padding on the first,
-   margin on the other two), and that 10px is also the gutter between them - so
-   the row's inset is the card inset less what the columns contribute, and the
-   visible edge of the first and last column lands on --pa-card-inset like
-   everything else in the card. */
+   The row carries the whole card inset and the two outer columns carry none on
+   their outer side (see the padding/margin configs on #availableOmicsContainer
+   and #additionalInfoContainer, and the margin on .availableOmicsBox below), so
+   the first drag source and the right edge of the Help card land on the same
+   two lines as every heading above them. The 10px those columns still carry on
+   their inner sides is the gutter between the three. */
 .po-step1-omics-row {
-  margin-left: calc(var(--pa-card-inset) - 10px);
-  margin-right: calc(var(--pa-card-inset) - 10px);
+  margin-left: var(--pa-card-inset);
+  margin-right: var(--pa-card-inset);
 }
 
 .po-ai-section-body p {
