@@ -71,12 +71,28 @@ class _Heartbeat:
 
     def _run(self):
         while not self._stop.wait(self._interval):
+            # The connection is closed in a finally, not after the touch.
+            # `except` decides whether the error propagates; only `finally`
+            # decides whether the connection comes back, and the two are easy
+            # to mistake for each other. DBmanager builds a new MongoClient per
+            # DAO with its own monitor threads, and this beats every 30s for
+            # the whole life of a job, once per concurrent job -- so a database
+            # that is merely flaky leaked a client every half minute, with the
+            # bare `pass` below ensuring nobody ever heard about it.
+            dao = None
             try:
                 dao = AIInterpretDAO()
                 dao.touch(self._job_id)
-                dao.closeConnection()
             except Exception:
-                pass  # best-effort; don't crash the heartbeat
+                # Still best-effort: a heartbeat that cannot reach the database
+                # must not take the pipeline down with it. But it is logged now
+                # rather than silently dropped, because a heartbeat failing
+                # every 30s is worth knowing about.
+                logger.debug("[%s] heartbeat touch failed", self._job_id,
+                             exc_info=True)
+            finally:
+                if dao is not None:
+                    dao.closeConnection()
 
 
 class _PhaseTimer:
