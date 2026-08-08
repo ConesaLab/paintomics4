@@ -122,6 +122,39 @@ class SignificantOmicCountTest(unittest.TestCase):
                          "a pathway with nothing matched counted as significant "
                          "because its zero counts were compared to the threshold")
 
+    def test_the_uncomputed_sentinel_is_not_read_as_a_p_value(self):
+        """`Pathway` fills the p-value slot with -1.0 until one is written.
+
+        `_conditionPvaluesOf` drops anything outside (0, 1] for this reason, and
+        that filter had no test: -1.0 is below every threshold, so an omic whose
+        p-values were never computed counted as significant and drove triage.
+        Found by deleting the filter and watching the suite stay green.
+        """
+        pathway = Pathway("mmu04210")
+        pathway.significanceValues["Gene expression"] = [[5, 2, -1.0],
+                                                         [5, 2, -1.0]]
+
+        self.assertEqual(_count_significant_omics(pathway), 0,
+                         "the -1.0 'not computed yet' sentinel was compared "
+                         "against the significance threshold and passed")
+
+    def test_the_sentinel_is_not_printed_as_a_p_value(self):
+        """The same filter keeps `p=-1.0000` out of the prompt."""
+        pathway = Pathway("mmu04210")
+        pathway.significanceValues["Gene expression"] = [[5, 2, -1.0]]
+
+        self.assertNotIn("-1.0", _format_significance(pathway),
+                         "the sentinel was rendered into the prompt as a "
+                         "negative p-value")
+
+    def test_a_real_p_value_beside_a_sentinel_still_counts(self):
+        """Dropping the sentinel must not drop the condition that has a value."""
+        pathway = Pathway("mmu04210")
+        pathway.significanceValues["Gene expression"] = [[5, 2, -1.0],
+                                                         [5, 2, 0.001]]
+
+        self.assertEqual(_count_significant_omics(pathway), 1)
+
     def test_each_significant_omic_counts_once(self):
         pathway = _pathway(relevantPerFeature=[[True, True, True]],
                            pvalues=[0.001, 0.001, 0.001])
