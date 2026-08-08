@@ -18,11 +18,14 @@
 #  Technical contact paintomics4@gmail.com
 #**************************************************************
 
+import logging
+
 from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
 
 from .DAO import DAO
 from src.classes.User import User
+from src.common.ServerErrorManager import CredentialException
 
 class UserDAO(DAO):
     #******************************************************************************************************************
@@ -36,6 +39,34 @@ class UserDAO(DAO):
     # GETTERS AND SETTER
     #******************************************************************************************************************
     def findByID(self, userID, otherParams=None):
+        """The user with this ID, or None. Refuses if more than one has it.
+
+        This used `find_one`, which returns whichever document Mongo reaches
+        first. With two accounts on the same userID the caller got one of them
+        arbitrarily and had no way to tell.
+
+        `getNextUserID` used to return `len(userCollection)`, so deleting a user
+        made the next signup collide with a live ID. That allocator is now an
+        atomic counter and issues no new duplicates, but it cannot undo the ones
+        already in a deployment's database.
+
+        What the arbitrary pick cost, measured against a running server: an
+        account on a duplicated ID changed its password, the reply said
+        `success: true`, its own password was unchanged, and the *other*
+        account's password was set to the value it had chosen. The same lookup
+        backs `isValidAdminUser`, where picking the wrong document decides an
+        administrator check.
+
+        `find_one` cannot express "there should be exactly one", so this reads
+        two and refuses if it gets them. The database is then in a state the
+        code has no rule for, and acting on an arbitrary candidate is the worst
+        of the available answers. All three callers already sit inside a
+        handleException, so the refusal reaches the user as an error instead of
+        as someone else's account.
+
+        A unique index on userID is the structural fix; it cannot be built while
+        duplicates exist, and repairing user rows is an operator's decision.
+        """
         queryParams={"userID" : int(userID)}
 
         if(otherParams != None and "password" in otherParams):
@@ -43,7 +74,16 @@ class UserDAO(DAO):
 
         collection = self.dbManager.getCollection(self.collectionName)
 
-        match = collection.find_one(queryParams)
+        candidates = list(collection.find(queryParams).limit(2))
+        if len(candidates) > 1:
+            raise CredentialException(
+                "[b]Account lookup is ambiguous[/b]. More than one account is "
+                "stored with user ID %s, so PaintOmics cannot tell which one "
+                "this request belongs to. Please contact the administrator: "
+                "the duplicate accounts have to be resolved before this ID can "
+                "be used." % (int(userID),))
+
+        match = candidates[0] if candidates else None
         if(match != None):
             match = self.adaptBSON(match)
             userInstance = User(userID)
@@ -155,9 +195,42 @@ class UserDAO(DAO):
             except DuplicateKeyError:
                 pass  # another request seeded it first; its value is equally valid
 
-        document = counters.find_one_and_update(
-            {"_id": "userID"},
-            {"$inc": {"sequence_value": 1}},
-            return_document=ReturnDocument.AFTER
-        )
-        return int(document["sequence_value"])
+        # Seeding happens once, and that is the gap: if the counter ever sits
+        # *below* the collection -- seeded while it held fewer users, rows
+        # restored over it, a database copied in -- $inc keeps handing out IDs
+        # that already belong to somebody, and nothing notices, because the
+        # index on userID is not unique so insert_one writes the duplicate
+        # happily.
+        #
+        # Found live rather than theorised: the counter read sequence_value 4
+        # while accounts existed at IDs 1-5, so a new signup was issued 4 and
+        # collided. Three IDs ended up shared by two accounts each. What a
+        # shared ID costs is in findByID above -- an arbitrary pick between the
+        # two, so changing your password changed someone else's.
+        #
+        # The counter stays the fast path; the result is checked against the
+        # collection and stepped past if taken. Bounded, because a collection
+        # pathological enough to exhaust this is a problem to report rather
+        # than to spin on.
+        users = self.dbManager.getCollection(self.collectionName)
+
+        for _attempt in range(1000):
+            document = counters.find_one_and_update(
+                {"_id": "userID"},
+                {"$inc": {"sequence_value": 1}},
+                return_document=ReturnDocument.AFTER
+            )
+            candidate = int(document["sequence_value"])
+
+            if users.count_documents({"userID": candidate}) == 0:
+                return candidate
+
+            logging.warning(
+                "User ID counter is behind the collection: %s is already taken, "
+                "skipping it. The counter was seeded before these accounts "
+                "existed.", candidate)
+
+        raise Exception(
+            "Could not allocate a free user ID after 1000 attempts. The user ID "
+            "counter is far behind the accounts collection; it needs to be "
+            "reset above the highest existing userID.")

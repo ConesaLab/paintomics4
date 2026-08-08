@@ -426,22 +426,40 @@ def getRandowWord(minLength):
     return password
 
 def initializeUserDirectories(userID):
+    """Make a user's directories, tolerating any that already exist.
+
+    This runs as the *last* step of sign-up, after the account has been written
+    to MongoDB and the welcome email sent. It used bare `os.mkdir`, which raises
+    FileExistsError when the directory is already there, and that exception
+    escaped to handleException -- so the reply said `success: false` for an
+    account that had in fact been created and worked. Observed live: sign-up
+    returned "[Errno 17] File exists: .../CLIENT_TMP/2" and the next sign-in
+    with those credentials succeeded. Retrying then reports the email as
+    already registered, leaving the user with no way forward.
+
+    A leftover directory is enough to reach it: `UserDAO.getNextUserID` numbers
+    accounts without consulting what is on disk, so a deleted user's directory
+    still claims that ID.
+
+    Making it idempotent is the whole fix. Creating a directory that exists is
+    not an error here -- the goal is that the four directories exist afterwards,
+    which `exist_ok=True` states directly.
+    """
     import os.path
 
-    # If there is a "nologin" session create the "nologin" dir if it does not exists
-    if userID is None:
-        if not os.path.exists(CLIENT_TMP_DIR + "nologin"):
-            os.makedirs(CLIENT_TMP_DIR + "nologin")
+    base = CLIENT_TMP_DIR + ("nologin" if userID is None else userID)
 
-            os.mkdir(CLIENT_TMP_DIR + "/nologin/inputData")
-            os.mkdir(CLIENT_TMP_DIR + "/nologin/jobsData")
-            os.mkdir(CLIENT_TMP_DIR + "/nologin/tmp")
-    else:
-        if os.path.isfile(CLIENT_TMP_DIR + userID):
-            import shutil
-            shutil.rmtree(CLIENT_TMP_DIR + 'userID') #THIS SHOULD NEVER HAPPEN!!!
+    # Previously the subdirectories were created only inside `if not
+    # os.path.exists(...)`, so a nologin directory that existed without them --
+    # a run that died midway, or a partially restored backup -- never got them.
+    if userID is not None and os.path.isfile(base):
+        # A *file* where the directory belongs. The old code tested this and
+        # then called rmtree on the literal string 'userID' rather than on the
+        # path it had just tested, so it removed something else entirely (and
+        # rmtree cannot remove a file in any case). Remove what was actually
+        # found, and only when it is genuinely a file.
+        os.remove(base)
 
-        os.mkdir(CLIENT_TMP_DIR + userID)
-        os.mkdir(CLIENT_TMP_DIR + userID + "/inputData")
-        os.mkdir(CLIENT_TMP_DIR + userID + "/jobsData")
-        os.mkdir(CLIENT_TMP_DIR + userID + "/tmp")
+    os.makedirs(base, exist_ok=True)
+    for subdirectory in ("inputData", "jobsData", "tmp"):
+        os.makedirs(os.path.join(base, subdirectory), exist_ok=True)
