@@ -1580,8 +1580,12 @@ div.availableOmicsBox h4 {
 	width: 60% !important;
 	margin: 0 auto !important;
 }
+/* Vertical only. The horizontal 20px was applied on top of the
+   --pa-card-inset these paragraphs already get from `div.contentbox p`, so the
+   prose in these two cards sat 20px to the right of their own h2 and of every
+   other paragraph on the page. */
 #clusternumber_box p, #threshold_box p {
-	margin: 20px;
+	margin: 20px 0;
 }
 /* Each database gets a name, a paragraph about it, and the table of what
    matched in it. The table is the answer the card exists to give, so it is
@@ -3193,6 +3197,9 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
   color: #3F3F46;
   font-weight: 500;
   box-shadow: none;
+  /* It floats right inside an h3 that is already inset by --pa-card-inset, so
+     .button's own 5px would stop it short of the card's right edge. */
+  margin-right: 0;
 }
 .paStep1Form a.button.btn-right.btn-small:hover {
   background-color: #FAFAFA;

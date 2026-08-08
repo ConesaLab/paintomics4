@@ -746,7 +746,7 @@ function PA_Step2CompoundSetView() {
 				xtype: "label", itemId: "titleBox",
 				html:
 				'<h3 class="metaboliteTitle">' + this.getModel().getTitle() + '</h3>' +
-				'<h4 style="padding-left: 10px;">' + mainCompoundsPanelComponents.length + ' compounds founds</h4>'
+				'<h4 style="padding-left: var(--pa-card-inset);">' + mainCompoundsPanelComponents.length + ' compounds founds</h4>'
 			}, {
 				xtype: 'container',
 				itemId: "mainCompoundsPanel",
@@ -755,7 +755,7 @@ function PA_Step2CompoundSetView() {
 				items: mainCompoundsPanelComponents
 			}, {
 				xtype: "label",
-				html: '<h4 style="padding-left: 10px;">' + this.otherCompoundsPanelItems.length + ' alternative compounds founds <a class="showOtherCompoundsButton" href="javascript:void(0)"><i class="fa fa-eye"></i> Show</a></h4> '
+				html: '<h4 style="padding-left: var(--pa-card-inset);">' + this.otherCompoundsPanelItems.length + ' alternative compounds founds <a class="showOtherCompoundsButton" href="javascript:void(0)"><i class="fa fa-eye"></i> Show</a></h4> '
 			}, {
 				xtype: 'container', itemId: "otherCompoundsPanel",
 				style: "padding: 3px 15px;", layout: 'column', hidden: true,
