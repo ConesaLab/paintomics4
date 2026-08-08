@@ -3670,6 +3670,21 @@ div.repDetectionCard h3 {
     scroll-behavior: auto !important;
   }
 
+  /* Collapsing the duration above only makes these two instant, not absent -
+     the image still jumps 2% larger and the card still steps up 2px, which is
+     displacement, which is the thing being asked about. Both are decoration on
+     a marketing surface and nothing depends on them, so under this setting
+     they do not move at all.
+
+     Only these two. `translateY(-50%)` appears twice elsewhere as optical
+     centring, and removing a transform that is doing layout would break it. */
+  .po-hero-visual img:hover {
+    transform: none !important;
+  }
+  .po-step-card:hover {
+    transform: none !important;
+  }
+
   /* loadingpaintomics2.gif loops for the whole analysis, which for the example
      dataset is around 90 seconds of continuous motion. `content` on a replaced
      element swaps the rendered image without touching the markup, so the
