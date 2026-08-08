@@ -865,9 +865,18 @@ ul.ui-menu.ui-widget.ui-widget-content {
    panel's own margin config, which ExtJS measures, so the body must not add it
    again. Scoped to this one panel - every other .contentbox is an element that
    ExtJS does not size itself, where the margin is correct. */
-.paStep1Form > .x-panel-body.contentbox {
+.paStep1Form > .x-panel-body.contentbox,
+.paToolForm > .x-panel-body.contentbox {
 	margin-left: 0;
 	margin-right: 0;
+}
+/* The one panel in each supporting-tool form. It is laid out by the form's
+   vbox, which reads this margin off the computed style and takes it out of the
+   stretched width, so the panel starts and ends on the card inset like the
+   "Data uploading" heading above it. */
+.paToolForm .omicbox {
+	margin-left: var(--pa-card-inset);
+	margin-right: var(--pa-card-inset);
 }
 /* Card headings ---------------------------------------------------------------
    Every block on the results page - Pathways selection, Pathways summary,
@@ -3278,6 +3287,21 @@ div.po-step-card h3 {
 .po-tutorials-grid iframe {
   width: 100%;
   border-radius: 4px;
+}
+
+/* The prose column of the Regions2Genes / miRNA2Genes intro card, beside the
+   tool's logo. It used to carry `padding-left: 10px` inline, which put its h4
+   on 10px while the paragraph under it sat on --pa-card-inset from
+   `div.contentbox p` - a heading and its own body copy on two different left
+   edges, each of them a different edge again from the "About input data" card
+   directly below. The column now starts at the card's edge and the heading
+   takes the same inset the prose already had, so all three agree. */
+.po-tool-intro {
+  max-width: 600px;
+  float: left;
+}
+.po-tool-intro > h4 {
+  padding-left: var(--pa-card-inset);
 }
 
 /* AI Section */

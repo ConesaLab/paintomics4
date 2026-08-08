@@ -89,17 +89,21 @@ function DM_miRNA2GenesJobView() {
 				'<a class="button btn-success btn-right" id="runButton"><i class="fa fa-play"></i> Run miRNA2Genes</a>' + 
 				'<a class="button btn-secondary btn-right" id="exampleButton"><i class="fa fa-file-text-o"></i> Load example</a>'
 			},{
-				xtype: "container", style: "margin-top:50px;  max-width:1300px;",
+				/* No max-width here. #mainViewCenterPanel already caps the page column
+				   at --pa-page-max and centres it, so a second 1300px cap only pinned
+				   this page's cards to the left and left a ~80px dead strip down the
+				   right - the same thing that was removed from the step 1 hero. */
+				xtype: "container", style: "margin-top:50px;",
 				items: [
 					{
 						xtype: 'box', html:
 						'<div id="about" class="contentbox">' +
 						'   <h2>From miRNAs to Genes</h2>' +
 						'   <img alt="logo_mirna2genes.png" src="resources/images/logo_mirna2genes.png" style="width: 300px;margin:20px;">' +
-						'   <div style=" max-width: 600px; float: left;padding-left: 10px; ">' +
+						'   <div class="po-tool-intro">' +
 						'       <h4>Match miRNAs to their target protein-coding genes</h4> ' +
 						'       <p>This tool processes your input miRNA quantification data and assigns the expression values to the known list of target genes for each miRNA. The tool includes many options to customize the resulting gene list. See below for more information.</p>' +
-						'       <b>More info:</b>'+
+						'       <p><b>More info:</b></p>'+
 						'       <ul><li><a href="http://paintomics.readthedocs.io/en/latest/2_1_accepted_input/#matching-mirnas-to-genes-rgmatch" target="_blank">Matching miRNAs to Genes (PaintOmics 3 Documentation)</a></li>' +
 						'   </div>' +
 						'</div>' +
@@ -127,11 +131,16 @@ function DM_miRNA2GenesJobView() {
 						'   <img alt="figure1apng.png" src="resources/images/paintomics_input_figure5c.png" style=" width: 750px; margin: 20px auto; display: block; ">'+
 						'</div>'
 					},{
-						xtype: 'form', bodyCls: "contentbox", itemId: "omicSubmittingForm", style: "max-width:1280px; padding-bottom:50px;",
+						xtype: 'form', bodyCls: "contentbox", cls: "paToolForm", itemId: "omicSubmittingForm",
+						/* The inset goes on the panel, not on its body: ExtJS writes an
+						   explicit width onto the body, so .contentbox's own 10px margin was
+						   added on top of that width and this card finished 20px wider than
+						   the two above it. See .paToolForm in main.css. */
+						margin: '0 10 0 10', style: "padding-bottom:50px;",
 						layout: {type: 'vbox', align: "stretch"},
-						defaults: {labelAlign: "right", labelWidth: 220, maxWidth: 800},
+						defaults: {labelAlign: "right", labelWidth: 220},
 						items: [
-							{xtype: "box", flex: 1, maxWidth: 1300, html: '<h2>Data uploading</h2><h3>1. Choose the files to upload </h3>'},
+							{xtype: "box", flex: 1, html: '<h2>Data uploading</h2><h3>1. Choose the files to upload </h3>'},
 							new MiRNAOmicSubmittingPanel(0, {removable: false, allowToogle: false}).getComponent(),
 							{xtype: "box", html: '<div style="height:150px"></div>'},
 						]

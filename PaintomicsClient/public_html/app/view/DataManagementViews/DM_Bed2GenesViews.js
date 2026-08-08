@@ -92,14 +92,14 @@ function DM_Bed2GenesJobView() {
 				'<div id="about" class="contentbox">' +
 				'   <h2>From Regions to Genes</h2>' +
 				'   <img alt="logorgmatch.png" src="resources/images/logo_rgmatch.png" style="width: 300px;margin:20px;">' +
-				'   <div style=" max-width: 600px; float: left;padding-left: 10px; ">' +
+				'   <div class="po-tool-intro">' +
 				'       <h4>Match genomic regions to the closest gene </h4> ' +
 				'       <p>This tool is based on RGmatch, a flexible and easy-to-use tool to match genomic regions to the closest gene ' +
 				'       (also transcript or exon), which provides the area of the gene where the region overlaps. The algorithm can ' +
 				'       be applied to any organism as long as the genome annotation is available.</br>' +
 				'       The original tool from developed by P. Furio and S. Tarazona, was adapted to accept quantification values for each genomic region, ' +
 				'       so the resulting gene list includes quantification values at gene level. See below for more information about input format.</p>' +
-				'       <b>More info:</b>'+
+				'       <p><b>More info:</b></p>'+
 				'       <ul><li><a href="http://paintomics.readthedocs.io/en/latest/2_1_accepted_input/#matching-regions-to-genes-rgmatch" target="_blank">Matching Regions to Genes (PaintOmics 3 Documentation)</a></li>' +
 				'       <li><a href="https://bitbucket.org/pfurio/rgmatch" target="_blank">RGmatch repository</a></li></ul>' +
 				'   </div>' +
@@ -125,11 +125,16 @@ function DM_Bed2GenesJobView() {
 				'   <img alt="paintomics_input_figure5.png" src="resources/images/paintomics_input_figure5.png" style="max-width: 625px;margin: auto;display: block;">'+
 				'</div>'
 			},{
-				xtype: 'form', bodyCls: "contentbox", itemId: "omicSubmittingForm", style: "max-width:1280px; padding-bottom:50px;",
+				xtype: 'form', bodyCls: "contentbox", cls: "paToolForm", itemId: "omicSubmittingForm",
+						/* The inset goes on the panel, not on its body: ExtJS writes an
+						   explicit width onto the body, so .contentbox's own 10px margin was
+						   added on top of that width and this card finished 20px wider than
+						   the two above it. See .paToolForm in main.css. */
+						margin: '0 10 0 10', style: "padding-bottom:50px;",
 				layout: {type: 'vbox', align: "stretch"},
-				defaults: {labelAlign: "right", labelWidth: 220, maxWidth: 800},
+				defaults: {labelAlign: "right", labelWidth: 220},
 				items: [
-					{xtype: "box", flex: 1, maxWidth: 1300, html: '<h2>Data uploading</h2><h3>1. Choose the files to upload </h3>'},
+					{xtype: "box", flex: 1, html: '<h2>Data uploading</h2><h3>1. Choose the files to upload </h3>'},
 					new RegionBasedOmicSubmittingPanel(0, {removable: false, allowToogle: false}).getComponent()
 				]
 			}],
