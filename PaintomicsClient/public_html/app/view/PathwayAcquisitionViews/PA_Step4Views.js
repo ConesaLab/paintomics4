@@ -3037,21 +3037,15 @@ function PA_Step4FindFeaturesView() {
 
 
 	/**
-	* TODO: MOVER A OTRO LADO??
-	* This function returns the corresponding color for a given cluster number
+	* Moved, as the TODO that stood here since 2021 asked: the palette is in
+	* Util.js and Step 3 reads the same one. This copy had kept the pre-2022 list,
+	* so a cluster changed colour between the two views - see getClusterColor
+	* there for what that looked like.
 	* @param  {String} cluster the cluster number
 	* @returns	{String} the hexadecimal color code
 	*/
 	this.getClusterColor= function(cluster){
-		var COLORS = ["#a6cee3", "#1f78b4", "#b2df8a", "#33a02c", "#fb9a99", "#e31a1c", "#fdbf6f", "#ff7f00", "#cab2d6", "#6a3d9a", "#eded84", "#b15928", "#003b46", "#f5b549", "#B38867"];
-		cluster = Number.parseInt(cluster.replace(/[a-z]*/,""));
-
-		if(!Number.isNaN(cluster) && cluster < COLORS.length){
-			return COLORS[cluster];
-		}
-
-		console.warn("Unable to find a color for cluster " + cluster);
-		return "#333";
+		return getClusterColor(cluster);
 	};
 
 	/**

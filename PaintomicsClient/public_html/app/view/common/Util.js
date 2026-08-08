@@ -494,6 +494,47 @@ function showErrorMessage(title, data) {
     showMessage(title, data);
 }
 
+/**
+* The colour a metagene cluster is drawn in, wherever it is drawn.
+*
+* This lived twice, once on the Step 3 view and once on Step 4, as two copies of
+* the same function differing only in their palette - the Step 4 copy carrying a
+* "TODO: MOVER A OTRO LADO??" that had been asking for this since 2021.
+*
+* The copies had drifted, and the drift was visible. "fixed cluster issues"
+* (ef2a2237, 2022-02-16) edited the Step 3 palette at indices 0, 2 and 3 and did
+* not touch Step 4, so from then on a cluster changed colour when the user moved
+* between the two views: cluster 3 was brown #a0512c in the Step 3 metagenes
+* chart and green #33a02c in the Step 4 trend chart, cluster 2 tan #dfbd8a there
+* and pale green #b2df8a here. A cluster number means nothing on its own - the
+* colour is how it is recognised across the analysis - so the same cluster
+* wearing two colours is the one thing this palette must not do. Observed on
+* mmu01210, which draws clusters 2, 3, 9, 10 and 11 at once.
+*
+* Step 4 also stopped at 15 entries against Step 3's 20, so clusters 15-19 fell
+* through to the grey fallback in one view and were coloured in the other.
+*
+* This is the Step 3 list: the newer one, and the one the 2022 fix chose.
+*
+* @param  {String} cluster the cluster number, optionally prefixed with letters
+* @returns {String} the hexadecimal colour code, or #333 if out of range
+*/
+function getClusterColor(cluster) {
+    var COLORS = ["#b8a6e3", "#1f78b4", "#dfbd8a", "#a0512c", "#fb9a99", "#e31a1c",
+                  "#fdbf6f", "#ff7f00", "#cab2d6", "#6a3d9a", "#eded84", "#b15928",
+                  "#003b46", "#f5b549", "#B38867", "#009999", "#008888", "#007777",
+                  "#006666", "#005555"];
+
+    cluster = Number.parseInt(String(cluster).replace(/[a-z]*/, ""));
+
+    if (!Number.isNaN(cluster) && cluster < COLORS.length) {
+        return COLORS[cluster];
+    }
+
+    console.warn("Unable to find a color for cluster " + cluster);
+    return "#333";
+}
+
 function initializeTooltips(query, options) {
     options = (options || {side: 'bottom', interactive: true, maxWidth: 350});
     $(query).tooltipster(options);

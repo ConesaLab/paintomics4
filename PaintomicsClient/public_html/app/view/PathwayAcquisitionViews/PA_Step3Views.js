@@ -2048,16 +2048,11 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 	* @param  {String} cluster the cluster number
 	* @returns	{String} the hexadecimal color code
 	*/
+	// The palette lives in Util.js now - Step 4 held a second copy of it that had
+	// drifted, so the same cluster was drawn in two different colours depending on
+	// which view you were looking at. See getClusterColor there.
 	this.getClusterColor= function(cluster){
-		var COLORS = ["#b8a6e3", "#1f78b4", "#dfbd8a", "#a0512c", "#fb9a99", "#e31a1c", "#fdbf6f", "#ff7f00", "#cab2d6", "#6a3d9a", "#eded84", "#b15928", "#003b46", "#f5b549", "#B38867", "#009999", "#008888", "#007777", "#006666", "#005555"];
-		cluster = Number.parseInt(cluster.replace(/[a-z]*/,""));
-
-		if(!Number.isNaN(cluster) && cluster < COLORS.length){
-			return COLORS[cluster];
-		}
-
-		console.warn("Unable to find a color for cluster " + cluster);
-		return "#333";
+		return getClusterColor(cluster);
 	};
 
 	this.updateNodePositions = function(updateCache, preserveExisting=false){
