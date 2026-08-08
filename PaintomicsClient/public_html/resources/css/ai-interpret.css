@@ -542,50 +542,19 @@
     40% { opacity: 1; transform: scale(1); }
 }
 
-/* ── AI Interpretation Section (Step 1 Form) ── */
-.ai-interpret-section {
-    margin: 20px 20px 10px 20px;
-    padding: 18px 22px;
-    background: linear-gradient(to bottom, #f8faff, #f2f6fc);
-    border: 1px solid #c8d6e5;
-    border-radius: 8px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-}
+/* The AI section's own styling used to live here as .ai-interpret-section,
+   .ai-privacy-btn and .ai-experiment-design. All three are gone: nothing in the
+   repository or in the deployed container carries any of those classes, and the
+   section is drawn by .po-ai-section-body in main.css instead.
 
-/* Privacy button - override Neptune theme */
-.ai-privacy-btn.x-btn,
-.ai-privacy-btn.x-btn.x-btn-default-small {
-    background-color: #fff3f3 !important;
-    background-image: none !important;
-    border: 1px solid #ffcdd2 !important;
-    border-radius: 20px !important;
-    transition: all 0.2s ease;
-}
-.ai-privacy-btn.x-btn .x-btn-inner,
-.ai-privacy-btn.x-btn .x-btn-inner-default-small {
-    color: #c0392b !important;
-    font-size: 12px !important;
-    font-weight: 500;
-}
-.ai-privacy-btn.x-btn-over,
-.ai-privacy-btn.x-btn-over.x-btn-default-small-over {
-    background-color: #ffebee !important;
-    background-image: none !important;
-    border-color: #ef9a9a !important;
-    box-shadow: 0 2px 8px rgba(192, 57, 43, 0.15);
-}
-.ai-privacy-btn.x-btn-focus,
-.ai-privacy-btn.x-btn-focus.x-btn-default-small-focus {
-    background-color: #fff3f3 !important;
-    background-image: none !important;
-    box-shadow: 0 0 0 2px rgba(192, 57, 43, 0.2);
-}
-
-/* Experiment design textarea within AI section */
-.ai-experiment-design .x-form-item-label {
-    color: #555;
-    font-size: 13px;
-}
+   .ai-interpret-section was the one worth removing rather than leaving. It was
+   not merely unused, it was the same rule frozen before two corrections -
+   identical to the live one in background, border, shadow and padding, and
+   differing only where .po-ai-section-body was fixed: border-radius 8px against
+   the surface token, and margin 20px against the card inset. Both of those are
+   values the live rule carries a comment explaining it should not have. A copy
+   that disagrees only where the original was corrected is the copy someone
+   reaches for next. */
 
 /* ── GDPR Disclaimer Popup ── */
 .ai-gdpr-info-icon {
