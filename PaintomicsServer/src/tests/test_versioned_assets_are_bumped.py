@@ -61,11 +61,21 @@ CLIENT_ROOT = os.path.abspath(os.path.join(
 INDEX_HTML = os.path.join(CLIENT_ROOT, "index.html")
 
 # path in index.html -> (version it is published under, sha256 of that content)
+#
+# A digest is carried for the application scripts, which change and are what
+# break each other. The vendor libraries carry None: they change perhaps once a
+# year, and recording a digest for a 300KB minified bundle only creates churn.
 PUBLISHED = {
     "app/view/common/Util.js": (
         "0.8", "a729580e1d68dd4ba9e4955afeefbe500018de8295ffa74e1fd0438330e82b0b"),
     "app/view/common/ExtJS_extensions.js": (
-        "0.6", None),
+        "0.6", "61a72e40803dd468f8b4af54c58a41cfc84224bf1a678a4dfee9666065a9eb1e"),
+    "app/view/common/upload/Panel.js": (
+        "0.1", "a8ae097ac622998d42c020fa8045fc4b15900ce17da065f80971bd0349daf93b"),
+    "app/view/PathwayAcquisitionViews/PA_AIInterpretView.js": (
+        "0.1", "083079e3da1338e0fed065f544d6136cdf73392255fd6b45ef6f1c3b18f82308"),
+    "app/view/PathwayAcquisitionViews/PA_Step3RegTargetNetworkView.js": (
+        "0.1", "f9b31d697a708f72074f605350ea488efe4faa3d610d90d8a0dfec18d271070c"),
     "js/libs/linkurious/sigma.min.js": ("0.1", None),
     "js/libs/linkurious/plugins.js": ("0.2", None),
     "app.js": ("0.1", None),
@@ -110,28 +120,50 @@ class VersionedAssetTest(unittest.TestCase):
                 "you bumped the marker, update PUBLISHED (version and digest) "
                 "to match." % (path, self.markers[path], version))
 
-    def test_util_js_content_matches_its_published_version(self):
-        """The file that has now broken twice, pinned by digest.
+    def test_content_matches_the_published_version(self):
+        """Every application script, pinned by digest."""
+        for path, (version, expected) in sorted(PUBLISHED.items()):
+            if expected is None:
+                continue
 
-        Only Util.js carries a digest: it is the one that changes often and the
-        one both incidents came from. The others are recorded so a bump
-        mismatch is still caught, without churn on every unrelated edit.
+            actual = _digest(path)
+
+            self.assertEqual(
+                actual, expected,
+                "%s has changed since it was published as v=%s.\n"
+                "Bump the marker in index.html AND update the digest here to:\n"
+                "    %s\n"
+                "Updating the digest alone defeats the purpose -- returning "
+                "browsers keep the old file for up to 12 hours and run new "
+                "code against it, which is how getClusterColor and "
+                "truncatableTextRenderer both broke."
+                % (path, version, actual))
+
+    def test_every_script_tag_asset_can_be_cache_busted(self):
+        """A plain <script src> with no ?v= has no lever to pull.
+
+        Files reached through `Application.loadModule` are exempt: that is
+        `$.ajax({dataType: "script"})`, and jQuery defaults `cache: false` for
+        script requests, so it appends its own `?_=<epoch>` and those are always
+        fresh. Confirmed in the browser -- PA_Step4Views.js arrives as
+        `?_=1786198859735` while the tags below arrive as written.
+
+        That asymmetry is the whole bug: always-fresh view code running against
+        a cached script-tag file. So every script tag needs a marker, or a
+        change to it is unbustable and returning users get up to 12 hours of
+        the old copy.
         """
-        version, expected = PUBLISHED["app/view/common/Util.js"]
-        if expected is None:
-            self.skipTest("no digest recorded")
+        unbustable = []
+        with open(INDEX_HTML, "r", encoding="utf-8", errors="replace") as handle:
+            for line in handle:
+                match = re.search(r'src="(app/[^"?]+\.js)"', line)
+                if match:
+                    unbustable.append(match.group(1))
 
-        actual = _digest("app/view/common/Util.js")
-
-        self.assertEqual(
-            actual, expected,
-            "Util.js has changed since it was published as v=%s.\n"
-            "Bump the marker in index.html AND update the digest here to:\n"
-            "    %s\n"
-            "Updating the digest alone defeats the purpose -- returning "
-            "browsers keep the old file and run new code against it, which is "
-            "how getClusterColor and truncatableTextRenderer both broke."
-            % (version, actual))
+        self.assertEqual(unbustable, [],
+                         "these are loaded as plain script tags with no ?v= "
+                         "marker, so a change to them cannot be pushed to a "
+                         "returning browser: %s" % unbustable)
 
     def test_the_functions_that_broke_are_present(self):
         """Cheap check that Util.js still defines what other views call.
