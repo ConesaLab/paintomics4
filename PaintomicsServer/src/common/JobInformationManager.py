@@ -47,6 +47,9 @@ class JobInformationManager(metaclass=Singleton):
         logging.info("CREATING NEW INSTANCE FOR JobInformationManager...")
         self.recentJobs= deque([])
         self.lock = threading_lock()
+        # Separate from self.lock on purpose: loadJobInstance holds this across
+        # a MongoDB read, and the cache's own operations must not wait on it.
+        self.jobLoadLock = threading_lock()
 
     #**********************************************
     #*
@@ -149,14 +152,40 @@ class JobInformationManager(metaclass=Singleton):
 
             jobInstance = self.findInCache(jobID)
             if jobInstance is None:
-                logging.info("JOB "  + jobID + " NOT FOUND IN CACHE, TRYING IN DB...")
-                jobInstanceDAO = PathwayAcquisitionJobDAO()
-                jobInstance = jobInstanceDAO.findByID(jobID)
-                if jobInstance is None:
-                    logging.info("JOB "  + jobID + " NOT FOUND IN DATABASE...")
-                else:
-                    logging.info("JOB "  + jobID + " FOUND IN DATABASE...")
-                    self.addToCache(jobInstance)
+                # findInCache and addToCache each take the lock, but the load
+                # between them did not, so concurrent requests for one uncached
+                # job all missed, all read MongoDB, and all cached their own
+                # copy. Measured at five concurrent requests: five reads, five
+                # distinct objects, five entries in a cache bounded at 50.
+                #
+                # A PathwayAcquisitionJob is mutable and gets written back, so
+                # separate copies are not just wasted work -- two requests that
+                # each load, change something and store change *different*
+                # objects, and whichever reaches the database last overwrites
+                # the other. (The duplicate loads happen whenever two requests
+                # race a cold entry; the lost update needs two concurrent
+                # writes to the same job, which is rarer but reachable -- a save
+                # of visual options beside a save of sharing options.)
+                #
+                # Double-checked: the fast path above is untouched, and only a
+                # miss takes this lock and looks again inside it, so the second
+                # caller finds what the first loaded. The lock is separate from
+                # self.lock because it is held across a database read and the
+                # cache's own operations must not queue behind that.
+                self.jobLoadLock.acquire()
+                try:
+                    jobInstance = self.findInCache(jobID)
+                    if jobInstance is None:
+                        logging.info("JOB "  + jobID + " NOT FOUND IN CACHE, TRYING IN DB...")
+                        jobInstanceDAO = PathwayAcquisitionJobDAO()
+                        jobInstance = jobInstanceDAO.findByID(jobID)
+                        if jobInstance is None:
+                            logging.info("JOB "  + jobID + " NOT FOUND IN DATABASE...")
+                        else:
+                            logging.info("JOB "  + jobID + " FOUND IN DATABASE...")
+                            self.addToCache(jobInstance)
+                finally:
+                    self.jobLoadLock.release()
 
             return jobInstance
         except Exception as ex:
