@@ -73,6 +73,39 @@ function PA_Step3JobView() {
 	this.aiJobID = null;
 	this.pollTimerID = null;
 
+	/**
+	* Does this job have metabolomics worth showing the two metabolite panels for?
+	*
+	* This used to ask `foundCompounds.length`, which is the list of *candidate*
+	* compound names awaiting disambiguation at step 2. Those candidates are
+	* deleted once step 2 resolves them -- storeJobInstance calls
+	* FoundFeatureDAO().removeAll() and never re-inserts them, the only use of
+	* that DAO in the file -- so a job reopened from its URL has none, and both
+	* panels disappeared even though everything they draw was still there.
+	*
+	* What they actually draw is the *resolved* compounds: the hub table reads
+	* hubAnalysisResult and mappingComp, the class activity table reads
+	* mappingComp, classificationDict, exprssionMetabolites, pValueInDict,
+	* adjustPvalue and totalRelevantFeaturesInCategory. All of those are written
+	* back at step 2, so asking about mappingComp answers the question the gate
+	* was trying to ask.
+	*
+	* foundCompounds is still checked first, so nothing changes for a job in the
+	* session that produced it; mappingComp only adds the reopened case. A job
+	* with no metabolomics at all has neither, and the panels stay hidden as
+	* before.
+	*/
+	this.hasMetaboliteData = function () {
+		var model = this.getModel();
+		if (!model) {
+			return false;
+		}
+		if (model.foundCompounds && model.foundCompounds.length) {
+			return true;
+		}
+		return !!(model.mappingComp && Object.keys(model.mappingComp).length);
+	};
+
 	/*********************************************************************
 	* GETTERS AND SETTERS
 	***********************************************************************/
@@ -282,7 +315,7 @@ function PA_Step3JobView() {
 		}
 		this.pathwayTableView.loadModel(model);
 
-		if ( this.metaboliteView === null && this.getModel().foundCompounds.length) {
+		if ( this.metaboliteView === null && this.hasMetaboliteData()) {
 			this.metaboliteView = new PA_Step3MetaboliteView();
 			this.metaboliteView.setController(this.getController());
 			this.metaboliteView.setParent(this);
@@ -847,8 +880,10 @@ function PA_Step3JobView() {
 							}
 						}
 				},
-				(!this.getModel().foundCompounds.length?null:me.hubAnalysisView.getComponent()),
-				(!this.getModel().foundCompounds.length?null:me.metaboliteView.getComponent()),
+				// See hasMetaboliteData: gated on the resolved compounds these
+				// panels draw, not on the candidate list that step 2 consumes.
+				(!this.hasMetaboliteData()?null:me.hubAnalysisView.getComponent()),
+				(!this.metaboliteView?null:me.metaboliteView.getComponent()),
 				// MORE Regulation panel — independent of metabolomics presence.
 				// The view returns a hidden container when no rpc data; safe to
 				// always include here.
