@@ -32,22 +32,60 @@ def calculateFisher(totalElems, foundElems, totalSignificative, foundSignificati
     # Ensure we don't return absolute 0 for display consistency
     return max(p, 1e-300)
 
+def _extractPvalue(significanceValues):
+    """Accept both [nFeatures, nRelevant, pValue] and a bare p-value."""
+    if isinstance(significanceValues, (list, tuple)) and len(significanceValues) >= 3:
+        return significanceValues[2]
+    return significanceValues
+
+
+def _usablePvalues(significanceValuesList):
+    """The p-values in [0, 1]; anything else is not evidence and is dropped.
+
+    A p-value outside that range is not something either combining method can
+    do anything sensible with, and the arithmetic quietly picks the worst
+    available answer if left alone. Fisher's method needs ln(p), so the clamp
+    below is `max(pVal, 1e-300)` to avoid log(0) -- correct for zero, and wrong
+    for everything under it, because a negative clamps *up* to the smallest
+    positive p-value the function admits, i.e. the strongest possible evidence.
+
+    `Pathway` initialises its p-value slot to the sentinel -1.0, so a slot
+    meaning "not computed yet" would read as "overwhelmingly significant": one
+    of them drags a pathway from p=0.98 to p=6e-298, straight to the top of the
+    results table. No reachable path through today's callers was found, but a
+    silent maximally-significant answer is the worst of the available failures,
+    so out-of-range input is ignored rather than clamped into evidence.
+
+    Returns (pvalues, keptIndices) so a parallel weight vector can be filtered
+    the same way.
+    """
+    pvalues, keptIndices = [], []
+    for index, significanceValues in enumerate(significanceValuesList or []):
+        pVal = _extractPvalue(significanceValues)
+        if isinstance(pVal, bool) or not isinstance(pVal, (int, float)):
+            continue
+        if pVal < 0 or pVal > 1:
+            continue
+        pvalues.append(pVal)
+        keptIndices.append(index)
+    return pvalues, keptIndices
+
+
 def calculateCombinedFisher(significanceValuesList):
     #X^2_2k ~ -2 * sum(ln(p_i))
     if not significanceValuesList: return 1.0
 
+    pvalues, _kept = _usablePvalues(significanceValuesList)
+    if not pvalues:
+        return 1.0
+
     accumulatedValue = 0
-    for significanceValues in significanceValuesList:
-        # Handle both [nFeatures, nRelevant, pValue] and simple pValue
-        if isinstance(significanceValues, (list, tuple)) and len(significanceValues) >= 3:
-            pVal = significanceValues[2]
-        else:
-            pVal = significanceValues
+    for pVal in pvalues:
         accumulatedValue += log(max(pVal, 1e-300)) # Avoid log(0)
 
     accumulatedValue = accumulatedValue * -2
 
-    return(chi2.sf(accumulatedValue, 2*len(significanceValuesList)))
+    return(chi2.sf(accumulatedValue, 2*len(pvalues)))
 
 # fdr_bh (default), fdr_by, nada
 def adjustPvalues(pvaluesList):
@@ -71,13 +109,18 @@ def adjustPvalues(pvaluesList):
 def calculateStoufferCombinedPvalue(pvalues, weights):
     # Stouffer method cannot deal with p-values equal to 1, returning Nan
     # Prevent that by removing a small value in those cases
-    curatedPvalues = []
-    for pvalue in pvalues:
-        if isinstance(pvalue, (list, tuple)) and len(pvalue) >= 3:
-            val = pvalue[2]
-        else:
-            val = pvalue
-        curatedPvalues.append(min(val, 0.9999999999))
+    # Out-of-range values are dropped for the same reason as in
+    # calculateCombinedFisher: the -1.0 sentinel is "not computed yet", not
+    # evidence. The weight vector is filtered alongside so the two stay
+    # aligned -- Stouffer pairs them positionally.
+    pvalueList = list(pvalues)
+    usable, keptIndices = _usablePvalues(pvalueList)
+    curatedPvalues = [min(val, 0.9999999999) for val in usable]
+
+    if weights is not None:
+        weightList = list(weights)
+        if len(weightList) == len(pvalueList):
+            weights = [weightList[index] for index in keptIndices]
 
     # Nothing to combine: no omic in this pathway carried a usable p-value.
     if not curatedPvalues:
