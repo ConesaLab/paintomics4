@@ -136,7 +136,16 @@ function PA_Step2JobView() {
 			'  <h2 >Data distribution summary <span class="helpTip" title=" "></h2>' +
 			'  <p>' +
 			'    The following diagrams show the data distribution summary of each data set provided.<br>' +
-			'    By default the percentiles 10 and 90 will be taken as a reference for the colour scale when generating the heatmaps, but <b>in the <span style="text-decoration: underline;">next step</span> you will be able to change the setting</b> using the "Visual settings" button located in the toolbar, the one showed here.<br>' +
+			'    By default the percentiles 10 and 90 will be taken as a reference for the colour scale when generating the heatmaps, but <b>in the <span style="text-decoration: underline;">next step</span> you will be able to change the setting</b> using the "Settings" button located in the toolbar, the one showed here.<br>' +
+			// settingsbutton.png was last regenerated in 2022 and shows the toolbar
+			// as it was then: a dark bar of coloured Bootstrap buttons reading
+			// "Go back / Show Pathway / Show Heatmap / Search / Settings", with a
+			// "Log out" above it. The step 4 toolbar it is meant to point at has
+			// been white pills in the reverse order since the chrome was rebuilt
+			// (98e5aa9d). The button's name is still "Settings", so the caption
+			// above is now accurate and the picture is the part that is out of
+			// date - it wants a fresh screenshot, which is not something to
+			// approximate by hand.
 			'		 <div style="margin: 15px auto;text-align:center;"><img src="resources/images/settingsbutton.png" width="400" height="73" /></div>' +
 			'  </p>' +
 			'</div>'
