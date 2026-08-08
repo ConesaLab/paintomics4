@@ -2661,21 +2661,46 @@ div.omicSelection div.omicPosition + div {
 
 /***********************************************************/
 
+/* Both of these drew their icon from a PNG that is not in the repository and
+   not in the deployed image either - `help_12x12.png` and `warning_12x12.png`
+   have been missing long enough that no build or deploy ever had them.
+
+   `.formfieldHelpTip` is the worse of the two: helpTips.js emits it as an empty
+   <span> carrying a data-qtip, so the icon was the only thing there was to see
+   or aim at. With the background failing to load, every field's help affordance
+   was a 16px blank with `cursor: help` on it - discoverable only by chance.
+
+   Drawn from FontAwesome instead, which is loaded globally and is already how
+   this stylesheet draws checkbox and radio marks, so there is no new dependency
+   and nothing further to keep on disk. */
 .formfieldHelpTip {
-	background-image: url('../images/help_12x12.png');
-	background-repeat: no-repeat;
-	padding-right: 16px;
-	background-position: center;
 	cursor: help;
 }
+.formfieldHelpTip::before,
+.warningTip::before {
+	display: inline-block;
+	font-family: FontAwesome;
+	font-style: normal;
+	font-weight: normal;
+	line-height: 1;
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+}
+.formfieldHelpTip::before {
+	content: "\f059";  /* question-circle */
+	color: var(--pa-ink-muted);
+}
 .warningTip {
-	background-image: url('../images/warning_12x12.png');
-	background-repeat: no-repeat;
-	padding-left: 12px;
 	line-height: 19px;
-	background-position-y: center;
 	font-style: italic;
-	color: rgb(163, 163, 163);
+	/* Was rgb(163,163,163), which is 2.3:1 on white - below the 4.5:1 the rest
+	   of this palette was retuned to, and a warning is the last thing that
+	   should be the hardest text on the page to read. */
+	color: var(--pa-ink-muted);
+}
+.warningTip::before {
+	content: "\f071";  /* exclamation-triangle */
+	margin-right: 5px;
 }
 .x-tip-body {
 	font-size: 12px;
