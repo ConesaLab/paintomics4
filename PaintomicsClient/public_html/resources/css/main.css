@@ -3248,20 +3248,28 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
    Nothing else on the upload page is that colour, so they read as the loudest
    thing on a page whose actual call to action is "Run PaintOmics".
 
-   Same size and shape, quieter colour. Scoped to the upload panels so no other
-   ExtJS button in the application is touched. */
-#submittingPanelsContainer a.x-btn.x-btn-default-small {
+   Same size and shape, quieter colour.
+
+   Scoped to .omicbox, the upload panel itself, rather than to
+   #submittingPanelsContainer as it first was. That id exists only on step 1,
+   so Regions2Genes and miRNA2Genes - which build the same panels from the same
+   classes, nine of these buttons on the miRNA page alone - kept the stock blue
+   and the restyle only ever reached a third of the controls it describes.
+   .omicbox travels with the panel, so it covers all three pages; measured on
+   the deployed site, every ExtJS button on each of them is inside one, and no
+   other button in the application is. */
+.omicbox a.x-btn.x-btn-default-small {
   background-color: #FFFFFF;
   background-image: none;
   border: 1px solid var(--pa-border);
   border-radius: var(--pa-radius-sm);
   box-shadow: none;
 }
-#submittingPanelsContainer a.x-btn.x-btn-default-small:hover {
+.omicbox a.x-btn.x-btn-default-small:hover {
   background-color: #FAFAFA;
   border-color: #C4C4CC;
 }
-#submittingPanelsContainer a.x-btn .x-btn-inner {
+.omicbox a.x-btn .x-btn-inner {
   color: #3F3F46;
   font-weight: 500;
 }
@@ -3269,11 +3277,11 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
    a dark button - on white they disappear, and with them the only sign that
    this button opens a menu. Drawn here instead, so they follow the text colour
    rather than the theme image. */
-#submittingPanelsContainer a.x-btn .x-btn-wrap {
+.omicbox a.x-btn .x-btn-wrap {
   background-image: none;
   position: relative;
 }
-#submittingPanelsContainer a.x-btn .x-btn-wrap::after {
+.omicbox a.x-btn .x-btn-wrap::after {
   content: "";
   position: absolute;
   right: 8px;
@@ -3284,7 +3292,7 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
   border-top: 5px solid #71717A;
   pointer-events: none;
 }
-#submittingPanelsContainer a.x-btn .x-btn-wrap::before {
+.omicbox a.x-btn .x-btn-wrap::before {
   content: "";
   position: absolute;
   right: 21px;
