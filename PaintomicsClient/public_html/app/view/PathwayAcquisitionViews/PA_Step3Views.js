@@ -877,6 +877,25 @@ function PA_Step3JobView() {
 							tabchange: function(tabPanel, newCard, oldCard, eOpts) {
 								/* Fire event at network element (second position) */
 								newCard.items.getAt(1).fireEvent('tabchange');
+
+								// Rebuild the contents list for the database now
+								// showing. paTocSections() skips headings whose
+								// offsetParent is null, which is right when the
+								// list is built -- but both databases' sections
+								// live in the DOM at once and the tabs only
+								// switch which is visible, so the list built on
+								// first render kept naming KEGG after a switch
+								// to Reactome. The entries then pointed at
+								// hidden headings while the visible ones,
+								// "Pathways classification (Reactome database)"
+								// and its network, were missing from it
+								// entirely. Only reachable with two databases,
+								// which is why the single-database case never
+								// showed it. Deferred so the new card has been
+								// laid out and its headings measure as visible.
+								$.wait(function () {
+									buildAnalysisTOC('#mainViewCenterPanel');
+								}, 0.3);
 							}
 						}
 				},
