@@ -163,6 +163,87 @@ class DeleteJobAuthorisationTest(unittest.TestCase):
                          "would break ordinary use")
 
 
+class DataManagementJobDeletionTest(unittest.TestCase):
+    """Deleting a Regions2Genes or miRNA2Genes job must actually delete it.
+
+    Both DAOs filtered on "jobId" while every document in
+    jobInstanceCollection stores "jobID". Nothing has ever written the
+    lowercase form -- checked across every collection in the database, zero
+    documents carry it -- so the filter matched nothing, `delete_many` removed
+    no rows, and `remove` still returned True. The job stayed in the database
+    and the caller was told it had gone.
+    """
+
+    JOB_ID = "ZZTEST_DM_DELETE"
+
+    @classmethod
+    def setUpClass(cls):
+        try:
+            cls.client, cls.db = _database()
+        except Exception as exc:
+            raise unittest.SkipTest("MongoDB not reachable: %s" % exc)
+
+    @classmethod
+    def tearDownClass(cls):
+        if getattr(cls, "db", None) is not None:
+            cls.db[JOBS].delete_many({"jobID": cls.JOB_ID})
+            cls.client.close()
+
+    def tearDown(self):
+        self.db[JOBS].delete_many({"jobID": self.JOB_ID})
+
+    def _daos(self):
+        from src.common.DAO.Bed2GeneJobDAO import Bed2GeneJobDAO
+        from src.common.DAO.MiRNA2GeneJobDAO import MiRNA2GeneJobDAO
+        return (("Bed2GeneJobDAO", Bed2GeneJobDAO),
+                ("MiRNA2GeneJobDAO", MiRNA2GeneJobDAO))
+
+    def _plant(self, owner):
+        self.db[JOBS].delete_many({"jobID": self.JOB_ID})
+        self.db[JOBS].insert_one({"jobID": self.JOB_ID, "userID": owner,
+                                  "jobType": "MiRNA2GeneJob"})
+
+    def _remove(self, daoClass, asUser):
+        dao = daoClass()
+        try:
+            return dao.remove(self.JOB_ID, {"userID": asUser})
+        finally:
+            dao.closeConnection()
+
+    def test_the_owner_can_delete_the_job(self):
+        for label, daoClass in self._daos():
+            with self.subTest(dao=label):
+                self._plant(owner=None)
+
+                self._remove(daoClass, asUser=None)
+
+                self.assertEqual(
+                    self.db[JOBS].count_documents({"jobID": self.JOB_ID}), 0,
+                    "%s reported success but the job is still in the database "
+                    "-- check the field name in its delete filter" % label)
+
+    def test_another_user_still_cannot(self):
+        """The field fix must not widen what the delete reaches."""
+        for label, daoClass in self._daos():
+            with self.subTest(dao=label):
+                self._plant(owner="9001")
+
+                self._remove(daoClass, asUser="9002")
+
+                self.assertEqual(
+                    self.db[JOBS].count_documents({"jobID": self.JOB_ID}), 1,
+                    "%s deleted a job belonging to someone else" % label)
+
+    def test_no_document_uses_the_lowercase_field(self):
+        """The premise of the fix, checked rather than assumed."""
+        offenders = {name: self.db[name].count_documents({"jobId": {"$exists": True}})
+                     for name in self.db.list_collection_names()}
+
+        self.assertEqual({k: v for k, v in offenders.items() if v}, {},
+                         "some documents do use 'jobId', so the field name is "
+                         "not simply a typo and this fix needs revisiting")
+
+
 def main():
     suite = unittest.TestLoader().loadTestsFromModule(sys.modules[__name__])
     result = unittest.TextTestRunner(verbosity=2).run(suite)

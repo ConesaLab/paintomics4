@@ -55,6 +55,13 @@ class MiRNA2GeneJobDAO(DAO):
             return False
         collection = self.dbManager.getCollection(self.collectionName)
 
-        collection.delete_many({"jobId": id, "userID" : otherParams.get("userID")})
+        # jobID, not jobId. Every document in jobInstanceCollection stores the
+        # key as "jobID" -- these two DAOs never wrote a "jobId" and neither
+        # does anything else, so this filter matched nothing and the delete
+        # silently removed no rows while still returning True. Deleting a
+        # Regions2Genes or miRNA2Genes job appeared to work and left it in the
+        # database. Checked across the whole database before changing it: zero
+        # documents in any collection have a "jobId" field.
+        collection.delete_many({"jobID": id, "userID" : otherParams.get("userID")})
 
         return True
