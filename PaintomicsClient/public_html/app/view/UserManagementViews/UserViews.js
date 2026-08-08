@@ -52,7 +52,11 @@ function SessionInfoBar() {
                 {xtype: "container", id: 'sessionInfoBar',
                     width: 150, height: 40, layout: 'hbox', style: {marginTop: "40px"},
                     items: [
-                        {xtype: "box", height: 40, width: 30, html: '<img src="resources/images/anonymous_user_30x30.png" alt="User avatar">'},
+                        // anonymous_user_30x30.png is in neither the repository nor the
+                        // deployed image, so this rendered as a broken-image icon in the
+                        // header for every visitor. The glyph needs no file and matches
+                        // how the rest of the chrome draws its icons.
+                        {xtype: "box", height: 40, width: 30, html: '<i class="fa fa-user sessionAvatar" aria-hidden="true"></i>'},
                         {xtype: "button", itemId: "buttonSessionOptions", text: "Not logged in!", height: 30,
                             style: {background: "none", border: "none"},
                             menu: {

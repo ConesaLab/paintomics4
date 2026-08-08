@@ -226,6 +226,16 @@ a:hover {color: var(--pa-link-hover);}
 	height: 50px;
 	/*z-index: 100;*/
 }
+/* The session bar's avatar. It was a 30x30 PNG that is in neither the
+   repository nor the deployed image, so it drew as a broken-image icon; it is
+   a FontAwesome glyph now and needs a size, since nothing sized the <img>
+   either. Muted rather than full ink: it labels the account control beside it
+   and should not outweigh it. */
+.sessionAvatar {
+	font-size: 24px;
+	line-height: 30px;
+	color: var(--pa-ink-muted);
+}
 /* Chrome ----------------------------------------------------------------------
    Successive passes lightened this bar from #222222 to #33343A and it still read
    as heavy, because the weight was never really the shade - it was that two
