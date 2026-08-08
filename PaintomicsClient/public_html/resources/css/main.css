@@ -32,6 +32,18 @@ root {
      consistent. */
   --pa-font-sans: 'SourceSansPro', 'Source Sans Pro', 'Segoe UI', system-ui, sans-serif;
 
+  /* Measure -------------------------------------------------------------------
+     How wide running text is allowed to get, in characters, independently of
+     how wide the thing holding it is. The page column is sized for the Step 3
+     enrichment grid, which is far past the width a line of prose can be read
+     at, so any paragraph sharing that column needs its own cap.
+
+     Two, because the two kinds of prose in the app are read differently: body
+     copy inside a card is read in sequence, and an empty-state note is a
+     sentence or two glanced at, which wants the shorter line. */
+  --pa-measure: 105ch;      /* running text inside a card */
+  --pa-measure-note: 78ch;  /* empty-state notes */
+
   /* Ink colours --------------------------------------------------------------
      Every value below clears WCAG 2.1 AA (4.5:1) with headroom. Hue and
      saturation are preserved from the original palette; only lightness moved,
@@ -1802,10 +1814,10 @@ div.contentbox,
 .po-hero-section {
 	max-width: none;
 }
-/* Running text does not want a 1560px measure even if the tables do. */
+/* Running text does not want the full page column even if the tables do. */
 div.contentbox p,
 div.contentbox li {
-	max-width: 105ch;
+	max-width: var(--pa-measure);
 }
 
 i.classificationNameBox {
@@ -2801,7 +2813,7 @@ div.omicSelection div.omicPosition + div {
 }
 .paEmptyNote p {
 	margin: 0;
-	max-width: 78ch;
+	max-width: var(--pa-measure-note);
 }
 .paEmptyNote p + p {
 	margin-top: 8px;
