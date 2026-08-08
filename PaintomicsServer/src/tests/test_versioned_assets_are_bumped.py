@@ -67,7 +67,7 @@ INDEX_HTML = os.path.join(CLIENT_ROOT, "index.html")
 # year, and recording a digest for a 300KB minified bundle only creates churn.
 PUBLISHED = {
     "app/view/common/Util.js": (
-        "0.8", "a729580e1d68dd4ba9e4955afeefbe500018de8295ffa74e1fd0438330e82b0b"),
+        "0.9", "74aad1f469002e0156982c36a543cc00028220b3495816c0e4ed5658c2b0eea3"),
     "app/view/common/ExtJS_extensions.js": (
         "0.6", "61a72e40803dd468f8b4af54c58a41cfc84224bf1a678a4dfee9666065a9eb1e"),
     "app/view/common/upload/Panel.js": (
