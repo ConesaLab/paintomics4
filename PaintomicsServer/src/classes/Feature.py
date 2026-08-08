@@ -97,7 +97,7 @@ class Feature(Model):
 
     def toBSON(self):
         bson = {}
-        for attr, value in self.__dict__.items():
+        for attr, value in list(self.__dict__.items()):
             if (attr == "omicsValues"):
                 bson[attr] = []
                 for elem in value:

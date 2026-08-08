@@ -1836,7 +1836,19 @@ class PathwayAcquisitionJob(Job):
         @return:
         """
         bson = {}
-        for attr, value in self.__dict__.items():
+        # A snapshot, not the live mapping: checkJobStatus writes
+        # `jobArgs.maxEstimatedTotal` onto this same instance while the job is
+        # running, and that attribute is not declared anywhere in the class --
+        # so the first poll of a job *adds* a key rather than reassigning one.
+        # Landing inside this walk, that is
+        #     RuntimeError: dictionary changed size during iteration
+        # and the store fails, losing a step the job had already computed.
+        #
+        # Narrow -- the walk is microseconds and only the first poll changes the
+        # size -- but free to close, and taking a copy covers anything else that
+        # sets a field on a job while it is being written out, not just this one
+        # attribute.
+        for attr, value in list(self.__dict__.items()):
             # Special case: "foundCompounds" is a list (not a dict) that contains recursive object data
             if not isinstance(value, dict) and (
                     ["svgDir", "inputDir", "outputDir", "temporalDir", "foundCompounds"].count(attr) == 0):

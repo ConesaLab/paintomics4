@@ -209,7 +209,7 @@ class Pathway(Model):
 
     def toBSON(self):
         bson = {}
-        for attr, value in self.__dict__.items():
+        for attr, value in list(self.__dict__.items()):
             if (attr != "graphicalOptions"):
                 bson[attr] = value
         return bson

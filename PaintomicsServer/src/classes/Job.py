@@ -952,7 +952,7 @@ class Job(Model):
 
     def toBSON(self, recursive= True):
         bson = {}
-        for attr, value in self.__dict__.items():
+        for attr, value in list(self.__dict__.items()):
             if not isinstance(value, dict) and ( ["svgDir", "inputDir", "outputDir", "temporalDir"].count(attr) == 0) :
                 bson[attr] = value
 

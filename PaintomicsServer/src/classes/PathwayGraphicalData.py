@@ -91,7 +91,7 @@ class PathwayGraphicalData(Model):
 
     def toBSON(self):
         bson = {}
-        for attr, value in self.__dict__.items():
+        for attr, value in list(self.__dict__.items()):
             if attr == "featuresGraphicalData":
                 featuresGraphicalData = []
                 for featureGraphicalData in self.getFeaturesGraphicalData():
