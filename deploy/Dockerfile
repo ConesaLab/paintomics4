@@ -151,8 +151,30 @@ RUN Rscript -e 'options(warn = 2); \
 # src/tests/test_runmore_r_contract.py checks.
 #
 # optparse parses runMORE.R's command line and is CRAN-only.
+#
+# patchwork is pinned, and the pin is what makes this step build at all.
+# ggplot2 here is Debian bookworm's r-cran-ggplot2, which is 3.4.1 and frozen
+# by the distro. MORE pulls ComplexUpset, which pulls patchwork, and patchwork
+# is unpinned from CRAN, so it resolves to whatever is current. Current
+# patchwork calls ggplot2::is_ggplot(), added in ggplot2 3.5.2, and on 3.4.1 it
+# fails to byte-compile:
+#
+#   Error: object 'is_ggplot' is not exported by 'namespace:ggplot2'
+#   ERROR: lazy loading failed for package 'patchwork'
+#   Failed to install 'MORE' from GitHub: Failed to install 'ComplexUpset' ...
+#
+# `upgrade = "never"` does not prevent this: it stops remotes upgrading what is
+# already installed, and patchwork is absent, so it is a fresh install at
+# latest. Installing a compatible patchwork first makes it present, and then
+# `upgrade = "never"` does keep it.
+#
+# 1.2.0 is the last line that predates the is_ggplot switch. Raise it only
+# together with ggplot2 - and ggplot2 moves only if it stops coming from the
+# distro.
 RUN Rscript -e 'options(warn = 2, Ncpus = parallel::detectCores()); \
       install.packages(c("optparse", "remotes"), repos = "https://cloud.r-project.org"); \
+      remotes::install_version("patchwork", version = "1.2.0", \
+                               repos = "https://cloud.r-project.org", upgrade = "never"); \
       remotes::install_github("BiostatOmics/MORE", upgrade = "never")'
 
 # Fail the build now, not at 3am in production, if anything is unimportable.
