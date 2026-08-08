@@ -3562,7 +3562,7 @@ div.po-step-card h3 {
    real but reaches two columns out of eight. Unifying it is a product call
    rather than a fidelity one - the design system names --pa-text-12 and
    --pa-text-13 for other roles and specifies no grid cell size at all - so it
-   is left as found and described accurately instead. */
+   is left as found and described accurately instead.
 
    Here the header stops shouting and the rules soften: the column rule drops
    from #C0C0C0 to the shared hairline, so the eye follows rows - which is how
