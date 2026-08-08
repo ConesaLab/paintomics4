@@ -258,10 +258,15 @@ a:hover {color: var(--pa-link-hover);}
 	/*z-index: 100;*/
 }
 /* The session bar's avatar. It was a 30x30 PNG that is in neither the
-   repository nor the deployed image, so it drew as a broken-image icon; it is
-   a FontAwesome glyph now and needs a size, since nothing sized the <img>
-   either. Muted rather than full ink: it labels the account control beside it
-   and should not outweigh it. */
+   repository nor the deployed image; it is a FontAwesome glyph now, which
+   needs a size because nothing ever sized the <img> either. Muted rather than
+   full ink: it labels the account control beside it and should not outweigh
+   it.
+
+   Nothing renders this today - MainView constructs SessionInfoBar and never
+   adds it to a container, under a TODO saying as much - so the rule is here
+   for whenever that widget is wired up, not because a broken image is on
+   screen now. */
 .sessionAvatar {
 	font-size: 24px;
 	line-height: 30px;
@@ -2702,18 +2707,20 @@ div.omicSelection div.omicPosition + div {
 
 /***********************************************************/
 
-/* Both of these drew their icon from a PNG that is not in the repository and
-   not in the deployed image either - `help_12x12.png` and `warning_12x12.png`
-   have been missing long enough that no build or deploy ever had them.
+/* Both of these drew their icon from a PNG that is in neither the repository
+   nor the deployed image - `help_12x12.png` and `warning_12x12.png` have been
+   missing long enough that no build or deploy ever had them.
 
-   `.formfieldHelpTip` is the worse of the two: helpTips.js emits it as an empty
-   <span> carrying a data-qtip, so the icon was the only thing there was to see
-   or aim at. With the background failing to load, every field's help affordance
-   was a 16px blank with `cursor: help` on it - discoverable only by chance.
+   Neither rule reaches a user today, so this is latent rather than live.
+   `.formfieldHelpTip` is emitted only by resources/help/helpTips.js, which
+   index.html does not load and nothing else references or injects; a rendered
+   page contains no element with the class at all. `.warningTip` has no callers
+   in the tree either.
 
-   Drawn from FontAwesome instead, which is loaded globally and is already how
-   this stylesheet draws checkbox and radio marks, so there is no new dependency
-   and nothing further to keep on disk. */
+   Fixed rather than deleted because the failure is in the reference, not the
+   rule: FontAwesome is loaded globally and is already how this stylesheet draws
+   checkbox and radio marks, so the glyphs need no file on disk and both work if
+   either is ever wired up. */
 .formfieldHelpTip {
 	cursor: help;
 }

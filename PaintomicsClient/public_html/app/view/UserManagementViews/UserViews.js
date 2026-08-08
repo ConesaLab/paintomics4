@@ -53,9 +53,14 @@ function SessionInfoBar() {
                     width: 150, height: 40, layout: 'hbox', style: {marginTop: "40px"},
                     items: [
                         // anonymous_user_30x30.png is in neither the repository nor the
-                        // deployed image, so this rendered as a broken-image icon in the
-                        // header for every visitor. The glyph needs no file and matches
-                        // how the rest of the chrome draws its icons.
+                        // deployed image. The glyph needs no file and matches how the
+                        // rest of the chrome draws its icons.
+                        //
+                        // This does not reach a screen today: MainView builds a
+                        // SessionInfoBar and never adds it to a container - see the TODO
+                        // above that call. So the image was a latent break, not a visible
+                        // one, and it is fixed here so that wiring the widget up does not
+                        // also mean chasing a missing file.
                         {xtype: "box", height: 40, width: 30, html: '<i class="fa fa-user sessionAvatar" aria-hidden="true"></i>'},
                         {xtype: "button", itemId: "buttonSessionOptions", text: "Not logged in!", height: 30,
                             style: {background: "none", border: "none"},
