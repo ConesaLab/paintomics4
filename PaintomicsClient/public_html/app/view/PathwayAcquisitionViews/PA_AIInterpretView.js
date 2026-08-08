@@ -49,7 +49,7 @@ function PA_AIInterpretView() {
             '    </div>' +
             '  </div>' +
             '  <button class="ai-widget-fab" title="AI Interpretation">' +
-            '    <span class="ai-fab-icon">&#129302;</span>' +
+            '    <span class="ai-fab-icon">' + getAIMark(26, "swarm") + '</span>' +
             '    <span class="ai-widget-fab-badge" style="display:none;"></span>' +
             '  </button>' +
             '</div>';

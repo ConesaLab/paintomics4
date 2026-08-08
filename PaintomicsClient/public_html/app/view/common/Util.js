@@ -34,8 +34,63 @@
 * - ajaxErrorHandler
 * - extJSErrorHandler
 * - scaleValue
+* - getAIMark
 *
 */
+
+/**
+ * The PaintOmics AI mark.
+ *
+ * Every AI surface used to borrow an icon from somewhere else: the toolbar
+ * button and the two Step 1 headings took Font Awesome's lightbulb, and the
+ * chat launcher took the robot emoji. The design system rules both out for the
+ * same reason -- a lightbulb says "idea", a robot says "chatbot", and neither
+ * is what this feature does nor has anything to do with PaintOmics. The emoji
+ * had a second problem: it renders in whatever colour and shape the platform's
+ * font decides, so it was a different picture on every operating system.
+ *
+ * This is the system's mark: the brand hexagon from paintomics-mark.svg with
+ * the six omic nodes removed, around one of two centres.
+ *   "spark" -- the interpretation itself. Reads down to 16px.
+ *   "swarm" -- three agents converging on one answer, which is closer to what
+ *              the feature actually is. Needs 20px or more to stay legible.
+ *
+ * Everything is currentColor, so one mark serves white-on-blue in the launcher
+ * and blue-on-white in a button without a second copy.
+ *
+ * @param {number} size   px, both dimensions. Defaults to 16.
+ * @param {string} variant "spark" (default) or "swarm".
+ * @returns {string} SVG markup, ready to drop into an html string.
+ */
+function getAIMark(size, variant) {
+    size = size || 16;
+    var centre = (variant === "swarm")
+        ? '<g stroke="currentColor" fill="currentColor">' +
+          '<g stroke-width="1.1" opacity="0.7">' +
+          '<line x1="12" y1="7.6" x2="12" y2="12"/>' +
+          '<line x1="16" y1="14.6" x2="12" y2="12"/>' +
+          '<line x1="8" y1="14.6" x2="12" y2="12"/>' +
+          '</g>' +
+          '<g stroke="none">' +
+          '<circle cx="12" cy="7.6" r="1.75"/>' +
+          '<circle cx="16" cy="14.6" r="1.75"/>' +
+          '<circle cx="8" cy="14.6" r="1.75"/>' +
+          '<circle cx="12" cy="12" r="2.4"/>' +
+          '</g></g>'
+        : '<path d="M12 7.6 C12.37 9.73 14.27 11.63 16.4 12 C14.27 12.37 12.37 14.27 12 16.4 ' +
+          'C11.63 14.27 9.73 12.37 7.6 12 C9.73 11.63 11.63 9.73 12 7.6 Z" fill="currentColor"/>';
+
+    // aria-hidden because every caller puts a readable label beside the mark;
+    // announcing "PaintOmics AI" again would just repeat it.
+    return '<svg class="po-ai-mark" width="' + size + '" height="' + size + '" viewBox="0 0 24 24" ' +
+        'aria-hidden="true" focusable="false" ' +
+        'style="display:inline-block;vertical-align:-0.15em;flex-shrink:0">' +
+        '<path d="M12 4.5 L18.5 8.25 L18.5 15.75 L12 19.5 L5.5 15.75 L5.5 8.25 Z" ' +
+        'fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" opacity="0.45"/>' +
+        centre +
+        '</svg>';
+}
+
 function Observer() {
     this.name = "";
     /**

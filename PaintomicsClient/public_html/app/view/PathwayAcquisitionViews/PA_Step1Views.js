@@ -25,6 +25,120 @@
 * - OmicSubmittingPanel
 * - RegionBasedOmicSubmittingPanel
 */
+/* The landing hero's explainer diagram: your omic data -> mapped onto
+   pathways -> ranked and painted, with the AI strip beneath.
+
+   This replaces the graphical abstract in the hero slot. That asset is a
+   1622x996 raster of a scientific figure with embedded screenshots and
+   labels, and the hero renders it at 340px -- a 4.8x downscale at which
+   none of its text can be read. It is still the right asset for print and
+   for the docs, so the link below the diagram opens it full size.
+
+   Ported from the design system's marketing/PaintomicsFlow, with two
+   deliberate departures. The ramp is the product's own rather than the
+   system's ColorBrewer values: the component's stated constraint is that
+   these colours match the painted pathway diagrams, and what the product
+   actually paints is getColor(..., 'bwr') in PA_Step3Views.js -- a pure RGB
+   ramp, red at max, white at zero, blue at min. And the three beats are
+   stacked as rows rather than set as columns, so the viewBox is 1:1 with
+   the rendered width and every label is drawn at the size it is read at;
+   the system's 660-wide landscape version has to shrink to 0.65 in this
+   slot, which takes its 11px labels down to about 7px. */
+var PO_HERO_FLOW_SVG =
+	'<svg class="po-hero-flow" viewBox="0 0 460 408" role="img" style="display:block;width:100%;height:auto;font-family:var(--pa-font-sans)" aria-label="How PaintOmics works: your omic data is mapped onto pathways, then ranked and painted" xmlns="http://www.w3.org/2000/svg">' +
+	'<title>How PaintOmics works</title>' +
+	'<rect x=".5" y="0.5" width="459" height="111" rx="8" fill="#FFFFFF" stroke="#E4E4E7"/>' +
+	'<circle cx="30" cy="30" r="11" fill="#AD5022"/>' +
+	'<text x="30" y="34.5" text-anchor="middle" font-size="12" font-weight="700" fill="#FFFFFF">1</text>' +
+	'<text x="50" y="30" font-size="14" font-weight="600" fill="#27272A">Your omic data</text>' +
+	'<text x="50" y="49" font-size="11.5" fill="#71717A">One file per omic type</text>' +
+	'<rect x="258" y="12" width="186" height="20" rx="5" fill="#55C9A6" fill-opacity=".16" stroke="#55C9A6" stroke-opacity=".55"/>' +
+	'<circle cx="271" cy="22" r="4.5" fill="#55C9A6"/>' +
+	'<text x="283" y="26" font-size="11" fill="#3F3F46">Gene expression</text>' +
+	'<rect x="410" y="18" width="7" height="7" rx="1" fill="#FF0000" stroke="#878787" stroke-width="1"/>' +
+	'<rect x="419" y="18" width="7" height="7" rx="1" fill="#FF8080" stroke="#878787" stroke-width="1"/>' +
+	'<rect x="428" y="18" width="7" height="7" rx="1" fill="#8080FF" stroke="#878787" stroke-width="1"/>' +
+	'<rect x="258" y="34" width="186" height="20" rx="5" fill="#79B0EC" fill-opacity=".16" stroke="#79B0EC" stroke-opacity=".55"/>' +
+	'<circle cx="271" cy="44" r="4.5" fill="#79B0EC"/>' +
+	'<text x="283" y="48" font-size="11" fill="#3F3F46">Metabolomics</text>' +
+	'<rect x="410" y="40" width="7" height="7" rx="1" fill="#8080FF" stroke="#878787" stroke-width="1"/>' +
+	'<rect x="419" y="40" width="7" height="7" rx="1" fill="#FFFFFF" stroke="#878787" stroke-width="1"/>' +
+	'<rect x="428" y="40" width="7" height="7" rx="1" fill="#FF0000" stroke="#878787" stroke-width="1"/>' +
+	'<rect x="258" y="56" width="186" height="20" rx="5" fill="#B4A1DD" fill-opacity=".16" stroke="#B4A1DD" stroke-opacity=".55"/>' +
+	'<circle cx="271" cy="66" r="4.5" fill="#B4A1DD"/>' +
+	'<text x="283" y="70" font-size="11" fill="#3F3F46">Proteomics</text>' +
+	'<rect x="410" y="62" width="7" height="7" rx="1" fill="#FF8080" stroke="#878787" stroke-width="1"/>' +
+	'<rect x="419" y="62" width="7" height="7" rx="1" fill="#FF0000" stroke="#878787" stroke-width="1"/>' +
+	'<rect x="428" y="62" width="7" height="7" rx="1" fill="#FFFFFF" stroke="#878787" stroke-width="1"/>' +
+	'<rect x="258" y="78" width="186" height="20" rx="5" fill="#738B9D" fill-opacity=".16" stroke="#738B9D" stroke-opacity=".55"/>' +
+	'<circle cx="271" cy="88" r="4.5" fill="#738B9D"/>' +
+	'<text x="283" y="92" font-size="11" fill="#3F3F46">+ 3 more omic types</text>' +
+	'<rect x=".5" y="122.5" width="459" height="111" rx="8" fill="#FFFFFF" stroke="#E4E4E7"/>' +
+	'<circle cx="30" cy="152" r="11" fill="#AD5022"/>' +
+	'<text x="30" y="156.5" text-anchor="middle" font-size="12" font-weight="700" fill="#FFFFFF">2</text>' +
+	'<text x="50" y="152" font-size="14" font-weight="600" fill="#27272A">Mapped to pathways</text>' +
+	'<text x="50" y="171" font-size="11.5" fill="#71717A">KEGG · Reactome · MapMan</text>' +
+	'<g transform="translate(307.6,145.8) scale(0.62)">' +
+	'<line x1="12" y1="30" x2="52" y2="12" stroke="#878787" stroke-width="1.6" stroke-opacity=".55"/>' +
+	'<line x1="52" y1="12" x2="98" y2="34" stroke="#878787" stroke-width="1.6" stroke-opacity=".55"/>' +
+	'<line x1="12" y1="30" x2="54" y2="56" stroke="#878787" stroke-width="1.6" stroke-opacity=".55"/>' +
+	'<line x1="54" y1="56" x2="98" y2="34" stroke="#878787" stroke-width="1.6" stroke-opacity=".55"/>' +
+	'<line x1="98" y1="34" x2="128" y2="74" stroke="#878787" stroke-width="1.6" stroke-opacity=".55"/>' +
+	'<line x1="54" y1="56" x2="74" y2="92" stroke="#878787" stroke-width="1.6" stroke-opacity=".55"/>' +
+	'<line x1="74" y1="92" x2="18" y2="78" stroke="#878787" stroke-width="1.6" stroke-opacity=".55"/>' +
+	'<line x1="74" y1="92" x2="128" y2="74" stroke="#878787" stroke-width="1.6" stroke-opacity=".55"/>' +
+	'<line x1="18" y1="78" x2="12" y2="30" stroke="#878787" stroke-width="1.6" stroke-opacity=".55"/>' +
+	'<circle cx="12" cy="30" r="9" fill="#F3F3F3" stroke="#878787" stroke-width="2.4"/>' +
+	'<circle cx="52" cy="12" r="9" fill="#F3F3F3" stroke="#878787" stroke-width="2.4"/>' +
+	'<rect x="39" y="50" width="10" height="12" fill="#F3F3F3" stroke="#878787" stroke-width="1.6"/>' +
+	'<rect x="49" y="50" width="10" height="12" fill="#F3F3F3" stroke="#878787" stroke-width="1.6"/>' +
+	'<rect x="59" y="50" width="10" height="12" fill="#F3F3F3" stroke="#878787" stroke-width="1.6"/>' +
+	'<rect x="83" y="28" width="10" height="12" fill="#F3F3F3" stroke="#878787" stroke-width="1.6"/>' +
+	'<rect x="93" y="28" width="10" height="12" fill="#F3F3F3" stroke="#878787" stroke-width="1.6"/>' +
+	'<rect x="103" y="28" width="10" height="12" fill="#F3F3F3" stroke="#878787" stroke-width="1.6"/>' +
+	'<circle cx="128" cy="74" r="9" fill="#F3F3F3" stroke="#878787" stroke-width="2.4"/>' +
+	'<circle cx="74" cy="92" r="9" fill="#F3F3F3" stroke="#878787" stroke-width="2.4"/>' +
+	'<circle cx="18" cy="78" r="9" fill="#F3F3F3" stroke="#878787" stroke-width="2.4"/>' +
+	'</g>' +
+	'<rect x=".5" y="244.5" width="459" height="111" rx="8" fill="#FFFFFF" stroke="#E4E4E7"/>' +
+	'<circle cx="30" cy="274" r="11" fill="#AD5022"/>' +
+	'<text x="30" y="278.5" text-anchor="middle" font-size="12" font-weight="700" fill="#FFFFFF">3</text>' +
+	'<text x="50" y="274" font-size="14" font-weight="600" fill="#27272A">Ranked and painted</text>' +
+	'<text x="50" y="293" font-size="11.5" fill="#71717A">104 of 888 pathways significant</text>' +
+	'<rect x="258" y="256" width="186" height="5" rx="2.5" fill="#AD5022" opacity="1.0"/>' +
+	'<rect x="258" y="265" width="138" height="5" rx="2.5" fill="#AD5022" opacity="0.7"/>' +
+	'<rect x="258" y="274" width="96" height="5" rx="2.5" fill="#AD5022" opacity="0.4"/>' +
+	'<g transform="translate(307.6,283.8) scale(0.62)">' +
+	'<line x1="12" y1="30" x2="52" y2="12" stroke="#878787" stroke-width="1.6" stroke-opacity=".55"/>' +
+	'<line x1="52" y1="12" x2="98" y2="34" stroke="#878787" stroke-width="1.6" stroke-opacity=".55"/>' +
+	'<line x1="12" y1="30" x2="54" y2="56" stroke="#878787" stroke-width="1.6" stroke-opacity=".55"/>' +
+	'<line x1="54" y1="56" x2="98" y2="34" stroke="#878787" stroke-width="1.6" stroke-opacity=".55"/>' +
+	'<line x1="98" y1="34" x2="128" y2="74" stroke="#878787" stroke-width="1.6" stroke-opacity=".55"/>' +
+	'<line x1="54" y1="56" x2="74" y2="92" stroke="#878787" stroke-width="1.6" stroke-opacity=".55"/>' +
+	'<line x1="74" y1="92" x2="18" y2="78" stroke="#878787" stroke-width="1.6" stroke-opacity=".55"/>' +
+	'<line x1="74" y1="92" x2="128" y2="74" stroke="#878787" stroke-width="1.6" stroke-opacity=".55"/>' +
+	'<line x1="18" y1="78" x2="12" y2="30" stroke="#878787" stroke-width="1.6" stroke-opacity=".55"/>' +
+	'<circle cx="12" cy="30" r="9" fill="#FF0000" stroke="#878787" stroke-width="1.6"/>' +
+	'<circle cx="52" cy="12" r="9" fill="#FF8080" stroke="#878787" stroke-width="1.6"/>' +
+	'<rect x="39" y="50" width="10" height="12" fill="#0000FF" stroke="#878787" stroke-width="1.6"/>' +
+	'<rect x="49" y="50" width="10" height="12" fill="#8080FF" stroke="#878787" stroke-width="1.6"/>' +
+	'<rect x="59" y="50" width="10" height="12" fill="#FFFFFF" stroke="#878787" stroke-width="1.6"/>' +
+	'<rect x="83" y="28" width="10" height="12" fill="#FF0000" stroke="#878787" stroke-width="1.6"/>' +
+	'<rect x="93" y="28" width="10" height="12" fill="#FF8080" stroke="#878787" stroke-width="1.6"/>' +
+	'<rect x="103" y="28" width="10" height="12" fill="#FF0000" stroke="#878787" stroke-width="1.6"/>' +
+	'<circle cx="128" cy="74" r="9" fill="#8080FF" stroke="#878787" stroke-width="1.6"/>' +
+	'<circle cx="74" cy="92" r="9" fill="#FFFFFF" stroke="#878787" stroke-width="1.6"/>' +
+	'<circle cx="18" cy="78" r="9" fill="#0000FF" stroke="#878787" stroke-width="1.6"/>' +
+	'</g>' +
+	'<rect x=".5" y="366.5" width="459" height="41" rx="8" fill="#F0F7FF" stroke="#C8D6E5"/>' +
+	'<g transform="translate(18,374) scale(1)" color="#4A90D9">' +
+	'<path d="M13 4.9 L20 9 L20 17.1 L13 21.2 L6 17.1 L6 9 Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" opacity=".45"/>' +
+	'<path d="M13 8.2 C13.4 10.5 15.5 12.6 17.8 13 C15.5 13.4 13.4 15.5 13 17.8 C12.6 15.5 10.5 13.4 8.2 13 C10.5 12.6 12.6 10.5 13 8.2 Z" fill="currentColor"/>' +
+	'</g>' +
+	'<text x="48" y="385" font-size="12" fill="#52525B"><tspan font-weight="600" fill="#27272A">PaintOmics AI</tspan><tspan> turns the ranked result into a written</tspan></text>' +
+	'<text x="48" y="400" font-size="12" fill="#52525B">interpretation, grounded in the literature.</text>' +
+	'</svg>';
+
 function PA_Step1JobView() {
 	/*********************************************************************
 	* ATTRIBUTES
@@ -373,7 +487,7 @@ function PA_Step1JobView() {
 								'<h1>PaintOmics AI <span>' + APP_VERSION + '</span></h1>' +
 								'<p class="po-hero-desc">Integrative visualization of multiple omic datasets onto KEGG, Reactome, and MapMan biological pathway maps across multiple species and biological kingdoms.</p>' +
 								'<div class="po-hero-ai-highlight">' +
-									'<div><span class="po-ai-icon"><i class="fa fa-lightbulb-o"></i></span> <strong>AI-Powered Pathway Interpretation</strong></div>' +
+									'<div><span class="po-ai-icon">' + getAIMark(15) + '</span> <strong>AI-Powered Pathway Interpretation</strong></div>' +
 									'<p>Unlock unprecedented systems-biology discoveries with our next-generation multi-agent AI framework. Automatically synthesize cross-omics patterns, identify regulatory cascades, and generate publication-ready biological narratives grounded in current literature.</p>' +
 								'</div>' +
 								'<div class="po-hero-actions">' +
@@ -383,7 +497,8 @@ function PA_Step1JobView() {
 								'</div>' +
 							'</div>' +
 							'<div class="po-hero-visual">' +
-								'<img id="graphicalAbstract" src="resources/images/GraphicalAbstract.png" alt="PaintOmics Graphical Abstract" />' +
+								PO_HERO_FLOW_SVG +
+								'<a href="javascript:void(0)" id="graphicalAbstract" class="po-hero-flow-link">View the full graphical abstract</a>' +
 							'</div>' +
 						'</div>' +
 					'</div>'
@@ -412,7 +527,7 @@ function PA_Step1JobView() {
 						'<div class="po-step-card">' +
 							'<div class="po-step-number">3</div>' +
 							'<h3>Explore Results</h3>' +
-							'<p>Pathways summary, Pathways classification, Pathways network, Pathways enrichment, Pathways visualization (by clicking <a href="javascript:void(0)" class="button btn-inline btn-small" style="background-color:#756C6C;font-size:14px;color:#fff;"><i class="fa fa-paint-brush"></i></a> for any of the displayed pathways), and <b>AI-powered pathway interpretation</b> (by clicking <a href="javascript:void(0)" class="button btn-inline btn-small" style="background-color:#2F73BC;font-size:14px;color:#fff;"><i class="fa fa-lightbulb-o"></i> AI Interpret</a>). Read more about these analyses in <a href="http://paintomics.readthedocs.io/en/latest/" target="_blank">our documentation</a>.</p>' +
+							'<p>Pathways summary, Pathways classification, Pathways network, Pathways enrichment, Pathways visualization (by clicking <a href="javascript:void(0)" class="button btn-inline btn-small" style="background-color:#756C6C;font-size:14px;color:#fff;"><i class="fa fa-paint-brush"></i></a> for any of the displayed pathways), and <b>AI-powered pathway interpretation</b> (by clicking <a href="javascript:void(0)" class="button btn-inline btn-small" style="background-color:#2F73BC;font-size:14px;color:#fff;">' + getAIMark(14) + ' AI Interpret</a>). Read more about these analyses in <a href="http://paintomics.readthedocs.io/en/latest/" target="_blank">our documentation</a>.</p>' +
 						'</div>' +
 					'</div>' +
 					'<h2 style="margin-top:24px;">Video Tutorials</h2>' +
@@ -549,7 +664,7 @@ function PA_Step1JobView() {
 					}*/,
 					{   // AI Interpretation section
 						xtype: "box", flex: 1,
-						html: '<h3><i class="fa fa-lightbulb-o"></i> AI-Powered Pathway Interpretation</h3>'
+						html: '<h3>' + getAIMark(17) + ' AI-Powered Pathway Interpretation</h3>'
 					},
 					{
 						xtype: "container", layout: {type: 'hbox', align: 'stretch'}, cls: "po-ai-section-body",
