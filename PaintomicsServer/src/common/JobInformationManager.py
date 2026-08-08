@@ -105,7 +105,8 @@ class JobInformationManager(metaclass=Singleton):
                          "mappingComp", "classificationDict", "pValueInDict",
                          "adjustPvalue", "totalRelevantFeaturesInCategory",
                          "featureSummary", "aiConsent", "experimentDesign",
-                         "regulationPerConditionData", "hubAnalysisResult"]})
+                         "regulationPerConditionData", "hubAnalysisResult",
+                         "exprssionMetabolites"]})
                     daoInstance = FoundFeatureDAO()
                     logging.info("REMOVING MATCHED METABOLITES FROM DATABASE...")
                     daoInstance.removeAll({"jobID": jobInstance.getJobID()})

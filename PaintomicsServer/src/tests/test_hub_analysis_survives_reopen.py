@@ -141,15 +141,46 @@ class HubAnalysisPersistenceTest(unittest.TestCase):
         self.assertIn("hubAnalysisResult", PAINTOMICS4_DICT_FIELDS)
         self.assertNotIn("hubAnalysisResult", PAINTOMICS4_LARGE_FIELDS,
                          "hub_result.csv never exceeded 3819 bytes across 45 "
-                         "jobs; it does not belong with the 60 MB fields")
+                         "jobs; it does not belong with the megabyte fields")
+
+    def test_the_metabolite_expression_is_stored_too(self):
+        """The field the Step 3 metabolite panels are actually gated on.
+
+        Persisting hubAnalysisResult alone restored the data but not the panel:
+        on cold recovery the sidebar still omitted both metabolite sections,
+        because the client checks `exprssionMetabolites` and that was still
+        being dropped. Measured on the same six-omic job, 96 compounds
+        selected: 96 entries, 11126 bytes — 0.07% of the 16 MB limit.
+        """
+        self.assertIn("exprssionMetabolites", PAINTOMICS4_DICT_FIELDS)
+        self.assertNotIn("exprssionMetabolites", PAINTOMICS4_LARGE_FIELDS)
 
     def test_the_genuinely_large_fields_are_left_alone(self):
-        """This change is about one small field, not the policy."""
-        for field in ("compoundRegulateFeatures", "globalExpressionData",
-                      "exprssionMetabolites"):
+        """This change is about the small fields, not the policy.
+
+        These two were measured on the same job and do earn their place:
+        compoundRegulateFeatures 2.67 MB, globalExpressionData 4.29 MB —
+        about 7 MB together, before the rest of the document.
+        """
+        for field in ("compoundRegulateFeatures", "globalExpressionData"):
             self.assertIn(field, PAINTOMICS4_LARGE_FIELDS,
-                          "%s was removed from LARGE_FIELDS; its size was "
-                          "never measured, unlike hubAnalysisResult" % field)
+                          "%s was removed from LARGE_FIELDS, but it was "
+                          "measured in megabytes" % field)
+            self.assertNotIn(field, PAINTOMICS4_DICT_FIELDS)
+
+    def test_step_two_writes_the_metabolite_expression(self):
+        path = os.path.join(os.path.dirname(__file__),
+                            "../common/JobInformationManager.py")
+        with open(path, "r", encoding="utf-8", errors="replace") as handle:
+            source = handle.read()
+
+        start = source.find("IS STEP 2")
+        window = source[start:start + 1600]
+
+        self.assertIn('"exprssionMetabolites"', window,
+                      "step 2's update field list does not name "
+                      "exprssionMetabolites, so the metabolite panels stay "
+                      "empty when the job is reopened")
 
     def test_an_empty_result_is_harmless(self):
         """hubAnalysis returns False early when nothing is relevant."""

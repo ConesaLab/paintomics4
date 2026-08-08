@@ -131,14 +131,24 @@ PAINTOMICS4_DICT_FIELDS = {
     # This branch stringifies them. Adding the field to step 2's update without
     # moving it here would fail the store for every job that selects compounds.
     "hubAnalysisResult",
+    # Metabolite expression per condition: {compoundID: [value, ...]}, keyed by
+    # KEGG id. Measured on a six-omic example job with 96 compounds selected:
+    # 96 entries, 11126 bytes — 0.07% of the 16 MB limit. It was in
+    # LARGE_FIELDS on the same inherited assumption hubAnalysisResult was, and
+    # it is the field the Step 3 metabolite panels are gated on, so dropping it
+    # cost the whole section on cold recovery.
+    "exprssionMetabolites",
 }
 
 # Large dict fields that stay in-memory cache only (too large for a single
-# MongoDB document — compoundRegulateFeatures alone can exceed 60 MB).
+# MongoDB document). Sizes measured on the six-omic example, same job:
+#   compoundRegulateFeatures  55 entries, 2.67 MB
+#   globalExpressionData       2 entries, 4.29 MB
+# Together ~7 MB before the rest of the document, so these two genuinely earn
+# their place — unlike the two small fields that used to sit beside them.
 # On cold recovery the safe_* defaults in the servlet return {}/[].
 PAINTOMICS4_LARGE_FIELDS = {
-    "exprssionMetabolites", "compoundRegulateFeatures",
-    "globalExpressionData"
+    "compoundRegulateFeatures", "globalExpressionData"
 }
 
 
