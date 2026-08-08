@@ -1272,7 +1272,13 @@ class PathwayAcquisitionJob(Job):
         totalFeatures = {dbSource: dbGenes.union(totalCompounds.get(dbSource)) for dbSource, dbGenes in
                          totalGenes.items()}
 
+        # Accumulated so the features that matched no pathway can be reported
+        # once, as a proportion, instead of a line each.
+        unmappedFeatureIDs = []
+        totalInputFeatures = 0
+
         for feature in chain(self.getInputCompoundsData().values(), self.getInputGenesData().values()):
+            totalInputFeatures += 1
             # Count only those present in at least one pathway
             if type(feature.getMatchingDB()) is str:
                 dbList = [feature.getMatchingDB()]
@@ -1327,7 +1333,27 @@ class PathwayAcquisitionJob(Job):
                             if is_any_rel:
                                 totalFeaturesIDSig.add(feature.getID())
             if not found_in_any_db:
-                logging.error("STEP2 - Feature not present in at least one pathway " + feature.getID())
+                # Counted, not logged one line at a time. A feature in no
+                # pathway of any database is the ordinary case -- most measured
+                # genes are not annotated to a pathway -- so this was never an
+                # error, and at logging.error it produced 6480 ERROR lines for a
+                # single run of the six-omic example. That buries the real
+                # errors: grepping the log for ERROR to find out why a job
+                # failed returns thousands of lines about healthy features.
+                # Kept at debug for the one case it helps with, diagnosing a
+                # mapping problem for a named feature.
+                unmappedFeatureIDs.append(feature.getID())
+                logging.debug("STEP2 - Feature not present in any pathway " + feature.getID())
+
+        if unmappedFeatureIDs:
+            # One line an operator can actually act on: a proportion tells you
+            # whether the identifiers are mismatched, which a per-feature list
+            # never did.
+            logging.info("STEP2 - %d of %d features matched no pathway in any "
+                         "database (e.g. %s)" % (
+                             len(unmappedFeatureIDs),
+                             totalInputFeatures,
+                             ", ".join(unmappedFeatureIDs[:5])))
 
         for sourceDB, countersDB in counterNames.items():
             for omicName, featureRelevanceLists in countersDB.items():
