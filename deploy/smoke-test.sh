@@ -144,5 +144,28 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+section "Bundled example data"
+# ---------------------------------------------------------------------------
+# Same reasoning as the R packages above: a server that works until someone
+# clicks the button. Bed2GenesServlet hardcodes this path for its example, so
+# without the file "Load example" then "Run Regions2Genes" fails with
+#     Reference file not found. Looked for '...' and '...'
+# and nothing else is affected -- which is exactly why it survives a release
+# unnoticed. fetch-example-gtf.sh builds it, and that script is referenced only
+# from deploy/README.md; no automated step runs it.
+#
+# A note rather than a failure, on the same principle as the header: this is
+# data, and a deployment that has not loaded data yet is legitimate.
+gtf="/app/PaintomicsServer/src/examplefiles/GTF/sorted_mmu.gtf"
+gtfsize=$("${COMPOSE[@]}" exec -T app sh -c \
+    "wc -c < '${gtf}' 2>/dev/null || echo 0" 2>/dev/null | tr -d '\r[:space:]')
+if [ "${gtfsize:-0}" -gt 1000000 ]; then
+    ok "Regions2Genes example annotations present ($((gtfsize / 1048576)) MB)"
+else
+    note "Regions2Genes example GTF missing or truncated (${gtfsize:-0} bytes)"
+    note "run deploy/fetch-example-gtf.sh, or that example fails for every user"
+fi
+
+# ---------------------------------------------------------------------------
 printf '\n\033[1mPassed: %d   Failed: %d\033[0m\n' "${PASS}" "${FAIL}"
 [ "${FAIL}" -eq 0 ] || exit 1

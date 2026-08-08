@@ -28,6 +28,24 @@ docker compose -f deploy/compose.yaml up -d --build
 
 The first build takes 15–30 minutes; most of it is R packages.
 
+Then check it came up correctly:
+
+```bash
+./deploy/smoke-test.sh                 # defaults to deploy/compose.yaml
+```
+
+It verifies the things that are cheap to check here and expensive to discover
+in production: the three containers, pymongo 4, the R packages that
+`generateMetaGenes.R` and `hubAnalysis.R` need, that MongoDB is not published to
+the host, that HTTP redirects to HTTPS, that debug is off, and that uWSGI runs a
+single process — the job queue is in-process, so more than one silently loses
+jobs. Exits non-zero if any of that is wrong.
+
+It reports missing data as a NOTE rather than a failure, because a deployment
+that has not loaded data yet is legitimate. It does not check pathway data at
+all, deliberately — a fresh deployment has none. It does check the example GTF
+below, so run it again after fetching that and the note should be gone.
+
 ## Configuration
 
 Everything lives in `deploy/.env`. Nothing is baked into the image, and
