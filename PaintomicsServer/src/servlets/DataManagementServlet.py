@@ -29,6 +29,7 @@ from src.common.UserSessionManager import UserSessionManager
 from src.common.DAO.FileDAO import FileDAO
 from src.common.DAO.JobDAO import JobDAO
 from src.common.ServerErrorManager import handleException
+from src.common.Util import resolveWithin
 
 def dataManagementUploadFile(request, response, DESTINATION_DIR, isReference=False):
     #VARIABLE DECLARATION
@@ -196,8 +197,18 @@ def dataManagementDeleteFile(request, response, DESTINATION_DIR, MAX_CLIENT_SPAC
                 # Step 2.2.DELETE THE GIVEN FILE FROM DIRECTORY
                 #****************************************************************
                 logging.info("STEP2 - REMOVING " + fileName + " FROM USER DIRECTORY...")
-                if os.path.isfile(DESTINATION_DIR + fileName):
-                    os.remove(DESTINATION_DIR + fileName)
+                # The name comes straight from the request, so it cannot be
+                # concatenated onto a directory and handed to os.remove: a
+                # "../" in it walked out of the user's own directory and this
+                # became an arbitrary file delete. resolveWithin resolves the
+                # path (collapsing "..", following symlinks) and refuses
+                # anything that does not land under DESTINATION_DIR.
+                targetPath = resolveWithin(DESTINATION_DIR, fileName)
+                if targetPath is None:
+                    logging.warning("STEP2 - REFUSED " + fileName +
+                                    ": resolves outside the user directory")
+                elif os.path.isfile(targetPath):
+                    os.remove(targetPath)
                     logging.info("STEP2 - REMOVING " + fileName + " FROM USER DIRECTORY...DONE")
                 else:
                     logging.info("STEP2 - REMOVING " + fileName + " FROM USER DIRECTORY...FILE NOT FOUND")
@@ -343,9 +354,14 @@ def dataManagementDownloadFile(request, response):
 
         userDir = CLIENT_TMP_DIR + userDirID + userDir
 
-        file_path = "{path}/{file}".format(path=userDir, file=fileName)
+        # Same reason as the delete route: fileName is request input, and the
+        # streaming branch below opens this path itself rather than going
+        # through send_from_directory, so it does not inherit Flask's own
+        # traversal check. Without this the handler was safe when it served an
+        # attachment and an arbitrary file read when it streamed.
+        file_path = resolveWithin(userDir, fileName)
 
-        if os.path.isfile(file_path):
+        if file_path is not None and os.path.isfile(file_path):
             #IF THE REQUEST WANTS THE FILE IN A STREAM
             if serve == True:
                 #TODO: HACER ESTO<- http://flask.pocoo.org/docs/0.10/patterns/streaming/

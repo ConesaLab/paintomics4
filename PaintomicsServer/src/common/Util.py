@@ -41,6 +41,58 @@ class Model (object):
         return newobj
 
 
+def resolveWithin(baseDir, fileName):
+    """Resolve `fileName` inside `baseDir`, or None if it escapes.
+
+    Routes that act on a file named by the request used to concatenate:
+
+        os.remove(DESTINATION_DIR + fileName)
+        open("{path}/{file}".format(path=userDir, file=fileName))
+
+    A `..` in the name walks out of the directory, which made those an
+    arbitrary file delete and an arbitrary file read respectively. Flask's
+    `send_from_directory` refuses that on its own, so the download handler was
+    safe on the branch that served an attachment and unsafe on the branch that
+    streamed the file itself.
+
+    `realpath` is what does the work: it collapses `..` and *also* resolves
+    symlinks, so a link planted inside the directory cannot be used to step
+    outside it. Containment is then checked with `commonpath` rather than
+    `startswith`, because a plain prefix test accepts a sibling directory whose
+    name merely begins the same way (`inputData` vs `inputData_evil`).
+
+    Returns the absolute resolved path when it is genuinely under `baseDir`,
+    otherwise None. Existence is not required -- the caller decides that -- but
+    the base directory itself is refused, since it is not a file to act on.
+    """
+    import os
+
+    if not fileName or not str(fileName).strip():
+        return None
+
+    fileName = str(fileName)
+    # A NUL cannot appear in a real name and breaks C-level path handling.
+    if "\x00" in fileName:
+        return None
+
+    base = os.path.realpath(baseDir)
+    # os.path.join drops the base entirely if fileName is absolute, so an
+    # absolute path would otherwise be honoured verbatim.
+    candidate = os.path.realpath(os.path.join(base, fileName))
+
+    if candidate == base:
+        return None
+
+    try:
+        if os.path.commonpath([base, candidate]) != base:
+            return None
+    except ValueError:
+        # Different drives on Windows; not the same tree by definition.
+        return None
+
+    return candidate
+
+
 def chunks(l, n):
     """
         This function divides an array in n parts
