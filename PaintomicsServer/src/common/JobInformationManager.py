@@ -78,8 +78,7 @@ class JobInformationManager(metaclass=Singleton):
 
             elif type(jobInstance).__name__ == "PathwayAcquisitionJob":
                 #IF JOB WAS NOT IN CACHE
-                if self.findInCache( jobInstance.getJobID() ) is None:
-                    self.addToCache(jobInstance)
+                self.cacheJobInstance(jobInstance)
 
                 #NOW SAVE JOB IN DATABASE
                 if stepNumber == 1:
@@ -193,6 +192,31 @@ class JobInformationManager(metaclass=Singleton):
         finally:
             if jobInstanceDAO is not None:
                 jobInstanceDAO.closeConnection()
+
+    def cacheJobInstance(self, jobInstance):
+        """Cache this instance unless the job is already there.
+
+        The check and the insert used to be adjacent-but-separate calls in
+        storeJobInstance, each locking on its own. The window between them is
+        microseconds rather than a database read, and the instance cached is the
+        one the caller already holds -- so racing stores duplicated *the same
+        object* rather than producing divergent copies the way loadJobInstance
+        did. Forced open, four concurrent stores left four entries that were all
+        `is` each other.
+
+        So the cost is cache slots, not correctness: one job can occupy several
+        of the fifty and push other jobs out into fresh database reads. Made
+        atomic because it is the same pattern as the rest of this class, not
+        because work was being lost to it.
+        """
+        self.lock.acquire()
+        try:
+            for cached in list(self.recentJobs):
+                if cached.getJobID() == jobInstance.getJobID():
+                    return
+            self.addToCache(jobInstance)
+        finally:
+            self.lock.release()
 
     def findInCache(self, jobID):
         """

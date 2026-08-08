@@ -167,6 +167,48 @@ class SharedJobInstanceTest(_ManagerCase):
 
         self.assertEqual(sorted(_DAO.loads), ["A", "B", "C", "D"])
 
+    def test_storing_one_job_concurrently_caches_it_once(self):
+        """storeJobInstance has the same check-then-act, milder consequences.
+
+        It does
+
+            if self.findInCache(jobID) is None:
+                self.addToCache(jobInstance)
+
+        on adjacent lines, so the window is microseconds rather than a database
+        read. And it caches the instance the caller already holds, so racing
+        stores duplicate *the same object* -- forced open, four concurrent
+        stores left four entries that were all `is` each other. No divergent
+        state and no lost update, unlike loadJobInstance; the cost is cache
+        slots, a job occupying several of fifty and evicting other jobs into
+        fresh database reads. Closed because it is the same pattern, not
+        because anyone is losing work to it.
+        """
+        job = _Job("JOB1")
+        started = threading.Barrier(4)
+
+        def store():
+            started.wait()
+            self.manager.cacheJobInstance(job)
+
+        threads = [threading.Thread(target=store) for _ in range(4)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+
+        copies = [j for j in self.manager.recentJobs
+                  if j.getJobID() == "JOB1"]
+        self.assertEqual(len(copies), 1,
+                         "one job took %d of the cache's 50 slots" % len(copies))
+
+    def test_caching_an_already_cached_job_is_a_no_op(self):
+        job = _Job("JOB1")
+        self.manager.cacheJobInstance(job)
+        self.manager.cacheJobInstance(job)
+
+        self.assertEqual(len(self.manager.recentJobs), 1)
+
     def test_a_job_missing_from_the_database_is_not_cached(self):
         class _MissingDAO(_DAO):
             def findByID(self, jobID):
