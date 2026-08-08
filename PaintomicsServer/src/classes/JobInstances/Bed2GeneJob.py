@@ -270,11 +270,38 @@ class Bed2GeneJob(Job):
         #STEP 1. GET THE FILES PATH AND PREPRARE THE OPTIONS
         logging.info("READING FILES...")
 
-        gtfFile = self.getInputDir()+ self.getReferenceInputs()[0].get("inputDataFile")
-        if not os_path.isfile(gtfFile): #CHECK IF THE FILE IS AN INPUT FILE OR AN INBUILT GTF FILE
-            gtfFile = self.getReferenceInputs()[0].get("inputDataFile")
-        if not os_path.isfile(gtfFile): #CHECK IF THE FILE IS AN INPUT FILE OR AN INBUILT GTF FILE
-            raise Exception("Reference file not found.")
+        # An upload registers a reference input only when one was actually
+        # sent: JobInformationManager adds it under
+        # `matchingType.lower() == "reference_file"`. Submit Regions2Genes
+        # without an annotations file and this list is empty, so indexing it
+        # raised
+        #     IndexError: list index out of range
+        # which handleException hands to the browser verbatim as the whole
+        # error message. Reproduced directly against a job with no reference
+        # inputs.
+        referenceInputs = self.getReferenceInputs() or []
+        if not referenceInputs:
+            raise Exception(
+                "No annotations file (GTF) was provided. Regions2Genes needs "
+                "one to map regions onto genes.")
+
+        referenceFileName = referenceInputs[0].get("inputDataFile") or ""
+
+        #CHECK IF THE FILE IS AN INPUT FILE OR AN INBUILT GTF FILE
+        uploadedPath = self.getInputDir() + referenceFileName
+        gtfFile = uploadedPath
+        if not os_path.isfile(gtfFile):
+            gtfFile = referenceFileName
+        if not os_path.isfile(gtfFile):
+            # Both candidates named, because the one case that reaches this in
+            # practice is a deployment where the bundled example GTF was never
+            # fetched -- deploy/fetch-example-gtf.sh is a manual step, wired
+            # into no automated deploy -- and "Reference file not found." on
+            # its own tells whoever is looking neither which file was missing
+            # nor that it is the example data rather than their upload.
+            raise Exception(
+                "Reference file not found. Looked for %r and %r."
+                % (uploadedPath, referenceFileName))
 
         inputOmic = self.getGeneBasedInputOmics()[0]
         dataFile = inputOmic.get("inputDataFile")
