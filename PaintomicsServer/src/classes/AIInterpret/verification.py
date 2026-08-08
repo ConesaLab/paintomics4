@@ -72,6 +72,23 @@ def redact_unverified(text, issues):
 # V2 verification — [N] citation format with fuzzy text matching
 # ---------------------------------------------------------------------------
 
+# Heading level, trailing colon, surrounding bold and case all vary between
+# generations, so every reader of the References section matches the section
+# rather than one exact spelling. Shared so the readers cannot drift apart:
+# render_references_section cuts the body at this heading and
+# parse_references_section reads the entries after it, and a section only one of
+# them recognises is worse than one neither does.
+_REFERENCES_HEADING_RE = re.compile(
+    r'^\s*(?:#{1,6}\s*)?\**\s*references\s*\**\s*:?\s*$',
+    re.MULTILINE | re.IGNORECASE)
+
+# A reference entry starts at the left margin with its own [N] label.
+_REFERENCE_ENTRY_RE = re.compile(r'^\[(\d+)\]', re.MULTILINE)
+
+# redact_unverified_v2 appends its note after the section; it belongs to the
+# report, not to whichever entry happens to be printed last.
+_TRAILING_NOTE_RE = re.compile(r'^>\s*\*\*Note:\*\*', re.MULTILINE)
+
 def verify_report_v2(report_text, gene_whitelist, unique_papers, job_instance):
     """Verify a report using [N] citation format.
 
@@ -289,6 +306,54 @@ def renumber_citations(report_text):
     return result, old_to_new
 
 
+def sort_references_section(report_text):
+    """Print the References entries in the order of the labels they now carry.
+
+    ``render_references_section`` emits entries in ascending index order and
+    ``renumber_citations`` then rewrites every ``[N]`` marker in place, in order
+    of first mention in the body. Neither step moves an entry, so the two
+    compose into a section that is individually correct and collectively
+    unreadable: rendered 2, 9, 10, 15, 22 and renumbered in body order, it
+    prints as [1], [5], [3], [2], [4].
+
+    Nothing downstream notices, because every marker still resolves to the right
+    paper -- verification passes and the job reports done. Only the reader sees
+    it, which is why this runs last, after redaction and renumbering have both
+    had their say.
+
+    Whole entries are moved and never relabelled, so each [N] keeps its own
+    title, PMID and Cited Text. Anything printed after the entries -- the
+    redaction note -- stays at the end where it belongs.
+    """
+    heading = _REFERENCES_HEADING_RE.search(report_text)
+    if not heading:
+        return report_text
+
+    head, tail = report_text[:heading.end()], report_text[heading.end():]
+
+    entries = list(_REFERENCE_ENTRY_RE.finditer(tail))
+    if len(entries) < 2:
+        return report_text
+
+    note = _TRAILING_NOTE_RE.search(tail, entries[-1].end())
+    entries_end = note.start() if note else len(tail)
+
+    blocks = []
+    for i, match in enumerate(entries):
+        stop = entries[i + 1].start() if i + 1 < len(entries) else entries_end
+        blocks.append((int(match.group(1)), tail[match.start():stop].strip("\n")))
+
+    labels = [index for index, _ in blocks]
+    if labels == sorted(labels):
+        return report_text
+
+    blocks.sort(key=lambda block: block[0])
+
+    rebuilt = tail[:entries[0].start()] + "\n\n".join(text for _, text in blocks)
+    trailer = tail[entries_end:].lstrip("\n")
+    return head + rebuilt + ("\n\n" + trailer if trailer else "\n")
+
+
 def parse_references_section(report_text):
     """Parse ### References section from a report.
 
@@ -309,12 +374,7 @@ def parse_references_section(report_text):
     # citations, and verify_report_v2's fuzzy grounding pass iterates over
     # nothing. The stored result was failed_citations = 0, which reads as "all
     # citations verified" when in fact none were ever examined.
-    #
-    # Heading level, trailing colon, surrounding bold and case all vary between
-    # generations, so match the section rather than one exact spelling.
-    ref_match = re.search(
-        r'^\s*(?:#{1,6}\s*)?\**\s*references\s*\**\s*:?\s*$',
-        report_text, re.MULTILINE | re.IGNORECASE)
+    ref_match = _REFERENCES_HEADING_RE.search(report_text)
     if not ref_match:
         return []
 
@@ -399,9 +459,7 @@ def render_references_section(report_text, paper_index, quotes):
         return report_text, []
 
     # Drop any section the model wrote, keeping only the body before it.
-    ref_match = re.search(
-        r'^\s*(?:#{1,6}\s*)?\**\s*references\s*\**\s*:?\s*$',
-        report_text, re.MULTILINE | re.IGNORECASE)
+    ref_match = _REFERENCES_HEADING_RE.search(report_text)
     body = report_text[:ref_match.start()] if ref_match else report_text
     body = body.rstrip()
 

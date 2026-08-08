@@ -16,7 +16,7 @@ from src.classes.AIInterpret.verification import (
     verify_report, redact_unverified,
     verify_report_v2, redact_unverified_v2, parse_references_section,
     render_references_section,
-    renumber_citations,
+    renumber_citations, sort_references_section,
     # Reused so a quote is held to the same matching rule that will later judge
     # it; a private import beats a second, subtly different matcher.
     _fuzzy_contains, _normalize_text,
@@ -601,6 +601,14 @@ def run_ai_pipeline(job_id, experiment_design, RESPONSE):
         # Renumber citations to be sequential [1], [2], [3]...
         # This fixes gaps left by redaction or LLM dropping citations during synthesis
         report, citation_mapping = renumber_citations(report)
+
+        # ...and then put the entries back in the order of the labels they now
+        # carry. Renumbering rewrites the markers where they stand, so a section
+        # rendered in ascending old index order ends up printed as [1], [5],
+        # [3], [2], [4] -- every entry pointing at the right paper, the list
+        # itself unreadable. Nothing downstream can catch it, because the
+        # citations are all still valid.
+        report = sort_references_section(report)
         if citation_mapping:
             final["citation_mapping"] = {str(k): v for k, v in citation_mapping.items()}
 
