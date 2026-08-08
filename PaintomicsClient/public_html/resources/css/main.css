@@ -3131,7 +3131,12 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
   height: 100%;
   width: 2%;
   border-radius: 999px;
-  background-color: var(--pa-accent-blue, #2C7FDD);
+  /* No fallback: --pa-accent-blue is defined unconditionally at the top of this
+     file, and the value that used to sit here as one was #2C7FDD - the exact
+     shade the contrast audit replaced, at 4.05:1. A fallback that can only ever
+     apply if the token disappears, and that reinstates the rejected colour when
+     it does, is worse than none. */
+  background-color: var(--pa-accent-blue);
   /* Matches the status poll, so the bar walks forward rather than stepping. */
   transition: width .6s linear;
 }
