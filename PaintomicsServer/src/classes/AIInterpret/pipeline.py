@@ -112,9 +112,21 @@ class _PhaseTimer:
         if not self.timings:
             return ""
         total = sum(t for _, t in self.timings)
-        parts = ", ".join(f"{name}={seconds:.1f}s "
-                          f"({100 * seconds / total:.0f}%)"
-                          for name, seconds in self.timings)
+
+        # This is called from run_ai_pipeline's finally, ahead of the semaphore
+        # release, so whatever it does it must not raise. Dividing by `total`
+        # did: a phase that finishes faster than the clock can measure records
+        # 0.0, and if every recorded phase does, `total` is 0.0. time.time()
+        # has roughly 15ms resolution on Windows, so that is a tick, not a
+        # freak event. The percentages are the expendable part of this line --
+        # the phase names and durations are what makes it worth logging.
+        if total > 0:
+            parts = ", ".join(f"{name}={seconds:.1f}s "
+                              f"({100 * seconds / total:.0f}%)"
+                              for name, seconds in self.timings)
+        else:
+            parts = ", ".join(f"{name}={seconds:.1f}s"
+                              for name, seconds in self.timings)
         return f"AI pipeline {total:.1f}s total -- {parts}"
 
 
@@ -629,14 +641,35 @@ def run_ai_pipeline(job_id, experiment_design, RESPONSE):
         from src.common.ServerErrorManager import handleException
         handleException(RESPONSE, ex, __file__, "run_ai_pipeline")
     finally:
-        # Log the breakdown regardless of outcome: a run that failed partway is
-        # exactly when knowing which phase consumed the time is most useful.
-        phaseSummary = timer.summary()
-        if phaseSummary:
-            logger.info(f"[{job_id}] {phaseSummary}")
-        heartbeat.stop()
+        # The permit comes back first, before anything that could fail.
+        #
+        # It used to be released last, after the phase summary and the
+        # heartbeat stop. `_PhaseTimer.summary()` divided by the total elapsed
+        # time, which is 0.0 when every recorded phase measured 0.0, so a
+        # ZeroDivisionError there skipped both the heartbeat stop and this
+        # release. That is not a lost log line: two such runs exhaust
+        # AI_MAX_CONCURRENT_PIPELINES and every later interpretation blocks
+        # forever on acquire() with no error and no timeout, until the server
+        # is restarted.
+        #
+        # The division is fixed too, but the ordering is the part that matters
+        # -- it is what stops the *next* statement added here from doing the
+        # same thing.
         _pipeline_semaphore.release()
+        heartbeat.stop()
         _cancel_flags.pop(job_id, None)
+
+        try:
+            # Log the breakdown regardless of outcome: a run that failed partway
+            # is exactly when knowing which phase consumed the time is most
+            # useful. Best-effort -- a logging failure must not become the
+            # pipeline's result.
+            phaseSummary = timer.summary()
+            if phaseSummary:
+                logger.info(f"[{job_id}] {phaseSummary}")
+        except Exception:
+            logger.exception(f"[{job_id}] could not summarise phase timings")
+
         if dao:
             dao.closeConnection()
         return RESPONSE
