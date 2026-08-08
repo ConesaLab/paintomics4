@@ -1,3 +1,5 @@
+import logging
+
 from src.common.DAO.DAO import DAO
 from src.common.DAO.FeatureDAO import FeatureDAO
 from src.common.DAO.FoundFeatureDAO import FoundFeatureDAO
@@ -126,7 +128,37 @@ class PathwayAcquisitionJobDAO(DAO):
             return False
 
         collection = self.dbManager.getCollection(self.collectionName)
-        collection.delete_many({"jobID": id, "userID" : otherParams.get("userID")})
+        deleted = collection.delete_many(
+            {"jobID": id, "userID": otherParams.get("userID")})
+
+        # The two cascades below matched on jobID alone, while the delete above
+        # is scoped to the owner. So a request to delete someone else's job
+        # removed nothing from jobInstanceCollection -- correctly -- and then
+        # deleted every feature and every pathway belonging to it anyway.
+        #
+        # Confirmed against a running server with no cookies at all, since
+        # isValidUser lets the anonymous "nologin" case through and
+        # dm_delete_job asks for nothing more:
+        #
+        #     before                  job=1 features=5 pathways=3
+        #     after anonymous delete  job=1 features=0 pathways=0
+        #     HTTP response           success: True
+        #
+        # The owner is left holding a job record whose contents are gone. Job
+        # ids travel: the results page prints "You can access this job using
+        # the URL ...?jobID=...", and there is a sharing feature, so anyone who
+        # has ever been given a link had everything needed to do this.
+        #
+        # Gating on deleted_count ties the cascade to the ownership check that
+        # was already there. An anonymous job stores userID None and matches
+        # normally, so ordinary deletion is unaffected -- every job on this
+        # machine is one of those, and they still delete.
+        if deleted.deleted_count == 0:
+            logging.warning(
+                "REFUSED to delete job %s: no job with that id belongs to "
+                "userID %r, so its features and pathways were left alone",
+                id, otherParams.get("userID"))
+            return False
 
         FeatureDAO().removeAll({"jobID": id})
         PathwayDAO(dbManager=self.dbManager).removeAll({"jobID": id})
