@@ -606,7 +606,12 @@ function PA_Step1JobView() {
 														'  </div>' +
 														'  <div style="background:#e8f5e9;border-left:4px solid #2e7d32;padding:10px 14px;margin:10px 0;border-radius:3px;">' +
 														'    <strong style="color:#2e7d32;">\u2705 NOT sent to external servers:</strong>' +
-														'    <ul style="margin:6px 0 0;padding-left:18px;">' +
+														// ai-gdpr-safe turns these bullets green, the way ai-gdpr-unsafe below
+														// turns the "never submit" bullets red. Both rules were written as a
+														// pair in ai-interpret.css; only the red one was ever put on its list,
+														// so this one kept default black markers inside a block that is green
+														// in its heading, its border and its fill.
+														'    <ul class="ai-gdpr-safe" style="margin:6px 0 0;padding-left:18px;">' +
 														'      <li>Raw data files you uploaded</li>' +
 														'      <li>Individual sample-level measurements</li>' +
 														'      <li>Your login credentials or account information</li>' +
