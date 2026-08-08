@@ -1105,10 +1105,11 @@ input, textarea {
 /********************************************************************************
 **Message dialog styles
 *********************************************************************************/
-#powerTip {
-	max-width: 350px;
-	white-space: normal;
-}
+/* #powerTip is gone with it. jQuery PowerTip creates that element itself, so
+   the rule was correct in principle - but index.html never loads
+   js/libs/powertip/jquery.powertip.min.js, and nothing else references it, so
+   the plugin never runs and the element is never made. Tooltips in this
+   application come from ExtJS qtips and from tooltipster. */
 
 .fieldSet {
 	display: inline-flex;
@@ -2645,49 +2646,21 @@ div.omicSelection div.omicPosition + div {
 
 /***********************************************************/
 
-.MessageBox_SUCCESS {
-	background: url(../images/success_32x32.png) no-repeat top left;
-}
-.MessageBox_ERROR {
-	background: url(../images/error_32x32.png) no-repeat top left;
-}
-#msg-div {
-	position: absolute;
-	left: 35%;
-	top: 10px;
-	width: 300px;
-	z-index: 20000;
-	text-align: center
-}
-.msg .x-box-mc, .error_msg .x-box-mc, .warning_msg .x-box-mc {
-	font-size: 14px;
-}
-#msg-div .msg, #msg-div .error_msg, #msg-div .warning_msg {
-	border-radius: 8px;
-	-moz-border-radius: 8px;
-	background: #eaffce;
-	border: 2px solid #a2d662;
-	margin-top: 2px;
-	padding: 10px 15px;
-	color: #555;
-}
-#msg-div .error_msg {
-	background: #fedddd;
-	border: 2px solid #fd8080;
-}
-#msg-div .warning_msg {
-	background: #ffedc4;
-	border: 2px solid #fec643;
-}
-#msg-div .msg h3, #msg-div .error_msg h3, #msg-div .warning_msg h3 {
-	margin: 0 0 8px;
-	/*font-weight: bold;*/
-	font-size: 15px;
-	text-align: center
-}
-#msg-div .msg p, #msg-div .error_msg p, #msg-div .warning_msg p {
-	margin: 0;
-}
+/* The toast stack that used to live at #msg-div is gone, and so are the two
+   .MessageBox_* icon rules beside it. Nothing in the tree creates any of it:
+   no id, no .msg / .error_msg / .warning_msg, and their inner selector was
+   `.x-box-mc`, which is ExtJS 3 markup that appears nowhere in the 4.2.1 build
+   this application runs on.
+
+   Messages have not gone through it for a long time. showSuccessMessage,
+   showWarningMessage and showErrorMessage in Util.js all funnel into
+   showMessage, which paints #messageDialog and swaps successDialog /
+   warningDialog / errorDialog / infoDialog on it - the rules for which are
+   further down this file and are the live ones.
+
+   Worth knowing when reading the design system: its Toast component was lifted
+   from these declarations, so its palette is real but the thing it describes is
+   this dead stack rather than the dialog the product actually shows. */
 #warningMessage {
 	background: #ffedc4;
 	border: 2px solid #fec643;
