@@ -2053,7 +2053,6 @@ div.onedatabase div[id ^= "networkview_"] {
 /********************************************************************************
 **STYLES FOR STEP 4
 *********************************************************************************/
-#diagramPin{background-color: #d9534f; border-color: #d43f3a;}
 .x-tab-bar-strip-default-top {
 	height: 1px;
 }
