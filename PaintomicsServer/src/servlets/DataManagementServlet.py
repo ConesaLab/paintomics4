@@ -487,11 +487,16 @@ def registerFile(userID, fileName, options, location):
 
     import time
     fileInstance.setSubmissionDate(time.strftime("%d/%m/%Y %H:%M"))
+    # Closed in a finally: DBmanager builds a new MongoClient per DAO, each
+    # with its own monitor threads, and a write that raises would otherwise
+    # leave them behind. Uploads run this once per file, so a batch upload
+    # against a struggling database leaked one client per file.
     daoInstance = FileDAO()
-    daoInstance.remove(fileName, otherParams={"userID": userID})
-    daoInstance.insert(fileInstance, otherParams={"userID":userID})
-    logging.info("\tREGISTERING " + fileName + " INTO DATABASE...DONE")
-    if(daoInstance != None):
+    try:
+        daoInstance.remove(fileName, otherParams={"userID": userID})
+        daoInstance.insert(fileInstance, otherParams={"userID":userID})
+        logging.info("\tREGISTERING " + fileName + " INTO DATABASE...DONE")
+    finally:
         daoInstance.closeConnection()
 
     return fileName

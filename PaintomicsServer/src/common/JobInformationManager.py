@@ -442,18 +442,26 @@ class JobInformationManager(metaclass=Singleton):
                 elif(matchingType.lower() == "reference_file"):
                     jobInstance.addReferenceInput({"omicName": omicType, "fileType": dataType, "inputDataFile": dataFileName})
 
+    # Both of these close in a finally rather than after the call: DBmanager
+    # builds a new MongoClient per DAO, each with its own monitor threads, so a
+    # query that raises leaves those threads behind. The raising case is a
+    # database that is unreachable, which is when every request is failing at
+    # once -- leaking a client per failure makes the outage worse rather than
+    # merely noisier.
     def getVisualOptions(self, jobID):
         daoInstance = VisualOptionsDAO()
-        visualOptions = daoInstance.findByID(jobID)
-        daoInstance.closeConnection()
-        return visualOptions
+        try:
+            return daoInstance.findByID(jobID)
+        finally:
+            daoInstance.closeConnection()
 
     def storeVisualOptions(self, jobID, visualOptionsInstance):
         daoInstance = VisualOptionsDAO()
-        daoInstance.remove(jobID)
-        success = daoInstance.insert(visualOptionsInstance, {"jobID":jobID})
-        daoInstance.closeConnection()
-        return success
+        try:
+            daoInstance.remove(jobID)
+            return daoInstance.insert(visualOptionsInstance, {"jobID":jobID})
+        finally:
+            daoInstance.closeConnection()
 
     def storeSharingOptions(self, jobInstance):
         daoInstance = PathwayAcquisitionJobDAO()

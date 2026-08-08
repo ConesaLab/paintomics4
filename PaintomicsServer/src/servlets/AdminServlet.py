@@ -466,6 +466,9 @@ def adminCleanDatabases(request, response):
 # MESSAGES
 #----------------------------------------------------------------
 def adminServletSaveMessage(request, response):
+    # See adminServletGetMessage: a DAO is a MongoClient with monitor threads,
+    # and it must come back even when the write raises.
+    daoInstance = None
     try:
         #****************************************************************
         # Step 0.CHECK IF VALID USER SESSION
@@ -488,15 +491,23 @@ def adminServletSaveMessage(request, response):
         daoInstance = MessageDAO()
         daoInstance.removeAll(otherParams={"message_type" : messageInstance.message_type})
         daoInstance.insert(messageInstance)
-        daoInstance.closeConnection()
         response.setContent({"success": True })
 
     except Exception as ex:
         handleException(response, ex, __file__ , "adminServletSaveMessage")
     finally:
+        if daoInstance is not None:
+            daoInstance.closeConnection()
         return response
 
 def adminServletGetMessage(request, response):
+    # Closed in the finally rather than after the query: DBmanager builds a new
+    # MongoClient per DAO, each with its own monitor threads, and findAll raises
+    # exactly when the database is unreachable -- i.e. when every request is
+    # failing at once. Leaking a client per failure makes that worse. This is
+    # also the handler behind the public welcome banner, so it runs on every
+    # page load.
+    daoInstance = None
     try:
         #****************************************************************
         # Step 0.CHECK IF VALID USER SESSION
@@ -515,15 +526,18 @@ def adminServletGetMessage(request, response):
         #****************************************************************
         daoInstance = MessageDAO()
         matchedMessages = daoInstance.findAll(otherParams={"message_type" : message_type})
-        daoInstance.closeConnection()
         response.setContent({"success": True, "messageList" : matchedMessages})
 
     except Exception as ex:
         handleException(response, ex, __file__ , "adminServletGetMessage")
     finally:
+        if daoInstance is not None:
+            daoInstance.closeConnection()
         return response
 
 def adminServletDeleteMessage(request, response, message_type=None):
+    # See adminServletGetMessage.
+    daoInstance = None
     try:
         #****************************************************************
         # Step 0.CHECK IF VALID USER SESSION
@@ -541,13 +555,14 @@ def adminServletDeleteMessage(request, response, message_type=None):
             message_type = request.form.get("message_type")
         daoInstance = MessageDAO()
         daoInstance.removeAll(otherParams={"message_type" : message_type})
-        daoInstance.closeConnection()
 
         response.setContent({"success": True})
 
     except Exception as ex:
         handleException(response, ex, __file__ , "adminServletDeleteMessage")
     finally:
+        if daoInstance is not None:
+            daoInstance.closeConnection()
         return response
 
 #----------------------------------------------------------------
