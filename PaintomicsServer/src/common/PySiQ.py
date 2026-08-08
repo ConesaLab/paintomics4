@@ -147,13 +147,26 @@ class Queue:
         return self.jobs.get(job_id, None)
 
     def get_result(self, job_id, remove=True):
-        job = self.jobs.get(job_id, None)
-        if job:
-            if remove and (job.status == JobStatus.FINISHED or job.status == JobStatus.FAILED):
-                logging.info("Removing job " + job_id)
-                self.jobs.pop(job_id)
-            return job.result
-        return JobStatus.NOT_QUEUED
+        """Return a job's result, consuming it if it has finished.
+
+        The lookup and the removal run under the queue lock. They used to be a
+        bare check-then-act on a shared dict, so two callers arriving together
+        could both find the job and both try to take it; the loser got the
+        JobStatus enum back, which the status handler then called getResponse()
+        on. Locking makes "who gets the result" a decision rather than a race,
+        and exactly one caller wins.
+        """
+        try:
+            self.lock.acquire() #LOCK CACHE
+            job = self.jobs.get(job_id, None)
+            if job:
+                if remove and (job.status == JobStatus.FINISHED or job.status == JobStatus.FAILED):
+                    logging.info("Removing job " + job_id)
+                    self.jobs.pop(job_id, None)
+                return job.result
+            return JobStatus.NOT_QUEUED
+        finally:
+            self.lock.release() #UNLOCK CACHE
 
     def get_error_message(self, job_id):
         job = self.jobs.get(job_id, None)

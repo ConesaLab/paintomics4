@@ -336,10 +336,27 @@ class Application(object):
         def checkJobStatus(jobID):
             jobInstance = self.queue.fetch_job(jobID)
 
-            if jobInstance is None:
+            def jobGoneResponse():
                 return Response().setStatus(400).setContent({"success": False, "status" : "failed", "message": "Your job is not on the queue anymore. Check your job list, if it's not there the process stopped and you must resend the data again."}).getResponse()
+
+            if jobInstance is None:
+                return jobGoneResponse()
             elif jobInstance.is_finished():
-                return self.queue.get_result(jobID).getResponse()
+                # Reading the job and consuming it are two steps, and the
+                # client polls this route every six seconds -- two tabs on one
+                # job, or a refresh landing beside a poll, can both get past
+                # fetch_job before either takes the result. get_result then
+                # returns the JobStatus enum to the loser, and calling
+                # getResponse() on it raised
+                #     AttributeError: 'JobStatus' object has no attribute 'getResponse'
+                # which reached the browser as a 500 for a job that had just
+                # *succeeded*. Whoever arrives second is in the same position as
+                # someone polling a job that is already gone, so they get the
+                # same answer.
+                result = self.queue.get_result(jobID)
+                if not hasattr(result, "getResponse"):
+                    return jobGoneResponse()
+                return result.getResponse()
             elif jobInstance.is_failed():
                 self.queue.get_result(jobID) #remove job
                 return Response().setStatus(400).setContent({"success": False, "status" : str(jobInstance.get_status()), "message": jobInstance.error_message}).getResponse()
