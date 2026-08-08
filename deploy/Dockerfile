@@ -171,11 +171,40 @@ RUN Rscript -e 'options(warn = 2); \
 # 1.2.0 is the last line that predates the is_ggplot switch. Raise it only
 # together with ggplot2 - and ggplot2 moves only if it stops coming from the
 # distro.
-RUN Rscript -e 'options(warn = 2, Ncpus = parallel::detectCores()); \
-      install.packages(c("optparse", "remotes"), repos = "https://cloud.r-project.org"); \
-      remotes::install_version("patchwork", version = "1.2.0", \
-                               repos = "https://cloud.r-project.org", upgrade = "never"); \
-      remotes::install_github("BiostatOmics/MORE", upgrade = "never")'
+#
+# ---------------------------------------------------------------------------
+# MORE IS NOT INSTALLED, and the block below is commented out rather than
+# deleted so the next attempt starts from what is already known.
+#
+# Pinning patchwork gets past ComplexUpset, and then eleven more packages fail,
+# for three unrelated reasons that no further pinning fixes (measured
+# 2026-08-08, full log in the build output):
+#
+#   Deriv     R_ClosureFormals / Rf_allocLang not declared. Those are R C-API
+#             additions from R 4.4/4.5. R here is Debian bookworm's, 4.2.
+#   fgsea     via BH/boost: 'is_final' / 'remove_cv_t' not declared in 'std'.
+#             C++17 type traits, compiled at the image's C++11 default.
+#   gdtools   cairo-ft.h: No such file. Missing dev headers.
+#
+# and behind them ggiraph, treeio, shadowtext, doBy, ggtree, DOSE, enrichplot
+# and clusterProfiler. MORE's transitive tree has moved to needing a newer R and
+# toolchain than this base provides; the tree is unpinned, so it keeps moving.
+#
+# Restoring it is a real piece of work, not a pin. Either resolve the whole
+# tree from a dated snapshot contemporary with R 4.2 - packagemanager.posit.co
+# is already an allowed outbound host, so `options(repos = ".../cran/2023-06-01")`
+# is the cheap thing to try first - or move the image off the distro's R.
+#
+# Note this changes nothing that was shipping: the deployed image has never
+# contained MORE. This file previously carried the block uncommented, which is
+# why building from master failed outright, and the VM's own copy had it
+# deleted with no record of why. This is that record.
+# ---------------------------------------------------------------------------
+# RUN Rscript -e 'options(warn = 2, Ncpus = parallel::detectCores()); \
+#       install.packages(c("optparse", "remotes"), repos = "https://cloud.r-project.org"); \
+#       remotes::install_version("patchwork", version = "1.2.0", \
+#                                repos = "https://cloud.r-project.org", upgrade = "never"); \
+#       remotes::install_github("BiostatOmics/MORE", upgrade = "never")'
 
 # Fail the build now, not at 3am in production, if anything is unimportable.
 #
@@ -190,8 +219,7 @@ RUN Rscript -e 'pkgs <- c("purrr", "cluster", "mclust", "amap", "factoextra", \
                           "gridExtra", "visNetwork", "jsonlite", "tibble", \
                           "stringr", "dplyr", "tidyr", "readr", "rvest", "xml2", \
                           "gtools", "qdapRegex", "tidyverse", \
-                          "KEGGgraph", "AnnotationDbi", \
-                          "optparse", "MORE"); \
+                          "KEGGgraph", "AnnotationDbi"); \
       missing <- pkgs[!vapply(pkgs, requireNamespace, logical(1), quietly = TRUE)]; \
       if (length(missing)) stop("missing R packages: ", paste(missing, collapse = ", ")); \
       cat("all", length(pkgs), "R packages import cleanly\n")'
@@ -362,8 +390,7 @@ RUN set -eux; \
                           "gridExtra", "visNetwork", "jsonlite", "tibble", \
                           "stringr", "dplyr", "tidyr", "readr", "rvest", "xml2", \
                           "gtools", "qdapRegex", "tidyverse", \
-                          "KEGGgraph", "AnnotationDbi", \
-                          "optparse", "MORE"); \
+                          "KEGGgraph", "AnnotationDbi"); \
       failed <- character(0); \
       for (p in pkgs) { \
         ok <- tryCatch({ suppressPackageStartupMessages(library(p, character.only = TRUE)); TRUE }, \
