@@ -294,16 +294,30 @@ def dataManagementDeleteJob(request, response):
             #****************************************************************
             # Step 2b. DELETE GIVEN JOB FROM USER DIRECTORY
             #****************************************************************
+            # jobID is request input and rmtree recurses, so this cannot be a
+            # concatenation: os.path.isdir is not a containment check, it is
+            # satisfied by any directory the path reaches -- including one
+            # reached by walking upwards. A jobID of ".." removes every job the
+            # user has; a longer walk reaches other users. resolveWithin
+            # refuses anything that does not land under the base.
+            jobDir = resolveWithin(userDir, jobID)
             logging.info("STEP2 - REMOVING " + userDir + jobID + " FROM USER DIRECTORY...")
-            if os.path.isdir(userDir + jobID):
-                shutil.rmtree(userDir + jobID)
+            if jobDir is None:
+                logging.warning("STEP2 - REFUSED jobID " + jobID +
+                                ": resolves outside " + userDir)
+            elif os.path.isdir(jobDir):
+                shutil.rmtree(jobDir)
                 logging.info("STEP2 - REMOVING " + userDir + jobID + " FROM USER DIRECTORY...DONE")
             else:
                 logging.info("STEP2 - REMOVING " + userDir + jobID + " FROM USER DIRECTORY...FILE NOT FOUND")
 
+            tmpJobDir = resolveWithin(tmpDir, jobID)
             logging.info("STEP2 - REMOVING TEMPORAL DIR " + tmpDir + jobID + " FROM USER DIRECTORY...")
-            if os.path.isdir(tmpDir + jobID):
-                shutil.rmtree(tmpDir + jobID)
+            if tmpJobDir is None:
+                logging.warning("STEP2 - REFUSED jobID " + jobID +
+                                ": resolves outside " + tmpDir)
+            elif os.path.isdir(tmpJobDir):
+                shutil.rmtree(tmpJobDir)
                 logging.info("STEP2 - REMOVING TEMPORAL DIR " + tmpDir + jobID + " FROM USER DIRECTORY...")
             else:
                 logging.info("STEP2 - REMOVING TEMPORAL DIR " + tmpDir + jobID + " FROM USER DIRECTORY...FILE NOT FOUND")
