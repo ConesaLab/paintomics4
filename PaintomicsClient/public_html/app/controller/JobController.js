@@ -71,7 +71,13 @@ function JobController() {
 							// These were two sentences of raw seconds that the reader had to
 							// divide to learn how far along the job was. Handed to the dialog
 							// as numbers instead, so it can draw a bar and say how long is left.
-							progress = {elapsed: response.timeSpent, estimated: response.estimatedFinishTime};
+							// `detailed` is the server's own phase/fraction report when it has
+							// one; the two flat numbers remain as the fallback path.
+							progress = {
+								elapsed: response.timeSpent,
+								estimated: response.estimatedFinishTime,
+								detailed: response.progress || null
+							};
 						}
 
 						showInfoMessage(message, {logMessage: "Job " + jobID + " still running.", showSpin: true, progress: progress, append: other.multipleJobs, itemId: jobID, icon: "play"});
@@ -582,7 +588,10 @@ function JobController() {
 						showSuccessMessage("Done", {logMessage: "Updating Pathways list...DONE", showTimeout: 1, closeTimeout: 0.5});
 					};
 
-					me.checkJobStatus(response.jobID, jobView, callback, true);
+					// `true` used to land in the `other` slot, leaving showURL false, so
+					// step 2 drew no progress bar at all — for a phase that is ~50% of
+					// the wait. The options object belongs in `other`, the flag last.
+					me.checkJobStatus(response.jobID, jobView, callback, {}, true);
 				},
 				error: ajaxErrorHandler
 			});

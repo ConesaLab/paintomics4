@@ -28,6 +28,7 @@ from collections import defaultdict
 from src.common.ServerErrorManager import handleException
 from src.common.UserSessionManager import UserSessionManager
 from src.common.JobInformationManager import JobInformationManager
+from src.common import JobProgress
 from src.common.Statistics import calculateSignificance, calculateCombinedSignificancePvalues, adjustPvalues, calculateStoufferCombinedPvalue
 from src.common.ReplicateDetection import detect_replicates, aggregate_replicates
 from src.common.DAO.PathwayAcquisitionJobDAO import PathwayAcquisitionJobDAO
@@ -229,10 +230,24 @@ def pathwayAcquisitionStep1_PART2(jobInstance, userID, exampleMode, RESPONSE):
     @returns Response
     """
     try :
+        # Phase weights measured over 100 logged step-1 runs: processFilesContent
+        # is 98.9% of the step, validate 0.1%, save 1.0%. processFilesContent
+        # subdivides itself per omic (see PathwayAcquisitionJob), which is where
+        # the bar actually gets its resolution.
+        # expectedTotal is the measured median (p50 43.1s over 100 logged runs).
+        # It only paces phases with nothing to count, and is re-derived from this
+        # job's own timings at each boundary, so a stale constant self-corrects.
+        JobProgress.begin(jobInstance.getJobID(), "step1", [
+            ("validate", "Checking input files", 0.1),
+            ("process", "Processing files", 98.9),
+            ("save", "Saving job data", 1.0),
+        ], expectedTotal=43.1)
+
         #****************************************************************
         # Step 0.VALIDATE THE FILES DATA
         #****************************************************************
         logging.info("STEP0 - VALIDATING INPUT..." )
+        JobProgress.enter(jobInstance.getJobID(), "validate")
         jobInstance.validateInput()
         logging.info("STEP1 - VALIDATING INPUT...DONE" )
 
@@ -240,6 +255,7 @@ def pathwayAcquisitionStep1_PART2(jobInstance, userID, exampleMode, RESPONSE):
         # Step 1.PROCESS THE FILES DATA
         #****************************************************************
         logging.info("STEP1 - PROCESSING FILES..." )
+        JobProgress.enter(jobInstance.getJobID(), "process")
         matchedMetabolites = jobInstance.processFilesContent() #This function processes all the files and returns a checkboxes list to show to the user
 
         logging.info("STEP1 - PROCESSING FILES...DONE" )
@@ -248,6 +264,7 @@ def pathwayAcquisitionStep1_PART2(jobInstance, userID, exampleMode, RESPONSE):
         # Step 2. Save the jobInstance in the MongoDB
         #************************************************************************
         logging.info("STEP1 - SAVING JOB DATA..." )
+        JobProgress.enter(jobInstance.getJobID(), "save")
         jobInstance.setLastStep(2)
         jobInstance.getJobDescription(True, exampleMode == "example")
         JobInformationManager().storeJobInstance(jobInstance, 1)
@@ -278,6 +295,10 @@ def pathwayAcquisitionStep1_PART2(jobInstance, userID, exampleMode, RESPONSE):
         # will keep returning success to the job.
         handleException(RESPONSE, ex, __file__ , "pathwayAcquisitionStep1_PART2", userID=userID)
     finally:
+        # In the `finally`, not the `except`: this function swallows exceptions
+        # and returns RESPONSE either way. A single long-lived process means a
+        # leaked ledger entry never goes away.
+        JobProgress.finish(jobInstance.getJobID())
         return RESPONSE
 
 #************************************************************************
@@ -381,6 +402,35 @@ def pathwayAcquisitionStep2_PART2(jobID, userID, selectedCompounds, clusterNumbe
     jobInstance = None
 
     try :
+        # Weights measured over 58 logged step-2 runs. compundsClassification and
+        # hubAnalysis sit inside `if selectedCompounds:` below, so with no
+        # metabolites selected that 40.2% never runs — the phase is dropped from
+        # the plan rather than interpolated through, or the bar would stall at
+        # ~45% for the whole of a job that skipped it.
+        # Two different shapes, not one shape with a phase removed. Dropping
+        # `classify` and renormalising the rest was measured wrong by 44 points:
+        # the pathways phase also carries getGlobalExpressionData and
+        # parseRegulationPerCondition, which are a rounding error next to a
+        # 32s classification but 57% of the run without one.
+        if selectedCompounds:
+            step2Plan = [
+                ("pathways", "Building pathway list", 4.6),
+                ("classify", "Classifying compounds", 40.2),
+                ("metagenes", "Computing metagenes", 49.9),
+                ("store", "Saving results", 3.7),
+            ]
+            expectedTotal = 76.5
+        else:
+            step2Plan = [
+                ("pathways", "Building pathway list", 57.0),
+                ("metagenes", "Computing metagenes", 38.0),
+                ("store", "Saving results", 5.0),
+            ]
+            expectedTotal = 30.0
+        # p50 76.5s over 58 logged runs with metabolites; ~30s without.
+        # See the note on step 1's expectedTotal for how it self-corrects.
+        JobProgress.begin(jobID, "step2", step2Plan, expectedTotal=expectedTotal)
+
         logging.info("STEP2 - LOADING JOB " + jobID + "...")
         jobInstance = JobInformationManager().loadJobInstance(jobID)
 
@@ -401,6 +451,7 @@ def pathwayAcquisitionStep2_PART2(jobID, userID, selectedCompounds, clusterNumbe
         logging.info("STEP2 - UPDATING SELECTED COMPOUNDS LIST...DONE")
 
         logging.info("STEP2 - GENERATING PATHWAYS INFORMATION...")
+        JobProgress.enter(jobID, "pathways")
         summary = jobInstance.generatePathwaysList()
 
         logging.info("STEP2 - GENERATE COMPOUND CLASSIFICATION")
@@ -409,6 +460,7 @@ def pathwayAcquisitionStep2_PART2(jobID, userID, selectedCompounds, clusterNumbe
         globalExpressionData = jobInstance.getGlobalExpressionData()
 
         if selectedCompounds:
+            JobProgress.enter(jobID, "classify")
             mappingComp, pValueInDict, classificationDict, exprssionMetabolites, adjustPvalue, totalRelevantFeaturesInCategory, featureSummary, compoundRegulateFeatures = jobInstance.compundsClassification(metaboliteClassThreshold)
             hubAnalysisResult = jobInstance.hubAnalysis( ROOT_DIRECTORY )
 
@@ -440,6 +492,7 @@ def pathwayAcquisitionStep2_PART2(jobID, userID, selectedCompounds, clusterNumbe
         # Step 3. GENERATING METAGENES INFORMATION
         #****************************************************************
         logging.info("STEP2 - GENERATING METAGENES INFORMATION...")
+        JobProgress.enter(jobID, "metagenes")
         jobInstance.generateMetagenesList(ROOT_DIRECTORY, clusterNumber)
         logging.info("STEP2 - GENERATING METAGENES INFORMATION...DONE")
 
@@ -449,6 +502,7 @@ def pathwayAcquisitionStep2_PART2(jobID, userID, selectedCompounds, clusterNumbe
         # Step 4. Save the all the Matched Compounds and pathways in MongoDB
         #************************************************************************
         logging.info("STEP2 - SAVING NEW JOB DATA..." )
+        JobProgress.enter(jobID, "store")
         JobInformationManager().storeJobInstance(jobInstance, 2)
         logging.info("STEP2 - SAVING NEW JOB DATA...DONE" )
 
@@ -528,6 +582,7 @@ def pathwayAcquisitionStep2_PART2(jobID, userID, selectedCompounds, clusterNumbe
     except Exception as ex:
         handleException(RESPONSE, ex, __file__ , "pathwayAcquisitionStep2_PART2", userID=userID)
     finally:
+        JobProgress.finish(jobID)
         jobInstance.cleanDirectories()
         return RESPONSE
 

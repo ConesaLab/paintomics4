@@ -31,6 +31,7 @@
 #TODO: AUTO REMOVE JOBS
 
 import logging
+import time
 from threading import RLock as threading_lock, Thread
 from collections import deque
 from enum import Enum
@@ -276,6 +277,9 @@ class Worker():
             #Execute the function
             fn = job.fn
             args = job.args
+            # The moment work actually begins — everything before this was queue
+            # wait, which the user should see as "waiting", not as slow progress.
+            job.started_at = time.monotonic()
             job.status = JobStatus.STARTED
             job.result = fn(*args)
             job.status = JobStatus.FINISHED
@@ -311,6 +315,17 @@ class Job:
         self.status = JobStatus.QUEUED
         self.result = None
         self.error_message=None
+        # time.monotonic(), not time.time(): these are only ever subtracted from
+        # each other, and a wall clock can step (NTP) and produce a negative
+        # duration. queued_at is set here because Job() is constructed inside
+        # enqueue(); started_at is set by the worker that claims it.
+        #
+        # Without these, "how long has this job been running" was measured from
+        # Job.startTime in the *domain* object, which is stamped in the web
+        # request before the files are even saved — so upload and queue wait
+        # were silently billed as job runtime.
+        self.queued_at = time.monotonic()
+        self.started_at = None
 
     def set_id(self, _id):
         self.id = _id

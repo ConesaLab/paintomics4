@@ -251,7 +251,57 @@ var paProgressLastElapsed = 0;
  *
  * @param {Object} progress {elapsed, estimated} in seconds; estimated may be absent
  */
+/**
+ * Draws the bar from the server's own fraction, which is the modern path.
+ *
+ * The server now reports where the job actually is rather than a ratio of two
+ * clocks, so there is nothing to reconstruct here: no max-percent ratchet (the
+ * fraction is monotone at the source) and no guessing whether an absent estimate
+ * means "too early to tell" or "overrunning" — the phase says which.
+ *
+ * @param {Object} p the server's `progress` object
+ * @returns {Boolean} true if it drew; false if the payload was not usable
+ */
+function renderProgressDetailed(p) {
+    if (!p || typeof p.fraction !== "number") {
+        return false;
+    }
+
+    var container = $("#messageDialogProgress");
+    var percent = Math.max(1, Math.min(99.9, p.fraction * 100));
+
+    container.removeClass("paProgressIndeterminate");
+    container.find(".paProgressFill").css("width", percent.toFixed(1) + "%");
+
+    // "Mapping identifiers — step 2 of 3". The phase and the counts are facts;
+    // only the seconds below are modelled.
+    var label = (p.label || "Working") + " — step " + p.phaseIndex + " of " + p.phaseCount;
+    if (p.detail) {
+        label += " (" + p.detail + ")";
+    }
+    container.find(".paProgressElapsed").text(label);
+
+    // A band, not a point. Identical input on an idle machine varies enough
+    // run-to-run that two significant figures would be inventing precision; the
+    // old single number was wrong by +58% at the end of a measured run.
+    if (typeof p.remainingLow === "number") {
+        container.find(".paProgressEta").text(
+            "about " + formatDuration(p.remainingLow) + "–" + formatDuration(p.remainingHigh) + " left");
+    } else {
+        container.find(".paProgressEta").text("estimating…");
+    }
+
+    return true;
+}
+
 function renderProgress(progress) {
+    // Preferred path: the job told us where it is. Falls through to the old
+    // elapsed/estimate reconstruction when talking to a server that predates
+    // JobProgress, or for a job type that does not report phases.
+    if (renderProgressDetailed(progress.detailed)) {
+        return;
+    }
+
     var elapsed = Number(progress.elapsed) || 0;
 
     // `estimatedFinishTime` is the time *remaining*, not the total run time:

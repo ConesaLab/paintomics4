@@ -28,6 +28,7 @@ except ImportError:
 from re import sub
 
 from src.common.PySiQ import Queue
+from src.common import JobProgress
 
 from src.conf.serverconf import *
 
@@ -376,45 +377,47 @@ class Application(object):
                 self.queue.get_result(jobID) #remove job
                 return Response().setStatus(400).setContent({"success": False, "status" : str(jobInstance.get_status()), "message": jobInstance.error_message}).getResponse()
             else:
-                jobRunningTime = 0
-                timeSpent = 0
-                jobArgs = jobInstance.args[0]
+                # The job reports its own position now (src/common/JobProgress.py).
+                # What was here before was a closed-form guess,
+                #     genes * databases * omics / 20000 * 15
+                # whose inputs are filled by the very job it estimates, so it read
+                # zero for the first 18s of a measured 83s run and then overshot by
+                # +58% (predicted 131.4s). The bar showed 62% when the job was
+                # 98.7% done. It also never applied to step 2 at all, because
+                # args[0] there is a jobID string and the hasattr() guard was
+                # false: every poll of a 51.6s step-2 run returned zeros.
+                import time
 
-                if hasattr(jobArgs, 'geneBasedInputOmics'):
-                    import time
+                queuedFor = 0
+                runningFor = 0
+                if jobInstance.started_at is not None:
+                    runningFor = round(time.monotonic() - jobInstance.started_at, 2)
+                    queuedFor = round(jobInstance.started_at - jobInstance.queued_at, 2)
+                elif jobInstance.queued_at is not None:
+                    queuedFor = round(time.monotonic() - jobInstance.queued_at, 2)
 
-                    # inputGenesData is not input: validateInput fills it one omic
-                    # at a time *while this job runs*. So this estimate is near
-                    # zero on the first poll and grows by roughly the omic count
-                    # over the run - which made the reported remainder grow too,
-                    # and the client's progress bar slide backwards mid-job
-                    # (measured: 48.7% -> 44.6%).
-                    #
-                    # The formula is the only estimate available and it converges
-                    # on the right answer as the genes arrive, so what is kept is
-                    # the largest total seen rather than the latest. That total is
-                    # non-decreasing, which stops the remainder jumping back up
-                    # each time another omic lands.
-                    #
-                    # Deliberately not clamping the remainder to fall with the
-                    # clock: tried, and it latches onto the near-zero estimate from
-                    # the first poll and reports "no time left" for the whole job.
-                    # Until the estimate is worth anything the remainder is 0, the
-                    # client shows an indeterminate bar, and it becomes a real
-                    # percentage once there is something to divide by.
-                    omicType = len(jobArgs.geneBasedInputOmics)
-                    inputGenesDataLen = len(jobArgs.inputGenesData)
-                    databasesLen = len(jobArgs.databases)
+                content = {
+                    "success": False,
+                    "status": str(jobInstance.get_status()),
+                    "queuedFor": queuedFor,
+                    "runningFor": runningFor,
+                    # Kept so an older cached client keeps working: it reads
+                    # timeSpent/estimatedFinishTime and divides them. Both are now
+                    # derived from the real fraction rather than the old formula.
+                    "timeSpent": runningFor,
+                    "estimatedFinishTime": 0,
+                }
 
-                    timeSpent = round((time.time() - jobArgs.startTime), 2)
-                    estimatedTotal = inputGenesDataLen * databasesLen * omicType / 20000 * 15
+                progress = JobProgress.snapshot(jobID)
+                if progress is not None:
+                    content["progress"] = progress
+                    if "remainingHigh" in progress:
+                        # Legacy field gets the middle of the band; the modern
+                        # client reads remainingLow/High off `progress` instead.
+                        content["estimatedFinishTime"] = round(
+                            (progress["remainingLow"] + progress["remainingHigh"]) / 2.0, 1)
 
-                    estimatedTotal = max(estimatedTotal, getattr(jobArgs, 'maxEstimatedTotal', 0))
-                    jobArgs.maxEstimatedTotal = estimatedTotal
-
-                    jobRunningTime = max(0, round(estimatedTotal - timeSpent, 2))
-
-                return Response().setContent({"success": False, "status" : str(jobInstance.get_status()), "estimatedFinishTime": jobRunningTime, "timeSpent": timeSpent}).getResponse()
+                return Response().setContent(content).getResponse()
         #*******************************************************************************************
         ##* COMMON JOB HANDLERS - END
         #############################################################################################
