@@ -813,7 +813,7 @@ function PA_Step3JobView() {
 					//'<a href="javascript:void(0)" class="button btn-default btn-right backButton"><i class="fa fa-arrow-left"></i> Go back</a>'
 					'<a href="javascript:void(0)" class="button btn-default btn-right mappingButton"><i class="fa fa-database"></i> Hide mapping info</a>' +
 					'<a href="javascript:void(0)" class="button btn-default btn-right" id="sharingButton"><i class="fa fa-share-alt"></i> Sharing options</a>' +
-					'<a href="javascript:void(0)" class="button btn-info btn-right" id="aiInterpretButton" style="display:none;"><i class="fa fa-lightbulb-o"></i> AI Interpret</a>' +
+					'<a href="javascript:void(0)" class="button btn-info btn-right" id="aiInterpretButton" style="display:none;">' + getAIMark(15) + ' AI Interpret</a>' +
 					'<div id="warningMessage" style="display: none;"></div>'
 				},{ //THE SUMMARY PANEL
 					xtype: 'container', itemId: "pathwaysSummaryPanel",
@@ -3747,7 +3747,22 @@ function PA_Step3PathwayTableView() {
 				   Reactome ones ("Regulation of Insulin-like Growth Factor...")
 				   do not fit any column width this table can afford. Truncated
 				   on screen but recoverable on hover, rather than simply lost. */
-				renderer: truncatableTextRenderer
+				renderer: truncatableTextRenderer,
+				/* flex alone is not enough here. This grid declares 52 leaf
+				   columns - one per omic per statistic - and hides most of them
+				   when a job carries more than five omics. Whatever ExtJS does
+				   with the flex share across that many hidden siblings, it stops
+				   handing this column anything: measured on a six-omic job it came
+				   out at 40px, the framework's default column minimum, while 500px
+				   of the grid sat unused. 40px is two characters and an ellipsis,
+				   so the column that names the row became the only unreadable one
+				   in the table.
+
+				   A real minimum is what survives that arithmetic. 220px fits the
+				   median KEGG name outright and leaves the long Reactome ones
+				   recoverable on hover, and when the omic columns are expanded the
+				   grid scrolls sideways rather than crushing this one. */
+				minWidth: 220
 			},{
 				text: '', dataIndex: 'classification',
 				filterable: true, width:10, resizable: false,
@@ -4760,7 +4775,13 @@ function PA_Step3HubAnalysis () {
 							xtype: 'box',
 							flex: 2,
 							border: 0,
-							height: 70,
+							// A minimum, not a height. Pinned at 70 this clipped its
+							// own second line: an h2 and two .infoTip lines measure
+							// 76px, so the last one was cut in half by the column
+							// headers below it. A minimum keeps the spacing this was
+							// chosen for and still lets the header grow when the
+							// text wraps, which it also does at narrow widths.
+							minHeight: 70,
 							html: '<h2 id="EnrichmentSection"> Metabolites Hub Analysis</h2>' +
 								' <span class="infoTip">Neighbouring genes for each metabolite at <b> 1 to 4 network steps </b> are identified.</b></span> ' +
 								' <span class="infoTip">The percentile and binomial tests are used to identify metabolites with a high density of DEGs in their proximal network.</span>',
@@ -5374,7 +5395,7 @@ function PA_Step3MetaboliteView() {
 							xtype: 'box',
 							flex: 1,
 							border: 0,
-							height: 35,
+							minHeight: 35,
 							html: '<h2 id="EnrichmentSection"> Metabolite class activity analysis</h2>',
 							style: {
 								backgroundColor: 'white'
@@ -5860,7 +5881,10 @@ function PA_Step3RegulationView() {
 					xtype: "box",
 					flex: 2,
 					border: 0,
-					height: 70,
+					// See the Hub Analysis header above: a minimum rather than a
+					// height. This one carries a single long .infoTip that wraps to
+					// three lines well before the window gets narrow.
+					minHeight: 70,
 					html: '<h2 id="MORERegulationSection">MORE Regulation Analysis</h2>' +
 					      ' <span class="infoTip">Per-condition regression coefficients from MORE\'s ' +
 					      '<b>RegulationPerCondition</b>. Each row is a target↔regulator pair; Group columns ' +
