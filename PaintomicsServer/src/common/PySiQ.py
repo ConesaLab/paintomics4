@@ -107,8 +107,23 @@ class Queue:
                 while job_id in self.jobs:
                     job_id = self.get_random_id()
             elif job_id in self.jobs:
-                # Check if it has finished, then remove
-                if self.jobs.get(job_id).status == JobStatus.FINISHED:
+                # A finished run is cleared so the next step can be submitted
+                # under the same id -- step 1 and step 2 both enqueue as
+                # `jobID`, so without this a job could never advance.
+                #
+                # FAILED belongs here for the same reason: that run is over too.
+                # It used to fall to the else, and since nothing else removes a
+                # failed entry, the id stayed blocked until the server was
+                # restarted. The one route that clears it is the status poll
+                # (`is_failed()` -> `get_result`), so the entry survives exactly
+                # when the client stops polling before seeing the failure -- a
+                # closed tab, a dropped connection. Every retry then got
+                #     RuntimeError: Job already at the queue
+                # which is not true: nothing is queued, the corpse is. The user
+                # is told to wait for a job that will never run, and the only
+                # way out is to resubmit the data as a new job.
+                if self.jobs.get(job_id).status in (JobStatus.FINISHED,
+                                                    JobStatus.FAILED):
                     self.get_result(job_id)
                 else:
                     raise RuntimeError("Job already at the queue (Job id : " + job_id + ")")
