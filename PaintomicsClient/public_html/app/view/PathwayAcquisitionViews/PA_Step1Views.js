@@ -485,8 +485,8 @@ function PA_Step1JobView() {
 						{
 							xtype: "container", layout: { type: "vbox", align: "stretch" }, flex: 0.5, items: [
 							{
-								xtype: "textfield", 
-								fieldLabel: "Enter a job description", 
+								xtype: "textfield",
+								fieldLabel: "Enter a job description",
 								allowBlank: true,
 								name: 'jobDescription',
 								style: "margin: 10px 26px 10px 20px;",
@@ -494,34 +494,41 @@ function PA_Step1JobView() {
 								width: 650,
 								flex: 0,
 								maxLength: 100
-							},
-							{
-								xtype: "container", layout: { type: "vbox", align: "stretch" }, flex: 0.6, hidden: false, items: [
-								{
-									xtype: 'checkboxgroup', fieldLabel: 'Databases',
-									style: "margin: 10px 10px 10px 20px;",
-									maxWidth: 650,
-									allowBlank: false,
-									columns: 2,
-									disabled: false,
-									labelWidth: 148,
-									// Hardcoded DBs (as they can be considered static) 
-									items: [
-											// Only for information, KEGG database is added always on server side 
-											{ boxLabel: 'KEGG (required)', name: 'databases[]', inputValue: 'KEGG', checked: true, disabled: true },
-											{ boxLabel: 'MapMan', name: 'databases[]', inputValue: 'MapMan', checked: false },
-											{ boxLabel: 'Reactome', name: 'databases[]', inputValue: 'Reactome', checked: false, id: 'reactomeDB'},
-									]
-								},
-								{
-									xtype: "box", flex: 1, html:
-									'<span class="infoTip" style=" font-size: 12px; margin: 0 26px 10px 196px;">'+
-									' For <span style="color: rgb(211, 21, 108);">some</span> species more than one database might be available. Please check <b><a href="https://paintomics.readthedocs.io/en/latest/1_4_id/" target="_blank"> Supported ID and databases</a></b>. Choose which ones do you want to include in the analysis.' +
-									'</span>'
-								}
-								]
 							}
 							]
+						}
+						]
+					},
+					/* Databases is a row of its own, not the second item of the right-hand
+					   column. Stacked there it made that column about 110px taller than the
+					   left one, and an hbox column is only as tall as its own content - so
+					   everything under the organism combo, the whole left half of section 1,
+					   was a hole of that size. As a row it sits under both columns, starts on
+					   the same left edge as Organism, and the section now ends where its last
+					   field ends. */
+					{
+						xtype: "container", layout: { type: "vbox", align: "stretch" }, items: [
+						{
+							xtype: 'checkboxgroup', fieldLabel: 'Databases',
+							style: "margin: 4px 10px 10px 26px;",
+							maxWidth: 650,
+							allowBlank: false,
+							columns: 2,
+							disabled: false,
+							labelWidth: 148,
+							// Hardcoded DBs (as they can be considered static)
+							items: [
+									// Only for information, KEGG database is added always on server side
+									{ boxLabel: 'KEGG (required)', name: 'databases[]', inputValue: 'KEGG', checked: true, disabled: true },
+									{ boxLabel: 'MapMan', name: 'databases[]', inputValue: 'MapMan', checked: false },
+									{ boxLabel: 'Reactome', name: 'databases[]', inputValue: 'Reactome', checked: false, id: 'reactomeDB'},
+							]
+						},
+						{
+							xtype: "box", html:
+							'<span class="infoTip" style=" font-size: 12px; margin: 0 26px 10px 196px;">'+
+							' For <span style="color: rgb(211, 21, 108);">some</span> species more than one database might be available. Please check <b><a href="https://paintomics.readthedocs.io/en/latest/1_4_id/" target="_blank"> Supported ID and databases</a></b>. Choose which ones do you want to include in the analysis.' +
+							'</span>'
 						}
 						]
 					},
