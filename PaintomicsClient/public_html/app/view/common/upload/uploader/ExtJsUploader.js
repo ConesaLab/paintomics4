@@ -87,7 +87,7 @@ Ext.define('Ext.upload.uploader.ExtJsUploader', {
         this.conn = this.initConnection();
 
         /*
-         * Passing the File object directly as the "rawFata" option.
+         * Passing the File object directly as the "rawData" option.
          * Specs:
          *   https://dvcs.w3.org/hg/xhr/raw-file/tip/Overview.html#the-send()-method
          *   http://dev.w3.org/2006/webapi/FileAPI/#blob
