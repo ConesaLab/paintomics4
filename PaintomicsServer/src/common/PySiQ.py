@@ -179,34 +179,92 @@ class Worker():
         self.status = WorkerStatus.IDLE
         self.must_die = False
         self.job = None
+        # Guards the claim sequence in notify(). See there for why.
+        self.lock = threading_lock()
 
     def notify(self):
-        if self.status != WorkerStatus.WORKING:
+        """Take one job, if this worker is free. Safe to call concurrently.
+
+        This used to check the status, dequeue, assign self.job and start a
+        thread without holding anything. Queue.dequeue() takes the queue lock,
+        but the sequence around it was not atomic and self.job is a single slot
+        on a shared Worker -- and Queue.enqueue() calls notify_workers() after
+        releasing its own lock, so two submissions arriving together produce
+        two concurrent notify() calls on the same worker.
+
+        Both then saw a non-WORKING status, both dequeued -- taking two
+        different jobs -- and the second assignment to self.job discarded the
+        first. Observed on the server by submitting two example jobs at once:
+        one was taken off the deque and never executed, still reporting QUEUED
+        three minutes later with no error, while the other was started twice
+        and had two threads writing the same output directory ("Failed while
+        compressing directory", then AttributeError: 'NoneType' object has no
+        attribute 'result' as one thread's finally cleared self.job under the
+        other).
+
+        The status is claimed inside the lock and *before* the thread starts:
+        setting it in run() left exactly the window a second notify() needed.
+        self.job is checked too, so a worker holding a job cannot be handed
+        another even if its status has not been updated yet.
+        """
+        self.lock.acquire()
+        try:
+            if self.status == WorkerStatus.WORKING or self.job is not None:
+                return
             if self.must_die:
-                self.queue.remove_worker(self.id)
+                mustRemove = True
             else:
                 job = self.queue.dequeue()
-                if job != None:
-                    self.job = job
-                    WorkerThread(self).start()
+                if job is None:
+                    return
+                self.job = job
+                self.status = WorkerStatus.WORKING
+                WorkerThread(self).start()
+                return
+        finally:
+            self.lock.release()
+
+        # remove_worker() calls back into notify_workers(), so it must not run
+        # while this worker's lock is held.
+        if mustRemove:
+            self.queue.remove_worker(self.id)
 
     def run(self):
+        # Taken once, under the lock, rather than read from self.job
+        # throughout: notify() owns that slot, and reading it repeatedly is
+        # what let one thread's finally clear it while another was still using
+        # it ("AttributeError: 'NoneType' object has no attribute 'result'").
+        self.lock.acquire()
+        try:
+            job = self.job
+        finally:
+            self.lock.release()
+
+        if job is None:                      # nothing claimed; nothing to do
+            return
+
         try:
             logging.info("Worker " + self.id + " starts working...")
-            self.status = WorkerStatus.WORKING
             #Execute the function
-            fn = self.job.fn
-            args = self.job.args
-            self.job.status=JobStatus.STARTED
-            self.job.result= fn(*args)
-            self.job.status=JobStatus.FINISHED
+            fn = job.fn
+            args = job.args
+            job.status = JobStatus.STARTED
+            job.result = fn(*args)
+            job.status = JobStatus.FINISHED
         except Exception as ex:
-            self.job.status = JobStatus.FAILED
-            self.job.error_message=str(ex)
+            job.status = JobStatus.FAILED
+            job.error_message = str(ex)
         finally:
             logging.info("Worker " + self.id + " stops working...")
-            self.status=WorkerStatus.IDLE
-            self.job=None
+            # Released under the lock so it cannot cross a concurrent claim in
+            # notify(); the follow-up notify() is called after releasing, so a
+            # long dequeue never blocks another submission.
+            self.lock.acquire()
+            try:
+                self.status = WorkerStatus.IDLE
+                self.job = None
+            finally:
+                self.lock.release()
             self.notify()
 
 class WorkerThread (Thread):
