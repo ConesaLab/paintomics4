@@ -87,9 +87,8 @@
 .ai-widget-panel.is-fullscreen .ai-widget-messages {
     font-size: 14px;
 }
-.ai-widget-panel.is-fullscreen .ai-msg-bubble {
-    max-width: 800px;
-}
+/* The fullscreen bubble's max-width is set with the rest of its type further
+   down, at 900px. An earlier 800px stood here and was simply overridden. */
 
 /* ── Header ── */
 .ai-widget-header {

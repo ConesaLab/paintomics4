@@ -2937,9 +2937,20 @@ a.toolbarOption {
 	float: right;
 	cursor: pointer;
 }
-div.contentbox {
-	max-width: var(--main-max-width);
-}
+/* `div.contentbox { max-width: var(--main-max-width) }` stood here, and it
+   quietly won an argument the page-column block up at #mainViewCenterPanel
+   thought it had settled. That block ends "`.contentbox` no longer caps itself,
+   so surfaces fill the column"; this rule has the same selector and the same
+   specificity, sits 1000 lines further down, and so took precedence. Measured on
+   the deployed page, every div.contentbox computed max-width: 1900px, not none.
+
+   Nothing moved when it went. The column is enforced by padding on the centre
+   panel, so a content box is `100vw - 2 * --pa-gutter` wide, and that gutter is
+   `max(40px, (100vw - 1400px) / 2)` - which holds the inner width at 1400px
+   however wide the viewport gets. A 1900px ceiling can never be reached, so it
+   was doing nothing except contradicting the comment that explains the layout.
+   Checked before removing: forcing it to none on the live page left all three
+   boxes at 1339px. */
 div.contentbox a.toolbarOption {
 	font-size: 15px;
 	padding: 4px 5px 0px 5px;
