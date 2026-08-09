@@ -19,6 +19,18 @@ from src.conf.serverconf import (AI_INTERPRETATION_ENABLED, AI_PROVIDERS,
 # Jobs stuck longer than this are considered dead (e.g. killed by server reload)
 AI_STALE_JOB_TIMEOUT = timedelta(minutes=10)
 
+def _consented(jobID):
+    """Whether this job's owner ticked "Enable AI pathway interpretation".
+
+    Every route that sends anything outward asks this. A job that cannot be
+    loaded counts as not consenting: the alternative is treating an unknown
+    job as permission, which is the wrong way round for a question about
+    someone else's data.
+    """
+    jobInstance = JobInformationManager().loadJobInstance(jobID)
+    return bool(jobInstance is not None and jobInstance.getAIConsent())
+
+
 def aiInterpretInitiate(REQUEST, RESPONSE, QUEUE_INSTANCE):
     """Start or re-check the AI interpretation pipeline for a job."""
     userID = None
@@ -239,6 +251,15 @@ def aiInterpretChat(REQUEST, RESPONSE):
         if record is None or record.get("status") != "done":
             raise UserWarning("Report must be completed before chatting.")
 
+        # Same consent the initiate endpoint checks. This one sends the
+        # user's question and the job's context to the same external service,
+        # so declining has to stop it here too -- gating only the pipeline
+        # would leave three other ways out.
+        if not _consented(jobID):
+            raise UserWarning(
+                "AI interpretation was not enabled for this job, so nothing "
+                "about it can be sent to the external AI service.")
+
         # Build conversation context
         report = record.get("report", "")
         conversation = record.get("conversation", [])
@@ -301,6 +322,12 @@ def aiGenerateExpDesign(REQUEST, RESPONSE):
         jobInstance = JobInformationManager().loadJobInstance(jobID)
         if jobInstance is None:
             raise UserWarning("Job " + jobID + " was not found.")
+
+        # See _consented: this route sends job context outward as well.
+        if not jobInstance.getAIConsent():
+            raise UserWarning(
+                "AI interpretation was not enabled for this job, so nothing "
+                "about it can be sent to the external AI service.")
 
         # Build a summary of uploaded omics
         omics_summary = []
@@ -386,6 +413,12 @@ def aiInterpretPathway(REQUEST, RESPONSE):
         jobInstance = JobInformationManager().loadJobInstance(jobID)
         if jobInstance is None:
             raise UserWarning("Job " + jobID + " was not found.")
+
+        # See _consented: this route sends job context outward as well.
+        if not jobInstance.getAIConsent():
+            raise UserWarning(
+                "AI interpretation was not enabled for this job, so nothing "
+                "about it can be sent to the external AI service.")
 
         record = dao.find_by_job_id(jobID) or {}
         experimentDesign = record.get("experimentDesign", "")

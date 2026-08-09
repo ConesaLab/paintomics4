@@ -138,6 +138,62 @@ class AIConsentEnforcedTest(unittest.TestCase):
                                 "%r should be consent" % (value,))
 
 
+    def test_every_outbound_handler_checks_consent(self):
+        """The initiate gate alone left three other ways out.
+
+        Chat, the per-pathway interpretation and the experiment-design helper
+        each build an LLMClient and send job context to the same service, and
+        none of them consulted the consent. Any handler that reaches outward
+        has to ask.
+        """
+        unguarded = []
+        for name, source in self.handlers.items():
+            if name.startswith("_"):
+                continue
+            body = _stripComments(source or "")
+            sendsOutward = "LLMClient(" in body or "run_ai_pipeline" in body
+            asks = "getAIConsent" in body or "_consented(" in body
+            if sendsOutward and not asks:
+                unguarded.append(name)
+
+        self.assertEqual(sorted(unguarded), [],
+                         "these send job data to the external service without "
+                         "checking consent: %s" % sorted(unguarded))
+
+    def test_the_read_only_routes_are_not_gated(self):
+        """Viewing a report already produced must keep working.
+
+        Four jobs on this machine have a finished report but aiConsent False.
+        Gating the read would hide results the user can already see, which
+        protects nobody -- the sending already happened.
+        """
+        for name in ("aiInterpretStatus", "aiInterpretReport"):
+            body = _stripComments(self.handlers.get(name, ""))
+            with self.subTest(handler=name):
+                self.assertNotIn("_consented(", body,
+                                 "%s refuses to show a stored report, which "
+                                 "hides results rather than preventing a send"
+                                 % name)
+
+    def test_an_unloadable_job_does_not_count_as_consent(self):
+        """_consented must fail closed."""
+        import src.servlets.AIInterpretServlet as servlet
+
+        original = servlet.JobInformationManager
+
+        class _NoJob:
+            def loadJobInstance(self, jobID):
+                return None
+
+        servlet.JobInformationManager = lambda: _NoJob()
+        try:
+            self.assertFalse(servlet._consented("NOSUCHJOB"),
+                             "a job that cannot be loaded was treated as "
+                             "having consented")
+        finally:
+            servlet.JobInformationManager = original
+
+
 def main():
     suite = unittest.TestLoader().loadTestsFromModule(sys.modules[__name__])
     result = unittest.TextTestRunner(verbosity=2).run(suite)
