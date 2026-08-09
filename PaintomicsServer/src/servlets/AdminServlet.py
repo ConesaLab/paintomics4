@@ -339,6 +339,54 @@ def clearFailedData():
 #----------------------------------------------------------------
 # USERS
 #----------------------------------------------------------------
+# The fields the admin panel actually renders, and the only ones that leave the
+# server. Taken from admin/templates/user-row.tpl.html, the only template that
+# binds user.*: it reads exactly these seven, plus usedSpace, which is computed
+# per request rather than stored and so is added separately.
+ADMIN_USER_FIELDS = ("userID", "userName", "email", "affiliation",
+                     "creation_date", "last_login", "is_guest")
+
+
+def summarizeUserForAdmin(userInstance, usedSpace):
+    """The admin view of a user: what the panel displays, and nothing else.
+
+    The list used to go out as the User objects themselves. MyJSONEncoder
+    serialises anything with a toBSON() by calling it, and User does not
+    override the one it inherits from Model, which returns `self.__dict__`
+    whole. So the response carried every attribute a User has, including the
+    four the panel never reads:
+
+        password, resetToken, resetPassword, sessionToken
+
+    Measured against the live collection: `password` is populated on all 16
+    stored users. It is sha1(password) with no salt -- see the four
+    `sha1(password.encode('utf-8')).hexdigest()` call sites in
+    UserManagementServlet -- so an unsalted SHA-1 of a common password is
+    recovered from a rainbow table instantly, and the stored value for one of
+    these accounts is d033e22ae348aeb5660fc2140aef11803e5c1c2, which is
+    SHA-1("admin"). Password reuse being what it is, that is the user's
+    password elsewhere too, not just here.
+
+    The route is admin-gated, so this is defence in depth rather than an open
+    door. It still matters: the hashes land in a browser, in its memory and
+    disk cache, in any intermediary that logs response bodies, and in the
+    devtools of whoever is looking at the panel. None of that is needed for a
+    page that shows names, e-mail addresses and disk usage.
+
+    Whitelisted rather than blacklisted so a field added to User later is
+    excluded by default -- the failure mode of forgetting to add a name here is
+    a missing column, not another silent leak.
+
+    Not fixed in User.toBSON, which would be the tempting single place: that
+    same method is what UserDAO.insert and update persist, so dropping the
+    password from it would write accounts that can never log in.
+    """
+    summary = {field: getattr(userInstance, field, None)
+               for field in ADMIN_USER_FIELDS}
+    summary["usedSpace"] = usedSpace
+    return summary
+
+
 def adminServletGetAllUsers(request, response):
     """
     This function obtains a list of all the users registered in the system including different details
@@ -347,6 +395,7 @@ def adminServletGetAllUsers(request, response):
     @param {Request} request, the request object
     @param {Response} response, the response object
     """
+    daoInstance = None
     try :
         #****************************************************************
         # Step 0.CHECK IF VALID USER SESSION
@@ -361,18 +410,28 @@ def adminServletGetAllUsers(request, response):
         # Step 1. GET THE LIST OF ALL USERS
         #****************************************************************
         logging.info("STEP1 - GET THE LIST OF ALL USERS...")
-        userList = UserDAO().findAll()
-        for userInstance in userList:
-            userInstance.usedSpace = 0
-            if os_path.isdir(CLIENT_TMP_DIR + str(userInstance.getUserId())):
-                userInstance.usedSpace = dir_total_size(CLIENT_TMP_DIR + str(userInstance.getUserId()))
+        daoInstance = UserDAO()
+        userList = daoInstance.findAll()
 
-        response.setContent({"success": True, "userList": userList,  "availableSpace": MAX_CLIENT_SPACE, "max_jobs_days": MAX_JOB_DAYS, "max_guest_days" : MAX_GUEST_DAYS})
+        userSummaries = []
+        for userInstance in userList:
+            usedSpace = 0
+            if os_path.isdir(CLIENT_TMP_DIR + str(userInstance.getUserId())):
+                usedSpace = dir_total_size(CLIENT_TMP_DIR + str(userInstance.getUserId()))
+            userSummaries.append(summarizeUserForAdmin(userInstance, usedSpace))
+
+        response.setContent({"success": True, "userList": userSummaries,  "availableSpace": MAX_CLIENT_SPACE, "max_jobs_days": MAX_JOB_DAYS, "max_guest_days" : MAX_GUEST_DAYS})
 
     except Exception as ex:
         handleException(response, ex, __file__ , "adminServletGetAllUsers")
 
     finally:
+        # Closed in a finally for the same reason as the handlers below:
+        # DBmanager builds a new MongoClient per DAO, each with its own monitor
+        # threads, and this one was never closed at all -- the admin panel polls
+        # it, so every refresh leaked a client.
+        if daoInstance is not None:
+            daoInstance.closeConnection()
         return response
 
 def adminServletDeleteUser(request, response, toDeleteUserID):
