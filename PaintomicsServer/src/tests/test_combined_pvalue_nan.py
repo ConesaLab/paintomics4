@@ -128,6 +128,91 @@ class CombinedPvalueNaNTest(unittest.TestCase):
         self.assertAlmostEqual(withSentinel, without, places=12)
 
 
+class FDRCorrectionNaNTest(unittest.TestCase):
+    """The other half of the same bug, in the correction rather than the combine.
+
+    `_usablePvalues` guards the combining functions. `adjustPvalues` is a
+    separate path -- it hands the raw dict to statsmodels' multipletests, which
+    propagates a NaN into every corrected value. One NaN among three p-values
+    produced six non-finite numbers, both methods, all entries. Same
+    consequence: jsonify writes them as the bare token `NaN` and the client
+    rejects the whole response.
+
+    Keys are kept rather than dropped because the caller subscripts them --
+    `{adjust_method: pvalues[pathway_id] for ...}` would raise KeyError -- and
+    come back as 1.0, which is what the rest of the module returns when there
+    is nothing to go on.
+    """
+
+    def _adjust(self, mapping):
+        from src.common.Statistics import adjustPvalues
+        return adjustPvalues(mapping)
+
+    def _values(self, result):
+        return [v for method in result.values() for v in method.values()]
+
+    def test_a_nan_does_not_reach_the_corrected_values(self):
+        result = self._adjust({"a": 0.01, "b": NAN, "c": 0.5})
+
+        offenders = [v for v in self._values(result)
+                     if isinstance(v, float) and not math.isfinite(v)]
+        self.assertEqual(offenders, [],
+                         "%d corrected p-values are non-finite and would be "
+                         "serialised as invalid JSON" % len(offenders))
+
+    def test_every_key_survives(self):
+        """The caller indexes the result by pathway id."""
+        mapping = {"a": 0.01, "b": NAN, "c": 0.5}
+
+        result = self._adjust(mapping)
+
+        for method, corrected in result.items():
+            with self.subTest(method=method):
+                self.assertEqual(set(corrected), set(mapping),
+                                 "a pathway disappeared from the correction, "
+                                 "which raises KeyError in the caller")
+
+    def test_an_unusable_pvalue_becomes_not_significant(self):
+        result = self._adjust({"a": 0.01, "b": NAN})
+
+        for method, corrected in result.items():
+            with self.subTest(method=method):
+                self.assertEqual(corrected["b"], 1.0,
+                                 "an uncorrectable p-value should read as not "
+                                 "significant, never as evidence")
+
+    def test_dropping_a_nan_does_not_move_the_others(self):
+        """The correction of the good values must be unaffected."""
+        clean = self._adjust({"a": 0.01, "b": 0.5})["FDR BH"]
+        withNaN = self._adjust({"a": 0.01, "b": 0.5, "c": NAN})["FDR BH"]
+
+        for key in ("a", "b"):
+            with self.subTest(key=key):
+                self.assertAlmostEqual(clean[key], withNaN[key], places=12)
+
+    def test_the_usable_subset_matches_statsmodels(self):
+        """Checked against the library, not against this implementation."""
+        from statsmodels.sandbox.stats.multicomp import multipletests
+
+        expected = multipletests([0.01, 0.5], method="fdr_bh")[1].tolist()
+        actual = self._adjust({"a": 0.01, "b": 0.5, "c": NAN})["FDR BH"]
+
+        for key, value in zip(("a", "b"), expected):
+            with self.subTest(key=key):
+                self.assertAlmostEqual(actual[key], value, places=12)
+
+    def test_all_unusable_is_not_an_error(self):
+        result = self._adjust({"a": NAN, "b": INF})
+
+        self.assertEqual(set(result["FDR BH"]), {"a", "b"})
+        self.assertEqual(set(self._values(result)), {1.0})
+
+    def test_an_empty_correction_is_still_empty(self):
+        """The pre-existing ZeroDivisionError guard must keep working."""
+        self.assertEqual(self._adjust({}), {"FDR BH": {}, "FDR BY": {}})
+
+
+
 def main():
     suite = unittest.TestLoader().loadTestsFromModule(sys.modules[__name__])
     result = unittest.TextTestRunner(verbosity=2).run(suite)

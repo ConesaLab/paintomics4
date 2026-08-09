@@ -125,7 +125,37 @@ def adjustPvalues(pvaluesList):
     if not pvaluesList:
         return {label: {} for label in adjust_methods.values()}
 
-    adjusted_pvalues = {adjust_methods[adjust_method]: dict(zip(pvaluesList.keys(), multipletests(list(pvaluesList.values()), method = adjust_method)[1].tolist())) for adjust_method in adjust_methods.keys()}
+    # Non-finite input is dropped before correcting, for the same reason
+    # _usablePvalues drops it before combining -- and this was the half of that
+    # fix that got missed. multipletests propagates a NaN: one NaN among three
+    # p-values produced six non-finite numbers here, every corrected value in
+    # both methods. Those reach jsonify as the bare token `NaN`, which is not
+    # valid JSON, so the client's JSON.parse rejects the entire response.
+    #
+    # calculateFisher is a live source of NaN -- hypergeom.sf returns it when
+    # the sample is larger than the population, e.g. calculateFisher(10, 20, 5,
+    # 8) -- so the same value that motivated the guard in _usablePvalues
+    # reaches this function too.
+    #
+    # The keys stay, because the caller subscripts them directly:
+    #     {adjust_method: pvalues[pathway_id] for ...}
+    # would raise KeyError on a dropped pathway. They come back as 1.0, which
+    # is what the rest of this module already returns when there is nothing to
+    # go on -- calculateCombinedFisher for an empty list, Stouffer for a
+    # degenerate one.
+    usable = {key: value for key, value in pvaluesList.items()
+              if isinstance(value, (int, float)) and not isinstance(value, bool)
+              and isfinite(value)}
+    unusable = [key for key in pvaluesList if key not in usable]
+
+    if not usable:
+        return {label: {key: 1.0 for key in pvaluesList}
+                for label in adjust_methods.values()}
+
+    adjusted_pvalues = {adjust_methods[adjust_method]: dict(zip(usable.keys(), multipletests(list(usable.values()), method = adjust_method)[1].tolist())) for adjust_method in adjust_methods.keys()}
+
+    for corrected in adjusted_pvalues.values():
+        corrected.update({key: 1.0 for key in unusable})
 
     return adjusted_pvalues
 
