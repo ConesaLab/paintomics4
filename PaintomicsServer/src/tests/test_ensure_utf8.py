@@ -3,6 +3,14 @@ import os
 import tempfile
 import unittest
 
+import sys
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
+
+# Imported from PathwayAcquisitionJob deliberately, not from src.common.Util
+# where it now lives: that re-export is what Bed2GeneJob, MiRNA2GeneJob and
+# PathwayAcquisitionJob itself all import, so this exercises the path the
+# application actually uses.
 from src.classes.JobInstances.PathwayAcquisitionJob import ensure_utf8
 
 
