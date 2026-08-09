@@ -42,6 +42,27 @@ def aiInterpretInitiate(REQUEST, RESPONSE, QUEUE_INSTANCE):
         if jobInstance is None:
             raise UserWarning("Job " + jobID + " was not found.")
 
+        # The consent the upload page asks for was collected, stored and echoed
+        # back in four responses, and never checked before the pipeline ran.
+        # Posting this endpoint a jobID was enough: measured against a job whose
+        # record says aiConsent False, the request returned success and the
+        # pipeline went through triage, search planning, 8.1s of literature
+        # retrieval and synthesis, reaching out to
+        # https://llm.iiia.es/v1/chat/completions. It stopped there only because
+        # this machine has no API key; a deployment that has one would have sent
+        # the job's analysis summary. The PubMed queries need no key and had
+        # already gone out.
+        #
+        # The checkbox says "sends analysis summaries to external AI service",
+        # so someone clearing it is declining exactly that. Job ids travel --
+        # the results page prints a shareable URL -- so the decision has to be
+        # enforced here rather than by the client choosing not to ask.
+        if not jobInstance.getAIConsent():
+            raise UserWarning(
+                "AI interpretation was not enabled for this job. Re-run the "
+                "analysis with 'Enable AI pathway interpretation' ticked if you "
+                "want its summaries sent to the external AI service.")
+
         # Check idempotency: is the AI pipeline already queued/running?
         ai_job_id = "ai_" + jobID
         existingJob = QUEUE_INSTANCE.fetch_job(ai_job_id)
