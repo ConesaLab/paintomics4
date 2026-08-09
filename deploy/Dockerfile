@@ -2,8 +2,18 @@
 #
 # Two things drive the shape of this file:
 #
-#   1. Python must be 3.9. Flask 1.1.2 / Werkzeug 1.0.1 / Jinja2 2.11.2 /
-#      MarkupSafe 1.1.1 do not import on 3.10+.
+#   1. Python must be 3.11 -- both bounds matter, and requirements.txt carries
+#      the detail. Briefly: >= 3.10 because Pillow 12.3.0, CairoSVG 2.9.0 and
+#      requests 2.34.2 declare it, and every security fix for those three was
+#      unreachable while this said 3.9; <= 3.11 because pandas 1.5.3 publishes
+#      no cp312 wheel and would be built from source against an untested NumPy.
+#
+#      This used to read "Python must be 3.9" because Flask 1.1.2 / Werkzeug
+#      1.0.1 / Jinja2 2.11.2 do not import on 3.10+. That was true of those
+#      versions and made the 2020 web framework the reason nothing else could
+#      move. Current Flask still supports 3.9, so it was upgraded first, on the
+#      old interpreter, which removed the constraint rather than trading one
+#      breakage for another.
 #   2. R is required, and not only for admin tasks. PathwayAcquisitionJob.py
 #      shells out to generateMetaGenes.R and hubAnalysis.R on the user-facing
 #      request path, so an image without R serves pages correctly and then fails
@@ -17,7 +27,7 @@
 # ---------------------------------------------------------------------------
 # Stage 1: Python dependencies
 # ---------------------------------------------------------------------------
-FROM python:3.9-slim-bookworm AS python-builder
+FROM python:3.11-slim-bookworm AS python-builder
 
 # Build-only toolchain. uWSGI and cffi compile C; none of this reaches the
 # runtime image.
@@ -43,7 +53,7 @@ RUN python -m venv /opt/venv \
 # ---------------------------------------------------------------------------
 # Separate stage so a change to requirements.txt does not rebuild R, and a
 # change to the R package list does not reinstall Python.
-FROM python:3.9-slim-bookworm AS r-builder
+FROM python:3.11-slim-bookworm AS r-builder
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         r-base-core \
@@ -227,7 +237,7 @@ RUN Rscript -e 'pkgs <- c("purrr", "cluster", "mclust", "amap", "factoextra", \
 # ---------------------------------------------------------------------------
 # Stage 3: runtime
 # ---------------------------------------------------------------------------
-FROM python:3.9-slim-bookworm AS runtime
+FROM python:3.11-slim-bookworm AS runtime
 
 # Runtime shared libraries only.
 #   libcairo2       -> cairocffi, which cairosvg renders through
