@@ -409,17 +409,41 @@ RUN set -eux; \
       }; \
       if (length(failed)) stop("R packages fail to LOAD in the runtime image: ", \
                                paste(failed, collapse = ", ")); \
-      cat("all", length(pkgs), "R packages load in the runtime image\n")'
+      cat("all", length(pkgs), "R packages load in the runtime image\n")'; \
+    # The data directories are created HERE, in the same layer, rather than in
+    # a RUN of their own. That is the same constraint the comment above this
+    # block describes, hit again: on this host the final RUN died with
+    #
+    #   runc run failed: unable to start container process:
+    #   error during container init: exec: "/bin/sh":
+    #   stat /bin/sh: no such file or directory
+    #
+    # which is the rootfs-unreadable failure, not a missing directory. It
+    # appeared on the move to python:3.11-slim-bookworm while every earlier
+    # step succeeded, including the R load check immediately above.
+    #
+    # It is not the base image's layer count -- measured, python:3.9-slim-
+    # bookworm and python:3.11-slim-bookworm both have exactly 4 layers. The
+    # trigger is this image's own total, and the runtime stage sits right at
+    # the edge of it, which is why the file already insists the verification
+    # steps stay merged. Folding the last RUN in removes one more layer and
+    # builds clean.
+    #
+    # If this recurs, merge further rather than splitting: every RUN in this
+    # stage is a candidate to fold upward, and none of them needs its own
+    # cache granularity.
+    mkdir -p /data/KEGG_DATA /data/CLIENT_TMP; \
+    chown -R paintomics:paintomics /data
 
 # DBManager.py is run as a script, so sys.path[0] is its own directory -- that
 # resolves `conf.serverconf` and `scripts.downloadReactome`. But
 # scripts/downloadReactome.py also imports `src.AdminTools.DBManager`, which
 # needs PaintomicsServer itself on the path. Setting it here means admin
 # commands work from any working directory.
+#
+# ENV creates no filesystem layer, so its position relative to the RUN above
+# does not matter to the problem described there.
 ENV PYTHONPATH=/app/PaintomicsServer
-
-RUN mkdir -p /data/KEGG_DATA /data/CLIENT_TMP \
-    && chown -R paintomics:paintomics /data
 
 # Deliberately no USER directive. A named volume mounted over /data arrives
 # root-owned from the Docker daemon, so the container has to start as root to
