@@ -50,7 +50,16 @@ class KeggInformationManager(metaclass=Singleton):
 
             return self
         except Exception as ex:
-                raise exTran
+                # Was `raise exTran`, a name that exists nowhere in this file or
+                # any other. So the handler that exists to propagate a failure
+                # raised NameError instead, and the real cause never surfaced:
+                #
+                #   createTranslationCache(unhashableJobID)
+                #     -> NameError: name 'exTran' is not defined
+                #
+                # rather than the TypeError that actually happened. Every other
+                # method here re-raises `ex`; this one was the outlier.
+                raise ex
         finally:
                 self.lock.release() #UNLOCK CACHE
 
