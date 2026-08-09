@@ -946,6 +946,51 @@ class PathwayAcquisitionJob(Job):
                     len(malformedSelections), ", ".join(
                         repr(entry) for entry in malformedSelections[:10])))
 
+        # A compound is added to the table empty and filled only when one of its
+        # omic values matches the selection:
+        #
+        #   newCompound.setOmicsValues([])                      # added empty
+        #   if omicValue.inputName in compoundName.split(", ") \
+        #      and omicValue.originalName.lower() == originalName.lower():
+        #       newCompound.addOmicValue(omicValue)             # only then
+        #
+        # so a selection whose name does not match leaves the compound in the
+        # table carrying nothing. Nineteen places then read `omicsValues[0]`,
+        # and the first of them ends step 2 with
+        #     IndexError: list index out of range
+        # after enrichment has already been computed -- the same expensive loss
+        # the malformed-selection branch above exists to prevent. Reproduced
+        # with one selection, "C00075#SomeOtherName#UTP" against a C00075 whose
+        # value is named UTP: the compound survives with omicsValues == [] and
+        # getGlobalExpressionData raises.
+        #
+        # Two of those nineteen readers already guard (`if feature.omicsValues`,
+        # `if comp and comp.omicsValues`), so this has been met before and
+        # patched where it surfaced rather than where it originates.
+        #
+        # Dropped after the loop rather than inside it. One compound ID
+        # legitimately appears in several selections under different names --
+        # the comment at the top of this function gives C00075 as exactly that
+        # case -- so "carries no value" is only meaningful once every selection
+        # has been seen. Pruning inside the loop happens to reach the same
+        # answer, because a compound removed on a non-matching pass is cloned
+        # again from initialCompound on the next one; this is checked, not
+        # assumed. Doing it once over the final state simply does not depend on
+        # that recovery.
+        #
+        # Dropping rather than keeping, because a compound with no omic value
+        # carries no measurement: it cannot be drawn, scored or summarised, and
+        # every consumer here assumes at least one value.
+        emptyCompounds = [compoundID for compoundID, compound
+                          in self.getInputCompoundsData().items()
+                          if not compound.omicsValues]
+        if emptyCompounds:
+            logging.warning(
+                "STEP2 - DROPPED %d SELECTED COMPOUND(S) THAT MATCHED NO OMIC "
+                "VALUE: %s" % (len(emptyCompounds), ", ".join(emptyCompounds[:10])))
+            for compoundID in emptyCompounds:
+                del self.getInputCompoundsData()[compoundID]
+
         # Update the omicSummary for the compoundOmic
         # TODO: at the moment it only considers "one whole compound omic" with the same mapped ratio
         for cpdOmic in self.getCompoundBasedInputOmics():
