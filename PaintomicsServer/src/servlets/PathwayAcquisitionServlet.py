@@ -348,6 +348,32 @@ def pathwayAcquisitionStep2_PART1(REQUEST, RESPONSE, QUEUE_INSTANCE, ROOT_DIRECT
         #****************************************************************
         formFields = REQUEST.form
         jobID  = formFields.get("jobID")
+
+        # The same readOnly rule the rest of the family applies, checked here
+        # rather than in PART2 because this is where the request is authorised
+        # and where the caller's userID is still a cookie rather than an
+        # argument that has already been trusted.
+        #
+        # Step 2 is the most destructive thing a caller can ask for. Its store
+        # branch (JobInformationManager.storeJobInstance, stepNumber 2)
+        # overwrites summary, lastStep, adjustPvalue and the rest of the
+        # field list, then does removeAll + insertAll over the job's compounds,
+        # its matched metabolites and its pathways. Re-running it with a
+        # different selectedCompounds replaces the owner's results wholesale.
+        #
+        # Measured against a running server before this check: a guest session
+        # that did not own a job marked readOnly posted here and got
+        # success:true with the work enqueued, while the identical caller and
+        # job put through pa_save_visual_options was refused.
+        #
+        # loadRequestedJob also replaces a blind enqueue: an unknown jobID used
+        # to be queued anyway and failed asynchronously inside the worker, where
+        # the user only saw the job stall. It now fails here, naming the job.
+        jobInstance = loadRequestedJob(jobID, "step 2")
+
+        if jobInstance.getReadOnly() and str(jobInstance.getUserID()) != str(userID):
+            raise Exception("Invalid user for the job running step 2")
+
         selectedCompounds= REQUEST.form.getlist("selectedCompounds[]")
         # Retrieve the number of cluster on a per omic basis
         # Note: this will contain the omic name transformed to remove spaces and special chars

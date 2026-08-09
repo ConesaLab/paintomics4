@@ -70,11 +70,17 @@ SERVLET = os.path.join(os.path.dirname(__file__),
                        "../servlets/PathwayAcquisitionServlet.py")
 
 # Handlers that load a job and then modify something belonging to it.
+#
+# pathwayAcquisitionStep2_PART1 is here for the same reason and was found the
+# same way -- see test_step2_authorisation.py for that one's measurements.
+# pathwayAcquisitionStep3 is deliberately absent: it is what the client calls
+# to *view* a pathway, and it persists nothing.
 GUARDED_HANDLERS = (
     "pathwayAcquisitionSaveImage",
     "pathwayAcquisitionSaveVisualOptions",
     "pathwayAcquisitionRecoverJob",
     "pathwayAcquisitionApplyReplicateMapping",
+    "pathwayAcquisitionStep2_PART1",
 )
 
 
