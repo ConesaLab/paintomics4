@@ -86,7 +86,10 @@ Each scenario directory:
 └── expected/          expected_pathways.txt, signal feature lists
 ```
 
-`examplefiles/original/` is deleted. It is unreferenced, and git retains it.
+`examplefiles/original/` moves to `archive/original-dat/` rather than being
+deleted: it is unreferenced by any code, but it is the source material the
+shipped `.tab` files were derived from, and moving it out of the top level is
+enough to stop it reading like the source of truth.
 
 ### 3.1 Manifest schema
 
@@ -207,7 +210,9 @@ data to serve examples, and CI can assert against them.
 | 05 | `regulatory-mirna` | mirna2genes | miRNA values + miRNA→gene association table + target expression |
 | 06 | `regulatory-more` | more | per-sample matrices with replicates, design matrix, 2 regulatory omics, association files, relevant-regulator list |
 | 07 | `region-based` | regions2genes | BED-like regions + synthetic GTF, 3-column relevant regions |
-| 08 | `stategra-mmu-timecourse` | pathway-acquisition | the existing real STATegra data, relocated and registered — the default |
+| 08 | `stategra-multiomics` | pathway-acquisition | the existing real STATegra data, relocated and registered — the default |
+| 09 | `stategra-regions` | regions2genes | the real DNase regions; needs the full mouse GTF, so absent from a fresh checkout and simply not offered there |
+| 10 | `stategra-mirna` | mirna2genes | the real miRNA table plus the 31 MB miRBase→Ensembl map |
 
 ## 5. File formats produced
 
@@ -246,14 +251,74 @@ Taken from the validators and `runMORE.R`, not from prose docs:
 Existing suite convention applies: standalone `__main__` scripts, run with
 `PYTHONPATH=PaintomicsServer`, no pytest.
 
+## 7a. What implementation changed about this design
+
+Recorded because each of these was a wrong assumption in the design above, found
+by building the thing and measuring it.
+
+**Missing values are not a supported input.** The design said scenario 02 would
+ship ~2% `NA` cells to exercise "NaN handling before FDR correction". It cannot:
+`PathwayAcquisitionJob.validateFile` runs `list(map(float, line[1:]))` over every
+data row and rejects the file for anything that will not parse. An example with
+gaps would be an example that cannot be uploaded. The missing-value generator was
+removed and a test (`test_no_values_file_carries_a_missing_value_token`) now
+holds the line. Malformed input stays covered by `tests/fake_omics.py`, which
+exists to build files that *should* be refused.
+
+**Region promoters are strand-dependent.** The first generator placed every
+signal region at `TSS - 500` regardless of strand, which puts a third of them
+*inside* the gene body on the minus strand. RGmatch still assigns those to the
+gene, under a different area rule, so the scenario would have silently stopped
+testing promoter assignment. Fixed and pinned by
+`test_signal_regions_sit_upstream_of_their_gene`.
+
+**A per-row missing rate rounds to nothing.** `round(6 * 0.02) == 0`, so the
+first implementation of the gap generator produced not a single gap while
+looking correct. Found only because a test asserted on the output rather than
+the code.
+
+**The MORE scenario needed three measured attempts.** Recovery of the planted
+regulator-target pairs, measured by running the real `runMORE.R`:
+
+| attempt | design | recall |
+| --- | --- | --- |
+| shared ramp per responder, 3 groups × 3 reps, both omics drive each target | 63% |
+| independent group profiles, weak group effect, strong per-sample noise | 48% |
+| as above, 4 replicates | 66% |
+| independent profiles, **strong** group effect *and* strong per-sample noise, 4 groups × 3 reps, one driving omic per target | **80%** |
+
+The 48% dip is the instructive one: decorrelating the candidates by shrinking the
+group effect also pushed the true drivers under MORE's `minVariation` filter,
+which drops regulators with low variability *across conditions*. Both terms have
+to be large — the group effect to survive the filter, the per-sample noise to
+make one candidate distinguishable from its decoys. Chance recovery for the
+number of pairs MORE reports is ~58%, so 80% is a real signal; the manifest
+records `recallFloor: 0.70` for a test to assert against, not the exact figure,
+because MORE's model selection is not bit-stable across versions.
+
+**Two pre-existing bugs surfaced and were fixed**, both of which had never been
+reachable before because the features that reach them had no example:
+
+* `MOREServlet` derived the path to `runMORE.R` from `CLIENT_TMP_DIR`
+  (`os.path.dirname(CLIENT_TMP_DIR.rstrip('/'))`), which assumes the data
+  directory is a sibling of `src/`. In the documented development layout it is
+  not, so the path resolved to a file that does not exist — and
+  `Rscript <missing file>` exits 2 printing nothing, surfacing as "R Script
+  failed with exit code 2. Output:" with no hint that the script was never
+  found. Now derived from `__file__`, with an explicit existence check.
+* `dark.css` set the window header's text colour but never its background, and
+  targeted `.x-window-header-title` (ExtJS 6) in an ExtJS 4.2.1 app. Every modal
+  title in dark mode was white on near-white. Fixed and verified by measuring
+  the computed contrast ratio on a rendered window: 12.02:1.
+
 ## 8. Edge cases addressed
 
 * Duplicate feature IDs — the STATegra data contains them (`ENSMUSG00000091455`
   appears five times in `dnase_values.dat`); the generator emits unique IDs, and
   scenario 04 deliberately includes one duplicated compound to keep the
   duplicate-handling path covered.
-* Missing values — scenario 02 includes a small fraction of `NA` cells so the
-  NaN-dropping path before FDR correction stays exercised.
+* Missing values — NOT shipped: the validator rejects any non-numeric cell, so
+  a values file with gaps is one no user could upload. See section 7a.
 * Line endings — `original/dnase_values.dat` uses classic-Mac `CR` endings,
   which is why `wc -l` reports 0 for it. All generated files use `\n`.
 * Encoding — all files ASCII, so `ensure_utf8` normalisation is a no-op and
