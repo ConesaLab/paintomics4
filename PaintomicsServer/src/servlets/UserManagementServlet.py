@@ -49,6 +49,15 @@ def userManagementSignIn(request, response):
         logging.info("STEP1 - READ PARAMS AND CHECK IF USER ALREADY EXISTS..." )
         formFields = request.form
         email  = formFields.get("email")
+        # Lowercased to match how it was stored. userManagementSignUp does
+        # `email = email.lower()` before saving, so an address registered as
+        # Bob@Example.com lives in the database as bob@example.com. Looking it
+        # up verbatim found nothing and the user was told their own address was
+        # wrong -- locked out of the account they had just created, with reset
+        # giving the same answer, so there was no way back in.
+        # Safe for accounts that exist: every stored address is already
+        # lowercase (checked, 17 of 17), so this only ever adds matches.
+        email = email.lower() if email else email
         password  = formFields.get("password")
         from hashlib import sha1
         # utf-8, not ascii. This was .encode('ascii') at all five password
@@ -349,6 +358,11 @@ def userManagementResetPassword(request, response, ROOT_DIRECTORY):
         #****************************************************************
         logging.info("STEP0 - CHECK IF VALID EMAIL...")
         userEmail = request.values.get('userEmail')
+        # Same reason as userManagementSignIn: the address is stored lowercased
+        # at sign-up, so a verbatim lookup told the user their e-mail was not
+        # registered when it was -- making reset useless to exactly the people
+        # who needed it.
+        userEmail = userEmail.lower() if userEmail else userEmail
         emailToken  = request.values.get('emailToken', None)
 
         daoInstance = UserDAO()
