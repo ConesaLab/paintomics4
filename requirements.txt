@@ -8,16 +8,35 @@
 # container reproduces a configuration that is known to run, not merely one that
 # resolves.
 #
-# Python must stay at 3.9: Flask 1.1.2 / Werkzeug 1.0.1 / Jinja2 2.11.2 /
-# MarkupSafe 1.1.1 do not import on 3.10+.
-
-# --- Web framework (do not bump; see above) ---
-Flask==1.1.2
-Werkzeug==1.0.1
-Jinja2==2.11.2
-MarkupSafe==1.1.1
-itsdangerous==1.1.0
-click==7.1.2
+# --- Web framework ---
+# These were pinned to the 2020 releases, and the pin was self-justifying: the
+# comment here said Python had to stay at 3.9 because Flask 1.1.2 / Werkzeug
+# 1.0.1 / Jinja2 2.11.2 / MarkupSafe 1.1.1 do not import on 3.10+. That is true
+# of those versions, but it made the old framework the reason the whole image
+# could not move, and everything else that needed a newer Python was stuck
+# behind it -- Pillow, CairoSVG and requests all ship security fixes that
+# require >= 3.10 and were therefore unreachable.
+#
+# The way out is that the *current* Flask stack still supports 3.9
+# (flask >= 3.9, werkzeug >= 3.9, jinja2 >= 3.7), so it could be upgraded in
+# place, on the old interpreter, and verified before anything else moved. Doing
+# that first removed the reason for the 3.9 pin; the image is on 3.11 now.
+#
+# Two API removals had to be handled, both in src/tests/test_flask3_compat.py:
+#   * flask.json.JSONEncoder / app.json_encoder (removed 2.3) -> app.json
+#     provider. The tree carried a shim for this that silently did nothing,
+#     leaving the Model serialiser unattached and the JSON API broken.
+#   * send_from_directory(attachment_filename=) (removed 2.2) -> download_name=
+#
+# blinker is new here: Flask 2.3 made signals unconditional, so it is a hard
+# dependency rather than the optional extra it used to be.
+Flask==3.1.3
+Werkzeug==3.1.8
+Jinja2==3.1.6
+MarkupSafe==3.0.3
+itsdangerous==2.2.0
+click==8.1.8
+blinker==1.9.0
 
 # --- WSGI server ---
 # processes = 1 is mandatory: src/common/PySiQ.py holds the job queue in process

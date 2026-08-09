@@ -20,11 +20,7 @@
 import logging.config
 
 from flask import Flask, request, send_from_directory, jsonify
-try:
-    from flask.json import JSONEncoder
-except ImportError:
-    # Flask >= 2.3 removed JSONEncoder; use stdlib json instead
-    from json import JSONEncoder
+from flask.json.provider import DefaultJSONProvider
 from re import sub
 
 from src.common.PySiQ import Queue
@@ -103,9 +99,7 @@ class Application(object):
         self.app = Flask(__name__)
 
         self.app.config['MAX_CONTENT_LENGTH'] =  SERVER_MAX_CONTENT_LENGTH
-        # Flask >= 2.3 removed json_encoder attribute
-        if hasattr(self.app, 'json_encoder'):
-            self.app.json_encoder = MyJSONEncoder
+        configureJSONSerialisation(self.app)
 
         KeggInformationManager(KEGG_DATA_DIR) #INITIALIZE THE SINGLETON
         JobInformationManager()#INITIALIZE THE SINGLETON
@@ -825,8 +819,36 @@ class Response(object):
 
         return response, self.status
 
-class MyJSONEncoder(JSONEncoder):
+class ModelJSONProvider(DefaultJSONProvider):
+    """Serialise anything carrying `toBSON()` by calling it.
+
+    `toBSON()` names a database serialiser, but it is also the wire format:
+    the API publishes Models by handing them to `jsonify`, and this is what
+    makes that work. Nothing else knows how to turn a Model into JSON, so an
+    app without this provider installed serves `TypeError` for most endpoints.
+
+    This replaces a `flask.json.JSONEncoder` subclass. Flask 2.2 introduced
+    providers and 2.3 removed the encoder hook entirely; the provider is the
+    only supported extension point now.
+    """
+
     def default(self, obj):
-        if hasattr(obj,"toBSON"):
+        if hasattr(obj, "toBSON"):
             return obj.toBSON()
-        return super(MyJSONEncoder, self).default(object)
+        # `obj`, not the builtin `object`. The encoder this replaces passed the
+        # latter, so an unserialisable value was reported as "Object of type
+        # type is not JSON serializable" -- naming a class the caller never
+        # supplied and sending anyone debugging it in the wrong direction.
+        return super(ModelJSONProvider, self).default(obj)
+
+
+def configureJSONSerialisation(app):
+    """Install the Model-aware JSON provider on `app`.
+
+    Split out of `Application.__init__` so it can be tested without standing up
+    the KEGG singleton, the scheduler and the job queue -- the previous wiring
+    was one line inside that constructor and consequently untested, which is
+    how it came to be silently skipped on Flask >= 2.3.
+    """
+    app.json = ModelJSONProvider(app)
+    return app
