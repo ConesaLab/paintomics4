@@ -133,6 +133,34 @@ class EmailCaseInsensitivityTest(unittest.TestCase):
                          % (len(offenders), offenders[:3]))
 
 
+    def test_the_stored_address_is_lowercased_too(self):
+        """Lowering only the lookups leaves the other direction broken.
+
+        Sign-up lowered its own copy; guest creation did not, and it builds
+        "guest<n>@" + PAINTOMICS_EMAIL_DOMAIN from an environment variable. A
+        deployment setting that with capitals would have written addresses the
+        now-lowercased lookups could never find. Normalising in User.setEmail
+        keeps both directions in step whatever the caller does.
+        """
+        from src.classes.User import User
+
+        user = User("")
+        user.setEmail("Guest42@Paintomics.CSIC.es")
+
+        self.assertEqual(user.getEmail(), "guest42@paintomics.csic.es",
+                         "a stored address keeps its capitals, so the "
+                         "lowercased lookup cannot match it")
+
+    def test_setting_a_non_string_email_does_not_explode(self):
+        """None reaches this on partially-built users."""
+        from src.classes.User import User
+
+        user = User("")
+        user.setEmail(None)
+
+        self.assertIsNone(user.getEmail())
+
+
 def main():
     suite = unittest.TestLoader().loadTestsFromModule(sys.modules[__name__])
     result = unittest.TextTestRunner(verbosity=2).run(suite)

@@ -63,7 +63,22 @@ class User (Model):
         return self.email
 
     def setEmail(self, email):
-        self.email = email
+        # Stored lowercased, because every lookup is now lowercased.
+        # userManagementSignIn and userManagementResetPassword lower the address
+        # before searching, so anything written with a capital becomes
+        # unreachable -- demonstrated by planting zzGuestCase@Example.COM and
+        # failing to sign in with that exact string.
+        #
+        # Sign-up already lowered its own copy; guest creation did not. It
+        # builds "guest<n>@" + PAINTOMICS_EMAIL_DOMAIN, and that domain comes
+        # from an environment variable, so a deployment setting it as
+        # Paintomics.CSIC.es would have produced guest accounts that could never
+        # log in. It is lowercase here, which is why nothing is broken today.
+        #
+        # Normalising in the setter rather than at each call site means the
+        # stored form and the looked-up form cannot drift apart again, whatever
+        # a future caller does.
+        self.email = email.lower() if isinstance(email, str) else email
 
     def getPassword(self):
         return self.password
