@@ -29,6 +29,7 @@ from src.common.ServerErrorManager import handleException
 from src.common.UserSessionManager import UserSessionManager
 from src.common.JobInformationManager import JobInformationManager
 from src.common import JobProgress
+from src.common import ExampleDatasets
 from src.common.Statistics import calculateSignificance, calculateCombinedSignificancePvalues, adjustPvalues, calculateStoufferCombinedPvalue
 from src.common.ReplicateDetection import detect_replicates, aggregate_replicates
 from src.common.DAO.PathwayAcquisitionJobDAO import PathwayAcquisitionJobDAO
@@ -106,6 +107,10 @@ def pathwayAcquisitionStep1_PART1(REQUEST, RESPONSE, QUEUE_INSTANCE, JOB_ID, EXA
     jobInstance = None
     userID = None
 
+    # Decoded before the job exists so an unrecognised mode is refused before
+    # any directory is created for it.
+    isExampleRequest, scenarioId = ExampleDatasets.scenarioIdFromMode(exampleMode)
+
     try :
         #****************************************************************
         # Step 1. CHECK IF VALID USER SESSION
@@ -130,7 +135,7 @@ def pathwayAcquisitionStep1_PART1(REQUEST, RESPONSE, QUEUE_INSTANCE, JOB_ID, EXA
         #****************************************************************
         # Step 3. SAVE THE UPLOADED FILES
         #****************************************************************
-        if not exampleMode:
+        if isExampleRequest is False:
             logging.info("STEP1 - FILE UPLOADING REQUEST RECEIVED")
             jobInstance.description=""
             jobInstance.setName(formFields.get("jobDescription", "")[:100])
@@ -149,30 +154,24 @@ def pathwayAcquisitionStep1_PART1(REQUEST, RESPONSE, QUEUE_INSTANCE, JOB_ID, EXA
             JobInformationManager().saveFiles(uploadedFiles, formFields, userID, jobInstance, CLIENT_TMP_DIR)
             logging.info("STEP1 - READING FILES....DONE")
 
-        elif exampleMode == "example":
+        elif isExampleRequest:
             #****************************************************************
-            # Step 2.SAVE THE UPLOADED FILES
+            # Step 2.REGISTER THE BUNDLED EXAMPLE FILES
             #****************************************************************
-            logging.info("STEP1 - EXAMPLE MODE SELECTED")
-            logging.info("STEP1 - COPYING FILES....")
+            # Which files these are is decided by examplefiles/datasets/
+            # manifest.json, not here. The previous version rebuilt each
+            # filename by mangling the omic name ("DNase-seq" ->
+            # "dnase_values.tab"), which silently tied the shipped data to a
+            # naming convention no file declared and made a second example
+            # impossible to add without editing this branch.
+            logging.info("STEP1 - EXAMPLE MODE SELECTED (scenario: %s)",
+                         scenarioId or "default")
+            scenario = ExampleDatasets.applyScenario(
+                jobInstance, EXAMPLE_FILES_DIR, scenarioId)
+            logging.info("STEP1 - EXAMPLE '%s' REGISTERED (%d omics)",
+                         scenario["id"], len(scenario.get("omics", [])))
 
-            exampleOmics = {"Gene expression": 'genes', "Metabolomics": 'features', "Proteomics": 'features', "miRNA-seq": 'genes', "DNase-seq": 'genes', "Transcription factor": 'genes'}
-            for omicName, enrichment in exampleOmics.items():
-                dataFileName = omicName.replace(" ", "_").replace("-seq", "").lower() + "_values.tab"
-                logging.info("STEP1 - USING ALREADY SUBMITTED FILE (data file) " + EXAMPLE_FILES_DIR + dataFileName + " FOR  " + omicName)
-
-                relevantFileName = omicName.replace(" ", "_").replace("-seq", "").lower() + "_relevant.tab"
-                logging.info("STEP1 - USING ALREADY SUBMITTED FILE (relevant features file) " + EXAMPLE_FILES_DIR + relevantFileName + " FOR  " + omicName)
-
-                if ["Metabolomics"].count( omicName ):
-                    jobInstance.addCompoundBasedInputOmic({"omicName": omicName, "inputDataFile": EXAMPLE_FILES_DIR + dataFileName, "relevantFeaturesFile": EXAMPLE_FILES_DIR + relevantFileName, "isExample" : True, "enrichment": enrichment})
-                else:
-                    jobInstance.addGeneBasedInputOmic({"omicName": omicName, "inputDataFile": EXAMPLE_FILES_DIR + dataFileName, "relevantFeaturesFile": EXAMPLE_FILES_DIR + relevantFileName,  "isExample" : True, "enrichment": enrichment})
-
-            specie = "mmu"
-            jobInstance.setOrganism(specie)
-            jobInstance.setDatabases(['KEGG', "Reactome"]) # TODO: cambiar
-
+            jobInstance.setName(scenario.get("title", "")[:100])
             jobInstance.setAIConsent(formFields.get("aiConsent", "false"))
             jobInstance.setExperimentDesign(formFields.get("experimentDesign", ""))
         else:
@@ -180,7 +179,8 @@ def pathwayAcquisitionStep1_PART1(REQUEST, RESPONSE, QUEUE_INSTANCE, JOB_ID, EXA
             # as "ERROR MESSAGE: " with nothing after it.
             raise NotImplementedError(
                 "Unrecognised example mode %r: expected no value for an "
-                "upload, or 'example' for the bundled dataset."
+                "upload, 'example' for the default dataset, or "
+                "'example/<dataset-id>' for a specific one."
                 % (exampleMode,))
 
 
@@ -189,7 +189,11 @@ def pathwayAcquisitionStep1_PART1(REQUEST, RESPONSE, QUEUE_INSTANCE, JOB_ID, EXA
         #************************************************************************
         QUEUE_INSTANCE.enqueue(
             fn=pathwayAcquisitionStep1_PART2,
-            args=(jobInstance, userID, exampleMode, RESPONSE),
+            # The decoded flag, not the raw segment: PART2 only asks "was this
+            # an example?", and `exampleMode == "example"` there would answer
+            # False for every `example/<id>` URL -- so a chosen scenario would
+            # get an uploaded job's description instead of the example one.
+            args=(jobInstance, userID, bool(isExampleRequest), RESPONSE),
             timeout=600,
             job_id= JOB_ID
         )
@@ -266,7 +270,7 @@ def pathwayAcquisitionStep1_PART2(jobInstance, userID, exampleMode, RESPONSE):
         logging.info("STEP1 - SAVING JOB DATA..." )
         JobProgress.enter(jobInstance.getJobID(), "save")
         jobInstance.setLastStep(2)
-        jobInstance.getJobDescription(True, exampleMode == "example")
+        jobInstance.getJobDescription(True, bool(exampleMode))
         JobInformationManager().storeJobInstance(jobInstance, 1)
         logging.info("STEP1 - SAVING JOB DATA...DONE" )
 
@@ -964,7 +968,14 @@ def pathwayAcquisitionSaveVisualOptions(request, response):
         #****************************************************************
         # Step 1.GET THE INSTANCE OF visual Options
         #****************************************************************
-        visualOptions = request.get_json()
+        # `or {}` for the same reason pathwayAcquisitionApplyReplicateMapping
+        # has it: request.get_json() returns None when the request did not
+        # arrive as application/json, and .get() on that is
+        #     AttributeError: 'NoneType' object has no attribute 'get'
+        # which reaches the browser naming neither the field nor the handler's
+        # actual complaint. Falling back to an empty mapping lets
+        # loadRequestedJob below report the missing jobID instead.
+        visualOptions = request.get_json() or {}
         jobID  = visualOptions.get("jobID")
 
         jobInstance = loadRequestedJob(jobID, "saving visual options")
@@ -1340,10 +1351,20 @@ def pathwayAcquisitionAdjustPvalues(request, response):
         #****************************************************************
         # Step 1.GET THE INFO
         #****************************************************************
-        formFields = request.get_json() #request.form
+        # `or {}` as above: get_json() is None for a request that did not
+        # arrive as application/json, and the .get() below was then
+        #     AttributeError: 'NoneType' object has no attribute 'get'
+        formFields = request.get_json() or {}
 
         # List of pathway => {pvalues}
         pvalues = formFields.get("pValues")
+
+        # Named rather than left to fail further down. Without pValues the
+        # loops below iterate `None`, which is
+        #     AttributeError: 'NoneType' object has no attribute 'items'
+        # several frames from the cause.
+        if not pvalues:
+            raise UserWarning("Missing pValues parameter for adjusting p-values.")
 
         # Check what kind of p-value we want to update
         if "stoufferWeights" in formFields:
