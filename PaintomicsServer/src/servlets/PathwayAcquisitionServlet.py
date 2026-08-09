@@ -855,6 +855,31 @@ def pathwayAcquisitionSaveImage(request, response):
         jobID = request.form.get("jobID")
         jobInstance = loadRequestedJob(jobID, "saving the image")
 
+        # The same guard pathwayAcquisitionSaveVisualOptions carries, and for a
+        # stronger reason: that one writes a document to MongoDB, this one
+        # writes a file into the job's output directory. `outputDir` is built
+        # from the *job owner's* userID --
+        #     CLIENT_TMP_DIR + userDir + "/jobsData/" + jobID + "/output/"
+        # (Job.setDirectories) -- so the bytes land under whoever owns the job,
+        # not whoever sent the request.
+        #
+        # Measured against a running server before this line existed: a guest
+        # session that did not own a job marked readOnly posted here and got
+        # success:true, and paintomics_<name>_<jobID>.svg appeared in the
+        # owner's output directory. The identical caller and job put through
+        # pa_save_visual_options was refused. Only the missing check differed.
+        #
+        # The svg branch writes the request body verbatim, and
+        # /get_cluster_image serves that directory through send_from_directory,
+        # which types a .svg as image/svg+xml from the app's own origin -- so
+        # the file planted there is same-origin markup, not just wasted disk.
+        #
+        # This restores the readOnly semantics the rest of the family uses; it
+        # deliberately does not tighten them. A job that is not readOnly stays
+        # writable by anyone holding its ID, which is how sharing works here.
+        if jobInstance.getReadOnly() and str(jobInstance.getUserID()) != str(userID):
+            raise Exception("Invalid user for the job saving the image")
+
         svgData = request.form.get("svgCode")
 
         # .replace() straight off the form raised AttributeError when the field
