@@ -135,6 +135,70 @@ class DataManagementUploadEncodingTest(unittest.TestCase):
                                  "%s rewrote an ASCII upload" % label)
 
 
+class MOREUploadEncodingTest(unittest.TestCase):
+    """MORE hands its files to R without ever reading them in Python.
+
+    That made it the last upload route without encoding normalisation, and the
+    consequence is quieter than elsewhere: R does not fail on a mis-encoded
+    file. Measured with read.delim on the same bytes --
+
+        utf8    names: GeneN, cafe (accents intact)
+        latin1  names: Gene?, caf?  (replacement characters)
+
+    -- so a cp1252 spreadsheet yields garbled regulator and gene identifiers,
+    which then fail to match the target expression file that *is* normalised.
+    MORE reports fewer associations, or none, and nothing errors.
+    """
+
+    def test_the_servlet_normalises_before_calling_r(self):
+        import ast, io, tokenize
+
+        path = os.path.join(os.path.dirname(__file__), "../servlets/MOREServlet.py")
+        with open(path, "r", encoding="utf-8", errors="replace") as handle:
+            source = handle.read()
+
+        try:
+            tokens = [t for t in tokenize.generate_tokens(io.StringIO(source).readline)
+                      if t.type != tokenize.COMMENT]
+            stripped = tokenize.untokenize(tokens)
+        except Exception:
+            stripped = source
+
+        # The call, not the import. Deleting the loop that normalises the
+        # files leaves "from src.common.Util import ensure_utf8" behind, so
+        # searching for the bare name passes while nothing is normalised --
+        # which is exactly what the first version of this test did, and a
+        # mutation run caught it.
+        callAt = stripped.find("ensure_utf8(")
+        self.assertNotEqual(callAt, -1,
+                            "MORE imports ensure_utf8 but never calls it, so "
+                            "uploaded files still reach runMORE.R in whatever "
+                            "encoding they arrived in")
+
+        rscriptAt = stripped.find("runMORE.R")
+        if rscriptAt != -1:
+            self.assertLess(callAt, rscriptAt,
+                            "the normalisation happens after the R script path "
+                            "is built; it must precede the call")
+
+    def test_a_latin1_file_becomes_readable(self):
+        from src.common.Util import ensure_utf8
+
+        directory = tempfile.mkdtemp()
+        try:
+            path = os.path.join(directory, "regulator.tab")
+            with open(path, "wb") as handle:
+                handle.write("gene\tC1\nGeneÑ\t1.5\n".encode("latin-1"))
+
+            self.assertIsNone(ensure_utf8(path))
+
+            with open(path, "rb") as handle:
+                handle.read().decode("utf-8")   # raises if still latin-1
+        finally:
+            shutil.rmtree(directory, ignore_errors=True)
+
+
+
 def main():
     suite = unittest.TestLoader().loadTestsFromModule(sys.modules[__name__])
     result = unittest.TextTestRunner(verbosity=2).run(suite)

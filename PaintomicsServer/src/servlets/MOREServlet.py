@@ -12,6 +12,7 @@ from src.classes.JobInstances.MOREJob import MOREJob
 from src.common.UserSessionManager import UserSessionManager
 from src.common.JobInformationManager import JobInformationManager
 from src.servlets.DataManagementServlet import saveFile
+from src.common.Util import ensure_utf8
 from src.common.ServerErrorManager import handleException
 from src.conf.serverconf import CLIENT_TMP_DIR, ROOT_DIRECTORY
 
@@ -273,6 +274,35 @@ def fromMOREtoGenes_STEP2(jobInstance, userID, RESPONSE, formFields):
                 raise ValueError(f"Regulatory data file for '{omicName}' not found: {omic['file']}")
             if os.path.getsize(omic_path) == 0:
                 raise ValueError(f"Regulatory data file for '{omicName}' is empty.")
+
+        # Normalise the encoding of everything handed to R, which is what every
+        # other upload path already does (PathwayAcquisitionJob, and the two
+        # data-management jobs since cab1dd57). MORE was the one route left
+        # without it, because it never reads these files in Python -- it passes
+        # the names to runMORE.R.
+        #
+        # R does not fail on a mis-encoded file, which is what makes this worth
+        # doing. Measured with read.delim on the same two bytes:
+        #
+        #     utf8    rows: 2  names: GeneN~,cafe'
+        #     latin1  rows: 2  names: Gene<fffd>,caf<fffd>
+        #
+        # So a spreadsheet saved as cp1252 -- Excel's default outside a UTF-8
+        # locale -- yields garbled regulator and gene identifiers rather than an
+        # error. Those then fail to match the target expression file, which *is*
+        # normalised, and MORE reports fewer associations or none. A silently
+        # wrong statistical result, not a crash.
+        for label, relativeName in (
+                [("Target Gene Expression", target_file),
+                 ("Experimental Design (Conditions)", jobInstance.conditionsFile)]
+                + [(omic.get("name") or "(unnamed)", omic.get("file"))
+                   for omic in jobInstance.regulatoryOmics]):
+            if not relativeName:
+                continue
+            encodingError = ensure_utf8(os.path.join(input_dir, relativeName))
+            if encodingError is not None:
+                raise ValueError(
+                    f"{label} file could not be read: {encodingError}.")
 
         # 2. Prepare Command
         # Derive server root from CLIENT_TMP_DIR, which is always an absolute path in serverconf.
