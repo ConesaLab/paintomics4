@@ -860,6 +860,74 @@ def pathwayAcquisitionTouchJob(request, response):
     finally:
         return response
 
+def _dataUriOnlyFetcher(url, resource_type=None):
+    """Resolve embedded ``data:`` URIs and nothing else.
+
+    CairoSVG's own safe mode answers *every* reference with a blank 1x1 image,
+    which is too blunt here: ``data:`` URIs go through the same fetcher, so
+    plain safe mode silently drops the pathway background and exports a black
+    PNG. This keeps the embedded case working and refuses the rest.
+
+    A blank image is returned rather than an exception because that is what
+    CairoSVG's stub does, so an SVG naming something external still renders
+    (without it) instead of failing the whole export. ``read_url`` normalises
+    a bare path to ``file://<abspath>`` before calling this, so a plain
+    ``/etc/passwd`` href arrives here with a scheme and is refused like any
+    other.
+    """
+    if url.startswith("data:"):
+        return cairosvg.url.fetch(url, resource_type)
+
+    logging.warning("Refused an external reference while rendering an export: %s",
+                    url[:200])
+    return b'<svg width="1" height="1"></svg>'
+
+
+def renderSvgToPng(svgData, destinationPath):
+    """Rasterise caller-supplied SVG markup, resolving nothing external.
+
+    This used to pass ``unsafe=True``. In cairosvg/parser.py that single flag
+    turns off three protections together::
+
+        tree = ElementTree.fromstring(
+            bytestring, forbid_entities=not unsafe,
+            forbid_external=not unsafe)
+        ...
+        if 'url_fetcher' not in kwargs and not unsafe:
+            self.url_fetcher = (
+                lambda *args, **kwargs: b'<svg width="1" height="1"></svg>')
+
+    so it accepted entity definitions (billion laughs) and installed the real
+    URL fetcher in place of that stub. ``read_url`` normalises a bare path to
+    ``file://<abspath>``, so with the real fetcher in place
+    ``<image xlink:href="/etc/passwd">`` reads a local file and an ``http://``
+    href is a request from inside the deployment network. The markup comes
+    from ``request.form.get("svgCode")``, so that was reachable by any user
+    holding a session cookie, and the render is written into the job output
+    directory and served back over /get_cluster_image/.
+
+    Turning the flag off is not sufficient on its own, and this is the part
+    worth remembering: CairoSVG's stub fetcher intercepts ``data:`` URIs too,
+    and the legitimate export is *entirely* data: URIs. PathwayController.js
+    draws the pathway background into a canvas, takes
+    ``forcedImageCode = canvas.toDataURL()`` and substitutes that for the PNG's
+    URL before posting. So `unsafe=False` alone renders the pathway background
+    as a black rectangle -- measured, not assumed. Hence the explicit fetcher.
+
+    ``PNGSurface.convert`` rather than ``svg2png``: the latter has a fixed
+    keyword list and drops ``url_fetcher``, while ``convert`` forwards **kwargs
+    to the parser. It is what ``svg2png`` calls anyway.
+
+    Pinned by src/tests/test_svg_export_is_sandboxed.py, which checks both
+    halves -- that a local file's pixels stay out of the render, and that an
+    embedded data: URI still reaches it.
+    """
+    cairosvg.surface.PNGSurface.convert(
+        bytestring=svgData,
+        write_to=destinationPath,
+        url_fetcher=_dataUriOnlyFetcher)
+
+
 def pathwayAcquisitionSaveImage(request, response):
     jobID=""
     try:
@@ -928,14 +996,12 @@ def pathwayAcquisitionSaveImage(request, response):
         logging.info("The path is xxx: " + path)
 
         if(fileFormat == "png"):
-            def createImage(svgData):
-                cairosvg.svg2png(bytestring=svgData, write_to=path + fileName + "." + fileFormat, unsafe=True)
             try:
                 logging.info("TRYING...")
-                createImage(svgData=svgData)
+                renderSvgToPng(svgData, path + fileName + "." + fileFormat)
             except Exception as ex:
                 logging.info("TRYING again...")
-                createImage(svgData=svgData)
+                renderSvgToPng(svgData, path + fileName + "." + fileFormat)
 
         elif(fileFormat == "svg"):
             file_ = open(path + fileName + "." + fileFormat, 'w')

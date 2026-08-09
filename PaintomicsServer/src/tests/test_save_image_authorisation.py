@@ -147,7 +147,13 @@ class SaveImageAuthorisationTest(unittest.TestCase):
         guardAt = source.find("getReadOnly()")
         self.assertNotEqual(guardAt, -1, "no guard at all")
 
-        for writer in ("svg2png", "open("):
+        # renderSvgToPng, not svg2png: the rasterisation moved into a helper so
+        # the CairoSVG call could be sandboxed (see renderSvgToPng and
+        # test_svg_export_is_sandboxed). The write it performs is the same one,
+        # and it is still what has to happen after the guard -- this test
+        # caught the rename rather than being defeated by it, which is the
+        # point of the "-1" assertion below.
+        for writer in ("renderSvgToPng", "open("):
             with self.subTest(write=writer):
                 writeAt = source.find(writer)
                 self.assertNotEqual(writeAt, -1,
