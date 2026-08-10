@@ -88,11 +88,16 @@ PUBLISHED = {
     "app/view/PathwayAcquisitionViews/PA_AIInterpretView.js": (
         "0.3", "6a8fae1b64d3b5ff5a68e2deb36460a1e4f1932128aa283f2adad6062bacaa30"),
     "app/view/PathwayAcquisitionViews/PA_Step3RegTargetNetworkView.js": (
-        "0.1", "f9b31d697a708f72074f605350ea488efe4faa3d610d90d8a0dfec18d271070c"),
+        "0.2", "PENDING-COMMIT"),
     "resources/ServerConfiguration.js": (
         "0.5", "e99fbca019569d7d31009db62c5db9e46a795b7f3c4f90d67da56dbab6f40385"),
     "js/libs/linkurious/sigma.min.js": ("0.1", None),
     "js/libs/linkurious/plugins.js": ("0.2", None),
+    # Versioned by its release rather than by a counter. A vendored library is
+    # replaced wholesale at a known version, never edited in place, so the
+    # upstream number is both the more informative marker and the one that
+    # cannot drift from what is on disk.
+    "js/libs/cytoscape/cytoscape.min.js": ("3.34.0", None),
     "app.js": ("0.2", None),
 }
 

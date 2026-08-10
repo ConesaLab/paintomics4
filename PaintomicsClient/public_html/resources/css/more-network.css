@@ -1,0 +1,262 @@
+/* MORE regulator-target network — PA_Step3RegTargetNetworkView.
+ *
+ * Its own stylesheet rather than a block in main.css for two reasons. The view
+ * is the only consumer, so nothing here can be reached by accident from the
+ * rest of the app; and main.css is 4,000 lines that several people edit at
+ * once, which is how a component's styles end up interleaved with everything
+ * else and unreviewable.
+ *
+ * Everything is expressed in the design-system tokens declared on `:root` in
+ * main.css and restated for `[data-theme="dark"]` in dark.css, so the view
+ * follows the theme without this file knowing the theme exists. The exceptions
+ * are the graph's own semantic colours -- omic palette, positive/negative edge
+ * -- which live in the view's JS: they are data encodings rather than surfaces,
+ * they have to be handed to Cytoscape as literal values anyway, and swapping
+ * them per theme would mean the same edge meant different things in a
+ * screenshot depending on who took it.
+ */
+
+.more-net-panel .x-panel-body {
+	background: var(--pa-surface, #fff);
+}
+
+/* ---- Toolbar ---------------------------------------------------------- */
+
+.more-net-toolbar {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 14px;
+	padding: 10px 14px;
+	background: var(--pa-surface-toolbar, #f5f5f7);
+	border-bottom: 1px solid var(--pa-border, #e4e4e7);
+	font-size: 12px;
+	color: var(--pa-ink-label, #555);
+}
+
+.more-net-toolbar label {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	white-space: nowrap;
+	margin: 0;
+	font-weight: 500;
+}
+
+/* Ranges get an explicit width: their intrinsic size differs enough between
+   engines that the toolbar rewraps between Chrome and Firefox without one. */
+.more-net-toolbar input[type="range"] {
+	width: 96px;
+	vertical-align: middle;
+}
+
+.more-net-toolbar select,
+.more-net-toolbar input[type="search"] {
+	padding: 3px 6px;
+	font-size: 12px;
+	color: var(--pa-ink-control, #333);
+	background: var(--pa-surface, #fff);
+	border: 1px solid var(--pa-border, #ccc);
+	border-radius: var(--pa-radius-sm, 4px);
+}
+
+.more-net-toolbar input[type="search"] {
+	min-width: 190px;
+}
+
+.more-net-toolbar button {
+	padding: 4px 10px;
+	font-size: 12px;
+	color: var(--pa-ink-control, #333);
+	background: var(--pa-surface, #fff);
+	border: 1px solid var(--pa-border, #ccc);
+	border-radius: var(--pa-radius-sm, 4px);
+	cursor: pointer;
+	transition: background var(--pa-transition, 150ms ease);
+}
+
+.more-net-toolbar button:hover {
+	background: var(--pa-surface-quiet, #ececf0);
+}
+
+.more-net-toolbar button:focus-visible,
+.more-net-toolbar select:focus-visible,
+.more-net-toolbar input:focus-visible {
+	outline: 2px solid var(--pa-focus-ring, #0a84ff);
+	outline-offset: 1px;
+}
+
+/* The live readout beside each slider. Tabular figures so the toolbar does not
+   twitch sideways as the digits change while a slider is dragged. */
+.more-net-r2-value,
+.more-net-coef-value,
+.more-net-edges-value {
+	display: inline-block;
+	min-width: 3.2em;
+	font-variant-numeric: tabular-nums;
+	color: var(--pa-ink, #222);
+}
+
+/* ---- Subtitle --------------------------------------------------------- */
+
+.more-net-subtitle {
+	padding: 8px 14px;
+	font-size: 12px;
+	color: var(--pa-ink-muted, #6b6b6b);
+	background: var(--pa-surface, #fff);
+	border-bottom: 1px solid var(--pa-border, #e0e0e0);
+}
+
+.more-net-subtitle b {
+	color: var(--pa-ink, #222);
+}
+
+/* ---- Canvas and side panel -------------------------------------------- */
+
+.more-net-body {
+	display: flex;
+	width: 100%;
+	height: 600px;
+}
+
+.more-net-canvas {
+	flex: 1;
+	height: 100%;
+	position: relative;
+	min-width: 0;             /* or the flex item refuses to shrink below its content */
+	background: var(--pa-surface-sunken, #fafafa);
+}
+
+.more-net-sidepanel {
+	width: 216px;
+	flex: 0 0 216px;
+	height: 100%;
+	overflow-y: auto;
+	background: var(--pa-surface-subtle, #f8f8f8);
+	border-left: 1px solid var(--pa-border, #e0e0e0);
+	box-sizing: border-box;
+}
+
+.more-net-side {
+	padding: 12px;
+	font-size: 12px;
+	color: var(--pa-ink-body, #444);
+}
+
+.more-net-side h6 {
+	margin: 14px 0 6px;
+	font-size: 11px;
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	color: var(--pa-ink-label, #6b6b6b);
+}
+
+.more-net-side h6:first-child {
+	margin-top: 0;
+}
+
+.more-net-omic {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin: 4px 0;
+	font-weight: 400;
+	cursor: pointer;
+}
+
+.more-net-swatch {
+	display: inline-block;
+	width: 11px;
+	height: 11px;
+	flex: 0 0 11px;
+	border-radius: 3px;
+	border: 1px solid rgba(0, 0, 0, 0.25);
+}
+
+.more-net-note {
+	margin: 8px 0 0;
+	font-size: 11px;
+	line-height: 1.45;
+	color: var(--pa-ink-muted, #6b6b6b);
+}
+
+/* ---- Top hubs --------------------------------------------------------- */
+
+.more-net-hub {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	gap: 8px;
+	padding: 3px 0;
+	color: var(--pa-link, #006acc);
+	text-decoration: none;
+}
+
+.more-net-hub:hover {
+	text-decoration: underline;
+}
+
+.more-net-hub-count {
+	flex: 0 0 auto;
+	padding: 0 6px;
+	font-size: 11px;
+	font-variant-numeric: tabular-nums;
+	color: var(--pa-ink-muted, #6b6b6b);
+	background: var(--pa-surface-quiet, #ececf0);
+	border-radius: 8px;
+}
+
+/* ---- Tooltip ---------------------------------------------------------- */
+
+/* Positioned against the canvas in rendered coordinates by _showTooltip, so
+   the container must establish a positioning context -- .more-net-canvas does,
+   above. pointer-events:none matters: without it the tooltip sits under the
+   cursor, triggers mouseout on the node, and the whole thing flickers. */
+.more-net-tip {
+	position: absolute;
+	display: none;
+	z-index: 20;
+	max-width: 240px;
+	padding: 6px 9px;
+	font-size: 11px;
+	line-height: 1.45;
+	color: var(--pa-ink, #222);
+	background: var(--pa-surface, #fff);
+	border: 1px solid var(--pa-border, #ddd);
+	border-radius: var(--pa-radius-sm, 4px);
+	box-shadow: var(--pa-shadow, 0 1px 3px rgba(0, 0, 0, 0.12));
+	pointer-events: none;
+}
+
+/* ---- Failure ---------------------------------------------------------- */
+
+.more-net-error {
+	padding: 30px;
+	text-align: center;
+	color: var(--pa-accent-orange, #a33);
+}
+
+/* ---- Narrow viewports ------------------------------------------------- */
+
+/* Below this the side panel takes more width than the graph it annotates, so
+   it goes under the canvas and the canvas keeps the full width. */
+@media (max-width: 900px) {
+	.more-net-body {
+		flex-direction: column;
+		height: auto;
+	}
+
+	.more-net-canvas {
+		height: 420px;
+	}
+
+	.more-net-sidepanel {
+		width: 100%;
+		flex: 0 0 auto;
+		height: auto;
+		max-height: 240px;
+		border-left: none;
+		border-top: 1px solid var(--pa-border, #e0e0e0);
+	}
+}

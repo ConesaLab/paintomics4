@@ -416,6 +416,95 @@ def engineRefusal(method, engine):
     return None
 
 
+def _designPatternNames(designPath):
+    """{indicator pattern -> group name} read from MORE's edesign.
+
+    The pattern is the row's 0/1 cells joined by "_", which is exactly the
+    suffix MORE builds its RegulationPerCondition column names from. A row
+    marking more than one group is joined with "+" rather than skipped: it is
+    not a shape the interface produces, but a hand-written design file may
+    carry one and losing the column name would be worse than an odd one.
+    """
+    with open(designPath, encoding="utf-8", errors="replace") as handle:
+        groups = handle.readline().rstrip("\n").split("\t")[1:]
+        patterns = {}
+        for line in handle:
+            cells = [cell.strip() for cell in line.rstrip("\n").split("\t")[1:]]
+            if len(cells) != len(groups):
+                continue
+            named = [group for group, cell in zip(groups, cells)
+                     if cell not in ("", "0")]
+            if named:
+                patterns["_".join(cells)] = "+".join(named)
+    return patterns
+
+
+def _nameConditionColumns(rpcPath, designPath):
+    """Rewrite `Group_1_0_0_0` column headers to `Group_<condition name>`.
+
+    MORE names the per-condition coefficient columns after the edesign
+    *indicator pattern*, not after the group, so a four-group design produces
+    `Group_1_0_0_0 … Group_0_0_0_1` and the interface -- which only strips the
+    `Group_` prefix -- offers the user a condition menu reading "1_0_0_0". Both
+    engines do it identically, so it is MORE's behaviour rather than a
+    difference between them, and it gets worse with the design: the bundled
+    12-group real dataset produces `1_0_0_0_0_0_0_0_0_0_0_0`.
+
+    The names are recoverable, because the design file has them and it is right
+    here. Done once, at the file, so every consumer -- the regulation table, the
+    network view, anything reading the stored job later -- sees the same names
+    without each having to undo the encoding.
+
+    Streamed rather than read whole: this table is a few megabytes on the
+    bundled example and unbounded in general, and only its first line changes.
+
+    Non-fatal by construction. A design that cannot be read, a header with no
+    recognisable pattern, or any I/O failure leaves the file exactly as MORE
+    wrote it -- the column names are then ugly, which is what they were before,
+    rather than absent.
+    """
+    try:
+        patterns = _designPatternNames(designPath)
+        if not patterns:
+            return False
+
+        with open(rpcPath, encoding="utf-8", errors="replace") as handle:
+            header = handle.readline()
+            if not header:
+                return False
+
+            columns = header.rstrip("\n").split("\t")
+            renamed, changed = [], 0
+            for column in columns:
+                name = patterns.get(column[6:]) if column.startswith("Group_") else None
+                if name is None:
+                    renamed.append(column)
+                else:
+                    renamed.append("Group_" + name)
+                    changed += 1
+            if not changed:
+                return False
+
+            # Written beside the original and moved over it, so a failure
+            # part-way through cannot leave a truncated results table where a
+            # complete one used to be.
+            temporary = rpcPath + ".named"
+            with open(temporary, "w", encoding="utf-8", newline="") as output:
+                output.write("\t".join(renamed) + "\n")
+                shutil.copyfileobj(handle, output)
+
+        os.replace(temporary, rpcPath)
+        logging.info("MORE_STEP2 - named %d condition column(s) from the "
+                     "experimental design", changed)
+        return True
+    except Exception as error:                                # noqa: BLE001
+        logging.warning(
+            "MORE_STEP2 - could not name the condition columns from the "
+            "experimental design (%s); leaving MORE's own headers in place.",
+            error)
+        return False
+
+
 def _moreRScript():
     """Absolute path to runMORE.R, which ships beside this package.
 
@@ -1064,7 +1153,10 @@ def fromMOREtoGenes_STEP2(jobInstance, userID, RESPONSE, formFields):
         rpc_file_name = f"MORE_rpc_{jobInstance.date}.tab"
         rpc_src = os.path.join(output_dir, rpc_file_name)
         if os.path.exists(rpc_src):
-            shutil.copy2(rpc_src, os.path.join(input_dir, rpc_file_name))
+            rpc_dst = os.path.join(input_dir, rpc_file_name)
+            shutil.copy2(rpc_src, rpc_dst)
+            _nameConditionColumns(
+                rpc_dst, os.path.join(input_dir, jobInstance.conditionsFile))
 
             # Sidecar metadata: the MORE filter settings the user picked at
             # configuration time. PathwayAcquisitionJob.parseRegulationPerCondition
