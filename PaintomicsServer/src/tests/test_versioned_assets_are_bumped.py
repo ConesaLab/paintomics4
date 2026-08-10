@@ -84,13 +84,13 @@ PUBLISHED = {
     "app/view/common/ExtJS_extensions.js": (
         "0.6", "61a72e40803dd468f8b4af54c58a41cfc84224bf1a678a4dfee9666065a9eb1e"),
     "app/view/common/upload/Panel.js": (
-        "0.1", "a8ae097ac622998d42c020fa8045fc4b15900ce17da065f80971bd0349daf93b"),
+        "0.2", "34264cdec6faef81e46d28982f348003180b2e06d0af696f815f1b5b2a7a7458"),
     "app/view/PathwayAcquisitionViews/PA_AIInterpretView.js": (
         "0.3", "6a8fae1b64d3b5ff5a68e2deb36460a1e4f1932128aa283f2adad6062bacaa30"),
     "app/view/PathwayAcquisitionViews/PA_Step3RegTargetNetworkView.js": (
-        "0.2", "PENDING-COMMIT"),
+        "0.2", "7adf84665c0c851d93e75b051586621d228df8809b12b4d3e044a040186e9de2"),
     "resources/ServerConfiguration.js": (
-        "0.5", "e99fbca019569d7d31009db62c5db9e46a795b7f3c4f90d67da56dbab6f40385"),
+        "0.6", "ad657741d87248b3286529282cbf38d6d9ede73170f79d30af93624a9bdbeb5a"),
     "js/libs/linkurious/sigma.min.js": ("0.1", None),
     "js/libs/linkurious/plugins.js": ("0.2", None),
     # Versioned by its release rather than by a counter. A vendored library is
