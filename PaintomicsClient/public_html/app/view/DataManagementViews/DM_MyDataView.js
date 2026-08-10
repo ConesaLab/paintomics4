@@ -87,14 +87,23 @@ function DM_MyDataListView() {
 						items: [{
 							xtype: 'box',cls: "" +
 								"contentbox omicSummaryBox", minHeight: 230, html:
+							/* The account card was a two-column table of bold labels, and one
+							   of its three rows was a Password row showing twelve asterisks -
+							   a value that is not the password, not the right length, and
+							   tells the reader nothing they did not already know. It is gone;
+							   what belongs there is the action, which is now a real button
+							   rather than a "Click here to..." link.
+
+							   Labels above values rather than beside them: the two are a pair,
+							   and a right-aligned label column only earns its keep on a long
+							   form. `<dl>` because that is what this is. */
 							'<div id="about">'+
-							'  <h2>My Data</h2>'+
-							'   <table id="myDataUserDetails"><tbody>' +
-							'     <tr><td><b>User name:</b></td><td>' + Ext.util.Cookies.get('userName') + '</td></tr>' +
-  						'     <tr><td><b>Email:</b></td><td>' + Ext.util.Cookies.get('lastEmail') + '</td></tr>' +
-  						'     <tr><td><b>Password:</b></td><td>************</td></tr>' +
-  						'     <tr><td><b></b></td><td><a id="changePassButton" href="javascript:void(0)">Click here to change password</a></td></tr>' +
-  						'  </tbody></table>' +
+							'  <h2>My account</h2>'+
+							'  <dl class="po-account">' +
+							'    <div class="po-account-row"><dt>User name</dt><dd>' + Ext.String.htmlEncode(Ext.util.Cookies.get('userName') || '—') + '</dd></div>' +
+							'    <div class="po-account-row"><dt>Email</dt><dd>' + Ext.String.htmlEncode(Ext.util.Cookies.get('lastEmail') || '—') + '</dd></div>' +
+							'  </dl>' +
+							'  <p class="formActionRow po-account-actions"><a class="button btn-default btn-form-action" href="javascript:void(0)" id="changePassButton"><i class="fa fa-key" aria-hidden="true"></i> Change password</a></p>' +
 							'</div>'
 						},
 						this.myDataSummaryPanel.getComponent()
@@ -134,43 +143,53 @@ function DM_MyDataSummaryPanel() {
 	* @returns {undefined}
 	*/
 	this.updateContent = function(dataSummary) {
-		if (dataSummary.usedSpace !== undefined && dataSummary.usedSpace !== undefined) {
-						// update the color of the pie chart based on the usage
-			this.usageChart.series[0].data[0].color = (this.getUsageColor(dataSummary.usedSpace, dataSummary.availableSpace));
-			this.usageChart.series[0].data[0].update(Math.round(dataSummary.usedSpace / Math.pow(1024, 2) * 100) / 100);
-			this.usageChart.series[0].data[1].update(Math.round(dataSummary.availableSpace / Math.pow(1024, 2) * 100) / 100 - Math.round(dataSummary.usedSpace / Math.pow(1024, 2) * 100) / 100);
-			this.usageChart.setTitle({
-				text: "<b>" + Math.round(dataSummary.usedSpace / Math.pow(1024, 2) * 100) / 100 + "</b> MB",
-				style: {
-					color: this.getUsageColor(dataSummary.usedSpace, dataSummary.availableSpace)
-				}
-			});
+		if (dataSummary.usedSpace !== undefined && dataSummary.availableSpace !== undefined) {
+			/* The original guard read `usedSpace !== undefined` twice, so a
+			   payload carrying usedSpace without availableSpace got through and
+			   divided by undefined. Both are needed to state a proportion. */
+			var toMB = function(bytes) {
+				return Math.round(bytes / Math.pow(1024, 2) * 100) / 100;
+			};
+			var used = toMB(dataSummary.usedSpace);
+			var total = toMB(dataSummary.availableSpace);
+			/* Clamped: a quota that has been exceeded should fill the bar, not
+			   overflow its track and paint past the card. */
+			var pct = total > 0 ? Math.min(100, (used / total) * 100) : 0;
 
+			$('#myDataUsedSpace').text(used);
+			$('#myDataAvailableSpace').text(total + " MB");
+			$('#myDataUsedSpaceBar')
+				.css('width', pct + '%')
+				.attr('class', 'po-storage-fill ' + this.getUsageClass(dataSummary.usedSpace, dataSummary.availableSpace));
 
-
-			$('#myDataAvailableSpace').html((Math.round(dataSummary.availableSpace / Math.pow(1024, 2) * 100) / 100) + "MB");
+			/* The bar is decoration to a screen reader; the figure above it is
+			   the real readout, so the meter carries the numbers itself. */
+			$('#myDataUsedSpaceBar').closest('.po-storage-track')
+				.attr({role: 'meter', 'aria-valuemin': 0, 'aria-valuemax': total,
+				       'aria-valuenow': used, 'aria-label': 'Storage used'});
 		}
 
 		if (dataSummary.totalFiles !== undefined) {
-			$('#myDataTotalFiles').html(dataSummary.totalFiles);
+			$('#myDataTotalFiles').text(dataSummary.totalFiles);
 		}
 
 		if (dataSummary.totalJobs !== undefined) {
-			$('#myDataTotalJobs').html(dataSummary.totalJobs);
+			$('#myDataTotalJobs').text(dataSummary.totalJobs);
 		}
 		return this;
 	};
 
-	this.getUsageColor = function(value, max) {
-		value = value / max;
-		if (value > 0.9) {
-			return '#DF5353';
-		} else if (value > 0.6) {
-			return '#DDDF0D';
-		} else {
-			return '#55BF3B';
+	/* A class rather than a hex, so dark.css can restate the three fills and so
+	   the thresholds stay stated in one place. Same 60/90% breakpoints the
+	   colour function used. */
+	this.getUsageClass = function(value, max) {
+		var ratio = max > 0 ? value / max : 0;
+		if (ratio > 0.9) {
+			return 'is-critical';
+		} else if (ratio > 0.6) {
+			return 'is-warning';
 		}
-		return this;
+		return 'is-ok';
 	};
 
 	this.initComponent = function() {
@@ -179,53 +198,41 @@ function DM_MyDataSummaryPanel() {
 			xtype: "box",
 			cls: "contentbox omicSummaryBox",
 			height: 200,
+			/* Used space was a Highcharts donut of two slices - used and free -
+			   with the figure floated in the middle of the hole, plus two
+			   odometer counters wearing coloured icon tiles.
+
+			   A donut for one proportion against a known maximum is the wrong
+			   form: the reader has to compare two arc lengths to answer "how
+			   full am I", which a bar answers by length alone. It also pulled a
+			   charting library in to draw what is a div with a width. Files and
+			   Jobs are bare counts and were never charts at all, so they are
+			   stat tiles now: the number leads, the word labels it.
+
+			   The fill is a status colour (success/warning/error from the design
+			   system, replacing Highcharts' #55BF3B/#DDDF0D/#DF5353 - that amber
+			   was 1.6:1 on white). Status colour never travels alone here: the
+			   figure above the bar states the same thing in words, so the bar
+			   is confirmation rather than the only signal. */
 			html: '<h3>Used space</h3>' +
-			'<div style="text-align: center;">'+
-			' <div class="myDataSummaryChartWrapper" id="usedSpaceSummaryPlot"></div>'+
-			' <span class="myDataSummaryCount"><i class="fa fa-file-text-o"></i> <span id="myDataTotalFiles" class="odometer odometer-theme-default">0</span>  Files</span>' +
-			' <span class="myDataSummaryCount"><i class="fa fa-code" style=" background: rgb(255, 182, 28);"></i><span id="myDataTotalJobs" class="odometer odometer-theme-default">0</span> Jobs</span>' +
-   		' <p style="text-align: center;">This is your <b id="myDataAvailableSpace"> 200 MB </b> personal cloud storage, where you can find all your <b>Files</b> and <b>Jobs</b>.<br>Use it carefully and remember that you can always delete old files to free space.</p>'+
-			'</div>',
-			listeners: {
-				boxready: function() {
-					new Odometer({el: $("#myDataTotalFiles")[0],value: 0});
-					new Odometer({el: $("#myDataTotalJobs")[0],value: 0});
-					me.usageChart = new Highcharts.Chart({
-						credits: {
-							enabled: false
-						},
-						chart: {
-							type: 'pie',
-							renderTo: 'usedSpaceSummaryPlot'
-						},
-						tooltip: {
-							enabled: true
-						},
-						title: {
-							text: "",
-							verticalAlign: 'middle',
-							floating: true
-						},
-						series: [{
-							name: 'Used space',
-							data: [{
-								name: "Used",
-								y: 0,
-								color: '#55BF3B'
-							}, {
-								name: "Available",
-								y: 10,
-								color: "#dedede",
-							}],
-							tooltip: {
-								valueSuffix: 'MB'
-							},
-							innerSize: '85%',
-							dataLabels: false
-						}]
-					});
-				}
-			}
+			'<div class="po-storage">' +
+			'  <div class="po-storage-meter">' +
+			'    <p class="po-storage-figure">' +
+			'      <span id="myDataUsedSpace" class="po-storage-used">0</span><span class="po-storage-unit"> MB</span>' +
+			'      <span class="po-storage-of">of <span id="myDataAvailableSpace">200 MB</span> used</span>' +
+			'    </p>' +
+			'    <div class="po-storage-track"><div class="po-storage-fill" id="myDataUsedSpaceBar" style="width:0%"></div></div>' +
+			'  </div>' +
+			'  <div class="po-storage-stats">' +
+			'    <div class="po-stat"><span class="po-stat-value" id="myDataTotalFiles">0</span><span class="po-stat-label">Files</span></div>' +
+			'    <div class="po-stat"><span class="po-stat-value" id="myDataTotalJobs">0</span><span class="po-stat-label">Jobs</span></div>' +
+			'  </div>' +
+			'</div>' +
+			'<p class="po-storage-note">Files you submit are kept here so you can reuse them in later analyses. Delete old ones to free space.</p>'
+			/* No boxready hook any more. It built the Highcharts donut and the two
+			   Odometer instances; the meter is plain markup that updateContent
+			   already fills, so there is nothing left to construct on render.
+			   Odometer is still used by PA_Step3Views and stays loaded. */
 		});
 
 		return this.component;
@@ -288,7 +295,15 @@ function DM_MyDataFileListView() {
 				items: [{
 					xtype: "box",
 					flex: 1,
-					html: '<h3>My files</h3>' + "<p>" + " Use this section to avoid uploading your files again and again, when running Paintomics's tools.<br>" + " Everytime you submit a new file using the available forms, files are automatically stored on your personal space so you can reuse them in future analysis as well as download and visualize them online.<br>" + " Additionally, use the <a id='myFilesUploadFilesLink' href='javascript:void(0)'><i>Upload new files</i></a> option on the main menu to upload multiple files in batch. <b>Keep your available space in mind!</b>" + "</p>"
+					html: '<h3>My files</h3>' +
+					/* Three sentences saying one thing, with "Everytime" and
+					   "Paintomics's" in them, and a bolded "Keep your available
+					   space in mind!" shouting at the end about a quota the Used
+					   space meter directly above already shows. Reduced to what
+					   the reader does not already know: files arrive here by
+					   themselves, and there is a batch route. */
+					'<p>Files you submit through any PaintOmics form are stored here automatically, so you can reuse them in a later analysis without uploading them again. ' +
+					'To add several at once, use <a id="myFilesUploadFilesLink" href="javascript:void(0)">Upload new files</a>.</p>'
 				}, {
 					xtype: "livesearchgrid",
 					itemId: "myFilesGrid",
@@ -507,7 +522,10 @@ function DM_MyDataJobListView() {
 			items: [{
 				xtype: "box",
 				flex: 1,
-				html: '<h3>My jobs</h3>' + "<p>" + " As you run new jobs in Paintomics, this section will show the status of your Jobs.</br>" + " You can resume your Jobs and continue working or download the results after each process." + "</p>"
+				html: '<h3>My jobs</h3>' +
+					/* Said "jobs" three times in two sentences, capitalised two of
+					   them, and closed a <br> the wrong way round. */
+					'<p>Every analysis you run appears here with its status. Reopen one to carry on where you left off, or download its results.</p>'
 			}, {
 				xtype: "livesearchgrid",
 				itemId: "myJobsGrid",
@@ -754,26 +772,28 @@ function DM_MyDataJobListView() {
 				items: [{
 					xtype: 'box',
 					cls: "contentbox",
+					/* The <ol> was nested inside the <p>, which the HTML parser cannot
+					   do - it closes the paragraph at the list and leaves a stray </p>
+					   afterwards. Two blocks now, so the markup means what it says.
+
+					   The prose also opened by telling the reader what the page they
+					   are already on is for ("Upload new files easily to your cloud
+					   space using this tool"), and closed the Data type example with a
+					   double full stop. What survives is the part that is not on
+					   screen: what the two fields they have to fill in actually are. */
 					html: '<div id="about">' +
-					' <h2>File uploading</h2>' +
-					' <p>' +
-					'  Upload new files easily to your cloud space using this tool.</br>' +
-					'  Uploaded files can be found at your section "My files and Jobs".' +
-					'  Remember that available space is limited for each user.' +
-					'  <ol>' +
-					'   <li>Choose the files for uploading (Browse button)</li>' +
-					'   <li>' +
-					'     For each selected file, it\'s necessary to specify the following fields:' +
-					'     <ul>' +
-					'       <li>' +
-					'          <b>Data type:</b> this field will help you to identify the type of data that the file contains.</br>' +
-					'          Some examples of data type are "Gene Expression file", "Relevant Compound list", or "GTF file"..' +
-					'       </li>' +
-					'       <li><b>Omic type:</b> identifies the omic family to which the data belong. Possible values are Transcriptomic data, Metabolomics data, etc.</li>' +
-					'     </ul>' +
-					'   </li>' +
-					'  </ol>' +
-					' </p>' +
+					' <h2>Upload files</h2>' +
+					' <p>Files land in <b>My files and Jobs</b>, and count against your storage quota.</p>' +
+					' <ol>' +
+					'  <li>Pick the files with <b>Browse</b>.</li>' +
+					'  <li>Set two fields on each one:' +
+					'    <ul>' +
+					'      <li><b>Data type</b> &mdash; what the file holds, such as a gene expression file, a relevant compound list, or a GTF file.</li>' +
+					'      <li><b>Omic type</b> &mdash; the omic family it belongs to, such as transcriptomics or metabolomics.</li>' +
+					'    </ul>' +
+					'  </li>' +
+					'  <li>Press <b>Upload</b>.</li>' +
+					' </ol>' +
 					'</div>'
 				},
 				Ext.create('Ext.upload.Panel', {

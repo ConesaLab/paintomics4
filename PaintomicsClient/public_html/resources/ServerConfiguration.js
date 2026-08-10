@@ -90,6 +90,13 @@ SERVER_URL_DM_EXAMPLE_FROMBED2GENES = SERVER_URL + "dm_fromBEDtoGenes/example";
 SERVER_URL_DM_EXAMPLE_FROMMIRNA2GENES = SERVER_URL + "dm_fromMiRNAtoGenes/example";
 SERVER_URL_DM_FROMMORE2GENES = SERVER_URL + "dm_fromMOREtoGenes";
 SERVER_URL_DM_EXAMPLE_FROMMORE2GENES = SERVER_URL + "dm_fromMOREtoGenes/example";
+/* Which regulatory engines this host can run -- Rust PLS1, R PLS1, R MLR --
+   and why any of them cannot. Asked rather than assumed for the same reason as
+   SERVER_URL_AI_PROVIDER above: the answer depends on what is installed on the
+   server, and the deployed image carries R without the MORE package, so a list
+   written into the client would offer options that fail inside the job.
+   See describeMOREBackends() in MOREServlet.py. */
+SERVER_URL_MORE_BACKENDS = SERVER_URL + "more_backends";
 SERVER_URL_DM_SEND_REPORT = SERVER_URL + "dm_sendReport";
 /*********************************************************************
  * EXAMPLE DATASET CATALOGUE                 *************************

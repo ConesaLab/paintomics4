@@ -1170,3 +1170,23 @@
 [data-theme="dark"] .po-exp-design-hint {
 	color: var(--pa-ink-muted);
 }
+
+/* Personal storage. main.css states the account and storage surfaces with
+   literal hexes as fallbacks, so the ink is restated here; the meter track and
+   its three status fills are stated too, because the light values were chosen
+   against white and none of them carry to a dark card. The fills come from
+   this file's own status ramp, which is already lightened for a dark ground. */
+[data-theme="dark"] .po-account dd,
+[data-theme="dark"] .po-storage-used,
+[data-theme="dark"] .po-stat-value {
+	color: var(--pa-ink-title);
+}
+[data-theme="dark"] .po-storage-unit {
+	color: var(--pa-ink-body);
+}
+[data-theme="dark"] .po-storage-track {
+	background: var(--pa-surface-quiet);
+}
+[data-theme="dark"] .po-storage-fill.is-ok       { background: var(--pa-status-success); }
+[data-theme="dark"] .po-storage-fill.is-warning  { background: var(--pa-status-warning); }
+[data-theme="dark"] .po-storage-fill.is-critical { background: var(--pa-status-error); }

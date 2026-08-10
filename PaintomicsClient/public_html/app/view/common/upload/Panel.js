@@ -37,16 +37,26 @@
 
 Ext.Loader.setPath('Ext.upload', 'app/view/common/upload');
 
+/* The five toolbar buttons carried their fills as inline `style` and their ink
+   as `<span style="color:white">` inside the label. Both put the colour out of
+   reach of any stylesheet, so neither theme could touch them and neither could
+   be corrected: white on the #5CB85C Upload fill measured 2.48:1 and on the
+   #dd4744 destructive fill 3.94:1, against the 4.5:1 AA wants of button text.
+   Three buttons on one toolbar, all failing.
+
+   The fills are gone. Without them the buttons inherit .x-btn-default-small,
+   which main.css already themes for this application, and the two that need to
+   read differently say so with a class the stylesheet can reach. */
 Ext.define('Ext.upload.Panel', {
     extend: 'Ext.panel.Panel',
     requires: ['Ext.upload.Manager'],
     config: {
         // button strings
-        textUpload: '<span style="color:white"><i class="fa fa-upload"></i> Upload</span>',
-        textBrowse: ' <span style="color:white"><i class="fa fa-search"></i> Browse</span>',
-        textAbort: '<span style="color:white"><i class="fa fa-times"></i> Abort</span>',
-        textRemoveSelected: '<span style="color:white"><i class="fa fa-trash-o"></i> Remove selected</span>',
-        textRemoveAll: '<span style="color:white"><i class="fa fa-trash-o"></i> Remove all</span>',
+        textUpload: '<i class="fa fa-upload"></i> Upload',
+        textBrowse: '<i class="fa fa-folder-open-o"></i> Browse',
+        textAbort: '<i class="fa fa-times"></i> Abort',
+        textRemoveSelected: '<i class="fa fa-trash-o"></i> Remove selected',
+        textRemoveAll: '<i class="fa fa-trash-o"></i> Remove all',
         // grid strings
         textFilename: 'Filename',
         textSize: 'Size',
@@ -238,7 +248,7 @@ Ext.define('Ext.upload.Panel', {
                 {
                     itemId: 'button_upload',
                     text: this.textUpload,
-                    style: "background-image: none; background-color:#5CB85C;",
+                    cls: 'po-upload-go',
                     scope: this,
                     handler: this.onInitUpload
                 },
@@ -246,7 +256,7 @@ Ext.define('Ext.upload.Panel', {
                 {
                     itemId: 'button_abort',
                     text: this.textAbort,
-                    style: "background-image: none; background-color:#dd4744;",
+                    cls: 'po-upload-danger',
                     scope: this,
                     handler: this.onAbortUpload,
                     disabled: true
@@ -255,7 +265,7 @@ Ext.define('Ext.upload.Panel', {
                 {
                     itemId: 'button_remove_selected',
                     text: this.textRemoveSelected,
-                    style: "background-image: none; background-color:#dd4744;",
+                    cls: 'po-upload-danger',
                     scope: this,
                     handler: this.onMultipleRemove
                 },
@@ -263,7 +273,7 @@ Ext.define('Ext.upload.Panel', {
                 {
                     itemId: 'button_remove_all',
                     text: this.textRemoveAll,
-                    style: "background-image: none; background-color:#dd4744;",
+                    cls: 'po-upload-danger',
                     scope: this,
                     handler: this.onRemoveAll
                 }

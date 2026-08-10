@@ -35,9 +35,10 @@
 	<link rel="stylesheet" type="text/css" href="js/libs/jquery-ui/jquery-ui.min.css" />
 	<link rel="stylesheet" type="text/css" href="js/libs/tooltipster-master/dist/css/tooltipster.bundle.min.css" />
 	<link rel="stylesheet" type="text/css" href="js/libs/odometer/odometer-theme-default.css" />
-	<link rel="stylesheet" type="text/css" href="resources/css/main.css?v=0.30" />
+	<link rel="stylesheet" type="text/css" href="resources/css/main.css?v=0.33" />
 	<link rel="stylesheet" type="text/css" href="resources/css/ai-interpret.css?v=0.3" />
-	<link rel="stylesheet" type="text/css" href="resources/css/dark.css?v=0.19" />
+	<link rel="stylesheet" type="text/css" href="resources/css/more-network.css?v=0.1" />
+	<link rel="stylesheet" type="text/css" href="resources/css/dark.css?v=0.20" />
 
 	<!-- Theme, resolved before the first paint.
 	     Deliberately inline and here rather than in Util.js: the stylesheets
@@ -83,9 +84,18 @@
 	<script type="text/javascript" src="js/libs/highcharts/modules/offline-exporting.js"></script> -->
 
 	<!--NETWORKS LIBRARY -->
+	<!-- sigma.js, the Linkurious fork, still draws the PATHWAY network in
+	     PA_Step3Views.js. The MORE regulator-target network moved to
+	     Cytoscape.js below; the two coexist deliberately rather than one
+	     migration being held up by the other. -->
 	<!-- <script type="text/javascript" src="js/libs/linkurious/sigma.js"></script> -->
 	<script type="text/javascript" src="js/libs/linkurious/sigma.min.js?v=0.1"></script>
 	<script type="text/javascript" src="js/libs/linkurious/plugins.js?v=0.2"></script>
+	<!-- Cytoscape.js (MIT) — the MORE regulator-target network. Vendored rather
+	     than fetched from a CDN: the deploy image serves this application
+	     offline behind its own nginx, and a CDN script tag is a hard
+	     dependency on outbound network access at page load. -->
+	<script type="text/javascript" src="js/libs/cytoscape/cytoscape.min.js?v=3.34.0"></script>
 	<!-- <script type="text/javascript" src="js/libs/linkurious/plugins.custom.min.js"></script> -->
 	<!-- <script type="text/javascript" src="js/libs/linkurious/test.min.js"></script> -->
 	<!--CLUSTERING LIBRARY -->
@@ -105,18 +115,18 @@
 	<script type="text/javascript" src="js/libs/svgjs/jquery.svg.pan.zoom.min.js"></script>
 
 	<!--SCRIPTS FOR SERVER CONNECTION CONFIGURATION-->
-	<script type="text/javascript" src="resources/ServerConfiguration.js?v=0.5"></script>
+	<script type="text/javascript" src="resources/ServerConfiguration.js?v=0.6"></script>
 	<!--CUSTOM SENCHA EXTENSIONS-->
 	<script type="text/javascript" src="app/view/common/Util.js?v=1.1"></script>
 	<script type="text/javascript" src="app/view/common/ExtJS_extensions.js?v=0.6"></script>
-	<script type="text/javascript" src="app/view/common/upload/Panel.js?v=0.1"></script>
+	<script type="text/javascript" src="app/view/common/upload/Panel.js?v=0.2"></script>
 
 	<!--MARKDOWN RENDERING LIBRARY -->
 	<script type="text/javascript" src="js/libs/marked/marked.min.js"></script>
 	<!--AI INTERPRETATION VIEW -->
 	<script type="text/javascript" src="app/view/PathwayAcquisitionViews/PA_AIInterpretView.js?v=0.3"></script>
 	<!--MORE REGULATOR–TARGET NETWORK VIEW -->
-	<script type="text/javascript" src="app/view/PathwayAcquisitionViews/PA_Step3RegTargetNetworkView.js?v=0.1"></script>
+	<script type="text/javascript" src="app/view/PathwayAcquisitionViews/PA_Step3RegTargetNetworkView.js?v=0.2"></script>
 
 	<!--LAUNCH APPLICATION -->
 	<script type="text/javascript" src="app.js?v=0.2"></script>

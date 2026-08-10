@@ -3120,34 +3120,150 @@ div.mainInfoPanel h3 {
 /**STYLES FOR MYDATA SECTION *************************/
 /***********************************************************/
 
-.myDataSummaryChartWrapper {
-	height: 130px;
-	width: 150px;
+/* Used space --------------------------------------------------------------
+   Replaces .myDataSummaryChartWrapper (a 150px Highcharts donut) and
+   .myDataSummaryCount (30px counters in coloured icon tiles). One proportion
+   against a known maximum reads as a length, so it is a bar; the two counts
+   were never charts, so they are stat tiles. */
+.po-storage {
+	display: flex;
+	align-items: center;
+	gap: 40px;
+	flex-wrap: wrap;
+}
+.po-storage-meter {
+	flex: 1 1 260px;
+	min-width: 220px;
+}
+.po-storage-figure {
+	margin: 0 0 10px;
+	display: flex;
+	align-items: baseline;
+	gap: 6px;
+}
+/* The hero number. Tabular figures so the bar below does not appear to jitter
+   when the value ticks over as files are added or deleted. */
+.po-storage-used {
+	font-size: 34px;
+	line-height: 1;
+	font-weight: 300;
+	color: var(--pa-ink-title, #24252A);
+	font-variant-numeric: tabular-nums;
+}
+.po-storage-unit {
+	font-size: 17px;
+	color: var(--pa-ink-body, #555);
+}
+.po-storage-of {
+	font-size: 13px;
+	color: var(--pa-ink-muted);
+	margin-left: 2px;
+}
+.po-storage-track {
+	height: 8px;
+	border-radius: var(--pa-radius-pill, 999px);
+	background: var(--pa-surface-quiet, #F1F2F4);
 	overflow: hidden;
-	float: left
 }
-.myDataSummaryCount {
+.po-storage-fill {
+	height: 100%;
+	border-radius: var(--pa-radius-pill, 999px);
+	background: #288824;
+	transition: width var(--pa-transition), background-color var(--pa-transition);
+}
+/* Status, not category: exactly one of these is on screen at a time, so they
+   are never compared against each other. The figure above the bar says the
+   same thing in words, which is what keeps this from being colour-alone.
+   Values are the design system's status ramp - the amber replaces Highcharts'
+   #DDDF0D, which measured 1.6:1 on white and was invisible as a warning. */
+.po-storage-fill.is-ok       { background: #288824; }
+.po-storage-fill.is-warning  { background: #CB7505; }
+.po-storage-fill.is-critical { background: #D36044; }
+
+.po-storage-stats {
+	display: flex;
+	gap: 34px;
+}
+.po-stat {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+.po-stat-value {
 	font-size: 30px;
-	margin: 0px;
-	line-height: 130px;
-	display: inline-block;
-	padding-right: 25px;
+	line-height: 1;
+	font-weight: 300;
+	color: var(--pa-ink-title, #24252A);
+	font-variant-numeric: tabular-nums;
 }
-span.myDataSummaryCount i {
-	background: #1B8468; /* was rgb(35,174,137) - white label at 2.80:1 */
-	color: #fff;
-	line-height: 65px;
-	padding: 0px 18px;
-	border-radius: 13px;
-	margin-right: 10px;
+.po-stat-label {
+	font-size: 12px;
+	letter-spacing: 0.02em;
+	color: var(--pa-ink-muted);
 }
-table#myDataUserDetails {
+.po-storage-note {
+	margin: 18px 0 0;
+	font-size: 12.5px;
+	line-height: 1.5;
+	color: var(--pa-ink-muted);
+	max-width: var(--pa-measure-note);
+}
+
+/* The upload toolbar. Its buttons used to state their fills inline, which no
+   stylesheet could reach - see the note at the top of upload/Panel.js. With
+   those gone they inherit .x-btn-default-small, and only the two that carry a
+   different meaning are restated here.
+
+   The measured reason the old values had to go: white on #5CB85C was 2.48:1 and
+   on #dd4744 was 4.15:1. Both replacements are the design system's own steps
+   and both measure 4.62:1, which is also exactly what the inherited blue makes,
+   so the whole toolbar now sits at one contrast rather than three. */
+.po-upload-go.x-btn-default-small {
+	background-color: #3A843A;
+	border-color: #306C30;
+}
+.po-upload-go.x-btn-default-small-over,
+.po-upload-go.x-btn-default-small-focus {
+	background-color: #337533;
+	border-color: #2A602A;
+}
+.po-upload-danger.x-btn-default-small {
+	background-color: #D43E3A;
+	border-color: #B62B28;
+}
+.po-upload-danger.x-btn-default-small-over,
+.po-upload-danger.x-btn-default-small-focus {
+	background-color: #C32F2B;
+	border-color: #A02723;
+}
+/* The account details. Was table#myDataUserDetails, a 15px two-column table
+   whose left column was bold labels. */
+.po-account {
+	margin: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
+}
+.po-account-row {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+.po-account dt {
+	font-size: 12px;
+	letter-spacing: 0.02em;
+	color: var(--pa-ink-muted);
+}
+.po-account dd {
+	margin: 0;
 	font-size: 15px;
-	padding: 15px;
+	color: var(--pa-ink-title, #24252A);
+	/* An address is data: it should be selectable and never silently clipped. */
+	word-break: break-word;
 }
-table#myDataUserDetails td:first-child {
-	text-align: right;
-	padding-right: 10px
+.po-account-actions {
+	text-align: left;
+	margin-top: 22px;
 }
 /***********************************************************/
 /**COMMON STYLES FOR ALL STEPS *************************/
