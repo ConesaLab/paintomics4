@@ -96,6 +96,14 @@ class Step2TestCase(unittest.TestCase):
         self.tmp = tempfile.mkdtemp(prefix="more2_")
         self._realPopen = MOREServlet.subprocess.Popen
         self._realJIM = MOREServlet.JobInformationManager
+        # Pin the backend to R. MORE_RS_BINARY is read from the environment at
+        # import time, so an operator with PAINTOMICS_MORE_RS exported would
+        # otherwise see these tests build a more-rs command and fail on the
+        # argv[0] assertion. What the backend choice depends on belongs to
+        # test_more_backend_selection; what this file pins is the argument
+        # vector, which is identical either way.
+        self._realBinary = MOREServlet.MORE_RS_BINARY
+        MOREServlet.MORE_RS_BINARY = ""
         MOREServlet.subprocess.Popen = FakePopen
         MOREServlet.JobInformationManager = lambda: self
 
@@ -115,6 +123,7 @@ class Step2TestCase(unittest.TestCase):
     def tearDown(self):
         MOREServlet.subprocess.Popen = self._realPopen
         MOREServlet.JobInformationManager = self._realJIM
+        MOREServlet.MORE_RS_BINARY = self._realBinary
         shutil.rmtree(self.tmp, ignore_errors=True)
 
     def makeJob(self, omics=None):

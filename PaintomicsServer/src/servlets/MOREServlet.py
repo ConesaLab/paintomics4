@@ -17,6 +17,61 @@ from src.common.ServerErrorManager import handleException
 from src.common import ExampleDatasets
 from src.conf.serverconf import CLIENT_TMP_DIR, ROOT_DIRECTORY
 
+# serverconf.py is gitignored and installed from example_serverconf.py by
+# deploy/entrypoint.sh -- but only when the file is absent, so a container
+# upgraded in place keeps the config it already has, which predates this
+# setting. Importing it directly would raise at module import and take the
+# whole MORE route down, turning an optional feature into an outage on every
+# existing deployment. Fall back to the variable the template itself reads.
+try:
+    from src.conf.serverconf import MORE_RS_BINARY
+except ImportError:
+    MORE_RS_BINARY = os.getenv("PAINTOMICS_MORE_RS", "")
+
+
+def _resolveMOREBackend(method, rScript, binaryPath=None):
+    """Return the argv prefix that runs MORE for ``method``.
+
+    Two engines sit behind one CLI. ``Rscript runMORE.R`` is the reference and
+    the default; ``more-rs`` is a Rust port of the PLS1 kernel that takes the
+    same arguments and returns, on the bundled 06-regulatory-more example, six
+    of seven output files byte-identical to R's (the seventh, the rpc table,
+    holds the same rows in a different order -- MORE orders them by omic name
+    under R's collation, which is locale-dependent and deliberately not
+    reproduced here).
+
+    R wins in three cases, all of which would otherwise be silent failures:
+
+    * ``MLR``. The port implements PLS1 only and exits pointing back at
+      runMORE.R, so routing MLR to it turns a working analysis into a failed
+      one. Any method it does not recognise goes to R for the same reason --
+      R owns the full method surface.
+    * A configured path that is not on disk. The binary ships separately from
+      the server and is absent from the deploy image; a stale setting must
+      degrade to R, not take MORE down.
+    * A configured path without the executable bit, which an unpacked archive
+      loses easily and which would otherwise surface as EACCES from Popen.
+
+    ``binaryPath`` defaults to the ``MORE_RS_BINARY`` setting and is a
+    parameter so the choice can be exercised without mutating the environment.
+    """
+    if binaryPath is None:
+        binaryPath = MORE_RS_BINARY
+
+    # Exact match. The port is stricter than R about this string -- `pls1` and
+    # ` PLS1 ` both exit with "must be PLS1 or MLR" -- so normalising here
+    # would route a value the port refuses away from the backend that might
+    # accept it, turning a slow analysis into a failed one.
+    if method == "PLS1" and binaryPath:
+        if os.path.isfile(binaryPath) and os.access(binaryPath, os.X_OK):
+            return [binaryPath]
+        logging.warning(
+            "MORE: PAINTOMICS_MORE_RS is set to %r but that is not an "
+            "executable file; falling back to Rscript runMORE.R.", binaryPath)
+
+    return ["Rscript", rScript]
+
+
 def _toFloat(rawValue, default):
     """Coerce one submitted form field to a float, falling back to ``default``.
 
@@ -249,10 +304,10 @@ def fromMOREtoGenes_STEP1(REQUEST, RESPONSE, QUEUE_INSTANCE, JOB_ID,
 
 def fromMOREtoGenes_STEP2(jobInstance, userID, RESPONSE, formFields):
     """
-    Step 2: Run the R backend and return results.
+    Step 2: Run the MORE backend (see _resolveMOREBackend) and return results.
     """
     try:
-        logging.info(f"MORE_STEP2 - RUNNING R SCRIPT for {jobInstance.getJobID()}")
+        logging.info(f"MORE_STEP2 - RUNNING MORE BACKEND for {jobInstance.getJobID()}")
         
         # 1. Pre-flight Validation
         target_file = jobInstance.targetExpressionFile
@@ -366,8 +421,13 @@ def fromMOREtoGenes_STEP2(jobInstance, userID, RESPONSE, formFields):
                 "The MORE analysis script is missing from this installation "
                 "(expected at %s)." % r_script)
 
-        cmd = [
-            "Rscript", r_script,
+        # PLS1 may run on the Rust port when one is installed; MLR and every
+        # other method always go to R. Both take the argument vector below
+        # unchanged -- more-rs mirrors runMORE.R's optparse surface option for
+        # option, which is what makes the two interchangeable here.
+        backend = _resolveMOREBackend(jobInstance.method, r_script)
+        backendName = "R" if backend[0] == "Rscript" else "more-rs"
+        cmd = backend + [
             "--target_file", os.path.join(input_dir, target_file),
             "--condition_file", os.path.join(input_dir, jobInstance.conditionsFile),
             "--omic_names", ",".join([o['name'] for o in jobInstance.regulatoryOmics]),
@@ -387,11 +447,11 @@ def fromMOREtoGenes_STEP2(jobInstance, userID, RESPONSE, formFields):
 
         logging.info(f"MORE_STEP2 - Executing command: {' '.join(cmd)}")
 
-        # 3. Execute R — stream output line-by-line so the operator can see exactly
-        # where MORE is in the pipeline (data load, sample alignment, model fitting,
-        # output writing). subprocess.check_output buffers everything until exit,
-        # which makes a long PLS1+Jackknife fit on real data look like a hang. Each
-        # R line is mirrored to the Flask log AND captured for the error response.
+        # 3. Execute the backend — stream output line-by-line so the operator can see
+        # exactly where MORE is in the pipeline (data load, sample alignment, model
+        # fitting, output writing). subprocess.check_output buffers everything until
+        # exit, which makes a long PLS1+Jackknife fit on real data look like a hang.
+        # Each line is mirrored to the Flask log AND captured for the error response.
         proc = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
@@ -406,14 +466,14 @@ def fromMOREtoGenes_STEP2(jobInstance, userID, RESPONSE, formFields):
         for line in iter(proc.stdout.readline, ''):
             line = line.rstrip()
             if line:
-                logging.info(f"MORE-R | {line}")
+                logging.info(f"MORE[{backendName}] | {line}")
                 captured.append(line)
         proc.stdout.close()
         return_code = proc.wait()
         if return_code != 0:
             error_text = "\n".join(captured) if captured else f"(no output captured, exit {return_code})"
-            logging.error(f"MORE_STEP2 - R Script failed with exit code {return_code}. Output:\n{error_text}")
-            raise RuntimeError(f"The MORE R analysis failed. Details:\n{error_text}")
+            logging.error(f"MORE_STEP2 - {backendName} backend failed with exit code {return_code}. Output:\n{error_text}")
+            raise RuntimeError(f"The MORE analysis failed ({backendName} backend). Details:\n{error_text}")
 
         
         # 3. Process Outputs and Prepare Summary
