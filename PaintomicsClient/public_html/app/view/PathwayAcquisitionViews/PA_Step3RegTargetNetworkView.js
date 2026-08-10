@@ -498,9 +498,23 @@ function PA_Step3RegTargetNetworkView() {
 				edge.data("coef", coef);
 				edge.data("absCoef", absCoef);
 				edge.data("sign", (coef != null && coef < 0) ? "neg" : "pos");
-				// |coef| in MORE is unbounded but typically lands in [0, ~2].
-				// Capping keeps one dominant edge from swamping the rest.
-				edge.data("width", 0.6 + Math.min(absCoef, 1.5) * 2.0);
+				// Width is |coef| RELATIVE TO THE STRONGEST EDGE IN THIS
+				// DATASET, not against an absolute scale.
+				//
+				// The absolute version -- inherited from the sigma view, which
+				// capped at 1.5 on the grounds that MORE coefficients "typically
+				// land in [0, ~2]" -- encodes nothing on real data. Measured on
+				// the bundled STATegra example, |coef| runs 0 to 0.178 with a
+				// median of 0.031, so every edge came out between 0.6 and 0.96
+				// pixels wide: a channel carrying no information, on the
+				// quantity the view exists to show.
+				//
+				// Relative scaling means widths are not comparable between two
+				// different jobs. They were not comparable before either -- they
+				// were all the same -- and within one network, which is what a
+				// reader is actually comparing, this is the encoding that works.
+				var scale = me.dataMaxAbsCoef > 0 ? absCoef / me.dataMaxAbsCoef : 0;
+				edge.data("width", 0.5 + Math.min(scale, 1) * 3.5);
 			});
 		});
 	};
