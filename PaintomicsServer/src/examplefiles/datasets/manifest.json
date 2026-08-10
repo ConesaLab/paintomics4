@@ -712,10 +712,11 @@
       },
       "expected": {
         "associations": 17669,
-        "enginesAgree": "rust-pls1 and r-pls1 byte-identical on all four output files",
+        "enginesAgree": "rust-pls1 and r-pls1 byte-identical on all four output files; r-mlr is a different model and is not expected to agree with either",
         "flaggedRegulators": 176,
         "flaggedRule": "one-way ANOVA across the 12 groups, Benjamini-Hochberg FDR < 0.01, and at least a two-fold range between group means",
         "measuredRuntimeSeconds": {
+          "r-mlr": 713.2,
           "r-pls1": 366.8,
           "rust-pls1": 0.8
         },

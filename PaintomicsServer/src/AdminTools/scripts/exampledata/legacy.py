@@ -277,9 +277,14 @@ def buildStategraMore(context):
             # between the two PLS1 engines. That is what makes offering the
             # port as the default legitimate; a 473x speed claim with no
             # equivalence behind it would just be a different answer, faster.
-            "measuredRuntimeSeconds": {"rust-pls1": 0.8, "r-pls1": 366.8},
+            # All three fit inside the 1800 s job timeout, which is the
+            # property that makes this dataset usable as the example for a
+            # three-way engine choice rather than only for the default.
+            "measuredRuntimeSeconds": {"rust-pls1": 0.8, "r-pls1": 366.8,
+                                       "r-mlr": 713.2},
             "enginesAgree": ("rust-pls1 and r-pls1 byte-identical on all four "
-                             "output files"),
+                             "output files; r-mlr is a different model and is "
+                             "not expected to agree with either"),
             "targets": 600,
             "regulators": 307,
             "associations": 17669,

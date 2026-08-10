@@ -34,10 +34,10 @@ A uniform random subsample of the STATegra Ikaros induction time course (GSE7541
 ## Expected result
 
 * **associations** — 17669
-* **enginesAgree** — rust-pls1 and r-pls1 byte-identical on all four output files
+* **enginesAgree** — rust-pls1 and r-pls1 byte-identical on all four output files; r-mlr is a different model and is not expected to agree with either
 * **flaggedRegulators** — 176
 * **flaggedRule** — one-way ANOVA across the 12 groups, Benjamini-Hochberg FDR < 0.01, and at least a two-fold range between group means
-* **measuredRuntimeSeconds** — {'rust-pls1': 0.8, 'r-pls1': 366.8}
+* **measuredRuntimeSeconds** — {'rust-pls1': 0.8, 'r-pls1': 366.8, 'r-mlr': 713.2}
 * **note** — Matched-pathway counts differ between KEGG snapshots (888/44 on the deploy VM vs 877/41 locally for the same job), so none are asserted.
 * **regulators** — 307
 * **source** — {'expression': 'GEO GSE75417 (STATegra RNA-seq, CQN + ComBat)', 'network': 'TFLink v1.0, Mus musculus, All simple format', 'subsample': 'uniform random, seed 20260811, from the 9,835 targets carrying at least one association'}
