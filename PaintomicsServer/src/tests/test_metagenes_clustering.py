@@ -106,7 +106,8 @@ def _r_available():
 R_AVAILABLE = _r_available()
 
 
-def _build_fixture(root, write_relevance_flag=True):
+def _build_fixture(root, write_relevance_flag=True, n_conditions=N_CONDITIONS,
+                   shapes=None, amplitudes=None):
     """Write a synthetic KEGG tree + matched file with known cluster structure.
 
     Returns (kegg_dir, data_dir, expected_shape_of_pathway).
@@ -127,12 +128,13 @@ def _build_fixture(root, write_relevance_flag=True):
 
     gene_counter = 0
     pathway_counter = 0
-    for shape_name, profile in SHAPES.items():
+    for shape_name, profile in (shapes or SHAPES).items():
         for p in range(PATHWAYS_PER_SHAPE):
             pathway_counter += 1
             pathway_id = "synth%03d" % pathway_counter
             expected[pathway_id] = shape_name
-            amplitude = AMPLITUDES[p % len(AMPLITUDES)]
+            scale = amplitudes or AMPLITUDES
+            amplitude = scale[p % len(scale)]
 
             for g in range(GENES_PER_PATHWAY):
                 gene_counter += 1
@@ -142,7 +144,7 @@ def _build_fixture(root, write_relevance_flag=True):
                 # Deterministic jitter -- no RNG, so the fixture is identical on
                 # every run and the assertions below cannot flake.
                 values = []
-                for c in range(N_CONDITIONS):
+                for c in range(n_conditions):
                     jitter = 0.01 * (((gene_counter * 7 + c * 13) % 11) - 5)
                     values.append(amplitude * profile[c] + jitter)
 
@@ -291,6 +293,109 @@ class ClusterCountClampTest(unittest.TestCase):
             self.assertGreaterEqual(len(assigned), 1)
         finally:
             shutil.rmtree(root, ignore_errors=True)
+
+
+@unittest.skipUnless(R_AVAILABLE, "Rscript and its packages are required")
+class SingleConditionMetagenesTest(unittest.TestCase):
+    """One condition must still produce metagenes and clusters.
+
+    PC1 across conditions needs two observations, so PCA2GO.2 used to die here
+    with `Error in if (nrow(gene.sel) < 2) next : argument is of length zero`,
+    taking all of step 2 down with it -- a treated-vs-control experiment, the
+    commonest design there is, could not be analysed at all.
+
+    The answer is not to skip metagenes for these jobs. A metagene is the
+    representative summary of a pathway's member genes; PC1 is one estimator of
+    it and it is the estimator that needs >= 2 conditions. With one condition
+    the summary is a location statistic, so generateMetaGenes.R switches to
+    CENTROID2GO (per-condition median) and clusters the resulting values in one
+    dimension with mclust. These tests pin that the switch happens, that the
+    number it produces is really the median, and that the output keeps the same
+    shape every consumer downstream expects.
+    """
+
+    # A single condition carries no shape, only amplitude, so the fixture plants
+    # three separated magnitude groups instead of three profiles.
+    SHAPES = {"down": [-2.0], "flat": [0.0], "up": [2.0]}
+    # One amplitude, unlike the multi-condition fixture. That fixture varies
+    # amplitude 80-fold *within* each shape group precisely because correlation
+    # clustering has to be amplitude-invariant. In one dimension amplitude is
+    # the only thing there is, so keeping that spread would ask the clustering
+    # to call -0.1 and -8.0 the same group -- which is not a property a
+    # one-dimensional partition should have, and not one worth pinning.
+    AMPLITUDES = [1.0]
+
+    @classmethod
+    def setUpClass(cls):
+        cls.root = tempfile.mkdtemp(prefix="pa4_metagenes_1cond_")
+        cls.kegg_dir, cls.data_dir, cls.expected = _build_fixture(
+            cls.root, n_conditions=1, shapes=cls.SHAPES, amplitudes=cls.AMPLITUDES)
+        cls.result = _run_r(cls.kegg_dir, cls.data_dir, kclusters="dynamic")
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.root, ignore_errors=True)
+
+    def test_the_script_completes(self):
+        self.assertEqual(self.result.returncode, 0,
+                         "single-condition run failed:\n%s" % self.result.stdout)
+
+    def test_it_says_which_estimator_ran(self):
+        """Silently changing estimator would make two jobs incomparable."""
+        self.assertIn("median centroid (single condition)", self.result.stdout)
+
+    def test_one_value_column_per_condition(self):
+        """Layout stays pathway | metageneIndex | cluster | v1."""
+        table = _read_tab(self.data_dir)
+        self.assertTrue(table, "no metagenes written")
+        for pathway, (_cluster, values) in table.items():
+            self.assertEqual(len(values), 1,
+                             "%s carries %d values, expected 1" % (pathway, len(values)))
+
+    def test_the_metagene_is_the_median_of_its_genes(self):
+        """The defining property of the estimator, not an implementation detail."""
+        members = {}
+        with open(os.path.join(self.data_dir, "Synth_matched.txt")) as handle:
+            for line in handle:
+                fields = line.rstrip("\n").split("\t")
+                members.setdefault(fields[2], float(fields[4]))
+        annotation = {}
+        with open(os.path.join(self.kegg_dir, "current", "mmu",
+                               "gene2pathway.list")) as handle:
+            for line in handle:
+                gene, pathway = line.rstrip("\n").split("\t")
+                annotation.setdefault(pathway.replace("path:", ""), []).append(
+                    gene.replace("mmu:", ""))
+        table = _read_tab(self.data_dir)
+        for pathway, (_cluster, values) in table.items():
+            xs = sorted(members[g] for g in annotation[pathway] if g in members)
+            middle = (xs[len(xs) // 2] if len(xs) % 2
+                      else (xs[len(xs) // 2 - 1] + xs[len(xs) // 2]) / 2.0)
+            self.assertAlmostEqual(values[0], middle, places=6,
+                                   msg="%s is not the median of its genes" % pathway)
+
+    def test_planted_magnitude_groups_are_separated(self):
+        """Clustering in 1-D still has to recover the planted structure."""
+        table = _read_tab(self.data_dir)
+        byGroup = {}
+        for pathway, (cluster, _values) in table.items():
+            byGroup.setdefault(self.expected[pathway], set()).add(cluster)
+        for group, clusters in byGroup.items():
+            self.assertEqual(len(clusters), 1,
+                             "'%s' pathways were split across clusters %s"
+                             % (group, sorted(clusters)))
+        allClusters = [next(iter(c)) for c in byGroup.values()]
+        self.assertEqual(len(set(allClusters)), len(byGroup),
+                         "distinct magnitude groups share a cluster: %s" % byGroup)
+
+    def test_thumbnails_are_drawn(self):
+        """A polyline through one x position draws nothing; the strip plot must."""
+        pngs = [f for f in os.listdir(self.data_dir)
+                if f.startswith("Synth_cluster_") and f.endswith(".png")]
+        self.assertTrue(pngs, "no cluster thumbnails written")
+        for name in pngs:
+            self.assertGreater(os.path.getsize(os.path.join(self.data_dir, name)), 1000,
+                               "%s looks like an empty canvas" % name)
 
 
 class MatchedFileContractTest(unittest.TestCase):

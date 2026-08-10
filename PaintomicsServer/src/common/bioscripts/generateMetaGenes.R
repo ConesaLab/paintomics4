@@ -121,8 +121,50 @@ genes2pathway[,1] <- tolower(genes2pathway[,1])
 # ENSMUSG00000000001	Gnai3	14679	KEGG	0.01523	0.01042	0.04686	0.01663	0.04748	0.04169	0
 #                                                                                                 ^ relevance flag
 input_data <- read.table(file=args$input_file, header=FALSE, sep="\t", quote="")
+
+# CANONICALISE ROW ORDER ------------------------------------------------------
+# The writer of <omic>_matched.txt (Job.py) emits its rows in an order that is
+# not stable between runs of the same job on the same input: the file's md5
+# changes run to run while the md5 of its *sorted* lines does not. Everything
+# below used to inherit that order, and two effects turned it into a different
+# answer rather than just a different file:
+#
+#   1. The deduplication on the next line keeps whichever copy of a repeated
+#      feature ID happens to come FIRST. Repeated IDs are not rare and they do
+#      not carry the same values -- measured on the bundled mmu single-condition
+#      example, 193 of the IDs appear more than once and all 193 disagree about
+#      the value. "First in the file" is therefore a coin flip that silently
+#      rewrote 193 gene values per run.
+#   2. Even with identical values, the per-pathway submatrix handed to PCA
+#      inherits this order, and the eigen decomposition of a permuted covariance
+#      matrix differs in its last bits. The single%-criterion in PCA2GO.2 counts
+#      components above a threshold, so those last bits flip how many metagenes
+#      a pathway contributes at all: measured 290 to 296 metagenes across 8
+#      permutations of one 6-condition input.
+#
+# The two together made the same job produce a different Step-4 picture every
+# run: 12 permutations of one real matched.txt gave 12 different cluster
+# memberships and 8 different cluster-size signatures.
+#
+# Sorting here fixes it for any writer, which is why it belongs in the script
+# and not in Job.py. The key is the lowercased feature ID -- the same value the
+# deduplication and the row names below key on -- with every remaining column
+# appended as a tie-break, so two rows sharing an ID resolve to the
+# lexicographically smallest one deterministically instead of by arrival order.
+# method = "radix" pins C-locale collation: the default for character vectors is
+# the collation locale, which would make the answer depend on the machine's LANG.
+# Sorting reorders whole rows, so column identity within a row is untouched, and
+# feature_ids below is derived from the sorted frame.
+sort_keys <- c(list(tolower(input_data[[3]])),
+               lapply(input_data, function(col)
+                 if (is.character(col)) tolower(col) else col))
+input_data <- input_data[do.call(order, c(sort_keys, list(method = "radix"))), ,
+                         drop = FALSE]
+
 # Remove duplicates
-# TODO: now we are just ignoring the duplicates and taking the first match, maybe we should calculate mean?
+# TODO: we take the first match after the canonical sort above, which is
+# reproducible but still arbitrary between the copies; averaging them is the
+# open question, and it is a change of statistic rather than of determinism.
 # Deduplicate on the *lowercased* ID because that is what becomes row.names
 # below; two IDs differing only in case would otherwise reach data.frame() as
 # duplicate row names and abort the run.
@@ -157,7 +199,18 @@ input_data <- data.frame(input_data[, value_cols, drop=FALSE], row.names=feature
 #genes2pathway[which(genes2pathway[,1] %in% rownames(input_data)),]
 # GET METAGENES  ------------------------------------------------------------------------------------------------
 cat("STEP 4. Obtaining metagenes, ")
-expression_GO <- get(PCA2GO.fun)(input_data, genes2pathway, var.cutoff = args$cutoff, fac.sel =  sel)
+# Pick the estimator by what the design can support, and say which one ran.
+# PC1 across conditions needs at least two observations to have a direction of
+# maximum variance at all; with one condition the pathway summary is a location
+# statistic of its member genes. CENTROID2GO (PCA2GO.2.R) is that estimator and
+# returns the identical shape, so nothing downstream branches on this choice.
+if (n_conditions >= 2) {
+  cat("PC1 across ", n_conditions, " conditions, ", sep = "")
+  expression_GO <- get(PCA2GO.fun)(input_data, genes2pathway, var.cutoff = args$cutoff, fac.sel =  sel)
+} else {
+  cat("median centroid (single condition), ")
+  expression_GO <- CENTROID2GO(input_data, genes2pathway, var.cutoff = args$cutoff)
+}
 if (is.null(expression_GO$X.sel)) {
   cat("No metagenes found for this database and input data. Exiting gracefully.\n")
   q(save="no", status=0)
@@ -210,7 +263,33 @@ adjust.direction <- function (expression_GO) {
   }
   return(metagenes)
 }
-metagenes <- adjust.direction(expression_GO)
+# The sign of a principal component is arbitrary, so the PCA branch has to
+# orient each metagene against the loadings of the genes that built it. A median
+# centroid is already expressed in the data's own units and direction -- there
+# is no sign to resolve, and running the loading vote over the deliberately
+# uniform loadings CENTROID2GO returns would be a no-op that only looks like a
+# decision.
+if (n_conditions >= 2) {
+  metagenes <- adjust.direction(expression_GO)
+} else {
+  metagenes <- expression_GO$X.sel
+}
+
+# Canonicalise the metagene row order before anything clusters it.
+#
+# The rows arrive in the order the pathways appear in gene2pathway.list, so this
+# is a second, independent exposure: regenerate the KEGG snapshot with the
+# pathways in another order and the clustering moves, even though not one
+# metagene value changed. Both clusterers are order-sensitive on ties --
+# Mclust seeds EM from model-based hierarchical agglomeration, whose merges are
+# resolved by row position when distances tie, and 1-D metagenes tie constantly;
+# kmeans draws its starting centres by sampling rows.
+#
+# This must run AFTER adjust.direction, which pairs X.sel row i with
+# X.loadings[[i]] positionally. Nothing below is positional: the thumbnails, the
+# cluster column and write.table all address rows by name, and columns are not
+# touched, so sorting cannot separate a pathway from its values.
+metagenes <- metagenes[order(rownames(metagenes), method = "radix"), , drop = FALSE]
 
 # CLUSTERIZE ----------------------------------------------------------------------------------------------------
 data <- metagenes
@@ -248,6 +327,31 @@ rowNorms <- sqrt(rowSums(dataScaled^2))
 # kmeans() rejects outright.
 rowNorms[!is.finite(rowNorms) | rowNorms == 0] <- 1
 dataForClustering <- dataScaled / rowNorms
+
+# Single condition: undo the two transformations above, because both of them are
+# statements about shape across conditions and there is no such axis here.
+# Centring a one-column matrix per row sends every value to exactly 0, and the
+# unit-norm step then divides 0 by the rowNorms guard -- the whole matrix
+# collapses onto a single point and any partition of it is arbitrary. With one
+# condition the amplitude IS the profile, so cluster the metagene values
+# themselves. This keeps "cluster metagenes by their response" true in both
+# regimes; only the meaning of "response" narrows from a shape to a magnitude.
+if (n_conditions < 2) {
+  dataScaled <- data
+  dataForClustering <- data
+}
+
+# k-means in one dimension is the wrong tool: Lloyd's algorithm has no exact
+# optimum, seeds randomly, and its elbow scan below assumes a cloud with more
+# structure than a single axis carries. mclust is already a supported branch of
+# this script, handles 1-D natively, chooses the number of components by BIC and
+# reports per-component variance, so single-condition jobs are routed to it.
+# (An exact 1-D dynamic-programming k-means would also be correct, but that means
+# adding Ckmeans.1d.dp to every deployment; mclust is already a dependency.)
+if (n_conditions < 2 && args$cluster == "kmeans") {
+  cat("Single condition: clustering with mclust in 1-D instead of k-means. ")
+  args$cluster <- "mclust"
+}
 
 # k-means seeds its centres from a random sample of rows. With no fixed seed the
 # same job produced a different partition on every run, so the thumbnails and
@@ -298,7 +402,16 @@ if(is.null(args$kclusters) || args$kclusters == "dynamic") {
 args$kclusters <- as.integer(args$kclusters)
 if (is.na(args$kclusters) || args$kclusters < 1) args$kclusters <- 1
 nMetagenes <- nrow(dataForClustering)
-maxClusters <- min(nrow(unique(dataForClustering)), nMetagenes - 1L)
+# unique() on doubles compares bit patterns, which is not the question being
+# asked here -- the clamp wants to know how many *distinguishable* points there
+# are. With exactly two conditions the centred, unit-norm rows are algebraically
+# only ever (+1/sqrt2, -1/sqrt2) or its negation, yet floating-point noise in the
+# division above leaves them bitwise distinct: measured 61 "distinct" rows for
+# 500 metagenes when there are 2. The clamp therefore never fired, k-means was
+# handed k = 17 for a cloud occupying 2 locations, and it returned 17 clusters
+# that mean nothing rather than erroring. Rounding first makes the count reflect
+# the geometry.
+maxClusters <- min(nrow(unique(round(dataForClustering, 10))), nMetagenes - 1L)
 if (args$kclusters > maxClusters) {
   cat("Requested", args$kclusters, "clusters but only", nMetagenes,
       "metagenes are available; using", max(maxClusters, 1L), ". ")
@@ -315,10 +428,25 @@ if(nMetagenes < 2 || args$kclusters < 2){
   singleton <- setNames(rep(1L, nMetagenes), rownames(dataForClustering))
   clusters <- list(cluster = singleton, classification = singleton)
 }else if(args$cluster=="kmeans"){
-  # nstart = 25: a single random start regularly settled in a poor local
-  # optimum, so re-running the same omic could return visibly different clusters.
+  # Re-seed here rather than relying on the set.seed above. The elbow scan
+  # between the two consumes a number of random draws that depends on the data
+  # (k.max, and how many restarts each k needs to converge), so the RNG state
+  # reaching this call was a function of the input size. Seeding immediately
+  # before the draw that matters makes the final partition depend on the data
+  # alone, and makes this call reproducible when k is passed in explicitly and
+  # the elbow scan never runs at all.
+  set.seed(149)
+  # nstart = 100: with a fixed seed any nstart is reproducible, but reproducible
+  # is not the same as stable -- a poor local optimum reached identically every
+  # time is still a poor answer, and it moves under any small change to the
+  # input. Measured over 12 seeds on a 6-condition example (296 metagenes,
+  # k = 5): nstart = 1 reached 6 different partitions and a tot.withinss spread
+  # of 55.896 to 56.630; nstart = 25 reached 2 partitions (55.896 to 55.982);
+  # nstart = 100 and nstart = 200 both reached the same single partition at the
+  # best value seen, 55.896. 100 is where the optimum stops moving, and it costs
+  # 10 ms per call at this size, so it is taken rather than 25.
   clusters <- stats::kmeans(dataForClustering, centers = args$kclusters,
-                            iter.max = 500, nstart = 25)
+                            iter.max = 500, nstart = 100)
 }else{
   clusters <- fit <- Mclust(dataForClustering, G = args$kclusters)
 }
@@ -386,6 +514,21 @@ for (i in 1:args$kclusters){
   }
   minMax <- range(values)
 
+  if(ncol(values) == 1){
+    # One condition: a polyline through a single x position draws nothing at
+    # all, so the thumbnail would come out blank. The honest picture of a
+    # one-dimensional cluster is where its members sit on the value axis, so
+    # plot them as points with the cluster centroid marked. range() of a
+    # one-member cluster is a single number and would give a degenerate xlim.
+    if (diff(minMax) == 0) minMax <- minMax + c(-0.5, 0.5)
+    stripchart(as.numeric(values), method = "jitter", jitter = 0.15, pch = 16,
+               col = "gray60", xlim = minMax, axes = FALSE,
+               main = paste(length(pathway_ids), "metagenes"))
+    abline(v = 0, lty = 3, col = "gray40")
+    abline(v = clust.centroid(args$cluster, dataScaled, clusters, i),
+           col = "red", lwd = 2)
+    box()
+  }else{
   if(length(row.names(values)) > 1){
     #Plot first cluster
     plot(as.matrix(values[1,]), type="l", col="gray88", main=paste(length(pathway_ids), "metagenes"), axes=F, xlab=NULL, ylim = minMax)
@@ -400,6 +543,7 @@ for (i in 1:args$kclusters){
   }
   abline(h =0)
   box()
+  }
   
   dev.off()
 }
