@@ -281,9 +281,26 @@ class PathwayAcquisitionJob(Job):
             totalUnmapped = omicSummary[1]
 
             try:
-                mapped_ratios[genericOmic.get("omicName")] = float(totalMapped) / float(totalMapped + totalUnmapped)
-            except ZeroDivisionError as e:
-                mapped_ratios[genericOmic.get("omicName")] = 0
+                ratio = float(totalMapped) / float(totalMapped + totalUnmapped)
+            except (ZeroDivisionError, TypeError, ValueError):
+                ratio = 0
+
+            # A mapped ratio is a proportion of the input, so it cannot leave
+            # [0, 1]. It is not cosmetic: generatePathwaysList hands this
+            # dictionary to the Stouffer/Fisher combination as the per-omic
+            # weight, so a ratio above 1 silently over-weights that omic in
+            # every combined pathway p-value. This is the last line of defence
+            # -- the counting that produced it is fixed at source in
+            # updateSubmitedCompoundsList -- and it is loud, because a clamp
+            # here means some summary is still wrong somewhere upstream.
+            if ratio < 0.0 or ratio > 1.0 or ratio != ratio:
+                logging.warning(
+                    "IMPOSSIBLE MAPPED RATIO %s FOR OMIC '%s' (mapped=%s, unmapped=%s); "
+                    "CLAMPING TO [0, 1]" % (
+                        ratio, genericOmic.get("omicName"), totalMapped, totalUnmapped))
+                ratio = 0.0 if ratio != ratio else min(max(ratio, 0.0), 1.0)
+
+            mapped_ratios[genericOmic.get("omicName")] = ratio
 
         return mapped_ratios
 
@@ -870,7 +887,6 @@ class PathwayAcquisitionJob(Job):
         #   and we need to distinguish which one the user selected
         #   e.g. C00075#Uridine 5'-triphosphate, Uridine triphosphate
         #   e.g. C00075#UTP
-        mappedCompounds = set()
         compoundID = compoundName = initialCompound = newCompound = None
         malformedSelections = []
         for selectedCompound in selectedCompounds:
@@ -908,8 +924,6 @@ class PathwayAcquisitionJob(Job):
             # TODO: this could ignore multiple values of different omics types for the same feature
             for i in sorted(range(len(initialCompound.omicsValues)), reverse=True):
                 omicValue = initialCompound.omicsValues[i]
-                # Add the omic value name (original feature) to the list
-                mappedCompounds.add(omicValue.getOriginalName())
 
                 if omicValue.inputName in compoundName.split(
                         ", ") and omicValue.originalName.lower() == originalName.lower():  # Some compounds can have combined names, separated by commas
@@ -992,17 +1006,135 @@ class PathwayAcquisitionJob(Job):
                 del self.getInputCompoundsData()[compoundID]
 
         # Update the omicSummary for the compoundOmic
-        # TODO: at the moment it only considers "one whole compound omic" with the same mapped ratio
-        for cpdOmic in self.getCompoundBasedInputOmics():
+        #
+        # "mapped" here means: how many of the input metabolites of this omic
+        # still carry a measurement after the user's selection. It is counted
+        # from the final table, once, rather than accumulated during the
+        # selection loop, because only the final table is what the rest of the
+        # job (and the browser) sees.
+        #
+        # The count used to be taken inside the loop above, on every omic value
+        # of every selected compound and *before* the name-match test that
+        # decides whether the value is kept. That counted on a different scale
+        # from the summary it then overwrote:
+        #
+        #   * values belonging to boxes the user did not tick were counted;
+        #   * originalName is stored lower-cased for a main compound and in the
+        #     input's own case for an "other" compound (see
+        #     FeatureNamesToKeggIDsMapper.mapCompoundsIdentifiers), so the same
+        #     metabolite could enter the set twice.
+        #
+        # Measured on the six-omic STATegra example (58 input metabolites, 51 of
+        # them matched): the old code reported mapped=62, unmapped=-4, and
+        # getMappedRatios turned that into 62/58 = 1.069 -- which
+        # generatePathwaysList passes straight into the Stouffer/Fisher weights,
+        # over-weighting metabolomics in every combined pathway p-value, and
+        # which PathwayAcquisitionServlet ships to the browser as
+        # "62 mapped of 58".
+        #
+        # Names are normalised (stripped, lower-cased) so the two casings of one
+        # metabolite count once, and attributed per omic through
+        # omicValue.getOmicName() so two metabolomics files no longer share a
+        # single count. With a single compound omic -- the case the old TODO
+        # assumed -- the union is used, which also covers omic values whose
+        # omicName was never set.
+        mappedNamesByOmic = defaultdict(set)
+        for finalCompound in self.getInputCompoundsData().values():
+            for omicValue in finalCompound.getOmicsValues():
+                featureName = (omicValue.getOriginalName() or omicValue.getInputName() or "")
+                featureName = featureName.strip().lower()
+                if featureName:
+                    mappedNamesByOmic[omicValue.getOmicName()].add(featureName)
+
+        compoundOmics = self.getCompoundBasedInputOmics()
+        allMappedNames = set()
+        for names in mappedNamesByOmic.values():
+            allMappedNames |= names
+
+        for cpdOmic in compoundOmics:
             # Get the original number of CPDs
             cpdSummary = cpdOmic.get("omicSummary")
-            cpdTotal = cpdSummary[0] + cpdSummary[1]
+
+            # [mapped, unmapped, ...distribution]; both counts must be plain
+            # integers or this omic was not summarised by parseCompoundBasedFile
+            # and there is nothing meaningful to rewrite.
+            if not isinstance(cpdSummary, list) or len(cpdSummary) < 2 or \
+                    not isinstance(cpdSummary[0], int) or not isinstance(cpdSummary[1], int):
+                logging.warning(
+                    "STEP2 - SKIPPING SUMMARY UPDATE FOR COMPOUND OMIC '%s': "
+                    "UNEXPECTED omicSummary %r" % (cpdOmic.get("omicName"), cpdSummary))
+                continue
+
+            # mapped + unmapped is the number of input features of this omic and
+            # does not change with the selection, so the rewrite is idempotent.
+            cpdTotal = max(cpdSummary[0] + cpdSummary[1], 0)
+
+            mapped = len(allMappedNames) if len(compoundOmics) == 1 else \
+                len(mappedNamesByOmic.get(cpdOmic.get("omicName"), set()))
+
+            if mapped > cpdTotal:
+                # Cannot happen with the counting above -- every name counted
+                # came from a feature of this omic's input file -- so if it ever
+                # does, the invariant is restored and the discrepancy is loud
+                # rather than shipped as a negative "unmapped".
+                logging.warning(
+                    "STEP2 - COMPOUND OMIC '%s' COUNTED %d MAPPED FEATURES OF %d INPUT "
+                    "FEATURES; CLAMPING" % (cpdOmic.get("omicName"), mapped, cpdTotal))
+                mapped = cpdTotal
 
             # Change the summary stats to reflect the user provided options
-            cpdSummary[0] = len(mappedCompounds)
-            cpdSummary[1] = cpdTotal - len(mappedCompounds)
+            cpdSummary[0] = mapped
+            cpdSummary[1] = cpdTotal - mapped
 
         return True
+
+    def filterPathwaysBySelectedDatabases(self, pathwaysList):
+        """Keep only the pathways coming from a database this job selected.
+
+        The organism collection holds every database PaintOmics knows for that
+        species in one dict -- for mmu, 888 pathways = 364 KEGG + 524 Reactome.
+        A job that selected only KEGG can never match the Reactome half:
+        `_matchPathways` skips any pathway whose source is not in
+        `totalFeaturesByOmic`, and that dictionary is keyed by the job's own
+        databases. Counting them anyway made the denominator dishonest -- the
+        log line and `summary[0]`, which the client shows as "N of M matched
+        pathways", said 888 when only 364 were reachable -- and made every
+        thread pay for feature lookups on pathways it was about to skip.
+
+        @param {dict} pathwaysList, pathwayID -> pathway document
+        @returns {dict} the same mapping restricted to the selected databases
+        """
+        selectedDatabases = set(self.databases or [])
+
+        if not pathwaysList or not selectedDatabases:
+            # No database recorded on the job: keep the previous behaviour
+            # rather than reporting zero pathways.
+            return pathwaysList
+
+        # "KEGG" is the default source, matching getPathwaySourceByID, so a
+        # pathway document written before the field existed still counts.
+        filteredPathways = {
+            pathwayID: pathway for pathwayID, pathway in pathwaysList.items()
+            if (pathway.get("source", "KEGG") if hasattr(pathway, "get") else "KEGG")
+            in selectedDatabases}
+
+        if not filteredPathways:
+            # Every pathway filtered out means the source names and the job's
+            # database names disagree (a data problem, not a user one). Falling
+            # back to the unfiltered list keeps the job running with the old,
+            # inflated denominator instead of silently matching nothing.
+            logging.warning(
+                "NO PATHWAY OF %s MATCHES THE SELECTED DATABASES %s; USING ALL %d PATHWAYS" % (
+                    self.getOrganism(), sorted(selectedDatabases), len(pathwaysList)))
+            return pathwaysList
+
+        if len(filteredPathways) != len(pathwaysList):
+            logging.info(
+                "PATHWAY UNIVERSE FOR %s RESTRICTED TO %s: %d OF %d PATHWAYS" % (
+                    self.getOrganism(), "+".join(sorted(selectedDatabases)),
+                    len(filteredPathways), len(pathwaysList)))
+
+        return filteredPathways
 
     def generatePathwaysList(self):
         """selectedCompounds
@@ -1066,7 +1198,8 @@ class PathwayAcquisitionJob(Job):
 
         self.inputCompunds = inputCompounds
 
-        pathwaysList = KeggInformationManager().getAllPathwaysByOrganism(self.getOrganism())
+        pathwaysList = self.filterPathwaysBySelectedDatabases(
+            KeggInformationManager().getAllPathwaysByOrganism(self.getOrganism()))
 
         enrichmentByOmic = {x.get("omicName"): x.get("enrichment", "genes") for x in
                             self.getGeneBasedInputOmics() + self.getCompoundBasedInputOmics()}
@@ -1329,7 +1462,26 @@ class PathwayAcquisitionJob(Job):
         
         has_multi_cond = max_conditions > 1
 
-        # counterNames[db][omicName][featureID] = [isRelevant_C1, isRelevant_C2, ...]
+        # counterNames[db][omicName][enrichmentProperty] = [isRelevant_C1, isRelevant_C2, ...]
+        #
+        # The key MUST be the enrichment property (the input identifier, the
+        # original name, or the association -- whichever the user selected),
+        # never feature.getID(). This dict is the *background* of the
+        # hypergeometric test, and testPathwaySignificance builds the *sample*
+        # keyed by exactly that enrichment property. Keying the two sides
+        # differently mixes units, because mapFeatureIdentifiers clones one
+        # input feature once per target ID it resolves to and addInputGeneData
+        # merges every input that resolved to the same target ID into a single
+        # Gene:
+        #   * one input on several KEGG ids inflated the background (counted
+        #     once per clone) while the pathway counted it once;
+        #   * several inputs on one KEGG id deflated the background to 1 while
+        #     the pathway counted each input, which makes the sample larger
+        #     than the population and hypergeom.sf returns NaN -- the NaN that
+        #     Statistics._usablePvalues documents and that takes the whole JSON
+        #     response down with it.
+        # Measured on a real job: 11359 KEGG mapping rows for 10406 distinct
+        # inputs, 272 inputs on >1 KEGG gene, worst case 43 inputs on one id.
         counterNames = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
 
         # Total features depends on the source DB
@@ -1368,19 +1520,19 @@ class PathwayAcquisitionJob(Job):
                         if not has_multi_cond:
                             # Scalar fast-path
                             is_rel = relevantValue[0]
-                            old_val = counterNames[db][omicValue.getOmicName()].get(feature.getID())
+                            old_val = counterNames[db][omicValue.getOmicName()].get(enrichmentProperty)
                             if old_val is None:
-                                counterNames[db][omicValue.getOmicName()][feature.getID()] = is_rel
+                                counterNames[db][omicValue.getOmicName()][enrichmentProperty] = is_rel
                             else:
-                                counterNames[db][omicValue.getOmicName()][feature.getID()] = old_val or is_rel
+                                counterNames[db][omicValue.getOmicName()][enrichmentProperty] = old_val or is_rel
                         else:
                             # List-based multi-condition path
                             if not isinstance(relevantValue, list):
                                 relevantValue = [relevantValue]
 
-                            old_val = counterNames[db][omicValue.getOmicName()].get(feature.getID())
+                            old_val = counterNames[db][omicValue.getOmicName()].get(enrichmentProperty)
                             if not old_val:
-                                counterNames[db][omicValue.getOmicName()][feature.getID()] = list(relevantValue)
+                                counterNames[db][omicValue.getOmicName()][enrichmentProperty] = list(relevantValue)
                             else:
                                 # Combine lists with OR logic
                                 nCond = max(len(old_val), len(relevantValue))
@@ -1389,8 +1541,11 @@ class PathwayAcquisitionJob(Job):
                                     v1 = old_val[i] if i < len(old_val) else False
                                     v2 = relevantValue[i] if i < len(relevantValue) else False
                                     combined[i] = v1 or v2
-                                counterNames[db][omicValue.getOmicName()][feature.getID()] = combined
+                                counterNames[db][omicValue.getOmicName()][enrichmentProperty] = combined
 
+                        # Deliberately still keyed by the target ID: these two are
+                        # sets of KEGG identifiers, not enrichment counters, so
+                        # they do not share the units of counterNames above.
                         if db == 'KEGG':
                             totalFeaturesID.add(feature.getID())
                             is_any_rel = any(relevantValue) if isinstance(relevantValue, list) else relevantValue

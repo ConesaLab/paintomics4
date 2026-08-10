@@ -9,12 +9,22 @@ so it passed the type check, and both range comparisons are False for it --
 `nan < 0` and `nan > 1` -- so it passed the range check too and came out the
 other side as a usable p-value.
 
-It is reachable. `calculateFisher` returns `hypergeom.sf(...)`, which is NaN
-whenever the sample is larger than the population:
+It WAS reachable from `calculateFisher`, which returned `hypergeom.sf(...)`
+unfiltered, and that is NaN whenever the sample is larger than the population:
 
-    calculateFisher(10, 20, 5, 8)  ->  nan
+    calculateFisher(10, 20, 5, 8)  ->  nan      # before the domain clamp
 
-That value is stored in the pathway's significanceValues and later combined.
+`calculateFisher` no longer produces it: out-of-domain counts are clamped into
+the hypergeometric domain and logged, because arriving there at all means two
+of the four counts were tallied in different units, which is a bug in the
+caller rather than in the user's data. The test below pins that new contract.
+
+Everything else in this file stays. The clamp closes the one route that was
+measured, not the class: `_usablePvalues` is the shared floor for a NaN
+arriving from any other source, and removing its coverage because today's only
+known producer was fixed is how the bug comes back.
+
+That value was stored in the pathway's significanceValues and later combined.
 Measured before the fix:
 
     calculateCombinedFisher([[5,2,nan],[5,2,0.2]])  ->  nan
@@ -65,12 +75,31 @@ class CombinedPvalueNaNTest(unittest.TestCase):
                         "JSON token and the client refuses to parse"
                         % (label, value))
 
-    def test_calculate_fisher_really_can_return_nan(self):
-        """The source of the NaN, so this is not a hypothetical input."""
-        self.assertTrue(math.isnan(calculateFisher(10, 20, 5, 8)),
-                        "calculateFisher no longer returns NaN for a sample "
-                        "larger than the population; if that was fixed, the "
-                        "reachability note in the docstring is now stale")
+    def test_calculate_fisher_no_longer_emits_the_nan_it_used_to(self):
+        """The input that produced the NaN, now pinned to the new contract.
+
+        A sample larger than the population is not a p-value question, it is a
+        counting bug upstream. `calculateFisher` clamps such counts into the
+        hypergeometric domain and returns a usable value rather than handing a
+        NaN to jsonify, which would take the whole step-2 response down.
+        """
+        value = calculateFisher(10, 20, 5, 8)
+        self.assertUsable(value, "calculateFisher(10, 20, 5, 8)")
+        self.assertGreaterEqual(value, 0.0)
+        self.assertLessEqual(value, 1.0)
+
+    def test_out_of_domain_counts_are_not_silently_maximally_significant(self):
+        """The other bad answer scipy gives: sf == 0, i.e. strongest evidence.
+
+        More successes in the sample than exist in the population used to floor
+        to 1e-300 and send a meaningless pathway to the top of the table, which
+        is worse than the NaN because nothing downstream notices.
+        """
+        value = calculateFisher(2, 10, 1, 5)
+        self.assertUsable(value, "calculateFisher(2, 10, 1, 5)")
+        self.assertGreater(value, 1e-300,
+                           "out-of-domain counts still produce the strongest "
+                           "possible evidence instead of no evidence")
 
     def test_fisher_with_a_nan_pvalue(self):
         result = calculateCombinedFisher([_entry(NAN), _entry(0.2)])

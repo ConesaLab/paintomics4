@@ -26,7 +26,17 @@ import uuid
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from src.classes.JobInstances.PathwayAcquisitionJob import PathwayAcquisitionJob
+from src.common import ExampleDatasets
 from src.conf.serverconf import CLIENT_TMP_DIR
+
+# The real STATegra bundle, resolved through the example catalogue rather than
+# by rebuilding filenames here. This harness used to mangle each omic name into
+# a path ("DNase-seq" -> "dnase_values.tab"), which was a third copy of the rule
+# the servlets carried -- and which broke silently when the files were
+# reorganised into examplefiles/datasets/.
+EXAMPLE_FILES_DIR = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "examplefiles")) + os.sep
+EXAMPLE_SCENARIO = "stategra-multiomics"
 
 
 EXAMPLE_OMICS = {
@@ -50,20 +60,27 @@ def build_job(databases, selected_omics, tmp_dir):
     job.setDatabases(databases)
     job.setName("autoresearch count harness")
 
-    example_dir = "src/examplefiles/"
+    scenario = ExampleDatasets.getScenario(EXAMPLE_FILES_DIR, EXAMPLE_SCENARIO)
+    available = {omic["omicName"]: omic for omic in scenario["omics"]}
+
     for omic_name in selected_omics:
-        if omic_name not in EXAMPLE_OMICS:
-            raise ValueError(f"Unknown omic: {omic_name}")
-        enrichment = EXAMPLE_OMICS[omic_name]
-        slug = omic_name.replace(" ", "_").replace("-seq", "").lower()
+        if omic_name not in available:
+            raise ValueError(
+                "Unknown omic: %s. The '%s' dataset provides: %s"
+                % (omic_name, EXAMPLE_SCENARIO, ", ".join(sorted(available))))
+        omic = available[omic_name]
         payload = {
             "omicName": omic_name,
-            "inputDataFile": example_dir + slug + "_values.tab",
-            "relevantFeaturesFile": example_dir + slug + "_relevant.tab",
+            "inputDataFile": ExampleDatasets.absolutePath(
+                EXAMPLE_FILES_DIR, omic["dataFile"]),
             "isExample": True,
-            "enrichment": enrichment,
+            "enrichment": omic.get("enrichment", EXAMPLE_OMICS.get(omic_name, "genes")),
         }
-        if omic_name == "Metabolomics":
+        if omic.get("relevantFile"):
+            payload["relevantFeaturesFile"] = ExampleDatasets.absolutePath(
+                EXAMPLE_FILES_DIR, omic["relevantFile"])
+
+        if omic.get("omicType") == "compound":
             job.addCompoundBasedInputOmic(payload)
         else:
             job.addGeneBasedInputOmic(payload)

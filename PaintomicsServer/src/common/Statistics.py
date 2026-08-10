@@ -1,6 +1,14 @@
+import logging
 from math import log, isfinite
 from scipy.stats import chi2, fisher_exact, combine_pvalues, hypergeom
 from statsmodels.sandbox.stats.multicomp import multipletests
+
+# Distinct out-of-domain argument tuples already reported by calculateFisher.
+# Bounded, because the alternative is one WARNING per pathway per omic: the
+# unmapped-feature line in PathwayAcquisitionJob produced 6480 lines for a
+# single run before it was capped, and a log that long stops being a diagnostic.
+_reportedFisherDomainViolations = set()
+_MAX_REPORTED_FISHER_DOMAIN_VIOLATIONS = 20
 ##*******************************************************************************************
 ##****AUXLIAR FUNCTION DEFINITION************************************************************
 ##*******************************************************************************************
@@ -18,6 +26,48 @@ def calculateCombinedSignificancePvalue(combinedTest, significanceValuesList):
     else:
         raise NotImplementedError
 
+def _clampToHypergeometricDomain(totalElems, foundElems, totalSignificative, foundSignificative):
+    """Force the four counts into the domain hypergeom is defined on.
+
+    The hypergeometric test only means anything when the sample is drawn from
+    the population: 0 <= foundElems <= totalElems, 0 <= totalSignificative <=
+    totalElems, and 0 <= foundSignificative <= min(foundElems,
+    totalSignificative). Outside that, scipy answers with a number that is not
+    a p-value, and both of its answers are actively harmful here:
+
+      * sample larger than the population -> NaN. jsonify writes a NaN as the
+        bare token `NaN`, which is not valid JSON (RFC 8259), so the client's
+        JSON.parse rejects the whole step-2 response and the user sees
+        "Oops..Internal error! Unable to parse the error message". One bad
+        pathway out of hundreds destroys the entire result.
+      * more successes in the sample than exist in the population -> sf is
+        exactly 0.0, floored below to 1e-300, i.e. the strongest possible
+        evidence. That is the failure `_usablePvalues` calls "the worst of the
+        available failures": a silent maximally-significant answer that sends
+        a meaningless pathway to the top of the results table.
+
+    Clamping rather than raising, for two reasons. This runs once per pathway
+    per omic inside generatePathwaysList, so raising turns a per-pathway
+    accounting glitch into the loss of a whole multi-minute job -- and the rest
+    of this module already answers degenerate input with a usable, neutral
+    p-value (calculateCombinedFisher on an empty list, Stouffer on all-zero
+    weights, adjustPvalues on non-finite input) instead of failing the run.
+    Second, the clamp is conservative by construction: once foundElems is
+    pulled down to totalElems the sample is the whole population, so
+    sf(k-1, N, K, N) is 1.0 for every k <= K, and k is clamped to <= K. A
+    caller that got here through a counting bug gets "not significant", never
+    a fabricated hit.
+
+    Returns the corrected 4-tuple; identical to the input when it was valid.
+    """
+    correctedTotal = max(int(totalElems), 0)
+    correctedFound = min(max(int(foundElems), 0), correctedTotal)
+    correctedTotalSig = min(max(int(totalSignificative), 0), correctedTotal)
+    correctedFoundSig = min(max(int(foundSignificative), 0),
+                            correctedFound, correctedTotalSig)
+    return correctedTotal, correctedFound, correctedTotalSig, correctedFoundSig
+
+
 def calculateFisher(totalElems, foundElems, totalSignificative, foundSignificative):
     # Using hypergeom.sf is faster than fisher_exact for right-tailed tests
     # Population size: totalElems
@@ -26,6 +76,29 @@ def calculateFisher(totalElems, foundElems, totalSignificative, foundSignificati
     # Number of successes in sample: foundSignificative
     # sf(k) = P(X > k)
     # We want P(X >= foundSignificative) = sf(foundSignificative - 1)
+    original = (totalElems, foundElems, totalSignificative, foundSignificative)
+    corrected = _clampToHypergeometricDomain(*original)
+
+    if corrected != original:
+        # Named values, because the only useful response to this line is to go
+        # and find which counter is in the wrong units. The historical cause was
+        # exactly that: calculateTotalFeaturesByOmic counted the background in
+        # target-ID units while testPathwaySignificance counted the pathway in
+        # input-ID units, so a pathway could legitimately report more matches
+        # than the background said existed.
+        if (original not in _reportedFisherDomainViolations
+                and len(_reportedFisherDomainViolations)
+                < _MAX_REPORTED_FISHER_DOMAIN_VIOLATIONS):
+            _reportedFisherDomainViolations.add(original)
+            logging.warning(
+                "calculateFisher received counts outside the hypergeometric "
+                "domain (totalElems=%s, foundElems=%s, totalSignificative=%s, "
+                "foundSignificative=%s); clamped to (%s, %s, %s, %s). This is "
+                "an enrichment counting bug, not user data: two of these are "
+                "being counted in different units."
+                % (original + corrected))
+        totalElems, foundElems, totalSignificative, foundSignificative = corrected
+
     if foundSignificative == 0:
         return 1.0
     p = hypergeom.sf(foundSignificative - 1, totalElems, totalSignificative, foundElems)
@@ -66,11 +139,16 @@ def _usablePvalues(significanceValuesList):
             continue
         # NaN is a float, and both comparisons below are False for it, so it
         # went straight through the range check and out the other side --
-        # despite this function promising p-values in [0, 1]. It is reachable:
-        # calculateFisher returns hypergeom.sf(...), which is NaN whenever the
+        # despite this function promising p-values in [0, 1]. It WAS reachable:
+        # calculateFisher returned hypergeom.sf(...), which is NaN whenever the
         # sample is larger than the population, e.g.
         #     calculateFisher(10, 20, 5, 8) -> nan
-        # Fisher then combined it into NaN, and a NaN reaching jsonify is
+        # That route is now closed at both ends -- the enrichment counters were
+        # keying the population and the sample in different units, and
+        # calculateFisher clamps its arguments into the hypergeometric domain --
+        # so this branch is a backstop for anything degenerate arriving another
+        # way, not a live filter. Kept because the failure it prevents is total:
+        # Fisher combined the NaN into NaN, and a NaN reaching jsonify is
         # written as the bare token `NaN`, which is not valid JSON (RFC 8259),
         # so the client's JSON.parse rejects the entire response --
         # "Oops..Internal error! Unable to parse the error message". That is
@@ -132,9 +210,10 @@ def adjustPvalues(pvaluesList):
     # both methods. Those reach jsonify as the bare token `NaN`, which is not
     # valid JSON, so the client's JSON.parse rejects the entire response.
     #
-    # calculateFisher is a live source of NaN -- hypergeom.sf returns it when
+    # calculateFisher WAS a live source of NaN -- hypergeom.sf returns it when
     # the sample is larger than the population, e.g. calculateFisher(10, 20, 5,
-    # 8) -- so the same value that motivated the guard in _usablePvalues
+    # 8) -- and it now clamps into the domain instead, so this guard is a
+    # backstop. It stays, because the same value that motivated _usablePvalues
     # reaches this function too.
     #
     # The keys stay, because the caller subscripts them directly:
