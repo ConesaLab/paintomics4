@@ -704,7 +704,9 @@ function PA_Step1JobView() {
 		// setAIConsent(formFields.get("aiConsent", "false"))). The dataset being
 		// public says nothing about whether the user wants that call made on their
 		// behalf, and clicking "Load example" is not an answer to the question the
-		// checkbox asks.
+		// checkbox asks. Note this neither ticks nor unticks it: on a local
+		// instance DEFAULT_AI_CONSENT_ENABLED has already ticked it and loading an
+		// example leaves that alone, which is the intent both ways round.
 		var expDesign = this.getComponent().down('[name=experimentDesign]');
 		if (expDesign && scenario) {
 			expDesign.setValue(exampleExperimentDesignFor(scenario));
@@ -1053,7 +1055,14 @@ function PA_Step1JobView() {
 									// Only for information, KEGG database is added always on server side
 									{ boxLabel: 'KEGG (required)', name: 'databases[]', inputValue: 'KEGG', checked: true, disabled: true },
 									{ boxLabel: 'MapMan', name: 'databases[]', inputValue: 'MapMan', checked: false },
-									{ boxLabel: 'Reactome', name: 'databases[]', inputValue: 'Reactome', checked: false, id: 'reactomeDB'},
+									/* Pre-ticked on a local instance only -- see LOCAL INSTANCE
+									   DEFAULTS in ServerConfiguration.js. The typeof guard is not
+									   ceremony: an undefined identifier here throws while this
+									   class config is being evaluated, which would take the whole
+									   of Step 1 down rather than just miss a default. */
+									{ boxLabel: 'Reactome', name: 'databases[]', inputValue: 'Reactome',
+									  checked: typeof DEFAULT_REACTOME_ENABLED !== "undefined" && DEFAULT_REACTOME_ENABLED,
+									  id: 'reactomeDB'},
 							]
 						},
 						{
@@ -1101,6 +1110,11 @@ function PA_Step1JobView() {
 									boxLabel: 'Enable AI pathway interpretation (<span style="color:#C44500;">sends analysis summaries to external AI service</span>) ' +
 										'<i class="fa fa-exclamation-circle ai-gdpr-info-icon" id="aiGdprInfoIcon" style="color:#C44500;cursor:pointer;font-size:16px;" title="Data privacy &amp; compliance \u2014 click to learn what data is sent"></i>',
 									name: 'aiConsent', inputValue: 'true', uncheckedValue: 'false',
+									/* Off everywhere but a local instance -- a pre-ticked consent
+									   box is not consent. See LOCAL INSTANCE DEFAULTS in
+									   ServerConfiguration.js for why localhost is the exception,
+									   and the guard note on the Reactome box above for the typeof. */
+									checked: typeof DEFAULT_AI_CONSENT_ENABLED !== "undefined" && DEFAULT_AI_CONSENT_ENABLED,
 									listeners: {
 										afterrender: function() {
 											setTimeout(function() {

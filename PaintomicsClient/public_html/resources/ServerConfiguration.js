@@ -6,6 +6,39 @@ SERVER_URL = "";
 //SERVER_PORT = ":8080";
 PAINTOMICS_EMAIL_DOMAIN = "paintomics.uv.es";
 /*********************************************************************
+ * LOCAL INSTANCE DEFAULTS   *****************************************
+ **********************************************************************/
+/* A developer running the server on their own machine re-ticks the same two
+   optional boxes on the upload form every single time: Reactome, and the AI
+   interpretation consent. Those defaults are set here rather than hardcoded
+   into the form because the two boxes are unticked in the deployed build for
+   reasons, and both reasons are about someone other than the developer:
+
+     - Reactome doubles the enrichment work and is only meaningful for the
+       organisms that have it, so a public instance should not opt every
+       visitor into it. Locally it is what is being worked on. Turning it on
+       is safe for any organism regardless: PathwayAcquisitionServlet
+       intersects the requested databases with the ones the organism actually
+       has (`set(databases).intersection(organismDB)`), so an organism without
+       Reactome silently runs KEGG only, exactly as before.
+
+     - The AI box is a *consent*, not a preference. Ticking it sends pathway
+       summaries, feature lists and the experiment design text to a
+       third-party LLM service, and a pre-ticked consent box is not consent
+       under GDPR Art. 4(11) / Art. 7 -- it has to be an affirmative act. On
+       localhost the only person whose data is at stake is the one who ticked
+       it, so the reason does not apply; anywhere else it does, and the box
+       stays as the visitor found it.
+
+   Hence the hostname test: this is on for 127.0.0.1 / localhost and off for
+   every deployed host, with no build step or separate config file to keep in
+   sync. The server side is untouched -- it still reads the submitted value and
+   AIInterpretServlet still refuses any job whose stored record says no. */
+IS_LOCAL_INSTANCE = ["localhost", "127.0.0.1", "[::1]", "::1"].indexOf(
+	window.location.hostname) !== -1;
+DEFAULT_REACTOME_ENABLED = IS_LOCAL_INSTANCE;
+DEFAULT_AI_CONSENT_ENABLED = IS_LOCAL_INSTANCE;
+/*********************************************************************
  * PATHWAY ACQUISITION SERVICES URLS         *************************
  *********************************************************************/
 SERVER_URL_PA_STEP1 = SERVER_URL + "pa_step1";
