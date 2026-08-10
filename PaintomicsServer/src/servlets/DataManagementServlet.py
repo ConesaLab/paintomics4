@@ -393,7 +393,10 @@ def dataManagementDownloadFile(request, response):
                 return Response(generate(), mimetype='text/plain')
                 #response.imetype='text/plain')
             else:
-                return send_from_directory(userDir, fileName, as_attachment=True, attachment_filename=fileName)
+                # download_name, not attachment_filename: Werkzeug 2.2 renamed
+                # it and removed the old spelling, so the previous call raised
+                # TypeError on every download.
+                return send_from_directory(userDir, fileName, as_attachment=True, download_name=fileName)
         else:
             response.setContent({"success": False, "errorMessage": "File not found.</br>Sorry but it looks like the requested file was removed from system."})
             return response
