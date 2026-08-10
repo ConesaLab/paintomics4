@@ -4369,7 +4369,7 @@ function PA_Step4DetailsView() {
 					{xtype: 'box', html: "<div id='featureFamilyOverviewContainer'></div>"},
 
 
-					{xtype: "box", html: '<h2> Metabolite regulates Features </h2>'},
+					{xtype: "box", html: '<h2>Neighbouring features</h2>'},
 					{
 						xtype: "box", html:
 							'  <div>' +

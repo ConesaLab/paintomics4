@@ -50,6 +50,15 @@ function UserController() {
             userViewsDialog = Ext.create('Ext.window.Window', {
                 id: "userViewsDialog",
                 modal: true, closable: false,
+                /* The window had no title and `closable: false`, so ExtJS drew
+                   its header anyway: an empty 60px grey band across the top of
+                   every account dialog, above content that names itself. The
+                   design system's dialog has no chrome bar at all -- it is a
+                   surface with a hairline, a shared corner radius and the title
+                   inside the body -- so the header comes off rather than
+                   acquiring a caption it does not need. */
+                header: false,
+                cls: "userViewsDialog",
                 items: []
             });
         }
@@ -64,14 +73,27 @@ function UserController() {
     * This function shows a new dialog for login
     */
     this.signInLinkClickHandler = function () {
-        var userViewsDialog = this.getUserViewsDialog(700, 330);
+        var userViewsDialog = this.getUserViewsDialog(720, 330);
 
         var signInPanel = new SignInPanel();
         signInPanel.setController(this);
         userViewsDialog.removeAll();
         userViewsDialog.add(signInPanel.getComponent());
         userViewsDialog.setLoading(false);
-        userViewsDialog.show();
+        /* Put the caret in the email box. ExtJS makes the window element itself
+           focusable and focuses it on open, so the app's 3px --pa-focus-ring
+           drew a blue rectangle around the whole dialog -- a focus indicator on
+           something nobody can type into, while the field they can type into
+           showed nothing. This has to hang off show()'s callback rather than
+           the panel's afterrender: the panel renders when it is added, and the
+           window then takes focus back as it opens, so focusing any earlier is
+           immediately undone. */
+        userViewsDialog.show(null, function () {
+            var emailField = userViewsDialog.down('textfield[name=email]');
+            if (emailField) {
+                emailField.focus(false, 50);
+            }
+        });
     };
 
     /**
@@ -212,7 +234,15 @@ function UserController() {
                 success: function (response) {
                     if (response.success === false) {
                         $("#invalidEmailMessage").html(response.message.split("ERROR MESSAGE:")[1]);
-                        $("#invalidUserPainvalidEmailMessagessMessage").fadeIn();
+                        /* Was #invalidUserPainvalidEmailMessagessMessage - the id of the
+                           sign-in panel's message box with this panel's id spliced into
+                           the middle of it by a search-and-replace. It matched nothing,
+                           so the reveal never fired; the failure was invisible only
+                           because the div carried two `style` attributes and the
+                           `display:none` in the second one was discarded by the parser,
+                           leaving it permanently shown. Both halves are fixed now, so
+                           this selector has to be the real one. */
+                        $("#invalidEmailMessage").fadeIn();
                         return;
                     }
 					

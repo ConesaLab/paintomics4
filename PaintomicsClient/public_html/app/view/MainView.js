@@ -221,8 +221,8 @@ function MainView() {
 				" <li class='menuOption' title='Publications'><i class='fa fa-paper-plane-o'></i><span class='menuLabel'>Publications</span>" +
 				" <ul class='submenu'>" +
 				// "     <li class='menuOption'><a href='https://paintomics.uv.es/' target='_blank'><i class='fa fa-book'></i>  Paintomics Documentation</a></li>"+
-				"     <li class='menuOption externalOption' style='font-size: 9px;'><div style='font-size: 12px; color: white;'>Cite Paintomics 4:</div><a href='https://doi.org/10.1093/nar/gkac352' target='_blank'>Liu, T., Salguero, P., Petek, M., Martinez-Mira, C., Balzano-Nogueira, L., Ramšak, Ž., McIntyre, L., Gruden, K., Tarazona, S. and Conesa, A. <b>PaintOmics 4: new tools for the integrative analysis of multi-omics datasets supported by multiple pathway databases</b>. <i>Nucleic Acids Research</i> 2022).</a><br><a href='resources/images/paintomics4.bib' target='_blank'>BibTeX</a></li>" +
-				"     <li class='menuOption externalOption' style='font-size: 9px;'><div style='font-size: 12px; color: white;'>Cite Paintomics 3:</div><a href='https://doi.org/10.1093/nar/gky466' target='_blank'>Hernández-de-Diego R, Tarazona S, Martínez-Mira C, Balzano-Nogueira L, Furió-Tarí P, Pappas J G, Conesa A. <b>PaintOmics 3: a web resource for the pathway analysis and visualization of multi-omics data</b>. <i>Nucleic Acids Research</i> 2018).</a><br><a href='resources/images/paintomics3.bib' target='_blank'>BibTeX</a></li>" +
+				"     <li class='menuOption externalOption' style='font-size: 9px;'><div style='font-size: 12px; color: white;'>Cite PaintOmics 4:</div><a href='https://doi.org/10.1093/nar/gkac352' target='_blank'>Liu, T., Salguero, P., Petek, M., Martinez-Mira, C., Balzano-Nogueira, L., Ramšak, Ž., McIntyre, L., Gruden, K., Tarazona, S. and Conesa, A. <b>PaintOmics 4: new tools for the integrative analysis of multi-omics datasets supported by multiple pathway databases</b>. <i>Nucleic Acids Research</i> 2022).</a><br><a href='resources/images/paintomics4.bib' target='_blank'>BibTeX</a></li>" +
+				"     <li class='menuOption externalOption' style='font-size: 9px;'><div style='font-size: 12px; color: white;'>Cite PaintOmics 3:</div><a href='https://doi.org/10.1093/nar/gky466' target='_blank'>Hernández-de-Diego R, Tarazona S, Martínez-Mira C, Balzano-Nogueira L, Furió-Tarí P, Pappas J G, Conesa A. <b>PaintOmics 3: a web resource for the pathway analysis and visualization of multi-omics data</b>. <i>Nucleic Acids Research</i> 2018).</a><br><a href='resources/images/paintomics3.bib' target='_blank'>BibTeX</a></li>" +
 				"     <li class='menuOption externalOption' style='font-size: 9px;'><div style='font-size: 12px; color: white;'>Cite Paintomics 2:</div><a href='http://bioinformatics.oxfordjournals.org/content/early/2010/11/23/bioinformatics.btq594' target='_blank'>García-Alcalde F, García-López F, Dopazo J, Conesa A. <b>Paintomics: a web based tool for the joint visualization of transcriptomics and metabolomics data</b>. <i>Bioinformatics</i> 2011 27(1): 137–139.</a><br><a href='resources/images/paintomics2-garcia-alcalde.bib' target='_blank'>BibTeX</a></li>" +
 				"     <li class='menuOption externalOption' style='font-size: 9px;'><div style='font-size: 12px; color: white;'>Cite rgmatch:</div><a href='https://bmcbioinformatics.biomedcentral.com/articles/10.1186/s12859-016-1293-1' target='_blank'>Furio-Tari P, Tarazona S, Conesa A. <b>RGmatch: matching genomic regions to proximal genes in omics data integration</b>. <i>BMC Bioinformatics</i> 2016 17(15).</a><br><a href='resources/images/rgmatch.bib' target='_blank'>BibTeX</a></li>" +
 				" </ul></li>" +
@@ -248,7 +248,7 @@ function MainView() {
 				'</div>' +
 				'<nav class="mainNav">' + navHTML + '</nav>' +
 				'<button class="themeToggle" id="themeToggle" type="button" title="Switch between light and dark" aria-pressed="false"><i class="fa fa-moon-o"></i></button>' +
-				'<a class="button btn-sm btn-right loggedOption" data-name="logout" id="logoutButton"><i class="fa fa-sign-out"></i> ' + (noLogin !== true ? 'Log out' : 'Sign in/Log in') + '</a>'
+				'<a class="button btn-sm btn-right loggedOption" data-name="logout" id="logoutButton" href="javascript:void(0)">' + (noLogin !== true ? '<i class="fa fa-sign-out" aria-hidden="true"></i> Log out' : '<i class="fa fa-sign-in" aria-hidden="true"></i> Sign in') + '</a>'
 			}, {
 				xtype: 'container', itemId: 'mainViewCenterPanel', id: 'mainViewCenterPanel',
 				flex: 1, region: 'center', overflowY: "auto", style: "background-color:#f3f3f3;",
@@ -304,7 +304,7 @@ function MainView() {
 									return;
 								}
 								showInfoMessage("Welcome to PaintOmics AI!", {
-									message: "PaintOmics 4 is now hosted on the University of Valencia's server. For any inquiries, please contact us at <a href=\"mailto:paintomics4@gmail.com\">paintomics4@gmail.com</a>",
+									message: "PaintOmics AI is now hosted on the University of Valencia's server. For any inquiries, please contact us at <a href=\"mailto:paintomics4@gmail.com\">paintomics4@gmail.com</a>",
 									showButton: true
 								})
 							},

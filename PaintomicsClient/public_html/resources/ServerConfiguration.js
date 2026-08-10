@@ -12,11 +12,15 @@ PAINTOMICS_EMAIL_DOMAIN = "paintomics.uv.es";
    interpretation consent.
 
    It is a *consent*, not a preference. Ticking it sends pathway summaries,
-   feature lists and the experiment design text to a third-party LLM service,
-   and a pre-ticked consent box is not consent under GDPR Art. 4(11) /
-   Art. 7 -- it has to be an affirmative act. On localhost the only person
-   whose data is at stake is the one who ticked it, so the reason does not
-   apply; anywhere else it does, and the box stays as the visitor found it.
+   feature lists, per-feature values and the experiment design text to whatever
+   LLM endpoint the server is configured for -- by default a gateway operated
+   by IIIA-CSIC, not a commercial API, but that is a server setting and not
+   something this file can assert; SERVER_URL_AI_PROVIDER below is how the
+   interface finds out. A pre-ticked consent box is not consent under GDPR
+   Art. 4(11) / Art. 7 -- it has to be an affirmative act. On localhost the
+   only person whose data is at stake is the one who ticked it, so the reason
+   does not apply; anywhere else it does, and the box stays as the visitor
+   found it.
 
    Hence the hostname test: on for 127.0.0.1 / localhost, off for every
    deployed host, with no build step or separate config file to keep in sync.
@@ -60,6 +64,12 @@ SERVER_URL_AI_INTERPRET_REPORT = SERVER_URL + "ai_interpret_report";
 SERVER_URL_AI_INTERPRET_CHAT = SERVER_URL + "ai_interpret_chat";
 SERVER_URL_AI_INTERPRET_PATHWAY = SERVER_URL + "ai_interpret_pathway";
 SERVER_URL_AI_GENERATE_EXP_DESIGN = SERVER_URL + "ai_generate_exp_design";
+/* Who the analysis summaries are actually sent to. The provider, its host and
+   the model are all chosen server-side by AI_LLM_PROVIDER and are all
+   env-overridable, so the consent notice asks rather than assumes -- naming a
+   provider from the client would be a guess, and a guess in a consent notice
+   is a false statement. See getAIProviderInfo() in AIInterpretServlet.py. */
+SERVER_URL_AI_PROVIDER = SERVER_URL + "ai_provider";
 AI_POLL_INTERVAL = 3000;
 CHAT_POLL_INTERVAL = 1500;
 

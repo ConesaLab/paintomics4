@@ -358,6 +358,27 @@
     text-align: right;
 }
 
+/* ── Report provenance ──
+   Who produced the write-up, stated at the foot of the report itself.
+
+   Inside the bubble rather than in the panel header on purpose: the report is
+   the surface people select and paste into a draft, and an attribution in the
+   chrome does not travel with it. Set below the body type and behind a rule so
+   it reads as a caption about the text rather than as its last paragraph --
+   the same job .ai-msg-label does for the speaker.
+
+   The model/host/operator half is empty in the markup and filled from
+   /ai_provider, like .ai-provider-inline on the upload form; an empty inline
+   span occupies nothing, so no :empty rule is needed to collapse it. */
+.ai-report-provenance {
+    margin-top: 12px;
+    padding-top: 8px;
+    border-top: 1px solid #e0e0e0;
+    font-size: 11px;
+    line-height: 1.5;
+    color: #555;          /* 7.46:1 on the white assistant bubble */
+}
+
 /* ── Citations ── */
 .ai-citations-toggle {
     display: inline-block;
@@ -556,9 +577,21 @@
    reaches for next. */
 
 /* ── GDPR Disclaimer Popup ── */
+
+/* The warning ink on the consent checkbox: the clause naming what is sent and
+   who receives it, and the icon that opens the full notice. Both carried this
+   colour as an inline `style` in PA_Step1Views.js, which no stylesheet can
+   override, so the dark theme could not lighten them and the sentence sat at
+   3.29:1. #C44500 is 5.00:1 on white; dark.css takes it from here. */
+.ai-consent-warn,
+.ai-gdpr-info-icon {
+    color: #C44500;
+}
 .ai-gdpr-info-icon {
     vertical-align: middle;
     margin-left: 4px;
+    cursor: pointer;
+    font-size: 16px;
 }
 .ai-gdpr-overlay {
     position: fixed;
@@ -636,3 +669,61 @@
 .ai-gdpr-unsafe li::marker {
     color: #c62828;
 }
+
+/* Provenance: who receives the data. Both of these are filled from
+   /ai_provider at runtime and are empty in the markup, so they must collapse
+   rather than reserve a blank band when the request fails or the server
+   cannot say which legal regime applies. `:empty` does that; it is exact here
+   because fillAIProvenance() either writes the whole string or writes nothing.
+
+   Set apart from the surrounding prose with a rule and a tint, because in a
+   notice this long a statement of the recipient reads as one more paragraph
+   otherwise - and the recipient is the single fact the notice exists to
+   deliver. */
+.ai-gdpr-where,
+.ai-gdpr-transfer {
+    background: #eef4fb;
+    border-left: 4px solid #1F6BC1;
+    padding: 10px 14px;
+    margin: 10px 0;
+    border-radius: 3px;
+    line-height: 1.5;
+}
+.ai-gdpr-where:empty,
+.ai-gdpr-transfer:empty {
+    display: none;
+}
+
+/* The same fact in the step 1 callout, where it is a trailing sentence rather
+   than a block. No colour of its own: it is the end of the paragraph it sits
+   in, and a second tinted box on that card would compete with the consent
+   checkbox beside it. */
+.ai-provider-inline:empty {
+    display: none;
+}
+
+/* The two lists that carry the actual disclosure: what leaves this server and
+   what does not. Both fills used to be inline `style="background:#fff3e0"` /
+   `#e8f5e9` on the div, which no stylesheet could reach - so in dark mode the
+   theme lightened the body ink to #C9CBD0 while the fill stayed near-white and
+   the text measured 1.48:1 and 1.44:1. The most load-bearing paragraphs in the
+   consent notice were the least readable ones on the page.
+
+   Stated as classes so dark.css can reach them. */
+.ai-gdpr-sent,
+.ai-gdpr-notsent {
+    padding: 10px 14px;
+    margin: 10px 0;
+    border-radius: 3px;
+    border-left: 4px solid;
+}
+.ai-gdpr-sent {
+    background: #fff3e0;
+    border-left-color: #C44500;
+}
+.ai-gdpr-notsent {
+    background: #e8f5e9;
+    border-left-color: #2e7d32;
+}
+.ai-gdpr-sent-title { color: #C44500; }
+.ai-gdpr-notsent-title { color: #2e7d32; }

@@ -444,13 +444,13 @@ function PA_Step1JobView() {
 			});
 		} else if (type === "mirnaseq") {
 			newElem = new OmicSubmittingPanel(this.nFiles, {
-				type: "miRNA-Seq",
+				type: "miRNA-seq",
 				fileType: "miRNA-Seq quatification",
 				relevantFileType: "Relevant miRNA-Seq list"
 			});
 		} else if (type === "dnaseseq") {
 			newElem = new OmicSubmittingPanel(this.nFiles, {
-				type: "DNAse-Seq",
+				type: "DNase-seq",
 				fileType: "DNAse-Seq quatification",
 				relevantFileType: "Relevant DNAse-Seq list"
 			});
@@ -814,8 +814,9 @@ function PA_Step1JobView() {
 					'</ul>' +
 					(scenario.simulated
 						? '<p>This dataset is <b>simulated</b>: a known signal was planted ' +
-						  'into real KEGG pathways, so the pathways enrichment should ' +
-						  'rank are written down alongside the files.</p>'
+						  'into real KEGG pathways. The pathways the enrichment should rank ' +
+						  'highest are listed alongside the files, so you can check that ' +
+						  'the analysis recovers them.</p>'
 						: '<p>This is <b>real published data</b> (STATegra).</p>')
 				: '<p>The bundled example dataset was loaded.</p>';
 
@@ -905,18 +906,9 @@ function PA_Step1JobView() {
 				' so all of them are offered; any that this server cannot run for ' +
 				Ext.String.htmlEncode(organism) + ' will be left out of the analysis.';
 		} else {
-			var missing = Ext.Array.filter(["MapMan", "Reactome"], function(database) {
-				return Ext.Array.indexOf(applied, database) === -1;
-			});
 			message = ' <b>' + Ext.String.htmlEncode(applied.join(' + ')) + '</b> ' +
 				(applied.length > 1 ? 'are' : 'is') + ' installed for ' +
 				Ext.String.htmlEncode(organism) + ' and included by default.';
-			if (missing.length) {
-				message += ' ' + Ext.String.htmlEncode(missing.join(' and ')) +
-					' ' + (missing.length > 1 ? 'are' : 'is') +
-					' not installed for this organism, so ' +
-					(missing.length > 1 ? 'they cannot' : 'it cannot') + ' be selected.';
-			}
 			message += ' Untick a database to leave it out.';
 		}
 
@@ -1090,7 +1082,7 @@ function PA_Step1JobView() {
 								'<p class="po-hero-desc">Integrative visualization of multiple omic datasets onto KEGG, Reactome, and MapMan biological pathway maps across multiple species and biological kingdoms.</p>' +
 								'<div class="po-hero-ai-highlight">' +
 									'<div><span class="po-ai-icon">' + getAIMark(15) + '</span> <strong>AI-Powered Pathway Interpretation</strong></div>' +
-									'<p>Unlock unprecedented systems-biology discoveries with our next-generation multi-agent AI framework. Automatically synthesize cross-omics patterns, identify regulatory cascades, and generate publication-ready biological narratives grounded in current literature.</p>' +
+									'<p>Turns your ranked pathways into a written interpretation: it reads the cross-omic patterns, finds the supporting literature, and drafts the biology with citations you can check.</p>' +
 								'</div>' +
 								'<div class="po-hero-actions">' +
 									'<a href="http://paintomics.readthedocs.org/en/latest/" target="_blank" class="po-btn-primary">Documentation</a>' +
@@ -1109,30 +1101,41 @@ function PA_Step1JobView() {
 				cls: "contentbox po-about-section",
 				style: "margin-top:4px",
 				html: '<div id="about">' +
-					'<h2>How It Works</h2>' +
+					'<h2>How it works</h2>' +
 					'<div class="po-steps-grid">' +
 						'<div class="po-step-card">' +
 							'<div class="po-step-number">1</div>' +
-							'<h3>Data Uploading</h3>' +
+							// Not "Data uploading": the upload form's own section heading
+							// two cards below is exactly that, and the two sat on one
+							// screen saying the same words about different things. This
+							// card is the whole of step 1, of which uploading is the
+							// fourth of five actions it lists.
+							'<h3>Upload and run</h3>' +
 							'<ol>' +
-								'<li>Choose your organism (see selection box below).</li>' +
-								'<li>Choose database you want to explore (see checkbox below).</li>' +
-								'<li>Upload your multi-omic data (see form below). You can <a href="resources/paintomics_example_data.zip">download the example data from here</a> to check the format of the files. You can also load an example (<a class="button btn-secondary btn-inline btn-small" href="javascript:void(0)"><i class="fa fa-file-text-o"></i> Load example</a>) to explore PaintOmics functionalities.</li>' +
+								'<li>Choose your organism.</li>' +
+								// "untick any you want to leave out" was not true of KEGG, which is
+								// rendered `checked: true, disabled: true` and labelled "KEGG
+								// (required)" - the server adds it regardless. Telling someone to
+								// untick a box that cannot be unticked sends them looking for a
+								// broken control.
+								'<li>Check the pathway databases: KEGG is always included, and every other database installed for your organism is ticked by default, so untick any of those you want to leave out.</li>' +
+								'<li>Decide whether to enable the AI interpretation, and describe your experiment design if you do.</li>' +
+								'<li>Upload your multi-omic data, or load an example (<a class="button btn-secondary btn-inline btn-small" href="javascript:void(0)"><i class="fa fa-file-text-o"></i> Load example</a>) to explore PaintOmics with a ready-made dataset.</li>' +
 								'<li>Click on <a class="button btn-success btn-inline btn-small" href="javascript:void(0)"><i class="fa fa-play"></i> Run PaintOmics</a> button.</li>' +
 							'</ol>' +
 						'</div>' +
 						'<div class="po-step-card">' +
 							'<div class="po-step-number">2</div>' +
-							'<h3>Identifier &amp; Name Matching</h3>' +
-							'<p>PaintOmics requires Entrez IDs for working with KEGG, Reactome and MapMan biological pathway maps, so the tool will convert the names and identifiers from different sources and databases in your input data. This screen shows the number of features successfully mapped and the data distribution used for pathway colouring. Metabolite name assignments are displayed and users can choose their favourite option in case of ambiguity. Click <a class="button btn-success btn-inline btn-small" href="javascript:void(0)"><i class="fa fa-play"></i> Next step</a> when you are ready.</p>' +
+							'<h3>Identifier and name matching</h3>' +
+							'<p>PaintOmics requires Entrez IDs for working with KEGG, Reactome and MapMan biological pathway maps, so the tool will convert the names and identifiers from different sources and databases in your input data. This screen shows the number of features successfully mapped and the data distribution used for pathway colouring. Metabolite name assignments are shown, and you can choose which one to keep when a name is ambiguous. Click <a class="button btn-success btn-inline btn-small" href="javascript:void(0)"><i class="fa fa-play"></i> Next step</a> when you are ready.</p>' +
 						'</div>' +
 						'<div class="po-step-card">' +
 							'<div class="po-step-number">3</div>' +
-							'<h3>Explore Results</h3>' +
-							'<p>Pathways summary, Pathways classification, Pathways network, Pathways enrichment, Pathways visualization (by clicking <a href="javascript:void(0)" class="button btn-inline btn-small" style="background-color:#756C6C;font-size:14px;color:#fff;"><i class="fa fa-paint-brush"></i></a> for any of the displayed pathways), and <b>AI-powered pathway interpretation</b> (by clicking <a href="javascript:void(0)" class="button btn-inline btn-small" style="background-color:#2F73BC;font-size:14px;color:#fff;">' + getAIMark(14) + ' AI Interpret</a>). Read more about these analyses in <a href="http://paintomics.readthedocs.io/en/latest/" target="_blank">our documentation</a>.</p>' +
+							'<h3>Explore results</h3>' +
+							'<p>You get a Pathways summary, a classification, a network and an enrichment analysis. Paint any of the listed pathways with <a href="javascript:void(0)" class="button btn-inline btn-small" style="background-color:#756C6C;font-size:14px;color:#fff;"><i class="fa fa-paint-brush"></i></a>, or ask for an <b>AI-powered pathway interpretation</b> with <a href="javascript:void(0)" class="button btn-inline btn-small" style="background-color:#2F73BC;font-size:14px;color:#fff;">' + getAIMark(14) + ' AI Interpret</a>. Read more about these analyses in <a href="http://paintomics.readthedocs.io/en/latest/" target="_blank">our documentation</a>.</p>' +
 						'</div>' +
 					'</div>' +
-					'<h2 style="margin-top:24px;">Video Tutorials</h2>' +
+					'<h2 style="margin-top:24px;">Video tutorials</h2>' +
 					'<div class="po-tutorials-grid">' +
 						'<iframe width="560" height="315" src="https://www.youtube.com/embed/brvToUmL1n4" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>' +
 						'<iframe width="560" height="315" src="https://www.youtube.com/embed/4XxPKqAubsA" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>' +
@@ -1201,7 +1204,7 @@ function PA_Step1JobView() {
 							{
 								xtype: "box", flex: 1, html:
 								'<span class="infoTip" style=" font-size: 12px; margin-left: 196px; margin-bottom: 10px;">'+
-								' Not your organism? Request new organisms <a href="javascript:void(0)" id="newOrganismRequest" style="color: rgb(211, 21, 108);">clicking here</a>.' +
+								' Not your organism? <a href="javascript:void(0)" id="newOrganismRequest" style="color: rgb(211, 21, 108);">Request a new organism</a>.' +
 								'</span>'
 							}]
 						},
@@ -1294,7 +1297,7 @@ function PA_Step1JobView() {
 					}*/,
 					{   // AI Interpretation section
 						xtype: "box", flex: 1,
-						html: '<h3>' + getAIMark(17) + ' AI-Powered Pathway Interpretation</h3>'
+						html: '<h3>' + getAIMark(17) + ' 2. AI-powered pathway interpretation (optional)</h3>'
 					},
 					{
 						xtype: "container", layout: {type: 'hbox', align: 'stretch'}, cls: "po-ai-section-body",
@@ -1307,12 +1310,42 @@ function PA_Step1JobView() {
 							items: [
 								{
 									xtype: "box",
-									html: '<p style="color:#555;font-size:13px;margin:0 0 10px 0;line-height:1.55;">PaintOmics offers a revolutionary AI-assisted pathway interpretation driven by the breathtaking computational power of a <b>Next-Generation Agentic AI Swarm</b>. When enabled, your pathway analysis summaries are seamlessly handed off to a hyper-advanced, autonomous network of domain-specialized LLM agents with real-time agentic RAG, live PubMed knowledge retrieval, and chain-of-thought reasoning \u2014 dynamically interfacing with the world\u2019s most powerful Large Language Models to reveal publication-ready biological discoveries at unprecedented speed.</p>'
+									/* This paragraph was written in the marketing register -- "revolutionary",
+									   "breathtaking computational power", "Next-Generation Agentic AI
+									   Swarm", "the world's most powerful Large Language Models". It sits
+									   directly above a consent checkbox, which is the one place in this
+									   application where the careful voice is not optional: someone
+									   deciding whether to send their data somewhere needs to know what
+									   happens to it, not how remarkable it is.
+
+									   It was also wrong. It described a fleet of agents dynamically
+									   selecting among frontier models; pipeline.py makes sequential
+									   calls to the one model the server is configured for, with a retry
+									   loop. #aiProviderInline is filled in from /ai_provider once that
+									   answers, so the recipient is named here rather than described as
+									   "external". */
+									html: '<p style="color:#555;font-size:13px;margin:0 0 10px 0;line-height:1.55;">' +
+										'PaintOmics can draft the write-up of your results. It takes the pathways your analysis ' +
+										'ranked highest, searches PubMed and Europe PMC for relevant literature, and asks a large ' +
+										'language model to explain what the cross-omic patterns mean. You get a draft interpretation ' +
+										'with citations, which you are expected to check.' +
+										'<span id="aiProviderInline" class="ai-provider-inline"></span>' +
+										'</p>'
 								},
 								{
 									xtype: 'checkboxfield',
-									boxLabel: 'Enable AI pathway interpretation (<span style="color:#C44500;">sends analysis summaries to external AI service</span>) ' +
-										'<i class="fa fa-exclamation-circle ai-gdpr-info-icon" id="aiGdprInfoIcon" style="color:#C44500;cursor:pointer;font-size:16px;" title="Data privacy &amp; compliance \u2014 click to learn what data is sent"></i>',
+									/* Both colours were written inline, which put them out of reach of
+									   dark.css -- an inline style beats a stylesheet -- so this
+									   sentence stayed #C44500 on the dark surface and measured 3.29:1
+									   at 13px, under the 4.5:1 AA asks of body text. It is the one
+									   line that says what leaves this server and who receives it,
+									   which makes it the worst line in the product to have to squint
+									   at. Stated as classes instead, so dark.css can restate them
+									   with --pa-ai-consent-warn -- a token it already declared for
+									   exactly this and had no way to apply. Same fix, same reason, as
+									   .formMessage. */
+									boxLabel: 'Enable AI pathway interpretation (<span class="ai-consent-warn">sends your pathway results and the values of the matched features to <span id="aiProviderName">an external AI service</span></span>) ' +
+										'<i class="fa fa-exclamation-circle ai-gdpr-info-icon" id="aiGdprInfoIcon" title="Data privacy &amp; compliance \u2014 click to learn what data is sent"></i>',
 									name: 'aiConsent', inputValue: 'true', uncheckedValue: 'false',
 									/* Off everywhere but a local instance -- a pre-ticked consent
 									   box is not consent. See LOCAL INSTANCE DEFAULTS in
@@ -1321,6 +1354,11 @@ function PA_Step1JobView() {
 									checked: typeof DEFAULT_AI_CONSENT_ENABLED !== "undefined" && DEFAULT_AI_CONSENT_ENABLED,
 									listeners: {
 										afterrender: function() {
+											/* Names the recipient in the consent label and in the callout
+											   above it. Both are on screen before anyone opens the notice,
+											   and the label is the surface the design system requires to
+											   carry the statement. */
+											fillAIProvenance(document);
 											setTimeout(function() {
 												var icon = document.getElementById("aiGdprInfoIcon");
 												if (!icon) return;
@@ -1341,61 +1379,56 @@ function PA_Step1JobView() {
 														'  <button class="ai-gdpr-close">&times;</button>' +
 														'</div>' +
 														'<div class="ai-gdpr-disclaimer-body">' +
-														'  <p><strong>How it works:</strong> When enabled, your aggregated pathway analysis summaries ' +
-														'  are routed through our <strong>Next-Generation Agentic AI Swarm</strong> \u2014 an autonomous network ' +
-														'  of domain-specialized LLM agents with real-time agentic RAG and live PubMed knowledge retrieval.</p>' +
-														'  <div style="background:#fff3e0;border-left:4px solid #C44500;padding:10px 14px;margin:10px 0;border-radius:3px;">' +
-														'    <strong style="color:#C44500;">\u26A0 Third-Party Processing:</strong> To deliver this analytical power, ' +
-														'    the following data is sent to <strong>external LLM servers</strong> outside PaintOmics infrastructure:' +
-														'    <ul style="margin:6px 0 0;padding-left:18px;">' +
-														'      <li>Pathway enrichment statistics (p-values, scores)</li>' +
-														'      <li>Gene/protein/metabolite lists per pathway</li>' +
-														'      <li>Expression fold-changes and summary statistics</li>' +
-														'      <li>Your experiment design description (if provided)</li>' +
-														'    </ul>' +
-														'  </div>' +
-														'  <div style="background:#e8f5e9;border-left:4px solid #2e7d32;padding:10px 14px;margin:10px 0;border-radius:3px;">' +
-														'    <strong style="color:#2e7d32;">\u2705 NOT sent to external servers:</strong>' +
-														// ai-gdpr-safe turns these bullets green, the way ai-gdpr-unsafe below
-														// turns the "never submit" bullets red. Both rules were written as a
-														// pair in ai-interpret.css; only the red one was ever put on its list,
-														// so this one kept default black markers inside a block that is green
-														// in its heading, its border and its fill.
-														'    <ul class="ai-gdpr-safe" style="margin:6px 0 0;padding-left:18px;">' +
-														'      <li>Raw data files you uploaded</li>' +
-														'      <li>Individual sample-level measurements</li>' +
-														'      <li>Your login credentials or account information</li>' +
-														'    </ul>' +
-														'  </div>' +
-														'  <hr>' +
-														'  <p><strong>EU Regulatory Framework:</strong></p>' +
-														'  <ul>' +
-														'    <li><strong>GDPR (EU 2016/679)</strong> \u2014 Articles 44\u201349 govern international transfers of personal data. ' +
-														'    If your data originates from EU subjects, transferring identifiable data to non-EU processors ' +
-														'    requires appropriate safeguards (e.g., Standard Contractual Clauses).</li>' +
-														'    <li><strong>GDPR Article 9</strong> \u2014 Processing of special categories of data, including ' +
-														'    <em>genetic data</em> and <em>health data</em>, is prohibited unless explicit consent or ' +
-														'    another lawful basis applies.</li>' +
-														'    <li><strong>GDPR Article 5(1)(c)</strong> \u2014 Data minimisation principle: only data adequate, ' +
-														'    relevant, and limited to what is necessary should be processed.</li>' +
-														'  </ul>' +
-														'  <hr>' +
-														'  <p><strong style="color:#c62828;">\u26D4 Data you must NEVER submit:</strong></p>' +
-														'  <ul class="ai-gdpr-unsafe">' +
-														'    <li>Patient names, clinical record identifiers, or any PII</li>' +
-														'    <li>Protected Health Information (PHI) under HIPAA/GDPR</li>' +
-														'    <li>Raw sequencing reads from identifiable human subjects</li>' +
-														'    <li>Rare genetic variants that could re-identify individuals</li>' +
-														'    <li>Unpublished clinical trial data with patient linkage</li>' +
-														'  </ul>' +
-														'  <p style="font-size:11px;color:#666;margin-top:8px;">' +
-														'    By enabling this feature, you confirm that the data submitted does not contain ' +
-														'    personally identifiable or sensitive personal data as defined by GDPR Article 9, ' +
-														'    or that you have obtained appropriate legal basis for its processing. ' +
-														'    For full details, see our <a href="conditions.html" target="_blank">Terms &amp; Conditions</a>.</p>' +
+																'  <p><strong>What this feature does:</strong> it sends a summary of your analysis to a large ' +
+																'  language model, which returns a draft interpretation with citations. PaintOmics does not run ' +
+																'  the model itself.</p>' +
+																'  <p id="aiGdprWhere" class="ai-gdpr-where"></p>' +
+																'  <div class="ai-gdpr-sent">' +
+																'    <strong class="ai-gdpr-sent-title">\u26A0 What leaves this server:</strong>' +
+																'    <ul style="margin:6px 0 0;padding-left:18px;">' +
+																'      <li>Pathway names, identifiers and enrichment statistics (p-values)</li>' +
+																'      <li>Names of the genes, proteins and metabolites matched in each pathway</li>' +
+																'      <li><strong>The measured values of those features</strong>, with their condition and ' +
+																'      timepoint labels &mdash; these are rows of the file you uploaded, not just summaries</li>' +
+																'      <li>Your experiment design description, if you provided one</li>' +
+																'    </ul>' +
+																'    <p style="margin:8px 0 0;">Pathway and feature names are also sent to <strong>NCBI PubMed</strong> ' +
+																'    and <strong>Europe PMC</strong> to find the literature the interpretation cites.</p>' +
+																'  </div>' +
+																'  <div class="ai-gdpr-notsent">' +
+																'    <strong class="ai-gdpr-notsent-title">\u2705 What does not leave this server:</strong>' +
+																'    <ul class="ai-gdpr-safe" style="margin:6px 0 0;padding-left:18px;">' +
+																'      <li>The files you uploaded, as files</li>' +
+																'      <li>Features that were not matched to one of the interpreted pathways</li>' +
+																'      <li>Your login credentials or account information</li>' +
+																'    </ul>' +
+																'  </div>' +
+																'  <hr>' +
+																'  <p><strong>Before you enable this, check your data</strong></p>' +
+																'  <p>Under <strong>GDPR Article 9</strong>, genetic and health data are a special category and ' +
+																'  may not be processed without an explicit lawful basis. Under <strong>Article 5(1)(c)</strong>, ' +
+																'  send only what the analysis needs.</p>' +
+																'  <p id="aiGdprTransfer" class="ai-gdpr-transfer"></p>' +
+																'  <p><strong style="color:#c62828;">\u26D4 Never submit:</strong></p>' +
+																'  <ul class="ai-gdpr-unsafe">' +
+																'    <li>Patient names, clinical record identifiers, or any other PII</li>' +
+																'    <li>Protected Health Information (PHI) under HIPAA or the GDPR</li>' +
+																'    <li>Raw sequencing reads from identifiable human subjects</li>' +
+																'    <li>Rare genetic variants that could re-identify an individual</li>' +
+																'    <li>Unpublished clinical trial data linked to patients</li>' +
+																'  </ul>' +
+																'  <p style="font-size:11px;color:#666;margin-top:8px;">' +
+																'    By enabling this feature you confirm that the data you submit contains no personally ' +
+																'    identifiable or special-category data as defined by GDPR Article 9, or that you have a ' +
+																'    lawful basis for processing it. ' +
+																'    For full details, see our <a href="conditions.html" target="_blank">Terms &amp; Conditions</a>.</p>' +
 														'</div>';
 													overlay.appendChild(disclaimer);
 													document.body.appendChild(overlay);
+													/* The notice does not exist until the icon is clicked, so its two
+													   provenance paragraphs are filled here rather than at render. The
+													   answer is already cached by this point in every realistic case. */
+													fillAIProvenance(disclaimer);
 													overlay.addEventListener("click", function(ev) {
 														if (ev.target === overlay) { overlay.remove(); }
 													});
@@ -1412,17 +1445,41 @@ function PA_Step1JobView() {
 							xtype: "container", flex: 2, margin: '0 0 0 32', layout: "anchor",
 							items: [
 								{
-									xtype: "textarea", fieldLabel: "Experiment Design", name: 'experimentDesign',
-									labelWidth: 150, anchor: '100%', height: 90,
-									emptyText: 'e.g., "RNA-seq wildtype vs knockout mouse liver, n=3 per group"',
+									/* Three things were wrong here, and the first hid the other two.
+									
+									   The placeholder read: e.g., "RNA-seq wildtype vs knockout mouse
+									   liver, n=3 per group". ExtJS writes emptyText into a
+									   placeholder="..." attribute, so the first embedded double quote
+									   closed the attribute and everything after it was parsed as stray
+									   markup -- on screen the hint was "e.g.," and nothing more. The
+									   example is the useful half of a placeholder and nobody had ever
+									   seen it. Curly quotes carry the same meaning through intact.
+									
+									   Then the label: labelWidth 150, right-aligned, inside a column
+									   already narrowed by the callout beside it -- which left roughly
+									   250px to compose prose in. It goes on top now and the input takes
+									   the full column.
+									
+									   And 90px is three lines for free text describing an experiment.
+									   It opens taller, and .po-exp-design lets it be dragged further. */
+									xtype: "textarea", fieldLabel: "Experiment design (optional)",
+									name: 'experimentDesign',
+									labelAlign: 'top', anchor: '100%', height: 132,
+									cls: 'po-exp-design',
+									emptyText: 'e.g. RNA-seq of wildtype vs knockout mouse liver, 3 replicates per group, sampled at 24 h',
 									maxLength: 2000
+								},
+								{
+									xtype: "box", cls: 'po-exp-design-hint',
+									html: 'Describe the comparison your data represents. The interpretation uses it '+
+									      'to say which direction of change means what.'
 								}
 							]
 						}]
 					},
 					{
 						xtype: "box",
-						html: '<h3>2. Choose the files to upload <a class="button btn-right btn-small" href="https://paintomics.uv.es/resources/paintomics_example_data.zip"><i class="fa fa-download"></i> Download example data</a></h3>'
+						html: '<h3>3. Choose the files to upload <a class="button btn-right btn-small" href="resources/paintomics_example_data.zip"><i class="fa fa-download"></i> Download example data</a></h3>'
 					},
 					{
 						xtype: "container",
@@ -1445,11 +1502,11 @@ function PA_Step1JobView() {
 							   inset, so the drag sources start where the headings do. */
 							padding: "10 0",
 							html: '<h2 style="text-align:center;">Available omics</h2>' +
-							'<div class="availableOmicsBox" title="geneexpression"><h4><a href="javascript:void(0)"><i class="fa fa-plus-circle"></i></a> Gene Expression</h4></div>' +
+							'<div class="availableOmicsBox" title="geneexpression"><h4><a href="javascript:void(0)"><i class="fa fa-plus-circle"></i></a> Gene expression</h4></div>' +
 							'<div class="availableOmicsBox" title="metabolomics"><h4><a href="javascript:void(0)"><i class="fa fa-plus-circle"></i></a> Metabolomics</h4></div>' +
 							'<div class="availableOmicsBox" title="proteomics"><h4><a href="javascript:void(0)"><i class="fa fa-plus-circle"></i></a> Proteomics</h4></div>' +
 							'<div class="availableOmicsBox" title="regulatoryomic"><h4><a href="javascript:void(0)"><i class="fa fa-plus-circle"></i></a> Regulatory Omic</h4></div>' +
-							'<div class="availableOmicsBox" title="bedbasedomic"><h4><a href="javascript:void(0)"><i class="fa fa-plus-circle"></i></a> Region based omic</h4></div>' +
+							'<div class="availableOmicsBox" title="bedbasedomic"><h4><a href="javascript:void(0)"><i class="fa fa-plus-circle"></i></a> Region-based omic</h4></div>' +
 							'<div class="availableOmicsBox" title="otheromic"><h4><a href="javascript:void(0)"><i class="fa fa-plus-circle"></i></a> Other omics</h4></div>'
 						}, {
 							xtype: "container",
@@ -1476,7 +1533,7 @@ function PA_Step1JobView() {
 							flex: 1,
 							layout: {type: 'vbox',align: "stretch"},
 							items: [
-								{xtype: 'box',html: '<div class="content"><h5><i class="fa fa-info-circle" style="color: var(--pa-accent-blue); font-size: 50px;"></i> Help</h5><p>Drag and drop omics from <i>"Available"</i> to <i>"Selected"</i> area or click the <i class="fa fa-plus-circle"  style="font-size: 18px;"></i> button.</p><p>If you do not need them, delete with <i class="fa fa-trash" style="font-size: 18px;"></i>.</p><p>Once you are done, click on the "Run PaintOmics" button on the upper-right corner.</p><p>Make sure to <span style="text-decoration: underline;">choose an organism</span> from the select box first!</p></div>'}
+								{xtype: 'box',html: '<div class="content"><h5><i class="fa fa-info-circle" style="color: var(--pa-accent-blue); font-size: 50px;"></i> Help</h5><p>Drag <i>omics</i> from <b>Available omics</b> to <b>Selected omics</b>, or click the <i class="fa fa-plus-circle"  style="font-size: 18px;"></i> button.</p><p>Remove any you do not need with <i class="fa fa-trash" style="font-size: 18px;"></i>.</p><p>When you are done, click <b>Run PaintOmics</b> in the top-right corner.</p></div>'}
 							]
 						}]
 					}					
@@ -1848,7 +1905,7 @@ function RegionBasedOmicSubmittingPanel(nElem, options) {
 	***********************************************************************/
 	options = (options || {});
 
-	this.title = "Region based omic";
+	this.title = "Region-based omic";
 	this.namePrefix = "omic" + nElem;
 	this.omicName = "";
 	this.mapTo = "Gene";
@@ -2650,7 +2707,7 @@ function MiRNAOmicSubmittingPanel(nElem, options) {
 
 	this.title = (options.regulatoryMethod === "pairwise")
 		? "Regulatory Omic — Pairwise"
-		: "Regulatory omic";
+		: "Regulatory Omic";
 	this.namePrefix = "omic" + nElem;
 	this.omicName = "";
 	this.mapTo = "Gene";
@@ -3268,7 +3325,14 @@ function MiRNAOmicSubmittingPanel(nElem, options) {
 							step: 0.1,
 							allowDecimals: true,
 							allowBlank: false,
-							helpTip: "The value for the threadhold. All features with a lower value of correlation or FC will be filterd out from the results. Default: 0.5"
+							// Deliberately not "features below the cutoff are removed".
+							// MiRNA2GeneJob inverts both the cutoff and the score when the
+							// selection method is negative correlation (lines 385-386 and
+							// 429), so at the -0.5 default an association is kept when its
+							// correlation is *more negative* than -0.5. Stating a numeric
+							// direction here gets it backwards for the default method; the
+							// direction belongs to the method, so that is what is named.
+							helpTip: "Threshold for the correlation or fold change, applied in the direction of the selection method above. At the default -0.5 with negative correlation, an association is kept when its correlation is more negative than -0.5."
 						}
 					]
 				}
@@ -4065,3 +4129,120 @@ window.cookieconsent.initialise({
 		link: '<a aria-label="learn more about cookies" tabindex="0" class="cc-link" href="" target="_blank"></a>'
 	}
 });
+
+/*********************************************************************
+ * AI PROVENANCE                                    ******************
+ *********************************************************************
+ * Names the recipient of the data in the consent surfaces.
+ *
+ * The provider, its host and the model are all chosen server-side by
+ * AI_LLM_PROVIDER and are all env-overridable, so the browser cannot know any
+ * of them. It used to not try: the consent label said "external AI service"
+ * and the notice said "external LLM servers", which is the same amount of
+ * information as saying nothing. The only string in the whole product that
+ * named the gateway was the missing-API-key error, so a working install told
+ * the user nothing about where their data went and a broken one told them
+ * everything.
+ *
+ * /ai_provider answers it. One request, cached for the page, and every
+ * placeholder that happens to be in the DOM is filled from the same answer.
+ * If the request fails the placeholders keep the wording they shipped with,
+ * which is vaguer but still true -- a consent notice must not degrade into a
+ * claim the server has not confirmed.
+ *********************************************************************/
+var AI_PROVIDER_INFO = null;
+var _aiProviderRequest = null;
+
+/* Runs `callback(info)` once the provider description is known, immediately if
+   it already is. Never calls back on failure: the fallback copy is what the
+   markup already contains. */
+function withAIProviderInfo(callback) {
+	if (AI_PROVIDER_INFO !== null) {
+		callback(AI_PROVIDER_INFO);
+		return;
+	}
+	if (_aiProviderRequest === null) {
+		_aiProviderRequest = $.ajax({
+			type: "GET", url: SERVER_URL_AI_PROVIDER, dataType: "json"
+		});
+	}
+	_aiProviderRequest.done(function (response) {
+		if (!response || response.success !== true || !response.host) {
+			return;
+		}
+		AI_PROVIDER_INFO = response;
+		callback(response);
+	});
+}
+
+/* Fills whichever provenance placeholders exist under `root` (the document by
+   default). Called twice with different roots: once when step 1 renders, for
+   the consent label and the callout, and again when the privacy notice is
+   built, because that modal does not exist until the icon is clicked. */
+function fillAIProvenance(root) {
+	root = root || document;
+
+	withAIProviderInfo(function (info) {
+		/* getAIProviderInfo answers for a host it has no entry for by setting
+		   `operator` and `summary` to the bare hostname (AIInterpretServlet.py
+		   :112-113). That is the right thing for it to do - the hostname is
+		   still true - but the sentences below were written as though the two
+		   were always distinct, so an unrecognised gateway printed its own name
+		   twice: "llm.example.org (llm.example.org)" in the consent label and
+		   "send the data to llm.example.org - llm.example.org" in the notice.
+		   Reads as a bug in a paragraph whose whole job is to be trusted. */
+		var operatorIsHost = !info.operator || info.operator === info.host;
+		var summaryIsHost = !info.summary || info.summary === info.host;
+
+		/* The model identifier is deliberately not shown anywhere in the
+		   interface. /ai_provider still reports it -- it is a true fact about
+		   the configuration and other callers may want it -- but naming a
+		   specific build in consent copy invites the reader to evaluate the
+		   model rather than the decision in front of them, and the string goes
+		   stale the moment the gateway is repointed. Who operates the endpoint
+		   and where it runs is what a consent decision actually turns on. */
+
+		var name = root.querySelector("#aiProviderName");
+		if (name) {
+			/* Deliberately the operator and the host rather than a phrase like
+			   "a CSIC gateway": the host is the checkable fact, and this label
+			   is the one piece of consent copy every user reads. */
+			name.textContent = operatorIsHost
+				? info.host
+				: info.operator + " (" + info.host + ")";
+		}
+
+		var inline = root.querySelector("#aiProviderInline");
+		if (inline) {
+			inline.textContent = " This server sends the data to " + info.summary + ".";
+		}
+
+		var where = root.querySelector("#aiGdprWhere");
+		if (where) {
+			where.innerHTML = "<strong>Where it runs:</strong> this server is configured to send "
+				+ "the data to <strong>" + Ext.String.htmlEncode(info.host) + "</strong>"
+				+ (summaryIsHost ? "" : " &mdash; " + Ext.String.htmlEncode(info.summary))
+				+ ".";
+		}
+
+		var transfer = root.querySelector("#aiGdprTransfer");
+		if (transfer) {
+			/* The page used to assert GDPR Chapter V unconditionally -- Articles
+			   44-49, "non-EU processors", Standard Contractual Clauses -- which
+			   does not describe the default configuration at all, and reads as
+			   boilerplate nobody updated. Stated from the configuration
+			   instead, and left blank where the server cannot say, because a
+			   guess about which legal regime applies is worse than silence. */
+			if (info.inEU === true) {
+				transfer.innerHTML = "<strong>Transfers:</strong> this deployment sends the data to "
+					+ "an endpoint operated within the EU, so Chapter V of the GDPR "
+					+ "(Articles 44&ndash;49, transfers to third countries) does not apply to it.";
+			} else if (info.inEU === false) {
+				transfer.innerHTML = "<strong>Transfers:</strong> this deployment sends the data "
+					+ "outside the EU. Under GDPR Articles 44&ndash;49, transferring identifiable "
+					+ "personal data to a non-EU processor requires appropriate safeguards, such as "
+					+ "Standard Contractual Clauses.";
+			}
+		}
+	});
+}

@@ -151,8 +151,7 @@ function PA_Step2JobView() {
 			html: '<div id="about">' +
 			'  <h2 >Data distribution summary <span class="helpTip" title=" "></h2>' +
 			'  <p>' +
-			'    The following diagrams show the data distribution summary of each data set provided.<br>' +
-			'    By default the percentiles 10 and 90 will be taken as a reference for the colour scale when generating the heatmaps, but <b>in the <span style="text-decoration: underline;">next step</span> you will be able to change the setting</b> using the "Settings" button located in the toolbar, the one showed here.<br>' +
+			'    By default, percentiles 10 and 90 set the reference range for the heatmap colours. You can change this in the pathway view: open <b>Settings</b> in the toolbar and edit <b>Reference values</b>.<br>' +
 			// settingsbutton.png was last regenerated in 2022 and shows the toolbar
 			// as it was then: a dark bar of coloured Bootstrap buttons reading
 			// "Go back / Show Pathway / Show Heatmap / Search / Settings", with a
@@ -252,7 +251,14 @@ function PA_Step2JobView() {
 							['0.9', 0.9],
 							['1.0', 1.0]]
 					}),
-					helpTip: "If the value is set to 'Generate automatically', the threshold will base on the proportion of significant metabolites in the dataset. The threshold is from 0 to 1."
+					// "Average percentage" is what the paragraph above this panel used
+					// to say and it is not what the code does. compundsClassification
+					// falls back to `totalRelevantFeatures / totalFeatures`
+					// (PathwayAcquisitionJob.py:2280-2283) - the proportion of
+					// significant metabolites across the whole dataset, not an average
+					// of per-class percentages. The two differ whenever the classes are
+					// unequally sized, which they always are.
+					helpTip: "With 'Generate automatically', the threshold is the proportion of significant metabolites across your whole dataset. Otherwise choose a value between 0 and 1."
 				});
 
 			}
@@ -268,7 +274,7 @@ function PA_Step2JobView() {
 				items: [{
 					html: '<h2 style="width: 100%;">Configure the number of clusters</h2>'
 				}, {
-					html: '<p>In the next step Paintomics will calculate the clusters present in the data provided for each omic. It will use the method k-means using a automatically calculated number of cluster or the ones you define here. In the next step you will also be able to modify them by selecting individual omics in the network.<br><br></p>'
+					html: '<p>In the next step Paintomics will calculate the clusters present in the data provided for each omic, using k-means with either an automatically calculated number of clusters or the ones you define here. You will also be able to modify them there by selecting individual omics in the network.<br><br></p>'
 				},{
 					xtype: 'form',
 					maxWidth: 600,
@@ -313,9 +319,9 @@ function PA_Step2JobView() {
 				html:
 				'<h2>Multiple databases used</h2>' +
 				'<div>' +
-				'  <p>The selected species had more than one database available. Your final analysis contains information about the following databases:</p>' +
+				'  <p>Your analysis includes the following databases:</p>' +
 				'  <dl id="dbs_dl">' + dl_dbs + '</dl>' +
-				'  <p>The following diagrams combine the matched &amp; unmatched elements considering <b>all</b> databases; for a desambiguation please place the cursor over the graph and check the emerging tooltip.</p>' +
+				'  <p>The diagrams below combine the matched and unmatched features of <b>all</b> databases. Hover over a diagram for the per-database breakdown.</p>' +
 				'</div>'
 			};
 
@@ -362,9 +368,7 @@ function PA_Step2JobView() {
 						'metabolite class being regulated, PaintOmics implements\n' +
 						'a metabolite class activity analysis tool, where a binomial\n' +
 						'test is used to assess the hypothesis of the proportion of significant compounds in a given measured metabolite class\n' +
-						'being higher than a user-defined threshold. In case the user\n' +
-						'does not define an activity threshold, PaintOmics will use\n' +
-						'the average percentage of significant metabolites as threshold for the "Generate automatically".</p>'
+						'being higher than a user-defined threshold.</p>'
 				},{
 					xtype: 'form',
 					maxWidth: 600,

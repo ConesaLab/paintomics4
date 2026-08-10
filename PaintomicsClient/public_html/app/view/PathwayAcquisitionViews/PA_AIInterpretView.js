@@ -1,4 +1,4 @@
-/* global Ext, $, marked, SERVER_URL_AI_INTERPRET_REPORT, SERVER_URL_AI_INTERPRET_CHAT */
+/* global Ext, $, marked, SERVER_URL_AI_INTERPRET_REPORT, SERVER_URL_AI_INTERPRET_CHAT, SERVER_URL_AI_INTERPRET_PATHWAY, withAIProviderInfo */
 
 if (typeof marked !== "undefined" && marked.use) {
     marked.use({
@@ -32,7 +32,7 @@ function PA_AIInterpretView() {
             '<div class="ai-widget" style="display:none;">' +
             '  <div class="ai-widget-panel">' +
             '    <div class="ai-widget-header">' +
-            '      <span class="ai-widget-header-title">AI Assistant</span>' +
+            '      <span class="ai-widget-header-title">PaintOmics AI</span>' +
             '      <div class="ai-widget-header-actions">' +
             '        <button class="ai-fullscreen-btn" title="Fullscreen">&#x26F6;</button>' +
             '        <button class="ai-minimize-btn" title="Minimize">&mdash;</button>' +
@@ -48,7 +48,7 @@ function PA_AIInterpretView() {
             '      <button class="ai-send-btn" title="Send">&#10148;</button>' +
             '    </div>' +
             '  </div>' +
-            '  <button class="ai-widget-fab" title="AI Interpretation">' +
+            '  <button class="ai-widget-fab" title="PaintOmics AI">' +
             '    <span class="ai-fab-icon">' + getAIMark(26, "swarm") + '</span>' +
             '    <span class="ai-widget-fab-badge" style="display:none;"></span>' +
             '  </button>' +
@@ -499,7 +499,48 @@ function PA_AIInterpretView() {
         holder.innerHTML = html;
         this._linkifyPathways(holder, pathways);
 
-        this.addMessage("assistant", holder.innerHTML, true);
+        /* Who wrote this. The report is model output that gets read, quoted and
+           pasted into drafts, so the attribution rides inside the bubble rather
+           than in the panel chrome -- a copy of the write-up copies the line.
+           Every report goes through here, so the per-pathway interpretations
+           opened from a pathway link carry it too.
+
+           The first sentence ships in the markup and is true on any install: it
+           is what stays on screen if /ai_provider never answers, and this line
+           must not degrade into a claim the server has not confirmed. The
+           model, its host and who operates it come from the same cached answer
+           the consent surfaces on step 1 use -- all three are chosen by
+           AI_LLM_PROVIDER server-side and the browser cannot know them. */
+        var provenance =
+            '<div class="ai-report-provenance">' +
+            'Drafted by a large language model, not by a person. Check every ' +
+            'claim and every citation against the sources before relying on it. ' +
+            '<span class="ai-report-provenance-model"></span>' +
+            '</div>';
+        this.addMessage("assistant", holder.innerHTML + provenance, true);
+
+        if (typeof withAIProviderInfo === "function") {
+            /* addMessage appends synchronously, so the span just added is the
+               last one in the panel. Filled with .text(), so a model name can
+               never be read as markup. withAIProviderInfo never calls back on
+               failure, which is why the sentence above has to stand alone. */
+            var $model = this.$root
+                .find(".ai-widget-messages .ai-report-provenance-model").last();
+            withAIProviderInfo(function (info) {
+                /* The model identifier is deliberately left out. The report is
+                   the surface people paste into a draft, and a build name
+                   pasted with it is stale as soon as the gateway is repointed,
+                   whereas who ran it and where does not go stale. */
+                var text = "Generated at " + info.host;
+                /* /ai_provider falls back to the bare hostname for a gateway it
+                   has no entry for, which leaves summary equal to host. Skip it
+                   there rather than print the hostname twice. */
+                if (info.summary && info.summary !== info.host) {
+                    text += " — " + info.summary;
+                }
+                $model.text(text + ".");
+            });
+        }
     };
 
     /**

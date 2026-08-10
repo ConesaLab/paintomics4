@@ -659,8 +659,12 @@ function PA_Step3JobView() {
 			items: [
 				{
 					xtype:"box", html:
-					"<h2>Job sharing options</h2>"+
-					"<div style='margin-bottom:10px;'>By default all jobs created by an user account are private and the others publics.<br><br><b>Note: </b> keep in mind when sharing a job with other people that filtering and visual options are stored in the server side, so you might wanna restrict that option to avoid inconsistencies.</div>" +
+					// The last sentence is owner-only. It points at the Read-only
+					// checkbox, and that checkbox is inside the `isOwner` branch below -
+					// so a non-owner was being told to use a control that is not on their
+					// screen, directly above the line explaining they cannot change
+					// anything here.
+					"<div style='margin-bottom:10px;'>Jobs created while you are signed in are private by default; jobs created without an account are public.<br><br>Filtering and visual settings are stored on the server, so anyone you share the link with sees the same view &mdash; and can change it." + (isOwner ? " Use the read-only option below to prevent that." : "") + "</div>" +
 					"<div>The link to this job is: <a href='" + window.location.href + "' target='_blank'>" + window.location.href +"</a></div><br><br>"
 				},
 				(isOwner ?
@@ -4790,7 +4794,7 @@ function PA_Step3HubAnalysis () {
 							// chosen for and still lets the header grow when the
 							// text wraps, which it also does at narrow widths.
 							minHeight: 70,
-							html: '<h2 id="EnrichmentSection"> Metabolites Hub Analysis</h2>' +
+							html: '<h2 id="EnrichmentSection">Metabolite hub analysis</h2>' +
 								' <span class="infoTip">Neighbouring genes for each metabolite at <b> 1 to 4 network steps </b> are identified.</b></span> ' +
 								' <span class="infoTip">The percentile and binomial tests are used to identify metabolites with a high density of DEGs in their proximal network.</span>',
 
@@ -4841,7 +4845,7 @@ function PA_Step3HubAnalysis () {
 											"  <div class='PA_step5_heatmapContainer' id='" + divIdComp + "'  style='height: " + 130 + "px'><i class='fa fa-cog fa-spin'></i> Loading..</div>" +
 											"  <div class='PA_step5_plotContainer' id='" + divIdComp + "_plotContainer'  style='width:" + divWidth + "px;height: " + 130 + "px'><i class='fa fa-cog fa-spin'></i> Loading..</div>" +
 											"</div>" +
-											'<h2 style="background-color: white"> Metabolite regulates Features </h2>'
+											'<h2 style="background-color: white">Neighbouring features</h2>'
 										elem.append(htmlCode);
 
 										heatmapSite = generateHeatmap(divIdComp, "Metabolomics", [compExpression], distributionSummaries, visualOptions, paOmicHeaders(me.model, "Metabolomics"))
@@ -5199,7 +5203,7 @@ function PA_Step3HubAnalysis () {
 							{
 								xtype: "box",
 								html:
-									' <h4>Expression Value<span class="infoTip">Use this tool to show expression details of <b>metabolites regulated features</b></span></h4> '
+									' <h4>Expression Value<span class="infoTip">Use this tool to show expression details of a metabolite and its <b>neighbouring features</b></span></h4> '
 							},
 							{
 								xtype: 'box',
@@ -5893,7 +5897,7 @@ function PA_Step3RegulationView() {
 					// height. This one carries a single long .infoTip that wraps to
 					// three lines well before the window gets narrow.
 					minHeight: 70,
-					html: '<h2 id="MORERegulationSection">MORE Regulation Analysis</h2>' +
+					html: '<h2 id="MORERegulationSection">MORE regulation analysis</h2>' +
 					      ' <span class="infoTip">Per-condition regression coefficients from MORE\'s ' +
 					      '<b>RegulationPerCondition</b>. Each row is a target↔regulator pair; Group columns ' +
 					      'are the coefficients for each experimental condition. Zero means no effect in that condition.</span>',

@@ -90,7 +90,7 @@ PUBLISHED = {
     "app/view/PathwayAcquisitionViews/PA_Step3RegTargetNetworkView.js": (
         "0.1", "f9b31d697a708f72074f605350ea488efe4faa3d610d90d8a0dfec18d271070c"),
     "resources/ServerConfiguration.js": (
-        "0.4", "2beb1dc6325fe1f6620b5e42f10867528e004badf607e53fe00e74280656dda7"),
+        "0.5", "e99fbca019569d7d31009db62c5db9e46a795b7f3c4f90d67da56dbab6f40385"),
     "js/libs/linkurious/sigma.min.js": ("0.1", None),
     "js/libs/linkurious/plugins.js": ("0.2", None),
     "app.js": ("0.2", None),

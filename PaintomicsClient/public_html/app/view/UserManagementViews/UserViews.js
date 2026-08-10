@@ -125,9 +125,17 @@ function SignInPanel() {
                           {xtype: 'form', itemId: "signInForm", flex: 1, border: 0,
                               layout: {type: 'vbox', align: 'stretch'}, defaults: {labelAlign: "top", border: false}, style: {"padding-right": "20px"},
                               items: [
-                                  {xtype: "box", html: '<h2>Sign In</h2>'},
-                                  {xtype: "textfield", name: 'email', fieldLabel: 'Email Address', vtype: 'email', value: Ext.util.Cookies.get('lastEmail'), allowBlank: false},
-                                  {xtype: "textfield", name: 'password', fieldLabel: 'Password', inputType: 'password', allowBlank: false,
+                                  {xtype: "box", html: '<h2>Sign in</h2>'},
+                                  /* validateOnBlur off on both. The dialog now puts the caret in
+                                     the email box when it opens, and ExtJS validates a field the
+                                     moment it loses focus - so clicking anywhere else, or tabbing
+                                     to the password box, painted a red invalid border on an empty
+                                     field nobody had tried to fill in yet. Telling someone they
+                                     are wrong before they have typed is not validation, it is
+                                     nagging. The form is still checked on submit:
+                                     signInButtonClickHandler gates on signInForm.isValid(). */
+                                  {xtype: "textfield", name: 'email', fieldLabel: 'Email Address', vtype: 'email', value: Ext.util.Cookies.get('lastEmail'), allowBlank: false, validateOnBlur: false},
+                                  {xtype: "textfield", name: 'password', fieldLabel: 'Password', inputType: 'password', allowBlank: false, validateOnBlur: false,
                                       listeners: {
                                           specialkey: function (field, e) {
                                               if (e.getKey() === e.ENTER) {
@@ -136,19 +144,18 @@ function SignInPanel() {
                                           }
                                       }},
                                   {xtype: "box", html:
-                                              '<div style="color: #D22; font-size: 16px;" id="invalidUserPassMessage" style="display:none"></div>' +
-                                              '<a class="button exampleButton" id="signInLink" style=" width: 195px; text-align: center; margin: 10px 54px; display: block;"><i class="fa fa-sign-in"></i> Sign in</a>' +
-                                              '<a id="forgotPassLink" href="javascript:void(0)"><p style="text-align: center;">Forgot your password?</p></a>' +
-                                              '<p style="text-align: center;">Want your own space? <a class="signUpLink" href="javascript:void(0)">Sign up now.</a></p>'
+                                              '<div class="formMessage" id="invalidUserPassMessage"></div>' +
+                                              '<p class="formActionRow"><a class="button btn-primary btn-form-action" href="javascript:void(0)" id="signInLink"><i class="fa fa-sign-in" aria-hidden="true"></i> Sign in</a></p>' +
+                                              '<p style="text-align: center;"><a id="forgotPassLink" href="javascript:void(0)">Forgot your password?</a></p>' +
+                                              '<p style="text-align: center;"><a class="signUpLink" href="javascript:void(0)">Create an account</a></p>'
                                   }
                               ]
                           },
 						  	{xtype: "box", flex: 1, html:
-                              '<div style="padding: 0 30px; border-left: 1px solid #E7E7E7;">' +
-                              '  <h2>No login</h2>' +
-                              '  <h4>Continue using Paintomics without using accounts.</h4>' +
-                              '  <p>Please remember to save the provided URL to recover your job.' +
-                              '  <p style="text-align:center; margin-top: 50px;"><a class="button acceptButton" id="noLoginButton" style=" width: 195px; text-align: center; margin: 20px auto;float: none; "><i class="fa fa-sign-in"></i> Continue without account</a></p>' +
+                              '<div class="signInColumnDivider">' +
+                              '  <h2>No account</h2>' +
+                              '  <p>Your job is reachable only from the URL PaintOmics gives you when it starts, so save that URL. Without it the job cannot be recovered.</p>' +
+                              '  <p class="formActionRow"><a class="button btn-default btn-form-action" href="javascript:void(0)" id="noLoginButton"><i class="fa fa-arrow-right" aria-hidden="true"></i> Continue without an account</a></p>' +
                               '</div>'
                   			}
                           /*{xtype: "box", flex: 1, html:
@@ -223,7 +230,7 @@ function SignUpPanel() {
         var email = signUpForm.down("textfield[name=email]").getValue();
 
 
-        var tpl = new Ext.Template("<div style='font-size: 20px;'>Thanks {0} for using Paintomics.</br>A confirmation email was sent to {1}, please check your inbox and follow the instructions for account activation.</div>");
+        var tpl = new Ext.Template("<div style='font-size: 20px;'>A confirmation email was sent to {1}. Follow the instructions in it to activate your account.</div>");
         tpl = tpl.apply([userName, email]);
 
         congratzPanel.queryById("messageBox").update(tpl);
@@ -239,8 +246,8 @@ function SignUpPanel() {
                     items: [
                         {xtype: 'form', itemId: "signUpForm", border: 0, layout: {type: 'vbox', align: 'stretch'}, defaults: {labelAlign: "top", border: false},
                             items: [
-                                {xtype: "box", html: '<h2>Sign Up in seconds</h2>'},
-                                {xtype: "textfield", name: 'email', fieldLabel: 'Your Email ', vtype: 'email', allowBlank: false},
+                                {xtype: "box", html: '<h2>Create an account</h2>'},
+                                {xtype: "textfield", name: 'email', fieldLabel: 'Email Address', vtype: 'email', allowBlank: false},
                                 {xtype: "textfield", name: 'password', fieldLabel: 'Choose a Password', inputType: 'password', allowBlank: false},
                                 {xtype: "textfield", name: 'password2', fieldLabel: 'Confirm Password', inputType: 'password', submitValue: false, allowBlank: false,
                                     validator: function (value) {
@@ -255,17 +262,17 @@ function SignUpPanel() {
                                 {xtype: "box", html: '<p class="formNode">Please let us know your university, research centre or company and the department or institute.</p>'},
 								{xtype: "box", html: '<iframe id="dataProtection" src="conditions_iframe.html"></iframe>'},
 								{xtype: "checkboxfield", name: 'conditions', id: 'conditionsCheckbox', allowBlank: false, submitValue: true, boxLabel: '<span > I have read the  <a href="conditions.html" target="_blank" id="conditionsSignup">rules, conditions and privacy policy</a>.</span><br />'},
-                                {xtype: "box", html: '<div style="color: #D22; font-size: 16px;" id="invalidSignUpMessage" style="display:none"></div>' +
-                                            '<a class="button exampleButton" id="signUpButton" style=" width: 100%; text-align: center; margin: 10px 0px; "><i class="fa fa-sign-in"></i> Sign me up!</a>' +
-                                            '<a id="signUpBackLink" href="javascript:void(0)"><i class="fa fa-arrow-circle-o-left"></i> Back</a>'
+                                {xtype: "box", html: '<div class="formMessage" id="invalidSignUpMessage"></div>' +
+                                            '<p class="formActionRow"><a class="button btn-primary btn-form-action" href="javascript:void(0)" id="signUpButton"><i class="fa fa-user-plus" aria-hidden="true"></i> Create account</a></p>' +
+                                            '<a id="signUpBackLink" href="javascript:void(0)"><i class="fa fa-arrow-circle-o-left" aria-hidden="true"></i> Back</a>'
                                 }
                             ]
                         },
                         {xtype: "container", itemId: "congratzPanel", hidden: true, layout: {type: 'vbox', align: 'stretch'},
                             items: [
-                                {xtype: "box", html: '<h2>Congratz!</h2>'},
+                                {xtype: "box", html: '<h2>Check your inbox</h2>'},
                                 {xtype: "box", flex: 1, itemId: "messageBox", html: ''},
-                                {xtype: "box", html: '<a class="button exampleButton" id="signUpCloseButton" style=" width: 100%; text-align: center; margin: 10px 0px; "><i class="fa fa-check-circle-o"></i> Close</a>'}
+                                {xtype: "box", html: '<p class="formActionRow"><a class="button btn-default btn-form-action" href="javascript:void(0)" id="signUpCloseButton"><i class="fa fa-check-circle-o" aria-hidden="true"></i> Close</a></p>'}
                             ]
                         }
                     ],
@@ -314,7 +321,7 @@ function ForgetPasswordPanel() {
                           {xtype: 'form', itemId: "signInForm", flex: 1, border: 0,
                               layout: {type: 'vbox', align: 'stretch'}, defaults: {labelAlign: "top", border: false}, style: {padding: "10px"},
                               items: [
-                                  {xtype: "box", html: '<h2>Reset Password</h2><p>If you do not remember your password please enter your address and we will send you an e-mail containing instructions to reset your password.'},
+                                  {xtype: "box", html: '<h2>Reset password</h2><p>We will email you instructions for choosing a new password.</p>'},
                                   {xtype: "textfield", name: 'userEmail', fieldLabel: 'Email Address', vtype: 'email', value: Ext.util.Cookies.get('lastEmail'), allowBlank: false,
 								   		listeners: {
                                           specialkey: function (field, e) {
@@ -325,16 +332,16 @@ function ForgetPasswordPanel() {
                                       }},
                                   {
                                       xtype: "box",html:
-                                              '<div style="color: #D22; height:25px;font-size: 16px;" id="invalidEmailMessage" style="display:none"></div>'
+                                              '<div class="formMessage" id="invalidEmailMessage"></div>'
                                   },
                                   {
                                     xtype: "box", html:
-                                               '<a class="button exampleButton" id="resetPassLink" style=" width: 195px; text-align: center; margin: 10px 35px; display: block;"><i class="fa fa-sign-in"></i> Reset password</a>'
+                                               '<p class="formActionRow"><a class="button btn-primary btn-form-action" href="javascript:void(0)" id="resetPassLink"><i class="fa fa-envelope-o" aria-hidden="true"></i> Send instructions</a></p>'
 
                                   },
                                   {
                                       xtype: "box",html:
-                                      		'<a id="forgetPasswordBackLink" href="javascript:void(0)"><i class="fa fa-arrow-circle-o-left"></i> Back</a>'
+                                      		'<a id="forgetPasswordBackLink" href="javascript:void(0)"><i class="fa fa-arrow-circle-o-left" aria-hidden="true"></i> Back</a>'
 
                                   }
                               ]
@@ -381,14 +388,14 @@ function GuestSessionPanel(email, p) {
                 {
                     xtype: "box", flex: 1, margin: '20px',
                     html:
-                            '<div style="padding-left: 30px; border-left: 1px solid #E7E7E7;">' +
+                            '<div class="signInColumnDivider">' +
                             '<h2>Guest session</h2>' +
-                            '<p><b>Welcome Guest</b>, please find your temporary credentials below. Use this information to resume your jobs or recover your data.</p>' +
-                            '<h4><b>Email:    </b> ' + me.email + '</h4>' +
-                            '<h4><b>Password: </b> ' + me.p + '</h4>' +
-                            '<b>Remember:</b> all data, jobs, and results for Guest Users will be kept on the system for a maximum of <b>7 days</b>.</p>' +
-                            '<p><a class="signUpLink" href="javascript:void(0)">Sign Up</a></b>. It only takes a few seconds. <a>More info</a>.</p>' +
-                            '<a class="button exampleButton" id="continueButton" style=" width: 100%; text-align: center; margin: 10px 0px; "><i class="fa fa-sign-in"></i> Got it! Let\'s get to work!</a>' +
+                            '<p>These are your temporary credentials. Save them &mdash; they are what you will use to resume a job or recover your data.</p>' +
+                            '<h4><b>Email:</b> ' + me.email + '</h4>' +
+                            '<h4><b>Password:</b> ' + me.p + '</h4>' +
+                            '<p>Data, jobs and results belonging to guest users are kept for a maximum of <b>7 days</b>.</p>' +
+                            '<p><a class="signUpLink" href="javascript:void(0)">Create an account</a> to keep them for longer. It takes a few seconds.</p>' +
+                            '<p class="formActionRow"><a class="button btn-primary btn-form-action" href="javascript:void(0)" id="continueButton"><i class="fa fa-arrow-right" aria-hidden="true"></i> Start working</a></p>' +
                             '</div>',
                     listeners: {
                         afterrender: function () {
@@ -427,12 +434,12 @@ function NoLoginSessionPanel(email, p) {
                 {
                     xtype: "box", flex: 1, margin: '20px',
                     html:
-                            '<div style="padding-left: 30px; border-left: 1px solid #E7E7E7;">' +
-                            '<h2>No login session</h2>' +
-                            '<p><b>Welcome </b>, please take into account that you will not have access to the data & jobs management area, so be sure to write down the job ID.</p>' +
-                            '<b>Remember:</b> all data, jobs, and results for no registered users will be kept on the system for a maximum of <b>7 days</b>.</p>' +
-                            '<p><a class="signUpLink" href="javascript:void(0)">Sign Up</a></b>. It only takes a few seconds. <a>More info</a>.</p>' +
-                            '<a class="button exampleButton" id="continueButton" style=" width: 100%; text-align: center; margin: 10px 0px; "><i class="fa fa-sign-in"></i> Got it! Let\'s get to work!</a>' +
+                            '<div class="signInColumnDivider">' +
+                            '<h2>No account</h2>' +
+                            '<p>Write down your job ID. Without an account you have no data and jobs management area, so the ID is the only way back to your results.</p>' +
+                            '<p>Data, jobs and results belonging to unregistered users are kept for a maximum of <b>7 days</b>.</p>' +
+                            '<p><a class="signUpLink" href="javascript:void(0)">Create an account</a> to keep them for longer. It takes a few seconds.</p>' +
+                            '<p class="formActionRow"><a class="button btn-primary btn-form-action" href="javascript:void(0)" id="continueButton"><i class="fa fa-arrow-right" aria-hidden="true"></i> Start working</a></p>' +
                             '</div>',
                     listeners: {
                         afterrender: function () {
@@ -487,13 +494,13 @@ function ChangePasswordPanel() {
                             {xtype: "textfield", name: 'password2', fieldLabel: 'Confirm Password', inputType: 'password', submitValue: false, allowBlank: false,
                                 validator: function (value) {
                                     if ($("input[name=password]").val() != value) {
-                                        return "Password do not match!";
+                                        return "Passwords do not match!";
                                     }
                                     return true;
                                 }
                             },
-                            {xtype: "box", html: '<a class="button acceptButton" id="acceptNewPassButton" style=" width: 100%; text-align: center; margin: 10px 0px; "><i class="fa fa-check"></i> Accept</a>' +
-                                        '<a id="cancelNewPassButton" href="javascript:void(0)"><i class="fa fa-arrow-circle-o-left"></i> Cancel</a>'
+                            {xtype: "box", html: '<p class="formActionRow"><a class="button btn-primary btn-form-action" href="javascript:void(0)" id="acceptNewPassButton"><i class="fa fa-check" aria-hidden="true"></i> Save new password</a></p>' +
+                                        '<a id="cancelNewPassButton" href="javascript:void(0)"><i class="fa fa-arrow-circle-o-left" aria-hidden="true"></i> Cancel</a>'
                             }
                         ],
                     },
@@ -501,7 +508,7 @@ function ChangePasswordPanel() {
                             items: [
                                 {xtype: "box", html: '<h2>Success!</h2>'},
                                 {xtype: "box", flex: 1, itemId: "messageBox", html: 'Your password has been successfully updated.'},
-                                {xtype: "box", html: '<a class="button acceptButton" style=" width: 100%; text-align: center; margin: 10px 0px; " id="closeNewPassButton" href="javascript:void(0)"><i class="fa fa-arrow-circle-o-left"></i> Close</a>'}
+                                {xtype: "box", html: '<p class="formActionRow"><a class="button btn-default btn-form-action" id="closeNewPassButton" href="javascript:void(0)"><i class="fa fa-arrow-circle-o-left" aria-hidden="true"></i> Close</a></p>'}
                             ]
                     }
                 ],

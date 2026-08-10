@@ -383,10 +383,27 @@ a:hover {color: var(--pa-link-hover);}
    underneath it changing. `margin-left: auto` is what pins it to the right now
    that the bar is a flex row rather than a float context. */
 .mainTopToolbar .button {
+	/* The account control is the design system's HeaderButton tone="account" - a
+	   filled charcoal pill, not one of the step ghosts - so its fill has to be
+	   restated here. The base `.button` above does carry #5b5a59, but at (0,1,0)
+	   it loses to the shared `.mainTopToolbar .button, .secondTopToolbar .button`
+	   rule that paints every header control white, and with the transparent
+	   border below that left this one at 1.00:1 against the white bar: WCAG
+	   1.4.11 had nothing to measure. The shape set by that rule - 30px pill,
+	   12.5px type, 999px radius - is unchanged; only the fill and its label ink
+	   return. */
+	background-color: #5B5A59;   /* --pa-btn-neutral-bg, 6.88:1 on the white bar */
+	color: #E2E2E2;              /* --pa-btn-neutral-ink, 5.31:1 on the fill */
 	border-color: transparent;
 	float: none;
 	margin-left: auto;
 	margin-right: 0;
+}
+/* (0,3,0), which is what it takes to beat the ghost hover declared above. */
+.mainTopToolbar .button:hover {
+	background-color: #117EA9;   /* --pa-btn-neutral-bg-hover, white label 4.58:1 */
+	color: #FFFFFF;
+	border-color: transparent;
 }
 /* One bar, not two -----------------------------------------------------------
    The step actions - Load example / Run PaintOmics / Reset on Step 1, Go back /
@@ -751,6 +768,195 @@ ul.menu li.loggedOption, ul.menu span.loggedOption {
 }
 .btn-inline {
 	float: none;
+}
+
+/* The action button of a dialog form - Sign in, Sign me up!, Reset password.
+   Every one of these used to carry its own inline geometry: `width: 195px;
+   margin: 10px 54px` on the sign-in link, `10px 35px` on the reset link,
+   `width: 100%` on the sign-up one. Those numbers were arithmetic against a
+   fixed dialog width - 195 + 54 + 54 = 303, tuned to the ~310px column of a
+   700px window - so they centred nothing and broke the moment a dialog was
+   resized or a label translated.
+
+   The design system's own login pattern is auto-width, centred, one filled
+   primary; `inline-flex` plus a centred parent gives that at any width. The
+   6px gap is --pa-btn-gap, which is what puts the icon next to the label
+   without the `&nbsp;`-and-hope this file used before.
+
+   `float: none` is the load-bearing declaration. `.button` floats right, and a
+   float ignores `margin: auto`, so centring is impossible until the float goes.
+   Dropping it also means the button now contributes its own height to the box
+   - which the fixed dialog heights in UserController.js have to absorb. */
+.button.btn-form-action {
+	float: none;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: var(--pa-btn-gap, 6px);
+	width: auto;
+	margin: 10px 0;
+}
+.formActionRow {
+	text-align: center;
+	margin: 0;
+}
+
+/* The validation line above those buttons. It was written as
+   `<div style="color: #D22; font-size: 16px;" id="..." style="display:none">`
+   - two `style` attributes on one element, of which the HTML parser keeps the
+   first and drops the second, so `display:none` never applied. The div is
+   empty until jQuery fills it, so nothing showed and the bug stayed invisible.
+   Hiding it here, in one place, is what the second attribute was reaching for.
+
+   #D22 on white is 4.51:1; it is stated as a token-adjacent literal rather
+   than inline so that dark.css can reach it, which an inline style cannot. */
+.formMessage {
+	display: none;
+	color: #D22;
+	font-size: 16px;
+}
+
+/* The rule between the sign-in form and the no-account column. It was an
+   inline `border-left: 1px solid #E7E7E7` repeated on three divs, which put it
+   out of reach of dark.css - so a near-white hairline stayed on the dark
+   panel. Stated once here, it takes the border token and can be themed. */
+.signInColumnDivider {
+	padding: 0 30px;
+	border-left: 1px solid var(--pa-border);
+	/* The rule is drawn by this div's own left border, so it was only ever as
+	   tall as the words inside it - it stopped level with the last line of the
+	   right-hand column and left the two halves joined by a stub. The parent
+	   box already stretches; this is what passes that height down to the
+	   element actually carrying the border. */
+	height: 100%;
+	box-sizing: border-box;
+}
+.signInColumnDivider .formActionRow {
+	margin-top: 28px;
+}
+
+/* The account dialog ----------------------------------------------------------
+   Sign in, Create account, Reset password all render into one ExtJS window, and
+   it was carrying the framework's defaults rather than the design system's
+   surface. Measured on screen: an empty 60px header band (removed in
+   UserController - the window has no title), the form column sitting on
+   ExtJS's #f2f2f2 panel fill against a white right column, so a dialog with
+   nothing asymmetric in it looked like two pasted-together halves, and field
+   labels at the framework's bold near-black rather than the 13px
+   --pa-ink-body every other form in the product uses.
+
+   The design system's Dialog is one surface: a hairline, the shared 6px
+   corner, real elevation, and the title inside the body rather than in chrome.
+   These rules bring the account window to that, without touching the ExtJS
+   window elsewhere. */
+.userViewsDialog,
+.userViewsDialog .x-window-body {
+	background-color: var(--pa-surface, #FFFFFF);
+	border-radius: var(--pa-radius);
+}
+/* ExtJS makes the window element itself focusable and focuses it on open, so
+   the global focus ring drew a 3px blue rectangle around the whole dialog. A
+   focus indicator belongs on the thing you are about to type into, and this
+   div is not it - SignInPanel now focuses the email field instead, which is
+   where the ring shows up. Suppressed on the container only; every control
+   inside keeps its own :focus-visible outline.
+
+   `!important` because the global :focus-visible rule carries it too - without
+   it this loses the cascade and the ring comes straight back, which is what
+   happened on the first attempt. */
+.userViewsDialog:focus,
+.userViewsDialog:focus-visible {
+	outline: none !important;
+}
+.userViewsDialog .x-window-body {
+	border: 0;
+}
+/* The form column's fill. `.x-panel-body-default` is where the grey came from;
+   it is stated at (0,2,0) so this needs the dialog class to win. */
+.userViewsDialog .x-panel-body,
+.userViewsDialog .x-panel-body-default,
+.userViewsDialog .x-form,
+.userViewsDialog .x-container {
+	background-color: transparent;
+}
+.userViewsDialog h2 {
+	margin: 0 0 18px;
+	font-size: 21px;
+	font-weight: 400;
+}
+/* The framework renders these bold and nearly black, which made "Email
+   Address:" heavier than the heading above it. */
+.userViewsDialog .x-form-item-label,
+.userViewsDialog .x-form-item-label-inner {
+	font-size: 13px;
+	font-weight: 400;
+	color: var(--pa-ink-body, #555);
+}
+.userViewsDialog .x-form-text {
+	font-size: 13px;
+}
+/* Both actions get the same footprint. The primary was 78px against the
+   secondary's 205px, so the two columns read as unequal offers when they are
+   deliberately equal ones - the whole point of the right-hand column is that
+   continuing without an account is a real choice. */
+.userViewsDialog .button.btn-form-action {
+	min-width: 190px;
+	padding: 8px 16px;
+}
+.userViewsDialog .formActionRow {
+	margin-top: 22px;
+}
+/* Quiet the secondary links under the primary: they were the same weight and
+   size as the action itself. */
+.userViewsDialog #forgotPassLink,
+.userViewsDialog .signUpLink {
+	font-size: 13px;
+}
+
+/* The AI consent checkbox ------------------------------------------------------
+   The box sat on its own line with its label dropped underneath it, so the
+   control and the sentence it applies to read as two separate things. Measured:
+   ExtJS anchors the field to 100% and writes an explicit `width: 721px` onto
+   the label, inside a 725px cell. Add the 15px box and its margins and the pair
+   needs 740px, so the label could never share the line and wrapped below.
+
+   The cell becomes a flex row and the label gives up its computed width, which
+   also buys the wrapped second line a hanging indent - continuation text lines
+   up with the first line rather than sliding back under the checkbox. Scoped to
+   the AI section so no other checkbox in the form is touched. */
+.po-ai-section-body .x-form-cb-wrap {
+	display: flex;
+	align-items: flex-start;
+	gap: 8px;
+}
+.po-ai-section-body .x-form-cb-wrap > .x-form-cb-label {
+	/* ExtJS writes the width inline, so this needs the weight to beat it. */
+	width: auto !important;
+	flex: 1 1 auto;
+	margin: 0;
+	line-height: 1.45;
+}
+.po-ai-section-body .x-form-cb-wrap > .x-form-checkbox {
+	flex: 0 0 auto;
+	margin-top: 1px;
+}
+
+/* The experiment-design field on step 1 ---------------------------------------
+   Free text describing an experiment, so it is sized to be written in rather
+   than filled in: the label sits on top (see the note in PA_Step1Views.js) and
+   the box keeps a comfortable measure and stays resizable vertically. */
+.po-exp-design textarea {
+	font-family: var(--pa-font-sans);
+	font-size: 13px;
+	line-height: 1.5;
+	padding: 8px 10px;
+	resize: vertical;
+}
+.po-exp-design-hint {
+	margin-top: 6px;
+	font-size: 12px;
+	line-height: 1.45;
+	color: var(--pa-ink-muted);
 }
 /* The outlined secondary button - "Sharing options", "Show mapping info", the
    dialog's Close. Its label was never the problem (#333 on white is 12.63:1);

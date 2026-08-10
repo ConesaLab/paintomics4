@@ -4,9 +4,9 @@
 <head>
   <meta charset="utf-8">
 
-  <title>Paintomics - Rules, terms and conditions</title>
-  <meta name="description" content="Paintomics terms and conditions">
-  <meta name="author" content="Paintomics">
+  <title>PaintOmics - Privacy policy and legal notice</title>
+  <meta name="description" content="PaintOmics privacy policy and legal notice">
+  <meta name="author" content="PaintOmics">
   <style>
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -95,14 +95,16 @@ with any part of the terms then you may not access the Service.</p>
 
 	<h3 style="color: #c0392b; border-bottom: 2px solid #c0392b; padding-bottom: 5px;">AI Pathway Interpretation & STRICT Data Privacy Compliance</h3>
 	
-	<p>Paintomics optionally offers a revolutionary AI-assisted pathway interpretation feature driven by the breathtaking computational power of a <strong>Next-Generation Multi-Agent Framework</strong>. When enabled, your aggregated pathway analysis summaries (such as enrichment statistics, gene lists, and expression fold-changes) are seamlessly handed off to a hyper-advanced, autonomous network of specialized AI agents. Designed to accelerate systems biology research, these agents dynamically interface with the world's most powerful external Large Language Models (LLMs) to reveal publication-ready biological discoveries at staggering speeds.</p>
-	
-	<p><strong style="color: #c0392b;">CRITICAL WARNING - THIRD-PARTY PROCESSING:</strong> Data sent for AI interpretation is processed on third-party servers entirely outside of the Paintomics infrastructure. Paintomics acts SOLELY as a pass-through entity. We have NO control over the external LLM provider's data retention or processing mechanisms.</p>
+	<p>PaintOmics optionally offers AI-assisted pathway interpretation. When you enable it, PaintOmics sends a description of your highest-ranked pathways to a large language model and returns the draft interpretation it produces, with citations. What is sent is: pathway names, identifiers and enrichment statistics; the names of the genes, proteins and metabolites matched in each pathway; <strong>the measured values of those features</strong>, with their condition and timepoint labels; and your experiment design description, if you provided one. Pathway and feature names are also sent to NCBI PubMed and Europe PMC to retrieve the literature that the interpretation cites.</p>
+
+	<p><strong>Where the model runs.</strong> PaintOmics does not run the model itself, so this data leaves the PaintOmics server. Which endpoint receives it is a configuration setting of the server you are using, and the interface tells you which one before you consent &mdash; open the <em>Data privacy &amp; compliance</em> notice next to the AI checkbox on the upload form. On the public PaintOmics deployment the endpoint is a gateway operated by <strong>IIIA-CSIC</strong>, the Artificial Intelligence Research Institute of the Spanish National Research Council, running an open-weights model on its own hardware in Spain; it is reached over the public internet and authenticated with a token. A differently configured installation may use a commercial LLM provider instead, in which case the notice on the upload form will say so.</p>
+
+	<p>PaintOmics has no control over how the operator of that endpoint retains or processes what it receives, and gives no warranty about it.</p>
 	
 	<h4>EU Regulatory Framework & GDPR MANDATES</h4>
 	<p><strong>FAILURE TO COMPLY WITH THESE MANDATES MAY RESULT IN SEVERE LEGAL PENALTIES FOR THE USER.</strong></p>
 	<ul>
-		<li><strong><a href="https://gdpr-info.eu/chapter-5/" target="_blank">GDPR (EU 2016/679) Articles 44–49</a>:</strong> You are strictly prohibited from transferring identifiable data to non-EU processors without appropriate legal safeguards. <strong>YOU bear 100% of the responsibility</strong> to ensure that no restricted personal data is uploaded.</li>
+		<li><strong><a href="https://gdpr-info.eu/chapter-5/" target="_blank">GDPR (EU 2016/679) Articles 44–49</a>:</strong> where the configured endpoint is outside the EU, transferring identifiable personal data to it requires appropriate safeguards, such as Standard Contractual Clauses. The upload form's privacy notice states whether this applies to the installation you are using. You are responsible for ensuring that no restricted personal data is uploaded.</li>
 		<li><strong><a href="https://gdpr-info.eu/art-9-gdpr/" target="_blank">GDPR Article 9</a>:</strong> Processing of special categories of personal data, including genetic data and health data, is <strong>STRICTLY AND ABSOLUTELY PROHIBITED</strong>.</li>
 		<li><strong><a href="https://gdpr-info.eu/art-5-gdpr/" target="_blank">GDPR Article 5(1)(c)</a>:</strong> You must strictly adhere to the data minimisation principle.</li>
 	</ul>
