@@ -178,10 +178,16 @@ class MOREUploadEncodingTest(unittest.TestCase):
         # Anchor on the path construction, not on any mention of the script.
         # "runMORE.R" also appears in prose -- the backend-selection helper
         # documents which engine handles which method -- and a docstring is a
-        # string literal, so comment-stripping leaves it in place and the first
-        # hit lands hundreds of lines above the code this is about. The
-        # "bioscripts" component appears only where the path is actually built.
-        rscriptAt = stripped.find("bioscripts")
+        # string literal, so comment-stripping leaves it in place and a loose
+        # search lands hundreds of lines above the code this is about.
+        #
+        # "bioscripts" used to be the anchor, on the grounds that it appeared
+        # only where the path was built. That stopped being true when PLS1
+        # started defaulting to the Rust backend: MORE_RS_BUNDLED builds a
+        # second bioscripts path, for more-rs, at the top of the module. The
+        # anchor is now the quoted filename, which the path construction is the
+        # only place to contain -- prose says runMORE.R without quoting it.
+        rscriptAt = stripped.find('"runMORE.R"')
         if rscriptAt != -1:
             self.assertLess(callAt, rscriptAt,
                             "the normalisation happens after the R script path "

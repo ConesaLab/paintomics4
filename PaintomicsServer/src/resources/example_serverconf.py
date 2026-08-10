@@ -154,12 +154,20 @@ AI_SEARCH_PLANNER_TEMPERATURE = float(os.getenv("AI_SEARCH_PLANNER_TEMPERATURE",
 AI_SEARCH_SUBAGENT_TEMPERATURE = float(os.getenv("AI_SEARCH_SUBAGENT_TEMPERATURE", "0.2"))
 
 # ========== MORE BACKEND ==========
-# Absolute path to `more-rs`, the Rust port of MORE's PLS1 kernel. It takes the
-# same arguments as runMORE.R and was measured against it on the bundled
+# Absolute path to `more-rs`, the Rust port of MORE. It takes the same
+# arguments as runMORE.R and was measured against it on the bundled
 # 06-regulatory-more example: six of the seven output files byte-identical, the
 # seventh (the rpc table) holding the same rows in a different order.
 #
-# Blank -- the default -- sends every job to `Rscript runMORE.R`. The image
-# carries no binary at this path unless one is mounted in, and the port covers
-# PLS1 only, so MLR jobs go to R regardless. See MOREServlet._resolveMOREBackend.
+# **PLS1 runs on the port by default.** Blank -- the default -- does NOT mean
+# "use R": it means "go and find a binary", which MOREServlet._discoverMoreRs
+# does by looking beside runMORE.R at src/common/bioscripts/more-rs and then on
+# PATH. A host with no binary finds nothing and runs R, exactly as before, so
+# the default is safe on a machine that has never heard of the port.
+#
+# Set this to a path to name one explicitly, or to `off` to force R for every
+# job. MLR always runs on R whatever this says -- R's MLR path draws from the
+# RNG in three places, so the port can only sit inside R's own seed band rather
+# than reproduce it, and that is a difference to opt into rather than impose.
+# See MOREServlet._resolveMOREBackend for the full reasoning.
 MORE_RS_BINARY = os.getenv("PAINTOMICS_MORE_RS", "")

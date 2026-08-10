@@ -96,14 +96,17 @@ class Step2TestCase(unittest.TestCase):
         self.tmp = tempfile.mkdtemp(prefix="more2_")
         self._realPopen = MOREServlet.subprocess.Popen
         self._realJIM = MOREServlet.JobInformationManager
-        # Pin the backend to R. MORE_RS_BINARY is read from the environment at
-        # import time, so an operator with PAINTOMICS_MORE_RS exported would
-        # otherwise see these tests build a more-rs command and fail on the
-        # argv[0] assertion. What the backend choice depends on belongs to
+        # Pin the backend to R. What the backend choice depends on belongs to
         # test_more_backend_selection; what this file pins is the argument
         # vector, which is identical either way.
+        #
+        # "off", not "": blank now means "discover a binary", which is what
+        # makes the Rust port the default for PLS1. Blank here would let a
+        # bundled or on-PATH more-rs win and fail the argv[0] assertion on any
+        # machine that has one -- which is every machine this is meant to ship
+        # to.
         self._realBinary = MOREServlet.MORE_RS_BINARY
-        MOREServlet.MORE_RS_BINARY = ""
+        MOREServlet.MORE_RS_BINARY = "off"
         MOREServlet.subprocess.Popen = FakePopen
         MOREServlet.JobInformationManager = lambda: self
 

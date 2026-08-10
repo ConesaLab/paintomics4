@@ -43,6 +43,81 @@ def _requireLLMCredentials():
             "AI_LLM_PROVIDER in the server configuration." % AI_LLM_PROVIDER)
 
 
+# Hosts whose operator the interface can name. The consent notice has to say
+# who receives the data, and "an external AI service" does not answer that --
+# but the client cannot answer it either, because the provider is chosen by
+# AI_LLM_PROVIDER on the server and three are shipped. So the server says.
+#
+# Anything not listed falls back to the bare hostname, which is still a true
+# and useful statement ("sent to <host>") and degrades safely for a site that
+# repoints AI_CSIC_API_BASE at its own gateway.
+_PROVIDER_OPERATORS = {
+    "llm.iiia.es": {
+        "operator": "IIIA-CSIC",
+        # Deliberately not "internal". The gateway resolves in public DNS and
+        # answers requests from outside CSIC; it is guarded by a token, not by
+        # a network boundary. Calling it internal would tell users their data
+        # stays inside a perimeter that does not exist.
+        "summary": "a gateway operated by IIIA-CSIC (the Artificial "
+                   "Intelligence Research Institute of the Spanish National "
+                   "Research Council), on hardware in Spain",
+        "inEU": True,
+    },
+    "openrouter.ai": {
+        "operator": "OpenRouter",
+        "summary": "OpenRouter, a commercial LLM broker that forwards the "
+                   "request to the model vendor",
+        "inEU": False,
+    },
+    "coding-intl.dashscope.aliyuncs.com": {
+        "operator": "Alibaba Cloud",
+        "summary": "Alibaba Cloud's DashScope service",
+        "inEU": False,
+    },
+}
+
+
+def getAIProviderInfo():
+    """Describe the LLM endpoint this server is configured to call.
+
+    Returned to the browser so the consent notice can name the recipient
+    instead of saying "an external AI service". Every field is derived from
+    the live configuration rather than hardcoded in the client, because
+    AI_LLM_PROVIDER, AI_CSIC_API_BASE and AI_CSIC_MODEL are all env-overridable
+    -- a client that hardcoded "CSIC" would be lying on any site that changed
+    them.
+
+    Carries no secret: the API key is never read here, and `configured` reports
+    only whether one is non-empty, which the browser can already infer from the
+    feature failing.
+    """
+    provider = AI_PROVIDERS.get(AI_LLM_PROVIDER, {})
+    apiBase = provider.get("api_base", "")
+
+    # urlparse rather than a split: an api_base carrying a port or a path
+    # ("https://host:8000/v1") must still yield the bare host.
+    try:
+        from urllib.parse import urlparse
+        host = urlparse(apiBase).hostname or ""
+    except Exception:
+        host = ""
+
+    known = _PROVIDER_OPERATORS.get(host, {})
+    return {
+        "enabled": bool(AI_INTERPRETATION_ENABLED),
+        "configured": bool(provider.get("api_key")),
+        "provider": AI_LLM_PROVIDER,
+        "host": host,
+        "model": provider.get("model", ""),
+        "operator": known.get("operator", host),
+        "summary": known.get("summary", host),
+        # Whether Chapter V of the GDPR (Arts. 44-49, transfers outside the
+        # EU) applies to this deployment. None where it cannot be determined,
+        # so the client can stay silent rather than guess.
+        "inEU": known.get("inEU", None),
+    }
+
+
 def _consented(jobID):
     """Whether this job's owner ticked "Enable AI pathway interpretation".
 

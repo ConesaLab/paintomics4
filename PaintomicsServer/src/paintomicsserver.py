@@ -555,6 +555,20 @@ class Application(object):
         def aiInterpretPathwayHandler():
             return aiInterpretPathway(request, Response()).getResponse()
 
+        # Who receives the data, answered before the user consents rather than
+        # after the feature breaks. Until this existed, the only string in the
+        # product naming the gateway was the missing-API-key error -- a working
+        # install told the user nothing about where their data went, and a
+        # broken one told them everything.
+        #
+        # GET and unauthenticated on purpose: it is a fact about the server's
+        # configuration, the same class of thing as /organism_databases, and
+        # the consent notice has to render before anyone has a session.
+        @self.app.route(SERVER_SUBDOMAIN + '/ai_provider', methods=['OPTIONS', 'GET'])
+        def aiProviderHandler():
+            return Response().setContent(
+                dict({"success": True}, **getAIProviderInfo())).getResponse()
+
         @self.app.route(SERVER_SUBDOMAIN + '/ai_generate_exp_design', methods=['OPTIONS', 'POST'])
         def aiGenerateExpDesignHandler():
             return aiGenerateExpDesign(request, Response()).getResponse()

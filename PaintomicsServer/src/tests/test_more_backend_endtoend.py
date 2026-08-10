@@ -35,7 +35,14 @@ DATA = os.path.abspath(os.path.join(
     os.path.dirname(__file__), "..", "examplefiles", "datasets",
     "06-regulatory-more", "data"))
 
-BINARY = os.environ.get("PAINTOMICS_MORE_RS", "")
+# The same binary a real PLS1 job would get. Reading only PAINTOMICS_MORE_RS
+# used to mean this whole file skipped itself on every machine that had not
+# exported it -- reporting `OK (skipped=5)`, which a suite sweep counts as a
+# pass, so a green run said nothing whatever about the Rust backend. Now that
+# the port is the default for PLS1, the default is what has to be exercised:
+# fall through to the servlet's own discovery, so the tests run wherever a job
+# would actually use it, and skip only where a job would fall back to R.
+BINARY = os.environ.get("PAINTOMICS_MORE_RS", "") or MOREServlet._discoverMoreRs()
 
 # Regulators the automatic threshold drops from the fit on this dataset. Their
 # pairs must survive into the values file all the same.
@@ -62,7 +69,7 @@ class FakeResponse(object):
 
 @unittest.skipUnless(
     BINARY and os.path.isfile(BINARY) and os.access(BINARY, os.X_OK),
-    "PAINTOMICS_MORE_RS is not set to an executable binary")
+    "no more-rs binary is configured or discoverable, so PLS1 runs on R here")
 class MoreRsEndToEndTest(unittest.TestCase):
 
     def setUp(self):

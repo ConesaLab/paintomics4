@@ -15,6 +15,7 @@ from src.servlets.DataManagementServlet import saveFile
 from src.common.Util import ensure_utf8
 from src.common.ServerErrorManager import handleException
 from src.common import ExampleDatasets
+from src.common import MORECostModel
 from src.conf.serverconf import CLIENT_TMP_DIR, ROOT_DIRECTORY
 
 # serverconf.py is gitignored and installed from example_serverconf.py by
@@ -28,27 +29,91 @@ try:
 except ImportError:
     MORE_RS_BINARY = os.getenv("PAINTOMICS_MORE_RS", "")
 
+# Seconds a single MORE analysis is allowed to be predicted to take. Same
+# reason as above for the try/except -- an in-place upgrade keeps a
+# serverconf.py that predates this setting.
+#
+# It defaults to the queue timeout below rather than to "unlimited", because
+# the ceiling already exists: every enqueue here passes timeout=1800, so a job
+# predicted to exceed it does not get a slow result, it gets killed after half
+# an hour with nothing to show. The guard exists to say so at submit time
+# instead. Set it to 0 to disable, or raise it in step with MORE_JOB_TIMEOUT.
+MORE_JOB_TIMEOUT = 1800
+try:
+    from src.conf.serverconf import MORE_RUNTIME_BUDGET_SECONDS
+except ImportError:
+    MORE_RUNTIME_BUDGET_SECONDS = int(
+        os.getenv("PAINTOMICS_MORE_RUNTIME_BUDGET", MORE_JOB_TIMEOUT))
+
+# Values of PAINTOMICS_MORE_RS that mean "use R, whatever is installed". `off`
+# is the documented spelling; the rest are what an operator reaches for when
+# they mean the same thing. Blank is NOT among them -- blank means "discover
+# one", which is what makes the port the default rather than the exception.
+MORE_RS_OFF = ("off", "none", "false", "0", "no", "disabled")
+
+# Where a bundled binary lives: beside runMORE.R, the other MORE backend.
+MORE_RS_BUNDLED = os.path.normpath(os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "..", "common", "bioscripts", "more-rs"))
+
+
+def _discoverMoreRs():
+    """The more-rs to use when the operator has not named one.
+
+    PLS1 runs on the port by default, so the common case has to need no
+    configuration at all. Two places are searched, in order:
+
+      1. `src/common/bioscripts/more-rs`, next to runMORE.R. The binary is
+         platform-specific and gitignored, so each deployment drops in the one
+         it needs.
+      2. `more-rs` on PATH, for a developer who already has one installed.
+
+    An empty return means neither was found and every job goes to R, exactly as
+    it did before the port existed. That is the point: making this the default
+    must not be able to break a host that has no binary.
+    """
+    if os.path.isfile(MORE_RS_BUNDLED) and os.access(MORE_RS_BUNDLED, os.X_OK):
+        return MORE_RS_BUNDLED
+    return shutil.which("more-rs") or ""
+
 
 def _resolveMOREBackend(method, rScript, binaryPath=None):
     """Return the argv prefix that runs MORE for ``method``.
 
-    Two engines sit behind one CLI. ``Rscript runMORE.R`` is the reference and
-    the default; ``more-rs`` is a Rust port of the PLS1 kernel that takes the
-    same arguments and returns, on the bundled 06-regulatory-more example, six
-    of seven output files byte-identical to R's (the seventh, the rpc table,
-    holds the same rows in a different order -- MORE orders them by omic name
-    under R's collation, which is locale-dependent and deliberately not
-    reproduced here).
+    Two engines sit behind one CLI, and which one a job gets is decided here.
+    **PLS1 runs on ``more-rs``, the Rust port, whenever a usable binary can be
+    found**; everything else runs ``Rscript runMORE.R``, still the reference.
 
-    R wins in three cases, all of which would otherwise be silent failures:
+    Why PLS1 can be switched silently and MLR cannot
+    ------------------------------------------------
+    R's PLS1 path is deterministic -- two independent runs of the bundled
+    06-regulatory-more example matched byte for byte -- so the port has a fixed
+    target to hit, and hits it: six of seven output files byte-identical, the
+    seventh (the rpc table) the same rows in a different order, because MORE
+    sorts them by omic name under R's locale collation and reproducing that
+    would encode a locale dependency. Swapping the engine is therefore
+    invisible to whoever reads the results, which is what makes a silent
+    default legitimate.
 
-    * ``MLR``. The port implements PLS1 only and exits pointing back at
-      runMORE.R, so routing MLR to it turns a working analysis into a failed
-      one. Any method it does not recognise goes to R for the same reason --
-      R owns the full method surface.
-    * A configured path that is not on disk. The binary ships separately from
-      the server and is absent from the deploy image; a stale setting must
-      degrade to R, not take MORE down.
+    R's MLR path is **not** deterministic. It draws from the RNG in three
+    places, the visible one being ``sample(correlacionados, 1)``, which picks
+    which member of a collapsed clique of correlated regulators survives as the
+    group representative. The port implements MLR in full -- elastic net,
+    collinearity grouping and all -- but it cannot be byte-equal to something
+    that is not equal to itself: R's own answer moves between seeds, and the
+    port was measured to sit *inside that seed band* rather than on any one
+    point in it. Group membership is deterministic and the expansion reports
+    every member, so the edge set is stable either way; what moves is which
+    member a collapsed group's coefficients are attributed to. That is a
+    difference worth opting into and a bad one to impose, so MLR keeps the
+    engine whose numbers its users have already seen. Any method this function
+    does not recognise goes to R for the blunter reason that R owns the full
+    method surface.
+
+    R also wins whenever the port cannot actually be run:
+
+    * ``PAINTOMICS_MORE_RS`` set to ``off`` (see MORE_RS_OFF), the opt-out.
+    * A configured path that is not on disk -- a stale setting must degrade to
+      R, not take MORE down.
     * A configured path without the executable bit, which an unpacked archive
       loses easily and which would otherwise surface as EACCES from Popen.
 
@@ -58,16 +123,28 @@ def _resolveMOREBackend(method, rScript, binaryPath=None):
     if binaryPath is None:
         binaryPath = MORE_RS_BINARY
 
+    configured = (binaryPath or "").strip()
+    if configured.lower() in MORE_RS_OFF:
+        return ["Rscript", rScript]
+
     # Exact match. The port is stricter than R about this string -- `pls1` and
     # ` PLS1 ` both exit with "must be PLS1 or MLR" -- so normalising here
     # would route a value the port refuses away from the backend that might
     # accept it, turning a slow analysis into a failed one.
-    if method == "PLS1" and binaryPath:
-        if os.path.isfile(binaryPath) and os.access(binaryPath, os.X_OK):
-            return [binaryPath]
-        logging.warning(
-            "MORE: PAINTOMICS_MORE_RS is set to %r but that is not an "
-            "executable file; falling back to Rscript runMORE.R.", binaryPath)
+    if method == "PLS1":
+        # Blank means "go and find one", not "use R". Only an explicit path is
+        # worth warning about when it fails to resolve -- a host with no binary
+        # at all is the ordinary case and has to stay quiet.
+        if configured:
+            if os.path.isfile(configured) and os.access(configured, os.X_OK):
+                return [configured]
+            logging.warning(
+                "MORE: PAINTOMICS_MORE_RS is set to %r but that is not an "
+                "executable file; falling back to Rscript runMORE.R.", configured)
+        else:
+            discovered = _discoverMoreRs()
+            if discovered:
+                return [discovered]
 
     return ["Rscript", rScript]
 

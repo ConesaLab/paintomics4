@@ -26,6 +26,7 @@ import stat
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
@@ -53,10 +54,79 @@ class ResolveMOREBackendTest(unittest.TestCase):
             MOREServlet._resolveMOREBackend("PLS1", R_SCRIPT, self.binary),
             [self.binary])
 
-    def test_pls1_falls_back_to_r_when_no_binary_is_configured(self):
-        self.assertEqual(
-            MOREServlet._resolveMOREBackend("PLS1", R_SCRIPT, ""),
-            ["Rscript", R_SCRIPT])
+    def test_pls1_discovers_a_binary_when_none_is_configured(self):
+        """Blank means "go and find one", which is what makes the port default.
+
+        This is the whole of the change: an operator who has configured nothing
+        gets the Rust backend for PLS1, because that is the case the port was
+        measured byte-equal for. Discovery is patched rather than relying on
+        whatever happens to be installed on the machine running the tests.
+        """
+        with mock.patch.object(MOREServlet, "_discoverMoreRs",
+                               return_value=self.binary):
+            self.assertEqual(
+                MOREServlet._resolveMOREBackend("PLS1", R_SCRIPT, ""),
+                [self.binary])
+
+    def test_pls1_falls_back_to_r_when_nothing_can_be_discovered(self):
+        """A host with no binary anywhere behaves exactly as it did before.
+
+        This is what keeps the new default safe to ship: turning the port on by
+        default must not be able to break a deployment that has never had one.
+        """
+        with mock.patch.object(MOREServlet, "_discoverMoreRs", return_value=""):
+            self.assertEqual(
+                MOREServlet._resolveMOREBackend("PLS1", R_SCRIPT, ""),
+                ["Rscript", R_SCRIPT])
+
+    def test_the_off_switch_forces_r_even_though_a_binary_exists(self):
+        """`off` is the documented opt-out, and it must beat discovery.
+
+        Without it there would be no way back to R once a binary is installed,
+        which matters for anyone reproducing an older result.
+        """
+        with mock.patch.object(MOREServlet, "_discoverMoreRs",
+                               return_value=self.binary):
+            for value in ("off", "OFF", " off ", "none", "false", "0", "no",
+                          "disabled"):
+                self.assertEqual(
+                    MOREServlet._resolveMOREBackend("PLS1", R_SCRIPT, value),
+                    ["Rscript", R_SCRIPT], "%r must force R" % value)
+
+    def test_discovery_prefers_the_bundled_binary_over_path(self):
+        """Beside runMORE.R first, so a deployment controls its own version."""
+        with mock.patch.object(MOREServlet.os.path, "isfile",
+                               lambda p: p == MOREServlet.MORE_RS_BUNDLED), \
+             mock.patch.object(MOREServlet.os, "access", lambda p, m: True), \
+             mock.patch.object(MOREServlet.shutil, "which",
+                               return_value="/usr/bin/more-rs"):
+            self.assertEqual(MOREServlet._discoverMoreRs(),
+                             MOREServlet.MORE_RS_BUNDLED)
+
+    def test_discovery_falls_through_to_path(self):
+        with mock.patch.object(MOREServlet.os.path, "isfile", return_value=False), \
+             mock.patch.object(MOREServlet.shutil, "which",
+                               return_value="/usr/bin/more-rs"):
+            self.assertEqual(MOREServlet._discoverMoreRs(), "/usr/bin/more-rs")
+
+    def test_discovery_returns_empty_when_there_is_nothing(self):
+        with mock.patch.object(MOREServlet.os.path, "isfile", return_value=False), \
+             mock.patch.object(MOREServlet.shutil, "which", return_value=None):
+            self.assertEqual(MOREServlet._discoverMoreRs(), "")
+
+    def test_mlr_ignores_a_discoverable_binary_too(self):
+        """MLR must not be reachable by the discovery path either.
+
+        The port implements MLR, so this is not a capability guard: R's MLR
+        draws from the RNG in three places and the port sits inside R's seed
+        band rather than on it, which is a difference to opt into rather than
+        have chosen silently.
+        """
+        with mock.patch.object(MOREServlet, "_discoverMoreRs",
+                               return_value=self.binary):
+            self.assertEqual(
+                MOREServlet._resolveMOREBackend("MLR", R_SCRIPT, ""),
+                ["Rscript", R_SCRIPT])
 
     def test_a_configured_binary_that_is_not_on_disk_falls_back_to_r(self):
         """A stale path must not take MORE down; R is always installed."""
@@ -73,7 +143,15 @@ class ResolveMOREBackendTest(unittest.TestCase):
             ["Rscript", R_SCRIPT])
 
     def test_mlr_always_uses_r_even_when_the_binary_is_present(self):
-        """The port has no MLR path -- it exits pointing back at runMORE.R."""
+        """MLR stays on R by policy, not because the port lacks it.
+
+        `more-rs` accepts `--method MLR` and implements it in full (elastic
+        net, collinearity grouping, group expansion). It is routed to R because
+        R's MLR path is stochastic -- `sample(correlacionados, 1)` picks the
+        surviving member of a collapsed clique -- so the port can only be
+        measured inside R's own seed band, never equal to it. PLS1 has no such
+        problem, which is why only PLS1 gets switched by default.
+        """
         self.assertEqual(
             MOREServlet._resolveMOREBackend("MLR", R_SCRIPT, self.binary),
             ["Rscript", R_SCRIPT])
