@@ -36,13 +36,51 @@ def json_schema_format(name, schema):
             "json_schema": {"name": name, "strict": True, "schema": schema}}
 
 
+class MissingAPIKeyError(RuntimeError):
+    """This server was never given a token for its configured LLM provider.
+
+    Separate from the HTTPError an authenticated-but-rejected key produces:
+    that one may be revoked, expired or rate limited and is worth reporting as
+    a gateway problem, while this one is a setting nobody filled in and no
+    amount of retrying will change it.
+    """
+
+
+def env_var_for_provider(provider_name):
+    """The environment variable serverconf reads that provider's key from.
+
+    serverconf.py names them uniformly -- AI_CSIC_API_KEY, AI_OPENROUTER_API_KEY
+    -- so the name can be derived rather than kept in a second list that would
+    drift. Hyphens become underscores so a locally-added provider still yields a
+    legal variable name.
+    """
+    return "AI_%s_API_KEY" % str(provider_name).replace("-", "_").upper()
+
+
 class LLMClient:
     """OpenAI-compatible chat completion via requests. Thread-safe (no global state)."""
 
-    def __init__(self, provider_config):
+    def __init__(self, provider_config, provider_name="csic"):
         self.api_base = provider_config["api_base"].rstrip("/")
-        self.api_key = provider_config["api_key"]
         self.model = provider_config["model"]
+
+        # An unset secret is the common case on a fresh checkout, and sending it
+        # anyway produces "Bearer " -- which the CSIC gateway rejects with
+        # "Malformed API Key ... Ensure Key has `Bearer ` prefix", wording that
+        # sends the reader after a prefix the code already sends. Refuse here,
+        # before any caller spends a literature-retrieval phase on a run that
+        # cannot finish. Stripped because a token pasted out of a web console
+        # routinely carries a trailing newline, which the header would forward
+        # verbatim and the gateway would reject as a different malformed key.
+        self.api_key = (provider_config.get("api_key") or "").strip()
+        if not self.api_key:
+            raise MissingAPIKeyError(
+                "No API key configured for the '%s' AI provider. Set %s in the "
+                "server environment (tokens are self-service at "
+                "https://console.llm.iiia.es for the CSIC gateway), then "
+                "restart the server. To turn the feature off instead, set "
+                "AI_INTERPRETATION_ENABLED=false."
+                % (provider_name, env_var_for_provider(provider_name)))
 
     def supports_schema(self):
         """Whether this endpoint has accepted response_format so far.

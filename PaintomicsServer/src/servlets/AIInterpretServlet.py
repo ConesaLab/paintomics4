@@ -7,7 +7,7 @@ from src.common.DAO.AIInterpretDAO import AIInterpretDAO
 from src.common.JobInformationManager import JobInformationManager
 from src.classes.AIInterpret.pipeline import run_ai_pipeline, _cancel_flags
 from src.common.PySiQ import JobStatus
-from src.classes.AIInterpret.llm_client import LLMClient
+from src.classes.AIInterpret.llm_client import LLMClient, MissingAPIKeyError
 from src.classes.AIInterpret.prompts import (SYSTEM_PROMPT_CHAT,
     SYSTEM_PROMPT_PATHWAY_FOCUS, build_pathway_focus_prompt)
 from src.classes.AIInterpret.context_builder import (build_pathway_context,
@@ -18,6 +18,30 @@ from src.conf.serverconf import (AI_INTERPRETATION_ENABLED, AI_PROVIDERS,
 
 # Jobs stuck longer than this are considered dead (e.g. killed by server reload)
 AI_STALE_JOB_TIMEOUT = timedelta(minutes=10)
+
+def _requireLLMCredentials():
+    """Refuse before spending anything if this server has no LLM token.
+
+    `AI_INTERPRETATION_ENABLED` defaults to true, so a checkout that was never
+    handed `AI_CSIC_API_KEY` advertises the feature and then fails at the
+    gateway. Measured locally: the request was accepted, the pipeline queued,
+    and 13.2s of PubMed and Europe PMC traffic went out against shared rate
+    limits before the first LLM call returned 401. The key cannot appear
+    mid-run, so the check belongs at the door -- and as a UserWarning, which is
+    what this servlet renders as a readable message rather than a stack trace.
+
+    Constructing the client is the check: it is where the validation lives, so
+    the two cannot drift apart.
+    """
+    try:
+        LLMClient(AI_PROVIDERS[AI_LLM_PROVIDER], AI_LLM_PROVIDER)
+    except MissingAPIKeyError as ex:
+        raise UserWarning(str(ex))
+    except KeyError:
+        raise UserWarning(
+            "AI provider '%s' is not defined in AI_PROVIDERS. Check "
+            "AI_LLM_PROVIDER in the server configuration." % AI_LLM_PROVIDER)
+
 
 def _consented(jobID):
     """Whether this job's owner ticked "Enable AI pathway interpretation".
@@ -41,6 +65,7 @@ def aiInterpretInitiate(REQUEST, RESPONSE, QUEUE_INSTANCE):
 
         if not AI_INTERPRETATION_ENABLED:
             raise UserWarning("AI interpretation is not enabled on this server.")
+        _requireLLMCredentials()
 
         formFields = REQUEST.form
         jobID = formFields.get("jobID")
@@ -235,6 +260,7 @@ def aiInterpretChat(REQUEST, RESPONSE):
 
         if not AI_INTERPRETATION_ENABLED:
             raise UserWarning("AI interpretation is not enabled on this server.")
+        _requireLLMCredentials()
 
         formFields = REQUEST.form
         jobID = formFields.get("jobID")
@@ -277,7 +303,7 @@ def aiInterpretChat(REQUEST, RESPONSE):
         dao.append_chat(jobID, "user", userMessage)
 
         # Get LLM response (with tool access when job data is available)
-        llm = LLMClient(AI_PROVIDERS[AI_LLM_PROVIDER])
+        llm = LLMClient(AI_PROVIDERS[AI_LLM_PROVIDER], AI_LLM_PROVIDER)
         job_instance = JobInformationManager().loadJobInstance(jobID)
 
         if job_instance is not None:
@@ -312,6 +338,7 @@ def aiGenerateExpDesign(REQUEST, RESPONSE):
 
         if not AI_INTERPRETATION_ENABLED:
             raise UserWarning("AI interpretation is not enabled on this server.")
+        _requireLLMCredentials()
 
         formFields = REQUEST.form
         jobID = formFields.get("jobID")
@@ -345,7 +372,7 @@ def aiGenerateExpDesign(REQUEST, RESPONSE):
             "that the user can edit. Focus on what biological question these data types typically address together."
         )
 
-        llm = LLMClient(AI_PROVIDERS[AI_LLM_PROVIDER])
+        llm = LLMClient(AI_PROVIDERS[AI_LLM_PROVIDER], AI_LLM_PROVIDER)
         suggestion = llm.complete([
             {"role": "system", "content": "You help researchers describe their experiment design concisely."},
             {"role": "user", "content": prompt}
@@ -376,6 +403,7 @@ def aiInterpretPathway(REQUEST, RESPONSE):
 
         if not AI_INTERPRETATION_ENABLED:
             raise UserWarning("AI interpretation is not enabled on this server.")
+        _requireLLMCredentials()
 
         formFields = REQUEST.form
         jobID = formFields.get("jobID")
@@ -440,7 +468,7 @@ def aiInterpretPathway(REQUEST, RESPONSE):
         ]
 
         organismName = get_organism_name(jobInstance.getOrganism())
-        llm = LLMClient(AI_PROVIDERS[AI_LLM_PROVIDER])
+        llm = LLMClient(AI_PROVIDERS[AI_LLM_PROVIDER], AI_LLM_PROVIDER)
         prompt = build_pathway_focus_prompt(pathway, papers, experimentDesign, organismName)
 
         report = llm.complete(

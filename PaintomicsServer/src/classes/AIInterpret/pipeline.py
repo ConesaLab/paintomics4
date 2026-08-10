@@ -269,7 +269,7 @@ def run_ai_pipeline(job_id, experiment_design, RESPONSE):
 
         organism = job_instance.getOrganism()
         organism_name = get_organism_name(organism)
-        llm = LLMClient(AI_PROVIDERS[AI_LLM_PROVIDER])
+        llm = LLMClient(AI_PROVIDERS[AI_LLM_PROVIDER], AI_LLM_PROVIDER)
         pubmed = PubMedClient()
 
         # =====================================================================
