@@ -175,23 +175,37 @@ class MOREUploadEncodingTest(unittest.TestCase):
                             "uploaded files still reach runMORE.R in whatever "
                             "encoding they arrived in")
 
-        # Anchor on the path construction, not on any mention of the script.
-        # "runMORE.R" also appears in prose -- the backend-selection helper
-        # documents which engine handles which method -- and a docstring is a
-        # string literal, so comment-stripping leaves it in place and a loose
-        # search lands hundreds of lines above the code this is about.
+        # Anchor on the invocation itself. This is the third anchor this test
+        # has used, and the first two failed the same way -- both were proxies
+        # for "where R gets called", and both stopped tracking it:
         #
-        # "bioscripts" used to be the anchor, on the grounds that it appeared
-        # only where the path was built. That stopped being true when PLS1
-        # started defaulting to the Rust backend: MORE_RS_BUNDLED builds a
-        # second bioscripts path, for more-rs, at the top of the module. The
-        # anchor is now the quoted filename, which the path construction is the
-        # only place to contain -- prose says runMORE.R without quoting it.
-        rscriptAt = stripped.find('"runMORE.R"')
-        if rscriptAt != -1:
-            self.assertLess(callAt, rscriptAt,
-                            "the normalisation happens after the R script path "
-                            "is built; it must precede the call")
+        #   "bioscripts"  -- picked because only the path construction had it.
+        #                    Untrue once PLS1 defaulted to the Rust backend and
+        #                    MORE_RS_BUNDLED built a second bioscripts path at
+        #                    the top of the module.
+        #   '"runMORE.R"' -- picked because only the path construction quoted
+        #                    it, prose being unquoted. Untrue once the path
+        #                    construction moved into the module-level helper
+        #                    _moreRScript(), ~400 lines above the normalisation,
+        #                    and again once the backend-selection logging began
+        #                    quoting the filename in log strings, which are
+        #                    literals and survive comment-stripping.
+        #
+        # So stop proxying. `subprocess.Popen(` IS the call that must not
+        # receive un-normalised files, it occurs exactly once, and it cannot be
+        # hoisted into a helper without the ordering genuinely changing -- which
+        # is the property this test exists to defend. Note it must be Popen
+        # specifically and not `subprocess.`: the R-availability probe uses
+        # subprocess.run() and legitimately runs before normalisation.
+        callsRAt = stripped.find("subprocess.Popen(")
+        self.assertNotEqual(callsRAt, -1,
+                            "MOREServlet no longer calls subprocess.Popen; if "
+                            "the backend invocation moved, re-anchor this test "
+                            "on whatever now runs the MORE binary")
+        self.assertLess(callAt, callsRAt,
+                        "the normalisation happens after the MORE backend is "
+                        "invoked; it must precede the call, or R reads the "
+                        "files in whatever encoding they arrived in")
 
     def test_a_latin1_file_becomes_readable(self):
         from src.common.Util import ensure_utf8

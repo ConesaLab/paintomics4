@@ -353,6 +353,28 @@ class Budget(unittest.TestCase):
         self.assertIn("30 minutes", message)
         self.assertIn("PLS1", message, "an MLR refusal must offer the faster method")
 
+    def test_an_mlr_refusal_does_not_promise_pls1_will_fix_it(self):
+        """Only offer the method switch when the switch actually works.
+
+        PLS1 is ~2x faster than MLR on R, which does not rescue a genome-scale
+        job: the real dataset is 3.3 h as MLR and still 1.7 h as PLS1, both
+        refused. Telling that user to "switch to PLS1" walks them into a second
+        refusal.
+        """
+        message = checkBudget(self.bigShape(), "MLR", "r", 1800)
+        self.assertIn("will not be enough on its own", message)
+        self.assertIn("reduce the number of genes", message)
+
+    def test_an_mlr_refusal_does_promise_it_when_it_is_true(self):
+        """The mirror case: small enough that PLS1 clears the budget."""
+        shape = MOREShape(modelledGenes=2200, samples=36, groups=12,
+                          regPerGene=30.0)
+        self.assertIsNotNone(checkBudget(shape, "MLR", "r", 1800),
+                             "fixture must be over budget as MLR")
+        message = checkBudget(shape, "MLR", "r", 1800)
+        self.assertIn("inside the limit", message)
+        self.assertNotIn("will not be enough", message)
+
     def test_a_pls1_refusal_does_not_suggest_pls1(self):
         message = checkBudget(self.bigShape(), "PLS1", "r", 1800)
         self.assertNotIn("switching to it", message)

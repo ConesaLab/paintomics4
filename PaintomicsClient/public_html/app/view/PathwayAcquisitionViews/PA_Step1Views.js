@@ -3803,7 +3803,7 @@ function MORESubmittingPanel(nElem, options) {
 					step: 0.01,
 					allowDecimals: true,
 					allowBlank: false,
-					helpTip: "Significance threshold (alpha)."
+					helpTip: "PLS1 only. Significance threshold for each regulator's coefficient, tested by jackknife resampling. A regulator must clear BOTH this and the VIP threshold to be reported, so lowering it alone will not necessarily shrink the results."
 				},
 				{
 					xtype: 'numberfield',
@@ -3816,7 +3816,7 @@ function MORESubmittingPanel(nElem, options) {
 					step: 0.1,
 					allowDecimals: true,
 					allowBlank: false,
-					helpTip: "VIP threshold for PLS1 model."
+					helpTip: "PLS1 only. Variable Importance in Projection: how much each regulator contributes to the components that explain the gene. The default of 0.8 is deliberately permissive; 1.0 is the conventional cutoff and is the first thing to raise if a run returns more regulators than you can interpret."
 				},
 				{
 					xtype: 'numberfield',
@@ -3829,7 +3829,7 @@ function MORESubmittingPanel(nElem, options) {
 					step: 0.1,
 					allowDecimals: true,
 					allowBlank: false,
-					helpTip: "R2 filter threshold."
+					helpTip: "Discard any gene whose fitted model explains less than this fraction of its variance, before its regulators are reported. 0 keeps every model that converged. Raising it is the cheapest way to stop poorly-fitted genes contributing regulators to the pathway results."
 				}]
 			},
 			{

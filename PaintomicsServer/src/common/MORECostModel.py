@@ -507,15 +507,36 @@ def checkBudget(shape, method, engine, budgetSeconds):
         ]
 
     if method == "MLR":
-        # PLS1 is 1.7x faster on R and ~700x on the port, so for an MLR job
-        # this is the first thing to try and often the only one needed.
-        message += [
-            "",
-            "MLR is the slower method and is not the recommended default. "
-            "PLS1 handles many correlated regulators better when samples are "
-            "few, and is substantially faster; switching to it will often "
-            "bring this job inside the limit.",
-        ]
+        # Only promise that switching method fixes it when it actually would.
+        # PLS1 is ~2x faster than MLR on R, which is not enough to rescue a
+        # genome-scale job: the real dataset is 3.3 h as MLR and still 1.7 h as
+        # PLS1, both refused. Telling that user to "switch to PLS1" sends them
+        # to a second refusal, so the estimate decides the wording.
+        #
+        # Compared on the SAME engine deliberately. MLR always runs on R, and
+        # if this host has more-rs then PLS1 would be faster still -- so a
+        # same-engine comparison understates the gain and can only make this
+        # suggestion more conservative, never less.
+        alternative = estimateSeconds(shape, "PLS1", engine)
+        if alternative <= budgetSeconds:
+            message += [
+                "",
+                "MLR is the slower method and is not the recommended default. "
+                "The same analysis as PLS1 is estimated at about %s, which is "
+                "inside the limit -- and PLS1 handles many correlated "
+                "regulators better when samples are few, so it is worth "
+                "trying first."
+                % _formatDuration(alternative),
+            ]
+        else:
+            message += [
+                "",
+                "Switching to PLS1 will not be enough on its own: the same "
+                "data is estimated at about %s that way, still over the "
+                "limit. PLS1 remains the better-suited method here, but this "
+                "job needs to be smaller as well."
+                % _formatDuration(alternative),
+            ]
 
     message += [
         "",
