@@ -8,35 +8,29 @@ PAINTOMICS_EMAIL_DOMAIN = "paintomics.uv.es";
 /*********************************************************************
  * LOCAL INSTANCE DEFAULTS   *****************************************
  **********************************************************************/
-/* A developer running the server on their own machine re-ticks the same two
-   optional boxes on the upload form every single time: Reactome, and the AI
-   interpretation consent. Those defaults are set here rather than hardcoded
-   into the form because the two boxes are unticked in the deployed build for
-   reasons, and both reasons are about someone other than the developer:
+/* One box on the upload form is ticked here rather than in the form: the AI
+   interpretation consent.
 
-     - Reactome doubles the enrichment work and is only meaningful for the
-       organisms that have it, so a public instance should not opt every
-       visitor into it. Locally it is what is being worked on. Turning it on
-       is safe for any organism regardless: PathwayAcquisitionServlet
-       intersects the requested databases with the ones the organism actually
-       has (`set(databases).intersection(organismDB)`), so an organism without
-       Reactome silently runs KEGG only, exactly as before.
+   It is a *consent*, not a preference. Ticking it sends pathway summaries,
+   feature lists and the experiment design text to a third-party LLM service,
+   and a pre-ticked consent box is not consent under GDPR Art. 4(11) /
+   Art. 7 -- it has to be an affirmative act. On localhost the only person
+   whose data is at stake is the one who ticked it, so the reason does not
+   apply; anywhere else it does, and the box stays as the visitor found it.
 
-     - The AI box is a *consent*, not a preference. Ticking it sends pathway
-       summaries, feature lists and the experiment design text to a
-       third-party LLM service, and a pre-ticked consent box is not consent
-       under GDPR Art. 4(11) / Art. 7 -- it has to be an affirmative act. On
-       localhost the only person whose data is at stake is the one who ticked
-       it, so the reason does not apply; anywhere else it does, and the box
-       stays as the visitor found it.
+   Hence the hostname test: on for 127.0.0.1 / localhost, off for every
+   deployed host, with no build step or separate config file to keep in sync.
+   The server side is untouched -- it still reads the submitted value and
+   AIInterpretServlet still refuses any job whose stored record says no.
 
-   Hence the hostname test: this is on for 127.0.0.1 / localhost and off for
-   every deployed host, with no build step or separate config file to keep in
-   sync. The server side is untouched -- it still reads the submitted value and
-   AIInterpretServlet still refuses any job whose stored record says no. */
+   DEFAULT_REACTOME_ENABLED used to live here, gated the same way, and no
+   longer exists. Reactome is not a local-development preference: it is either
+   installed for the chosen organism or it is not, which is a fact about the
+   server and not about who is looking at it. SERVER_URL_GET_ORGANISM_DATABASES
+   below answers that per organism, and step 1 ticks every database the answer
+   contains on every host. */
 IS_LOCAL_INSTANCE = ["localhost", "127.0.0.1", "[::1]", "::1"].indexOf(
 	window.location.hostname) !== -1;
-DEFAULT_REACTOME_ENABLED = IS_LOCAL_INSTANCE;
 DEFAULT_AI_CONSENT_ENABLED = IS_LOCAL_INSTANCE;
 /*********************************************************************
  * PATHWAY ACQUISITION SERVICES URLS         *************************
@@ -102,6 +96,12 @@ SERVER_URL_GET_PATHWAY_NETWORK_REACTOME = SERVER_URL + "kegg_data/pathway_networ
 SERVER_URL_GET_PATHWAY_NETWORK_MAPMAN = SERVER_URL + "kegg_data/pathway_network_mapman";
 
 SERVER_URL_GET_AVAILABLE_SPECIES = SERVER_URL + "kegg_data/species.json";
+// {organism: [databases]} for every organism this deployment installed, read
+// from each organism's own MongoDB rather than from a static list. Step 1's
+// database checkboxes are drawn from it: a database the map does not name for
+// the chosen organism cannot be selected, because selecting it would be
+// discarded by PathwayAcquisitionServlet anyway.
+SERVER_URL_GET_ORGANISM_DATABASES = SERVER_URL + "organism_databases";
 /*********************************************************************
  * USER MANIPULATION SERVICES URLS         ***************************
  *********************************************************************/

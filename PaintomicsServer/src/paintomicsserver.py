@@ -30,6 +30,7 @@ from re import sub
 from src.common.PySiQ import Queue
 from src.common import JobProgress
 from src.common import ExampleDatasets
+from src.common import DatabaseAvailability
 
 from src.conf.serverconf import *
 
@@ -338,9 +339,34 @@ class Application(object):
         # id back and the server resolves it.
         @self.app.route(SERVER_SUBDOMAIN + '/example_datasets', methods=['OPTIONS', 'GET'])
         def exampleDatasetsHandler():
-            content = ExampleDatasets.catalogueForClient(self.EXAMPLE_FILES_DIR)
+            # The resolver, so each card names the databases the job will really
+            # run rather than the ones its manifest entry declares -- the example
+            # branch of pathwayAcquisitionStep1_PART1 resolves the same way.
+            content = ExampleDatasets.catalogueForClient(
+                self.EXAMPLE_FILES_DIR,
+                resolveDatabases=DatabaseAvailability.resolveDatabases)
             content["success"] = True
             return Response().setContent(content).getResponse()
+        #*******************************************************************************************
+        ##* INSTALLED PATHWAY DATABASES PER ORGANISM
+        #*******************************************************************************************
+        # What step 1's database checkboxes are drawn from. Same shape and same
+        # audience as species.json, which sits beside it: GET, unauthenticated
+        # and read-only, describing what this deployment installed and nothing
+        # about anyone using it.
+        #
+        # The whole map rather than one organism per request, because the
+        # alternative is a round trip on every change of the organism combo --
+        # and the map is a few hundred bytes for a hundred organisms, answered
+        # from a cache after the first call.
+        @self.app.route(SERVER_SUBDOMAIN + '/organism_databases', methods=['OPTIONS', 'GET'])
+        def organismDatabasesHandler():
+            return Response().setContent({
+                "success": True,
+                "databases": DatabaseAvailability.getInstalledDatabasesByOrganism(),
+                "known": list(DatabaseAvailability.KNOWN_DATABASES),
+                "mandatory": DatabaseAvailability.MANDATORY_DATABASE,
+            }).getResponse()
         #*******************************************************************************************
         ##* DATA MANIPULATION SERVLETS HANDLERS - END
         #*******************************************************************************************

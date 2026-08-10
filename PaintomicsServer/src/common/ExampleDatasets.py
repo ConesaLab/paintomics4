@@ -657,17 +657,37 @@ def _chainedFingerprint(scenario):
 # The client's view of the catalogue
 # ---------------------------------------------------------------------------
 
-def catalogueForClient(exampleFilesDir):
+def catalogueForClient(exampleFilesDir, resolveDatabases=None):
     """What `GET /example_datasets` returns.
 
     Trimmed to what the picker draws. File paths are deliberately omitted: the
     client never opens these files -- it posts a scenario id and the server
     resolves it -- and publishing server paths to the browser would be a leak
     for no gain.
+
+    @param resolveDatabases an optional `organism -> [databases]` callable. The
+           manifest's own `databases` list is a property of the dataset as
+           authored and cannot know what the host running it installed, but the
+           picker card prints it as a promise about the job that is about to
+           run. Passing DatabaseAvailability.resolveDatabases makes that promise
+           true; omitting it -- as the tests do -- reports the manifest
+           unchanged and keeps this module free of MongoDB, which is the reason
+           it is a parameter and not an import.
     """
     manifest = loadManifest(exampleFilesDir)
     scenarios = []
     for scenario in listScenarios(exampleFilesDir):
+        databases = scenario.get("databases", [])
+        if resolveDatabases is not None:
+            try:
+                databases = resolveDatabases(scenario.get("organism"))
+            except Exception as ex:
+                # The picker showing a stale database list is a smaller failure
+                # than the picker not opening.
+                logging.warning(
+                    "Could not resolve the installed databases for example '%s' "
+                    "(%s: %s); reporting the manifest's list",
+                    scenario.get("id"), type(ex).__name__, ex)
         scenarios.append({
             "id": scenario.get("id"),
             "title": scenario.get("title", scenario.get("id")),
@@ -675,7 +695,7 @@ def catalogueForClient(exampleFilesDir):
             "tests": scenario.get("tests", []),
             "pipeline": scenario.get("pipeline"),
             "organism": scenario.get("organism"),
-            "databases": scenario.get("databases", []),
+            "databases": databases,
             "conditions": scenario.get("conditions", []),
             "simulated": bool(scenario.get("simulated")),
             "omicNames": [omic.get("omicName")

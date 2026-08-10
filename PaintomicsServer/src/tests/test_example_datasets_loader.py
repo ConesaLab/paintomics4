@@ -277,6 +277,41 @@ class ClientCatalogueTest(LoaderTestCase):
         payload = ExampleDatasets.catalogueForClient(self.root)
         self.assertEqual([entry["id"] for entry in payload["scenarios"]], ["alpha"])
 
+    def test_the_card_names_what_the_job_will_run_not_what_the_manifest_says(self):
+        """The picker card is a promise about the job that is about to start.
+
+        A manifest entry declares the databases the dataset was authored
+        against; it cannot know what the host running it installed. Every
+        bundled scenario is mmu and five of the seven declare KEGG alone, while
+        an mmu install that has Reactome runs both -- so the unresolved card
+        understated its own job by half the pathway universe.
+        """
+        self.writeManifest(manifestWith([scenario("alpha")]))
+        self.writeDataFor("alpha")
+        payload = ExampleDatasets.catalogueForClient(
+            self.root, resolveDatabases=lambda organism: ["KEGG", "Reactome"])
+        self.assertEqual(["KEGG", "Reactome"], payload["scenarios"][0]["databases"])
+
+    def test_the_resolver_is_given_the_scenario_organism(self):
+        seen = []
+        self.writeManifest(manifestWith([scenario("alpha")]))
+        self.writeDataFor("alpha")
+        ExampleDatasets.catalogueForClient(
+            self.root,
+            resolveDatabases=lambda organism: seen.append(organism) or ["KEGG"])
+        self.assertEqual(["mmu"], seen)
+
+    def test_a_failing_resolver_leaves_the_picker_working(self):
+        """A stale database list is a smaller failure than a picker that won't open."""
+        def explode(organism):
+            raise RuntimeError("MongoDB is down")
+
+        self.writeManifest(manifestWith([scenario("alpha")]))
+        self.writeDataFor("alpha")
+        payload = ExampleDatasets.catalogueForClient(self.root, resolveDatabases=explode)
+        self.assertEqual(["alpha"], [entry["id"] for entry in payload["scenarios"]])
+        self.assertEqual(["KEGG"], payload["scenarios"][0]["databases"])
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

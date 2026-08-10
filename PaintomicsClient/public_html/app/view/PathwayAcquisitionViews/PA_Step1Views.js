@@ -241,6 +241,86 @@ function exampleExperimentDesignFor(scenario) {
 	return parts.join(" ");
 }
 
+/*********************************************************************
+* INSTALLED PATHWAY DATABASES
+*
+* Which of KEGG / MapMan / Reactome a job can actually use is a property of
+* the server and the chosen organism, not of the form. GET /organism_databases
+* reports it, read from each organism's own MongoDB, and step 1 draws its
+* checkboxes from the answer: every database it names is ticked, and every
+* database it does not is disabled.
+*
+* Fetched once per page. The map is a few hundred bytes for a hundred
+* organisms and changes only when an administrator installs a species, so
+* re-reading it on every change of the organism combo would buy nothing and
+* put a round trip in front of a click.
+***********************************************************************/
+var ORGANISM_DATABASES = null;
+var ORGANISM_DATABASES_REQUEST = null;
+/* Whether the endpoint actually answered, which is NOT the same question as
+   whether the map has an entry for an organism. species.json is written once by
+   DBManager and lists what was installed when it last ran -- this repository's
+   own copy offers about a hundred species on a machine that has two -- so an
+   organism can be selectable in the combo and have no pathways at all. That has
+   to disable every optional database, whereas an endpoint that never answered
+   has to enable them. Same missing entry, opposite correct answers. */
+var ORGANISM_DATABASES_READ = false;
+
+/**
+* Resolves to {organism: [databases]}, fetching it at most once.
+*
+* Never rejects. A server too old to have the endpoint, or one that cannot
+* reach MongoDB, resolves without setting ORGANISM_DATABASES_READ, and
+* getInstalledDatabasesFor() then offers everything -- which is what this form
+* did before the endpoint existed. Degrading to a form that offers too much is
+* recoverable; the server drops what it cannot run, exactly as it always has.
+* Degrading to a form that offers nothing would make step 1 unusable.
+*/
+function loadOrganismDatabases() {
+	if (ORGANISM_DATABASES_REQUEST === null) {
+		// A Deferred that is only ever resolved, rather than the jqXHR's own
+		// promise. Returning a value from a .then() failure filter recovers the
+		// chain in jQuery 3 and does NOT in jQuery 1 or 2, and this file is
+		// loaded next to a jquery-migrate shim -- a promise that silently stops
+		// resolving would leave every optional database disabled for good.
+		var ready = $.Deferred();
+		ORGANISM_DATABASES_REQUEST = ready.promise();
+
+		$.getJSON(SERVER_URL_GET_ORGANISM_DATABASES)
+			.done(function(response) {
+				ORGANISM_DATABASES = (response && response.databases) || {};
+				ORGANISM_DATABASES_READ = true;
+			})
+			.fail(function() {
+				console.warn("Could not read the installed pathway databases; " +
+					"every database will be offered and the server will drop " +
+					"the ones it cannot run.");
+				ORGANISM_DATABASES = {};
+			})
+			.always(function() { ready.resolve(ORGANISM_DATABASES); });
+	}
+	return ORGANISM_DATABASES_REQUEST;
+}
+
+/**
+* The databases installed for one organism, or null for "cannot tell".
+*
+* null is the only answer that means "offer everything and let the server drop
+* what it cannot run" -- the behaviour this form had before the endpoint
+* existed. It is returned when, and only when, the map could not be read.
+*
+* An organism the map does not mention gets ["KEGG"]: the endpoint enumerates
+* the organisms that have a MongoDB database of their own, so a name missing
+* from it has no pathways installed under any database, and offering MapMan or
+* Reactome for it would be the same empty promise this change exists to remove.
+*/
+function getInstalledDatabasesFor(organism) {
+	if (!ORGANISM_DATABASES_READ) { return null; }
+	if (!organism) { return ["KEGG"]; }
+	var installed = ORGANISM_DATABASES[organism];
+	return (installed && installed.length) ? installed : ["KEGG"];
+}
+
 function PA_Step1JobView() {
 	/*********************************************************************
 	* ATTRIBUTES
@@ -638,14 +718,17 @@ function PA_Step1JobView() {
 		speciesCombo.setValue(scenario && scenario.organism ? scenario.organism : "mmu");
 		speciesCombo.setReadOnly(true);
 
-		// Only tick Reactome when the dataset actually declares it. The previous
-		// version ticked it unconditionally, which asked for a Reactome analysis
-		// on datasets that were never built for one.
-		var databases = (scenario && scenario.databases) || ["KEGG", "Reactome"];
-		var reactomeCheckbox = this.getComponent().queryById('reactomeDB');
-		if (reactomeCheckbox) {
-			reactomeCheckbox.setValue(databases.indexOf("Reactome") !== -1);
-		}
+		// The databases are NOT taken from the scenario. setValue above has
+		// already fired the combo's change listener, so applyDatabaseAvailability
+		// has ticked whatever this server installed for the dataset's organism --
+		// and that is what PathwayAcquisitionServlet will run, because its example
+		// branch resolves the same way and overrides the manifest.
+		//
+		// The manifest's `databases` is a property of the dataset as authored and
+		// cannot know what the host running it installed. Five of the seven
+		// bundled scenarios declare KEGG alone while every one of them is mmu, an
+		// organism that ships with Reactome, so honouring it meant an example ran
+		// against half the pathways the same files would reach as an upload.
 
 		// "~=", not "=". ComponentQuery's "=" compares the WHOLE cls string, and
 		// only the plain omic panel declares cls:"omicbox" on its own; the region
@@ -716,26 +799,129 @@ function PA_Step1JobView() {
 
 		this.lockFormForExample(pipeline);
 
-		var facts = scenario
-			? '<ul>' +
-				'<li><b>Dataset:</b> ' + Ext.String.htmlEncode(scenario.title) + '</li>' +
-				'<li><b>Organism:</b> ' + Ext.String.htmlEncode(scenario.organism || "mmu") + '</li>' +
-				'<li><b>Omics:</b> ' + Ext.String.htmlEncode((scenario.omicNames || []).join(', ')) + '</li>' +
-				'<li><b>Conditions:</b> ' + ((scenario.conditions || []).length || 1) + '</li>' +
-				'<li><b>Databases:</b> ' + Ext.String.htmlEncode(databases.join(', ')) + '</li>' +
-				'</ul>' +
-				(scenario.simulated
-					? '<p>This dataset is <b>simulated</b>: a known signal was planted ' +
-					  'into real KEGG pathways, so the pathways enrichment should ' +
-					  'rank are written down alongside the files.</p>'
-					: '<p>This is <b>real published data</b> (STATegra).</p>')
-			: '<p>The bundled example dataset was loaded.</p>';
+		// Inside the callback, so the "Databases" line names the databases the
+		// job will really run rather than the ones the manifest declares. It used
+		// to print the manifest's list, which after this change would understate
+		// every mmu example by leaving Reactome out of a run that includes it.
+		this.applyDatabaseAvailability(function(databases) {
+			var facts = scenario
+				? '<ul>' +
+					'<li><b>Dataset:</b> ' + Ext.String.htmlEncode(scenario.title) + '</li>' +
+					'<li><b>Organism:</b> ' + Ext.String.htmlEncode(scenario.organism || "mmu") + '</li>' +
+					'<li><b>Omics:</b> ' + Ext.String.htmlEncode((scenario.omicNames || []).join(', ')) + '</li>' +
+					'<li><b>Conditions:</b> ' + ((scenario.conditions || []).length || 1) + '</li>' +
+					'<li><b>Databases:</b> ' + Ext.String.htmlEncode(databases.join(', ')) + '</li>' +
+					'</ul>' +
+					(scenario.simulated
+						? '<p>This dataset is <b>simulated</b>: a known signal was planted ' +
+						  'into real KEGG pathways, so the pathways enrichment should ' +
+						  'rank are written down alongside the files.</p>'
+						: '<p>This is <b>real published data</b> (STATegra).</p>')
+				: '<p>The bundled example dataset was loaded.</p>';
 
-		showInfoMessage("About this example", {
-			message: facts,
-			showButton: true,
-			height: 300
+			showInfoMessage("About this example", {
+				message: facts,
+				showButton: true,
+				height: 300
+			});
 		});
+	};
+
+	/**
+	* Ticks every pathway database installed for `organism` and locks the rest.
+	*
+	* This is the whole of the rule: a database that is installed is selected,
+	* because there is no reason to analyse against half of what the server has;
+	* a database that is not installed cannot be selected, because
+	* PathwayAcquisitionServlet would drop it and the analysis has no pathways to
+	* run it against. Both halves used to be wrong in the same direction -- all
+	* three boxes were always offered, Reactome was pre-ticked on localhost and
+	* nowhere else, and the two that did not apply were silently discarded.
+	*
+	* KEGG is skipped: its box is ticked and disabled from birth and the server
+	* unions it into every job regardless.
+	*
+	* Asynchronous because the availability map may still be in flight; ordering
+	* is safe without a guard because it reads the combo's value at apply time
+	* rather than closing over the organism it was called for, so two overlapping
+	* calls converge on the same answer instead of racing.
+	*
+	* @param {Function} done optional, called with the applied database list.
+	*/
+	this.applyDatabaseAvailability = function(done) {
+		var me = this;
+		loadOrganismDatabases().then(function() {
+			var combo = me.getComponent().queryById("speciesCombobox");
+			var organism = combo ? combo.getValue() : null;
+			var installed = getInstalledDatabasesFor(organism);
+			var applied = ["KEGG"];
+
+			Ext.each(["MapMan", "Reactome"], function(database) {
+				var box = me.getComponent().queryById(database.toLowerCase() + "DB");
+				if (!box) { return; }
+
+				// null means the map never arrived: offer the box rather than
+				// hiding a database the server may well have.
+				var available = (installed === null) ||
+					(Ext.Array.indexOf(installed, database) !== -1);
+
+				// setValue before setDisabled. A disabled checkbox is excluded
+				// from getSubmitData(), so leaving a stale tick on a disabled box
+				// would show a database as selected that could never be posted.
+				box.setValue(available);
+				box.setDisabled(!available);
+				if (box.setBoxLabel) {
+					box.setBoxLabel(available
+						? database
+						: database + ' <span style="color:#8A8A8A;">(not installed for this organism)</span>');
+				}
+				if (available) { applied.push(database); }
+			});
+
+			me.describeDatabaseAvailability(organism, installed, applied);
+			if (done) { done(applied); }
+		});
+	};
+
+	/**
+	* Replaces the note under the checkboxes with what is true for this organism.
+	*
+	* The note it replaces said "for some species more than one database might be
+	* available" and left the reader to find out which by ticking a box and
+	* reading the results.
+	*/
+	this.describeDatabaseAvailability = function(organism, installed, applied) {
+		var note = this.getComponent().queryById("databasesAvailabilityNote");
+		if (!note || !note.update) { return; }
+
+		var reference = ' Please check <b><a href="https://paintomics.readthedocs.io/en/latest/1_4_id/"' +
+			' target="_blank">Supported ID and databases</a></b>.';
+		var message;
+
+		if (!organism) {
+			message = ' Choose an organism to see which pathway databases are available for it.';
+		} else if (installed === null) {
+			message = ' The list of installed databases could not be read from the server,' +
+				' so all of them are offered; any that this server cannot run for ' +
+				Ext.String.htmlEncode(organism) + ' will be left out of the analysis.';
+		} else {
+			var missing = Ext.Array.filter(["MapMan", "Reactome"], function(database) {
+				return Ext.Array.indexOf(applied, database) === -1;
+			});
+			message = ' <b>' + Ext.String.htmlEncode(applied.join(' + ')) + '</b> ' +
+				(applied.length > 1 ? 'are' : 'is') + ' installed for ' +
+				Ext.String.htmlEncode(organism) + ' and included by default.';
+			if (missing.length) {
+				message += ' ' + Ext.String.htmlEncode(missing.join(' and ')) +
+					' ' + (missing.length > 1 ? 'are' : 'is') +
+					' not installed for this organism, so ' +
+					(missing.length > 1 ? 'they cannot' : 'it cannot') + ' be selected.';
+			}
+			message += ' Untick a database to leave it out.';
+		}
+
+		note.update('<span class="infoTip" style=" font-size: 12px; margin: 0 26px 10px 196px;">' +
+			message + reference + '</span>');
 	};
 
 	/**
@@ -986,6 +1172,12 @@ function PA_Step1JobView() {
 								valueField: 'value',
 								queryMode: 'local',
 								labelWidth: 150,
+								/* The database checkboxes below are a function of this field.
+								   `change` rather than `select`: setValue() fires change and not
+								   select, and setExampleModeHandler sets the organism that way. */
+								listeners: {
+									change: function() { me.applyDatabaseAvailability(); }
+								},
 								store: Ext.create('Ext.data.ArrayStore', {
 									fields: ['name', 'value'],
 									autoLoad: true,
@@ -1042,7 +1234,7 @@ function PA_Step1JobView() {
 						{
 							xtype: 'checkboxgroup', fieldLabel: 'Databases',
 							// Named so lockFormForExample can find it: in example mode
-							// the databases come from the manifest, not from here.
+							// the databases are resolved on the server, not from here.
 							itemId: "databasesCheckboxGroup",
 							style: "margin: 4px 10px 10px 26px;",
 							maxWidth: 650,
@@ -1050,25 +1242,37 @@ function PA_Step1JobView() {
 							columns: 2,
 							disabled: false,
 							labelWidth: 148,
-							// Hardcoded DBs (as they can be considered static)
+							/* The boxes are fixed -- these are the three databases PaintOmics knows
+							   how to draw a pathway from -- but which of them can be TICKED is not,
+							   and is not knowable here: it depends on what this server installed for
+							   the organism chosen above. So every optional box starts unticked and
+							   disabled, and applyDatabaseAvailability turns on the ones that
+							   /organism_databases reports for the selected organism.
+							
+							   They used to be permanently selectable, and two of the three were a
+							   lie for nearly every organism: PathwayAcquisitionServlet has always
+							   intersected the submitted selection with the databases the organism
+							   actually has, so ticking MapMan for mouse or Reactome for tomato
+							   changed nothing at all and said nothing about it. */
 							items: [
 									// Only for information, KEGG database is added always on server side
 									{ boxLabel: 'KEGG (required)', name: 'databases[]', inputValue: 'KEGG', checked: true, disabled: true },
-									{ boxLabel: 'MapMan', name: 'databases[]', inputValue: 'MapMan', checked: false },
-									/* Pre-ticked on a local instance only -- see LOCAL INSTANCE
-									   DEFAULTS in ServerConfiguration.js. The typeof guard is not
-									   ceremony: an undefined identifier here throws while this
-									   class config is being evaluated, which would take the whole
-									   of Step 1 down rather than just miss a default. */
+									/* itemId as well as id: queryById finds either, but two ids on one page
+									   is a global, and the region/miRNA/MORE flows can rebuild this form. */
+									{ boxLabel: 'MapMan', name: 'databases[]', inputValue: 'MapMan',
+									  checked: false, disabled: true,
+									  itemId: 'mapmanDB', id: 'mapmanDB'},
 									{ boxLabel: 'Reactome', name: 'databases[]', inputValue: 'Reactome',
-									  checked: typeof DEFAULT_REACTOME_ENABLED !== "undefined" && DEFAULT_REACTOME_ENABLED,
-									  id: 'reactomeDB'},
+									  checked: false, disabled: true,
+									  itemId: 'reactomeDB', id: 'reactomeDB'},
 							]
 						},
 						{
-							xtype: "box", html:
+							// Rewritten by applyDatabaseAvailability once an organism is known, so
+							// this text is only ever seen before one is chosen.
+							xtype: "box", itemId: "databasesAvailabilityNote", html:
 							'<span class="infoTip" style=" font-size: 12px; margin: 0 26px 10px 196px;">'+
-							' For <span style="color: rgb(211, 21, 108);">some</span> species more than one database might be available. Please check <b><a href="https://paintomics.readthedocs.io/en/latest/1_4_id/" target="_blank"> Supported ID and databases</a></b>. Choose which ones do you want to include in the analysis.' +
+							' Choose an organism to see which pathway databases are available for it. Please check <b><a href="https://paintomics.readthedocs.io/en/latest/1_4_id/" target="_blank">Supported ID and databases</a></b>.' +
 							'</span>'
 						}
 						]

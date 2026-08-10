@@ -30,6 +30,7 @@ from src.common.UserSessionManager import UserSessionManager
 from src.common.JobInformationManager import JobInformationManager
 from src.common import JobProgress
 from src.common import ExampleDatasets
+from src.common import DatabaseAvailability
 from src.common.Statistics import calculateSignificance, calculateCombinedSignificancePvalues, adjustPvalues, calculateStoufferCombinedPvalue
 from src.common.ReplicateDetection import detect_replicates, aggregate_replicates
 from src.common.DAO.PathwayAcquisitionJobDAO import PathwayAcquisitionJobDAO
@@ -37,7 +38,6 @@ from src.common.DAO.FeatureDAO import FeatureDAO
 from src.classes.JobInstances.PathwayAcquisitionJob import PathwayAcquisitionJob
 
 from src.conf.serverconf import CLIENT_TMP_DIR, KEGG_DATA_DIR
-from src.conf.organismDB import dicDatabases
 
 
 def loadRequestedJob(jobID, action):
@@ -186,9 +186,14 @@ def pathwayAcquisitionStep1_PART1(REQUEST, RESPONSE, QUEUE_INSTANCE, JOB_ID, EXA
             specie = formFields.get("specie") #GET THE SPECIES NAME
             databases = REQUEST.form.getlist('databases[]')
             jobInstance.setOrganism(specie)
-            # Check the available databases for species
-            organismDB = set(dicDatabases.get(specie, [{}])[0].keys())
-            jobInstance.setDatabases(list(set([u'KEGG']) | set(databases).intersection(organismDB)))
+            # The submitted selection, filtered to what this server can actually
+            # run for this organism. The rule used to be spelled out here as an
+            # intersection with organismDB.py; it now lives in
+            # DatabaseAvailability, which the form reads too, so a box the user
+            # can tick is a box whose database reaches the job. KEGG is added
+            # regardless, exactly as before.
+            jobInstance.setDatabases(
+                DatabaseAvailability.resolveDatabases(specie, databases))
             logging.info("STEP1 - SELECTED SPECIES IS " + specie)
 
             jobInstance.setAIConsent(formFields.get("aiConsent", "false"))
@@ -229,6 +234,21 @@ def pathwayAcquisitionStep1_PART1(REQUEST, RESPONSE, QUEUE_INSTANCE, JOB_ID, EXA
                 jobInstance, EXAMPLE_FILES_DIR, scenarioId)
             logging.info("STEP1 - EXAMPLE '%s' REGISTERED (%d omics)",
                          scenario["id"], len(scenario.get("omics", [])))
+
+            # An example has no form to submit, so "what was requested" is
+            # everything the organism has installed -- the same answer the
+            # upload form now arrives at by ticking every available box. The
+            # manifest's own `databases` list is what applyScenario set a moment
+            # ago and is overridden here on purpose: it is a property of the
+            # dataset as authored, and cannot know which databases the host
+            # running it installed. Five of the seven bundled scenarios declare
+            # KEGG alone while every one of them is mmu, an organism that ships
+            # with Reactome, so honouring the manifest meant the example ran
+            # against half the pathways the same data would reach on an upload.
+            jobInstance.setDatabases(
+                DatabaseAvailability.resolveDatabases(jobInstance.getOrganism()))
+            logging.info("STEP1 - EXAMPLE DATABASES: %s",
+                         ", ".join(jobInstance.getDatabases()))
 
             jobInstance.setName(scenario.get("title", "")[:100])
             jobInstance.setAIConsent(formFields.get("aiConsent", "false"))
