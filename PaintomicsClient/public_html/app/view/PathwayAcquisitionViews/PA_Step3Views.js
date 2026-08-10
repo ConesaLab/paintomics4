@@ -3833,7 +3833,7 @@ function PA_Step3PathwayTableView() {
 				if (value === '') {
 					myToolTipText = myToolTipText + "<i>No data for this pathway</i>";
 					metadata.tdAttr = 'data-qtip="' + myToolTipText + '"';
-					metadata.style += " background-color:#D4D4D4;";
+					metadata.style += " background-color:var(--pa-cell-empty,#D4D4D4);";
 					return "-";
 				}
 
@@ -4225,7 +4225,7 @@ function PA_Step3PathwayTableView() {
 			if (value === "-" || value == undefined || isNaN(value)) {
 				myToolTipText = myToolTipText + "<i>No data for this pathway</i>";
 				metadata.tdAttr = 'data-qtip="' + myToolTipText + '"';
-				metadata.style += "background-color:#D4D4D4;";
+				metadata.style += "background-color:var(--pa-cell-empty,#D4D4D4);";
 				return "-";
 			}
 			//ELSE, GENERATE SUMMARY TIP
@@ -6379,7 +6379,7 @@ var renderFunctionLimit = function (value, metadata, record) {
 		if (value === "-" || value == undefined || isNaN(value)) {
 			myToolTipText = myToolTipText + "<i>No data for this pathway</i>";
 			metadata.tdAttr = 'data-qtip="' + myToolTipText + '"';
-			metadata.style += "background-color:#D4D4D4;";
+			metadata.style += "background-color:var(--pa-cell-empty,#D4D4D4);";
 			return "-";
 		}
 		//ELSE, GENERATE SUMMARY TIP
@@ -6439,7 +6439,7 @@ var renderFunctionHub= function (value, metadata, record) {
 		if (value === "-" || value == undefined || isNaN(value)) {
 			myToolTipText = myToolTipText + "<i>No data for this metabolite</i>";
 			metadata.tdAttr = 'data-qtip="' + myToolTipText + '"';
-			metadata.style += "background-color:#D4D4D4;";
+			metadata.style += "background-color:var(--pa-cell-empty,#D4D4D4);";
 			return "-";
 		}
 

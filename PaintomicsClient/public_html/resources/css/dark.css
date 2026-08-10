@@ -129,6 +129,19 @@
   --pa-grid-action-active: #7FC0FF;
   --pa-grid-row-selected: #26333F;
   --pa-grid-row-alt: #1F272E;
+  /* The "no data for this pathway" cell. PA_Step3Views writes this as an inline
+     style, so it is read through var(--pa-cell-empty, #D4D4D4): light keeps the
+     literal, dark substitutes this. It has to stay distinguishable from an
+     ordinary empty cell without reading as a value, which is what the light grey
+     did - so it is one step off the row ground, not a colour. */
+  --pa-cell-empty: #2C2E34;
+
+  /* Charts (Highcharts draws its own light palette into the SVG) */
+  --pa-chart-bg: #1E1F23;
+  --pa-chart-ink: #C9CBD0;
+  --pa-chart-ink-soft: #A6A9B0;
+  --pa-chart-grid: #33353B;
+  --pa-chart-axis: #4A4D55;
 
   /* Form controls */
   --pa-invalid-bg: #2E1C21;
@@ -645,3 +658,351 @@
    define, and the light build is not what needs changing here. */
 [data-theme="dark"] #mainViewCenterPanel [style*="color:#555"] { color: var(--pa-ink-body) !important; }
 [data-theme="dark"] #mainViewCenterPanel [style*="color:#666"] { color: var(--pa-ink-label) !important; }
+
+/* ---------------------------------------------------------------------------
+   8. Step 1's AI callout
+
+   .po-ai-section-body states `background: linear-gradient(to bottom, #f8faff,
+   #f2f6fc)`. The token block above moved its background-COLOUR, but a gradient
+   is a background-IMAGE and paints over the colour, so the callout stayed a
+   near-white slab on the dark form - the largest bright surface on Step 1 at
+   1285x182. Both halves have to be restated, and the border with them: #c8d6e5
+   is a light-theme hairline that reads as a highlight here.
+   --------------------------------------------------------------------------- */
+
+[data-theme="dark"] .po-ai-section-body {
+	background: var(--pa-ai-section-bg);
+	border-color: var(--pa-ai-section-border);
+}
+
+/* ---------------------------------------------------------------------------
+   9. Step 2
+
+   Two cards on this step are drawn by a sledgehammer in main.css:
+
+       #clusternumber_box div, #clusternumber_box span,
+       #threshold_box div, #threshold_box span { background-color: white !important; }
+
+   It exists to flatten ExtJS's widget chrome inside those cards, and because it
+   is !important on 34 elements it was the single brightest thing in the whole
+   dark build - 2.6M px2 of white. Nothing in this file could reach it: beating
+   an !important needs !important, and beating (1,0,1) needs the theme attribute
+   to make it (1,1,1). Both are here.
+
+   Because the light rule already forces every one of those descendants white,
+   none of them carries a meaningful colour of its own, so mapping the whole set
+   to the card surface loses no information.
+   --------------------------------------------------------------------------- */
+
+[data-theme="dark"] #clusternumber_box div,
+[data-theme="dark"] #clusternumber_box span,
+[data-theme="dark"] #threshold_box div,
+[data-theme="dark"] #threshold_box span {
+	background-color: var(--pa-surface) !important;
+}
+
+/* The two summary tables - "Multiple databases used" on Step 2 and its Step 3
+   twin - are white cards with near-black ink. Both are restated together
+   because they are the same table written twice in main.css.
+
+   The <dt> database names are included even though they are ink, not surface:
+   at #27272A on the dark card they measured 1.4:1, which is the same defect
+   seen from the other side. */
+[data-theme="dark"] #dbs_message table,
+[data-theme="dark"] div#multisource_summary table {
+	background-color: var(--pa-surface-sunken);
+	border-color: var(--pa-border);
+}
+[data-theme="dark"] #dbs_message table th,
+[data-theme="dark"] div#multisource_summary table th {
+	background-color: var(--pa-grid-header-bg);
+	border-bottom-color: var(--pa-border);
+	color: var(--pa-grid-header-ink);
+}
+[data-theme="dark"] #dbs_message table td,
+[data-theme="dark"] div#multisource_summary table td {
+	border-top-color: var(--pa-border-row);
+	color: var(--pa-ink-body);
+}
+[data-theme="dark"] #dbs_message dt,
+[data-theme="dark"] div#multisource_summary dt { color: var(--pa-ink-title); }
+
+/* ---------------------------------------------------------------------------
+   10. Highcharts
+
+   The mapped/unmapped donuts and the data-distribution box plots are Highcharts
+   SVG. It writes fill="#ffffff" on the backdrop as a presentation attribute,
+   which a CSS `fill` outranks, so no chart reconfiguration is needed - eleven
+   charts, 54,000 px2 of white each.
+
+   Only the chart's own chrome moves: backdrop, axes, gridlines, labels and the
+   box-plot's unfilled box. The donut segments are the mapped/unmapped
+   green/red and are left exactly as they are, for the same reason the omic
+   fills are: they are the reading, not the frame around it.
+   --------------------------------------------------------------------------- */
+
+[data-theme="dark"] .highcharts-background { fill: var(--pa-chart-bg); }
+[data-theme="dark"] .highcharts-plot-background { fill: transparent; }
+[data-theme="dark"] .highcharts-plot-border,
+[data-theme="dark"] .highcharts-axis-line,
+[data-theme="dark"] .highcharts-tick { stroke: var(--pa-chart-axis); }
+[data-theme="dark"] .highcharts-grid-line { stroke: var(--pa-chart-grid); }
+[data-theme="dark"] .highcharts-axis-labels text,
+[data-theme="dark"] .highcharts-legend-item text { fill: var(--pa-chart-ink-soft) !important; }
+[data-theme="dark"] .highcharts-axis-title,
+[data-theme="dark"] .highcharts-title,
+[data-theme="dark"] .highcharts-subtitle { fill: var(--pa-chart-ink) !important; }
+/* The box plot's box is drawn white so the median line and whiskers read
+   through it; on a dark chart the equivalent is the chart ground, not white. */
+[data-theme="dark"] .highcharts-boxplot-box { fill: var(--pa-surface-quiet); }
+[data-theme="dark"] .highcharts-plot-line-label { fill: var(--pa-chart-ink-soft); }
+[data-theme="dark"] .highcharts-tooltip > span {
+	background: var(--pa-surface-quiet) !important;
+	color: var(--pa-ink-body) !important;
+	border-color: var(--pa-border) !important;
+}
+
+/* ---------------------------------------------------------------------------
+   11. Step 3
+
+   The pathway table, the classification panel and the network view. The network
+   surfaces are matched on the id prefix main.css uses, because each one is
+   suffixed with the database name at render time.
+
+   Not here, deliberately: the significance cells. Those are written inline as
+   rgb(255, tint, tint) with the tint computed from the p-value, and their ink is
+   #9B1C1C chosen against that ramp. They are the same kind of thing as the bwr
+   scale on the pathway diagrams - the colour IS the result - so they keep their
+   values. Nor the classification swatches, which are category type-coding.
+   --------------------------------------------------------------------------- */
+
+[data-theme="dark"] .paGridBar {
+	background: var(--pa-surface);
+	border-color: var(--pa-border);
+}
+[data-theme="dark"] .paGridBar-filters { background: var(--pa-surface-subtle); }
+[data-theme="dark"] .paGridBar .x-form-checkbox { background-color: var(--pa-legacy-field-bg); }
+[data-theme="dark"] .paGridBar a.downloadXLS:hover,
+[data-theme="dark"] .paGridBar #configureButton:not(.x-item-disabled):hover {
+	background-color: var(--pa-surface-quiet);
+}
+[data-theme="dark"] .paGridBar a.multiDelete:hover { background-color: var(--pa-btn-ghost-danger-bg-hover); }
+[data-theme="dark"] .paWeightsTip { background-color: var(--pa-surface); }
+[data-theme="dark"] .paWeightsTip .x-tip-header,
+[data-theme="dark"] .paWeightsTip .x-tip-header-default { background: var(--pa-surface-quiet); }
+
+[data-theme="dark"] .pathwaySummaryTable tr:nth-child(even) { background: var(--pa-grid-row-alt); }
+/* Disabled classification chips grey out to #E8E8E8 with !important. */
+[data-theme="dark"] .step3ClassificationsTitle.disabled > i.classificationNameBox {
+	background-color: var(--pa-surface-quiet) !important;
+}
+
+[data-theme="dark"] div[id ^= "pathwayNetworkBox_"].fullscreen { background-color: var(--pa-surface-page); }
+[data-theme="dark"] div[id ^= "pathwayNetworkWaitBox_"] { background-color: rgba(23, 24, 27, 0.76); }
+[data-theme="dark"] span.networkClusterImage > i { background-color: rgba(30, 31, 35, 0.54); }
+[data-theme="dark"] div[id ^= "step3-network-toolbar_"] { background: rgba(30, 31, 35, 0.91); }
+[data-theme="dark"] p[id ^= "step3-network-toolbar-message_"] {
+	background: rgba(30, 31, 35, 0.85);
+	color: var(--pa-ink-body);
+}
+[data-theme="dark"] div[id ^= "step3-network-toolbar_"] div.menuBody {
+	background-color: var(--pa-surface);
+	border-color: var(--pa-border);
+}
+[data-theme="dark"] div[id ^= "step3-network-toolbar_"] div[id ^= "reorderOptions"] {
+	background: rgba(30, 31, 35, 0.88) !important;
+}
+
+/* ---------------------------------------------------------------------------
+   12. Step 4
+
+   The pathway view. Its two side panels share .lateralOptionsPanel, but only
+   one of them was dark: the information panel is an .x-container and so was
+   caught by the ExtJS block above, while the diagram viewport is an
+   .x-component and was not - main.css's `.lateralOptionsPanel { background:
+   #fff }` was left standing over the whole 1039x656 viewport and its header.
+   Measured on the rendered page, that one element was 3,093 of the 3,561
+   bright samples on this screen.
+
+   The KEGG and Reactome artwork inside it still has a white canvas, and still
+   should: it is opaque - verified by painting the viewport behind it and
+   watching only the margins change - so it now reads as a light diagram laid on
+   a dark desk, which is what it is.
+
+   The header's fill is restated without !important on purpose. The information
+   panel carries its teal inline, and an inline declaration outranks this, so
+   the coloured header keeps its colour while the plain one goes dark. */
+
+[data-theme="dark"] .lateralOptionsPanel { background: var(--pa-surface); }
+[data-theme="dark"] .lateralOptionsPanel-header {
+	background: var(--pa-surface-quiet);
+	border-bottom-color: var(--pa-border);
+}
+[data-theme="dark"] .lateralOptionsPanel-header h2 { color: var(--pa-ink-title); }
+[data-theme="dark"] div.lateralOptionsPanel-header .toolbarOption.downloadTool {
+	background: var(--pa-btn-default-bg);
+	border-color: var(--pa-border-control);
+	color: var(--pa-btn-default-ink);
+}
+[data-theme="dark"] div.lateralOptionsPanel-header .toolbarOption.downloadTool:hover {
+	background: var(--pa-btn-default-bg-hover);
+}
+[data-theme="dark"] div.lateralOptionsPanel input[type="text"]:not([id^=numberfield]) {
+	background-color: var(--pa-legacy-field-bg);
+	border-color: var(--pa-legacy-field-border);
+	color: var(--pa-ink-body);
+}
+[data-theme="dark"] .lateralOptionsSelector.omicSelection {
+	background: var(--pa-surface-sunken);
+	border-color: var(--pa-border);
+}
+[data-theme="dark"] .globalHeatmapConfigurator {
+	background: var(--pa-surface-sunken);
+	border-color: var(--pa-border);
+}
+[data-theme="dark"] div.lateralOptionsPanel div.updateMessageContainer {
+	background: var(--pa-toast-warning-bg);
+	border-color: var(--pa-toast-warning-border);
+	color: var(--pa-ink-body);
+}
+[data-theme="dark"] div.lateralOptionsPanel div.updateMessageContainer h3 { color: var(--pa-ink-title); }
+[data-theme="dark"] .step4PathwayThumbnailHover { background-color: rgba(23, 24, 27, 0.67); }
+[data-theme="dark"] td.whiteBackground { background: var(--pa-surface); }
+/* The Heatmap / Line chart pair. The unselected half is a light grey that reads
+   brighter than the panel it sits on; the selected half keeps its accent. */
+[data-theme="dark"] a.button.twoOptionsButton {
+	background: var(--pa-btn-default-bg);
+	color: var(--pa-btn-default-ink);
+	border-color: var(--pa-border-control);
+}
+
+/* ---------------------------------------------------------------------------
+   13. Controls and widgets that appear on more than one step
+   --------------------------------------------------------------------------- */
+
+[data-theme="dark"] .btn-default {
+	background-color: var(--pa-btn-default-bg);
+	color: var(--pa-btn-default-ink);
+}
+[data-theme="dark"] .btn-default:hover { background-color: var(--pa-btn-default-bg-hover); }
+
+/* Step 1's two white pill buttons - the "Browse..." split buttons on every omic
+   card, and "Download example data" above them. main.css claims both at (0,3,1)
+   and (0,4,1) respectively, so the generic button rules in section 3 lost to
+   them and these were the last white surfaces left on Step 1. The selectors
+   below mirror main.css's exactly and add the theme attribute, which is the
+   smallest change that wins.
+
+   The split arrow is drawn as a CSS triangle rather than taken from the Neptune
+   sprite (see main.css), so it does not follow the button fill and has to be
+   restated with it - otherwise it stays #71717A on a dark pill. */
+[data-theme="dark"] .omicbox a.x-btn.x-btn-default-small {
+	background-color: var(--pa-btn-default-bg);
+	background-image: none;
+	border-color: var(--pa-border-control);
+}
+[data-theme="dark"] .omicbox a.x-btn.x-btn-default-small:hover {
+	background-color: var(--pa-btn-default-bg-hover);
+	border-color: var(--pa-border-control-hover);
+}
+[data-theme="dark"] .omicbox a.x-btn .x-btn-inner { color: var(--pa-btn-default-ink); }
+[data-theme="dark"] .omicbox a.x-btn .x-btn-wrap::after { border-top-color: var(--pa-ink-label); }
+[data-theme="dark"] .omicbox a.x-btn .x-btn-wrap::before { border-left-color: var(--pa-border-control); }
+
+[data-theme="dark"] .paStep1Form a.button.btn-right.btn-small {
+	background-color: var(--pa-btn-default-bg);
+	border-color: var(--pa-border-control);
+	color: var(--pa-btn-default-ink);
+}
+[data-theme="dark"] .paStep1Form a.button.btn-right.btn-small:hover {
+	background-color: var(--pa-btn-default-bg-hover);
+	border-color: var(--pa-border-control-hover);
+	color: var(--pa-ink-strong);
+}
+[data-theme="dark"] .fieldBox,
+[data-theme="dark"] .container { background-color: var(--pa-surface); }
+[data-theme="dark"] .dragHerePanel {
+	background: var(--pa-surface-sunken);
+	border-color: var(--pa-border);
+}
+[data-theme="dark"] span.currentStep { background: var(--pa-surface-quiet); }
+[data-theme="dark"] select {
+	background: var(--pa-legacy-field-bg);
+	color: var(--pa-legacy-field-ink);
+	border-color: var(--pa-legacy-field-border);
+}
+[data-theme="dark"] .sigma-tooltip {
+	background-color: var(--pa-surface-quiet);
+	color: var(--pa-ink-body);
+	border-color: var(--pa-border);
+}
+[data-theme="dark"] .invalid-cell { background-color: var(--pa-invalid-bg) !important; }
+[data-theme="dark"] .x-grid-row-editor { background: var(--pa-surface-quiet); }
+[data-theme="dark"] .x-trigger-cell { background-color: var(--pa-legacy-field-bg); }
+/* The combobox arrow and the number-field spinners. Only the fill moves - the
+   glyphs come from ExtJS's spinner/trigger sprites, which are mid-grey on
+   transparent and stay legible on the field ground (checked on a rendered
+   spinner at 5x rather than assumed). */
+[data-theme="dark"] .x-form-trigger { background-color: var(--pa-legacy-field-bg); }
+[data-theme="dark"] #warningMessage {
+	background: var(--pa-toast-warning-bg);
+	border-color: var(--pa-toast-warning-border);
+	color: var(--pa-ink-body);
+}
+[data-theme="dark"] .repDetectionWarn {
+	background: var(--pa-toast-warning-bg);
+	border-color: var(--pa-toast-warning-border);
+}
+[data-theme="dark"] .repDetectionPreview,
+[data-theme="dark"] .repDetectionManual { background: var(--pa-surface-sunken); }
+[data-theme="dark"] .paProgressTrack { background-color: var(--pa-ai-progress-track); }
+[data-theme="dark"] .dropdown-menu a { background: var(--pa-surface-quiet); }
+[data-theme="dark"] .pa-toc-list::-webkit-scrollbar-thumb { background: var(--pa-border-control); }
+/* jQuery UI ships a light texture as a background-image, so the colour alone
+   does not cover it. Used by the autocomplete menu on the search fields. */
+[data-theme="dark"] ul.ui-menu.ui-widget.ui-widget-content,
+[data-theme="dark"] .ui-widget-content {
+	background: var(--pa-surface) !important;
+	background-image: none !important;
+	border-color: var(--pa-border);
+	color: var(--pa-ink-body);
+}
+[data-theme="dark"] .ui-menu .ui-menu-item:hover,
+[data-theme="dark"] .ui-menu .ui-state-active { background: var(--pa-surface-quiet); }
+/* The network view's sliders. Their thumbs are jQuery UI's .ui-state-default,
+   a near-white fill plus a texture image, which left a row of white blobs down
+   the settings column. Doubling the class beats jQuery UI's own
+   `.ui-widget-content .ui-state-default` without reaching for !important. */
+[data-theme="dark"] .ui-slider-handle.ui-state-default,
+[data-theme="dark"] .ui-widget-content .ui-slider-handle.ui-state-default {
+	background: var(--pa-btn-default-bg);
+	background-image: none;
+	border-color: var(--pa-border-control);
+}
+[data-theme="dark"] .ui-slider-handle.ui-state-hover,
+[data-theme="dark"] .ui-slider-handle.ui-state-active,
+[data-theme="dark"] .ui-widget-content .ui-slider-handle.ui-state-hover,
+[data-theme="dark"] .ui-widget-content .ui-slider-handle.ui-state-active {
+	background: var(--pa-btn-default-bg-hover);
+	background-image: none;
+	border-color: var(--pa-border-control-hover);
+}
+
+/* ---------------------------------------------------------------------------
+   14. AI interpretation surfaces that state their own light fills
+   --------------------------------------------------------------------------- */
+
+[data-theme="dark"] .ai-widget-progress {
+	background: var(--pa-ai-progress-bg);
+	color: var(--pa-ai-progress-ink);
+}
+[data-theme="dark"] .ai-widget-progress.is-done { background: var(--pa-toast-success-bg); }
+[data-theme="dark"] .ai-widget-progress.is-error { background: var(--pa-toast-error-bg); }
+[data-theme="dark"] .ai-citation-item:hover { background: var(--pa-surface-quiet); }
+[data-theme="dark"] .ai-send-btn:disabled { background: var(--pa-btn-neutral-bg); }
+[data-theme="dark"] .ai-gdpr-disclaimer {
+	background: var(--pa-surface);
+	border-color: var(--pa-border);
+	color: var(--pa-ink-body);
+}
+[data-theme="dark"] .ai-gdpr-disclaimer-header { background: var(--pa-surface-quiet); }
