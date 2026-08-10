@@ -1,0 +1,695 @@
+{
+  "defaultScenario": "stategra-multiomics",
+  "generator": "src/AdminTools/scripts/exampledata",
+  "keggVersion": "# DOWNLOAD DATE:\t20251118 1350",
+  "scenarios": [
+    {
+      "conditions": [
+        "Treated_vs_Control"
+      ],
+      "databases": [
+        "KEGG"
+      ],
+      "expected": {
+        "diffuseRelevantRate": 0.05,
+        "minTargetCoverage": 0.688,
+        "pathwaysFile": "datasets/01-gene-single-condition/expected/expected_pathways.txt",
+        "relevantFeatures": 954,
+        "signalFeatures": 414,
+        "signalFeaturesFile": "datasets/01-gene-single-condition/expected/signal_features.txt",
+        "targetCoverage": [
+          0.727,
+          0.704,
+          0.706,
+          0.698,
+          0.688,
+          0.705,
+          0.696,
+          0.699
+        ],
+        "targetLeakageCap": 2.5,
+        "targetPathways": 8
+      },
+      "id": "gene-single-condition",
+      "omics": [
+        {
+          "dataFile": "datasets/01-gene-single-condition/data/gene_expression_values.tab",
+          "enrichment": "genes",
+          "omicName": "Gene expression",
+          "omicType": "gene",
+          "relevantFile": "datasets/01-gene-single-condition/data/gene_expression_relevant.tab"
+        }
+      ],
+      "order": 1,
+      "organism": "mmu",
+      "pipeline": "pathway-acquisition",
+      "references": [],
+      "simulated": true,
+      "summary": "One condition and one relevant-features list: the smallest input PaintOmics accepts, and the fastest way to see a pathway light up.",
+      "tests": [
+        "Pathway enrichment",
+        "Single-condition pathway colouring",
+        "Feature-to-KEGG identifier translation"
+      ],
+      "title": "Gene expression \u2014 single condition"
+    },
+    {
+      "conditions": [
+        "T00h",
+        "T02h",
+        "T06h",
+        "T12h",
+        "T18h",
+        "T24h"
+      ],
+      "databases": [
+        "KEGG",
+        "Reactome"
+      ],
+      "expected": {
+        "diffuseRelevantRate": 0.05,
+        "minTargetCoverage": 0.696,
+        "pathwaysFile": "datasets/02-gene-multi-condition/expected/expected_pathways.txt",
+        "relevantFeatures": 891,
+        "signalFeatures": 417,
+        "signalFeaturesFile": "datasets/02-gene-multi-condition/expected/signal_features.txt",
+        "targetCoverage": [
+          0.722,
+          0.714,
+          0.704,
+          0.706,
+          0.701,
+          0.696,
+          0.702,
+          0.697
+        ],
+        "targetLeakageCap": 2.5,
+        "targetPathways": 8
+      },
+      "id": "gene-multi-condition",
+      "omics": [
+        {
+          "dataFile": "datasets/02-gene-multi-condition/data/gene_expression_values.tab",
+          "enrichment": "genes",
+          "omicName": "Gene expression",
+          "omicType": "gene",
+          "relevantFile": "datasets/02-gene-multi-condition/data/gene_expression_relevant.tab"
+        }
+      ],
+      "order": 2,
+      "organism": "mmu",
+      "pipeline": "pathway-acquisition",
+      "references": [],
+      "simulated": true,
+      "summary": "A six-point time course with one relevance list shared by every condition \u2014 the ordinary shape of a time-course submission, and the closest simulated counterpart to the real STATegra example.",
+      "tests": [
+        "Multi-condition heatmaps",
+        "Per-condition pathway colouring",
+        "Stouffer combination across conditions"
+      ],
+      "title": "Gene expression \u2014 six conditions"
+    },
+    {
+      "conditions": [
+        "T00h",
+        "T02h",
+        "T06h",
+        "T12h",
+        "T18h",
+        "T24h"
+      ],
+      "databases": [
+        "KEGG"
+      ],
+      "expected": {
+        "diffuseRelevantRate": 0.05,
+        "minTargetCoverage": 0.698,
+        "pathwaysFile": "datasets/03-gene-multi-condition-relevance/expected/expected_pathways.txt",
+        "relevantFeatures": 895,
+        "relevantPerCondition": [
+          268,
+          394,
+          519,
+          644,
+          770,
+          895
+        ],
+        "signalFeatures": 407,
+        "signalFeaturesFile": "datasets/03-gene-multi-condition-relevance/expected/signal_features.txt",
+        "targetCoverage": [
+          0.722,
+          0.781,
+          0.767,
+          0.714,
+          0.701,
+          0.699,
+          0.702,
+          0.698
+        ],
+        "targetLeakageCap": 2.5,
+        "targetPathways": 8
+      },
+      "id": "gene-multi-condition-relevance",
+      "omics": [
+        {
+          "dataFile": "datasets/03-gene-multi-condition-relevance/data/gene_expression_values.tab",
+          "enrichment": "genes",
+          "omicName": "Gene expression",
+          "omicType": "gene",
+          "relevantFile": "datasets/03-gene-multi-condition-relevance/data/gene_expression_relevant.tab"
+        }
+      ],
+      "order": 3,
+      "organism": "mmu",
+      "pipeline": "pathway-acquisition",
+      "references": [],
+      "simulated": true,
+      "summary": "Six conditions with a relevant-features file holding one column per condition, so significance is tracked separately at each time point rather than shared.",
+      "tests": [
+        "Per-condition relevant features",
+        "Per-condition p-values and FDR",
+        "Relevant-features files wider than 80 characters"
+      ],
+      "title": "Gene expression \u2014 per-condition relevance"
+    },
+    {
+      "conditions": [
+        "T00h",
+        "T02h",
+        "T06h",
+        "T12h",
+        "T18h",
+        "T24h"
+      ],
+      "databases": [
+        "KEGG",
+        "Reactome"
+      ],
+      "expected": {
+        "compoundTargetCoverage": [
+          0.681,
+          0.656,
+          0.639,
+          0.423,
+          0.543,
+          0.5,
+          0.727,
+          0.5
+        ],
+        "compoundUniverse": 4612,
+        "diffuseRelevantRate": 0.05,
+        "minTargetCoverage": 0.694,
+        "namedCompounds": 400,
+        "omicCount": 5,
+        "pathwaysFile": "datasets/04-multiomics-integration/expected/expected_pathways.txt",
+        "relevantCompounds": 495,
+        "relevantFeatures": 829,
+        "signalCompounds": 252,
+        "signalFeatures": 324,
+        "signalFeaturesFile": "datasets/04-multiomics-integration/expected/signal_features.txt",
+        "targetCoverage": [
+          0.722,
+          0.7,
+          0.709,
+          0.705,
+          0.707,
+          0.719,
+          0.694,
+          0.706
+        ],
+        "targetLeakageCap": 3.0,
+        "targetPathways": 8
+      },
+      "extraFiles": [
+        {
+          "note": "Alternative to metabolomics_values.tab, keyed by real KEGG compound name instead of KEGG ID, to exercise the matched-metabolites selection step. Load it *instead of* the ID-keyed file, never alongside.",
+          "path": "datasets/04-multiomics-integration/data/metabolomics_by_name_values.tab",
+          "role": "compound-name-keyed metabolomics",
+          "rows": 400
+        },
+        {
+          "note": "The relevance list for metabolomics_by_name_values.tab. Relevance is keyed by the identifier as submitted, so the ID-keyed metabolomics_relevant.tab matches nothing in a name-keyed values file.",
+          "path": "datasets/04-multiomics-integration/data/metabolomics_by_name_relevant.tab",
+          "role": "compound-name-keyed relevant features"
+        }
+      ],
+      "id": "multiomics-integration",
+      "omics": [
+        {
+          "dataFile": "datasets/04-multiomics-integration/data/gene_expression_values.tab",
+          "enrichment": "genes",
+          "omicName": "Gene expression",
+          "omicType": "gene",
+          "relevantFile": "datasets/04-multiomics-integration/data/gene_expression_relevant.tab"
+        },
+        {
+          "dataFile": "datasets/04-multiomics-integration/data/proteomics_values.tab",
+          "enrichment": "genes",
+          "omicName": "Proteomics",
+          "omicType": "gene",
+          "relevantFile": "datasets/04-multiomics-integration/data/proteomics_relevant.tab"
+        },
+        {
+          "dataFile": "datasets/04-multiomics-integration/data/transcription_factor_values.tab",
+          "enrichment": "genes",
+          "omicName": "Transcription factor",
+          "omicType": "gene",
+          "relevantFile": "datasets/04-multiomics-integration/data/transcription_factor_relevant.tab"
+        },
+        {
+          "dataFile": "datasets/04-multiomics-integration/data/metabolomics_values.tab",
+          "enrichment": "features",
+          "omicName": "Metabolomics",
+          "omicType": "compound",
+          "relevantFile": "datasets/04-multiomics-integration/data/metabolomics_relevant.tab"
+        },
+        {
+          "dataFile": "datasets/04-multiomics-integration/data/mirna_values.tab",
+          "enrichment": "genes",
+          "omicName": "miRNA-seq",
+          "omicType": "gene",
+          "relevantFile": "datasets/04-multiomics-integration/data/mirna_relevant.tab"
+        }
+      ],
+      "order": 4,
+      "organism": "mmu",
+      "pipeline": "pathway-acquisition",
+      "references": [],
+      "simulated": true,
+      "summary": "Transcriptomics, proteomics, transcription factors, metabolomics and miRNA over the same six time points, sharing one planted signal so the layers agree.",
+      "tests": [
+        "Multi-omic pathway enrichment",
+        "Compound matching",
+        "Metabolite hub analysis",
+        "Pathway network",
+        "Gene- and compound-based enrichment side by side"
+      ],
+      "title": "Multi-omic integration \u2014 five omics"
+    },
+    {
+      "conditions": [
+        "T00h",
+        "T02h",
+        "T06h",
+        "T12h",
+        "T18h",
+        "T24h"
+      ],
+      "databases": [
+        "KEGG"
+      ],
+      "expected": {
+        "associations": 2358,
+        "diffuseRelevantRate": 0.05,
+        "miRNAs": 300,
+        "minTargetCoverage": 0.696,
+        "pathwaysFile": "datasets/05-regulatory-mirna/expected/expected_pathways.txt",
+        "relevantFeatures": 399,
+        "relevantMiRNAs": 188,
+        "signalFeatures": 299,
+        "signalFeaturesFile": "datasets/05-regulatory-mirna/expected/signal_features.txt",
+        "targetCoverage": [
+          0.696,
+          0.714,
+          0.696,
+          0.705,
+          0.701,
+          0.706
+        ],
+        "targetLeakageCap": 2.5,
+        "targetPathways": 6
+      },
+      "id": "regulatory-mirna",
+      "omics": [
+        {
+          "dataFile": "datasets/05-regulatory-mirna/data/mirna_values.tab",
+          "enrichment": "genes",
+          "omicName": "miRNA-seq",
+          "omicType": "gene",
+          "relevantFile": "datasets/05-regulatory-mirna/data/mirna_relevant.tab",
+          "role": "regulator"
+        },
+        {
+          "dataFile": "datasets/05-regulatory-mirna/data/gene_expression_values.tab",
+          "enrichment": "genes",
+          "omicName": "Gene expression",
+          "omicType": "gene",
+          "relevantFile": "datasets/05-regulatory-mirna/data/gene_expression_relevant.tab",
+          "role": "target"
+        }
+      ],
+      "order": 5,
+      "organism": "mmu",
+      "pipeline": "mirna2genes",
+      "references": [
+        {
+          "dataFile": "datasets/05-regulatory-mirna/data/mirna_to_gene_associations.tab",
+          "fileType": "Reference file",
+          "omicName": "miRNA-seq"
+        }
+      ],
+      "simulated": true,
+      "summary": "miRNA quantification plus a target-prediction table. The Regulatory Omics step pairs each miRNA with its targets and hands GENE:::miRNA rows on to the pathway analysis.",
+      "tests": [
+        "miRNA-to-gene association",
+        "Regulator/target pairing",
+        "Correlation filtering of predicted targets"
+      ],
+      "title": "Regulatory omics \u2014 miRNA to genes"
+    },
+    {
+      "conditions": [
+        "Control",
+        "Early",
+        "Mid",
+        "Late"
+      ],
+      "databases": [
+        "KEGG"
+      ],
+      "design": {
+        "dataFile": "datasets/06-regulatory-more/data/experimental_design.tab"
+      },
+      "expected": {
+        "backgroundGenes": 170,
+        "diffuseRelevantRate": 0.05,
+        "estimatedRuntimeSeconds": 72,
+        "flaggedRegulatorsPerOmic": 10,
+        "inPathwayGenes": 80,
+        "measuredRecall": 0.88,
+        "minTargetCoverage": 0.583,
+        "modelledTargets": 250,
+        "pathwaysFile": "datasets/06-regulatory-more/expected/expected_pathways.txt",
+        "recallFloor": 0.7,
+        "regulatorPairs": 250,
+        "regulatorPairsFile": "datasets/06-regulatory-more/expected/expected_regulator_pairs.txt",
+        "signalFeatures": 56,
+        "signalFeaturesFile": "datasets/06-regulatory-more/expected/signal_features.txt",
+        "targetCoverage": [
+          0.778,
+          0.647,
+          0.667,
+          0.9,
+          0.833,
+          0.765,
+          0.583,
+          0.75
+        ],
+        "targetLeakageCap": 2.5,
+        "targetPathways": 8
+      },
+      "id": "regulatory-more",
+      "omics": [
+        {
+          "associationsFile": "datasets/06-regulatory-more/data/transcription_factor_associations.tab",
+          "dataFile": "datasets/06-regulatory-more/data/transcription_factor_regulators.tab",
+          "minVariation": "NA",
+          "omicName": "Transcription factor",
+          "omicType": "regulator",
+          "relevantFile": "datasets/06-regulatory-more/data/transcription_factor_relevant_regulators.tab"
+        },
+        {
+          "associationsFile": "datasets/06-regulatory-more/data/mirna_associations.tab",
+          "dataFile": "datasets/06-regulatory-more/data/mirna_regulators.tab",
+          "minVariation": "NA",
+          "omicName": "miRNA-seq",
+          "omicType": "regulator",
+          "relevantFile": "datasets/06-regulatory-more/data/mirna_relevant_regulators.tab"
+        }
+      ],
+      "order": 6,
+      "organism": "mmu",
+      "parameters": {
+        "alpha": 0.05,
+        "enrichment": "genes",
+        "filter_r2": 0.0,
+        "method": "PLS1",
+        "vip": 0.8
+      },
+      "pipeline": "more",
+      "references": [],
+      "samples": [
+        "Control_R1",
+        "Control_R2",
+        "Control_R3",
+        "Early_R1",
+        "Early_R2",
+        "Early_R3",
+        "Mid_R1",
+        "Mid_R2",
+        "Mid_R3",
+        "Late_R1",
+        "Late_R2",
+        "Late_R3"
+      ],
+      "simulated": true,
+      "summary": "Per-sample expression with three replicates per group, an experimental design matrix, and two candidate regulatory omics with association files. Each target is a noisy linear function of one known regulator, so what MORE should find is written down.",
+      "target": {
+        "dataFile": "datasets/06-regulatory-more/data/gene_expression_targets.tab",
+        "omicName": "Gene expression"
+      },
+      "tests": [
+        "MORE PLS1 and MLR models",
+        "Experimental design parsing",
+        "Per-omic minVariation filter",
+        "Regulator significance (VIP, alpha, R2)",
+        "GENE:::REGULATOR hand-off to pathway analysis"
+      ],
+      "title": "Regulatory omics \u2014 MORE joint model"
+    },
+    {
+      "conditions": [
+        "T00h",
+        "T02h",
+        "T06h",
+        "T12h",
+        "T18h",
+        "T24h"
+      ],
+      "databases": [
+        "KEGG"
+      ],
+      "expected": {
+        "annotatedGenes": 2400,
+        "diffuseRelevantRate": 0.05,
+        "intergenicDecoys": 200,
+        "minTargetCoverage": 0.688,
+        "pathwaysFile": "datasets/07-region-based/expected/expected_pathways.txt",
+        "regions": 2600,
+        "relevantRegions": 347,
+        "signalFeatures": 252,
+        "signalFeaturesFile": "datasets/07-region-based/expected/signal_features.txt",
+        "targetCoverage": [
+          0.688,
+          0.696,
+          0.703,
+          0.694,
+          0.704,
+          0.706
+        ],
+        "targetLeakageCap": 2.5,
+        "targetPathways": 6
+      },
+      "id": "region-based",
+      "omics": [
+        {
+          "dataFile": "datasets/07-region-based/data/dnase_regions_values.tab",
+          "enrichment": "genes",
+          "omicName": "DNase-seq",
+          "omicType": "region",
+          "relevantFile": "datasets/07-region-based/data/dnase_regions_relevant.tab"
+        }
+      ],
+      "order": 7,
+      "organism": "mmu",
+      "pipeline": "regions2genes",
+      "references": [
+        {
+          "dataFile": "datasets/07-region-based/data/synthetic_mmu.gtf",
+          "fileType": "Reference file",
+          "omicName": "DNase-seq"
+        }
+      ],
+      "simulated": true,
+      "summary": "Genomic regions in BED-like form with a matching synthetic GTF, so region-to-gene assignment runs without the large mouse annotation a fresh checkout does not have. Signal regions sit in promoters; 200 intergenic decoys do not.",
+      "tests": [
+        "RGmatch region-to-gene assignment",
+        "Promoter/TSS area rules",
+        "Three-column relevant-regions parsing",
+        "Region omics feeding pathway enrichment"
+      ],
+      "title": "Region-based omic \u2014 DNase-like regions"
+    },
+    {
+      "conditions": [
+        "Ikaros/Control_0h",
+        "Ikaros/Control_2h",
+        "Ikaros/Control_6h",
+        "Ikaros/Control_12h",
+        "Ikaros/Control_18h",
+        "Ikaros/Control_24h"
+      ],
+      "databases": [
+        "KEGG",
+        "Reactome"
+      ],
+      "expected": {
+        "note": "Matched-pathway counts differ between KEGG snapshots (888/44 on the deploy VM vs 877/41 locally for the same job), so none are asserted."
+      },
+      "id": "stategra-multiomics",
+      "omics": [
+        {
+          "dataFile": "datasets/08-stategra-multiomics/data/gene_expression_values.tab",
+          "enrichment": "genes",
+          "omicName": "Gene expression",
+          "omicType": "gene",
+          "relevantFile": "datasets/08-stategra-multiomics/data/gene_expression_relevant.tab"
+        },
+        {
+          "dataFile": "datasets/08-stategra-multiomics/data/metabolomics_values.tab",
+          "enrichment": "features",
+          "omicName": "Metabolomics",
+          "omicType": "compound",
+          "relevantFile": "datasets/08-stategra-multiomics/data/metabolomics_relevant.tab"
+        },
+        {
+          "dataFile": "datasets/08-stategra-multiomics/data/proteomics_values.tab",
+          "enrichment": "features",
+          "omicName": "Proteomics",
+          "omicType": "gene",
+          "relevantFile": "datasets/08-stategra-multiomics/data/proteomics_relevant.tab"
+        },
+        {
+          "dataFile": "datasets/08-stategra-multiomics/data/mirna_values.tab",
+          "enrichment": "genes",
+          "omicName": "miRNA-seq",
+          "omicType": "gene",
+          "relevantFile": "datasets/08-stategra-multiomics/data/mirna_relevant.tab"
+        },
+        {
+          "dataFile": "datasets/08-stategra-multiomics/data/dnase_values.tab",
+          "enrichment": "genes",
+          "omicName": "DNase-seq",
+          "omicType": "gene",
+          "relevantFile": "datasets/08-stategra-multiomics/data/dnase_relevant.tab"
+        },
+        {
+          "dataFile": "datasets/08-stategra-multiomics/data/transcription_factor_values.tab",
+          "enrichment": "genes",
+          "omicName": "Transcription factor",
+          "omicType": "gene",
+          "relevantFile": "datasets/08-stategra-multiomics/data/transcription_factor_relevant.tab"
+        }
+      ],
+      "order": 8,
+      "organism": "mmu",
+      "pipeline": "pathway-acquisition",
+      "references": [],
+      "simulated": false,
+      "summary": "The published six-omic, six-timepoint STATegra dataset PaintOmics has always shipped. Real measurements, not simulated \u2014 the reference every simulated scenario is shaped against.",
+      "tests": [
+        "The full multi-omic pipeline on real data",
+        "Metabolite hub analysis",
+        "Pathway network",
+        "AI interpretation"
+      ],
+      "title": "STATegra \u2014 real mouse Ikaros time course (6 omics)"
+    },
+    {
+      "conditions": [
+        "Ikaros/Control_0h",
+        "Ikaros/Control_2h",
+        "Ikaros/Control_6h",
+        "Ikaros/Control_12h",
+        "Ikaros/Control_18h",
+        "Ikaros/Control_24h"
+      ],
+      "databases": [
+        "KEGG"
+      ],
+      "expected": {
+        "note": "Matched-pathway counts differ between KEGG snapshots (888/44 on the deploy VM vs 877/41 locally for the same job), so none are asserted."
+      },
+      "id": "stategra-regions",
+      "omics": [
+        {
+          "dataFile": "datasets/09-stategra-regions/data/dnase_unmapped_values.tab",
+          "enrichment": "genes",
+          "omicName": "DNase unmapped",
+          "omicType": "region",
+          "relevantFile": "datasets/09-stategra-regions/data/dnase_unmapped_relevant.tab"
+        }
+      ],
+      "order": 9,
+      "organism": "mmu",
+      "pipeline": "regions2genes",
+      "references": [
+        {
+          "dataFile": "GTF/sorted_mmu.gtf",
+          "fileType": "Reference file",
+          "omicName": "DNase unmapped"
+        }
+      ],
+      "simulated": false,
+      "summary": "The unmapped DNase-seq regions from the STATegra time course, for the Regions2Genes step. Requires the full mouse annotation, which is fetched by a deploy step and is absent from a fresh checkout.",
+      "tests": [
+        "RGmatch on real regions",
+        "Region-to-gene assignment at scale"
+      ],
+      "title": "STATegra \u2014 DNase regions (real, needs the mouse GTF)"
+    },
+    {
+      "conditions": [
+        "Ikaros/Control_0h",
+        "Ikaros/Control_2h",
+        "Ikaros/Control_6h",
+        "Ikaros/Control_12h",
+        "Ikaros/Control_18h",
+        "Ikaros/Control_24h"
+      ],
+      "databases": [
+        "KEGG"
+      ],
+      "expected": {
+        "note": "Matched-pathway counts differ between KEGG snapshots (888/44 on the deploy VM vs 877/41 locally for the same job), so none are asserted."
+      },
+      "id": "stategra-mirna",
+      "omics": [
+        {
+          "dataFile": "datasets/10-stategra-mirna/data/mirna_unmapped_values.tab",
+          "enrichment": "genes",
+          "omicName": "miRNA unmapped",
+          "omicType": "gene",
+          "relevantFile": "datasets/10-stategra-mirna/data/mirna_unmapped_relevant.tab",
+          "role": "regulator"
+        },
+        {
+          "dataFile": "datasets/08-stategra-multiomics/data/gene_expression_values.tab",
+          "enrichment": "genes",
+          "omicName": "Gene expression",
+          "omicType": "gene",
+          "role": "target"
+        }
+      ],
+      "order": 10,
+      "organism": "mmu",
+      "pipeline": "mirna2genes",
+      "references": [
+        {
+          "dataFile": "datasets/10-stategra-mirna/data/mmu_mirBase_to_ensembl.tab",
+          "fileType": "Reference file",
+          "omicName": "miRNA unmapped"
+        }
+      ],
+      "simulated": false,
+      "summary": "The unmapped miRNA quantification from the STATegra time course with the full miRBase-to-Ensembl target table, for the Regulatory Omics step.",
+      "tests": [
+        "miRNA-to-gene association on real data",
+        "Correlation filtering across a large prediction table"
+      ],
+      "title": "STATegra \u2014 miRNA to genes (real)"
+    }
+  ],
+  "seed": 20260809,
+  "version": 1
+}

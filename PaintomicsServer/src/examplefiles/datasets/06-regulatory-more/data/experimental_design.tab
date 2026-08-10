@@ -1,0 +1,13 @@
+Sample	Control	Early	Mid	Late
+Control_R1	1	0	0	0
+Control_R2	1	0	0	0
+Control_R3	1	0	0	0
+Early_R1	0	1	0	0
+Early_R2	0	1	0	0
+Early_R3	0	1	0	0
+Mid_R1	0	0	1	0
+Mid_R2	0	0	1	0
+Mid_R3	0	0	1	0
+Late_R1	0	0	0	1
+Late_R2	0	0	0	1
+Late_R3	0	0	0	1
