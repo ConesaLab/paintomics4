@@ -23,6 +23,13 @@ class MOREJob(Job):
         
         # Model Parameters
         self.method = "PLS1"  # PLS1 or MLR
+        # Which implementation runs `method`: "rust", "r", or "auto" for the
+        # behaviour every job had before the engine could be chosen -- PLS1 to
+        # the port when one is installed, everything else to R. Kept separate
+        # from `method` because it is not a modelling choice: the two engines
+        # were measured byte-identical on PLS1, so this decides how long the
+        # job takes, not what it answers. See MOREServlet.MORE_ENGINES.
+        self.engine = "auto"
         self.alpha = 0.05
         self.vip = 0.8
         self.filter_r2 = 0.0

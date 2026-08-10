@@ -149,8 +149,22 @@ pnpm-lock.yaml
 *.gtf
 *.gff
 
-# Example data directories that may contain large files
-PaintomicsServer/src/examplefiles/
+# Example data directories that may contain large files.
+#
+# `datasets/` is the exception and has to be spelled out, because the bundled
+# examples are deliberately committed -- the deployed server then needs no KEGG
+# snapshot to serve them and the tests have something fixed to assert against.
+# The 77 files already under it were added before this rule existed and stayed
+# tracked, which hid the problem: adding an ELEVENTH scenario produced files
+# `git status` did not mention at all, so a new example could be generated,
+# tested, and left out of the commit without anything saying so.
+#
+# Written as `examplefiles/*` plus a negation rather than as a rule inside
+# `examplefiles/`: git does not re-include a path whose parent directory is
+# excluded, so `!.../datasets/` under the old directory-level ignore would have
+# had no effect whatever.
+PaintomicsServer/src/examplefiles/*
+!PaintomicsServer/src/examplefiles/datasets/
 PaintomicsServer/src/examplefiles/GTF/
 
 # MkDocs generated site

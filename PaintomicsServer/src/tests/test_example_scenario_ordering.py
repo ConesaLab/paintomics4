@@ -46,6 +46,7 @@ EXPECTED_ORDER = [
     (8, "stategra-multiomics"),
     (9, "stategra-regions"),
     (10, "stategra-mirna"),
+    (11, "stategra-more"),
 ]
 
 

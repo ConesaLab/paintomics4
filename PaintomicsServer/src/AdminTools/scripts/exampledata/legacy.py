@@ -29,6 +29,7 @@ import os
 MULTIOMICS_FOLDER = "08-stategra-multiomics"
 REGIONS_FOLDER = "09-stategra-regions"
 MIRNA_FOLDER = "10-stategra-mirna"
+MORE_FOLDER = "11-stategra-more"
 
 # The six omics in the order the old hardcoded example built them, with the
 # filenames it derived by mangling the omic name ("DNase-seq" -> "dnase").
@@ -44,6 +45,13 @@ MULTIOMICS = [
 
 CONDITIONS = ["Ikaros/Control_0h", "Ikaros/Control_2h", "Ikaros/Control_6h",
               "Ikaros/Control_12h", "Ikaros/Control_18h", "Ikaros/Control_24h"]
+
+# The MORE scenario keeps the two arms apart instead of shipping their ratio.
+# The other three entries carry one column per timepoint, already reduced to
+# Ikaros-over-control; MORE fits per-sample values against an experimental
+# design, so it needs the 12 groups and the three replicates in each.
+MORE_CONDITIONS = ["Ctr_0H", "Ctr_2H", "Ctr_6H", "Ctr_12H", "Ctr_18H", "Ctr_24H",
+                   "Ik_0H", "Ik_2H", "Ik_6H", "Ik_12H", "Ik_18H", "Ik_24H"]
 
 _ENVIRONMENT_NOTE = ("Matched-pathway counts differ between KEGG snapshots "
                      "(888/44 on the deploy VM vs 877/41 locally for the same "
@@ -196,8 +204,102 @@ def buildStategraMirna(context):
     }
 
 
+def buildStategraMore(context):
+    """Real expression against a real TF network, for the MORE joint model.
+
+    The counterpart to the simulated `regulatory-more`. That one plants a known
+    driver behind every target so recall can be asserted; this one has no ground
+    truth at all, which is the point -- it is what MORE does to an experiment
+    rather than to a fixture.
+
+    Built by `stategramore.py` from GSE75417 and TFLink v1.0; see that module
+    for the subsampling rule and why it is uniform rather than signal-led. The
+    files are committed, so a checkout without the source dataset still serves
+    this scenario -- it simply cannot regenerate it.
+    """
+    target = _fileEntry(context, MORE_FOLDER, "gene_expression_targets.tab")
+    design = _fileEntry(context, MORE_FOLDER, "experimental_design.tab")
+    values = _fileEntry(context, MORE_FOLDER, "transcription_factor_regulators.tab")
+    associations = _fileEntry(
+        context, MORE_FOLDER, "transcription_factor_associations.tab")
+    relevant = _fileEntry(
+        context, MORE_FOLDER, "transcription_factor_relevant_regulators.tab")
+    if target is None or design is None or values is None or associations is None:
+        return None
+
+    omic = {
+        "omicName": "Transcription factor",
+        "omicType": "regulator",
+        "dataFile": values,
+        "associationsFile": associations,
+        # NA, not 0: MORE picks the low-variation threshold from the data. On a
+        # real matrix a fixed 0 keeps every non-constant regulator, including
+        # the ones whose variation is indistinguishable from measurement noise.
+        "minVariation": "NA",
+    }
+    if relevant:
+        omic["relevantFile"] = relevant
+
+    return {
+        "id": "stategra-more",
+        "title": "STATegra — real expression against a real TF network (MORE)",
+        "summary": ("A uniform random subsample of the STATegra Ikaros "
+                    "induction time course (GSE75417) with the TFLink v1.0 "
+                    "mouse regulatory network: 600 genes, 36 samples, 12 "
+                    "groups, and every curated TF that regulates one of them. "
+                    "Real measurements with no planted signal, which is what "
+                    "separates it from the simulated MORE example."),
+        "tests": ["MORE on real per-sample data",
+                  "All three regulatory engines (Rust PLS1, R PLS1, R MLR)",
+                  "12-group experimental design",
+                  "Automatic minVariation threshold",
+                  "GENE:::REGULATOR hand-off to pathway analysis"],
+        "pipeline": "more",
+        "organism": "mmu",
+        "databases": ["KEGG"],
+        "conditions": MORE_CONDITIONS,
+        "simulated": False,
+        "target": {"omicName": "Gene expression", "dataFile": target},
+        "design": {"dataFile": design},
+        "omics": [omic],
+        "references": [],
+        "parameters": {"method": "PLS1", "alpha": 0.05, "vip": 0.8,
+                       "filter_r2": 0.0, "enrichment": "genes"},
+        "expected": {
+            "note": _ENVIRONMENT_NOTE,
+            # Measured, not estimated: one run of each engine over exactly
+            # these files, on an M-series laptop under other load, so treat
+            # them as ratios rather than as absolutes.
+            #
+            # The equivalence is the load-bearing half. `cmp` on all four
+            # result files -- values, relevant associations, relevant pairs and
+            # the RegulationPerCondition table -- reports them byte-identical
+            # between the two PLS1 engines. That is what makes offering the
+            # port as the default legitimate; a 473x speed claim with no
+            # equivalence behind it would just be a different answer, faster.
+            "measuredRuntimeSeconds": {"rust-pls1": 0.8, "r-pls1": 366.8},
+            "enginesAgree": ("rust-pls1 and r-pls1 byte-identical on all four "
+                             "output files"),
+            "targets": 600,
+            "regulators": 307,
+            "associations": 17669,
+            "flaggedRegulators": 176,
+            "flaggedRule": ("one-way ANOVA across the 12 groups, "
+                            "Benjamini-Hochberg FDR < 0.01, and at least a "
+                            "two-fold range between group means"),
+            "source": {
+                "expression": "GEO GSE75417 (STATegra RNA-seq, CQN + ComBat)",
+                "network": "TFLink v1.0, Mus musculus, All simple format",
+                "subsample": ("uniform random, seed 20260811, from the 9,835 "
+                              "targets carrying at least one association"),
+            },
+        },
+    }
+
+
 CATALOGUE = [
     buildStategraMultiomics,
     buildStategraRegions,
     buildStategraMirna,
+    buildStategraMore,
 ]

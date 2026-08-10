@@ -3753,27 +3753,79 @@ function MORESubmittingPanel(nElem, options) {
 					html: '<hr><h5>MORE Algorithm Parameters</h5>'
 				},
 				{
+					/* One control for two decisions -- which model, and which
+					   implementation runs it -- because to the person choosing they
+					   are one decision. The three entries come from the server
+					   (/more_backends), never from a list written here: whether an
+					   engine can run depends on what is installed on THIS host, and
+					   the deployed image carries R without the MORE package, so a
+					   hardcoded list would offer two options that fail deep inside
+					   the job.
+
+					   `more_method` is still posted alongside `more_engine`, so a
+					   server that predates the picker keeps working. */
 					xtype: 'combo',
-					itemId: "moreMethodField",
-					name: 'more_method',
-					fieldLabel: 'Regression Method',
+					itemId: "moreEngineField",
+					name: 'more_engine',
+					fieldLabel: 'Regulatory model',
 					editable: false,
 					allowBlank: false,
-					value: "PLS1",
 					displayField: 'label',
-					valueField: 'value',
-					store: Ext.create('Ext.data.ArrayStore', {
-						fields: ['label', 'value'],
-						data: [
-							["PLS1 (Partial Least Squares)", "PLS1"],
-							["MLR (Multiple Linear Regression)", "MLR"]
-						]
+					valueField: 'id',
+					queryMode: 'local',
+					store: Ext.create('Ext.data.Store', {
+						fields: ['id', 'label', 'method', 'engine', 'detail',
+						         'available', 'unavailableReason']
 					}),
-					helpTip: "Select the regression model to use for finding significant regulators.",
+					/* The unavailable entries stay in the list, greyed, rather than
+					   being filtered out. "MLR is not offered here" and "MLR does not
+					   exist" look identical when the row is simply absent, and the
+					   first is a fixable installation problem the operator should be
+					   able to see. */
+					listConfig: {
+						getInnerTpl: function() {
+							return '<div class="more-engine-option ' +
+								'{[values.available ? "" : "more-engine-unavailable"]}">' +
+								'<span class="more-engine-label">{label}</span>' +
+								'<tpl if="!available">' +
+								'  <span class="more-engine-why">{unavailableReason}</span>' +
+								'</tpl>' +
+								'</div>';
+						}
+					},
+					helpTip: "Which regression model finds the significant regulators, and which implementation runs it. Options this server cannot run are shown greyed with the reason.",
 					listeners: {
+						afterrender: function(combo) {
+							loadMOREEngines(combo);
+						},
+						/* Refuse the selection rather than the submission. An
+						   unavailable engine would be refused by the server anyway,
+						   but only after the user has filled in the rest of the form. */
+						beforeselect: function(combo, record) {
+							if (record.get('available') === false) {
+								showInfoMessage("Not available on this server",
+									record.get('unavailableReason'));
+								return false;
+							}
+						},
 						change: function(combo, newValue) {
 							var container = combo.up('#itemsContainer');
-							var isPLS1 = newValue === 'PLS1';
+							var record = combo.getStore().findRecord('id', newValue);
+							// The method now travels with the engine, so the show/hide
+							// below keys off the selected entry rather than off the
+							// combo's own value.
+							var method = record ? record.get('method') : 'PLS1';
+							var isPLS1 = method === 'PLS1';
+
+							var methodField = container.queryById('moreMethodField');
+							if (methodField) { methodField.setValue(method); }
+
+							var detail = container.queryById('moreEngineDetail');
+							if (detail && record) {
+								detail.update('<p class="more-engine-detail">' +
+									Ext.String.htmlEncode(record.get('detail')) + '</p>');
+							}
+
 							var alphaField = container.queryById('moreAlphaField');
 							var vipField = container.queryById('moreVipField');
 							// Disable as well as hide. Both fields are allowBlank:false,
@@ -3784,6 +3836,11 @@ function MORESubmittingPanel(nElem, options) {
 							// Disabling excludes them from validation and from the POST;
 							// MORE's GetMLR takes neither alfa nor vip, so MLR loses
 							// nothing, and MOREServlet defaults them when absent.
+							//
+							// MLR does not merely ignore them: MORE_MLR.R builds its
+							// coefficients table with a single `coefficient` column and
+							// no p-value at all, so there is nothing for alpha to
+							// threshold. Selection there is shrinkage alone.
 							[alphaField, vipField].forEach(function(field) {
 								if (!field) { return; }
 								field.setVisible(isPLS1);
@@ -3791,6 +3848,26 @@ function MORESubmittingPanel(nElem, options) {
 							});
 						}
 					}
+				},
+				{
+					/* What the chosen engine actually does, under the picker rather
+					   than inside a tooltip: the difference between the two PLS1
+					   entries is entirely runtime, and the difference between PLS1 and
+					   MLR is reproducibility, neither of which is guessable from a
+					   label. */
+					xtype: 'box',
+					itemId: "moreEngineDetail",
+					html: ''
+				},
+				{
+					/* Posted for a server that predates `more_engine`; kept in step
+					   with the picker by its change handler above. Hidden rather than
+					   removed -- two controls for one choice is what the picker
+					   replaced. */
+					xtype: 'hiddenfield',
+					itemId: "moreMethodField",
+					name: 'more_method',
+					value: 'PLS1'
 				},
 				{
 					xtype: 'numberfield',
@@ -4152,6 +4229,102 @@ window.cookieconsent.initialise({
  *********************************************************************/
 var AI_PROVIDER_INFO = null;
 var _aiProviderRequest = null;
+
+/**********************************************************************
+ * WHICH REGULATORY ENGINES THIS SERVER CAN RUN
+ *
+ * The picker offers three: PLS1 on the Rust engine, PLS1 on R, and MLR on R.
+ * Which of them a given host can actually run is not a fact the client can
+ * know -- the deployed image carries /usr/bin/Rscript and none of MORE,
+ * optparse, ropls or glmnet, so a list hardcoded here would offer two options
+ * that pass every check in the browser and then fail deep inside the job.
+ *
+ * /more_backends answers it, from a probe of the R *packages* rather than the
+ * interpreter. One request, cached for the page.
+ *
+ * The fallback matters as much as the success path: if the request fails, the
+ * picker is filled with the same three entries marked available, because a
+ * server that cannot answer is more likely to be an old one that has no such
+ * route than one with nothing installed -- and refusing every engine on a
+ * transport error would take a working feature down. The server refuses an
+ * engine it cannot run anyway (MOREServlet.engineRefusal), so the cost of
+ * being optimistic here is a clear message at submission rather than a
+ * mislabelled dropdown.
+ **********************************************************************/
+var MORE_BACKENDS = null;
+var _moreBackendsRequest = null;
+
+/* Every engine marked runnable, used when the server cannot be asked. Mirrors
+   MOREServlet.MORE_ENGINES; the labels are deliberately terser than the
+   server's, so a reader can tell an offline fallback from a real answer. */
+var MORE_ENGINES_FALLBACK = [
+	{id: "rust-pls1", method: "PLS1", engine: "rust", available: true,
+	 unavailableReason: "", label: "PLS1 — Rust engine (recommended)",
+	 detail: "The same model as the R engine, reimplemented and much faster."},
+	{id: "r-pls1", method: "PLS1", engine: "r", available: true,
+	 unavailableReason: "", label: "PLS1 — R engine (reference)",
+	 detail: "The original MORE R package. Same answers, far slower."},
+	{id: "r-mlr", method: "MLR", engine: "r", available: true,
+	 unavailableReason: "", label: "MLR — R engine",
+	 detail: "Elastic-net multiple linear regression. Slower than PLS1 and " +
+	         "harder to reproduce, and it reports no p-values, so the alpha " +
+	         "and VIP thresholds do not apply."}
+];
+
+/* Fills `combo` from /more_backends, and selects the server's default. */
+function loadMOREEngines(combo) {
+	function fill(report) {
+		if (!combo || combo.isDestroyed) { return; }
+		var engines = (report && report.engines && report.engines.length)
+			? report.engines : MORE_ENGINES_FALLBACK;
+		combo.getStore().loadData(engines);
+
+		/* The server names the default, and it is not always rust-pls1: on a
+		   host with no binary the picker has to open on something runnable.
+		   Falling back to the first available entry rather than to engines[0]
+		   for the same reason. */
+		var chosen = (report && report.default) || null;
+		if (!chosen) {
+			var runnable = Ext.Array.findBy(engines, function(entry) {
+				return entry.available !== false;
+			});
+			chosen = runnable ? runnable.id : engines[0].id;
+		}
+		combo.setValue(chosen);
+
+		if (report && report.anyAvailable === false) {
+			showWarningMessage("No regulatory model can be run here", {
+				text: "This server has neither the Rust engine nor the R MORE " +
+				      "package installed, so a regulatory analysis cannot be " +
+				      "started. Please contact the administrator.",
+				logMessage: "GET /more_backends reported no available engine."
+			});
+		}
+	}
+
+	if (MORE_BACKENDS !== null) { fill(MORE_BACKENDS); return; }
+	if (_moreBackendsRequest === null) {
+		/* Derived when the constant is absent rather than depending on it.
+		   ServerConfiguration.js is one of the twelve hand-versioned scripts,
+		   so a returning browser can hold a cached copy for up to 12 hours
+		   after this view starts calling the route -- which is the exact
+		   failure test_versioned_assets_are_bumped exists to catch, and the
+		   one case where being defensive costs a line and saves a support
+		   ticket. Both forms produce the same URL. */
+		var url = (typeof SERVER_URL_MORE_BACKENDS !== "undefined")
+			? SERVER_URL_MORE_BACKENDS
+			: SERVER_URL + "more_backends";
+		_moreBackendsRequest = $.ajax({type: "GET", url: url, dataType: "json"});
+	}
+	_moreBackendsRequest.done(function(response) {
+		if (response && response.success === true && response.engines) {
+			MORE_BACKENDS = response;
+		}
+		fill(MORE_BACKENDS);
+	}).fail(function() {
+		fill(null);
+	});
+}
 
 /* Runs `callback(info)` once the provider description is known, immediately if
    it already is. Never calls back on failure: the fallback copy is what the

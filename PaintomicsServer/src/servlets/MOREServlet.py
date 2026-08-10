@@ -76,12 +76,108 @@ def _discoverMoreRs():
     return shutil.which("more-rs") or ""
 
 
-def _resolveMOREBackend(method, rScript, binaryPath=None):
+# The three ways a MORE analysis can be run, in the order the interface offers
+# them. Two axes -- the statistical method and the implementation -- collapsed
+# into one choice, because the pairing is not free: the port implements PLS1
+# for our purposes and R owns MLR, so a method/engine grid would have a cell in
+# it that cannot be run and would have to be explained.
+#
+# `id` is the wire value and the provenance stamp. `method` is what reaches
+# --method on either backend; `engine` is which backend.
+MORE_ENGINES = [
+    {
+        "id": "rust-pls1",
+        "method": "PLS1",
+        "engine": "rust",
+        "label": "PLS1 — Rust engine (recommended)",
+        "detail": ("The same model as the R engine, reimplemented. Measured "
+                   "byte-identical to R on the bundled real dataset and "
+                   "several hundred times faster, which is what makes it the "
+                   "default rather than an option."),
+    },
+    {
+        "id": "r-pls1",
+        "method": "PLS1",
+        "engine": "r",
+        "label": "PLS1 — R engine (reference)",
+        "detail": ("The original MORE R package. Same answers as the Rust "
+                   "engine and far slower; choose it to reproduce a published "
+                   "run against the reference implementation."),
+    },
+    {
+        "id": "r-mlr",
+        "method": "MLR",
+        "engine": "r",
+        "label": "MLR — R engine",
+        # Every clause here was read out of the MORE sources rather than
+        # recalled: the random representative is `sample(correlacionados, 1)`
+        # at MORE_MLR.R:811, :860 and :1049; the single `coefficient` column is
+        # built at :689-691, against MORE_PLS.R:599 which builds `coefficient`
+        # AND `pvalue`; and `grep -rn 'step(\|stepAIC\|regsubsets' MORE/R` is
+        # empty, so nothing here may describe MLR as stepwise however natural
+        # that assumption is.
+        #
+        # The last point is why this option is listed third rather than second.
+        # The usual reason given for choosing MLR is that it returns real
+        # p-values. In MORE it does not.
+        "detail": ("Elastic-net multiple linear regression. Slower than PLS1 "
+                   "and harder to reproduce: correlated regulators are "
+                   "collapsed into a group and one member is chosen at random "
+                   "to represent it, so re-running the same job can credit a "
+                   "different regulator. It also reports coefficients without "
+                   "p-values — selection is shrinkage alone — which is why the "
+                   "alpha and VIP thresholds do not apply. Prefer PLS1 unless "
+                   "you have many more samples than candidate regulators per "
+                   "gene."),
+    },
+]
+
+DEFAULT_MORE_ENGINE = "rust-pls1"
+
+# What a job gets when it names no engine at all -- an older client, a stored
+# job predating the choice, or a scripted POST. Not the same thing as
+# DEFAULT_MORE_ENGINE: "auto" preserves the behaviour those callers were
+# written against, which is "PLS1 goes to the port when one is installed".
+AUTO_ENGINE = "auto"
+
+
+def engineIdFor(method, engine=None):
+    """The catalogue id a (method, engine) pair resolves to.
+
+    `auto` and unknown engines resolve by method, which is what keeps a request
+    that predates this choice working. Returns None for a method the catalogue
+    does not cover, so callers can tell "not offered" from "offered but
+    unavailable" rather than inventing an id for it.
+    """
+    normalised = (engine or AUTO_ENGINE).strip().lower()
+    if normalised in ("", AUTO_ENGINE):
+        normalised = "rust" if method == "PLS1" else "r"
+    for entry in MORE_ENGINES:
+        if entry["method"] == method and entry["engine"] == normalised:
+            return entry["id"]
+    # A recognised method with an engine that cannot run it -- MLR on the port
+    # is the only case -- falls back to the engine that can.
+    for entry in MORE_ENGINES:
+        if entry["method"] == method:
+            return entry["id"]
+    return None
+
+
+def _resolveMOREBackend(method, rScript, binaryPath=None, engine=None):
     """Return the argv prefix that runs MORE for ``method``.
 
     Two engines sit behind one CLI, and which one a job gets is decided here.
-    **PLS1 runs on ``more-rs``, the Rust port, whenever a usable binary can be
-    found**; everything else runs ``Rscript runMORE.R``, still the reference.
+    ``engine`` is the user's explicit choice -- ``"rust"``, ``"r"``, or
+    ``"auto"``/``None`` for the historical behaviour, under which **PLS1 runs
+    on ``more-rs``, the Rust port, whenever a usable binary can be found** and
+    everything else runs ``Rscript runMORE.R``.
+
+    An explicit choice is honoured wherever it can be: ``"r"`` always gets R,
+    and ``"rust"`` gets the port for PLS1. Where it cannot be honoured the job
+    still runs, on R, with a warning -- a stale client asking for an engine
+    this host does not have should get the reference answer slowly rather than
+    an error, and the interface refuses such a request up front anyway (see
+    `engineRefusal`) so this path is the belt to that's braces.
 
     Why PLS1 can be switched silently and MLR cannot
     ------------------------------------------------
@@ -123,8 +219,21 @@ def _resolveMOREBackend(method, rScript, binaryPath=None):
     if binaryPath is None:
         binaryPath = MORE_RS_BINARY
 
+    wanted = (engine or AUTO_ENGINE).strip().lower() or AUTO_ENGINE
+    if wanted == "r":
+        # An explicit request for the reference implementation. It outranks the
+        # discovery below AND the `off` switch is irrelevant to it, because
+        # both of those exist to answer "should the port be used", which this
+        # has already answered.
+        return ["Rscript", rScript]
+
     configured = (binaryPath or "").strip()
     if configured.lower() in MORE_RS_OFF:
+        if wanted == "rust":
+            logging.warning(
+                "MORE: the Rust engine was requested but PAINTOMICS_MORE_RS is "
+                "set to %r, which disables it; running Rscript runMORE.R.",
+                configured)
         return ["Rscript", rScript]
 
     # Exact match. The port is stricter than R about this string -- `pls1` and
@@ -134,7 +243,8 @@ def _resolveMOREBackend(method, rScript, binaryPath=None):
     if method == "PLS1":
         # Blank means "go and find one", not "use R". Only an explicit path is
         # worth warning about when it fails to resolve -- a host with no binary
-        # at all is the ordinary case and has to stay quiet.
+        # at all is the ordinary case and has to stay quiet, unless the engine
+        # was asked for by name, in which case silence would be a lie.
         if configured:
             if os.path.isfile(configured) and os.access(configured, os.X_OK):
                 return [configured]
@@ -145,8 +255,165 @@ def _resolveMOREBackend(method, rScript, binaryPath=None):
             discovered = _discoverMoreRs()
             if discovered:
                 return [discovered]
+            if wanted == "rust":
+                logging.warning(
+                    "MORE: the Rust engine was requested but no more-rs binary "
+                    "is installed; falling back to Rscript runMORE.R.")
+    elif wanted == "rust":
+        logging.warning(
+            "MORE: the Rust engine was requested for method %r, which only the "
+            "R implementation covers here; running Rscript runMORE.R.", method)
 
     return ["Rscript", rScript]
+
+
+# ---------------------------------------------------------------------------
+# Which engines this host can actually run
+# ---------------------------------------------------------------------------
+
+# Memoised probe result. R startup alone is several hundred milliseconds to a
+# second and this sits on the request path, so it is answered once per process.
+_R_PROBE = None
+
+# What the probe asks R. `requireNamespace("MORE")` is enough to cover the
+# Bioconductor stack: glmnet and ropls are hard Imports of MORE, so the call
+# fails transitively when either is missing and there is no need to enumerate
+# them. optparse is asked separately because runMORE.R uses it for its own CLI
+# and MORE does not import it -- optparse can be absent while MORE is fine.
+_R_PROBE_SCRIPT = ('cat(requireNamespace("MORE", quietly=TRUE),'
+                   ' requireNamespace("optparse", quietly=TRUE))')
+
+
+def probeR(refresh=False):
+    """Whether `Rscript runMORE.R` could actually run here.
+
+    Probes the **packages**, not the interpreter, and that distinction is the
+    whole value of this function. The deployed image carries `/usr/bin/Rscript`
+    and none of MORE, optparse, ropls or glmnet -- so `shutil.which("Rscript")`
+    returns a path there and a check built on it concludes the R engine is
+    available, lets the job through, and it dies deep in the run. That is the
+    exact failure this is meant to prevent, wearing the disguise of a working
+    guard.
+
+    Returns a dict; never raises. A host where R cannot be probed at all is
+    reported as unavailable, which is the safe direction: the worst outcome is
+    refusing a job that would have worked, and the user is told why.
+    """
+    global _R_PROBE
+    if _R_PROBE is not None and not refresh:
+        return _R_PROBE
+
+    result = {"rscript": shutil.which("Rscript") or "",
+              "more": False, "optparse": False, "error": ""}
+    if result["rscript"]:
+        try:
+            completed = subprocess.run(
+                [result["rscript"], "--vanilla", "-e", _R_PROBE_SCRIPT],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=60)
+            answer = completed.stdout.decode("utf-8", "replace").split()
+            result["more"] = "TRUE" in answer[:1]
+            result["optparse"] = "TRUE" in answer[1:2]
+            if not (result["more"] and result["optparse"]):
+                result["error"] = (completed.stderr.decode("utf-8", "replace")
+                                   .strip()[:400])
+        except Exception as error:                        # noqa: BLE001
+            # Timeout, OSError, a shell that is not really Rscript. Any of them
+            # means the same thing operationally.
+            result["error"] = "%s: %s" % (type(error).__name__, error)
+    else:
+        result["error"] = "Rscript is not on PATH"
+
+    _R_PROBE = result
+    logging.info("MORE: R backend probe -- Rscript=%r MORE=%s optparse=%s%s",
+                 result["rscript"], result["more"], result["optparse"],
+                 (" (%s)" % result["error"]) if result["error"] else "")
+    return result
+
+
+def _rustBinary():
+    """The more-rs this host would use, or "" -- the same choice a job makes."""
+    configured = (MORE_RS_BINARY or "").strip()
+    if configured.lower() in MORE_RS_OFF:
+        return ""
+    if configured:
+        return configured if (os.path.isfile(configured)
+                              and os.access(configured, os.X_OK)) else ""
+    return _discoverMoreRs()
+
+
+def describeMOREBackends(refresh=False):
+    """The catalogue, with each entry marked available or not and why.
+
+    Served to the browser so the engine picker can disable what this host
+    cannot run, *and* consulted at submission so the refusal and the picker
+    cannot disagree -- one function, two callers, no second opinion to drift.
+
+    `default` names the first available entry rather than always `rust-pls1`:
+    on a host with no binary the picker must still open on something runnable.
+    It is None when nothing is available at all, which is a real state (a
+    deployment with neither the binary nor the R packages) and one the client
+    has to be able to render.
+    """
+    binary = _rustBinary()
+    r = probeR(refresh=refresh)
+
+    engines = []
+    for entry in MORE_ENGINES:
+        available, reason = True, ""
+        if entry["engine"] == "rust":
+            if not binary:
+                available, reason = False, (
+                    "This server has no more-rs binary installed.")
+        elif not r["rscript"]:
+            available, reason = False, "This server has no R installation."
+        elif not r["more"]:
+            available, reason = False, (
+                "R is installed but the MORE package is not, so the R engines "
+                "cannot run here.")
+        elif not r["optparse"]:
+            available, reason = False, (
+                "R and MORE are installed but the optparse package is not, "
+                "which runMORE.R needs for its own arguments.")
+        engines.append(dict(entry, available=available, unavailableReason=reason))
+
+    firstAvailable = next((e["id"] for e in engines if e["available"]), None)
+    return {
+        "engines": engines,
+        "default": (DEFAULT_MORE_ENGINE
+                    if any(e["id"] == DEFAULT_MORE_ENGINE and e["available"]
+                           for e in engines)
+                    else firstAvailable),
+        "anyAvailable": firstAvailable is not None,
+    }
+
+
+def engineRefusal(method, engine):
+    """``None`` if this engine may be submitted, else why it may not.
+
+    Hiding an option in the dropdown is necessary and not sufficient: a stale
+    client, a resubmitted job or a scripted POST still reaches here, and
+    without this the request spawns Rscript on a host with no MORE and fails
+    deep in the job with whatever that produces. Same move, and the same
+    reasoning, as refusing an AI job up front when the server has no LLM token.
+    """
+    wanted = engineIdFor(method, engine)
+    if wanted is None:
+        return ("'%s' is not a regulatory model this server offers." % method)
+
+    report = describeMOREBackends()
+    for entry in report["engines"]:
+        if entry["id"] != wanted:
+            continue
+        if entry["available"]:
+            return None
+        alternatives = [e["label"] for e in report["engines"] if e["available"]]
+        message = "%s is not available on this server. %s" % (
+            entry["label"], entry["unavailableReason"])
+        return message + (
+            " Available instead: %s." % ", ".join(alternatives) if alternatives
+            else " No regulatory model can be run here; please contact the "
+                 "administrator.")
+    return None
 
 
 def _moreRScript():
@@ -159,15 +426,22 @@ def _moreRScript():
         os.path.dirname(__file__), "..", "common", "bioscripts", "runMORE.R"))
 
 
-def _engineFor(method):
+def _engineFor(method, engine=None):
     """"r" or "rust": which binary ``method`` will actually run on.
 
     The cost model needs this, not just the method. R and the port differ by
     ~700x on PLS1, so an estimate that ignored the engine would either refuse
     every large job on a host that could do it in seconds, or wave through
     every large job on a host that cannot.
+
+    ``engine`` has to be threaded through rather than left to resolve under
+    `auto`, and the reason is worth stating because the omission is invisible:
+    `auto` sends PLS1 to the port, so a user who explicitly picks the **R**
+    PLS1 engine -- the option whose entire purpose is to be slow -- would be
+    costed on the port's constant, roughly 660x under, and the guard would wave
+    through a job it exists to refuse.
     """
-    backend = _resolveMOREBackend(method, _moreRScript())
+    backend = _resolveMOREBackend(method, _moreRScript(), engine=engine)
     return "r" if backend[0] == "Rscript" else "rust"
 
 
@@ -191,7 +465,12 @@ def _runtimeRefusal(jobInstance):
             jobInstance.targetExpressionFile,
             jobInstance.conditionsFile,
             jobInstance.regulatoryOmics)
-        engine = _engineFor(jobInstance.method)
+        # getattr, not attribute access: MOREJob gained `engine` after this
+        # guard was written, and a job restored from Mongo that predates it has
+        # no such key. The guard fails open, so a bare access would disable it
+        # silently rather than crash -- the worst of both.
+        engine = _engineFor(jobInstance.method,
+                            getattr(jobInstance, "engine", None))
         refusal = MORECostModel.checkBudget(
             shape, jobInstance.method, engine, MORE_RUNTIME_BUDGET_SECONDS)
         logging.info(
@@ -286,6 +565,30 @@ def _nonEmpty(rawValue, default):
     return text or default
 
 
+def _applyEngineChoice(jobInstance, formFields):
+    """Record the picked engine on the job; return a refusal, or None.
+
+    The form posts a single catalogue id (`more_engine`), because method and
+    implementation are one choice to the person making it. `more_method` is
+    still read -- and still authoritative when no engine is named -- so a
+    client that predates the picker keeps working unchanged.
+
+    Both branches of STEP1 call this, uploads and examples alike. The example
+    is not exempt: its manifest names PLS1, and someone who has just selected
+    the MLR engine and then loads the example means to run MLR on it.
+    """
+    entry = next((e for e in MORE_ENGINES
+                  if e["id"] == _nonEmpty(formFields.get("more_engine"), "")),
+                 None)
+    if entry is None:
+        jobInstance.engine = AUTO_ENGINE
+    else:
+        jobInstance.method = entry["method"]
+        jobInstance.engine = entry["engine"]
+
+    return engineRefusal(jobInstance.method, jobInstance.engine)
+
+
 def fromMOREtoGenes_STEP1(REQUEST, RESPONSE, QUEUE_INSTANCE, JOB_ID,
                           EXAMPLE_FILES_DIR="", exampleMode=False):
     """
@@ -337,6 +640,13 @@ def fromMOREtoGenes_STEP1(REQUEST, RESPONSE, QUEUE_INSTANCE, JOB_ID,
                     EXAMPLE_FILES_DIR, "more"))
             logging.info("MORE_STEP1 - EXAMPLE '%s' REGISTERED (%d regulatory omics)",
                          scenario["id"], len(jobInstance.regulatoryOmics))
+
+            # After the scenario, so an explicit engine choice outranks the
+            # manifest's method -- see _applyEngineChoice.
+            refusal = _applyEngineChoice(jobInstance, formFields)
+            if refusal:
+                RESPONSE.setContent({"success": False, "message": refusal})
+                return RESPONSE
 
             # Checked for the example too. The bundled scenarios are sized to
             # pass, so this should never fire -- which is the point: if a
@@ -427,7 +737,14 @@ def fromMOREtoGenes_STEP1(REQUEST, RESPONSE, QUEUE_INSTANCE, JOB_ID,
         jobInstance.filter_r2 = _toFloat(formFields.get("more_filter_r2"), 0.0)
         jobInstance.enrichment = _nonEmpty(formFields.get("more_enrichment"), "genes")
 
-        # 7. Refuse a job that cannot finish inside the queue's timeout.
+        # 7. Refuse an engine this host cannot run, before the runtime guard --
+        # which needs to know the engine to cost the job at all.
+        refusal = _applyEngineChoice(jobInstance, formFields)
+        if refusal:
+            RESPONSE.setContent({"success": False, "message": refusal})
+            return RESPONSE
+
+        # 8. Refuse a job that cannot finish inside the queue's timeout.
         #
         # This has to come after the model parameters are read, because the
         # estimate depends on the method: PLS1 may route to more-rs and be
@@ -438,7 +755,7 @@ def fromMOREtoGenes_STEP1(REQUEST, RESPONSE, QUEUE_INSTANCE, JOB_ID,
             RESPONSE.setContent({"success": False, "message": refusal})
             return RESPONSE
 
-        # 8. Queue job
+        # 9. Queue job
         QUEUE_INSTANCE.enqueue(
             fn=fromMOREtoGenes_STEP2,
             args=(jobInstance, userID, RESPONSE, formFields),
@@ -576,12 +893,23 @@ def fromMOREtoGenes_STEP2(jobInstance, userID, RESPONSE, formFields):
                 "The MORE analysis script is missing from this installation "
                 "(expected at %s)." % r_script)
 
-        # PLS1 may run on the Rust port when one is installed; MLR and every
-        # other method always go to R. Both take the argument vector below
-        # unchanged -- more-rs mirrors runMORE.R's optparse surface option for
-        # option, which is what makes the two interchangeable here.
-        backend = _resolveMOREBackend(jobInstance.method, r_script)
+        # The engine the user picked, or -- for a job that named none, which is
+        # any job predating the picker -- whichever `auto` resolves to. Both
+        # backends take the argument vector below unchanged: more-rs mirrors
+        # runMORE.R's optparse surface option for option, which is what makes
+        # them interchangeable here.
+        #
+        # getattr, because a job restored from Mongo that predates the picker
+        # carries no `engine` key and must still run.
+        chosenEngine = getattr(jobInstance, "engine", None)
+        backend = _resolveMOREBackend(jobInstance.method, r_script,
+                                      engine=chosenEngine)
         backendName = "R" if backend[0] == "Rscript" else "more-rs"
+        # Stamped on the job so the result carries its own provenance: two
+        # engines that agree today can diverge, and a stored analysis that
+        # cannot say which one produced it is not reproducible.
+        jobInstance.backendUsed = backendName
+        jobInstance.engineId = engineIdFor(jobInstance.method, chosenEngine)
         cmd = backend + [
             "--target_file", os.path.join(input_dir, target_file),
             "--condition_file", os.path.join(input_dir, jobInstance.conditionsFile),

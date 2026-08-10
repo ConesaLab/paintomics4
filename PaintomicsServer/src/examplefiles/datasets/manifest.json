@@ -688,6 +688,82 @@
         "Correlation filtering across a large prediction table"
       ],
       "title": "STATegra \u2014 miRNA to genes (real)"
+    },
+    {
+      "conditions": [
+        "Ctr_0H",
+        "Ctr_2H",
+        "Ctr_6H",
+        "Ctr_12H",
+        "Ctr_18H",
+        "Ctr_24H",
+        "Ik_0H",
+        "Ik_2H",
+        "Ik_6H",
+        "Ik_12H",
+        "Ik_18H",
+        "Ik_24H"
+      ],
+      "databases": [
+        "KEGG"
+      ],
+      "design": {
+        "dataFile": "datasets/11-stategra-more/data/experimental_design.tab"
+      },
+      "expected": {
+        "associations": 17669,
+        "enginesAgree": "rust-pls1 and r-pls1 byte-identical on all four output files",
+        "flaggedRegulators": 176,
+        "flaggedRule": "one-way ANOVA across the 12 groups, Benjamini-Hochberg FDR < 0.01, and at least a two-fold range between group means",
+        "measuredRuntimeSeconds": {
+          "r-pls1": 366.8,
+          "rust-pls1": 0.8
+        },
+        "note": "Matched-pathway counts differ between KEGG snapshots (888/44 on the deploy VM vs 877/41 locally for the same job), so none are asserted.",
+        "regulators": 307,
+        "source": {
+          "expression": "GEO GSE75417 (STATegra RNA-seq, CQN + ComBat)",
+          "network": "TFLink v1.0, Mus musculus, All simple format",
+          "subsample": "uniform random, seed 20260811, from the 9,835 targets carrying at least one association"
+        },
+        "targets": 600
+      },
+      "id": "stategra-more",
+      "omics": [
+        {
+          "associationsFile": "datasets/11-stategra-more/data/transcription_factor_associations.tab",
+          "dataFile": "datasets/11-stategra-more/data/transcription_factor_regulators.tab",
+          "minVariation": "NA",
+          "omicName": "Transcription factor",
+          "omicType": "regulator",
+          "relevantFile": "datasets/11-stategra-more/data/transcription_factor_relevant_regulators.tab"
+        }
+      ],
+      "order": 11,
+      "organism": "mmu",
+      "parameters": {
+        "alpha": 0.05,
+        "enrichment": "genes",
+        "filter_r2": 0.0,
+        "method": "PLS1",
+        "vip": 0.8
+      },
+      "pipeline": "more",
+      "references": [],
+      "simulated": false,
+      "summary": "A uniform random subsample of the STATegra Ikaros induction time course (GSE75417) with the TFLink v1.0 mouse regulatory network: 600 genes, 36 samples, 12 groups, and every curated TF that regulates one of them. Real measurements with no planted signal, which is what separates it from the simulated MORE example.",
+      "target": {
+        "dataFile": "datasets/11-stategra-more/data/gene_expression_targets.tab",
+        "omicName": "Gene expression"
+      },
+      "tests": [
+        "MORE on real per-sample data",
+        "All three regulatory engines (Rust PLS1, R PLS1, R MLR)",
+        "12-group experimental design",
+        "Automatic minVariation threshold",
+        "GENE:::REGULATOR hand-off to pathway analysis"
+      ],
+      "title": "STATegra \u2014 real expression against a real TF network (MORE)"
     }
   ],
   "seed": 20260809,

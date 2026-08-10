@@ -35,7 +35,7 @@ from src.servlets.DataManagementServlet import *
 from src.servlets.UserManagementServlet import *
 from src.servlets.Bed2GenesServlet import *
 from src.servlets.MiRNA2GenesServlet import *
-from src.servlets.MOREServlet import fromMOREtoGenes_STEP1
+from src.servlets.MOREServlet import fromMOREtoGenes_STEP1, describeMOREBackends
 from src.servlets.AdminServlet import *
 from src.servlets.AIInterpretServlet import *
 from src.common.LoggingSetup import configureLogging
@@ -602,6 +602,19 @@ class Application(object):
         def fromMOREtoGenesHandler(exampleMode=False):
             result = fromMOREtoGenes_STEP1(request, Response(), self.queue, self.generateRandomID(), self.EXAMPLE_FILES_DIR, exampleMode).getResponse()
             return result
+
+        # Which regulatory engines this host can actually run, so the picker
+        # can disable what is not installed and say why instead of offering a
+        # choice that fails deep inside the job.
+        #
+        # GET and unauthenticated, like /organism_databases and /ai_provider:
+        # it states a fact about the server's own installation, carries no
+        # secret beyond a binary path the operator configured, and the form
+        # renders before anyone has a session.
+        @self.app.route(SERVER_SUBDOMAIN + '/more_backends', methods=['OPTIONS', 'GET'])
+        def moreBackendsHandler():
+            return Response().setContent(
+                dict({"success": True}, **describeMOREBackends())).getResponse()
         #*******************************************************************************************
         ##* ALTERNATIVE PIPELINES SERVLETS HANDLERS - END
         #############################################################################################
