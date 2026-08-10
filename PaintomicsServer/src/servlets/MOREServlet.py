@@ -14,6 +14,7 @@ from src.common.JobInformationManager import JobInformationManager
 from src.servlets.DataManagementServlet import saveFile
 from src.common.Util import ensure_utf8
 from src.common.ServerErrorManager import handleException
+from src.common import ExampleDatasets
 from src.conf.serverconf import CLIENT_TMP_DIR, ROOT_DIRECTORY
 
 def _toFloat(rawValue, default):
@@ -94,13 +95,30 @@ def _nonEmpty(rawValue, default):
     return text or default
 
 
-def fromMOREtoGenes_STEP1(REQUEST, RESPONSE, QUEUE_INSTANCE, JOB_ID):
+def fromMOREtoGenes_STEP1(REQUEST, RESPONSE, QUEUE_INSTANCE, JOB_ID,
+                          EXAMPLE_FILES_DIR="", exampleMode=False):
     """
     Step 1: Receive the MORE submission form, save files, and initialize the job.
     JOB_ID is a randomly generated ID for this pre-processing job.
+
+    MORE is the one entry point that never had an example. Its inputs are also
+    the ones a user is least likely to get right unaided -- a per-sample matrix
+    rather than the log ratios every other omic takes, plus a numeric design
+    matrix and an association file per regulatory omic -- so having one to load
+    matters more here than anywhere else.
     """
     jobInstance = None
     userID = None
+
+    isExampleRequest, scenarioId = ExampleDatasets.scenarioIdFromMode(exampleMode)
+    if isExampleRequest is None:
+        RESPONSE.setContent({
+            "success": False,
+            "message": ("Unrecognised example mode %r for MORE: expected no "
+                        "value for an upload, 'example' for the default "
+                        "dataset, or 'example/<dataset-id>' for a specific one."
+                        % (exampleMode,))})
+        return RESPONSE
 
     try:
         # 1. Validate User
@@ -115,6 +133,27 @@ def fromMOREtoGenes_STEP1(REQUEST, RESPONSE, QUEUE_INSTANCE, JOB_ID):
 
         formFields = REQUEST.form
         uploadedFiles = REQUEST.files
+
+        if isExampleRequest:
+            # Everything below -- target file, design file, the omic_name_N
+            # loop, the model parameters -- comes from the manifest instead.
+            # Paths are absolute, which STEP2's os.path.join against the job's
+            # input directory passes through unchanged, so the bundled files are
+            # read where they lie rather than copied per job.
+            scenario = ExampleDatasets.applyMoreScenario(
+                jobInstance, EXAMPLE_FILES_DIR,
+                scenarioId or ExampleDatasets.defaultScenarioFor(
+                    EXAMPLE_FILES_DIR, "more"))
+            logging.info("MORE_STEP1 - EXAMPLE '%s' REGISTERED (%d regulatory omics)",
+                         scenario["id"], len(jobInstance.regulatoryOmics))
+
+            QUEUE_INSTANCE.enqueue(
+                fn=fromMOREtoGenes_STEP2,
+                args=(jobInstance, userID, RESPONSE, formFields),
+                timeout=1800,
+                job_id=JOB_ID)
+            RESPONSE.setContent({"success": True, "jobID": JOB_ID})
+            return RESPONSE
 
         # 3. Save Gene Expression Dataset
         rnaseq_file = uploadedFiles.get("rnaseqaux_file")
@@ -305,10 +344,28 @@ def fromMOREtoGenes_STEP2(jobInstance, userID, RESPONSE, formFields):
                     f"{label} file could not be read: {encodingError}.")
 
         # 2. Prepare Command
-        # Derive server root from CLIENT_TMP_DIR, which is always an absolute path in serverconf.
-        server_root = os.path.dirname(CLIENT_TMP_DIR.rstrip('/'))
-        r_script = os.path.join(server_root, "src", "common", "bioscripts", "runMORE.R")
-        
+        #
+        # The R script is part of the source tree and lives two directories up
+        # from this module, so that is where it is looked for.
+        #
+        # It used to be derived from CLIENT_TMP_DIR:
+        #     server_root = os.path.dirname(CLIENT_TMP_DIR.rstrip('/'))
+        # which silently assumes the *data* directory is a sibling of `src/`.
+        # That is false in the documented development layout, where the code is
+        # in .../paintomics4/PaintomicsServer and CLIENT_TMP_DIR points at
+        # .../paintomics4_data/CLIENT_TMP/. The path then resolved to
+        # .../paintomics4_data/src/common/bioscripts/runMORE.R, which does not
+        # exist -- and `Rscript <missing file>` exits 2 printing nothing, so the
+        # job failed with "R Script failed with exit code 2. Output:" and no
+        # indication that the script itself was never found.
+        r_script = os.path.abspath(os.path.join(
+            os.path.dirname(__file__), "..", "common", "bioscripts", "runMORE.R"))
+
+        if not os.path.isfile(r_script):
+            raise ValueError(
+                "The MORE analysis script is missing from this installation "
+                "(expected at %s)." % r_script)
+
         cmd = [
             "Rscript", r_script,
             "--target_file", os.path.join(input_dir, target_file),
@@ -387,6 +444,19 @@ def fromMOREtoGenes_STEP2(jobInstance, userID, RESPONSE, formFields):
                 # Expand those IDs to all GENE:::REGULATOR pairs present in the values file
                 # (regardless of MORE significance) so that any gene regulated by a
                 # user-flagged TF gets a red star.
+                #
+                # "Regardless of MORE significance" is deliberate and was
+                # re-examined when the bundled MORE example came back with 90.4%
+                # of its modelled genes starred and no pathway enrichment left.
+                # Measured on that run: intersecting this expansion with MORE's
+                # own significant pairs would have moved 90.4% to 61.0%, still
+                # far too high to enrich against -- so the flood was the shape
+                # of that dataset (every modelled gene inside the declared
+                # target pathways, half the regulators flagged, candidates drawn
+                # uniformly), not this rule, and the dataset is what was fixed.
+                # Intersecting here would also break the contract this file
+                # shares with MiRNA2GeneJob, where a red star means "the user
+                # called this regulator relevant" and not "the model agreed".
                 relevant_tfs = _parseRelevantRegulators(user_rel_file)
 
                 values_src = os.path.join(output_dir, out_file_name)

@@ -24,6 +24,7 @@ from src.classes.JobInstances.Bed2GeneJob import Bed2GeneJob
 from src.common.UserSessionManager import UserSessionManager
 from src.common.JobInformationManager import JobInformationManager
 from src.common.ServerErrorManager import handleException
+from src.common import ExampleDatasets
 
 from src.conf.serverconf import CLIENT_TMP_DIR
 
@@ -58,6 +59,8 @@ def fromBEDtoGenes_STEP1(REQUEST, RESPONSE, QUEUE_INSTANCE, JOB_ID, EXAMPLE_FILE
     jobInstance = None
     userID= None
 
+    isExampleRequest, scenarioId = ExampleDatasets.scenarioIdFromMode(exampleMode)
+
     try :
         #****************************************************************
         # Step 1. CHECK IF VALID USER SESSION
@@ -79,7 +82,7 @@ def fromBEDtoGenes_STEP1(REQUEST, RESPONSE, QUEUE_INSTANCE, JOB_ID, EXAMPLE_FILE
         #****************************************************************
         formFields   = REQUEST.form
 
-        if(exampleMode == False):
+        if isExampleRequest is False:
             logging.info("STEP1 - FILE UPLOADING REQUEST RECEIVED")
             uploadedFiles  = REQUEST.files
 
@@ -87,33 +90,30 @@ def fromBEDtoGenes_STEP1(REQUEST, RESPONSE, QUEUE_INSTANCE, JOB_ID, EXAMPLE_FILE
             JobInformationManager().saveFiles(uploadedFiles, formFields, userID, jobInstance, CLIENT_TMP_DIR,  EXAMPLE_FILES_DIR)
             logging.info("STEP1 - READING FILES....DONE")
 
-        elif(exampleMode == "example"):
+        elif isExampleRequest:
             #****************************************************************
-            # Step 2.SAVE THE UPLOADED FILES
+            # Step 2.REGISTER THE BUNDLED EXAMPLE FILES
             #****************************************************************
-            logging.info("STEP1 - EXAMPLE MODE SELECTED")
-            logging.info("STEP1 - COPYING FILES....")
-
-            exampleOmics = ["DNase unmapped"]
-            for omicName in exampleOmics:
-                dataFileName = omicName.replace(" ", "_").lower() + "_values.tab"
-                logging.info("STEP1 - USING ALREADY SUBMITTED FILE (data file) " + EXAMPLE_FILES_DIR + dataFileName + " FOR  " + omicName)
-                relevantFileName =omicName.replace(" ", "_").lower() + "_relevant.tab"
-                logging.info("STEP1 - USING ALREADY SUBMITTED FILE (relevant features file) " + EXAMPLE_FILES_DIR + relevantFileName + " FOR  " + omicName)
-
-                jobInstance.addGeneBasedInputOmic({"omicName": omicName, "inputDataFile": EXAMPLE_FILES_DIR + dataFileName, "relevantFeaturesFile": EXAMPLE_FILES_DIR + relevantFileName,  "isExample" : True})
-
-                jobInstance.addReferenceInput({"omicName": omicName, "fileType":  "Reference file", "inputDataFile": EXAMPLE_FILES_DIR + "GTF/sorted_mmu.gtf"})
-
-            specie = "mmu"
-            jobInstance.setOrganism(specie)
+            # The manifest decides which files these are. Note that the real
+            # STATegra region example needs the full mouse GTF, which a fresh
+            # checkout does not have -- applyScenario refuses it with a readable
+            # message, and the simulated `region-based` scenario, which carries
+            # its own annotation, works everywhere.
+            logging.info("STEP1 - EXAMPLE MODE SELECTED (scenario: %s)",
+                         scenarioId or "default")
+            scenario = ExampleDatasets.applyScenario(
+                jobInstance, EXAMPLE_FILES_DIR,
+                scenarioId or ExampleDatasets.defaultScenarioFor(
+                    EXAMPLE_FILES_DIR, "regions2genes"))
+            logging.info("STEP1 - EXAMPLE '%s' REGISTERED", scenario["id"])
         else:
             # `raise NotImplementedError` on its own has an empty str(), and
             # handleException formats the reply as "ERROR MESSAGE: " + str(ex),
             # so the user was shown a dialog with nothing after the colon.
             raise NotImplementedError(
                 "Unrecognised example mode %r for Regions2Genes: expected no "
-                "value for an upload, or 'example' for the bundled dataset."
+                "value for an upload, 'example' for the default dataset, or "
+                "'example/<dataset-id>' for a specific one."
                 % (exampleMode,))
 
         #****************************************************************
@@ -169,7 +169,7 @@ def fromBEDtoGenes_STEP1(REQUEST, RESPONSE, QUEUE_INSTANCE, JOB_ID, EXAMPLE_FILE
         #************************************************************************
         QUEUE_INSTANCE.enqueue(
             fn=fromBEDtoGenes_STEP2,
-            args=(jobInstance, userID, exampleMode, RESPONSE),
+            args=(jobInstance, userID, bool(isExampleRequest), RESPONSE),
             timeout=600,
             job_id= JOB_ID
         )

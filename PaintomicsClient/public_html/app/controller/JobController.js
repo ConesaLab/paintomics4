@@ -39,6 +39,25 @@
 *  - getCredentialsParams
 *
 */
+/**
+* Appends the chosen example dataset to an "/example" URL.
+*
+* The routes are declared with Flask's <path:> converter, so an extra segment
+* needs no new endpoint: "pa_step1/example" and "pa_step1/example/region-based"
+* both reach the same handler. A null id keeps the bare URL, which the server
+* resolves to that pipeline's default -- so the old behaviour is what happens
+* when nothing was chosen.
+*
+* @param {string} exampleURL a URL already ending in "/example"
+* @param {PA_Step1JobView} jobView
+* @returns {string}
+*/
+function withExampleScenario(exampleURL, jobView) {
+	var scenarioId = (jobView && jobView.getExampleScenarioId)
+		? jobView.getExampleScenarioId() : null;
+	return scenarioId ? exampleURL + "/" + encodeURIComponent(scenarioId) : exampleURL;
+}
+
 function JobController() {
 	/**
 	*
@@ -120,8 +139,9 @@ function JobController() {
 			var moreURL = SERVER_URL_DM_FROMMORE2GENES;
 
 			if (jobView.isExampleMode() === true) {
-				regionURL = SERVER_URL_DM_EXAMPLE_FROMBED2GENES;
-				miRNAURL = SERVER_URL_DM_EXAMPLE_FROMMIRNA2GENES;
+				regionURL = withExampleScenario(SERVER_URL_DM_EXAMPLE_FROMBED2GENES, jobView);
+				miRNAURL = withExampleScenario(SERVER_URL_DM_EXAMPLE_FROMMIRNA2GENES, jobView);
+				moreURL = withExampleScenario(SERVER_URL_DM_EXAMPLE_FROMMORE2GENES, jobView);
 			}
 
 			/**
@@ -298,8 +318,14 @@ function JobController() {
 	************************************************************/
 	this.step1OnFormSubmitHandler = function (jobView) {
 		var URL = SERVER_URL_PA_STEP1;
-		if (jobView.isExampleMode() === true) {
-			URL = SERVER_URL_PA_EXAMPLE_STEP1;
+		// Only a pathway-acquisition example submits step 1 as an example. The
+		// pre-processing pipelines (regions2genes, mirna2genes, more) have
+		// already run by this point and written real files into the job's own
+		// directory; posting to the example endpoint here would discard that
+		// output and re-read the dataset's raw inputs instead.
+		if (jobView.isExampleMode() === true &&
+			jobView.getExamplePipeline() === "pathway-acquisition") {
+			URL = withExampleScenario(SERVER_URL_PA_EXAMPLE_STEP1, jobView);
 		}
 
 		if (jobView.checkForm() === true) {
@@ -927,7 +953,9 @@ function JobController() {
 	* @returns {undefined}
 	************************************************************/
 	this.fromBed2GenesOnFormSubmitHandler = function (jobView) {
-		var URL = jobView.isExampleMode() === true ? SERVER_URL_DM_EXAMPLE_FROMBED2GENES : SERVER_URL_DM_FROMBED2GENES;
+		var URL = jobView.isExampleMode() === true
+			? withExampleScenario(SERVER_URL_DM_EXAMPLE_FROMBED2GENES, jobView)
+			: SERVER_URL_DM_FROMBED2GENES;
 
 		if (jobView.checkForm() === true) {
 			var me = this;
@@ -975,7 +1003,9 @@ function JobController() {
 	* @returns {undefined}
 	************************************************************/
 	this.fromMiRNA2GenesOnFormSubmitHandler = function (jobView) {
-		var URL = jobView.isExampleMode() === true ? SERVER_URL_DM_EXAMPLE_FROMMIRNA2GENES : SERVER_URL_DM_FROMMIRNA2GENES;
+		var URL = jobView.isExampleMode() === true
+			? withExampleScenario(SERVER_URL_DM_EXAMPLE_FROMMIRNA2GENES, jobView)
+			: SERVER_URL_DM_FROMMIRNA2GENES;
 
 		if (jobView.checkForm() === true) {
 			var me = this;

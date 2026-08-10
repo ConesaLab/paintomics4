@@ -410,8 +410,38 @@
 	border-color: var(--pa-border);
 	color: var(--pa-ink-body);
 }
+/* Window headers need the SURFACE as well as the text colour.
+ *
+ * This block used to set `color` only, which produced light text on the
+ * ExtJS default header background (#f6f6f6) -- every modal title in dark mode
+ * was white on near-white and effectively invisible. It was not noticed
+ * because the two windows that existed (the regulatory-method chooser and the
+ * info dialogs) are read for their body text, not their title.
+ *
+ * `.x-window-header-title` is the ExtJS 6 class name; this app runs ExtJS
+ * 4.2.1, where the element is `.x-window-header-text`. Both are listed so the
+ * rule survives an upgrade, but only the second one matches today. Verified by
+ * measuring the computed style on a rendered window, not by eye.
+ */
+[data-theme="dark"] .x-window-header {
+	background-color: var(--pa-surface-quiet);
+	background-image: none;
+	border-color: var(--pa-border);
+}
 [data-theme="dark"] .x-window-header,
+[data-theme="dark"] .x-window-header-text,
 [data-theme="dark"] .x-window-header-title { color: var(--pa-ink-title); }
+/* main.css already claims this element with
+ *     .x-window-default > .x-window-header .x-header-text { color: #222; }
+ * at specificity (0,3,0), which outranks the (0,2,0) selectors above -- so
+ * without this the title merely went from invisible-white to invisible-dark
+ * once the header background was darkened. Matching main.css's shape and
+ * adding the theme attribute puts it at (0,4,0). Measured on a rendered
+ * window: computed colour must be the light token, not rgb(34,34,34).
+ */
+[data-theme="dark"] .x-window-default > .x-window-header .x-header-text {
+	color: var(--pa-ink-title);
+}
 [data-theme="dark"] .x-mask { background-color: var(--pa-scrim); }
 [data-theme="dark"] .x-tip,
 [data-theme="dark"] .x-tip-body {

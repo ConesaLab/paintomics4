@@ -29,6 +29,7 @@ from re import sub
 
 from src.common.PySiQ import Queue
 from src.common import JobProgress
+from src.common import ExampleDatasets
 
 from src.conf.serverconf import *
 
@@ -329,6 +330,18 @@ class Application(object):
         def getGTFFilesHandler():
             return dataManagementGetMyFiles(request, Response(), self.EXAMPLE_FILES_DIR, MAX_CLIENT_SPACE, isReference=True).getResponse()
         #*******************************************************************************************
+        ##* EXAMPLE DATASET CATALOGUE
+        #*******************************************************************************************
+        # The picker behind "Load example". GET, unauthenticated and read-only:
+        # it describes files the server already ships publicly, exposes no user
+        # data, and returns no filesystem paths -- the client posts a scenario
+        # id back and the server resolves it.
+        @self.app.route(SERVER_SUBDOMAIN + '/example_datasets', methods=['OPTIONS', 'GET'])
+        def exampleDatasetsHandler():
+            content = ExampleDatasets.catalogueForClient(self.EXAMPLE_FILES_DIR)
+            content["success"] = True
+            return Response().setContent(content).getResponse()
+        #*******************************************************************************************
         ##* DATA MANIPULATION SERVLETS HANDLERS - END
         #*******************************************************************************************
 
@@ -550,9 +563,10 @@ class Application(object):
         #*******************************************************************************************
         # fromMOREtoGenes HANDLERS
         #*******************************************************************************************
+        @self.app.route(SERVER_SUBDOMAIN + '/dm_fromMOREtoGenes/<path:exampleMode>', methods=['OPTIONS', 'POST'])
         @self.app.route(SERVER_SUBDOMAIN + '/dm_fromMOREtoGenes', methods=['OPTIONS', 'POST'])
-        def fromMOREtoGenesHandler():
-            result = fromMOREtoGenes_STEP1(request, Response(), self.queue, self.generateRandomID()).getResponse()
+        def fromMOREtoGenesHandler(exampleMode=False):
+            result = fromMOREtoGenes_STEP1(request, Response(), self.queue, self.generateRandomID(), self.EXAMPLE_FILES_DIR, exampleMode).getResponse()
             return result
         #*******************************************************************************************
         ##* ALTERNATIVE PIPELINES SERVLETS HANDLERS - END

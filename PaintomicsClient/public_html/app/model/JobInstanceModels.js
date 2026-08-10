@@ -607,17 +607,19 @@ function JobInstance(jobID) {
 					this.addOmicValue(new Feature(i).loadFromJSON(jsonObject.omicsValues[i]));
 				}
 			}else if(i === "globalExpressionData"){
-				this.globalExpressionData = { "inputGene": {}, "inputCompound": {} };
-				if (jsonObject.globalExpressionData.inputGene) {
-					for (var id in jsonObject.globalExpressionData.inputGene) {
-						this.globalExpressionData.inputGene[id] = OmicValue.loadFromJSON(jsonObject.globalExpressionData.inputGene[id]);
-					}
-				}
-				if (jsonObject.globalExpressionData.inputCompound) {
-					for (var id in jsonObject.globalExpressionData.inputCompound) {
-						this.globalExpressionData.inputCompound[id] = OmicValue.loadFromJSON(jsonObject.globalExpressionData.inputCompound[id]);
-					}
-				}
+				// Delegate to the setter, which is the one place that knows how to
+				// normalise this field. Restoring used to re-implement it here and
+				// branch on the *presence* of the key, then dereference the value:
+				// every model cached before Step 3 stores globalExpressionData ===
+				// null (see the constructor), so a restore threw
+				// "Cannot read properties of null (reading 'inputGene')" inside
+				// Application.launch() and every later page load died the same way
+				// until sessionStorage was cleared by hand.
+				// Only leaving the branch out is not enough either: the views index
+				// the field without a guard (PA_Step3Views.js:5343,
+				// PA_Step4Views.js:4389), so a restored model must always end up
+				// with the {inputGene:{}, inputCompound:{}} shape, never with null.
+				this.setGlobalExpressionData(jsonObject.globalExpressionData);
 			}else{
 				this[i] = jsonObject[i];
 			}

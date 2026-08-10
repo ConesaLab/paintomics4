@@ -89,9 +89,11 @@ PUBLISHED = {
         "0.2", "fb65d139103002db2122ce5f02b6e98ef6aecb28c5f0c8c0af4b1eb4abb5411d"),
     "app/view/PathwayAcquisitionViews/PA_Step3RegTargetNetworkView.js": (
         "0.1", "f9b31d697a708f72074f605350ea488efe4faa3d610d90d8a0dfec18d271070c"),
+    "resources/ServerConfiguration.js": (
+        "0.2", "68825b896239ebbe443d0be389927068f8628f3baae07066b8a36b6f4acbea27"),
     "js/libs/linkurious/sigma.min.js": ("0.1", None),
     "js/libs/linkurious/plugins.js": ("0.2", None),
-    "app.js": ("0.1", None),
+    "app.js": ("0.2", None),
 }
 
 _SRC = re.compile(r'src="([^"]+?)\?v=([0-9.]+)"')

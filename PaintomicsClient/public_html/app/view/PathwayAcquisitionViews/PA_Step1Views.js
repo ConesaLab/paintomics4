@@ -139,6 +139,108 @@ var PO_HERO_FLOW_SVG =
 	'<text x="48" y="400" font-size="12" fill="#52525B">interpretation, grounded in the literature.</text>' +
 	'</svg>';
 
+/**
+* The description shipped with the real STATegra example. Only used as the
+* fallback when the server's catalogue is unreachable; otherwise the text is
+* generated from the chosen dataset's own manifest entry.
+*/
+var STATEGRA_EXPERIMENT_DESIGN = "STATegra multi-omics time-course experiment in mouse B3 cell line (Mus musculus, mmu). Ikaros transcription factor expression was induced via tamoxifen treatment to trigger B-cell differentiation. Ikaros-induced vs Control samples were compared across 6 time points (0h, 2h, 6h, 12h, 18h, 24h). Values are log2 fold-changes (Ikaros/Control). Six omics layers: gene expression, proteomics, metabolomics, DNase-seq chromatin accessibility, miRNA-seq, and transcription factor activity. Goal: identify pathways and molecular mechanisms driving Ikaros-mediated B-cell differentiation across multiple regulatory levels.";
+
+/**
+* Manifest omic name -> the panel type addNewOmicSubmittingPanel builds.
+*
+* The manifest uses the omic names the *server* knows ("Gene expression",
+* "DNase-seq"); the form uses its own panel keys ("geneexpression",
+* "dnaseseq"). Matching is case-insensitive and punctuation-insensitive so a
+* dataset written as "miRNA-seq", "miRNA-Seq" or "mirna seq" all land on the
+* same panel -- the manifest is edited by hand and this is not worth failing on.
+*
+* An unrecognised name falls back to the generic "otheromic" panel rather than
+* being skipped: showing a user a panel labelled with their omic's name is a
+* better failure than silently loading fewer omics than the dataset contains.
+*/
+/**
+* Put a read-only "this came from the example dataset" label in a file field.
+*
+* `myFilesSelectorButton.setValue(value)` defaults its origin to "mydata" and
+* renders the value as `[MyData]/<value>`, which is right for a file the user
+* picked out of their own storage and wrong for an example: the old panels
+* displayed strings like `[MyData]/example/dnase_unmapped_values.tab`, naming a
+* location that does not exist in anyone's data folder. Passing an explicit
+* origin suppresses the prefix.
+*
+* The origin token also lands in the hidden `<prefix>_origin` field. "example"
+* matches none of the branches JobInformationManager.saveFiles dispatches on
+* ("client", "mydata", "inbuilt_gtf", "*filelocation*"), which is safe because
+* example submissions never reach saveFiles -- the servlets resolve their files
+* from the manifest and ignore the form entirely.
+*
+* setDisabled here disables the Browse button, which is the widget's whole
+* interactive surface; the text stays selectable so it can be read and copied.
+*/
+function setExampleLabel(field, text) {
+	if (!field) { return; }
+	field.setValue("[example dataset] " + text, "example");
+	field.setDisabled(true);
+}
+
+/**
+* Pipeline -> the single panel type that pipeline's example needs.
+*
+* These three are pre-processing steps: they convert their input into
+* gene-based values and hand the result to the normal pathway analysis, so an
+* example for them is one panel, not one per omic.
+*/
+var EXAMPLE_PANEL_FOR_PIPELINE = {
+	"regions2genes": "bedbasedomic",
+	"mirna2genes": "mirnabasedomic",
+	"more": "moreanalysis"
+};
+
+function examplePanelTypeFor(omicName) {
+	var key = String(omicName || "").toLowerCase().replace(/[^a-z]/g, "");
+	var byKey = {
+		"geneexpression": "geneexpression",
+		"proteomics": "proteomics",
+		"metabolomics": "metabolomics",
+		"mirnaseq": "mirnaseq",
+		"mirna": "mirnaseq",
+		"mirnaunmapped": "mirnaseq",
+		"dnaseseq": "dnaseseq",
+		"dnase": "dnaseseq",
+		"dnaseunmapped": "dnaseseq",
+		"transcriptionfactor": "transcriptionfactor"
+	};
+	return byKey[key] || "otheromic";
+}
+
+/**
+* A plain-language description of a dataset, for the AI-interpretation prompt.
+*
+* Generated from the manifest entry rather than stored, so it cannot drift from
+* the data the way a hand-written blurb does -- the previous version quoted
+* feature counts ("6337 genes, 5224 DE") that no longer matched the files.
+*/
+function exampleExperimentDesignFor(scenario) {
+	var conditions = scenario.conditions || [];
+	var parts = [scenario.title + "."];
+
+	if (scenario.summary) { parts.push(scenario.summary); }
+	parts.push("Organism: " + (scenario.organism || "mmu") + ".");
+	if ((scenario.omicNames || []).length) {
+		parts.push("Omics layers: " + scenario.omicNames.join(", ") + ".");
+	}
+	if (conditions.length) {
+		parts.push("Conditions (" + conditions.length + "): " +
+			conditions.join(", ") + ".");
+	}
+	parts.push(scenario.simulated
+		? "Values are simulated log2 fold-changes with a coherent signal planted " +
+		  "into a chosen set of KEGG pathways; all other features are centred on zero."
+		: "Values are log2 fold-changes against the control condition.");
+	return parts.join(" ");
+}
+
 function PA_Step1JobView() {
 	/*********************************************************************
 	* ATTRIBUTES
@@ -155,6 +257,30 @@ function PA_Step1JobView() {
 	***********************************************************************/
 	this.isExampleMode = function() {
 		return this.exampleMode;
+	};
+	/**
+	* The example dataset the user picked, or null for the server's default.
+	* Appended to the "/example" URL as an extra path segment; the routes use
+	* Flask's <path:> converter, so no new endpoint is involved.
+	*/
+	this.getExampleScenarioId = function() {
+		return this.exampleScenarioId || null;
+	};
+	/**
+	* The pipeline the loaded example belongs to, or null when none is loaded.
+	*
+	* This is what tells the controller whether the *pathway* submission is
+	* still an example submission. For a `pathway-acquisition` dataset it is:
+	* step 1 reads the bundled files directly. For `regions2genes`,
+	* `mirna2genes` and `more` it is NOT: those run first and produce real files
+	* into the job's own directory, and step 1 must then be an ordinary upload
+	* of that output. Sending step 1 to the example endpoint instead makes it
+	* re-read the dataset's raw inputs and throw the conversion away -- observed
+	* as "EXAMPLE 'regulatory-more' REGISTERED (2 omics)" in the step-1 log
+	* after MORE had already produced its GENE:::REGULATOR values.
+	*/
+	this.getExamplePipeline = function() {
+		return this.examplePipeline || null;
 	};
 
 	/*********************************************************************
@@ -351,54 +477,342 @@ function PA_Step1JobView() {
 		delete omicSubmittingPanel;
 	};
 	/**
-	* This function sets the Example mode for the first step.
+	* Opens the "Load example" picker, populated from the server's catalogue.
+	*
+	* The catalogue lives in examplefiles/datasets/manifest.json and is the
+	* single source of truth for which examples exist. Nothing about the
+	* scenarios is hardcoded here: adding one to the manifest makes it appear.
+	*
+	* Every pipeline is listed, not just pathway-acquisition. The region,
+	* miRNA and MORE examples are pre-processing steps that feed this same form,
+	* and setExampleModeHandler creates the one panel each of them needs -- so
+	* they are reachable here rather than only by hand-typing a URL. MORE in
+	* particular had no example at all before, which is why its input format
+	* (per-sample matrices plus a numeric design matrix, unlike every other
+	* omic) was undocumented by example.
 	*/
-	this.setExampleModeHandler = function() {
-		var panel, fileField, omicSubmittingPanels;
+	this.showExampleChooser = function() {
+		var me = this;
+
+		$.ajax({
+			url: SERVER_URL_EXAMPLE_DATASETS,
+			type: "GET",
+			dataType: "json"
+		}).done(function(response) {
+			var scenarios = (response && response.scenarios) ? response.scenarios : [];
+
+			if (scenarios.length === 0) {
+				// The server has no catalogue -- an incomplete deploy. Fall back
+				// to the default rather than leaving the button dead: the
+				// servlet resolves "example" with no id on its own.
+				me.setExampleModeHandler(null);
+				return;
+			}
+			me.renderExampleChooser(scenarios, response.defaultScenario);
+		}).fail(function() {
+			// Same reasoning: a failed catalogue request must not remove the
+			// ability to load an example.
+			me.setExampleModeHandler(null);
+		});
+	};
+	/**
+	* Draws the picker. Split from the fetch so the layout can be reasoned
+	* about (and changed) without touching the request handling.
+	*/
+	this.renderExampleChooser = function(scenarios, defaultScenarioId) {
+		var me = this;
+
+		// Grouped by pipeline, because the groups behave differently once
+		// loaded: the first submits straight to the pathway analysis, the rest
+		// run a conversion step first.
+		var GROUPS = [
+			["pathway-acquisition", "Multi-omic pathway analysis",
+			 "Loads straight into the form below and runs the pathway analysis."],
+			["mirna2genes", "Regulatory omics — pairwise",
+			 "Pairs each regulator with its target genes first, then runs the analysis."],
+			["more", "Regulatory omics — MORE",
+			 "Fits a joint multi-omic regression over per-sample data, then runs the analysis."],
+			["regions2genes", "Region-based omics",
+			 "Assigns genomic regions to genes with RGmatch first, then runs the analysis."]
+		];
+
+		var makeCard = function(scenario) {
+			var badge = scenario.simulated
+				? '<span style="background:#E8F1FA;color:#2F73BC;border-radius:3px;' +
+				  'padding:1px 6px;font-size:11px;">simulated</span>'
+				: '<span style="background:#FDF0E6;color:#B4690E;border-radius:3px;' +
+				  'padding:1px 6px;font-size:11px;">real data</span>';
+
+			var facts = [];
+			if (scenario.omicNames && scenario.omicNames.length) {
+				facts.push('<b>' + scenario.omicNames.length + '</b> omic' +
+					(scenario.omicNames.length === 1 ? '' : 's') +
+					': ' + scenario.omicNames.join(', '));
+			}
+			if (scenario.conditions && scenario.conditions.length) {
+				facts.push('<b>' + scenario.conditions.length + '</b> condition' +
+					(scenario.conditions.length === 1 ? '' : 's'));
+			}
+			if (scenario.databases && scenario.databases.length) {
+				facts.push(scenario.databases.join(' + '));
+			}
+
+			var tests = (scenario.tests || []).map(function(item) {
+				return '<li>' + Ext.String.htmlEncode(item) + '</li>';
+			}).join('');
+
+			return {
+				xtype: 'panel',
+				title: scenario.title,
+				bodyPadding: 12,
+				margin: '0 0 10 0',
+				border: 1,
+				html: '<p style="margin:0 0 8px 0;">' + badge + '</p>' +
+					'<p style="margin:0 0 8px 0;">' +
+					Ext.String.htmlEncode(scenario.summary) + '</p>' +
+					'<p style="margin:0 0 6px 0;color:#6B6B6B;font-size:12px;">' +
+					facts.join(' &nbsp;•&nbsp; ') + '</p>' +
+					(tests ? '<p style="margin:0 0 2px 0;font-size:12px;">' +
+						'<b>Exercises:</b></p><ul style="margin:0;font-size:12px;' +
+						'color:#6B6B6B;">' + tests + '</ul>' : ''),
+				bbar: ['->', {
+					xtype: 'button',
+					text: scenario.id === defaultScenarioId ? 'Load (default)' : 'Load',
+					handler: function() {
+						win.close();
+						me.setExampleModeHandler(scenario);
+					}
+				}]
+			};
+		};
+
+		var items = [{
+			xtype: 'box',
+			html: '<p style="margin:0 0 12px 0;">Each dataset exercises a ' +
+				'different part of PaintOmics. The <b>real data</b> entries are ' +
+				'the published STATegra time course; the <b>simulated</b> ones ' +
+				'carry a known signal planted into real KEGG pathways, so you ' +
+				'can check that the analysis recovers what was put in.</p>'
+		}];
+
+		GROUPS.forEach(function(group) {
+			var pipeline = group[0], heading = group[1], note = group[2];
+			var inGroup = scenarios.filter(function(s) { return s.pipeline === pipeline; });
+			if (inGroup.length === 0) { return; }
+
+			items.push({
+				xtype: 'box',
+				html: '<h4 style="margin:14px 0 2px 0;">' + heading + '</h4>' +
+					'<p style="margin:0 0 8px 0;color:#6B6B6B;font-size:12px;">' +
+					note + '</p>'
+			});
+			inGroup.forEach(function(scenario) { items.push(makeCard(scenario)); });
+		});
+
+		var win = Ext.create('Ext.window.Window', {
+			title: 'Load example — choose a dataset',
+			modal: true,
+			width: 760,
+			maxHeight: 660,
+			closable: true,
+			bodyPadding: 14,
+			autoScroll: true,
+			items: items
+		});
+		win.show();
+	};
+	/**
+	* Configures the form for a chosen example dataset.
+	*
+	* @param {Object|null} scenario an entry from /example_datasets, or null to
+	*        let the server pick its default (used when the catalogue is
+	*        unreachable, so the button still works on an incomplete deploy).
+	*/
+	this.setExampleModeHandler = function(scenario) {
+		var omicSubmittingPanels;
 		this.exampleMode = true;
+		this.exampleScenarioId = scenario ? scenario.id : null;
+		this.examplePipeline = (scenario && scenario.pipeline) || "pathway-acquisition";
 
-		this.getComponent().queryById("speciesCombobox").setValue("mmu");
-		this.getComponent().queryById("speciesCombobox").setReadOnly(true);
-		this.getComponent().queryById('reactomeDB').setValue(checked=true)
+		var speciesCombo = this.getComponent().queryById("speciesCombobox");
+		speciesCombo.setValue(scenario && scenario.organism ? scenario.organism : "mmu");
+		speciesCombo.setReadOnly(true);
 
+		// Only tick Reactome when the dataset actually declares it. The previous
+		// version ticked it unconditionally, which asked for a Reactome analysis
+		// on datasets that were never built for one.
+		var databases = (scenario && scenario.databases) || ["KEGG", "Reactome"];
+		var reactomeCheckbox = this.getComponent().queryById('reactomeDB');
+		if (reactomeCheckbox) {
+			reactomeCheckbox.setValue(databases.indexOf("Reactome") !== -1);
+		}
 
-
-		omicSubmittingPanels = this.getComponent().queryById("submittingPanelsContainer").query("[cls=omicbox]");
-
+		// "~=", not "=". ComponentQuery's "=" compares the WHOLE cls string, and
+		// only the plain omic panel declares cls:"omicbox" on its own; the region
+		// ("omicbox regionBasedOmic"), miRNA ("omicbox miRNABasedOmic") and MORE
+		// ("omicbox moreBasedOmic") panels never matched and therefore survived
+		// this clear-out into the next example -- loading MORE and then a gene
+		// dataset left the MORE panel sitting above the new omics and submitted it.
+		// "~=" tests one entry of the whitespace-separated list, which is what the
+		// cls attribute actually is.
+		omicSubmittingPanels = this.getComponent().queryById("submittingPanelsContainer").query("[cls~=omicbox]");
 		for (var i in omicSubmittingPanels) {
 			$("#" + omicSubmittingPanels[i].el.id + " a.deleteOmicBox").click();
 		}
 
-		this.addNewOmicSubmittingPanel("transcriptionfactor").setExampleMode();
-		this.addNewOmicSubmittingPanel("mirnaseq").setExampleMode();
-		this.addNewOmicSubmittingPanel("dnaseseq").setExampleMode();
-		this.addNewOmicSubmittingPanel("proteomics").setExampleMode();
-		this.addNewOmicSubmittingPanel("metabolomics").setExampleMode();
-		this.addNewOmicSubmittingPanel("geneexpression").setExampleMode();
+		var me = this;
+		var pipeline = (scenario && scenario.pipeline) || "pathway-acquisition";
 
-		$("#availableOmicsContainer").css("display", "none");
-		$("#exampleButton").css("display", "none");
-
-		// Auto-enable AI interpretation for example data
-		var aiCheckbox = this.getComponent().down('[name=aiConsent]');
-		if (aiCheckbox) { aiCheckbox.setValue(true); }
-		var expDesign = this.getComponent().down('[name=experimentDesign]');
-		if (expDesign) {
-			expDesign.setValue("STATegra multi-omics time-course experiment in mouse B3 cell line (Mus musculus, mmu). Ikaros transcription factor expression was induced via tamoxifen treatment to trigger B-cell differentiation. Ikaros-induced vs Control samples were compared across 6 time points (0h, 2h, 6h, 12h, 18h, 24h). Values are log2 fold-changes (Ikaros/Control). Six omics layers: gene expression (RNA-seq, 6337 genes, 5224 DE), proteomics (1110 proteins, 148 DE), metabolomics (59 metabolites, 41 DE), DNase-seq chromatin accessibility (10274 regions, 5101 DE), miRNA-seq (5000 gene-miRNA pairs, 1106 DE), and transcription factor activity (2890 TFs, 2403 DE). Goal: identify pathways and molecular mechanisms driving Ikaros-mediated B-cell differentiation across multiple regulatory levels.");
+		if (pipeline === "pathway-acquisition") {
+			// One panel per omic the dataset actually contains, in the order the
+			// manifest lists them. Previously this was a fixed list of six, so
+			// a dataset with a different composition showed the wrong form.
+			var omicNames = (scenario && scenario.omicNames) ||
+				["Transcription factor", "miRNA-seq", "DNase-seq", "Proteomics",
+				 "Metabolomics", "Gene expression"];
+			omicNames.forEach(function(omicName) {
+				var panel = me.addNewOmicSubmittingPanel(examplePanelTypeFor(omicName));
+				if (panel) { panel.setExampleMode(omicName); }
+			});
+		} else {
+			// A pre-processing pipeline: regions-to-genes, miRNA-to-genes or
+			// MORE. These take ONE panel, and submitting it posts to that
+			// pipeline's own endpoint first; its output then feeds the normal
+			// pathway analysis. submitFormHandler already routes on the panel's
+			// css class, so creating the right panel is the whole wiring.
+			//
+			// MORE additionally needs its method locked, because the unified
+			// "Regulatory Omic" card would otherwise open the method chooser.
+			if (pipeline === "more") { me.regulatoryMethod = "more"; }
+			var panel = me.addNewOmicSubmittingPanel(EXAMPLE_PANEL_FOR_PIPELINE[pipeline]);
+			if (panel && panel.setExampleMode) {
+				panel.setExampleMode(scenario);
+			}
 		}
 
+		$("#availableOmicsContainer").css("display", "none");
+		// The button used to hide itself here, so a second dataset could only be
+		// reached by throwing the whole job away with Reset. Loading an example is
+		// not a one-way door -- the clear-out above is the first thing this
+		// function does -- so it stays, renamed for what it now does.
+		$("#exampleButton").html('<i class="fa fa-file-text-o"></i> Load another example');
+
+		// Deliberately NOT ticking the AI consent checkbox. It is a permission to
+		// send pathway summaries, feature lists and the experiment design text to
+		// a third-party LLM service, and the server reads it straight off this
+		// form on the example branch too (PathwayAcquisitionServlet
+		// setAIConsent(formFields.get("aiConsent", "false"))). The dataset being
+		// public says nothing about whether the user wants that call made on their
+		// behalf, and clicking "Load example" is not an answer to the question the
+		// checkbox asks.
+		var expDesign = this.getComponent().down('[name=experimentDesign]');
+		if (expDesign && scenario) {
+			expDesign.setValue(exampleExperimentDesignFor(scenario));
+		} else if (expDesign) {
+			expDesign.setValue(STATEGRA_EXPERIMENT_DESIGN);
+		}
+
+		this.lockFormForExample(pipeline);
+
+		var facts = scenario
+			? '<ul>' +
+				'<li><b>Dataset:</b> ' + Ext.String.htmlEncode(scenario.title) + '</li>' +
+				'<li><b>Organism:</b> ' + Ext.String.htmlEncode(scenario.organism || "mmu") + '</li>' +
+				'<li><b>Omics:</b> ' + Ext.String.htmlEncode((scenario.omicNames || []).join(', ')) + '</li>' +
+				'<li><b>Conditions:</b> ' + ((scenario.conditions || []).length || 1) + '</li>' +
+				'<li><b>Databases:</b> ' + Ext.String.htmlEncode(databases.join(', ')) + '</li>' +
+				'</ul>' +
+				(scenario.simulated
+					? '<p>This dataset is <b>simulated</b>: a known signal was planted ' +
+					  'into real KEGG pathways, so the pathways enrichment should ' +
+					  'rank are written down alongside the files.</p>'
+					: '<p>This is <b>real published data</b> (STATegra).</p>')
+			: '<p>The bundled example dataset was loaded.</p>';
+
 		showInfoMessage("About this example", {
-			message: 'The following example data was loaded:' +
-			'<ul>' +
-			'  <li>Gene Expression data: 37000 genes [5524 relevant genes].</li>' +
-			'  <li>Proteomics data: 1110 proteins [148 relevant proteins].</li>' +
-			'  <li>Metabolomics data: 59 compounds [41 relevant compounds].</li>' +
-			'  <li>DNase-seq data: 5101 regions [3596 relevant regions].</li>'+
-			'  <li>miRNA-seq data: 4998 genes with miRNA values [605 relevant genes].</li>'+
-			' <li>Transcription factor expression data: 2890 transcription factors [2403 relevant transcription factors].</li>'+
-			'</ul>',
+			message: facts,
 			showButton: true,
-			height: 240
+			height: 300
+		});
+	};
+
+	/**
+	* Shows the loaded example for what it is: a fixed dataset, not a draft.
+	*
+	* The composition of an example job is decided on the server. For a
+	* pathway-acquisition dataset the client posts a scenario id and
+	* pathwayAcquisitionStep1_PART1 rebuilds the omic list, the organism and the
+	* databases from examplefiles/datasets/manifest.json, ignoring every omic
+	* field in this form; the pre-processing pipelines do the same in their own
+	* servlets (applyScenario / applyMoreScenario). So the form was decorative
+	* and did not say so: deleting the Metabolomics panel and pressing Run
+	* produced a job byte-identical to an untouched one, and the progress dialog
+	* still announced "mapping Metabolomics".
+	*
+	* Locking it is the honest half of the fix. Making the server honour the
+	* edits is the other half and is not done here -- see the handoff note.
+	*
+	* Nothing here uses setDisabled(): a disabled field returns null from
+	* getSubmitData() and never reaches the server, and the chained pipelines
+	* (regions2genes, mirna2genes, more) DO post this form for real once their
+	* conversion has run -- their step 1 is an ordinary upload, which is why
+	* step1OnFormSubmitHandler refuses the example endpoint for them. setReadOnly
+	* keeps every value on the wire while removing the invitation to change it.
+	*
+	* @param {string} pipeline the loaded scenario's pipeline.
+	*/
+	this.lockFormForExample = function(pipeline) {
+		var container = this.getComponent().queryById("submittingPanelsContainer");
+		var panels = container.query("[cls~=omicbox]");
+		var fields, i, j;
+
+		for (i = 0; i < panels.length; i++) {
+			fields = panels[i].query("field");
+			for (j = 0; j < fields.length; j++) {
+				if (fields[j].setReadOnly) {
+					fields[j].setReadOnly(true);
+				}
+			}
+			// The trash icon is the most misleading control on the page: it
+			// removes the panel and changes nothing about what runs. Hidden
+			// rather than unbound, because the clear-out in
+			// setExampleModeHandler still triggers this handler by jQuery when a
+			// second example is loaded over this one.
+			if (panels[i].getEl()) {
+				$(panels[i].getEl().dom).find("a.deleteOmicBox").css("display", "none");
+			}
+
+			// MORE's "+ Add another Regulatory Omic" builds a block that the
+			// example endpoint never reads: MOREServlet returns right after
+			// applyMoreScenario, which takes every regulator from the manifest.
+			var addOmicWrapper = panels[i].queryById("addOmicWrapper");
+			if (addOmicWrapper) { addOmicWrapper.setVisible(false); }
+		}
+
+		// CheckboxGroup.setReadOnly forwards to each box, and Checkbox.setReadOnly
+		// only marks the DOM input disabled -- the component stays enabled, so the
+		// values still travel. That matters: for a chained example, step 1 is a
+		// real upload and these boxes are the only place the databases come from.
+		var databases = this.getComponent().queryById("databasesCheckboxGroup");
+		if (databases && databases.setReadOnly) {
+			databases.setReadOnly(true);
+		}
+
+		// Rebuilt rather than kept, so it sits above the panels of the example
+		// that is loaded now: new panels are inserted at index 1 as well.
+		var note = container.queryById("exampleFixedNote");
+		if (note) { container.remove(note); }
+		container.insert(1, {
+			xtype: "box",
+			itemId: "exampleFixedNote",
+			html: '<p style="margin:0 0 10px 0;padding:8px 12px;border-left:4px solid var(--pa-accent-blue);' +
+				'background:rgba(38,132,255,0.08);font-size:12px;line-height:1.5;">' +
+				'<b>This example dataset is fixed.</b> Its omics, organism and databases come from ' +
+				'the server&rsquo;s example catalogue' +
+				(pipeline === "pathway-acquisition" ? "" : " for this pre-processing step") +
+				', so the panels below are shown read-only: changes made here would not reach the ' +
+				'analysis. Press <b>Reset</b> to go back to an upload form, or ' +
+				'<b>Load another example</b> to switch dataset.</p>'
 		});
 	};
 
@@ -625,6 +1039,9 @@ function PA_Step1JobView() {
 						xtype: "container", layout: { type: "vbox", align: "stretch" }, items: [
 						{
 							xtype: 'checkboxgroup', fieldLabel: 'Databases',
+							// Named so lockFormForExample can find it: in example mode
+							// the databases come from the manifest, not from here.
+							itemId: "databasesCheckboxGroup",
 							style: "margin: 4px 10px 10px 26px;",
 							maxWidth: 650,
 							allowBlank: false,
@@ -853,7 +1270,7 @@ function PA_Step1JobView() {
 						me.submitFormHandler();
 					});
 					$("#exampleButton").click(function() {
-						me.setExampleModeHandler();
+						me.showExampleChooser();
 					});
 					$("#resetButton").click(function() {
 						me.resetViewHandler();
@@ -987,14 +1404,24 @@ function OmicSubmittingPanel(nElem, options) {
 	/***********************************************************************
 	* OTHER FUNCTIONS
 	***********************************************************************/
-	this.setExampleMode = function(){
-		var fileField = this.getComponent().queryById("mainFileSelector");
-		fileField.setValue("example/" + this.type + "_example.tab");
-		fileField.setDisabled(true);
-
-		fileField = this.getComponent().queryById("secondaryFileSelector");
-		fileField.setValue("example/" + this.type + "_relevant_example");
-		fileField.setDisabled(true);
+	/**
+	* Display-only: the fields are disabled and the server resolves the actual
+	* files from the manifest. Only the labels are set here.
+	*
+	* This used to render `"example/" + this.type + "_example.tab"`, which named
+	* a file that has never existed in any release -- so the form taught a
+	* filename convention nothing on the server would recognise if a user copied
+	* it. Naming the omic instead is honest about what is going on: the specific
+	* files belong to the chosen dataset, not to this panel.
+	*
+	* @param {string} [omicName] the manifest's name for this omic.
+	*/
+	this.setExampleMode = function(omicName){
+		var label = omicName || this.type || "example";
+		var component = this.getComponent();
+		setExampleLabel(component.queryById("mainFileSelector"), label + " — values");
+		setExampleLabel(component.queryById("secondaryFileSelector"),
+			label + " — relevant features");
 	};
 	/*********************************************************************
 	* COMPONENT DECLARATION
@@ -1234,32 +1661,37 @@ function RegionBasedOmicSubmittingPanel(nElem, options) {
 	/***********************************************************************
 	* OTHER FUNCTIONS
 	***********************************************************************/
-	this.setExampleMode = function(){
+	/**
+	* Display-only example mode. The server resolves the real files from the
+	* manifest, so only labels are set here.
+	*
+	* The names are no longer hardcoded. They used to be literal paths
+	* ("example/dnase_unmapped_values.tab"), which was already the second
+	* attempt -- before that they were built from `this.type`, and the
+	* Regions2Genes tool constructs this panel with no type, so the form
+	* displayed "example/undefined_example.tab". Taking them from the chosen
+	* scenario means they cannot go stale when the files move again.
+	*
+	* @param {Object} [scenario] the entry from /example_datasets.
+	*/
+	this.setExampleMode = function(scenario){
 		var component = this.getComponent();
 		//component.queryById("toogleMapRegions").setVisible(false);
 
 		component = component.queryById("itemsContainer");
 
-		// These are display-only: the fields are disabled and the server picks
-		// the example files itself (Bed2GenesServlet, exampleOmics =
-		// ["DNase unmapped"]). Name the files the server actually reads --
-		// building them from this.type produced "example/undefined_example.tab"
-		// here, because the Regions2Genes tool constructs this panel with no
-		// type, and named files that have never existed anywhere else.
-		var field = component.queryById("mainFileSelector");
-		field.setValue("example/dnase_unmapped_values.tab");
-		field.setDisabled(true);
+		var omicName = (scenario && scenario.omicNames && scenario.omicNames[0]) ||
+			"Region-based omic";
 
-		field = component.queryById("secondaryFileSelector");
-		field.setValue("example/dnase_unmapped_relevant.tab");
-		field.setDisabled(true);
+		setExampleLabel(component.queryById("mainFileSelector"),
+			omicName + " — region values");
+		setExampleLabel(component.queryById("secondaryFileSelector"),
+			omicName + " — relevant regions");
+		setExampleLabel(component.queryById("tertiaryFileSelector"),
+			"genome annotation (GTF)");
 
-		field = component.queryById("tertiaryFileSelector");
-		field.setValue("example/GTF/sorted_mmu.gtf");
-		field.setDisabled(true);
-
-		field = component.queryById("omicNameField");
-		field.setValue("Region-omic");
+		var field = component.queryById("omicNameField");
+		field.setValue(omicName);
 		field.setDisabled(true);
 
 		var otherFields = ["distanceField", "tssDistanceField", "promoterDistanceField", "geneAreaPercentageField", "regionAreaPercentageField", "gtfTagField", "summarizationMethodField", "reportSelector1","reportSelector2"];
@@ -1730,7 +2162,12 @@ function RegionBasedOmicSubmittingPanel(nElem, options) {
 					itemId: "geneAreaPercentageField",
 					name: this.namePrefix + '_geneAreaPercentage',
 					fieldLabel: 'Overlapped gene area (%)',
-					value: 50,
+					// 90, not 50: the helpTip below, Bed2GeneJob's own default
+					// (Bed2GeneJob.py:50) and the servlet's fallback
+					// (Bed2GenesServlet.py:147) all say 90. The field posts on every
+					// request, so the 50 that sat here was silently overriding the
+					// documented default for every region-based job.
+					value: 90,
 					minValue: 0,
 					maxValue: 100,
 					allowDecimals: false,
@@ -2026,29 +2463,34 @@ function MiRNAOmicSubmittingPanel(nElem, options) {
 	/***********************************************************************
 	* OTHER FUNCTIONS
 	***********************************************************************/
-	this.setExampleMode = function(){
+	/**
+	* Display-only example mode; the server resolves the files from the
+	* manifest. `mirna_unmapped.tab` was named here for years while the file
+	* that actually ships is `mirna_unmapped_values.tab` -- a label nobody could
+	* act on, and exactly the drift that taking the names from the scenario
+	* prevents.
+	*
+	* @param {Object} [scenario] the entry from /example_datasets.
+	*/
+	this.setExampleMode = function(scenario){
 		var component = this.getComponent();
 		//component.queryById("toogleMapRegions").setVisible(false);
 		component = component.queryById("itemsContainer");
 
-		var field = component.queryById("mainFileSelector");
-		field.setValue("example/mirna_unmapped.tab");
-		field.setDisabled(true);
+		var omicNames = (scenario && scenario.omicNames) || ["miRNA"];
+		var regulator = omicNames[0];
 
-		field = component.queryById("secondaryFileSelector");
-		field.setValue("example/mirna_unmapped_relevant.tab");
-		field.setDisabled(true);
+		setExampleLabel(component.queryById("mainFileSelector"),
+			regulator + " — values");
+		setExampleLabel(component.queryById("secondaryFileSelector"),
+			regulator + " — relevant features");
+		setExampleLabel(component.queryById("mirnaTargetsFileSelector"),
+			regulator + " — target predictions");
+		setExampleLabel(component.queryById("rnaseqauxFileSelector"),
+			"target gene expression");
 
-		field = component.queryById("mirnaTargetsFileSelector");
-		field.setValue("example/mmu_mirBase_to_ensembl.tab");
-		field.setDisabled(true);
-
-		field = component.queryById("rnaseqauxFileSelector");
-		field.setValue("example/gene_expression_values.tab");
-		field.setDisabled(true);
-
-		field = component.queryById("omicNameField");
-		field.setValue("miRNA");
+		var field = component.queryById("omicNameField");
+		field.setValue(regulator);
 		field.setDisabled(true);
 
 		var otherFields = ["summarizationMethodField"];
@@ -2740,6 +3182,69 @@ function MORESubmittingPanel(nElem, options) {
 			component.queryById("enrichmentTypeFieldAlt").setValue(values.enrichmentType);
 		}
 		this.toogleContent();
+		return this;
+	};
+
+	/**
+	* Display-only example mode for the MORE panel.
+	*
+	* MORE never had an example. Its inputs are also the least guessable in the
+	* application -- a per-sample matrix with replicates rather than the log
+	* ratios every other omic takes, plus a numeric 0/1 design matrix and one
+	* association file per regulatory omic -- so "load an example and look at
+	* the files" was the one thing a user could not do for the format that most
+	* needed it.
+	*
+	* Only labels are set here; the server resolves the real files from the
+	* manifest when the form posts to dm_fromMOREtoGenes/example/<id>. The model
+	* settings (method, alpha, VIP, R2) come from the manifest too --
+	* MOREServlet's example branch returns immediately after applyMoreScenario
+	* and never reaches the "6. Model Parameters" block that reads the form -- so
+	* lockFormForExample marks them read-only along with everything else. They
+	* were left editable here on the belief that they were honoured; they are
+	* not, and an editable field that changes nothing is the T1 defect in
+	* miniature.
+	*
+	* @param {Object} scenario the entry from /example_datasets.
+	*/
+	this.setExampleMode = function(scenario) {
+		var component = this.getComponent().queryById("itemsContainer");
+		var omicNames = (scenario && scenario.omicNames) || ["Regulatory omic"];
+
+		var label = function(itemId, text) {
+			setExampleLabel(component.queryById(itemId), text);
+		};
+
+		label("conditionsFileSelector", "experimental design (samples × groups)");
+		label("rnaseqauxFileSelector", "target gene expression (per sample)");
+		label("mainFileSelector", omicNames[0] + " — regulator values");
+		label("moreAssociationsFileSelector", omicNames[0] + " — associations");
+		label("moreRelevantFileSelector", omicNames[0] + " — relevant regulators");
+
+		// The omic name is `allowBlank: false`, so leaving it empty makes
+		// checkForm() refuse to submit -- the example would load and then
+		// silently fail to run. The server takes the name from the manifest
+		// regardless; this is what lets the form validate.
+		var nameField = component.queryById("omicNameField");
+		if (nameField) {
+			nameField.setValue(omicNames[0]);
+			nameField.setDisabled(true);
+		}
+
+		// The manifest may carry more regulatory omics than the single block
+		// the panel starts with. Rather than synthesising extra blocks -- which
+		// would have to mirror the "+ Add another Regulatory Omic" handler and
+		// drift from it -- say so, since the server loads all of them regardless.
+		if (omicNames.length > 1) {
+			this.getComponent().queryById("itemsContainer").add({
+				xtype: 'box',
+				html: '<p style="margin:6px 0 0 0;font-size:12px;color:#6B6B6B;">' +
+					'This example also includes <b>' +
+					Ext.String.htmlEncode(omicNames.slice(1).join(', ')) +
+					'</b>. Every regulatory omic in the dataset is analysed; only ' +
+					'the first is shown above.</p>'
+			});
+		}
 		return this;
 	};
 

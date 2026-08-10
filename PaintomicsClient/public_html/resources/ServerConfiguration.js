@@ -52,7 +52,15 @@ SERVER_URL_DM_FROMMIRNA2GENES = SERVER_URL + "dm_fromMiRNAtoGenes";
 SERVER_URL_DM_EXAMPLE_FROMBED2GENES = SERVER_URL + "dm_fromBEDtoGenes/example";
 SERVER_URL_DM_EXAMPLE_FROMMIRNA2GENES = SERVER_URL + "dm_fromMiRNAtoGenes/example";
 SERVER_URL_DM_FROMMORE2GENES = SERVER_URL + "dm_fromMOREtoGenes";
+SERVER_URL_DM_EXAMPLE_FROMMORE2GENES = SERVER_URL + "dm_fromMOREtoGenes/example";
 SERVER_URL_DM_SEND_REPORT = SERVER_URL + "dm_sendReport";
+/*********************************************************************
+ * EXAMPLE DATASET CATALOGUE                 *************************
+ *********************************************************************/
+// The picker behind "Load example". Every URL above ending in "/example"
+// accepts an optional "/<scenario-id>" after it -- the routes use Flask's
+// <path:> converter, so the extra segment needs no new endpoint.
+SERVER_URL_EXAMPLE_DATASETS = SERVER_URL + "example_datasets";
 /*********************************************************************
  * KEGG DATA URLS                          ***************************
  *********************************************************************/

@@ -30,6 +30,7 @@ from src.classes.JobInstances.MiRNA2GeneJob import MiRNA2GeneJob
 from src.common.UserSessionManager import UserSessionManager
 from src.common.JobInformationManager import JobInformationManager
 from src.common.ServerErrorManager import handleException
+from src.common import ExampleDatasets
 
 from src.conf.serverconf import CLIENT_TMP_DIR
 
@@ -64,6 +65,8 @@ def fromMiRNAtoGenes_STEP1(REQUEST, RESPONSE, QUEUE_INSTANCE, JOB_ID, EXAMPLE_FI
     jobInstance = None
     userID= None
 
+    isExampleRequest, scenarioId = ExampleDatasets.scenarioIdFromMode(exampleMode)
+
     try :
         #****************************************************************
         # Step 1. CHECK IF VALID USER SESSION
@@ -85,7 +88,7 @@ def fromMiRNAtoGenes_STEP1(REQUEST, RESPONSE, QUEUE_INSTANCE, JOB_ID, EXAMPLE_FI
         #****************************************************************
         formFields   = REQUEST.form
 
-        if not exampleMode:
+        if isExampleRequest is False:
             logging.info("STEP1 - FILE UPLOADING REQUEST RECEIVED")
             uploadedFiles  = REQUEST.files
 
@@ -93,32 +96,29 @@ def fromMiRNAtoGenes_STEP1(REQUEST, RESPONSE, QUEUE_INSTANCE, JOB_ID, EXAMPLE_FI
             JobInformationManager().saveFiles(uploadedFiles, formFields, userID, jobInstance, CLIENT_TMP_DIR,  EXAMPLE_FILES_DIR)
             logging.info("STEP1 - READING FILES....DONE")
 
-        elif exampleMode == "example":
+        elif isExampleRequest:
             #****************************************************************
-            # Step 2.SAVE THE UPLOADED FILES
+            # Step 2.REGISTER THE BUNDLED EXAMPLE FILES
             #****************************************************************
-            logging.info("STEP1 - EXAMPLE MODE SELECTED")
-            logging.info("STEP1 - COPYING FILES....")
-
-            # exampleOmics:
-            omicName = "miRNA unmapped"
-
-            dataFileName = omicName.replace(" ", "_").lower() + "_values.tab"
-            logging.info("STEP1 - USING ALREADY SUBMITTED FILE (data file) " + EXAMPLE_FILES_DIR + dataFileName + " FOR  " + omicName)
-            relevantFileName = omicName.replace(" ", "_").lower() + "_relevant.tab"
-            logging.info("STEP1 - USING ALREADY SUBMITTED FILE (relevant features file) " + EXAMPLE_FILES_DIR + relevantFileName + " FOR  " + omicName)
-
-            jobInstance.addGeneBasedInputOmic({"omicName": omicName, "inputDataFile": EXAMPLE_FILES_DIR + dataFileName, "relevantFeaturesFile": EXAMPLE_FILES_DIR + relevantFileName,  "isExample" : True})
-            jobInstance.addGeneBasedInputOmic({"omicName": "Gene expression", "inputDataFile": EXAMPLE_FILES_DIR + "gene_expression_values.tab", "isExample" : True})
-            #jobInstance.addReferenceInput({"omicName": omicName, "fileType":  "Reference file", "inputDataFile": EXAMPLE_FILES_DIR + "sorted_mmu.gtf"})
-            jobInstance.addReferenceInput({"omicName": omicName, "fileType": "Reference file", "inputDataFile": EXAMPLE_FILES_DIR + "mmu_mirBase_to_ensembl.tab", "isExample" : True})
-            jobInstance.setOrganism("mmu")
+            # The manifest carries the regulator/target pairing that used to be
+            # implicit here: the miRNA omic plus a "Gene expression" omic whose
+            # only job is to be the target, plus the miRBase->Ensembl reference.
+            # validateInput picks the miRNA omic as "the one not called Gene
+            # expression", so the names in the manifest are load-bearing.
+            logging.info("STEP1 - EXAMPLE MODE SELECTED (scenario: %s)",
+                         scenarioId or "default")
+            scenario = ExampleDatasets.applyScenario(
+                jobInstance, EXAMPLE_FILES_DIR,
+                scenarioId or ExampleDatasets.defaultScenarioFor(
+                    EXAMPLE_FILES_DIR, "mirna2genes"))
+            logging.info("STEP1 - EXAMPLE '%s' REGISTERED", scenario["id"])
         else:
             # See Bed2GenesServlet: a bare NotImplementedError reaches the user
             # as "ERROR MESSAGE: " with nothing after it.
             raise NotImplementedError(
                 "Unrecognised example mode %r for miRNA2Genes: expected no "
-                "value for an upload, or 'example' for the bundled dataset."
+                "value for an upload, 'example' for the default dataset, or "
+                "'example/<dataset-id>' for a specific one."
                 % (exampleMode,))
 
         #****************************************************************

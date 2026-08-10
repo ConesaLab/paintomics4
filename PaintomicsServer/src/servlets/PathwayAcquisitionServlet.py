@@ -70,6 +70,50 @@ def loadRequestedJob(jobID, action):
 
 
 #************************************************************************
+# WHAT AN INPUT OMIC MAY TELL THE BROWSER
+#************************************************************************
+# An entry in geneBasedInputOmics/compoundBasedInputOmics is the job's DB
+# record as much as its in-memory state: Job.toBSON writes it out verbatim and
+# Job reopens a job by reading `inputDataFile` back, so the file fields cannot
+# be dropped from the entry itself. But every step-1, step-2 and recover-job
+# response handed the whole entry to the client, and the browser stored it --
+# measured in sessionStorage.jobModel:
+#
+#   inputDataFile: "/Users/.../PaintomicsServer/src/examplefiles/datasets/
+#                   01-gene-single-condition/data/gene_expression_values.tab"
+#
+# an absolute server path, plus relevantFeaturesFile, associationsFile and
+# relevantAssociationsFile beside it. So the projection happens here, at the
+# response boundary, and never in toBSON.
+#
+# A whitelist, not a blacklist: the next field somebody adds for persistence
+# stays server-side by default instead of shipping until it is noticed. Each
+# entry below is a field the client is measurably reading.
+CLIENT_VISIBLE_OMIC_FIELDS = (
+    "omicName",            # every view keys on it
+    "omicSummary",         # mapped/unmapped counts, JobModel.getMappingSummary
+    "omicHeader",          # condition labels, JobModel.getOmicHeaders
+    "replicateDetection",  # the Step-2 replicate card
+    "replicateSource",     # which mapping is in force
+    "replicateMapping",
+    "sampleHeader",        # headers in "samples" mode
+)
+
+
+def inputOmicsForClient(inputOmics):
+    """The client-visible projection of a list of input omics.
+
+    Applied at every site that publishes geneBasedInputOmics or
+    compoundBasedInputOmics; see CLIENT_VISIBLE_OMIC_FIELDS for why.
+    """
+    return [
+        {field: omic[field] for field in CLIENT_VISIBLE_OMIC_FIELDS
+         if field in omic}
+        for omic in (inputOmics or [])
+    ]
+
+
+#************************************************************************
 #     _____ _______ ______ _____    __
 #    / ____|__   __|  ____|  __ \  /_ |
 #   | (___    | |  | |__  | |__) |  | |
@@ -153,6 +197,21 @@ def pathwayAcquisitionStep1_PART1(REQUEST, RESPONSE, QUEUE_INSTANCE, JOB_ID, EXA
             logging.info("STEP1 - READING FILES....")
             JobInformationManager().saveFiles(uploadedFiles, formFields, userID, jobInstance, CLIENT_TMP_DIR)
             logging.info("STEP1 - READING FILES....DONE")
+
+            # A chained example arrives here, not in the branch below: the
+            # Regulatory Omics step has already run and step 1 is an ordinary
+            # upload of its output, which is what the guard in
+            # step1OnFormSubmitHandler exists to keep true. The cost is that
+            # the manifest's role="target" omic has no form field to travel in
+            # -- measured as job 3Z1q20I1rC registering ['miRNA-seq'] alone and
+            # returning 357 pathways, 0 significant. Put it back from the
+            # manifest. A no-op for every real upload, and for the region and
+            # MORE examples, which declare no target omic at all.
+            reattached = ExampleDatasets.attachChainedExampleTargets(
+                jobInstance, EXAMPLE_FILES_DIR)
+            if reattached:
+                logging.info("STEP1 - CHAINED EXAMPLE: RE-ATTACHED TARGET OMIC(S) %s",
+                             ", ".join(reattached))
 
         elif isExampleRequest:
             #****************************************************************
@@ -285,8 +344,8 @@ def pathwayAcquisitionStep1_PART2(jobInstance, userID, exampleMode, RESPONSE):
             "jobID": jobInstance.getJobID(),
             "userID": jobInstance.getUserID(),
             "matchedMetabolites": list(map(lambda foundFeature: foundFeature.toBSON(), matchedMetabolites)),
-            "geneBasedInputOmics": jobInstance.getGeneBasedInputOmics(),
-            "compoundBasedInputOmics": jobInstance.getCompoundBasedInputOmics(),
+            "geneBasedInputOmics": inputOmicsForClient(jobInstance.getGeneBasedInputOmics()),
+            "compoundBasedInputOmics": inputOmicsForClient(jobInstance.getCompoundBasedInputOmics()),
             "databases": jobInstance.getDatabases(),
             "name": jobInstance.getName(),
             "timestamp": int(time())
@@ -551,8 +610,8 @@ def pathwayAcquisitionStep2_PART2(jobID, userID, selectedCompounds, clusterNumbe
                 "pathwaysInfo" : matchedPathwaysJSON,
                 # PaintOmics 4
                 "classInfo": matchedClassJSON,
-                "geneBasedInputOmics": jobInstance.getGeneBasedInputOmics(),
-                "compoundBasedInputOmics": jobInstance.getCompoundBasedInputOmics(),
+                "geneBasedInputOmics": inputOmicsForClient(jobInstance.getGeneBasedInputOmics()),
+                "compoundBasedInputOmics": inputOmicsForClient(jobInstance.getCompoundBasedInputOmics()),
                 "databases": jobInstance.getDatabases(),
                 "omicsValuesID": jobInstance.getValueIdTable(),
                 # Add classification metabolism
@@ -586,8 +645,8 @@ def pathwayAcquisitionStep2_PART2(jobID, userID, selectedCompounds, clusterNumbe
                 "pathwaysInfo": matchedPathwaysJSON,
                 # PaintOmics 4
                 "classInfo": matchedClassJSON,
-                "geneBasedInputOmics": jobInstance.getGeneBasedInputOmics(),
-                "compoundBasedInputOmics": jobInstance.getCompoundBasedInputOmics(),
+                "geneBasedInputOmics": inputOmicsForClient(jobInstance.getGeneBasedInputOmics()),
+                "compoundBasedInputOmics": inputOmicsForClient(jobInstance.getCompoundBasedInputOmics()),
                 "databases": jobInstance.getDatabases(),
                 "omicsValuesID": jobInstance.getValueIdTable(),
                 # Add classification metabolism
@@ -787,8 +846,8 @@ def pathwayAcquisitionRecoverJob(request, response, QUEUE_INSTANCE):
                     "jobID": jobInstance.getJobID(),
                     "userID": jobInstance.getUserID(),
                     "pathwaysInfo" : matchedPathwaysJSONList,
-                    "geneBasedInputOmics": jobInstance.getGeneBasedInputOmics(),
-                    "compoundBasedInputOmics": jobInstance.getCompoundBasedInputOmics(),
+                    "geneBasedInputOmics": inputOmicsForClient(jobInstance.getGeneBasedInputOmics()),
+                    "compoundBasedInputOmics": inputOmicsForClient(jobInstance.getCompoundBasedInputOmics()),
                     "organism" : jobInstance.getOrganism(),
                     "summary" : jobInstance.summary,
                     "visualOptions" : JobInformationManager().getVisualOptions(jobID),
@@ -827,8 +886,8 @@ def pathwayAcquisitionRecoverJob(request, response, QUEUE_INSTANCE):
                     "jobID": jobInstance.getJobID(),
                     "userID": jobInstance.getUserID(),
                     "pathwaysInfo" : matchedPathwaysJSONList,
-                    "geneBasedInputOmics": jobInstance.getGeneBasedInputOmics(),
-                    "compoundBasedInputOmics": jobInstance.getCompoundBasedInputOmics(),
+                    "geneBasedInputOmics": inputOmicsForClient(jobInstance.getGeneBasedInputOmics()),
+                    "compoundBasedInputOmics": inputOmicsForClient(jobInstance.getCompoundBasedInputOmics()),
                     "organism" : jobInstance.getOrganism(),
                     "summary" : jobInstance.summary,
                     "visualOptions" : JobInformationManager().getVisualOptions(jobID),
