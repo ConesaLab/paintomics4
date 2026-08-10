@@ -25,6 +25,22 @@ ignore_missing = False
 match_table    = None
 check_strand   = False
 
+# The option names run() understands. They are deliberately NOT the getopt flag
+# names -- "report" and "gene" on the command line are "level" and
+# "gene_id_tag" here -- and an options dict is read with .get(key, default), so
+# a caller that spells a key the getopt way used to be ignored without a word.
+# That is exactly how the web app spent its life running at the built-in
+# defaults instead of the settings the user typed into the form. Any key not in
+# this set is a programming error, so run() rejects it loudly.
+RUN_OPTION_KEYS = frozenset([
+    "presortedGTF", "rules", "perc_area", "perc_region", "tss", "tts",
+    "promoter", "distance", "level", "gene_id_tag", "tran_id_tag",
+    "ignore_missing", "check_strand",
+])
+
+# Values accepted for the "level" option / -r flag.
+REPORT_LEVELS = ("exon", "transcript", "gene")
+
 class Candidate:
     def __init__(self, start, end, strand, exon_number, area, transcript, gene, distance, pctg_region, pctg_area, tssdist, ttsdist):
         self.start       = start
@@ -254,13 +270,16 @@ def main():
             tran_id_tag = a
             tran_id_re  = re.compile(r"{0} \"?(.*?)\"?;".format(a))
         elif o in ("-r", "--report"):
-            if a.lower() in ["exon","transcript","gene"]:
+            if a.lower() in REPORT_LEVELS:
                 level = a.lower()
             else:
                 sys.stderr.write("\nERROR: Report can only be one of the following: exon, transcript or gene.\n")
                 usage()
                 sys.exit()
         elif o in ("-q", "--distance"):
+            # -q is documented in kb; everything downstream compares against
+            # genomic coordinates in bp. run() is handed a distance already in
+            # bp (its callers convert), so this is the only place that scales.
             aux = int(a)
             distance = aux*1000 if aux >= 0 else distance
         elif o in ("-t", "--tss"):
@@ -311,6 +330,9 @@ def main():
             assert False, "Unhandled option"
 
     if gtf is not None and dhs is not None and outputfile is not None:
+        # No options dict: getopt has already written every setting straight
+        # into the module globals above (including the kb->bp scaling of
+        # -q/--distance), so passing them again here would convert twice.
         run(gtf, dhs, outputfile, match_table)
     else:
         usage()
@@ -609,6 +631,14 @@ def applyRules(myfinaloutput, groupedBy):
                                     flagRule = True
                             if flagRule is True:
                                 break
+
+                        if flagRule is False:
+                            # `rules` is caller-supplied, so it may not rank
+                            # every area the code emits. Reporting nothing here
+                            # dropped the region from the output silently;
+                            # keeping the first candidate loses the tie-break
+                            # but never loses the association.
+                            toreport.append(region_candidates[0])
     return toreport
 
 
@@ -640,6 +670,15 @@ def selectTranscript(myfinaloutput, groupedBy):
                     area_winner = area_rule
                     break
 
+            if area_winner is None:
+                # No candidate area appears in the rules table. The built-in
+                # table lists all eight areas the code can emit, but `rules` is
+                # caller-supplied (-R / options["rules"]), so a short table
+                # leaves every area unranked and `myAreas[None]` raised KeyError
+                # -- an unhandled crash in place of a result. Fall back to the
+                # first area we grouped, which keeps the report deterministic.
+                area_winner = next(iter(myAreas))
+
             if len(myAreas[area_winner]) == 1:
                 toreport.append( myfinaloutput[myAreas[area_winner][0]] )
             else:
@@ -656,10 +695,15 @@ def selectTranscript(myfinaloutput, groupedBy):
                     pArea   = max(pArea, mycandidate.getPArea())
                     pRegion = max(pRegion, mycandidate.getPRegion())
 
+                # ttsdist completes the 12 arguments Candidate takes. It was
+                # missing, so the moment two transcripts of the same gene tied
+                # this raised TypeError instead of merging them -- unreachable
+                # while the web app was stuck at the "exon" default, reachable
+                # the instant it reports at gene level.
                 mycandidate_ref = myfinaloutput[myAreas[area_winner][0]]
-                mycandidate = Candidate(mycandidate_ref.getStart(), mycandidate_ref.getEnd(), mycandidate_ref.getStrand(), exons[:-1], 
-                    mycandidate_ref.getArea(), transcripts[:-1], mycandidate_ref.getGene(), mycandidate_ref.getDistance(), 
-                    pRegion, pArea, mycandidate_ref.getTSSdistance())
+                mycandidate = Candidate(mycandidate_ref.getStart(), mycandidate_ref.getEnd(), mycandidate_ref.getStrand(), exons[:-1],
+                    mycandidate_ref.getArea(), transcripts[:-1], mycandidate_ref.getGene(), mycandidate_ref.getDistance(),
+                    pRegion, pArea, mycandidate_ref.getTSSdistance(), mycandidate_ref.getTTSdistance())
                 toreport.append(mycandidate)
 
     return toreport
@@ -714,7 +758,15 @@ def reportOutput(myfinaloutput, dhs_id, start, end, outobj, metainfo):
                     "\t" + str("{0:.2f}".format(myexon.getPArea())) + (("\t" + "\t".join(metainfo)[:-1]) if len(metainfo) > 0 else "") + "\n")
 
 
-def run(gtf, dhs, outputfile, match_table, options, managed_queue):
+def run(gtf, dhs, outputfile, match_table, options=None, managed_queue=None):
+    """Run the region-to-gene association.
+
+    `options` is a dict keyed by RUN_OPTION_KEYS, with `distance` already in
+    **bp** (the kb wording belongs to the -q flag and to the web form; every
+    caller of run() converts before calling). `managed_queue` is the
+    multiprocessing queue the web app uses to ferry an exception back out of
+    the worker process; the command-line path passes neither.
+    """
     #############################################
     ## CODE ADDED BY RAFA (modified by Carlos) ##
     # Global variables
@@ -734,7 +786,24 @@ def run(gtf, dhs, outputfile, match_table, options, managed_queue):
         global ignore_missing
         global check_strand
 
-        presortedGTF   = options.get("presortedGTF", False)
+        options = options or {}
+
+        # Every setting below is read with .get(key, default), so a misspelled
+        # key is indistinguishable from an absent one and the run quietly uses
+        # the built-in default. Refuse instead: a caller sending an option we
+        # do not honour is a bug, and the user deserves to hear about it now
+        # rather than to receive a plausible-looking wrong answer.
+        unknownOptions = sorted(set(options.keys()) - RUN_OPTION_KEYS)
+        if unknownOptions:
+            raise Exception(
+                "Unknown option(s) passed to the region-to-gene association: "
+                + ", ".join(unknownOptions)
+                + ". Accepted options are: "
+                + ", ".join(sorted(RUN_OPTION_KEYS)) + ".")
+
+        # presortedGTF is accepted for compatibility with the callers that send
+        # it, but nothing here depends on the GTF being sorted: the annotation
+        # is loaded into dictionaries before any region is matched.
         rules          = options.get("rules", rules)
         perc_area      = options.get("perc_area", perc_area)
         perc_region    = options.get("perc_region", perc_region)
@@ -746,6 +815,23 @@ def run(gtf, dhs, outputfile, match_table, options, managed_queue):
         gene_id_tag    = options.get("gene_id_tag", gene_id_tag)
         tran_id_tag    = options.get("tran_id_tag", tran_id_tag)
         ignore_missing = options.get("ignore_missing", ignore_missing)
+        check_strand   = options.get("check_strand", check_strand)
+
+        if level not in REPORT_LEVELS:
+            # reportOutput() has no else-branch for an unrecognised level: it
+            # would silently fall through to the gene-level report. Say so.
+            raise Exception(
+                "Unknown report level %r for the region-to-gene association. "
+                "Expected one of: %s." % (level, ", ".join(REPORT_LEVELS)))
+
+        # The gene/transcript tags are only ever consumed through these two
+        # regexes, which the getopt path recompiles but this one did not -- so
+        # a GTF annotated with, say, gene_name was parsed looking for gene_id
+        # and every lookup raised AttributeError on a None match. Recompile
+        # unconditionally, so a second run() in the same interpreter cannot
+        # inherit the previous call's tag.
+        gene_id_re = re.compile(r"{0} \"?(.*?)\"?;".format(gene_id_tag))
+        tran_id_re = re.compile(r"{0} \"?(.*?)\"?;".format(tran_id_tag))
         ## END CODE ADDED BY RAFA ##
         ############################
 
@@ -877,11 +963,30 @@ def run(gtf, dhs, outputfile, match_table, options, managed_queue):
         myregions = {}
         myheader = []
 
+        # Column names carried by the regions file itself. In PaintOmics a
+        # regions file is not a plain BED: columns 4..n hold one quantification
+        # per experimental condition and the header names them (T00h..T24h,
+        # Ikaros/Control_0h..). Those names exist nowhere else in the pipeline,
+        # so if they are dropped here the condition labels are gone for good --
+        # Bed2GeneJob copies this file's header into B2G_output_*.tab, and the
+        # pathway job hands that straight to the browser as the chart legend.
+        inputValueHeader = []
+        # Widest metainfo seen, rather than whatever the last parsed row
+        # happened to leave behind in `metainfo`: a short final row used to
+        # silently shorten the header of the whole file.
+        maxMetaColumns = 0
+        firstRowSeen = False
+
         for dhs_line in inputDHS:
 
             if dhs_line:
                 line = dhs_line.split("\t")
                 if len(line) >= 3:
+                    # Only rows wide enough to be a region (or its header) count
+                    # as "first": a BED `track ...` / `browser ...` preamble is
+                    # one column wide and must not shadow the real header.
+                    isFirstRow = not firstRowSeen
+                    firstRowSeen = True
                     try:
                         chrom = line[0]
                         start = int(line[1])
@@ -890,6 +995,7 @@ def run(gtf, dhs, outputfile, match_table, options, managed_queue):
 
                         # Select up to 9 additional bed columns
                         metainfo = line[3:12]
+                        maxMetaColumns = max(maxMetaColumns, len(metainfo))
 
                         # In BED files strand is the optional column 6 (third position of metainfo)
                         if len(metainfo) > 2:
@@ -900,8 +1006,13 @@ def run(gtf, dhs, outputfile, match_table, options, managed_queue):
 
                         myregions[chrom].append([start,end, metainfo, strand])
                     except:
-                        # If cannot convert start and end to int, it must be a header
-                        # Ignore it as it currently does not contain any relevant info
+                        # If cannot convert start and end to int, it must be a header.
+                        # Keep the value-column names from the FIRST such row only,
+                        # so a stray comment further down the file (datasets/09 ships
+                        # one at line 886) cannot rename the conditions.
+                        if isFirstRow:
+                            inputValueHeader = [cell.strip().lstrip('#').strip()
+                                                for cell in line[3:12]]
                         continue
 
         if dhs[-2:] == "gz":
@@ -913,7 +1024,17 @@ def run(gtf, dhs, outputfile, match_table, options, managed_queue):
         bed_extra_columns = ["name", "score", "strand", "thickStart", "thickEnd",
                              "itemRgb", "blockCount", "blockSizes", "blockStarts"]
 
-        myheader = bed_extra_columns[:len(metainfo)]
+        # Prefer the file's own names; fall back to the BED optional-column
+        # vocabulary only for a genuinely headerless file. The fallback is
+        # required to stay exactly as wide as the data rows, so a header that
+        # does not cover every value column -- or that leaves a cell blank -- is
+        # discarded whole rather than patched, which would mix real condition
+        # names with BED keywords in one legend.
+        myheader = bed_extra_columns[:maxMetaColumns]
+        if maxMetaColumns > 0 and len(inputValueHeader) >= maxMetaColumns:
+            candidate = inputValueHeader[:maxMetaColumns]
+            if all(candidate):
+                myheader = candidate
 
         salida = open(outputfile,'w')
         salida.write("#Region\tMidpoint\tGene\tTranscript\tExon/Intron\tArea\tDistance\tTSSDistance\tTTSDistance\tPercRegion\tPercArea" + (("\t" + "\t".join(myheader)) if len(myheader) > 0 else "") + "\n")
@@ -1417,9 +1538,15 @@ def run(gtf, dhs, outputfile, match_table, options, managed_queue):
         gc.collect()
         gc.enable()
 
-        # Need to put something at the queue
-        managed_queue.put(None)
+        # Need to put something at the queue (the caller blocks on a get()).
+        # None means "finished without raising" -- it says nothing about how
+        # many associations were written, so the caller has to check the file.
+        if managed_queue is not None:
+            managed_queue.put(None)
     except Exception as e:
+        if managed_queue is None:
+            # Command-line path: no worker process to ferry the error out of.
+            raise
         managed_queue.put(e)
         raise e
 

@@ -88,6 +88,148 @@ class Job(Model):
                 return True
         return False
 
+    # Condition labels this class invents when nothing better is available.
+    # They are placeholders, so a later source (the values file's own header)
+    # is allowed to replace them; a real name never is.
+    _PLACEHOLDER_CONDITION = re_compile(r'^Condition \d+$')
+
+    # The BED specification's optional-column names. RGmatch
+    # (common/bioscripts/DHS_exon_association.py) writes a prefix of exactly
+    # this list as the header of its association file whenever the regions file
+    # it read had no header of its own, and Bed2GeneJob copies that header into
+    # B2G_output_*.tab -- which then arrives here as a values file. They are
+    # BED structure keywords, never experimental conditions, so a six-timepoint
+    # DNase time course must not be labelled "name / score / strand /
+    # thickStart / thickEnd / itemRgb" in the browser.
+    #
+    # DHS_exon_association now carries the regions file's real header through,
+    # so this should no longer trigger; it is kept because that fix lives in a
+    # converter that can be changed again, while this check sits on the last
+    # boundary before the names reach the client.
+    _BED_RESERVED_COLUMN_NAMES = frozenset([
+        "name", "score", "strand", "thickstart", "thickend", "itemrgb",
+        "blockcount", "blocksizes", "blockstarts"])
+
+    @staticmethod
+    def _isBedReservedVocabulary(names):
+        """True when every candidate label is a BED structural column name.
+
+        Matched as a set rather than as the literal prefix RGmatch emits, so a
+        converter that reorders or drops one of them is caught too. Requiring
+        *all* of them to be reserved words keeps a real omic whose single
+        condition happens to be called "score" from being rejected alongside a
+        genuine six-column BED header -- one such coincidence is plausible, six
+        in BED order is not.
+        """
+        if not names:
+            return False
+        return all(str(name).strip().lower() in Job._BED_RESERVED_COLUMN_NAMES
+                   for name in names)
+
+    @staticmethod
+    def _firstNonBlankRow(fileName, delimiter):
+        """The first row of `fileName` that carries at least one non-empty cell.
+
+        Reads no further than that row, so classifying a header costs one line
+        of I/O regardless of how big the relevance file is.
+        """
+        try:
+            with open(fileName, 'r', encoding='utf-8-sig', newline='') as handle:
+                for row in csv_reader(handle, delimiter=delimiter):
+                    if row and any(cell.strip() for cell in row):
+                        return row
+        except (IOError, OSError, UnicodeDecodeError):
+            return None
+        return None
+
+    @staticmethod
+    def _isPairSchemaHeader(row):
+        """True when the first row declares a two-column [TARGET, REGULATOR] file.
+
+        The shape of a relevance file is decided HERE, from its header, and not
+        from the identifiers in its first data row. The rule:
+
+            a `#`-prefixed first row is a SCHEMA header -- it names what the
+            columns hold ("# Gene name<TAB>miRNA ID"), never what conditions
+            the columns stand for.
+
+        Every producer in this codebase follows that split: MiRNA2GeneJob and
+        Bed2GeneJob write `#`-prefixed schema headers on their pair/target
+        files, while per-condition relevance matrices are written with a bare
+        header of condition names (see AdminTools/scripts/exampledata/writers.py
+        `writeRelevantPerCondition`, and datasets/03 which ships
+        `T00h<TAB>...<TAB>T24h` with no `#`).
+
+        Why the header and not the identifiers: the previous rule asked whether
+        BOTH cells of the first data row "look like a biological ID", which
+        means 4+ consecutive digits or a colon. That makes the parse depend on
+        how one arbitrary miRNA happens to be named --
+        `mmu-miR-1983` passed and `mmu-miR-100-3p` failed, in files of
+        identical shape -- so the same job parsed or mis-parsed depending on
+        which regulator sorted first. A header is written by the producer, is
+        identical for every row, and cannot be re-broken by a differently named
+        identifier.
+
+        Restricted to exactly two columns: a `#`-prefixed header with three or
+        more columns keeps its previous reading (condition names with the `#`
+        stripped), because there is no pair interpretation for it.
+        """
+        if not row or len(row) != 2:
+            return False
+        if not str(row[0]).strip().startswith('#'):
+            return False
+        return all(str(cell).strip() for cell in row)
+
+    def _applyValuesFileConditionNames(self, fileHeader, nValueColumns):
+        """Name the conditions from the values file when the relevance file cannot.
+
+        `conditionNames` used to have exactly one source, the relevance file,
+        which is the wrong one: a single-column relevance file ("these genes
+        are relevant") says nothing about conditions, so every such job fell
+        back to ["Condition 1"] and the client rendered "Cond 2".."Cond 6"
+        even though the values file's own header read T00h..T24h.
+
+        Real per-condition names supplied by the relevance file (datasets/03)
+        are kept: they are only replaced when what we hold is a placeholder or
+        does not line up with the number of value columns.
+
+        @param fileHeader   raw first row of the values file, or None
+        @param nValueColumns number of numeric columns per data row
+        """
+        if not fileHeader or nValueColumns < 1:
+            return
+
+        # The values file may or may not label its ID column: datasets/05 ships
+        # `#geneID<TAB>T00h..T24h` (nValueColumns + 1 cells) while datasets/10
+        # ships `I/C_0h..I/C_24h` with no label at all (nValueColumns cells).
+        if len(fileHeader) == nValueColumns + 1:
+            candidate = list(fileHeader[1:])
+        elif len(fileHeader) == nValueColumns:
+            candidate = list(fileHeader)
+        else:
+            # Cannot align header cells to value columns -- guessing here would
+            # mislabel the chart axes, which is worse than "Condition N".
+            return
+
+        candidate = [str(name).strip().lstrip('#').strip() for name in candidate]
+        if not all(candidate):
+            return
+
+        # A values file produced by a region-to-gene converter that lost the
+        # original header carries BED structure keywords where the condition
+        # names should be. "Condition 1".."Condition 6" is wrong but obviously
+        # a placeholder; "thickStart" is wrong and looks authoritative.
+        if Job._isBedReservedVocabulary(candidate):
+            return
+
+        current = self.conditionNames or []
+        if len(current) == nValueColumns and not all(
+                Job._PLACEHOLDER_CONDITION.match(str(name).strip()) for name in current):
+            # Already named by something that knew the conditions.
+            return
+
+        self.conditionNames = candidate
+
     #******************************************************************************************************************
     # CONSTRUCTORS
     #******************************************************************************************************************
@@ -399,6 +541,7 @@ class Job(Model):
             detected_delimiter = Job.detect_delimiter(valuesFileName)
             with open(valuesFileName, 'r', encoding='utf-8-sig', newline='') as inputDataFile:
                 nLine = 0
+                nValueColumns = 0
                 geneAux = omicValueAux = fileHeader = None
                 for line in csv_reader(inputDataFile, delimiter=detected_delimiter):
                     nLine = nLine+1
@@ -438,6 +581,9 @@ class Job(Model):
 
                         # Make sure to use numerical values
                         numericValues = list(map(float, line[1:len(line)]))
+                        # Widest data row seen, used to align the values-file
+                        # header with the conditions it names.
+                        nValueColumns = max(nValueColumns, len(numericValues))
 
                         # If there exists an appropriate association list, use that to retrieve the gene
                         # name as the previous process of matching regions or regulators to genes (rgmatch, etc)
@@ -501,6 +647,11 @@ class Job(Model):
 
                 totalInputFeatures = len(totalInputFeatures)
                 logging.info("PARSING USER USER GENE BASED FILE (" + omicName + ")... FINISHED. " + str(totalInputFeatures) + " FEATURES PROCESSED.")
+
+                # The relevance file is not a source of condition names unless
+                # it actually has one column per condition; fall back to the
+                # values file's own header, which always does.
+                self._applyValuesFileConditionNames(fileHeader, nValueColumns)
 
                 #*************************************************************************
                 # STEP 3. MAP TH FEATURE NAMES TO KEGG IDs
@@ -626,6 +777,7 @@ class Job(Model):
             detected_delimiter = Job.detect_delimiter(valuesFileName)
             with open(valuesFileName, 'r', encoding='utf-8-sig', newline='') as inputDataFile:
                 nLine = 0
+                nValueColumns = 0
                 compoundAux = omicValueAux = fileHeader = None
                 for line in csv_reader(inputDataFile, delimiter=detected_delimiter):
                     nLine = nLine+1
@@ -647,6 +799,7 @@ class Job(Model):
                         relList = relevantFeatures.get(omicValueAux.getInputName(), [])
                         omicValueAux.setRelevant(relList)
                         omicValueAux.setValues(list(map(float, line[1:len(line)])))
+                        nValueColumns = max(nValueColumns, len(line) - 1)
 
                         #STEP 2.C.2 CREATE A NEW TEMPORAL COMPOUND INSTANCE
                         compoundAux = Compound(line[0].lower())
@@ -657,6 +810,11 @@ class Job(Model):
                         allValues += omicValueAux.getValues()
 
                 logging.info("PARSING USER COMPOUND BASED FILE (" + omicName + ")... FINISHED. " + str(len(inputCompounds)) + " FEATURES PROCESSED.");
+
+                # Same fallback as the gene-based parser: a compound relevance
+                # file that lists one relevant compound per line cannot name
+                # the conditions, but the values file's header can.
+                self._applyValuesFileConditionNames(fileHeader, nValueColumns)
             inputDataFile.close()
 
 
@@ -742,6 +900,18 @@ class Job(Model):
         relevantFeatures = {}
         if fileName and os_path.isfile(fileName):
             detected_delimiter = Job.detect_delimiter(fileName)
+
+            # Decide the file's SHAPE from its header before reading any data.
+            # `# Gene name<TAB>miRNA ID` (what MiRNA2GeneJob writes) is a schema
+            # header for a [TARGET, REGULATOR] pair file and must never be read
+            # as a two-condition relevance matrix -- doing so emits bare
+            # `gene` / `mirna` keys that can never match the values file's
+            # `gene:::mirna` feature IDs, leaving the omic with zero relevant
+            # features and every pathway at Fisher p = 1.0.
+            if not isBedFormat and not forceLegacyTwoCol:
+                if Job._isPairSchemaHeader(Job._firstNonBlankRow(fileName, detected_delimiter)):
+                    forceLegacyTwoCol = True
+
             if forceLegacyTwoCol and not isBedFormat:
                 with open(fileName, 'r', encoding='utf-8-sig', newline='') as inputDataFile:
                     for nLine, line in enumerate(csv_reader(inputDataFile, delimiter=detected_delimiter), start=1):
@@ -791,6 +961,23 @@ class Job(Model):
                     # marks the header row, and a leading blank line must not
                     # consume that slot.
                     if not line or not any(cell.strip() for cell in line):
+                        continue
+                    # Comment / header rows are skipped for EVERY format,
+                    # before nLine is incremented so they do not consume the
+                    # header slot. The BED branch below used to guard only on
+                    # `len(line) < 3`, and it sits ahead of the header handling
+                    # for the other formats, so a `#CHR<TAB>start<TAB>end` row
+                    # -- shipped at line 886 of datasets/09's relevance file as
+                    # a concatenation artifact, and also the natural first line
+                    # of a BED export -- was turned into the phantom relevant
+                    # feature `#chr_start_end`.
+                    #
+                    # Single-column files never reached the header block either
+                    # (it only runs for len(line) > 1), so `#Gene name` in
+                    # datasets/08's dnase_relevant.tab became a feature key too.
+                    # A `#` prefix is unambiguous: no biological identifier
+                    # starts with one.
+                    if str(line[0]).strip().startswith('#') and (isBedFormat or len(line) == 1):
                         continue
                     nLine += 1
                     if isBedFormat == True:

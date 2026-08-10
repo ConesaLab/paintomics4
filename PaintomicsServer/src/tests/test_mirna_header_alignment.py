@@ -18,7 +18,31 @@ import unittest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
-EXAMPLE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../examplefiles"))
+EXAMPLE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../examplefiles")) + os.sep
+
+# The two shipped files are no longer flat under examplefiles/ -- they live in
+# the scenario tree, and their locations come from the manifest. Looking them up
+# by bare filename made this test *skip* after the reorganisation, which is the
+# worst outcome available: a silently green suite over files nobody checked.
+SHIPPED_FILES = {
+    "mirna_unmapped_values.tab": ("stategra-mirna", "miRNA unmapped"),
+    "gene_expression_values.tab": ("stategra-multiomics", "Gene expression"),
+}
+
+
+def shippedPath(name):
+    """Absolute path of a shipped values file, via the example catalogue."""
+    from src.common import ExampleDatasets
+
+    scenarioId, omicName = SHIPPED_FILES[name]
+    try:
+        scenario = ExampleDatasets.getScenario(EXAMPLE_DIR, scenarioId)
+    except ExampleDatasets.UnknownScenario:
+        return None
+    for omic in scenario.get("omics", []):
+        if omic["omicName"] == omicName:
+            return ExampleDatasets.absolutePath(EXAMPLE_DIR, omic["dataFile"])
+    return None
 
 
 def resolve_header(rows):
@@ -57,8 +81,8 @@ class ShippedExampleFilesTest(unittest.TestCase):
     """The two shipped files are the reason the rule cannot be a fixed slice."""
 
     def _rows(self, name):
-        path = os.path.join(EXAMPLE_DIR, name)
-        if not os.path.isfile(path):
+        path = shippedPath(name)
+        if path is None or not os.path.isfile(path):
             self.skipTest(name + " is not present in this checkout")
         rows = []
         with open(path) as handle:
