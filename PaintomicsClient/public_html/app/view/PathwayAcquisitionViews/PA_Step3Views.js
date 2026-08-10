@@ -3210,7 +3210,10 @@ function PA_Step3PathwayDetailsView() {
 						'      <a href="javascript:void(0)" class="button twoOptionsButton selected" name="line-chart">Line chart</a>'+
 						"  </div>" +
 						"  <div class='step3-tooltip-plot-container' name='heatmap-chart'  style='display:none;'>" +
-						"    <div id='" + divName + "_heatmapcontainer' name='heatmap-chart' style='height:"+ (metagenes.length * 35 + 10 )+ "px;width: 230px;'></div>" +
+						/* +34px on top of the row height: that is the band the rotated
+					   condition labels occupy under the x axis. Without it they
+					   would come out of the 35px allowed per trend. */
+					"    <div id='" + divName + "_heatmapcontainer' name='heatmap-chart' style='height:"+ (metagenes.length * 35 + 44 )+ "px;width: 230px;'></div>" +
 						"  </div>" +
 						"  <div class='step3-tooltip-plot-container selected' name='line-chart'>" +
 						"    <div id='" + divName + "_plotcontainer' style='height:100px;width: 230px;'></div>" +
@@ -3276,10 +3279,11 @@ function PA_Step3PathwayDetailsView() {
 				y++;
 			}
 
-			var xAxisCat = [];
-			for (var i = 0; i < maxX; i++) {
-				xAxisCat.push("Timepoint " + (i + 1));
-			}
+			/* Condition names instead of "Timepoint n" placeholders - see
+			 * paConditionAxis(). The header is looked up per omic because each
+			 * metagene chart plots exactly one omic. */
+			var xAxisConfig = paConditionAxis(maxX, paOmicHeaders(paJobModel(this), omicName), {maxChars: 9});
+			var omicHeaderPD = xAxisConfig.categories;
 
 			var replaceSymbols = {
 				"*": '<i class="relevantFeature"></i>',
@@ -3294,19 +3298,23 @@ function PA_Step3PathwayDetailsView() {
 					formatter: function () {
 						var title = this.point.series.name.split("#");
 						title[1] = (title.length > 1) ? title[1] : "";
+						/* Name the column in the tooltip too: the axis label is
+						 * length-capped, this is where the full name is readable. */
+						if (omicHeaderPD[this.point.x] !== undefined) {
+							title[0] = title[0] + " [" + omicHeaderPD[this.point.x] + "]";
+						}
 						return "<b>" + title[0].replace(/[\*\^]/g, function(c) { return replaceSymbols[c]; }) + "</b><br/>" + "<i class='tooltipInputName'>" + title[1] + "</i>" + (this.point.value === null ? "No data" : this.point.value);
 					},
 					useHTML: true
 				},
-				xAxis: {categories: xAxisCat, labels: {enabled: false}},
+				xAxis: xAxisConfig,
 				yAxis: {
 					categories: yAxisCat, title: null, width: 100,
 					labels: {
 						formatter: function () {
 							var title = this.value.split("#");
 							title[1] = (title.length > 1) ? title[1] : "No data";
-							return '<span style="width: 55px;display: block;   text-align: right;">' + ((title[0].length > 14) ? title[0].substring(0, 14) + "..." : title[0]).replace(/[\*\^]/g, function(c) { return replaceSymbols[c]; }) +
-							'</br><i class="tooltipInputName yAxisLabel">' + ((title[1].length > 14) ? title[1].substring(0, 14) + "..." : title[1]) + '</i></span>';
+							return paRowLabel(title[0], title[1], {width: 55, maxChars: 12});
 						},
 						style: {fontSize: "9px"}, useHTML: true
 					}
@@ -4836,8 +4844,8 @@ function PA_Step3HubAnalysis () {
 											'<h2 style="background-color: white"> Metabolite regulates Features </h2>'
 										elem.append(htmlCode);
 
-										heatmapSite = generateHeatmap(divIdComp, "Metabolomics", [compExpression], distributionSummaries, visualOptions)
-										plotSite = generatePlot(divIdComp + "_plotContainer", "Metabolomics", [compExpression], distributionSummaries, divIdComp + "_plotlegendContainer", visualOptions);
+										heatmapSite = generateHeatmap(divIdComp, "Metabolomics", [compExpression], distributionSummaries, visualOptions, paOmicHeaders(me.model, "Metabolomics"))
+										plotSite = generatePlot(divIdComp + "_plotContainer", "Metabolomics", [compExpression], distributionSummaries, divIdComp + "_plotlegendContainer", visualOptions, paOmicHeaders(me.model, "Metabolomics"));
 
 										// Expression value of regulate features.
 										//
@@ -4913,8 +4921,8 @@ function PA_Step3HubAnalysis () {
 
 
 											// expression of regulate features
-											heatmapGene = generateHeatmap(divId, omicName, regulateOmicsValue, distributionSummaries, visualOptions)
-											plot = generatePlot(divId + "_plotContainer", omicName, regulateOmicsValue, distributionSummaries, divId + "_plotlegendContainer", visualOptions);
+											heatmapGene = generateHeatmap(divId, omicName, regulateOmicsValue, distributionSummaries, visualOptions, paOmicHeaders(me.model, omicName))
+											plot = generatePlot(divId + "_plotContainer", omicName, regulateOmicsValue, distributionSummaries, divId + "_plotlegendContainer", visualOptions, paOmicHeaders(me.model, omicName));
 											$("div.contentbox h3 :checkbox").change(function () {
 												let onlyRelevants = $(this).is(":checked");
 												// Highcharts does not automatically hide Y labels when hiding series, so it is easier and faster
@@ -4924,8 +4932,8 @@ function PA_Step3HubAnalysis () {
 													omicValues = omicValues.filter(x => x.isRelevant() || x.isRelevantAssociation());
 												}
 												$('#' + divId + "_heatmapContainer").height(omicValues.length * 30 + 100);
-												generateHeatmap(divId, omicName, omicValues, distributionSummaries, visualOptions)
-												generatePlot(divId + "_plotContainer", omicName, omicValues, distributionSummaries, divId + "_plotlegendContainer", visualOptions);
+												generateHeatmap(divId, omicName, omicValues, distributionSummaries, visualOptions, paOmicHeaders(me.model, omicName))
+												generatePlot(divId + "_plotContainer", omicName, omicValues, distributionSummaries, divId + "_plotlegendContainer", visualOptions, paOmicHeaders(me.model, omicName));
 											})
 										}
 
@@ -5460,8 +5468,8 @@ function PA_Step3MetaboliteView() {
 
 													"</div>";
 												elem.append(htmlCode);
-												heatmapComp = generateHeatmap(divId, omicName, regulateOmicsValueComp, distributionSummaries, visualOptions)
-												plot = generatePlot(divId + "_plotContainer", omicName, regulateOmicsValueComp, distributionSummaries, divId + "_plotlegendContainer", visualOptions);
+												heatmapComp = generateHeatmap(divId, omicName, regulateOmicsValueComp, distributionSummaries, visualOptions, paOmicHeaders(me.model, omicName))
+												plot = generatePlot(divId + "_plotContainer", omicName, regulateOmicsValueComp, distributionSummaries, divId + "_plotlegendContainer", visualOptions, paOmicHeaders(me.model, omicName));
 
 												$("#" + divId + "_cb_relevant").change(function () {
 													let onlyRelevants = $(this).is(":checked");
@@ -5476,8 +5484,8 @@ function PA_Step3MetaboliteView() {
 
 													$('#' + divId).height(omicValues.length * 30 + 100);
 
-													heatmapComp = generateHeatmap(divId, omicName, omicValues, distributionSummaries, visualOptions)
-													plot = generatePlot(divId + "_plotContainer", omicName, omicValues, distributionSummaries, divId + "_plotlegendContainer", visualOptions);
+													heatmapComp = generateHeatmap(divId, omicName, omicValues, distributionSummaries, visualOptions, paOmicHeaders(me.model, omicName))
+													plot = generatePlot(divId + "_plotContainer", omicName, omicValues, distributionSummaries, divId + "_plotlegendContainer", visualOptions, paOmicHeaders(me.model, omicName));
 
 												});
 
@@ -6035,6 +6043,333 @@ var getColor = function (limits, value, colorScale) {
 			return "rgb(" + Math.round(red) + ", " + Math.round(green) + "," + Math.round(blue) + ")";
 		};
 
+/* =====================================================================
+ * Shared heatmap / line-chart labelling helpers.
+ *
+ * These live next to getMinMax() and getColor() because they have the same
+ * lifetime and the same two consumers: the charts drawn in PA_Step3Views.js
+ * and the ones drawn in PA_Step4Views.js. app.js loads step 3 before step 4
+ * and both files are evaluated long before any chart is drawn, so step 4 can
+ * call these the same way it already calls getColor().
+ * ===================================================================== */
+
+/**
+ * Escapes a string so it is safe inside a double-quoted HTML attribute.
+ * Needed because the row labels below put the untruncated feature name in a
+ * title attribute, and feature names come from user-uploaded files.
+ */
+var paEscapeAttribute = function (text) {
+	return String((text === undefined || text === null) ? "" : text)
+		.replace(/&/g, "&amp;")
+		.replace(/"/g, "&quot;")
+		.replace(/</g, "&lt;")
+		.replace(/>/g, "&gt;");
+};
+
+/**
+ * Truncation that keeps the END of the string.
+ *
+ * Every truncation in these two files used to keep the head - "first 14", or
+ * "5 head + 4 tail". For a column of Ensembl gene identifiers that keeps the
+ * species prefix that every single row shares and throws away the digits that
+ * tell the rows apart: a heatmap of 164 distinct identifiers rendered as 164
+ * copies of "ENSMU...7533". The discriminating characters of an accession
+ * (ENSMUSG00000036438), of a gene symbol pair (Calm1 / Calm2) and of a
+ * replicate column (Ctrl_R1 / Ctrl_R2) are all at the end, so the end is what
+ * survives here.
+ *
+ * A leading relevance marker ("* " / "^ ") is held aside and re-attached: it
+ * is the flag that says the row is significant, and front-ellipsising would
+ * silently drop it.
+ */
+var paTruncateTail = function (text, maxChars) {
+	text = String((text === undefined || text === null) ? "" : text);
+
+	var markers = text.match(/^[\*\^\s]*/)[0];
+	var body = text.substring(markers.length);
+
+	if (!maxChars || markers.length + body.length <= maxChars) {
+		return text;
+	}
+
+	var budget = Math.max(1, maxChars - markers.length - 1);
+
+	return markers + "…" + body.substring(body.length - budget);
+};
+
+/**
+ * Keep the FRONT of a label, ellipsis at the end.
+ *
+ * The mirror of paTruncateTail, and which one is right depends entirely on
+ * where the information sits. An input identifier is a shared prefix plus a
+ * discriminating tail (every mouse gene starts "ENSMUSG0000"), so the tail is
+ * what must survive. A display name is the opposite: "Slc22a3 (20497)" front-
+ * truncated reads "…2a3 (20497)", which names nothing. Ellipsising both lines
+ * the same way was measured on the live app -- Gnai3, Adcy9 and Prkaca all came
+ * out as "…ai3", "…cy9", "…aca".
+ */
+var paTruncateHead = function (text, maxChars) {
+	text = String((text === undefined || text === null) ? "" : text);
+
+	var markers = text.match(/^[\*\^\s]*/)[0];
+	var body = text.substring(markers.length);
+
+	if (!maxChars || markers.length + body.length <= maxChars) {
+		return text;
+	}
+
+	var budget = Math.max(1, maxChars - markers.length - 1);
+
+	return markers + body.substring(0, budget) + "…";
+};
+
+/**
+ * The JobInstance a view belongs to, or null.
+ *
+ * The chart-drawing views are mounted under the step-3 job view, under the
+ * step-4 job view, or (for the pathway details panel) under the network view,
+ * and getParent() walks up until it runs out of parents, so asking for the
+ * wrong one is safe. Everything downstream treats null as "no header
+ * available" and falls back to positional labels rather than failing.
+ */
+var paJobModel = function (view) {
+	var jobView = null;
+
+	try {
+		if (view && view.getParent) {
+			jobView = view.getParent("PA_Step4JobView") || view.getParent("PA_Step3JobView");
+		}
+	} catch (error) {
+		console.error(Date.logFormat() + " could not resolve the job view for condition labels.", error);
+		return null;
+	}
+
+	return (jobView && jobView.getModel) ? jobView.getModel() : null;
+};
+
+/**
+ * The name a heatmap row should carry for a feature: its symbol together with
+ * the KEGG identifier that links the symbol to the uploaded identifier.
+ *
+ * The symbol on its own does not identify a row. The identifier map is
+ * many-to-many, so one uploaded identifier can be matched to several KEGG
+ * genes: the mouse Rap1 heatmap printed 166 rows for 164 identifiers, two of
+ * them reading "Calm2 # ENSMUSG00000036438" and "Calm1 # ENSMUSG00000036438"
+ * - the same measurement under two symbols - while a third row paired "Calm1"
+ * with a different identifier entirely. Painting one measurement onto several
+ * KEGG boxes is what the mapping says; the label just has to say which box.
+ *
+ * The id is appended on the symbol side because every consumer of these
+ * labels splits them on "#" and expects the identifier on the right.
+ */
+var paFeatureRowName = function (feature) {
+	if (!feature) {
+		return "";
+	}
+
+	var name = (feature.getName ? feature.getName() : feature.name);
+	var featureID = (feature.getID ? feature.getID() : feature.ID);
+
+	name = String((name === undefined || name === null) ? "" : name);
+
+	if (featureID && String(featureID) !== name) {
+		return name + " (" + featureID + ")";
+	}
+
+	return name;
+};
+
+/**
+ * The column headers of one omic, in the replicate/sample mode the user has
+ * selected, as ["<id column>", "<condition 1>", ...]. Empty when unavailable
+ * (a job model restored from an older session may not carry them).
+ */
+var paOmicHeaders = function (jobModel, omicName) {
+	if (!jobModel || !jobModel.getOmicHeaders) {
+		return [];
+	}
+
+	var mode = jobModel.getReplicateMode ? jobModel.getReplicateMode() : "replicates";
+	var headers = jobModel.getOmicHeaders(null, mode) || {};
+
+	return headers[omicName] || [];
+};
+
+/**
+ * The column header shared by several omics, or an empty array if they do not
+ * all agree on it.
+ *
+ * The per-feature popup stacks one row per omic under a single x axis. Omics
+ * are uploaded independently and need not share a design, so labelling that
+ * axis from whichever omic happened to be first would print one omic's
+ * condition names over another omic's cells. An unlabelled axis is bad; a
+ * confidently mislabelled one is worse, so disagreement falls back to
+ * positional labels.
+ */
+var paSharedOmicHeader = function (jobModel, omicNames, columnCount) {
+	var reference = null, signature = null, header, current, i;
+
+	for (i = 0; i < omicNames.length; i++) {
+		header = paOmicHeaders(jobModel, omicNames[i]);
+
+		if (header.length < columnCount + 1) {
+			return [];
+		}
+
+		current = header.slice(1, columnCount + 1).join("");
+
+		if (signature === null) {
+			signature = current;
+			reference = header;
+		} else if (signature !== current) {
+			return [];
+		}
+	}
+
+	return reference || [];
+};
+
+/**
+ * The x-axis fragment shared by every heatmap and line chart that plots one
+ * column per experimental condition.
+ *
+ * All of them used to push "Timepoint 1..n" and then set labels.enabled to
+ * false, so a six-condition job drew six anonymous columns and the only way
+ * to tell T02h from T18h was to hover a cell - even though the real names
+ * travel with the job the whole time, in the uploaded file's header row, and
+ * the tooltips already print them.
+ *
+ * The labels cannot merely be switched back on. These charts sit in
+ * containers as narrow as 230px minus a 100px label gutter - about 21px per
+ * column - where horizontal labels overlap and Highcharts starts dropping
+ * every other one, which looks exactly like the unlabelled axis being fixed.
+ * So the rotation and the length cap are part of the same change, applied
+ * here once instead of at each of the seven call sites.
+ *
+ * @param {Number} columnCount  conditions actually plotted
+ * @param {Array}  omicHeader   the omic's header row, id column first
+ * @param {Object} options      {maxChars, rotation, fontSize}
+ */
+var paConditionAxis = function (columnCount, omicHeader, options) {
+	options = options || {};
+
+	var maxChars = options.maxChars || 12;
+	var categories = [];
+	var name, i;
+
+	for (i = 0; i < columnCount; i++) {
+		/* Column i is header[i + 1]: position 0 of the header row is the
+		 * feature-id column ("#geneID"). */
+		name = (omicHeader && omicHeader[i + 1] !== undefined && omicHeader[i + 1] !== null && omicHeader[i + 1] !== "")
+			? String(omicHeader[i + 1])
+			: ("Condition " + (i + 1));
+		categories.push(name);
+	}
+
+	return {
+		categories: categories,
+		labels: {
+			enabled: true,
+			rotation: (options.rotation === undefined) ? -45 : options.rotation,
+			align: "right",
+			/* step:1 forbids Highcharts' automatic thinning. A label it decides
+			 * to skip is indistinguishable from no label at all. */
+			step: 1,
+			style: {fontSize: (options.fontSize || "9px")},
+			formatter: function () {
+				return paTruncateTail(this.value, maxChars);
+			}
+		}
+	};
+};
+
+/**
+ * One two-line heatmap row label: display name above, the identifier it was
+ * matched from below.
+ *
+ * The two lines are ellipsised from opposite ends, because the information is
+ * at opposite ends: the display name keeps its front (paTruncateHead) and the
+ * identifier keeps its tail (paTruncateTail). The full untruncated pair goes
+ * into a title attribute, because the tooltip is not a fallback for what is
+ * lost here - it truncates to 12 characters as well.
+ */
+var paRowLabel = function (primary, secondary, options) {
+	options = options || {};
+
+	var width = options.width || 100;
+	var maxChars = options.maxChars || 14;
+	var replaceSymbols = {
+		"*": '<i class="relevantFeature"></i>',
+		"^": '<i class="relevantAssociationFeature"></i>'
+	};
+
+	primary = String((primary === undefined || primary === null) ? "" : primary);
+	secondary = String((secondary === undefined || secondary === null) ? "" : secondary);
+
+	/* Regulator rows embed markup (e.g. "WRKY40<br><span ...>AT2G25000</span>")
+	 * in the primary side; slicing characters there would cut a tag in half, so
+	 * those are rendered verbatim. */
+	var primaryHasHTML = primary.indexOf("<") >= 0;
+	var renderedPrimary = primaryHasHTML
+		? primary
+		: paTruncateHead(primary, maxChars).replace(/[\*\^]/g, function (c) { return replaceSymbols[c]; });
+	var renderedSecondary = paTruncateTail(secondary, maxChars);
+	var fullText = (primaryHasHTML ? primary.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim() : primary) +
+		(secondary ? "  |  " + secondary : "");
+
+	return '<span title="' + paEscapeAttribute(fullText) + '" style="width: ' + width + 'px;display: block;text-align: right;">' +
+		renderedPrimary +
+		'</br><i class="tooltipInputName yAxisLabel">' + renderedSecondary + '</i></span>';
+};
+
+/**
+ * The colour scale a heatmap was painted with, as a standalone HTML strip.
+ *
+ * The heatmaps all carry legend:{enabled:false} for a good reason - a
+ * Highcharts legend lists series, and there is one series per row, so it would
+ * have printed hundreds of entries. The side effect was that nothing on screen
+ * said what red or blue meant. This draws the real ramp by sampling the very
+ * getColor() the cells were painted with, so it cannot drift away from them.
+ *
+ * Styles are inline because this markup is injected into containers owned by
+ * several different views, none of which has a stylesheet rule for it.
+ */
+var paColorLegend = function (limits, colorScale, options) {
+	options = options || {};
+
+	if (!limits || !isFinite(limits.min) || !isFinite(limits.max) || limits.min === limits.max) {
+		/* A degenerate range (a single-valued omic, or a summary that never
+		 * loaded) would produce "rgb(NaN,...)" stops, and one invalid stop
+		 * voids the whole CSS gradient. Draw nothing instead. */
+		return "";
+	}
+
+	var steps = options.steps || 24;
+	var barWidth = options.width || 120;
+	var stops = [];
+	var i, ratio;
+
+	for (i = 0; i <= steps; i++) {
+		ratio = i / steps;
+		stops.push(getColor(limits, limits.min + ratio * (limits.max - limits.min), colorScale) +
+			" " + Math.round(ratio * 100) + "%");
+	}
+
+	var format = function (value) {
+		return (Math.abs(value) >= 1000 || (value !== 0 && Math.abs(value) < 0.01))
+			? value.toExponential(1)
+			: value.toFixed(2);
+	};
+
+	return '<div class="paColorLegend" style="display:inline-block;font-size:10px;color:#555;margin:2px 0 6px 0;white-space:nowrap;">' +
+		'<span style="vertical-align:middle;">' + format(limits.min) + '</span>' +
+		'<span title="Colour scale used by this heatmap. Values outside the range are drawn as outliers." ' +
+		'style="display:inline-block;vertical-align:middle;margin:0 5px;width:' + barWidth + 'px;height:10px;border:1px solid #999;' +
+		'background:linear-gradient(to right,' + stops.join(",") + ');"></span>' +
+		'<span style="vertical-align:middle;">' + format(limits.max) + '</span>' +
+		'</div>';
+};
+
 
 var renderFunctionLimit = function (value, metadata, record) {
 		var myToolTipText = "<b style='display:block; width:200px'>" + "Metabolism" + "</b>";
@@ -6130,7 +6465,12 @@ var renderFunctionHub= function (value, metadata, record) {
 	};
 
 
-let generateHeatmap = function (targetID, omicName, omicsValues, dataDistributionSummaries, visualOptions) {
+/* `omicHeader` was added so the metabolite and hub panels can label the x axis
+ * with the real condition names. These two are plain module functions with no
+ * view of their own, so unlike the chart methods elsewhere they cannot walk up
+ * to the job model themselves - the caller, which does have it, passes it in.
+ * Omitting it is allowed and falls back to positional labels. */
+let generateHeatmap = function (targetID, omicName, omicsValues, dataDistributionSummaries, visualOptions, omicHeader) {
 	var featureValues, x = 0, y = 0, maxX = -1, series = [], yAxisCat = [], serie;
 
 	for (var i in omicsValues) {
@@ -6187,10 +6527,9 @@ if (omicsValues[i].isRelevantAssociation()) {
 		y++;
 	}
 
-	var xAxisCat = [];
-	for (var i = 0; i < maxX; i++) {
-		xAxisCat.push("Timepoint " + (i + 1));
-	}
+	/* Real condition names on the x axis - see paConditionAxis(). */
+	var xAxisConfig = paConditionAxis(maxX, omicHeader, {maxChars: 12});
+	var xAxisCat = xAxisConfig.categories;
 
 	var replaceSymbols = {
 		"*": '<i class="relevantFeature"></i>',
@@ -6214,19 +6553,23 @@ if (omicsValues[i].isRelevantAssociation()) {
 			formatter: function () {
 				var title = this.point.series.name.split("#");
 				title[1] = (title.length > 1) ? title[1] : "";
+				/* The axis label is length-capped; the tooltip carries the full
+				 * condition name so nothing is only ever shown truncated. */
+				if (xAxisCat[this.point.x] !== undefined) {
+					title[0] = title[0] + " [" + xAxisCat[this.point.x] + "]";
+				}
 				return "<b>" + title[0].replace(/[\*\^]/g, function(c) { return replaceSymbols[c]; }) + "</b><br/>" + "<i class='tooltipInputName'>" + title[1] + "</i>" + (this.point.value === null ? "No data" : this.point.value);
 			},
 			useHTML: true
 		},
-		xAxis: {categories: xAxisCat, labels: {enabled: false}},
+		xAxis: xAxisConfig,
 		yAxis: {
 			categories: yAxisCat, title: null, width: 100,
 			labels: {
 				formatter: function () {
 					var title = this.value.split("#");
 					title[1] = (title.length > 1) ? title[1] : "No data";
-					return '<span style="width: 100px;display: block;   text-align: right;">' + ((title[0].length > 14) ? title[0].substring(0, 14) + "..." : title[0]).replace(/[\*\^]/g, function(c) { return replaceSymbols[c]; }) +
-					'</br><i class="tooltipInputName yAxisLabel">' + ((title[1].length > 14) ? title[1].substring(0, 14) + "..." : title[1]) + '</i></span>';
+					return paRowLabel(title[0], title[1], {width: 100, maxChars: 16});
 				},
 				style: {fontSize: "9px"}, useHTML: true
 			}
@@ -6274,7 +6617,8 @@ if (omicsValues[i].isRelevantAssociation()) {
 	return heatmap;
 };
 
-let generatePlot = function (targetID, omicName, omicsValues, dataDistributionSummaries, legendContainerId, visualOptions) {
+/* `omicHeader` - see the note on generateHeatmap above. */
+let generatePlot = function (targetID, omicName, omicsValues, dataDistributionSummaries, legendContainerId, visualOptions, omicHeader) {
 	var series = [], maxX = -1;
 	var yAxisItem = {title: null}, omicsValue, auxValues;
 
@@ -6318,10 +6662,10 @@ if (omicsValues[i].isRelevantAssociation()) {
 		];
 	}
 
-	var xAxisCat = [];
-	for (var i = 0; i < maxX; i++) {
-		xAxisCat.push("Timepoint " + (i + 1));
-	}
+	/* Real condition names on the x axis - see paConditionAxis(). */
+	var xAxisConfig = paConditionAxis(maxX, omicHeader, {maxChars: 12});
+	var xAxisCat = xAxisConfig.categories;
+
 	var replaceSymbols = {
 		"*": '<i class="relevantFeature"></i>',
 		"^": '<i class="relevantAssociationFeature"></i>'
@@ -6334,11 +6678,14 @@ if (omicsValues[i].isRelevantAssociation()) {
 			formatter: function () {
 				var title = this.point.series.name.split("#");
 				title[1] = (title.length > 1) ? title[1] : "";
+				if (xAxisCat[this.point.x] !== undefined) {
+					title[0] = title[0] + " [" + xAxisCat[this.point.x] + "]";
+				}
 				return "<b>" + title[0].replace(/[\*\^]/g, function(c) { return replaceSymbols[c]; }) + "</b><br/>" + "<i class='tooltipInputName'>" + title[1] + "</i>" + (this.point.y === null ? "No data" : this.point.y);
 			},
 			useHTML: true
 		},
-		xAxis: [{categories: xAxisCat, labels: {enabled: false}}],
+		xAxis: [xAxisConfig],
 		yAxis: yAxisItem,
 		series: series
 	});

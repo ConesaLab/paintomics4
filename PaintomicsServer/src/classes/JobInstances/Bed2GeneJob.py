@@ -49,6 +49,13 @@ class Bed2GeneJob(Job):
         self.promoter             = 1300
         self.geneAreaPercentage   = 90
         self.regionAreaPercentage = 50
+        # Deliberately NOT forwarded by getOptions(): this list drops "TTS",
+        # while RGmatch emits eight areas and uses the list to break ties. A
+        # short list leaves TTS hits unranked, so sending it would degrade the
+        # tie-break rather than configure it. No form field feeds this yet
+        # (see the "#rules" placeholder in Bed2GenesServlet), so RGmatch's own
+        # complete eight-area default is the right thing to run with. Restore
+        # the missing "TTS" before wiring this up.
         self.rules                = ["TSS","1st_EXON","PROMOTER","INTRON","GENE_BODY","UPSTREAM","DOWNSTREAM"]
         self.geneIDtag            = "gene_id"
         self.ignoreMissing        = True
@@ -72,15 +79,32 @@ class Bed2GeneJob(Job):
     #         "-o", tmpFile,
     #     ]
     def getOptions(self):
+        """Build the options dict for DHS_exon_association.run().
+
+        The keys must be the ones run() reads (DHS_exon_association.RUN_OPTION_KEYS),
+        NOT the getopt flag names: run() looks every setting up with
+        .get(key, default), so a key it does not recognise used to be dropped
+        without a sound. Two were being dropped -- "report" (run() calls it
+        "level") and "gene" (run() calls it "gene_id_tag") -- which is why the
+        Report and GTF-tag settings on the form had no effect whatsoever.
+        run() now rejects unknown keys, so a future rename fails loudly here.
+        """
         return {
             "presortedGTF": self.presortedGTF,
-            "report": self.report,
-            "distance": self.distance,
+            "level": self.report,
+            # The form asks for a distance in kb ("Distance (kb)", default 10)
+            # but run() compares it against genomic coordinates, in bp. The
+            # kb->bp scaling lived only in the -q/--distance getopt branch, so
+            # the web app searched 10 bp around each region and produced zero
+            # associations for every user. Scale here, in the sender that
+            # speaks kb -- run()'s "distance" stays a plain bp value for every
+            # caller.
+            "distance": int(round(float(self.distance) * 1000)),
             "tss": self.tss,
             "promoter": self.promoter,
             "perc_area": self.geneAreaPercentage,
             "perc_region": self.regionAreaPercentage,
-            "gene": self.geneIDtag,
+            "gene_id_tag": self.geneIDtag,
             "ignore_missing": self.ignoreMissing
         }
 
@@ -108,8 +132,24 @@ class Bed2GeneJob(Job):
 
         try:
             self.distance = float(self.distance)
+            # A negative search radius reaches run() as a negative bp window
+            # and matches nothing, producing the empty association the user
+            # then has to diagnose. The getopt path rejects it too (it keeps
+            # its default when -q is negative); say so here instead.
+            if self.distance < 0:
+                error +=  " -  Distance must be a positive numeric value (in kb)"
         except:
             error +=  " -  Distance must be a numeric value"
+        # run() only knows these three report levels and now refuses anything
+        # else. Catch it while we can still name the field. getattr, because
+        # this guard accumulates messages rather than raising: an AttributeError
+        # out of here would escape as an internal error and hide the real
+        # complaints collected above and below it.
+        reportLevel = str(getattr(self, "report", "gene")).lower()
+        if reportLevel not in ("exon", "transcript", "gene"):
+            error +=  " -  Report must be one of: exon, transcript, gene"
+        else:
+            self.report = reportLevel
         try:
             self.tss = float(self.tss)
         except:
@@ -279,6 +319,33 @@ class Bed2GeneJob(Job):
 
         return nConditions, error
 
+    @staticmethod
+    def countAssociationRows(associationFile):
+        """Count the data rows in an RGMatch association file.
+
+        The first line is always the column header, written by
+        DHS_exon_association.run() before any region is examined, so it is not
+        evidence that anything was found. Counted line by line rather than with
+        readlines(): a permissive Distance over a real genome can associate
+        millions of regions and this runs on the request thread.
+
+        @param associationFile absolute path to the RGMatch output
+        @returns number of data rows, 0 if the file is absent or header-only
+        """
+        if not os_path.isfile(associationFile):
+            return 0
+
+        nRows = 0
+        with open(associationFile, 'r') as associationHandler:
+            for nLine, line in enumerate(associationHandler):
+                if nLine == 0:
+                    continue
+                # Trailing newlines and any blank separator line are not data.
+                if line.strip() != "":
+                    nRows += 1
+
+        return nRows
+
     ##*************************************************************************************************************
     # This function...
     #
@@ -356,6 +423,27 @@ class Bed2GeneJob(Job):
 
         if queue_content is not None:
             raise queue_content
+
+        # An empty queue message only means run() returned without raising. It
+        # says nothing about how many associations were found: run() writes the
+        # output header before it examines a single region, so a run that
+        # matched nothing still leaves a well-formed, header-only file behind.
+        # That file was accepted here, registered as an omic with zero
+        # features, and only blew up a step later as
+        #   "The file B2G_output_<date>.tab does not seem to have any feature
+        #    lines."
+        # -- a message about an internal artefact that names neither the cause
+        # nor the setting that governs it. Stop here instead, and name the
+        # Distance the search actually used.
+        if self.countAssociationRows(tmpFile) == 0:
+            raise Exception(
+                "No region could be associated with any gene, so there is "
+                "nothing to analyse. The search used a Distance of " +
+                str(self.distance) + " kb around each region, reporting at "
+                "the '" + str(self.report) + "' level. Check that the "
+                "chromosome names in your regions file match the ones in the "
+                "annotation (GTF) file -- '1' and 'chr1' do not match -- and "
+                "try a larger Distance.")
 
         logging.info("STARTING DHS_exon_association PROCESS...Done")
 

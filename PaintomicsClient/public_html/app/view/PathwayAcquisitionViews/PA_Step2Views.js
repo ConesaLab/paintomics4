@@ -20,8 +20,9 @@
 *     aconesa@cipf.es
 * THIS FILE CONTAINS THE FOLLOWING COMPONENT DECLARATION
 * - PA_Step2JobView
+* - PA_Step2ReplicateDetectionView
 * - PA_Step2CompoundSetView
-* - PA_Step2CompoundView
+* - PA_OmicSummaryPanel
 *
 */
 //Ext.require('Ext.chart.*');
@@ -98,13 +99,28 @@ function PA_Step2JobView() {
 		}
 
 		this.model = jobModel;
+
+		// JobController.showJobInstance re-loads the model into an existing view
+		// on its "force" path, so the list has to be rebuilt from scratch or the
+		// second load stacks a duplicate card set on top of the first.
+		this.items = [];
+
 		var foundCompounds = this.model.getFoundCompounds();
 		var compoundSetView = null;
 		for (var i in foundCompounds) {
 			compoundSetView = new PA_Step2CompoundSetView();
 			compoundSetView.loadModel(foundCompounds[i]);
-			foundCompounds[i].addObserver(compoundSetView);
-			this.items.push(compoundSetView);
+			// Only the sets that still need a decision get a card. The *model*
+			// keeps every set: PA_Step3Views gates Hub Analysis and Class
+			// Activity on model.foundCompounds.length, and getSelectedCompounds()
+			// reads the model, so the auto-resolved sets still reach the server
+			// with their selection intact. Nothing observes a CompoundSet
+			// (nothing ever calls notifyObservers on one), so registering 6592
+			// dead observers - and logging one line per registration - is pure
+			// cost and is gone.
+			if (compoundSetView.needsDisambiguation()) {
+				this.items.push(compoundSetView);
+			}
 		}
 	};
 
@@ -324,9 +340,16 @@ function PA_Step2JobView() {
 			}
 		}
 
-		var compoundsComponents = [];
+		var compoundsPanelHTML = "";
 
-		if (me.items.length > 0) {
+		// This guard is deliberately NOT me.items.length. items only holds the
+		// sets that still need disambiguation, and the threshold combo below
+		// belongs to the job, not to the cards: its value is posted as
+		// thresholdMetaboliteClass and PathwayAcquisitionServlet feeds it to
+		// compundsClassification(). A job whose compounds all resolved
+		// automatically must still be able to set it, so it is gated on the
+		// model having matched compounds at all.
+		if (me.getModel().getFoundCompounds().length > 0) {
 			// create a box named "Configure the metabolite class activity threshold"
 			omicSummaryPanelComponents.splice(5, 0, {
 				xtype: 'container',
@@ -352,19 +375,32 @@ function PA_Step2JobView() {
 					items: thresholdMetaboliteClass
 				}]
 			}, {xtype: 'container', html:'<div style="display: none;"></div>'});
+		}
 
-			compoundsComponents.push({
-				xtype: 'box', cls: "contentbox omicSummaryBox",
-				html: '<div id="about">' +
-				'  <h2>Compounds disambiguation</h2>' +
-				'  <p>Some compounds names need to be disambiguated.</p>' +
-				'  <p>Please check the list below and choose the compounds in which you are interested.</p> ' +
-				'</div>'
-			});
-
-			for (var i in me.items) {
-				compoundsComponents.push(me.items[i].getComponent());
-			}
+		if (me.items.length > 0) {
+			// The whole disambiguation panel is one string of HTML inside a
+			// single component. It used to be a column layout holding one
+			// container per matched name, each holding one Ext box per candidate
+			// plus an Ext.tip.ToolTip per candidate; a job with 6592 matched
+			// names built tens of thousands of components and froze the tab for
+			// minutes before the first paint. The markup below reproduces the
+			// same DOM (the cards are laid out by .metaboliteBox:nth-child in
+			// main.css, not by the column layout) at a fraction of the cost.
+			compoundsPanelHTML =
+			'<div class="contentbox omicSummaryBox">' +
+			'  <div id="about">' +
+			'    <h2>Compounds disambiguation</h2>' +
+			'    <p>Some compounds names need to be disambiguated.</p>' +
+			'    <p>Please check the list below and choose the compounds in which you are interested.</p> ' +
+			'  </div>' +
+			'</div>' +
+			me.items.map(function(compoundSetView, index) {
+				return compoundSetView.renderCard(index);
+			}).join("") +
+			// The cards are floated; the column layout used to supply the
+			// clearfix, so without this the panel would collapse to no height
+			// and the cards would spill out of the step-2 form.
+			'<div style="clear: both;"></div>';
 		}
 
 		this.component = Ext.widget({
@@ -392,10 +428,9 @@ function PA_Step2JobView() {
 					hidden: true,
 					value: this.model.getJobID()
 				}, {
-					xtype: "container", itemId: "compoundsPanelsContainer",
+					xtype: "box", itemId: "compoundsPanelsContainer",
 					cls: "compoundsPanelsContainer",
-					layout: 'column',
-					items: compoundsComponents
+					html: compoundsPanelHTML
 				}]
 			}],
 			listeners: {
@@ -413,6 +448,7 @@ function PA_Step2JobView() {
 						application.getController("DataManagementController").downloadFilesHandler(me, "mapping_results_" + me.getModel().getJobID() + ".zip", "job_result", me.getModel().getJobID());
 					});
 					initializeTooltips(".helpTip");
+					me.initCompoundsPanelHandlers(this.queryById("compoundsPanelsContainer"));
 				},
 				beforedestroy: function() {
 					me.getModel().deleteObserver(me);
@@ -431,8 +467,169 @@ function PA_Step2JobView() {
 	this.resetViewHandler = function() {
 		this.controller.resetButtonClickHandler(this);
 	};
+	/**
+	* Every card shares one set of delegated jQuery handlers and one tooltip,
+	* bound once to the panel that contains them. Binding per candidate - and
+	* creating an Ext.tip.ToolTip per candidate - was the other half of the
+	* step-2 freeze: that cost scales with the number of matched compounds,
+	* this does not. Delegation also covers the alternative candidates, which
+	* are only inserted into the document when a card is expanded (which is why
+	* the old code needed a 2 second setTimeout to re-bind them).
+	*
+	* @param {Ext.Component} panelComponent the compoundsPanelsContainer box
+	*/
+	this.initCompoundsPanelHandlers = function(panelComponent) {
+		var me = this;
+
+		if (me.items.length === 0 || !panelComponent || !panelComponent.el) {
+			return;
+		}
+
+		// Scoped to this view's own element: a previous step-2 job may still be
+		// in the DOM behind the card layout, and its cards index into a
+		// different items array.
+		var panel = $(panelComponent.el.dom);
+
+		panel.on("change", "input[type=checkbox][name=metabolite]", function() {
+			me.compoundSelectionHandler($(this));
+		});
+
+		panel.on("click", ".showOtherCompoundsButton", function() {
+			me.showOtherCompoundsHandler($(this));
+		});
+
+		Ext.create('Ext.tip.ToolTip', {
+			target: panel[0],
+			delegate: '.metaboliteCompound',
+			listeners: {
+				beforeshow: function(tip) {
+					var compound = $(tip.triggerElement);
+					// The browser has already decoded the attributes, so the
+					// values go back through htmlEncode before being re-injected.
+					var compoundID = compound.attr("data-compound-id") || "";
+					var compoundName = compound.attr("data-compound-name") || "";
+
+					tip.update(
+						'<b>' + Ext.String.htmlEncode(compoundName) + '</b> (' + Ext.String.htmlEncode(compoundID) + ')' +
+						'<div>' +
+						'  <div style="display: block; text-align:center; padding: 20px;"><i class="fa fa-circle-o-notch fa-spin fa-fw"></i> Loading image...</div>' +
+						'  <img style="display: block; margin:auto;" src="http://rest.kegg.jp/get/' + encodeURIComponent(compoundID) + '/image">' +
+						'</div>');
+				},
+				show: function(tip) {
+					// The KEGG structure image arrives late; drop the spinner and
+					// re-measure the tip once it does.
+					$(tip.el.dom).find("img").on('load', function() {
+						$(this).prev().remove();
+						tip.doLayout();
+					});
+				}
+			}
+		});
+	};
+
+	/**
+	* Mirrors a checkbox onto the model, which is the only place the selection
+	* is read from (see getSelectedCompounds).
+	*/
+	this.compoundSelectionHandler = function(checkbox) {
+		var compoundID = checkbox.val();
+		var selected = checkbox.is(":checked");
+		var setIndex = parseInt(checkbox.closest(".metaboliteBox").attr("data-compoundset"), 10);
+		var compoundSetView = this.items[setIndex];
+
+		if (compoundSetView === undefined) {
+			return;
+		}
+
+		var compoundSet = compoundSetView.getModel();
+		var compound = compoundSet.findOtherCompound(compoundID) || compoundSet.findMainCompound(compoundID);
+
+		if (compound === null) {
+			return;
+		}
+
+		compound.selected = selected;
+
+		if (selected) {
+			//If the user selects a compound which is repeated and already selected, warn.
+			//The duplicates are looked up in the model rather than by scanning the
+			//rendered checkboxes: the resolved compound sets have no card at all and
+			//the alternatives of a collapsed card are not in the document, so a DOM
+			//scan would silently miss real duplicates.
+			var duplicates = this.findSelectedDuplicates(compoundID, compoundSet);
+
+			if (duplicates.length > 0) {
+				var message = "<b>Also selected for:</b><ul>";
+				for (var i in duplicates) {
+					message += "<li>" + Ext.String.htmlEncode(duplicates[i]) + "</li>";
+				}
+				message += "</ul>";
+
+				showWarningMessage("Compound already selected", {
+					message : "This compound has been already selected in other box. Duplicated compounds may affect to the results in next stages.<br>" + message,
+					showButton : true
+				});
+			}
+		}
+	};
+
+	/**
+	* Titles of the other compound sets that already have this KEGG compound
+	* selected. Excludes ownerSet, whose selection is the one just made.
+	*/
+	this.findSelectedDuplicates = function(compoundID, ownerSet) {
+		var foundCompounds = this.model.getFoundCompounds();
+		var duplicates = [], compoundSet, compound;
+
+		for (var i in foundCompounds) {
+			compoundSet = foundCompounds[i];
+			if (compoundSet === ownerSet) {
+				continue;
+			}
+
+			compound = compoundSet.findMainCompound(compoundID) || compoundSet.findOtherCompound(compoundID);
+			if (compound !== null && compound.selected === true) {
+				duplicates.push(compoundSet.getTitle());
+			}
+		}
+
+		return duplicates;
+	};
+
+	/**
+	* Expands/collapses the alternative candidates of one card, building their
+	* markup the first time it is opened. A name can match a hundred KEGG
+	* compounds, so rendering every card's alternatives up front would put
+	* hundreds of thousands of nodes in the document that nobody asked for.
+	*/
+	this.showOtherCompoundsHandler = function(button) {
+		var card = button.closest(".metaboliteBox");
+		var otherCompoundsPanel = card.find(".otherCompoundsPanel");
+		var isVisible = button.hasClass("visible");
+
+		if (!isVisible) {
+			if (otherCompoundsPanel.is(":empty")) {
+				var setIndex = parseInt(card.attr("data-compoundset"), 10);
+				otherCompoundsPanel.html(this.items[setIndex].renderOtherCompounds());
+			}
+			card.addClass("expandedBox");
+			button.addClass("visible").html('<i class="fa fa-eye-slash"></i> Hide');
+		} else {
+			card.removeClass("expandedBox");
+			button.removeClass("visible").html('<i class="fa fa-eye"></i> Show');
+		}
+
+		otherCompoundsPanel.toggle(!isVisible);
+	};
+
 	this.checkForm = function() {
-		return ($(".compoundsPanelsContainer input[type=checkbox]").length === 0 || $(".compoundsPanelsContainer  :checked").length > 0);
+		// Asked of the model, not of the rendered checkboxes. Only the sets that
+		// need disambiguation have a card, so counting checkboxes would report
+		// "nothing to choose" for a job whose compounds all resolved
+		// automatically - and would ignore the selections of the collapsed
+		// alternatives, which are not in the document.
+		return (this.model.getFoundCompounds().length === 0 || this.getSelectedCompounds().length > 0);
 	};
 
 	this.getSelectedCompounds = function() {
@@ -710,206 +907,179 @@ function PA_Step2ReplicateDetectionView() {
 }
 PA_Step2ReplicateDetectionView.prototype = new View();
 
+/**
+* "1 compound found" / "4 compounds found": the noun agrees with the count and
+* the verb is the past participle. This read "compounds founds" - and, for a
+* single match, "1 compounds founds" - since 2014.
+*
+* @param {Number} count how many candidates were matched
+* @param {String} noun "compound" or "alternative compound"
+* @returns {String}
+*/
+function foundCountLabel(count, noun) {
+	return count + " " + noun + ((count === 1) ? "" : "s") + " found";
+}
+
+/**
+* One candidate compound as plain HTML: a checkbox, the KEGG link and the data
+* attributes that the delegated handlers in PA_Step2JobView read back.
+*
+* This replaces PA_Step2CompoundView, which built an Ext box plus its own
+* Ext.tip.ToolTip per candidate. Those components, multiplied by the number of
+* matched compounds, are what froze step 2 on a compound-heavy job.
+*
+* @param {Compound} compound the candidate
+* @param {Number} columnWidth width in px of the cell, as the old view had it
+* @returns {String}
+*/
+function renderCompoundCandidate(compound, columnWidth) {
+	var compoundID = compound.getID();
+	var safeID = Ext.String.htmlEncode(compoundID);
+	var safeName = Ext.String.htmlEncode(compound.getName());
+
+	return '' +
+	'<div class="metaboliteCompound" data-compound-id="' + safeID + '" data-compound-name="' + safeName + '"' +
+	' style="float:left; width:' + columnWidth + 'px; max-width:' + columnWidth + 'px; margin-top:5px;' +
+	' white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">' +
+	'  <input type="checkbox"' + (compound.isSelected() ? " checked" : "") + ' name="metabolite" value="' + safeID + '">' +
+	'  <a href="http://www.kegg.jp/dbget-bin/www_bget?' + encodeURIComponent(compoundID) + '" target="_blank">' + safeName + '</a>' +
+	'</div>';
+}
+
 function PA_Step2CompoundSetView() {
 	/***********************************************************************
 	* ATTRIBUTES
 	***********************************************************************/
-	this.mainCompoundsPanelItems = [];
-	this.otherCompoundsPanelItems = [];
+	this.name = "PA_Step2CompoundSetView";
 
 	/***********************************************************************
 	* GETTERS AND SETTERS
 	***********************************************************************/
 	this.loadModel = function(model) {
 		this.model = model;
-
-		var panelAux;
-		var compounds = this.model.getMainCompounds();
-		for (var i in compounds) {
-			panelAux = new PA_Step2CompoundView(25, 200);
-			panelAux.loadModel(compounds[i]);
-			compounds[i].addObserver(panelAux);
-			this.mainCompoundsPanelItems.push(panelAux);
-		}
-		compounds = this.model.getOtherCompounds();
-		for (var i in compounds) {
-			panelAux = new PA_Step2CompoundView(30, 250);
-			panelAux.loadModel(compounds[i]);
-			this.otherCompoundsPanelItems.push(panelAux);
-		}
 	};
+
 	/***********************************************************************
 	* OTHER FUNCTIONS
 	***********************************************************************/
-	this.initComponent = function() {
-		var me = this;
+	/**
+	* True when this input name actually leaves the user something to decide.
+	*
+	* A set with exactly one candidate, no alternatives, and that candidate
+	* already selected is fully resolved: its card was a single pre-ticked
+	* checkbox that could only be turned off. Skipping those is what makes a
+	* job with thousands of matched names openable.
+	*
+	* The "already selected" half of the test is not cosmetic. The cross-box
+	* de-duplicator in JobController.step1OnFormSubmitHandler unselects the
+	* losing copy when two input names propose the same KEGG compound, so a
+	* lone candidate can arrive with selected === false. That one renders
+	* unchecked today and the user must be able to tick it, so it keeps its
+	* card.
+	*
+	* @returns {Boolean}
+	*/
+	this.needsDisambiguation = function() {
+		var mainCompounds = this.model.getMainCompounds();
+		var otherCompounds = this.model.getOtherCompounds();
 
-		var mainCompoundsPanelComponents = [];
-		for (var i in this.mainCompoundsPanelItems) {
-			mainCompoundsPanelComponents.push(this.mainCompoundsPanelItems[i].getComponent());
+		// Nothing matched at all: there is no card to draw.
+		if (mainCompounds.length + otherCompounds.length === 0) {
+			return false;
+		}
+		if (otherCompounds.length > 0) {
+			return true;
 		}
 
-		this.component = Ext.widget({
-			xtype: "container", cls: "contentbox metaboliteBox",
-			items: [{
-				xtype: "label", itemId: "titleBox",
-				html:
-				'<h3 class="metaboliteTitle">' + this.getModel().getTitle() + '</h3>' +
-				'<h4 style="padding-left: var(--pa-card-inset);">' + mainCompoundsPanelComponents.length + ' compounds founds</h4>'
-			}, {
-				xtype: 'container',
-				itemId: "mainCompoundsPanel",
-				style: "padding: 3px 15px;",
-				layout: 'column',
-				items: mainCompoundsPanelComponents
-			}, {
-				xtype: "label",
-				html: '<h4 style="padding-left: var(--pa-card-inset);">' + this.otherCompoundsPanelItems.length + ' alternative compounds founds <a class="showOtherCompoundsButton" href="javascript:void(0)"><i class="fa fa-eye"></i> Show</a></h4> '
-			}, {
-				xtype: 'container', itemId: "otherCompoundsPanel",
-				style: "padding: 3px 15px;", layout: 'column', hidden: true,
-				items: []
-			}],
-			listeners: {
-				boxready: function() {
-					var container = this.queryById("otherCompoundsPanel");
+		return !(mainCompounds.length === 1 && mainCompounds[0].isSelected() === true);
+	};
 
-					var inputSelectionHandler = function() {
-						var id = $(this).val();
-						var selected = $(this).is(":checked");
-						var compound = me.model.findOtherCompound(id) || me.model.findMainCompound(id);
-						compound.selected = selected;
+	/**
+	* The whole card as HTML. `index` is this view's position in
+	* PA_Step2JobView.items and is written into the card so a delegated handler
+	* can map a click back to this view without walking a component tree.
+	*
+	* @param {Number} index
+	* @returns {String}
+	*/
+	this.renderCard = function(index) {
+		var mainCompounds = this.model.getMainCompounds();
+		var otherCompounds = this.model.getOtherCompounds();
 
-						if(selected){
-							//If the user select a compound which is repeated and already selected, warn
-							var others = $("input[value=" + id + "]:checked");
-							if(others.length > 1){
-								var message = "<b>Duplicated compounds:</b><ul>";
-								others.each(function(){
-									message += "<li>" + $(this).next().text() + "</li>";
-								});
-								message += "</ul>";
+		var html =
+		'<div class="contentbox metaboliteBox" data-compoundset="' + index + '">' +
+		'  <h3 class="metaboliteTitle">' + Ext.String.htmlEncode(this.model.getTitle()) + '</h3>' +
+		'  <h4 style="padding-left: var(--pa-card-inset);">' + foundCountLabel(mainCompounds.length, "compound") + '</h4>' +
+		'  <div class="mainCompoundsPanel" style="padding: 3px 15px; overflow: hidden;">' +
+		mainCompounds.map(function(compound) {
+			return renderCompoundCandidate(compound, 200);
+		}).join("") +
+		'  </div>';
 
-								showWarningMessage("Compound already selected", {
-									message : "This compound has been already selected in other box. Duplicated compounds may affect to the results in next stages.<br>" + message,
-									showButton : true
-								});
-							}
-						}
-					};
+		// Only offer the control when there is something behind it: the old
+		// markup printed "0 alternative compounds founds" with a Show link over
+		// an empty container.
+		if (otherCompounds.length > 0) {
+			html +=
+			'  <h4 style="padding-left: var(--pa-card-inset);">' + foundCountLabel(otherCompounds.length, "alternative compound") +
+			'    <a class="showOtherCompoundsButton" href="javascript:void(0)"><i class="fa fa-eye"></i> Show</a>' +
+			'  </h4>' +
+			'  <div class="otherCompoundsPanel" style="padding: 3px 15px; overflow: hidden; display: none;"></div>';
+		}
 
-					//TODO: Event fired when a checkbox is checked
-					$(this.el.dom).find("input").change(inputSelectionHandler);
+		return html + '</div>';
+	};
 
-					$(this.el.dom).find(".showOtherCompoundsButton").click(function() {
-						var isVisible = $(this).hasClass("visible");
-						if (!isVisible) {
-							//If the items haven't been created yet, create them
-							if (container.items.length === 0) {
-								var otherCompoundsPanelComponents = [];
-								for (var i in me.otherCompoundsPanelItems) {
-									otherCompoundsPanelComponents.push(me.otherCompoundsPanelItems[i].getComponent());
-								}
-								container.add(otherCompoundsPanelComponents);
-								//Add the event for the new checboxes
-								setTimeout(function(){
-									$(container.el.dom).find("input").change(inputSelectionHandler);
-								}, 2000);
-
-							}
-							$(this).parents(".metaboliteBox").addClass("expandedBox");
-							$(this).addClass("visible");
-							$(this).html('<i class="fa fa-eye-slash"></i> Hide');
-						} else {
-							$(this).parents(".metaboliteBox").removeClass("expandedBox");
-							$(this).removeClass("visible");
-							$(this).html('<i class="fa fa-eye"></i> Show');
-						}
-						container.setVisible(!isVisible);
-					});
-				},
-				beforedestroy: function() {
-					me.getModel().deleteObserver(me);
-				}
-			}
-		});
-
-		return this.component;
+	/**
+	* The alternative candidates, built on demand when the card is expanded.
+	*
+	* @returns {String}
+	*/
+	this.renderOtherCompounds = function() {
+		return this.model.getOtherCompounds().map(function(compound) {
+			return renderCompoundCandidate(compound, 250);
+		}).join("");
 	};
 
 	return this;
 }
 PA_Step2CompoundSetView.prototype = new View();
 
-function PA_Step2CompoundView(maxLength, columnWidth) {
-	/***********************************************************************
-	* ATTRIBUTES
-	***********************************************************************/
-	this.title = "";
-	this.columnWidth = columnWidth;
-	this.maxLength = maxLength;
-	/***********************************************************************
-	* GETTERS AND SETTERS
-	***********************************************************************/
-	this.loadModel = function(model) {
-		this.model = model;
-		this.title = this.model.getName();
-	};
-	/***********************************************************************
-	* OTHER FUNCTIONS
-	***********************************************************************/
-	this.initComponent = function() {
-		var me = this;
-		var titleAux = this.title;
-		// if (this.title.length > this.maxLength) {
-		// 	titleAux = this.title.substr(0, this.maxLength) + "[...]";
-		// }
-		this.component = Ext.widget({
-			xtype: "box",
-			html:
-			'<div style="max-width:' + this.columnWidth + 'px; white-space: nowrap; overflow: hidden; text-overflow:ellipsis;">' +
-			'  <input type="checkbox"' + (this.model.isSelected() ? "checked" : "") + ' name="metabolite" value="' + this.model.getID() + '">' +
-			'  <a href="http://www.kegg.jp/dbget-bin/www_bget?' + this.model.getID() + '" target="_blank">' + titleAux +'</a>' +
-			'</div>',
-			style: {
-				marginTop: "5px",
-				width: this.columnWidth + "px",
-				display: "inline-box",
-				textOverflow : "ellipsis"
-			},
-			listeners: {
-				beforedestroy: function() {
-					me.getModel().deleteObserver(me);
-				}
-			}
-		});
+/**
+* The mapping donut's own data labels cannot be trusted at this size:
+* Highcharts drops any label that does not fit, and in a 327x195 chart neither
+* of the two fits - "Mapped features", the number the whole panel exists to
+* report, was never drawn on any omic, and an omic mapped at 100% drew a bare
+* ring with no number at all. Rather than fight the label distributor, the
+* counts are printed under the chart as HTML, which also gives the compound
+* based omics - which have no donut, only a "See Compounds disambiguation"
+* note - somewhere to state their numbers.
+*
+* @param {Number} mappedFeatures features matched against the databases
+* @param {Number} unmappedFeatures features left unmatched
+* @returns {String} the caption markup
+*/
+function mappingSummaryCaption(mappedFeatures, unmappedFeatures) {
+	var mapped = Number(mappedFeatures) || 0;
+	var unmapped = Number(unmappedFeatures) || 0;
+	var total = mapped + unmapped;
 
-		this.component.tip =
-		'<b>' + this.title + '</b> (' + this.model.getID() + ')' +
-		'<div>'+
-		'  <div style="display: block; text-align:center; padding: 20px;"><i class="fa fa-circle-o-notch fa-spin fa-fw"></i> Loading image...</div>' +
-		'  <img style="display: block; margin:auto;" src="http://rest.kegg.jp/get/' + this.model.getID() + '/image">' +
-		'</div>';
-		this.component.addListener("afterrender", function(c) {
-			Ext.create('Ext.tip.ToolTip', {
-				target: c.getEl(),
-				html: c.tip,
-				listeners: {
-					boxready: function() {
-						var tip = this;
-						$(this.el.dom).find("img").on('load', function() {
-							$(this).prev().remove();
-							tip.doLayout();
-						});
-					}
-				}
-			});
-		});
-		return this.component;
+	// An omic with no input features at all must not divide by zero.
+	var mappedPct = (total > 0) ? Math.round(mapped / total * 100) : 0;
+	var unmappedPct = (total > 0) ? (100 - mappedPct) : 0;
+
+	var row = function(color, count, label, percentage) {
+		return '<div>' +
+			'<span style="display:inline-block; width:9px; height:9px; border-radius:50%; vertical-align:middle; background:' + color + ';"></span> ' +
+			'<b>' + count.toLocaleString() + '</b> ' + label + ' (' + percentage + '%)' +
+			'</div>';
 	};
-	return this;
+
+	return '<div class="mappingSummaryCaption" style="text-align:center; font-size:12px; line-height:1.6; padding:0 5px 8px;">' +
+		row("rgb(106, 208, 150)", mapped, "mapped", mappedPct) +
+		row("rgb(250, 112, 112)", unmapped, "unmapped", unmappedPct) +
+		'</div>';
 }
-PA_Step2CompoundView.prototype = new View();
 
 function PA_OmicSummaryPanel(omicName, dataDistribution, isCompoundOmic) {
 	/***********************************************************************
@@ -934,16 +1104,26 @@ function PA_OmicSummaryPanel(omicName, dataDistribution, isCompoundOmic) {
 			html: '<h3 class = "metaboliteTitle" style="display:inline-block;margin-right: 20px;">' + this.omicName + '</h3>' +
 			'<div>' +
 			'  <div style="height:195px; overflow:hidden; width:50%; float: right;" id="' + divName + 'data_dstribution_plot"></div>' +
-			'  <div style="height:195px; overflow:hidden; width:50%; " id="' + divName + 'mapping_summary_plot"></div>' +
+			// The chart keeps its fixed height; the caption sits below it inside
+			// the same half-width column, which is what makes the counts
+			// readable regardless of what the chart decides to draw.
+			'  <div style="width:50%;">' +
+			'    <div style="height:195px; overflow:hidden;" id="' + divName + 'mapping_summary_plot"></div>' +
+			'    <div id="' + divName + 'mapping_summary_caption"></div>' +
+			'  </div>' +
 			'	 <div style="margin: 0 auto; text-align: center" id="customvalues_' + divName + '_summary"></div>' +
 			'</div>',
 			listeners: {
 				boxready: function() {
+					// Declared here so the caption below can read it whichever
+					// branch filled it in; these three used to be implicit globals.
+					var mappedFeatures, mappedInfo, added_info;
+
 					// if (me.dataDistribution[1] !== -1 && me.dataDistribution[0] !== -1) {
 					if (! isCompoundOmic) {
 						// Mapped features can differ between used databases
 						mappedInfo = me.dataDistribution[0];
-						
+
 						added_info = "";
 
 						if (! Object.keys(mappedInfo).length) {
@@ -974,15 +1154,15 @@ function PA_OmicSummaryPanel(omicName, dataDistribution, isCompoundOmic) {
 							},
 							plotOptions: {
 								pie: {
-									dataLabels: {
-										useHTML: true,
-										enabled: true,
-										distance: 10,
-										formatter: function() {
-											return "<p style='text-align:center'>" + this.y + "</br>" + this.point.name.replace(" ", "</br>") + '</p>';
-										}
-									},
-									center: ['50%', '30%']
+									// Off on purpose: see mappingSummaryCaption. At
+									// this size Highcharts hid the "Mapped features"
+									// label on every omic and clipped the other one,
+									// so the ring is now the proportion and the
+									// caption underneath carries the numbers. With
+									// no labels to leave room for, the ring can sit
+									// in the middle of its box.
+									dataLabels: {enabled: false},
+									center: ['50%', '45%']
 								}
 							},
 							series: [{
@@ -1004,8 +1184,16 @@ function PA_OmicSummaryPanel(omicName, dataDistribution, isCompoundOmic) {
 							}]
 						});
 					} else {
-						$('#' + divName + 'mapping_summary_plot').html("<b>See Compounds disambiguation</b>");
+						// A compound omic is matched once against KEGG compound
+						// IDs, so there is no per-database breakdown to draw - but
+						// its mapped/unmapped counts matter just as much, and until
+						// now the panel reported neither.
+						mappedFeatures = me.dataDistribution[0];
+						$('#' + divName + 'mapping_summary_plot').html('<div style="text-align:center; padding-top:60px;"><b>See Compounds disambiguation</b></div>');
 					}
+
+					$('#' + divName + 'mapping_summary_caption')
+						.html(mappingSummaryCaption(mappedFeatures, me.dataDistribution[1]));
 
 					//   0        1       2    3    4    5     6,   7   8      9        10
 					//[MAPPED, UNMAPPED, MIN, P10, Q1, MEDIAN, Q3, P90, MAX, MIN_IR, Max_IR]
