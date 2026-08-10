@@ -149,6 +149,65 @@ def _resolveMOREBackend(method, rScript, binaryPath=None):
     return ["Rscript", rScript]
 
 
+def _moreRScript():
+    """Absolute path to runMORE.R, which ships beside this package.
+
+    Shared by the runtime guard and STEP2 so the two cannot disagree about
+    which script -- and therefore which backend -- a job will use.
+    """
+    return os.path.abspath(os.path.join(
+        os.path.dirname(__file__), "..", "common", "bioscripts", "runMORE.R"))
+
+
+def _engineFor(method):
+    """"r" or "rust": which binary ``method`` will actually run on.
+
+    The cost model needs this, not just the method. R and the port differ by
+    ~700x on PLS1, so an estimate that ignored the engine would either refuse
+    every large job on a host that could do it in seconds, or wave through
+    every large job on a host that cannot.
+    """
+    backend = _resolveMOREBackend(method, _moreRScript())
+    return "r" if backend[0] == "Rscript" else "rust"
+
+
+def _runtimeRefusal(jobInstance):
+    """``None`` if this job may be queued, else the message explaining why not.
+
+    Every MORE job is enqueued with ``timeout=MORE_JOB_TIMEOUT``. Before this
+    existed, a genome-scale submission was accepted, ran for half an hour and
+    was then killed -- the user having waited the full timeout to learn
+    nothing. Measured on the STATegra set (9,835 genes), R needs ~3.4 h for MLR
+    and ~1.7 h for PLS1, so this is the ordinary outcome for real data, not an
+    edge case.
+
+    Anything unexpected here lets the job through. A probe that cannot read its
+    inputs is STEP2's problem to report against the specific file; it must not
+    become a refusal that blames the user's dataset size for a missing upload.
+    """
+    try:
+        shape = MORECostModel.probeShape(
+            jobInstance.getInputDir(),
+            jobInstance.targetExpressionFile,
+            jobInstance.conditionsFile,
+            jobInstance.regulatoryOmics)
+        engine = _engineFor(jobInstance.method)
+        refusal = MORECostModel.checkBudget(
+            shape, jobInstance.method, engine, MORE_RUNTIME_BUDGET_SECONDS)
+        logging.info(
+            "MORE_STEP1 - runtime guard: %s on %s, %s, estimate %.0fs, "
+            "budget %ss -> %s",
+            jobInstance.method, engine, shape.describe(),
+            MORECostModel.estimateSeconds(shape, jobInstance.method, engine),
+            MORE_RUNTIME_BUDGET_SECONDS, "REFUSED" if refusal else "accepted")
+        return refusal
+    except Exception as error:
+        logging.warning(
+            "MORE_STEP1 - runtime guard could not evaluate this job (%s); "
+            "allowing it to queue.", error)
+        return None
+
+
 def _toFloat(rawValue, default):
     """Coerce one submitted form field to a float, falling back to ``default``.
 
@@ -279,10 +338,19 @@ def fromMOREtoGenes_STEP1(REQUEST, RESPONSE, QUEUE_INSTANCE, JOB_ID,
             logging.info("MORE_STEP1 - EXAMPLE '%s' REGISTERED (%d regulatory omics)",
                          scenario["id"], len(jobInstance.regulatoryOmics))
 
+            # Checked for the example too. The bundled scenarios are sized to
+            # pass, so this should never fire -- which is the point: if a
+            # scenario is ever grown past what the server can run, the guard
+            # says so here instead of the example silently timing out.
+            refusal = _runtimeRefusal(jobInstance)
+            if refusal:
+                RESPONSE.setContent({"success": False, "message": refusal})
+                return RESPONSE
+
             QUEUE_INSTANCE.enqueue(
                 fn=fromMOREtoGenes_STEP2,
                 args=(jobInstance, userID, RESPONSE, formFields),
-                timeout=1800,
+                timeout=MORE_JOB_TIMEOUT,
                 job_id=JOB_ID)
             RESPONSE.setContent({"success": True, "jobID": JOB_ID})
             return RESPONSE
@@ -359,11 +427,22 @@ def fromMOREtoGenes_STEP1(REQUEST, RESPONSE, QUEUE_INSTANCE, JOB_ID,
         jobInstance.filter_r2 = _toFloat(formFields.get("more_filter_r2"), 0.0)
         jobInstance.enrichment = _nonEmpty(formFields.get("more_enrichment"), "genes")
 
-        # 7. Queue job
+        # 7. Refuse a job that cannot finish inside the queue's timeout.
+        #
+        # This has to come after the model parameters are read, because the
+        # estimate depends on the method: PLS1 may route to more-rs and be
+        # ~700x cheaper, MLR never does. Doing it before would have to assume
+        # a method and would refuse the wrong jobs.
+        refusal = _runtimeRefusal(jobInstance)
+        if refusal:
+            RESPONSE.setContent({"success": False, "message": refusal})
+            return RESPONSE
+
+        # 8. Queue job
         QUEUE_INSTANCE.enqueue(
             fn=fromMOREtoGenes_STEP2,
             args=(jobInstance, userID, RESPONSE, formFields),
-            timeout=1800,  # 30 minutes
+            timeout=MORE_JOB_TIMEOUT,
             job_id=JOB_ID
         )
 
@@ -490,8 +569,7 @@ def fromMOREtoGenes_STEP2(jobInstance, userID, RESPONSE, formFields):
         # exist -- and `Rscript <missing file>` exits 2 printing nothing, so the
         # job failed with "R Script failed with exit code 2. Output:" and no
         # indication that the script itself was never found.
-        r_script = os.path.abspath(os.path.join(
-            os.path.dirname(__file__), "..", "common", "bioscripts", "runMORE.R"))
+        r_script = _moreRScript()
 
         if not os.path.isfile(r_script):
             raise ValueError(

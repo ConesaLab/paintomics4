@@ -171,3 +171,23 @@ AI_SEARCH_SUBAGENT_TEMPERATURE = float(os.getenv("AI_SEARCH_SUBAGENT_TEMPERATURE
 # than reproduce it, and that is a difference to opt into rather than impose.
 # See MOREServlet._resolveMOREBackend for the full reasoning.
 MORE_RS_BINARY = os.getenv("PAINTOMICS_MORE_RS", "")
+
+# Seconds a single MORE analysis may be *predicted* to take before the server
+# refuses it at submit time, instead of accepting it and killing it when the
+# queue timeout expires.
+#
+# This is not a new limit -- MOREServlet already enqueues every MORE job with a
+# 1800 s timeout. What is new is finding out before the wait rather than after
+# it. Measured on the STATegra TF->gene set (9,835 genes, 36 samples, ~30
+# regulators/gene), one process at a time:
+#
+#     R MLR      ~3.4 h        R PLS1     ~1.7 h        more-rs PLS1  ~9 s
+#
+# so on an R-only host this is reached by ordinary genome-scale data, and the
+# guard covers PLS1 as well as MLR. A host running the port is effectively
+# never gated, because the estimate is keyed on the engine that will actually
+# run (see MORECostModel).
+#
+# Raise it only in step with the queue timeout -- a budget above that just
+# moves the failure back to where it was. Set it to 0 to disable the check.
+MORE_RUNTIME_BUDGET_SECONDS = int(os.getenv("PAINTOMICS_MORE_RUNTIME_BUDGET", "1800"))
