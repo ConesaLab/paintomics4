@@ -272,11 +272,19 @@ def renderDocument(exampleFilesDir, scenarios, members, skipped):
     add("")
 
     if real:
+        # GSE75417 is the mRNA-seq series only. Naming it for the whole
+        # collection credited one accession with five other assays' data --
+        # DNase is GSE75390, miRNA GSE75394, proteomics PXD003263, metabolomics
+        # MTBLS283. Each scenario's own README carries its per-omic provenance,
+        # so this paragraph points there instead of guessing on their behalf.
         add("The %d real dataset%s carr%s no planted signal of any kind. %s "
             "come from the published STATegra mouse Ikaros time course "
-            "(GEO GSE75417); they are the reference the simulated ones are "
-            "shaped against, and nothing in this project rewrites a byte of "
-            "them."
+            "(Gomez-Cabrero et al., Sci Data 6:256, 2019); they are the "
+            "reference the simulated ones are shaped against, and nothing in "
+            "this project rewrites a byte of them. They are *reduced* copies of "
+            "that release rather than the whole of it -- see the Provenance "
+            "section of each dataset's README for its per-omic scale and the "
+            "accession the full data lives under."
             % (len(real), "" if len(real) == 1 else "s",
                "ies" if len(real) == 1 else "y",
                "It" if len(real) == 1 else "They"))

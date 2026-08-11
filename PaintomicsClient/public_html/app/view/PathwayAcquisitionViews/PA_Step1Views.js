@@ -144,7 +144,7 @@ var PO_HERO_FLOW_SVG =
 * fallback when the server's catalogue is unreachable; otherwise the text is
 * generated from the chosen dataset's own manifest entry.
 */
-var STATEGRA_EXPERIMENT_DESIGN = "STATegra multi-omics time-course experiment in mouse B3 cell line (Mus musculus, mmu). Ikaros transcription factor expression was induced via tamoxifen treatment to trigger B-cell differentiation. Ikaros-induced vs Control samples were compared across 6 time points (0h, 2h, 6h, 12h, 18h, 24h). Values are log2 fold-changes (Ikaros/Control). Six omics layers: gene expression, proteomics, metabolomics, DNase-seq chromatin accessibility, miRNA-seq, and transcription factor activity. Goal: identify pathways and molecular mechanisms driving Ikaros-mediated B-cell differentiation across multiple regulatory levels.";
+var STATEGRA_EXPERIMENT_DESIGN = "STATegra multi-omics time-course experiment in mouse B3 cell line (Mus musculus, mmu). Ikaros transcription factor expression was induced via tamoxifen treatment to trigger B-cell differentiation. Ikaros-induced vs Control samples were compared across 6 time points (0h, 2h, 6h, 12h, 18h, 24h). Values are log2 fold-changes (Ikaros/Control). Five omics layers: gene expression, proteomics, metabolomics, DNase-seq chromatin accessibility, and miRNA-seq. Goal: identify pathways and molecular mechanisms driving Ikaros-mediated B-cell differentiation across multiple regulatory levels.";
 
 /**
 * Manifest omic name -> the panel type addNewOmicSubmittingPanel builds.
@@ -751,7 +751,7 @@ function PA_Step1JobView() {
 			// manifest lists them. Previously this was a fixed list of six, so
 			// a dataset with a different composition showed the wrong form.
 			var omicNames = (scenario && scenario.omicNames) ||
-				["Transcription factor", "miRNA-seq", "DNase-seq", "Proteomics",
+				["miRNA-seq", "DNase-seq", "Proteomics",
 				 "Metabolomics", "Gene expression"];
 			omicNames.forEach(function(omicName) {
 				var panel = me.addNewOmicSubmittingPanel(examplePanelTypeFor(omicName));

@@ -29,7 +29,7 @@ The unmapped miRNA quantification from the STATegra time course with the full mi
 
 ## Expected result
 
-* **note** — Matched-pathway counts differ between KEGG snapshots (888/44 on the deploy VM vs 877/41 locally for the same job), so none are asserted.
+* **note** — Matched-pathway counts depend on the KEGG snapshot the host carries, so the same job yields different totals on the deploy VM and locally. None are asserted.
 
 ---
 

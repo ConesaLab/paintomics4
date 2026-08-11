@@ -534,7 +534,7 @@
         "Reactome"
       ],
       "expected": {
-        "note": "Matched-pathway counts differ between KEGG snapshots (888/44 on the deploy VM vs 877/41 locally for the same job), so none are asserted."
+        "note": "Matched-pathway counts depend on the KEGG snapshot the host carries, so the same job yields different totals on the deploy VM and locally. None are asserted."
       },
       "id": "stategra-multiomics",
       "omics": [
@@ -572,28 +572,40 @@
           "omicName": "DNase-seq",
           "omicType": "gene",
           "relevantFile": "datasets/08-stategra-multiomics/data/dnase_relevant.tab"
-        },
-        {
-          "dataFile": "datasets/08-stategra-multiomics/data/transcription_factor_values.tab",
-          "enrichment": "genes",
-          "omicName": "Transcription factor",
-          "omicType": "gene",
-          "relevantFile": "datasets/08-stategra-multiomics/data/transcription_factor_relevant.tab"
         }
       ],
       "order": 8,
       "organism": "mmu",
       "pipeline": "pathway-acquisition",
+      "provenance": [
+        "Published as Gomez-Cabrero et al., *STATegra, a comprehensive multi-omics dataset of B-cell differentiation in mouse*, Sci Data 6:256 (2019), [doi:10.1038/s41597-019-0202-7](https://doi.org/10.1038/s41597-019-0202-7). Mouse B3 pre-B cell line, Ikaros induced by tamoxifen, Ikaros-over-control log ratios at six time points.",
+        "",
+        "**These files are a reduced copy.** The reduction predates this repository -- the blobs are byte-identical to their first commit and nothing here can regenerate them -- so the scale is recorded rather than corrected:",
+        "",
+        "| omic | shipped | full release |",
+        "| --- | --- | --- |",
+        "| Metabolomics | 58 compounds | 58 \u2014 **complete** |",
+        "| Gene expression | 6,336 genes | 12,762 (GSE75417) |",
+        "| Proteomics | 1,109 proteins | 2,396 protein groups (PXD003263) |",
+        "| miRNA-seq | 5,878 gene\u2013miRNA pairs, 238 miRNAs | 468 miRNAs (GSE75394) |",
+        "| DNase-seq | 10,273 gene rows | 52,788 consensus DHS regions (GSE75390) |",
+        "",
+        "The gene-expression cut is effect-size dependent, not random: roughly half of the low-amplitude genes are kept but only ~3% of the highest, which is a detection/low-count filter stacked with a further reduction. The DNase rows are regions already collapsed onto genes; the region form is the `stategra-regions` scenario.",
+        "",
+        "Full data, all confirmed reachable: [STATegraData/STATegraData](https://github.com/STATegraData/STATegraData) carries analysis-ready matrices for every omic and is the best entry point; otherwise GEO [GSE75417](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE75417) (mRNA), [GSE75390](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE75390) (DNase), [GSE75394](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE75394) (miRNA), MetaboLights MTBLS283, PRIDE PXD003263. Note the shipped values are ratios from an unrecorded normalisation that GSE75417 does not reproduce, so scaling any layer up is a re-derivation, not an extension.",
+        "",
+        "A sixth layer, \"Transcription factor\", was retired on 2026-08-11 as a duplicate of gene expression; see `examplefiles/archive/retired/`."
+      ],
       "references": [],
       "simulated": false,
-      "summary": "The published six-omic, six-timepoint STATegra dataset PaintOmics has always shipped. Real measurements, not simulated \u2014 the reference every simulated scenario is shaped against.",
+      "summary": "Five omics over six time points from the published STATegra mouse Ikaros time course. Real measurements, not simulated \u2014 the reference every simulated scenario is shaped against. A reduced copy of the release, not the whole of it: see the Provenance section of the README for the per-omic scale and where the full data is.",
       "tests": [
         "The full multi-omic pipeline on real data",
         "Metabolite hub analysis",
         "Pathway network",
         "AI interpretation"
       ],
-      "title": "STATegra \u2014 real mouse Ikaros time course (6 omics)"
+      "title": "STATegra \u2014 real mouse Ikaros time course (5 omics)"
     },
     {
       "conditions": [
@@ -608,7 +620,7 @@
         "KEGG"
       ],
       "expected": {
-        "note": "Matched-pathway counts differ between KEGG snapshots (888/44 on the deploy VM vs 877/41 locally for the same job), so none are asserted."
+        "note": "Matched-pathway counts depend on the KEGG snapshot the host carries, so the same job yields different totals on the deploy VM and locally. None are asserted."
       },
       "id": "stategra-regions",
       "omics": [
@@ -651,7 +663,7 @@
         "KEGG"
       ],
       "expected": {
-        "note": "Matched-pathway counts differ between KEGG snapshots (888/44 on the deploy VM vs 877/41 locally for the same job), so none are asserted."
+        "note": "Matched-pathway counts depend on the KEGG snapshot the host carries, so the same job yields different totals on the deploy VM and locally. None are asserted."
       },
       "id": "stategra-mirna",
       "omics": [
@@ -720,7 +732,7 @@
           "r-pls1": 234.4,
           "rust-pls1": 0.1
         },
-        "note": "Matched-pathway counts differ between KEGG snapshots (888/44 on the deploy VM vs 877/41 locally for the same job), so none are asserted.",
+        "note": "Matched-pathway counts depend on the KEGG snapshot the host carries, so the same job yields different totals on the deploy VM and locally. None are asserted.",
         "regulators": 387,
         "source": {
           "expression": "GEO GSE75417 (STATegra RNA-seq, CQN + ComBat)",

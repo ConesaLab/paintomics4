@@ -31,16 +31,22 @@ REGIONS_FOLDER = "09-stategra-regions"
 MIRNA_FOLDER = "10-stategra-mirna"
 MORE_FOLDER = "11-stategra-more"
 
-# The six omics in the order the old hardcoded example built them, with the
+# The omics in the order the old hardcoded example built them, with the
 # filenames it derived by mangling the omic name ("DNase-seq" -> "dnase").
 # Explicit here so that mangling can be deleted from the servlet.
+#
+# There were six. "Transcription factor" was retired on 2026-08-11: all 2,889 of
+# its value tuples appear verbatim in gene_expression_values.tab -- the same
+# measurements re-keyed from ENSMUSG to MGI symbol -- so it scored one layer
+# twice in every pathway statistic. STATegra ran no TF-expression assay, and the
+# layer's pre-reorganisation source is named `factor_expression_fake.txt`. The
+# files and the full argument are in `examplefiles/archive/retired/`.
 MULTIOMICS = [
     ("Gene expression",      "gene_expression",       "gene",     "genes"),
     ("Metabolomics",         "metabolomics",          "compound", "features"),
     ("Proteomics",           "proteomics",            "gene",     "features"),
     ("miRNA-seq",            "mirna",                 "gene",     "genes"),
     ("DNase-seq",            "dnase",                 "gene",     "genes"),
-    ("Transcription factor", "transcription_factor",  "gene",     "genes"),
 ]
 
 CONDITIONS = ["Ikaros/Control_0h", "Ikaros/Control_2h", "Ikaros/Control_6h",
@@ -53,9 +59,56 @@ CONDITIONS = ["Ikaros/Control_0h", "Ikaros/Control_2h", "Ikaros/Control_6h",
 MORE_CONDITIONS = ["Ctr_0H", "Ctr_2H", "Ctr_6H", "Ctr_12H", "Ctr_18H", "Ctr_24H",
                    "Ik_0H", "Ik_2H", "Ik_6H", "Ik_12H", "Ik_18H", "Ik_24H"]
 
-_ENVIRONMENT_NOTE = ("Matched-pathway counts differ between KEGG snapshots "
-                     "(888/44 on the deploy VM vs 877/41 locally for the same "
-                     "job), so none are asserted.")
+# Deliberately carries no numbers. It is shared by all four legacy entries, and
+# the pair it used to quote (888/44 on the deploy VM, 877/41 locally) was both
+# specific to the multi-omics job and stale the moment that job's inputs changed
+# -- a recorded count that silently rots is worse than no count, because the
+# next reader treats it as ground truth.
+_ENVIRONMENT_NOTE = ("Matched-pathway counts depend on the KEGG snapshot the "
+                     "host carries, so the same job yields different totals on "
+                     "the deploy VM and locally. None are asserted.")
+
+# What these files actually are, recorded because their absence is how a reduced
+# copy came to be described as "the published dataset". Scale audited 2026-08-11
+# against the deposited data; every accession below was confirmed by fetching it.
+MULTIOMICS_PROVENANCE = [
+    "Published as Gomez-Cabrero et al., *STATegra, a comprehensive multi-omics "
+    "dataset of B-cell differentiation in mouse*, Sci Data 6:256 (2019), "
+    "[doi:10.1038/s41597-019-0202-7](https://doi.org/10.1038/s41597-019-0202-7). "
+    "Mouse B3 pre-B cell line, Ikaros induced by tamoxifen, Ikaros-over-control "
+    "log ratios at six time points.",
+    "",
+    "**These files are a reduced copy.** The reduction predates this repository "
+    "-- the blobs are byte-identical to their first commit and nothing here can "
+    "regenerate them -- so the scale is recorded rather than corrected:",
+    "",
+    "| omic | shipped | full release |",
+    "| --- | --- | --- |",
+    "| Metabolomics | 58 compounds | 58 — **complete** |",
+    "| Gene expression | 6,336 genes | 12,762 (GSE75417) |",
+    "| Proteomics | 1,109 proteins | 2,396 protein groups (PXD003263) |",
+    "| miRNA-seq | 5,878 gene–miRNA pairs, 238 miRNAs | 468 miRNAs (GSE75394) |",
+    "| DNase-seq | 10,273 gene rows | 52,788 consensus DHS regions (GSE75390) |",
+    "",
+    "The gene-expression cut is effect-size dependent, not random: roughly half "
+    "of the low-amplitude genes are kept but only ~3% of the highest, which is a "
+    "detection/low-count filter stacked with a further reduction. The DNase rows "
+    "are regions already collapsed onto genes; the region form is the "
+    "`stategra-regions` scenario.",
+    "",
+    "Full data, all confirmed reachable: "
+    "[STATegraData/STATegraData](https://github.com/STATegraData/STATegraData) "
+    "carries analysis-ready matrices for every omic and is the best entry point; "
+    "otherwise GEO [GSE75417](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE75417) "
+    "(mRNA), [GSE75390](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE75390) "
+    "(DNase), [GSE75394](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE75394) "
+    "(miRNA), MetaboLights MTBLS283, PRIDE PXD003263. Note the shipped values are "
+    "ratios from an unrecorded normalisation that GSE75417 does not reproduce, so "
+    "scaling any layer up is a re-derivation, not an extension.",
+    "",
+    "A sixth layer, \"Transcription factor\", was retired on 2026-08-11 as a "
+    "duplicate of gene expression; see `examplefiles/archive/retired/`.",
+]
 
 
 def _dataDir(context, folder):
@@ -92,11 +145,15 @@ def buildStategraMultiomics(context):
 
     return {
         "id": "stategra-multiomics",
-        "title": "STATegra — real mouse Ikaros time course (6 omics)",
-        "summary": ("The published six-omic, six-timepoint STATegra dataset "
-                    "PaintOmics has always shipped. Real measurements, not "
-                    "simulated — the reference every simulated scenario is "
-                    "shaped against."),
+        "title": "STATegra — real mouse Ikaros time course (5 omics)",
+        # Plain text, no markdown: the dataset picker renders this string as-is,
+        # so emphasis markers show up literally on the card.
+        "summary": ("Five omics over six time points from the published STATegra "
+                    "mouse Ikaros time course. Real measurements, not simulated — "
+                    "the reference every simulated scenario is shaped against. "
+                    "A reduced copy of the release, not the whole of it: see the "
+                    "Provenance section of the README for the per-omic scale and "
+                    "where the full data is."),
         "tests": ["The full multi-omic pipeline on real data",
                   "Metabolite hub analysis", "Pathway network", "AI interpretation"],
         "pipeline": "pathway-acquisition",
@@ -106,6 +163,7 @@ def buildStategraMultiomics(context):
         "simulated": False,
         "omics": omics,
         "references": [],
+        "provenance": MULTIOMICS_PROVENANCE,
         "expected": {"note": _ENVIRONMENT_NOTE},
     }
 
