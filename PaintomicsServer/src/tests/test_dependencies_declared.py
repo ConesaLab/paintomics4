@@ -98,19 +98,47 @@ def test_every_external_import_resolves():
         + "\n  ".join(unresolved))
 
 
-def test_requirements_file_is_the_single_source_of_truth():
-    """src/requirements.txt must defer to the root file, not duplicate it."""
-    nested = _SRC_ROOT / "requirements.txt"
-    assert nested.is_file(), "PaintomicsServer/src/requirements.txt is missing"
+def test_there_is_exactly_one_requirements_file():
+    """The root requirements.txt must be the only pip manifest in the tree.
 
-    content = nested.read_text()
-    pins = [line for line in content.splitlines()
-            if line.strip() and not line.strip().startswith("#") and "==" in line]
-    assert not pins, (
-        "PaintomicsServer/src/requirements.txt pins versions again; it drifted out of sync "
-        "with the root file once already (CairoSVG 2.4.2 vs 2.7.0, Pillow 8.0.1 vs 10.3.0). "
-        f"It must only contain an -r include. Found: {pins}")
-    assert "-r " in content, "expected an '-r' include pointing at the root requirements.txt"
+    This asserted the opposite until 2026-08-11: that
+    `PaintomicsServer/src/requirements.txt` still existed, reduced to a single
+    `-r ../../requirements.txt` include. That stub was well intentioned -- it
+    redirected anyone installing from the path they were used to -- and it cost
+    33 open Dependabot alerts.
+
+    GitHub's dependency graph never re-parsed it. A pip manifest whose only
+    content is an `-r` include yields no requirements, and rather than clearing
+    the manifest GitHub kept the last snapshot it had successfully read: the
+    2020 pins, Flask 1.1.2 / Werkzeug 1.0.1 / Jinja2 2.11.2 / CairoSVG 2.7.0 /
+    Pillow 10.3.0. Measured against the API, every open alert on this repository
+    named this file and none named the root, whose 63 alerts are all fixed --
+    and new ones were still being raised against the stale snapshot as recently
+    as 2026-08-07 (alert 320, pillow < 12.3.0). The advisories were real; the
+    versions they were raised against had not been installed by anything for
+    months.
+
+    Nothing read the stub: the image installs the root file
+    (deploy/Dockerfile), and there are no CI workflows. Deleting it is what the
+    deployment plan called for in the first place -- see
+    docs/superpowers/plans/2026-08-05-drago-cloud-deployment.md, "Delete:
+    PaintomicsServer/src/requirements.txt".
+
+    So the guard is inverted: a second manifest anywhere in the tree is the
+    defect, whether it duplicates the pins or merely points at them.
+    """
+    stray = [path for path in _REPO_ROOT.rglob("requirements*.txt")
+             if ".git" not in path.parts
+             and "node_modules" not in path.parts
+             and path != _REPO_ROOT / "requirements.txt"]
+    assert not stray, (
+        "a second pip manifest exists; GitHub's dependency graph will scan it "
+        "and raise alerts against whatever it last managed to parse there, "
+        "which is what produced 33 phantom alerts against a file containing "
+        "nothing but an -r include. The root requirements.txt is the only one. "
+        f"Found: {[str(p.relative_to(_REPO_ROOT)) for p in stray]}")
+    assert (_REPO_ROOT / "requirements.txt").is_file(), \
+        "the root requirements.txt is missing"
 
 
 def test_known_previously_missing_dependencies_are_declared():
@@ -124,7 +152,7 @@ def test_known_previously_missing_dependencies_are_declared():
 def main():
     tests = [
         test_every_external_import_resolves,
-        test_requirements_file_is_the_single_source_of_truth,
+        test_there_is_exactly_one_requirements_file,
         test_known_previously_missing_dependencies_are_declared,
     ]
     for t in tests:
