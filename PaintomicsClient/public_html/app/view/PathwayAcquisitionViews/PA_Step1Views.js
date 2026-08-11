@@ -780,16 +780,28 @@ function PA_Step1JobView() {
 		// function does -- so it stays, renamed for what it now does.
 		$("#exampleButton").html('<i class="fa fa-file-text-o"></i> Load another example');
 
-		// Deliberately NOT ticking the AI consent checkbox. It is a permission to
-		// send pathway summaries, feature lists and the experiment design text to
-		// a third-party LLM service, and the server reads it straight off this
-		// form on the example branch too (PathwayAcquisitionServlet
-		// setAIConsent(formFields.get("aiConsent", "false"))). The dataset being
-		// public says nothing about whether the user wants that call made on their
-		// behalf, and clicking "Load example" is not an answer to the question the
-		// checkbox asks. Note this neither ticks nor unticks it: on a local
-		// instance DEFAULT_AI_CONSENT_ENABLED has already ticked it and loading an
-		// example leaves that alone, which is the intent both ways round.
+		// Ticks the AI consent checkbox, and only ever on this branch.
+		//
+		// This used to deliberately leave it alone, reasoning that a dataset being
+		// public says nothing about whether the user wants a third-party LLM call
+		// made on their behalf. That argument holds for an *upload* and is why the
+		// box still defaults off there (see DEFAULT_AI_CONSENT_ENABLED at the
+		// checkbox definition). It does not hold here: the example datasets are
+		// published STATegra measurements and generated simulations, they contain
+		// nothing of the user's, and every scenario that carries an interpretation
+		// lists "AI interpretation" among the things it exists to exercise. Leaving
+		// the box clear meant the flagship demo of the feature silently produced
+		// "Not started", which reads as a broken build rather than a withheld
+		// permission.
+		//
+		// What is sent is still the pathway results, matched feature values and the
+		// experiment design text set just below -- all of it derived from the
+		// example data, none of it from the person clicking. Pressing Reset or
+		// unticking the box before Run both still work; this is a default, not a
+		// lock.
+		var aiConsent = this.getComponent().down('[name=aiConsent]');
+		if (aiConsent) { aiConsent.setValue(true); }
+
 		var expDesign = this.getComponent().down('[name=experimentDesign]');
 		if (expDesign && scenario) {
 			expDesign.setValue(exampleExperimentDesignFor(scenario));

@@ -175,22 +175,54 @@ def exampleLoaderBody(source):
 
 
 class ExampleModeConsentTest(unittest.TestCase):
-    """Loading an example must not answer the AI consent question for the user.
+    """Loading an example turns AI interpretation on. Uploads still default off.
 
-    The checkbox reads "sends analysis summaries to external AI service", and
-    the server takes it straight off the form on the example branch too
-    (PathwayAcquisitionServlet: setAIConsent(formFields.get("aiConsent",
-    "false"))). Measured before this guard: unchecked on a fresh page, checked
-    after clicking Load example, for every dataset -- so every example run
-    called out to a third-party LLM on a permission nobody gave.
+    This guard is the reverse of the one it replaces, and the reversal was
+    deliberate, so the reasoning is worth keeping rather than quietly dropping.
+
+    The original guard forbade the example loader from touching the checkbox at
+    all: the box reads "sends your pathway results and the values of the matched
+    features" to a third party, the server takes it straight off the form on the
+    example branch too (PathwayAcquisitionServlet:
+    setAIConsent(formFields.get("aiConsent", "false"))), and clicking "Load
+    example" is not an answer to the question the box asks.
+
+    That argument was about *the user's* data, and it still governs uploads --
+    the checkbox's own `checked:` stays bound to DEFAULT_AI_CONSENT_ENABLED, off
+    everywhere but a local instance. It does not govern the examples: they are
+    published STATegra measurements and generated simulations, they carry
+    nothing of the person clicking, and the scenarios that ship an
+    interpretation name "AI interpretation" among the things they exist to
+    exercise. With the box left clear the flagship demonstration of the feature
+    rendered "Not started", which reads as a broken build rather than as a
+    permission withheld on purpose.
+
+    So the assertion is inverted, not deleted: example mode must reach for the
+    checkbox and set it, and if that line is ever removed this fails and asks
+    why -- the same service the old guard performed, pointed the other way.
     """
 
-    def test_the_example_loader_does_not_touch_the_ai_consent_checkbox(self):
+    def test_the_example_loader_enables_ai_interpretation(self):
         body = exampleLoaderBody(read(STEP1_VIEWS))
-        self.assertNotIn(
+        self.assertIn(
             "[name=aiConsent]", body,
-            "setExampleModeHandler reaches for the AI consent checkbox again; "
-            "loading an example is not consent to transmit to a third party")
+            "setExampleModeHandler no longer reaches for the AI consent "
+            "checkbox, so example runs will render 'Not started' instead of an "
+            "interpretation")
+        self.assertIn(
+            "aiConsent.setValue(true)", body.replace(" ", ""),
+            "the example loader finds the AI consent checkbox but does not tick "
+            "it; loading an example is meant to demonstrate the interpretation")
+
+    def test_uploads_still_default_to_no_consent(self):
+        """The reversal is scoped to the example branch, not to the checkbox."""
+        source = read(STEP1_VIEWS)
+        self.assertIn(
+            "checked: typeof DEFAULT_AI_CONSENT_ENABLED !== \"undefined\" && "
+            "DEFAULT_AI_CONSENT_ENABLED", source,
+            "the checkbox's own default no longer follows "
+            "DEFAULT_AI_CONSENT_ENABLED, so an upload page may now arrive "
+            "pre-consented")
 
     def test_the_experiment_design_prefill_is_kept(self):
         """The other prefill is a visible, editable text field -- not a permission."""
