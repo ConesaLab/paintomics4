@@ -183,9 +183,21 @@ class HeatmapLabelHelperBehaviour(unittest.TestCase):
     """
     Runs the extracted helper block under node and checks what it actually
     produces. The helpers are pure, so no DOM, chart library or job is needed;
-    only getColor() (which paColorLegend samples) has to be supplied, and it is
-    taken verbatim from the same file.
+    only getColor() (which paColorLegend samples) and whatever getColor itself
+    depends on have to be supplied, and they are taken verbatim from the same
+    file.
+
+    That dependency list is not fixed, which this class learned the hard way:
+    when the ramp maths moved out of getColor into paRampPosition, the lift
+    still compiled and every assertion that did not reach a colour still
+    passed -- only paColorLegend, which samples getColor 25 times, died with
+    "paRampPosition is not defined". A helper extracted from a file is only as
+    complete as its call graph, so anything getColor calls belongs here.
     """
+
+    # Free functions getColor() calls. Lifted verbatim, in this order, ahead of
+    # getColor itself.
+    COLOUR_DEPENDENCIES = ("paRampPosition",)
 
     @classmethod
     def setUpClass(cls):
@@ -195,15 +207,20 @@ class HeatmapLabelHelperBehaviour(unittest.TestCase):
         end = source.index(HELPER_END)
         cls.helpers = source[start:end]
 
+        def lift(name):
+            begin = source.index("var %s = function" % name)
+            return source[begin:source.index("\n};", begin) + 3]
+
+        cls.dependencies = "\n".join(lift(name) for name in cls.COLOUR_DEPENDENCIES)
+
         color_start = source.index("var getColor = function")
-        color_end = source.index("var renderFunctionLimit = function")
         cls.get_color = source[color_start:source.index("};", color_start) + 2]
 
         cls.prelude = (
             "var Date_logFormat = function () { return ''; };\n"
             "Date.logFormat = Date_logFormat;\n"
             "var console_error = console.error; console.error = function () {};\n"
-            + cls.get_color + "\n" + cls.helpers + "\n"
+            + cls.dependencies + "\n" + cls.get_color + "\n" + cls.helpers + "\n"
         )
 
     def evaluate(self, expression):
