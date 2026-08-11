@@ -31,7 +31,7 @@ An important setting is the type of enrichment to perform: based on genes or fea
 
 For more information about the configuration options of regulatory and region based omic, read the associated pages in the "Supporting tools" at the left menu of the main Paintomics webpage.
 
-You can read more about the accepted input data in the <a href="http://paintomics.readthedocs.io/en/latest/2_1_accepted_input/" target="_blank">dedicated page</a>, as well as download the example data <a href="http://bioinfo.cipf.es/paintomics/resources/paintomics_example_data.zip">here</a>.
+You can read more about the accepted input data in the <a href="http://paintomics.readthedocs.io/en/latest/2_1_accepted_input/" target="_blank">dedicated page</a>. The example data is available from the server you are using, through the "Download example data" button in step 1 or the Downloads menu: it is built from that server's own catalogue, so it always matches what "Load example" offers, and it includes a `HOW-THIS-DATA-WAS-MADE.md` explaining which datasets are simulated and how.
 
 Once everything is ready, press the button "Run paintomics" in the upper left corner.
 

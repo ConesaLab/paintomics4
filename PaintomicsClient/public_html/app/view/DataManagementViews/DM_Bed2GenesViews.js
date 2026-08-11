@@ -113,7 +113,10 @@ function DM_Bed2GenesJobView() {
 				'       <li>A list of all the regions which are specially relevant for our experiment (Figure 1. B).</li>' +
 				'   </ul>' + 
 				'   <img alt="paintomics_input_figure2.png" src="resources/images/paintomics_input_figure2.png" style="max-width: 700px;margin: auto;display: block;">' +
-				'	<div style="text-align: center;height: 35px;margin-top: 20px;"><a class="button btn-success btn-right" target="_blank" style="float: none;" href="resources/rgmatch_example_data.zip"><i class="fa fa-play"></i> Download example data</a></div>' +
+				// This page's own datasets, matching its "Load example". The
+				// rgmatch zip it replaced is RGmatch's standalone example, not
+				// the region data this converter loads.
+				'	<div style="text-align: center;height: 35px;margin-top: 20px;"><a class="button btn-success btn-right" target="_blank" style="float: none;" href="' + SERVER_URL_EXAMPLE_DATASETS_DOWNLOAD + '?pipeline=regions2genes"><i class="fa fa-play"></i> Download example data</a></div>' +
 				'   <h3>About gene regions</h3>' +
 				'   <p>By default, the region to gene associations will be computed as follows:</p>' +
 				'   <ul>' +

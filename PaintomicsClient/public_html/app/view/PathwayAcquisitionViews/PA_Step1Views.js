@@ -1483,7 +1483,11 @@ function PA_Step1JobView() {
 					},
 					{
 						xtype: "box",
-						html: '<h3>3. Choose the files to upload <a class="button btn-right btn-small" href="resources/paintomics_example_data.zip"><i class="fa fa-download"></i> Download example data</a></h3>'
+						// Served from the manifest rather than a checked-in zip, so
+						// this hands over the datasets "Load example" actually
+						// offers. The old static file was built in 2017 and shared
+						// no filename with any current scenario.
+						html: '<h3>3. Choose the files to upload <a class="button btn-right btn-small" href="' + SERVER_URL_EXAMPLE_DATASETS_DOWNLOAD + '"><i class="fa fa-download"></i> Download example data</a></h3>'
 					},
 					{
 						xtype: "container",

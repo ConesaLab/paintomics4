@@ -90,7 +90,7 @@ PUBLISHED = {
     "app/view/PathwayAcquisitionViews/PA_Step3RegTargetNetworkView.js": (
         "0.4", "4d92961b47ef064b8150e8514d52dea5b5f0467d31281d3b580b6049df6a2e76"),
     "resources/ServerConfiguration.js": (
-        "0.6", "ad657741d87248b3286529282cbf38d6d9ede73170f79d30af93624a9bdbeb5a"),
+        "0.7", "da64ff7cfeeecef7c6c9fb8ec125199b40200988d638951e9d7817eef13da754"),
     "js/libs/linkurious/sigma.min.js": ("0.1", None),
     "js/libs/linkurious/plugins.js": ("0.2", None),
     # Versioned by its release rather than by a counter. A vendored library is

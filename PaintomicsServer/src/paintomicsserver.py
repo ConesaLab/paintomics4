@@ -19,13 +19,14 @@
 #**************************************************************
 import logging.config
 
-from flask import Flask, request, send_from_directory, jsonify
+from flask import Flask, request, send_file, send_from_directory, jsonify
 from flask.json.provider import DefaultJSONProvider
 from re import sub
 
 from src.common.PySiQ import Queue
 from src.common import JobProgress
 from src.common import ExampleDatasets
+from src.common import ExampleBundle
 from src.common import DatabaseAvailability
 
 from src.conf.serverconf import *
@@ -341,6 +342,36 @@ class Application(object):
                 resolveDatabases=DatabaseAvailability.resolveDatabases)
             content["success"] = True
             return Response().setContent(content).getResponse()
+        #*******************************************************************************************
+        ##* EXAMPLE DATASET DOWNLOAD
+        #*******************************************************************************************
+        # The same catalogue as an archive, for the "Download example data"
+        # button. It used to serve a static resources/*.zip built in 2017 whose
+        # twelve files belonged to a dataset the picker no longer offers, so
+        # "load the example" and "download the example" handed out different
+        # experiments; building it from the manifest is what stops that.
+        #
+        # ?scenario=<id> narrows it to one dataset and ?pipeline=<name> to one
+        # entry point's datasets, which is what the converter pages' own
+        # "Download example data" buttons ask for. Unauthenticated and GET like
+        # the catalogue beside it, and for the same reason: these are files the
+        # server already ships publicly.
+        @self.app.route(SERVER_SUBDOMAIN + '/example_datasets/download', methods=['OPTIONS', 'GET'])
+        def exampleDatasetsDownloadHandler():
+            scenarioId = (request.args.get("scenario") or "").strip() or None
+            pipeline = (request.args.get("pipeline") or "").strip() or None
+            try:
+                path = ExampleBundle.bundleFor(self.EXAMPLE_FILES_DIR,
+                                               scenarioId, pipeline)
+            except ExampleDatasets.UnknownScenario as warning:
+                # Rendered as a message rather than a 500: an unknown id here is
+                # a mistyped URL, which is the user's to fix.
+                return Response().setContent({
+                    "success": False, "message": str(warning)}).getResponse()
+
+            return send_file(path, mimetype="application/zip", as_attachment=True,
+                             download_name=ExampleBundle.downloadName(scenarioId,
+                                                                      pipeline))
         #*******************************************************************************************
         ##* INSTALLED PATHWAY DATABASES PER ORGANISM
         #*******************************************************************************************

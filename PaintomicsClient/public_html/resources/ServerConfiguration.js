@@ -105,6 +105,12 @@ SERVER_URL_DM_SEND_REPORT = SERVER_URL + "dm_sendReport";
 // accepts an optional "/<scenario-id>" after it -- the routes use Flask's
 // <path:> converter, so the extra segment needs no new endpoint.
 SERVER_URL_EXAMPLE_DATASETS = SERVER_URL + "example_datasets";
+// The same catalogue as a zip, behind every "Download example data" button.
+// Built from the manifest on request, so what you can load is what you get --
+// the static resources/paintomics_example_data.zip this replaced was assembled
+// in 2017 and held a dataset the picker stopped offering. Accepts an optional
+// "?scenario=<id>" for one dataset or "?pipeline=<name>" for one entry point's.
+SERVER_URL_EXAMPLE_DATASETS_DOWNLOAD = SERVER_URL_EXAMPLE_DATASETS + "/download";
 /*********************************************************************
  * KEGG DATA URLS                          ***************************
  *********************************************************************/
