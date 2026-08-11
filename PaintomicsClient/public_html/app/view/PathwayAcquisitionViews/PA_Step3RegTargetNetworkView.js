@@ -503,11 +503,20 @@ function PA_Step3RegTargetNetworkView() {
 				//
 				// The absolute version -- inherited from the sigma view, which
 				// capped at 1.5 on the grounds that MORE coefficients "typically
-				// land in [0, ~2]" -- encodes nothing on real data. Measured on
-				// the bundled STATegra example, |coef| runs 0 to 0.178 with a
-				// median of 0.031, so every edge came out between 0.6 and 0.96
-				// pixels wide: a channel carrying no information, on the
-				// quantity the view exists to show.
+				// land in [0, ~2]" -- assumes a coefficient scale that no data
+				// is obliged to have. Measured on the STATegra example as it
+				// was then bundled (TFLink "All", 600 targets), |coef| ran 0 to
+				// 0.178 with a median of 0.031, so every edge came out between
+				// 0.6 and 0.96 pixels wide: a channel carrying no information,
+				// on the quantity the view exists to show.
+				//
+				// The rebuilt example (TFLink small-scale, 957 targets) runs 0
+				// to 3.005 with a median of 0.176, where that same absolute cap
+				// would have worked passably. Do not read that as a reason to
+				// go back: the two measurements are a year apart in nothing but
+				// the choice of network, and they differ by 17x. The scale is a
+				// property of the user's data, not a constant, which is the
+				// whole argument for scaling against the network in hand.
 				//
 				// Relative scaling means widths are not comparable between two
 				// different jobs. They were not comparable before either -- they

@@ -1,6 +1,6 @@
 # STATegra — real expression against a real TF network (MORE)
 
-A uniform random subsample of the STATegra Ikaros induction time course (GSE75417) with the TFLink v1.0 mouse regulatory network: 600 genes, 36 samples, 12 groups, and every curated TF that regulates one of them. Real measurements with no planted signal, which is what separates it from the simulated MORE example.
+The STATegra Ikaros induction time course (GSE75417) against the literature-curated half of the TFLink v1.0 mouse network: 957 genes, 387 transcription factors, 36 samples and 12 groups, with nothing subsampled. Real measurements and no planted signal, which is what separates it from the simulated MORE example.
 
 |  |  |
 | --- | --- |
@@ -17,6 +17,7 @@ A uniform random subsample of the STATegra Ikaros induction time course (GSE7541
 * 12-group experimental design
 * Automatic minVariation threshold
 * GENE:::REGULATOR hand-off to pathway analysis
+* Pathway enrichment on a real regulatory hand-off
 
 ## Files
 
@@ -33,15 +34,17 @@ A uniform random subsample of the STATegra Ikaros induction time course (GSE7541
 
 ## Expected result
 
-* **associations** — 17669
+* **associations** — 2910
 * **enginesAgree** — rust-pls1 and r-pls1 byte-identical on all four output files; r-mlr is a different model and is not expected to agree with either
-* **flaggedRegulators** — 176
-* **flaggedRule** — one-way ANOVA across the 12 groups, Benjamini-Hochberg FDR < 0.01, and at least a two-fold range between group means
-* **measuredRuntimeSeconds** — {'rust-pls1': 0.8, 'r-pls1': 366.8, 'r-mlr': 713.2}
+* **flaggedRegulators** — 56
+* **flaggedRule** — Welch t-test of the 18 induced samples against the 18 controls, Benjamini-Hochberg FDR < 0.01, and at least a two-fold difference of arm means
+* **measuredRuntimeSeconds** — {'rust-pls1': 0.1, 'r-pls1': 234.4, 'r-mlr': 739.8}
 * **note** — Matched-pathway counts differ between KEGG snapshots (888/44 on the deploy VM vs 877/41 locally for the same job), so none are asserted.
-* **regulators** — 307
-* **source** — {'expression': 'GEO GSE75417 (STATegra RNA-seq, CQN + ComBat)', 'network': 'TFLink v1.0, Mus musculus, All simple format', 'subsample': 'uniform random, seed 20260811, from the 9,835 targets carrying at least one association'}
-* **targets** — 600
+* **regulators** — 387
+* **source** — {'expression': 'GEO GSE75417 (STATegra RNA-seq, CQN + ComBat)', 'network': 'TFLink v1.0, Mus musculus, restricted to interactions flagged Small-scale.evidence = Yes', 'subsample': 'none -- every gene with a measured profile and at least one small-scale association is included'}
+* **starredTargetRate** — 0.315
+* **starredTargets** — 301
+* **targets** — 957
 
 ---
 

@@ -117,6 +117,32 @@ def declaredTargets(scenario):
                 if line.strip() and not line.startswith("#")]
 
 
+def enrichmentRows(kegg, background, relevantByOmic):
+    """(pathway, combined p) per matched pathway, the way the job does it.
+
+    calculateFisher is PathwayAcquisitionJob's own hypergeometric, and the
+    omics are combined with Fisher's method exactly as
+    Pathway.getTotalGlobalPvalues does. With a single omic the combination is
+    the identity -- chi2(-2 ln p, 2 df) survives back to p -- so one code path
+    covers both MORE scenarios.
+    """
+    total = len(background)
+    rows = []
+    for pathway, members in kegg.pathwayToGenes.items():
+        inPathway = [gene for gene in members if gene in background]
+        if not inPathway:
+            continue
+        pvalues = []
+        for relevant in relevantByOmic.values():
+            hits = sum(1 for gene in inPathway if gene in relevant)
+            pvalues.append(calculateFisher(total, len(inPathway),
+                                           len(relevant), hits))
+        rows.append((pathway, float(combine_pvalues(pvalues,
+                                                    method="fisher")[1])))
+    rows.sort(key=lambda row: row[1])
+    return rows
+
+
 class MoreEnrichmentShapeTest(unittest.TestCase):
 
     @classmethod
@@ -133,31 +159,7 @@ class MoreEnrichmentShapeTest(unittest.TestCase):
                         & cls.background
                         for omic in cls.scenario["omics"]}
         cls.targets = declaredTargets(cls.scenario)
-        cls.rows = cls._enrich()
-
-    @classmethod
-    def _enrich(cls):
-        """(pathway, combined p) per matched pathway, the way the job does it.
-
-        calculateFisher is PathwayAcquisitionJob's own hypergeometric, and the
-        two omics are combined with Fisher's method exactly as
-        Pathway.getTotalGlobalPvalues does.
-        """
-        total = len(cls.background)
-        rows = []
-        for pathway, members in cls.kegg.pathwayToGenes.items():
-            inPathway = [gene for gene in members if gene in cls.background]
-            if not inPathway:
-                continue
-            pvalues = []
-            for relevant in cls.relevant.values():
-                hits = sum(1 for gene in inPathway if gene in relevant)
-                pvalues.append(calculateFisher(total, len(inPathway),
-                                               len(relevant), hits))
-            rows.append((pathway, float(combine_pvalues(pvalues,
-                                                        method="fisher")[1])))
-        rows.sort(key=lambda row: row[1])
-        return rows
+        cls.rows = enrichmentRows(cls.kegg, cls.background, cls.relevant)
 
     def test_relevance_is_not_a_flood(self):
         for omicName, relevant in self.relevant.items():
@@ -207,6 +209,115 @@ class MoreEnrichmentShapeTest(unittest.TestCase):
             len(self.rows), 200,
             "only %d pathways hold a modelled gene; the example would exercise "
             "a quarter of the pathway space it used to" % len(self.rows))
+
+
+class RealMoreEnrichmentShapeTest(unittest.TestCase):
+    """The same question asked of `stategra-more`, which has no ground truth.
+
+    `regulatory-more` can be checked against the pathways it planted. This one
+    plants nothing, so the assertions are about shape only -- but the shape is
+    exactly what was wrong with it. Built against TFLink "All", every one of
+    its 600 targets carried a red star, which pins each pathway's
+    hypergeometric at exactly 1.0 and left the scenario with zero significant
+    pathways out of 309 and no threshold able to change that. Rebuilt against
+    TFLink's small-scale subset it stars 31.5%.
+
+    The counts below are deliberately banded rather than pinned: matched and
+    significant totals move with the installed KEGG snapshot (888/44 on the
+    deploy VM against 877/41 locally for the same job), and this file would
+    otherwise fail on a perfectly good machine. The star rate is pinned harder,
+    because it is computed from the shipped files alone.
+    """
+
+    # The failure this scenario was rebuilt to fix, and the opposite one. A
+    # star rate at either end makes the pathway step uninformative: at 100%
+    # nothing can be enriched against the background, at 0% nothing is
+    # relevant at all.
+    MAX_STAR_RATE = 0.45
+    MIN_STAR_RATE = 0.05
+
+    # Wide on purpose -- see the class docstring. Measured 23.5% locally; the
+    # band exists to catch 0% and 100%, not to pin the snapshot.
+    MIN_SIGNIFICANT_FRACTION = 0.02
+    MAX_SIGNIFICANT_FRACTION = 0.40
+
+    @classmethod
+    def setUpClass(cls):
+        cls.kegg = keggSource()
+        if cls.kegg is None:
+            raise unittest.SkipTest(
+                "no installed KEGG snapshot; this checks the shipped MORE "
+                "files against pathway membership and cannot run without it")
+        cls.scenario = ExampleDatasets.getScenario(EXAMPLE_DIR, "stategra-more")
+        cls.modelled = modelledGenes(cls.scenario)
+        cls.background = {gene for gene in cls.modelled
+                          if gene in cls.kegg.geneToPathways}
+        cls.relevant = {omic["omicName"]: redStarredGenes(cls.scenario, omic)
+                        & cls.background
+                        for omic in cls.scenario["omics"]}
+        cls.rows = enrichmentRows(cls.kegg, cls.background, cls.relevant)
+
+    def test_the_star_rate_matches_what_the_manifest_declares(self):
+        """The manifest's number and the shipped files must not drift apart.
+
+        Computed over every modelled gene rather than only the ones KEGG
+        knows, because that is what the manifest records and what MOREServlet
+        actually produces.
+        """
+        starred = redStarredGenes(self.scenario, self.scenario["omics"][0])
+        starred &= self.modelled
+        expected = self.scenario["expected"]
+        self.assertEqual(
+            len(starred), expected["starredTargets"],
+            "the shipped association and relevant-regulator files star %d of "
+            "%d modelled genes; the manifest says %d. Regenerate the manifest "
+            "or the dataset -- they disagree."
+            % (len(starred), len(self.modelled), expected["starredTargets"]))
+        self.assertAlmostEqual(
+            len(starred) / float(len(self.modelled)),
+            expected["starredTargetRate"], places=3)
+
+    def test_relevance_is_neither_a_flood_nor_empty(self):
+        for omicName, relevant in self.relevant.items():
+            rate = len(relevant) / float(len(self.background))
+            self.assertLessEqual(
+                rate, self.MAX_STAR_RATE,
+                "%s stars %d of %d genes (%.1f%%). Expanding the flagged "
+                "regulators over the associations marks so much of the "
+                "submission that nothing can be enriched against it -- which "
+                "is what TFLink 'All' did to this scenario at 100%%."
+                % (omicName, len(relevant), len(self.background), 100 * rate))
+            self.assertGreaterEqual(
+                rate, self.MIN_STAR_RATE,
+                "%s stars only %.1f%% of the background" % (omicName, 100 * rate))
+
+    def test_the_enrichment_separates(self):
+        """Something has to come back significant, and convincingly.
+
+        The old files failed this at its weakest possible reading: the *best*
+        pathway of 309 came back at exactly p = 1.0.
+        """
+        best = self.rows[0][1]
+        self.assertLess(
+            best, 1e-4,
+            "the most enriched of %d matched pathways is only p=%.3g; the "
+            "regulatory hand-off is not separating anything"
+            % (len(self.rows), best))
+
+    def test_the_significant_fraction_is_believable(self):
+        significant = sum(1 for _pathway, p in self.rows if p <= 0.05)
+        fraction = significant / float(len(self.rows))
+        self.assertGreaterEqual(fraction, self.MIN_SIGNIFICANT_FRACTION,
+                                "%d of %d pathways significant"
+                                % (significant, len(self.rows)))
+        self.assertLessEqual(fraction, self.MAX_SIGNIFICANT_FRACTION,
+                             "%d of %d pathways significant"
+                             % (significant, len(self.rows)))
+
+    def test_the_example_exercises_a_realistic_share_of_the_pathway_space(self):
+        self.assertGreaterEqual(
+            len(self.rows), 200,
+            "only %d pathways hold a modelled gene" % len(self.rows))
 
 
 if __name__ == "__main__":

@@ -213,9 +213,10 @@ def buildStategraMore(context):
     rather than to a fixture.
 
     Built by `stategramore.py` from GSE75417 and TFLink v1.0; see that module
-    for the subsampling rule and why it is uniform rather than signal-led. The
-    files are committed, so a checkout without the source dataset still serves
-    this scenario -- it simply cannot regenerate it.
+    for why the network is TFLink's small-scale subset rather than "All", which
+    is the difference between a pathway step that separates and one that
+    cannot. The files are committed, so a checkout without the source dataset
+    still serves this scenario -- it simply cannot regenerate it.
     """
     target = _fileEntry(context, MORE_FOLDER, "gene_expression_targets.tab")
     design = _fileEntry(context, MORE_FOLDER, "experimental_design.tab")
@@ -243,17 +244,18 @@ def buildStategraMore(context):
     return {
         "id": "stategra-more",
         "title": "STATegra — real expression against a real TF network (MORE)",
-        "summary": ("A uniform random subsample of the STATegra Ikaros "
-                    "induction time course (GSE75417) with the TFLink v1.0 "
-                    "mouse regulatory network: 600 genes, 36 samples, 12 "
-                    "groups, and every curated TF that regulates one of them. "
-                    "Real measurements with no planted signal, which is what "
+        "summary": ("The STATegra Ikaros induction time course (GSE75417) "
+                    "against the literature-curated half of the TFLink v1.0 "
+                    "mouse network: 957 genes, 387 transcription factors, 36 "
+                    "samples and 12 groups, with nothing subsampled. Real "
+                    "measurements and no planted signal, which is what "
                     "separates it from the simulated MORE example."),
         "tests": ["MORE on real per-sample data",
                   "All three regulatory engines (Rust PLS1, R PLS1, R MLR)",
                   "12-group experimental design",
                   "Automatic minVariation threshold",
-                  "GENE:::REGULATOR hand-off to pathway analysis"],
+                  "GENE:::REGULATOR hand-off to pathway analysis",
+                  "Pathway enrichment on a real regulatory hand-off"],
         "pipeline": "more",
         "organism": "mmu",
         "databases": ["KEGG"],
@@ -280,23 +282,37 @@ def buildStategraMore(context):
             # All three fit inside the 1800 s job timeout, which is the
             # property that makes this dataset usable as the example for a
             # three-way engine choice rather than only for the default.
-            "measuredRuntimeSeconds": {"rust-pls1": 0.8, "r-pls1": 366.8,
-                                       "r-mlr": 713.2},
+            "measuredRuntimeSeconds": {"rust-pls1": 0.1, "r-pls1": 234.4,
+                                       "r-mlr": 739.8},
             "enginesAgree": ("rust-pls1 and r-pls1 byte-identical on all four "
                              "output files; r-mlr is a different model and is "
                              "not expected to agree with either"),
-            "targets": 600,
-            "regulators": 307,
-            "associations": 17669,
-            "flaggedRegulators": 176,
-            "flaggedRule": ("one-way ANOVA across the 12 groups, "
-                            "Benjamini-Hochberg FDR < 0.01, and at least a "
-                            "two-fold range between group means"),
+            "targets": 957,
+            "regulators": 387,
+            "associations": 2910,
+            "flaggedRegulators": 56,
+            "flaggedRule": ("Welch t-test of the 18 induced samples against "
+                            "the 18 controls, Benjamini-Hochberg FDR < 0.01, "
+                            "and at least a two-fold difference of arm means"),
+            # The number this scenario was rebuilt around, and the one worth
+            # asserting: it depends only on the shipped association and
+            # relevant-regulator files, so unlike the pathway counts it does
+            # not move with the KEGG snapshot.
+            #
+            # MOREServlet stars a gene when ANY of its regulators is flagged,
+            # so this is the share of the submission that carries a red star --
+            # and therefore the ceiling on what pathway enrichment can resolve.
+            # Against TFLink "All" it was 100.0%, which makes every
+            # hypergeometric p exactly 1.0. See stategramore.py.
+            "starredTargets": 301,
+            "starredTargetRate": 0.315,
             "source": {
                 "expression": "GEO GSE75417 (STATegra RNA-seq, CQN + ComBat)",
-                "network": "TFLink v1.0, Mus musculus, All simple format",
-                "subsample": ("uniform random, seed 20260811, from the 9,835 "
-                              "targets carrying at least one association"),
+                "network": ("TFLink v1.0, Mus musculus, restricted to "
+                            "interactions flagged Small-scale.evidence = Yes"),
+                "subsample": ("none -- every gene with a measured profile and "
+                              "at least one small-scale association is "
+                              "included"),
             },
         },
     }

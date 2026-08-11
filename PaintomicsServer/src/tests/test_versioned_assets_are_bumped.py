@@ -88,7 +88,7 @@ PUBLISHED = {
     "app/view/PathwayAcquisitionViews/PA_AIInterpretView.js": (
         "0.3", "6a8fae1b64d3b5ff5a68e2deb36460a1e4f1932128aa283f2adad6062bacaa30"),
     "app/view/PathwayAcquisitionViews/PA_Step3RegTargetNetworkView.js": (
-        "0.3", "aef95f9946e4ec5f8bed62deb7b5da12e051a32f32862ae003a25f50604c1c55"),
+        "0.4", "4d92961b47ef064b8150e8514d52dea5b5f0467d31281d3b580b6049df6a2e76"),
     "resources/ServerConfiguration.js": (
         "0.6", "ad657741d87248b3286529282cbf38d6d9ede73170f79d30af93624a9bdbeb5a"),
     "js/libs/linkurious/sigma.min.js": ("0.1", None),
