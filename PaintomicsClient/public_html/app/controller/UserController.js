@@ -59,11 +59,23 @@ function UserController() {
                    acquiring a caption it does not need. */
                 header: false,
                 cls: "userViewsDialog",
+                /* Only ever engages when the clamp below has had to shorten the
+                   window: the sizes these forms ask for fit on a normal screen,
+                   and a dialog that scrolls when it does not need to is worse
+                   than one that does not. */
+                autoScroll: true,
                 items: []
             });
         }
 
-        userViewsDialog.setHeight(height);
+        /* The window is centred and fixed-height, so anything taller than the
+           viewport is not something the reader can scroll the page to reach -
+           it is simply off the screen, top and bottom. Create an account is the
+           form that gets near this: it asks for 700px, which is fine on a
+           laptop and is not on a short window or a projector. Clamped, and
+           autoScroll above then makes the remainder reachable. */
+        var ceiling = Math.max(320, Ext.Element.getViewportHeight() - 40);
+        userViewsDialog.setHeight(Math.min(height, ceiling));
         userViewsDialog.setWidth(width);
         userViewsDialog.center();
         return userViewsDialog;
@@ -73,7 +85,7 @@ function UserController() {
     * This function shows a new dialog for login
     */
     this.signInLinkClickHandler = function () {
-        var userViewsDialog = this.getUserViewsDialog(720, 330);
+        var userViewsDialog = this.getUserViewsDialog(760, 440);
 
         var signInPanel = new SignInPanel();
         signInPanel.setController(this);
@@ -112,6 +124,12 @@ function UserController() {
                     if (response.success === false) {
                         $("#invalidUserPassMessage").html(response.message.split("ERROR MESSAGE:")[1]);
                         $("#invalidUserPassMessage").fadeIn();
+                        /* The message is a plain div jQuery reveals, and the
+                           panel around it was measured before it existed - see
+                           poRelayout in UserViews.js. Without this the links
+                           under the button are pushed out of a panel that
+                           carries `overflow: hidden`. */
+                        poRelayout(userView.getComponent());
                         return;
                     }
                     $("#invalidUserPassMessage").fadeOut();
@@ -149,7 +167,7 @@ function UserController() {
         * @returns {undefined}
         */
         this.signUpLinkClickHandler = function (userView) {
-            var userViewsDialog = this.getUserViewsDialog(440, 600);
+            var userViewsDialog = this.getUserViewsDialog(660, 700);
 
             userViewsDialog.setLoading(true);
             var signUpPanel = new SignUpPanel();
@@ -208,7 +226,7 @@ function UserController() {
         * @returns {undefined}
         */
         this.forgotPassLinkClickHandler = function (userView) {
-			var userViewsDialog = this.getUserViewsDialog(300, 330);
+			var userViewsDialog = this.getUserViewsDialog(430, 345);
 
 			var forgetPasswordPanel = new ForgetPasswordPanel();
 			forgetPasswordPanel.setController(this);
@@ -243,10 +261,14 @@ function UserController() {
                            leaving it permanently shown. Both halves are fixed now, so
                            this selector has to be the real one. */
                         $("#invalidEmailMessage").fadeIn();
+                        poRelayout(userView.getComponent());
                         return;
                     }
 					
 					$("#invalidEmailMessage").html('E-mail sent, please check your inbox for instructions.').css('color', 'green').fadeIn();
+					/* Same re-measure as the failure branch above: the panel was laid
+					   out before this line existed. */
+					poRelayout(userView.getComponent());
                     },
                     error: ajaxErrorHandler
                 });
@@ -260,7 +282,7 @@ function UserController() {
         * @returns {undefined}
         */
         this.changePassLinkClickHandler = function () {
-            var userViewsDialog = this.getUserViewsDialog(440, 300);
+            var userViewsDialog = this.getUserViewsDialog(440, 405);
             userViewsDialog.setLoading(true);
             var changePasswordPanel = new ChangePasswordPanel();
             changePasswordPanel.setController(this);

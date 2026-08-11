@@ -7,29 +7,126 @@
   <title>Paintomics - Terms and conditions</title>
   <meta name="description" content="Paintomics terms and conditions">
   <meta name="author" content="Paintomics">
-	
+
+	<!-- This document is embedded, not visited: it is the summary panel above the
+	     consent tick on the Create an account form (see .po-auth-terms in
+	     main.css). It used to be `background-color: linen` with a 40px-indented
+	     h4 and an unstyled table, which inside the account dialog read as a
+	     beige rectangle of a different design system pasted into the form.
+
+	     It now paints nothing of its own - the frame around it, which is a
+	     themed surface in the parent stylesheet, shows through - and takes the
+	     application's own type. -->
 	<style>
+		:root {
+			color-scheme: light;
+			--doc-bg: #F7F8FA;
+			--doc-ink: #3F3F46;
+			--doc-ink-strong: #27272A;
+			--doc-rule: #E4E4E7;
+			--doc-link: #006ACC;
+		}
+		/* The theme is mirrored from the parent document by the script below.
+		   `prefers-color-scheme` alone is not enough: the application lets the
+		   reader choose light while the operating system is dark, and this
+		   frame would then be the one dark rectangle in a light dialog. */
+		html[data-theme="dark"] {
+			/* Not decoration. An iframe whose root background is transparent is
+			   still composited over the browser's own canvas, and that canvas
+			   takes its colour from `color-scheme` - so a document that painted
+			   nothing came out white inside a dark dialog, with the dark
+			   theme's pale ink on it. Measured: the iframe element resolved to
+			   rgb(42,44,50) and the frame still rendered white.
+
+			   Hence both of these: `color-scheme` sets the canvas under the
+			   document, and --doc-bg paints the surface the parent would
+			   otherwise have supplied. */
+			color-scheme: dark;
+			--doc-bg: #2A2C32;
+			--doc-ink: #C5C7CD;
+			--doc-ink-strong: #EDEEF0;
+			--doc-rule: #3A3D45;
+			--doc-link: #6FB4F5;
+		}
+
+		html, body {
+			background: var(--doc-bg);
+		}
+
 		body {
-			background-color: linen;
+			margin: 0;
+			padding: 12px 14px;
+			font-family: 'SourceSansPro', 'Source Sans Pro', 'Segoe UI', system-ui, sans-serif;
+			font-size: 12.5px;
+			line-height: 1.5;
+			color: var(--doc-ink);
 		}
 
 		h4 {
-			color: black;
-			margin-left: 40px;
-		} 
-		
-		table {
-			font-size: 12px;
+			margin: 0 0 10px;
+			font-size: 12.5px;
+			font-weight: 600;
+			color: var(--doc-ink-strong);
 		}
-		table tr {
-			border-bottom: 1px solid black !important;
+
+		table {
+			width: 100%;
+			border-collapse: collapse;
+			font-size: 12.5px;
+		}
+
+		/* Was `border-bottom: 1px solid black !important` on every row, which
+		   drew a black grid through a summary of five facts. */
+		table tr + tr td {
+			border-top: 1px solid var(--doc-rule);
+		}
+
+		td {
+			padding: 5px 8px 5px 0;
+			vertical-align: top;
+		}
+
+		td b {
+			font-weight: 600;
+			color: var(--doc-ink-strong);
+			white-space: nowrap;
+		}
+
+		a {
+			color: var(--doc-link);
+			text-decoration: none;
+			white-space: nowrap;
+		}
+
+		a:hover {
+			text-decoration: underline;
 		}
 	</style>
+	<script>
+	/* Same origin, so the parent's resolved theme is readable directly. Wrapped
+	   because this file is also reachable on its own, where there is no parent
+	   to ask and the operating system's preference is the best answer left. */
+	(function () {
+		var theme = null;
+		try {
+			if (window.parent !== window) {
+				theme = window.parent.document.documentElement.getAttribute("data-theme");
+			}
+		} catch (e) { /* cross-origin embed: fall through to the OS preference */ }
+		if (theme === null && window.matchMedia &&
+				window.matchMedia("(prefers-color-scheme: dark)").matches) {
+			theme = "dark";
+		}
+		if (theme === "dark") {
+			document.documentElement.setAttribute("data-theme", "dark");
+		}
+	})();
+	</script>
 </head>
 
 <body>
 	<h4>Basic information about data protection</h4>
-	
+
 	<table>
  		<tr>
 			<td><b>Responsible</b></td>
@@ -46,13 +143,13 @@
 			<td>Interested consent.<td>
 			<td><a target="_blank" href="conditions.html">+ info</a></td>
 		</tr>
-		
+
 		<tr>
 			<td><b>Rights</b></td>
 			<td>Access, rectify and suppress the data, among other rights, like explained in the additional information.<td>
 			<td><a target="_blank" href="conditions.html">+ info</a></td>
 		</tr>
-		
+
 		<tr>
 			<td><b>Addressees</b></td>
 			<td>Interested consent.<td>
@@ -60,3 +157,4 @@
 		</tr>
 	</table>
 </body>
+</html>
