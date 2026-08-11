@@ -345,23 +345,33 @@ WORKDIR /app
 # The real serverconf.py is excluded from the archive and never baked into the
 # image; the entrypoint generates it from the template so every secret arrives
 # as an environment variable.
-RUN set -eux; \
-    mkdir -p /app; \
-    tar -xf /tmp/app.tar -C /app; \
-    rm -f /tmp/app.tar; \
-    mkdir -p /app/PaintomicsServer/src/log; \
-    test -L /app/PaintomicsServer/src/src; \
-    test -L /app/PaintomicsServer/src/AdminTools/src; \
-    test -L /app/PaintomicsServer/src/AdminTools/scripts/src; \
-    test -e /app/PaintomicsServer/src/public_html; \
-    test ! -e /app/PaintomicsServer/src/conf/serverconf.py; \
-    chown -R paintomics:paintomics /app
-
-# Application permissions and runtime verification, deliberately in ONE layer.
+# Unpack, permissions and runtime verification, deliberately in ONE layer.
 #
-# These were three separate RUN steps. Splitting them reintroduced the rootfs
+# These were four separate RUN steps. Splitting them reintroduced the rootfs
 # corruption described above the COPY block -- adding layers past a threshold
 # makes the next step start with an unreadable filesystem. Keep this merged.
+#
+# 2026-08-11: it recurred, exactly as this comment warned, and the unpack step
+# was folded in too. The tell is the same every time and names the wrong thing:
+#
+#     #25 [runtime 13/13] RUN ...
+#     #25 0.647 runc run failed: unable to start container process:
+#               error during container init: exec: "/bin/sh": stat /bin/sh:
+#               no such file or directory
+#
+# The step that dies is the R package check, so it reads as an R problem. It is
+# not. Excluded by measurement that day: the base image (`docker run --rm
+# python:3.11-slim-bookworm /bin/sh -c echo` works), disk (528 GB free), RAM
+# (24 GB), buildkit itself (a trivial two-line build on the same host at the
+# same moment succeeds in under a second -- run that first, it separates "the
+# daemon is sick" from "this image is sick" in seconds), concurrent load, and a
+# stale snapshot (survives `systemctl restart docker`). It fails identically
+# whether the previous step is CACHED or runs fresh, which is the clue: the
+# layer *count* is what is the same in both.
+#
+# The delta between the last build that worked and the first that did not was a
+# few hundred bytes in one client file. That is what sitting exactly at a
+# threshold looks like. Fold further; never split.
 #
 # The verification runs HERE, in the runtime image, not in the r-builder. That
 # stage's own import check passes by construction because apt installed every
@@ -376,6 +386,16 @@ RUN set -eux; \
 # and it is what the scripts actually do. requireNamespace can succeed where
 # library() fails.
 RUN set -eux; \
+    mkdir -p /app; \
+    tar -xf /tmp/app.tar -C /app; \
+    rm -f /tmp/app.tar; \
+    mkdir -p /app/PaintomicsServer/src/log; \
+    test -L /app/PaintomicsServer/src/src; \
+    test -L /app/PaintomicsServer/src/AdminTools/src; \
+    test -L /app/PaintomicsServer/src/AdminTools/scripts/src; \
+    test -e /app/PaintomicsServer/src/public_html; \
+    test ! -e /app/PaintomicsServer/src/conf/serverconf.py; \
+    chown -R paintomics:paintomics /app; \
     chmod +x /usr/local/bin/entrypoint.sh; \
     chown paintomics:paintomics /app/uwsgi.ini; \
     chmod +x /app/PaintomicsServer/src/AdminTools/scripts/*.R; \
