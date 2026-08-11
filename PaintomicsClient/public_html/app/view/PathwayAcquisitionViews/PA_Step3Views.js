@@ -838,11 +838,24 @@ function PA_Step3JobView() {
 							cls: "contentbox omicSummaryBox",
 							html: '<h2>Pathways summary</h2>' +
 							'<h3 style="text-align:center;">Your Job ID is <b id="jobIdField">[JOB ID]</b><span id="jobName" style="display: none">[JOB NAME]</span><span class="infoTip" style=" font-size: 12px; ">You can access this job using the URL: <a id="jobURL" target="_blank" href="#">[JOBURL]</a></h3>' +
-							'<div style="text-align:center;font-size: 25px;line-height: 120px;">' +
-							'  <span class="myDataSummaryCount" style=" margin: 0; padding-right: 0; "><i class="fa fa-sitemap"></i> </span>' +
-							'  <div id="foundPathwaysTag" class="odometer odometer-theme-default">000</div>  Found Pathways' +
-							'  <span class="myDataSummaryCount" style=" margin: 0; padding-right: 0;"><i class="fa fa-star" style="background-color: #F1CC28;"></i> </span>' +
-							'  <div id="significantPathwaysTag" class="odometer odometer-theme-default">000</div> Significant' +
+							// The icons are decorative -- the label beside each count
+							// already names it -- so they are hidden from screen
+							// readers rather than read out as "star".
+							'<div class="po-pathway-stats">' +
+							'  <div class="po-pathway-stat">' +
+							'    <span class="po-pathway-icon" aria-hidden="true"><i class="fa fa-sitemap"></i></span>' +
+							'    <span class="po-pathway-figure">' +
+							'      <div id="foundPathwaysTag" class="odometer odometer-theme-default po-pathway-count">000</div>' +
+							'      <span class="po-pathway-label">Found Pathways</span>' +
+							'    </span>' +
+							'  </div>' +
+							'  <div class="po-pathway-stat">' +
+							'    <span class="po-pathway-icon is-significant" aria-hidden="true"><i class="fa fa-star"></i></span>' +
+							'    <span class="po-pathway-figure">' +
+							'      <div id="significantPathwaysTag" class="odometer odometer-theme-default po-pathway-count">000</div>' +
+							'      <span class="po-pathway-label">Significant</span>' +
+							'    </span>' +
+							'  </div>' +
 							'</div>'
 						}
 					]

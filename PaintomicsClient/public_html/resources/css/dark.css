@@ -1190,3 +1190,22 @@
 [data-theme="dark"] .po-storage-fill.is-ok       { background: var(--pa-status-success); }
 [data-theme="dark"] .po-storage-fill.is-warning  { background: var(--pa-status-warning); }
 [data-theme="dark"] .po-storage-fill.is-critical { background: var(--pa-status-error); }
+
+/* Pathways summary counts. The glyph colours already follow --pa-accent-*,
+   which this file redefines, so only the washes behind them are restated: they
+   are literal rgba in main.css, mixed against white, and a 12% tint of the
+   light accent goes muddy on a dark card rather than reading as a tile. Stated
+   from the dark accents at a slightly higher alpha, because a wash needs more
+   weight to separate from a dark ground than from a white one. */
+[data-theme="dark"] .po-pathway-icon {
+	background: rgba(107, 168, 240, 0.18);
+}
+[data-theme="dark"] .po-pathway-icon.is-significant {
+	background: rgba(227, 138, 90, 0.18);
+}
+[data-theme="dark"] .po-pathway-count {
+	color: var(--pa-ink-title);
+}
+[data-theme="dark"] .po-pathway-label {
+	color: var(--pa-ink-body);
+}

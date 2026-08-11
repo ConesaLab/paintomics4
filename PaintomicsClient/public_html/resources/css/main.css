@@ -3344,6 +3344,82 @@ div.lateralOptionsPanel-header .toolbarOption.downloadTool:hover {
 	padding: 3px 5px;
 }
 .lateralOptionsPanel-toolbar .toolbarOption.downloadTool > i {font-size: 16px; display: block;}
+
+/* Pathways summary counts -------------------------------------------------
+   Step 3's "N Found Pathways / N Significant" pair.
+
+   These were styled by `.myDataSummaryCount` -- "30px counters in coloured
+   icon tiles", per the note further up this file. That class was deleted with
+   the MyData rework and these two call sites were never migrated, so the
+   markup carried a class with no rules behind it. What survived was the one
+   piece of styling that was inline: `background-color: #F1CC28` on the star's
+   own `<i>`. Font Awesome glyphs fill their whole box, so that painted a hard
+   yellow rectangle behind the star and nothing behind the sitemap icon -- the
+   two counts stopped matching each other, and one looked like a rendering
+   fault.
+
+   Restored as the tinted tiles the old class described. The colour is on the
+   glyph; the tile is a wash behind it, which is what keeps it from reading as
+   a block. Both live here rather than inline so `dark.css` can reach them --
+   an inline colour cannot be themed at all. */
+.po-pathway-stats {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	flex-wrap: wrap;
+	gap: 20px 46px;
+	margin: 24px 0 4px;
+	/* The old container set line-height: 120px to fake vertical centring.
+	   Flex does it honestly, and the tall line-height was what pushed these
+	   counts so far from the job ID above them. */
+	line-height: 1;
+}
+.po-pathway-stat {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+}
+.po-pathway-icon {
+	flex: none;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 52px;
+	height: 52px;
+	border-radius: 50%;
+	font-size: 21px;
+	background: rgba(31, 107, 193, 0.12);
+	color: var(--pa-accent-blue, #1F6BC1);
+}
+.po-pathway-icon > i {
+	/* Font Awesome's own line-height would offset the glyph inside the
+	   circle; the flex centring above is what should place it. */
+	line-height: 1;
+}
+.po-pathway-icon.is-significant {
+	background: rgba(173, 80, 34, 0.12);
+	color: var(--pa-accent-orange, #AD5022);
+}
+.po-pathway-figure {
+	display: flex;
+	align-items: baseline;
+	gap: 9px;
+}
+/* Matches .po-stat-value, the design system's figure treatment, rather than
+   inventing a second one. Tabular figures so the number does not jitter
+   sideways as it counts up. */
+.po-pathway-count {
+	font-size: 34px;
+	line-height: 1;
+	font-weight: 300;
+	color: var(--pa-ink-title, #24252A);
+	font-variant-numeric: tabular-nums;
+}
+.po-pathway-label {
+	font-size: 15px;
+	color: var(--pa-ink-body, #555);
+}
+
 .omicSummaryBox, .metaboliteBox {
 	width: 49%;
 	margin: 5px 0;
