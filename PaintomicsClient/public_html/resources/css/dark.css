@@ -47,6 +47,13 @@
   --pa-accent-orange: #E38A5A;
   --pa-accent-green: #6BC46A;
   --pa-bold-blue: #8FB3D9;
+  /* Currently unread. Their only reader was the hero's uppercase eyebrow badge,
+     which was removed on 2026-08-11 along with the version chip beside the
+     product name. Kept because they are one half of the accent ramp and the
+     pair is the measured answer to a real question -- --pa-teal is 2.33:1 in
+     small type on the page ground, so anything reaching for teal at that size
+     needs the hover step, not the base one. Do not "clean up" the base without
+     the hover, or the next reader repeats the measurement. */
   --pa-teal: #4FB6C4;
   --pa-teal-hover: #7ACBD6;
   --pa-focus-ring: #4CA6FF;
@@ -590,9 +597,14 @@
 [data-theme="dark"] .po-hero-section,
 [data-theme="dark"] .po-about-section { background: var(--pa-surface-page); }
 [data-theme="dark"] .po-hero h1 { color: var(--pa-ink-title); }
-[data-theme="dark"] .po-hero h1 span,
-[data-theme="dark"] .po-hero-badge { color: var(--pa-teal); }
 [data-theme="dark"] .po-hero-desc { color: var(--pa-ink-body); }
+
+/* Video tutorials. The frame keeps its dark fill in both themes - it is the
+   letterbox behind a video, not a surface - so only the hairline and the
+   caption need restating. */
+[data-theme="dark"] .po-tutorial-frame { border-color: var(--pa-border); }
+[data-theme="dark"] .po-tutorial-title { color: var(--pa-ink-title); }
+[data-theme="dark"] .po-tutorial-desc { color: var(--pa-ink-muted); }
 [data-theme="dark"] .po-step-card h3 { color: var(--pa-ink-title); }
 [data-theme="dark"] .po-step-card {
 	background: var(--pa-surface);
@@ -689,11 +701,6 @@
 [data-theme="dark"] #mainViewCenterPanel .contentbox > p,
 [data-theme="dark"] #mainViewCenterPanel .contentbox div > p { color: var(--pa-ink-body); }
 
-/* The hero badge is the one place --pa-teal is set in small type on the page
-   ground, where it measures 2.33. The hover tint is the same hue two steps
-   lighter and clears 3:1, so the badge borrows it rather than inventing a
-   colour the system does not have. */
-[data-theme="dark"] .po-hero-badge { color: var(--pa-teal-hover); }
 
 /* Two paragraphs in the Step 1 AI section carry their colour as an inline
    style attribute written by PA_Step1Views.js, so no stylesheet rule can reach
@@ -1166,6 +1173,40 @@
 [data-theme="dark"] .userViewsDialog .x-form-item-label,
 [data-theme="dark"] .userViewsDialog .x-form-item-label-inner {
 	color: var(--pa-ink-body);
+}
+/* The rest of the modernised account dialog. Every value below is a literal in
+   main.css - chosen against a white dialog - so none of them carry, and a
+   `--pa-*` fallback cannot rescue a colour that was never a token. Measured on
+   the rendered dialog: "Data protection" at #3F3F46 on the #232429 surface is
+   1.17:1, i.e. a label you cannot see at all. */
+[data-theme="dark"] .po-auth-terms-label {
+	color: var(--pa-ink-body);
+}
+[data-theme="dark"] .po-pass-toggle {
+	color: var(--pa-ink-soft);
+}
+[data-theme="dark"] .po-pass-toggle:hover {
+	color: var(--pa-ink);
+	background: var(--pa-surface-quiet);
+}
+/* The confirmation glyph - "Check your inbox", "Password changed". The light
+   wash is a 10% tint of the light theme's green mixed against white, which
+   over a dark card reads as a muddy brown ring rather than a tile. */
+[data-theme="dark"] .po-auth-notice-icon {
+	color: var(--pa-accent-green);
+	background: rgba(107, 196, 106, 0.14);
+}
+/* The sign-in dialog's second column. `.signInColumnDivider` is restated
+   further up this file for the plain hairline the guest and no-login panels
+   still use; inside the dialog it is a panel, so it needs a surface. Its
+   heading needs nothing here - `.userViewsDialog h2` already takes
+   --pa-ink-title, which this file redefines. */
+[data-theme="dark"] .po-auth-aside .signInColumnDivider {
+	background: var(--pa-surface-quiet);
+	border-color: var(--pa-border);
+}
+[data-theme="dark"] .userViewsDialog .x-form-text:hover {
+	border-color: var(--pa-border-control-hover) !important;
 }
 [data-theme="dark"] .po-exp-design-hint {
 	color: var(--pa-ink-muted);

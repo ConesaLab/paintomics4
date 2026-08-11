@@ -1093,8 +1093,14 @@ function PA_Step1JobView() {
 					html: '<div class="po-hero-section">' +
 						'<div class="po-hero">' +
 							'<div class="po-hero-text">' +
-								'<div class="po-hero-badge">Multi-Omics Integration Platform</div>' +
-								'<h1>PaintOmics AI <span>' + APP_VERSION + '</span></h1>' +
+								/* No eyebrow badge and no version chip above the title.
+								   "MULTI-OMICS INTEGRATION PLATFORM" set in uppercase restated
+								   what the sentence directly below the title already says in
+								   full, and the release number rendered in 36px accent beside
+								   the product name read as half of the name rather than as a
+								   build number. The version is chrome, not a headline: it still
+								   ships, in the header bar, at the size a build number earns. */
+								'<h1>PaintOmics AI</h1>' +
 								'<p class="po-hero-desc">Integrative visualization of multiple omic datasets onto KEGG, Reactome, and MapMan biological pathway maps across multiple species and biological kingdoms.</p>' +
 								'<div class="po-hero-ai-highlight">' +
 									'<div><span class="po-ai-icon">' + getAIMark(15) + '</span> <strong>AI-Powered Pathway Interpretation</strong></div>' +
@@ -1153,8 +1159,28 @@ function PA_Step1JobView() {
 					'</div>' +
 					'<h2 style="margin-top:24px;">Video tutorials</h2>' +
 					'<div class="po-tutorials-grid">' +
-						'<iframe width="560" height="315" src="https://www.youtube.com/embed/brvToUmL1n4" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>' +
-						'<iframe width="560" height="315" src="https://www.youtube.com/embed/4XxPKqAubsA" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>' +
+						'<figure class="po-tutorial-card">' +
+							'<div class="po-tutorial-frame">' +
+								'<iframe src="https://www.youtube-nocookie.com/embed/brvToUmL1n4" '  +
+								'title="Concepts" loading="lazy" frameborder="0" '  +
+								'allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>' +
+							'</div>' +
+							'<figcaption class="po-tutorial-meta">' +
+								'<span class="po-tutorial-title">Concepts</span>' +
+								'<span class="po-tutorial-desc">What PaintOmics does with a multi-omic dataset, and how to read the result it gives back.</span>' +
+							'</figcaption>' +
+						'</figure>' +
+						'<figure class="po-tutorial-card">' +
+							'<div class="po-tutorial-frame">' +
+								'<iframe src="https://www.youtube-nocookie.com/embed/4XxPKqAubsA" '  +
+								'title="Step by step" loading="lazy" frameborder="0" '  +
+								'allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>' +
+							'</div>' +
+							'<figcaption class="po-tutorial-meta">' +
+								'<span class="po-tutorial-title">Step by step</span>' +
+								'<span class="po-tutorial-desc">A run from end to end: uploading the files, matching identifiers and exploring the pathways.</span>' +
+							'</figcaption>' +
+						'</figure>' +
 					'</div>' +
 					'<p style="margin-top:16px;">Check the <b><a href="http://paintomics.readthedocs.org/en/latest/" target="_blank">User guide</a></b> for further information. For questions, email <a href="mailto:paintomics4@gmail.com">paintomics4@gmail.com</a> or visit our <a href="https://github.com/ConesaLab/paintomics4/">GitHub page</a>.</p>' +
 				'</div>'

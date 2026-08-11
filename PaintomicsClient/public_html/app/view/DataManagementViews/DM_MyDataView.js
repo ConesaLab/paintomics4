@@ -85,8 +85,7 @@ function DM_MyDataListView() {
 						layout: 'column',
 						style: "max-width:1300px; margin: 5px 10px; margin-top:50px;",
 						items: [{
-							xtype: 'box',cls: "" +
-								"contentbox omicSummaryBox", minHeight: 230, html:
+							xtype: 'box', cls: "contentbox omicSummaryBox poMyDataCard", minHeight: 230, html:
 							/* The account card was a two-column table of bold labels, and one
 							   of its three rows was a Password row showing twelve asterisks -
 							   a value that is not the password, not the right length, and
@@ -196,8 +195,8 @@ function DM_MyDataSummaryPanel() {
 		var me = this;
 		this.component = Ext.widget({
 			xtype: "box",
-			cls: "contentbox omicSummaryBox",
-			height: 200,
+			cls: "contentbox omicSummaryBox poMyDataCard",
+			minHeight: 230,
 			/* Used space was a Highcharts donut of two slices - used and free -
 			   with the figure floated in the middle of the hole, plus two
 			   odometer counters wearing coloured icon tiles.
@@ -214,7 +213,11 @@ function DM_MyDataSummaryPanel() {
 			   was 1.6:1 on white). Status colour never travels alone here: the
 			   figure above the bar states the same thing in words, so the bar
 			   is confirmation rather than the only signal. */
-			html: '<h3>Used space</h3>' +
+			/* h2, not h3. This card sits beside My account, whose heading is an
+			   h2 and therefore a card header band with a rule under it; at h3 this
+			   one had no band at all, so two cards on one row were titled two
+			   different ways. */
+			html: '<h2>Used space</h2>' +
 			'<div class="po-storage">' +
 			'  <div class="po-storage-meter">' +
 			'    <p class="po-storage-figure">' +
@@ -309,6 +312,12 @@ function DM_MyDataFileListView() {
 					itemId: "myFilesGrid",
 					columnWidth: 300,
 					searchFor: "fileName",
+					/* deferEmptyText false so the message shows on the first render
+					   rather than only after a store load has been and gone. */
+					viewConfig: {
+						deferEmptyText: false,
+						emptyText: 'No files yet. Files you submit with an analysis are kept here automatically.'
+					},
 					border: 0,
 					multidelete: this.multidelete,
 					store: Ext.create('Ext.data.Store', {
@@ -529,6 +538,10 @@ function DM_MyDataJobListView() {
 			}, {
 				xtype: "livesearchgrid",
 				itemId: "myJobsGrid",
+				viewConfig: {
+					deferEmptyText: false,
+					emptyText: 'No jobs yet. Every analysis you run appears here with its status.'
+				},
 				columnWidth: 300,
 				searchFor: "jobID",
 				border: 0,

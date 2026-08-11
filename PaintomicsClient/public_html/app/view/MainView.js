@@ -250,7 +250,7 @@ function MainView() {
 				html:
 				'<div id="header">'+
 				'  <img src="resources/images/paintomics-mark.svg" alt="PaintOmics AI">' +
-				'  <h1> PaintOmics AI <span style="font-size: 8px; margin-left:10px;">' + APP_VERSION + '</span></h1>' +
+				'  <h1>PaintOmics AI</h1><span class="appVersion">' + APP_VERSION + '</span>' +
 				'</div>' +
 				'<nav class="mainNav">' + navHTML + '</nav>' +
 				'<button class="themeToggle" id="themeToggle" type="button" title="Switch between light and dark" aria-pressed="false"><i class="fa fa-moon-o"></i></button>' +

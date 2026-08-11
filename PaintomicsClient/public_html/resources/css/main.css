@@ -482,6 +482,24 @@ a:hover {color: var(--pa-link-hover);}
 	color: #1A1A1A;
 	white-space: nowrap;
 }
+/* The build number. It was `<span style="font-size: 8px; margin-left:10px;">`
+   written inline by MainView.js, which put it out of reach of dark.css - the
+   one thing an inline style guarantees - and set it at 8px, below the size
+   anything in this interface is legible at, in the h1's own near-black.
+
+   A version is metadata about the page, not part of the product's name, so it
+   is set as a quiet chip: muted ink, tabular figures, and its own baseline
+   rather than riding the wordmark's. 11px is small; 8px was decoration
+   pretending to be text. */
+#header .appVersion {
+	margin-left: 8px;
+	align-self: center;
+	font-size: 11px;
+	font-weight: 400;
+	letter-spacing: 0.01em;
+	color: var(--pa-ink-muted);
+	font-variant-numeric: tabular-nums;
+}
 #footer {
 	max-width: 65px;
 }
@@ -879,38 +897,304 @@ ul.menu li.loggedOption, ul.menu span.loggedOption {
 .userViewsDialog .x-container {
 	background-color: transparent;
 }
+/* The heading of an account form. `h2` globally is 23px `font-weight: lighter`
+   in --pa-accent-orange, which resolved to weight 100 terracotta: the title of
+   the dialog was the palest text in it. A form's title is the one thing that
+   should be unambiguous, so it takes real weight and title ink. */
 .userViewsDialog h2 {
-	margin: 0 0 18px;
-	font-size: 21px;
-	font-weight: 400;
+	margin: 0;
+	font-size: 22px;
+	font-weight: 600;
+	line-height: 1.2;
+	letter-spacing: -0.015em;
+	color: var(--pa-ink-title, #18181B);
 }
-/* The framework renders these bold and nearly black, which made "Email
-   Address:" heavier than the heading above it. */
-.userViewsDialog .x-form-item-label,
-.userViewsDialog .x-form-item-label-inner {
+
+/* The lockup above it: product mark, title, and a line saying what the form is
+   for. Four different forms open into this one window and none of them used to
+   say which product the credentials belonged to. */
+.po-auth-head {
+	margin-bottom: 22px;
+}
+.po-auth-brand {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-bottom: 18px;
+}
+.po-auth-brand img {
+	height: 22px;
+	width: auto;
+	display: block;
+}
+.po-auth-brand span {
 	font-size: 13px;
-	font-weight: 400;
+	font-weight: 600;
+	letter-spacing: -0.005em;
+	color: var(--pa-ink-title, #27272A);
+}
+.po-auth-sub {
+	margin: 7px 0 0;
+	font-size: 13px;
+	line-height: 1.5;
+	color: var(--pa-ink-muted);
+}
+
+/* The confirmation states - "Check your inbox", "Password changed". */
+.po-auth-notice {
+	margin-bottom: 14px;
+}
+/* The sentence under the heading. Replaces a `style='font-size: 20px'` written
+   inline by showCongratzPanel, which set the confirmation copy larger than the
+   heading above it and put it out of reach of dark.css. */
+.po-auth-notice-body {
+	margin: 0;
+	font-size: 14px;
+	line-height: 1.55;
 	color: var(--pa-ink-body, #555);
 }
-.userViewsDialog .x-form-text {
-	font-size: 13px;
+.po-auth-notice-icon {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 40px;
+	height: 40px;
+	margin-bottom: 14px;
+	border-radius: 50%;
+	font-size: 17px;
+	color: #1F6B4A;
+	background: rgba(36, 123, 33, 0.10);
 }
-/* Both actions get the same footprint. The primary was 78px against the
-   secondary's 205px, so the two columns read as unequal offers when they are
-   deliberately equal ones - the whole point of the right-hand column is that
-   continuing without an account is a real choice. */
+
+/* The gutter between the sign-in form and the "No account" column beside it.
+   Only there: the other three forms in this window are a single column, and a
+   padding on `.po-auth-form` alone put 26px of dead space down the right of
+   Create an account, Reset password and Change password as well.
+
+   Descendant, not `>`. An ExtJS hbox wraps its items in `.x-box-inner` and
+   `.x-box-target`, so the form is a grandchild of the container carrying
+   `.po-auth-cols` and the child combinator matched nothing - measured 0px of
+   padding and a 0px gap, with the sign-in inputs ending flush against the
+   second column's border. */
+.po-auth-cols .po-auth-form {
+	padding-right: 26px;
+}
+
+/* Field rhythm. ExtJS stacks these with no gap at all, so five inputs read as
+   one striped block rather than five questions. */
+.userViewsDialog .x-form-item {
+	margin-bottom: 14px;
+}
+/* The framework renders labels bold and nearly black, which made "Email
+   Address:" heavier than the heading above it. Medium weight and a step down
+   in size: a label names its field, it does not compete with the title. */
+.userViewsDialog .x-form-item-label,
+.userViewsDialog .x-form-item-label-inner {
+	font-size: 12.5px;
+	font-weight: 600;
+	color: #3F3F46;
+	padding-bottom: 6px;
+}
+
+/* The inputs. Neptune draws a 22px box with a 1px #B5B8C8 border and square
+   corners - the single most dated element in the dialog. These take the
+   design system's own control geometry: the shared small radius, the border
+   token every card uses, room to actually type in, and a real focus state
+   rather than the framework's 1px colour shift.
+
+   `height` is set rather than padding because ExtJS writes an explicit
+   `height` onto the input element inline when it lays the field out; matching
+   it here keeps the box the size the layout thinks it is. */
+.userViewsDialog .x-form-text {
+	font-size: 13.5px;
+	height: 38px;
+	padding: 0 12px;
+	border: 1px solid var(--pa-border);
+	border-radius: var(--pa-radius-sm);
+	background-image: none;
+	background-color: var(--pa-surface, #FFFFFF);
+	color: var(--pa-ink-title, #27272A);
+	box-shadow: none;
+	transition: border-color var(--pa-transition), box-shadow var(--pa-transition);
+}
+.userViewsDialog .x-form-text:hover {
+	border-color: #C4C6CC;
+}
+/* `!important` on the outline: the global :focus-visible rule near the top of
+   this file restores a 3px ring on every focusable element, which on a field
+   that is already drawing its own ring doubles it. The ring below is the same
+   colour and the same job, drawn inside the control's own corner radius. */
+.userViewsDialog .x-form-text:focus {
+	outline: none !important;
+	border-color: var(--pa-focus-ring);
+	box-shadow: 0 0 0 3px rgba(10, 132, 255, 0.20);
+}
+.userViewsDialog .x-form-text::placeholder {
+	color: #A1A1AA;
+}
+/* Neptune marks an invalid field with a red wavy background image tiled along
+   the bottom edge, which at this border radius is clipped into a smear. A
+   border and a ring say the same thing and survive the corner. */
+.userViewsDialog .x-form-invalid-field,
+.userViewsDialog .x-form-invalid-field-default {
+	background-image: none;
+	border-color: #D22;
+	box-shadow: 0 0 0 3px rgba(221, 34, 34, 0.14);
+}
+
+/* Show/hide password. See poAttachPasswordReveal in UserViews.js - the button
+   is appended to the field's own cell, which this makes a positioning
+   context. */
+.userViewsDialog .po-pass-wrap {
+	position: relative;
+}
+.userViewsDialog .po-pass-wrap .x-form-text {
+	padding-right: 40px;
+}
+.po-pass-toggle {
+	position: absolute;
+	/* Anchored to the bottom of the cell, not centred in it. With
+	   `labelAlign: top` the cell this sits in is 65px tall because it also
+	   spans the label row above, so centring on it put the button 27px high -
+	   floating between the label and the field rather than in the field.
+	   The field is 38px and the button 28, so 5px off the bottom edge centres
+	   it on the input itself. */
+	bottom: 5px;
+	right: 5px;
+	width: 28px;
+	height: 28px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 0;
+	border: 0;
+	border-radius: var(--pa-radius-sm);
+	background: transparent;
+	color: var(--pa-ink-muted);
+	font-size: 13px;
+	cursor: pointer;
+	transition: color var(--pa-transition), background-color var(--pa-transition);
+}
+.po-pass-toggle:hover {
+	color: #3F3F46;
+	background: var(--pa-surface-quiet, #F1F2F4);
+}
+
+/* The primary action fills its column. It was `min-width: 190px` centred,
+   which on the 300px form column left an asymmetric 55px of air either side of
+   the one thing the reader came here to press. A full-width action is also
+   what makes the two columns of the sign-in dialog read as equal offers. */
 .userViewsDialog .button.btn-form-action {
-	min-width: 190px;
-	padding: 8px 16px;
+	min-width: 0;
+	width: 100%;
+	height: 40px;
+	padding: 0 16px;
+	font-size: 13.5px;
+	font-weight: 600;
+	border-radius: var(--pa-radius-sm);
+	margin: 0;
 }
 .userViewsDialog .formActionRow {
-	margin-top: 22px;
+	margin-top: 20px;
 }
 /* Quiet the secondary links under the primary: they were the same weight and
    size as the action itself. */
+.userViewsDialog .po-auth-links {
+	text-align: center;
+	margin: 14px 0 0;
+}
+.userViewsDialog .po-auth-alt {
+	text-align: center;
+	margin: 8px 0 0;
+	font-size: 13px;
+	color: var(--pa-ink-muted);
+}
+.userViewsDialog .po-auth-links a,
+.userViewsDialog .po-auth-alt a,
 .userViewsDialog #forgotPassLink,
 .userViewsDialog .signUpLink {
 	font-size: 13px;
+}
+
+/* The second column of the sign-in dialog. It was a bare `border-left`
+   hairline, which left the two halves reading as one form that had been split
+   rather than as two ways in. A quiet panel says "this is a different offer"
+   without any more ink than the rule used, and centring it vertically keeps
+   its heading level with the form's now that the form has a lockup above
+   its own.
+
+   Scoped to .po-auth-aside so the same .signInColumnDivider markup in the
+   guest and no-login panels keeps the plain rule it was written for. */
+.po-auth-aside .signInColumnDivider {
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	border-left: 0;
+	border: 1px solid var(--pa-border);
+	border-radius: var(--pa-radius);
+	background: var(--pa-surface-quiet, #F7F8FA);
+	padding: 24px;
+}
+.po-auth-aside .signInColumnDivider h2 {
+	font-size: 16px;
+	margin-bottom: 8px;
+}
+.po-auth-aside .signInColumnDivider p {
+	font-size: 13px;
+	line-height: 1.55;
+	color: var(--pa-ink-body, #555);
+	margin: 0;
+}
+.po-auth-aside .signInColumnDivider .formActionRow {
+	margin-top: 20px;
+}
+
+/* Create an account ----------------------------------------------------------
+   The affiliation hint, and the data-protection notice above the consent tick.
+   That notice was a bare 80px scrolling iframe with no label and no frame, so
+   it read as a rendering fault rather than as a document. */
+.po-auth-hint {
+	margin: -8px 0 14px;
+	font-size: 12px;
+	line-height: 1.45;
+	color: var(--pa-ink-muted);
+}
+.po-auth-terms {
+	margin-bottom: 14px;
+}
+.po-auth-terms-label {
+	display: block;
+	margin-bottom: 6px;
+	font-size: 12.5px;
+	font-weight: 600;
+	color: #3F3F46;
+}
+.po-auth-terms #dataProtection {
+	display: block;
+	height: 112px;
+	border: 1px solid var(--pa-border);
+	border-radius: var(--pa-radius-sm);
+	background: var(--pa-surface-quiet, #F7F8FA);
+}
+/* The consent row. ExtJS drops the label under the box; the same flex fix the
+   AI consent checkbox below uses, so the tick and the sentence it applies to
+   read as one thing. */
+.po-auth-consent .x-form-cb-wrap {
+	display: flex;
+	align-items: flex-start;
+	gap: 8px;
+}
+.po-auth-consent .x-form-cb-wrap > .x-form-cb-label {
+	width: auto !important;
+	flex: 1 1 auto;
+	margin: 0;
+	font-size: 13px;
+	line-height: 1.45;
+	color: var(--pa-ink-body, #555);
+}
+.po-auth-consent .x-form-cb-wrap > .x-form-checkbox {
+	flex: 0 0 auto;
+	margin-top: 1px;
 }
 
 /* The AI consent checkbox ------------------------------------------------------
@@ -3236,6 +3520,50 @@ div.mainInfoPanel h3 {
 	background-color: #C32F2B;
 	border-color: #A02723;
 }
+/* The two cards at the top of Personal storage. `div.contentbox h2` and
+   `div.contentbox p` both carry --pa-card-inset, so a heading and a paragraph
+   in one of these cards line up - but the account list is a `<dl>` and the
+   storage meter is a `<div>`, and neither selector reaches those. Measured on
+   the rendered page: "My account" started at x=87 and "User name" directly
+   under it at x=61, a 26px step between a heading and the thing it titles.
+
+   Stated on the blocks rather than as padding on the card, because the card's
+   own heading is a full-bleed band with a rule under it and must keep running
+   edge to edge. */
+.po-account,
+.po-storage {
+	padding-left: var(--pa-card-inset);
+	padding-right: var(--pa-card-inset);
+}
+/* Both cards end on the same baseline. The meter card was `height: 200` against
+   the account card's `min-height: 230`, so two cards on one row stopped at
+   different heights over a shared background. */
+.poMyDataCard {
+	padding-bottom: 18px;
+}
+
+/* An empty grid. My files and My jobs used to render the header row above an
+   empty body and stop, which reads as a grid that failed to load rather than
+   as an account with nothing in it yet; they now carry an emptyText.
+
+   The framework's box for that text is stated in the vendored Neptune theme as
+
+       .x-grid-empty { padding:10px; color:gray; background-color:white;
+                       font:normal 13px helvetica,arial,verdana,sans-serif }
+
+   - a white block set in Helvetica, which on a dark card is a white block set
+   in Helvetica. Restated here rather than in dark.css because the font and the
+   inset are wrong in both themes, and the colour is a token that follows the
+   theme by itself. Not scoped to these two grids: every empty grid in the
+   application has the same box. */
+.x-grid-empty {
+	padding: 18px var(--pa-card-inset);
+	background-color: transparent;
+	font-family: var(--pa-font-sans);
+	font-size: 13px;
+	color: var(--pa-ink-muted);
+}
+
 /* The account details. Was table#myDataUserDetails, a 15px two-column table
    whose left column was bold labels. */
 .po-account {
@@ -3481,30 +3809,23 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
   min-width: 0;
 }
 
-.po-hero-badge {
-  display: inline-block;
-  text-transform: uppercase;
-  letter-spacing: 1.5px;
-  background: rgba(0, 115, 131, 0.08);
-  border: 1px solid rgba(0, 115, 131, 0.3);
-  color: #007383;
-  border-radius: 20px;
-  padding: 5px 14px;
-  font-size: 11px;
-  font-weight: 600;
-}
+/* .po-hero-badge and `.po-hero h1 span` are gone with the markup that used
+   them - the uppercase eyebrow above the title and the version number set
+   beside the product name. See the note in PA_Step1Views.js. The version chip
+   that remains lives in the header bar and is styled as #header .appVersion. */
 
 .po-hero h1 {
   font-size: 36px;
-  font-weight: lighter;
-  color: #333;
-  margin: 14px 0;
-  line-height: 1.2;
-}
-
-.po-hero h1 span {
-  font-weight: 600;
-  color: var(--pa-accent-orange);
+  /* `lighter` resolves to 100, which at 36px is the thinnest thing on the
+     page: the product's own name came out paler than the sentence under it.
+     300 keeps the airy display treatment and still has a stroke. */
+  font-weight: 300;
+  color: #27272A;
+  /* The badge used to sit above this, so the 14px top margin was the gap
+     between the two. The title is the first thing in the column now. */
+  margin: 0 0 14px;
+  line-height: 1.15;
+  letter-spacing: -0.015em;
 }
 
 .po-hero-desc {
@@ -3851,16 +4172,81 @@ div.po-step-card h3 {
   margin: 4px 0;
 }
 
+/* Video tutorials ------------------------------------------------------------
+   Two `<iframe width="560" height="315">` stretched to `width: 100%` by this
+   rule while the height attribute stayed at 315. Each column is about 640px
+   wide on a laptop, and a 16:9 video 640px wide is 360px tall - so the player
+   kept its own ratio inside a box 45px too short and painted black pillarbox
+   bars down both sides of both videos. Two black-framed rectangles, which is
+   what the section looked like.
+
+   The frame now states the ratio instead of a height, so it is exactly the
+   shape of the video in it and there is nothing left to letterbox. The grid
+   also starts on --pa-card-inset like every other block in the card: it used
+   to run edge to edge under a heading that was inset, so the videos hung
+   further left than the words above and below them.
+
+   Capped, and auto-fit rather than a fixed two columns: on a 1400px page an
+   uncapped half-column makes each video 660px wide, which is a bigger picture
+   than anything else on the landing page and turns a footnote into the main
+   event. 940px puts them at a comfortable 460px each and drops to one column
+   on a narrow window without needing a media query. */
 .po-tutorials-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 20px;
-  margin: 20px 0;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 22px;
+  margin: 16px var(--pa-card-inset) 6px;
+  max-width: 940px;
 }
 
-.po-tutorials-grid iframe {
+.po-tutorial-card {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.po-tutorial-frame {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  border-radius: var(--pa-radius);
+  overflow: hidden;
+  border: 1px solid var(--pa-border);
+  /* The poster frame loads after the box does, so the box is black from the
+     first paint rather than flashing white and then filling in. */
+  background: #18181B;
+  box-shadow: var(--pa-shadow);
+}
+
+.po-tutorial-frame iframe {
+  position: absolute;
+  inset: 0;
   width: 100%;
-  border-radius: 4px;
+  height: 100%;
+  border: 0;
+  display: block;
+}
+
+.po-tutorial-meta {
+  /* A caption, so it takes the same treatment as a card sub-heading and its
+     body copy rather than inventing a third pair of sizes. */
+  padding: 0;
+}
+
+.po-tutorial-title {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #3F3F46;
+}
+
+.po-tutorial-desc {
+  display: block;
+  margin-top: 3px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--pa-ink-muted);
 }
 
 /* The prose column of the Regions2Genes / miRNA2Genes intro card, beside the
@@ -4128,9 +4514,10 @@ div.po-step-card h3 {
   .po-steps-grid {
     grid-template-columns: 1fr;
   }
-  .po-tutorials-grid {
-    grid-template-columns: 1fr;
-  }
+  /* .po-tutorials-grid used to be restated here as a single column. Its
+     `auto-fit, minmax(300px, 1fr)` track already collapses to one column
+     below ~620px, so the override only duplicated what the grid does by
+     itself. */
 }
 
 /* ----- Step-2: Replicate detection card ----- */
