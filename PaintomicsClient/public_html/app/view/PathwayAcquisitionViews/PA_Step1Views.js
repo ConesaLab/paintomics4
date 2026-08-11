@@ -872,9 +872,13 @@ function PA_Step1JobView() {
 				box.setValue(available);
 				box.setDisabled(!available);
 				if (box.setBoxLabel) {
+					// Short on purpose: the group is two columns wide, and
+					// "(not installed for this organism)" wrapped the label onto
+					// a second line, leaving the checkbox aligned with nothing.
+					// "for this organism" is already said by the note below.
 					box.setBoxLabel(available
 						? database
-						: database + ' <span style="color:#8A8A8A;">(not installed for this organism)</span>');
+						: database + ' <span style="color:#8A8A8A;">(not installed)</span>');
 				}
 				if (available) { applied.push(database); }
 			});
