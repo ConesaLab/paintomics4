@@ -3499,6 +3499,13 @@ function PA_Step4GlobalHeatmapView() {
 
 		showLabels = (showLabels === undefined) ? true : showLabels;
 
+		// Resolve the column labels BEFORE the matrix is built, so the cells
+		// are plotted in the space the axis is labelled in - see
+		// paValuesForHeader().
+		var jobModelGH_HM = this.getParent("PA_Step4JobView") ? this.getParent("PA_Step4JobView").getModel() : null;
+		var replicateModeGH_HM = jobModelGH_HM && jobModelGH_HM.getReplicateMode ? jobModelGH_HM.getReplicateMode() : "replicates";
+		var omicHeaderGH = paOmicHeaders(jobModelGH_HM, omicName);
+
 		//STEP 1. GENERATE THE DATA MATRIX
 		for (var i = omicsValues.length - 1; i >= 0; i--) {
 			//restart the x coordinate
@@ -3506,7 +3513,7 @@ function PA_Step4GlobalHeatmapView() {
 			var limits = getMinMax(dataDistributionSummaries[omicName], visualOptions.colorReferences[omicName]);
 
 			//Get the values and the name for the new serie
-			featureValues = omicsValues[i].values;
+			featureValues = paValuesForHeader(omicsValues[i], omicHeaderGH);
 
 			var shownameValue = omicsValues[i].inputName != omicsValues[i].originalName && omicsValues[i].originalName !== undefined ?
 				omicsValues[i].originalName + ": " + omicsValues[i].inputName :
@@ -3584,9 +3591,8 @@ function PA_Step4GlobalHeatmapView() {
 		// the tooltip can name each cell by its sample (or replicate) column
 		// — matches the pathway-box tooltip behaviour. Captured in closure
 		// because the Highcharts formatter loses the surrounding `this`.
-		var jobModelGH_HM = this.getParent("PA_Step4JobView") ? this.getParent("PA_Step4JobView").getModel() : null;
-		var replicateModeGH_HM = jobModelGH_HM && jobModelGH_HM.getReplicateMode ? jobModelGH_HM.getReplicateMode() : "replicates";
-		var omicHeaderGH = paOmicHeaders(jobModelGH_HM, omicName);
+		// (jobModelGH_HM / replicateModeGH_HM / omicHeaderGH are resolved at the
+		// top of this function, before the values are chosen against them.)
 
 		// The same names, now also drawn on the axis instead of only in the
 		// tooltip - see paConditionAxis().
@@ -4113,11 +4119,18 @@ function PA_Step4DetailsView() {
 	this.generateHeatmap = function (targetID, omicName, omicsValues, dataDistributionSummaries, visualOptions) {
 		var featureValues, x = 0, y = 0, maxX = -1, series = [], yAxisCat = [], serie;
 
+		// Resolve the column labels BEFORE the value loop: whichever space the
+		// axis is labelled in is the space the cells must be plotted in, and
+		// the loop below picks its values to match - see paValuesForHeader().
+		var jobModelDV_HM = this.getParent("PA_Step4JobView") ? this.getParent("PA_Step4JobView").getModel() : null;
+		var replicateModeDV_HM = jobModelDV_HM && jobModelDV_HM.getReplicateMode ? jobModelDV_HM.getReplicateMode() : "replicates";
+		var omicHeaderDV = paOmicHeaders(jobModelDV_HM, omicName);
+
 		for (var i in omicsValues) {
 			//restart the x coordinate
 			x = 0;
 			//Get the values and the name for the new serie
-			featureValues = omicsValues[i].values;
+			featureValues = paValuesForHeader(omicsValues[i], omicHeaderDV);
 			var shownameValue = omicsValues[i].inputName != omicsValues[i].originalName && omicsValues[i].originalName !== undefined ?
 				omicsValues[i].originalName + ": " + omicsValues[i].inputName :
 				omicsValues[i].inputName;
@@ -4170,9 +4183,8 @@ function PA_Step4DetailsView() {
 		// Resolve column labels for this omic in the active replicate mode so
 		// the tooltip names the sample (or replicate) under each cell. Same
 		// shape as the pathway-box tooltip and the global-heatmap tooltip.
-		var jobModelDV_HM = this.getParent("PA_Step4JobView") ? this.getParent("PA_Step4JobView").getModel() : null;
-		var replicateModeDV_HM = jobModelDV_HM && jobModelDV_HM.getReplicateMode ? jobModelDV_HM.getReplicateMode() : "replicates";
-		var omicHeaderDV = paOmicHeaders(jobModelDV_HM, omicName);
+		// (jobModelDV_HM / replicateModeDV_HM / omicHeaderDV are resolved at the
+		// top of this function, before the values are chosen against them.)
 
 		// The same names, on the axis as well as in the tooltip - see
 		// paConditionAxis().
@@ -4266,14 +4278,19 @@ function PA_Step4DetailsView() {
 
 		var limits = getMinMax(dataDistributionSummaries[omicName], visualOptions.colorReferences[omicName]);
 
+		// Resolved before the loop so the points land in the same space as the
+		// axis labels chosen below - see paValuesForHeader().
+		var jobModelDV_PL = this.getParent("PA_Step4JobView") ? this.getParent("PA_Step4JobView").getModel() : null;
+		var omicHeaderDV_PL = paOmicHeaders(jobModelDV_PL, omicName);
 
 		for (var i in omicsValues) {
 			auxValues = [];
 			omicsValue = omicsValues[i];
-			maxX = Math.max(maxX, omicsValue.values.length);
+			var plottedValues = paValuesForHeader(omicsValue, omicHeaderDV_PL);
+			maxX = Math.max(maxX, plottedValues.length);
 
-			for (var j in omicsValue.values) {
-				auxValues.push({y: omicsValue.values[j], marker: ((omicsValue.values[j] > limits.max || omicsValue.values[j] < limits.min) ? {fillColor: '#ff6e00'} : null)});
+			for (var j in plottedValues) {
+				auxValues.push({y: plottedValues[j], marker: ((plottedValues[j] > limits.max || plottedValues[j] < limits.min) ? {fillColor: '#ff6e00'} : null)});
 			}
 
 			var relevantSymbols = "";
@@ -4301,8 +4318,8 @@ function PA_Step4DetailsView() {
 
 		// Real condition names on the x axis, resolved for the active
 		// replicate/sample mode exactly as the paired heatmap does.
-		var jobModelDV_PL = this.getParent("PA_Step4JobView") ? this.getParent("PA_Step4JobView").getModel() : null;
-		var xAxisConfig = paConditionAxis(maxX, paOmicHeaders(jobModelDV_PL, omicName), {maxChars: 12});
+		// (omicHeaderDV_PL is resolved above, before the points were chosen.)
+		var xAxisConfig = paConditionAxis(maxX, omicHeaderDV_PL, {maxChars: 12});
 		var xAxisCat = xAxisConfig.categories;
 
 		var replaceSymbols = {

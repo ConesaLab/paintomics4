@@ -1144,6 +1144,28 @@ def fromMOREtoGenes_STEP2(jobInstance, userID, RESPONSE, formFields):
                 "relevantAssociationsFile": rel_pairs_name
             }
 
+        # The experimental design, under a name the pathway job can find.
+        #
+        # MORE's output files keep the ORIGINAL per-sample columns -- for the
+        # bundled example that is 36 `Batch_N_Ctr_0H`-style replicates -- and
+        # the replicate detector only recognises a trailing `_R1`/`_rep2`, so
+        # it reports "none" and every heatmap then draws 36 unreadable columns.
+        # The grouping those columns need is stated exactly once, in the design
+        # matrix, and MOREJob is a separate Job class: copying it here is the
+        # only channel by which it reaches the pathway job (same reasoning as
+        # the filters sidecar below). Best-effort -- a design that cannot be
+        # copied costs the collapsed view, not the run.
+        design_src = os.path.join(input_dir, jobInstance.conditionsFile) if jobInstance.conditionsFile else None
+        if design_src and os.path.exists(design_src):
+            design_name = f"MORE_design_{jobInstance.date}.tab"
+            try:
+                shutil.copy2(design_src, os.path.join(input_dir, design_name))
+                logging.info("MORE_STEP2 - copied the experimental design to %s "
+                             "for the pathway step.", design_name)
+            except Exception as ex:
+                logging.warning("MORE_STEP2 - could not copy the experimental design "
+                                "(%s); heatmaps will show every replicate column.", str(ex))
+
         # Combined RegulationPerCondition table (single file, all omics). The R
         # script wrote it to output_dir; copy into inputData/ so the
         # PathwayAcquisitionJob can read it by basename in Step 4 (parse step).

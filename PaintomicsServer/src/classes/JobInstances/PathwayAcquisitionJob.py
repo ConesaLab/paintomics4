@@ -17,8 +17,11 @@
 #  More info http://bioinfo.cipf.es/paintomics
 #  Technical contact paintomics4@outlook.com
 # **************************************************************
+import glob
 import logging
 import math
+import os
+import re
 from chardet import detect # get the encoding of a file
 
 from os import path as os_path, system as os_system, makedirs as os_makedirs
@@ -36,6 +39,7 @@ from itertools import chain
 from src.common.Statistics import calculateSignificance, calculateCombinedSignificancePvalues, adjustPvalues
 from src.common.Util import chunks, getImageSize
 from src.common.ReplicateDetection import detect_replicates, aggregate_replicates
+from src.common.DesignFile import parse_design, derive_groupings
 
 from src.common.KeggInformationManager import KeggInformationManager
 from src.common import JobProgress
@@ -607,6 +611,86 @@ class PathwayAcquisitionJob(Job):
         )
         return result
 
+    def _designFileCandidatesFor(self, inputOmic):
+        """Design files in this job's input dir that might describe ``inputOmic``.
+
+        MORE writes ``MORE_design_<date>.tab`` next to the ``MORE_output_<omic>_
+        <date>.tab`` it hands to step 1, so the omic's own filename names its
+        design exactly. The input dir is per USER rather than per job
+        (``Job.setDirectories``), so it also accumulates designs from earlier
+        runs -- the dated match is tried first and the rest, newest first, only
+        as a fallback. A stale one is not a silent hazard: ``parse_design``
+        rejects any design that does not cover every column of this omic.
+        """
+        inputDir = self.getInputDir()
+        if not inputDir or not os.path.isdir(inputDir):
+            return []
+
+        candidates = []
+        dataFile = os.path.basename(inputOmic.get("inputDataFile") or "")
+        match = re.match(r"^MORE_output_.*_(\d+)\.tab$", dataFile)
+        if match:
+            dated = os.path.join(inputDir, "MORE_design_%s.tab" % match.group(1))
+            if os.path.exists(dated):
+                candidates.append(dated)
+
+        others = glob.glob(os.path.join(inputDir, "MORE_design_*.tab"))
+        others.sort(key=os.path.getmtime, reverse=True)
+        candidates.extend(path for path in others if path not in candidates)
+        return candidates
+
+    def _applyDesignGroupingForOmic(self, inputOmic):
+        """Collapse one omic's columns using a design file. True when applied.
+
+        Stores every grouping the design supports on the omic
+        (``columnGroupings``) so the interface can offer the coarser ones --
+        for a ``Ctr_0H … Ik_24H`` design that is the 12 conditions, the 2
+        treatment levels and the 6 timepoints -- and applies the design itself
+        as the default, which is the one that is always meaningful.
+
+        Never raises. A design that is absent, unreadable, or does not cover
+        this omic's columns leaves the omic exactly as it was.
+        """
+        omicHeader = inputOmic.get("omicHeader") or []
+        replicateHeader = omicHeader[1:] if len(omicHeader) > 1 else []
+        if len(replicateHeader) < 2:
+            return False
+
+        for path in self._designFileCandidatesFor(inputOmic):
+            try:
+                with open(path, "r", encoding="utf-8", errors="replace") as handle:
+                    body = handle.read()
+                sampleHeader, mapping, groups = parse_design(body, replicateHeader)
+            except Exception as ex:
+                logging.info("DESIGN GROUPING (%s): %s did not apply (%s).",
+                             inputOmic.get("omicName"), os.path.basename(path), str(ex))
+                continue
+
+            if len(sampleHeader) >= len(replicateHeader):
+                # A design that groups nothing is not worth applying: it would
+                # pin the job into "samples" mode for an identical picture.
+                continue
+
+            try:
+                inputOmic["columnGroupings"] = derive_groupings(
+                    replicateHeader, sampleHeader, mapping)
+                res = self.applyReplicateMappingForOmic(
+                    inputOmic["omicName"], "manual",
+                    sampleHeader=sampleHeader, mapping=mapping, groups=groups)
+                logging.info(
+                    "DESIGN GROUPING (%s): %s collapsed %d column(s) to %d condition(s), "
+                    "%d feature(s) updated.",
+                    inputOmic["omicName"], os.path.basename(path), len(replicateHeader),
+                    len(res["sampleHeader"]), res["featuresUpdated"])
+                return True
+            except Exception as ex:
+                logging.warning(
+                    "DESIGN GROUPING (%s) failed to apply %s: %s — continuing without it.",
+                    inputOmic.get("omicName"), os.path.basename(path), str(ex))
+                return False
+
+        return False
+
     def _findInputOmicByName(self, omicName):
         """
         Locate an inputOmic + its feature dict + feature type by omic name.
@@ -828,6 +912,16 @@ class PathwayAcquisitionJob(Job):
             # is the average — most jobs with `_R1/_R2`-style headers want this.
             for inputOmic in (self.geneBasedInputOmics + self.compoundBasedInputOmics):
                 detection = inputOmic.get("replicateDetection") or {}
+
+                # A design file beats the name-based detector whenever one is
+                # present: it STATES the grouping instead of inferring it. This
+                # is the only route for a MORE run, whose columns carry their
+                # replicate tag as a prefix (`Batch_1_Ctr_0H`) that the suffix
+                # regex cannot see -- detection comes back "none" and the
+                # heatmaps draw every replicate.
+                if self._applyDesignGroupingForOmic(inputOmic):
+                    continue
+
                 if detection.get("status") != "complete":
                     continue
                 try:

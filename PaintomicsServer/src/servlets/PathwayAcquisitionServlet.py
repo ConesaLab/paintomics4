@@ -33,6 +33,7 @@ from src.common import ExampleDatasets
 from src.common import DatabaseAvailability
 from src.common.Statistics import calculateSignificance, calculateCombinedSignificancePvalues, adjustPvalues, calculateStoufferCombinedPvalue
 from src.common.ReplicateDetection import detect_replicates, aggregate_replicates
+from src.common.DesignFile import parse_design
 from src.common.DAO.PathwayAcquisitionJobDAO import PathwayAcquisitionJobDAO
 from src.common.DAO.FeatureDAO import FeatureDAO
 from src.classes.JobInstances.PathwayAcquisitionJob import PathwayAcquisitionJob
@@ -1317,86 +1318,15 @@ def pathwayAcquisitionApplyReplicateMapping(request, response):
 
 def _parseDesignFile(body, replicateHeader):
     """
-    Parse a user-supplied 2-column design file (tab- or comma-separated).
+    Parse a user-supplied design file into ``(sampleHeader, mapping, groups)``.
 
-    Format:
-        [optional header row]
-        sample_column_1<sep>sample_label_1
-        sample_column_2<sep>sample_label_2
-        ...
-
-    `sample_column_*` must match (after whitespace strip) one of the column
-    names in ``replicateHeader``. ``sample_label_*`` is the biological-sample
-    name the row collapses into. Sample-label order in the result follows the
-    order in which each label is first seen in the file (so the user controls
-    the display order via row order).
-
-    Validation:
-    - Every entry in ``replicateHeader`` must appear in the file (else hard error).
-    - Sample labels must be non-empty (else hard error).
-
-    Returns ``(sampleHeader, mapping, groups)`` matching the shape produced by
-    :func:`detect_replicates`.
+    Thin delegation to :func:`src.common.DesignFile.parse_design`, which is
+    shared with the job-side auto-apply path so a design uploaded here and a
+    design shipped with a MORE run are read by exactly one implementation.
+    The reader also accepts MORE's indicator-matrix ``edesign`` in addition to
+    the two-column long form this endpoint has always taken.
     """
-    if not body:
-        raise Exception("Design file is empty.")
-
-    # Tab is the canonical separator; fall back to comma if the file has no
-    # tabs (matches PaintOmics's auto-delimiter convention elsewhere).
-    sep = "\t" if "\t" in body else ","
-
-    column_to_sample = {}
-    for raw_line in body.splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#"):
-            continue
-        parts = [p.strip() for p in line.split(sep)]
-        if len(parts) < 2:
-            # Tolerate trailing empty lines / incomplete rows but skip them.
-            continue
-        col_name, sample_label = parts[0], parts[1]
-        if not col_name:
-            continue
-        # Header detection: first row whose column-1 entry doesn't match any
-        # actual column in the values-file header. We use the same heuristic
-        # the MORE loader does — if it doesn't match, just skip it once.
-        if col_name not in replicateHeader and not column_to_sample:
-            continue
-        if not sample_label:
-            raise Exception("Design file: empty sample label for column '%s'." % col_name)
-        column_to_sample[col_name] = sample_label
-
-    # Sanity: every replicate column in the values file must have a label.
-    missing = [c for c in replicateHeader if c not in column_to_sample]
-    if missing:
-        raise Exception(
-            "Design file is missing entries for columns: %s" % ", ".join(missing[:10])
-            + ("…" if len(missing) > 10 else "")
-        )
-
-    # Build sampleHeader in *file order* — the order the user wrote sample
-    # labels in the design file. This lets users control how samples display
-    # without reordering the values file.
-    sampleHeader = []
-    seen = {}
-    for raw_line in body.splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#"):
-            continue
-        parts = [p.strip() for p in line.split(sep)]
-        if len(parts) < 2 or parts[0] not in column_to_sample:
-            continue
-        label = column_to_sample[parts[0]]
-        if label not in seen:
-            seen[label] = len(sampleHeader)
-            sampleHeader.append(label)
-
-    mapping = [seen[column_to_sample[c]] for c in replicateHeader]
-    groups = [[] for _ in sampleHeader]
-    for col_idx, s_idx in enumerate(mapping):
-        groups[s_idx].append(col_idx)
-
-    return sampleHeader, mapping, groups
+    return parse_design(body, replicateHeader)
 
 
 def pathwayAcquisitionMetagenes_PART1(REQUEST, RESPONSE, QUEUE_INSTANCE, JOB_ID, ROOT_DIRECTORY):

@@ -6028,17 +6028,61 @@ var getMinMax = function(dataDistributionSummaries, option) {
 		* @param {String} colorScale the color scale (RED-BLACK-GREEN -> "rbg", BLUE-WHITE-RED -> "bwr")
 		* @returns {String}
 		*/
+/**
+ * How far `value` sits from the pale end of the ramp, as 0..1.
+ *
+ * Two problems live here, and they are the same problem.
+ *
+ * Every scale below used to divide by `limits.max` or `limits.min` directly.
+ * For an omic whose values never cross zero -- MORE's regulator expression is
+ * the case that surfaced it, 0.00 to 14.71 -- `limits.min` is 0, so a value of
+ * exactly 0 computed 0/0 and returned `rgb(NaN, NaN,NaN)`. A single NaN stop
+ * voids an entire CSS gradient, which is why the colour legend beside those
+ * heatmaps rendered as an empty white box rather than a ramp.
+ *
+ * The second problem is what the ramp MEANS there. bwr and rbg are diverging
+ * scales built around a zero midpoint; on all-positive data the whole blue (or
+ * green) half is unreachable, and anchoring at zero wastes the pale end too --
+ * an omic spanning 5..14.71 started at pink, so a third of the scale carried
+ * no data. When the range does not cross zero the ramp is stretched across the
+ * real min..max instead, which uses the whole strip and leaves diverging data
+ * -- where the zero anchor is the entire point -- untouched.
+ */
+var paRampPosition = function (limits, value) {
+	var crossesZero = (limits.min < 0 && limits.max > 0);
+	var lo, hi;
+
+	if (crossesZero) {
+		/* Diverging: distance from zero, against whichever end this side of
+		 * the axis is bounded by. Unchanged behaviour. */
+		lo = 0;
+		hi = (value > 0) ? limits.max : limits.min;
+	} else {
+		/* Sequential: the observed range is the ramp. */
+		lo = limits.min;
+		hi = limits.max;
+	}
+
+	if (hi === lo) {
+		/* A degenerate range has no position to report; treat every value as
+		 * the pale end rather than emitting NaN. */
+		return 0;
+	}
+
+	return Math.abs((value - lo) / (hi - lo));
+};
+
 var getColor = function (limits, value, colorScale) {
 			var red, blue, green;
 			//RED-BLACK-GREEN
 			if (colorScale === "rbg") {
-				var percentage = Math.abs((value > 0) ? (value / limits.max) : (value / limits.min));
+				var percentage = paRampPosition(limits, value);
 				green = (value > 0) ? 0 : 255 * percentage;
 				red = (value > 0) ? 255 * percentage : 0;
 				blue = 0;
 			} else if (colorScale === "bwr") {
 				//BLUE-WHITE-RED
-				var percentage = Math.max(0, 1 - Math.abs((value > 0) ? (value / limits.max) : (value / limits.min)));
+				var percentage = Math.max(0, 1 - paRampPosition(limits, value));
 
 				var outlierPercentage = Math.max(0, Math.abs((value > 0) ? ((value - limits.max) / (limits.absMax - limits.max)) : ((value - limits.min) / (limits.absMin - limits.min))));
 				green = percentage * 255;
@@ -6047,7 +6091,7 @@ var getColor = function (limits, value, colorScale) {
 
 			} else if (colorScale === "bwr2") {
 				//BLUE-WHITE-RED
-				var percentage = Math.max(0, 1 - Math.abs((value > 0) ? (value / limits.max) : (value / limits.min)));
+				var percentage = Math.max(0, 1 - paRampPosition(limits, value));
 				var outlierPercentage = Math.max(0, Math.abs((value > 0) ? ((value - limits.max) / (limits.absMax - limits.max)) : ((value - limits.min) / (limits.absMin - limits.min))));
 
 				green = (value > limits.max || value < limits.min) ? (outlierPercentage * 128) : (percentage * 255);
@@ -6267,8 +6311,49 @@ var paSharedOmicHeader = function (jobModel, omicNames, columnCount) {
  * @param {Array}  omicHeader   the omic's header row, id column first
  * @param {Object} options      {maxChars, rotation, fontSize}
  */
+/**
+ * The values to plot for one feature, in the same space as `omicHeader`.
+ *
+ * An OmicValue can carry two parallel series: `values`, one per uploaded
+ * column, and `sampleValues`, one per biological sample once a replicate or
+ * design grouping has been applied. `paOmicHeaders` returns whichever header
+ * matches the job's current mode, so a renderer that labels its axis from that
+ * header and then plots `values` unconditionally is labelling one space with
+ * the names of the other.
+ *
+ * Measured on the bundled MORE example after the design grouping landed: the
+ * heatmap drew 36 replicate columns and captioned the first twelve of them
+ * "Ctr_0H … Ik_24H" -- so column 2 was labelled Ctr_2H while holding
+ * Batch_2_Ctr_0H. Wrong labels on real data beat missing ones only in the
+ * sense that they are harder to notice.
+ *
+ * Choosing by LENGTH rather than by mode is deliberate: it is the property the
+ * axis actually depends on, and it stays correct for an omic that has no
+ * aggregation, one whose aggregation is stale, and one rendered by a caller
+ * that never learned about modes.
+ */
+var paValuesForHeader = function (omicValue, omicHeader) {
+	/* Position 0 of a header row is the feature-id column. */
+	var labelled = (omicHeader && omicHeader.length > 1) ? omicHeader.length - 1 : 0;
+	var samples = (omicValue.getSampleValues ? omicValue.getSampleValues() : omicValue.sampleValues);
+
+	if (labelled && Array.isArray(samples) && samples.length === labelled) {
+		return samples;
+	}
+	return omicValue.values;
+};
+
 var paConditionAxis = function (columnCount, omicHeader, options) {
 	options = options || {};
+
+	/* A header that does not describe the columns being drawn is not a partial
+	 * label, it is a wrong one: pasting its first N names onto unrelated
+	 * columns and padding the rest with "Condition N" reads as authoritative.
+	 * Positional labels are the honest fallback -- same rule paSharedOmicHeader
+	 * applies when two omics disagree. */
+	if (omicHeader && omicHeader.length > 1 && (omicHeader.length - 1) !== columnCount) {
+		omicHeader = null;
+	}
 
 	var maxChars = options.maxChars || 12;
 	var categories = [];
@@ -6495,7 +6580,7 @@ let generateHeatmap = function (targetID, omicName, omicsValues, dataDistributio
 		//restart the x coordinate
 		x = 0;
 		//Get the values and the name for the new serie
-		featureValues = omicsValues[i].values;
+		featureValues = paValuesForHeader(omicsValues[i], omicHeader);
 		var shownameValue = omicsValues[i].inputName != omicsValues[i].originalName && omicsValues[i].originalName !== undefined ?
 			omicsValues[i].originalName + ": " + omicsValues[i].inputName :
 			omicsValues[i].inputName;
@@ -6650,10 +6735,12 @@ let generatePlot = function (targetID, omicName, omicsValues, dataDistributionSu
 		if (!omicsValues[i]) continue;
 		auxValues = [];
 		omicsValue = omicsValues[i];
-		maxX = Math.max(maxX, omicsValue.values.length);
+		/* Same space as the axis labels -- see paValuesForHeader(). */
+		var plottedValues = paValuesForHeader(omicsValue, omicHeader);
+		maxX = Math.max(maxX, plottedValues.length);
 
-		for (var j in omicsValue.values) {
-			auxValues.push({y: omicsValue.values[j], marker: ((omicsValue.values[j] > limits.max || omicsValue.values[j] < limits.min) ? {fillColor: '#ff6e00'} : null)});
+		for (var j in plottedValues) {
+			auxValues.push({y: plottedValues[j], marker: ((plottedValues[j] > limits.max || plottedValues[j] < limits.min) ? {fillColor: '#ff6e00'} : null)});
 		}
 
 		var relevantSymbols = "";
