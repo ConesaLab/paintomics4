@@ -126,6 +126,18 @@ root {
      the two themes now name the same thing. */
   --pa-surface-page: #FAF9F5;
 
+  /* The quiet surface - toolbars, hovers, the compact left menu. This token
+     had only ever been declared in dark.css, so every light-mode use of it was
+     resolving to its `var(--pa-surface-quiet, #F1F2F4)` fallback, and #F1F2F4
+     is cold: its blue channel sits three above its red. Declaring the light
+     value here is what the dark sheet has always assumed existed.
+
+     #F3F2ED carries the same +5 red-over-blue as --pa-surface-page above, and
+     is within 0.1% relative luminance of the #F1F2F4 it replaces (0.8866 vs
+     0.8873), so the contrast figures measured against the old value - the
+     8.6:1 noted further down this file among them - all still hold. */
+  --pa-surface-quiet: #F3F2ED;
+
   /* The quiet panel fills scattered through this file were warmed to match:
      #FAFAFA -> #F9F8F4, #F6F6F6 -> #F6F5F0, #F5F5F5 -> #F5F4EF. Warmed at
      constant lightness, deliberately - every contrast figure recorded in the
@@ -370,7 +382,7 @@ a:hover {color: var(--pa-link-hover);}
 }
 .mainTopToolbar .button:hover,
 .secondTopToolbar .button:hover {
-	background-color: #F1F2F4;
+	background-color: var(--pa-surface-quiet);
 	color: #111111;
 	border-color: #767676;
 }
@@ -563,7 +575,7 @@ ul.lateralMenu-body {
 	margin: 0;
 	padding: 3px;
 	list-style: none;
-	background: #F1F2F4;
+	background: var(--pa-surface-quiet);
 	border-radius: 999px;
 	max-width: 100%;
 }
@@ -703,7 +715,7 @@ ul.submenu li.menuOption {
 	transition: background-color var(--pa-transition);
 }
 ul.submenu li.menuOption:hover {
-	background-color: #F1F2F4;
+	background-color: var(--pa-surface-quiet);
 }
 ul.submenu a {
 	color: var(--pa-link);
@@ -4518,7 +4530,7 @@ div.po-step-card h3 {
    this table is actually read - instead of being cut into cells by the stronger
    of the two axes. */
 .x-column-header {
-	background-color: #F1F2F4;
+	background-color: var(--pa-surface-quiet);
 	background-image: none;
 	/* Transparent rather than zero-width: ExtJS measures column widths from the
 	   rendered box, so removing the border outright shifts every column. This
@@ -4792,7 +4804,7 @@ div.repDetectionCard h3 {
 	transition: background-color var(--pa-transition), color var(--pa-transition);
 }
 .pa-toc-link:hover {
-	background: #F1F2F4;
+	background: var(--pa-surface-quiet);
 	color: #111111;
 	text-decoration: none;
 }
@@ -4870,7 +4882,7 @@ div.repDetectionCard h3 {
 		border-left: 2px solid transparent;
 	}
 	.pa-toc-link.current {
-		background: #F1F2F4;
+		background: var(--pa-surface-quiet);
 		color: #111111;
 		border-left-color: #33343A;
 		font-weight: 600;
