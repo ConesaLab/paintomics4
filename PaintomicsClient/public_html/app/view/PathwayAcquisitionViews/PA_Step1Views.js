@@ -1237,7 +1237,13 @@ function PA_Step1JobView() {
 								'<p class="po-hero-desc">Integrative visualization of multiple omic datasets onto KEGG, Reactome, and MapMan biological pathway maps across multiple species and biological kingdoms.</p>' +
 								'<div class="po-hero-ai-highlight">' +
 									'<div><span class="po-ai-icon">' + getAIMark(15) + '</span> <strong>AI-Powered Pathway Interpretation</strong></div>' +
-									'<p>Turns your ranked pathways into a written interpretation: it reads the cross-omic patterns, finds the supporting literature, and drafts the biology with citations you can check.</p>' +
+									/* "Turns your ranked pathways into..." left the subject unsaid,
+								   which read as though the page itself did it. The thing that does
+								   it is an agent, and the three verbs below are the three it
+								   actually performs - it queries the job's own values through its
+								   tools, plans and runs its own searches, and verifies each
+								   citation in a sub-agent before using it. */
+								'<p>An <b>agent</b> turns your ranked pathways into a written interpretation: it queries your values, runs its own literature searches, and verifies every citation it uses. A draft, for you to check.</p>' +
 								'</div>' +
 								'<div class="po-hero-actions">' +
 									'<a href="https://paintomics.readthedocs.io/en/latest/" target="_blank" class="po-btn-primary">Documentation</a>' +
@@ -1508,11 +1514,28 @@ function PA_Step1JobView() {
 									   loop. #aiProviderInline is filled in from /ai_provider once that
 									   answers, so the recipient is named here rather than described as
 									   "external". */
+									/* "asks a large language model to explain" undersold what
+									   actually runs, and a consent notice is the wrong place to be
+									   vague about that. src/classes/AIInterpret/pipeline.py runs six
+									   phases - triage, search planning, literature retrieval,
+									   interpretation, synthesis, verification - and along the way it
+									   plans its own searches, calls tools against the job's own data
+									   (get_gene_timecourse, get_pathway_genes, compare_genes), and
+									   spawns sub-agents: one per search, and one per citation to
+									   check it. Someone deciding whether to send their data is
+									   entitled to know it is an agent doing that and not a single
+									   prompt. The wording below names the parts that exist in the
+									   code and nothing more. */
 									html: '<p style="color:#555;font-size:13px;margin:0 0 10px 0;line-height:1.55;">' +
-										'PaintOmics can draft the write-up of your results. It takes the pathways your analysis ' +
-										'ranked highest, searches PubMed and Europe PMC for relevant literature, and asks a large ' +
-										'language model to explain what the cross-omic patterns mean. You get a draft interpretation ' +
-										'with citations, which you are expected to check.' +
+										'PaintOmics can draft the write-up of your results. An interpretation <b>agent</b> triages the ' +
+										'pathways your analysis ranked highest, plans and runs its own searches across PubMed and ' +
+										'Europe PMC, queries your uploaded values directly to check what the cross-omic patterns do, ' +
+										'and verifies each citation before it uses it. You get a draft interpretation with citations, ' +
+										/* Named, not linked. AgentEvolve has no remote configured - it is
+										   a local repository - so any URL here would ship as a dead link.
+										   Add one when it is published, not before. */
+										'which you are expected to check. The agents are developed and scored with the ' +
+										'<b>AgentEvolve</b> framework, against a benchmark drawn from published literature.' +
 										'<span id="aiProviderInline" class="ai-provider-inline"></span>' +
 										'</p>'
 								},
