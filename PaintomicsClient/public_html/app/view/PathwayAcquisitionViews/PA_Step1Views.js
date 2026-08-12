@@ -45,13 +45,11 @@
    the system's 660-wide landscape version has to shrink to 0.65 in this
    slot, which takes its 11px labels down to about 7px. */
 var PO_HERO_FLOW_SVG =
-	'<svg class="po-hero-flow" viewBox="0 0 460 408" role="img" style="display:block;width:100%;height:auto;font-family:var(--pa-font-sans)" aria-label="How PaintOmics works: your omic data is mapped onto pathways, then ranked and painted" xmlns="http://www.w3.org/2000/svg">' +
+	'<svg class="po-hero-flow" viewBox="0 0 460 356" role="img" style="display:block;width:100%;height:auto;font-family:var(--pa-font-sans)" aria-label="How PaintOmics works: your omic data is mapped onto pathways, then ranked and painted" xmlns="http://www.w3.org/2000/svg">' +
 	'<title>How PaintOmics works</title>' +
 	'<rect x=".5" y="0.5" width="459" height="111" rx="8" fill="#FFFFFF" stroke="#E4E4E7"/>' +
-	'<circle cx="30" cy="30" r="11" fill="#AD5022"/>' +
-	'<text x="30" y="34.5" text-anchor="middle" font-size="12" font-weight="700" fill="#FFFFFF">1</text>' +
-	'<text x="50" y="30" font-size="14" font-weight="600" fill="#27272A">Your omic data</text>' +
-	'<text x="50" y="49" font-size="11.5" fill="#71717A">One file per omic type</text>' +
+	'<text x="24" y="30" font-size="14" font-weight="600" fill="#27272A">Your omic data</text>' +
+	'<text x="24" y="49" font-size="11.5" fill="#71717A">One file per omic type</text>' +
 	'<rect x="258" y="12" width="186" height="20" rx="5" fill="#55C9A6" fill-opacity=".16" stroke="#55C9A6" stroke-opacity=".55"/>' +
 	'<circle cx="271" cy="22" r="4.5" fill="#55C9A6"/>' +
 	'<text x="283" y="26" font-size="11" fill="#3F3F46">Gene expression</text>' +
@@ -74,10 +72,8 @@ var PO_HERO_FLOW_SVG =
 	'<circle cx="271" cy="88" r="4.5" fill="#738B9D"/>' +
 	'<text x="283" y="92" font-size="11" fill="#3F3F46">+ 3 more omic types</text>' +
 	'<rect x=".5" y="122.5" width="459" height="111" rx="8" fill="#FFFFFF" stroke="#E4E4E7"/>' +
-	'<circle cx="30" cy="152" r="11" fill="#AD5022"/>' +
-	'<text x="30" y="156.5" text-anchor="middle" font-size="12" font-weight="700" fill="#FFFFFF">2</text>' +
-	'<text x="50" y="152" font-size="14" font-weight="600" fill="#27272A">Mapped to pathways</text>' +
-	'<text x="50" y="171" font-size="11.5" fill="#71717A">KEGG · Reactome · MapMan</text>' +
+	'<text x="24" y="152" font-size="14" font-weight="600" fill="#27272A">Mapped to pathways</text>' +
+	'<text x="24" y="171" font-size="11.5" fill="#71717A">KEGG · Reactome · MapMan</text>' +
 	'<g transform="translate(307.6,145.8) scale(0.62)">' +
 	'<line x1="12" y1="30" x2="52" y2="12" stroke="#878787" stroke-width="1.6" stroke-opacity=".55"/>' +
 	'<line x1="52" y1="12" x2="98" y2="34" stroke="#878787" stroke-width="1.6" stroke-opacity=".55"/>' +
@@ -101,10 +97,8 @@ var PO_HERO_FLOW_SVG =
 	'<circle cx="18" cy="78" r="9" fill="#F3F3F3" stroke="#878787" stroke-width="2.4"/>' +
 	'</g>' +
 	'<rect x=".5" y="244.5" width="459" height="111" rx="8" fill="#FFFFFF" stroke="#E4E4E7"/>' +
-	'<circle cx="30" cy="274" r="11" fill="#AD5022"/>' +
-	'<text x="30" y="278.5" text-anchor="middle" font-size="12" font-weight="700" fill="#FFFFFF">3</text>' +
-	'<text x="50" y="274" font-size="14" font-weight="600" fill="#27272A">Ranked and painted</text>' +
-	'<text x="50" y="293" font-size="11.5" fill="#71717A">104 of 888 pathways significant</text>' +
+	'<text x="24" y="274" font-size="14" font-weight="600" fill="#27272A">Ranked and painted</text>' +
+	'<text x="24" y="293" font-size="11.5" fill="#71717A">104 of 888 pathways significant</text>' +
 	'<rect x="258" y="256" width="186" height="5" rx="2.5" fill="#AD5022" opacity="1.0"/>' +
 	'<rect x="258" y="265" width="138" height="5" rx="2.5" fill="#AD5022" opacity="0.7"/>' +
 	'<rect x="258" y="274" width="96" height="5" rx="2.5" fill="#AD5022" opacity="0.4"/>' +
@@ -130,13 +124,6 @@ var PO_HERO_FLOW_SVG =
 	'<circle cx="74" cy="92" r="9" fill="#FFFFFF" stroke="#878787" stroke-width="1.6"/>' +
 	'<circle cx="18" cy="78" r="9" fill="#0000FF" stroke="#878787" stroke-width="1.6"/>' +
 	'</g>' +
-	'<rect x=".5" y="366.5" width="459" height="41" rx="8" fill="#F0F7FF" stroke="#C8D6E5"/>' +
-	'<g transform="translate(18,374) scale(1)" color="#4A90D9">' +
-	'<path d="M13 4.9 L20 9 L20 17.1 L13 21.2 L6 17.1 L6 9 Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" opacity=".45"/>' +
-	'<path d="M13 8.2 C13.4 10.5 15.5 12.6 17.8 13 C15.5 13.4 13.4 15.5 13 17.8 C12.6 15.5 10.5 13.4 8.2 13 C10.5 12.6 12.6 10.5 13 8.2 Z" fill="currentColor"/>' +
-	'</g>' +
-	'<text x="48" y="385" font-size="12" fill="#52525B"><tspan font-weight="600" fill="#27272A">PaintOmics AI</tspan><tspan> turns the ranked result into a written</tspan></text>' +
-	'<text x="48" y="400" font-size="12" fill="#52525B">interpretation, grounded in the literature.</text>' +
 	'</svg>';
 
 /**
@@ -1133,18 +1120,21 @@ function PA_Step1JobView() {
 							// card is the whole of step 1, of which uploading is the
 							// fourth of five actions it lists.
 							'<h3>Upload and run</h3>' +
-							'<ol>' +
-								'<li>Choose your organism.</li>' +
-								// "untick any you want to leave out" was not true of KEGG, which is
-								// rendered `checked: true, disabled: true` and labelled "KEGG
-								// (required)" - the server adds it regardless. Telling someone to
-								// untick a box that cannot be unticked sends them looking for a
-								// broken control.
-								'<li>Check the pathway databases: KEGG is always included, and every other database installed for your organism is ticked by default, so untick any of those you want to leave out.</li>' +
-								'<li>Decide whether to enable the AI interpretation, and describe your experiment design if you do.</li>' +
-								'<li>Upload your multi-omic data, or load an example (<a class="button btn-secondary btn-inline btn-small" href="javascript:void(0)"><i class="fa fa-file-text-o"></i> Load example</a>) to explore PaintOmics with a ready-made dataset.</li>' +
-								'<li>Click on <a class="button btn-success btn-inline btn-small" href="javascript:void(0)"><i class="fa fa-play"></i> Run PaintOmics</a> button.</li>' +
-							'</ol>' +
+							/* Prose, not an <ol>. This card is numbered 1, and it used to
+							   hold a list numbered 1 to 5 inside it - so the screen showed
+							   a "1" containing a "1", and the two sibling cards beside it
+							   were plain paragraphs, which made this one look like a
+							   different kind of thing rather than the first of three.
+							   Every fact the list carried is still here, in the order it
+							   carried them, including both buttons.
+
+							   "untick any you want to leave out" was not true of KEGG, which
+							   is rendered `checked: true, disabled: true` and labelled "KEGG
+							   (required)" - the server adds it regardless. Telling someone to
+							   untick a box that cannot be unticked sends them looking for a
+							   broken control, so the sentence below is careful to say which
+							   databases can actually be unticked. */
+							'<p>Choose your organism, then check the pathway databases: KEGG is always included, and every other database installed for your organism is ticked by default, so untick any of <em>those</em> you want to leave out. Decide whether to enable the AI interpretation, describing your experiment design if you do. Then upload your multi-omic data — or load an example (<a class="button btn-secondary btn-inline btn-small" href="javascript:void(0)"><i class="fa fa-file-text-o"></i> Load example</a>) to explore PaintOmics with a ready-made dataset — and click <a class="button btn-success btn-inline btn-small" href="javascript:void(0)"><i class="fa fa-play"></i> Run PaintOmics</a>.</p>' +
 						'</div>' +
 						'<div class="po-step-card">' +
 							'<div class="po-step-number">2</div>' +
