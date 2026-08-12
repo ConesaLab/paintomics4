@@ -116,9 +116,49 @@ root {
      alpha layers, enough to separate a card from the #F3F3F3 page and no more,
      and the border is a touch cooler than the old #E9E9E9 so cards read as
      defined rather than washed out against that grey. */
-  --pa-radius: 6px;         /* cards, panels, dialogs */
-  --pa-radius-sm: 4px;      /* buttons, inputs, chips */
-  --pa-border: #E4E4E7;
+  /* The page behind the cards. #F3F3F3 was a neutral grey, which is the colour
+     a surface gets when nobody chose one: it reads as unpainted rather than as
+     a background. This is the same warmth an ivory paper stock has - enough to
+     make the white cards on it read as white, which a card on grey never quite
+     does, and enough that the page looks lit rather than switched off.
+
+     A light counterpart to the --pa-surface-page dark.css already defines, so
+     the two themes now name the same thing. */
+  --pa-surface-page: #FAF9F5;
+
+  /* The quiet surface - toolbars, hovers, the compact left menu. This token
+     had only ever been declared in dark.css, so every light-mode use of it was
+     resolving to its `var(--pa-surface-quiet, #F1F2F4)` fallback, and #F1F2F4
+     is cold: its blue channel sits three above its red. Declaring the light
+     value here is what the dark sheet has always assumed existed.
+
+     #F3F2ED carries the same +5 red-over-blue as --pa-surface-page above, and
+     is within 0.1% relative luminance of the #F1F2F4 it replaces (0.8866 vs
+     0.8873), so the contrast figures measured against the old value - the
+     8.6:1 noted further down this file among them - all still hold. */
+  --pa-surface-quiet: #F3F2ED;
+
+  /* The quiet panel fills scattered through this file were warmed to match:
+     #FAFAFA -> #F9F8F4, #F6F6F6 -> #F6F5F0, #F5F5F5 -> #F5F4EF. Warmed at
+     constant lightness, deliberately - every contrast figure recorded in the
+     comments below was measured against the old values, and a swap that moves
+     hue without moving luminance leaves all of them true (each pair differs by
+     under 1% relative luminance). Mixing cold greys into a warm page is what
+     makes an interface look assembled from parts rather than designed; it is
+     also the tell that the greys were never chosen, only defaulted to.
+
+     They are still literals rather than a token because there are twelve of
+     them across nine unrelated components, and turning that into a token is a
+     refactor with its own risk, not a colour change. */
+
+  --pa-radius: 8px;         /* cards, panels, dialogs */
+  --pa-radius-sm: 6px;      /* buttons, inputs, chips */
+  /* An alpha of the ink rather than a fixed grey. The same hairline then sits
+     correctly on a white card, on the ivory page and on the #EEEEEE panels of
+     Step 4, instead of being tuned for one of them and looking cold on the
+     other two. Resolves to about #E7E7E8 on white, which is where #E4E4E7
+     already was, so nothing shifts - it just stops being wrong elsewhere. */
+  --pa-border: rgba(24, 24, 27, 0.10);
   /* How far a card's contents stand off its own border. Body copy used to sit
      about 5px from the edge while the card's heading sat at 20, so text ran
      into the frame around it and the two never lined up. One value for both. */
@@ -342,7 +382,7 @@ a:hover {color: var(--pa-link-hover);}
 }
 .mainTopToolbar .button:hover,
 .secondTopToolbar .button:hover {
-	background-color: #F1F2F4;
+	background-color: var(--pa-surface-quiet);
 	color: #111111;
 	border-color: #767676;
 }
@@ -535,7 +575,7 @@ ul.lateralMenu-body {
 	margin: 0;
 	padding: 3px;
 	list-style: none;
-	background: #F1F2F4;
+	background: var(--pa-surface-quiet);
 	border-radius: 999px;
 	max-width: 100%;
 }
@@ -675,7 +715,7 @@ ul.submenu li.menuOption {
 	transition: background-color var(--pa-transition);
 }
 ul.submenu li.menuOption:hover {
-	background-color: #F1F2F4;
+	background-color: var(--pa-surface-quiet);
 }
 ul.submenu a {
 	color: var(--pa-link);
@@ -1469,11 +1509,19 @@ div.contentbox h2, #clusternumber_box h2, #threshold_box h2 {
 	background-color: #FFFFFF;
 	border-bottom: 1px solid var(--pa-border);
 	border-radius: var(--pa-radius) var(--pa-radius) 0 0;
-	color: #27272A;
-	font-size: 15px;
+	/* A warm near-black rather than #27272A. On an ivory page a cold grey-black
+	   heading reads as a different material from the paper under it. */
+	color: #1A1A18;
+	/* 19, not 15. Body copy in these cards is 13px, so a 15px heading was a
+	   1.15 step - close enough to the text it titles that the page had no
+	   typographic hierarchy at all, which is most of why it read as flat. Every
+	   card looked like an undifferentiated block of text with a slightly bolder
+	   first line. 19px is a 1.46 step: unmistakably a heading, still nowhere
+	   near shouting, and it moves nothing horizontally. */
+	font-size: 19px;
 	font-weight: 600;
-	letter-spacing: -0.005em;
-	padding: 13px var(--pa-card-inset);
+	letter-spacing: -0.012em;
+	padding: 15px var(--pa-card-inset);
 	margin: 0;
 }
 /* The inset for body copy lives on `div.contentbox p, div.contentbox li` further
@@ -1720,14 +1768,22 @@ body > .x-mask {
    use, with dark text on it, which is both lighter and consistent with the rest
    of the application. Contrast stops being a problem rather than being
    negotiated: #222 on #F6F6F6 is 15.9:1. */
-/* The header carries its own 5px #3892d3 border on three sides, separate from
-   the window's - which is why a blue edge survived hugging the top corners
-   after the window frame was already down to a hairline. Zeroed, leaving only
-   the divider under the title. */
+/* The header carries its own 5px border on all four sides, separate from the
+   window's - which is why a heavy edge survived hugging the top corners after
+   the window frame was already down to a hairline.
+
+   !important on the width, and only on the width. Neptune writes
+   `.x-window-header-default { border-width: 5px !important }`, so the zeroing
+   here was losing to it on every dialog in the application while this rule's
+   own border-color went on winning - which is exactly why the band was still
+   there and still looked like a deliberate 5px frame in --pa-border. No amount
+   of added specificity fixes that; an important declaration is only beaten by
+   another one. Measured before the fix: 5px/5px/5px/5px on a header whose rule
+   said `0 0 1px`. */
 .x-window-default > .x-window-header {
-	background-color: #F6F6F6;
+	background-color: #F6F5F0;
 	background-image: none;
-	border-width: 0 0 1px;
+	border-width: 0 0 1px !important;
 	border-style: solid;
 	border-color: var(--pa-border);
 	border-radius: var(--pa-radius) var(--pa-radius) 0 0;
@@ -1755,6 +1811,47 @@ body > .x-mask {
 	transition: background-color var(--pa-transition);
 }
 .x-window .x-tool-img.x-tool-close:hover {
+	background-color: #5A5B62;
+}
+
+/* Panel headers get the window header's treatment, for the same reason and in
+   the same colours. Neptune paints `.x-panel-header-default` #157FCC with a
+   white title, and nothing in this file ever overrode it, so every framed
+   panel in the light theme - the dataset cards in the example picker most
+   visibly - wore a saturated blue band.
+
+   That blue was never a decision. It is not in the token block at the top of
+   this file, and it is not even the blue the application uses elsewhere:
+   --pa-accent-blue is #1F6BC1. It is simply what the framework ships.
+
+   The give-away that this was an oversight rather than a choice is dark.css,
+   which has neutralised `.x-panel-header-default` since the dark theme landed.
+   The two themes disagreed about what a panel header looks like, and the light
+   one was disagreeing with itself as well - its own window headers had already
+   gone neutral a few rules above. This closes that gap rather than opening a
+   new question.
+
+   Both title class names, as in the window-header rules and in dark.css:
+   `-title` is the ExtJS 6 name and `-text` the 4.2.1 one this app runs. */
+.x-panel-header-default {
+	background-color: #F6F5F0;
+	background-image: none;
+	border-color: var(--pa-border);
+}
+.x-panel-header-default .x-panel-header-title,
+.x-panel-header-default .x-panel-header-text,
+.x-panel-header-default .x-header-text {
+	color: #222;
+}
+/* The tools are <img> sprites knocked out of a background *colour*, which
+   Neptune fills with the same #157FCC. Left alone they are saturated dots on a
+   near-white band; muted, exactly like the window's close control above. */
+.x-panel-header-default .x-tool-img {
+	background-color: #8A8B92;
+	border-radius: 3px;
+	transition: background-color var(--pa-transition);
+}
+.x-panel-header-default .x-tool-img:hover {
 	background-color: #5A5B62;
 }
 
@@ -2081,7 +2178,7 @@ div.availableOmicsBox h4 {
 	text-align: center !important;
 	color: #6D7075; /* was #8B8E93 - 3.04:1 on this panel's own #F6F6F6 fill */
 	font-size: 22px;
-	background: #F6F6F6;
+	background: #F6F5F0;
 	padding: 10px;
 	border: 1px solid var(--pa-border);
 	border-radius: var(--pa-radius);
@@ -2198,7 +2295,7 @@ div.availableOmicsBox h4 {
 #dbs_message table th {
 	padding: 9px 18px;
 	border-bottom: 1px solid var(--pa-border);
-	background-color: #FAFAFA;
+	background-color: #F9F8F4;
 	color: #52525B;
 	font-size: 11.5px;
 	font-weight: 600;
@@ -2367,6 +2464,16 @@ div[id ^= "networkDetailsPanel_"] {width:270px;}
 	padding-left: var(--pa-gutter);
 	padding-right: var(--pa-gutter);
 	box-sizing: border-box;
+	/* Stated here rather than left to the ExtJS theme's grey. This is the one
+	   ancestor every step shares, so it is the only place the page colour can
+	   be set once. dark.css already claims this selector with !important, and
+	   is loaded after this file, so the dark page still wins.
+
+	   !important because ExtJS writes `background-color: rgb(243,243,243)`
+	   into this element's own style attribute from JavaScript - which is also
+	   the reason the dark rule needs it. A stylesheet cannot outrank an inline
+	   style by being more specific, only by being important. */
+	background-color: var(--pa-surface-page) !important;
 }
 div.contentbox,
 .contentbox,
@@ -2552,7 +2659,7 @@ div#multisource_summary table {
 div#multisource_summary table th {
 	padding: 9px 16px;
 	border-bottom: 1px solid var(--pa-border);
-	background-color: #FAFAFA;
+	background-color: #F9F8F4;
 	color: #52525B;
 	font-size: 11.5px;
 	font-weight: 600;
@@ -3325,7 +3432,7 @@ div.omicSelection div.omicPosition + div {
 }
 .x-toolbar {
 	padding: 5px 0 6px 8px;
-	background-color: #F5F5F5;
+	background-color: #F5F4EF;
 }
 
 /***********************************************************/
@@ -3662,7 +3769,7 @@ div.lateralOptionsPanel-header .toolbarOption.downloadTool {
 	background: #FFFFFF;
 }
 div.lateralOptionsPanel-header .toolbarOption.downloadTool:hover {
-	background: #FAFAFA;
+	background: #F9F8F4;
 	border-color: #C4C4CC;
 }
 .lateralOptionsPanel-toolbar .toolbarOption.downloadTool {
@@ -3815,12 +3922,19 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
    that remains lives in the header bar and is styled as #header .appVersion. */
 
 .po-hero h1 {
-  font-size: 36px;
-  /* `lighter` resolves to 100, which at 36px is the thinnest thing on the
-     page: the product's own name came out paler than the sentence under it.
-     300 keeps the airy display treatment and still has a stroke. */
-  font-weight: 300;
-  color: #27272A;
+  /* Was 36px at weight 300, in a card 1200px wide and 297px tall - a light
+     title, at a size that would suit a sidebar, holding down a whole hero. The
+     word for how that reads is thin, and it was literally true: 300 is the
+     lightest weight this family ships.
+
+     46px at 400 is the same restraint with a stroke behind it. It scales with
+     the viewport so it does not overrun a narrow window, and it is the only
+     size change needed - the ramp below it (46 / 16.5 / 13) now steps twice
+     instead of hovering around one size. */
+  font-size: clamp(32px, 3.4vw, 46px);
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  color: var(--pa-ink-title, #1A1A18);
   /* The badge used to sit above this, so the 14px top margin was the gap
      between the two. The title is the first thing in the column now. */
   margin: 0 0 14px;
@@ -3829,19 +3943,26 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
 }
 
 .po-hero-desc {
-  font-size: 15px;
-  line-height: 1.7;
+  /* One step under the title rather than two, so the hero reads as a lead
+     paragraph and not as body copy that happens to be first. */
+  font-size: 16.5px;
+  line-height: 1.65;
   color: #555;
-  margin-bottom: 20px;
+  margin-bottom: 22px;
 }
 
 .po-hero-ai-highlight {
   background: #f5fafa;
   border: 1px solid #c8e0e3;
   border-left: 3px solid #007383;
-  border-radius: 4px;
-  padding: 14px 18px;
+  border-radius: var(--pa-radius-sm);
+  padding: 16px 20px;
   margin-bottom: 24px;
+  /* Capped to the measure the description already uses. Unconstrained it ran
+     the full 1200px of the card, which is roughly 160 characters a line - long
+     enough that the eye loses the return, and wide enough that the callout
+     read as a band across the page rather than as part of the column. */
+  max-width: var(--pa-measure);
 }
 
 .po-hero-ai-highlight .po-ai-icon {
@@ -3930,17 +4051,7 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
 /* The raster is still the better asset when the full detail matters, so it
    keeps its click-to-open behaviour -- as a named link rather than as an
    unlabelled image nobody would think to click. */
-.po-hero-flow-link {
-  display: inline-block;
-  margin-top: 10px;
-  font-size: 12px;
-  color: var(--pa-link);
-  cursor: pointer;
-}
 
-.po-hero-flow-link:hover {
-  color: var(--pa-link-hover);
-}
 
 /* Running-job progress --------------------------------------------------------
    A job takes minutes, and the only sign it was alive was a spinning GIF with
@@ -4022,7 +4133,7 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
   box-shadow: none;
 }
 .omicbox a.x-btn.x-btn-default-small:hover {
-  background-color: #FAFAFA;
+  background-color: #F9F8F4;
   border-color: #C4C4CC;
 }
 .omicbox a.x-btn .x-btn-inner {
@@ -4071,7 +4182,7 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
   margin-right: 0;
 }
 .paStep1Form a.button.btn-right.btn-small:hover {
-  background-color: #FAFAFA;
+  background-color: #F9F8F4;
   border-color: #C4C4CC;
   color: #27272A;
 }
@@ -4091,8 +4202,12 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
 .po-steps-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 20px;
-  margin: 20px 0;
+  gap: 34px;
+  /* Inset to --pa-card-inset so a column's text starts on the same left edge as
+     the "How it works" heading above it. The cards used to carry their own 24px
+     padding for this; with the boxes gone there is nothing to pad, so the grid
+     positions itself instead. */
+  margin: 20px var(--pa-card-inset);
   /* Not `start`, which is what this was. These three cards hold unrelated
      amounts of prose - measured on the deployed page they came out 327, 358
      and 278px tall - so `start` gave a row of peers three different bottom
@@ -4107,26 +4222,62 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
 }
 
 .po-step-card {
-  background: #fff;
-  /* Was #e0e0e0 at 4px - the neutral grey and the *control* radius. This is a
-     card, and the token block above picked 6px for cards precisely to stop
-     surfaces and controls sharing a corner, so a 4px card is the drift that
-     rule exists to prevent. The border likewise: --pa-border is a touch cooler
-     than a flat grey, which is what makes a card read as defined rather than
-     washed out against the page. */
-  border: 1px solid var(--pa-border);
-  border-top: 3px solid #007383;
-  border-radius: var(--pa-radius);
-  padding: 24px;
-  text-align: center;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
-  transition: transform 0.2s, box-shadow 0.2s;
+  /* Not a card any more, despite the name. These three sat inside the "How it
+     works" .contentbox, each with its own border and radius, so the outer
+     card's edge and the inner cards' edges ran as two near-parallel lines a
+     few pixels apart at the top and bottom of the row - a box drawn inside a
+     box, which reads as two blocks rather than one.
+
+     They are columns now: no fill, no border, no radius, no shadow. The
+     section is one surface, and the three steps are separated by the 34px
+     grid gutter and their own numbered discs, which is enough. The padding
+     went with the border - the grid carries --pa-card-inset instead, so a
+     column's text lines up with the heading above it. */
+  background: transparent;
+  border: 0;
+  /* Left, not centre. The disc and the heading were centred over a
+     left-aligned paragraph, so nothing in the column shared an edge - the
+     specific reason this block read as slightly off rather than as designed. */
+  text-align: left;
+  /* A column, so the diagram can be pushed to the bottom with
+     `margin-top: auto`. The three hold unequal prose - measured at 297, 277
+     and 238px against a common 335px height - and that difference used to fall
+     out as dead space at the foot of each one, 97px of it at worst. The
+     picture spends the gap, and all three land on one line across the row. */
+  display: flex;
+  flex-direction: column;
 }
 
-.po-step-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+
+/* The stage diagram at the foot of each card. `margin-top: auto` is what does
+   the work: it eats whatever vertical slack the card has left. */
+.po-step-art {
+  margin-top: auto;
+  padding-top: 20px;
 }
+
+.po-step-art-svg {
+  display: block;
+  /* Sized by height, not width. The three artworks are 186x90, 90x68 and
+     186x96, so a shared width gave them three different heights - measured,
+     106, 166 and 114px - and the row read as three unrelated pictures. A
+     shared height puts them in one band instead, which is the dimension the
+     eye actually compares across a row. Their widths then differ, which is
+     honest: one of them really is a narrower drawing.
+
+     Left, not centred. The heading, the prose and the numbered disc all start
+     on the column's left edge; a centred figure was the only thing in the
+     card that did not, and that is what stopped the three columns from
+     looking aligned. */
+  height: 104px;
+  width: auto;
+  max-width: 100%;
+  margin: 0;
+}
+
+/* The lift-on-hover went with the box. A card that raises itself off the page
+   needs an edge and a shadow to raise; on three columns of prose sharing one
+   surface it just nudged the text sideways. */
 
 .po-step-number {
   width: 34px;
@@ -4146,7 +4297,12 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
    these headings also match - the step cards live inside a .contentbox. */
 div.po-step-card h3 {
   font-size: 16px;
-  color: #007383;
+  /* Was #007383. That teal was the last cold colour on a warm page, and the
+     card already carries an accent - the orange disc directly above it. A
+     heading and a badge in two different accent hues, on a card whose only
+     other colour is body grey, is what makes three of these in a row look
+     restless. Near-black, so the disc is the one accent per card. */
+  color: var(--pa-ink-title, #1A1A18);
   margin-bottom: 6px;
   font-weight: 600;
   /* The card supplies its own 24px inset, so the card-heading inset from
@@ -4155,12 +4311,78 @@ div.po-step-card h3 {
   padding-right: 0;
 }
 
+/* The same double-inset, on the prose. `div.contentbox p` adds
+   --pa-card-inset to every paragraph inside a card, which is right for a
+   paragraph sitting directly on a card and wrong twice over here: the step
+   card already pads itself by 24px, and the hero runs its own layout.
+
+   Centring hid this. With the heading centred and the text left-aligned there
+   was no shared edge to be wrong about, so a 26px indent just read as the way
+   the card was. Left-aligning made it visible immediately: measured, the card
+   heading started at x=86 and its own paragraph at x=112, and in the hero the
+   title sat at 120 with its description at 146. Same 26px in both places.
+
+   Specificity is a tie with `div.contentbox p` in the step-card case, decided
+   by source order - which is why this sits below that rule, exactly as the h3
+   fix above it does. */
+div.po-step-card p,
+.po-hero-text .po-hero-desc {
+  padding-left: 0;
+  padding-right: 0;
+}
+
 .po-step-card p,
 .po-step-card ol {
   font-size: 13px;
   color: #666;
-  line-height: 1.6;
+  /* 1.6 gave a 20.8px line box, and the inline buttons sitting in this prose
+     are 22px tall - so every one of them stuck out of its own line and
+     overlapped the line above. In step 3, where two of them land on
+     consecutive lines, the paint control and the AI Interpret pill collided
+     outright. 1.75 is 22.75px, which clears the tallest of them. */
+  line-height: 1.75;
   text-align: left;
+}
+
+/* The inline buttons in these cards are pictures of real controls, so they
+   should look like the control they name. Two things stopped them:
+
+   The shape. Every real button in the toolbar is a 999px pill; these were 6px
+   rectangles, so a sentence saying "click Run PaintOmics" showed a shape that
+   appears nowhere in the interface.
+
+   And "Load example" was the wrong colour entirely. The toolbar's own Load
+   example is a white outline button - measured, white fill with #24252A ink -
+   while its inline portrait was solid green on white. Two controls with the
+   same name and nothing in common to look at. `btn-secondary` is right in the
+   toolbar, where a later `.btn-right` rule neutralises it; inline there is no
+   such rule, so the raw green came through. Restated here rather than by
+   changing btn-secondary, which other screens rely on. */
+.po-step-card a.button.btn-inline {
+  border-radius: 999px;
+  vertical-align: middle;
+}
+
+.po-step-card a.button.btn-secondary.btn-inline {
+  background: #FFFFFF;
+  color: #24252A;
+  border-color: #878787;
+}
+
+/* Step 3's two controls, previously carrying their colours in a style
+   attribute along with a `font-size: 14px` that is what made them 24px tall
+   and overlapping. The colours are unchanged; they are just declared where
+   they can be themed and where btn-small's 12px reaches them. */
+.po-step-card a.button.btn-paint {
+  background-color: #756C6C;
+  border-color: #756C6C;
+  color: #FFFFFF;
+}
+
+.po-step-card a.button.btn-ai {
+  background-color: #2F73BC;
+  border-color: #2F73BC;
+  color: #FFFFFF;
 }
 
 .po-step-card ol {
@@ -4170,83 +4392,6 @@ div.po-step-card h3 {
 
 .po-step-card li {
   margin: 4px 0;
-}
-
-/* Video tutorials ------------------------------------------------------------
-   Two `<iframe width="560" height="315">` stretched to `width: 100%` by this
-   rule while the height attribute stayed at 315. Each column is about 640px
-   wide on a laptop, and a 16:9 video 640px wide is 360px tall - so the player
-   kept its own ratio inside a box 45px too short and painted black pillarbox
-   bars down both sides of both videos. Two black-framed rectangles, which is
-   what the section looked like.
-
-   The frame now states the ratio instead of a height, so it is exactly the
-   shape of the video in it and there is nothing left to letterbox. The grid
-   also starts on --pa-card-inset like every other block in the card: it used
-   to run edge to edge under a heading that was inset, so the videos hung
-   further left than the words above and below them.
-
-   Capped, and auto-fit rather than a fixed two columns: on a 1400px page an
-   uncapped half-column makes each video 660px wide, which is a bigger picture
-   than anything else on the landing page and turns a footnote into the main
-   event. 940px puts them at a comfortable 460px each and drops to one column
-   on a narrow window without needing a media query. */
-.po-tutorials-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 22px;
-  margin: 16px var(--pa-card-inset) 6px;
-  max-width: 940px;
-}
-
-.po-tutorial-card {
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  min-width: 0;
-}
-
-.po-tutorial-frame {
-  position: relative;
-  aspect-ratio: 16 / 9;
-  border-radius: var(--pa-radius);
-  overflow: hidden;
-  border: 1px solid var(--pa-border);
-  /* The poster frame loads after the box does, so the box is black from the
-     first paint rather than flashing white and then filling in. */
-  background: #18181B;
-  box-shadow: var(--pa-shadow);
-}
-
-.po-tutorial-frame iframe {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  border: 0;
-  display: block;
-}
-
-.po-tutorial-meta {
-  /* A caption, so it takes the same treatment as a card sub-heading and its
-     body copy rather than inventing a third pair of sizes. */
-  padding: 0;
-}
-
-.po-tutorial-title {
-  display: block;
-  font-size: 13.5px;
-  font-weight: 600;
-  color: #3F3F46;
-}
-
-.po-tutorial-desc {
-  display: block;
-  margin-top: 3px;
-  font-size: 12.5px;
-  line-height: 1.5;
-  color: var(--pa-ink-muted);
 }
 
 /* The prose column of the Regions2Genes / miRNA2Genes intro card, beside the
@@ -4417,7 +4562,7 @@ div.po-step-card h3 {
    this table is actually read - instead of being cut into cells by the stronger
    of the two axes. */
 .x-column-header {
-	background-color: #F1F2F4;
+	background-color: var(--pa-surface-quiet);
 	background-image: none;
 	/* Transparent rather than zero-width: ExtJS measures column widths from the
 	   rendered box, so removing the border outright shifts every column. This
@@ -4514,10 +4659,6 @@ div.po-step-card h3 {
   .po-steps-grid {
     grid-template-columns: 1fr;
   }
-  /* .po-tutorials-grid used to be restated here as a single column. Its
-     `auto-fit, minmax(300px, 1fr)` track already collapses to one column
-     below ~620px, so the override only duplicated what the grid does by
-     itself. */
 }
 
 /* ----- Step-2: Replicate detection card ----- */
@@ -4551,7 +4692,7 @@ div.repDetectionCard h3 {
     list-style: none;
     padding: 4px 8px;
     margin: 6px 0;
-    background: #fafafa;
+    background: #F9F8F4;
     border: 1px solid #ececec;
     border-radius: 3px;
     max-height: 140px;
@@ -4573,7 +4714,7 @@ div.repDetectionCard h3 {
 .repDetectionManual {
     margin: 6px 0 6px 22px;
     padding: 6px 8px;
-    background: #fafafa;
+    background: #F9F8F4;
     border: 1px solid #ececec;
     border-radius: 3px;
 }
@@ -4691,7 +4832,7 @@ div.repDetectionCard h3 {
 	transition: background-color var(--pa-transition), color var(--pa-transition);
 }
 .pa-toc-link:hover {
-	background: #F1F2F4;
+	background: var(--pa-surface-quiet);
 	color: #111111;
 	text-decoration: none;
 }
@@ -4769,7 +4910,7 @@ div.repDetectionCard h3 {
 		border-left: 2px solid transparent;
 	}
 	.pa-toc-link.current {
-		background: #F1F2F4;
+		background: var(--pa-surface-quiet);
 		color: #111111;
 		border-left-color: #33343A;
 		font-weight: 600;
@@ -4832,7 +4973,7 @@ div.repDetectionCard h3 {
 
 .paWeightsTip .x-tip-header,
 .paWeightsTip .x-tip-header-default {
-	background: #FAFAFA;
+	background: #F9F8F4;
 	border-bottom: 1px solid var(--pa-border);
 	border-radius: var(--pa-radius) var(--pa-radius) 0 0;
 	padding: 7px 10px;
@@ -4911,7 +5052,7 @@ div.repDetectionCard h3 {
    omic colour-coding in the same row. A pale tint plus a left marker says the
    same thing without competing for attention. */
 .x-grid-item-over .x-grid-cell {
-	background-color: #FAFAFA;
+	background-color: #F9F8F4;
 }
 
 .x-grid-cell-inner {
@@ -5083,4 +5224,130 @@ div.repDetectionCard h3 {
 	opacity: 1;
 	color: #9A9AA0;
 	cursor: default;
+}
+
+/* Hero visualisation -----------------------------------------------------------
+   The animated figure beside the headline. It exists because the hero had
+   nothing on its right once the flow diagram moved into the step cards, and
+   because a picture there should earn its place: this one shows the two things
+   the product does that nothing else on the page demonstrates - painting a
+   network with your values, and reading that network back as prose.
+
+   It runs continuously, as a conversation would. Each 9s cycle swaps to a
+   different pathway - a different topology carrying different values, not the
+   same graph recoloured - and wipes the interpretation away to write a new
+   one. That is the loop a user is actually in: ask about something else, get
+   a different answer. Two complete networks cross-fade rather than one being
+   morphed, because morphing edge paths between topologies is a lot of
+   machinery for something the eye reads as a dissolve anyway.
+
+   Order lives in the markup: every line of the interpretation carries its own
+   `--d` delay. */
+.po-hero-viz {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.po-hero-viz .po-viz-net {
+  opacity: 0;
+  animation: poVizSwapA 9s ease-in-out infinite;
+}
+
+/* The second network runs the same keyframes half a cycle out of phase, so one
+   is always arriving as the other leaves and the panel is never beside an
+   empty space. */
+.po-hero-viz .po-viz-net-b {
+  animation-name: poVizSwapB;
+}
+
+.po-hero-viz .po-viz-panel {
+  fill: var(--pa-surface-quiet, #F3F2ED);
+  stroke: var(--pa-border);
+  opacity: 0;
+  animation: poVizIn 0.5s ease-out 0.5s forwards;
+}
+
+.po-hero-viz .po-viz-mark,
+.po-hero-viz .po-viz-title {
+  opacity: 0;
+  animation: poVizIn 0.4s ease-out 0.65s forwards;
+}
+
+.po-hero-viz .po-viz-title { fill: var(--pa-ink-title, #1A1A18); }
+
+/* The interpretation: each line grows from its left edge, holds while it is
+   read, and is wiped away. The per-line delay makes it cascade rather than
+   move as a block, which is what reading a generated answer looks like.
+
+   There are two answers, not one replayed. Retyping the same line lengths
+   every cycle reads as a loop rather than as a new response, so the second
+   has its own rhythm - different lengths and two citations instead of three -
+   and each is written during the half of the cycle its own network is on
+   screen. */
+.po-hero-viz .po-viz-line,
+.po-hero-viz .po-viz-cite {
+  transform: scaleX(0);
+  transform-origin: left center;
+  animation-duration: 9s;
+  animation-timing-function: cubic-bezier(.2,.7,.3,1);
+  animation-delay: var(--d, 0s);
+  animation-iteration-count: infinite;
+}
+
+.po-hero-viz .po-viz-ans-a .po-viz-line,
+.po-hero-viz .po-viz-ans-a .po-viz-cite { animation-name: poVizAnswerA; }
+
+.po-hero-viz .po-viz-ans-b .po-viz-line,
+.po-hero-viz .po-viz-ans-b .po-viz-cite { animation-name: poVizAnswerB; }
+
+.po-hero-viz .po-viz-line { fill: var(--pa-border); }
+/* The citations are the one thing in the panel that is not grey: an
+   interpretation you can check is the point of the feature. */
+.po-hero-viz .po-viz-cite { fill: #4A90D9; opacity: .32; }
+
+@keyframes poVizIn { to { opacity: 1; } }
+
+/* Each network holds for about four seconds and hands over in half of one. */
+@keyframes poVizSwapA {
+  0%,  42%  { opacity: 1; }
+  50%, 92%  { opacity: 0; }
+  100%      { opacity: 1; }
+}
+
+@keyframes poVizSwapB {
+  0%,  42%  { opacity: 0; }
+  50%, 92%  { opacity: 1; }
+  100%      { opacity: 0; }
+}
+
+/* Answer A is written while network A is up, and cleared as it hands over;
+   answer B is written against network B. Between them the panel is briefly
+   empty, which is the pause a question leaves. */
+@keyframes poVizAnswerA {
+  0%         { transform: scaleX(0); }
+  9%,  40%   { transform: scaleX(1); }
+  46%, 100%  { transform: scaleX(0); }
+}
+
+@keyframes poVizAnswerB {
+  0%,  52%   { transform: scaleX(0); }
+  61%, 90%   { transform: scaleX(1); }
+  96%, 100%  { transform: scaleX(0); }
+}
+
+/* Anyone who has asked for less motion gets the finished picture and no loop:
+   the first network, painted, beside a written interpretation. This restates
+   the end state rather than only zeroing the duration - with `animation: none`
+   alone the elements keep their starting opacity: 0 and scaleX(0), and the
+   figure would be half missing. */
+@media (prefers-reduced-motion: reduce) {
+  .po-hero-viz .po-viz-net-a { opacity: 1; animation: none; }
+  .po-hero-viz .po-viz-net-b { opacity: 0; animation: none; }
+  .po-hero-viz .po-viz-panel,
+  .po-hero-viz .po-viz-mark,
+  .po-hero-viz .po-viz-title { opacity: 1; animation: none; }
+  .po-hero-viz .po-viz-ans-a .po-viz-line,
+  .po-hero-viz .po-viz-ans-a .po-viz-cite { transform: scaleX(1); animation: none; }
+  .po-hero-viz .po-viz-ans-b { display: none; }
 }

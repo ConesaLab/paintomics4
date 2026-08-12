@@ -44,14 +44,151 @@
    the rendered width and every label is drawn at the size it is read at;
    the system's 660-wide landscape version has to shrink to 0.65 in this
    slot, which takes its 11px labels down to about 7px. */
-var PO_HERO_FLOW_SVG =
-	'<svg class="po-hero-flow" viewBox="0 0 460 408" role="img" style="display:block;width:100%;height:auto;font-family:var(--pa-font-sans)" aria-label="How PaintOmics works: your omic data is mapped onto pathways, then ranked and painted" xmlns="http://www.w3.org/2000/svg">' +
-	'<title>How PaintOmics works</title>' +
-	'<rect x=".5" y="0.5" width="459" height="111" rx="8" fill="#FFFFFF" stroke="#E4E4E7"/>' +
-	'<circle cx="30" cy="30" r="11" fill="#AD5022"/>' +
-	'<text x="30" y="34.5" text-anchor="middle" font-size="12" font-weight="700" fill="#FFFFFF">1</text>' +
-	'<text x="50" y="30" font-size="14" font-weight="600" fill="#27272A">Your omic data</text>' +
-	'<text x="50" y="49" font-size="11.5" fill="#71717A">One file per omic type</text>' +
+/* The flow diagram, split into the three pieces it was always made of.
+   It used to sit in the hero as one 460x356 picture whose three stacked
+   panels were the same three stages the "How it works" cards describe -
+   so the page drew the pipeline twice, once as a picture beside the
+   title and once as text below it. Each panel now lives in the card
+   that explains it, which is also what fills those cards: they were
+   forced to a common 335px by the grid while their prose ran out 38,
+   59 and 97px short, so the tallest one was a third empty.
+
+   Wrapped in a translate group rather than re-numbered. Every element
+   below keeps the coordinates it was authored with, and the group moves
+   the origin, so nothing here can drift out of alignment with the
+   artwork it came from. */
+/* The hero visual: the product doing its own job.
+   
+   A pathway network is drawn, its features are painted with the same bwr ramp
+   the application paints real data with - red high, white zero, blue low - and
+   then the AI panel reads the painted result and writes an interpretation.
+   That is literally the pipeline, so this is the one picture on the page that
+   is not decoration: everything it shows, the tool actually does.
+
+   Colours are the product's own. The node fills come from the bwr ramp in
+   PA_Step3Views, the grey is the stroke KEGG diagrams use, and the AI blue is
+   --pa-ai-blue. Nothing here invents a palette.
+
+   Animation lives in main.css so it can be turned off under
+   prefers-reduced-motion, where every element simply renders in its final
+   state - a painted network beside a written interpretation. */
+/* The hero visual: the product doing its own job.
+
+   Two pathway networks, cross-faded. Each carries its own topology and its own
+   values, painted with the same bwr ramp the application paints real data with
+   - red high, white zero, blue low - and beside them a panel writes the
+   interpretation, wipes it, and writes a different one. Recolouring a single
+   fixed network was not enough: the point is that you ask about a different
+   pathway and get a different answer, so the network has to change too.
+
+   Colours and shapes are the product's own. Circles are compounds and boxes
+   are genes, exactly as the KEGG diagrams in the step cards below draw them,
+   the grey is their stroke, and the AI blue is --pa-ai-blue. Nothing here
+   invents a palette.
+
+   The whole cycle is 9s and never stops. Animation lives in main.css so it can
+   be turned off under prefers-reduced-motion, where the first network and a
+   finished interpretation simply render as a still. */
+var PO_HERO_VIZ_SVG =
+	'<svg class="po-hero-viz" viewBox="0 0 440 300" role="img" xmlns="http://www.w3.org/2000/svg" ' +
+		'aria-label="A pathway network is painted with your omic values, then read by the AI into a written interpretation">' +
+	'<title>From painted pathway to written interpretation</title>' +
+
+	'<g class="po-viz-net po-viz-net-a">' +
+	'<g stroke="#878787" stroke-opacity=".5" stroke-width="1.6" fill="none">' +
+		'<path d="M42 96 L104 58"/>' +
+		'<path d="M104 58 L168 92"/>' +
+		'<path d="M42 96 L96 148"/>' +
+		'<path d="M96 148 L168 92"/>' +
+		'<path d="M168 92 L196 168"/>' +
+		'<path d="M96 148 L118 210"/>' +
+		'<path d="M118 210 L46 186"/>' +
+		'<path d="M118 210 L196 168"/>' +
+		'<path d="M46 186 L42 96"/>' +
+	'</g>' +
+		'<circle cx="42" cy="96" r="11" fill="#FFFFFF" stroke="#878787" stroke-width="1.8"/>' +
+		'<circle cx="42" cy="96" r="11" fill="#FF0000"/>' +
+		'<circle cx="104" cy="58" r="11" fill="#FFFFFF" stroke="#878787" stroke-width="1.8"/>' +
+		'<circle cx="104" cy="58" r="11" fill="#FF8080"/>' +
+		'<rect x="156" y="80" width="13" height="16" rx="1.5" fill="#FFFFFF" stroke="#878787" stroke-width="1.6"/>' +
+		'<rect x="156" y="80" width="13" height="16" rx="1.5" fill="#0000FF"/>' +
+		'<rect x="169" y="80" width="13" height="16" rx="1.5" fill="#FFFFFF" stroke="#878787" stroke-width="1.6"/>' +
+		'<rect x="169" y="80" width="13" height="16" rx="1.5" fill="#8080FF"/>' +
+		'<circle cx="96" cy="148" r="11" fill="#FFFFFF" stroke="#878787" stroke-width="1.8"/>' +
+		'<circle cx="96" cy="148" r="11" fill="#FF0000"/>' +
+		'<circle cx="196" cy="168" r="11" fill="#FFFFFF" stroke="#878787" stroke-width="1.8"/>' +
+		'<circle cx="196" cy="168" r="11" fill="#8080FF"/>' +
+		'<circle cx="118" cy="210" r="11" fill="#FFFFFF" stroke="#878787" stroke-width="1.8"/>' +
+		'<circle cx="118" cy="210" r="11" fill="#FF8080"/>' +
+		'<circle cx="46" cy="186" r="11" fill="#FFFFFF" stroke="#878787" stroke-width="1.8"/>' +
+		'<circle cx="46" cy="186" r="11" fill="#0000FF"/>' +
+	'</g>' +
+
+	'<g class="po-viz-net po-viz-net-b">' +
+	'<g stroke="#878787" stroke-opacity=".5" stroke-width="1.6" fill="none">' +
+		'<path d="M58 72 L122 64"/>' +
+		'<path d="M122 64 L190 92"/>' +
+		'<path d="M190 92 L152 146"/>' +
+		'<path d="M152 146 L72 152"/>' +
+		'<path d="M72 152 L58 72"/>' +
+		'<path d="M152 146 L196 196"/>' +
+		'<path d="M196 196 L112 214"/>' +
+		'<path d="M112 214 L72 152"/>' +
+	'</g>' +
+		'<circle cx="58" cy="72" r="11" fill="#FFFFFF" stroke="#878787" stroke-width="1.8"/>' +
+		'<circle cx="58" cy="72" r="11" fill="#8080FF"/>' +
+		'<rect x="116" y="56" width="13" height="16" rx="1.5" fill="#FFFFFF" stroke="#878787" stroke-width="1.6"/>' +
+		'<rect x="116" y="56" width="13" height="16" rx="1.5" fill="#FF0000"/>' +
+		'<rect x="129" y="56" width="13" height="16" rx="1.5" fill="#FFFFFF" stroke="#878787" stroke-width="1.6"/>' +
+		'<rect x="129" y="56" width="13" height="16" rx="1.5" fill="#FF8080"/>' +
+		'<circle cx="190" cy="92" r="11" fill="#FFFFFF" stroke="#878787" stroke-width="1.8"/>' +
+		'<circle cx="190" cy="92" r="11" fill="#FF0000"/>' +
+		'<circle cx="152" cy="146" r="11" fill="#FFFFFF" stroke="#878787" stroke-width="1.8"/>' +
+		'<circle cx="152" cy="146" r="11" fill="#FFFFFF"/>' +
+		'<circle cx="72" cy="152" r="11" fill="#FFFFFF" stroke="#878787" stroke-width="1.8"/>' +
+		'<circle cx="72" cy="152" r="11" fill="#FF8080"/>' +
+		'<circle cx="196" cy="196" r="11" fill="#FFFFFF" stroke="#878787" stroke-width="1.8"/>' +
+		'<circle cx="196" cy="196" r="11" fill="#0000FF"/>' +
+		'<circle cx="112" cy="214" r="11" fill="#FFFFFF" stroke="#878787" stroke-width="1.8"/>' +
+		'<circle cx="112" cy="214" r="11" fill="#FF0000"/>' +
+	'</g>' +
+
+	/* --- the interpretation ------------------------------------------------ */
+	'<g class="po-viz-ai">' +
+		'<rect x="238" y="52" width="196" height="196" rx="10" class="po-viz-panel"/>' +
+		'<g class="po-viz-mark" transform="translate(256,72)" color="#4A90D9">' +
+			'<path d="M11 2.6 L18.5 7 L18.5 15.8 L11 20.2 L3.5 15.8 L3.5 7 Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" opacity=".5"/>' +
+			'<path d="M11 6.4 C11.4 8.7 13.3 10.6 15.6 11 C13.3 11.4 11.4 13.3 11 15.6 C10.6 13.3 8.7 11.4 6.4 11 C8.7 10.6 10.6 8.7 11 6.4 Z" fill="currentColor"/>' +
+		'</g>' +
+		'<text x="284" y="88" class="po-viz-title" font-size="12.5" font-weight="600">AI interpretation</text>' +
+		'<g class="po-viz-ans po-viz-ans-a">' +
+			'<rect class="po-viz-line" style="--d:0.15s" x="256" y="106" width="160" height="6" rx="3"/>' +
+			'<rect class="po-viz-line" style="--d:0.30s" x="256" y="122" width="142" height="6" rx="3"/>' +
+			'<rect class="po-viz-line" style="--d:0.45s" x="256" y="138" width="152" height="6" rx="3"/>' +
+			'<rect class="po-viz-line" style="--d:0.60s" x="256" y="154" width="118" height="6" rx="3"/>' +
+			'<rect class="po-viz-cite" style="--d:0.95s" x="256" y="178" width="46" height="15" rx="7.5"/>' +
+			'<rect class="po-viz-cite" style="--d:1.07s" x="308" y="178" width="46" height="15" rx="7.5"/>' +
+			'<rect class="po-viz-cite" style="--d:1.19s" x="360" y="178" width="46" height="15" rx="7.5"/>' +
+			'<rect class="po-viz-line" style="--d:1.47s" x="256" y="208" width="132" height="6" rx="3"/>' +
+			'<rect class="po-viz-line" style="--d:1.57s" x="256" y="224" width="96" height="6" rx="3"/>' +
+		'</g>' +
+		'<g class="po-viz-ans po-viz-ans-b">' +
+			'<rect class="po-viz-line" style="--d:0.15s" x="256" y="106" width="138" height="6" rx="3"/>' +
+			'<rect class="po-viz-line" style="--d:0.30s" x="256" y="122" width="164" height="6" rx="3"/>' +
+			'<rect class="po-viz-line" style="--d:0.45s" x="256" y="138" width="120" height="6" rx="3"/>' +
+			'<rect class="po-viz-line" style="--d:0.60s" x="256" y="154" width="150" height="6" rx="3"/>' +
+			'<rect class="po-viz-cite" style="--d:0.95s" x="256" y="178" width="46" height="15" rx="7.5"/>' +
+			'<rect class="po-viz-cite" style="--d:1.07s" x="308" y="178" width="46" height="15" rx="7.5"/>' +
+			'<rect class="po-viz-line" style="--d:1.35s" x="256" y="208" width="108" height="6" rx="3"/>' +
+			'<rect class="po-viz-line" style="--d:1.45s" x="256" y="224" width="146" height="6" rx="3"/>' +
+		'</g>' +
+	'</g>' +
+	'</svg>';
+
+
+var PO_STEP_ART_UPLOAD =
+	'<svg class="po-step-art-svg" viewBox="0 0 186 90" role="img" aria-label="One row per omic type, each carrying its own values" style="font-family:var(--pa-font-sans)" xmlns="http://www.w3.org/2000/svg">' +
+	'<g transform="translate(-258,-10)">' +
 	'<rect x="258" y="12" width="186" height="20" rx="5" fill="#55C9A6" fill-opacity=".16" stroke="#55C9A6" stroke-opacity=".55"/>' +
 	'<circle cx="271" cy="22" r="4.5" fill="#55C9A6"/>' +
 	'<text x="283" y="26" font-size="11" fill="#3F3F46">Gene expression</text>' +
@@ -73,11 +210,12 @@ var PO_HERO_FLOW_SVG =
 	'<rect x="258" y="78" width="186" height="20" rx="5" fill="#738B9D" fill-opacity=".16" stroke="#738B9D" stroke-opacity=".55"/>' +
 	'<circle cx="271" cy="88" r="4.5" fill="#738B9D"/>' +
 	'<text x="283" y="92" font-size="11" fill="#3F3F46">+ 3 more omic types</text>' +
-	'<rect x=".5" y="122.5" width="459" height="111" rx="8" fill="#FFFFFF" stroke="#E4E4E7"/>' +
-	'<circle cx="30" cy="152" r="11" fill="#AD5022"/>' +
-	'<text x="30" y="156.5" text-anchor="middle" font-size="12" font-weight="700" fill="#FFFFFF">2</text>' +
-	'<text x="50" y="152" font-size="14" font-weight="600" fill="#27272A">Mapped to pathways</text>' +
-	'<text x="50" y="171" font-size="11.5" fill="#71717A">KEGG · Reactome · MapMan</text>' +
+	'</g>' +
+	'</svg>';
+
+var PO_STEP_ART_MATCH =
+	'<svg class="po-step-art-svg" viewBox="0 0 90 68" role="img" aria-label="Features matched onto a pathway network" style="font-family:var(--pa-font-sans)" xmlns="http://www.w3.org/2000/svg">' +
+	'<g transform="translate(-306,-144)">' +
 	'<g transform="translate(307.6,145.8) scale(0.62)">' +
 	'<line x1="12" y1="30" x2="52" y2="12" stroke="#878787" stroke-width="1.6" stroke-opacity=".55"/>' +
 	'<line x1="52" y1="12" x2="98" y2="34" stroke="#878787" stroke-width="1.6" stroke-opacity=".55"/>' +
@@ -100,11 +238,12 @@ var PO_HERO_FLOW_SVG =
 	'<circle cx="74" cy="92" r="9" fill="#F3F3F3" stroke="#878787" stroke-width="2.4"/>' +
 	'<circle cx="18" cy="78" r="9" fill="#F3F3F3" stroke="#878787" stroke-width="2.4"/>' +
 	'</g>' +
-	'<rect x=".5" y="244.5" width="459" height="111" rx="8" fill="#FFFFFF" stroke="#E4E4E7"/>' +
-	'<circle cx="30" cy="274" r="11" fill="#AD5022"/>' +
-	'<text x="30" y="278.5" text-anchor="middle" font-size="12" font-weight="700" fill="#FFFFFF">3</text>' +
-	'<text x="50" y="274" font-size="14" font-weight="600" fill="#27272A">Ranked and painted</text>' +
-	'<text x="50" y="293" font-size="11.5" fill="#71717A">104 of 888 pathways significant</text>' +
+	'</g>' +
+	'</svg>';
+
+var PO_STEP_ART_EXPLORE =
+	'<svg class="po-step-art-svg" viewBox="0 0 186 96" role="img" aria-label="Pathways ranked, and the network painted with your values" style="font-family:var(--pa-font-sans)" xmlns="http://www.w3.org/2000/svg">' +
+	'<g transform="translate(-258,-254)">' +
 	'<rect x="258" y="256" width="186" height="5" rx="2.5" fill="#AD5022" opacity="1.0"/>' +
 	'<rect x="258" y="265" width="138" height="5" rx="2.5" fill="#AD5022" opacity="0.7"/>' +
 	'<rect x="258" y="274" width="96" height="5" rx="2.5" fill="#AD5022" opacity="0.4"/>' +
@@ -130,13 +269,7 @@ var PO_HERO_FLOW_SVG =
 	'<circle cx="74" cy="92" r="9" fill="#FFFFFF" stroke="#878787" stroke-width="1.6"/>' +
 	'<circle cx="18" cy="78" r="9" fill="#0000FF" stroke="#878787" stroke-width="1.6"/>' +
 	'</g>' +
-	'<rect x=".5" y="366.5" width="459" height="41" rx="8" fill="#F0F7FF" stroke="#C8D6E5"/>' +
-	'<g transform="translate(18,374) scale(1)" color="#4A90D9">' +
-	'<path d="M13 4.9 L20 9 L20 17.1 L13 21.2 L6 17.1 L6 9 Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" opacity=".45"/>' +
-	'<path d="M13 8.2 C13.4 10.5 15.5 12.6 17.8 13 C15.5 13.4 13.4 15.5 13 17.8 C12.6 15.5 10.5 13.4 8.2 13 C10.5 12.6 12.6 10.5 13 8.2 Z" fill="currentColor"/>' +
 	'</g>' +
-	'<text x="48" y="385" font-size="12" fill="#52525B"><tspan font-weight="600" fill="#27272A">PaintOmics AI</tspan><tspan> turns the ranked result into a written</tspan></text>' +
-	'<text x="48" y="400" font-size="12" fill="#52525B">interpretation, grounded in the literature.</text>' +
 	'</svg>';
 
 /**
@@ -1104,17 +1237,24 @@ function PA_Step1JobView() {
 								'<p class="po-hero-desc">Integrative visualization of multiple omic datasets onto KEGG, Reactome, and MapMan biological pathway maps across multiple species and biological kingdoms.</p>' +
 								'<div class="po-hero-ai-highlight">' +
 									'<div><span class="po-ai-icon">' + getAIMark(15) + '</span> <strong>AI-Powered Pathway Interpretation</strong></div>' +
-									'<p>Turns your ranked pathways into a written interpretation: it reads the cross-omic patterns, finds the supporting literature, and drafts the biology with citations you can check.</p>' +
+									/* "Turns your ranked pathways into..." left the subject unsaid,
+								   which read as though the page itself did it. The thing that does
+								   it is an agent, and the three verbs below are the three it
+								   actually performs - it queries the job's own values through its
+								   tools, plans and runs its own searches, and verifies each
+								   citation in a sub-agent before using it. */
+								'<p>An <b>agent</b> turns your ranked pathways into a written interpretation: it queries your values, runs its own literature searches, and verifies every citation it uses. A draft, for you to check.</p>' +
 								'</div>' +
 								'<div class="po-hero-actions">' +
-									'<a href="http://paintomics.readthedocs.org/en/latest/" target="_blank" class="po-btn-primary">Documentation</a>' +
+									'<a href="https://paintomics.readthedocs.io/en/latest/" target="_blank" class="po-btn-primary">Documentation</a>' +
 									'<a href="https://github.com/ConesaLab/paintomics4/" target="_blank" class="po-btn-outline">GitHub</a>' +
 									'<a href="mailto:paintomics4@gmail.com" class="po-btn-outline">Contact</a>' +
+									/* The abstract keeps its id and handler; it is a text link
+									   beside the other three actions rather than a picture. */
 								'</div>' +
 							'</div>' +
 							'<div class="po-hero-visual">' +
-								PO_HERO_FLOW_SVG +
-								'<a href="javascript:void(0)" id="graphicalAbstract" class="po-hero-flow-link">View the full graphical abstract</a>' +
+								PO_HERO_VIZ_SVG +
 							'</div>' +
 						'</div>' +
 					'</div>'
@@ -1133,56 +1273,64 @@ function PA_Step1JobView() {
 							// card is the whole of step 1, of which uploading is the
 							// fourth of five actions it lists.
 							'<h3>Upload and run</h3>' +
-							'<ol>' +
-								'<li>Choose your organism.</li>' +
-								// "untick any you want to leave out" was not true of KEGG, which is
-								// rendered `checked: true, disabled: true` and labelled "KEGG
-								// (required)" - the server adds it regardless. Telling someone to
-								// untick a box that cannot be unticked sends them looking for a
-								// broken control.
-								'<li>Check the pathway databases: KEGG is always included, and every other database installed for your organism is ticked by default, so untick any of those you want to leave out.</li>' +
-								'<li>Decide whether to enable the AI interpretation, and describe your experiment design if you do.</li>' +
-								'<li>Upload your multi-omic data, or load an example (<a class="button btn-secondary btn-inline btn-small" href="javascript:void(0)"><i class="fa fa-file-text-o"></i> Load example</a>) to explore PaintOmics with a ready-made dataset.</li>' +
-								'<li>Click on <a class="button btn-success btn-inline btn-small" href="javascript:void(0)"><i class="fa fa-play"></i> Run PaintOmics</a> button.</li>' +
-							'</ol>' +
+							/* Prose, not an <ol>. This card is numbered 1, and it used to
+							   hold a list numbered 1 to 5 inside it - so the screen showed
+							   a "1" containing a "1", and the two sibling cards beside it
+							   were plain paragraphs, which made this one look like a
+							   different kind of thing rather than the first of three.
+							   Every fact the list carried is still here, in the order it
+							   carried them, including both buttons.
+
+							   "untick any you want to leave out" was not true of KEGG, which
+							   is rendered `checked: true, disabled: true` and labelled "KEGG
+							   (required)" - the server adds it regardless. Telling someone to
+							   untick a box that cannot be unticked sends them looking for a
+							   broken control, so the sentence below is careful to say which
+							   databases can actually be unticked. */
+							'<p>Choose your organism, then check the pathway databases: KEGG is always included, and every other database installed for it is ticked by default, so untick any of <em>those</em> you want to leave out. Decide whether to enable the AI interpretation, describing your experiment design if you do. Then upload your multi-omic data — or load an example (<a class="button btn-secondary btn-inline btn-small" href="javascript:void(0)"><i class="fa fa-file-text-o"></i> Load example</a>) to explore PaintOmics with a ready-made dataset — and click <a class="button btn-success btn-inline btn-small" href="javascript:void(0)"><i class="fa fa-play"></i> Run PaintOmics</a>.</p>' +
+							'<div class="po-step-art">' + PO_STEP_ART_UPLOAD + '</div>' +
 						'</div>' +
 						'<div class="po-step-card">' +
 							'<div class="po-step-number">2</div>' +
 							'<h3>Identifier and name matching</h3>' +
-							'<p>PaintOmics requires Entrez IDs for working with KEGG, Reactome and MapMan biological pathway maps, so the tool will convert the names and identifiers from different sources and databases in your input data. This screen shows the number of features successfully mapped and the data distribution used for pathway colouring. Metabolite name assignments are shown, and you can choose which one to keep when a name is ambiguous. Click <a class="button btn-success btn-inline btn-small" href="javascript:void(0)"><i class="fa fa-play"></i> Next step</a> when you are ready.</p>' +
+							/* The opening sentence was 32 words to carry two facts: those
+							   three databases are keyed on Entrez IDs, and PaintOmics does
+							   the conversion for you. "requires ... for working with ...
+							   so the tool will convert the names and identifiers from
+							   different sources and databases in your input data" says
+							   both, at length, and leads with a requirement the reader
+							   never has to act on - the conversion is automatic, so the
+							   useful half is the promise, not the constraint. 17 words
+							   now, leading with what PaintOmics does; every term the
+							   original used, Entrez included, is still here. */
+							'<p>PaintOmics converts the identifiers in your files to the Entrez IDs that KEGG, Reactome and MapMan need. This screen shows the number of features successfully mapped and the data distribution used for pathway colouring. Metabolite name assignments are shown, and you can choose which one to keep when a name is ambiguous. Click <a class="button btn-success btn-inline btn-small" href="javascript:void(0)"><i class="fa fa-play"></i> Next step</a> when you are ready.</p>' +
+							'<div class="po-step-art">' + PO_STEP_ART_MATCH + '</div>' +
 						'</div>' +
 						'<div class="po-step-card">' +
 							'<div class="po-step-number">3</div>' +
 							'<h3>Explore results</h3>' +
-							'<p>You get a Pathways summary, a classification, a network and an enrichment analysis. Paint any of the listed pathways with <a href="javascript:void(0)" class="button btn-inline btn-small" style="background-color:#756C6C;font-size:14px;color:#fff;"><i class="fa fa-paint-brush"></i></a>, or ask for an <b>AI-powered pathway interpretation</b> with <a href="javascript:void(0)" class="button btn-inline btn-small" style="background-color:#2F73BC;font-size:14px;color:#fff;">' + getAIMark(14) + ' AI Interpret</a>. Read more about these analyses in <a href="http://paintomics.readthedocs.io/en/latest/" target="_blank">our documentation</a>.</p>' +
+							'<p>You get a Pathways summary, a classification, a network and an enrichment analysis. Paint any of the listed pathways with <a href="javascript:void(0)" class="button btn-inline btn-small btn-paint" title="Paint this pathway"><i class="fa fa-paint-brush"></i></a>, or ask for an <b>AI-powered pathway interpretation</b> with <a href="javascript:void(0)" class="button btn-inline btn-small btn-ai">' + getAIMark(14) + ' AI Interpret</a>. Read more about these analyses in <a href="https://paintomics.readthedocs.io/en/latest/" target="_blank">our documentation</a>.</p>' +
+							'<div class="po-step-art">' + PO_STEP_ART_EXPLORE + '</div>' +
 						'</div>' +
 					'</div>' +
-					'<h2 style="margin-top:24px;">Video tutorials</h2>' +
-					'<div class="po-tutorials-grid">' +
-						'<figure class="po-tutorial-card">' +
-							'<div class="po-tutorial-frame">' +
-								'<iframe src="https://www.youtube-nocookie.com/embed/brvToUmL1n4" '  +
-								'title="Concepts" loading="lazy" frameborder="0" '  +
-								'allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>' +
-							'</div>' +
-							'<figcaption class="po-tutorial-meta">' +
-								'<span class="po-tutorial-title">Concepts</span>' +
-								'<span class="po-tutorial-desc">What PaintOmics does with a multi-omic dataset, and how to read the result it gives back.</span>' +
-							'</figcaption>' +
-						'</figure>' +
-						'<figure class="po-tutorial-card">' +
-							'<div class="po-tutorial-frame">' +
-								'<iframe src="https://www.youtube-nocookie.com/embed/4XxPKqAubsA" '  +
-								'title="Step by step" loading="lazy" frameborder="0" '  +
-								'allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>' +
-							'</div>' +
-							'<figcaption class="po-tutorial-meta">' +
-								'<span class="po-tutorial-title">Step by step</span>' +
-								'<span class="po-tutorial-desc">A run from end to end: uploading the files, matching identifiers and exploring the pathways.</span>' +
-							'</figcaption>' +
-						'</figure>' +
-					'</div>' +
-					'<p style="margin-top:16px;">Check the <b><a href="http://paintomics.readthedocs.org/en/latest/" target="_blank">User guide</a></b> for further information. For questions, email <a href="mailto:paintomics4@gmail.com">paintomics4@gmail.com</a> or visit our <a href="https://github.com/ConesaLab/paintomics4/">GitHub page</a>.</p>' +
+					/* The "Video tutorials" block is gone. Both recordings are on
+					   the channel that Resources > Paintomics tutorial video already
+					   links from the header bar, so the landing page was a second
+					   door to the same place - and they predate this interface, so
+					   they show a product that no longer looks like this. The chip
+					   styles and the click handler went with the markup rather than
+					   being left behind as CSS and JS matching nothing. */
+					/* The closing "Check the User guide ... email ... GitHub page"
+					   line is gone. Its three links were the hero's three buttons
+					   again, to the same three URLs: the user guide is the
+					   Documentation button's readthedocs address, the address in
+					   the mailto is the Contact button's, and the GitHub page is
+					   the GitHub button's repository. It restated the top of the
+					   page at the bottom of it and added nothing in between.
+
+					   Nothing is lost by dropping it: those three destinations are
+					   also in the header bar, which is on screen at every scroll
+					   position, and the hero row itself is one page-up away. */
 				'</div>'
 			}, {
 				xtype: 'form',
@@ -1366,11 +1514,28 @@ function PA_Step1JobView() {
 									   loop. #aiProviderInline is filled in from /ai_provider once that
 									   answers, so the recipient is named here rather than described as
 									   "external". */
+									/* "asks a large language model to explain" undersold what
+									   actually runs, and a consent notice is the wrong place to be
+									   vague about that. src/classes/AIInterpret/pipeline.py runs six
+									   phases - triage, search planning, literature retrieval,
+									   interpretation, synthesis, verification - and along the way it
+									   plans its own searches, calls tools against the job's own data
+									   (get_gene_timecourse, get_pathway_genes, compare_genes), and
+									   spawns sub-agents: one per search, and one per citation to
+									   check it. Someone deciding whether to send their data is
+									   entitled to know it is an agent doing that and not a single
+									   prompt. The wording below names the parts that exist in the
+									   code and nothing more. */
 									html: '<p style="color:#555;font-size:13px;margin:0 0 10px 0;line-height:1.55;">' +
-										'PaintOmics can draft the write-up of your results. It takes the pathways your analysis ' +
-										'ranked highest, searches PubMed and Europe PMC for relevant literature, and asks a large ' +
-										'language model to explain what the cross-omic patterns mean. You get a draft interpretation ' +
-										'with citations, which you are expected to check.' +
+										'PaintOmics can draft the write-up of your results. An interpretation <b>agent</b> triages the ' +
+										'pathways your analysis ranked highest, plans and runs its own searches across PubMed and ' +
+										'Europe PMC, queries your uploaded values directly to check what the cross-omic patterns do, ' +
+										'and verifies each citation before it uses it. You get a draft interpretation with citations, ' +
+										/* Named, not linked. AgentEvolve has no remote configured - it is
+										   a local repository - so any URL here would ship as a dead link.
+										   Add one when it is published, not before. */
+										'which you are expected to check. The agents are developed and scored with the ' +
+										'<b>AgentEvolve</b> framework, against a benchmark drawn from published literature.' +
 										'<span id="aiProviderInline" class="ai-provider-inline"></span>' +
 										'</p>'
 								},
@@ -1608,19 +1773,7 @@ function PA_Step1JobView() {
 						me.addNewOmicSubmittingPanel(type);
 					});
 			
-					$("#graphicalAbstract").click(function(){
-						var imageWindow = new Ext.Window({
-							modal:true,
-							border:false,
-							plain:true,
-							width: '80%',
-							height: '90%',
-							constrain:true,
-							html:'<img style="margin: 0 auto;max-height:100%; max-width:100%;" src="resources/images/GraphicalAbstract.png" />',
-							resizable:{preserveAspectRatio: true}
-						});
-						imageWindow.show();
-					});
+
 
 					var containers = [$("#availableOmicsContainer")[0], $("#submittingPanelsContainer-targetEl")[0]];
 
@@ -1641,6 +1794,25 @@ function PA_Step1JobView() {
 
 					me.addNewOmicSubmittingPanel("metabolomics");
 					me.addNewOmicSubmittingPanel("geneexpression");
+
+					/* ...and then start at the top, the way a page does.
+					   ExtJS gives every panel it adds `tabindex="-1"` and focuses it,
+					   and a browser scrolls a focused element into view - so the
+					   application opened 1218px down, with the whole hero and "How it
+					   works" already above the fold before the first paint.
+					   Measured both halves of that: focusing one of these boxes with
+					   the attribute present moves the scroller to 1278, and the same
+					   focus with it removed moves it to 0. So the attribute is the
+					   cause, and removing it is the fix rather than scrolling back
+					   afterwards - a correction would race the focus, which lands on
+					   its own schedule and not in this handler.
+					   Only these two, and only here. When the user adds an omic later
+					   that panel keeps its tabindex, and scrolling to the thing they
+					   just asked for is the right behaviour. The fields inside are
+					   untouched and still take focus normally; it is the layout
+					   container that had no business holding it. */
+					$(".omicbox").removeAttr("tabindex");
+					$("#mainViewCenterPanel").scrollTop(0);
 				},
 				beforedestroy: function() {
 					me.getModel().deleteObserver(me);

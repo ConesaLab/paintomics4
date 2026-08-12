@@ -3058,7 +3058,15 @@ function PA_Step4FindFeaturesView() {
 			xtype: "container", cls: "lateralOptionsPanel",  width: 300, height: ($("#mainViewCenterPanel").height() - 100),
 			items:[{
 				xtype: "box", html:
-				"<div class='lateralOptionsPanel-header' style='background: #1F7F9B;'>" +
+				/* The teal that used to be inline here is gone. main.css styles
+				   .lateralOptionsPanel-header as a white band with a hairline
+				   under it, and the pathway card 300px to the left uses that
+				   same class and got it - so the two panels either side of the
+				   screen wore the same class and did not match. An inline style
+				   is unreachable from any stylesheet, which is also why neither
+				   the light sheet nor dark.css could correct it: in dark mode
+				   this header stayed teal while everything around it moved. */
+				"<div class='lateralOptionsPanel-header'>" +
 				'  <div class="lateralOptionsPanel-toolbar">' +
 				'    <a href="javascript:void(0)" class="toolbarOption btn-info helpTip" id="hideFindFeaturePanelButton" title="Close this panel"><i class="fa fa-times"></i></a>' +
 				'  </div>' +

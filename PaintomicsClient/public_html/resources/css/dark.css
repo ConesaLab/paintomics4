@@ -322,11 +322,10 @@
 [data-theme="dark"] .contentbox,
 [data-theme="dark"] .omicSummaryBox,
 [data-theme="dark"] .po-about-section,
+/* No fill, border or shadow to restate: the step cards are columns on the
+   section's own surface in both themes now, so only their ink is themed. */
 [data-theme="dark"] .po-step-card {
-	background-color: var(--pa-surface);
-	border-color: var(--pa-border);
 	color: var(--pa-ink-body);
-	box-shadow: var(--pa-shadow);
 }
 /* Card headings carry their own white fill and near-black ink, so both have to
    move together. Recolouring only the ink - which is what a blanket heading
@@ -376,8 +375,23 @@
 	color: var(--pa-ink-title);
 	border-color: var(--pa-border);
 }
+/* `-text` as well as `-title`, and this is the same ExtJS 4.2.1 / 6 naming
+   trap the window-header block further down this file already warns about:
+   `.x-panel-header-title` is the ExtJS 6 name, and this app runs 4.2.1, where
+   the element is `.x-panel-header-text`. So the two selectors that were here
+   matched nothing at all - the dark title was only ever legible because
+   Neptune's own colour on it happens to be white.
+
+   That went unnoticed until main.css started stating a panel-header title
+   colour of its own. A light `#222` on a selector that *does* match, against a
+   dark rule on selectors that do not, measured 1.03:1 - black text on a black
+   band. Adding the name the DOM actually uses is the fix; the ExtJS 6 names
+   stay so this keeps working if the framework is ever upgraded. */
 [data-theme="dark"] .x-panel-header-title,
-[data-theme="dark"] .x-panel-header-title-default { color: var(--pa-ink-title); }
+[data-theme="dark"] .x-panel-header-title-default,
+[data-theme="dark"] .x-panel-header-text,
+[data-theme="dark"] .x-panel-header-default .x-panel-header-text,
+[data-theme="dark"] .x-panel-header-default .x-header-text { color: var(--pa-ink-title); }
 
 /* Grids */
 [data-theme="dark"] .x-grid-body,
@@ -599,16 +613,8 @@
 [data-theme="dark"] .po-hero h1 { color: var(--pa-ink-title); }
 [data-theme="dark"] .po-hero-desc { color: var(--pa-ink-body); }
 
-/* Video tutorials. The frame keeps its dark fill in both themes - it is the
-   letterbox behind a video, not a surface - so only the hairline and the
-   caption need restating. */
-[data-theme="dark"] .po-tutorial-frame { border-color: var(--pa-border); }
-[data-theme="dark"] .po-tutorial-title { color: var(--pa-ink-title); }
-[data-theme="dark"] .po-tutorial-desc { color: var(--pa-ink-muted); }
 [data-theme="dark"] .po-step-card h3 { color: var(--pa-ink-title); }
 [data-theme="dark"] .po-step-card {
-	background: var(--pa-surface);
-	border-color: var(--pa-border);
 	color: var(--pa-ink-body);
 }
 [data-theme="dark"] .po-step-card li,
@@ -631,7 +637,6 @@
 [data-theme="dark"] .po-hero-ai-highlight .po-ai-icon { color: var(--pa-ai-blue); }
 [data-theme="dark"] .po-ai-section-body,
 [data-theme="dark"] .po-ai-section-body p { color: var(--pa-ink-body); }
-[data-theme="dark"] .po-hero-flow-link { color: var(--pa-link); }
 
 /* The hero diagram is inline SVG with its own light fills, drawn to sit on a
    white card. Nudging the three panel plates and their ink is enough; the omic
