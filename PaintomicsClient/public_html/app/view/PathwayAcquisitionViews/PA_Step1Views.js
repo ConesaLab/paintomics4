@@ -1158,29 +1158,34 @@ function PA_Step1JobView() {
 						'</div>' +
 					'</div>' +
 					'<h2 style="margin-top:24px;">Video tutorials</h2>' +
-					'<div class="po-tutorials-grid">' +
-						'<figure class="po-tutorial-card">' +
-							'<div class="po-tutorial-frame">' +
-								'<iframe src="https://www.youtube-nocookie.com/embed/brvToUmL1n4" '  +
-								'title="Concepts" loading="lazy" frameborder="0" '  +
-								'allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>' +
-							'</div>' +
-							'<figcaption class="po-tutorial-meta">' +
-								'<span class="po-tutorial-title">Concepts</span>' +
-								'<span class="po-tutorial-desc">What PaintOmics does with a multi-omic dataset, and how to read the result it gives back.</span>' +
-							'</figcaption>' +
-						'</figure>' +
-						'<figure class="po-tutorial-card">' +
-							'<div class="po-tutorial-frame">' +
-								'<iframe src="https://www.youtube-nocookie.com/embed/4XxPKqAubsA" '  +
-								'title="Step by step" loading="lazy" frameborder="0" '  +
-								'allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>' +
-							'</div>' +
-							'<figcaption class="po-tutorial-meta">' +
-								'<span class="po-tutorial-title">Step by step</span>' +
-								'<span class="po-tutorial-desc">A run from end to end: uploading the files, matching identifiers and exploring the pathways.</span>' +
-							'</figcaption>' +
-						'</figure>' +
+					/* Two chips rather than two embedded players. A live embed paints
+					   YouTube's own title, channel byline and localised "watch on
+					   YouTube" pill over the poster, so each video announced itself
+					   twice - once in its own chrome and once in our caption beneath -
+					   and the pair were the only saturated colour on a page that is
+					   otherwise text and hairlines. They finished louder than the
+					   "How it works" steps they were meant to support.
+
+					   Real anchors to the watch page, not buttons: the click handler
+					   in afterrender opens the modal instead, but cmd-click, middle
+					   click and "copy link address" all still do the obvious thing.
+					   The description each caption used to carry is now the chip's
+					   title attribute, so the wording survives without the height. */
+					'<div class="po-tutorial-links">' +
+						'<a class="po-tutorial-chip" href="https://www.youtube.com/watch?v=brvToUmL1n4" target="_blank"' +
+							' data-video="brvToUmL1n4" data-title="Concepts"' +
+							' title="What PaintOmics does with a multi-omic dataset, and how to read the result it gives back.">' +
+							'<svg class="po-tutorial-play" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M7 4.5l12 7.5-12 7.5z"/></svg>' +
+							'<span class="po-tutorial-name">Concepts</span>' +
+							'<span class="po-tutorial-len">15 min</span>' +
+						'</a>' +
+						'<a class="po-tutorial-chip" href="https://www.youtube.com/watch?v=4XxPKqAubsA" target="_blank"' +
+							' data-video="4XxPKqAubsA" data-title="Step by step"' +
+							' title="A run from end to end: uploading the files, matching identifiers and exploring the pathways.">' +
+							'<svg class="po-tutorial-play" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M7 4.5l12 7.5-12 7.5z"/></svg>' +
+							'<span class="po-tutorial-name">Step by step</span>' +
+							'<span class="po-tutorial-len">22 min</span>' +
+						'</a>' +
 					'</div>' +
 					'<p style="margin-top:16px;">Check the <b><a href="http://paintomics.readthedocs.org/en/latest/" target="_blank">User guide</a></b> for further information. For questions, email <a href="mailto:paintomics4@gmail.com">paintomics4@gmail.com</a> or visit our <a href="https://github.com/ConesaLab/paintomics4/">GitHub page</a>.</p>' +
 				'</div>'
@@ -1620,6 +1625,68 @@ function PA_Step1JobView() {
 							resizable:{preserveAspectRatio: true}
 						});
 						imageWindow.show();
+					});
+
+					/* The tutorial chips. Same Ext.Window the graphical abstract uses
+					   above, which is what gives this the mask, the close tool and
+					   Esc-to-close for nothing. It also matters that the default
+					   closeAction is "destroy": that takes the iframe out of the DOM,
+					   which is the only thing that reliably stops the audio. A
+					   hand-rolled overlay has to remember to blank the src, and the
+					   symptom when it forgets is a video still talking behind a
+					   dialog that is no longer on screen.
+
+					   Not preventDefault() on every click - a modified click is the
+					   user asking for a tab, and the href is a real watch page, so
+					   let the browser have it. Modifiers only, deliberately: a middle
+					   click arrives as auxclick and never reaches a click handler, so
+					   testing the button number here would buy nothing and would cost
+					   the keyboard, where Enter on the link reports no button and
+					   would have fallen through to the href. */
+					$(".po-tutorial-chip").click(function(event) {
+						if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+							return;
+						}
+						event.preventDefault();
+
+						var chip = $(this);
+						/* 16:9 derived from the width, unless that would be taller
+						   than the window, in which case height is the scarce
+						   dimension and the width follows from it. 920 is the cap:
+						   past that the player is wider than the card it came from. */
+						var width = Math.min(920, Math.round(Ext.Element.getViewportWidth() * 0.9));
+						var maxVideoHeight = Math.round(Ext.Element.getViewportHeight() * 0.8);
+						if (Math.round(width * 9 / 16) > maxVideoHeight) {
+							width = Math.round(maxVideoHeight * 16 / 9);
+						}
+						var videoHeight = Math.round(width * 9 / 16);
+
+						var videoWindow = new Ext.Window({
+							modal: true,
+							border: false,
+							plain: true,
+							constrain: true,
+							title: chip.attr("data-title"),
+							width: width,
+							/* Corrected against the measured header below. This is
+							   only a starting value, so that the window never opens
+							   at some default size and then jumps. */
+							height: videoHeight + 40,
+							resizable: {preserveAspectRatio: true},
+							html: '<iframe src="https://www.youtube-nocookie.com/embed/' + chip.attr("data-video") + '?autoplay=1&rel=0" ' +
+								'title="' + chip.attr("data-title") + '" frameborder="0" style="display:block;width:100%;height:100%;border:0;" ' +
+								'allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>'
+						});
+						videoWindow.show();
+						/* Both the header's height and the window's borders are theme
+						   values, so measure rather than guess: the ratio is taken
+						   from the body's own width, not the window's, or the two
+						   border pixels come off the width without coming off the
+						   height and the player letterboxes by 2px. Give the window
+						   back whatever the body is short or long by and the body
+						   lands on exactly 16:9. */
+						videoWindow.setHeight(videoWindow.getHeight() - videoWindow.body.getHeight() +
+							Math.round(videoWindow.body.getWidth() * 9 / 16));
 					});
 
 					var containers = [$("#availableOmicsContainer")[0], $("#submittingPanelsContainer-targetEl")[0]];

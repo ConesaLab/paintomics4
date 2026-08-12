@@ -116,9 +116,37 @@ root {
      alpha layers, enough to separate a card from the #F3F3F3 page and no more,
      and the border is a touch cooler than the old #E9E9E9 so cards read as
      defined rather than washed out against that grey. */
-  --pa-radius: 6px;         /* cards, panels, dialogs */
-  --pa-radius-sm: 4px;      /* buttons, inputs, chips */
-  --pa-border: #E4E4E7;
+  /* The page behind the cards. #F3F3F3 was a neutral grey, which is the colour
+     a surface gets when nobody chose one: it reads as unpainted rather than as
+     a background. This is the same warmth an ivory paper stock has - enough to
+     make the white cards on it read as white, which a card on grey never quite
+     does, and enough that the page looks lit rather than switched off.
+
+     A light counterpart to the --pa-surface-page dark.css already defines, so
+     the two themes now name the same thing. */
+  --pa-surface-page: #FAF9F5;
+
+  /* The quiet panel fills scattered through this file were warmed to match:
+     #FAFAFA -> #F9F8F4, #F6F6F6 -> #F6F5F0, #F5F5F5 -> #F5F4EF. Warmed at
+     constant lightness, deliberately - every contrast figure recorded in the
+     comments below was measured against the old values, and a swap that moves
+     hue without moving luminance leaves all of them true (each pair differs by
+     under 1% relative luminance). Mixing cold greys into a warm page is what
+     makes an interface look assembled from parts rather than designed; it is
+     also the tell that the greys were never chosen, only defaulted to.
+
+     They are still literals rather than a token because there are twelve of
+     them across nine unrelated components, and turning that into a token is a
+     refactor with its own risk, not a colour change. */
+
+  --pa-radius: 8px;         /* cards, panels, dialogs */
+  --pa-radius-sm: 6px;      /* buttons, inputs, chips */
+  /* An alpha of the ink rather than a fixed grey. The same hairline then sits
+     correctly on a white card, on the ivory page and on the #EEEEEE panels of
+     Step 4, instead of being tuned for one of them and looking cold on the
+     other two. Resolves to about #E7E7E8 on white, which is where #E4E4E7
+     already was, so nothing shifts - it just stops being wrong elsewhere. */
+  --pa-border: rgba(24, 24, 27, 0.10);
   /* How far a card's contents stand off its own border. Body copy used to sit
      about 5px from the edge while the card's heading sat at 20, so text ran
      into the frame around it and the two never lined up. One value for both. */
@@ -1469,11 +1497,19 @@ div.contentbox h2, #clusternumber_box h2, #threshold_box h2 {
 	background-color: #FFFFFF;
 	border-bottom: 1px solid var(--pa-border);
 	border-radius: var(--pa-radius) var(--pa-radius) 0 0;
-	color: #27272A;
-	font-size: 15px;
+	/* A warm near-black rather than #27272A. On an ivory page a cold grey-black
+	   heading reads as a different material from the paper under it. */
+	color: #1A1A18;
+	/* 19, not 15. Body copy in these cards is 13px, so a 15px heading was a
+	   1.15 step - close enough to the text it titles that the page had no
+	   typographic hierarchy at all, which is most of why it read as flat. Every
+	   card looked like an undifferentiated block of text with a slightly bolder
+	   first line. 19px is a 1.46 step: unmistakably a heading, still nowhere
+	   near shouting, and it moves nothing horizontally. */
+	font-size: 19px;
 	font-weight: 600;
-	letter-spacing: -0.005em;
-	padding: 13px var(--pa-card-inset);
+	letter-spacing: -0.012em;
+	padding: 15px var(--pa-card-inset);
 	margin: 0;
 }
 /* The inset for body copy lives on `div.contentbox p, div.contentbox li` further
@@ -1720,14 +1756,22 @@ body > .x-mask {
    use, with dark text on it, which is both lighter and consistent with the rest
    of the application. Contrast stops being a problem rather than being
    negotiated: #222 on #F6F6F6 is 15.9:1. */
-/* The header carries its own 5px #3892d3 border on three sides, separate from
-   the window's - which is why a blue edge survived hugging the top corners
-   after the window frame was already down to a hairline. Zeroed, leaving only
-   the divider under the title. */
+/* The header carries its own 5px border on all four sides, separate from the
+   window's - which is why a heavy edge survived hugging the top corners after
+   the window frame was already down to a hairline.
+
+   !important on the width, and only on the width. Neptune writes
+   `.x-window-header-default { border-width: 5px !important }`, so the zeroing
+   here was losing to it on every dialog in the application while this rule's
+   own border-color went on winning - which is exactly why the band was still
+   there and still looked like a deliberate 5px frame in --pa-border. No amount
+   of added specificity fixes that; an important declaration is only beaten by
+   another one. Measured before the fix: 5px/5px/5px/5px on a header whose rule
+   said `0 0 1px`. */
 .x-window-default > .x-window-header {
-	background-color: #F6F6F6;
+	background-color: #F6F5F0;
 	background-image: none;
-	border-width: 0 0 1px;
+	border-width: 0 0 1px !important;
 	border-style: solid;
 	border-color: var(--pa-border);
 	border-radius: var(--pa-radius) var(--pa-radius) 0 0;
@@ -1755,6 +1799,47 @@ body > .x-mask {
 	transition: background-color var(--pa-transition);
 }
 .x-window .x-tool-img.x-tool-close:hover {
+	background-color: #5A5B62;
+}
+
+/* Panel headers get the window header's treatment, for the same reason and in
+   the same colours. Neptune paints `.x-panel-header-default` #157FCC with a
+   white title, and nothing in this file ever overrode it, so every framed
+   panel in the light theme - the dataset cards in the example picker most
+   visibly - wore a saturated blue band.
+
+   That blue was never a decision. It is not in the token block at the top of
+   this file, and it is not even the blue the application uses elsewhere:
+   --pa-accent-blue is #1F6BC1. It is simply what the framework ships.
+
+   The give-away that this was an oversight rather than a choice is dark.css,
+   which has neutralised `.x-panel-header-default` since the dark theme landed.
+   The two themes disagreed about what a panel header looks like, and the light
+   one was disagreeing with itself as well - its own window headers had already
+   gone neutral a few rules above. This closes that gap rather than opening a
+   new question.
+
+   Both title class names, as in the window-header rules and in dark.css:
+   `-title` is the ExtJS 6 name and `-text` the 4.2.1 one this app runs. */
+.x-panel-header-default {
+	background-color: #F6F5F0;
+	background-image: none;
+	border-color: var(--pa-border);
+}
+.x-panel-header-default .x-panel-header-title,
+.x-panel-header-default .x-panel-header-text,
+.x-panel-header-default .x-header-text {
+	color: #222;
+}
+/* The tools are <img> sprites knocked out of a background *colour*, which
+   Neptune fills with the same #157FCC. Left alone they are saturated dots on a
+   near-white band; muted, exactly like the window's close control above. */
+.x-panel-header-default .x-tool-img {
+	background-color: #8A8B92;
+	border-radius: 3px;
+	transition: background-color var(--pa-transition);
+}
+.x-panel-header-default .x-tool-img:hover {
 	background-color: #5A5B62;
 }
 
@@ -2081,7 +2166,7 @@ div.availableOmicsBox h4 {
 	text-align: center !important;
 	color: #6D7075; /* was #8B8E93 - 3.04:1 on this panel's own #F6F6F6 fill */
 	font-size: 22px;
-	background: #F6F6F6;
+	background: #F6F5F0;
 	padding: 10px;
 	border: 1px solid var(--pa-border);
 	border-radius: var(--pa-radius);
@@ -2198,7 +2283,7 @@ div.availableOmicsBox h4 {
 #dbs_message table th {
 	padding: 9px 18px;
 	border-bottom: 1px solid var(--pa-border);
-	background-color: #FAFAFA;
+	background-color: #F9F8F4;
 	color: #52525B;
 	font-size: 11.5px;
 	font-weight: 600;
@@ -2367,6 +2452,16 @@ div[id ^= "networkDetailsPanel_"] {width:270px;}
 	padding-left: var(--pa-gutter);
 	padding-right: var(--pa-gutter);
 	box-sizing: border-box;
+	/* Stated here rather than left to the ExtJS theme's grey. This is the one
+	   ancestor every step shares, so it is the only place the page colour can
+	   be set once. dark.css already claims this selector with !important, and
+	   is loaded after this file, so the dark page still wins.
+
+	   !important because ExtJS writes `background-color: rgb(243,243,243)`
+	   into this element's own style attribute from JavaScript - which is also
+	   the reason the dark rule needs it. A stylesheet cannot outrank an inline
+	   style by being more specific, only by being important. */
+	background-color: var(--pa-surface-page) !important;
 }
 div.contentbox,
 .contentbox,
@@ -2552,7 +2647,7 @@ div#multisource_summary table {
 div#multisource_summary table th {
 	padding: 9px 16px;
 	border-bottom: 1px solid var(--pa-border);
-	background-color: #FAFAFA;
+	background-color: #F9F8F4;
 	color: #52525B;
 	font-size: 11.5px;
 	font-weight: 600;
@@ -3325,7 +3420,7 @@ div.omicSelection div.omicPosition + div {
 }
 .x-toolbar {
 	padding: 5px 0 6px 8px;
-	background-color: #F5F5F5;
+	background-color: #F5F4EF;
 }
 
 /***********************************************************/
@@ -3662,7 +3757,7 @@ div.lateralOptionsPanel-header .toolbarOption.downloadTool {
 	background: #FFFFFF;
 }
 div.lateralOptionsPanel-header .toolbarOption.downloadTool:hover {
-	background: #FAFAFA;
+	background: #F9F8F4;
 	border-color: #C4C4CC;
 }
 .lateralOptionsPanel-toolbar .toolbarOption.downloadTool {
@@ -4022,7 +4117,7 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
   box-shadow: none;
 }
 .omicbox a.x-btn.x-btn-default-small:hover {
-  background-color: #FAFAFA;
+  background-color: #F9F8F4;
   border-color: #C4C4CC;
 }
 .omicbox a.x-btn .x-btn-inner {
@@ -4071,7 +4166,7 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
   margin-right: 0;
 }
 .paStep1Form a.button.btn-right.btn-small:hover {
-  background-color: #FAFAFA;
+  background-color: #F9F8F4;
   border-color: #C4C4CC;
   color: #27272A;
 }
@@ -4115,7 +4210,12 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
      than a flat grey, which is what makes a card read as defined rather than
      washed out against the page. */
   border: 1px solid var(--pa-border);
-  border-top: 3px solid #007383;
+  /* The 3px teal rule that used to sit on top is gone. Each of these cards was
+     carrying two accents at once - a saturated teal bar and an orange numbered
+     disc - competing inside a 300px box, which reads as busy rather than as
+     designed. The disc is the better of the two: it is the thing that says
+     which step this is. One accent per card, and the bar was also the most
+     dated device on the page. */
   border-radius: var(--pa-radius);
   padding: 24px;
   text-align: center;
@@ -4173,79 +4273,80 @@ div.po-step-card h3 {
 }
 
 /* Video tutorials ------------------------------------------------------------
-   Two `<iframe width="560" height="315">` stretched to `width: 100%` by this
-   rule while the height attribute stayed at 315. Each column is about 640px
-   wide on a laptop, and a 16:9 video 640px wide is 360px tall - so the player
-   kept its own ratio inside a box 45px too short and painted black pillarbox
-   bars down both sides of both videos. Two black-framed rectangles, which is
-   what the section looked like.
+   Two live embeds used to sit here, about 460px each. They are gone rather
+   than merely smaller, because size was only half of it: an embedded player
+   paints YouTube's own title, channel byline and a localised "watch on
+   YouTube" pill over its poster, so every video announced itself twice - once
+   in YouTube's voice, in whatever language the viewer's account is set to, and
+   once in our caption underneath. The pair were also the only saturated colour
+   on a page that is otherwise text and hairlines, so the bottom of the card
+   pulled harder than the three numbered steps it was there to support.
 
-   The frame now states the ratio instead of a height, so it is exactly the
-   shape of the video in it and there is nothing left to letterbox. The grid
-   also starts on --pa-card-inset like every other block in the card: it used
-   to run edge to edge under a heading that was inset, so the videos hung
-   further left than the words above and below them.
+   What replaces them is a link with a play glyph and a running time. It costs
+   one row rather than a third of a screen, it loads no third-party player on a
+   page people came to upload a file on, and the running time is stated because
+   nobody should start a 22-minute video expecting three. The sentence each
+   caption carried is now the chip's title attribute, so the wording survives
+   the height. The video itself opens in the same Ext.Window the graphical
+   abstract uses, at a size the reader chose to ask for.
 
-   Capped, and auto-fit rather than a fixed two columns: on a 1400px page an
-   uncapped half-column makes each video 660px wide, which is a bigger picture
-   than anything else on the landing page and turns a footnote into the main
-   event. 940px puts them at a comfortable 460px each and drops to one column
-   on a narrow window without needing a media query. */
-.po-tutorials-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 22px;
-  margin: 16px var(--pa-card-inset) 6px;
-  max-width: 940px;
-}
-
-.po-tutorial-card {
-  margin: 0;
+   --pa-radius-sm, not --pa-radius: this is a control, so it takes the corner
+   every other button and input in the app takes. */
+.po-tutorial-links {
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
   gap: 10px;
-  min-width: 0;
+  /* Starts on --pa-card-inset like the heading above and the paragraph below,
+     which is the whole reason the old grid carried the same margin. */
+  margin: 14px var(--pa-card-inset) 6px;
 }
 
-.po-tutorial-frame {
-  position: relative;
-  aspect-ratio: 16 / 9;
-  border-radius: var(--pa-radius);
-  overflow: hidden;
+.po-tutorial-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 14px 7px 11px;
+  /* Deliberately the same three declarations .po-hero-actions .po-btn-outline
+     carries: transparent fill, --pa-border hairline, --pa-radius-sm. This is
+     an outline control and the app already has one, so it takes that one's
+     values rather than a second opinion about what an outline control is. */
   border: 1px solid var(--pa-border);
-  /* The poster frame loads after the box does, so the box is black from the
-     first paint rather than flashing white and then filling in. */
-  background: #18181B;
-  box-shadow: var(--pa-shadow);
-}
-
-.po-tutorial-frame iframe {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  border: 0;
-  display: block;
-}
-
-.po-tutorial-meta {
-  /* A caption, so it takes the same treatment as a card sub-heading and its
-     body copy rather than inventing a third pair of sizes. */
-  padding: 0;
-}
-
-.po-tutorial-title {
-  display: block;
+  border-radius: var(--pa-radius-sm);
+  background: transparent;
+  color: var(--pa-ink-title, #27272A);
   font-size: 13.5px;
   font-weight: 600;
-  color: #3F3F46;
+  line-height: 1.2;
+  text-decoration: none;
+  transition: background var(--pa-transition), border-color var(--pa-transition);
 }
 
-.po-tutorial-desc {
-  display: block;
-  margin-top: 3px;
+/* An anchor, but not a prose link: the rules further up this file give `a` a
+   link colour and an underline on hover, and a control wants neither. */
+.po-tutorial-chip:hover,
+.po-tutorial-chip:focus {
+  background: var(--pa-surface-quiet, #F1F2F4);
+  border-color: var(--pa-border-control-hover, #C7C7CC);
+  color: var(--pa-ink-title, #27272A);
+  text-decoration: none;
+}
+
+.po-tutorial-play {
+  /* 16px against a 24 viewBox with the triangle spanning 15 of those units
+     puts the glyph at 10px tall, which is the cap height of the 13.5px/600
+     label beside it. Sized to the letters rather than to a round number, so
+     the two sit on one optical line. */
+  width: 16px;
+  height: 16px;
+  flex: none;
+  /* currentColor, not YouTube red. That red button was the other half of what
+     made the old section shout. */
+  fill: currentColor;
+}
+
+.po-tutorial-len {
+  font-weight: 400;
   font-size: 12.5px;
-  line-height: 1.5;
   color: var(--pa-ink-muted);
 }
 
@@ -4551,7 +4652,7 @@ div.repDetectionCard h3 {
     list-style: none;
     padding: 4px 8px;
     margin: 6px 0;
-    background: #fafafa;
+    background: #F9F8F4;
     border: 1px solid #ececec;
     border-radius: 3px;
     max-height: 140px;
@@ -4573,7 +4674,7 @@ div.repDetectionCard h3 {
 .repDetectionManual {
     margin: 6px 0 6px 22px;
     padding: 6px 8px;
-    background: #fafafa;
+    background: #F9F8F4;
     border: 1px solid #ececec;
     border-radius: 3px;
 }
@@ -4832,7 +4933,7 @@ div.repDetectionCard h3 {
 
 .paWeightsTip .x-tip-header,
 .paWeightsTip .x-tip-header-default {
-	background: #FAFAFA;
+	background: #F9F8F4;
 	border-bottom: 1px solid var(--pa-border);
 	border-radius: var(--pa-radius) var(--pa-radius) 0 0;
 	padding: 7px 10px;
@@ -4911,7 +5012,7 @@ div.repDetectionCard h3 {
    omic colour-coding in the same row. A pale tint plus a left marker says the
    same thing without competing for attention. */
 .x-grid-item-over .x-grid-cell {
-	background-color: #FAFAFA;
+	background-color: #F9F8F4;
 }
 
 .x-grid-cell-inner {

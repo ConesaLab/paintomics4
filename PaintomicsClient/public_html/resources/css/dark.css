@@ -376,8 +376,23 @@
 	color: var(--pa-ink-title);
 	border-color: var(--pa-border);
 }
+/* `-text` as well as `-title`, and this is the same ExtJS 4.2.1 / 6 naming
+   trap the window-header block further down this file already warns about:
+   `.x-panel-header-title` is the ExtJS 6 name, and this app runs 4.2.1, where
+   the element is `.x-panel-header-text`. So the two selectors that were here
+   matched nothing at all - the dark title was only ever legible because
+   Neptune's own colour on it happens to be white.
+
+   That went unnoticed until main.css started stating a panel-header title
+   colour of its own. A light `#222` on a selector that *does* match, against a
+   dark rule on selectors that do not, measured 1.03:1 - black text on a black
+   band. Adding the name the DOM actually uses is the fix; the ExtJS 6 names
+   stay so this keeps working if the framework is ever upgraded. */
 [data-theme="dark"] .x-panel-header-title,
-[data-theme="dark"] .x-panel-header-title-default { color: var(--pa-ink-title); }
+[data-theme="dark"] .x-panel-header-title-default,
+[data-theme="dark"] .x-panel-header-text,
+[data-theme="dark"] .x-panel-header-default .x-panel-header-text,
+[data-theme="dark"] .x-panel-header-default .x-header-text { color: var(--pa-ink-title); }
 
 /* Grids */
 [data-theme="dark"] .x-grid-body,
@@ -599,12 +614,26 @@
 [data-theme="dark"] .po-hero h1 { color: var(--pa-ink-title); }
 [data-theme="dark"] .po-hero-desc { color: var(--pa-ink-body); }
 
-/* Video tutorials. The frame keeps its dark fill in both themes - it is the
-   letterbox behind a video, not a surface - so only the hairline and the
-   caption need restating. */
-[data-theme="dark"] .po-tutorial-frame { border-color: var(--pa-border); }
-[data-theme="dark"] .po-tutorial-title { color: var(--pa-ink-title); }
-[data-theme="dark"] .po-tutorial-desc { color: var(--pa-ink-muted); }
+/* Video tutorials. --pa-border-control rather than the --pa-border the light
+   sheet sets, for the same reason .po-btn-outline above takes that swap: on a
+   dark page the hairline that separates a control from the surface behind it
+   has to be lighter than the one that separates two panels, or it separates
+   nothing. Measured, #33353B against this page is 1.45:1 and the chip reads as
+   a rectangle of very slightly different black; #6E7178 is 3.6:1 and reads as
+   a button. --pa-ink-title is restated because the light sheet has to write it
+   as `var(--pa-ink-title, #27272A)` - the token is defined in this file and
+   nowhere else, so the fallback would otherwise win here. */
+[data-theme="dark"] .po-tutorial-chip {
+	border-color: var(--pa-border-control);
+	color: var(--pa-ink-title);
+}
+[data-theme="dark"] .po-tutorial-chip:hover,
+[data-theme="dark"] .po-tutorial-chip:focus {
+	background: var(--pa-surface-quiet);
+	border-color: var(--pa-border-control-hover);
+	color: var(--pa-ink-title);
+}
+[data-theme="dark"] .po-tutorial-len { color: var(--pa-ink-muted); }
 [data-theme="dark"] .po-step-card h3 { color: var(--pa-ink-title); }
 [data-theme="dark"] .po-step-card {
 	background: var(--pa-surface);
