@@ -44,12 +44,94 @@
    the rendered width and every label is drawn at the size it is read at;
    the system's 660-wide landscape version has to shrink to 0.65 in this
    slot, which takes its 11px labels down to about 7px. */
-var PO_HERO_FLOW_SVG =
-	'<svg class="po-hero-flow" viewBox="0 0 460 356" role="img" style="display:block;width:100%;height:auto;font-family:var(--pa-font-sans)" aria-label="How PaintOmics works: your omic data is mapped onto pathways, then ranked and painted" xmlns="http://www.w3.org/2000/svg">' +
-	'<title>How PaintOmics works</title>' +
-	'<rect x=".5" y="0.5" width="459" height="111" rx="8" fill="#FFFFFF" stroke="#E4E4E7"/>' +
-	'<text x="24" y="30" font-size="14" font-weight="600" fill="#27272A">Your omic data</text>' +
-	'<text x="24" y="49" font-size="11.5" fill="#71717A">One file per omic type</text>' +
+/* The flow diagram, split into the three pieces it was always made of.
+   It used to sit in the hero as one 460x356 picture whose three stacked
+   panels were the same three stages the "How it works" cards describe -
+   so the page drew the pipeline twice, once as a picture beside the
+   title and once as text below it. Each panel now lives in the card
+   that explains it, which is also what fills those cards: they were
+   forced to a common 335px by the grid while their prose ran out 38,
+   59 and 97px short, so the tallest one was a third empty.
+
+   Wrapped in a translate group rather than re-numbered. Every element
+   below keeps the coordinates it was authored with, and the group moves
+   the origin, so nothing here can drift out of alignment with the
+   artwork it came from. */
+/* The hero visual: the product doing its own job.
+   
+   A pathway network is drawn, its features are painted with the same bwr ramp
+   the application paints real data with - red high, white zero, blue low - and
+   then the AI panel reads the painted result and writes an interpretation.
+   That is literally the pipeline, so this is the one picture on the page that
+   is not decoration: everything it shows, the tool actually does.
+
+   Colours are the product's own. The node fills come from the bwr ramp in
+   PA_Step3Views, the grey is the stroke KEGG diagrams use, and the AI blue is
+   --pa-ai-blue. Nothing here invents a palette.
+
+   Animation lives in main.css so it can be turned off under
+   prefers-reduced-motion, where every element simply renders in its final
+   state - a painted network beside a written interpretation. */
+var PO_HERO_VIZ_SVG =
+	'<svg class="po-hero-viz" viewBox="0 0 440 300" role="img" xmlns="http://www.w3.org/2000/svg" ' +
+		'aria-label="A pathway network is painted with your omic values, then read by the AI into a written interpretation">' +
+	'<title>From painted pathway to written interpretation</title>' +
+
+	/* --- the network ------------------------------------------------------ */
+	'<g class="po-viz-edges" stroke="#878787" stroke-opacity=".5" stroke-width="1.6" fill="none">' +
+		'<path d="M42 96 L104 58"/>' + '<path d="M104 58 L168 92"/>' +
+		'<path d="M42 96 L96 148"/>' + '<path d="M96 148 L168 92"/>' +
+		'<path d="M168 92 L196 168"/>' + '<path d="M96 148 L118 210"/>' +
+		'<path d="M118 210 L46 186"/>' + '<path d="M118 210 L196 168"/>' +
+		'<path d="M46 186 L42 96"/>' +
+	'</g>' +
+
+	/* Each feature is an outline that is always there, plus a fill that arrives
+	   on its own delay - which is what "being painted" looks like. */
+	'<g class="po-viz-nodes">' +
+		'<circle cx="42"  cy="96"  r="11" fill="#FFFFFF" stroke="#878787" stroke-width="1.8"/>' +
+		'<circle cx="42"  cy="96"  r="11" class="po-viz-paint" style="--d:0.0s"  fill="#FF0000"/>' +
+		'<circle cx="104" cy="58"  r="11" fill="#FFFFFF" stroke="#878787" stroke-width="1.8"/>' +
+		'<circle cx="104" cy="58"  r="11" class="po-viz-paint" style="--d:0.15s" fill="#FF8080"/>' +
+		'<rect x="156" y="80" width="13" height="16" rx="1.5" fill="#FFFFFF" stroke="#878787" stroke-width="1.6"/>' +
+		'<rect x="156" y="80" width="13" height="16" rx="1.5" class="po-viz-paint" style="--d:0.3s"  fill="#0000FF"/>' +
+		'<rect x="169" y="80" width="13" height="16" rx="1.5" fill="#FFFFFF" stroke="#878787" stroke-width="1.6"/>' +
+		'<rect x="169" y="80" width="13" height="16" rx="1.5" class="po-viz-paint" style="--d:0.42s" fill="#8080FF"/>' +
+		'<circle cx="96"  cy="148" r="11" fill="#FFFFFF" stroke="#878787" stroke-width="1.8"/>' +
+		'<circle cx="96"  cy="148" r="11" class="po-viz-paint" style="--d:0.55s" fill="#FF0000"/>' +
+		'<circle cx="196" cy="168" r="11" fill="#FFFFFF" stroke="#878787" stroke-width="1.8"/>' +
+		'<circle cx="196" cy="168" r="11" class="po-viz-paint" style="--d:0.7s"  fill="#8080FF"/>' +
+		'<circle cx="118" cy="210" r="11" fill="#FFFFFF" stroke="#878787" stroke-width="1.8"/>' +
+		'<circle cx="118" cy="210" r="11" class="po-viz-paint" style="--d:0.85s" fill="#FF8080"/>' +
+		'<circle cx="46"  cy="186" r="11" fill="#FFFFFF" stroke="#878787" stroke-width="1.8"/>' +
+		'<circle cx="46"  cy="186" r="11" class="po-viz-paint" style="--d:1.0s"  fill="#0000FF"/>' +
+	'</g>' +
+
+	/* --- the interpretation ------------------------------------------------ */
+	'<g class="po-viz-ai">' +
+		'<rect x="238" y="52" width="196" height="196" rx="10" class="po-viz-panel"/>' +
+		'<g class="po-viz-mark" transform="translate(256,72)" color="#4A90D9">' +
+			'<path d="M11 2.6 L18.5 7 L18.5 15.8 L11 20.2 L3.5 15.8 L3.5 7 Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" opacity=".5"/>' +
+			'<path d="M11 6.4 C11.4 8.7 13.3 10.6 15.6 11 C13.3 11.4 11.4 13.3 11 15.6 C10.6 13.3 8.7 11.4 6.4 11 C8.7 10.6 10.6 8.7 11 6.4 Z" fill="currentColor"/>' +
+		'</g>' +
+		'<text x="284" y="88" class="po-viz-title" font-size="12.5" font-weight="600">AI interpretation</text>' +
+		'<rect class="po-viz-line" style="--d:1.35s" x="256" y="106" width="160" height="6" rx="3"/>' +
+		'<rect class="po-viz-line" style="--d:1.5s"  x="256" y="122" width="142" height="6" rx="3"/>' +
+		'<rect class="po-viz-line" style="--d:1.65s" x="256" y="138" width="152" height="6" rx="3"/>' +
+		'<rect class="po-viz-line" style="--d:1.8s"  x="256" y="154" width="118" height="6" rx="3"/>' +
+		/* The citation chips: the interpretation comes back referenced. */
+		'<rect class="po-viz-cite" style="--d:2.0s" x="256" y="178" width="46" height="15" rx="7.5"/>' +
+		'<rect class="po-viz-cite" style="--d:2.12s" x="308" y="178" width="46" height="15" rx="7.5"/>' +
+		'<rect class="po-viz-cite" style="--d:2.24s" x="360" y="178" width="46" height="15" rx="7.5"/>' +
+		'<rect class="po-viz-line" style="--d:2.4s" x="256" y="208" width="132" height="6" rx="3"/>' +
+		'<rect class="po-viz-line" style="--d:2.5s" x="256" y="224" width="96"  height="6" rx="3"/>' +
+	'</g>' +
+	'</svg>';
+
+
+var PO_STEP_ART_UPLOAD =
+	'<svg class="po-step-art-svg" viewBox="0 0 186 90" role="img" aria-label="One row per omic type, each carrying its own values" style="display:block;width:100%;height:auto;font-family:var(--pa-font-sans)" xmlns="http://www.w3.org/2000/svg">' +
+	'<g transform="translate(-258,-10)">' +
 	'<rect x="258" y="12" width="186" height="20" rx="5" fill="#55C9A6" fill-opacity=".16" stroke="#55C9A6" stroke-opacity=".55"/>' +
 	'<circle cx="271" cy="22" r="4.5" fill="#55C9A6"/>' +
 	'<text x="283" y="26" font-size="11" fill="#3F3F46">Gene expression</text>' +
@@ -71,9 +153,12 @@ var PO_HERO_FLOW_SVG =
 	'<rect x="258" y="78" width="186" height="20" rx="5" fill="#738B9D" fill-opacity=".16" stroke="#738B9D" stroke-opacity=".55"/>' +
 	'<circle cx="271" cy="88" r="4.5" fill="#738B9D"/>' +
 	'<text x="283" y="92" font-size="11" fill="#3F3F46">+ 3 more omic types</text>' +
-	'<rect x=".5" y="122.5" width="459" height="111" rx="8" fill="#FFFFFF" stroke="#E4E4E7"/>' +
-	'<text x="24" y="152" font-size="14" font-weight="600" fill="#27272A">Mapped to pathways</text>' +
-	'<text x="24" y="171" font-size="11.5" fill="#71717A">KEGG · Reactome · MapMan</text>' +
+	'</g>' +
+	'</svg>';
+
+var PO_STEP_ART_MATCH =
+	'<svg class="po-step-art-svg" viewBox="0 0 90 68" role="img" aria-label="Features matched onto a pathway network" style="display:block;width:100%;height:auto;font-family:var(--pa-font-sans)" xmlns="http://www.w3.org/2000/svg">' +
+	'<g transform="translate(-306,-144)">' +
 	'<g transform="translate(307.6,145.8) scale(0.62)">' +
 	'<line x1="12" y1="30" x2="52" y2="12" stroke="#878787" stroke-width="1.6" stroke-opacity=".55"/>' +
 	'<line x1="52" y1="12" x2="98" y2="34" stroke="#878787" stroke-width="1.6" stroke-opacity=".55"/>' +
@@ -96,9 +181,12 @@ var PO_HERO_FLOW_SVG =
 	'<circle cx="74" cy="92" r="9" fill="#F3F3F3" stroke="#878787" stroke-width="2.4"/>' +
 	'<circle cx="18" cy="78" r="9" fill="#F3F3F3" stroke="#878787" stroke-width="2.4"/>' +
 	'</g>' +
-	'<rect x=".5" y="244.5" width="459" height="111" rx="8" fill="#FFFFFF" stroke="#E4E4E7"/>' +
-	'<text x="24" y="274" font-size="14" font-weight="600" fill="#27272A">Ranked and painted</text>' +
-	'<text x="24" y="293" font-size="11.5" fill="#71717A">104 of 888 pathways significant</text>' +
+	'</g>' +
+	'</svg>';
+
+var PO_STEP_ART_EXPLORE =
+	'<svg class="po-step-art-svg" viewBox="0 0 186 96" role="img" aria-label="Pathways ranked, and the network painted with your values" style="display:block;width:100%;height:auto;font-family:var(--pa-font-sans)" xmlns="http://www.w3.org/2000/svg">' +
+	'<g transform="translate(-258,-254)">' +
 	'<rect x="258" y="256" width="186" height="5" rx="2.5" fill="#AD5022" opacity="1.0"/>' +
 	'<rect x="258" y="265" width="138" height="5" rx="2.5" fill="#AD5022" opacity="0.7"/>' +
 	'<rect x="258" y="274" width="96" height="5" rx="2.5" fill="#AD5022" opacity="0.4"/>' +
@@ -123,6 +211,7 @@ var PO_HERO_FLOW_SVG =
 	'<circle cx="128" cy="74" r="9" fill="#8080FF" stroke="#878787" stroke-width="1.6"/>' +
 	'<circle cx="74" cy="92" r="9" fill="#FFFFFF" stroke="#878787" stroke-width="1.6"/>' +
 	'<circle cx="18" cy="78" r="9" fill="#0000FF" stroke="#878787" stroke-width="1.6"/>' +
+	'</g>' +
 	'</g>' +
 	'</svg>';
 
@@ -1097,11 +1186,13 @@ function PA_Step1JobView() {
 									'<a href="https://paintomics.readthedocs.io/en/latest/" target="_blank" class="po-btn-primary">Documentation</a>' +
 									'<a href="https://github.com/ConesaLab/paintomics4/" target="_blank" class="po-btn-outline">GitHub</a>' +
 									'<a href="mailto:paintomics4@gmail.com" class="po-btn-outline">Contact</a>' +
+									/* The abstract keeps its id and handler; it is a text link
+									   beside the other three actions rather than a picture. */
+									'<a href="javascript:void(0)" id="graphicalAbstract" class="po-hero-flow-link">View the full graphical abstract</a>' +
 								'</div>' +
 							'</div>' +
 							'<div class="po-hero-visual">' +
-								PO_HERO_FLOW_SVG +
-								'<a href="javascript:void(0)" id="graphicalAbstract" class="po-hero-flow-link">View the full graphical abstract</a>' +
+								PO_HERO_VIZ_SVG +
 							'</div>' +
 						'</div>' +
 					'</div>'
@@ -1135,6 +1226,7 @@ function PA_Step1JobView() {
 							   broken control, so the sentence below is careful to say which
 							   databases can actually be unticked. */
 							'<p>Choose your organism, then check the pathway databases: KEGG is always included, and every other database installed for it is ticked by default, so untick any of <em>those</em> you want to leave out. Decide whether to enable the AI interpretation, describing your experiment design if you do. Then upload your multi-omic data — or load an example (<a class="button btn-secondary btn-inline btn-small" href="javascript:void(0)"><i class="fa fa-file-text-o"></i> Load example</a>) to explore PaintOmics with a ready-made dataset — and click <a class="button btn-success btn-inline btn-small" href="javascript:void(0)"><i class="fa fa-play"></i> Run PaintOmics</a>.</p>' +
+							'<div class="po-step-art">' + PO_STEP_ART_UPLOAD + '</div>' +
 						'</div>' +
 						'<div class="po-step-card">' +
 							'<div class="po-step-number">2</div>' +
@@ -1150,43 +1242,22 @@ function PA_Step1JobView() {
 							   now, leading with what PaintOmics does; every term the
 							   original used, Entrez included, is still here. */
 							'<p>PaintOmics converts the identifiers in your files to the Entrez IDs that KEGG, Reactome and MapMan need. This screen shows the number of features successfully mapped and the data distribution used for pathway colouring. Metabolite name assignments are shown, and you can choose which one to keep when a name is ambiguous. Click <a class="button btn-success btn-inline btn-small" href="javascript:void(0)"><i class="fa fa-play"></i> Next step</a> when you are ready.</p>' +
+							'<div class="po-step-art">' + PO_STEP_ART_MATCH + '</div>' +
 						'</div>' +
 						'<div class="po-step-card">' +
 							'<div class="po-step-number">3</div>' +
 							'<h3>Explore results</h3>' +
-							'<p>You get a Pathways summary, a classification, a network and an enrichment analysis. Paint any of the listed pathways with <a href="javascript:void(0)" class="button btn-inline btn-small" style="background-color:#756C6C;font-size:14px;color:#fff;"><i class="fa fa-paint-brush"></i></a>, or ask for an <b>AI-powered pathway interpretation</b> with <a href="javascript:void(0)" class="button btn-inline btn-small" style="background-color:#2F73BC;font-size:14px;color:#fff;">' + getAIMark(14) + ' AI Interpret</a>. Read more about these analyses in <a href="https://paintomics.readthedocs.io/en/latest/" target="_blank">our documentation</a>.</p>' +
+							'<p>You get a Pathways summary, a classification, a network and an enrichment analysis. Paint any of the listed pathways with <a href="javascript:void(0)" class="button btn-inline btn-small btn-paint" title="Paint this pathway"><i class="fa fa-paint-brush"></i></a>, or ask for an <b>AI-powered pathway interpretation</b> with <a href="javascript:void(0)" class="button btn-inline btn-small btn-ai">' + getAIMark(14) + ' AI Interpret</a>. Read more about these analyses in <a href="https://paintomics.readthedocs.io/en/latest/" target="_blank">our documentation</a>.</p>' +
+							'<div class="po-step-art">' + PO_STEP_ART_EXPLORE + '</div>' +
 						'</div>' +
 					'</div>' +
-					'<h2 style="margin-top:24px;">Video tutorials</h2>' +
-					/* Two chips rather than two embedded players. A live embed paints
-					   YouTube's own title, channel byline and localised "watch on
-					   YouTube" pill over the poster, so each video announced itself
-					   twice - once in its own chrome and once in our caption beneath -
-					   and the pair were the only saturated colour on a page that is
-					   otherwise text and hairlines. They finished louder than the
-					   "How it works" steps they were meant to support.
-
-					   Real anchors to the watch page, not buttons: the click handler
-					   in afterrender opens the modal instead, but cmd-click, middle
-					   click and "copy link address" all still do the obvious thing.
-					   The description each caption used to carry is now the chip's
-					   title attribute, so the wording survives without the height. */
-					'<div class="po-tutorial-links">' +
-						'<a class="po-tutorial-chip" href="https://www.youtube.com/watch?v=brvToUmL1n4" target="_blank"' +
-							' data-video="brvToUmL1n4" data-title="Concepts"' +
-							' title="What PaintOmics does with a multi-omic dataset, and how to read the result it gives back.">' +
-							'<svg class="po-tutorial-play" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M7 4.5l12 7.5-12 7.5z"/></svg>' +
-							'<span class="po-tutorial-name">Concepts</span>' +
-							'<span class="po-tutorial-len">15 min</span>' +
-						'</a>' +
-						'<a class="po-tutorial-chip" href="https://www.youtube.com/watch?v=4XxPKqAubsA" target="_blank"' +
-							' data-video="4XxPKqAubsA" data-title="Step by step"' +
-							' title="A run from end to end: uploading the files, matching identifiers and exploring the pathways.">' +
-							'<svg class="po-tutorial-play" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M7 4.5l12 7.5-12 7.5z"/></svg>' +
-							'<span class="po-tutorial-name">Step by step</span>' +
-							'<span class="po-tutorial-len">22 min</span>' +
-						'</a>' +
-					'</div>' +
+					/* The "Video tutorials" block is gone. Both recordings are on
+					   the channel that Resources > Paintomics tutorial video already
+					   links from the header bar, so the landing page was a second
+					   door to the same place - and they predate this interface, so
+					   they show a product that no longer looks like this. The chip
+					   styles and the click handler went with the markup rather than
+					   being left behind as CSS and JS matching nothing. */
 					/* The closing "Check the User guide ... email ... GitHub page"
 					   line is gone. Its three links were the hero's three buttons
 					   again, to the same three URLs: the user guide is the
@@ -1637,67 +1708,6 @@ function PA_Step1JobView() {
 						imageWindow.show();
 					});
 
-					/* The tutorial chips. Same Ext.Window the graphical abstract uses
-					   above, which is what gives this the mask, the close tool and
-					   Esc-to-close for nothing. It also matters that the default
-					   closeAction is "destroy": that takes the iframe out of the DOM,
-					   which is the only thing that reliably stops the audio. A
-					   hand-rolled overlay has to remember to blank the src, and the
-					   symptom when it forgets is a video still talking behind a
-					   dialog that is no longer on screen.
-
-					   Not preventDefault() on every click - a modified click is the
-					   user asking for a tab, and the href is a real watch page, so
-					   let the browser have it. Modifiers only, deliberately: a middle
-					   click arrives as auxclick and never reaches a click handler, so
-					   testing the button number here would buy nothing and would cost
-					   the keyboard, where Enter on the link reports no button and
-					   would have fallen through to the href. */
-					$(".po-tutorial-chip").click(function(event) {
-						if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
-							return;
-						}
-						event.preventDefault();
-
-						var chip = $(this);
-						/* 16:9 derived from the width, unless that would be taller
-						   than the window, in which case height is the scarce
-						   dimension and the width follows from it. 920 is the cap:
-						   past that the player is wider than the card it came from. */
-						var width = Math.min(920, Math.round(Ext.Element.getViewportWidth() * 0.9));
-						var maxVideoHeight = Math.round(Ext.Element.getViewportHeight() * 0.8);
-						if (Math.round(width * 9 / 16) > maxVideoHeight) {
-							width = Math.round(maxVideoHeight * 16 / 9);
-						}
-						var videoHeight = Math.round(width * 9 / 16);
-
-						var videoWindow = new Ext.Window({
-							modal: true,
-							border: false,
-							plain: true,
-							constrain: true,
-							title: chip.attr("data-title"),
-							width: width,
-							/* Corrected against the measured header below. This is
-							   only a starting value, so that the window never opens
-							   at some default size and then jumps. */
-							height: videoHeight + 40,
-							resizable: {preserveAspectRatio: true},
-							html: '<iframe src="https://www.youtube-nocookie.com/embed/' + chip.attr("data-video") + '?autoplay=1&rel=0" ' +
-								'title="' + chip.attr("data-title") + '" frameborder="0" style="display:block;width:100%;height:100%;border:0;" ' +
-								'allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>'
-						});
-						videoWindow.show();
-						/* Both the header's height and the window's borders are theme
-						   values, so measure rather than guess: the ratio is taken
-						   from the body's own width, not the window's, or the two
-						   border pixels come off the width without coming off the
-						   height and the player letterboxes by 2px. Give the window
-						   back whatever the body is short or long by and the body
-						   lands on exactly 16:9. */
-						videoWindow.setHeight(videoWindow.getHeight() - videoWindow.body.getHeight() +
-							Math.round(videoWindow.body.getWidth() * 9 / 16));
-					});
 
 					var containers = [$("#availableOmicsContainer")[0], $("#submittingPanelsContainer-targetEl")[0]];
 

@@ -614,26 +614,6 @@
 [data-theme="dark"] .po-hero h1 { color: var(--pa-ink-title); }
 [data-theme="dark"] .po-hero-desc { color: var(--pa-ink-body); }
 
-/* Video tutorials. --pa-border-control rather than the --pa-border the light
-   sheet sets, for the same reason .po-btn-outline above takes that swap: on a
-   dark page the hairline that separates a control from the surface behind it
-   has to be lighter than the one that separates two panels, or it separates
-   nothing. Measured, #33353B against this page is 1.45:1 and the chip reads as
-   a rectangle of very slightly different black; #6E7178 is 3.6:1 and reads as
-   a button. --pa-ink-title is restated because the light sheet has to write it
-   as `var(--pa-ink-title, #27272A)` - the token is defined in this file and
-   nowhere else, so the fallback would otherwise win here. */
-[data-theme="dark"] .po-tutorial-chip {
-	border-color: var(--pa-border-control);
-	color: var(--pa-ink-title);
-}
-[data-theme="dark"] .po-tutorial-chip:hover,
-[data-theme="dark"] .po-tutorial-chip:focus {
-	background: var(--pa-surface-quiet);
-	border-color: var(--pa-border-control-hover);
-	color: var(--pa-ink-title);
-}
-[data-theme="dark"] .po-tutorial-len { color: var(--pa-ink-muted); }
 [data-theme="dark"] .po-step-card h3 { color: var(--pa-ink-title); }
 [data-theme="dark"] .po-step-card {
 	background: var(--pa-surface);

@@ -3922,12 +3922,19 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
    that remains lives in the header bar and is styled as #header .appVersion. */
 
 .po-hero h1 {
-  font-size: 36px;
-  /* `lighter` resolves to 100, which at 36px is the thinnest thing on the
-     page: the product's own name came out paler than the sentence under it.
-     300 keeps the airy display treatment and still has a stroke. */
-  font-weight: 300;
-  color: #27272A;
+  /* Was 36px at weight 300, in a card 1200px wide and 297px tall - a light
+     title, at a size that would suit a sidebar, holding down a whole hero. The
+     word for how that reads is thin, and it was literally true: 300 is the
+     lightest weight this family ships.
+
+     46px at 400 is the same restraint with a stroke behind it. It scales with
+     the viewport so it does not overrun a narrow window, and it is the only
+     size change needed - the ramp below it (46 / 16.5 / 13) now steps twice
+     instead of hovering around one size. */
+  font-size: clamp(32px, 3.4vw, 46px);
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  color: var(--pa-ink-title, #1A1A18);
   /* The badge used to sit above this, so the 14px top margin was the gap
      between the two. The title is the first thing in the column now. */
   margin: 0 0 14px;
@@ -3936,19 +3943,26 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
 }
 
 .po-hero-desc {
-  font-size: 15px;
-  line-height: 1.7;
+  /* One step under the title rather than two, so the hero reads as a lead
+     paragraph and not as body copy that happens to be first. */
+  font-size: 16.5px;
+  line-height: 1.65;
   color: #555;
-  margin-bottom: 20px;
+  margin-bottom: 22px;
 }
 
 .po-hero-ai-highlight {
   background: #f5fafa;
   border: 1px solid #c8e0e3;
   border-left: 3px solid #007383;
-  border-radius: 4px;
-  padding: 14px 18px;
+  border-radius: var(--pa-radius-sm);
+  padding: 16px 20px;
   margin-bottom: 24px;
+  /* Capped to the measure the description already uses. Unconstrained it ran
+     the full 1200px of the card, which is roughly 160 characters a line - long
+     enough that the eye loses the return, and wide enough that the callout
+     read as a band across the page rather than as part of the column. */
+  max-width: var(--pa-measure);
 }
 
 .po-hero-ai-highlight .po-ai-icon {
@@ -4230,9 +4244,39 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
      dated device on the page. */
   border-radius: var(--pa-radius);
   padding: 24px;
-  text-align: center;
+  /* Left, not centre. The disc and the heading were centred over a
+     left-aligned paragraph, so the three things in the card each started on a
+     different x and nothing lined up with anything - which is the specific
+     reason this block read as slightly off rather than as designed. One edge
+     now: number, title and prose all begin together. */
+  text-align: left;
+  /* A column, so the artwork below can be pushed to the bottom with
+     `margin-top: auto`. The three cards hold unequal prose - measured at 297,
+     277 and 238px against a common 335px card - and that difference used to
+     fall out as dead space at the foot of each one, 97px of it in the worst
+     case. Putting the picture there spends the gap instead of leaving it, and
+     lands all three pictures on one line across the row. */
+  display: flex;
+  flex-direction: column;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
   transition: transform 0.2s, box-shadow 0.2s;
+}
+
+/* The stage diagram at the foot of each card. `margin-top: auto` is what does
+   the work: it eats whatever vertical slack the card has left. */
+.po-step-art {
+  margin-top: auto;
+  padding-top: 20px;
+}
+
+.po-step-art-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  /* Capped and centred so the narrow middle diagram is not stretched to the
+     width of the two wide ones - they are 90, 186 and 186 units across. */
+  max-width: 220px;
+  margin: 0 auto;
 }
 
 .po-step-card:hover {
@@ -4258,7 +4302,12 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
    these headings also match - the step cards live inside a .contentbox. */
 div.po-step-card h3 {
   font-size: 16px;
-  color: #007383;
+  /* Was #007383. That teal was the last cold colour on a warm page, and the
+     card already carries an accent - the orange disc directly above it. A
+     heading and a badge in two different accent hues, on a card whose only
+     other colour is body grey, is what makes three of these in a row look
+     restless. Near-black, so the disc is the one accent per card. */
+  color: var(--pa-ink-title, #1A1A18);
   margin-bottom: 6px;
   font-weight: 600;
   /* The card supplies its own 24px inset, so the card-heading inset from
@@ -4267,12 +4316,78 @@ div.po-step-card h3 {
   padding-right: 0;
 }
 
+/* The same double-inset, on the prose. `div.contentbox p` adds
+   --pa-card-inset to every paragraph inside a card, which is right for a
+   paragraph sitting directly on a card and wrong twice over here: the step
+   card already pads itself by 24px, and the hero runs its own layout.
+
+   Centring hid this. With the heading centred and the text left-aligned there
+   was no shared edge to be wrong about, so a 26px indent just read as the way
+   the card was. Left-aligning made it visible immediately: measured, the card
+   heading started at x=86 and its own paragraph at x=112, and in the hero the
+   title sat at 120 with its description at 146. Same 26px in both places.
+
+   Specificity is a tie with `div.contentbox p` in the step-card case, decided
+   by source order - which is why this sits below that rule, exactly as the h3
+   fix above it does. */
+div.po-step-card p,
+.po-hero-text .po-hero-desc {
+  padding-left: 0;
+  padding-right: 0;
+}
+
 .po-step-card p,
 .po-step-card ol {
   font-size: 13px;
   color: #666;
-  line-height: 1.6;
+  /* 1.6 gave a 20.8px line box, and the inline buttons sitting in this prose
+     are 22px tall - so every one of them stuck out of its own line and
+     overlapped the line above. In step 3, where two of them land on
+     consecutive lines, the paint control and the AI Interpret pill collided
+     outright. 1.75 is 22.75px, which clears the tallest of them. */
+  line-height: 1.75;
   text-align: left;
+}
+
+/* The inline buttons in these cards are pictures of real controls, so they
+   should look like the control they name. Two things stopped them:
+
+   The shape. Every real button in the toolbar is a 999px pill; these were 6px
+   rectangles, so a sentence saying "click Run PaintOmics" showed a shape that
+   appears nowhere in the interface.
+
+   And "Load example" was the wrong colour entirely. The toolbar's own Load
+   example is a white outline button - measured, white fill with #24252A ink -
+   while its inline portrait was solid green on white. Two controls with the
+   same name and nothing in common to look at. `btn-secondary` is right in the
+   toolbar, where a later `.btn-right` rule neutralises it; inline there is no
+   such rule, so the raw green came through. Restated here rather than by
+   changing btn-secondary, which other screens rely on. */
+.po-step-card a.button.btn-inline {
+  border-radius: 999px;
+  vertical-align: middle;
+}
+
+.po-step-card a.button.btn-secondary.btn-inline {
+  background: #FFFFFF;
+  color: #24252A;
+  border-color: #878787;
+}
+
+/* Step 3's two controls, previously carrying their colours in a style
+   attribute along with a `font-size: 14px` that is what made them 24px tall
+   and overlapping. The colours are unchanged; they are just declared where
+   they can be themed and where btn-small's 12px reaches them. */
+.po-step-card a.button.btn-paint {
+  background-color: #756C6C;
+  border-color: #756C6C;
+  color: #FFFFFF;
+}
+
+.po-step-card a.button.btn-ai {
+  background-color: #2F73BC;
+  border-color: #2F73BC;
+  color: #FFFFFF;
 }
 
 .po-step-card ol {
@@ -4282,84 +4397,6 @@ div.po-step-card h3 {
 
 .po-step-card li {
   margin: 4px 0;
-}
-
-/* Video tutorials ------------------------------------------------------------
-   Two live embeds used to sit here, about 460px each. They are gone rather
-   than merely smaller, because size was only half of it: an embedded player
-   paints YouTube's own title, channel byline and a localised "watch on
-   YouTube" pill over its poster, so every video announced itself twice - once
-   in YouTube's voice, in whatever language the viewer's account is set to, and
-   once in our caption underneath. The pair were also the only saturated colour
-   on a page that is otherwise text and hairlines, so the bottom of the card
-   pulled harder than the three numbered steps it was there to support.
-
-   What replaces them is a link with a play glyph and a running time. It costs
-   one row rather than a third of a screen, it loads no third-party player on a
-   page people came to upload a file on, and the running time is stated because
-   nobody should start a 22-minute video expecting three. The sentence each
-   caption carried is now the chip's title attribute, so the wording survives
-   the height. The video itself opens in the same Ext.Window the graphical
-   abstract uses, at a size the reader chose to ask for.
-
-   --pa-radius-sm, not --pa-radius: this is a control, so it takes the corner
-   every other button and input in the app takes. */
-.po-tutorial-links {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  /* Starts on --pa-card-inset like the heading above and the paragraph below,
-     which is the whole reason the old grid carried the same margin. */
-  margin: 14px var(--pa-card-inset) 6px;
-}
-
-.po-tutorial-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 9px;
-  padding: 7px 14px 7px 11px;
-  /* Deliberately the same three declarations .po-hero-actions .po-btn-outline
-     carries: transparent fill, --pa-border hairline, --pa-radius-sm. This is
-     an outline control and the app already has one, so it takes that one's
-     values rather than a second opinion about what an outline control is. */
-  border: 1px solid var(--pa-border);
-  border-radius: var(--pa-radius-sm);
-  background: transparent;
-  color: var(--pa-ink-title, #27272A);
-  font-size: 13.5px;
-  font-weight: 600;
-  line-height: 1.2;
-  text-decoration: none;
-  transition: background var(--pa-transition), border-color var(--pa-transition);
-}
-
-/* An anchor, but not a prose link: the rules further up this file give `a` a
-   link colour and an underline on hover, and a control wants neither. */
-.po-tutorial-chip:hover,
-.po-tutorial-chip:focus {
-  background: var(--pa-surface-quiet, #F1F2F4);
-  border-color: var(--pa-border-control-hover, #C7C7CC);
-  color: var(--pa-ink-title, #27272A);
-  text-decoration: none;
-}
-
-.po-tutorial-play {
-  /* 16px against a 24 viewBox with the triangle spanning 15 of those units
-     puts the glyph at 10px tall, which is the cap height of the 13.5px/600
-     label beside it. Sized to the letters rather than to a round number, so
-     the two sit on one optical line. */
-  width: 16px;
-  height: 16px;
-  flex: none;
-  /* currentColor, not YouTube red. That red button was the other half of what
-     made the old section shout. */
-  fill: currentColor;
-}
-
-.po-tutorial-len {
-  font-weight: 400;
-  font-size: 12.5px;
-  color: var(--pa-ink-muted);
 }
 
 /* The prose column of the Regions2Genes / miRNA2Genes intro card, beside the
@@ -4627,10 +4664,6 @@ div.po-step-card h3 {
   .po-steps-grid {
     grid-template-columns: 1fr;
   }
-  /* .po-tutorials-grid used to be restated here as a single column. Its
-     `auto-fit, minmax(300px, 1fr)` track already collapses to one column
-     below ~620px, so the override only duplicated what the grid does by
-     itself. */
 }
 
 /* ----- Step-2: Replicate detection card ----- */
@@ -5196,4 +5229,92 @@ div.repDetectionCard h3 {
 	opacity: 1;
 	color: #9A9AA0;
 	cursor: default;
+}
+
+/* Hero visualisation -----------------------------------------------------------
+   The animated network-and-interpretation figure beside the headline. It exists
+   because the hero had nothing on its right once the flow diagram moved into the
+   step cards, and because a picture there should earn its place: this one shows
+   the two things the product does that nothing else on the page demonstrates -
+   painting a network with your values, and reading that network back as prose.
+
+   The whole sequence is about 3 seconds and runs once per page load, not on a
+   loop. A landing page that keeps moving is a landing page nobody can read the
+   text on.
+
+   Every animated element is keyed off its own `--d` custom property, set inline
+   on the element, so the order is visible in the markup rather than encoded in a
+   pile of :nth-child rules. */
+.po-hero-viz {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/* The edges draw themselves in first, so the network exists before it is
+   painted - which is the actual order of operations. */
+.po-hero-viz .po-viz-edges path {
+  stroke-dasharray: 120;
+  stroke-dashoffset: 120;
+  animation: poVizDraw 0.9s ease-out forwards;
+}
+
+/* Then each feature takes its colour. The fill is a second copy of the shape
+   over the white one, faded in, rather than a `fill` transition - a fill
+   transition from white would wash through pink on the way to red, which is a
+   value this ramp actually uses. */
+.po-hero-viz .po-viz-paint {
+  opacity: 0;
+  animation: poVizPaint 0.5s ease-out forwards;
+  animation-delay: calc(0.8s + var(--d, 0s));
+}
+
+.po-hero-viz .po-viz-panel {
+  fill: var(--pa-surface-quiet, #F3F2ED);
+  stroke: var(--pa-border);
+  opacity: 0;
+  animation: poVizPaint 0.5s ease-out forwards;
+  animation-delay: 1.15s;
+}
+
+.po-hero-viz .po-viz-mark,
+.po-hero-viz .po-viz-title {
+  opacity: 0;
+  animation: poVizPaint 0.4s ease-out forwards;
+  animation-delay: 1.3s;
+}
+
+.po-hero-viz .po-viz-title { fill: var(--pa-ink-title, #1A1A18); }
+
+/* The lines of the interpretation, each growing from its left edge, which is
+   how text arrives. */
+.po-hero-viz .po-viz-line,
+.po-hero-viz .po-viz-cite {
+  transform: scaleX(0);
+  transform-origin: left center;
+  animation: poVizType 0.45s cubic-bezier(.2,.7,.3,1) forwards;
+  animation-delay: var(--d, 0s);
+}
+
+.po-hero-viz .po-viz-line { fill: var(--pa-border); }
+/* The citations are the one thing in the panel that is not grey: an
+   interpretation you can check is the point of the feature. */
+.po-hero-viz .po-viz-cite { fill: #4A90D9; opacity: .32; }
+
+@keyframes poVizDraw  { to { stroke-dashoffset: 0; } }
+@keyframes poVizPaint { to { opacity: 1; } }
+@keyframes poVizType  { to { transform: scaleX(1); } }
+
+/* Anyone who has asked for less motion gets the finished picture immediately.
+   Note this restates the end state rather than only zeroing the duration: with
+   `animation: none` the elements would keep their starting opacity: 0 and the
+   figure would be half missing. */
+@media (prefers-reduced-motion: reduce) {
+  .po-hero-viz .po-viz-edges path { stroke-dashoffset: 0; animation: none; }
+  .po-hero-viz .po-viz-paint,
+  .po-hero-viz .po-viz-panel,
+  .po-hero-viz .po-viz-mark,
+  .po-hero-viz .po-viz-title { opacity: 1; animation: none; }
+  .po-hero-viz .po-viz-line,
+  .po-hero-viz .po-viz-cite { transform: scaleX(1); animation: none; }
 }
