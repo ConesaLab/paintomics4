@@ -322,11 +322,10 @@
 [data-theme="dark"] .contentbox,
 [data-theme="dark"] .omicSummaryBox,
 [data-theme="dark"] .po-about-section,
+/* No fill, border or shadow to restate: the step cards are columns on the
+   section's own surface in both themes now, so only their ink is themed. */
 [data-theme="dark"] .po-step-card {
-	background-color: var(--pa-surface);
-	border-color: var(--pa-border);
 	color: var(--pa-ink-body);
-	box-shadow: var(--pa-shadow);
 }
 /* Card headings carry their own white fill and near-black ink, so both have to
    move together. Recolouring only the ink - which is what a blanket heading
@@ -616,8 +615,6 @@
 
 [data-theme="dark"] .po-step-card h3 { color: var(--pa-ink-title); }
 [data-theme="dark"] .po-step-card {
-	background: var(--pa-surface);
-	border-color: var(--pa-border);
 	color: var(--pa-ink-body);
 }
 [data-theme="dark"] .po-step-card li,
@@ -640,7 +637,6 @@
 [data-theme="dark"] .po-hero-ai-highlight .po-ai-icon { color: var(--pa-ai-blue); }
 [data-theme="dark"] .po-ai-section-body,
 [data-theme="dark"] .po-ai-section-body p { color: var(--pa-ink-body); }
-[data-theme="dark"] .po-hero-flow-link { color: var(--pa-link); }
 
 /* The hero diagram is inline SVG with its own light fills, drawn to sit on a
    white card. Nudging the three panel plates and their ink is enough; the omic

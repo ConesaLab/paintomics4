@@ -72,39 +72,85 @@
    Animation lives in main.css so it can be turned off under
    prefers-reduced-motion, where every element simply renders in its final
    state - a painted network beside a written interpretation. */
+/* The hero visual: the product doing its own job.
+
+   Two pathway networks, cross-faded. Each carries its own topology and its own
+   values, painted with the same bwr ramp the application paints real data with
+   - red high, white zero, blue low - and beside them a panel writes the
+   interpretation, wipes it, and writes a different one. Recolouring a single
+   fixed network was not enough: the point is that you ask about a different
+   pathway and get a different answer, so the network has to change too.
+
+   Colours and shapes are the product's own. Circles are compounds and boxes
+   are genes, exactly as the KEGG diagrams in the step cards below draw them,
+   the grey is their stroke, and the AI blue is --pa-ai-blue. Nothing here
+   invents a palette.
+
+   The whole cycle is 9s and never stops. Animation lives in main.css so it can
+   be turned off under prefers-reduced-motion, where the first network and a
+   finished interpretation simply render as a still. */
 var PO_HERO_VIZ_SVG =
 	'<svg class="po-hero-viz" viewBox="0 0 440 300" role="img" xmlns="http://www.w3.org/2000/svg" ' +
 		'aria-label="A pathway network is painted with your omic values, then read by the AI into a written interpretation">' +
 	'<title>From painted pathway to written interpretation</title>' +
 
-	/* --- the network ------------------------------------------------------ */
-	'<g class="po-viz-edges" stroke="#878787" stroke-opacity=".5" stroke-width="1.6" fill="none">' +
-		'<path d="M42 96 L104 58"/>' + '<path d="M104 58 L168 92"/>' +
-		'<path d="M42 96 L96 148"/>' + '<path d="M96 148 L168 92"/>' +
-		'<path d="M168 92 L196 168"/>' + '<path d="M96 148 L118 210"/>' +
-		'<path d="M118 210 L46 186"/>' + '<path d="M118 210 L196 168"/>' +
+	'<g class="po-viz-net po-viz-net-a">' +
+	'<g stroke="#878787" stroke-opacity=".5" stroke-width="1.6" fill="none">' +
+		'<path d="M42 96 L104 58"/>' +
+		'<path d="M104 58 L168 92"/>' +
+		'<path d="M42 96 L96 148"/>' +
+		'<path d="M96 148 L168 92"/>' +
+		'<path d="M168 92 L196 168"/>' +
+		'<path d="M96 148 L118 210"/>' +
+		'<path d="M118 210 L46 186"/>' +
+		'<path d="M118 210 L196 168"/>' +
 		'<path d="M46 186 L42 96"/>' +
 	'</g>' +
-
-	/* Each feature is an outline that is always there, plus a fill that arrives
-	   on its own delay - which is what "being painted" looks like. */
-	'<g class="po-viz-nodes">' +
-		'<circle cx="42"  cy="96"  r="11" fill="#FFFFFF" stroke="#878787" stroke-width="1.8"/>' +
-		'<circle cx="42"  cy="96"  r="11" class="po-viz-paint" style="--d:0.0s"  fill="#FF0000"/>' +
-		'<circle cx="104" cy="58"  r="11" fill="#FFFFFF" stroke="#878787" stroke-width="1.8"/>' +
-		'<circle cx="104" cy="58"  r="11" class="po-viz-paint" style="--d:0.15s" fill="#FF8080"/>' +
+		'<circle cx="42" cy="96" r="11" fill="#FFFFFF" stroke="#878787" stroke-width="1.8"/>' +
+		'<circle cx="42" cy="96" r="11" fill="#FF0000"/>' +
+		'<circle cx="104" cy="58" r="11" fill="#FFFFFF" stroke="#878787" stroke-width="1.8"/>' +
+		'<circle cx="104" cy="58" r="11" fill="#FF8080"/>' +
 		'<rect x="156" y="80" width="13" height="16" rx="1.5" fill="#FFFFFF" stroke="#878787" stroke-width="1.6"/>' +
-		'<rect x="156" y="80" width="13" height="16" rx="1.5" class="po-viz-paint" style="--d:0.3s"  fill="#0000FF"/>' +
+		'<rect x="156" y="80" width="13" height="16" rx="1.5" fill="#0000FF"/>' +
 		'<rect x="169" y="80" width="13" height="16" rx="1.5" fill="#FFFFFF" stroke="#878787" stroke-width="1.6"/>' +
-		'<rect x="169" y="80" width="13" height="16" rx="1.5" class="po-viz-paint" style="--d:0.42s" fill="#8080FF"/>' +
-		'<circle cx="96"  cy="148" r="11" fill="#FFFFFF" stroke="#878787" stroke-width="1.8"/>' +
-		'<circle cx="96"  cy="148" r="11" class="po-viz-paint" style="--d:0.55s" fill="#FF0000"/>' +
+		'<rect x="169" y="80" width="13" height="16" rx="1.5" fill="#8080FF"/>' +
+		'<circle cx="96" cy="148" r="11" fill="#FFFFFF" stroke="#878787" stroke-width="1.8"/>' +
+		'<circle cx="96" cy="148" r="11" fill="#FF0000"/>' +
 		'<circle cx="196" cy="168" r="11" fill="#FFFFFF" stroke="#878787" stroke-width="1.8"/>' +
-		'<circle cx="196" cy="168" r="11" class="po-viz-paint" style="--d:0.7s"  fill="#8080FF"/>' +
+		'<circle cx="196" cy="168" r="11" fill="#8080FF"/>' +
 		'<circle cx="118" cy="210" r="11" fill="#FFFFFF" stroke="#878787" stroke-width="1.8"/>' +
-		'<circle cx="118" cy="210" r="11" class="po-viz-paint" style="--d:0.85s" fill="#FF8080"/>' +
-		'<circle cx="46"  cy="186" r="11" fill="#FFFFFF" stroke="#878787" stroke-width="1.8"/>' +
-		'<circle cx="46"  cy="186" r="11" class="po-viz-paint" style="--d:1.0s"  fill="#0000FF"/>' +
+		'<circle cx="118" cy="210" r="11" fill="#FF8080"/>' +
+		'<circle cx="46" cy="186" r="11" fill="#FFFFFF" stroke="#878787" stroke-width="1.8"/>' +
+		'<circle cx="46" cy="186" r="11" fill="#0000FF"/>' +
+	'</g>' +
+
+	'<g class="po-viz-net po-viz-net-b">' +
+	'<g stroke="#878787" stroke-opacity=".5" stroke-width="1.6" fill="none">' +
+		'<path d="M58 72 L122 64"/>' +
+		'<path d="M122 64 L190 92"/>' +
+		'<path d="M190 92 L152 146"/>' +
+		'<path d="M152 146 L72 152"/>' +
+		'<path d="M72 152 L58 72"/>' +
+		'<path d="M152 146 L196 196"/>' +
+		'<path d="M196 196 L112 214"/>' +
+		'<path d="M112 214 L72 152"/>' +
+	'</g>' +
+		'<circle cx="58" cy="72" r="11" fill="#FFFFFF" stroke="#878787" stroke-width="1.8"/>' +
+		'<circle cx="58" cy="72" r="11" fill="#8080FF"/>' +
+		'<rect x="116" y="56" width="13" height="16" rx="1.5" fill="#FFFFFF" stroke="#878787" stroke-width="1.6"/>' +
+		'<rect x="116" y="56" width="13" height="16" rx="1.5" fill="#FF0000"/>' +
+		'<rect x="129" y="56" width="13" height="16" rx="1.5" fill="#FFFFFF" stroke="#878787" stroke-width="1.6"/>' +
+		'<rect x="129" y="56" width="13" height="16" rx="1.5" fill="#FF8080"/>' +
+		'<circle cx="190" cy="92" r="11" fill="#FFFFFF" stroke="#878787" stroke-width="1.8"/>' +
+		'<circle cx="190" cy="92" r="11" fill="#FF0000"/>' +
+		'<circle cx="152" cy="146" r="11" fill="#FFFFFF" stroke="#878787" stroke-width="1.8"/>' +
+		'<circle cx="152" cy="146" r="11" fill="#FFFFFF"/>' +
+		'<circle cx="72" cy="152" r="11" fill="#FFFFFF" stroke="#878787" stroke-width="1.8"/>' +
+		'<circle cx="72" cy="152" r="11" fill="#FF8080"/>' +
+		'<circle cx="196" cy="196" r="11" fill="#FFFFFF" stroke="#878787" stroke-width="1.8"/>' +
+		'<circle cx="196" cy="196" r="11" fill="#0000FF"/>' +
+		'<circle cx="112" cy="214" r="11" fill="#FFFFFF" stroke="#878787" stroke-width="1.8"/>' +
+		'<circle cx="112" cy="214" r="11" fill="#FF0000"/>' +
 	'</g>' +
 
 	/* --- the interpretation ------------------------------------------------ */
@@ -115,16 +161,16 @@ var PO_HERO_VIZ_SVG =
 			'<path d="M11 6.4 C11.4 8.7 13.3 10.6 15.6 11 C13.3 11.4 11.4 13.3 11 15.6 C10.6 13.3 8.7 11.4 6.4 11 C8.7 10.6 10.6 8.7 11 6.4 Z" fill="currentColor"/>' +
 		'</g>' +
 		'<text x="284" y="88" class="po-viz-title" font-size="12.5" font-weight="600">AI interpretation</text>' +
-		'<rect class="po-viz-line" style="--d:1.35s" x="256" y="106" width="160" height="6" rx="3"/>' +
-		'<rect class="po-viz-line" style="--d:1.5s"  x="256" y="122" width="142" height="6" rx="3"/>' +
-		'<rect class="po-viz-line" style="--d:1.65s" x="256" y="138" width="152" height="6" rx="3"/>' +
-		'<rect class="po-viz-line" style="--d:1.8s"  x="256" y="154" width="118" height="6" rx="3"/>' +
+		'<rect class="po-viz-line" style="--d:0.15s" x="256" y="106" width="160" height="6" rx="3"/>' +
+		'<rect class="po-viz-line" style="--d:0.3s"  x="256" y="122" width="142" height="6" rx="3"/>' +
+		'<rect class="po-viz-line" style="--d:0.45s" x="256" y="138" width="152" height="6" rx="3"/>' +
+		'<rect class="po-viz-line" style="--d:0.6s"  x="256" y="154" width="118" height="6" rx="3"/>' +
 		/* The citation chips: the interpretation comes back referenced. */
-		'<rect class="po-viz-cite" style="--d:2.0s" x="256" y="178" width="46" height="15" rx="7.5"/>' +
-		'<rect class="po-viz-cite" style="--d:2.12s" x="308" y="178" width="46" height="15" rx="7.5"/>' +
-		'<rect class="po-viz-cite" style="--d:2.24s" x="360" y="178" width="46" height="15" rx="7.5"/>' +
-		'<rect class="po-viz-line" style="--d:2.4s" x="256" y="208" width="132" height="6" rx="3"/>' +
-		'<rect class="po-viz-line" style="--d:2.5s" x="256" y="224" width="96"  height="6" rx="3"/>' +
+		'<rect class="po-viz-cite" style="--d:0.8s"  x="256" y="178" width="46" height="15" rx="7.5"/>' +
+		'<rect class="po-viz-cite" style="--d:0.92s" x="308" y="178" width="46" height="15" rx="7.5"/>' +
+		'<rect class="po-viz-cite" style="--d:1.04s" x="360" y="178" width="46" height="15" rx="7.5"/>' +
+		'<rect class="po-viz-line" style="--d:1.2s" x="256" y="208" width="132" height="6" rx="3"/>' +
+		'<rect class="po-viz-line" style="--d:1.3s" x="256" y="224" width="96"  height="6" rx="3"/>' +
 	'</g>' +
 	'</svg>';
 
@@ -1188,7 +1234,6 @@ function PA_Step1JobView() {
 									'<a href="mailto:paintomics4@gmail.com" class="po-btn-outline">Contact</a>' +
 									/* The abstract keeps its id and handler; it is a text link
 									   beside the other three actions rather than a picture. */
-									'<a href="javascript:void(0)" id="graphicalAbstract" class="po-hero-flow-link">View the full graphical abstract</a>' +
 								'</div>' +
 							'</div>' +
 							'<div class="po-hero-visual">' +
@@ -1694,19 +1739,6 @@ function PA_Step1JobView() {
 						me.addNewOmicSubmittingPanel(type);
 					});
 			
-					$("#graphicalAbstract").click(function(){
-						var imageWindow = new Ext.Window({
-							modal:true,
-							border:false,
-							plain:true,
-							width: '80%',
-							height: '90%',
-							constrain:true,
-							html:'<img style="margin: 0 auto;max-height:100%; max-width:100%;" src="resources/images/GraphicalAbstract.png" />',
-							resizable:{preserveAspectRatio: true}
-						});
-						imageWindow.show();
-					});
 
 
 					var containers = [$("#availableOmicsContainer")[0], $("#submittingPanelsContainer-targetEl")[0]];
@@ -1728,6 +1760,25 @@ function PA_Step1JobView() {
 
 					me.addNewOmicSubmittingPanel("metabolomics");
 					me.addNewOmicSubmittingPanel("geneexpression");
+
+					/* ...and then start at the top, the way a page does.
+					   ExtJS gives every panel it adds `tabindex="-1"` and focuses it,
+					   and a browser scrolls a focused element into view - so the
+					   application opened 1218px down, with the whole hero and "How it
+					   works" already above the fold before the first paint.
+					   Measured both halves of that: focusing one of these boxes with
+					   the attribute present moves the scroller to 1278, and the same
+					   focus with it removed moves it to 0. So the attribute is the
+					   cause, and removing it is the fix rather than scrolling back
+					   afterwards - a correction would race the focus, which lands on
+					   its own schedule and not in this handler.
+					   Only these two, and only here. When the user adds an omic later
+					   that panel keeps its tabindex, and scrolling to the thing they
+					   just asked for is the right behaviour. The fields inside are
+					   untouched and still take focus normally; it is the layout
+					   container that had no business holding it. */
+					$(".omicbox").removeAttr("tabindex");
+					$("#mainViewCenterPanel").scrollTop(0);
 				},
 				beforedestroy: function() {
 					me.getModel().deleteObserver(me);
