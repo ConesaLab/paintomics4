@@ -1134,12 +1134,22 @@ function PA_Step1JobView() {
 							   untick a box that cannot be unticked sends them looking for a
 							   broken control, so the sentence below is careful to say which
 							   databases can actually be unticked. */
-							'<p>Choose your organism, then check the pathway databases: KEGG is always included, and every other database installed for your organism is ticked by default, so untick any of <em>those</em> you want to leave out. Decide whether to enable the AI interpretation, describing your experiment design if you do. Then upload your multi-omic data — or load an example (<a class="button btn-secondary btn-inline btn-small" href="javascript:void(0)"><i class="fa fa-file-text-o"></i> Load example</a>) to explore PaintOmics with a ready-made dataset — and click <a class="button btn-success btn-inline btn-small" href="javascript:void(0)"><i class="fa fa-play"></i> Run PaintOmics</a>.</p>' +
+							'<p>Choose your organism, then check the pathway databases: KEGG is always included, and every other database installed for it is ticked by default, so untick any of <em>those</em> you want to leave out. Decide whether to enable the AI interpretation, describing your experiment design if you do. Then upload your multi-omic data — or load an example (<a class="button btn-secondary btn-inline btn-small" href="javascript:void(0)"><i class="fa fa-file-text-o"></i> Load example</a>) to explore PaintOmics with a ready-made dataset — and click <a class="button btn-success btn-inline btn-small" href="javascript:void(0)"><i class="fa fa-play"></i> Run PaintOmics</a>.</p>' +
 						'</div>' +
 						'<div class="po-step-card">' +
 							'<div class="po-step-number">2</div>' +
 							'<h3>Identifier and name matching</h3>' +
-							'<p>PaintOmics requires Entrez IDs for working with KEGG, Reactome and MapMan biological pathway maps, so the tool will convert the names and identifiers from different sources and databases in your input data. This screen shows the number of features successfully mapped and the data distribution used for pathway colouring. Metabolite name assignments are shown, and you can choose which one to keep when a name is ambiguous. Click <a class="button btn-success btn-inline btn-small" href="javascript:void(0)"><i class="fa fa-play"></i> Next step</a> when you are ready.</p>' +
+							/* The opening sentence was 32 words to carry two facts: those
+							   three databases are keyed on Entrez IDs, and PaintOmics does
+							   the conversion for you. "requires ... for working with ...
+							   so the tool will convert the names and identifiers from
+							   different sources and databases in your input data" says
+							   both, at length, and leads with a requirement the reader
+							   never has to act on - the conversion is automatic, so the
+							   useful half is the promise, not the constraint. 17 words
+							   now, leading with what PaintOmics does; every term the
+							   original used, Entrez included, is still here. */
+							'<p>PaintOmics converts the identifiers in your files to the Entrez IDs that KEGG, Reactome and MapMan need. This screen shows the number of features successfully mapped and the data distribution used for pathway colouring. Metabolite name assignments are shown, and you can choose which one to keep when a name is ambiguous. Click <a class="button btn-success btn-inline btn-small" href="javascript:void(0)"><i class="fa fa-play"></i> Next step</a> when you are ready.</p>' +
 						'</div>' +
 						'<div class="po-step-card">' +
 							'<div class="po-step-number">3</div>' +
