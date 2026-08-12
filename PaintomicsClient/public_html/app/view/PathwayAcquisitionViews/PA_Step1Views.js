@@ -1094,7 +1094,7 @@ function PA_Step1JobView() {
 									'<p>Turns your ranked pathways into a written interpretation: it reads the cross-omic patterns, finds the supporting literature, and drafts the biology with citations you can check.</p>' +
 								'</div>' +
 								'<div class="po-hero-actions">' +
-									'<a href="http://paintomics.readthedocs.org/en/latest/" target="_blank" class="po-btn-primary">Documentation</a>' +
+									'<a href="https://paintomics.readthedocs.io/en/latest/" target="_blank" class="po-btn-primary">Documentation</a>' +
 									'<a href="https://github.com/ConesaLab/paintomics4/" target="_blank" class="po-btn-outline">GitHub</a>' +
 									'<a href="mailto:paintomics4@gmail.com" class="po-btn-outline">Contact</a>' +
 								'</div>' +
@@ -1144,7 +1144,7 @@ function PA_Step1JobView() {
 						'<div class="po-step-card">' +
 							'<div class="po-step-number">3</div>' +
 							'<h3>Explore results</h3>' +
-							'<p>You get a Pathways summary, a classification, a network and an enrichment analysis. Paint any of the listed pathways with <a href="javascript:void(0)" class="button btn-inline btn-small" style="background-color:#756C6C;font-size:14px;color:#fff;"><i class="fa fa-paint-brush"></i></a>, or ask for an <b>AI-powered pathway interpretation</b> with <a href="javascript:void(0)" class="button btn-inline btn-small" style="background-color:#2F73BC;font-size:14px;color:#fff;">' + getAIMark(14) + ' AI Interpret</a>. Read more about these analyses in <a href="http://paintomics.readthedocs.io/en/latest/" target="_blank">our documentation</a>.</p>' +
+							'<p>You get a Pathways summary, a classification, a network and an enrichment analysis. Paint any of the listed pathways with <a href="javascript:void(0)" class="button btn-inline btn-small" style="background-color:#756C6C;font-size:14px;color:#fff;"><i class="fa fa-paint-brush"></i></a>, or ask for an <b>AI-powered pathway interpretation</b> with <a href="javascript:void(0)" class="button btn-inline btn-small" style="background-color:#2F73BC;font-size:14px;color:#fff;">' + getAIMark(14) + ' AI Interpret</a>. Read more about these analyses in <a href="https://paintomics.readthedocs.io/en/latest/" target="_blank">our documentation</a>.</p>' +
 						'</div>' +
 					'</div>' +
 					'<h2 style="margin-top:24px;">Video tutorials</h2>' +
@@ -1177,7 +1177,17 @@ function PA_Step1JobView() {
 							'<span class="po-tutorial-len">22 min</span>' +
 						'</a>' +
 					'</div>' +
-					'<p style="margin-top:16px;">Check the <b><a href="http://paintomics.readthedocs.org/en/latest/" target="_blank">User guide</a></b> for further information. For questions, email <a href="mailto:paintomics4@gmail.com">paintomics4@gmail.com</a> or visit our <a href="https://github.com/ConesaLab/paintomics4/">GitHub page</a>.</p>' +
+					/* The closing "Check the User guide ... email ... GitHub page"
+					   line is gone. Its three links were the hero's three buttons
+					   again, to the same three URLs: the user guide is the
+					   Documentation button's readthedocs address, the address in
+					   the mailto is the Contact button's, and the GitHub page is
+					   the GitHub button's repository. It restated the top of the
+					   page at the bottom of it and added nothing in between.
+
+					   Nothing is lost by dropping it: those three destinations are
+					   also in the header bar, which is on screen at every scroll
+					   position, and the hero row itself is one page-up away. */
 				'</div>'
 			}, {
 				xtype: 'form',

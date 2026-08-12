@@ -206,7 +206,11 @@ function MainView() {
 				" <li class='menuOption' title='Resources'><i class='fa fa-info-circle'></i><span class='menuLabel'>Resources</span>" +
 				" <ul class='submenu'>" +
 				"     <li class='menuOption externalOption'><a href='https://www.youtube.com/channel/UCSoQ3LSli9ZxOQTX56_WJeA' target='_blank'><i class=\"fa fa-youtube\"></i>  Paintomics tutorial video</a></li>" +
-				"     <li class='menuOption externalOption'><a href='http://paintomics.readthedocs.org/en/latest/' target='_blank'><i class='fa fa-book'></i>  Paintomics Documentation</a></li>" +
+				/* https and .io, the same spelling the rest of the app uses. The
+				   old readthedocs.org address still redirects, but it was the
+				   only one of the app's five documentation links written that
+				   way, and it sent a plain-http request first. */
+				"     <li class='menuOption externalOption'><a href='https://paintomics.readthedocs.io/en/latest/' target='_blank'><i class='fa fa-book'></i>  Paintomics Documentation</a></li>" +
 				// The "PaintOmics 3" entry pointed at http://188.166.42.44/, a bare IP
 				// that no longer answers at all (connection failure, not an error
 				// page). Removed rather than repointed: there is no live PaintOmics 3
