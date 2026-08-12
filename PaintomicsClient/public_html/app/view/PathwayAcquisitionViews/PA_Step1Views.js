@@ -161,22 +161,33 @@ var PO_HERO_VIZ_SVG =
 			'<path d="M11 6.4 C11.4 8.7 13.3 10.6 15.6 11 C13.3 11.4 11.4 13.3 11 15.6 C10.6 13.3 8.7 11.4 6.4 11 C8.7 10.6 10.6 8.7 11 6.4 Z" fill="currentColor"/>' +
 		'</g>' +
 		'<text x="284" y="88" class="po-viz-title" font-size="12.5" font-weight="600">AI interpretation</text>' +
-		'<rect class="po-viz-line" style="--d:0.15s" x="256" y="106" width="160" height="6" rx="3"/>' +
-		'<rect class="po-viz-line" style="--d:0.3s"  x="256" y="122" width="142" height="6" rx="3"/>' +
-		'<rect class="po-viz-line" style="--d:0.45s" x="256" y="138" width="152" height="6" rx="3"/>' +
-		'<rect class="po-viz-line" style="--d:0.6s"  x="256" y="154" width="118" height="6" rx="3"/>' +
-		/* The citation chips: the interpretation comes back referenced. */
-		'<rect class="po-viz-cite" style="--d:0.8s"  x="256" y="178" width="46" height="15" rx="7.5"/>' +
-		'<rect class="po-viz-cite" style="--d:0.92s" x="308" y="178" width="46" height="15" rx="7.5"/>' +
-		'<rect class="po-viz-cite" style="--d:1.04s" x="360" y="178" width="46" height="15" rx="7.5"/>' +
-		'<rect class="po-viz-line" style="--d:1.2s" x="256" y="208" width="132" height="6" rx="3"/>' +
-		'<rect class="po-viz-line" style="--d:1.3s" x="256" y="224" width="96"  height="6" rx="3"/>' +
+		'<g class="po-viz-ans po-viz-ans-a">' +
+			'<rect class="po-viz-line" style="--d:0.15s" x="256" y="106" width="160" height="6" rx="3"/>' +
+			'<rect class="po-viz-line" style="--d:0.30s" x="256" y="122" width="142" height="6" rx="3"/>' +
+			'<rect class="po-viz-line" style="--d:0.45s" x="256" y="138" width="152" height="6" rx="3"/>' +
+			'<rect class="po-viz-line" style="--d:0.60s" x="256" y="154" width="118" height="6" rx="3"/>' +
+			'<rect class="po-viz-cite" style="--d:0.95s" x="256" y="178" width="46" height="15" rx="7.5"/>' +
+			'<rect class="po-viz-cite" style="--d:1.07s" x="308" y="178" width="46" height="15" rx="7.5"/>' +
+			'<rect class="po-viz-cite" style="--d:1.19s" x="360" y="178" width="46" height="15" rx="7.5"/>' +
+			'<rect class="po-viz-line" style="--d:1.47s" x="256" y="208" width="132" height="6" rx="3"/>' +
+			'<rect class="po-viz-line" style="--d:1.57s" x="256" y="224" width="96" height="6" rx="3"/>' +
+		'</g>' +
+		'<g class="po-viz-ans po-viz-ans-b">' +
+			'<rect class="po-viz-line" style="--d:0.15s" x="256" y="106" width="138" height="6" rx="3"/>' +
+			'<rect class="po-viz-line" style="--d:0.30s" x="256" y="122" width="164" height="6" rx="3"/>' +
+			'<rect class="po-viz-line" style="--d:0.45s" x="256" y="138" width="120" height="6" rx="3"/>' +
+			'<rect class="po-viz-line" style="--d:0.60s" x="256" y="154" width="150" height="6" rx="3"/>' +
+			'<rect class="po-viz-cite" style="--d:0.95s" x="256" y="178" width="46" height="15" rx="7.5"/>' +
+			'<rect class="po-viz-cite" style="--d:1.07s" x="308" y="178" width="46" height="15" rx="7.5"/>' +
+			'<rect class="po-viz-line" style="--d:1.35s" x="256" y="208" width="108" height="6" rx="3"/>' +
+			'<rect class="po-viz-line" style="--d:1.45s" x="256" y="224" width="146" height="6" rx="3"/>' +
+		'</g>' +
 	'</g>' +
 	'</svg>';
 
 
 var PO_STEP_ART_UPLOAD =
-	'<svg class="po-step-art-svg" viewBox="0 0 186 90" role="img" aria-label="One row per omic type, each carrying its own values" style="display:block;width:100%;height:auto;font-family:var(--pa-font-sans)" xmlns="http://www.w3.org/2000/svg">' +
+	'<svg class="po-step-art-svg" viewBox="0 0 186 90" role="img" aria-label="One row per omic type, each carrying its own values" style="font-family:var(--pa-font-sans)" xmlns="http://www.w3.org/2000/svg">' +
 	'<g transform="translate(-258,-10)">' +
 	'<rect x="258" y="12" width="186" height="20" rx="5" fill="#55C9A6" fill-opacity=".16" stroke="#55C9A6" stroke-opacity=".55"/>' +
 	'<circle cx="271" cy="22" r="4.5" fill="#55C9A6"/>' +
@@ -203,7 +214,7 @@ var PO_STEP_ART_UPLOAD =
 	'</svg>';
 
 var PO_STEP_ART_MATCH =
-	'<svg class="po-step-art-svg" viewBox="0 0 90 68" role="img" aria-label="Features matched onto a pathway network" style="display:block;width:100%;height:auto;font-family:var(--pa-font-sans)" xmlns="http://www.w3.org/2000/svg">' +
+	'<svg class="po-step-art-svg" viewBox="0 0 90 68" role="img" aria-label="Features matched onto a pathway network" style="font-family:var(--pa-font-sans)" xmlns="http://www.w3.org/2000/svg">' +
 	'<g transform="translate(-306,-144)">' +
 	'<g transform="translate(307.6,145.8) scale(0.62)">' +
 	'<line x1="12" y1="30" x2="52" y2="12" stroke="#878787" stroke-width="1.6" stroke-opacity=".55"/>' +
@@ -231,7 +242,7 @@ var PO_STEP_ART_MATCH =
 	'</svg>';
 
 var PO_STEP_ART_EXPLORE =
-	'<svg class="po-step-art-svg" viewBox="0 0 186 96" role="img" aria-label="Pathways ranked, and the network painted with your values" style="display:block;width:100%;height:auto;font-family:var(--pa-font-sans)" xmlns="http://www.w3.org/2000/svg">' +
+	'<svg class="po-step-art-svg" viewBox="0 0 186 96" role="img" aria-label="Pathways ranked, and the network painted with your values" style="font-family:var(--pa-font-sans)" xmlns="http://www.w3.org/2000/svg">' +
 	'<g transform="translate(-258,-254)">' +
 	'<rect x="258" y="256" width="186" height="5" rx="2.5" fill="#AD5022" opacity="1.0"/>' +
 	'<rect x="258" y="265" width="138" height="5" rx="2.5" fill="#AD5022" opacity="0.7"/>' +

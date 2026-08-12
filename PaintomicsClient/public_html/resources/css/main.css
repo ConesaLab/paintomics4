@@ -4258,12 +4258,21 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
 
 .po-step-art-svg {
   display: block;
-  width: 100%;
-  height: auto;
-  /* Capped and centred so the narrow middle diagram is not stretched to the
-     width of the two wide ones - they are 90, 186 and 186 units across. */
-  max-width: 220px;
-  margin: 0 auto;
+  /* Sized by height, not width. The three artworks are 186x90, 90x68 and
+     186x96, so a shared width gave them three different heights - measured,
+     106, 166 and 114px - and the row read as three unrelated pictures. A
+     shared height puts them in one band instead, which is the dimension the
+     eye actually compares across a row. Their widths then differ, which is
+     honest: one of them really is a narrower drawing.
+
+     Left, not centred. The heading, the prose and the numbered disc all start
+     on the column's left edge; a centred figure was the only thing in the
+     card that did not, and that is what stopped the three columns from
+     looking aligned. */
+  height: 104px;
+  width: auto;
+  max-width: 100%;
+  margin: 0;
 }
 
 /* The lift-on-hover went with the box. A card that raises itself off the page
@@ -5268,15 +5277,29 @@ div.repDetectionCard h3 {
 .po-hero-viz .po-viz-title { fill: var(--pa-ink-title, #1A1A18); }
 
 /* The interpretation: each line grows from its left edge, holds while it is
-   read, wipes, and is written again. The per-line delay makes it cascade
-   rather than move as a block, which is what reading a generated answer looks
-   like. */
+   read, and is wiped away. The per-line delay makes it cascade rather than
+   move as a block, which is what reading a generated answer looks like.
+
+   There are two answers, not one replayed. Retyping the same line lengths
+   every cycle reads as a loop rather than as a new response, so the second
+   has its own rhythm - different lengths and two citations instead of three -
+   and each is written during the half of the cycle its own network is on
+   screen. */
 .po-hero-viz .po-viz-line,
 .po-hero-viz .po-viz-cite {
   transform: scaleX(0);
   transform-origin: left center;
-  animation: poVizRetype 9s cubic-bezier(.2,.7,.3,1) var(--d, 0s) infinite;
+  animation-duration: 9s;
+  animation-timing-function: cubic-bezier(.2,.7,.3,1);
+  animation-delay: var(--d, 0s);
+  animation-iteration-count: infinite;
 }
+
+.po-hero-viz .po-viz-ans-a .po-viz-line,
+.po-hero-viz .po-viz-ans-a .po-viz-cite { animation-name: poVizAnswerA; }
+
+.po-hero-viz .po-viz-ans-b .po-viz-line,
+.po-hero-viz .po-viz-ans-b .po-viz-cite { animation-name: poVizAnswerB; }
 
 .po-hero-viz .po-viz-line { fill: var(--pa-border); }
 /* The citations are the one thing in the panel that is not grey: an
@@ -5298,12 +5321,19 @@ div.repDetectionCard h3 {
   100%      { opacity: 0; }
 }
 
-@keyframes poVizRetype {
+/* Answer A is written while network A is up, and cleared as it hands over;
+   answer B is written against network B. Between them the panel is briefly
+   empty, which is the pause a question leaves. */
+@keyframes poVizAnswerA {
   0%         { transform: scaleX(0); }
-  10%,  40%  { transform: scaleX(1); }
-  47%,  56%  { transform: scaleX(0); }
-  66%,  90%  { transform: scaleX(1); }
-  100%       { transform: scaleX(0); }
+  9%,  40%   { transform: scaleX(1); }
+  46%, 100%  { transform: scaleX(0); }
+}
+
+@keyframes poVizAnswerB {
+  0%,  52%   { transform: scaleX(0); }
+  61%, 90%   { transform: scaleX(1); }
+  96%, 100%  { transform: scaleX(0); }
 }
 
 /* Anyone who has asked for less motion gets the finished picture and no loop:
@@ -5317,6 +5347,7 @@ div.repDetectionCard h3 {
   .po-hero-viz .po-viz-panel,
   .po-hero-viz .po-viz-mark,
   .po-hero-viz .po-viz-title { opacity: 1; animation: none; }
-  .po-hero-viz .po-viz-line,
-  .po-hero-viz .po-viz-cite { transform: scaleX(1); animation: none; }
+  .po-hero-viz .po-viz-ans-a .po-viz-line,
+  .po-hero-viz .po-viz-ans-a .po-viz-cite { transform: scaleX(1); animation: none; }
+  .po-hero-viz .po-viz-ans-b { display: none; }
 }
