@@ -31,6 +31,10 @@ from scripts.downloadReactome import *
 
 VERSION = 0.12
 
+# Degradations that did not stop an install, collected so the run ends with one
+# readable list instead of leaving them scattered through a multi-hour log.
+INSTALL_WARNINGS = []
+
 
 # ------------------------------------------------------------------------------------------
 # ------------------------------------------------------------------------------------------
@@ -352,19 +356,28 @@ def download_command(inputfile=None, specie=None, kegg=0, mapping=0, common=0, r
         exit(0)
 
 
-def install_command(inputfile=None, specie=None, common=0, hub=1):
+def install_command(inputfile=None, specie=None, species=None, common=0, hub=1, reinstall=0):
     """
     Install the information for given species
     Usage: AdminTools.py install <options>
     Examples:
               ./DBManager.py install --specie=mmu --common=0 --hub=1
+              ./DBManager.py install --species=hsa,mmu,ath --common=0 --hub=0
+              ./DBManager.py install --species=hsa,mmu --reinstall=1
 
     Keyword arguments:
-        from_file -- a file containing a list of a list of species IDs (one per line) to be installed
-        specie    -- a valid KEGG specie code e.g. mmu, hsa
+        inputfile -- a file containing a list of species IDs (one per line) to be installed
+        specie    -- a single valid KEGG specie code e.g. mmu, hsa
+        species   -- a comma-separated list of species codes, e.g. hsa,mmu,ath
         common    -- (optional) 1 if Pathways info (classification, PNG images...) should be reinstalled, 0 to keep from previous version. Default=0
+        hub       -- (optional) 1 to build the hub-analysis data. Default=1
+        reinstall -- (optional) 1 to rebuild from the data already in current/ without
+                     promoting anything from download/. Default=0
+
+    A species whose data is missing is skipped with a warning rather than ending the
+    run, so one absent organism cannot cost a batch the other nineteen.
     """
-    if inputfile == None and specie == None:
+    if inputfile == None and specie == None and species == None:
         print("Organisms not specified, please type ./DBManager.py install -h for help")
         exit(-1)
 
@@ -404,10 +417,22 @@ def install_command(inputfile=None, specie=None, common=0, hub=1):
 
     INSTALLED_SPECIES = []
     ERRONEOUS_SPECIES = []
+    SKIPPED_SPECIES = []
 
     SPECIES_INSTALL = None
     if inputfile != None:
         SPECIES_INSTALL = readFile(inputfile)  # THE IDS FOR THE SPECIES TO UPDATE
+    elif species != None:
+        # Comma-separated list. Order is preserved so a run reads the way it was asked
+        # for, and duplicates collapse rather than installing the same species twice.
+        SPECIES_INSTALL = {}
+        for code in str(species).split(","):
+            code = code.strip()
+            if code:
+                SPECIES_INSTALL[code] = 1
+        if not SPECIES_INSTALL:
+            print("No valid species found in --species=" + str(species))
+            exit(-1)
     else:
         SPECIES_INSTALL = {specie: 1}  # THE IDS FOR THE SPECIES TO UPDATE
 
@@ -435,19 +460,48 @@ def install_command(inputfile=None, specie=None, common=0, hub=1):
         downloadSpecieDir = os.path.join(downloadDir, specie_to_check)
         currentSpecieDir = os.path.join(currentDataDir, specie_to_check)
 
-        # Check if data exists in either download or current directory
+        # Check if data exists in either download or current directory.
+        #
+        # Skip, do not exit. Killing the whole run for one absent species means a batch
+        # of twenty loses the nineteen that were ready -- and with --inputfile or a
+        # comma-separated list that is the normal case, not an edge case. The species is
+        # dropped from this run and named again in the closing summary.
+        # --reinstall builds from current/ only, so that is the directory that has to
+        # exist; a staged download is irrelevant to it.
+        if reinstall and not os.path.isdir(currentSpecieDir):
+            msg = (f"'{specie_to_check}' is not installed ({currentSpecieDir} does not "
+                   f"exist), so there is nothing to reinstall -- run install first")
+            log("WARNING: " + msg)
+            summary.write(f"{specie_to_check}\tREINSTALL\tSKIPPED\tnot installed\n")
+            INSTALL_WARNINGS.append((specie_to_check, msg))
+            SKIPPED_SPECIES.append(specie_to_check)
+            continue
+
         if not os.path.isdir(downloadSpecieDir) and not os.path.isdir(currentSpecieDir):
-            error_msg = f"ERROR: Cannot find data for species '{specie_to_check}' in either download ({downloadSpecieDir}) or current ({currentSpecieDir}) directories. Please download the species data first using the download command."
-            log(error_msg)
-            summary.write(error_msg + '\n')
-            summary.close()
-            exit(1)
+            msg = (f"no data for '{specie_to_check}' in either {downloadSpecieDir} or "
+                   f"{currentSpecieDir} -- run the download command for it first")
+            log("WARNING: " + msg)
+            summary.write(f"{specie_to_check}\tINSTALL\tSKIPPED\tno downloaded data\n")
+            INSTALL_WARNINGS.append((specie_to_check, msg))
+            SKIPPED_SPECIES.append(specie_to_check)
+            continue
 
         # Log which directory will be used
-        if os.path.isdir(downloadSpecieDir):
+        if reinstall:
+            log(f"Species '{specie_to_check}': will rebuild in place from current/")
+        elif os.path.isdir(downloadSpecieDir):
             log(f"Species '{specie_to_check}': will use new data from download directory")
         else:
             log(f"Species '{specie_to_check}': will reinstall using existing data from current directory")
+
+    # Drop the skipped ones so the install loop below never sees them.
+    for skipped in SKIPPED_SPECIES:
+        SPECIES_INSTALL.pop(skipped, None)
+
+    if not SPECIES_INSTALL:
+        log("Nothing to install: every requested species is missing its downloaded data.")
+        summary.close()
+        exit(1)
 
     # **************************************************************************
     # STEP 2. INSTALLING KEGG GLOBAL/HUB DATA
@@ -559,16 +613,21 @@ def install_command(inputfile=None, specie=None, common=0, hub=1):
                 log("STEP EXTRA: [" + hubSpecie + "] Hub data staged in the download directory; "
                     "the species install below moves it into current/.")
     except Exception as e:
-        log("        FAILED WHILE INSTALLING HUB ANALYSIS INFORMATION. UNABLE TO CONTINUE. ABORTING!!")
-        summary.write('FAILED WHILE INSTALLING HUB ANALYSIS INFORMATION. UNABLE TO CONTINUE. ABORTING!!\n')
+        # Hub analysis is an optional panel, not the species. Aborting the whole install
+        # for it is why 170 runs in the production summary.log say "UNABLE TO CONTINUE"
+        # -- every one of those species could have been installed without it and simply
+        # shown no Hub Analysis section. Warn, drop the partial hub tree, carry on.
+        log("WARNING: hub analysis could not be built (" + str(e) + ")")
+        log("         -> the species installs WITHOUT hub data; the Hub Analysis panel "
+            "will be unavailable until it is rebuilt with --hub=1")
+        summary.write('HUB ANALYSIS SKIPPED (species still installed): ' + str(e) + '\n')
+        INSTALL_WARNINGS.append(("hub analysis", str(e)))
         # rmtree, not rmdir: rmdir cannot remove a non-empty directory, so a crash after
         # the first .RData was written left the partial tree in place and every later
         # run treated it as a finished install.
         if hubDir:
             shutil.rmtree(hubDir, ignore_errors=True)
         errorlog(e)
-        summary.close()
-        exit(1)
     # ********************************************************************************
     # STEP 2.A.1 IF WE CHOOSED TO DONWLOAD THE GENERAL DATA (PATHWAYS CLASSIFICATION, ETC.)
     # ********************************************************************************
@@ -620,27 +679,52 @@ def install_command(inputfile=None, specie=None, common=0, hub=1):
             # Lift it out, move the species, then put it back. The two are now independent:
             # the species move only ever sees real species data, and hub data cannot be
             # destroyed by it.
-            stagedHubDir = os.path.join(downloadDir, specie, "hubData")
-            heldHubDir = None
-            if hub_data_is_complete(stagedHubDir):
-                heldHubDir = os.path.join(downloadDir, "_hub_hold_" + specie)
-                if os.path.isdir(heldHubDir):
-                    shutil.rmtree(heldHubDir, ignore_errors=True)
-                shutil.move(stagedHubDir, heldHubDir)
-                # A download/<specie> left holding nothing must not trigger a move at all.
-                stagedSpecieDir = os.path.join(downloadDir, specie)
-                if os.path.isdir(stagedSpecieDir) and not os.listdir(stagedSpecieDir):
-                    os.rmdir(stagedSpecieDir)
+            # --reinstall rebuilds the database from what is already in current/ and
+            # touches no directories at all: nothing is promoted, archived, or moved.
+            # That is the whole point -- re-running a build after a code fix should not
+            # risk the installed data, and should not need the download tree to exist.
+            if reinstall:
+                log("        REINSTALL: rebuilding from " + dirNameAux + " (no species data is moved)")
+                # ...with one exception. The hub step above always stages into
+                # download/<specie>/hubData and relies on the species move to carry it
+                # across -- a move reinstall deliberately skips. Without this, a
+                # `reinstall --hub=1` builds the hub data, leaves all 1,637 files in
+                # download/, and reports SUCCESS with nothing installed.
+                stagedHubDir = os.path.join(downloadDir, specie, "hubData")
+                if hub_data_is_complete(stagedHubDir):
+                    installedHubDir = os.path.join(currentDataDir, specie, "hubData")
+                    if os.path.isdir(installedHubDir):
+                        shutil.rmtree(installedHubDir, ignore_errors=True)
+                    shutil.move(stagedHubDir, installedHubDir)
+                    log("        Hub analysis data installed into " + installedHubDir)
+            else:
+                stagedHubDir = os.path.join(downloadDir, specie, "hubData")
+                heldHubDir = None
+                if hub_data_is_complete(stagedHubDir):
+                    heldHubDir = os.path.join(downloadDir, "_hub_hold_" + specie)
+                    if os.path.isdir(heldHubDir):
+                        shutil.rmtree(heldHubDir, ignore_errors=True)
+                    shutil.move(stagedHubDir, heldHubDir)
+                    # A download/<specie> left holding nothing must not trigger a move at all.
+                    stagedSpecieDir = os.path.join(downloadDir, specie)
+                    if os.path.isdir(stagedSpecieDir) and not os.listdir(stagedSpecieDir):
+                        os.rmdir(stagedSpecieDir)
 
-            replaceNewVersionData(downloadDir, currentDataDir, specie, oldDataDir)
-
-            if heldHubDir:
-                installedHubDir = os.path.join(currentDataDir, specie, "hubData")
-                if os.path.isdir(installedHubDir):
-                    shutil.rmtree(installedHubDir, ignore_errors=True)
-                os.makedirs(os.path.dirname(installedHubDir), exist_ok=True)
-                shutil.move(heldHubDir, installedHubDir)
-                log("        Hub analysis data installed into " + installedHubDir)
+                # try/finally, because the restore has to happen on the failure path too.
+                # Without it, a promotion that raises between the two moves leaves the
+                # hub data orphaned in download/_hub_hold_<specie> and absent from
+                # current/ -- found as a real 60 MB directory stranded by an install that
+                # the guard had refused hours earlier.
+                try:
+                    replaceNewVersionData(downloadDir, currentDataDir, specie, oldDataDir)
+                finally:
+                    if heldHubDir and os.path.isdir(heldHubDir):
+                        installedHubDir = os.path.join(currentDataDir, specie, "hubData")
+                        if os.path.isdir(installedHubDir):
+                            shutil.rmtree(installedHubDir, ignore_errors=True)
+                        os.makedirs(os.path.dirname(installedHubDir), exist_ok=True)
+                        shutil.move(heldHubDir, installedHubDir)
+                        log("        Hub analysis data installed into " + installedHubDir)
 
             installSpecieData(specie, installLog, dirNameAux, str(step) + "/" + total,
                               ROOT_DIRECTORY + "AdminTools/scripts/")
@@ -675,6 +759,29 @@ def install_command(inputfile=None, specie=None, common=0, hub=1):
     # **************************************************************************
     log("")
     log("STEP " + str(currentStep) + ". CLOSING LOG FILES, GENERATING VERSION FILE")
+
+    # One readable block at the end. A multi-species run previously left the operator to
+    # reconstruct what happened by reading the whole log; the three lists below are the
+    # answer to "what do I have now, and what do I need to go back for".
+    # Assembled first, then emitted in one loop. log() derives its indentation from the
+    # source line's own indentation, so emitting these from inside an if/for staircases
+    # the output; building the lines up front keeps the block aligned.
+    summaryLines = ["", "=" * 62, "INSTALL SUMMARY", "=" * 62,
+                    "  installed : %d  %s" % (len(INSTALLED_SPECIES), " ".join(INSTALLED_SPECIES) or "-"),
+                    "  failed    : %d  %s" % (len(ERRONEOUS_SPECIES), " ".join(ERRONEOUS_SPECIES) or "-"),
+                    "  skipped   : %d  %s" % (len(SKIPPED_SPECIES), " ".join(SKIPPED_SPECIES) or "-")]
+
+    if INSTALL_WARNINGS:
+        summaryLines.append("  warnings  : %d (installed anyway)" % len(INSTALL_WARNINGS))
+        summaryLines.extend("      %s: %s" % (subject, detail) for subject, detail in INSTALL_WARNINGS)
+    else:
+        summaryLines.append("  warnings  : none")
+
+    summaryLines.append("=" * 62)
+
+    for summaryLine in summaryLines:
+        log(summaryLine)
+
     summary.close()
 
     version = open(currentDataDir + 'VERSION', 'a')
@@ -775,7 +882,11 @@ def replaceNewVersionData(origin, destination, dirname, backup_dir):
     if os.path.isdir(source_path) and os.path.isdir(dest_path):
         sourceFiles = set(os.listdir(source_path))
         destFiles = set(os.listdir(dest_path))
-        missing = destFiles - sourceFiles
+        # hubData is deliberately kept OUT of the download tree (see the species move
+        # below), so it is missing from every staged directory by design. Counting it
+        # here made this guard fire on every reinstall of a species that has hub data --
+        # 87 of the 105 installed species -- which blocked reinstalling any of them.
+        missing = destFiles - sourceFiles - {"hubData"}
         if missing:
             raise Exception(
                 "Refusing to install '" + dirname + "': the download directory is missing " +
@@ -789,6 +900,24 @@ def replaceNewVersionData(origin, destination, dirname, backup_dir):
     # Check if new data exists in download directory
     if os.path.isdir(source_path):
         # We have new data to install
+
+        # Carry hub data across the move.
+        #
+        # Exempting hubData from the guard above is only half the job: the promotion
+        # archives dest_path wholesale and moves source_path into its place, so an
+        # installed hubData that the download tree does not have would be left behind in
+        # old/ -- silently, since the guard no longer objects. Verified by doing exactly
+        # that to mmu: 1,869 files, 60 MB, gone from current/ and reported as SUCCESS.
+        #
+        # Hold it aside and put it back once the new tree is in place. It is moved, not
+        # copied, so this costs nothing on the same filesystem.
+        heldHubData = None
+        installedHubData = os.path.join(dest_path, "hubData")
+        if os.path.isdir(installedHubData) and not os.path.isdir(os.path.join(source_path, "hubData")):
+            heldHubData = os.path.join(os.path.dirname(dest_path), "_hubdata_hold_" + dirname)
+            if os.path.isdir(heldHubData):
+                shutil.rmtree(heldHubData, ignore_errors=True)
+            shutil.move(installedHubData, heldHubData)
 
         # 1. Handle Backup: If destination exists, move it to backup
         if os.path.exists(dest_path):
@@ -815,6 +944,12 @@ def replaceNewVersionData(origin, destination, dirname, backup_dir):
             
         # Move source to destination
         shutil.move(source_path, dest_path)
+
+        # Put the held hub data back into the freshly promoted tree.
+        if heldHubData:
+            shutil.move(heldHubData, os.path.join(dest_path, "hubData"))
+            log(f"Preserved existing hub data for {dirname} across the update")
+
         log(f"Installed new data for {dirname}")
         
     elif os.path.isdir(dest_path):
@@ -868,6 +1003,31 @@ def hub_data_is_complete(path):
             return False
 
     return any(entry.endswith(".RData") for entry in entries)
+
+
+def reinstall_command(species=None, specie=None, inputfile=None, common=0, hub=0):
+    """
+    Rebuild the database for species that are already installed, without downloading.
+    Usage: AdminTools.py reinstall <options>
+    Examples:
+              ./DBManager.py reinstall --species=hsa,mmu,ath
+              ./DBManager.py reinstall --specie=ath --hub=1
+              ./DBManager.py reinstall --inputfile=species.txt
+
+    Reads only from KEGG_DATA/current/<specie>/ and moves nothing: no promotion from
+    download/, no archiving under old/. Use it after fixing build code, or to pick up a
+    parser change, without re-fetching gigabytes that have not changed.
+
+    A species that is not installed is skipped with a warning; the rest still run.
+    `hub` defaults to 0 here because rebuilding hub data is the slow part and is rarely
+    what you want from a re-run -- pass --hub=1 to include it.
+    """
+    if species == None and specie == None and inputfile == None:
+        print("Organisms not specified, please type ./DBManager.py reinstall -h for help")
+        exit(-1)
+
+    return install_command(inputfile=inputfile, specie=specie, species=species,
+                           common=common, hub=hub, reinstall=1)
 
 
 def restorePreviousVersionData(origin, destination, dirname, backup_dir):
@@ -1198,10 +1358,34 @@ def getSpecieMappingData(specie, downloadLog, dirName, step, scriptsDir):
     return mapping_errors
 
 
+def collectBuildWarnings(specie):
+    """Pull the sources the species build had to do without into the run summary.
+
+    The build runs as a subprocess, so without this its warnings only ever reach
+    install.log -- which is precisely the multi-MB file nobody reads to the end.
+    """
+    handoff = "/tmp/build_warnings.tmp"
+    if not os.path.isfile(handoff):
+        return
+    try:
+        with open(handoff) as handle:
+            for line in handle:
+                parts = line.rstrip("\n").split("\t")
+                if len(parts) >= 4 and parts[0] == specie:
+                    INSTALL_WARNINGS.append((specie + " / " + parts[1], parts[2] + " -> " + parts[3]))
+                    log("       ! " + parts[1] + ": " + parts[3])
+        os.remove(handoff)
+    except Exception as readError:
+        errorlog("could not read build warnings for " + specie + ": " + str(readError))
+
+
 def installSpecieData(specie, downloadLog, dirName, step, scriptsDir):
     start_time = time()
     log("                 INSTALLING MAPPING DATA FOR " + specie + " (" + step + ")...")
     downloadLogFile = open(downloadLog, 'a')
+    # Never inherit a previous species' warnings.
+    if os.path.isfile("/tmp/build_warnings.tmp"):
+        os.remove("/tmp/build_warnings.tmp")
 
     try:
         if os.path.isfile(scriptsDir + specie + "_resources/build_database.py"):
@@ -1231,6 +1415,9 @@ def installSpecieData(specie, downloadLog, dirName, step, scriptsDir):
         raise ex
     finally:
         downloadLogFile.close()
+        # In `finally` so a species that failed still reports what it was missing --
+        # that list is usually the explanation for the failure.
+        collectBuildWarnings(specie)
     return True
 
 
