@@ -379,14 +379,16 @@ def install_command(inputfile=None, specie=None, common=0, hub=1):
     if not os.path.exists(oldDataDir):
         os.mkdir(oldDataDir)
 
-    # Add hub analysis result dir
-    hubDir = os.path.join(downloadDir, specie.lower() + "/hubData/")
-    currentHubDir = os.path.join(currentDataDir, specie.lower() + "/hubData/")
-
-    # Create download hub directory if it doesn't exist
-    if not os.path.exists(hubDir):
-        os.makedirs(hubDir)
-
+    # Hub directories are computed PER SPECIES inside the hub block below, not here.
+    # Computing them here did two kinds of damage:
+    #   - specie is legitimately None when --inputfile is used (see the branch below),
+    #     so specie.lower() raised AttributeError before any work started, which is why
+    #     the documented bulk install path had never run;
+    #   - creating download/<specie>/hubData unconditionally, outside `if hub:`, meant
+    #     that on a reinstall the "hub data already exists in current/" branch was taken
+    #     while an EMPTY staged directory sat in download/, and the species move then
+    #     replaced good hub data with nothing and reported success.
+    # It also used specie.lower() while the species move uses the bare code.
     installLog = currentDataDir + "install.log"
     summary = open(currentDataDir + 'summary.log', 'a')
     currentStep = 1;
@@ -454,40 +456,81 @@ def install_command(inputfile=None, specie=None, common=0, hub=1):
     # ********************************************************************************
     # STEP 2.A.1 IF WE CHOOSED TO install THE hub analysis data
     # ********************************************************************************
+    hubDir = None
     try:
         if hub:
-            current_has_hub = directory_has_contents(currentHubDir)
-            if current_has_hub:
-                log("STEP EXTRA: Hub data already exists in current directory, skipping regeneration...")
-            else:
-                if not os.path.isdir(hubDir):
-                    log("STEP EXTRA: Hub download directory not found. Creating it so we can reuse or regenerate data...")
+            for hubSpecie in SPECIES_INSTALL.keys():
+                if hubSpecie[0] == "#":
+                    continue
+
+                # Built from the bare species code, exactly as replaceNewVersionData
+                # builds the path it will later move.
+                hubDir = os.path.join(downloadDir, hubSpecie, "hubData/")
+                currentHubDir = os.path.join(currentDataDir, hubSpecie, "hubData/")
+
+                if hub_data_is_complete(currentHubDir):
+                    log("STEP EXTRA: [" + hubSpecie + "] Hub data already complete in current/, skipping regeneration...")
+                elif hub_data_is_complete(hubDir):
+                    log("STEP EXTRA: [" + hubSpecie + "] Hub data already staged in download/, skipping regeneration...")
+                else:
+                    # A directory that merely EXISTS is not a finished install: the R
+                    # script writes pathway_list.list within seconds and
+                    # kegg_interaction.json only at the very end, so any crash in
+                    # between used to leave a populated directory that every later run
+                    # accepted as complete and reported as SUCCESS. Clear the partial
+                    # tree and rebuild it.
+                    if os.path.isdir(hubDir) and directory_has_contents(hubDir):
+                        log("STEP EXTRA: [" + hubSpecie + "] Discarding an incomplete hub directory before rebuilding...")
+                        shutil.rmtree(hubDir, ignore_errors=True)
                     os.makedirs(hubDir, exist_ok=True)
 
-                if not directory_has_contents(hubDir):
-                    log("STEP EXTRA: INSTALLING HUB ANALYSIS INFORMATION...")
+                    # Reuse the KGML the KEGG installer already downloaded instead of
+                    # re-fetching ~364 files from rest.kegg.jp. This step runs BEFORE
+                    # the species move below, so on a fresh install the files are still
+                    # under download/<specie>/kgml and only on a reinstall under
+                    # current/<specie>/kgml -- probe in that order.
+                    kgmlDir = None
+                    for candidate in (os.path.join(downloadDir, hubSpecie, "kgml"),
+                                      os.path.join(currentDataDir, hubSpecie, "kgml")):
+                        if os.path.isdir(candidate) and os.listdir(candidate):
+                            kgmlDir = candidate
+                            break
+
+                    hubCommand = [
+                        ROOT_DIRECTORY + "AdminTools/scripts/hubAnalysisInstall.R",
+                        '--organism="' + hubSpecie + '"',
+                        '--scriptDir="' + ROOT_DIRECTORY + 'AdminTools/scripts/' + '"',
+                        '--outputDir="' + hubDir + '"'
+                    ]
+                    if kgmlDir:
+                        log("STEP EXTRA: [" + hubSpecie + "] Reusing local KGML from " + kgmlDir)
+                        # Only ever appended when we actually have a directory. Passing
+                        # --kgmlDir="" would parse to the literal string "kgmlDir" and
+                        # silently send every pathway back over HTTP.
+                        hubCommand.append('--kgmlDir="' + kgmlDir + '"')
+                    else:
+                        log("STEP EXTRA: [" + hubSpecie + "] No local KGML found; pathways will be fetched over HTTP (slow)")
+
+                    log("STEP EXTRA: [" + hubSpecie + "] INSTALLING HUB ANALYSIS INFORMATION...")
                     # Capture the output rather than discarding it. This used to
                     # run with stderr=STDOUT, stdout=DEVNULL, which merges the R
                     # error into stdout and then throws it away -- so a missing R
                     # package surfaced only as "returned non-zero exit status 1"
                     # and had to be reproduced by hand to find out which one.
                     try:
-                        hubOutput = check_output(
-                            [
-                                ROOT_DIRECTORY + "AdminTools/scripts/hubAnalysisInstall.R",
-                                '--organism="' + specie + '"',
-                                '--scriptDir="' + ROOT_DIRECTORY + 'AdminTools/scripts/' + '"',
-                                '--outputDir="' + hubDir + '"'
-                            ], stderr=STDOUT, universal_newlines=True
-                        )
+                        hubOutput = check_output(hubCommand, stderr=STDOUT, universal_newlines=True)
+                        for outputLine in (hubOutput or "").splitlines():
+                            if "KeggParser:" in outputLine or "STEP 3: dropped" in outputLine:
+                                log("          " + outputLine)
                     except CalledProcessError as hubError:
                         log("        hubAnalysisInstall.R failed (exit " +
                             str(hubError.returncode) + "). Last output:")
                         for outputLine in (hubError.output or "").splitlines()[-25:]:
                             log("          " + outputLine)
                         raise
-                else:
-                    log("Hub directory already contains data in download directory, skipping regeneration...")
+
+                    if not hub_data_is_complete(hubDir):
+                        raise Exception("hubAnalysisInstall.R exited 0 but produced an incomplete hub directory: " + hubDir)
 
                 # Do NOT move hubData into current/ here.
                 #
@@ -503,25 +546,26 @@ def install_command(inputfile=None, specie=None, common=0, hub=1):
                 #
                 # Leaving it in download/<specie>/hubData lets the species move
                 # carry it across, which is both simpler and correct.
-                if directory_has_contents(hubDir):
-                    log("STEP EXTRA: Hub data staged in the download directory; "
-                        "the species install below moves it into current/.")
-                elif directory_has_contents(currentHubDir):
-                    # Reuse case: nothing was regenerated, so stage the existing
-                    # data into the download tree or the species move would
-                    # replace it with an empty directory.
-                    log("STEP EXTRA: Reusing existing hub data; staging it for the species move...")
+                #
+                # Staging is UNCONDITIONAL. It used to sit in the `else` of "current/
+                # already has hub data", i.e. in the one branch where it could never
+                # run, so the reuse case shipped an empty directory into current/.
+                if not hub_data_is_complete(hubDir) and hub_data_is_complete(currentHubDir):
+                    log("STEP EXTRA: [" + hubSpecie + "] Reusing existing hub data; staging it for the species move...")
                     shutil.copytree(currentHubDir, hubDir, dirs_exist_ok=True)
-                else:
-                    raise Exception("Hub analysis data is missing in both download and current directories.")
+
+                if not hub_data_is_complete(hubDir):
+                    raise Exception("Hub analysis data is missing or incomplete in both download and current directories for " + hubSpecie)
+                log("STEP EXTRA: [" + hubSpecie + "] Hub data staged in the download directory; "
+                    "the species install below moves it into current/.")
     except Exception as e:
         log("        FAILED WHILE INSTALLING HUB ANALYSIS INFORMATION. UNABLE TO CONTINUE. ABORTING!!")
         summary.write('FAILED WHILE INSTALLING HUB ANALYSIS INFORMATION. UNABLE TO CONTINUE. ABORTING!!\n')
-        # remove hub directory
-        try:
-            os.rmdir(hubDir)
-        except OSError as rm_error:
-            log(f"Failed to remove hub directory: {rm_error}")
+        # rmtree, not rmdir: rmdir cannot remove a non-empty directory, so a crash after
+        # the first .RData was written left the partial tree in place and every later
+        # run treated it as a finished install.
+        if hubDir:
+            shutil.rmtree(hubDir, ignore_errors=True)
         errorlog(e)
         summary.close()
         exit(1)
@@ -564,7 +608,40 @@ def install_command(inputfile=None, specie=None, common=0, hub=1):
         log("        INSTALLING  " + specie + "...")
 
         try:
+            # hubData does not travel with the species move.
+            #
+            # It used to: the hub step staged into download/<specie>/hubData and relied on
+            # this move to carry it into current/. That coupling caused two separate data
+            # losses -- the freshly generated hub data being archived under old/, and (on a
+            # KEGG-only refresh, where download/<specie> holds ONLY hubData) the move
+            # promoting a one-directory tree over a complete installation and deleting the
+            # other 14 files.
+            #
+            # Lift it out, move the species, then put it back. The two are now independent:
+            # the species move only ever sees real species data, and hub data cannot be
+            # destroyed by it.
+            stagedHubDir = os.path.join(downloadDir, specie, "hubData")
+            heldHubDir = None
+            if hub_data_is_complete(stagedHubDir):
+                heldHubDir = os.path.join(downloadDir, "_hub_hold_" + specie)
+                if os.path.isdir(heldHubDir):
+                    shutil.rmtree(heldHubDir, ignore_errors=True)
+                shutil.move(stagedHubDir, heldHubDir)
+                # A download/<specie> left holding nothing must not trigger a move at all.
+                stagedSpecieDir = os.path.join(downloadDir, specie)
+                if os.path.isdir(stagedSpecieDir) and not os.listdir(stagedSpecieDir):
+                    os.rmdir(stagedSpecieDir)
+
             replaceNewVersionData(downloadDir, currentDataDir, specie, oldDataDir)
+
+            if heldHubDir:
+                installedHubDir = os.path.join(currentDataDir, specie, "hubData")
+                if os.path.isdir(installedHubDir):
+                    shutil.rmtree(installedHubDir, ignore_errors=True)
+                os.makedirs(os.path.dirname(installedHubDir), exist_ok=True)
+                shutil.move(heldHubDir, installedHubDir)
+                log("        Hub analysis data installed into " + installedHubDir)
+
             installSpecieData(specie, installLog, dirNameAux, str(step) + "/" + total,
                               ROOT_DIRECTORY + "AdminTools/scripts/")
             INSTALLED_SPECIES.append(specie)
@@ -682,10 +759,37 @@ def replaceNewVersionData(origin, destination, dirname, backup_dir):
     dest_path = os.path.abspath(dest_path)
     backup_path = os.path.abspath(backup_path)
 
+    # An install must never LOSE files. `os.path.isdir(source_path)` alone was the only
+    # gate, so any leftover download directory -- including one an interrupted or
+    # partial download had created -- was promoted over a complete installation and the
+    # difference was silently archived under old/.
+    #
+    # Reproduced on 2026-08-12: a stale download/common holding 7 files replaced a
+    # current/common holding 12, dropping Ensembl2Reactome_PE_All_Levels.txt and its four
+    # siblings. The install logged "Installed new data for common" and the species build
+    # then died with "Reactome source file missing", pointing at a file that had existed
+    # minutes earlier and naming neither the move nor the promotion that removed it.
+    #
+    # Refuse instead. Deleting a known-stale download to proceed is a decision an admin
+    # can make in one command; recovering silently archived data is not.
+    if os.path.isdir(source_path) and os.path.isdir(dest_path):
+        sourceFiles = set(os.listdir(source_path))
+        destFiles = set(os.listdir(dest_path))
+        missing = destFiles - sourceFiles
+        if missing:
+            raise Exception(
+                "Refusing to install '" + dirname + "': the download directory is missing " +
+                str(len(missing)) + " file(s) that the installed one has, so promoting it "
+                "would delete them (" + ", ".join(sorted(missing)[:6]) +
+                ("..." if len(missing) > 6 else "") + "). "
+                "Source: " + source_path + " ; installed: " + dest_path + ". "
+                "Re-run the download for this data, or delete the stale download directory "
+                "if you are sure it should replace what is installed.")
+
     # Check if new data exists in download directory
     if os.path.isdir(source_path):
         # We have new data to install
-        
+
         # 1. Handle Backup: If destination exists, move it to backup
         if os.path.exists(dest_path):
             # Ensure backup parent directory exists
@@ -729,6 +833,41 @@ def directory_has_contents(path):
     Returns True if the directory exists and contains at least one file.
     """
     return os.path.isdir(path) and bool(os.listdir(path))
+
+
+def hub_data_is_complete(path):
+    """
+    Returns True only if `path` holds a FINISHED hub-analysis install.
+
+    "Has contents" is not the same as "is complete" here, and the difference used to
+    cost a whole reinstall: hubAnalysisInstall.R writes pathway_list.list within the
+    first seconds, the per-compound .RData files throughout the run, and
+    kegg_interaction.json only as its very last act. Any crash in between left a
+    populated directory that the next install accepted as finished, skipped
+    regeneration for, and reported as SUCCESS -- while every metabolite job then died
+    on the missing JSON.
+
+    Require the artifacts the runtime actually reads: the JSON that
+    compundsClassification loads, the CSV that hubAnalysis.R reads, and at least one
+    per-compound .RData that hubAnalysis.R load()s.
+
+    Deliberately NOT implemented as a sentinel file inside the directory:
+    hubAnalysis.R walks dir() by POSITION and would take a stray filename as a
+    compound, leaving a NULL hole in its list.
+    """
+    if not os.path.isdir(path):
+        return False
+    try:
+        entries = os.listdir(path)
+    except OSError:
+        return False
+
+    for required in ("kegg_interaction.json", "kegg_interaction.csv"):
+        target = os.path.join(path, required)
+        if not (os.path.isfile(target) and os.path.getsize(target) > 0):
+            return False
+
+    return any(entry.endswith(".RData") for entry in entries)
 
 
 def restorePreviousVersionData(origin, destination, dirname, backup_dir):
@@ -810,7 +949,18 @@ def downloadChEBItoKEGGMapping(message, logFile, dirName, fileName, delay, maxTr
     log(message)
 
     CHEBI_URL = "https://ftp.ebi.ac.uk/pub/databases/chebi/flat_files/database_accession.tsv.gz"
-    KEGG_SOURCE_ID = "45"  # KEGG COMPOUND source ID in ChEBI database
+    # ChEBI files KEGG cross-references under three different source ids, one per KEGG
+    # sub-database, and each uses its own accession prefix. Measured over the whole
+    # 422,561-row table on 2026-08-12:
+    #     source 45 -> COMPOUND  C#####   18,465
+    #     source 46 -> DRUG      D#####    4,529
+    #     source 47 -> GLYCAN    G#####      831
+    # Only source 45/C was accepted, so 5,360 ChEBI->KEGG mappings were dropped. That
+    # matters because KEGG pathway maps genuinely draw glycans and drugs -- the installed
+    # mmu hub network contains 213 G and 28 D nodes -- while KEGG's /list/compound
+    # endpoint returns COMPOUND only (compounds_all.list is 19,541 rows, all C). So a
+    # glycan on a pathway had no route from a user's ChEBI identifier at all.
+    KEGG_SOURCE_PREFIXES = {"45": "C", "46": "D", "47": "G"}
 
     nTry = 1
     while nTry <= maxTries:
@@ -835,8 +985,14 @@ def downloadChEBItoKEGGMapping(message, logFile, dirName, fileName, delay, maxTr
                     accession_number = fields[2]
                     source_id = fields[5]
 
-                    # Filter for KEGG COMPOUND entries with valid KEGG ID format (C + 5 digits)
-                    if source_id == KEGG_SOURCE_ID and accession_number.startswith('C') and len(accession_number) == 6:
+                    # Keep an entry only when the accession has the prefix and length that
+                    # its own source id implies -- source 45 also carries CAS numbers such
+                    # as "498-15-7", which must not be taken for KEGG identifiers.
+                    expectedPrefix = KEGG_SOURCE_PREFIXES.get(source_id)
+                    if (expectedPrefix
+                            and len(accession_number) == 6
+                            and accession_number[0] == expectedPrefix
+                            and accession_number[1:].isdigit()):
                         kegg_mappings.append(f"chebi:{compound_id}\tcpd:{accession_number}\n")
 
             # Write to output file
@@ -881,9 +1037,23 @@ def downloadKEGGFile(message, logFile, URL, dirName, fileName, delay, maxTries):
             response = requests.get(URL, timeout=30)
             response.raise_for_status()  # Raises HTTPError for bad status codes (4xx, 5xx)
 
-            # Write the content to file
-            with open(dirName + fileName, 'wb') as f:
+            # raise_for_status() only rejects a bad STATUS. KEGG answers 200 with an
+            # empty body for an unknown organism or a withdrawn entry, and the empty
+            # file used to be written and reported as a successful download -- the KGML
+            # loop then iterated zero pathways and the organism was recorded as
+            # DOWNLOAD SUCCESS with no pathways at all.
+            if not response.content.strip():
+                raise requests.exceptions.RequestException(
+                    "empty body (HTTP " + str(response.status_code) + ") for " + URL)
+
+            # Write to a temporary name and rename only once the body is known to be
+            # non-empty, so an interrupted write cannot leave a file that the next run
+            # mistakes for a complete download.
+            targetPath = dirName + fileName
+            tempPath = targetPath + ".part"
+            with open(tempPath, 'wb') as f:
                 f.write(response.content)
+            os.replace(tempPath, targetPath)
 
             # Log success to the log file
             with open(logFile, 'a') as log_file:
