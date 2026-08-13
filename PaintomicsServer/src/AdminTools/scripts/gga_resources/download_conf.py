@@ -1,10 +1,11 @@
 EXTERNAL_RESOURCES = {
                 "ensembl"   :   [
                     {
-                    "url"           :   "https://www.ensembl.org/biomart/martservice",
-                    "file"          :   "gga_resources/ensembl_mapping.xml",
+                    "url"           :   "https://ftp.ensembl.org/pub/",
+                    "species-dir"   :   "gallus_gallus",
+                    "division"      :   "vertebrates",
                     "output"        :   "ensembl_mapping.list",
-                    "description"   :   "Source: Ensembl Mammals databases. Downloaded from Biomart."
+                    "description"   :   "Source: Ensembl cross-reference TSV dumps. BioMart was retired (martservice answers HTTP 405), so the release/assembly and filename are resolved at run time rather than pinned here."
                     }
                 ],
                 "refseq"   :  [

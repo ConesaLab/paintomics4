@@ -1,16 +1,20 @@
 EXTERNAL_RESOURCES = {
                 "ensembl"   :   [
                     {
-                    "url"           :   "http://plants.ensembl.org/biomart/martservice?query=",
-                    "file"          :   "dosa_resources/ensembl_mapping.xml",
+                    "url"           :   "https://ftp.ebi.ac.uk/ensemblgenomes/pub/current/",
+                    "species-dir"   :   "oryza_sativa",
+                    "division"      :   "plants",
                     "output"        :   "ensembl_mapping.list",
-                    "description"   :   "Source: Ensembl Plants databases. Downloaded from Biomart."
+                    "description"   :   "Source: Ensembl cross-reference TSV dumps. BioMart was retired (martservice answers HTTP 405), so the release/assembly and filename are resolved at run time rather than pinned here."
                     },
                     {
-                    "url"           :   "http://plants.ensembl.org/biomart/martservice?query=",
-                    "file"          :   "dosa_resources/uniprot_mapping.xml",
+                    "url"           :   "https://ftp.ebi.ac.uk/ensemblgenomes/pub/current/",
+                    "species-dir"   :   "oryza_sativa",
+                    "division"      :   "plants",
+                    "xref-type"     :   "uniprot",
+                    "xref-db"       :   ["Uniprot/SWISSPROT", "Uniprot/SPTREMBL"],
                     "output"        :   "uniprot_mapping.list",
-                    "description"   :   "Source: UniProt + Ensembl Plants databases. Downloaded from Biomart."
+                    "description"   :   "Source: Ensembl UniProt cross-reference TSV dumps. BioMart was retired (martservice answers HTTP 405), so the release/assembly and filename are resolved at run time rather than pinned here."
                     }
                 ]
         }

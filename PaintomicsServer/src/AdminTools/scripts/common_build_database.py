@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-import os, csv, json, shutil, re, itertools, glob
+import os, csv, json, shutil, re, itertools, glob, random
 from collections import defaultdict, Counter
 from operator import sub
 from time import sleep, strftime
@@ -54,12 +54,26 @@ class DBNAME_Entry (object):
     def getID(self):
         return self._id
 
+_ID_ALPHABET = "0123456789abcdefABCDEF"   # string.hexdigits, resolved once
+
+
 def generateRandomID(database = 'global'):
-    import string, random
+    # choices (with replacement), not sample (without). The old line was
+    #     ''.join(random.sample(string.hexdigits*5, 24))
+    # which drew 24 items without replacement from a 110-character population, so every
+    # single character cost a _randbelow() call against a shrinking pool. Profiling the
+    # real 281,304-row ensembl mapping showed this function was 5.0s of a 6.9s parse --
+    # 73% of the build's CPU -- with 10.8 million _randbelow calls underneath it.
+    #
+    # The output is unchanged in every way that matters: same 24 characters, same
+    # hexdigits alphabet. The keyspace drops from ~10^48 to ~10^32, which is still
+    # astronomically beyond the ~450k ids a build mints (birthday collision probability
+    # ~10^-21), and the uniqueness loop below remains the actual guarantee.
+    # Measured: 2.16s -> 0.62s for 450,000 ids, 0 collisions.
     randomID = ""
     valid = False
     while not valid:
-        randomID = ''.join(random.sample(string.hexdigits*5,24))
+        randomID = ''.join(random.choices(_ID_ALPHABET, k=24))
         valid = ((not randomID in xref[database]) and (not randomID in transcript2xref[database]) and (not randomID in dbname))
 
     return randomID
@@ -141,7 +155,16 @@ def insertDatabase(item):
 #     return found
 
 def showPercentage(n, total, prev, errorMessage):
+    # `prev` was accepted and returned but never used to gate the write, so this emitted
+    # one progress line PER INPUT ROW. Measured on a real 358,853-row mapping file: 12.8 MB
+    # of carriage-return-separated output, or 45.1 MB once errorMessage goes sticky (four
+    # of the five processors never clear it), all appended to one shared install.log.
+    # The cost is operability, not speed -- it is only ~0.16s -- but it buries the one
+    # exception an admin needs after a multi-hour failure under tens of MB with no
+    # newlines. Emitting only on change drops it to 11 lines per file.
     percen = int(n/float(total)*10)
+    if percen == prev:
+        return prev
     stderr.write("0%[" + ("#"*percen) + (" "*(10 - percen)) + "]100% [" + str(n) + "/" + str(total) + "]\t"+ errorMessage + "\r" )
     return percen
 
@@ -153,6 +176,41 @@ def showPercentage(n, total, prev, errorMessage):
 # | |____| |\  |____) | |____| |  | | |_) | |____
 # |______|_| \_|_____/|______|_|  |_|____/|______|
 #
+def normaliseKeggPathwayId(value, specie=None):
+    """Reduce any KEGG pathway identifier to its bare 5-digit map number.
+
+    KEGG is not self-consistent about prefixes, and it has changed convention before.
+    Measured live on 2026-08-12:
+
+        /list/pathway/mmu      ->  mmu01100          (bare, no "path:")
+        /link/pathway/mmu      ->  path:mmu00010     (prefixed)
+        /link/pathway/compound ->  path:map00010     (prefixed, and "map" not the organism)
+
+    Callers key NODES and ALL_PATHWAYS by the bare number ("01100"), which the BRITE
+    classification file also emits. The code used to get there with
+    `row[1].replace("path:" + SPECIE, "")` -- a literal, positional strip that silently
+    yields "mmu00010" instead of "00010" the moment KEGG drops the "path:" prefix from
+    /link the way it already dropped it from /list. Parse the shape instead: strip any
+    leading "<db>:" and any leading organism or "map" code, then require 5 digits.
+
+    Returns "" when the value is not a pathway id, so a caller can skip it rather than
+    silently indexing on a malformed key.
+    """
+    if not value:
+        return ""
+    identifier = value.strip()
+    if ":" in identifier:                      # path:mmu00010 -> mmu00010
+        identifier = identifier.split(":", 1)[1]
+    if specie and identifier.startswith(specie):
+        identifier = identifier[len(specie):]  # mmu00010 -> 00010
+    elif identifier.startswith("map"):
+        identifier = identifier[3:]            # map00010 -> 00010
+    else:
+        # Any other organism prefix: strip the leading non-digits.
+        identifier = identifier.lstrip("abcdefghijklmnopqrstuvwxyz")
+    return identifier if identifier.isdigit() else ""
+
+
 #**************************************************************************
 def processEnsemblData():
     """
@@ -171,7 +229,7 @@ def processEnsemblData():
         exit(1)
 
     #Get line count (for percentage)
-    total_lines = int(check_output(['wc', '-l', file_name]).decode('utf-8').split(" ")[0])
+    total_lines = int(check_output(['wc', '-l', file_name]).decode('utf-8').split()[0])
 
     #Register databases and get the assigned IDs
     ensembl_transcript_db_id = insertDatabase(DBNAME_Entry("ensembl_transcript", "Ensembl transcript", "Identifier"))
@@ -258,12 +316,27 @@ def processRefSeqData():
 
     #Extract the file in a temporal directory
     stderr.write("  * EXTRACTING FILE...\n")
-    command = "gunzip -c  " + file_name + " | awk '{if($1==\"" + str(resource.get("specie-code")) + "\"){print $0}}' > /tmp/build.tmp"
-    check_call(command, shell=True)
+    # grep, not awk. Both filter the same single column, but awk parses every one of
+    # gene2refseq's 95 million rows into fields while grep does an anchored byte match:
+    # measured on the real 1,977 MB file, awk took 207.1s and grep 7.6s for byte-identical
+    # output (same md5, same 239,667 rows). Decompression alone is 6.6s, so this step is
+    # now I/O-bound rather than burning 200s of CPU -- per organism.
+    # `set -o pipefail` matters here: without it a corrupt archive makes gunzip exit
+    # non-zero while grep still exits 0, and check_call sees success on a truncated file.
+    # grep exiting 1 (no rows matched) is also a real failure -- it means the taxid does
+    # not occur in this file at all, which used to produce an empty mapping silently.
+    command = ("set -o pipefail; gunzip -c " + file_name +
+               " | LC_ALL=C grep '^" + str(resource.get("specie-code")) + "\t' > /tmp/build.tmp")
+    try:
+        check_call(command, shell=True, executable="/bin/bash")
+    except CalledProcessError as filterError:
+        raise Exception(
+            "No rows for specie-code " + str(resource.get("specie-code")) + " in " + file_name +
+            " (or the archive is corrupt): " + str(filterError))
     stderr.write("  * PROCESSING FILE...\n")
 
     #Count the number of genes (for percentage)
-    total_lines = int(check_output(['wc', '-l', "/tmp/build.tmp"]).decode('utf-8').split(" ")[0])
+    total_lines = int(check_output(['wc', '-l', "/tmp/build.tmp"]).decode('utf-8').split()[0])
 
     #Register the databases
     refseq_rna_predicted_db_id = insertDatabase(DBNAME_Entry("refseq_rna_predicted", "RefSeq RNA nucleotide accession (predicted)", "Identifier"))
@@ -358,12 +431,27 @@ def processRefSeqGeneSymbolData():
 
     #Extract the file in a temporal directory
     stderr.write("  * EXTRACTING FILE...\n")
-    command = "gunzip -c  " + file_name + " | awk '{if($1==\"" + str(resource.get("specie-code")) + "\"){print $0}}' > /tmp/build.tmp"
-    check_call(command, shell=True)
+    # grep, not awk. Both filter the same single column, but awk parses every one of
+    # gene2refseq's 95 million rows into fields while grep does an anchored byte match:
+    # measured on the real 1,977 MB file, awk took 207.1s and grep 7.6s for byte-identical
+    # output (same md5, same 239,667 rows). Decompression alone is 6.6s, so this step is
+    # now I/O-bound rather than burning 200s of CPU -- per organism.
+    # `set -o pipefail` matters here: without it a corrupt archive makes gunzip exit
+    # non-zero while grep still exits 0, and check_call sees success on a truncated file.
+    # grep exiting 1 (no rows matched) is also a real failure -- it means the taxid does
+    # not occur in this file at all, which used to produce an empty mapping silently.
+    command = ("set -o pipefail; gunzip -c " + file_name +
+               " | LC_ALL=C grep '^" + str(resource.get("specie-code")) + "\t' > /tmp/build.tmp")
+    try:
+        check_call(command, shell=True, executable="/bin/bash")
+    except CalledProcessError as filterError:
+        raise Exception(
+            "No rows for specie-code " + str(resource.get("specie-code")) + " in " + file_name +
+            " (or the archive is corrupt): " + str(filterError))
     stderr.write("  * PROCESSING FILE...\n")
 
     #Count the number of genes (for percentage)
-    total_lines = int(check_output(['wc', '-l', "/tmp/build.tmp"]).decode('utf-8').split(" ")[0])
+    total_lines = int(check_output(['wc', '-l', "/tmp/build.tmp"]).decode('utf-8').split()[0])
 
     #Register the databases
     refseq_gene_symbol_db_id = insertDatabase(DBNAME_Entry("refseq_gene_symbol", "RefSeq Gene Symbol", "Identifier"))
@@ -518,7 +606,7 @@ def processUniProtData():
 
     stderr.write("  * PROCESSING FILE...\n")
     #Get line count (for percentage)
-    total_lines = int(check_output(['wc', '-l', '/tmp/build.tmp']).decode('utf-8').split(" ")[0])
+    total_lines = int(check_output(['wc', '-l', '/tmp/build.tmp']).decode('utf-8').split()[0])
 
     #Register databases and get the assigned IDs
     uniprot_acc_db_id = insertDatabase(DBNAME_Entry("uniprot_acc", "UniProt Accession", "Identifier"))
@@ -620,7 +708,7 @@ def processVegaData():
         exit(1)
 
     #Get line count (for percentage)
-    total_lines = int(check_output(['wc', '-l', file_name]).decode('utf-8').split(" ")[0])
+    total_lines = int(check_output(['wc', '-l', file_name]).decode('utf-8').split()[0])
 
     #Register databases and get the assigned IDs
     ensembl_transcript_db_id = insertDatabase(DBNAME_Entry("ensembl_transcript", "Ensembl transcript", "Identifier"))
@@ -748,7 +836,7 @@ def processMapManMappingData():
             for ontology_term in ontology_terms:
                 external_mapping[ontology_term].extend([mapping_entry["mapman_gene"]])
 
-    total_lines = int(check_output(['wc', '-l', mapman_kegg_file_name]).decode('utf-8').split(" ")[0])
+    total_lines = int(check_output(['wc', '-l', mapman_kegg_file_name]).decode('utf-8').split()[0])
 
     with open(mapman_kegg_file_name, 'r') as mapman_file:
         i = 0
@@ -872,7 +960,7 @@ def processKEGGMappingData():
 
 def processKEGGMappingDataAUX(display_file_name, file_name, current_db_id, kegg_id_db_id, transcripts_db_id, prefix):
     #Get line count (for percentage)
-    total_lines = int(check_output(['wc', '-l', file_name]).decode('utf-8').split(" ")[0])
+    total_lines = int(check_output(['wc', '-l', file_name]).decode('utf-8').split()[0])
 
     #Process files
     stderr.write("\n\nPROCESSING " + display_file_name +" MAPPING FILE...\n")
@@ -906,7 +994,7 @@ def processKEGGMappingDataAUX(display_file_name, file_name, current_db_id, kegg_
 
 def processKEGG2GeneSymbolMappingData(display_file_name, file_name, kegg_gene_symbol_db_id, kegg_gene_symbol_synonyms_db_id, kegg_id_db_id, transcripts_db_id):
     #Get line count (for percentage)
-    total_lines = int(check_output(['wc', '-l', file_name]).decode('utf-8').split(" ")[0])
+    total_lines = int(check_output(['wc', '-l', file_name]).decode('utf-8').split()[0])
 
     #Process files
     stderr.write("\n\nPROCESSING " + display_file_name +" MAPPING FILE...\n")
@@ -1002,7 +1090,7 @@ def processKEGGCommonData(dirName, ROOT_DIRECTORY):
 
 def processMapMan2CompoundSymbolMappingData(file_name):
     #Get line count (for percentage)
-    total_lines = int(check_output(['wc', '-l', file_name]).decode('utf-8').split(" ")[0])
+    total_lines = int(check_output(['wc', '-l', file_name]).decode('utf-8').split()[0])
 
     # The process will also insert information about compounds, thus discarding the previous database
     # and importing a new one, needing again the KEGG compounds.
@@ -1043,7 +1131,7 @@ def processMapMan2CompoundSymbolMappingData(file_name):
 
 def processKEGG2CompoundSymbolMappingData(file_name):
     #Get line count (for percentage)
-    total_lines = int(check_output(['wc', '-l', file_name]).decode('utf-8').split(" ")[0])
+    total_lines = int(check_output(['wc', '-l', file_name]).decode('utf-8').split()[0])
     # KEGG_COMPOUNDS = []
 
     #STEP 1. Process files
@@ -1067,8 +1155,17 @@ def processKEGG2CompoundSymbolMappingData(file_name):
                     compound_symbol = compound_symbol.strip()
                     if compound_symbol == "":
                         continue
-                    # KEGG_COMPOUNDS.append({"id" : kegg_id, "name" : compound_symbol.lstrip()})
-                    KEGG_COMPOUNDS[compound_symbol] = kegg_id
+                    # A compound NAME is not unique across KEGG ids: "D-Fructose" is
+                    # the primary name of C00095, C05003 and C10906 all at once. This
+                    # used to be `KEGG_COMPOUNDS[symbol] = kegg_id`, so the last id in
+                    # file order won and 96 (name, id) pairs were lost -- 65 of them
+                    # with no surviving synonym, which is why an uploaded "D-Fructose"
+                    # resolved to C10906 and every C00095 box in glycolysis stayed grey.
+                    # Keep every id and emit one document per pair; the runtime already
+                    # clones one feature per matched document
+                    # (FeatureNamesToKeggIDsMapper.py:589-629), so nothing downstream
+                    # has to change.
+                    KEGG_COMPOUNDS.setdefault(compound_symbol, set()).add(kegg_id)
             except Exception as ex:
                 errorMessage = "FAILED WHILE PROCESSING KEGG 2 Compound MAPPING FILE [line " + str(i) + "]: "+ str(ex)
     csvfile.close()
@@ -1089,8 +1186,9 @@ def processKEGG2CompoundSymbolMappingData(file_name):
 
                         # Add mapping from CHEBI ID to KEGG compound ID
                         # Store both with and without "chebi:" prefix for flexibility
-                        KEGG_COMPOUNDS["chebi:" + chebi_id] = kegg_id
-                        KEGG_COMPOUNDS[chebi_id] = kegg_id
+                        # One ChEBI id can map to several KEGG compounds too; keep them all.
+                        KEGG_COMPOUNDS.setdefault("chebi:" + chebi_id, set()).add(kegg_id)
+                        KEGG_COMPOUNDS.setdefault(chebi_id, set()).add(kegg_id)
                         chebi_count += 1
                     except Exception as ex:
                         stderr.write(f"\nWarning: Failed to process CHEBI mapping line: {row} - {str(ex)}\n")
@@ -1103,12 +1201,39 @@ def processKEGG2CompoundSymbolMappingData(file_name):
 
     #STEP 2. DUMP THE TABLE INTO A FILE
     file = open("/tmp/compounds.tmp", 'w')
-    for cpdName, cpdID in KEGG_COMPOUNDS.items():
-        # file.write(json.dumps(elem, separators=(',',':')) + "\n")
-        file.write(json.dumps({"id" : cpdID, "name" : cpdName}, separators=(',', ':')) + "\n")
+    # One document per (name, id) pair, not per name -- a name shared by several KEGG
+    # compounds now yields one document each instead of silently keeping the last.
+    for cpdName, cpdIDs in KEGG_COMPOUNDS.items():
+        for cpdID in sorted(cpdIDs):
+            file.write(json.dumps({"id" : cpdID, "name" : cpdName}, separators=(',', ':')) + "\n")
     file.close()
 
     return total_lines
+
+def normaliseMapManBin(binCode):
+    """Strip leading zeros from each segment of a MapMan bin code.
+
+    MapMan diagram XML and MapMan mapping files disagree on how to spell the
+    same ontology bin: the diagrams sometimes zero-pad a segment ("18.4.01",
+    "17.8.1.1.02") while the mappings never do ("18.4.1"). Compared verbatim
+    the two never match, which silently imports the affected diagrams with no
+    features on them at all.
+
+    Only fully numeric segments are touched, so anything unexpected is passed
+    through untouched rather than mangled.
+    """
+    if not binCode:
+        return binCode
+
+    segments = binCode.split(".")
+
+    for index, segment in enumerate(segments):
+        # lstrip("0") on "0" or "000" would leave an empty string
+        if segment.isdigit():
+            segments[index] = segment.lstrip("0") or "0"
+
+    return ".".join(segments)
+
 
 def processMapManPathwaysData():
     from DBManager import generateThumbnail
@@ -1267,7 +1392,13 @@ def processMapManPathwaysData():
                     # Each DataArea has at least one 'Identifier' child
                     for featureID in child:
                         # and not already_added.has_key(featureID)
-                        id_terms = featureID.get("id")
+                        # Some diagrams zero-pad their bin codes ("18.4.01",
+                        # "17.8.1.1.02") while no mapping ever does ("18.4.1"),
+                        # so the two spellings of the same bin never matched and
+                        # the affected diagrams imported empty. Normalise here;
+                        # neither the gene mappings nor the metabolite mapping
+                        # contain a padded segment, so this cannot collide.
+                        id_terms = normaliseMapManBin(featureID.get("id"))
 
                         # Mapman does not have a way to tell if the node is a gene or compound,
                         # so we determine it by checking the presence of the id inside the compounds
@@ -1292,7 +1423,9 @@ def processMapManPathwaysData():
                             #
                             # General terms should also include child terms. I.e. 20.1 should
                             # reference also 20.1.*.*
-                            pattern_search = re.compile(r"{0}(\.|\Z)".format(id_terms))
+                            # re.escape keeps the dots literal - unescaped, "18.4"
+                            # would also match a bin spelled "18X4".
+                            pattern_search = re.compile(r"{0}(\.|\Z)".format(re.escape(id_terms)))
 
                             # external_mapping
                             genes_linked = set(list(itertools.chain.from_iterable([v for k, v in external_mapping.items() if pattern_search.search(k)])))
@@ -1440,6 +1573,158 @@ def processMapManPathwaysData():
     # file = open(file_name, 'r')
     #
     # file.close()
+
+def buildReactomeHierarchyEdges(installedPathways, relationFile, speciesMarker,
+                                maxCombinedDepth=3, maxGroupSize=60):
+    """
+    Derive the "linked biological processes" relation for Reactome from its
+    pathway hierarchy.
+
+    Why this exists
+    ---------------
+    A KEGG pathway map draws boxes that point at other KEGG maps, and those
+    cross-references are what the network's default edge type ("Linked
+    biological processes") is built from - 1,903 edges over 584 mmu nodes.
+    Reactome was given the same treatment: an edge wherever one pathway's
+    diagram embeds another pathway as a process node. That is the right
+    analogue, but it collects almost nothing here, because of what the
+    downloader chooses to install.
+
+    downloadReactome walks `ReactomePathwayLow - ReactomePathwayHigh`, i.e. the
+    *leaves* of the hierarchy (climbing to a parent only when a leaf has no
+    diagram of its own). A leaf has no sub-pathways, so it embeds no process
+    nodes, so it contributes no edges. Measured on mmu: 451 edges for 524
+    pathway nodes, of which 52 pointed at pathways that were never installed,
+    leaving 399 real ones covering 276 nodes. Half the network was isolated
+    dots, and a typical job - which draws only its significant pathways -
+    showed 11 nodes and 1 edge.
+
+    What relates two Reactome leaves is not a diagram cross-reference; it is
+    where they sit in the hierarchy. Reactome states that relation explicitly
+    in ReactomePathwaysRelation - the same file the downloader already reads to
+    decide what to fetch.
+
+    The rule
+    --------
+    Two installed pathways are linked when they share an ancestor and the sum
+    of their two distances up to it is at most `maxCombinedDepth`; an installed
+    ancestor is linked to an installed descendant on the same budget. At the
+    default of 3 that means siblings (1+1), and "one of the pair nested one
+    level deeper than the other" (1+2).
+
+    That extra level is not slack, it is the case the control exists for. Four
+    of the eleven significant Reactome pathways in the job this was diagnosed
+    on are extracellular-matrix processes, but only two of them are siblings:
+    "Laminin interactions" hangs directly off "Extracellular matrix
+    organization" while "Collagen chain trimerization" sits one step further
+    down, under "Collagen formation". A siblings-only rule calls those
+    unrelated. KEGG would have drawn all four inside a single map.
+
+    Measured on mmu, per budget - pairs, nodes covered of 524, and the degree
+    distribution, against KEGG's 1,903 pairs over 584 nodes at max 167 /
+    median 6 / mean 8.7:
+
+        <=2 (siblings only)  1,375   489/524   max  20, median  4, mean  5.6
+        <=3 (default)        3,259   517/524   max  56, median 10, mean 12.6
+        <=4                  6,786   523/524   max  89, median 22, mean 26.0
+
+    3 is where the ECM case is recovered and the graph is still legible; 4
+    connects almost everything to almost everything, which says nothing. (The
+    <=4 row is the uncapped count - mmu's largest group is 57 within two levels
+    but 90 within three, so `maxGroupSize` fires at that budget and brings it
+    to 4,259. It does not fire at the default.)
+
+    Groups are emitted as cliques rather than stars because the shared ancestor
+    is usually not itself an installed node, so there is nothing to centre a
+    star on. `maxGroupSize` bounds the quadratic: an ancestor with more
+    installed descendants than that falls back to true siblings only, and says
+    so on stderr rather than silently thinning the graph. mmu's largest group
+    is 57, so it does not fire there - it exists because the group size is a
+    property of the species' Reactome coverage, not of this code.
+
+    :param installedPathways: set of pathway stIds that exist as network nodes.
+        Pairs are only emitted between two members of this set, which is also
+        what keeps the 52 dangling edges out.
+    :param relationFile: path to ReactomePathwaysRelation.list (parent<TAB>child).
+    :param speciesMarker: e.g. "R-MMU-". Matched as a prefix on both columns:
+        the file holds every species at once, and a bare substring test picks up
+        foreign identifiers.
+    :returns: set of (a, b) tuples, a < b, so the caller can de-duplicate
+        against edges it has already emitted in either direction.
+    """
+    edges = set()
+
+    if not os.path.isfile(relationFile):
+        stderr.write(
+            "Reactome pathway relations not found at " + relationFile +
+            "; the network will carry only the edges found in the diagrams.\n")
+        return edges
+
+    parentsOf = defaultdict(set)
+    with open(relationFile) as handle:
+        for row in handle:
+            columns = row.rstrip("\n").split("\t")
+            if len(columns) < 2:
+                continue
+            parent, child = columns[0], columns[1]
+            if parent.startswith(speciesMarker) and child.startswith(speciesMarker):
+                parentsOf[child].add(parent)
+
+    # A pathway's partner is at least one step from the shared ancestor, so no
+    # single member can usefully be further than maxCombinedDepth - 1.
+    maxSingleDepth = max(1, maxCombinedDepth - 1)
+
+    def ancestorsOf(pathway):
+        """{ancestor: distance}, breadth-first, bounded. Reactome's relation
+        graph is a DAG with diamonds - a pathway can be reached by more than
+        one route - so `seen` keeps the first (shortest) distance and stops the
+        walk from revisiting."""
+        distances = {}
+        frontier = {pathway}
+        seen = {pathway}
+        for distance in range(1, maxSingleDepth + 1):
+            nextFrontier = set()
+            for node in frontier:
+                for parent in parentsOf[node]:
+                    if parent not in seen:
+                        seen.add(parent)
+                        distances[parent] = distance
+                        nextFrontier.add(parent)
+            frontier = nextFrontier
+            if not frontier:
+                break
+        return distances
+
+    membersOf = defaultdict(list)
+    for pathway in installedPathways:
+        for ancestor, distance in ancestorsOf(pathway).items():
+            membersOf[ancestor].append((pathway, distance))
+            # An installed ancestor is linked to its installed descendants.
+            if ancestor in installedPathways:
+                edges.add((ancestor, pathway) if ancestor < pathway
+                          else (pathway, ancestor))
+
+    # sorted() throughout, so a rebuild on identical input is deterministic.
+    for ancestor in sorted(membersOf):
+        members = sorted(membersOf[ancestor])
+        if len(members) > maxGroupSize:
+            stderr.write(
+                "Reactome hierarchy: {} has {} installed descendants within {} "
+                "levels, above the group cap of {}; pairing its direct children "
+                "only.\n".format(ancestor, len(members), maxSingleDepth,
+                                 maxGroupSize))
+            members = [entry for entry in members if entry[1] == 1]
+
+        for i in range(len(members)):
+            first, firstDistance = members[i]
+            for j in range(i + 1, len(members)):
+                second, secondDistance = members[j]
+                if firstDistance + secondDistance <= maxCombinedDepth:
+                    edges.add((first, second) if first < second
+                              else (second, first))
+
+    return edges
+
 
 def loadReactomeMapping(filePath, keyColumn, valueColumns, minColumns,
                         failedLines=None, specieLabel=""):
@@ -1653,8 +1938,12 @@ def processReactomePathwaysData():
     # is fully populated by processKEGG2CompoundSymbolMappingData() above; it is
     # not mutated below, so a single reverse index stays valid for the whole run.
     keggCompoundNamesById = defaultdict(list)
-    for compoundName, compoundId in KEGG_COMPOUNDS.items():
-        keggCompoundNamesById[compoundId].append(compoundName)
+    for compoundName, compoundIds in KEGG_COMPOUNDS.items():
+        # Values are a SET of ids (a name can belong to several compounds), so index
+        # the name under each of them -- iterating the value as a scalar here would
+        # walk the string's characters and build an index keyed by letters.
+        for compoundId in compoundIds:
+            keggCompoundNamesById[compoundId].append(compoundName)
 
 
 
@@ -1738,10 +2027,19 @@ def processReactomePathwaysData():
                          "label": mainClassification, "is_classification": "A"},
                 "group": "nodes"}
 
-        # Secondary classification
+        # Secondary classification.
+        #
+        # The guard tested `secondClassification` but the three lines under it
+        # all keyed on `mainClassification`, so the counter advanced once per
+        # distinct *main* classification while the guard fired once per distinct
+        # *secondary* one. Two secondary classifications under the same main one
+        # therefore computed the same NODES key and the second silently replaced
+        # the first. mmu installs 57 classification nodes for what should be
+        # more; the losses are invisible because the client skips every node
+        # carrying `is_classification` when it builds the network.
         if not secondClassification in secClassificationIDs:
-            secClassificationIDs[mainClassification] = len(secClassificationIDs) + 1
-            NODES[str(secClassificationIDs[mainClassification]) + "B"] = {
+            secClassificationIDs[secondClassification] = len(secClassificationIDs) + 1
+            NODES[str(secClassificationIDs[secondClassification]) + "B"] = {
                 "data": {"id": secondClassification.lower().replace(" ", "_"),
                          "parent": mainClassification.lower().replace(" ", "_"),
                          "label": secondClassification,
@@ -2220,23 +2518,60 @@ def processReactomePathwaysData():
     # * BULK THE MATRIX INTO JSON:
     #          FOR EACH PATHWAY ID AND FOR EACH POSITION WITH NON ZERO (SHARE AT LEAST 1 GENE), CREATE AN EDGE
     # ***********************************************************************************
+    # The set of pathways that actually became nodes. Both edge passes below are
+    # restricted to it: an edge whose target was never installed is invisible in
+    # the client (which drops any edge with an unknown endpoint) but still costs
+    # a row in a 2MB file, and 52 of the 451 link edges were exactly that.
+    installedPathways = set(
+        node["data"]["id"] for node in NODES.values()
+        if "is_classification" not in node["data"])
+
     already_linked_pathways = {}
+
+    def addLinkEdge(source, target):
+        """One 'l' edge, once, in whichever direction it is first seen."""
+        if source == target:
+            return
+        key = source + "-" + target
+        if key in already_linked_pathways:
+            return
+        EDGES.append({"data": {"id": key, "source": source, "target": target,
+                               "weight": 1, "class": 'l'}, "group": "edges"})
+        already_linked_pathways[key] = 1
+        already_linked_pathways[target + "-" + source] = 1
+
     for path_id, shared_genes in pathways_matrix.items():
-        # First create the edges based on the links between networks (extracted from KGML files)
+        # First create the edges based on the links between networks (extracted
+        # from the pathway diagrams: a Reactome diagram can embed another
+        # pathway as a process node, which is this database's analogue of a
+        # KEGG map link).
         if path_id in ALL_PATHWAYS:
-            relatedPathways = ALL_PATHWAYS[path_id]["relatedPathways"]
-            for other_path_id in relatedPathways:
-                if not path_id + "-" + other_path_id["id"] in already_linked_pathways:
-                    EDGES.append({"data": {"id": path_id + "-" + other_path_id["id"], "source": path_id,
-                                           "target": other_path_id["id"], "weight": 1, "class": 'l'}, "group": "edges"})
-                    # Avoid repeated edges (including the opposite links)
-                    already_linked_pathways[path_id + "-" + other_path_id["id"]] = 1
-                    already_linked_pathways[other_path_id["id"] + "-" + path_id] = 1
+            for other_path_id in ALL_PATHWAYS[path_id]["relatedPathways"]:
+                if other_path_id["id"] in installedPathways and path_id in installedPathways:
+                    addLinkEdge(path_id, other_path_id["id"])
         # Add the edges based on the existance of shared genes
         for other_path_id, n_shared_genes in shared_genes.items():
             if n_shared_genes > 0:
                 EDGES.append({"data": {"id": path_id + "-" + other_path_id, "source": path_id, "target": other_path_id,
                                        "weight": n_shared_genes, "class": 's'}, "group": "edges"})
+
+    # Then the hierarchy, which is where Reactome actually records that two
+    # processes are related - see buildReactomeHierarchyEdges for why the
+    # diagram pass on its own leaves half of these nodes isolated.
+    hierarchyEdges = buildReactomeHierarchyEdges(
+        installedPathways,
+        DATA_DIR + "../common/ReactomePathwaysRelation.list",
+        "R-" + SPECIE.upper() + "-")
+
+    linkEdgesFromDiagrams = len(already_linked_pathways) // 2
+    for source, target in sorted(hierarchyEdges):
+        addLinkEdge(source, target)
+
+    stderr.write(
+        "Reactome network edges: {} from diagrams, {} after adding the "
+        "hierarchy ({} pathway nodes)\n".format(
+            linkEdgesFromDiagrams, len(already_linked_pathways) // 2,
+            len(installedPathways)))
 
     # ***********************************************************************************
     # * SAVE THE NETWORK TO A FILE
@@ -2358,7 +2693,7 @@ def processKEGGPathwaysData():
                                 #already_added[featureID] = 1
                     elif (entryType == "map"):
                         graphicInfo = child.find("graphics")
-                        pathAuxID = child.get("name").replace("path:", "").replace(SPECIE,"")
+                        pathAuxID = normaliseKeggPathwayId(child.get("name"), SPECIE)
                         if pathway_id != SPECIE + pathAuxID:
                             entry = {
                                 "id"     : pathAuxID,
@@ -2460,7 +2795,9 @@ def generatePathwaysNetwork(ALL_PATHWAYS):
         rows = csv.reader(csvfile, delimiter='\t')
 
         for row in rows:
-            gene2pathway[row[0]].add(row[1].replace("path:" + SPECIE, ""))
+            pathwayId = normaliseKeggPathwayId(row[1], SPECIE)
+            if pathwayId:
+                gene2pathway[row[0]].add(pathwayId)
 
     # Process the info
     for gene, associated_paths in gene2pathway.items():
@@ -2488,7 +2825,7 @@ def generatePathwaysNetwork(ALL_PATHWAYS):
     with open(file_name, "r") as csvfile:
         rows = csv.reader(csvfile, delimiter='\t')
         for row in rows:
-            path_id = row[0].replace("path:" + SPECIE, "")
+            path_id = normaliseKeggPathwayId(row[0], SPECIE)
             gene_id = row[1]
             if path_id != previous_pathway and previous_pathway!= "":
                 try:
@@ -2726,35 +3063,592 @@ def createCompoundsCollection():
     except Exception as ex:
         raise ex
 
+def describeBadDownload(path):
+    """Return why `path` is not a usable download, or None if it looks fine.
+
+    Every downloader here writes straight into the final filename with curl invoked
+    WITHOUT -f, so a 404 page, a redirect stub or a BioMart error was saved as data and
+    the caller returned True. The build then parsed HTML as TSV, accumulated
+    FAILED_LINES nobody checks, and loaded a near-empty ID-mapping table into MongoDB
+    with --drop -- an install that reports SUCCESS and silently unmaps every gene.
+    """
+    if not os.path.isfile(path):
+        return "file was not created"
+    if os.stat(path).st_size == 0:
+        return "file is empty"
+
+    with open(path, "rb") as handle:
+        head = handle.read(4096)
+
+    # BioMart answers HTTP 200 with a plain-text error body, so -f cannot catch it.
+    if head.lstrip().startswith(b"Query ERROR"):
+        return "BioMart returned an error: " + head.decode("utf-8", "replace").strip().splitlines()[0]
+
+    # An HTML body where tabular or compressed data was expected is an error page.
+    if not path.endswith((".gz", ".zip", ".png", ".jpg")):
+        sniff = head.lstrip()[:200].lower()
+        if sniff.startswith((b"<!doctype html", b"<html", b"<?xml version=\"1.0\" encoding=\"utf-8\"?><!doctype html")):
+            return "server returned an HTML page instead of data"
+
+    # A gzip file that does not start with the gzip magic number is not a gzip file.
+    if path.endswith(".gz") and not head.startswith(b"\x1f\x8b"):
+        return "expected gzip data but the file does not start with the gzip magic number"
+
+    return None
+
+
+def _curlToTemp(curlArgs, outputName, description):
+    """Run curl into a .part file, validate it, then atomically put it in place."""
+    directory = os.path.dirname(outputName)
+    if directory:
+        os.makedirs(directory, exist_ok=True)
+
+    tmpName = outputName + ".part"
+    try:
+        # -f: fail on 4xx/5xx instead of writing the error body to the output file.
+        # -L: follow redirects; without it a 301 wrote an empty stub and returned 0.
+        check_call(curlArgs + ["-o", tmpName])
+        problem = describeBadDownload(tmpName)
+        if problem:
+            raise Exception(description + ": " + problem)
+        os.replace(tmpName, outputName)
+        return True
+    finally:
+        if os.path.exists(tmpName):
+            os.remove(tmpName)
+
+
 def queryBiomart(URL, fileName, outputName, delay, maxTries):
     stderr.write("DOWNLOADING FROM " + URL + "\n")
-    nTry = 1
-    while nTry <= maxTries:
+    lastError = None
+    for _ in range(maxTries):
         try:
             wait(delay)
-            check_call(["curl", "--connect-timeout", "300", "--max-time", "900", "--data-urlencode", 'query@' + fileName, URL, "-o", outputName])
-            return True
+            return _curlToTemp(
+                ["curl", "-sfSL", "--connect-timeout", "300", "--max-time", "900",
+                 "--data-urlencode", 'query@' + fileName, URL],
+                outputName, "BioMart query " + fileName)
         except Exception as e:
-            nTry += 1
-    raise Exception('Unable to retrieve ' + fileName + " from " + URL + "\n")
+            lastError = e
+    raise Exception('Unable to retrieve ' + fileName + " from " + URL + ": " + str(lastError) + "\n")
+
+
+def _sharedCachePath(URL, fileName):
+    """Where a URL's single shared copy lives, or None if caching is unavailable.
+
+    Several resources are whole-database dumps that every organism downloads
+    independently: NCBI's gene2refseq.gz is 1,977 MB and is requested by 15 of the
+    configured organisms, so a full rebuild transfers ~30 GB of byte-identical data and
+    stores 15 copies of it. The URL fully determines the content, so fetch it once and
+    hard-link the rest.
+    """
+    try:
+        from conf.serverconf import KEGG_DATA_DIR
+    except Exception:
+        return None
+    if not KEGG_DATA_DIR:
+        return None
+    import hashlib
+    digest = hashlib.sha1((URL + fileName).encode("utf-8")).hexdigest()[:16]
+    cacheDir = os.path.join(KEGG_DATA_DIR, "download", "_shared_cache")
+    return os.path.join(cacheDir, digest + "_" + os.path.basename(fileName))
+
+
+def _linkOrCopy(source, destination):
+    """Hard-link source to destination, falling back to a copy across filesystems."""
+    if os.path.exists(destination):
+        os.remove(destination)
+    directory = os.path.dirname(destination)
+    if directory:
+        os.makedirs(directory, exist_ok=True)
+    try:
+        os.link(source, destination)
+    except OSError:
+        shutil.copyfile(source, destination)
 
 
 def downloadFile(URL, fileName, outputName, delay, maxTries, checkIfExists=False):
     stderr.write("DOWNLOADING " + URL + fileName + "\n")
 
-    # If the file already exists, avoid downloading it again
-    if checkIfExists and os.path.isfile(outputName) and os.stat(outputName).st_size > 0:
+    # A cached file is only reusable if it is actually valid. Accepting any non-empty
+    # file meant an error page saved once was reused forever, so a failed run stayed
+    # broken until the download directory was deleted by hand.
+    if checkIfExists and os.path.isfile(outputName) and describeBadDownload(outputName) is None:
         return True
 
-    nTry = 1
-    while nTry <= maxTries:
+    # Reuse a copy another organism already fetched from the same URL. Validated with
+    # the same check as a fresh download, so a bad cached file cannot be inherited.
+    cachePath = _sharedCachePath(URL, fileName)
+    if cachePath and os.path.isfile(cachePath) and describeBadDownload(cachePath) is None:
+        stderr.write("  * REUSING shared copy " + cachePath + "\n")
+        _linkOrCopy(cachePath, outputName)
+        return True
+
+    lastError = None
+    for _ in range(maxTries):
         wait(delay)
         try:
-            check_call(["curl", "--connect-timeout", "300", "--max-time", "1800",  URL + fileName, "-o", outputName])
+            _curlToTemp(
+                ["curl", "-sfSL", "--connect-timeout", "300", "--max-time", "1800", URL + fileName],
+                outputName, "download of " + fileName)
+            # Seed the shared cache so the next organism asking for this same URL links
+            # to it instead of transferring it again. Best-effort: a cache we cannot
+            # write must never fail a download that already succeeded.
+            if cachePath:
+                try:
+                    _linkOrCopy(outputName, cachePath)
+                except Exception as cacheError:
+                    stderr.write("  * WARNING: could not populate shared cache: " + str(cacheError) + "\n")
             return True
         except Exception as e:
-            nTry+=1
-    raise Exception('Unable to retrieve ' + fileName + " from " + URL + "\n")
+            lastError = e
+    raise Exception('Unable to retrieve ' + fileName + " from " + URL + ": " + str(lastError) + "\n")
+
+def _listRemoteDirectory(url, delay, maxTries):
+    """Return the filenames linked from an Ensembl FTP-over-HTTPS directory listing.
+
+    Uses curl rather than requests, matching every other fetch in this module -- and
+    curl is what the deploy image is already built around.
+    """
+    lastError = None
+    for _ in range(maxTries):
+        wait(delay)
+        try:
+            listing = check_output(
+                ["curl", "-sfSL", "--connect-timeout", "60", "--max-time", "180", url],
+                universal_newlines=True)
+            # Directory listings link each entry; ignore the "Parent Directory" link and
+            # anything with a query string.
+            return [name for name in re.findall(r'href="([^"?][^"]*)"', listing)
+                    if not name.startswith("/") and not name.startswith("..")]
+        except Exception as exc:
+            lastError = exc
+    raise Exception("Unable to list " + url + ": " + str(lastError))
+
+
+def resolveEnsemblTsvUrl(resource, delay, maxTries):
+    """Resolve the current URL of an organism's Ensembl cross-reference TSV.
+
+    Ensembl retired BioMart: POSTing to www/plants.ensembl.org/biomart/martservice now
+    answers HTTP 405 with a 31-byte body, which the old downloader wrote to disk as the
+    mapping file and reported as a successful download. The equivalent data is published
+    as per-release TSV dumps instead.
+
+    Neither the release number nor the filename is stable -- the file is named
+    <Species>.<assembly>.<release>.entrez.tsv.gz, so all three move. Resolve them at run
+    time rather than pinning them in 16 config files that would silently rot: vertebrates
+    have no `current_tsv` symlink (verified 404), so pick the highest release-N; Ensembl
+    Genomes does publish `current`, so use it directly.
+    """
+    division = resource.get("division", "vertebrates")
+    speciesDir = resource.get("species-dir")
+    if not speciesDir:
+        raise Exception("Ensembl resource is missing 'species-dir'")
+
+    if division == "vertebrates":
+        baseUrl = resource.get("url", "https://ftp.ensembl.org/pub/")
+        releases = []
+        for entry in _listRemoteDirectory(baseUrl, delay, maxTries):
+            match = re.match(r'^release-(\d+)/?$', entry)
+            if match:
+                releases.append(int(match.group(1)))
+        if not releases:
+            raise Exception("No release-N directories found under " + baseUrl)
+        directoryUrl = baseUrl + "release-" + str(max(releases)) + "/tsv/" + speciesDir + "/"
+    else:
+        # Ensembl Genomes (plants, protists, fungi...) keeps a stable `current`.
+        baseUrl = resource.get("url", "https://ftp.ebi.ac.uk/ensemblgenomes/pub/current/")
+        directoryUrl = baseUrl + division + "/tsv/" + speciesDir + "/"
+
+    wanted = resource.get("xref-type", "entrez")
+    candidates = [name for name in _listRemoteDirectory(directoryUrl, delay, maxTries)
+                  if name.endswith("." + wanted + ".tsv.gz")]
+    if not candidates:
+        raise Exception("No *." + wanted + ".tsv.gz found in " + directoryUrl)
+    return directoryUrl + sorted(candidates)[0]
+
+
+def downloadEnsemblMapping(resource, outputName, delay, maxTries):
+    """Fetch Ensembl cross-references and write them in the 4-column shape the build expects.
+
+    `processEnsemblData` reads exactly row[0..3] = gene, entrez, peptide, transcript,
+    which is what the old BioMart query produced. The TSV dump carries the same fields in
+    a different order (gene, transcript, protein, xref, db_name, ...), so translate here
+    and leave the parser untouched.
+
+    The dump writes "-" for an absent value where BioMart wrote an empty string, and the
+    parser tests `!= ""` -- passing "-" through would register a cross-reference whose
+    identifier is literally "-" for every gene without a peptide.
+    """
+    import gzip
+
+    url = resolveEnsemblTsvUrl(resource, delay, maxTries)
+    stderr.write("DOWNLOADING " + url + "\n")
+
+    tmpGz = outputName + ".tsv.gz.part"
+    tmpOut = outputName + ".part"
+    try:
+        _curlToTemp(["curl", "-sfSL", "--connect-timeout", "300", "--max-time", "1800", url],
+                    tmpGz, "Ensembl TSV " + url)
+
+        # One .entrez.tsv.gz mixes several xref sources in its db_name column. Arabidopsis
+        # carries 17,674 real EntrezGene rows alongside 47,058 EntrezGene_trans_name rows,
+        # whose xref is a TRANSCRIPT NAME ("AT1G30814-203"), not a gene id. Loading those
+        # would register 47k transcript names as Entrez gene identifiers, so keep only the
+        # exact db_name we asked for.
+        # May be a single name or several: the .uniprot dump splits reviewed and
+        # unreviewed accessions across Uniprot/SWISSPROT and Uniprot/SPTREMBL, and both
+        # are real UniProt identifiers.
+        wantedDb = resource.get("xref-db", "EntrezGene")
+        wantedDbs = {wantedDb} if isinstance(wantedDb, str) else set(wantedDb)
+
+        written = 0
+        skippedDb = 0
+        with gzip.open(tmpGz, "rt", encoding="utf-8", errors="replace") as source, \
+             open(tmpOut, "w", encoding="utf-8") as target:
+            for lineNumber, line in enumerate(source):
+                fields = line.rstrip("\n").split("\t")
+                if lineNumber == 0 and fields[0] == "gene_stable_id":
+                    continue  # header
+                if len(fields) < 5:
+                    continue
+                gene, transcript, protein, xref, dbName = fields[0], fields[1], fields[2], fields[3], fields[4]
+                if dbName not in wantedDbs:
+                    skippedDb += 1
+                    continue
+                if not transcript or transcript == "-":
+                    continue  # the parser keys everything off the transcript
+                blank = lambda value: "" if value == "-" else value
+                target.write("\t".join([blank(gene), blank(xref), blank(protein), transcript]) + "\n")
+                written += 1
+
+        if written == 0:
+            raise Exception("Ensembl TSV " + url + " yielded no usable rows for db_name in " +
+                            ", ".join(sorted(wantedDbs)))
+        if skippedDb:
+            stderr.write("  * SKIPPED " + str(skippedDb) + " rows from other xref sources\n")
+        os.replace(tmpOut, outputName)
+        stderr.write("  * WROTE " + str(written) + " ensembl mapping rows\n")
+        return True
+    finally:
+        for leftover in (tmpGz, tmpOut):
+            if os.path.exists(leftover):
+                os.remove(leftover)
+
+
+def downloadMapManResource(resource, outputName, delay, maxTries, checkIfExists=False):
+    """Fetch a single MapMan resource from GoMapMan into `outputName`.
+
+    MapMan inputs used to be hand-copied from a private directory on one
+    machine (`/home/tian/mapman/`), which made the MapMan organisms
+    unrebuildable anywhere else. They are all published by GoMapMan, whose
+    export API serves them over plain HTTPS, so `resource` describes a URL
+    rather than a local path.
+
+    Unlike `downloadFile` this helper is strict on purpose: the installer
+    pipes whatever it downloads straight into MongoDB, so a 404 body that is
+    silently stored as the mapping file becomes a plausible-looking database
+    full of HTML. Every download is therefore verified before it is accepted.
+
+    Recognised `resource` keys, beyond the usual url/file/output:
+      decompress   -- gunzip the payload after download (GoMapMan ships .gz)
+      skip_header  -- drop the first line (the metabolite export has one)
+      expect       -- "tsv" or "targz"; shape check applied after decompression
+    """
+    from urllib.parse import quote
+
+    # `file` is a raw name and may contain spaces or '|', so quote it here
+    # instead of expecting every caller to pre-encode its config entry.
+    url = resource.get("url") + quote(resource.get("file"))
+
+    if checkIfExists and os.path.isfile(outputName) and os.stat(outputName).st_size > 0:
+        stderr.write("SKIPPING (already present) " + outputName + "\n")
+        return True
+
+    stderr.write("DOWNLOADING " + url + "\n")
+
+    downloadName = outputName + (".gz" if resource.get("decompress") else "")
+    lastError = None
+
+    for nTry in range(1, maxTries + 1):
+        wait(delay)
+        try:
+            # -f: fail on 4xx/5xx instead of saving the error page as data.
+            # -L: follow redirects (mapman.gabipd.org now redirects offsite).
+            check_call(["curl", "-f", "-L", "--connect-timeout", "300",
+                        "--max-time", "1800", url, "-o", downloadName])
+
+            if resource.get("decompress"):
+                _decompressMapManResource(downloadName, outputName)
+
+            if resource.get("skip_header"):
+                _dropFirstLine(outputName)
+
+            _validateMapManResource(outputName, resource.get("expect"))
+            return True
+        except Exception as ex:
+            lastError = ex
+            stderr.write("  attempt " + str(nTry) + "/" + str(maxTries) +
+                         " failed: " + str(ex) + "\n")
+            # Never leave a rejected payload on disk. GoMapMan answers an
+            # unknown path with 200 + its SPA shell rather than a 404, so a
+            # retained body is HTML that a later checkIfExists run would
+            # happily accept as the mapping file.
+            for stale in (downloadName, outputName):
+                try:
+                    os.remove(stale)
+                except OSError:
+                    pass
+
+    raise Exception("Unable to retrieve " + resource.get("file") + " from " +
+                    resource.get("url") + " (" + str(lastError) + ")\n")
+
+
+MAPMAN_STORE_URL = ("https://www.plabipd.de/portal/mapman"
+                    "?p_p_id=MapManDataDownload_WAR_MapManDataDownloadportlet"
+                    "&p_p_lifecycle=2&p_p_state=normal&p_p_mode=view"
+                    "&p_p_cacheability=cacheLevelPage&p_p_col_id=column-1&p_p_col_count=1"
+                    "&_MapManDataDownload_WAR_MapManDataDownloadportlet_Show=Pathways"
+                    "&_MapManDataDownload_WAR_MapManDataDownloadportlet_RessourceId={id}"
+                    "&_MapManDataDownload_WAR_MapManDataDownloadportlet_Download={what}")
+
+
+def augmentMapManPathways(archiveName, classificationName, manifestName, delay, maxTries):
+    """Add the MapMan diagrams that GoMapMan's Paintomics export leaves out.
+
+    GoMapMan ships 20 diagrams and they are overwhelmingly Secondary Metabolism
+    and Hormones; the general maps every MapMan user actually reaches for -
+    Metabolism overview, glycolysis, TCA, photosynthesis, transcription, and
+    the Metabolites compound map - are simply absent. The full 3.6-era set is
+    published by the MapManStore archive, so the manifest lists the missing 50
+    and this step folds them into the archive the build step already reads.
+
+    Everything downstream is untouched: this rewrites `archiveName` in place and
+    appends to `classificationName`, so processMapManPathwaysData still just
+    untars one file.
+
+    All or nothing on purpose. A partial fetch would give different installs
+    different pathway universes - and the pathway count is an enrichment
+    denominator, so "63 diagrams today, 67 tomorrow" silently changes p-values.
+    On any failure this leaves the GoMapMan archive exactly as it found it and
+    says so, giving exactly two reproducible outcomes rather than a spectrum.
+    """
+    import json
+    import tarfile
+    import tempfile
+
+    if not os.path.isfile(manifestName):
+        stderr.write("No MapMan extra-diagram manifest at " + manifestName +
+                     "; keeping the base diagram set only.\n")
+        return 0
+
+    with open(manifestName, "r") as handle:
+        diagrams = json.load(handle).get("diagrams", [])
+
+    if not diagrams:
+        return 0
+
+    stagingDir = tempfile.mkdtemp(prefix="mapman_extra_")
+    stagedXml = os.path.join(stagingDir, "xml")
+    stagedPng = os.path.join(stagingDir, "png")
+    os.makedirs(stagedXml)
+    os.makedirs(stagedPng)
+    existing = set()
+
+    try:
+        # Names already in the archive win: those pathway ids are live in
+        # MongoDB and in saved jobs, so they must not be renamed or replaced.
+        with tarfile.open(archiveName, "r:gz") as archive:
+            existing = set(
+                os.path.basename(m.name)[:-4]
+                for m in archive.getmembers()
+                if m.name.startswith("xml/") and m.name.endswith(".xml"))
+
+        wanted = [d for d in diagrams if d["name"] not in existing]
+        stderr.write("\nFetching " + str(len(wanted)) + " extra MapMan diagrams "
+                     "(" + str(len(diagrams) - len(wanted)) + " already in the base archive)...\n")
+
+        for index, diagram in enumerate(wanted, 1):
+            _fetchMapManDiagram(diagram, stagedXml, stagedPng, delay, maxTries)
+            if index % 10 == 0:
+                stderr.write("  " + str(index) + "/" + str(len(wanted)) + "\n")
+
+        added = _repackMapManArchive(archiveName, stagedXml, stagedPng)
+        _appendMapManClassification(classificationName, wanted, existing)
+
+        stderr.write("MapMan diagrams: " + str(len(existing)) + " -> " +
+                     str(len(existing) + added) + "\n")
+        return added
+    except Exception as ex:
+        stderr.write("\nCould not assemble the extra MapMan diagrams: " + str(ex) + "\n"
+                     "Continuing with the " + str(len(existing)) + " diagrams already in the "
+                     "archive. It and the classification file are unchanged.\n")
+        return 0
+    finally:
+        shutil.rmtree(stagingDir, ignore_errors=True)
+
+
+def _fetchMapManDiagram(diagram, stagedXml, stagedPng, delay, maxTries):
+    """Download one diagram's layout + background and normalise it to PNG."""
+    name = diagram["name"]
+
+    xmlPath = os.path.join(stagedXml, name + ".xml")
+    _curlMapManStore(diagram["ressourceId"], "PathwayAnnotation", xmlPath, delay, maxTries)
+
+    with open(xmlPath, "r", errors="replace") as handle:
+        if "<Image" not in handle.read(4096):
+            raise Exception("diagram '" + name + "' did not return MapMan XML")
+
+    # The store serves backgrounds as PNG, SVG or JPEG depending on the
+    # diagram's age. generateThumbnail and the client both want png/<id>.png.
+    rawPath = os.path.join(stagedPng, name + ".download")
+    _curlMapManStore(diagram["ressourceId"], "PathwayImage", rawPath, delay, maxTries)
+    _convertToPng(rawPath, os.path.join(stagedPng, name + ".png"), name)
+    os.remove(rawPath)
+
+
+def _curlMapManStore(ressourceId, what, outputName, delay, maxTries):
+    url = MAPMAN_STORE_URL.format(id=ressourceId, what=what)
+    lastError = None
+
+    for _ in range(maxTries):
+        wait(delay)
+        try:
+            check_call(["curl", "-f", "-L", "--connect-timeout", "120",
+                        "--max-time", "600", url, "-o", outputName])
+            if os.path.isfile(outputName) and os.stat(outputName).st_size > 0:
+                return
+            lastError = "empty response"
+        except Exception as ex:
+            lastError = ex
+
+    raise Exception("RessourceId " + str(ressourceId) + " (" + what + "): " + str(lastError))
+
+
+def _convertToPng(sourceName, targetName, diagramName):
+    """Render whatever the store returned as a PNG, on white."""
+    from PIL import Image, ImageFile
+    ImageFile.LOAD_TRUNCATED_IMAGES = True
+
+    with open(sourceName, "rb") as handle:
+        head = handle.read(1024)
+
+    if b"<svg" in head or b"<?xml" in head:
+        import cairosvg
+        # These diagrams are plain vector art with no data: URIs, so the
+        # default safe fetcher is fine here. White ground, not transparent:
+        # the client paints coloured boxes on top of this image.
+        cairosvg.svg2png(url=sourceName, write_to=targetName, background_color="white")
+    else:
+        image = Image.open(sourceName)
+        if image.mode not in ("RGB", "RGBA", "P", "L", "LA"):
+            image = image.convert("RGB")
+        image.save(targetName, "PNG")
+
+    # A diagram that renders blank is worse than one that is missing: it looks
+    # deliberate. Reject anything with no tonal range at all.
+    rendered = Image.open(targetName).convert("RGB")
+    if max(high - low for low, high in rendered.getextrema()) < 12:
+        raise Exception("diagram '" + diagramName + "' rendered blank")
+
+
+def _repackMapManArchive(archiveName, stagedXml, stagedPng):
+    """Rewrite the pathways tarball as base + staged extras, atomically."""
+    import tarfile
+    import tempfile
+
+    handle, tempName = tempfile.mkstemp(suffix=".tar.gz",
+                                        dir=os.path.dirname(os.path.abspath(archiveName)))
+    os.close(handle)
+    added = 0
+
+    try:
+        with tarfile.open(archiveName, "r:gz") as source:
+            with tarfile.open(tempName, "w:gz") as target:
+                for member in source.getmembers():
+                    extracted = source.extractfile(member) if member.isfile() else None
+                    target.addfile(member, extracted)
+
+                for folder, prefix in ((stagedXml, "xml"), (stagedPng, "png")):
+                    for entry in sorted(os.listdir(folder)):
+                        target.add(os.path.join(folder, entry), arcname=prefix + "/" + entry)
+                        if prefix == "xml":
+                            added += 1
+
+        os.replace(tempName, archiveName)
+        return added
+    except Exception:
+        if os.path.isfile(tempName):
+            os.remove(tempName)
+        raise
+
+
+def _appendMapManClassification(classificationName, diagrams, existing):
+    """Give each added diagram a category row; without one it reads 'Not classified'."""
+    if not os.path.isfile(classificationName):
+        return
+
+    with open(classificationName, "r", errors="replace") as handle:
+        alreadyListed = set(
+            line.split("\t")[2].strip()
+            for line in handle if line.count("\t") >= 2)
+
+    rows = ["\t".join([d["primary"], d["secondary"], d["name"]])
+            for d in diagrams
+            if d["name"] not in alreadyListed and d["name"] not in existing]
+
+    if not rows:
+        return
+
+    with open(classificationName, "r", errors="replace") as handle:
+        needsNewline = not handle.read().endswith("\n")
+
+    with open(classificationName, "a") as handle:
+        handle.write(("\n" if needsNewline else "") + "\n".join(rows) + "\n")
+
+
+def _decompressMapManResource(downloadName, outputName):
+    """gunzip `downloadName` onto `outputName`, streaming to bound memory."""
+    import gzip
+
+    with gzip.open(downloadName, "rb") as compressed, open(outputName, "wb") as plain:
+        shutil.copyfileobj(compressed, plain, 1024 * 1024)
+    os.remove(downloadName)
+
+
+def _dropFirstLine(fileName):
+    """Strip a leading header row in place, streaming rather than slurping."""
+    tmpName = fileName + ".tmp"
+    with open(fileName, "r") as source, open(tmpName, "w") as target:
+        source.readline()
+        shutil.copyfileobj(source, target, 1024 * 1024)
+    os.replace(tmpName, fileName)
+
+
+def _validateMapManResource(fileName, expect):
+    """Reject a download that is empty or is not the shape we asked for."""
+    import tarfile
+
+    if not os.path.isfile(fileName) or os.stat(fileName).st_size == 0:
+        raise Exception(fileName + " is missing or empty after download")
+
+    if expect == "targz":
+        if not tarfile.is_tarfile(fileName):
+            raise Exception(fileName + " is not a tar archive (server error page?)")
+        return
+
+    if expect == "tsv":
+        # Read one line only; these files run to tens of MB.
+        with open(fileName, "r") as handle:
+            for line in handle:
+                if not line.strip():
+                    continue
+                if "\t" not in line:
+                    raise Exception(fileName + " has no tab-separated columns; "
+                                    "first line was: " + line[:120].rstrip())
+                return
+        raise Exception(fileName + " contains no data rows")
+
 
 def wait(nSeconds):
     sleep(nSeconds)

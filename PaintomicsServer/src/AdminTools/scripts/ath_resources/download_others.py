@@ -32,7 +32,7 @@ try:
     #**************************************************************************
     #STEP 2.1 GET ENSEMBL GENE ID -> TRANSCRIPT ID -> PEPTIDE ID -> ENTREZ ID
     resource = COMMON_BUILD_DB_TOOLS.EXTERNAL_RESOURCES.get("ensembl")[0]
-    COMMON_BUILD_DB_TOOLS.queryBiomart(resource.get("url"), ROOT_DIR + "scripts/" + resource.get("file"), DESTINATION + resource.get("output"),  SERVER_SETTINGS.DOWNLOAD_DELAY_1, SERVER_SETTINGS.MAX_TRIES_1)
+    COMMON_BUILD_DB_TOOLS.downloadEnsemblMapping(resource, DESTINATION + resource.get("output"), SERVER_SETTINGS.DOWNLOAD_DELAY_1, SERVER_SETTINGS.MAX_TRIES_1)
     print("success")
     #**************************************************************************
     #STEP 2.2 GET REFSEQ TRANSCRIPTS, PEPTIDES -> ENTREZ GENES and REFSEQ GENE ID -> GENE SYMBOL
@@ -50,47 +50,51 @@ try:
     COMMON_BUILD_DB_TOOLS.downloadFile(resource.get("url"), resource.get("file"), DESTINATION + resource.get("output"),  SERVER_SETTINGS.DOWNLOAD_DELAY_1, SERVER_SETTINGS.MAX_TRIES_1)	
 
 
-    stderr.write( "STEP3 DOWNLOAD MAPMAN" + "\n")
+    stderr.write( "STEP4 DOWNLOAD MAPMAN" + "\n")
     #**************************************************************************
-    #STEP 2.1 GET MapMan NCBI ID -> MapMan GENE ID
-    # **************************************************************************
-    resource = COMMON_BUILD_DB_TOOLS.EXTERNAL_RESOURCES.get("mapman_kegg")[0]
-    #COMMON_BUILD_DB_TOOLS.downloadFile(resource.get("url"), resource.get("file"), DESTINATION + resource.get("output"), SERVER_SETTINGS.DOWNLOAD_DELAY_1, SERVER_SETTINGS.MAX_TRIES_1)
-    shutil.copy(resource.get("url") + resource.get("file"), DESTINATION + resource.get("output"))
+    #STEP 2.4 GET THE MapMan INPUTS
+    #
+    # All five come from GoMapMan over HTTPS (see download_conf.py); they used
+    # to be copied out of a private /home/tian/mapman/ directory, which meant
+    # the MapMan organisms could only be rebuilt on one machine.
+    #
+    # "mapman_kegg" is optional - not every organism has a gene-to-Entrez
+    # export, and without it MapMan genes simply are not linked to KEGG.
+    #**************************************************************************
+    for resourceName in ("mapman_kegg", "mapman_gene", "mapman_pathways",
+                         "mapman_classification", "metabolites"):
+        resources = COMMON_BUILD_DB_TOOLS.EXTERNAL_RESOURCES.get(resourceName)
 
-    # **************************************************************************
-    # STEP 2.1 GET MapMan GENE ID -> MAPMAN FEATURE ID
-    # **************************************************************************
-    resource = COMMON_BUILD_DB_TOOLS.EXTERNAL_RESOURCES.get("mapman_gene")[0]
-    shutil.copy(resource.get("url") + resource.get("file"), DESTINATION + resource.get("output"))
+        if not resources:
+            if resourceName == "mapman_kegg":
+                stderr.write("No " + resourceName + " resource declared for " + SPECIE +
+                             "; MapMan genes will not be cross-linked to KEGG.\n")
+                continue
+            raise Exception("Missing required MapMan resource: " + resourceName)
 
-    #COMMON_BUILD_DB_TOOLS.downloadFile(resource.get("url"), resource.get("file"), DESTINATION + resource.get("output"),
-    #                                   SERVER_SETTINGS.DOWNLOAD_DELAY_1, SERVER_SETTINGS.MAX_TRIES_1)
-
+        resource = resources[0]
+        COMMON_BUILD_DB_TOOLS.downloadMapManResource(
+            resource,
+            DESTINATION + resource.get("output"),
+            SERVER_SETTINGS.DOWNLOAD_DELAY_1,
+            SERVER_SETTINGS.MAX_TRIES_1)
 
     #**************************************************************************
-    #STEP 2.1 GET MapMan pathways
-    # **************************************************************************
-    resource = COMMON_BUILD_DB_TOOLS.EXTERNAL_RESOURCES.get("mapman_pathways")[0]
-    shutil.copy(resource.get("url") + resource.get("file"), DESTINATION + resource.get("output"))
-    #COMMON_BUILD_DB_TOOLS.downloadFile(resource.get("url"), resource.get("file"), DESTINATION + resource.get("output"), SERVER_SETTINGS.DOWNLOAD_DELAY_1, SERVER_SETTINGS.MAX_TRIES_1)
-
+    # Fold in the MapMan diagrams GoMapMan's export omits. Best effort and
+    # all-or-nothing: if the store cannot be reached the base 20 still install.
     #**************************************************************************
-    #STEP 2.1 GET MapMan pathways classification
-    # **************************************************************************
-    resource = COMMON_BUILD_DB_TOOLS.EXTERNAL_RESOURCES.get("mapman_classification")[0]
-    shutil.copy(resource.get("url") + resource.get("file"), DESTINATION + resource.get("output"))
+    extraPathways = COMMON_BUILD_DB_TOOLS.EXTERNAL_RESOURCES.get("mapman_extra_pathways")
 
-    #COMMON_BUILD_DB_TOOLS.downloadFile(resource.get("url"), resource.get("file"), DESTINATION + resource.get("output"), SERVER_SETTINGS.DOWNLOAD_DELAY_1, SERVER_SETTINGS.MAX_TRIES_1)
+    if extraPathways:
+        pathwaysResource = COMMON_BUILD_DB_TOOLS.EXTERNAL_RESOURCES.get("mapman_pathways")[0]
+        classificationResource = COMMON_BUILD_DB_TOOLS.EXTERNAL_RESOURCES.get("mapman_classification")[0]
 
-
-   #**************************************************************************
-    #STEP 2.1 GET MapMan compound dataset
-    # **************************************************************************
-    resource = COMMON_BUILD_DB_TOOLS.EXTERNAL_RESOURCES.get("metabolites")[0]
-    shutil.copy(resource.get("url") + resource.get("file"), DESTINATION + resource.get("output"))
-
-    #COMMON_BUILD_DB_TOOLS.downloadFile(resource.get("url"), resource.get("file"), DESTINATION + resource.get("output"), SERVER_SETTINGS.DOWNLOAD_DELAY_1, SERVER_SETTINGS.MAX_TRIES_1)
+        COMMON_BUILD_DB_TOOLS.augmentMapManPathways(
+            DESTINATION + pathwaysResource.get("output"),
+            DESTINATION + classificationResource.get("output"),
+            ROOT_DIR + extraPathways[0].get("manifest"),
+            SERVER_SETTINGS.DOWNLOAD_DELAY_1,
+            SERVER_SETTINGS.MAX_TRIES_1)
 
 
 except Exception as ex:

@@ -1,16 +1,20 @@
 EXTERNAL_RESOURCES = {
                 "ensembl"   :   [
                     {
-                    "url"           :   "http://www.ensembl.org/biomart/martservice/",
-                    "file"          :   "acs_resources/ensembl_mapping.xml",
+                    "url"           :   "https://ftp.ensembl.org/pub/",
+                    "species-dir"   :   "anolis_carolinensis",
+                    "division"      :   "vertebrates",
                     "output"        :   "ensembl_mapping.list",
-                    "description"   :   "Source: Ensembl Mammals databases. Downloaded from Biomart."
+                    "description"   :   "Source: Ensembl cross-reference TSV dumps. BioMart was retired (martservice answers HTTP 405), so the release/assembly and filename are resolved at run time rather than pinned here."
                     },
                     {
-                    "url"           :   "http://www.ensembl.org/biomart/martservice/",
-                    "file"          :   "acs_resources/uniprot_mapping.xml",
+                    "url"           :   "https://ftp.ensembl.org/pub/",
+                    "species-dir"   :   "anolis_carolinensis",
+                    "division"      :   "vertebrates",
+                    "xref-type"     :   "uniprot",
+                    "xref-db"       :   ["Uniprot/SWISSPROT", "Uniprot/SPTREMBL"],
                     "output"        :   "uniprot_mapping.list",
-                    "description"   :   "Source: UniProt + Ensembl Mammals databases. Downloaded from Biomart."
+                    "description"   :   "Source: Ensembl UniProt cross-reference TSV dumps. BioMart was retired (martservice answers HTTP 405), so the release/assembly and filename are resolved at run time rather than pinned here."
                     }
                 ],
                 "refseq"   :  [

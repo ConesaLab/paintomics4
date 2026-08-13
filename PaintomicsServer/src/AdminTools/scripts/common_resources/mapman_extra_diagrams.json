@@ -1,0 +1,311 @@
+{
+ "_comment": "MapMan diagrams that GoMapMan's Paintomics export omits, fetched from the MapManStore archive at plabipd.de. GoMapMan ships 20 diagrams, almost all Secondary Metabolism and Hormones; these 50 add the general maps (Metabolism overview, glycolysis, TCA, photosynthesis, transcription, Metabolites, ...). All are MapMan 3.6-era, matching the bin codes GoMapMan's gene mappings use. X4-era diagrams are deliberately excluded: they use a renumbered ontology and would place the wrong genes without erroring.",
+ "_source": "https://www.plabipd.de/portal/mapman  (Show=Pathways)",
+ "_excluded": {
+  "R_stress": "places no features for any organism",
+  "R_nutrients": "places no features for any organism",
+  "Seed_custom_arabidopsis_Cellv": "XML is empty on the server"
+ },
+ "diagrams": [
+  {
+   "name": "AA TCA",
+   "ressourceId": "101",
+   "primary": "Metabolism",
+   "secondary": "Amino Acids"
+  },
+  {
+   "name": "AGPs",
+   "ressourceId": "290",
+   "primary": "Structure",
+   "secondary": "Cell Wall"
+  },
+  {
+   "name": "Alanine Glutamate",
+   "ressourceId": "182",
+   "primary": "Metabolism",
+   "secondary": "Amino Acids"
+  },
+  {
+   "name": "Alanine Glycine",
+   "ressourceId": "185",
+   "primary": "Metabolism",
+   "secondary": "Amino Acids"
+  },
+  {
+   "name": "C Lignin",
+   "ressourceId": "91",
+   "primary": "Not classified",
+   "secondary": "Unclassified"
+  },
+  {
+   "name": "C TCA",
+   "ressourceId": "93",
+   "primary": "Metabolism",
+   "secondary": "Energy (TCA, mitochondria)"
+  },
+  {
+   "name": "Cell wall precursors",
+   "ressourceId": "86",
+   "primary": "Metabolism",
+   "secondary": "Sugar and Sugar Derivatives"
+  },
+  {
+   "name": "Cell functions overview",
+   "ressourceId": "69",
+   "primary": "Overview",
+   "secondary": "Overview"
+  },
+  {
+   "name": "Cellular response overview",
+   "ressourceId": "76",
+   "primary": "Overview",
+   "secondary": "Overview"
+  },
+  {
+   "name": "ChloroPlast CustomArray CUSTOM MAPPING",
+   "ressourceId": "190",
+   "primary": "Custom Arrays",
+   "secondary": "Custom Arrays"
+  },
+  {
+   "name": "Chloroplast PlasTi-microarray pathway",
+   "ressourceId": "304",
+   "primary": "Custom Arrays",
+   "secondary": "Custom Arrays"
+  },
+  {
+   "name": "Core metabolism overview",
+   "ressourceId": "308",
+   "primary": "Overview",
+   "secondary": "Overview"
+  },
+  {
+   "name": "GABA Metabolism",
+   "ressourceId": "140",
+   "primary": "Metabolism",
+   "secondary": "Amino Acids"
+  },
+  {
+   "name": "Glycolysis-TCA",
+   "ressourceId": "100",
+   "primary": "Metabolism",
+   "secondary": "Sugar and Sugar Derivatives"
+  },
+  {
+   "name": "HomoserineThreonineSynthesis",
+   "ressourceId": "149",
+   "primary": "Metabolism",
+   "secondary": "Amino Acids"
+  },
+  {
+   "name": "Inositol Phosphates",
+   "ressourceId": "142",
+   "primary": "Metabolism",
+   "secondary": "Primary Metabolism"
+  },
+  {
+   "name": "Large enzyme families overview",
+   "ressourceId": "108",
+   "primary": "Overview",
+   "secondary": "Overview"
+  },
+  {
+   "name": "Lignin Synthesis",
+   "ressourceId": "68",
+   "primary": "Not classified",
+   "secondary": "Unclassified"
+  },
+  {
+   "name": "Lipid Biosynthesis",
+   "ressourceId": "116",
+   "primary": "Metabolism",
+   "secondary": "Primary Metabolism"
+  },
+  {
+   "name": "Metabolism overview",
+   "ressourceId": "211",
+   "primary": "Overview",
+   "secondary": "Overview"
+  },
+  {
+   "name": "Metabolites",
+   "ressourceId": "40",
+   "primary": "Overview",
+   "secondary": "Overview"
+  },
+  {
+   "name": "Mitochondrial e-transport",
+   "ressourceId": "72",
+   "primary": "Metabolism",
+   "secondary": "Energy (TCA, mitochondria)"
+  },
+  {
+   "name": "Myo Inositol Synthesis",
+   "ressourceId": "141",
+   "primary": "Metabolism",
+   "secondary": "Sugar and Sugar Derivatives"
+  },
+  {
+   "name": "N-metabolism",
+   "ressourceId": "73",
+   "primary": "Metabolism",
+   "secondary": "Amino Acids"
+  },
+  {
+   "name": "NDP sugars and ascorbate",
+   "ressourceId": "209",
+   "primary": "Metabolism",
+   "secondary": "Sugar and Sugar Derivatives"
+  },
+  {
+   "name": "Nucleotide Synthesis",
+   "ressourceId": "120",
+   "primary": "Metabolism",
+   "secondary": "Primary Metabolism"
+  },
+  {
+   "name": "Overview",
+   "ressourceId": "103",
+   "primary": "Overview",
+   "secondary": "Overview"
+  },
+  {
+   "name": "Pentose Phosphate",
+   "ressourceId": "89",
+   "primary": "Metabolism",
+   "secondary": "Sugar and Sugar Derivatives"
+  },
+  {
+   "name": "Phylloquinone Synthesis",
+   "ressourceId": "289",
+   "primary": "Not classified",
+   "secondary": "Unclassified"
+  },
+  {
+   "name": "Plant glycolysis",
+   "ressourceId": "293",
+   "primary": "Metabolism",
+   "secondary": "Sugar and Sugar Derivatives"
+  },
+  {
+   "name": "Prokaryotic Ribosome SSU 5S branch assembly",
+   "ressourceId": "257",
+   "primary": "Overview",
+   "secondary": "Overview"
+  },
+  {
+   "name": "Prokaryotic Ribosome LSU assembly",
+   "ressourceId": "258",
+   "primary": "Overview",
+   "secondary": "Overview"
+  },
+  {
+   "name": "Proteasom",
+   "ressourceId": "87",
+   "primary": "Overview",
+   "secondary": "Overview"
+  },
+  {
+   "name": "ProteasomeDetailAndAutophagy",
+   "ressourceId": "161",
+   "primary": "Overview",
+   "secondary": "Overview"
+  },
+  {
+   "name": "Protein glycosylation",
+   "ressourceId": "309",
+   "primary": "Overview",
+   "secondary": "Overview"
+  },
+  {
+   "name": "RNA-ProteinSynthesis",
+   "ressourceId": "82",
+   "primary": "Overview",
+   "secondary": "Overview"
+  },
+  {
+   "name": "RNA-ProteinSynthesis 2009",
+   "ressourceId": "219",
+   "primary": "Overview",
+   "secondary": "Overview"
+  },
+  {
+   "name": "Raffinose metabolism",
+   "ressourceId": "139",
+   "primary": "Metabolism",
+   "secondary": "Sugar and Sugar Derivatives"
+  },
+  {
+   "name": "Regulation overview",
+   "ressourceId": "74",
+   "primary": "Overview",
+   "secondary": "Overview"
+  },
+  {
+   "name": "Ribosomal proteins overview",
+   "ressourceId": "259",
+   "primary": "Overview",
+   "secondary": "Overview"
+  },
+  {
+   "name": "Secondary Metabolism",
+   "ressourceId": "92",
+   "primary": "Overview",
+   "secondary": "Overview"
+  },
+  {
+   "name": "Seed custom arabidopsis Seed",
+   "ressourceId": "367",
+   "primary": "Custom Arrays",
+   "secondary": "Custom Arrays"
+  },
+  {
+   "name": "Sucrose-Starch",
+   "ressourceId": "194",
+   "primary": "Metabolism",
+   "secondary": "Sugar and Sugar Derivatives"
+  },
+  {
+   "name": "Sulphate Assimilation",
+   "ressourceId": "90",
+   "primary": "Metabolism",
+   "secondary": "Amino Acids"
+  },
+  {
+   "name": "TCA",
+   "ressourceId": "79",
+   "primary": "Metabolism",
+   "secondary": "Energy (TCA, mitochondria)"
+  },
+  {
+   "name": "Transport overview",
+   "ressourceId": "52",
+   "primary": "Overview",
+   "secondary": "Overview"
+  },
+  {
+   "name": "photosynthesis",
+   "ressourceId": "95",
+   "primary": "Metabolism",
+   "secondary": "Primary Metabolism"
+  },
+  {
+   "name": "protein targeting",
+   "ressourceId": "118",
+   "primary": "Overview",
+   "secondary": "Overview"
+  },
+  {
+   "name": "tetrapyrrole",
+   "ressourceId": "119",
+   "primary": "Metabolism",
+   "secondary": "Primary Metabolism"
+  },
+  {
+   "name": "transcription",
+   "ressourceId": "81",
+   "primary": "Overview",
+   "secondary": "Overview"
+  }
+ ]
+}

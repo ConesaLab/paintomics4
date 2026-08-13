@@ -1,10 +1,11 @@
 EXTERNAL_RESOURCES = {
                 "ensembl"   :   [
                     {
-                    "url"           :   "https://www.ensembl.org/biomart/martservice",
-                    "file"          :   "mmu_resources/ensembl_mapping.xml",
+                    "url"           :   "https://ftp.ensembl.org/pub/",
+                    "species-dir"   :   "mus_musculus",
+                    "division"      :   "vertebrates",
                     "output"        :   "ensembl_mapping.list",
-                    "description"   :   "Source: Ensembl Mammals databases. Downloaded from Biomart."
+                    "description"   :   "Source: Ensembl cross-reference TSV dumps. BioMart was retired (martservice answers HTTP 405), so the release/assembly and filename are resolved at run time rather than pinned here."
                     }
                 ],
                 "refseq"   :  [
@@ -24,7 +25,7 @@ EXTERNAL_RESOURCES = {
                 ],
                  "uniprot"   :   [
                     {
-                    "url"           :   "https://ftp.uniprot.org/pub/databases/uniprot/current_release/knowledgebase/idmapping/by_organism/",
+                    "url"           :   "ftp://ftp.uniprot.org/pub/databases/uniprot/current_release/knowledgebase/idmapping/by_organism/",
                     "file"          :   "MOUSE_10090_idmapping_selected.tab.gz",
                     "output"        :   "uniprot_mapping.list",
                     "description"   :    "Source: UniProt idmapping_selected.tab. Downloaded from UniProt FTP. Tab-delimited table which includes the multiple mappings between UniProt Accession and external databases."
