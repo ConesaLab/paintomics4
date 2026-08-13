@@ -16,6 +16,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 import traceback
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -25,6 +26,30 @@ _FAILED = []
 
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(
     os.path.dirname(os.path.abspath(__file__)))))
+
+
+def _execTemplate(templatePath):
+    """Execute the template the way an import would, but in isolation.
+
+    A real import always defines ``__file__`` -- the template's dotenv loader
+    depends on it -- so a bare ``exec`` into an empty namespace misrepresents
+    module semantics and dies with NameError. But handing it the *real* path
+    is no better: the loader would then find the developer's own .env and
+    setdefault live keys into a test that exists to prove the template works
+    with nothing set. So: a copy of the source, buried in a temp directory
+    where the .env probe paths resolve to nothing.
+    """
+    with open(templatePath) as handle:
+        source = handle.read()
+    with tempfile.TemporaryDirectory() as tmp:
+        isolatedDir = os.path.join(tmp, "isolated", "src", "resources")
+        os.makedirs(isolatedDir)
+        isolatedPath = os.path.join(isolatedDir, "example_serverconf.py")
+        with open(isolatedPath, "w") as handle:
+            handle.write(source)
+        namespace = {"__file__": isolatedPath}
+        exec(compile(source, isolatedPath, "exec"), namespace)
+    return namespace
 
 
 def _check(name, fn):
@@ -156,8 +181,7 @@ def test_template_covers_every_setting_the_app_imports():
 
     templatePath = os.path.join(
         _REPO_ROOT, "PaintomicsServer", "src", "resources", "example_serverconf.py")
-    namespace = {}
-    exec(compile(open(templatePath).read(), templatePath, "exec"), namespace)
+    namespace = _execTemplate(templatePath)
 
     missing = sorted(name for name in required if name not in namespace)
     assert not missing, \
@@ -175,8 +199,7 @@ def test_template_is_importable_with_no_environment_set():
         for key in list(os.environ):
             if key.startswith(("AI_", "SMTP_", "PAINTOMICS_", "MONGODB_", "SERVER_", "EMAIL_")):
                 del os.environ[key]
-        namespace = {}
-        exec(compile(open(templatePath).read(), templatePath, "exec"), namespace)
+        namespace = _execTemplate(templatePath)
     finally:
         os.environ.clear()
         os.environ.update(saved)
