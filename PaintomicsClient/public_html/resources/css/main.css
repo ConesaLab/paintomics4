@@ -1,24 +1,88 @@
-/* Yes, the family called 'SourceSansPro' is served by the two Myriad Pro faces.
-   That is how this product has always shipped and it is deliberate; the real
-   Source Sans Pro is vendored alongside and is the next name in the fallback
-   chain. Only these two weights exist, so every 500/600 in the UI synthesises
-   up to Semibold.
+/* The family called 'SourceSansPro' is now served by the real Source Sans Pro
+   faces, which have been vendored in this directory all along.
+
+   It used to be served by MyriadPro-Light + MyriadPro-Semibold, and that
+   mapping was the single reason this UI read as washed out. `MyriadPro-Light`
+   declares `usWeightClass: 300`: it is a Light cut, and it was bound to
+   `font-weight: normal`. So every paragraph, label, table cell and form field
+   in the product - all of it nominally weight 400 - was actually painted in a
+   300 face. Not a colour problem. The strokes themselves were thin.
+
+   Light cuts at 12-14px are a readability failure that the industry spent the
+   back half of the 2010s walking away from: a 300 weight is a display face,
+   sized for headlines, and it loses stem contrast at body sizes on exactly the
+   low-DPI external monitors this kind of software is read on all day.
+
+   Source Sans Pro is what the CSS always claimed to be loading, is by the same
+   designer as Myriad (Robert Slimbach) and is the same humanist-sans genre, so
+   the product's typographic character carries over - but it ships true 400, 600
+   and 700 cuts instead of a Light standing in for regular.
+
+   Real italics, too. Nothing declared an italic face before, so every `em` was
+   synthetically obliqued by the browser. That matters here specifically:
+   italic on the AI report surface denotes gene symbols, which is semantic, not
+   decorative, and a slanted Light face is a poor way to carry meaning.
 
    `swap` on body text: the fallback renders immediately and is replaced when
    the webfont arrives, so text is never invisible. Icon fonts below take
    `block` instead, for the opposite reason. */
+/* Light is declared at 300, where it belongs, rather than standing in for
+   normal. The three rules that ask for 300 are all large display figures - the
+   34px storage total, the 30px stat values, the 34px pathway count - where a
+   light weight is a legitimate treatment and has stroke mass to spare. They
+   were written when 300 silently resolved to the Light face, so this keeps
+   them rendering as their author saw them.
+
+   Body text asks for 400 and cannot reach this: with 300 and 400 both present,
+   a 400 request matches 400 exactly. What the old mapping got wrong was
+   binding Light to `normal`, not shipping a Light at all. */
 @font-face {
 	font-family: 'SourceSansPro';
-	src: url('fonts/MyriadPro-Light.ttf') format('truetype');
-	font-weight: normal;
+	src: url('fonts/SourceSansPro-Light.ttf') format('truetype');
+	font-weight: 300;
 	font-style: normal;
 	font-display: swap;
 }
 @font-face {
 	font-family: 'SourceSansPro';
-	src: url('fonts/MyriadPro-Semibold.ttf') format('truetype');
-	font-weight: bold;
+	src: url('fonts/SourceSansPro-Regular.ttf') format('truetype');
+	font-weight: 400;
 	font-style: normal;
+	font-display: swap;
+}
+@font-face {
+	font-family: 'SourceSansPro';
+	src: url('fonts/SourceSansPro-Semibold.ttf') format('truetype');
+	font-weight: 600;
+	font-style: normal;
+	font-display: swap;
+}
+@font-face {
+	font-family: 'SourceSansPro';
+	src: url('fonts/SourceSansPro-Bold.ttf') format('truetype');
+	font-weight: 700;
+	font-style: normal;
+	font-display: swap;
+}
+@font-face {
+	font-family: 'SourceSansPro';
+	src: url('fonts/SourceSansPro-Italic.ttf') format('truetype');
+	font-weight: 400;
+	font-style: italic;
+	font-display: swap;
+}
+@font-face {
+	font-family: 'SourceSansPro';
+	src: url('fonts/SourceSansPro-SemiboldItalic.ttf') format('truetype');
+	font-weight: 600;
+	font-style: italic;
+	font-display: swap;
+}
+@font-face {
+	font-family: 'SourceSansPro';
+	src: url('fonts/SourceSansPro-BoldItalic.ttf') format('truetype');
+	font-weight: 700;
+	font-style: italic;
 	font-display: swap;
 }
 /* Icon fonts ------------------------------------------------------------------
@@ -76,24 +140,39 @@ root {
   --pa-measure-note: 78ch;  /* empty-state notes */
 
   /* Ink colours --------------------------------------------------------------
-     Every value below clears WCAG 2.1 AA (4.5:1) with headroom. Hue and
-     saturation are preserved from the original palette; only lightness moved,
-     so the UI keeps its colour identity.
+     Hue and saturation are preserved from the original palette; only lightness
+     moves, so the UI keeps its colour identity.
 
      Measured against #EEEEEE, the darkest light panel fill in this stylesheet,
      rather than against white. That distinction has already caught this
      palette out twice: tuning against white alone left every token at
      4.13-4.48:1 on the grey panels of Step 3, and a retune against #F3F3F3
      still left them at 4.38-4.41:1 on the #EEEEEE surfaces of Step 4. Tuning
-     against the darkest surface makes every lighter one pass by construction
-     (each is ~5.3:1 on white), so this should not need revisiting when the
-     next screen is audited. */
-  --pa-link: #006ACC;         /* orig #0076E2 4.48:1 */
+     against the darkest surface makes every lighter one pass by construction.
+
+     What that earlier pass got wrong was the target, not the method. It aimed
+     at AA (4.5:1) and stopped, which landed the entire palette in a 5.3-5.4:1
+     band on white - every token the same distance above the line, and that
+     line is the legal floor for "can be perceived", not a setting for text
+     somebody reads for an hour. A palette clustered just above a minimum is
+     what "washed out" means in practice, and it is what this one looked like.
+
+     The four tokens that carry actual running text - muted body copy, inline
+     `b`, `strong`/infoTip accents, links - now target AAA (7:1) on white,
+     which puts them at 6.0-6.4:1 on the #EEEEEE panels. That is roughly where
+     the mainstream systems put body ink (Tailwind gray-600 7.5:1, GitHub
+     Primer fg.default 15:1 with fg.muted 5.7:1 reserved for genuinely
+     secondary text), and it is a full step darker than a floor-hugging 5.3.
+
+     `--pa-accent-orange` and `--pa-accent-green` stay where they are: both are
+     used on headings and badges at large sizes, where 3:1 is the threshold and
+     darkening them further would cost the palette its warmth for no gain. */
+  --pa-link: #0060BA;         /* was #006ACC 5.34:1 -> 6.21:1 */
   --pa-link-hover: #24785D;   /* orig #2E9B78 3.46:1 */
-  --pa-accent-blue: #1F6BC1;  /* orig #2C7FDD 4.05:1 */
+  --pa-accent-blue: #19589E;  /* was #1F6BC1 5.34:1 -> 7.17:1 */
   --pa-accent-orange: #AD5022;/* orig rgb(209,96,42) 3.59:1 */
-  --pa-ink-muted: #6B6B6B;    /* orig #C9C9C9 1.66:1 / #B1B0B0 2.16:1 */
-  --pa-bold-blue: #446E9B;    /* orig rgb(105,146,190) 3.25:1 */
+  --pa-ink-muted: #595959;    /* was #6B6B6B 5.33:1 -> 7.00:1 */
+  --pa-bold-blue: #37587C;    /* was #446E9B 5.32:1 -> 7.37:1 */
   --pa-accent-green: #247B21; /* orig #288824 3.90:1 on #EEEEEE */
 
   /* Focus ring. Chosen to clear 3:1 (WCAG 2.4.11) against every surface the
@@ -137,6 +216,44 @@ root {
      0.8873), so the contrast figures measured against the old value - the
      8.6:1 noted further down this file among them - all still hold. */
   --pa-surface-quiet: #F3F2ED;
+
+  /* The rest of the surface family, and the two control inks that go with it.
+     Same story as --pa-surface-quiet above: dark.css has declared all of these
+     for a long time, but the light `:root` never did, so every light-mode
+     reader fell through to whatever literal its own `var(..., #fallback)`
+     happened to carry. The MORE regulator-target network is written entirely
+     against these names, which meant the one panel in the application authored
+     against the design system was also the only one not painted by it - it
+     rendered in #f5f5f7 / #fafafa / #333, cold greys, on a warm ivory page.
+
+     Values chosen from the warmed literals already used throughout this file
+     (#F6F6F6 -> #F6F5F0, #F5F5F5 -> #F5F4EF, #FAFAFA -> #F9F8F4) so nothing
+     shifts for anything that was already using those by hand; naming them is
+     what lets network-views.css describe both graph surfaces at once.
+
+     --pa-ink-body and --pa-ink-title are deliberately NOT declared here. They
+     are read in 22 places in this file with per-site fallbacks that differ on
+     purpose, and unifying those is a typographic decision of its own, not a
+     side effect of wiring up two network panels. */
+  --pa-surface: #FFFFFF;
+  --pa-surface-toolbar: #F6F5F0;
+  --pa-surface-sunken: #F5F4EF;
+  --pa-surface-subtle: #F9F8F4;
+  --pa-ink: #18181B;
+  --pa-ink-control: #3F3F46;
+  --pa-ink-label: #52525B;
+
+  /* A control sitting on a toolbar band: its resting fill, the fill it takes
+     under the cursor, and the one it takes while pressed. These exist as their
+     own tokens rather than as reuses of --pa-surface because "lights up under
+     the cursor" is not the same colour move in the two themes. On the ivory
+     band a control brightens to white; on dark.css's #212227 band it has to go
+     lighter than the band, and --pa-surface there is #1E1F23 - darker. Written
+     as --pa-surface, the hover looked right in light mode and inverted in
+     dark. */
+  --pa-control-bg: #FFFFFF;
+  --pa-control-hover-bg: #FFFFFF;
+  --pa-control-active-bg: #EEEDE7;
 
   /* The quiet panel fills scattered through this file were warmed to match:
      #FAFAFA -> #F9F8F4, #F6F6F6 -> #F6F5F0, #F5F5F5 -> #F5F4EF. Warmed at
@@ -190,7 +307,40 @@ root {
      work on displays wide enough to have the problem. */
   --pa-page-max: 1400px;
   --pa-rail: 206px;
-  --pa-gutter: max(40px, calc((100vw - var(--pa-page-max)) / 2));
+
+  /* The gutter was `max(40px, (100vw - 1400px) / 2)`, which on the 1440-1512px
+     laptops this is mostly read on resolved to the 40px floor or a little over
+     it - 56px at 1512. That is a hairline by the standards of any page meant to
+     be read rather than operated, and it is the specific thing that made the
+     application feel like it was pressed against the sides of the window.
+
+     Measured on anthropic.com at a 1512px viewport for comparison: content
+     1279px wide inside a 116.5px gutter, or 7.71% of the viewport each side.
+     Not a floor it happens to land on - a proportion it holds.
+
+     So the floor becomes proportional too. 7.5vw tracks that reference within
+     a few pixels, the 24px minimum keeps a phone from losing the text to its
+     own bezel, and the 160px cap stops the proportion running away on a very
+     wide display - past which the `(100vw - --pa-page-max) / 2` term takes over
+     again and the column caps at 1400px exactly as before.
+
+     Between roughly 1280 and 1600px the proportional term now wins, so the
+     column there IS narrower than it was - 1286px rather than 1400px at 1512.
+     That is the trade, and it is deliberate: those widths were previously
+     spending the difference on a 40-56px margin, which is not a column.
+
+     It costs the enrichment grid nothing, because the results view does not
+     read this token. It is `#mainViewCenterPanel.pa-has-toc`, and the media
+     block near the end of this file pads it from --pa-gutter-railed instead,
+     which is unchanged. Note also that the old rule never actually delivered
+     1400px on a 1440px laptop either - max(40, 20) is 40, for a 1360px column -
+     so the width the grid was sized against was only ever reached at 1480px and
+     up, where the second term still wins today.
+
+       1280 ->  96 (was 40)   1440 -> 108 (was 40)   1512 -> 113 (was 56)
+       1680 -> 140 (was 140)  1920 -> 260 (was 260)  2560 -> 580 (unchanged) */
+  --pa-gutter: max(clamp(24px, 7.5vw, 160px),
+                   calc((100vw - var(--pa-page-max)) / 2));
 
   /* The contents sidebar is chrome, not content, so the results column is
      centred in what is left after it - not in the viewport. Padding the left by
@@ -279,11 +429,42 @@ b {color: var(--pa-bold-blue);}
 
 /*TITLES STYLES*/
 
-h1, h2, h3, h4 {font-weight: lighter;margin: 0;}
+/* `font-weight: lighter` is a *relative* keyword, not an absolute one: it steps
+   down from the inherited weight, so on a 400 body it resolved to 100. Every
+   heading in the product was asking for Thin. Measured in Chrome, `h4` on the
+   landing page computed to `font-weight: 100`.
+
+   A heading's job is to outrank the paragraph beneath it, and weight is the
+   cheapest way to say so. 600 - Semibold, a real cut in the family above - is
+   the standard choice for UI headings; it separates from 400 body copy without
+   the blockiness 700 brings at these small heading sizes. */
+/* The scale below h2 used to be colour-coded rather than sized: h3 teal
+   (#007383), h4 green, h5 a third teal (#056E66). Three hues, no relationship
+   between them, and each one a step *down* the document outline while reading
+   as a step up in emphasis.
+
+   That was invisible at the top level, because the landing page and the results
+   cards override h2 and h3 locally (`div.contentbox h2` / `h3` below). It was
+   not invisible one level in. Everything that lives inside a panel - the
+   network's Tools and Details columns, the pathway view's information strip,
+   the cluster panels, the omic upload boxes - titles its sections with bare h4
+   and h5, so a settings column read as green heading, teal sub-heading, green
+   heading, teal sub-heading down its whole length, with the actual controls in
+   near-black underneath. Colour was marking nothing: every one of those
+   headings is the same kind of thing.
+
+   One ink, three sizes, one weight. Hierarchy is carried by size and by the
+   space around a heading, which is what the level-1 surfaces already do; colour
+   goes back to meaning links, significance tints and omic type-coding.
+
+   Sizes come down with the colour. 20px for an h3 and 16px for an h4 were
+   display sizes inside 260px-wide panels, where they wrapped a two-word label
+   onto two lines; the body copy they title is 13px. */
+h1, h2, h3, h4 {font-weight: 600;margin: 0;}
 h2 {color: var(--pa-accent-orange);font-size: 23px;}
-h3 {font-size: 20px;color: #007383;	margin: 10px 0px;}
-h4 {font-size: 16px;color: var(--pa-accent-green); margin: 10px 0px;}
-h5 {font-size: 13px; margin: 10px 0px; color: #056E66; font-weight: lighter;}
+h3 {font-size: 16px;color: #27272A;	margin: 10px 0px;}
+h4 {font-size: 14px;color: #27272A; margin: 10px 0px;}
+h5 {font-size: 12.5px; margin: 10px 0px; color: #3F3F46; font-weight: 600;}
 a {text-decoration: none;color: var(--pa-link);}
 a:hover {color: var(--pa-link-hover);}
 
@@ -420,8 +601,14 @@ a:hover {color: var(--pa-link-hover);}
    On white its own #5b5a59 fill is 6.88:1 against the bar, so the fill now
    carries the boundary by itself and the border goes back to transparent -
    the earlier fix is not reverted so much as made unnecessary by the surface
-   underneath it changing. `margin-left: auto` is what pins it to the right now
-   that the bar is a flex row rather than a float context. */
+   underneath it changing.
+
+   The `margin-left: auto` that pins the corner to the right belongs to neither
+   this button nor the switch any more: it is on .headerUtilities below, the
+   wrapper that holds both. Giving it to the switch alone - the arrangement
+   before this - meant the switch absorbed all the free space in the row and the
+   account button merely followed it, which is exactly how a bare moon ended up
+   floating on its own between the step actions and a labelled pill. */
 .mainTopToolbar .button {
 	/* The account control is the design system's HeaderButton tone="account" - a
 	   filled charcoal pill, not one of the step ghosts - so its fill has to be
@@ -436,7 +623,7 @@ a:hover {color: var(--pa-link-hover);}
 	color: #E2E2E2;              /* --pa-btn-neutral-ink, 5.31:1 on the fill */
 	border-color: transparent;
 	float: none;
-	margin-left: auto;
+	margin-left: 0;
 	margin-right: 0;
 }
 /* (0,3,0), which is what it takes to beat the ghost hover declared above. */
@@ -468,12 +655,45 @@ a:hover {color: var(--pa-link-hover);}
    without !important, so without these the Step 4 toolbar stayed full-width,
    wrapped its five buttons onto two rows and sat on top of the pathway. The
    inner span is ExtJS's box wrapper and carries the same inline width, which is
-   why it needs the override too. */
+   why it needs the override too.
+
+   `position` was the one declaration in this block that did not carry it, and
+   that is the whole reason Step 4's toolbar did not line up with the other
+   three steps. On Step 4 the band is a child of a vbox, so ExtJS gives it
+   `.x-box-item`, and Neptune declares
+
+       .x-box-item { position: absolute !important; }
+
+   which beats a plain `position: fixed` no matter how specific this selector
+   is. So the band computed to `absolute`, and every other declaration here
+   then resolved against the wrong containing block: `top: 0` meant the top of
+   #pathwaysPanelsWrapper rather than of the viewport, which is 50px down, and
+   the inline `left: 0` -- never overridden, because a fixed element does not
+   need it -- stretched the box from the panel's left edge to `right`. Measured:
+   position absolute, top 50, left 109, the buttons packed to the right of a
+   973px box and reading as a centred second row under the header, where every
+   other step has them in the header itself.
+
+   `left: auto` is the other half. Without it the inline `left: 0px` survives
+   the switch to fixed and pins the band to the viewport's left edge, so it is
+   the pair that has to be stated, not just the position. */
 .secondTopToolbar {
-	position: fixed;
-	top: 0 !important;
+	position: fixed !important;
 	left: auto !important;
-	right: calc(var(--pa-gutter) + 132px) !important;
+	top: 0 !important;
+	/* --pa-header-utilities is the distance from the right edge of the viewport
+	   to the left edge of .headerUtilities, written by fitHeaderNav() on every
+	   resize and every view change. It replaces a literal `var(--pa-gutter) +
+	   178px`, which was 132 of account button plus 30 of switch plus a 16 gap,
+	   counted by hand and true only while all three kept those exact sizes. It
+	   was already wrong in a state the app reaches by itself: signing out removes
+	   the account button, and the band went on reserving room for it.
+
+	   The fallback is the old number, so a browser that somehow renders this
+	   before the first measurement lands where it used to rather than on top of
+	   the corner. The +16 matches the divider's own 16px margin on the far side,
+	   which is what centres that hairline between the two groups. */
+	right: calc(var(--pa-header-utilities, calc(var(--pa-gutter) + 178px)) + 16px) !important;
 	width: auto !important;
 	height: 50px;
 	padding: 0;
@@ -499,13 +719,71 @@ a:hover {color: var(--pa-link-hover);}
 	float: none;
 	margin: 0;
 }
+
+/* The corner that is not about the analysis --------------------------------
+   The theme switch and the account button do the same kind of job - neither
+   belongs to the step on screen - and they now say so by sitting together in
+   one group at the end of the row, behind a divider.
+
+   That divider is the point of the wrapper. The header carries three different
+   kinds of control: navigation, the actions for this step, and these two. With
+   nothing marking the boundary, an icon-only switch in a run of labelled pills
+   reads as something left behind rather than as a member of a group, which is
+   the complaint this answers. A hairline costs one pixel and does the whole
+   job. */
+.mainTopToolbar .headerUtilities {
+	flex: 0 0 auto;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-left: auto;
+}
+/* Hidden with opacity rather than display so its 9px stays in the group's
+   measured width. fitHeaderNav() reserves space for that width, and a divider
+   that came and went would move the step actions sideways every time a view
+   mounted its toolbar.
+
+   Shown by :has(), not by a class from JavaScript. The first version asked
+   fitHeaderNav() to write `.has-step-actions`, which meant a decorative hairline
+   depended on that function's scheduling - and that scheduling is known to go
+   stale (see the note on watchHeaderFit). Measured on the results page it did:
+   the divider was present on one load and absent on the next, from nothing but
+   which run happened to be last. The stylesheet can answer "is a step toolbar on
+   screen" by itself, and a selector cannot be out of date. */
+.mainTopToolbar .headerUtilities::before {
+	content: '';
+	flex: 0 0 auto;
+	width: 1px;
+	height: 20px;
+	/* 16, matching the gap .secondTopToolbar leaves on the other side, so the
+	   hairline sits centred between the two zones. Measured at 8 it was closer to
+	   the switch than to Reset, which made it read as an ornament belonging to the
+	   switch instead of as the boundary between two groups - the opposite of the
+	   job. The 8px inside the group stays 8, so the switch and the account button
+	   are still visibly tighter to each other than either is to this line. */
+	margin-right: 16px;
+	/* --pa-border is a 0.10 alpha, correct for a panel edge sitting against a
+	   filled surface but too faint to read as a boundary in open space. This one
+	   has 16px of white either side of it and one pixel to make its case. */
+	background: rgba(24, 24, 27, 0.18);
+	opacity: 0;
+	transition: opacity var(--pa-transition);
+}
+body:has(.secondTopToolbar) .mainTopToolbar .headerUtilities::before {
+	opacity: 1;
+}
 #header {
 	float: none;
 	flex: 0 0 auto;
 	display: flex;
 	align-items: center;
 	height: 32px;
-	margin-left: -5px;
+	/* No `margin-left: -5px`. It pulled the mark five pixels outside the
+	   toolbar's own gutter, so the wordmark did not start on the page rail -
+	   and once the cards below were brought onto that rail, five pixels of
+	   overhang is exactly the kind of miss that reads as sloppy rather than as
+	   optical correction. The mark is a square SVG with no side bearing to
+	   compensate for. */
 	cursor: pointer;
 }
 #header img {
@@ -522,24 +800,13 @@ a:hover {color: var(--pa-link-hover);}
 	color: #1A1A1A;
 	white-space: nowrap;
 }
-/* The build number. It was `<span style="font-size: 8px; margin-left:10px;">`
-   written inline by MainView.js, which put it out of reach of dark.css - the
-   one thing an inline style guarantees - and set it at 8px, below the size
-   anything in this interface is legible at, in the h1's own near-black.
-
-   A version is metadata about the page, not part of the product's name, so it
-   is set as a quiet chip: muted ink, tabular figures, and its own baseline
-   rather than riding the wordmark's. 11px is small; 8px was decoration
-   pretending to be text. */
-#header .appVersion {
-	margin-left: 8px;
-	align-self: center;
-	font-size: 11px;
-	font-weight: 400;
-	letter-spacing: 0.01em;
-	color: var(--pa-ink-muted);
-	font-variant-numeric: tabular-nums;
-}
+/* No rule for .appVersion any more: MainView.js stopped emitting the chip. The
+   header is the row where the nav pills and the step actions grow towards each
+   other, and fitHeaderNav() compacts the pills and then strips their labels to
+   keep them apart; a build number between the wordmark and the first pill spent
+   about 50px of exactly that contested space. Kept as a note rather than as a
+   dead rule, so the next person to look for the version in the header finds out
+   where it went instead of finding styling for an element that is not there. */
 #footer {
 	max-width: 65px;
 }
@@ -693,12 +960,13 @@ ul.submenu {
 	height: 8px;
 }
 
-/* The last two dropdowns would run off the right edge, so they hang from the
-   right of their item instead. */
-.lateralMenu-body > .menuOption:nth-last-child(-n+2) ul.submenu {
-	left: auto;
-	right: 0;
-}
+/* No right-anchoring rule any more. `:nth-last-child(-n+2)` used to hang the
+   last two dropdowns from the right of their item, because with six pills those
+   two sat far enough along the bar to run off the window. With four they do not:
+   the whole nav now ends around 450px from the left, so every dropdown fits
+   hanging left - and the rule had become actively wrong, since right-anchoring a
+   380px card to a pill at x=340 would have started it 40px off the left edge of
+   the screen. */
 ul.submenu li {
 	list-style-type: none;
 	padding: 0;
@@ -724,22 +992,113 @@ ul.submenu a:hover {
 	color: var(--pa-link-hover);
 	text-decoration: underline;
 }
-/* The citation entries carry `style="color: white"` inline, written for the old
-   dark flyout. On a white dropdown that is invisible, and the inline style beats
-   any normal rule, so this is one of the few places !important is the only tool
-   that works. */
-ul.submenu li.menuOption > div {
-	color: #1A1A1A !important;
-	font-weight: 600;
-	margin-bottom: 2px;
-}
+/* No rule for `li.menuOption > div` any more. It existed to overrule
+   `style="color: white"` written inline on the citation headings, back when they
+   flew out of a dark rail; the citations are structured markup now and no header
+   element carries a colour in its style attribute, so there is nothing left to
+   beat with !important. */
 ul.submenu i.fa {
 	display: inline-block;
 	margin-right: 8px;
 	font-size: 13px;
 	width: 14px;
 	text-align: center;
-	color: #6B6C74;
+	color: var(--pa-ink-muted);
+}
+
+/* The More panel --------------------------------------------------------------
+   Resources, the citations and Contact behind one pill. Two columns because the
+   two lists have genuinely different shapes - five short links against four
+   references - and stacking them made a dropdown taller than most laptop
+   viewports.
+
+   The grid lives on .navPanel-inner, an <li>, and not on the <ul> that is the
+   card. jQuery's fadeIn() writes `display: block` as an inline style on the
+   element it reveals, and an inline declaration beats any `display: grid` a
+   stylesheet puts on the same element. Putting the grid one level in keeps the
+   framework's show/hide and the layout out of each other's way. */
+.lateralMenu-body ul.submenu.navPanel {
+	min-width: 0;
+	max-width: min(600px, calc(100vw - 48px));
+	padding: 14px 16px 12px;
+}
+.navPanel-inner {
+	display: grid;
+	grid-template-columns: minmax(180px, auto) minmax(230px, auto);
+	column-gap: 28px;
+	row-gap: 10px;
+	align-items: start;
+}
+/* Contact is neither a resource nor a citation, so it spans the foot with a rule
+   above it rather than being filed under a heading it does not belong to. */
+.navPanel-foot {
+	grid-column: 1 / -1;
+	border-top: 1px solid var(--pa-border);
+	padding-top: 8px;
+}
+.navPanel-list {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+/* 11px and tracked out: these name the columns, they are not read as content,
+   and at body size two of them would compete with the links underneath. */
+.navPanel-title {
+	margin: 0 0 6px 10px;
+	font-size: 11px;
+	font-weight: 600;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: var(--pa-ink-muted);
+}
+/* The citation row: paper on the left, BibTeX on the right, both clickable. */
+.navPanel-cite {
+	display: flex !important;   /* beats `ul.submenu li.menuOption { display: block }` */
+	align-items: baseline;
+	gap: 10px;
+}
+.navPanel-cite-ref {
+	flex: 1 1 auto;
+	min-width: 0;
+	display: block;
+}
+.navPanel-cite-name {
+	display: block;
+	color: var(--pa-ink-strong, #1A1A1A);
+	font-weight: 600;
+}
+.navPanel-cite:hover .navPanel-cite-name {
+	color: var(--pa-link-hover);
+}
+.navPanel-cite-meta {
+	display: block;
+	margin-top: 1px;
+	font-size: 11.5px;
+	color: var(--pa-ink-muted);
+}
+/* A chip, so the second link in the row is obviously a separate target from the
+   first rather than a word that happens to be underlined next to it. */
+.navPanel-cite-bib {
+	flex: 0 0 auto;
+	align-self: center;
+	padding: 3px 8px;
+	border: 1px solid var(--pa-border);
+	border-radius: 999px;
+	font-size: 11px;
+	line-height: 1.4;
+	white-space: nowrap;
+}
+.navPanel-cite-bib:hover {
+	background: var(--pa-surface-quiet);
+	text-decoration: none !important;
+}
+/* Two columns need about 600px of dropdown. Below that the panel would be wider
+   than the room to the right of the More pill, so it becomes one column and
+   grows downwards instead. */
+@media (max-width: 940px) {
+	.navPanel-inner {
+		grid-template-columns: minmax(0, 1fr);
+	}
 }
 ul.menu li.loggedOption, ul.menu span.loggedOption {
 	display: none
@@ -1276,11 +1635,63 @@ ul.menu li.loggedOption, ul.menu span.loggedOption {
 	padding: 8px 10px;
 	resize: vertical;
 }
+/* The field's caption. It used to be its own full-width box above the button;
+   it is now a span inside .po-exp-design-draft, sharing that row with the
+   button, so it takes no margin of its own and flexes into whatever the button
+   leaves. The basis is a measure, not a width: below it the row wraps and the
+   caption takes its own line, which is the right behaviour in the narrow
+   column rather than a hyphenated two-word ribbon beside the button. */
 .po-exp-design-hint {
-	margin-top: 6px;
 	font-size: 12px;
 	line-height: 1.45;
 	color: var(--pa-ink-muted);
+	flex: 1 1 220px;
+	min-width: 0;
+}
+
+/* "Draft this for me" and the line under it that reports what was sent.
+   The row wraps because the note grows to two lines once it carries the
+   column count and the Undo link, and a nowrap row pushed Undo off the
+   card's right edge at the narrow end of the two-column split. */
+.po-exp-design-draft {
+	margin-top: 10px;
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 8px;
+}
+.po-exp-design-draft-btn {
+	/* The AI mark is an inline SVG, so it needs a baseline the button's own
+	   line-height does not give it. */
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	flex: none;
+}
+/* Disabled until consent is ticked, which is most of the time this form is on
+   screen -- so it has to read as "not yet", not as "broken". Kept at the
+   secondary button's shape with the ink dropped to the muted token, and the
+   cursor says the control knows it was clicked. `title` carries the reason. */
+.po-exp-design-draft-btn:disabled,
+.po-exp-design-draft-btn[disabled] {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+.po-exp-design-draft-note {
+	font-size: 12px;
+	line-height: 1.45;
+	color: var(--pa-ink-muted);
+	flex: 1 1 100%;
+}
+.po-exp-design-draft-note:empty {
+	display: none;
+}
+.po-exp-design-draft-note.is-error {
+	color: var(--pa-ai-consent-warn, #C44500);
+}
+.po-exp-design-undo {
+	font-weight: 600;
+	white-space: nowrap;
 }
 /* The outlined secondary button - "Sharing options", "Show mapping info", the
    dialog's Close. Its label was never the problem (#333 on white is 12.63:1);
@@ -1342,28 +1753,33 @@ ul.menu li.loggedOption, ul.menu span.loggedOption {
 	font-size: 12px;
 	padding: 4px 6px;
 }
-/* The label here was fixed earlier; the boundary was not. A #5bc0de fill on
-   white or on the #F2F2F2 toolbar is 1.87-2.09:1, and the old #46b8da border
-   only reached 2.05-2.30:1, so nothing about this button's edge told you it was
-   a button - WCAG 1.4.11 wants 3:1 for exactly that.
+/* The type-coding argument for the pale cyan was true when this class dressed
+   the message dialog's dismiss button, where the fill said "this dialog is an
+   info". It does not any more: Util.js gives that button `btn-default` in every
+   case now, because a button that closes a dialog does the same thing whatever
+   the dialog says, and the type is already carried by the accent along the
+   dialog's top edge and by its heading.
 
-   The fill stays. It is doing type-coding work and earlier iterations
-   deliberately kept it, so the border is what carries the boundary instead:
-   #1F7F9B gives 4.60:1 on white and 4.11:1 on the toolbar. That value is not a
-   new colour - it is the Pathway information panel header, reused.
+   What is left wearing this class is three real actions - Search in this
+   pathway, Search for features, Show Features - and Step 3's AI Interpret. Not
+   one of them is an "info". They are the primary control of the panel they sit
+   in, and they were a #5bc0de fill with #333 ink and a #1F7F9B border: a pale
+   Bootstrap-3 cyan carrying dark text inside a dark teal outline, i.e. three
+   colours on one small button and none of them the application's.
 
-   The border does not darken on hover. The fill already darkens to #31b0d5,
-   which is the feedback; a second moving part would just be one more value to
-   keep in sync. */
+   One accent, filled, white ink, no third colour. --pa-accent-blue is 7.17:1
+   against white, so the label clears AAA, and the fill is 3:1 against the
+   panels these sit on without needing a separate border to prove it is a
+   control. */
 .btn-info{
-	color: #333; /* dark ink on the light cyan fill - 6.04:1 */
-	background-color: #5bc0de;
-	border-color: #1F7F9B;
+	color: #FFFFFF;
+	background-color: var(--pa-accent-blue);
+	border-color: var(--pa-accent-blue);
 }
 .btn-info:hover {
-	color: #333; /* 4.99:1 */
-	background-color: #31b0d5;
-	border-color: #1F7F9B;
+	color: #FFFFFF;
+	background-color: #124477;
+	border-color: #124477;
 }
 .btn-success {
 	color: #fff;
@@ -1468,7 +1884,13 @@ ul.ui-menu.ui-widget.ui-widget-content {
 	background: #fff;
 	border-radius: var(--pa-radius);
 	overflow: hidden;
-	margin: 5px 10px;
+	/* `5px 10px` before. The horizontal 10 was a second gutter stacked on the
+	   one --pa-gutter already applies to #mainViewCenterPanel, so a card's edge
+	   never coincided with anything else measured from the page column - most
+	   visibly the header wordmark, which sat 20px to the left of the card
+	   directly below it. Vertical margin stays; that one separates cards from
+	   each other, which is what a margin here is for. */
+	margin: 5px 0;
 	box-shadow: var(--pa-shadow);
 }
 /* See the comment on the form in PA_Step1Views: the inset is applied through the
@@ -1544,6 +1966,24 @@ div.contentbox h3 {
 	font-weight: 600;
 	padding: 6px var(--pa-card-inset);
 	margin: 12px 0 4px;
+}
+/* The AI mark that leads "2. AI-powered pathway interpretation" in the upload
+   form hangs in the card's inset instead of sitting in the text flow.
+
+   The three headings of that form are a numbered sequence - 1. Organism
+   selection, 2. AI-powered..., 3. Choose the files to upload - and only the
+   middle one carries a mark. In flow it pushed that heading's number 17px right
+   of the other two: an ordered list whose numbers do not line up, which is the
+   one thing a numbered list has to get right.
+
+   Pulled by its own width plus the space that follows it, so the digit lands on
+   the same rail as its siblings and the mark sits in the 26px inset the card
+   already holds open. Measured after the change: 1., 2. and 3. all start at
+   x=150. Still inline, so it keeps the vertical alignment its own
+   `vertical-align:-0.15em` gives it - absolute positioning would have needed
+   that centring rebuilt by hand. */
+div.contentbox h3 > svg.po-ai-mark:first-child {
+	margin-left: calc(-1em - 0.2em);
 }
 div.contentbox h3 span {
 	font-size: small;
@@ -1687,7 +2127,9 @@ input, textarea {
 	box-shadow: 0px 0px 6px #B1B1B1;
 	font-size: 14px;
 	padding: 8px;
-	color: #707070;
+	/* Was #707070 (4.95:1). This is a field showing the filename the user
+	   picked - their own data echoed back - which is content, not chrome. */
+	color: #3F3F46;
 	width: 500px;
 	margin-left: 10px;
 }
@@ -1699,15 +2141,40 @@ select {
 	padding: 8px;
 	/* Was #707070. It reads as 4.95:1 if you assume a white field, which is
 	   what an earlier pass in this branch did - but this rule sets its own
-	   #E7E7E7 fill two lines down, where the real figure is 4.00:1. */
-	color: #676767;
+	   #E7E7E7 fill two lines down, where the real figure is 4.00:1. #676767
+	   cleared that at 4.58:1, which is the floor again; the selected option is
+	   the user's own choice of organism or database, so it reads as content.
+	   #3F3F46 is 8.45:1 against the same #E7E7E7 fill. */
+	color: #3F3F46;
 	width: 250px;
 	background: rgb(231, 231, 231);
 	margin-left: 15px;
 }
+/* The message dialog's own layout --------------------------------------------
+   `text-align: center` here was doing the work of a design decision that was
+   never made. It centred the title, the body, the progress meta and the button
+   row alike, so a dialog carrying three bullet points of prose ("About this
+   example") centred them; #messageDialogBody had to opt back out with its own
+   `text-align: left`, which is the tell.
+
+   Centring is right for the button row and for the spinner, and wrong for
+   everything that is read rather than glanced at. Both of those state it
+   themselves - the button row inline, the spinner in `#messageDialogSpin` - so
+   removing it here costs them nothing.
+
+   The title also stops being 16px semibold *and* coloured *and* centred, which
+   is three ways of saying "this is the heading" where a dialog needs one. It
+   keeps the size and weight; the colour stays, because on this one surface a
+   heading's hue is the message type - error, warning, info, success - and those
+   four rules are further up this file. */
 #messageDialogPanel {
-	padding: 20px;
-	text-align: center;
+	padding: 22px 24px 18px;
+	text-align: left;
+}
+#messageDialogPanel > h4 {
+	font-size: 16px;
+	line-height: 1.35;
+	margin: 0 0 8px;
 }
 
 /* The modal scrim, and why the dialog looked the way it did ------------------
@@ -1894,8 +2361,12 @@ body > .x-mask {
 	border-top-color: #288824;
 }
 #messageDialog.successDialog h4 {
-	/* Same green as the global h4. It passed on the dialog's white fill at
-	   4.53:1, but is moved to the token so the two cannot drift apart; the
+	/* This was "the same green as the global h4", back when the global h4 was
+	   green. It is not any more - see the heading-scale note near the top of
+	   this file - so the green is stated here on its own account: these four
+	   rules are the one place in the application where a heading's colour is
+	   the message type, and success is the only one of the four that would
+	   otherwise have gone neutral. 4.53:1 on the dialog's white fill; the
 	   border above keeps #288824, which clears the 3:1 non-text bar. */
 	color: var(--pa-accent-green);
 }
@@ -2009,15 +2480,122 @@ i.fa.fa-paint-brush-o:before {
 	content: "\e600";
 }
 
-/*Custom Radio Buttons and Checkboxes using Font Awesome*/
+/* Checkboxes and radios ------------------------------------------------------
+   These were drawn as Font Awesome glyphs: `\f096` / `\f046` for a checkbox and
+   `\f10c` / `\f05d` for a radio. Two things were wrong with that, one cosmetic
+   and one not.
+
+   The cosmetic one: a glyph is a letterform, so the "box" was a hairline square
+   at whatever weight the icon font happened to draw it, and the checked state
+   was a *tick sitting outside* the square rather than a filled control. At 13px
+   in the network's settings column that is a row of faint outlines, which is
+   most of why that panel read as older than the rest of the application.
+
+   The one that is not cosmetic: `\f05d` - the radio's checked glyph - is a
+   check mark in a circle. A tick means "this is on", independently of the
+   others; a dot means "this is the one of the group". The control was drawn
+   saying the wrong thing about its own semantics, in the one place
+   (Node coloring, Choose what edges represent) where the distinction is the
+   whole point of using a radio.
+
+   Drawn in CSS instead: a real 16px box with a real fill, a stroked tick for
+   the checkbox and an inset dot for the radio. 16px of control plus a 7px gap
+   is the 23px the glyph rule reserved, so nothing moves horizontally.
+
+   The fill is the app's interaction blue rather than the old #3C8E49. Green in
+   this UI means *go* - it is Apply, Run PaintOmics, Next step - and a checkbox
+   is not an action; blue is what already marks selection and focus here. It is
+   --pa-accent-blue, so a checked control and a link agree.
+
+   The input itself moves from `display: none` to being visually hidden but
+   still in the accessibility tree and still focusable. `display: none` removes
+   an element from tab order entirely, so none of these controls could be
+   reached or toggled from the keyboard at all - the Tools panel's ten
+   checkboxes, the two radio groups, the Step 4 view toggles. Absolutely
+   positioned, so it takes no space and no layout changes. */
+/* A handful of checkboxes in this app are bare `<input type="checkbox">` with
+   no wrapper of any kind - Step 3's "Choose the pathways below and Paint!" is
+   the visible one - so neither the rule below nor the framework one further
+   down can reach them and they render in the platform's own blue. One line puts
+   them in the app's accent without taking over their drawing. */
+input[type="checkbox"],
+input[type="radio"] {
+	accent-color: var(--pa-accent-blue);
+}
 div.radio input[type=radio], div.checkbox input[type='checkbox'] {
-	display: none;
+	position: absolute;
+	width: 16px;
+	height: 16px;
+	margin: 0;
+	opacity: 0;
+	pointer-events: none;
+}
+/* So the hidden input above resolves against its own wrapper rather than
+   against whatever ancestor happens to be positioned. */
+div.radio, div.checkbox {
+	position: relative;
 }
 div.radio input[type=radio] + label {
 	display: block;
 	padding-left: 23px;
 }
-div.checkbox input[type='checkbox'] + label:before, div.radio input[type='radio'] + label:before {
+div.checkbox:not(.viewbox):not(.nobox) input[type='checkbox'] + label:before,
+div.radio input[type='radio'] + label:before {
+	content: "";
+	display: inline-block;
+	box-sizing: border-box;
+	width: 16px;
+	height: 16px;
+	margin-right: 7px;
+	/* Optical, not arithmetic: pulls the box onto the label's baseline so the
+	   two read as one line rather than as a box with text beside it. */
+	vertical-align: -3px;
+	border: 1.5px solid #8A8A91;
+	background-color: #FFFFFF;
+	background-repeat: no-repeat;
+	background-position: center;
+	background-size: 100% 100%;
+	transition: background-color var(--pa-transition), border-color var(--pa-transition), box-shadow var(--pa-transition);
+}
+div.checkbox:not(.viewbox):not(.nobox) input[type='checkbox'] + label:before {
+	border-radius: 4px;
+}
+div.radio input[type='radio'] + label:before {
+	border-radius: 50%;
+}
+/* The tick is a stroked path in a data URI rather than a glyph, so it scales
+   with the box and cannot be affected by an icon font failing to load. */
+div.checkbox:not(.viewbox):not(.nobox) input[type="checkbox"]:checked + label:before {
+	background-color: var(--pa-accent-blue);
+	border-color: var(--pa-accent-blue);
+	background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='none' stroke='%23fff' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' d='M3.6 8.4l2.9 2.9 5.9-6.3'/%3E%3C/svg%3E");
+}
+/* An inset white ring is what leaves a dot: the fill covers the whole circle
+   and the ring eats everything but the middle. One declaration, no second
+   pseudo-element to position. */
+div.radio input[type=radio]:checked + label:before {
+	background-color: var(--pa-accent-blue);
+	border-color: var(--pa-accent-blue);
+	box-shadow: inset 0 0 0 3.5px #FFFFFF;
+}
+div.checkbox:not(.viewbox):not(.nobox):hover input[type="checkbox"]:not(:checked) + label:before,
+div.radio:hover input[type=radio]:not(:checked) + label:before {
+	border-color: #52525B;
+}
+/* The ring the rest of the application uses, moved onto the drawn box because
+   the input it belongs to is invisible. */
+div.checkbox input[type="checkbox"]:focus-visible + label:before,
+div.radio input[type=radio]:focus-visible + label:before {
+	outline: 3px solid var(--pa-focus-ring);
+	outline-offset: 2px;
+}
+/* The two variants that are deliberately not boxes. `viewbox` is Step 4's
+   show/hide toggle, where the glyph is an eye and the state is what the eye is
+   doing; `nobox` drops the mark entirely and colours the label instead. Both
+   keep the Font Awesome technique, so it is restated for them here rather than
+   inherited from a base rule that now draws a box. */
+div.checkbox.viewbox input[type='checkbox'] + label:before,
+div.checkbox.nobox input[type='checkbox'] + label:before {
 	display: inline-block;
 	font-family: FontAwesome;
 	font-style: normal;
@@ -2027,24 +2605,6 @@ div.checkbox input[type='checkbox'] + label:before, div.radio input[type='radio'
 	-moz-osx-font-smoothing: grayscale;
 	padding-right: 0px;
 	width: 23px;
-}
-div.radio input[type=radio] + label:before {
-	content: "\f10c";
-	/* Radio Unchecked */
-}
-div.radio input[type=radio]:checked + label:before {
-	content: "\f05d";
-	/* Radio Checked */
-	color: #3C8E49;
-}
-div.checkbox input[type="checkbox"] + label:before {
-	content: "\f096";
-	/* Checkbox Unchecked */
-}
-div.checkbox input[type="checkbox"]:checked + label:before {
-	content: "\f046";
-	/* Checkbox Checked */
-	color: #3C8E49;
 }
 div.checkbox.viewbox input[type="checkbox"] + label:before {
 	content: "\f070";
@@ -2070,13 +2630,74 @@ div.checkbox label, div.radio label {
 	padding-left: 0;
 }
 
-.ui-slider-horizontal {
-	height: .5em !important;
-}
+/* Sliders ---------------------------------------------------------------------
+   The seven sliders in the network's settings column, and the cluster-count one
+   beside them, were jQuery UI's stock 2009 widget: a 1px #ddd frame around an
+   #eee gradient GIF for the track, and a bold-bordered #f6f6f6 square with a
+   second gradient GIF for the thumb. Two raster images per slider, for a
+   control that is four rounded rectangles.
 
-.ui-slider-horizontal .ui-slider-handle {
-	width: 1em !important;
-	height: 1em !important;
+   The track also said nothing. Without `range`, jQuery UI draws no filled
+   portion, so a slider at 10% and a slider at 90% were the same picture except
+   for where the thumb sat - which in a column of four stacked sliders is the
+   difference between reading the filter settings at a glance and reading each
+   one. `range: "min"` is passed at every call site now, which is what the
+   `.ui-slider-range` rule below paints.
+
+   `!important` on the track height only, matching what stood here: jQuery UI's
+   own `.ui-slider-horizontal { height: .8em }` is a single class, so it loses
+   on specificity, but ExtJS re-applies inline heights to some of these
+   containers. Everything else wins on specificity alone. */
+.slider-ui.ui-slider,
+.ui-slider-horizontal {
+	height: 4px !important;
+	background: #E1E1E4;
+	background-image: none;
+	border: 0;
+	border-radius: 999px;
+	/* The thumb overhangs the track by 6px top and bottom, so the widget needs
+	   room around it or the row above clips it. */
+	margin-top: 14px;
+	margin-bottom: 14px;
+}
+.slider-ui.ui-slider .ui-slider-range,
+.ui-slider-horizontal .ui-slider-range {
+	background: var(--pa-accent-blue);
+	background-image: none;
+	border-radius: 999px;
+}
+.slider-ui.ui-slider .ui-slider-handle.ui-state-default,
+.ui-slider-horizontal .ui-slider-handle,
+.ui-widget-content .ui-slider-handle.ui-state-default {
+	width: 16px;
+	height: 16px;
+	top: -6px;
+	margin-left: -8px;
+	border: 1.5px solid var(--pa-accent-blue);
+	border-radius: 50%;
+	background: #FFFFFF;
+	background-image: none;
+	box-shadow: 0 1px 3px rgba(24, 24, 27, 0.20);
+	cursor: grab;
+	transition: box-shadow var(--pa-transition), background-color var(--pa-transition);
+}
+/* A ring rather than a size change: growing the thumb on hover moves the target
+   out from under the cursor mid-drag, which is the one thing a slider must not
+   do. */
+.slider-ui.ui-slider .ui-slider-handle.ui-state-hover,
+.slider-ui.ui-slider .ui-slider-handle.ui-state-focus,
+.ui-widget-content .ui-slider-handle.ui-state-hover,
+.ui-widget-content .ui-slider-handle.ui-state-focus {
+	background: #FFFFFF;
+	background-image: none;
+	box-shadow: 0 1px 3px rgba(24, 24, 27, 0.20), 0 0 0 4px rgba(25, 88, 158, 0.16);
+}
+.slider-ui.ui-slider .ui-slider-handle.ui-state-active,
+.ui-widget-content .ui-slider-handle.ui-state-active {
+	background: var(--pa-accent-blue);
+	background-image: none;
+	cursor: grabbing;
+	box-shadow: 0 1px 3px rgba(24, 24, 27, 0.20), 0 0 0 4px rgba(25, 88, 158, 0.22);
 }
 
 /********************************************************************************
@@ -2117,48 +2738,80 @@ div.checkbox label, div.radio label {
    collect. Nothing about an omic's name needs to be twice the size of the
    step heading.
 
-   The band comes down to 40px and the name to 20px, which is the same size as
-   the "Available omics" / "Selected omics" panel titles it sits between - so
-   the page now has one heading scale instead of the card shouting over it. The
-   fill is untouched: it is the app's type-coding, used here, in the legends and
-   in the pathway diagrams alike. */
-.omicboxTitle {
-	height: 40px;
-	background: rgb(85, 201, 166);
-	padding-left: 15px;
+   The band came down to 40px and the name to 20px, which was the same size as
+   the "Available omics" / "Selected omics" panel titles it sits between. That
+   fixed the size and left the shape: a full-width band of saturated colour is
+   how a framed panel was drawn in 2012, and it is the last thing in the upload
+   form still drawn that way. It is also the loudest object on a page whose
+   other cards - the AI section, the example note, the help panel - are all
+   white surfaces separated by hairlines.
+
+   So the colour stops being the surface and becomes a marker on it. The header
+   is a white band with the card's own hairline under it, like every other card
+   header in the application, and the omic's hue is a 5px bar down its leading
+   edge. Nothing is lost by that: the bar is the same colour at full strength,
+   in the position an eye scanning a column of cards actually reads first, and
+   the drag chips in "Available omics" - where the colour has no other carrier -
+   keep their solid fill.
+
+   The six hues are the app's type-coding: users identify an omic by its colour
+   here, in the legends and in the pathway diagrams, so every value below is
+   exactly the one it has always been. They move from `background` to a custom
+   property because they now have two jobs - the chip's fill and the card's bar -
+   and a colour used twice should be written once. */
+.omicboxTitle,
+.availableOmicsBox {
+	--pa-omic-color: rgb(85, 201, 166);
 }
-/* The six omic fills below are the app's type-coding: users identify an omic by
-   its colour here, in the legends and in the pathway diagrams, so the hues are
-   left exactly as they were. White text on those pastels ran 2.04:1 to 3.55:1;
-   near-black ink clears AA on all six (4.90:1 on the darkest, region-based, up
-   to 8.53:1) without touching a single fill. */
+.omicboxTitle.metabolomicsFileBox, .availableOmicsBox[title=metabolomics] {
+	--pa-omic-color: rgb(121, 176, 236);
+}
+.omicboxTitle.proteomicsFileBox, .availableOmicsBox[title=proteomics] {
+	--pa-omic-color: rgb(180, 161, 221);
+}
+.omicboxTitle.otherFileBox, .availableOmicsBox[title=otheromic] {
+	--pa-omic-color: rgb(214, 127, 107);
+}
+.omicboxTitle.bedbasedFileBox, .availableOmicsBox[title=bedbasedomic] {
+	--pa-omic-color: #738B9D;
+}
+.omicboxTitle.miRNAbasedFileBox, .omicboxTitle.moreBasedFileBox, .availableOmicsBox[title=regulatoryomic] {
+	--pa-omic-color: rgb(154, 150, 78);
+}
+.omicboxTitle {
+	display: flex;
+	align-items: center;
+	min-height: 44px;
+	background: #FFFFFF;
+	border-bottom: 1px solid var(--pa-border);
+	/* Inset rather than a border: `.omicbox` clips to its own radius, so a
+	   5px inset shadow follows the rounded top-left corner instead of being
+	   squared off by a border box that predates it. It also takes no space, so
+	   the fields below stay on the same left rail as the title. */
+	box-shadow: inset 5px 0 0 var(--pa-omic-color);
+	padding-left: 20px;
+}
+/* Near-black ink. The header is white now, so the contrast note that used to
+   live here - white-on-pastel ran 2.04:1 to 3.55:1, near-black cleared AA on
+   all six - applies to the drag chips below, which still carry the fill. */
 div.omicboxTitle h4 {
-	font-size: 20px;
-	color: #1A1A1A;
+	font-size: 15px;
+	color: #1A1A18;
+	margin: 0;
+	/* The delete control is `float: right` inside this heading, and a flex item
+	   shrink-wraps its content - so without this the trash icon sat hard against
+	   the last letter of the omic's name instead of at the far end of the bar.
+	   Filling the row gives the float an edge to reach. */
+	flex: 1 1 auto;
 }
 .omicboxTitle a, .availableOmicsBox a {
 	color: #1A1A1A;
 }
 .availableOmicsBox {
 	cursor: move;
-}
-.omicboxTitle.metabolomicsFileBox, .availableOmicsBox[title=metabolomics] {
-	background: rgb(121, 176, 236);
-}
-.omicboxTitle.proteomicsFileBox, .availableOmicsBox[title=proteomics] {
-	background: rgb(180, 161, 221);
-}
-.omicboxTitle.otherFileBox, .availableOmicsBox[title=otheromic] {
-	background: rgb(214, 127, 107);
-}
-.omicboxTitle.bedbasedFileBox, .availableOmicsBox[title=bedbasedomic] {
-	background: #738B9D;
-}
-.omicboxTitle.miRNAbasedFileBox, .omicboxTitle.moreBasedFileBox, .availableOmicsBox[title=regulatoryomic] {
-	background: rgb(154, 150, 78);
-}
-.availableOmicsBox {
-	background: rgb(85, 201, 166);
+	/* The chip keeps the solid fill: it is a 24px-tall strip with nothing else
+	   in it, so the colour has no other way to say which omic this is. */
+	background: var(--pa-omic-color);
 	padding: 5px 10px;
 	/* No horizontal margin: the column these sit in is already on the card's
 	   inset, and 10px here put the first thing the eye meets under
@@ -2170,8 +2823,9 @@ div.omicboxTitle h4 {
 }
 /* The drag sources match the cards they become, so they come down with them. */
 div.availableOmicsBox h4 {
-	font-size: 16px;
+	font-size: 14px;
 	color: #1A1A1A;
+	margin: 0;
 }
 .dragHerePanel {
 	display: none;
@@ -2188,26 +2842,64 @@ div.availableOmicsBox h4 {
 	margin: 10px auto;
 }
 
+/* The upload form's help panel ------------------------------------------------
+   A 50px blue ⓘ over a 20px centred "Help", both stacked above three short
+   paragraphs of left-aligned prose. The icon was the largest single glyph
+   anywhere in the application - larger than the product name in the header -
+   and it was announcing three sentences of instructions.
+
+   It is a note, so it is dressed as one: the quiet surface the rest of the
+   app uses for secondary panels, a small label with the icon inline at the
+   size of the text beside it, and the prose set to the note measure. The
+   heading stops being centred, because nothing under it is.
+
+   `text-align` and the flex centring both go rather than being overridden -
+   a centred heading over ragged-left body copy is the arrangement that made
+   this read as a widget dropped onto the page instead of part of it. */
 #additionalInfoContainer div.content {
-	color: #222;
+	color: var(--pa-ink-body, #222);
 	height: auto;
 	border: 1px solid var(--pa-border);
 	border-radius: var(--pa-radius);
-	margin: 50px auto;
-	padding: 15px;
+	background: var(--pa-surface-quiet);
+	margin: 24px auto;
+	padding: 18px 20px;
 }
 
 #additionalInfoContainer div.content h5 {
-	color: black;
-	text-align: center;
-	font-size: 20px;
-    display: flex;
-    align-items: center;
-	justify-content: center;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	color: #27272A;
+	font-size: 11px;
+	font-weight: 600;
+	letter-spacing: 0.07em;
+	text-transform: uppercase;
+	margin: 0 0 10px;
 }
 
 #additionalInfoContainer div.content h5 i {
-	margin-right: 5px;
+	/* The inline `font-size: 50px` this used to fight with is gone from
+	   PA_Step1Views.js; the icon is now sized here, with the label. */
+	font-size: 14px;
+	color: var(--pa-accent-blue);
+}
+
+#additionalInfoContainer div.content p {
+	margin: 0 0 8px;
+	font-size: 13px;
+	line-height: 1.55;
+	max-width: var(--pa-measure-note);
+	/* Inset twice: `div.contentbox p` gives every paragraph the card inset,
+	   and `div.content` above has already inset this one. The help text
+	   therefore started 26px right of its own "Help" heading, which takes no
+	   padding at all - the heading's icon on one edge and the prose it
+	   introduces on another, inside a 200px-wide card. */
+	padding-left: 0;
+	padding-right: 0;
+}
+#additionalInfoContainer div.content p:last-child {
+	margin-bottom: 0;
 }
 
 /********************************************************************************
@@ -2244,9 +2936,15 @@ div.availableOmicsBox h4 {
 	background-color: white !important;
 	width: 100% !important;
 }
+/* `margin: 0 auto` centred this form in its card, which put the one control
+   the card exists to offer 395px right of the heading and the paragraph that
+   introduce it - the only block on Step 2 not starting on the card's own rail.
+   Centring a single left-labelled form row aligns it with nothing: the row has
+   a label edge and a field edge, and neither lands under the prose. Left on the
+   card inset, the label sits under the first word of the paragraph above it. */
 #clusternumber_box .divForm, #threshold_box .divForm {
 	width: 60% !important;
-	margin: 0 auto !important;
+	margin: 0 0 0 var(--pa-card-inset) !important;
 }
 /* Vertical only. The horizontal 20px was applied on top of the
    --pa-card-inset these paragraphs already get from `div.contentbox p`, so the
@@ -2291,6 +2989,15 @@ div.availableOmicsBox h4 {
 	overflow: hidden;
 	background-color: #FFFFFF;
 	min-width: 340px;
+	/* `div[id^=matching_table] table` further down this file centres these
+	   tables, and that inherits into the cells. The <th> below then sets itself
+	   back to `left` while the <td> did not, so "Omic" and "Gene expression"
+	   sat in one column on two different edges - 27px apart here, and a
+	   different 27px in the Reactome table next to it, because centred text
+	   moves with the column width and the two tables hold different numbers.
+	   Set the alignment once on the table; the last-child rule below still
+	   takes the counts back to the right. */
+	text-align: left;
 }
 #dbs_message table th {
 	padding: 9px 18px;
@@ -2391,24 +3098,46 @@ div[id ^= "pathwayNetworkBox_"].fullscreen {
 max-width: 1300px;
 max-height: 600px;
 }*/
+/* "Building network…", over the diagram while it lays out.
+   40px terracotta with a spinning cog beside it, which made a routine wait the
+   single largest and most saturated thing on the results page - three times the
+   size of the card heading above it, and in a colour this UI otherwise uses for
+   the numbered step markers. A wait message is not news. Body-sized, muted, and
+   centred properly rather than by a hard-coded 350px of top padding, which only
+   ever landed in the middle of a network box that happened to be 775px tall. */
 div[id ^= "pathwayNetworkWaitBox_"] {
 	position: absolute;
-	height: 775px;
+	inset: 0;
+	height: 100%;
 	width: 100%;
 	background-color: rgba(255, 255, 255, 0.76);
 	z-index: 2;
-	padding-top: 350px;
-	text-align: center;
-	font-size: 40px;
-	color: #D26430;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 10px;
+	font-size: 15px;
+	color: var(--pa-ink-muted);
 }
-.resumeLayout {
-	color: #2A7D4B !important; /* was #3BAF6A - 2.51:1 */
-}
-.resumeLayout:hover {
-	color: #fff !important;
-	background-color: #2A7D4B !important;
-}
+/* `.resumeLayout` used to paint its controls green with `!important`, which is
+   why three of the five items in the network toolbar were a different colour
+   from the other two.
+
+   The class is not a colour, though - it is a state flag, and only on one
+   control. PA_Step3Views adds it to the layout button while the layout is
+   paused and removes it while the layout runs, swapping the icon and the label
+   at the same time (`▶ Resume layout` / `⏸ Stop layout`). The other two
+   controls that carry it - Save Node Positions, Toggle tooltips - never change
+   state at all; they were green because they happened to be written with the
+   same class.
+
+   A play/pause pair that already swaps both its glyph and its wording does not
+   also need a hue, and paying for it here cost the toolbar its consistency. So
+   the colour goes and the state stays: the flag still does its job in the click
+   handler, and every control in the strip takes the one neutral treatment
+   `.pa-net-tool` gives it in network-views.css. The class is now carried by the
+   layout button alone - Save positions and Toggle tooltips never had a state
+   for it to flag. */
 div[id ^= "pathwayClassificationPlot2Box_"] {
 	font-size: 15px;
 	padding-top: 24px;
@@ -2432,10 +3161,30 @@ span.networkClusterImage > i {
 span.networkClusterImage.disabled > i {display:block;}
 .mainInfoPanel {font-size: 12px;}
 .pathwayPlotwrappers h4{color: #B14C2D;/* was #D16949 - 3.60:1 */font-size: 13px;margin: 0;margin-top: 5px;}
-div[id ^= "networkview_"] { max-width:1800px; margin: 5px 10px; }
+/* Vertical margin only. The horizontal 10px put the "Pathways network" card
+   10px right of the "Pathways classification" card stacked directly above it,
+   and of every other card on Step 3. It was already being zeroed further down
+   this file - but only under `div.onedatabase`, so the fault was invisible on a
+   single-database organism and present on every KEGG+Reactome job, which is
+   what mmu and most of the example datasets produce. */
+div[id ^= "networkview_"] { max-width:1800px; margin: 5px 0; }
 div[id ^= "networkClustersContainer_"], div[id ^= "patwaysDetailsWrapper_"]{overflow-y:auto; overflow-x: hidden; padding: 2px 10px;}
-div[id ^= "networkSettingsPanel_"], div[id ^= "networkDetailsPanel_"] {width:260px; float:right; margin:0; margin-left:10px;height: 843px;overflow: auto;}
-div[id ^= "networkDetailsPanel_"] {width:270px;}
+/* The Tools and Details columns beside the pathways network.
+   260px and 270px - two different widths for two panels standing side by side,
+   which is the kind of near-miss that reads as a mistake even when nobody can
+   say what is wrong. Together with their gutters they took 550px of a 1114px
+   row, so the graph they annotate got less than half the card it lives in.
+
+   216px each is the width of the MORE network's side panel one card below, so
+   the three annotation columns on this page are now one measurement, and the
+   diagram gets 662px instead of 564.
+
+   The height tracks the network beside it: 775px of canvas, plus the 34px
+   toolbar and the 33px status line above it. It is a literal because the
+   resizer at the foot of the panel sets these three heights together in JS -
+   see the Ext.resizer.Resizer in PA_Step3Views - so `auto` here would make one
+   of the three stop following the drag. */
+div[id ^= "networkSettingsPanel_"], div[id ^= "networkDetailsPanel_"] {width:216px; float:right; margin:0; margin-left:10px;height: 876px;overflow: auto;}
 
 /* Classification / database badge. The fill and the letter colour are set
    inline by classificationBadgeStyle() in Util.js - see the comment there for
@@ -2519,49 +3268,84 @@ div[id ^= "pathwayClassificationContainer"] {overflow-y: auto; overflow-x: hidde
 .step3ClassificationsOptions a.showOption.selected, .step3ClassificationsOptions a.showOption:hover{color: #23AE89;}
 .step3ClassificationsOptions a.customOption.selected, .step3ClassificationsOptions a.customOption:hover{color: #BD7E39;}
 .step3ClassificationsOptions a.selected{float: left;font-weight: bold;}
-div[id ^= "step3-network-toolbar_"]{
-	margin-bottom: -20px;
-	width: 100%;
-	position: relative;
-	background: rgba(255, 255, 255, 0.91);
-	border-bottom: 1px solid #EAEAEA;
-	z-index: 3;
-	text-align: center;
-	height: 30px;
-}
+/* The pathways network toolbar ------------------------------------------------
+   The band itself, its status line and the shape of its controls are now
+   described once in network-views.css, together with the MORE network's
+   toolbar. What survives here is what only this bar has: the three hover
+   menus, the reorder popover, and the transient "Saved" / "Tooltips enabled"
+   message that floats over the diagram.
+
+   Three things went, and they are worth naming because each of them was
+   visible:
+
+   `margin-bottom: -20px` pulled the strip 20px down over the canvas, so the
+   toolbar and the top of the diagram overlapped. `float: left !important` on
+   every `a` in the bar beat the inline `float: right` that Save Node Positions,
+   Toggle tooltips and the layout button each carried - which is why a bar
+   written as two groups rendered as one undifferentiated row. And the clearfix
+   existed only to contain those floats; a flex container contains its own
+   children.
+
+   The download links for PNG and SVG were not in this bar at all. They were in
+   a `.lateralOptionsPanel-toolbar` floated above the card's own `<h2>`, so the
+   two controls that act on the network sat outside the network's chrome and on
+   top of its title. They are in the band now, in a group of their own. */
 p[id ^= "step3-network-toolbar-message_"]{
 	display: none;
 	position: absolute;
+	left: 50%;
+	top: 84px;
+	transform: translateX(-50%);
+	z-index: 4;
+	padding: 9px 18px;
+	margin: 0;
+	font-size: 14px;
+	line-height: 1.3;
 	text-align: center;
-	width: 40%;
-	background: rgba(255, 255, 255, 0.85);
-	line-height: 40px;
-	font-size: 18px;
-	margin: 40px 30%;
+	white-space: nowrap;
 	color: var(--pa-accent-blue);
-	border: 1px solid var(--pa-accent-blue);
-	border-radius: 5px;
-	text-align: center;
+	background: var(--pa-surface, #FFFFFF);
+	border: 1px solid var(--pa-border);
+	border-radius: var(--pa-radius-sm);
+	box-shadow: var(--pa-shadow);
+}
+p[id ^= "step3-network-toolbar-message_"].successMessage{
+	color: var(--pa-accent-green);
+	border-color: var(--pa-accent-green);
 }
 div[id ^= "step3-network-toolbar-message_"].successMessage{color: #12A22F !important;border: 1px solid #12A22F !important;}
-div[id ^= "step3-network-toolbar_"] a{float:left !important;font-size: 12px !important;}
 
-div[id ^= "step3-network-toolbar_"] div.menu {display: block !important; float: left !important;}
+div[id ^= "step3-network-toolbar_"] div.menu { position: relative; }
 div[id ^= "step3-network-toolbar_"] div.menuBody {
 	position: absolute;
-	width: 165px;
-	border: 1px solid #d3d3d3;
-	margin-top: 30px;
+	left: 0;
+	top: calc(100% + 4px);
+	width: 205px;
+	padding: 4px;
 	display: none;
-	background-color: #FFFFFF;
+	z-index: 5;
+	background-color: var(--pa-surface, #FFFFFF);
+	border: 1px solid var(--pa-border);
+	border-radius: var(--pa-radius-sm);
+	box-shadow: var(--pa-shadow);
+}
+/* Menu items are full-width rows rather than inline chips: a dropdown whose
+   entries are centred pills reads as a toolbar that escaped its bar. */
+div[id ^= "step3-network-toolbar_"] div.menuBody .pa-net-tool {
+	display: flex;
+	width: 100%;
+	justify-content: flex-start;
 }
 
 div[id ^= "step3-network-toolbar_"] div[id ^= "reorderOptions"]{
 		position: absolute; width: 200px !important;
-	 	height: 80px !important; margin-top: 35px !important;
+		left: 10px; top: calc(100% + 4px);
+	 	height: 80px !important;
 	 	border: 1px solid var(--pa-border) !important;
 	 	border-radius: var(--pa-radius) !important;
-	 	background: rgba(255, 255, 255, 0.88) !important;
+	 	background: var(--pa-surface, #FFFFFF) !important;
+		box-shadow: var(--pa-shadow);
+		z-index: 5;
 		min-height: auto !important;
  }
 
@@ -2571,42 +3355,84 @@ div[id ^= "step3-network-toolbar_"] div[id ^= "reorderOptions"]{
 	margin: 0;
 }
 
-div#tabcontainer_network { border-color: silver;}
-div#tabcontainer_network .x-panel-body-default { border-color: silver; }
-div#tabcontainer_network .x-tab.x-active {
-	border-color: silver;
-	border-top-color: gray !important;
+/* The database tabs -----------------------------------------------------------
+   KEGG / Reactome / MapMan, above the classification, network and enrichment
+   blocks in Step 3. They select which database the three panels below describe,
+   which makes them the most consequential control on the results page - and
+   they were the most confusing thing on it.
+
+   Each label was 23px semibold terracotta, i.e. dressed exactly as `h2`, the
+   card-title style used by "Pathways selection", "Multiple databases used" and
+   the five headings around them. So the tabs read as one more section heading
+   in a page full of them, and the only sign that "KEGG" was a *state* and
+   "Reactome" a *thing you could press* was a 1px silver line under one of them.
+   Two 23px orange words with a hairline between them is not a tab bar.
+
+   Rebuilt as one: 14px labels, the selected one near-black with a 2px accent
+   rule beneath it, the rest muted and colouring on hover. That is smaller than
+   the headings it sits above, which is correct - a tab is a control, and the
+   thing it reveals is what the reader came for.
+
+   The `!important`s below match Neptune's own on the same properties; the
+   heights it hard-codes are what the strip and the tab boxes are measured from,
+   so they are restated rather than removed. */
+div#tabcontainer_network,
+div#tabcontainer_network .x-panel-body-default {
+	border-color: transparent;
+}
+/* The bar itself: a single hairline running the width of the block, which the
+   active tab's own rule then overpaints for its own width. */
+div#tabcontainer_network .x-tab-bar {
+	border-bottom: 1px solid var(--pa-border);
+}
+div#tabcontainer_network .x-tab {
+	background: none;
+	border: 0 !important;
+	border-radius: 0;
+	margin-right: 4px;
+	padding: 0;
+	height: 38px !important;
+	transition: border-color var(--pa-transition);
 }
 div#tabcontainer_network .x-tab-inner {
-	color: var(--pa-accent-orange);
+	color: var(--pa-ink-muted);
 	font-family: var(--pa-font-sans) !important;
-	font-size: 23px;
-	font-weight: lighter !important;
+	font-size: 14px;
+	font-weight: 600 !important;
+	height: auto;
+	transition: color var(--pa-transition);
 }
+div#tabcontainer_network .x-tab:hover .x-tab-inner {
+	color: #27272A;
+}
+/* The selected state. A 2px rule sitting on the bar's own hairline, in the ink
+   of the label above it - so the mark and the thing it marks are one object. */
+div#tabcontainer_network .x-tab.x-active {
+	border-bottom: 2px solid #1A1A18 !important;
+}
+div#tabcontainer_network .x-tab.x-active .x-tab-inner {
+	color: #1A1A18;
+}
+/* Neptune's 1px filler strip under the bar. The bar draws its own border now,
+   so this would be a second line 40px below it. */
 div#tabcontainer_network .x-tab-bar-strip {
-	top: 40px !important;
-	background-color: silver;
-	border-color: silver;
+	display: none;
 }
 div#tabcontainer_network .x-tab-bar .x-tab-bar-body {
-	height: 50 !important;
-	border: 1px !important;
+	height: 38px !important;
+	border: 0 !important;
+	padding: 0;
 }
 div#tabcontainer_network .x-tab-bar .x-tab-bar-body .x-box-inner {
-	height: 40px !important;
-}
-div#tabcontainer_network .x-tab-bar .x-tab-bar-body .x-box-inner .x-tab {
-	height: 41px !important;
+	height: 38px !important;
 }
 div#tabcontainer_network .x-tab-bar .x-tab-bar-body .x-box-inner .x-tab button {
-	line-height: auto !important;
+	line-height: 36px !important;
 	font-size: 14px;
-}
-div#tabcontainer_network .x-tab button .x-tab-inner {
-	height: 16px;
+	padding: 0 14px;
 }
 div#tabcontainer_network .x-tab-center {
-	margin-top: -10px;
+	margin-top: 0;
 }
 /* "Multiple databases used" card.
 
@@ -2687,10 +3513,18 @@ div#multisource_summary table th:first-child,
 div#multisource_summary table td:first-child {
 	width: 1%;
 	padding-right: 0;
+}
 
 /* Cell classes introduced with master's markup: the badge column carries no
    label, the name column is the row's subject, and the significant count is
-   the number a reader is scanning for. */
+   the number a reader is scanning for.
+
+   The rule above used to be left unclosed, so the browser's error recovery
+   swallowed this first selector as a bad declaration and `db_chip` never
+   applied - the badge column was sized by the `width: 1%` above instead. The
+   header cell is included now because the header row has a real cell for that
+   column rather than a colspan across it. */
+div#multisource_summary th.db_chip,
 div#multisource_summary td.db_chip {
 	width: 1px;                /* shrink to the chip */
 	padding-right: 0;
@@ -2701,7 +3535,6 @@ div#multisource_summary td.db_name {
 	white-space: nowrap;
 }
 div#multisource_summary td.db_significant { color: #1a1a1a; font-weight: 600; }
-}
 
 div.onedatabase .x-panel-body-default {
 	border: none !important;
@@ -2715,6 +3548,18 @@ div.onedatabase .contentbox {
 div.onedatabase div[id ^= "networkview_"] {
 	margin-left: 0 !important;
 	margin-right: 0 !important;
+}
+
+/* The tab panel is a grouping, not a surface: the cards inside it draw their
+   own borders. Its body border added a pixel to the left of everything in the
+   KEGG and Reactome tabs, so "Pathways classification" and "Pathways network"
+   started 1px right of the four cards outside the tabs - a hairline stagger
+   down the page. Removed for one database already, via the rules above; the
+   side that had two databases is the side a reader normally sees. */
+#tabcontainer_network > .x-panel-body,
+#tabcontainer_network .x-tabpanel-child > .x-panel-body {
+	border-left-width: 0 !important;
+	border-right-width: 0 !important;
 }
 
 /********************************************************************************
@@ -2746,7 +3591,10 @@ i.masterRegulator:before {
 }
 .x-tab-default .x-tab-inner {
 	color: #333;
-	font-weight: 300;
+	/* Was 300. A tab label is 13px UI text, not a display figure, and 300 now
+	   selects a real Light face rather than resolving to the only face there
+	   was. This is the one place the 300s were not a deliberate treatment. */
+	font-weight: 400;
 }
 .x-tab.x-active {
 	border-width: 1px !important;
@@ -3064,9 +3912,25 @@ div[id^=matching_table] table {
 	/* Was min-height: 845px, which propped the panel open to a fixed height
 	   whatever it contained. Its own height config already sizes it. */
 }
+/* The 10px above is the gutter *between* panels, and on the pathway view the
+   leftmost panel has no panel to its left to be gutted from. Its wrapper already
+   carries the page inset (`padding: 5px 10px`), so the pathway image started
+   20px inside the column while the information panel beside it stopped 10px
+   short of the other edge - a 10px asymmetry that puts the whole of Step 4 off
+   centre, which is the one thing a full-width two-panel layout cannot survive.
+
+   Scoped to the wrapper rather than written as a bare `:first-child`: Step 3's
+   two network side panels carry the same class and are `float: right`, so the
+   first of them in document order is the *rightmost* on screen, and resetting
+   its left margin there would close the gutter between Details and Tools
+   instead of the one it looks like it is closing. */
+#pathwaysPanelsWrapper .lateralOptionsPanel:first-child {
+	margin-left: 0;
+}
 .lateralOptionsPanel-body {
-	padding: 10px;
-	padding-bottom: 35px;
+	/* 16px horizontally, matching the header above it - see the note on the
+	   left rail further down this file. */
+	padding: 12px 16px 35px;
 	/*max-height: 98%;*/
 	overflow-y: auto;
 }
@@ -3076,9 +3940,41 @@ div[id^=matching_table] table {
    red on a panel that only changes colour scales reads as a warning it is not.
    Both now match every other heading here. */
 .lateralOptionsPanel-header {
-	padding: 12px var(--pa-card-inset);
+	padding: 12px 16px;
 	background: #FFFFFF;
 	border-bottom: 1px solid var(--pa-border);
+}
+/* One left rail for a side panel -------------------------------------------
+   These are 260-300px columns, not cards, and they were carrying two insets at
+   once: the title took --pa-card-inset (26px) from the card rules, while the
+   controls under it took the 10px their own containers declare. Measured on
+   the pathway view, "Visual settings" started at x=1101 and the first thing it
+   titles at x=1085 - a 16px step between a heading and its own contents, in a
+   panel narrow enough that 26px is a twelfth of its width.
+
+   16px for both. The card inset is sized for a 1400px column; this is a
+   sidebar, and giving 52px of a 300px panel to margins would cost the sliders
+   and the p-value radios the room they need. */
+div.lateralOptionsPanel > h2,
+div[id ^= "pathwayNetworkToolsBox_"],
+div[id ^= "networkClustersContainer_"],
+div[id ^= "patwaysDetailsWrapper_"],
+div[id ^= "sliderClusterNumberContainer_"] {
+	padding-left: 16px;
+	padding-right: 16px;
+}
+/* ...and the panel's one action reaches that same rail.
+
+   `.button` carries `margin: 0 5px`, which is the gutter between two buttons
+   sitting side by side. These two are alone on their line - "Apply" at the foot
+   of the network Tools panel, "Search" at the top of the pathway information
+   panel - so the gutter has nothing to separate them from and simply stops each
+   one 5px short of the edge every heading and every field in the same panel is
+   squared to. Five pixels is small enough to read as sloppiness rather than as
+   spacing, which is the worst size for it to be. */
+div[id ^= "pathwayNetworkToolsBox_"] > a.button.btn-right,
+.findFeaturesContainer a.button {
+	margin-right: 0;
 }
 .lateralOptionsPanel-header h2 {
 	color: #27272A;
@@ -3089,6 +3985,26 @@ div[id^=matching_table] table {
 .lateralOptionsPanel-toolbar {
 	margin-top: -5px;
 	float: right;
+}
+/* The same class is used in two places with opposite geometry, and the negative
+   top margin above is written for one of them.
+
+   Inside a `.lateralOptionsPanel-header` - Step 4's four panels - the toolbar is
+   in a band that already pads it, and -5px only trims that padding back.
+
+   As a *direct child of the panel*, though, there is nothing above it: the
+   toolbar floats before the panel's own `<h2>`, so -5px lifts it clear of the
+   card's top border and a zero right margin puts it hard against the right one.
+   Measured on Step 3's Tools and Details panels: the toolbar ran 1129.9-1160.9
+   against a card starting at 1133.9, so the ✕ straddled the corner - four pixels
+   of it outside the card it belongs to, at the one place where two cards meet.
+
+   12px centres it in the title band (the band is 54.5px tall and the toolbar
+   31px, so 11.75px is exact, and a quarter-pixel is not worth a fractional
+   margin); 16px is the inset the panel gives its heading and its body, so the
+   toolbar ends where its own title's text would. */
+.lateralOptionsPanel > .lateralOptionsPanel-toolbar {
+	margin: 12px 16px 0 0;
 }
 .lateralOptionsSelector.omicSelection {
 	padding: 6px;
@@ -3113,8 +4029,28 @@ div.lateralOptionsPanel input[type="text"]:not([id^=numberfield]) {
 	border: 1px solid var(--pa-border);
 	color: #27272A;
 }
+/* The per-omic reference-value group in Step 4's Visual settings. A bare
+   <fieldset>, so it was drawing the browser's default 2px inset `groove`
+   border - the one control in the application still showing a bevel - with the
+   omic's name in the legend at whatever size the UA picked. Same hairline and
+   corner as every other box on the page, and the legend takes the group-label
+   treatment its siblings above it already have. */
 div.lateralOptionsPanel fieldset {
-	margin: 10px auto;
+	margin: 8px 0 16px;
+	border: 1px solid var(--pa-border);
+	border-radius: var(--pa-radius-sm);
+	padding: 4px 12px 12px;
+}
+div.lateralOptionsPanel fieldset > legend {
+	width: auto;
+	margin: 0;
+	padding: 0 6px;
+	border: 0;
+	font-size: 11px;
+	font-weight: 600;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: var(--pa-ink-muted);
 }
 /* These panels sit inside a .contentbox, so their headings match
    `div.contentbox h3` - but they are compact control labels ("Nodes per row:",
@@ -3124,6 +4060,75 @@ div.lateralOptionsPanel fieldset {
 div.lateralOptionsPanel h3 {
 	padding-left: 0;
 	padding-right: 0;
+}
+/* The settings-column type scale -------------------------------------------
+   These panels are the densest text in the application: the network's Tools
+   column stacks three groups, nine control labels, four sliders, six
+   checkboxes and two radio pairs into 260px. With the global scale alone every
+   one of those labels was the same near-black at within 1.5px of every other,
+   so the column read as an undifferentiated list and the reader had to
+   re-derive the grouping from the controls each time.
+
+   Two roles, told apart the way a form does it rather than by colour:
+
+   h4 is the group - "Visual settings", "Network layout settings", "Node
+   filtering options". Small, tracked, uppercase and muted, with a rule above
+   it. That is the standard treatment for a settings-group label precisely
+   because it reads as a divider rather than as another line of content; it
+   also survives being one word long, which a 16px green heading did not.
+
+   h5 is the control's own label - "Node coloring:", "Label font size (14)".
+   Near-black at body size, sitting directly on top of the thing it names.
+
+   The group treatment is opted into with `paSettingsPanel` rather than applied
+   to `.lateralOptionsPanel` at large, because three of the panels sharing that
+   class are not settings columns: the pathway view's information strip uses h4
+   for the pathway's own name and the omic's, and the network's Details column
+   uses it for whatever the network is currently coloured by. Uppercasing
+   "Ribosome biogenesis in eukaryotes" is not a label treatment, it is a
+   spelling mistake. Names take the plain heading below; only a settings group
+   takes the tracked one.
+
+   `:first-child` drops the rule and the space above the first group, which
+   would otherwise draw a line immediately under the panel header's own.
+
+   Order matters between the next two rules and cannot be swapped: a settings
+   panel carries both classes, and `div.lateralOptionsPanel h4` and
+   `div.paSettingsPanel h4` are the same specificity, so the general case has to
+   come first for the specific one to win on source order. */
+div.lateralOptionsPanel h4 {
+	font-size: 13px;
+	font-weight: 600;
+	color: #1A1A18;
+	margin: 16px 0 6px;
+}
+div.paSettingsPanel h4 {
+	font-size: 11px;
+	font-weight: 600;
+	letter-spacing: 0.07em;
+	text-transform: uppercase;
+	color: var(--pa-ink-muted);
+	margin: 22px 0 10px;
+	padding-top: 16px;
+	border-top: 1px solid var(--pa-border);
+}
+div.paSettingsPanel h4:first-child {
+	margin-top: 4px;
+	padding-top: 0;
+	border-top: 0;
+}
+div.lateralOptionsPanel h5 {
+	font-size: 12.5px;
+	font-weight: 600;
+	color: #27272A;
+	margin: 14px 0 6px;
+}
+/* The help mark that trails most of these labels is `float:right` inline, so
+   it leaves the line box and the label's own margin no longer clears it. */
+div.lateralOptionsPanel h5::after {
+	content: "";
+	display: block;
+	clear: both;
 }
 .globalHeatmapConfigurator {
 	padding: 15px;
@@ -3731,19 +4736,47 @@ a.toolbarOption {
    was doing nothing except contradicting the comment that explains the layout.
    Checked before removing: forcing it to none on the live page left all three
    boxes at 1339px. */
+/* The in-panel toolbars ------------------------------------------------------
+   The ✕ that closes the Tools and Details columns, and the remaining
+   `.toolbarOption` controls elsewhere in the application.
+
+   They wore three colours between them. `.toolbarOption` painted them
+   terracotta; `.resumeLayout` overrode three of those to green with
+   `!important`; the ✕ inherited the terracotta and read as a destructive
+   control on a panel that only hides itself. Nothing chose that arrangement -
+   it is two rules written years apart, and the result was a toolbar whose
+   colour coding could not be explained because there was none to explain.
+
+   A secondary toolbar's job is to be available without competing with the
+   thing it operates on, which here is a network diagram in six saturated
+   category colours. So: one neutral ink, and the control announces itself by
+   taking a surface under the cursor rather than by being coloured all the time.
+   That is the same move the header nav and the card toolbars at level one
+   already make; this brings the panels into line with them.
+
+   Step 3's network strip used to be styled from here too. It has moved to
+   `.pa-net-tool` in network-views.css, which it now shares with the MORE
+   network's buttons; this rule stays for the controls that are not in either
+   graph toolbar. */
 div.contentbox a.toolbarOption {
-	font-size: 15px;
-	padding: 4px 5px 0px 5px;
-	margin: 5px 5px;
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	font-size: 13px;
+	/* Measured: the five controls in the network strip come to 546px inside a
+	   540px bar at 9px of horizontal padding, and 516px at 7px. The hover
+	   surface still needs to be a shape rather than a tint on the text, so this
+	   is the smallest padding that reads as a control. */
+	padding: 5px 7px;
+	margin: 4px 1px;
 	background: none;
-	/* Was #DA643D - 3.22:1 on the grey toolbar these sit in. Same hue, 4.63:1.
-	   The hover state inverts to this colour as a fill, so it moves too or the
-	   near-white hover label would sit at 3.36:1. */
-	color: #BB4924;
+	border-radius: var(--pa-radius-sm);
+	color: #3F3F46;
+	transition: background-color var(--pa-transition), color var(--pa-transition);
 }
 div.contentbox a.toolbarOption:hover {
-	color: #F6F6F6;
-	background-color: #BB4924;
+	color: #18181B;
+	background-color: rgba(24, 24, 27, 0.06);
 }
 /* These carry .btn-primary / .btn-danger, which were filled shapes chosen to sit
    on the old coloured header. On a white header a red-filled close button is the
@@ -3772,13 +4805,39 @@ div.lateralOptionsPanel-header .toolbarOption.downloadTool:hover {
 	background: #F9F8F4;
 	border-color: #C4C4CC;
 }
+/* Step 3's two network download controls. They were a 16px icon stacked over a
+   10px label on a 7px line box - a two-line control 10px tall, in a header
+   whose title is 19px, set in the smallest type anywhere in the application.
+   Laid out inline like every other toolbar control instead, and given the same
+   quiet outline the Step 4 download button above already uses, so "Download
+   (PNG)" and "Download (SVG)" read as the pair of buttons they are. */
 .lateralOptionsPanel-toolbar .toolbarOption.downloadTool {
-	font-size: 10px;
-	text-align: center;
-	line-height: 7px;
-	padding: 3px 5px;
+	font-size: 12px;
+	line-height: 1.2;
+	padding: 5px 10px;
+	border: 1px solid var(--pa-border);
+	background: #FFFFFF;
+	margin-top: 0;
 }
-.lateralOptionsPanel-toolbar .toolbarOption.downloadTool > i {font-size: 16px; display: block;}
+.lateralOptionsPanel-toolbar .toolbarOption.downloadTool:hover {
+	background: #F9F8F4;
+	border-color: #C4C4CC;
+}
+.lateralOptionsPanel-toolbar .toolbarOption.downloadTool > i {
+	font-size: 13px;
+}
+/* The control that hides a side panel. It is the only ✕ in the results view,
+   and terracotta made it read as "delete this" rather than "put this away" -
+   the panel comes back from the Configure button two inches to its left. Muted,
+   like the ✕ on every dialog in the application, and it colours on hover. */
+.lateralOptionsPanel-toolbar .toolbarOption.hideOption {
+	color: #8A8B92;
+	padding: 5px 7px;
+}
+.lateralOptionsPanel-toolbar .toolbarOption.hideOption:hover {
+	color: #18181B;
+	background-color: rgba(24, 24, 27, 0.06);
+}
 
 /* Pathways summary counts -------------------------------------------------
    Step 3's "N Found Pathways / N Significant" pair.
@@ -3824,7 +4883,7 @@ div.lateralOptionsPanel-header .toolbarOption.downloadTool:hover {
 	border-radius: 50%;
 	font-size: 21px;
 	background: rgba(31, 107, 193, 0.12);
-	color: var(--pa-accent-blue, #1F6BC1);
+	color: var(--pa-accent-blue, #19589E);
 }
 .po-pathway-icon > i {
 	/* Font Awesome's own line-height would offset the glyph inside the
@@ -3896,18 +4955,75 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
    PaintOmics Landing Page - Modernized Styles
    ============================================= */
 
-/* Hero Section */
+/* Hero Section ---------------------------------------------------------------
+
+   The first thing anyone sees, and previously the flattest thing on the page: a
+   product name set in the lightest weight this family ships, a 24-word nominal
+   phrase under it, and the AI feature - the reason this release exists - filed
+   into a bordered box at 13px grey.
+
+   Three changes, all typographic. This is research software and the hero is not
+   the product, so nothing below adds a gradient, a texture, an entrance
+   animation or a device of any kind; the element count, the block order and the
+   height are the ones that were already here.
+
+   1. The title is set in the weight it was always meant to be. When this was
+      written the family was vendored as two files, MyriadPro-Light at
+      `font-weight: normal` and MyriadPro-Semibold at `bold`, so
+      `font-weight: 400` was not "regular" - it was Light, literally the
+      lightest thing available, and 700 was the first weight that rendered
+      differently at all. That is why the title asks for 700 here.
+
+      The family now ships real 400, 600 and 700 cuts (see the @font-face rules
+      at the top of this file), so the gap this was working around is gone and
+      400 means regular everywhere. The 700 stays because a 52px product name
+      wants it, not because it is the only thing that moves.
+
+   2. Scale. The ramp was 46 / 16.5 / 13 - three sizes inside one octave, which
+      reads as one size slightly disturbed rather than as a hierarchy. 52 / 17 /
+      13 steps properly, and costs six pixels of height.
+
+   3. The AI block stops being a callout. Same three lines, same box, but the
+      contents are sized to be read rather than to be got past.
+   --------------------------------------------------------------------------- */
 .po-hero-section {
-  padding: 40px 30px;
-  border-bottom: 2px solid #e0e0e0;
+  /* Vertical padding unchanged - the hero is the same height it was; see the
+     note on .po-hero-ai-highlight for where the taller title is paid for.
+
+     Horizontally this was a hardcoded 30px while every other block on the page
+     is inset by --pa-card-inset (26px). Four pixels is not the interesting
+     part; sharing the token is, because it is what keeps the hero on the rail
+     when the token moves. */
+  padding: 40px var(--pa-card-inset);
+  /* Was `2px solid #e0e0e0`: a hardcoded light grey at twice the weight of any
+     other rule in the application, and one dark.css never restated - so on the
+     dark theme a bright 2px bar ran the full width under the hero. --pa-border
+     is an alpha of the ink and is redefined per theme, so the one declaration
+     is right on both. */
+  border-bottom: 1px solid var(--pa-border);
+  /* Anchors the diagram's plate below. */
+  position: relative;
 }
 
+/* No `max-width: 1200px; margin: 0 auto` here any more, and that pairing is
+   worth naming because it is a plausible thing to put back.
+
+   Centring a block inside a column that is itself already centred gives the
+   page two left edges instead of one, and the second is not at a fixed offset
+   from the first - it is half of whatever the column has left over, so it
+   *moves with the viewport*. Measured at 1512px: the card's inset put every
+   other block's text at x=103, while this rule put the hero's at x=156, a 53px
+   drift no screenshot names because the two blocks are hundreds of pixels
+   apart and a hero that is slightly indented looks like a decision.
+
+   The page column is already capped at --pa-page-max and centred once, on
+   #mainViewCenterPanel. One cap, one centring, one rail. The overlay in
+   app/view/common/AlignmentGuides.js reports the rail count directly - it went
+   from three to one on this change. */
 .po-hero {
   display: flex;
   flex-direction: row;
-  gap: 40px;
-  max-width: 1200px;
-  margin: 0 auto;
+  gap: 44px;
   align-items: center;
 }
 
@@ -3918,82 +5034,179 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
 
 /* .po-hero-badge and `.po-hero h1 span` are gone with the markup that used
    them - the uppercase eyebrow above the title and the version number set
-   beside the product name. See the note in PA_Step1Views.js. The version chip
-   that remains lives in the header bar and is styled as #header .appVersion. */
+   beside the product name. See the note in PA_Step1Views.js. The version is not
+   drawn anywhere on the page now: the header chip that used to carry it was
+   removed too, for the space it cost the nav. It lives in APP_VERSION. */
 
-.po-hero h1 {
-  /* Was 36px at weight 300, in a card 1200px wide and 297px tall - a light
-     title, at a size that would suit a sidebar, holding down a whole hero. The
-     word for how that reads is thin, and it was literally true: 300 is the
-     lightest weight this family ships.
-
-     46px at 400 is the same restraint with a stroke behind it. It scales with
-     the viewport so it does not overrun a narrow window, and it is the only
-     size change needed - the ramp below it (46 / 16.5 / 13) now steps twice
-     instead of hovering around one size. */
-  font-size: clamp(32px, 3.4vw, 46px);
-  font-weight: 400;
-  letter-spacing: -0.02em;
+.po-hero h1,
+.po-hero-title {
+  /* See note 1 above: 700 is the only weight in this family with a face of its
+     own. Tight tracking because a semibold at this size needs it - the default
+     spacing was drawn for text, not for a headline. */
+  font-size: clamp(34px, 3.8vw, 52px);
+  font-weight: 700;
+  letter-spacing: -0.028em;
+  line-height: 1.04;
   color: var(--pa-ink-title, #1A1A18);
-  /* The badge used to sit above this, so the 14px top margin was the gap
-     between the two. The title is the first thing in the column now. */
+  margin: 0 0 10px;
+}
+
+/* The blue every AI surface in the application uses, on the one word of the
+   name that is new in this release. 3.34:1 on white, which clears WCAG's 3:1
+   for large text several times over at this size; the small AI type in the
+   panel below uses a darker one. */
+.po-hero-title .po-hero-ai {
+  color: var(--pa-ai-blue, #4A90D9);
+}
+
+.po-hero-text .po-hero-desc {
+  /* Half a point up from 16.5, and capped by characters rather than left to run
+     the width of the card - two lines of about 70, which is the same two lines
+     the sentence it replaces occupied. */
+  font-size: 17px;
+  line-height: 1.55;
+  color: var(--pa-ink-body, #555);
+  max-width: 64ch;
   margin: 0 0 14px;
-  line-height: 1.15;
-  letter-spacing: -0.015em;
+  padding-left: 0;
+  padding-right: 0;
 }
 
-.po-hero-desc {
-  /* One step under the title rather than two, so the hero reads as a lead
-     paragraph and not as body copy that happens to be first. */
-  font-size: 16.5px;
-  line-height: 1.65;
-  color: #555;
-  margin-bottom: 22px;
-}
+/* The AI panel ---------------------------------------------------------------
+   Same box, same three lines, same left bar. What changed is inside it: the
+   body was 13px #666, one step below the smallest type anywhere else on this
+   page, for the paragraph describing the feature the release is named after.
+   14px at --pa-ink-body is the size the step cards use for their own prose.
 
+   The left bar moves from the teal of the primary button to the AI blue, which
+   is the colour this application already gives every AI surface, so the strip
+   names the panel instead of matching a button two rows below it. */
 .po-hero-ai-highlight {
-  background: #f5fafa;
-  border: 1px solid #c8e0e3;
-  border-left: 3px solid #007383;
+  background: #F4F8FC;
+  border: 1px solid #CFE0F0;
+  border-left: 3px solid var(--pa-ai-blue, #4A90D9);
   border-radius: var(--pa-radius-sm);
-  padding: 16px 20px;
-  margin-bottom: 24px;
-  /* Capped to the measure the description already uses. Unconstrained it ran
-     the full 1200px of the card, which is roughly 160 characters a line - long
-     enough that the eye loses the return, and wide enough that the callout
-     read as a band across the page rather than as part of the column. */
-  max-width: var(--pa-measure);
+  padding: 10px 18px;
+  margin-bottom: 16px;
+  /* Capped, but not to --pa-measure as it was. At 105ch the panel ran the full
+     1200px of the card - roughly 160 characters a line, long enough that the
+     eye loses the return, and wide enough that it read as a band across the
+     page rather than as part of the column. 78ch is the width at which the
+     three verbs below sit on one line, which is what keeps this block, and so
+     the hero, the height it was before. */
+  max-width: 78ch;
+}
+
+.po-hero-ai-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .po-hero-ai-highlight .po-ai-icon {
-  font-size: 18px;
-  margin-right: 6px;
+  display: inline-flex;
+  /* The mark was inheriting body ink, so the one graphic that stands for the
+     feature was drawn in the same grey as the sentence beside it. */
+  color: var(--pa-ai-blue, #4A90D9);
+  flex-shrink: 0;
 }
 
 .po-hero-ai-highlight strong {
-  color: #007383;
+  /* Not the #4A90D9 the mark uses: this is bold body text, which WCAG does not
+     count as large, so it needs 4.5:1 rather than 3:1. Same hue, darker.
+
+     This used to read `var(--pa-ai-blue-ink, #1F6BC1)` and say it was carrying
+     --pa-accent-blue's measured value. It was not carrying anything:
+     --pa-ai-blue-ink is declared in no stylesheet, so the fallback was the
+     value, and it went on being #1F6BC1 after --pa-accent-blue moved. Naming
+     the token it claims to follow is what makes that claim true. */
+  color: var(--pa-accent-blue);
+  font-size: 14.5px;
+  font-weight: 700;
 }
 
-.po-hero-ai-highlight p {
-  color: #666;
-  font-size: 13px;
-  margin: 4px 0 0;
-  line-height: 1.55;
+/* Two class selectors, not one. `div.contentbox p` is (0,1,2) and adds
+   --pa-card-inset to every paragraph inside a card; a bare
+   `.po-hero-ai-highlight p` is (0,1,1) and loses to it, which left this
+   paragraph indented 26px from the heading above it and the verbs below it.
+   The same trap is noted on .po-hero-desc further down this file. */
+.po-hero-text .po-hero-ai-highlight p {
+  color: var(--pa-ink-body, #555);
+  font-size: 14px;
+  line-height: 1.5;
+  margin: 6px 0 0;
+  padding-left: 0;
+  padding-right: 0;
+  max-width: none;
+}
+
+/* The three things the agent does. Inside the sentence they were a comma list,
+   which is read as one clause; on their own line they are read as three. The
+   line is free - the sentence lost exactly the one they were taking up in it. */
+.po-hero-ai-does {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+}
+
+/* Two classes again, for the reason given on the paragraph above: the rule that
+   would otherwise win is `div.contentbox li`, at (0,1,2).
+
+   `padding` in full and not `padding-left`. That rule is `padding: 2px 26px`,
+   so overriding only the left edge left every one of these carrying 26px of
+   dead space on its right - measured, the three came to 492px inside a 503px
+   row, and the third wrapped to a second line for the sake of padding nobody
+   can see. Zeroed, they are 414px and the row is one line. */
+.po-hero-text .po-hero-ai-does li {
+  position: relative;
+  padding: 0 0 0 13px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--pa-ink-muted, #595959);
+  max-width: none;
+}
+
+/* A small square in the AI blue, drawn rather than typed so it is not selected
+   with the text and not read out as a character. */
+.po-hero-ai-does li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.55em;
+  width: 5px;
+  height: 5px;
+  border-radius: 1px;
+  background: var(--pa-ai-blue, #4A90D9);
 }
 
 .po-hero-actions {
   display: flex;
-  gap: 10px;
+  gap: 8px;
   flex-wrap: wrap;
+  align-items: center;
 }
 
 .po-hero-actions a {
+  display: inline-flex;
+  align-items: center;
   padding: 8px 20px;
-  border-radius: 4px;
-  font-size: 13px;
-  font-weight: 600;
+  border-radius: var(--pa-radius-sm);
+  font-size: 13.5px;
+  font-weight: 700;
   text-decoration: none;
-  transition: all 0.2s;
+  /* Every button in the row is the same height because every button in the row
+     has the same border box. Only the outline and quiet variants below declared
+     a border, so the filled primary - the first button in the row, and the one
+     the eye squares the others against - rendered 33px tall beside three 35px
+     siblings sharing its centre line. A transparent border is invisible on a
+     filled button (the background paints under it) and costs the label nothing;
+     what it buys is that the variants differ in colour alone. */
+  border: 1px solid transparent;
+  transition: background var(--pa-transition), border-color var(--pa-transition),
+              color var(--pa-transition);
 }
 
 .po-hero-actions .po-btn-primary {
@@ -4009,12 +5222,28 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
   background: transparent;
   border: 1px solid var(--pa-border);
   border-radius: var(--pa-radius-sm);
-  color: #555;
+  color: var(--pa-ink-body, #555);
 }
 
 .po-hero-actions .po-btn-outline:hover {
   border-color: #007383;
   color: #007383;
+}
+
+/* GitHub and Contact. Both are real destinations and neither is what this page
+   is for, so they are links rather than a third and fourth button competing
+   with the two beside them. */
+.po-hero-actions .po-btn-quiet {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--pa-ink-muted, #595959);
+  padding-left: 12px;
+  padding-right: 12px;
+}
+
+.po-hero-actions .po-btn-quiet:hover {
+  color: #007383;
+  background: rgba(0, 115, 131, 0.07);
 }
 
 /* 460px, not the 340 the raster had. The diagram's viewBox is 460 wide, so at
@@ -4023,6 +5252,38 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
 .po-hero-visual {
   flex: 0 1 460px;
   min-width: 0;
+  position: relative;
+}
+
+/* The diagram's plate ---------------------------------------------------------
+   Every other diagram on this page sits on one: the three "How it works" cards
+   put theirs on `.po-step-art`, #F6F5F0 at --pa-radius. The hero's was the only
+   drawing in the application floating directly on the card, which is what made
+   the row read as two unrelated things beside each other rather than as one
+   composition - a column of text, and some artwork.
+
+   Full-bleed to the top, right and bottom of the hero rather than boxed. The
+   negative offsets are exactly the section's own padding, so the plate finishes
+   on the card's edge and is clipped by its radius (`.contentbox` is
+   `overflow: hidden`); rounded on the left only, where it meets the text.
+
+   Costs no height - the plate is drawn behind a row whose height the diagram
+   already sets. */
+.po-hero-visual::before {
+  content: "";
+  position: absolute;
+  top: -40px;
+  bottom: -40px;
+  right: calc(-1 * var(--pa-card-inset));
+  left: -24px;
+  background: #F6F5F0;
+  border-radius: var(--pa-radius) 0 0 var(--pa-radius);
+}
+
+/* Above the plate. Without this the SVG paints under it and the diagram
+   disappears. */
+.po-hero-viz {
+  position: relative;
 }
 
 .po-hero-flow {
@@ -4058,8 +5319,17 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
    two lines of raw seconds under it. A bar answers the question the reader
    actually has - how much longer - without making them do the division. */
 .paProgress {
-  margin: 18px auto 4px;
-  max-width: 400px;
+  /* Squared to the dialog's own rail, not centred in it. The dialog body is
+     448px wide and the bar was capped at 400 and centred, so it began 24px
+     right of the heading above it and ended 24px short of that heading's right
+     edge - and because the inset came from `auto` margins rather than from a
+     declared one, it was a different inset at every dialog width. The bar is
+     the one element on this surface a reader watches, and it was the only one
+     not lined up with anything.
+
+     The elapsed/ETA line under it is a flex row squared to the same two edges,
+     so the whole block now reads against the text above it. */
+  margin: 18px 0 4px;
 }
 .paProgressTrack {
   height: 6px;
@@ -4106,6 +5376,171 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
 @media (prefers-reduced-motion: reduce) {
   .paProgressFill { transition: none; }
   .paProgressIndeterminate .paProgressFill { animation: none; margin-left: 0; }
+}
+
+/* The example picker -----------------------------------------------------------
+   The first dialog most people open, and the first thing after the landing page
+   that a new reader sees - so it is the point where the level-one surfaces hand
+   over to the application, and it was where the handover showed. Seven framed
+   ExtJS panels, each with a grey title band, an inner body box and a docked
+   toolbar under it holding a single button; see the note in PA_Step1Views.js.
+
+   Rebuilt as cards on the language the rest of the app uses: one hairline, one
+   radius, one inset, a hover that lifts the border rather than the card. The
+   markup is plain HTML, so everything below is ordinary layout.
+
+   The window's title comes up to the size of the content it introduces -
+   Neptune's header text is 13px, which on a 760px dialog full of 15px card
+   titles read as a caption above the thing rather than as its name. */
+.po-example-window .x-window-header .x-header-text,
+.po-example-window .x-window-header .x-panel-header-text {
+	font-size: 15px;
+	font-weight: 600;
+}
+.po-example-intro p {
+	margin: 18px 0 6px;
+	font-size: 13.5px;
+	line-height: 1.55;
+	color: var(--pa-ink-body, #3F3F46);
+	max-width: var(--pa-measure);
+}
+/* The pipeline heading - "Multi-omic pathway analysis", "Region-based omics".
+   These group the cards below them, so they take the group-label treatment the
+   settings panels use rather than being a fourth size of heading. */
+.po-example-group h3 {
+	margin: 26px 0 2px;
+	font-size: 11px;
+	font-weight: 600;
+	letter-spacing: 0.07em;
+	text-transform: uppercase;
+	color: var(--pa-ink-muted);
+}
+.po-example-group p {
+	margin: 0 0 10px;
+	font-size: 12.5px;
+	color: var(--pa-ink-muted);
+	max-width: var(--pa-measure-note);
+}
+.po-example {
+	border: 1px solid var(--pa-border);
+	border-radius: var(--pa-radius);
+	background: #FFFFFF;
+	padding: 16px 18px;
+	margin-bottom: 10px;
+	transition: border-color var(--pa-transition), box-shadow var(--pa-transition);
+}
+.po-example:hover {
+	border-color: #C4C4CC;
+	box-shadow: var(--pa-shadow);
+}
+/* Title and badges on one line. `wrap` so a long dataset name pushes the badges
+   down rather than squeezing them; `baseline` so the 11px chips sit on the
+   title's baseline instead of floating in the middle of its line box. */
+.po-example-head {
+	display: flex;
+	align-items: baseline;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin-bottom: 8px;
+}
+.po-example-title {
+	margin: 0;
+	font-size: 15px;
+	color: #1A1A18;
+	flex: 1 1 auto;
+}
+/* The badges were inline `style=` attributes on a span, which is also why they
+   could not follow the dark theme. Same two fills, stated once. */
+.po-example-badge {
+	flex: 0 0 auto;
+	border-radius: 999px;
+	padding: 2px 9px;
+	font-size: 11px;
+	font-weight: 600;
+	letter-spacing: 0.02em;
+	white-space: nowrap;
+}
+.po-example-badge-sim {
+	background: #E8F1FA;
+	color: #2F73BC;
+}
+.po-example-badge-real {
+	background: #FDF0E6;
+	color: #B4690E;
+}
+.po-example-badge-default {
+	background: var(--pa-surface-quiet);
+	color: var(--pa-ink-muted);
+}
+.po-example-summary {
+	margin: 0 0 10px;
+	font-size: 13.5px;
+	line-height: 1.55;
+	color: var(--pa-ink-body, #3F3F46);
+	max-width: var(--pa-measure);
+}
+.po-example-facts {
+	margin: 0;
+	font-size: 12.5px;
+	color: var(--pa-ink-muted);
+}
+.po-example-facts b {
+	color: inherit;
+	font-weight: 600;
+}
+.po-example-dot {
+	padding: 0 8px;
+	color: #C4C4CC;
+}
+.po-example-tests {
+	margin-top: 12px;
+	padding-top: 12px;
+	border-top: 1px solid var(--pa-border);
+}
+.po-example-tests h5 {
+	margin: 0 0 6px;
+	font-size: 11px;
+	font-weight: 600;
+	letter-spacing: 0.07em;
+	text-transform: uppercase;
+	color: var(--pa-ink-muted);
+}
+/* Two columns where there is room: these lists run to five short items, and a
+   single column of them made the card twice as tall as its own prose. */
+.po-example-tests ul {
+	margin: 0;
+	padding-left: 18px;
+	columns: 2;
+	column-gap: 28px;
+	font-size: 12.5px;
+	line-height: 1.7;
+	color: var(--pa-ink-body, #3F3F46);
+}
+.po-example-tests li {
+	break-inside: avoid;
+}
+.po-example-actions {
+	margin-top: 14px;
+	display: flex;
+	justify-content: flex-end;
+}
+/* The one action on the card, so it is filled rather than outlined - the reader
+   is choosing between cards, not between controls inside one.
+
+   #007383 is `.po-hero-actions .po-btn-primary`, i.e. the "Load an example"
+   button on the landing page that opens this dialog. The button you press and
+   the button it offers you are the same button. */
+.po-example a.button.po-example-load {
+	background-color: #007383;
+	color: #FFFFFF;
+	font-size: 13px;
+	font-weight: 600;
+	padding: 7px 16px;
+	margin: 0;
+}
+.po-example a.button.po-example-load:hover {
+	background-color: #005F6B;
+	color: #FFFFFF;
 }
 
 /* Upload controls -------------------------------------------------------------
@@ -4249,39 +5684,77 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
 }
 
 
-/* The stage diagram at the foot of each card. `margin-top: auto` is what does
-   the work: it eats whatever vertical slack the card has left. */
+/* The header row: the numbered disc and the step's title on one line, with a
+   hairline under them. `margin-bottom` on the disc used to stack them, which
+   spent 58px of every column before the first word and left an orange dot
+   floating over a heading it had no visible relationship to. */
+.po-step-head {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding-bottom: 11px;
+  margin-bottom: 14px;
+  /* The one horizontal line the three columns share at the top. Three of them
+     at an identical y is what makes the row read as one row of three peers
+     rather than three stacks that happen to be side by side. */
+  border-bottom: 1px solid var(--pa-border);
+}
+
+/* The stage diagram at the foot of each card. `margin-top: auto` is what puts
+   all three plates on one line: it eats whatever vertical slack the column has
+   left, and the columns are stretched to a common height by the grid.
+
+   A plate, not a loose drawing. Measured on the deployed page the three
+   diagrams sat 33, 56 and 79px below their own last line of prose - three
+   different rhythms down one row, which is the specific thing that read as
+   "not in order". The gap is now structural: everything above it is prose,
+   everything inside it is a picture, and the boundary is in the same place in
+   all three columns.
+
+   No border on it. The section is already inside a bordered .contentbox, and a
+   second outline a few pixels in from the first is what the step cards lost
+   their own boxes to avoid. A fill alone is enough to read as a plate. */
 .po-step-art {
   margin-top: auto;
-  padding-top: 20px;
+  background: #F6F5F0;
+  border-radius: var(--pa-radius);
+  padding: 16px;
+  min-height: 136px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .po-step-art-svg {
   display: block;
-  /* Sized by height, not width. The three artworks are 186x90, 90x68 and
-     186x96, so a shared width gave them three different heights - measured,
-     106, 166 and 114px - and the row read as three unrelated pictures. A
-     shared height puts them in one band instead, which is the dimension the
-     eye actually compares across a row. Their widths then differ, which is
-     honest: one of them really is a narrower drawing.
-
-     Left, not centred. The heading, the prose and the numbered disc all start
-     on the column's left edge; a centred figure was the only thing in the
-     card that did not, and that is what stopped the three columns from
-     looking aligned. */
-  height: 104px;
-  width: auto;
-  max-width: 100%;
+  /* All three diagrams are now one 186x96 frame drawn on one row rhythm, so a
+     shared width gives a shared height for free - which the previous
+     `height: 104px` had to force, and which still left them 215, 138 and 202px
+     wide. Identical boxes, centred in identical plates. */
+  width: 100%;
+  max-width: 204px;
+  height: auto;
   margin: 0;
+  /* The labels inside these diagrams are drawn with fill="currentColor" so they
+     can follow the theme. They used to be a hardcoded #3F3F46, which is a dark
+     grey - fine on the white the diagrams used to sit on, and invisible on the
+     dark plate they sit on now. Only the *type* inherits this: the omic row
+     tints and the bwr value swatches stay literal in both themes, because they
+     are pictures of colours the application really draws. */
+  color: #3F3F46;
 }
 
 /* The lift-on-hover went with the box. A card that raises itself off the page
    needs an edge and a shadow to raise; on three columns of prose sharing one
    surface it just nudged the text sideways. */
 
+/* 26px, not 34. On its own line the disc was the largest single object in the
+   column and had to carry it; sitting beside a 16px heading it is a marker on
+   that heading, and a disc more than half again the cap height of the words it
+   numbers reads as the more important of the two. */
 .po-step-number {
-  width: 34px;
-  height: 34px;
+  width: 26px;
+  height: 26px;
   border-radius: 50%;
   background: var(--pa-accent-orange);
   color: #fff;
@@ -4289,8 +5762,11 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
   align-items: center;
   justify-content: center;
   font-weight: 700;
-  font-size: 15px;
-  margin-bottom: 12px;
+  font-size: 13px;
+  /* The heading beside it can wrap to two lines at narrow widths; without this
+     the disc is squeezed into an oval by the flex row. */
+  flex: 0 0 auto;
+  margin-bottom: 0;
 }
 
 /* `div.` is load-bearing: this has to out-specify `div.contentbox h3`, which
@@ -4303,12 +5779,15 @@ div.po-step-card h3 {
      other colour is body grey, is what makes three of these in a row look
      restless. Near-black, so the disc is the one accent per card. */
   color: var(--pa-ink-title, #1A1A18);
-  margin-bottom: 6px;
   font-weight: 600;
-  /* The card supplies its own 24px inset, so the card-heading inset from
-     `div.contentbox h3` would be applied a second time here. */
-  padding-left: 0;
-  padding-right: 0;
+  /* Zeroed entirely rather than only horizontally. `div.contentbox h3` supplies
+     `padding: 6px var(--pa-card-inset)` and `margin: 12px 0 4px`; the inset is
+     applied a second time here because the column already carries one, and the
+     vertical pair now has to go too - the heading is a flex item centred
+     against a 26px disc, so any margin or padding of its own offsets it from
+     the disc it is supposed to sit level with. */
+  padding: 0;
+  margin: 0;
 }
 
 /* The same double-inset, on the prose. `div.contentbox p` adds
@@ -4334,7 +5813,12 @@ div.po-step-card p,
 .po-step-card p,
 .po-step-card ol {
   font-size: 13px;
-  color: #666;
+  /* Was #666 (5.74:1). This is the landing page's primary running text - the
+     paragraphs that explain what the product does - not secondary metadata,
+     so it takes the same #3F3F46 body ink (10.4:1) the rest of the app's prose
+     uses rather than a muted grey. A mid grey on the first screen a new user
+     reads is the most expensive place in the product to look faint. */
+  color: #3F3F46;
   /* 1.6 gave a 20.8px line box, and the inline buttons sitting in this prose
      are 22px tall - so every one of them stuck out of its own line and
      overlapped the line above. In step 3, where two of them land on
@@ -4441,6 +5925,59 @@ div.po-step-card p,
   margin-right: var(--pa-card-inset);
 }
 
+/* The two column titles, "Available omics" and "Selected omics".
+
+   They were 23px terracotta h2s carrying `text-align: center` inline - the same
+   size and colour as "Data uploading", the heading of the whole card they sit
+   inside, so the section shouted over its own owner three times. And they were
+   centred over columns in which nothing else is: the drag chips, the omic
+   cards, the fields inside them and the help note beside them are all set from
+   the left, so each title floated free of the rail its own contents keep.
+
+   They label the columns under them, which is the same job the "HELP" label
+   does in the third column and the group labels do in the settings panels, so
+   they take that treatment and the row ends up with three headings that match. */
+/* `div.` and the tag both needed: `div.contentbox h2` is (0,1,2) and owns the
+   26px card inset these would otherwise take. A column label belongs on the
+   outer edge of the cards it labels - and the two columns put that edge in
+   different places, which is why the inset is set per column below rather than
+   once here.
+
+   The flat `padding: 0 10px` this used to carry was measured against the
+   Selected column alone, where `#submittingPanelsContainer` insets its cards by
+   10px and the label duly landed on them at x=405. The Available column insets
+   nothing: `.availableOmicsBox` declares `margin: 10px 0` precisely so the first
+   drag chip starts on the page rail with the headings above it. The same 10px
+   therefore pushed "Available omics" to x=145 over chips at x=135 - the one
+   column label on the row not sitting on the thing it labels, and the more
+   visible of the two because the chips are solid blocks of colour whose edge the
+   eye reads as the rail. */
+div.contentbox h2.po-omics-col-title {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--pa-ink-muted);
+  background: none;
+  border-bottom: 0;
+  padding: 0;
+  margin: 6px 0 6px;
+}
+/* The Selected column's own inset, taken from the cards it labels rather than
+   from a number: `#submittingPanelsContainer` carries `margin: 10`, so its
+   `.omicbox` cards start 10px inside it and the label follows them there.
+   Measured after: Available title glyph and `.availableOmicsBox` both at x=135,
+   Selected title glyph and `.omicbox` both at x=405. */
+#submittingPanelsContainer h2.po-omics-col-title {
+  padding-left: 10px;
+}
+/* An <i> is display:inline-block, which UAX#14 makes a line-break opportunity,
+   so "…do not need with 🗑." was breaking between the icon and its full stop
+   and leaving the stop alone at the start of the next line. */
+.po-nowrap {
+  white-space: nowrap;
+}
+
 .po-ai-section-body p {
   word-wrap: break-word;
   overflow-wrap: break-word;
@@ -4519,15 +6056,68 @@ div.po-step-card p,
    4.17:1 on the toolbar and 4.54:1 on white, and is the grey already used for
    the segmented control's outline and .btn-default's hover border.
 
-   The radius on the radio is what keeps its ring circular - a box-shadow
-   follows the element's border-radius, and the element itself is square even
-   though the sprite it displays is round. */
+   The ring was a stopgap, and it has been overtaken. It drew a second outline
+   *around* a sprite that already had one, so the control read as a box inside a
+   box - and once the app's own checkboxes (`div.checkbox`, further up this
+   file) were redrawn in CSS, the Step 3 enrichment toolbar ended up showing
+   both kinds side by side: a redrawn one for the database filters and a
+   ringed sprite for "Regular expression" three inches to its left.
+
+   So the framework's controls take the same drawing. Same 16px box, same 4px
+   corner, same 1.5px edge, same accent fill, same tick - the difference between
+   an ExtJS checkbox and one this application wrote by hand stops being visible,
+   which is the only acceptable outcome when they sit in the same toolbar.
+
+   `background-image` rather than a pseudo-element for the mark: these are
+   `<input type="button">`, and a replaced element cannot carry ::before or
+   ::after. That constraint is what forced the earlier attempt to hang the tick
+   off the wrapping `<td>`; a background image goes on the control itself and so
+   also works for the radio, whose mark is a dot and could not have shared a
+   single wrapper rule with the checkbox's tick.
+
+   The scale that used to hold this treatment for `.paGridBar` alone is gone
+   with it - this is the same set of declarations, applied everywhere the
+   framework draws one of these. */
 .x-form-checkbox,
 .x-form-radio {
-	box-shadow: 0 0 0 1px #767676;
+	box-sizing: border-box;
+	width: 16px;
+	height: 16px;
+	background-image: none;
+	background-color: #FFFFFF;
+	background-repeat: no-repeat;
+	background-position: center;
+	background-size: 100% 100%;
+	border: 1.5px solid #8A8A91;
+	border-radius: 4px;
+	box-shadow: none;
+	transition: background-color var(--pa-transition), border-color var(--pa-transition);
 }
 .x-form-radio {
 	border-radius: 50%;
+}
+.x-form-checkbox:hover,
+.x-form-radio:hover {
+	border-color: #52525B;
+}
+/* `background-position` is restated on the checked rules, not just on the base
+   one above. Neptune's own `.x-form-cb-checked .x-form-checkbox` sets
+   `background-position: 0 -15px` - it is sliding a two-state sprite up to show
+   its lower half - and that selector is (0,2,0) against the base rule's
+   (0,1,0), so it went on winning after the sprite it was scrolling had been
+   replaced. Measured: a filled blue box with the tick parked 15px above it. */
+.x-form-cb-checked .x-form-checkbox {
+	background-color: var(--pa-accent-blue);
+	border-color: var(--pa-accent-blue);
+	background-position: center;
+	background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='none' stroke='%23fff' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' d='M3.6 8.4l2.9 2.9 5.9-6.3'/%3E%3C/svg%3E");
+}
+.x-form-cb-checked .x-form-radio {
+	background-color: var(--pa-accent-blue);
+	border-color: var(--pa-accent-blue);
+	background-position: center;
+	background-image: none;
+	box-shadow: inset 0 0 0 3.5px #FFFFFF;
 }
 
 /* Data grid -------------------------------------------------------------------
@@ -4656,6 +6246,19 @@ div.po-step-card p,
     flex: 0 0 auto;
     max-width: 460px;
   }
+  /* The plate stops bleeding once the row stacks. Its offsets are the hero's
+     own padding, which is right when the diagram is the right-hand column and
+     wrong the moment it is the bottom one: -40px at the top would reach up
+     behind the action buttons and put a grey panel under them. Boxed and
+     rounded on all four corners here - which is exactly what .po-step-art is,
+     and this is the width at which those cards go single-column too. */
+  .po-hero-visual::before {
+    top: 0;
+    bottom: 0;
+    left: -14px;
+    right: -14px;
+    border-radius: var(--pa-radius);
+  }
   .po-steps-grid {
     grid-template-columns: 1fr;
   }
@@ -4700,7 +6303,7 @@ div.repDetectionCard h3 {
     font-size: 12px;
 }
 .repDetectionPreview li { padding: 1px 0; }
-.repDetectionMore { color: #888; font-style: italic; }
+.repDetectionMore { color: var(--pa-ink-muted); font-style: italic; }
 .repDetectionRadios { margin: 8px 0 4px 0; }
 .repDetectionRadios label {
     display: inline-block;
@@ -4718,7 +6321,7 @@ div.repDetectionCard h3 {
     border: 1px solid #ececec;
     border-radius: 3px;
 }
-.repDetectionFormatHint { font-size: 11px; color: #777; margin: 4px 0 0 0; }
+.repDetectionFormatHint { font-size: 11px; color: var(--pa-ink-muted); margin: 4px 0 0 0; }
 .repDetectionStatus { font-size: 12px; margin-top: 8px; min-height: 14px; }
 .repDetectionStatus.repDetectionOK    { color: #2a8a3a; }
 .repDetectionStatus.repDetectionError { color: #c0392b; }
@@ -4940,7 +6543,13 @@ div.repDetectionCard h3 {
 .paGridBar {
 	background: #FFFFFF;
 	border-bottom: 1px solid var(--pa-border);
-	padding: 6px 10px;
+	/* 6px on the left, not 10: ExtJS's box layout adds 4px of its own before the
+	   first item, so a 10px bar padding put "Search" at x=282 while the grid it
+	   belongs to starts its first column's text at 278. The bar and the table
+	   under it are read as one block, and they were on two rails four pixels
+	   apart - close enough to look like a mistake and too close to look like a
+	   decision. 6 + 4 lands the bar's first label on the grid's own rail. */
+	padding: 6px 10px 6px 6px;
 }
 .paGridBar-filters {
 	/* The second row carries the choices that shape the results, so it reads as
@@ -5091,8 +6700,21 @@ div.repDetectionCard h3 {
 	line-height: 1.25;
 	font-size: 11.5px;
 }
+/* 10px, matching `.x-grid-cell-inner`, and that is the whole point of the rule.
+   At 5px every header in these two grids sat exactly 5px left of the values it
+   names - "Metabolite" over "C00032", "Step" over "1", thirteen columns of it
+   across the hub-analysis and metabolite-class grids - which is the one
+   misalignment in a table a reader cannot help seeing, because the two things
+   are inches apart with nothing between them.
+
+   The 5px was taken to give the wrapping header text more room. It does not
+   need it: the text wraps rather than truncating (see `white-space: normal`
+   above), so the cost of the extra 10px is at most one more line in the two
+   widest headers, and both already wrap to two. Measured after: "DE neighbors"
+   and "not DE neighbors" are still two lines in a 94px column, and all thirteen
+   headers now start on their own column's rail. */
 .paWrapHeaders .x-column-header-inner {
-	padding: 6px 5px;
+	padding: 6px 10px;
 }
 
 /* Grid toolbar controls -------------------------------------------------------
@@ -5151,44 +6773,9 @@ div.repDetectionCard h3 {
 	border-left: 1px solid var(--pa-border);
 }
 
-/* Checkboxes -----------------------------------------------------------------
-   Neptune draws these as a 15px sprite on an <input type="button">. An input is
-   a replaced element, so it cannot carry the ::after that draws a tick - the
-   box is styled on the input and the tick on its wrapping cell, which is a <td>
-   and can. Same constraint that ruled out restyling the dialog close button. */
-.paGridBar .x-form-checkbox {
-	background-image: none;
-	width: 15px;
-	height: 15px;
-	border: 1px solid #A1A1AA;
-	border-radius: 3px;
-	background-color: #FFFFFF;
-	transition: background-color var(--pa-transition), border-color var(--pa-transition);
-}
-.paGridBar .x-form-checkbox:hover {
-	border-color: var(--pa-accent-blue);
-}
-.paGridBar .x-form-cb-checked .x-form-checkbox {
-	background-color: var(--pa-accent-blue);
-	border-color: var(--pa-accent-blue);
-}
-.paGridBar .x-form-cb-wrap {
-	position: relative;
-}
-.paGridBar .x-form-cb-checked .x-form-cb-wrap::after {
-	content: '';
-	position: absolute;
-	left: 5px;
-	top: 50%;
-	width: 3px;
-	height: 7px;
-	margin-top: -6px;
-	border: solid #FFFFFF;
-	border-width: 0 2px 2px 0;
-	transform: rotate(45deg);
-	/* The tick sits over the input, which is what receives the click. */
-	pointer-events: none;
-}
+/* The box itself is drawn by the shared `.x-form-checkbox` rule further down
+   this file, which started here and was generalised once the same control
+   appeared in the Step 3 settings panels. Only the label is toolbar-specific. */
 .paGridBar .x-form-cb-label {
 	color: #3F3F46;
 	font-size: 12.5px;
@@ -5262,7 +6849,13 @@ div.repDetectionCard h3 {
 }
 
 .po-hero-viz .po-viz-panel {
-  fill: var(--pa-surface-quiet, #F3F2ED);
+  /* --pa-surface, not --pa-surface-quiet. The interpretation panel was the
+     quiet grey because it was drawn on the white card; the diagram now sits on
+     a #F6F5F0 plate, and #F3F2ED on #F6F5F0 is a 0.3% luminance step - the
+     panel would have vanished into the plate behind it. Same figure-ground,
+     inverted: the plate is the quiet surface and the panel on it is the card.
+     Dark inverts again, where --pa-surface is darker than --pa-surface-quiet. */
+  fill: var(--pa-surface, #FFFFFF);
   stroke: var(--pa-border);
   opacity: 0;
   animation: poVizIn 0.5s ease-out 0.5s forwards;

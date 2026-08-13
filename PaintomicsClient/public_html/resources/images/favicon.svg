@@ -1,6 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-label="PaintOmics AI">
   <title>PaintOmics AI</title>
   <!--
+    "PaintOmics AI" is the product's name - the h1 wordmark in MainView and the
+    document title both read it that way - so this is the product mark and not a
+    drawing of the AI feature. The AI feature's own mark is getAIMark()'s spark
+    in a hexagon, and it is deliberately nothing like this.
+
     A favicon renders at 16px, so this is a redrawn variant of the header mark
     rather than the same file. At that size the header version's six 4.7r nodes
     on a 1.7 stroke close up into a ring of mush: the gaps between nodes are
@@ -12,17 +17,56 @@
     omics a user is most likely to have loaded: gene expression, metabolomics,
     proteomics and region-based.
 
-    The rounded square backdrop is what keeps it legible on both light and dark
-    browser chrome; a bare mark on transparent disappears into a dark tab strip.
+    Two themes, one file.
+    (No rule of hyphens under that heading, and none anywhere else in here: an
+    SVG is XML, XML forbids a double hyphen inside a comment, and a parse error
+    is total. The browser drops the whole file and quietly keeps whatever icon
+    it had before, which reads exactly like a caching problem.)
+
+    This used to be a #33343A rounded square with the mark on top, which is one
+    icon asked to work on two backgrounds. It only ever suited one of them: a
+    charcoal tile on Chrome's dark tab strip (#35363A) is the same colour as the
+    strip, so the tile disappeared and left the mark floating anyway, while on
+    the light strip it read as a heavy dark box.
+
+    So the tile is gone and the ink follows the theme instead. The browser
+    resolves `prefers-color-scheme` for a favicon the same way it does for a
+    page, which is verified rather than assumed: Chrome 151 renders the light
+    branch on a light-appearance profile and the dark branch on a profile
+    launched in forced dark mode, checked by screenshotting the tab strip.
+
+    The default - outside the media query - is the light-mode drawing. That
+    ordering is deliberate: any browser that does not evaluate the query at all
+    falls back to the bright variant on a light tab strip, which is the case
+    worth being right about.
+
+    The node colours are not the same two sets. On white the dark-theme tints
+    sit at 1.9-2.9:1 and look washed out, so the light branch takes the deeper
+    shade of each hue; on the dark strip those deeper shades go muddy, so the
+    dark branch keeps the original tints. Same four hues, same order, in both.
   -->
-  <rect width="48" height="48" rx="11" fill="#33343A"/>
-  <g fill="none" stroke="#FFFFFF" stroke-width="2.6" stroke-linecap="round" opacity="0.55">
-    <path d="M16 16 L32 16 L32 32 L16 32 Z"/>
+  <style>
+    .po-link  { stroke: #33343A; stroke-opacity: 0.55; }
+    .po-gene  { fill: #2E9B78; }   /* gene expression */
+    .po-metab { fill: #2C7FDD; }   /* metabolomics    */
+    .po-prot  { fill: #8A76C4; }   /* proteomics      */
+    .po-reg   { fill: #C4604A; }   /* region-based    */
+
+    @media (prefers-color-scheme: dark) {
+      .po-link  { stroke: #FFFFFF; stroke-opacity: 0.6; }
+      .po-gene  { fill: #55C9A6; }
+      .po-metab { fill: #79B0EC; }
+      .po-prot  { fill: #B4A1DD; }
+      .po-reg   { fill: #D67F6B; }
+    }
+  </style>
+  <g fill="none" stroke-width="2.6" stroke-linecap="round">
+    <path class="po-link" d="M16 16 L32 16 L32 32 L16 32 Z"/>
   </g>
   <g>
-    <circle cx="16" cy="16" r="6.2" fill="#55C9A6"/>
-    <circle cx="32" cy="16" r="6.2" fill="#79B0EC"/>
-    <circle cx="32" cy="32" r="6.2" fill="#B4A1DD"/>
-    <circle cx="16" cy="32" r="6.2" fill="#D67F6B"/>
+    <circle class="po-gene"  cx="16" cy="16" r="6.2"/>
+    <circle class="po-metab" cx="32" cy="16" r="6.2"/>
+    <circle class="po-prot"  cx="32" cy="32" r="6.2"/>
+    <circle class="po-reg"   cx="16" cy="32" r="6.2"/>
   </g>
 </svg>

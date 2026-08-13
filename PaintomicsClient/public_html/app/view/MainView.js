@@ -138,7 +138,14 @@ function MainView() {
 		// the ones JobController makes between steps, so this is the one place
 		// that sees them all. Step 3 and Step 4 still build their own afterwards -
 		// their sections arrive on a delay and are not here yet at this point.
-		requestAnimationFrame(function () {
+		//
+		// paDeferFrame, not requestAnimationFrame: rAF is throttled to nothing in
+		// a background tab, and every view swap in the application comes through
+		// here. Reached with the tab hidden - which is what happens when a job
+		// finishes while its author is reading something else - the rail was
+		// never rebuilt, and Step 2 came up on a 1184px column where the same
+		// page reached in the foreground uses 1114. See paDeferFrame in Util.js.
+		paDeferFrame(function () {
 			buildAnalysisTOC('#mainViewCenterPanel');
 		});
 	};
@@ -186,9 +193,27 @@ function MainView() {
 		// the words and keep the icons when the step actions need the room -- see
 		// fitHeaderNav() below. The title attribute is what names the item once its
 		// label is hidden, so it is load-bearing rather than decoration.
+		//
+		// Four pills, not six. Resources / Publications / Contact are read-once
+		// links sharing a row with the step actions, and the nav lost that contest
+		// on every results page: fitHeaderNav() reached `is-iconly` and stripped
+		// all six labels at once, which is how the header came to read as an
+		// undifferentiated cluster of glyphs. They now live behind one "More" item,
+		// and the two remaining labels are shortened - "Personal storage" ->
+		// "Storage", "Supporting tools" -> "Tools" - with the full name kept in
+		// `title`. Together that gives back roughly 280px, enough for the words to
+		// survive at the widths this is actually used at.
+		var citeHTML = function(name, venue, year, doi, bib) {
+			return "<li class='menuOption externalOption navPanel-cite'>" +
+				"<a class='navPanel-cite-ref' href='" + doi + "' target='_blank' rel='noopener'>" +
+				"<span class='navPanel-cite-name'>" + name + "</span>" +
+				"<span class='navPanel-cite-meta'>" + venue + " &middot; " + year + "</span></a>" +
+				"<a class='navPanel-cite-bib' href='resources/images/" + bib + "' target='_blank'>BibTeX</a></li>";
+		};
+
 		var navHTML = "<ul class='lateralMenu-body'>" +
-				" <li class='menuOption' id='homeButton' title='Job view'><i class='fa fa-paint-brush'></i><span class='menuLabel'>Job view</span></li>" + 
-				" <li class='menuOption loggedOption' title='Personal storage'><i class='fa fa-cloud'></i><span class='menuLabel'>Personal storage</span>" +
+				" <li class='menuOption' id='homeButton' title='Job view'><i class='fa fa-paint-brush'></i><span class='menuLabel'>Job view</span></li>" +
+				" <li class='menuOption loggedOption' title='Personal storage'><i class='fa fa-cloud'></i><span class='menuLabel'>Storage</span>" +
 				"  <ul class='submenu loggedOption'>" +
 				(noLogin != true ?
 					"     <li class='menuOption' data-name='DM_MyDataListView'><i class='fa fa-file-text'></i>  My files and Jobs</li>" +
@@ -198,19 +223,29 @@ function MainView() {
 				) +
 				// "     <li class='menuOption' data-name='fileEdition'><i class='fa fa-cloud-upload'></i>   File edition</li>"+
 				" </ul></li>" +
-				" <li class='menuOption loggedOption' title='Supporting tools'><i class='fa fa-rocket'></i><span class='menuLabel'>Supporting tools</span>" +
+				" <li class='menuOption loggedOption' title='Supporting tools'><i class='fa fa-rocket'></i><span class='menuLabel'>Tools</span>" +
 				" <ul class='submenu loggedOption'>" +
 				"     <li class='menuOption' data-name='fromBEDtoGenes'><i class='fa fa-align-center'></i>   From Regions to Genes</li>" +
 				"     <li class='menuOption' data-name='fromMiRNAtoGenes'><i class='fa fa-link'></i>   From miRNA to Genes</li>"+
 				" </ul></li>" +
-				" <li class='menuOption' title='Resources'><i class='fa fa-info-circle'></i><span class='menuLabel'>Resources</span>" +
-				" <ul class='submenu'>" +
-				"     <li class='menuOption externalOption'><a href='https://www.youtube.com/channel/UCSoQ3LSli9ZxOQTX56_WJeA' target='_blank'><i class=\"fa fa-youtube\"></i>  Paintomics tutorial video</a></li>" +
+				/* One panel rather than three nested menus. Resources and the
+				   citations are two lists of very different shape, so they get a
+				   column each and Contact spans the foot; a "More" that flew out
+				   three submenus sideways would have been a three-deep hover
+				   chain, which no trackpad can hold open.
+
+				   `.navPanel-inner` carries the grid, not the <ul>: jQuery's
+				   fadeIn() writes `display: block` inline on the submenu itself,
+				   which would beat any display the stylesheet set on it. */
+				" <li class='menuOption' title='Resources, publications and contact'><i class='fa fa-ellipsis-h'></i><span class='menuLabel'>More</span>" +
+				" <ul class='submenu navPanel'><li class='navPanel-inner'>" +
+				"  <div class='navPanel-col'><h2 class='navPanel-title'>Resources</h2><ul class='navPanel-list'>" +
+				"     <li class='menuOption externalOption'><a href='https://www.youtube.com/channel/UCSoQ3LSli9ZxOQTX56_WJeA' target='_blank' rel='noopener'><i class=\"fa fa-youtube-play\"></i>Tutorial video</a></li>" +
 				/* https and .io, the same spelling the rest of the app uses. The
 				   old readthedocs.org address still redirects, but it was the
 				   only one of the app's five documentation links written that
 				   way, and it sent a plain-http request first. */
-				"     <li class='menuOption externalOption'><a href='https://paintomics.readthedocs.io/en/latest/' target='_blank'><i class='fa fa-book'></i>  Paintomics Documentation</a></li>" +
+				"     <li class='menuOption externalOption'><a href='https://paintomics.readthedocs.io/en/latest/' target='_blank' rel='noopener'><i class='fa fa-book'></i>Documentation</a></li>" +
 				// The "PaintOmics 3" entry pointed at http://188.166.42.44/, a bare IP
 				// that no longer answers at all (connection failure, not an error
 				// page). Removed rather than repointed: there is no live PaintOmics 3
@@ -221,25 +256,38 @@ function MainView() {
 				// This server's own examples, not paintomics.uv.es's copy of a
 				// 2017 archive: a deployment with its own datasets installed was
 				// sending people elsewhere for data it does not use.
-				"	  <li class='menuOption externalOption'><a href='" + SERVER_URL_EXAMPLE_DATASETS_DOWNLOAD + "'><i class='fa fa-download'></i>  Paintomics example data</a></li>" +
-				"	  <li class='menuOption externalOption'><a href='https://paintomics.uv.es/resources/rgmatch_example_data.zip' target='_blank'><i class='fa fa-download'></i>  RGmatch example data</a></li>" +
+				"	  <li class='menuOption externalOption'><a href='" + SERVER_URL_EXAMPLE_DATASETS_DOWNLOAD + "'><i class='fa fa-download'></i>PaintOmics example data</a></li>" +
+				"	  <li class='menuOption externalOption'><a href='https://paintomics.uv.es/resources/rgmatch_example_data.zip' target='_blank' rel='noopener'><i class='fa fa-download'></i>RGmatch example data</a></li>" +
 				// RGmatch above stays an external link: it is a separate tool with
 				// its own example data, not something this server's manifest
 				// describes. miRNA2Genes is ours, so it comes from the manifest.
-				"	  <li class='menuOption externalOption'><a href='" + SERVER_URL_EXAMPLE_DATASETS_DOWNLOAD + "?pipeline=mirna2genes'><i class='fa fa-download'></i>  miRNA2Genes example data</a></li>" +
-				" </ul></li>" +
-				" <li class='menuOption' title='Publications'><i class='fa fa-paper-plane-o'></i><span class='menuLabel'>Publications</span>" +
-				" <ul class='submenu'>" +
-				// "     <li class='menuOption'><a href='https://paintomics.uv.es/' target='_blank'><i class='fa fa-book'></i>  Paintomics Documentation</a></li>"+
-				"     <li class='menuOption externalOption' style='font-size: 9px;'><div style='font-size: 12px; color: white;'>Cite PaintOmics 4:</div><a href='https://doi.org/10.1093/nar/gkac352' target='_blank'>Liu, T., Salguero, P., Petek, M., Martinez-Mira, C., Balzano-Nogueira, L., Ramšak, Ž., McIntyre, L., Gruden, K., Tarazona, S. and Conesa, A. <b>PaintOmics 4: new tools for the integrative analysis of multi-omics datasets supported by multiple pathway databases</b>. <i>Nucleic Acids Research</i> 2022).</a><br><a href='resources/images/paintomics4.bib' target='_blank'>BibTeX</a></li>" +
-				"     <li class='menuOption externalOption' style='font-size: 9px;'><div style='font-size: 12px; color: white;'>Cite PaintOmics 3:</div><a href='https://doi.org/10.1093/nar/gky466' target='_blank'>Hernández-de-Diego R, Tarazona S, Martínez-Mira C, Balzano-Nogueira L, Furió-Tarí P, Pappas J G, Conesa A. <b>PaintOmics 3: a web resource for the pathway analysis and visualization of multi-omics data</b>. <i>Nucleic Acids Research</i> 2018).</a><br><a href='resources/images/paintomics3.bib' target='_blank'>BibTeX</a></li>" +
-				"     <li class='menuOption externalOption' style='font-size: 9px;'><div style='font-size: 12px; color: white;'>Cite Paintomics 2:</div><a href='http://bioinformatics.oxfordjournals.org/content/early/2010/11/23/bioinformatics.btq594' target='_blank'>García-Alcalde F, García-López F, Dopazo J, Conesa A. <b>Paintomics: a web based tool for the joint visualization of transcriptomics and metabolomics data</b>. <i>Bioinformatics</i> 2011 27(1): 137–139.</a><br><a href='resources/images/paintomics2-garcia-alcalde.bib' target='_blank'>BibTeX</a></li>" +
-				"     <li class='menuOption externalOption' style='font-size: 9px;'><div style='font-size: 12px; color: white;'>Cite rgmatch:</div><a href='https://bmcbioinformatics.biomedcentral.com/articles/10.1186/s12859-016-1293-1' target='_blank'>Furio-Tari P, Tarazona S, Conesa A. <b>RGmatch: matching genomic regions to proximal genes in omics data integration</b>. <i>BMC Bioinformatics</i> 2016 17(15).</a><br><a href='resources/images/rgmatch.bib' target='_blank'>BibTeX</a></li>" +
-				" </ul></li>" +
-				" <li class='menuOption' title='Contact'><i class='fa fa-envelope-o'></i><span class='menuLabel'>Contact</span>" +
-				" <ul class='submenu'>" +
-				"     <li class='menuOption' data-name='contactForm'><i class='fa fa-envelope-o'></i>  Contact by email</li>" +
-				" </ul></li>" +
+				"	  <li class='menuOption externalOption'><a href='" + SERVER_URL_EXAMPLE_DATASETS_DOWNLOAD + "?pipeline=mirna2genes'><i class='fa fa-download'></i>miRNA2Genes example data</a></li>" +
+				"  </ul></div>" +
+				/* The four entries used to be full citations set at `font-size:
+				   9px` with a white heading inline - illegible on the dark rail
+				   they were written for and invisible on the white bar that
+				   replaced it. A citation nobody can read is not a citation, and
+				   the two things a reader actually wants from this menu are the
+				   paper and a BibTeX record. Both are one click away; the DOI page
+				   carries the author list this was setting in 9px type. */
+				"  <div class='navPanel-col'><h2 class='navPanel-title'>Cite PaintOmics</h2><ul class='navPanel-list'>" +
+				citeHTML("PaintOmics 4", "Nucleic Acids Research", "2022", "https://doi.org/10.1093/nar/gkac352", "paintomics4.bib") +
+				citeHTML("PaintOmics 3", "Nucleic Acids Research", "2018", "https://doi.org/10.1093/nar/gky466", "paintomics3.bib") +
+				// The DOI, not the plain-http oxfordjournals.org address this used
+				// to carry: that domain was retired into academic.oup.com years ago
+				// and it was the last insecure link left in the navigation.
+				citeHTML("PaintOmics 2", "Bioinformatics", "2011", "https://doi.org/10.1093/bioinformatics/btq594", "paintomics2-garcia-alcalde.bib") +
+				citeHTML("RGmatch", "BMC Bioinformatics", "2016", "https://doi.org/10.1186/s12859-016-1293-1", "rgmatch.bib") +
+				"  </ul></div>" +
+				/* Kept a .menuOption inside a .submenu, and kept its data-name: the
+				   boxready handler binds `.submenu .menuOption:not(.externalOption)`
+				   as a descendant selector and marks `parents('.menuOption')`
+				   selected, both of which still resolve through the extra wrappers
+				   to the More pill. */
+				"  <div class='navPanel-foot'><ul class='navPanel-list'>" +
+				"     <li class='menuOption' data-name='contactForm'><i class='fa fa-envelope-o'></i>Contact by email</li>" +
+				"  </ul></div>" +
+				" </li></ul></li>" +
 				"</ul>";
 
 		this.component = Ext.create('Ext.container.Viewport', {
@@ -254,11 +302,32 @@ function MainView() {
 				html:
 				'<div id="header">'+
 				'  <img src="resources/images/paintomics-mark.svg" alt="PaintOmics AI">' +
-				'  <h1>PaintOmics AI</h1><span class="appVersion">' + APP_VERSION + '</span>' +
+				/* No version chip beside the wordmark. The header is the one row
+				   in the application where two groups grow towards each other -
+				   the nav pills from the left, the step actions from the right -
+				   and fitHeaderNav() below already compacts the pills, and then
+				   strips their labels, to keep them from colliding. A build
+				   number sitting between the wordmark and the first pill spends
+				   about 50px of the space that contest is fought over, to tell
+				   the reader something no reader of a landing page is asking.
+				   It is still in APP_VERSION for anything that needs it. */
+				'  <h1>PaintOmics AI</h1>' +
 				'</div>' +
 				'<nav class="mainNav">' + navHTML + '</nav>' +
-				'<button class="themeToggle" id="themeToggle" type="button" title="Switch between light and dark" aria-pressed="false"><i class="fa fa-moon-o"></i></button>' +
-				'<a class="button btn-sm btn-right loggedOption" data-name="logout" id="logoutButton" href="javascript:void(0)">' + (noLogin !== true ? '<i class="fa fa-sign-out" aria-hidden="true"></i> Log out' : '<i class="fa fa-sign-in" aria-hidden="true"></i> Sign in') + '</a>'
+				/* The switch and the account button are one group now.
+
+				   Both were direct children of the header's flex row, and the
+				   switch alone carried `margin-left: auto` - so it, and only it,
+				   absorbed the free space. That is what left a bare moon adrift
+				   between the step actions and a labelled pill, belonging to
+				   neither. The auto margin moves to this wrapper, which parks the
+				   pair together at the end of the row and gives the header three
+				   readable zones: brand and navigation, the actions for this step,
+				   and the controls that are not about the analysis at all. */
+				'<div class="headerUtilities">' +
+				'  <button class="themeToggle" id="themeToggle" type="button" title="Switch between light and dark" aria-pressed="false"><i class="fa fa-moon-o"></i></button>' +
+				'  <a class="button btn-sm btn-right loggedOption" data-name="logout" id="logoutButton" href="javascript:void(0)">' + (noLogin !== true ? '<i class="fa fa-sign-out" aria-hidden="true"></i> Log out' : '<i class="fa fa-sign-in" aria-hidden="true"></i> Sign in') + '</a>' +
+				'</div>'
 			}, {
 				xtype: 'container', itemId: 'mainViewCenterPanel', id: 'mainViewCenterPanel',
 				flex: 1, region: 'center', overflowY: "auto", style: "background-color:#f3f3f3;",
@@ -439,7 +508,36 @@ function MainView() {
 		// null for *every* position:fixed element whether it is visible or not,
 		// so it read as hidden on the very screens this needs to measure.
 		var actions = document.querySelector(".secondTopToolbar");
-		if (!actions || actions.getClientRects().length === 0) {
+		var hasActions = !!(actions && actions.getClientRects().length > 0);
+
+		/* Tell the stylesheet where the utility group starts.
+		 *
+		 * .secondTopToolbar is `position: fixed`, so it is offset from the right
+		 * edge by hand, and that offset was the literal `178px` - 132 of account
+		 * button, 30 of switch, 16 of gap, counted once and true only while all
+		 * three stayed exactly that size. It was already wrong in one state the
+		 * app reaches on its own: signing out removes the account button, and the
+		 * band kept reserving room for it.
+		 *
+		 * Measured instead, from the group's own left edge, so the reservation
+		 * follows whatever is actually in the corner. The divider is a ::before
+		 * inside the group, so it is inside this measurement rather than another
+		 * number to remember.
+		 */
+		var utilities = document.querySelector(".headerUtilities");
+		if (utilities) {
+			var edge = utilities.getBoundingClientRect().left;
+			var reserved = Math.max(0, Math.ceil(document.documentElement.clientWidth - edge));
+			document.documentElement.style.setProperty("--pa-header-utilities", reserved + "px");
+		}
+		// Nothing here decides whether the divider is drawn. It first hung on a
+		// class written from this function, and inherited this watcher's staleness
+		// with it: on a results page that settled without a final fit the hairline
+		// simply never appeared, which is a visible defect for something whose
+		// only job is to be seen. main.css answers the question declaratively with
+		// :has(), so it cannot be stale.
+
+		if (!hasActions) {
 			return;
 		}
 
@@ -467,6 +565,21 @@ function MainView() {
 	 * contents change and not only when the window does. A MutationObserver on
 	 * the body covers every one of the seven views that mount a toolbar without
 	 * any of them having to know this exists.
+	 *
+	 * This used to carry a warning for anyone measuring it from an automated
+	 * browser: run() was scheduled inside requestAnimationFrame, which Chrome
+	 * pauses in a background tab, so a check that loaded a results page without
+	 * bringing the tab to the front saw the nav at full width and overlapping the
+	 * step actions. Instrumented at a 1200px viewport, a background tab logged
+	 * zero fits; the same page in a foreground tab logged five, applied
+	 * `is-compact`, and left a 22px gap.
+	 *
+	 * That was read as an artefact of how it was being measured. It was not - it
+	 * was the same bug in the tab a reader is actually using. A results page is
+	 * routinely opened and then left while its job finishes, and the nav that came
+	 * back was the unfitted one; it healed only if the observer happened to fire
+	 * again after the tab came forward, which returning to a settled page does not
+	 * cause. Scheduled through paDeferFrame below, the fit runs either way.
 	 */
 	this.watchHeaderFit = function() {
 		var me = this;
@@ -498,8 +611,15 @@ function MainView() {
 				return;
 			}
 			// Coalesced to the next frame: ExtJS mutates the DOM in bursts, and
-			// measuring inside the burst would read a half-built toolbar.
-			pending = window.requestAnimationFrame(run);
+			// measuring inside the burst would read a half-built toolbar. A frame
+			// while the tab is visible, a timer while it is not - see the note
+			// above, and paDeferFrame in Util.js.
+			//
+			// `pending` is a flag, not a handle: nothing here cancels a scheduled
+			// run, and the two schedulers hand back ids that are not
+			// interchangeable to cancel with.
+			pending = true;
+			paDeferFrame(run);
 		};
 
 		window.addEventListener("resize", recheck);

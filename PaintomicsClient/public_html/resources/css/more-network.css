@@ -14,119 +14,16 @@
  * they have to be handed to Cytoscape as literal values anyway, and swapping
  * them per theme would mean the same edge meant different things in a
  * screenshot depending on who took it.
+ *
+ * The toolbar, the status line under it and the canvas fill are NOT here any
+ * more: they are the chrome this view shares with the pathways network in
+ * PA_Step3Views, and they live in network-views.css so the two graph surfaces
+ * on the same page cannot drift apart again. What remains below is what is
+ * genuinely particular to this view -- its legend, its hub list, its tooltip.
  */
 
 .more-net-panel .x-panel-body {
 	background: var(--pa-surface, #fff);
-}
-
-/* ---- Toolbar ---------------------------------------------------------- */
-
-.more-net-toolbar {
-	display: flex;
-	flex-wrap: wrap;
-	align-items: center;
-	gap: 14px;
-	padding: 10px 14px;
-	background: var(--pa-surface-toolbar, #f5f5f7);
-	border-bottom: 1px solid var(--pa-border, #e4e4e7);
-	font-size: 12px;
-	color: var(--pa-ink-label, #555);
-}
-
-.more-net-toolbar label {
-	display: inline-flex;
-	align-items: center;
-	gap: 6px;
-	white-space: nowrap;
-	margin: 0;
-	font-weight: 500;
-}
-
-/* Ranges get an explicit width: their intrinsic size differs enough between
-   engines that the toolbar rewraps between Chrome and Firefox without one. */
-.more-net-toolbar input[type="range"] {
-	width: 96px;
-	vertical-align: middle;
-}
-
-.more-net-toolbar select,
-.more-net-toolbar input[type="search"] {
-	padding: 3px 6px;
-	font-size: 12px;
-	color: var(--pa-ink-control, #333);
-	background: var(--pa-surface, #fff);
-	border: 1px solid var(--pa-border, #ccc);
-	border-radius: var(--pa-radius-sm, 4px);
-}
-
-.more-net-toolbar input[type="search"] {
-	min-width: 190px;
-}
-
-/* `appearance: none` and the `background-color` longhand, not the `background`
- * shorthand. A button carrying custom padding, border and radius is not a
- * native control, and saying so keeps its rendering identical across platforms
- * rather than at the mercy of each UA's control painting.
- *
- * Not a bug fix, and worth saying so: while testing a runtime theme switch,
- * `getComputedStyle(button).backgroundColor` reported `rgb(255,255,255)`
- * against #E7E8EA text -- 1.23:1, which would be text invisible against its own
- * button. It reproduced repeatedly and survived both this change and a
- * higher-specificity literal override, which is what finally made it suspect.
- * Sampling the painted pixels instead showed the buttons dark with light text
- * and perfectly legible: the reported value was stale, not the paint. The
- * lesson is the one this repo has already learned once about screenshots --
- * measure the pixels, not the DOM's account of them, before believing a
- * theming defect.
- */
-.more-net-toolbar button {
-	appearance: none;
-	-webkit-appearance: none;
-	padding: 4px 10px;
-	font-size: 12px;
-	color: var(--pa-ink-control, #333);
-	background-color: var(--pa-surface, #fff);
-	border: 1px solid var(--pa-border, #ccc);
-	border-radius: var(--pa-radius-sm, 4px);
-	cursor: pointer;
-	transition: background-color var(--pa-transition, 150ms ease);
-}
-
-.more-net-toolbar button:hover {
-	background-color: var(--pa-surface-quiet, #ececf0);
-}
-
-.more-net-toolbar button:focus-visible,
-.more-net-toolbar select:focus-visible,
-.more-net-toolbar input:focus-visible {
-	outline: 2px solid var(--pa-focus-ring, #0a84ff);
-	outline-offset: 1px;
-}
-
-/* The live readout beside each slider. Tabular figures so the toolbar does not
-   twitch sideways as the digits change while a slider is dragged. */
-.more-net-r2-value,
-.more-net-coef-value,
-.more-net-edges-value {
-	display: inline-block;
-	min-width: 3.2em;
-	font-variant-numeric: tabular-nums;
-	color: var(--pa-ink, #222);
-}
-
-/* ---- Subtitle --------------------------------------------------------- */
-
-.more-net-subtitle {
-	padding: 8px 14px;
-	font-size: 12px;
-	color: var(--pa-ink-muted, #6b6b6b);
-	background: var(--pa-surface, #fff);
-	border-bottom: 1px solid var(--pa-border, #e0e0e0);
-}
-
-.more-net-subtitle b {
-	color: var(--pa-ink, #222);
 }
 
 /* ---- Canvas and side panel -------------------------------------------- */
@@ -137,12 +34,11 @@
 	height: 600px;
 }
 
+/* The fill is in network-views.css; the flex behaviour is this layout's. */
 .more-net-canvas {
 	flex: 1;
 	height: 100%;
-	position: relative;
 	min-width: 0;             /* or the flex item refuses to shrink below its content */
-	background: var(--pa-surface-sunken, #fafafa);
 }
 
 .more-net-sidepanel {
@@ -167,7 +63,7 @@
 	font-weight: 700;
 	text-transform: uppercase;
 	letter-spacing: 0.04em;
-	color: var(--pa-ink-label, #6b6b6b);
+	color: var(--pa-ink-label, #595959);
 }
 
 .more-net-side h6:first-child {
@@ -196,7 +92,7 @@
 	margin: 8px 0 0;
 	font-size: 11px;
 	line-height: 1.45;
-	color: var(--pa-ink-muted, #6b6b6b);
+	color: var(--pa-ink-muted, #595959);
 }
 
 /* ---- Top hubs --------------------------------------------------------- */
@@ -220,7 +116,7 @@
 	padding: 0 6px;
 	font-size: 11px;
 	font-variant-numeric: tabular-nums;
-	color: var(--pa-ink-muted, #6b6b6b);
+	color: var(--pa-ink-muted, #595959);
 	background: var(--pa-surface-quiet, #ececf0);
 	border-radius: 8px;
 }

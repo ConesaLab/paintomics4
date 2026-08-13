@@ -132,8 +132,14 @@ function DM_Bed2GenesJobView() {
 						/* The inset goes on the panel, not on its body: ExtJS writes an
 						   explicit width onto the body, so .contentbox's own 10px margin was
 						   added on top of that width and this card finished 20px wider than
-						   the two above it. See .paToolForm in main.css. */
-						margin: '0 10 0 10', style: "padding-bottom:50px;",
+						   the two above it. See .paToolForm in main.css.
+
+						   Zero horizontally now: the 10 mirrored the horizontal margin
+						   `.contentbox` used to carry, and that margin is gone - the page
+						   gutter on #mainViewCenterPanel is the only inset. Left at 10 this
+						   card's "Data uploading" heading would sit 10px right of every
+						   other card's heading on the page. */
+						margin: '0', style: "padding-bottom:50px;",
 				layout: {type: 'vbox', align: "stretch"},
 				defaults: {labelAlign: "right", labelWidth: 220},
 				items: [

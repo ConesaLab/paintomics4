@@ -1,0 +1,291 @@
+/* Network view chrome — shared by both graph surfaces in Step 3.
+ *
+ * Step 3 draws two networks and, until this file, they had nothing in common
+ * but the word "network":
+ *
+ *   Pathways network (KEGG / Reactome / MapMan) — PA_Step3Views.js, sigma.js.
+ *     Its toolbar was a row of bare anchors floated left inside a 30px box with
+ *     `margin-bottom: -20px`, so the strip sat *on top of* the diagram it
+ *     controls. No control had a shape; the only feedback was the text
+ *     changing colour. The two download links were not in the bar at all —
+ *     they floated above the card's own title.
+ *
+ *   MORE Regulator–Target network — PA_Step3RegTargetNetworkView.js,
+ *     Cytoscape.js. Its toolbar was a proper band with a surface, a border and
+ *     real buttons, written against design-system tokens — but half of those
+ *     tokens (`--pa-surface-toolbar`, `--pa-ink-control`, …) were only ever
+ *     declared in dark.css, so in light mode every one of them fell through to
+ *     a hardcoded cold grey. The panel that looked the most designed was the
+ *     one least connected to the palette.
+ *
+ * Two graph views on the same page should not be two products. This file is
+ * the one description of what a network toolbar, its status line and its
+ * canvas look like, and both views are styled from it: selectors name the
+ * `.pa-net-*` classes used by the pathways view and the `.more-net-*` classes
+ * used by the MORE view together, so a change here cannot drift between them.
+ * What stays local to each view is what genuinely differs — MORE's legend and
+ * hub list in more-network.css, the pathways view's hover menus and lateral
+ * panels in main.css.
+ *
+ * Everything below resolves through tokens declared for both themes, so dark
+ * mode needs no counterpart block.
+ */
+
+/* ---- The toolbar band --------------------------------------------------- */
+
+/* Flex rather than floats. The float version could not express "these belong
+   to the left, those to the right" without an inline `float: right` on each
+   item — which a `float: left !important` in main.css then overrode anyway, so
+   the two groups had silently collapsed into one undifferentiated row. That is
+   the row in the screenshot this work started from. */
+/* Spacing is margin on the items, not `gap` on the container. The pathways
+   toolbar holds three hover menus whose trigger is hidden until nodes are
+   selected; they are zero-width most of the time, and `gap` charges 4px for
+   each of them anyway. That was enough to push the last control onto a second
+   row on a 660px panel. A zero-width item with margins costs zero. */
+.pa-net-toolbar,
+.more-net-toolbar {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0;
+	padding: 6px 8px;
+	background: var(--pa-surface-toolbar, #F6F5F0);
+	border-bottom: 1px solid var(--pa-border);
+	font-size: 12px;
+	color: var(--pa-ink-label, #52525B);
+	/* The hover menus and the reorder popover are absolutely positioned
+	   children of the pathways toolbar. */
+	position: relative;
+	z-index: 3;
+	box-sizing: border-box;
+	width: 100%;
+	/* Size containment in the inline axis, and it is load-bearing.
+
+	   A flex container's max-content width is the sum of its items laid out on
+	   one line - here about 730px. The pathways toolbar sits inside an ExtJS
+	   `box` whose column is an auto-width `display: table` cell, so ExtJS
+	   measured that 730 and wrote `width: 1184px` as an inline style on the tab
+	   panel child: 70px wider than its own 1114px container, which pushed the
+	   classification card and the Details column past the right edge of every
+	   other card on the page and, on a five-omic job, gave the document a
+	   horizontal scrollbar. The float-based bar this replaced did not have that
+	   contribution, so this arrived with the rewrite.
+
+	   `contain: inline-size` makes the element's intrinsic inline size be
+	   computed as if it were empty, so the cell is sized by the rest of the
+	   card and the bar takes the width it is given. The used width still comes
+	   from `width: 100%` above, so wrapping is unaffected - and because ExtJS
+	   writes that 1184 into an inline style, this has to be true at *its*
+	   measuring time. Setting it afterwards from the console does nothing,
+	   which is what makes it a stylesheet rule rather than a JS fix. */
+	contain: inline-size;
+}
+
+/* MORE's toolbar carries labelled sliders, so it needs more air between items
+   than a row of buttons does. */
+.more-net-toolbar {
+	gap: 14px;
+	padding: 9px 12px;
+}
+
+/* Pushes everything after it to the right edge. Replaces five inline
+   `float: right` declarations that were not doing anything. */
+.pa-net-toolbar-gap {
+	flex: 1 1 auto;
+	min-width: 8px;
+}
+
+/* Groups controls that act on the same thing — the layout trio, then the two
+   downloads. A hairline reads as grouping without adding another surface. */
+.pa-net-toolbar-sep {
+	flex: 0 0 auto;
+	width: 1px;
+	height: 18px;
+	margin: 0 5px;
+	background: var(--pa-border);
+}
+
+/* ---- Controls ----------------------------------------------------------- */
+
+/* One shape for every control in either bar: the anchors the pathways view
+   uses and the `<button>`s the MORE view uses. Transparent until pointed at,
+   because a secondary toolbar's job is to be available without competing with
+   a diagram drawn in six saturated category colours. */
+.pa-net-tool,
+.more-net-toolbar button {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	flex: 0 0 auto;
+	margin: 1px;
+	padding: 5px 8px;
+	font-size: 12px;
+	line-height: 1.35;
+	font-family: inherit;
+	white-space: nowrap;
+	color: var(--pa-ink-control, #3F3F46);
+	background-color: transparent;
+	border: 1px solid transparent;
+	border-radius: var(--pa-radius-sm, 6px);
+	cursor: pointer;
+	text-decoration: none;
+	appearance: none;
+	-webkit-appearance: none;
+	transition: background-color var(--pa-transition, 150ms ease),
+	            border-color var(--pa-transition, 150ms ease),
+	            color var(--pa-transition, 150ms ease);
+}
+
+/* MORE's three buttons sit among sliders rather than among other buttons, so
+   they keep a resting outline — without one they read as labels. */
+.more-net-toolbar button {
+	background-color: var(--pa-control-bg, #FFFFFF);
+	border-color: var(--pa-border);
+}
+
+/* The hover fill is a token pair, not a literal, because "a control lights up
+   under the cursor" points in opposite directions in the two themes: on the
+   ivory band a control goes to white, and on the #212227 band it has to go
+   *lighter* than the band, not to the darker card colour. Writing this as
+   `--pa-surface` looked right in light mode and produced a hover that was
+   darker than its own toolbar in dark mode. */
+.pa-net-tool:hover,
+.pa-net-tool:focus,
+.more-net-toolbar button:hover {
+	color: var(--pa-ink, #18181B);
+	background-color: var(--pa-control-hover-bg, #FFFFFF);
+	border-color: var(--pa-border);
+	text-decoration: none;
+}
+
+.pa-net-tool:active,
+.more-net-toolbar button:active {
+	background-color: var(--pa-control-active-bg, #EEEDE7);
+}
+
+/* Icons are a size cue, not a second voice: one step down and one step muted,
+   so the label leads. */
+.pa-net-tool > i,
+.pa-net-tool > .fa {
+	font-size: 12px;
+	color: var(--pa-ink-label, #52525B);
+}
+
+.pa-net-tool:hover > i,
+.pa-net-tool:hover > .fa {
+	color: inherit;
+}
+
+.pa-net-tool:focus-visible,
+.more-net-toolbar button:focus-visible,
+.more-net-toolbar select:focus-visible,
+.more-net-toolbar input:focus-visible {
+	outline: 2px solid var(--pa-focus-ring, #0A84FF);
+	outline-offset: 1px;
+}
+
+/* ---- Labelled inputs (MORE) --------------------------------------------- */
+
+.more-net-toolbar label {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	white-space: nowrap;
+	margin: 0;
+	font-weight: 500;
+}
+
+/* Ranges get an explicit width: their intrinsic size differs enough between
+   engines that the toolbar rewraps between Chrome and Firefox without one. */
+.more-net-toolbar input[type="range"] {
+	width: 96px;
+	vertical-align: middle;
+}
+
+.more-net-toolbar select,
+.more-net-toolbar input[type="search"] {
+	padding: 4px 7px;
+	font-size: 12px;
+	font-family: inherit;
+	color: var(--pa-ink-control, #3F3F46);
+	background: var(--pa-control-bg, #FFFFFF);
+	border: 1px solid var(--pa-border);
+	border-radius: var(--pa-radius-sm, 6px);
+}
+
+.more-net-toolbar input[type="search"] {
+	min-width: 190px;
+}
+
+/* The live readout beside each slider. Tabular figures so the toolbar does not
+   twitch sideways as the digits change while a slider is dragged. */
+.more-net-r2-value,
+.more-net-coef-value,
+.more-net-edges-value {
+	display: inline-block;
+	min-width: 3.2em;
+	font-variant-numeric: tabular-nums;
+	color: var(--pa-ink, #18181B);
+}
+
+/* ---- Status line -------------------------------------------------------- */
+
+/* "445 nodes · 400 of 1382 edges · condition Ctr_0H" under the MORE toolbar
+   told you at a glance what you were looking at. The pathways network had no
+   equivalent, which is why "the Reactome network is nearly empty" had to be
+   diagnosed from the browser console instead of read off the page. Both bars
+   now carry one. */
+.pa-net-subtitle,
+.more-net-subtitle {
+	padding: 7px 12px;
+	font-size: 12px;
+	line-height: 1.5;
+	color: var(--pa-ink-muted, #595959);
+	background: var(--pa-surface, #FFFFFF);
+	border-bottom: 1px solid var(--pa-border);
+	box-sizing: border-box;
+}
+
+.pa-net-subtitle b,
+.more-net-subtitle b {
+	color: var(--pa-ink, #18181B);
+	font-weight: 600;
+}
+
+/* Said when a filter has emptied the graph rather than when the data is thin.
+   Warns without the alarm of an error colour. */
+.pa-net-subtitle .pa-net-warn {
+	color: var(--pa-accent-orange, #AD5022);
+}
+
+/* ---- Canvas ------------------------------------------------------------- */
+
+.pa-net-canvas,
+.more-net-canvas {
+	position: relative;
+	background: var(--pa-surface-sunken, #F5F4EF);
+}
+
+/* ---- Narrow viewports --------------------------------------------------- */
+
+@media (max-width: 900px) {
+	.pa-net-toolbar,
+	.more-net-toolbar {
+		gap: 3px;
+		padding: 6px 8px;
+	}
+
+	/* At this width the two groups no longer fit on one line, and a spacer that
+	   still claims the row would push the right group onto a line of its own
+	   with a gap of dead air above it. */
+	.pa-net-toolbar-gap {
+		flex-basis: 100%;
+		min-width: 0;
+		height: 0;
+	}
+
+	.pa-net-toolbar-sep {
+		display: none;
+	}
+}

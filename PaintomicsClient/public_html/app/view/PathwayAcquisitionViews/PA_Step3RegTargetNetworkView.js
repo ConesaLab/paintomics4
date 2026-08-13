@@ -913,6 +913,33 @@ function PA_Step3RegTargetNetworkView() {
 		element.innerHTML = parts.join(" · ");
 	};
 
+	/**
+	 * Instantiates the graph into its container, once.
+	 *
+	 * Extracted so that afterrender and expand can share it: the deferred build
+	 * can be dropped (see the afterrender comment below), and expand is the
+	 * natural place to notice and retry. Guarded on `this.cy` so a retry that
+	 * was not needed costs nothing.
+	 */
+	this._buildGraph = function () {
+		if (this.cy) return;
+
+		var element = document.getElementById(this.containerId);
+		if (!element) {
+			console.warn("RegTargetNetwork: container not found");
+			return;
+		}
+		try {
+			this._instantiate(element);
+		} catch (error) {
+			console.error("RegTargetNetwork init failed:", error);
+			element.innerHTML =
+				'<div class="more-net-error">Failed to initialise ' +
+				'network: ' + Ext.String.htmlEncode(
+					String(error && error.message || error)) + '</div>';
+		}
+	};
+
 	// ---- Ext component ----------------------------------------------------
 	this.initComponent = function () {
 		if (!this.hasData) {
@@ -943,28 +970,39 @@ function PA_Step3RegTargetNetworkView() {
 					// Deferred a frame: Cytoscape measures its container, and
 					// on Sencha 6 the panel does not have its final size until
 					// after afterrender returns.
-					requestAnimationFrame(function () {
-						var element = document.getElementById(me.containerId);
-						if (!element) {
-							console.warn("RegTargetNetwork: container not found");
-							return;
-						}
-						try {
-							me._instantiate(element);
-						} catch (error) {
-							console.error("RegTargetNetwork init failed:", error);
-							element.innerHTML =
-								'<div class="more-net-error">Failed to initialise ' +
-								'network: ' + Ext.String.htmlEncode(
-									String(error && error.message || error)) + '</div>';
-						}
-					});
+					//
+					// paDeferFrame, not requestAnimationFrame. Chrome throttles
+					// rAF to nothing in a background tab, and this is the call
+					// that builds the graph - so on a hidden tab it never ran and
+					// the panel came up empty: no canvas, no legend, no error, and
+					// the subtitle stuck on its "N rpc rows" placeholder. Measured
+					// that way before this change, on a tab that reported
+					// document.visibilityState === "hidden".
+					//
+					// It did not recover either. Nothing retries, and the expand
+					// handler below used to guard on `me.cy`, which is null in
+					// exactly this case, so bringing the tab forward left the
+					// panel blank for the rest of the session.
+					//
+					// Not a corner case: a job takes minutes, and reading
+					// something else while it finishes is the ordinary way to use
+					// this application, so the tab is commonly hidden at the
+					// moment Step 3 renders.
+					paDeferFrame(function () { me._buildGraph(); });
 				},
 				beforedestroy: function () { me._teardown(); },
 				expand: function () {
-					// The container had zero height while collapsed, so
-					// Cytoscape's cached dimensions are stale on the way back.
-					if (me.cy) { me.cy.resize(); me.cy.fit(me.cy.elements(":visible"), 24); }
+					// Two cases. If the graph exists, its cached dimensions are
+					// stale because the container had zero height while collapsed.
+					// If it does not, this is the second chance for a build that
+					// was dropped before it could run - a panel being expanded is
+					// proof that someone is looking at it now.
+					if (me.cy) {
+						me.cy.resize();
+						me.cy.fit(me.cy.elements(":visible"), 24);
+					} else {
+						me._buildGraph();
+					}
 				}
 			}
 		});

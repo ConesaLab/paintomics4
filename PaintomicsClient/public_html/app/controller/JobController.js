@@ -80,12 +80,23 @@ function JobController() {
 			success: function (response) {
 				if (response.success === false) {
 					if (response.status === "JobStatus.STARTED" || response.status === "started") {
-						var message = "Running job " + jobID;
+						// Title and body, not one string in the title slot.
+						//
+						// The whole thing - the job id, the sentence about the URL, and the
+						// URL itself - used to be passed as the dialog's title, so all three
+						// lines were painted by `#messageDialog.infoDialog h4`: 16px, 600
+						// weight, centred, in the info blue. A dialog whose every word is a
+						// heading has no heading, and the one line that matters ("Running job
+						// X") was indistinguishable from the two lines of housekeeping under
+						// it. The body slot has existed on this dialog all along.
+						var title = "Running job " + jobID;
+						var body = "";
 						var progress = null;
 
 						if (showURL) {
 							var jobURL = 'https://' + window.location.host + window.location.pathname + "?jobID=" + jobID;
-							message += ".<br/> You will be able to access it from the URL: <br/><br/><a href=\"" + jobURL  + "\" target=\"_blank\">" + jobURL + "</a>";
+							body = "You can come back to this job at any time:<br/>" +
+								"<a href=\"" + jobURL  + "\" target=\"_blank\">" + jobURL + "</a>";
 
 							// These were two sentences of raw seconds that the reader had to
 							// divide to learn how far along the job was. Handed to the dialog
@@ -99,7 +110,7 @@ function JobController() {
 							};
 						}
 
-						showInfoMessage(message, {logMessage: "Job " + jobID + " still running.", showSpin: true, progress: progress, append: other.multipleJobs, itemId: jobID, icon: "play"});
+						showInfoMessage(title, {message: body, logMessage: "Job " + jobID + " still running.", showSpin: true, progress: progress, append: other.multipleJobs, itemId: jobID, icon: "play"});
 					}
 					//Check again in N seconds
 					setTimeout(function () {
@@ -523,6 +534,17 @@ function JobController() {
 						jobModel.setOrganism(response.organism);  //UPDATE ORGANISM
 						jobModel.setDatabases(response.databases);
 						jobModel.setTimestamp(response.timestamp);
+
+						/* pathwayAcquisitionStep2_PART2 sends conditionNames, and this
+						   handler -- like the recover handler below -- copies the
+						   response field by field, so anything not named here is
+						   dropped. Only the recover path claimed it, which meant a job
+						   showed "Cond 1".."Cond N" on the run that produced it and the
+						   real names only after being reopened from its URL. Measured on
+						   a fresh run of the per-condition-relevance example: Mongo held
+						   ["T00h".."T24h"], the model held undefined, and the table drew
+						   six columns called "Cond 1".."Cond 6". */
+						jobModel.conditionNames = response.conditionNames || [];
 
 						if (response.classInfo) {
 							jobModel.setClasses(response.classInfo);

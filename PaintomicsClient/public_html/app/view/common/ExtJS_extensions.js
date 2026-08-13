@@ -341,6 +341,32 @@ Ext.define('Ext.grid.LiveSearchGridPanel', {
           me.paFilterItems.push(...pvalue_filter_options);
         }
 
+        /* Row two opens on the same rail as row one.
+
+           Both groups above start with a separator, because both are written to
+           be appended after something else. Whichever one runs first therefore
+           puts a separator at the very start of the bar, where it separates the
+           row from nothing - and the group label following it carries a 10px
+           left margin for that same absent neighbour.
+
+           `.paGridBar .x-toolbar-separator` draws its border transparent, so
+           neither is visible. What a reader sees is "Databases to view:"
+           beginning 19px right of "Search" directly above it, with nothing in
+           the gap to account for the step: 4px + the 1px rule + 4px of separator
+           margin, then the label's own 10px.
+
+           Trimmed here, after both groups are assembled, rather than inside
+           either of them: each group still needs its leading separator in the
+           case where it is not first, and a group added later cannot
+           reintroduce the problem.
+        */
+        while (me.paFilterItems.length && me.paFilterItems[0] === '-') {
+            me.paFilterItems.shift();
+        }
+        if (typeof me.paFilterItems[0] === "string") {
+            me.paFilterItems[0] = me.paFilterItems[0].replace(/(margin:\s*0 5px 0)\s*10px/, "$1 0");
+        }
+
         // The second row is only worth rendering when there is something to put
         // on it: a single-database run with no p-value methods has no filters at
         // all, and an empty bar is worse than none.

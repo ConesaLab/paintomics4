@@ -72,6 +72,14 @@
   --pa-border-hover: #4A4D55;
   --pa-scrim: rgba(0, 0, 0, 0.62);
 
+  /* Controls on a toolbar band. The polarity flips here relative to main.css:
+     on the ivory band a control brightens to white under the cursor, and on
+     this #212227 band it has to step lighter than the band rather than to
+     --pa-surface, which is #1E1F23 and darker than the bar it would sit on. */
+  --pa-control-bg: #2A2C32;
+  --pa-control-hover-bg: #2E3037;
+  --pa-control-active-bg: #3A3C44;
+
   /* Buttons — hues held, lightness raised so white ink still clears AA. */
   --pa-btn-default-bg: #2A2C32;
   --pa-btn-default-ink: #E7E8EA;
@@ -241,6 +249,18 @@
 [data-theme="dark"] ul.submenu li.menuOption:hover { background: var(--pa-surface-quiet); }
 [data-theme="dark"] ul.submenu a { color: var(--pa-link); }
 
+/* The More panel. Its column headings and citation metadata take --pa-ink-muted,
+   which the token block above already redefines, so only the three places that
+   name a colour or a border literally in main.css need restating here. */
+[data-theme="dark"] .navPanel-foot { border-top-color: var(--pa-border); }
+[data-theme="dark"] .navPanel-cite-name { color: var(--pa-ink-strong); }
+[data-theme="dark"] .navPanel-cite-bib { border-color: var(--pa-border); }
+[data-theme="dark"] .navPanel-cite-bib:hover { background: var(--pa-surface-quiet); }
+/* The divider between the step actions and the utility corner. main.css sets a
+   dark ink at 0.18, which on a dark bar is very nearly invisible; a hairline has
+   to be lighter than what it sits on here, not darker. */
+[data-theme="dark"] .mainTopToolbar .headerUtilities::before { background: rgba(255, 255, 255, 0.20); }
+
 /* Header and step-action controls. main.css states the ghost button's fill,
    ink and border literally, so all three are restated. */
 [data-theme="dark"] .mainTopToolbar .button,
@@ -319,11 +339,37 @@
    2. Content surfaces
    --------------------------------------------------------------------------- */
 
+/* The card fill, which this rule used to leave behind.
+
+   `.contentbox` is the results page's card, and main.css states its fill as a
+   literal -- `background: #fff`, not a token -- while its border and shadow are
+   both tokens this file redefines. So the border went dark, the ink went dark,
+   and the fill stayed white: --pa-ink-body #C9CBD0 on #FFFFFF, which measures
+   1.62:1 against the 4.5:1 AA asks of body text. Every paragraph on Step 3's
+   "Pathways selection", "Pathways summary" and "Multiple databases used" was
+   effectively unreadable.
+
+   It hid because `.x-panel-body.contentbox` -- the form cards on step 1 -- were
+   already dark: they match the .x-panel-body rule further down, which is (0,2,0)
+   and beats a bare `.contentbox`. Only the .contentbox elements that ExtJS does
+   not make panel bodies were left white, and those are almost all on Step 3, so
+   the light theme and the whole upload flow looked correct.
+
+   --pa-surface, the same token .x-panel-body takes, so a card reads the same
+   whether or not ExtJS happened to make it a panel body. The border and shadow
+   are what separate it from the page, and both are already themed. */
+[data-theme="dark"] .contentbox,
+[data-theme="dark"] .omicSummaryBox {
+	background: var(--pa-surface);
+}
 [data-theme="dark"] .contentbox,
 [data-theme="dark"] .omicSummaryBox,
 [data-theme="dark"] .po-about-section,
 /* No fill, border or shadow to restate: the step cards are columns on the
-   section's own surface in both themes now, so only their ink is themed. */
+   section's own surface in both themes now, so only their ink is themed. And
+   deliberately not in the background rule above -- giving these three a fill is
+   the "box drawn inside a box" the .po-step-card comment in main.css exists to
+   undo. */
 [data-theme="dark"] .po-step-card {
 	color: var(--pa-ink-body);
 }
@@ -439,6 +485,19 @@
 [data-theme="dark"] .x-tab .x-tab-inner { color: var(--pa-ink-label); }
 [data-theme="dark"] .x-tab-active .x-tab-inner { color: var(--pa-ink-strong); }
 [data-theme="dark"] .x-tab-active { background-color: var(--pa-surface); }
+/* Step 3's database tabs are the one bar main.css rebuilds from scratch, as a
+   selected label over a 2px rule rather than a raised box - see the note there.
+   Its selected ink is a literal near-black, which is the correct colour for the
+   light theme and invisible here, and the rule under the label is the same
+   value. Both are stated by an id selector, so these have to carry it too. */
+[data-theme="dark"] div#tabcontainer_network .x-tab.x-active {
+	border-bottom-color: var(--pa-ink-title) !important;
+	background-color: transparent;
+}
+[data-theme="dark"] div#tabcontainer_network .x-tab.x-active .x-tab-inner,
+[data-theme="dark"] div#tabcontainer_network .x-tab:hover .x-tab-inner {
+	color: var(--pa-ink-title);
+}
 
 /* Form fields */
 [data-theme="dark"] .x-form-field,
@@ -476,6 +535,49 @@
 }
 [data-theme="dark"] .x-menu-item-text { color: var(--pa-ink-body); }
 [data-theme="dark"] .x-menu-item-active .x-menu-item-link { background-color: var(--pa-surface-quiet); }
+
+/* The combobox dropdown - the organism picker, and every other `combo` in the
+   app. This had no dark rule at all, and the failure mode is the one the window
+   header a few lines below documents: the *ink* was already dark-themed by a
+   broad rule, so the list drew --pa-ink-body #C9CBD0 on the white
+   .x-boundlist fill Neptune ships. Measured 1.62:1 - not "low contrast", but
+   pale grey on white, which is a list of six hundred organisms you cannot read
+   at all. The hover row was worse in a way that hid the cause: Neptune paints
+   it #D6E8F6, a light blue, so the one row under the pointer looked like a
+   deliberate highlight and the rest looked like a rendering glitch.
+
+   .x-boundlist-item-over and -selected both have to be restated. Leaving either
+   at its Neptune value puts a light fill back under pale ink, one row at a time,
+   which is the same bug with a smaller footprint.
+
+   Floating: ExtJS renders this under <body>, not inside the field. That is fine
+   for the selector - [data-theme="dark"] is on <html> - but it is why the list
+   cannot inherit anything from the form it belongs to. */
+[data-theme="dark"] .x-boundlist {
+	background-color: var(--pa-surface);
+	border-color: var(--pa-border);
+}
+[data-theme="dark"] .x-boundlist-item {
+	color: var(--pa-ink-body);
+	border-color: transparent;
+}
+[data-theme="dark"] .x-boundlist-item-over {
+	background-color: var(--pa-surface-quiet);
+	border-color: var(--pa-border-hover);
+	color: var(--pa-ink-strong);
+}
+[data-theme="dark"] .x-boundlist-selected {
+	background-color: var(--pa-surface-sunken);
+	border-color: var(--pa-border-control);
+	color: var(--pa-ink-strong);
+}
+/* The empty-list and loading rows, which Neptune also leaves on white. */
+[data-theme="dark"] .x-boundlist-list-ct,
+[data-theme="dark"] .x-combo-list-item,
+[data-theme="dark"] .x-boundlist-empty {
+	background-color: var(--pa-surface);
+	color: var(--pa-ink-body);
+}
 [data-theme="dark"] .x-window,
 [data-theme="dark"] .x-window-body {
 	background-color: var(--pa-surface);
@@ -567,11 +669,62 @@
 	color: var(--pa-ink-muted);
 	border-top-color: var(--pa-border);
 }
+/* The report itself. .ai-msg-bubble was restated above, so its paragraphs came
+   out at 9.33:1 -- but the markdown block inside it never was, and every
+   element there carries an ink chosen for a white bubble. Measured on a real
+   report in this theme:
+
+       h1 1.13:1   h2 1.38:1   h3 1.63:1   strong 1.38:1 (x39 in one report)
+
+   so bold made text *less* legible than the sentence around it. The
+   light-theme ordering is kept: h1 strongest, h2/h3 and bold a step above the
+   body, h4 a step below. The #e0e0e0 hairlines on h2 and hr go with them. */
+[data-theme="dark"] .ai-msg-bubble h1 { color: var(--pa-ink-strong); }
+[data-theme="dark"] .ai-msg-bubble h2,
+[data-theme="dark"] .ai-msg-bubble h3,
+[data-theme="dark"] .ai-msg-bubble strong,
+[data-theme="dark"] .ai-msg-bubble b { color: var(--pa-ink-title); }
+[data-theme="dark"] .ai-msg-bubble h4 { color: var(--pa-ink-label); }
+[data-theme="dark"] .ai-msg-bubble h2,
+[data-theme="dark"] .ai-msg-bubble hr { border-color: var(--pa-border); }
+/* `em` needs no rule: it inherits the bubble's ink, which is why
+   ai-interpret.css sets `color: inherit` on it rather than a grey. */
+
+/* Tinted runs. #f0f7ff and #f5f5f5 are white slabs here, and a callout cannot
+   set itself apart by being the brightest thing in a dark panel. `pre` already
+   ships a dark fill. */
+[data-theme="dark"] .ai-msg-bubble blockquote {
+	background: var(--pa-surface-quiet);
+	border-left-color: var(--pa-accent-blue);
+	color: var(--pa-ink-body);
+}
+[data-theme="dark"] .ai-msg-bubble code { background: var(--pa-surface-quiet); }
+[data-theme="dark"] .ai-msg-bubble th {
+	background: var(--pa-surface-quiet);
+	border-color: var(--pa-border);
+}
+[data-theme="dark"] .ai-msg-bubble td { border-color: var(--pa-border); }
+
+/* Step 1's AI paragraph and the consent notice's fine print. Both carried
+   their colour inline and were reached from section 7 below by matching on the
+   `style` attribute; they are classes now, so they take the same two inks the
+   attribute selectors were mapping #555 and #666 to. */
+[data-theme="dark"] .ai-intro-copy { color: var(--pa-ink-body); }
+[data-theme="dark"] .ai-gdpr-fineprint { color: var(--pa-ink-label); }
 
 /* ---------------------------------------------------------------------------
    5. The toggle itself
    --------------------------------------------------------------------------- */
 
+/* No `margin-left: auto` here. It used to be, and it was the whole problem: the
+   switch was a direct child of the header's flex row and the only one with an
+   auto margin, so it swallowed every pixel of free space and came to rest
+   wherever that happened to leave it - a lone unlabelled glyph between the step
+   actions and the account pill, in a group of its own size one. The margin now
+   belongs to `.headerUtilities` in main.css, the wrapper holding this control
+   and the account button, and this one just sits inside it on the group's 8px
+   gap. main.css's `.secondTopToolbar` no longer needs to know this control's
+   width either: it reserves the group's measured width instead. */
 .themeToggle {
 	flex: 0 0 auto;
 	display: inline-flex;
@@ -579,7 +732,6 @@
 	justify-content: center;
 	width: 30px;
 	height: 30px;
-	margin-left: 8px;
 	border: 1px solid transparent;
 	border-radius: 999px;
 	background: transparent;
@@ -619,6 +771,22 @@
 }
 [data-theme="dark"] .po-step-card li,
 [data-theme="dark"] .po-step-card p { color: var(--pa-ink-body); }
+/* The diagram plate. Its light fill is one of the warm literals main.css lists
+   as untokenised, so it cannot follow a token here and has to be restated - the
+   same reason the surfaces around it are restated by selector rather than by
+   swapping a variable. The step-head hairline needs nothing: it is already
+   drawn with --pa-border, which this sheet redefines.
+
+   The diagrams themselves keep their light strokes and fills on purpose. They
+   are pictures of the real interface - the omic row colours, the bwr value
+   swatches, the painted network - and recolouring them for the theme would
+   show a reader something the application never draws. */
+[data-theme="dark"] .po-step-art { background: var(--pa-surface-quiet); }
+/* The type inside the diagrams - the omic names in step 1, the identifiers and
+   accessions in step 2. It is drawn with fill="currentColor" precisely so this
+   one declaration can move it; as a hardcoded #3F3F46 it was dark grey on a
+   dark plate, which is to say it was not there. */
+[data-theme="dark"] .po-step-art-svg { color: var(--pa-ink-body); }
 [data-theme="dark"] .po-hero-actions .po-btn-outline {
 	color: var(--pa-ink);
 	border-color: var(--pa-border-control);
@@ -633,8 +801,31 @@
 	border-color: var(--pa-ai-section-border);
 }
 [data-theme="dark"] .po-hero-ai-highlight p { color: var(--pa-ink-body); }
-[data-theme="dark"] .po-hero-ai-highlight strong { color: var(--pa-ink-strong); }
+/* The light theme darkens this blue to #1F6BC1 to clear 4.5:1 on a near-white
+   panel. On the dark panel the requirement inverts - a dark blue would be the
+   unreadable one - so it takes the brighter AI blue that the mark beside it
+   uses, which is where --pa-ink-strong stood before the heading became blue. */
+[data-theme="dark"] .po-hero-ai-highlight strong { color: var(--pa-ai-blue); }
 [data-theme="dark"] .po-hero-ai-highlight .po-ai-icon { color: var(--pa-ai-blue); }
+/* The three verbs are --pa-ink-muted in light mode, which this sheet retunes
+   for the dark ground; naming it here rather than relying on inheritance
+   because `div.contentbox li` sets its own colour further up. */
+[data-theme="dark"] .po-hero-ai-does li { color: var(--pa-ink-muted); }
+[data-theme="dark"] .po-hero-ai-does li::before { background: var(--pa-ai-blue); }
+[data-theme="dark"] .po-hero-title .po-hero-ai { color: var(--pa-ai-blue); }
+/* The diagram's plate, on the same token .po-step-art takes here - the hero's
+   drawing and the three step drawings are the same kind of thing and now sit on
+   the same surface in both themes. */
+[data-theme="dark"] .po-hero-visual::before { background: var(--pa-surface-quiet); }
+[data-theme="dark"] .po-hero-actions .po-btn-quiet {
+	color: var(--pa-ink-muted);
+	background: transparent;
+	border-color: transparent;
+}
+[data-theme="dark"] .po-hero-actions .po-btn-quiet:hover {
+	color: var(--pa-ink-strong);
+	background: var(--pa-surface-quiet);
+}
 [data-theme="dark"] .po-ai-section-body,
 [data-theme="dark"] .po-ai-section-body p { color: var(--pa-ink-body); }
 
@@ -647,19 +838,57 @@
 [data-theme="dark"] .po-hero-flow text[fill="#3F3F46"] { fill: var(--pa-ink-body); }
 [data-theme="dark"] .po-hero-flow text[fill="#71717A"] { fill: var(--pa-ink-label); }
 
-/* Inline "Load example" / "Run PaintOmics" chips inside the help prose. These
-   are coloured like their real counterparts in the toolbar, which means white
-   ink on a solid fill; the fill is stated inline in PA_Step1Views so only the
-   ink needs restating here. */
+/* Inline "Load example" / "Run PaintOmics" / "Next step" chips inside the help
+   prose. These are portraits of real controls, so each one has to be the colour
+   its counterpart in the toolbar actually is - and in dark mode neither of them
+   was.
+
+   The reason is a specificity tie that only dark mode loses. `.button.btn-success`
+   in main.css is (0,2,0); so is `[data-theme="dark"] .button` below, whose whole
+   job is to give an untyped button a neutral grey fill. Equal weight, and this
+   sheet loads second, so the neutral fill won and every btn-success that is not
+   explicitly re-themed came out grey. The toolbar is explicitly re-themed a few
+   hundred lines up; these were not. Measured: the real Run PaintOmics drew
+   rgb(63,154,63) and its inline portrait rgb(58,59,65) - a grey pill with a
+   green outline, next to a sentence telling you to click the green button.
+
+   Load example was wrong the other way and for a plainer reason: main.css pins
+   it to a white fill with near-black ink so it matches the light toolbar's ghost
+   button, and a pinned literal cannot follow a theme. In dark the real control
+   is a dark fill with pale ink and a visible border, so that is what its picture
+   is given here.
+
+   The comment this replaces said the fills were "stated inline in PA_Step1Views
+   so only the ink needs restating" - true when it was written, and not since the
+   paint and AI chips moved their colours out of style attributes and into
+   main.css. Those two are still correct in dark without help, but by specificity
+   rather than by inlining: `.po-step-card a.button.btn-paint` is (0,3,0) and
+   outranks the neutral rule outright. Same shape used here. */
 [data-theme="dark"] .button.btn-inline { color: #FFFFFF; }
+[data-theme="dark"] .po-step-card a.button.btn-success.btn-inline {
+	background-color: var(--pa-btn-success-bg);
+	border-color: transparent;
+	color: #FFFFFF;
+}
+[data-theme="dark"] .po-step-card a.button.btn-secondary.btn-inline {
+	background-color: var(--pa-btn-default-bg);
+	color: var(--pa-btn-default-ink);
+	border-color: var(--pa-border-control);
+}
 
 /* Step 1's omic selection.
-   Only the containers and the card body move. Deliberately NOT
-   .availableOmicsBox or .omicboxTitle: those are the coloured omic chips, and
-   their fills are the same type-coding used in the pathway diagrams. Repainting
-   them dark - which an earlier version of this rule did - left six unlabelled
-   grey slabs, because their near-black ink is chosen against the colour, not
-   against the page. The fills carry their own contrast and stay as they are. */
+   Deliberately NOT .availableOmicsBox: that is the coloured drag chip, and its
+   fill is the same type-coding used in the pathway diagrams. Repainting it dark
+   - which an earlier version of this rule did - left six unlabelled grey slabs,
+   because their near-black ink is chosen against the colour, not against the
+   page. The chips carry their own contrast and stay as they are.
+
+   .omicboxTitle is now in scope, and was not before, because it is no longer a
+   colour: main.css turned the card's header into a white band with the omic's
+   hue as a 5px bar down its edge. The bar is a box-shadow reading
+   --pa-omic-color and needs nothing here; the band is a surface like any other
+   card header and follows the theme, and its title is near-black ink that had
+   nothing left to sit on once it did. */
 [data-theme="dark"] .omicSubmittingPanel,
 [data-theme="dark"] .omicSummaryContainer {
 	background: var(--pa-surface);
@@ -670,6 +899,12 @@
 	background: var(--pa-surface);
 	border-color: var(--pa-border);
 }
+[data-theme="dark"] .omicboxTitle {
+	background: var(--pa-surface-quiet);
+	border-bottom-color: var(--pa-border);
+}
+[data-theme="dark"] div.omicboxTitle h4,
+[data-theme="dark"] .omicboxTitle a { color: var(--pa-ink-title); }
 
 /* Step 1's help panel and the numbered section labels around it are plain prose
    in a box with no class of their own, so they inherit whatever the page gives
@@ -707,15 +942,18 @@
 [data-theme="dark"] #mainViewCenterPanel .contentbox div > p { color: var(--pa-ink-body); }
 
 
-/* Two paragraphs in the Step 1 AI section carry their colour as an inline
-   style attribute written by PA_Step1Views.js, so no stylesheet rule can reach
-   them - #555 measures 2.21 against the dark panel. `!important` is the only
-   thing that beats an inline declaration, and the selectors are pinned to the
-   exact values so they stop applying the moment that markup is cleaned up.
+/* Inline `style="color:#555"` / `#666` written into markup as a string, which
+   no stylesheet rule can reach - #555 measures 2.21 against the dark panel.
+   `!important` is the only thing that beats an inline declaration, and the
+   selectors are pinned to the exact values so they stop applying the moment
+   that markup is cleaned up.
 
-   The proper fix is to take the colour out of the markup, but that means
-   choosing a light-theme replacement for a token this stylesheet does not
-   define, and the light build is not what needs changing here. */
+   Two of the three have been cleaned up: the Step 1 AI paragraph and the
+   consent notice's fine print became .ai-intro-copy and .ai-gdpr-fineprint
+   when the AI surfaces were put on one type scale, and are restated by class
+   in section 4. What is left below them is PA_Step3Views.js's .paColorLegend,
+   which still writes its colour inline, so these two rules stay until it does
+   not. */
 [data-theme="dark"] #mainViewCenterPanel [style*="color:#555"] { color: var(--pa-ink-body) !important; }
 [data-theme="dark"] #mainViewCenterPanel [style*="color:#666"] { color: var(--pa-ink-label) !important; }
 
@@ -841,7 +1079,56 @@
 	border-color: var(--pa-border);
 }
 [data-theme="dark"] .paGridBar-filters { background: var(--pa-surface-subtle); }
-[data-theme="dark"] .paGridBar .x-form-checkbox { background-color: var(--pa-legacy-field-bg); }
+/* Checkboxes, radios and sliders --------------------------------------------
+   main.css draws all four of these in CSS now rather than from sprites, so the
+   dark theme has real properties to move instead of an image it could only
+   leave alone. Not scoped to this toolbar any more: the same controls fill the
+   network's Tools column, the pathway view's settings panel and the upload
+   forms, and every one of them was painting a white 16px box on a dark panel.
+
+   The mark inverts as well as the fill. --pa-accent-blue is #6BA8F0 in this
+   theme - light, because it has to read as a link on a dark page - and a white
+   tick on it is 2.3:1, i.e. invisible at 16px. The tick and the radio's dot are
+   drawn in the page colour instead, which is how a filled control is marked on
+   every dark UI: the mark is a hole in the fill, not ink on top of it. */
+[data-theme="dark"] .x-form-checkbox,
+[data-theme="dark"] .x-form-radio,
+[data-theme="dark"] div.checkbox:not(.viewbox):not(.nobox) input[type="checkbox"] + label:before,
+[data-theme="dark"] div.radio input[type="radio"] + label:before {
+	background-color: var(--pa-legacy-field-bg);
+	border-color: var(--pa-border-control);
+}
+[data-theme="dark"] .x-form-checkbox:hover,
+[data-theme="dark"] .x-form-radio:hover,
+[data-theme="dark"] div.checkbox:not(.viewbox):not(.nobox):hover input[type="checkbox"]:not(:checked) + label:before,
+[data-theme="dark"] div.radio:hover input[type="radio"]:not(:checked) + label:before {
+	border-color: var(--pa-border-control-hover);
+}
+[data-theme="dark"] .x-form-cb-checked .x-form-checkbox,
+[data-theme="dark"] .x-form-cb-checked .x-form-radio,
+[data-theme="dark"] div.checkbox:not(.viewbox):not(.nobox) input[type="checkbox"]:checked + label:before,
+[data-theme="dark"] div.radio input[type="radio"]:checked + label:before {
+	background-color: var(--pa-accent-blue);
+	border-color: var(--pa-accent-blue);
+}
+[data-theme="dark"] .x-form-cb-checked .x-form-checkbox,
+[data-theme="dark"] div.checkbox:not(.viewbox):not(.nobox) input[type="checkbox"]:checked + label:before {
+	background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='none' stroke='%2317181B' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round' d='M3.6 8.4l2.9 2.9 5.9-6.3'/%3E%3C/svg%3E");
+}
+[data-theme="dark"] .x-form-cb-checked .x-form-radio,
+[data-theme="dark"] div.radio input[type="radio"]:checked + label:before {
+	box-shadow: inset 0 0 0 3.5px #17181B;
+}
+/* The slider's unfilled track. Its filled portion and its thumb border are
+   --pa-accent-blue, which this theme already moves; only the groove behind
+   them was a light-theme literal. */
+[data-theme="dark"] .slider-ui.ui-slider,
+[data-theme="dark"] .ui-slider-horizontal {
+	background: var(--pa-border-control);
+}
+/* The thumb's own fill is set by the .ui-state-default block further down this
+   file, which is later and therefore wins; it is left as the one place that
+   describes a jQuery UI thumb. */
 [data-theme="dark"] .paGridBar a.downloadXLS:hover,
 [data-theme="dark"] .paGridBar #configureButton:not(.x-item-disabled):hover {
 	background-color: var(--pa-surface-quiet);
@@ -860,17 +1147,24 @@
 [data-theme="dark"] div[id ^= "pathwayNetworkBox_"].fullscreen { background-color: var(--pa-surface-page); }
 [data-theme="dark"] div[id ^= "pathwayNetworkWaitBox_"] { background-color: rgba(23, 24, 27, 0.76); }
 [data-theme="dark"] span.networkClusterImage > i { background-color: rgba(30, 31, 35, 0.54); }
-[data-theme="dark"] div[id ^= "step3-network-toolbar_"] { background: rgba(30, 31, 35, 0.91); }
-[data-theme="dark"] p[id ^= "step3-network-toolbar-message_"] {
-	background: rgba(30, 31, 35, 0.85);
-	color: var(--pa-ink-body);
-}
-[data-theme="dark"] div[id ^= "step3-network-toolbar_"] div.menuBody {
-	background-color: var(--pa-surface);
-	border-color: var(--pa-border);
-}
+/* The network toolbar, its status line and its two popovers used to need three
+   translucent literals here because main.css painted them with
+   `rgba(255,255,255,.91)`. They are stated in tokens now - see
+   network-views.css, which describes this bar and the MORE network's together -
+   so the only thing left to say in dark is the one !important the reorder
+   popover carries in main.css, and the toolbar controls' ink.
+
+   The ink needs saying because the pathways toolbar builds its controls out of
+   `<a>`, and `[data-theme="dark"] a` up at the top of this file is (0,1,1) to
+   `.pa-net-tool`'s (0,1,0) - so in dark mode every control in the strip came
+   out link-blue and turned green under the cursor, while the identical
+   `<button>`s in the MORE toolbar stayed neutral. Two toolbars, same design,
+   different colours, for no reason but the element each was built from. */
+[data-theme="dark"] .pa-net-toolbar .pa-net-tool { color: var(--pa-ink-control); }
+[data-theme="dark"] .pa-net-toolbar .pa-net-tool:hover,
+[data-theme="dark"] .pa-net-toolbar .pa-net-tool:focus { color: var(--pa-ink-strong); }
 [data-theme="dark"] div[id ^= "step3-network-toolbar_"] div[id ^= "reorderOptions"] {
-	background: rgba(30, 31, 35, 0.88) !important;
+	background: var(--pa-surface) !important;
 }
 
 /* ---------------------------------------------------------------------------
@@ -1126,6 +1420,10 @@
 	color: var(--pa-ink-body);
 }
 [data-theme="dark"] .ai-gdpr-disclaimer-header { background: var(--pa-surface-quiet); }
+/* The notice's own title. Its body text inherits from .ai-gdpr-disclaimer,
+   which this file restates, but the title carries `color: #333` of its own,
+   which inherits from nothing - 1.10:1 on the header lightened just above. */
+[data-theme="dark"] .ai-gdpr-disclaimer-header strong { color: var(--pa-ink-title); }
 
 /* The provenance blocks in the AI privacy notice. main.css tints them
    #eef4fb, which is a near-white panel on the dark disclaimer surface. The
@@ -1213,8 +1511,21 @@
 [data-theme="dark"] .userViewsDialog .x-form-text:hover {
 	border-color: var(--pa-border-control-hover) !important;
 }
-[data-theme="dark"] .po-exp-design-hint {
+[data-theme="dark"] .po-exp-design-hint,
+[data-theme="dark"] .po-exp-design-draft-note {
 	color: var(--pa-ink-muted);
+}
+/* The failure line, restated because the rule above would otherwise swallow it.
+
+   main.css says `.po-exp-design-draft-note.is-error` and reaches
+   --pa-ai-consent-warn through var(), which this file redefines -- so the
+   colour was right and the selector still lost. Both are (0,2,0): two classes
+   against one attribute plus one class. Equal specificity is decided by order,
+   dark.css is loaded after main.css in index.html, and the muted grey won.
+   Measured in the browser: rgb(139,142,150) where #F08A5D was expected, on the
+   one line in this control that reports a failure. */
+[data-theme="dark"] .po-exp-design-draft-note.is-error {
+	color: var(--pa-ai-consent-warn);
 }
 
 /* Personal storage. main.css states the account and storage surfaces with
@@ -1254,4 +1565,82 @@
 }
 [data-theme="dark"] .po-pathway-label {
 	color: var(--pa-ink-body);
+}
+
+/* ---------------------------------------------------------------------------
+   The second- and third-level surfaces
+
+   Everything below is the dark counterpart of the level-2/3 pass in main.css:
+   the side panels' type scale, the in-panel toolbars, the example picker and
+   the two overlays. The pattern is the one this file uses throughout - main.css
+   states the light value as a literal because it was measured against a white
+   card, and the same role is restated here from a token.
+   --------------------------------------------------------------------------- */
+
+/* Side-panel headings. `div.lateralOptionsPanel h4/h5` are near-black literals,
+   which on a #1E1F23 panel measure about 1.2:1 - the settings columns' control
+   labels were effectively invisible. The group label above them already reads
+   --pa-ink-muted and needs nothing, but it has to be restated after the general
+   rule for the same source-order reason main.css gives. */
+[data-theme="dark"] div.lateralOptionsPanel h4,
+[data-theme="dark"] div.lateralOptionsPanel h5 { color: var(--pa-ink-title); }
+[data-theme="dark"] div.paSettingsPanel h4 { color: var(--pa-ink-muted); }
+[data-theme="dark"] .lateralOptionsPanel-header { background: var(--pa-surface); }
+
+/* In-panel toolbars: the network strip, the two download chips and the ✕ that
+   hides a side panel. Their neutral ink and their hover wash are both stated
+   against a white card in main.css - a 6% black wash is invisible on a dark
+   panel, so the hover inverts to a light one. */
+[data-theme="dark"] div.contentbox a.toolbarOption { color: var(--pa-ink-label); }
+[data-theme="dark"] div.contentbox a.toolbarOption:hover,
+[data-theme="dark"] .lateralOptionsPanel-toolbar .toolbarOption.hideOption:hover {
+	color: var(--pa-ink-title);
+	background-color: rgba(255, 255, 255, 0.08);
+}
+[data-theme="dark"] .lateralOptionsPanel-toolbar .toolbarOption.hideOption { color: var(--pa-ink-muted); }
+[data-theme="dark"] .lateralOptionsPanel-toolbar .toolbarOption.downloadTool {
+	background: var(--pa-btn-default-bg);
+	border-color: var(--pa-border-control);
+	color: var(--pa-btn-default-ink);
+}
+[data-theme="dark"] .lateralOptionsPanel-toolbar .toolbarOption.downloadTool:hover {
+	background: var(--pa-btn-default-bg-hover);
+	border-color: var(--pa-border-control-hover);
+}
+/* The network strip is described in tokens in network-views.css and needs no
+   dark counterpart; only the veil that covers the diagram while it lays out
+   does. */
+[data-theme="dark"] div[id ^= "pathwayNetworkWaitBox_"] {
+	background-color: rgba(23, 24, 27, 0.76);
+}
+
+/* Step 1's help note and the omic column titles. */
+[data-theme="dark"] #additionalInfoContainer div.content {
+	background: var(--pa-surface-quiet);
+	border-color: var(--pa-border);
+}
+[data-theme="dark"] #additionalInfoContainer div.content h5 { color: var(--pa-ink-title); }
+
+/* The example picker. All new markup, so none of it was reachable before. */
+[data-theme="dark"] .po-example {
+	background: var(--pa-surface);
+	border-color: var(--pa-border);
+}
+[data-theme="dark"] .po-example:hover { border-color: var(--pa-border-hover); }
+[data-theme="dark"] .po-example-title { color: var(--pa-ink-title); }
+[data-theme="dark"] .po-example-tests { border-top-color: var(--pa-border); }
+[data-theme="dark"] .po-example-dot { color: var(--pa-border-control); }
+/* The two badges are 8%-ish tints mixed against white in main.css. Same hues,
+   restated as washes over the dark card. */
+[data-theme="dark"] .po-example-badge-sim {
+	background: rgba(107, 168, 240, 0.18);
+	color: var(--pa-accent-blue);
+}
+[data-theme="dark"] .po-example-badge-real {
+	background: rgba(227, 138, 90, 0.18);
+	color: var(--pa-accent-orange);
+}
+[data-theme="dark"] .po-example-badge-default {
+	background: var(--pa-surface-quiet);
+	color: var(--pa-ink-muted);
 }
