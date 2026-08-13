@@ -9,21 +9,37 @@
 
 ###########################################################
 # Libraries required
-library (dplyr)
-library(tidyverse)
-library(igraph)
-library(visNetwork)
-library(ggplot2)
-library(ggsignif)
-library(ggpubr)
-library(gridExtra)
-library(reshape2)
-library (data.table)
+#
+# Split deliberately. Everything here used to be a bare library() executed at source()
+# time, so a single absent package aborted the whole hub install before the first
+# pathway was even read -- which is how a missing visNetwork (a package this file's
+# reachable code never calls) could stop an organism from installing at all.
+#
+# Hard requirements: used by KeggParser, which is the only function the installer calls.
+for (pkg in c("dplyr", "tidyverse", "data.table")) {
+  if (!requireNamespace(pkg, quietly = TRUE)) {
+    stop(paste0("Required R package '", pkg, "' is not installed; hub analysis cannot be built."))
+  }
+  suppressPackageStartupMessages(library(pkg, character.only = TRUE))
+}
+
+# Plotting/visualisation only: used exclusively by the legacy Galaxy network-drawing
+# functions further down this file, none of which the installer reaches. Load them when
+# present so those functions keep working, but never let one abort an install.
+for (pkg in c("igraph", "visNetwork", "ggplot2", "ggsignif", "ggpubr", "gridExtra", "reshape2")) {
+  if (requireNamespace(pkg, quietly = TRUE)) {
+    suppressPackageStartupMessages(library(pkg, character.only = TRUE))
+  } else {
+    message(paste0("Optional R package '", pkg,
+                   "' is not installed; the legacy Galaxy plotting functions in this file are unavailable. ",
+                   "The hub-analysis install does not use them and will continue."))
+  }
+}
 
 ###########################################################
 # Functions related to the downloading and parsing of the data:
 
-KeggParser<- function (Pathways) {
+KeggParser<- function (Pathways, kgmlDir = NULL) {
   # Function to create a table with the interactions between features inside KEGG pathways. These features can be genes or met$
   # Input: A file with a list of the KEGG pathways
   # Output: A data frame with all information needed to analyze and interpret the interaction among features
@@ -37,19 +53,43 @@ KeggParser<- function (Pathways) {
   # entry_name_2: This is the ID name or names of the second feature of the interaction. If several isoforms, the algorithm saves them all and locates them in different rows.
   # pathway: This is the pathway KEGG code.
 
+  # The KEGG installer has already downloaded every one of these KGML files to
+  # <specie>/kgml/<pathway>.kgml (byte-for-byte the same HTTP body, written by
+  # downloadKEGGFile in 'wb' mode). Re-fetching all ~364 of them over the network was
+  # the single largest cost of a hub install. Read the local copy when we have one and
+  # fall back to HTTP per-file when we do not, so a missing file degrades instead of
+  # failing. Counters are reported at the end and written to a file the Python caller
+  # reads -- a run that silently fell back to HTTP for everything must be visible.
+  localHits <- 0
+  httpFallbacks <- 0
   suppressWarnings({
     ParserData<-NULL
     # Loop over all KEGG pathways in the input data
     for (path in 1:length(Pathways)) {
       print (Pathways[path])
-      url= paste0("https://rest.kegg.jp/get/",Pathways[path],"/kgml")
-      #print(url)
-      html_data <- read_html(url)
+      # Pathways[path] may or may not carry KEGG's "path:" prefix depending on the
+      # /list/pathway response format, which has changed before; strip it either way.
+      pathwayId <- sub("^path:", "", Pathways[path])
+      localFile <- if (!is.null(kgmlDir) && nzchar(kgmlDir)) {
+        file.path(kgmlDir, paste0(pathwayId, ".kgml"))
+      } else {
+        NULL
+      }
+
+      if (!is.null(localFile) && file.exists(localFile) && file.info(localFile)$size > 0) {
+        html_data <- read_html(localFile)
+        localHits <- localHits + 1
+      } else {
+        url= paste0("https://rest.kegg.jp/get/",pathwayId,"/kgml")
+        #print(url)
+        html_data <- read_html(url)
+        httpFallbacks <- httpFallbacks + 1
+      }
       ####
       entry <- html_nodes(html_data,"entry")
       #print(entry)
       entrytable<-bind_rows(lapply(xml_attrs(entry), function(x) data.frame(as.list(x), stringsAsFactors=FALSE)))
-      entrytable$pathway<-rep(Pathways[path],nrow(entrytable))
+      entrytable$pathway<-rep(pathwayId,nrow(entrytable))
       #print(head(entrytable))
       ####
       relation<-html_nodes(html_data,"relation")
@@ -303,7 +343,7 @@ KeggParser<- function (Pathways) {
       RelationTable5$entry_name_2<- id_name$name[match(RelationTable5$node_id_2, id_name$id)]
       RelationTable5<-separate_rows(RelationTable5,entry_name_2,sep=" ") #Esta es
       RelationTable5$entry_name_2<-sapply(strsplit(RelationTable5$entry_name_2, split=':', fixed=TRUE), function(x) (x[2]))
-      RelationTable5$pathway<-as.character(rep(Pathways[path], nrow(RelationTable5)))
+      RelationTable5$pathway<-as.character(rep(pathwayId, nrow(RelationTable5)))
 
       RelationTable5$node_id_1 <- as.character(RelationTable5$node_id_1)
       RelationTable5$node_id_2 <- as.character(RelationTable5$node_id_2)
@@ -411,17 +451,28 @@ KeggParser<- function (Pathways) {
         RelationTableGroup<-rbind(merge(RelationTable5,preloscomponentes4, by.x=1,by.y=1),merge(RelationTable5,preloscomponentes4, by.x=2,by.y=1) )
 
 
+        # A KGML group entry is written name="undefined", so the ':' split above yields
+        # NA -- but `RelationTable5[is.na(RelationTable5)] <- ''` (line 317) has already
+        # rewritten those NAs to the empty string by the time we get here. Testing
+        # is.na() alone therefore matched NOTHING, this whole loop assigned nothing, and
+        # every protein-complex relation shipped as an edge to a node named "" (measured
+        # in the installed mmu data: 1929 of 1929 group rows blank, and "" became the
+        # third-highest-degree node in the graph with 1381 neighbours).
+        # Test blank-or-NA instead. Fixing it by moving line 317 below this block would
+        # be wrong: the `any(entry_type == "group")` guard at :322 and the merges at :411
+        # need '' rather than NA to behave.
+        isMissing <- function(x) is.na(x) | !nzchar(x)
         for (i in 1: nrow(RelationTableGroup)) {
-          if (is.na(RelationTableGroup$entry_name_2[i]) & is.na(RelationTableGroup$RealName[i]) ) {
+          if (isMissing(RelationTableGroup$entry_name_2[i]) & isMissing(RelationTableGroup$RealName[i]) ) {
             next
-          } else if (is.na(RelationTableGroup$entry_name_2[i]) & !is.na(RelationTableGroup$RealName[i])){
+          } else if (isMissing(RelationTableGroup$entry_name_2[i]) & !isMissing(RelationTableGroup$RealName[i])){
             RelationTableGroup$entry_name_2[i] <-as.character(RelationTableGroup$RealName[i])
             RelationTableGroup$entry_type_2[i] <-as.character(RelationTableGroup$RealType[i])
             RelationTableGroup$node_id_2[i] <-as.numeric(as.character(RelationTableGroup$preloscomponentes2[i]))
           }
-          if (is.na(RelationTableGroup$entry_name_1[i]) & is.na(RelationTableGroup$RealName[i]) ) {
+          if (isMissing(RelationTableGroup$entry_name_1[i]) & isMissing(RelationTableGroup$RealName[i]) ) {
             next
-          } else if (is.na(RelationTableGroup$entry_name_1[i]) & !is.na(RelationTableGroup$RealName[i])){
+          } else if (isMissing(RelationTableGroup$entry_name_1[i]) & !isMissing(RelationTableGroup$RealName[i])){
             #print("entre aqui")
             RelationTableGroup$entry_name_1[i] <-as.character(RelationTableGroup$RealName[i])
             RelationTableGroup$entry_type_1[i] <-as.character(RelationTableGroup$RealType[i])
@@ -471,7 +522,20 @@ KeggParser<- function (Pathways) {
 
 
     rownames(ParserData)<-seq(1:nrow(ParserData))
+
+    # Report where the KGML actually came from. A run that quietly fell back to HTTP for
+    # every pathway is 10x slower and looks identical in the output, so make it visible
+    # in the log and in a file the Python caller can read without scraping stdout
+    # (check_output only surfaces R stdout on CalledProcessError, so a successful
+    # degraded run would otherwise be invisible).
+    print(paste0("KeggParser: ", localHits, " pathways read from local KGML, ",
+                 httpFallbacks, " fetched over HTTP"))
+
     res<-ParserData
+    # Carried back as attributes so the caller can record them in ITS output directory;
+    # KeggParser does not know where that is and must not write into the species tree.
+    attr(res, "local_kgml_hits") <- localHits
+    attr(res, "http_fallbacks")  <- httpFallbacks
     return(res)
   })
 }

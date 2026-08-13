@@ -1,12 +1,49 @@
 /* AI Chatbot Widget Styles */
 
+/* ── Type ──
+   One scale for every AI surface: the widget, the report inside it, and the
+   consent notice on step 1. On :root because the notice and the GDPR dialog are
+   appended to document.body, outside .ai-widget. */
+:root {
+    --pa-ai-fs: 13px;      /* body    -- bubbles, chat input, consent notice   */
+    --pa-ai-fs-xs: 11px;   /* caption -- speaker label, provenance, ref meta   */
+    --pa-ai-fs-sm: 12px;   /* second  -- progress, citations, code, tables     */
+    --pa-ai-fs-lg: 14px;   /* h3, panel title, dialog title                    */
+    --pa-ai-fs-xl: 15px;   /* h2                                               */
+    --pa-ai-fs-2xl: 17px;  /* h1                                               */
+
+    /* One bold, named once so a fallback font cannot draw 600 and 700
+       differently - which is what the hardcoded system stack below used to do.
+
+       This used to say 600 and 700 "select the same face", which was true when
+       --pa-font-sans carried Light and Semibold only. It now ships real 400,
+       600 and 700 cuts, so they are distinct; 700 is a deliberate choice here
+       rather than a value that happened not to matter. */
+    --pa-ai-bold: 700;
+
+    /* Characters used as icons -- close cross, minimise dash, send arrow, info
+       circle. Sized to their hit target, not to the 13px body, so deliberately
+       off the scale above. */
+    --pa-ai-glyph: 16px;      /* controls in a 28-36px hit target */
+    --pa-ai-glyph-lg: 20px;   /* the dialog's own close */
+}
+
 /* ── Widget Container ── */
 .ai-widget {
     position: fixed;
     bottom: 20px;
     right: 20px;
     z-index: 19000;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-family: var(--pa-font-sans);
+    font-size: var(--pa-ai-fs);
+}
+/* A form control does not inherit type -- the user agent stamps its own
+   `font: 400 13.333px Arial` on every button and textarea. The dialog is listed
+   because it is appended to document.body, not into the widget. */
+.ai-widget button,
+.ai-widget textarea,
+.ai-gdpr-disclaimer button {
+    font-family: inherit;
 }
 
 /* ── FAB Button ── */
@@ -17,7 +54,10 @@
     background: #4a90d9;
     color: #fff;
     border: none;
-    font-size: 24px;
+    /* Styles no text: the children are getAIMark()'s SVG, which carries its own
+       dimensions, and the badge, which sets its own size. Here only to keep the
+       button off the user agent's 13.333px. */
+    font-size: var(--pa-ai-fs);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -41,7 +81,7 @@
     top: -2px;
     right: -2px;
     border: 2px solid #fff;
-    font-size: 10px;
+    font-size: var(--pa-ai-fs-xs);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -84,8 +124,22 @@
     border-radius: 8px;
     z-index: 20000;
 }
+/* Fullscreen moves the scale up two steps, on the message area alone: it is a
+   request to read the report, not to inflate the chrome around it.
+
+   Restated rather than derived with calc(). A custom property is substituted at
+   the element that declares it, so `--pa-ai-fs-xs: calc(var(--pa-ai-fs) - 2px)`
+   on :root resolves against :root's 13px and inherits as 11px however deep
+   --pa-ai-fs is later overridden. A single knob reads better and does not
+   work. */
 .ai-widget-panel.is-fullscreen .ai-widget-messages {
-    font-size: 14px;
+    --pa-ai-fs: 15px;
+    --pa-ai-fs-xs: 13px;
+    --pa-ai-fs-sm: 14px;
+    --pa-ai-fs-lg: 16px;
+    --pa-ai-fs-xl: 17px;
+    --pa-ai-fs-2xl: 19px;
+    font-size: var(--pa-ai-fs);
 }
 /* The fullscreen bubble's max-width is set with the rest of its type further
    down, at 900px. An earlier 800px stood here and was simply overridden. */
@@ -98,8 +152,8 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    font-weight: 600;
-    font-size: 14px;
+    font-weight: var(--pa-ai-bold);
+    font-size: var(--pa-ai-fs-lg);
     min-height: 42px;
 }
 .ai-widget-header-title {
@@ -107,6 +161,13 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+/* Not `gap`: the ellipsis above needs this to stay a non-flex inline context,
+   so the space between mark and name is a margin on the mark itself. The mark
+   takes its size from this header's own font-size, which is why there is no
+   width here to keep in step with the markup. */
+.ai-widget-header-title .po-ai-mark {
+    margin-right: 7px;
 }
 .ai-widget-header-actions {
     display: flex;
@@ -130,12 +191,9 @@
     justify-content: center;
     border-radius: 4px;
     transition: opacity 0.15s, background 0.15s;
-}
-.ai-minimize-btn {
-    font-size: 18px;
-}
-.ai-fullscreen-btn {
-    font-size: 15px;
+    /* Was 18px for the dash and 15px for the cross -- two buttons of identical
+       size, side by side, drawing their glyphs at different sizes. */
+    font-size: var(--pa-ai-glyph);
 }
 .ai-minimize-btn:hover,
 .ai-fullscreen-btn:hover {
@@ -150,7 +208,7 @@
     border-bottom: 1px solid #e0e0e0;
 }
 .ai-progress-detail {
-    font-size: 12px;
+    font-size: var(--pa-ai-fs-sm);
     color: #336;
     margin-bottom: 4px;
 }
@@ -202,7 +260,7 @@
     padding: 8px 12px;
     display: inline-block;
     text-align: left;
-    font-size: 13px;
+    font-size: var(--pa-ai-fs);
 }
 .ai-msg-assistant {
     margin-right: auto;
@@ -213,17 +271,19 @@
     border-radius: 12px 12px 12px 2px;
     padding: 10px 14px;
     display: inline-block;
-    font-size: 13px;
+    font-size: var(--pa-ai-fs);
     line-height: 1.5;
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
     max-width: 100%;
     word-wrap: break-word;
 }
 
-/* Markdown styles inside assistant bubbles */
+/* Markdown styles inside assistant bubbles. h4 is at the body size on purpose:
+   it is a run-in heading, told apart by weight and colour. h3 is not -- it was
+   13.5px against a 13px body, a difference no screen draws. */
 .ai-msg-assistant .ai-msg-bubble h1 {
-    font-size: 17px;
-    font-weight: 700;
+    font-size: var(--pa-ai-fs-2xl);
+    font-weight: var(--pa-ai-bold);
     color: #1a1a2e;
     margin: 16px 0 8px 0;
     padding-bottom: 4px;
@@ -233,22 +293,22 @@
     margin-top: 0;
 }
 .ai-msg-assistant .ai-msg-bubble h2 {
-    font-size: 15px;
-    font-weight: 700;
+    font-size: var(--pa-ai-fs-xl);
+    font-weight: var(--pa-ai-bold);
     color: #2c3e50;
     margin: 14px 0 6px 0;
     padding-bottom: 3px;
     border-bottom: 1px solid #e0e0e0;
 }
 .ai-msg-assistant .ai-msg-bubble h3 {
-    font-size: 13.5px;
-    font-weight: 600;
+    font-size: var(--pa-ai-fs-lg);
+    font-weight: var(--pa-ai-bold);
     color: #34495e;
     margin: 10px 0 4px 0;
 }
 .ai-msg-assistant .ai-msg-bubble h4 {
-    font-size: 13px;
-    font-weight: 600;
+    font-size: var(--pa-ai-fs);
+    font-weight: var(--pa-ai-bold);
     color: #555;
     margin: 8px 0 4px 0;
 }
@@ -272,20 +332,22 @@
     background: #f5f5f5;
     padding: 1px 4px;
     border-radius: 3px;
-    font-size: 12px;
+    font-size: var(--pa-ai-fs-sm);
 }
-.ai-msg-assistant .ai-msg-bubble strong {
-    color: #2c3e50;
-}
+/* One rule for both spellings, at the one weight. */
+.ai-msg-assistant .ai-msg-bubble strong,
 .ai-msg-assistant .ai-msg-bubble b {
+    font-weight: var(--pa-ai-bold);
     color: #2c3e50;
 }
+/* No font-style: italic means "gene symbol" here (see the em rule below), so
+   italicising a whole block makes the callout read as if every word in it were
+   one. The left rule and the tint already mark it. */
 .ai-msg-assistant .ai-msg-bubble blockquote {
     border-left: 3px solid #4a90d9;
     background: #f0f7ff;
     padding: 8px 12px;
     margin: 8px 0;
-    font-style: italic;
     color: #333;
 }
 .ai-msg-assistant .ai-msg-bubble pre {
@@ -295,7 +357,7 @@
     border-radius: 6px;
     overflow-x: auto;
     margin: 8px 0;
-    font-size: 12px;
+    font-size: var(--pa-ai-fs-sm);
     line-height: 1.45;
 }
 .ai-msg-assistant .ai-msg-bubble pre code {
@@ -313,16 +375,24 @@
     background: #f0f4f8;
     padding: 6px 10px;
     border: 1px solid #dde;
-    font-size: 12px;
+    font-size: var(--pa-ai-fs-sm);
+    font-weight: var(--pa-ai-bold);
     text-align: left;
 }
 .ai-msg-assistant .ai-msg-bubble td {
     padding: 6px 10px;
     border: 1px solid #eee;
-    font-size: 12px;
+    font-size: var(--pa-ai-fs-sm);
 }
-.ai-msg-assistant .ai-msg-bubble em {
-    color: #555;
+/* Italic here is nomenclature, not emphasis: the model writes gene symbols as
+   *Pard3*, *Bcl2*, *Smad3* -- 31 of them in one sampled report against 21
+   bolds. This rule used to set nothing but `color: #555`, which drew them
+   lighter than the sentence around them. The slant is the mark; it needs no
+   colour of its own, and certainly not a fainter one. */
+.ai-msg-assistant .ai-msg-bubble em,
+.ai-msg-assistant .ai-msg-bubble i {
+    font-style: italic;
+    color: inherit;
 }
 .ai-msg-assistant .ai-msg-bubble a {
     color: #4a90d9;
@@ -342,16 +412,20 @@
 .ai-msg-assistant .ai-msg-bubble h3 strong {
     color: inherit;
 }
+/* Size comes from the restated tokens above; only non-type properties here. */
 .ai-widget-panel.is-fullscreen .ai-msg-bubble {
-    font-size: 15px;
     line-height: 1.65;
     padding: 14px 20px;
     max-width: 900px;
 }
 
+/* Was 10px, the only size below the caption step. */
 .ai-msg-label {
-    font-size: 10px;
-    color: #999;
+    font-size: var(--pa-ai-fs-xs);
+    /* Was #999 - 2.85:1, a straight AA failure, and at the smallest size in
+       the sheet. This names who is speaking in the transcript, so it is read,
+       not glanced at. */
+    color: var(--pa-ink-muted, #595959);
     margin-bottom: 2px;
 }
 .ai-msg-user .ai-msg-label {
@@ -374,7 +448,7 @@
     margin-top: 12px;
     padding-top: 8px;
     border-top: 1px solid #e0e0e0;
-    font-size: 11px;
+    font-size: var(--pa-ai-fs-xs);
     line-height: 1.5;
     color: #555;          /* 7.46:1 on the white assistant bubble */
 }
@@ -384,7 +458,7 @@
     display: inline-block;
     color: #4a90d9;
     cursor: pointer;
-    font-size: 12px;
+    font-size: var(--pa-ai-fs-sm);
     margin-top: 8px;
     user-select: none;
 }
@@ -394,7 +468,7 @@
 .ai-citations-list {
     margin-top: 6px;
     padding: 0;
-    font-size: 12px;
+    font-size: var(--pa-ai-fs-sm);
 }
 .ai-citation-item {
     padding: 6px 8px;
@@ -404,33 +478,35 @@
 .ai-citation-item:hover {
     background: #f5f5f5;
 }
+/* No size of its own: it sits inside .ai-citation-title and was restating it. */
 .ai-citation-ref {
     color: #4a90d9;
-    font-weight: 700;
-    font-size: 12px;
+    font-weight: var(--pa-ai-bold);
     margin-right: 2px;
 }
 .ai-citation-title {
-    font-weight: 600;
+    font-weight: var(--pa-ai-bold);
     color: #333;
-    font-size: 12px;
+    font-size: var(--pa-ai-fs-sm);
     margin-bottom: 1px;
 }
 .ai-citation-meta {
-    color: #888;
-    font-size: 11px;
+    /* Was #888 - 3.54:1, below AA. A citation's journal and year are the part
+       a reader checks before trusting the claim above it. */
+    color: var(--pa-ink-muted, #595959);
+    font-size: var(--pa-ai-fs-xs);
 }
 .ai-citation-pmid {
     color: #4a90d9;
-    font-size: 11px;
-    font-weight: 600;
+    font-size: var(--pa-ai-fs-xs);
+    font-weight: var(--pa-ai-bold);
 }
 
 /* ── Inline Citation Links ── */
 .ai-citation-link {
     color: #4a90d9;
     text-decoration: none;
-    font-weight: 600;
+    font-weight: var(--pa-ai-bold);
     cursor: pointer;
     transition: color 0.2s;
 }
@@ -446,7 +522,7 @@
 .ai-pathway-link {
     color: #2e8b57;
     text-decoration: none;
-    font-weight: 600;
+    font-weight: var(--pa-ai-bold);
     cursor: pointer;
     border-bottom: 1px dotted #2e8b57;
     transition: color 0.2s, background-color 0.2s;
@@ -476,7 +552,7 @@
     border: 1px solid #ccc;
     border-radius: 18px;
     padding: 8px 14px;
-    font-size: 13px;
+    font-size: var(--pa-ai-fs);
     resize: none;
     min-height: 36px;
     max-height: 80px;
@@ -499,7 +575,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 16px;
+    font-size: var(--pa-ai-glyph);
     flex-shrink: 0;
     transition: background 0.2s;
 }
@@ -517,8 +593,8 @@
     align-items: center;
     gap: 8px;
     padding: 10px;
-    color: #666;
-    font-size: 13px;
+    color: var(--pa-ink-muted, #595959);
+    font-size: var(--pa-ai-fs);
 }
 .ai-loading-dots {
     display: inline-flex;
@@ -539,7 +615,7 @@
     border: none;
     border-radius: 6px;
     padding: 6px 16px;
-    font-size: 12px;
+    font-size: var(--pa-ai-fs-sm);
     cursor: pointer;
     margin-top: 6px;
 }
@@ -591,7 +667,7 @@
     vertical-align: middle;
     margin-left: 4px;
     cursor: pointer;
-    font-size: 16px;
+    font-size: var(--pa-ai-glyph);
 }
 .ai-gdpr-overlay {
     position: fixed;
@@ -616,7 +692,8 @@
     max-width: 90vw;
     max-height: 80vh;
     overflow-y: auto;
-    font-size: 13px;
+    font-family: var(--pa-font-sans);
+    font-size: var(--pa-ai-fs);
     line-height: 1.5;
     color: #333;
 }
@@ -629,16 +706,19 @@
     border-bottom: 1px solid #e0e0e0;
     border-radius: 8px 8px 0 0;
 }
+/* Set like the widget panel's title -- same thing on two AI surfaces. */
 .ai-gdpr-disclaimer-header strong {
-    font-size: 14px;
+    font-size: var(--pa-ai-fs-lg);
+    font-weight: var(--pa-ai-bold);
     color: #333;
 }
 .ai-gdpr-close {
     background: none;
     border: none;
-    font-size: 20px;
+    font-size: var(--pa-ai-glyph-lg);
     cursor: pointer;
-    color: #999;
+    /* Was #999, 2.85:1. It is the only way to dismiss the consent panel. */
+    color: var(--pa-ink-muted, #595959);
     padding: 0 4px;
     line-height: 1;
 }
@@ -650,6 +730,21 @@
 }
 .ai-gdpr-disclaimer-body p {
     margin: 6px 0;
+}
+/* Stated rather than left to the user agent, so the notice's many bolds and the
+   two title classes below cannot come out at different weights. */
+.ai-gdpr-disclaimer-body strong {
+    font-weight: var(--pa-ai-bold);
+}
+/* The closing confirmation, moved out of an inline `style="font-size:11px;
+   color:#666"` that no stylesheet could reach -- and that dark.css still has an
+   `[style*="color:#666"] !important` rule downstairs for. */
+.ai-gdpr-fineprint {
+    font-size: var(--pa-ai-fs-xs);
+    /* Fine print about what leaves the machine is the last text that should be
+       hard to read. Was #666 at the smallest size in the sheet. */
+    color: var(--pa-ink-muted, #595959);
+    margin-top: 8px;
 }
 .ai-gdpr-disclaimer-body hr {
     border: none;
@@ -700,6 +795,16 @@
    checkbox beside it. */
 .ai-provider-inline:empty {
     display: none;
+}
+
+/* The paragraph above the consent checkbox on step 1. Its size and colour were
+   an inline `style` on the <p>, same as .ai-gdpr-fineprint above and for the
+   same reason: PA_Step1Views.js writes this markup as a string. */
+.ai-intro-copy {
+    font-size: var(--pa-ai-fs);
+    color: #555;
+    line-height: 1.55;
+    margin: 0 0 10px 0;
 }
 
 /* The two lists that carry the actual disclosure: what leaves this server and

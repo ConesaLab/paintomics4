@@ -15,6 +15,60 @@ Defaults target the containerised deployment (see `deploy/README.md`).
 import os
 from urllib.parse import urlparse
 
+
+# ---------------------------------------------------------------------------
+# Local secrets: PaintomicsServer/.env
+# ---------------------------------------------------------------------------
+# Every secret below is read with os.getenv, so it lives in the ENVIRONMENT and
+# not in this file. That is right for deployment and hostile to local work: a
+# key exported in one shell is gone in the next terminal, gone under the IDE,
+# gone in a test runner -- and this file is gitignored, so a key pasted into it
+# survives locally but vanishes on any fresh checkout or reinstall. The usual
+# symptom is "I set the key and AI interpretation still reports no token".
+#
+# So a `.env` beside the server is loaded here, before anything calls getenv:
+#
+#     PaintomicsServer/.env
+#     AI_CSIC_API_KEY=sk-...
+#
+# `.env` is already gitignored (.gitignore:81), so it cannot be pushed.
+#
+# Two properties worth keeping:
+#   * a REAL environment variable always wins. Production sets these through
+#     systemd or the container, and a stray .env on the box must never override
+#     what the deployment configured -- hence setdefault, never assignment.
+#   * failure is silent. A missing or malformed .env leaves the server exactly
+#     as it was, because a config module that raises on import takes the whole
+#     servlet down and the traceback surfaces far from its cause.
+def _load_dotenv():
+    _here = os.path.dirname(os.path.abspath(__file__))
+    for _candidate in (
+        os.path.join(_here, "..", "..", ".env"),        # PaintomicsServer/.env
+        os.path.join(_here, "..", "..", "..", ".env"),  # repository root
+    ):
+        _path = os.path.abspath(_candidate)
+        if not os.path.isfile(_path):
+            continue
+        try:
+            with open(_path) as _fh:
+                for _line in _fh:
+                    _line = _line.strip()
+                    if not _line or _line.startswith("#") or "=" not in _line:
+                        continue
+                    _key, _, _value = _line.partition("=")
+                    _key = _key.strip()
+                    if _key.startswith("export "):
+                        _key = _key[len("export "):].strip()
+                    _value = _value.strip().strip('"').strip("'")
+                    if _key:
+                        os.environ.setdefault(_key, _value)
+        except OSError:
+            pass
+
+
+_load_dotenv()
+
+
 # ========== SERVER SETTINGS ==========
 SERVER_HOST_NAME          = os.getenv("SERVER_HOST_NAME", "0.0.0.0")   # 0.0.0.0 listens on all interfaces
 SERVER_PORT_NUMBER        = int(os.getenv("SERVER_PORT_NUMBER", "8000"))

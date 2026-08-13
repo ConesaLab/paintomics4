@@ -14,135 +14,102 @@
  * they have to be handed to Cytoscape as literal values anyway, and swapping
  * them per theme would mean the same edge meant different things in a
  * screenshot depending on who took it.
+ *
+ * The toolbar, the status line under it and the canvas fill are NOT here any
+ * more: they are the chrome this view shares with the pathways network in
+ * PA_Step3Views, and they live in network-views.css so the two graph surfaces
+ * on the same page cannot drift apart again. What remains below is what is
+ * genuinely particular to this view -- its legend, its hub list, its tooltip.
  */
 
 .more-net-panel .x-panel-body {
 	background: var(--pa-surface, #fff);
 }
 
-/* ---- Toolbar ---------------------------------------------------------- */
+/* ---- The panel's own title --------------------------------------------- */
 
-.more-net-toolbar {
+/* This is an Ext panel, so its title arrives as `.x-panel-header` rather than
+   as the `<h2>` every card on this page uses. Untouched, Neptune drew it at
+   13px/700 on #F6F5F0 with 9px of padding — and because the toolbar underneath
+   is the same ivory band, the title and the toolbar fused into one 127px block
+   of beige with no edge between them. Nine hundred pixels up the page, the
+   pathways network's title is 19px/600 near-black on white, inset 26px. Two
+   titles for two panels of the same kind, agreeing on nothing.
+
+   Restated here as the card heading `div.contentbox h2` describes, declaration
+   for declaration, so the two network panels are titled the same way. Written
+   out rather than shared with that rule because this is a framework element:
+   the selector has to be specific enough to outscore Neptune's own
+   `.x-panel-header-default`, which a joint selector in main.css would not be. */
+.more-net-panel > .x-panel-header {
+	padding: 15px var(--pa-card-inset, 26px);
+	background: var(--pa-surface, #FFFFFF);
+	background-image: none;
+	border: 0;
+	border-bottom: 1px solid var(--pa-border);
+	border-radius: var(--pa-radius, 8px) var(--pa-radius, 8px) 0 0;
+}
+
+.more-net-panel > .x-panel-header .x-panel-header-text {
+	font-size: 19px;
+	font-weight: 600;
+	letter-spacing: -0.012em;
+	color: var(--pa-ink-title, #1A1A18);
+	line-height: 1.3;
+}
+
+/* The collapse control. Neptune draws it as a sprite `<img>`, which is the one
+   piece of framework chrome left on a surface that is otherwise the
+   application's own. The image keeps its box — ExtJS binds the click to the
+   tool and measures the image — but goes invisible, and a Font Awesome chevron
+   is centred over it, so the affordance matches the icons in the toolbar
+   directly below. `:has()` reads the state off the class ExtJS swaps on the
+   image, so the chevron turns over with the panel. */
+.more-net-panel > .x-panel-header .x-tool {
+	position: relative;
+	color: var(--pa-ink-label, #52525B);
+	border-radius: var(--pa-radius-sm, 6px);
+	transition: background-color var(--pa-transition, 150ms ease),
+	            color var(--pa-transition, 150ms ease);
+}
+
+.more-net-panel > .x-panel-header .x-tool:hover {
+	color: var(--pa-ink, #18181B);
+	background-color: var(--pa-control-hover-bg, #FFFFFF);
+}
+
+.more-net-panel > .x-panel-header .x-tool-img {
+	visibility: hidden;
+}
+
+.more-net-panel > .x-panel-header .x-tool::before {
+	position: absolute;
+	inset: 0;
 	display: flex;
-	flex-wrap: wrap;
 	align-items: center;
-	gap: 14px;
-	padding: 10px 14px;
-	background: var(--pa-surface-toolbar, #f5f5f7);
-	border-bottom: 1px solid var(--pa-border, #e4e4e7);
-	font-size: 12px;
-	color: var(--pa-ink-label, #555);
+	justify-content: center;
+	font: normal normal normal 13px/1 FontAwesome;
+	content: "\f077";              /* chevron-up — click to collapse */
 }
 
-.more-net-toolbar label {
-	display: inline-flex;
-	align-items: center;
-	gap: 6px;
-	white-space: nowrap;
-	margin: 0;
-	font-weight: 500;
-}
-
-/* Ranges get an explicit width: their intrinsic size differs enough between
-   engines that the toolbar rewraps between Chrome and Firefox without one. */
-.more-net-toolbar input[type="range"] {
-	width: 96px;
-	vertical-align: middle;
-}
-
-.more-net-toolbar select,
-.more-net-toolbar input[type="search"] {
-	padding: 3px 6px;
-	font-size: 12px;
-	color: var(--pa-ink-control, #333);
-	background: var(--pa-surface, #fff);
-	border: 1px solid var(--pa-border, #ccc);
-	border-radius: var(--pa-radius-sm, 4px);
-}
-
-.more-net-toolbar input[type="search"] {
-	min-width: 190px;
-}
-
-/* `appearance: none` and the `background-color` longhand, not the `background`
- * shorthand. A button carrying custom padding, border and radius is not a
- * native control, and saying so keeps its rendering identical across platforms
- * rather than at the mercy of each UA's control painting.
- *
- * Not a bug fix, and worth saying so: while testing a runtime theme switch,
- * `getComputedStyle(button).backgroundColor` reported `rgb(255,255,255)`
- * against #E7E8EA text -- 1.23:1, which would be text invisible against its own
- * button. It reproduced repeatedly and survived both this change and a
- * higher-specificity literal override, which is what finally made it suspect.
- * Sampling the painted pixels instead showed the buttons dark with light text
- * and perfectly legible: the reported value was stale, not the paint. The
- * lesson is the one this repo has already learned once about screenshots --
- * measure the pixels, not the DOM's account of them, before believing a
- * theming defect.
- */
-.more-net-toolbar button {
-	appearance: none;
-	-webkit-appearance: none;
-	padding: 4px 10px;
-	font-size: 12px;
-	color: var(--pa-ink-control, #333);
-	background-color: var(--pa-surface, #fff);
-	border: 1px solid var(--pa-border, #ccc);
-	border-radius: var(--pa-radius-sm, 4px);
-	cursor: pointer;
-	transition: background-color var(--pa-transition, 150ms ease);
-}
-
-.more-net-toolbar button:hover {
-	background-color: var(--pa-surface-quiet, #ececf0);
-}
-
-.more-net-toolbar button:focus-visible,
-.more-net-toolbar select:focus-visible,
-.more-net-toolbar input:focus-visible {
-	outline: 2px solid var(--pa-focus-ring, #0a84ff);
-	outline-offset: 1px;
-}
-
-/* The live readout beside each slider. Tabular figures so the toolbar does not
-   twitch sideways as the digits change while a slider is dragged. */
-.more-net-r2-value,
-.more-net-coef-value,
-.more-net-edges-value {
-	display: inline-block;
-	min-width: 3.2em;
-	font-variant-numeric: tabular-nums;
-	color: var(--pa-ink, #222);
-}
-
-/* ---- Subtitle --------------------------------------------------------- */
-
-.more-net-subtitle {
-	padding: 8px 14px;
-	font-size: 12px;
-	color: var(--pa-ink-muted, #6b6b6b);
-	background: var(--pa-surface, #fff);
-	border-bottom: 1px solid var(--pa-border, #e0e0e0);
-}
-
-.more-net-subtitle b {
-	color: var(--pa-ink, #222);
+.more-net-panel > .x-panel-header .x-tool:has(.x-tool-expand-bottom)::before {
+	content: "\f078";              /* chevron-down — click to expand */
 }
 
 /* ---- Canvas and side panel -------------------------------------------- */
 
+/* Height comes from --pa-net-canvas-height in network-views.css, which the
+   pathways canvas reads too. */
 .more-net-body {
 	display: flex;
 	width: 100%;
-	height: 600px;
 }
 
+/* The fill is in network-views.css; the flex behaviour is this layout's. */
 .more-net-canvas {
 	flex: 1;
 	height: 100%;
-	position: relative;
 	min-width: 0;             /* or the flex item refuses to shrink below its content */
-	background: var(--pa-surface-sunken, #fafafa);
 }
 
 .more-net-sidepanel {
@@ -161,18 +128,12 @@
 	color: var(--pa-ink-body, #444);
 }
 
-.more-net-side h6 {
-	margin: 14px 0 6px;
-	font-size: 11px;
-	font-weight: 700;
-	text-transform: uppercase;
-	letter-spacing: 0.04em;
-	color: var(--pa-ink-label, #6b6b6b);
-}
-
-.more-net-side h6:first-child {
-	margin-top: 0;
-}
+/* The group labels (`h6`) and the filter labels (`.more-net-field-label`) are
+   NOT styled here. They are the same two roles the pathways network's Tools
+   column already has — a tracked uppercase group divider and a near-black
+   control label — and they are drawn by that column's rules, which name these
+   selectors alongside their own. See "The settings-column type scale" in
+   main.css. A second description here is how the two rails drift apart. */
 
 .more-net-omic {
 	display: flex;
@@ -196,7 +157,7 @@
 	margin: 8px 0 0;
 	font-size: 11px;
 	line-height: 1.45;
-	color: var(--pa-ink-muted, #6b6b6b);
+	color: var(--pa-ink-muted, #595959);
 }
 
 /* ---- Top hubs --------------------------------------------------------- */
@@ -220,7 +181,7 @@
 	padding: 0 6px;
 	font-size: 11px;
 	font-variant-numeric: tabular-nums;
-	color: var(--pa-ink-muted, #6b6b6b);
+	color: var(--pa-ink-muted, #595959);
 	background: var(--pa-surface-quiet, #ececf0);
 	border-radius: 8px;
 }

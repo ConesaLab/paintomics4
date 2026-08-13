@@ -204,7 +204,16 @@ function PA_Step2JobView() {
 					displayField: 'name', valueField: 'value',
 					editable: false,
 					allowBlank: false,
-					labelWidth: 300,
+					/* ExtJS aligns field labels right by default, so a 300px
+					   label column pushed "Gene expression:" 198px away from
+					   the card's own left edge - the heading and the paragraph
+					   above it start there, and the one control the card exists
+					   to offer did not. Left labels put the text on that rail,
+					   and 240px is the width of the longest of them
+					   ("Metabolite class activity threshold") with room to
+					   spare, so every row's field starts on one edge too. */
+					labelAlign: 'left',
+					labelWidth: 240,
 					width: 300,
 					store: Ext.create('Ext.data.ArrayStore', {
 						fields: ['name', 'value'],
@@ -235,7 +244,9 @@ function PA_Step2JobView() {
 					displayField: 'name', valueField: 'value',
 					editable: true,
 					allowBlank: false,
-					labelWidth: 300,
+					/* Same rail as the cluster combo above. */
+					labelAlign: 'left',
+					labelWidth: 240,
 					width: 300,
 					store: Ext.create('Ext.data.ArrayStore', {
 						fields: ['name', 'value'],

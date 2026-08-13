@@ -1,14 +1,26 @@
+/* Its own copy of the family, because the admin pages do not load main.css.
+   Kept in step with the @font-face block at the top of main.css: real Source
+   Sans Pro cuts at their true weights, rather than MyriadPro-Light standing in
+   for regular - which is what these two rules used to do, and which made every
+   line on the admin screens a 300-weight Light. */
 @font-face {
     font-family: 'SourceSansPro';
-    src: url('/resources/css/fonts/MyriadPro-Light.ttf') format('truetype');
-    font-weight: normal;
+    src: url('/resources/css/fonts/SourceSansPro-Regular.ttf') format('truetype');
+    font-weight: 400;
     font-style: normal;
 }
 
 @font-face {
     font-family: 'SourceSansPro';
-    src: url('/resources/css/fonts/MyriadPro-Semibold.ttf') format('truetype');
-    font-weight: bold;
+    src: url('/resources/css/fonts/SourceSansPro-Semibold.ttf') format('truetype');
+    font-weight: 600;
+    font-style: normal;
+}
+
+@font-face {
+    font-family: 'SourceSansPro';
+    src: url('/resources/css/fonts/SourceSansPro-Bold.ttf') format('truetype');
+    font-weight: 700;
     font-style: normal;
 }
 
@@ -34,7 +46,10 @@ div#header img {
 }
 div#header h1 {
     color: #fff;
-    font-weight: lighter;
+    /* Was `lighter`, a relative keyword that resolved to 100. Stated absolutely
+       so the weight is a choice rather than whatever the parent happened to
+       be; 400 is what 100 was already falling back to. */
+    font-weight: 400;
     font-size: 50px;
     margin: 0;
     vertical-align: middle;
@@ -59,7 +74,7 @@ input[type=text], input[type=password]{
 }
 .wrapper-404 h1{
     font-size: 7vw;
-    font-weight: lighter;
+    font-weight: 400;
     text-align: center;
     vertical-align: middle;
     color: #333;

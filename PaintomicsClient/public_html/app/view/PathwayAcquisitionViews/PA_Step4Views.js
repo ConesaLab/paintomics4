@@ -2835,7 +2835,11 @@ function PA_Step4VisualOptionsView() {
 		windowContent += '</div>'; //advanceOptionsPanel
 
 		this.component = Ext.widget({
-			xtype: "container", cls: "lateralOptionsPanel",  width: 300, height: ($("#mainViewCenterPanel").height() - 100),
+			// paSettingsPanel: a column of grouped controls, so main.css tracks
+			// its h4s out as group labels. The Pathway information panel further
+			// down this file uses the same class *without* it, because its h4s
+			// are the pathway's name and the omic's.
+			xtype: "container", cls: "lateralOptionsPanel paSettingsPanel",  width: 300, height: ($("#mainViewCenterPanel").height() - 100),
 			items:[{
 				xtype: "box",
 				html:
@@ -3076,7 +3080,15 @@ function PA_Step4FindFeaturesView() {
 				'  <div>'+
 				'    <h4>Search in this pathway</h4>' +
 				'    <div class="findFeaturesInput input" style="width:170px; display:inline-block;"><input type="text" style="width:160px;"></div>'+
-				'    <a class="button btn-info findFeatureButton helpTip" style="margin: 20px 5px" title="Find features"><i class="fa fa-search"></i> Search</a>' +
+				/* `margin-right: 0`, not the 5px `.button` gives every button: that
+				   5px is the gutter between two buttons sitting side by side, and
+				   this one is alone on its line. It floats right, so the gutter
+				   simply stopped it 5px short of the edge the panel's heading,
+				   its "Search in this pathway" label and every field below it are
+				   squared to - x=1301 against a rail at 1306. Written here rather
+				   than in the stylesheet because the margin is inline, and inline
+				   beats any rule that is not !important. */
+				'    <a class="button btn-info findFeatureButton helpTip" style="margin: 20px 0 20px 5px" title="Find features"><i class="fa fa-search"></i> Search</a>' +
 				'    <div class="applyWaitMessage" style="color:#4c4c4c; margin: 10px; display:none;"> Searching...<i class="fa fa-cog fa-spin" style=" float: left; margin-right: 10px; "></i></div>' +
 				'  </div>'+
 				'  <div class="patwaysDetailsContainer"></div>'+

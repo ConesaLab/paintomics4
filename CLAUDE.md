@@ -50,3 +50,23 @@ cd /Users/tianyuan/Desktop/github_dev/paintomics4/PaintomicsServer
 Server runs at **http://localhost:8000/** with debug mode on.
 
 To stop: `kill $(lsof -ti:8000)`
+
+## 5. Verification in Chrome (Mandatory)
+
+**Always verify every change in Chrome before reporting it as done.** A change that only
+compiles, only passes a test, or only looks right in the diff is not verified. Drive the running
+app with the `mcp__claude-in-chrome__*` tools, exercise the code path you touched, and confirm the
+result with a screenshot, `read_page`, or `read_console_messages`. State what you observed; never
+claim a fix works on the strength of the edit alone. This applies to subagents too — an agent that
+edits UI or server code reports back only after it has seen the behaviour in the browser.
+
+Before verifying:
+* **Restart the server.** The debug reloader does not reliably pick up changes, so an unrestarted
+  server means you verify the old code and it looks fine.
+* **Bump the `?v=` marker in `index.html`** for any edited JS/CSS file, or Chrome serves the
+  cached copy and a correct fix looks broken.
+* **Re-check disagreements between pixels and DOM.** Screenshots can show stale compositor layers
+  and `getComputedStyle` can go stale the other way; when the image and the DOM disagree, force a
+  repaint and re-measure both.
+* **Never trigger `alert`/`confirm`/`prompt`** — a modal dialog blocks every subsequent browser
+  command. Use `console.log` plus `read_console_messages` instead.

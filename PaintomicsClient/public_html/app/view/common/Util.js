@@ -34,9 +34,35 @@
 * - ajaxErrorHandler
 * - extJSErrorHandler
 * - scaleValue
+* - getAIMarkPaths
 * - getAIMark
 *
 */
+
+/**
+ * The AI mark's geometry, on its own, in a 24x24 box.
+ *
+ * Exists because one caller cannot use getAIMark(): the Step 1 hero diagram
+ * draws the mark *inside* its own <svg>, placed by a transform in the diagram's
+ * coordinate space, where a nested <svg> sized in px would not scale with the
+ * viewBox. So it needs the paths without a wrapper.
+ *
+ * It had been meeting that need by keeping a second copy of them, retyped into a
+ * 22-unit box, and the copy had drifted: a hexagon 15 units wide by 17.6 rather
+ * than 13 by 15, stroke 1.5 rather than 1.4, opacity .5 rather than .45. Small
+ * enough that nobody would call it a different logo, and visible when the hero's
+ * card and the sentence below it are put side by side -- which is what the hero
+ * does. Two copies of a mark is one copy too many however close they are, so the
+ * geometry lives here and both mounts read it.
+ *
+ * @returns {string} the two <path> elements, in a 0 0 24 24 coordinate space.
+ */
+function getAIMarkPaths() {
+    return '<path d="M12 4.5 L18.5 8.25 L18.5 15.75 L12 19.5 L5.5 15.75 L5.5 8.25 Z" ' +
+        'fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" opacity="0.45"/>' +
+        '<path d="M12 7.6 C12.37 9.73 14.27 11.63 16.4 12 C14.27 12.37 12.37 14.27 12 16.4 ' +
+        'C11.63 14.27 9.73 12.37 7.6 12 C9.73 11.63 11.63 9.73 12 7.6 Z" fill="currentColor"/>';
+}
 
 /**
  * The PaintOmics AI mark.
@@ -50,44 +76,50 @@
  * font decides, so it was a different picture on every operating system.
  *
  * This is the system's mark: the brand hexagon from paintomics-mark.svg with
- * the six omic nodes removed, around one of two centres.
- *   "spark" -- the interpretation itself. Reads down to 16px.
- *   "swarm" -- three agents converging on one answer, which is closer to what
- *              the feature actually is. Needs 20px or more to stay legible.
+ * the six omic nodes removed, around a four-point spark.
+ *
+ * One drawing, not a family. This used to offer a second "swarm" centre -- three
+ * agents converging on one answer -- which is a better description of what the
+ * feature does, and it was used on the launcher and the Step 1 hero while the
+ * button and the two headings kept the spark. That put two different pictures on
+ * one feature, which is the thing a mark exists to prevent: nothing tells a
+ * reader that the blob on the launcher and the star on the button are the same
+ * offer. The spark won the tie rather than the swarm because of what the pixels
+ * do, not because it describes the feature better. Rendered side by side at the
+ * sizes this app actually asks for, the swarm's three 1.75r satellites and its
+ * 2.4r centre merge into one dark cluster below about 20px, and four of the five
+ * call sites are inline with text at 14-17px. The spark is still four clean
+ * points at 14px. A mark that only survives at its largest use is not a mark.
+ *
+ * Sizing is derived, not chosen. The default is 1em, so the mark tracks whatever
+ * text it sits beside -- an h3 heading, a button label, a sentence -- instead of
+ * being hand-picked per call site. That is what stopped the five call sites from
+ * drifting to 14/15/17/17px in the first place, and it is why the px argument is
+ * only for the launcher, which has no text to take a size from.
  *
  * Everything is currentColor, so one mark serves white-on-blue in the launcher
  * and blue-on-white in a button without a second copy.
  *
- * @param {number} size   px, both dimensions. Defaults to 16.
- * @param {string} variant "spark" (default) or "swarm".
+ * @param {number} [size] px, both dimensions. Omit to size to 1em, which is
+ *                        what every caller beside text should do.
  * @returns {string} SVG markup, ready to drop into an html string.
  */
-function getAIMark(size, variant) {
-    size = size || 16;
-    var centre = (variant === "swarm")
-        ? '<g stroke="currentColor" fill="currentColor">' +
-          '<g stroke-width="1.1" opacity="0.7">' +
-          '<line x1="12" y1="7.6" x2="12" y2="12"/>' +
-          '<line x1="16" y1="14.6" x2="12" y2="12"/>' +
-          '<line x1="8" y1="14.6" x2="12" y2="12"/>' +
-          '</g>' +
-          '<g stroke="none">' +
-          '<circle cx="12" cy="7.6" r="1.75"/>' +
-          '<circle cx="16" cy="14.6" r="1.75"/>' +
-          '<circle cx="8" cy="14.6" r="1.75"/>' +
-          '<circle cx="12" cy="12" r="2.4"/>' +
-          '</g></g>'
-        : '<path d="M12 7.6 C12.37 9.73 14.27 11.63 16.4 12 C14.27 12.37 12.37 14.27 12 16.4 ' +
-          'C11.63 14.27 9.73 12.37 7.6 12 C9.73 11.63 11.63 9.73 12 7.6 Z" fill="currentColor"/>';
+function getAIMark(size) {
+    // A bare number is px; anything else (undefined, null, 0) means "match the
+    // surrounding text". Set through style rather than the width/height
+    // attributes because those take only a bare number or a CSS length, and
+    // browsers disagree about em there.
+    var box = (typeof size === "number" && size > 0)
+        ? size + "px"
+        : "1em";
 
     // aria-hidden because every caller puts a readable label beside the mark;
     // announcing "PaintOmics AI" again would just repeat it.
-    return '<svg class="po-ai-mark" width="' + size + '" height="' + size + '" viewBox="0 0 24 24" ' +
+    return '<svg class="po-ai-mark" viewBox="0 0 24 24" ' +
         'aria-hidden="true" focusable="false" ' +
-        'style="display:inline-block;vertical-align:-0.15em;flex-shrink:0">' +
-        '<path d="M12 4.5 L18.5 8.25 L18.5 15.75 L12 19.5 L5.5 15.75 L5.5 8.25 Z" ' +
-        'fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" opacity="0.45"/>' +
-        centre +
+        'style="display:inline-block;width:' + box + ';height:' + box + ';' +
+        'vertical-align:-0.15em;flex-shrink:0">' +
+        getAIMarkPaths() +
         '</svg>';
 }
 
@@ -435,22 +467,33 @@ function showMessage(title, data) {
     message = message.replace(/\[b\]/g, "<b>").replace(/\[\/b\]/g, "</b>").replace(/\[br\]/g, "</br>").replace(/\[ul\]/g, "<ul>").replace(/\[\/ul\]/g, "</ul>").replace(/\[li\]/g, "<li>").replace(/\[\/li\]/g, "</li>");
     extra = JSON.stringify(extra);
 
-    var buttonClass, color, icon, dialogClass;
+    // The dismiss button used to be coloured by message type: red on an error,
+    // amber on a warning, cyan on an info, green on a success. It does the same
+    // thing in all four cases - it closes the dialog - and a filled red button
+    // labelled "Close" reads as a destructive action, which is the one thing it
+    // is not. The type is already stated twice on this surface, by the 4px
+    // accent along the dialog's top edge and by the heading's colour, so the
+    // button goes neutral and stops being a third, contradictory, statement.
+    //
+    // It also could not have worked as intended. The class was swapped with
+    // `removeClass("btn-danger btn-success btn-warning btn-default")`, which
+    // never listed btn-info - so once any info dialog had been shown, its cyan
+    // stayed on the shared button for the rest of the session and every later
+    // error dialog carried btn-info *and* btn-danger. The removeClass below
+    // lists every class this function can add.
+    var buttonClass = "btn-default";
+    var color, icon, dialogClass;
     if (messageType === "error") {
         console.error(Date.logFormat() + logMessage);
-        buttonClass = "btn-danger";
         dialogClass = "errorDialog";
     } else if (messageType === "warning") {
         console.warn(Date.logFormat() + logMessage);
-        buttonClass = "btn-warning";
         dialogClass = "warningDialog";
     } else if (messageType === "info") {
         console.info(Date.logFormat() + logMessage);
-        buttonClass = "btn-info";
         dialogClass = "infoDialog";
     } else { //success
         console.info(Date.logFormat() + logMessage);
-        buttonClass = "btn-success";
         dialogClass = "successDialog";
     }
 
@@ -485,7 +528,7 @@ function showMessage(title, data) {
         }
 
         if (showButton) {
-            $("#messageDialogButton").removeClass("btn-danger btn-success btn-warning btn-default").addClass(buttonClass);
+            $("#messageDialogButton").removeClass("btn-danger btn-success btn-warning btn-info btn-default").addClass(buttonClass);
             $("#messageDialogButton").css({display: "inline-block"});
         } else {
             $("#messageDialogButton").css({display: "none"});
@@ -497,8 +540,40 @@ function showMessage(title, data) {
             $("#reportErrorButton").css({display: "none"});
         }
 
-        messageDialog.setHeight($("#messageDialogPanel").outerHeight() + 30);
+        // Width first, then height. How tall the panel is depends on where the
+        // message wraps, and it wraps at whatever width the window has at the
+        // moment it is measured. Measuring before setWidth measured a window
+        // that had never been given one: on the first dialog of a session
+        // ExtJS had shrink-wrapped it around a body that was still empty when
+        // the window was created, so the welcome message was measured at five
+        // wrapped lines, and the window kept that height after setWidth
+        // reflowed the text to two. That was 78px of blank space under the
+        // Close button. Later dialogs reuse a window already 500 wide and so
+        // were always correct, which is why this only ever looked wrong once
+        // per page load.
         messageDialog.setWidth(width);
+
+        // The panel is the whole of the content, so the window adds only its
+        // own frame: everything between its outer edge and the content box its
+        // body actually offers. Measuring that rather than hard-coding it keeps
+        // this honest if the border changes - main.css gives #messageDialog a
+        // 4px top accent and 1px elsewhere, and the window body adds 1px of its
+        // own top and bottom, so it is 7px today. The constant it replaces was
+        // 30, and the ~23px of that which was not frame is why the dialog still
+        // sat loose even once the wrapping above was right.
+        //
+        // clientHeight rather than body.getHeight(): the latter is a border box
+        // and counts 2px the content cannot use, which left the panel
+        // overflowing by that much on every dialog. The body is overflow:hidden
+        // so it was clipping rather than scrolling, absorbed by the panel's own
+        // bottom padding and invisible - but it is the spinner and progress
+        // dialogs, the tightest of them, that had the least padding to spare.
+        // Ceil for the same reason: the panel measures fractionally (145.66 for
+        // the spinner) and a truncated height clips the last pixel of it.
+        var bodyDom = messageDialog.body ? messageDialog.body.dom : null;
+        var frame = (bodyDom && bodyDom.clientHeight > 0)
+                ? messageDialog.getHeight() - bodyDom.clientHeight : 7;
+        messageDialog.setHeight(Math.ceil($("#messageDialogPanel").outerHeight()) + frame);
         messageDialog.center();
     };
 
@@ -1043,6 +1118,33 @@ function paTocMarkCurrent() {
  * @param {Element} root, the centre panel
  * @param {Boolean} wanted, whether a sidebar is being shown
  */
+/**
+ * Runs `fn` after the current task: on the next frame while the tab is visible,
+ * on a timer while it is not.
+ *
+ * Chrome throttles requestAnimationFrame to nothing in a background tab, and
+ * what is deferred through here decides layout - the contents rail, and the
+ * re-measure that has to follow it. Scheduled on rAF alone those simply never
+ * run while the tab is in the background: no error, no retry, and the page
+ * settles at a width nobody chose. It is not a corner case either. A job takes
+ * minutes, and reading something else while it finishes is the ordinary way to
+ * use this application, so the tab being hidden at the moment a view swaps is
+ * the common case rather than the exotic one. Measured: on a hidden tab the
+ * contents rail was never built on a view swap, so Step 2 came up 138px wider
+ * than the same page reached with the tab in front.
+ *
+ * Same failure, and the same fix, as the overlay in AlignmentGuides.js.
+ *
+ * @param {Function} fn, the work to defer
+ */
+function paDeferFrame(fn) {
+    if (document.visibilityState === 'hidden') {
+        setTimeout(fn, 0);
+    } else {
+        requestAnimationFrame(fn);
+    }
+}
+
 function paTocSyncRail(root, wanted) {
     if (root.classList.contains('pa-has-toc') === wanted) {
         return;
@@ -1050,14 +1152,57 @@ function paTocSyncRail(root, wanted) {
 
     root.classList.toggle('pa-has-toc', wanted);
 
-    // Deferred a frame so the new padding is in effect before Ext re-measures.
-    requestAnimationFrame(function () {
+    // Deferred so the new padding is in effect before Ext re-measures.
+    var remeasure = function () {
         var viewport = window.Ext ? Ext.ComponentQuery.query('viewport')[0] : null;
 
-        if (viewport) {
-            viewport.updateLayout();
+        if (!viewport) {
+            return;
         }
-    });
+
+        /* A card layout does not re-derive its child's width on a re-layout: it
+           writes the width it measured as an inline style on the child, and
+           `updateLayout()` then honours that written width as if it had been
+           configured. So the padding change below reaches every card on the page
+           except the ones inside a tab panel, which keep the width the column
+           had before the sidebar took its 158px.
+
+           Measured on Step 3 of a KEGG+Reactome job at 1440: `tabcontainer_network`
+           correctly 1114 wide, its active child still 1184 - so "Pathways
+           classification" and the Details panel ran to x=1450 while every card
+           outside the tabs stopped at 1380, and on a job with metabolites the
+           overhang escaped as a horizontal scrollbar on the whole page.
+
+           Clearing the width first is what makes the re-layout re-measure. Only
+           tab-panel children in this column are touched, and a tab panel's child
+           is sized by its container by definition, so there is no configured
+           width here to destroy. */
+        var staleTabs = Ext.ComponentQuery.query('tabpanel').filter(function (tabs) {
+            return tabs.el && tabs.el.dom && root.contains(tabs.el.dom);
+        });
+        staleTabs.forEach(function (tabs) {
+            tabs.items.each(function (child) {
+                if (child.getWidth && child.getWidth() > 0) {
+                    child.setWidth(null);
+                }
+            });
+        });
+
+        viewport.updateLayout();
+
+        /* And each tab panel by name afterwards. Laying out the viewport does
+           not reach the card layout inside these - the run stops at the tab
+           panel, whose own width is already right, and never asks the card
+           layout to re-place a child whose width was just cleared. Verified
+           both ways from the console: clearing plus `viewport.updateLayout()`
+           leaves the child at 1184, clearing plus the tab panel's own
+           `updateLayout()` takes it to 1114. */
+        staleTabs.forEach(function (tabs) {
+            tabs.updateLayout();
+        });
+    };
+
+    paDeferFrame(remeasure);
 }
 
 function buildAnalysisTOC(containerSelector) {

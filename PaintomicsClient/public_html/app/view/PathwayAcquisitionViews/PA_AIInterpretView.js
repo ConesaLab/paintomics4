@@ -32,7 +32,11 @@ function PA_AIInterpretView() {
             '<div class="ai-widget" style="display:none;">' +
             '  <div class="ai-widget-panel">' +
             '    <div class="ai-widget-header">' +
-            '      <span class="ai-widget-header-title">PaintOmics AI</span>' +
+            /* The mark rides with the name here for the same reason the launcher
+               is nothing but the mark: expanding the panel replaces one with the
+               other, and without this the picture the user clicked disappears
+               the moment they click it. */
+            '      <span class="ai-widget-header-title">' + getAIMark() + 'PaintOmics AI</span>' +
             '      <div class="ai-widget-header-actions">' +
             '        <button class="ai-fullscreen-btn" title="Fullscreen">&#x26F6;</button>' +
             '        <button class="ai-minimize-btn" title="Minimize">&mdash;</button>' +
@@ -49,7 +53,7 @@ function PA_AIInterpretView() {
             '    </div>' +
             '  </div>' +
             '  <button class="ai-widget-fab" title="PaintOmics AI">' +
-            '    <span class="ai-fab-icon">' + getAIMark(26, "swarm") + '</span>' +
+            '    <span class="ai-fab-icon">' + getAIMark(26) + '</span>' +
             '    <span class="ai-widget-fab-badge" style="display:none;"></span>' +
             '  </button>' +
             '</div>';

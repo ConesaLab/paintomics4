@@ -156,9 +156,19 @@ var PO_HERO_VIZ_SVG =
 	/* --- the interpretation ------------------------------------------------ */
 	'<g class="po-viz-ai">' +
 		'<rect x="238" y="52" width="196" height="196" rx="10" class="po-viz-panel"/>' +
-		'<g class="po-viz-mark" transform="translate(256,72)" color="#4A90D9">' +
-			'<path d="M11 2.6 L18.5 7 L18.5 15.8 L11 20.2 L3.5 15.8 L3.5 7 Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" opacity=".5"/>' +
-			'<path d="M11 6.4 C11.4 8.7 13.3 10.6 15.6 11 C13.3 11.4 11.4 13.3 11 15.6 C10.6 13.3 8.7 11.4 6.4 11 C8.7 10.6 10.6 8.7 11 6.4 Z" fill="currentColor"/>' +
+		/* The same mark the AI-powered highlight below the hero uses, from the
+		   same source, rather than a second copy retyped into this diagram's
+		   coordinates -- see getAIMarkPaths(). getAIMark() itself is no use here:
+		   a nested <svg> sized in px would not scale with this viewBox.
+
+		   The transform lands getAIMarkPaths()'s 24-unit box exactly where the
+		   retyped 22-unit copy sat, so the mark occupies the same 15x17.3 of the
+		   card as before: scale 15/13 for the width the copy had drawn, then a
+		   translate that puts the box centre (12,12) back on (267,83.4). Checked
+		   against the old numbers rather than eyeballed -- the hexagon's left and
+		   right edges land on 259.5 and 274.5, which is where they already were. */
+		'<g class="po-viz-mark" transform="translate(253.15,69.55) scale(1.154)" color="#4A90D9">' +
+			getAIMarkPaths() +
 		'</g>' +
 		'<text x="284" y="88" class="po-viz-title" font-size="12.5" font-weight="600">AI interpretation</text>' +
 		'<g class="po-viz-ans po-viz-ans-a">' +
@@ -186,68 +196,97 @@ var PO_HERO_VIZ_SVG =
 	'</svg>';
 
 
+/* The three step diagrams share one frame: viewBox 186x96, content bleeding to
+   both side edges, drawn on the same row rhythm. They did not, and that is what
+   made the row of columns look unordered even though every element in it was
+   correctly aligned. Measured on the deployed page, the three rendered 215, 138
+   and 202px wide from viewBoxes of 186x90, 90x68 and 186x96 - so the middle one
+   was a small island between two full-bleed drawings, and its network was drawn
+   at scale 0.95 against the identical network in step 3 at 0.67. Same picture,
+   two sizes, side by side.
+
+   One frame means the eye compares the three as a set. */
 var PO_STEP_ART_UPLOAD =
-	'<svg class="po-step-art-svg" viewBox="0 0 186 90" role="img" aria-label="One row per omic type, each carrying its own values" style="font-family:var(--pa-font-sans)" xmlns="http://www.w3.org/2000/svg">' +
-	'<g transform="translate(-258,-10)">' +
+	'<svg class="po-step-art-svg" viewBox="0 0 186 96" role="img" aria-label="One row per omic type, each carrying its own values" style="font-family:var(--pa-font-sans)" xmlns="http://www.w3.org/2000/svg">' +
+	/* -7 rather than -10: the four rows are 86 tall, so this centres them in the
+	   96 the other two diagrams use. */
+	'<g transform="translate(-258,-7)">' +
 	'<rect x="258" y="12" width="186" height="20" rx="5" fill="#55C9A6" fill-opacity=".16" stroke="#55C9A6" stroke-opacity=".55"/>' +
 	'<circle cx="271" cy="22" r="4.5" fill="#55C9A6"/>' +
-	'<text x="283" y="26" font-size="11" fill="#3F3F46">Gene expression</text>' +
+	'<text x="283" y="26" font-size="11" fill="currentColor">Gene expression</text>' +
 	'<rect x="410" y="18" width="7" height="7" rx="1" fill="#FF0000" stroke="#878787" stroke-width="1"/>' +
 	'<rect x="419" y="18" width="7" height="7" rx="1" fill="#FF8080" stroke="#878787" stroke-width="1"/>' +
 	'<rect x="428" y="18" width="7" height="7" rx="1" fill="#8080FF" stroke="#878787" stroke-width="1"/>' +
 	'<rect x="258" y="34" width="186" height="20" rx="5" fill="#79B0EC" fill-opacity=".16" stroke="#79B0EC" stroke-opacity=".55"/>' +
 	'<circle cx="271" cy="44" r="4.5" fill="#79B0EC"/>' +
-	'<text x="283" y="48" font-size="11" fill="#3F3F46">Metabolomics</text>' +
+	'<text x="283" y="48" font-size="11" fill="currentColor">Metabolomics</text>' +
 	'<rect x="410" y="40" width="7" height="7" rx="1" fill="#8080FF" stroke="#878787" stroke-width="1"/>' +
 	'<rect x="419" y="40" width="7" height="7" rx="1" fill="#FFFFFF" stroke="#878787" stroke-width="1"/>' +
 	'<rect x="428" y="40" width="7" height="7" rx="1" fill="#FF0000" stroke="#878787" stroke-width="1"/>' +
 	'<rect x="258" y="56" width="186" height="20" rx="5" fill="#B4A1DD" fill-opacity=".16" stroke="#B4A1DD" stroke-opacity=".55"/>' +
 	'<circle cx="271" cy="66" r="4.5" fill="#B4A1DD"/>' +
-	'<text x="283" y="70" font-size="11" fill="#3F3F46">Proteomics</text>' +
+	'<text x="283" y="70" font-size="11" fill="currentColor">Proteomics</text>' +
 	'<rect x="410" y="62" width="7" height="7" rx="1" fill="#FF8080" stroke="#878787" stroke-width="1"/>' +
 	'<rect x="419" y="62" width="7" height="7" rx="1" fill="#FF0000" stroke="#878787" stroke-width="1"/>' +
 	'<rect x="428" y="62" width="7" height="7" rx="1" fill="#FFFFFF" stroke="#878787" stroke-width="1"/>' +
 	'<rect x="258" y="78" width="186" height="20" rx="5" fill="#738B9D" fill-opacity=".16" stroke="#738B9D" stroke-opacity=".55"/>' +
 	'<circle cx="271" cy="88" r="4.5" fill="#738B9D"/>' +
-	'<text x="283" y="92" font-size="11" fill="#3F3F46">+ 3 more omic types</text>' +
+	'<text x="283" y="92" font-size="11" fill="currentColor">+ 3 more omic types</text>' +
 	'</g>' +
 	'</svg>';
 
-var PO_STEP_ART_MATCH =
-	'<svg class="po-step-art-svg" viewBox="0 0 90 68" role="img" aria-label="Features matched onto a pathway network" style="font-family:var(--pa-font-sans)" xmlns="http://www.w3.org/2000/svg">' +
-	'<g transform="translate(-306,-144)">' +
-	'<g transform="translate(307.6,145.8) scale(0.62)">' +
-	'<line x1="12" y1="30" x2="52" y2="12" stroke="#878787" stroke-width="1.6" stroke-opacity=".55"/>' +
-	'<line x1="52" y1="12" x2="98" y2="34" stroke="#878787" stroke-width="1.6" stroke-opacity=".55"/>' +
-	'<line x1="12" y1="30" x2="54" y2="56" stroke="#878787" stroke-width="1.6" stroke-opacity=".55"/>' +
-	'<line x1="54" y1="56" x2="98" y2="34" stroke="#878787" stroke-width="1.6" stroke-opacity=".55"/>' +
-	'<line x1="98" y1="34" x2="128" y2="74" stroke="#878787" stroke-width="1.6" stroke-opacity=".55"/>' +
-	'<line x1="54" y1="56" x2="74" y2="92" stroke="#878787" stroke-width="1.6" stroke-opacity=".55"/>' +
-	'<line x1="74" y1="92" x2="18" y2="78" stroke="#878787" stroke-width="1.6" stroke-opacity=".55"/>' +
-	'<line x1="74" y1="92" x2="128" y2="74" stroke="#878787" stroke-width="1.6" stroke-opacity=".55"/>' +
-	'<line x1="18" y1="78" x2="12" y2="30" stroke="#878787" stroke-width="1.6" stroke-opacity=".55"/>' +
-	'<circle cx="12" cy="30" r="9" fill="#F3F3F3" stroke="#878787" stroke-width="2.4"/>' +
-	'<circle cx="52" cy="12" r="9" fill="#F3F3F3" stroke="#878787" stroke-width="2.4"/>' +
-	'<rect x="39" y="50" width="10" height="12" fill="#F3F3F3" stroke="#878787" stroke-width="1.6"/>' +
-	'<rect x="49" y="50" width="10" height="12" fill="#F3F3F3" stroke="#878787" stroke-width="1.6"/>' +
-	'<rect x="59" y="50" width="10" height="12" fill="#F3F3F3" stroke="#878787" stroke-width="1.6"/>' +
-	'<rect x="83" y="28" width="10" height="12" fill="#F3F3F3" stroke="#878787" stroke-width="1.6"/>' +
-	'<rect x="93" y="28" width="10" height="12" fill="#F3F3F3" stroke="#878787" stroke-width="1.6"/>' +
-	'<rect x="103" y="28" width="10" height="12" fill="#F3F3F3" stroke="#878787" stroke-width="1.6"/>' +
-	'<circle cx="128" cy="74" r="9" fill="#F3F3F3" stroke="#878787" stroke-width="2.4"/>' +
-	'<circle cx="74" cy="92" r="9" fill="#F3F3F3" stroke="#878787" stroke-width="2.4"/>' +
-	'<circle cx="18" cy="78" r="9" fill="#F3F3F3" stroke="#878787" stroke-width="2.4"/>' +
-	'</g>' +
-	'</g>' +
-	'</svg>';
+/* Was the same node-and-edge network step 3 draws, only unpainted and at a
+   different scale - so the two adjacent columns showed one picture twice, and
+   the copy that was supposed to illustrate *identifier conversion* showed no
+   identifiers at all.
 
+   This is what the card's own prose describes: the name in your file on the
+   left, the Entrez or KEGG accession PaintOmics resolves it to on the right.
+   Real pairs, mouse, one per omic type in step 1's colours - Gapdh/14433,
+   D-Glucose/C00031 (KEGG compound), and the UniProt accession P17182 for Eno1
+   resolving to Entrez 13806. A reader who knows the domain can check them. */
+var PO_STEP_ART_MATCH = (function() {
+	/* Grey on the left because what you upload is just text; the omic's own
+	   colour on the right because that is the point at which PaintOmics knows
+	   what the feature is. The three colours are step 1's, in step 1's order. */
+	var rows = [
+		{y: 10, from: 'Gapdh',     to: '14433',  colour: '#55C9A6'},
+		{y: 38, from: 'D-Glucose', to: 'C00031', colour: '#79B0EC'},
+		{y: 66, from: 'P17182',    to: '13806',  colour: '#B4A1DD'}
+	];
+	var svg = '<svg class="po-step-art-svg" viewBox="0 0 186 96" role="img" ' +
+		'aria-label="Names and accessions in your files resolved to the identifiers the pathway databases use" ' +
+		'style="font-family:var(--pa-font-sans)" xmlns="http://www.w3.org/2000/svg">';
+	for (var i = 0; i < rows.length; i++) {
+		var r = rows[i], mid = r.y + 10;
+		svg +=
+			'<rect x="0" y="' + r.y + '" width="72" height="20" rx="5" fill="#738B9D" fill-opacity=".12" stroke="#738B9D" stroke-opacity=".45"/>' +
+			'<text x="10" y="' + (r.y + 14) + '" font-size="10.5" fill="currentColor">' + r.from + '</text>' +
+			'<path d="M78 ' + mid + ' H105" stroke="#878787" stroke-opacity=".55" stroke-width="1.4" stroke-linecap="round"/>' +
+			'<path d="M101.5 ' + (mid - 3.5) + ' L105 ' + mid + ' L101.5 ' + (mid + 3.5) + '" fill="none" stroke="#878787" stroke-opacity=".55" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>' +
+			'<rect x="114" y="' + r.y + '" width="72" height="20" rx="5" fill="' + r.colour + '" fill-opacity=".16" stroke="' + r.colour + '" stroke-opacity=".55"/>' +
+			'<text x="124" y="' + (r.y + 14) + '" font-size="10.5" fill="currentColor">' + r.to + '</text>';
+	}
+	return svg + '</svg>';
+})();
+
+/* Side by side, not stacked. Stacked, the three ranked bars took the top 25 of
+   the 96 and left the network 57 to live in, which in a frame this wide meant a
+   small drawing floating under three hairlines - the emptiest of the three
+   plates by a distance, and the one step that has colour to show.
+
+   The split also matches the sentence it illustrates and the screen it depicts:
+   the ranked pathway list you read first on the left, the map you paint from it
+   on the right. Four bars rather than three, on step 1's four-row rhythm. */
 var PO_STEP_ART_EXPLORE =
 	'<svg class="po-step-art-svg" viewBox="0 0 186 96" role="img" aria-label="Pathways ranked, and the network painted with your values" style="font-family:var(--pa-font-sans)" xmlns="http://www.w3.org/2000/svg">' +
-	'<g transform="translate(-258,-254)">' +
-	'<rect x="258" y="256" width="186" height="5" rx="2.5" fill="#AD5022" opacity="1.0"/>' +
-	'<rect x="258" y="265" width="138" height="5" rx="2.5" fill="#AD5022" opacity="0.7"/>' +
-	'<rect x="258" y="274" width="96" height="5" rx="2.5" fill="#AD5022" opacity="0.4"/>' +
-	'<g transform="translate(307.6,283.8) scale(0.62)">' +
+	'<rect x="0" y="20" width="78" height="8" rx="4" fill="#AD5022" opacity="1.0"/>' +
+	'<rect x="0" y="36" width="62" height="8" rx="4" fill="#AD5022" opacity="0.78"/>' +
+	'<rect x="0" y="52" width="48" height="8" rx="4" fill="#AD5022" opacity="0.56"/>' +
+	'<rect x="0" y="68" width="34" height="8" rx="4" fill="#AD5022" opacity="0.34"/>' +
+	/* 0.70, up from 0.62: the network now has the right-hand 94 of the frame to
+	   itself, so it can be drawn at the size the plate can carry. */
+	'<g transform="translate(89.9,11.6) scale(0.70)">' +
 	'<line x1="12" y1="30" x2="52" y2="12" stroke="#878787" stroke-width="1.6" stroke-opacity=".55"/>' +
 	'<line x1="52" y1="12" x2="98" y2="34" stroke="#878787" stroke-width="1.6" stroke-opacity=".55"/>' +
 	'<line x1="12" y1="30" x2="54" y2="56" stroke="#878787" stroke-width="1.6" stroke-opacity=".55"/>' +
@@ -268,7 +307,6 @@ var PO_STEP_ART_EXPLORE =
 	'<circle cx="128" cy="74" r="9" fill="#8080FF" stroke="#878787" stroke-width="1.6"/>' +
 	'<circle cx="74" cy="92" r="9" fill="#FFFFFF" stroke="#878787" stroke-width="1.6"/>' +
 	'<circle cx="18" cy="78" r="9" fill="#0000FF" stroke="#878787" stroke-width="1.6"/>' +
-	'</g>' +
 	'</g>' +
 	'</svg>';
 
@@ -749,12 +787,26 @@ function PA_Step1JobView() {
 			 "Assigns genomic regions to genes with RGmatch first, then runs the analysis."]
 		];
 
+		/* One dataset, as a card.
+		 *
+		 * This was an `Ext.panel.Panel` per scenario: a framed panel with a
+		 * titled header band and a `bbar` holding the Load button. That is three
+		 * pieces of framework chrome - header, body, docked toolbar - stacked to
+		 * produce something that is a card, and it looked like it: the title sat
+		 * in a grey strip, the body in a second box inside it, and the button on
+		 * a third strip below, each with its own border. Seven datasets meant
+		 * twenty-one nested rectangles down a scrolling dialog.
+		 *
+		 * It is one `<article>` now, styled by `.po-example*` in main.css, so
+		 * the card has one edge, one padding and a hover state, and the Load
+		 * button is a button rather than a toolbar with one item in it. The
+		 * click is bound in `afterrender` because the markup is a string - the
+		 * same approach the rest of this file uses for its HTML boxes.
+		 */
 		var makeCard = function(scenario) {
 			var badge = scenario.simulated
-				? '<span style="background:#E8F1FA;color:#2F73BC;border-radius:3px;' +
-				  'padding:1px 6px;font-size:11px;">simulated</span>'
-				: '<span style="background:#FDF0E6;color:#B4690E;border-radius:3px;' +
-				  'padding:1px 6px;font-size:11px;">real data</span>';
+				? '<span class="po-example-badge po-example-badge-sim">simulated</span>'
+				: '<span class="po-example-badge po-example-badge-real">real data</span>';
 
 			var facts = [];
 			if (scenario.omicNames && scenario.omicNames.length) {
@@ -774,34 +826,41 @@ function PA_Step1JobView() {
 				return '<li>' + Ext.String.htmlEncode(item) + '</li>';
 			}).join('');
 
+			var isDefault = scenario.id === defaultScenarioId;
+
 			return {
-				xtype: 'panel',
-				title: scenario.title,
-				bodyPadding: 12,
-				margin: '0 0 10 0',
-				border: 1,
-				html: '<p style="margin:0 0 8px 0;">' + badge + '</p>' +
-					'<p style="margin:0 0 8px 0;">' +
+				xtype: 'box',
+				cls: 'po-example-card',
+				html: '<article class="po-example">' +
+					'<header class="po-example-head">' +
+					'<h4 class="po-example-title">' +
+					Ext.String.htmlEncode(scenario.title) + '</h4>' + badge +
+					(isDefault ? '<span class="po-example-badge po-example-badge-default">default</span>' : '') +
+					'</header>' +
+					'<p class="po-example-summary">' +
 					Ext.String.htmlEncode(scenario.summary) + '</p>' +
-					'<p style="margin:0 0 6px 0;color:#6B6B6B;font-size:12px;">' +
-					facts.join(' &nbsp;•&nbsp; ') + '</p>' +
-					(tests ? '<p style="margin:0 0 2px 0;font-size:12px;">' +
-						'<b>Exercises:</b></p><ul style="margin:0;font-size:12px;' +
-						'color:#6B6B6B;">' + tests + '</ul>' : ''),
-				bbar: ['->', {
-					xtype: 'button',
-					text: scenario.id === defaultScenarioId ? 'Load (default)' : 'Load',
-					handler: function() {
-						win.close();
-						me.setExampleModeHandler(scenario);
+					'<p class="po-example-facts">' + facts.join('<span class="po-example-dot">•</span>') + '</p>' +
+					(tests ? '<div class="po-example-tests">' +
+						'<h5>Exercises</h5><ul>' + tests + '</ul></div>' : '') +
+					'<div class="po-example-actions">' +
+					'<a href="javascript:void(0)" class="button btn-inline po-example-load">Load this dataset</a>' +
+					'</div>' +
+					'</article>',
+				listeners: {
+					afterrender: function(cmp) {
+						$('#' + cmp.el.id + ' .po-example-load').on('click', function() {
+							win.close();
+							me.setExampleModeHandler(scenario);
+						});
 					}
-				}]
+				}
 			};
 		};
 
 		var items = [{
 			xtype: 'box',
-			html: '<p style="margin:0 0 12px 0;">Each dataset exercises a ' +
+			cls: 'po-example-intro',
+			html: '<p>Each dataset exercises a ' +
 				'different part of PaintOmics. The <b>real data</b> entries are ' +
 				'the published STATegra time course; the <b>simulated</b> ones ' +
 				'carry a known signal planted into real KEGG pathways, so you ' +
@@ -815,20 +874,23 @@ function PA_Step1JobView() {
 
 			items.push({
 				xtype: 'box',
-				html: '<h4 style="margin:14px 0 2px 0;">' + heading + '</h4>' +
-					'<p style="margin:0 0 8px 0;color:#6B6B6B;font-size:12px;">' +
-					note + '</p>'
+				cls: 'po-example-group',
+				html: '<h3>' + heading + '</h3><p>' + note + '</p>'
 			});
 			inGroup.forEach(function(scenario) { items.push(makeCard(scenario)); });
 		});
 
 		var win = Ext.create('Ext.window.Window', {
 			title: 'Load example — choose a dataset',
+			cls: 'po-example-window',
 			modal: true,
 			width: 760,
 			maxHeight: 660,
 			closable: true,
-			bodyPadding: 14,
+			// Stated here, not in CSS: `bodyPadding` writes an inline `padding` on
+			// the body element, so a stylesheet rule cannot win it - and ExtJS needs
+			// the number anyway to size the cards inside.
+			bodyPadding: '0 22 22 22',
 			autoScroll: true,
 			items: items
 		});
@@ -1206,7 +1268,18 @@ function PA_Step1JobView() {
 		this.component = Ext.widget({
 			xtype: "container",
 			minHeight: 800,
-			padding: '10',
+			/* Vertical only. This was '10', which ExtJS writes as an inline
+			   `padding: 10px` on the container's innerCt - and that horizontal
+			   10px was one of two accidental insets between the page column and
+			   the cards. Together with the 10px `.contentbox` carried in its own
+			   margin, the cards started at x=76 while the header's wordmark
+			   started at x=56: the logo did not line up with the block directly
+			   beneath it, and neither did the right edge.
+
+			   The gutter is --pa-gutter, applied once on #mainViewCenterPanel.
+			   Anything added on top of it here is a second gutter that only some
+			   of the page gets. */
+			padding: '10 0',
 			items: [
 				{
 				xtype: "box",
@@ -1233,22 +1306,61 @@ function PA_Step1JobView() {
 								   the product name read as half of the name rather than as a
 								   build number. The version is chrome, not a headline: it still
 								   ships, in the header bar, at the size a build number earns. */
-								'<h1>PaintOmics AI</h1>' +
-								'<p class="po-hero-desc">Integrative visualization of multiple omic datasets onto KEGG, Reactome, and MapMan biological pathway maps across multiple species and biological kingdoms.</p>' +
+								/* "AI" is the half of the name that is new in this release and
+								   the half the whole page is about, so it is set in the blue the
+								   application already uses for every AI surface. Same word, same
+								   size; the colour is the only thing that separates it. */
+								'<h1 class="po-hero-title">PaintOmics <span class="po-hero-ai">AI</span></h1>' +
+								/* One sentence, same slot, same two lines as the one it replaces.
+
+								   What stood here was a 24-word nominal phrase with no subject
+								   and no verb - "Integrative visualization of multiple omic
+								   datasets onto ... maps across ..." - which describes the
+								   product the way a catalogue entry does rather than telling
+								   anyone what it is for. This says the same three things in the
+								   product's own verb, and says the useful one first. */
+								'<p class="po-hero-desc">Paint every omic layer onto the pathway that explains it &mdash; across KEGG, Reactome and MapMan, for species from every biological kingdom.</p>' +
+								/* The AI panel keeps its three lines. What changed inside them:
+
+								   "Turns your ranked pathways into..." left the subject unsaid,
+								   which read as though the page itself did it. The thing that
+								   does it is an agent, and the three verbs are the three it
+								   actually performs - it queries the job's own values through
+								   its tools, plans and runs its own searches, and verifies each
+								   citation in a sub-agent before using it. They were a comma
+								   list inside the sentence; on their own line they can be read
+								   at a glance, which is the only way three capabilities ever
+								   are, and it costs no height because the sentence loses the
+								   line they were taking up in it.
+
+								   "A draft, for you to check" stays, on the sentence it
+								   qualifies. It is the honest half of the claim and the hero is
+								   worth less without it. */
 								'<div class="po-hero-ai-highlight">' +
-									'<div><span class="po-ai-icon">' + getAIMark(15) + '</span> <strong>AI-Powered Pathway Interpretation</strong></div>' +
-									/* "Turns your ranked pathways into..." left the subject unsaid,
-								   which read as though the page itself did it. The thing that does
-								   it is an agent, and the three verbs below are the three it
-								   actually performs - it queries the job's own values through its
-								   tools, plans and runs its own searches, and verifies each
-								   citation in a sub-agent before using it. */
-								'<p>An <b>agent</b> turns your ranked pathways into a written interpretation: it queries your values, runs its own literature searches, and verifies every citation it uses. A draft, for you to check.</p>' +
+									'<div class="po-hero-ai-head"><span class="po-ai-icon">' + getAIMark() + '</span><strong>AI-powered pathway interpretation</strong></div>' +
+									'<p>An <b>agent</b> writes an interpretation of your ranked pathways &mdash; a draft, for you to check.</p>' +
+									'<ul class="po-hero-ai-does">' +
+										'<li>queries your values</li>' +
+										'<li>runs its own literature searches</li>' +
+										'<li>verifies every citation</li>' +
+									'</ul>' +
 								'</div>' +
+								/* Documentation was the primary button, which made reading about
+								   the tool the loudest thing a first-time visitor could do. The
+								   loudest thing should be using it: this fires the same example
+								   chooser the toolbar's "Load example" opens - bound in the
+								   boxready listener below, beside that button's own handler -
+								   so a visitor with no data of their own can be looking at a
+								   painted pathway without leaving the page.
+
+								   The other three keep their destinations; they step down to
+								   outline and to plain links, which is the order they are
+								   actually wanted in. */
 								'<div class="po-hero-actions">' +
-									'<a href="https://paintomics.readthedocs.io/en/latest/" target="_blank" class="po-btn-primary">Documentation</a>' +
-									'<a href="https://github.com/ConesaLab/paintomics4/" target="_blank" class="po-btn-outline">GitHub</a>' +
-									'<a href="mailto:paintomics4@gmail.com" class="po-btn-outline">Contact</a>' +
+									'<a href="javascript:void(0)" id="poHeroExampleButton" class="po-btn-primary">Load an example</a>' +
+									'<a href="https://paintomics.readthedocs.io/en/latest/" target="_blank" class="po-btn-outline">Documentation</a>' +
+									'<a href="https://github.com/ConesaLab/paintomics4/" target="_blank" class="po-btn-quiet">GitHub</a>' +
+									'<a href="mailto:paintomics4@gmail.com" class="po-btn-quiet">Contact</a>' +
 									/* The abstract keeps its id and handler; it is a text link
 									   beside the other three actions rather than a picture. */
 								'</div>' +
@@ -1266,13 +1378,20 @@ function PA_Step1JobView() {
 					'<h2>How it works</h2>' +
 					'<div class="po-steps-grid">' +
 						'<div class="po-step-card">' +
-							'<div class="po-step-number">1</div>' +
-							// Not "Data uploading": the upload form's own section heading
-							// two cards below is exactly that, and the two sat on one
-							// screen saying the same words about different things. This
-							// card is the whole of step 1, of which uploading is the
-							// fourth of five actions it lists.
-							'<h3>Upload and run</h3>' +
+							/* The disc and the heading are one element. Loose, the disc sat
+							   34px tall with 24px of air under it before any words - a
+							   floating orange dot at the top of each column, reading as
+							   ornament rather than as the number of the step it labels. On
+							   one line it is what it says it is: "1. Upload and run". */
+							'<div class="po-step-head">' +
+								'<div class="po-step-number">1</div>' +
+								// Not "Data uploading": the upload form's own section heading
+								// two cards below is exactly that, and the two sat on one
+								// screen saying the same words about different things. This
+								// card is the whole of step 1, of which uploading is the
+								// fourth of five actions it lists.
+								'<h3>Upload and run</h3>' +
+							'</div>' +
 							/* Prose, not an <ol>. This card is numbered 1, and it used to
 							   hold a list numbered 1 to 5 inside it - so the screen showed
 							   a "1" containing a "1", and the two sibling cards beside it
@@ -1291,8 +1410,10 @@ function PA_Step1JobView() {
 							'<div class="po-step-art">' + PO_STEP_ART_UPLOAD + '</div>' +
 						'</div>' +
 						'<div class="po-step-card">' +
-							'<div class="po-step-number">2</div>' +
-							'<h3>Identifier and name matching</h3>' +
+							'<div class="po-step-head">' +
+								'<div class="po-step-number">2</div>' +
+								'<h3>Identifier and name matching</h3>' +
+							'</div>' +
 							/* The opening sentence was 32 words to carry two facts: those
 							   three databases are keyed on Entrez IDs, and PaintOmics does
 							   the conversion for you. "requires ... for working with ...
@@ -1307,9 +1428,11 @@ function PA_Step1JobView() {
 							'<div class="po-step-art">' + PO_STEP_ART_MATCH + '</div>' +
 						'</div>' +
 						'<div class="po-step-card">' +
-							'<div class="po-step-number">3</div>' +
-							'<h3>Explore results</h3>' +
-							'<p>You get a Pathways summary, a classification, a network and an enrichment analysis. Paint any of the listed pathways with <a href="javascript:void(0)" class="button btn-inline btn-small btn-paint" title="Paint this pathway"><i class="fa fa-paint-brush"></i></a>, or ask for an <b>AI-powered pathway interpretation</b> with <a href="javascript:void(0)" class="button btn-inline btn-small btn-ai">' + getAIMark(14) + ' AI Interpret</a>. Read more about these analyses in <a href="https://paintomics.readthedocs.io/en/latest/" target="_blank">our documentation</a>.</p>' +
+							'<div class="po-step-head">' +
+								'<div class="po-step-number">3</div>' +
+								'<h3>Explore results</h3>' +
+							'</div>' +
+							'<p>You get a Pathways summary, a classification, a network and an enrichment analysis. Paint any of the listed pathways with <a href="javascript:void(0)" class="button btn-inline btn-small btn-paint" title="Paint this pathway"><i class="fa fa-paint-brush"></i></a>, or ask for an <b>AI-powered pathway interpretation</b> with <a href="javascript:void(0)" class="button btn-inline btn-small btn-ai">' + getAIMark() + ' AI Interpret</a>. Read more about these analyses in <a href="https://paintomics.readthedocs.io/en/latest/" target="_blank">our documentation</a>.</p>' +
 							'<div class="po-step-art">' + PO_STEP_ART_EXPLORE + '</div>' +
 						'</div>' +
 					'</div>' +
@@ -1338,9 +1461,18 @@ function PA_Step1JobView() {
 				   body to the panel's content box and writes an explicit width onto
 				   it, so .contentbox's own horizontal margin pushed this body 20px
 				   past its panel and the upload card finished further right than the
-				   two cards above it. */
+				   two cards above it.
+
+				   Horizontally that inset is now zero, because the thing it was
+				   matching is gone. This read '0 10 0 10' to mirror the 10px
+				   `.contentbox` used to carry in its own margin; that margin has been
+				   removed in favour of the single page gutter on
+				   #mainViewCenterPanel, so the 10 here became the last surviving
+				   copy of it - and the visible symptom was "Data uploading" sitting
+				   10px right of "How it works" in the card directly above, two
+				   headings of the same rank on two different rails. */
 				cls: "paStep1Form",
-				margin: '0 10 0 10',
+				margin: '0',
 				bodyCls: "contentbox",
 				layout: {type: 'vbox', align: 'stretch'},
 				defaults: {labelAlign: "right", border: false},
@@ -1487,7 +1619,7 @@ function PA_Step1JobView() {
 					}*/,
 					{   // AI Interpretation section
 						xtype: "box", flex: 1,
-						html: '<h3>' + getAIMark(17) + ' 2. AI-powered pathway interpretation (optional)</h3>'
+						html: '<h3>' + getAIMark() + ' 2. AI-powered pathway interpretation (optional)</h3>'
 					},
 					{
 						xtype: "container", layout: {type: 'hbox', align: 'stretch'}, cls: "po-ai-section-body",
@@ -1526,17 +1658,40 @@ function PA_Step1JobView() {
 									   entitled to know it is an agent doing that and not a single
 									   prompt. The wording below names the parts that exist in the
 									   code and nothing more. */
-									html: '<p style="color:#555;font-size:13px;margin:0 0 10px 0;line-height:1.55;">' +
-										'PaintOmics can draft the write-up of your results. An interpretation <b>agent</b> triages the ' +
-										'pathways your analysis ranked highest, plans and runs its own searches across PubMed and ' +
-										'Europe PMC, queries your uploaded values directly to check what the cross-omic patterns do, ' +
-										'and verifies each citation before it uses it. You get a draft interpretation with citations, ' +
-										/* Named, not linked. AgentEvolve has no remote configured - it is
-										   a local repository - so any URL here would ship as a dead link.
-										   Add one when it is published, not before. */
-										'which you are expected to check. The agents are developed and scored with the ' +
-										'<b>AgentEvolve</b> framework, against a benchmark drawn from published literature.' +
-										'<span id="aiProviderInline" class="ai-provider-inline"></span>' +
+									/* Size, colour, leading and margin were an inline `style` here,
+									   which no stylesheet can reach: the paragraph could not take the
+									   AI type scale, and dark.css had to chase its colour with an
+									   attribute selector. Now .ai-intro-copy in ai-interpret.css. */
+									/* Seven lines, then four, now two. This paragraph exists to
+									   introduce two controls; it had grown into the largest block
+									   of text on a page whose subject is the user's data.
+
+									   What went, in order. The AgentEvolve sentence: a
+									   benchmarking framework is a fact about how the feature was
+									   built, not one the reader needs to tick or leave the box.
+									   The enumeration of the agent's phases, compressed to the
+									   verbs that distinguish it from a single prompt. And now
+									   #aiProviderInline, which is the interesting one.
+
+									   That span printed "This server sends the data to a gateway
+									   operated by IIIA-CSIC (the Artificial Intelligence Research
+									   Institute of the Spanish National Research Council), on
+									   hardware in Spain" -- two of the four lines, and a
+									   restatement of the sentence in the checkbox directly below
+									   it, which already says the data goes "to IIIA-CSIC
+									   (llm.iiia.es)". The recipient is still named, on the
+									   control where the decision is actually made and where the
+									   design system requires it, and the (i) notice still gives
+									   the full operator, the country and every field that leaves
+									   the server. Saying it twice bought nothing and cost half
+									   the callout's height.
+
+									   fillAIProvenance guards each placeholder with `if (el)`,
+									   so it keeps working with this one absent. */
+									html: '<p class="ai-intro-copy">' +
+										'An <b>agent</b> drafts the write-up of your results: it triages your top-ranked ' +
+										'pathways, searches PubMed and Europe PMC, checks the patterns against your uploaded ' +
+										'values, and verifies every citation. Check its draft before you use it.' +
 										'</p>'
 								},
 								{
@@ -1624,7 +1779,7 @@ function PA_Step1JobView() {
 																'    <li>Rare genetic variants that could re-identify an individual</li>' +
 																'    <li>Unpublished clinical trial data linked to patients</li>' +
 																'  </ul>' +
-																'  <p style="font-size:11px;color:#666;margin-top:8px;">' +
+																'  <p class="ai-gdpr-fineprint">' +
 																'    By enabling this feature you confirm that the data you submit contains no personally ' +
 																'    identifiable or special-category data as defined by GDPR Article 9, or that you have a ' +
 																'    lawful basis for processing it. ' +
@@ -1668,18 +1823,72 @@ function PA_Step1JobView() {
 									   the full column.
 									
 									   And 90px is three lines for free text describing an experiment.
-									   It opens taller, and .po-exp-design lets it be dragged further. */
+									   It opens taller, and .po-exp-design lets it be dragged further.
+
+									   96 now, not 132, plus growExpDesignToFit below. This field
+									   is the tallest thing in the callout, so it alone sets the
+									   section's height -- the left column runs out of content well
+									   above it -- and for the whole time the form sits unfilled it
+									   is 132px of empty box.
+
+									   Sizing it to hold a draft was the obvious alternative and it
+									   does not work: measured, a real draft off the STATegra
+									   headers was 510 characters and wanted 153px, so 132 was
+									   already too short for the case it was tall for. Picking a
+									   height that fits the longest plausible draft would make the
+									   idle form taller still, to no benefit.
+
+									   So: short while empty -- 96 is the two-line placeholder plus
+									   a line -- and grown to fit the moment there is something to
+									   fit, which is the only moment the height is worth paying.
+									   Dragging it still works; growing sets a height, not a cap. */
 									xtype: "textarea", fieldLabel: "Experiment design (optional)",
 									name: 'experimentDesign',
-									labelAlign: 'top', anchor: '100%', height: 132,
+									labelAlign: 'top', anchor: '100%', height: 96,
 									cls: 'po-exp-design',
 									emptyText: 'e.g. RNA-seq of wildtype vs knockout mouse liver, 3 replicates per group, sampled at 24 h',
 									maxLength: 2000
 								},
+								/* A blank box asking a user to describe their own design in
+								   prose is the least-filled field on this form, and the design
+								   is already written down in the header row of the file they
+								   are about to upload. This reads those headers in the browser
+								   and asks the model to turn them into the sentence.
+
+								   Gated twice on purpose. The button is disabled until the
+								   consent box is ticked, because pressing it sends the column
+								   names outward -- earlier than Run, which is the moment the
+								   rest of the form treats as the boundary -- and the request
+								   carries an explicit consent flag that the servlet checks, so
+								   the guarantee does not rest on a disabled attribute.
+
+								   The hint moved in here, from its own box above. It was two
+								   full-width lines followed by a button on a third row, under a
+								   field whose left column had already run out of content -- the
+								   three tallest rows in the callout were the three carrying the
+								   least. Beside the button it is one row, and it reads as a
+								   caption for the control rather than a second paragraph.
+								   Shortened to match: "Describe the comparison your data
+								   represents. The interpretation uses it to say which direction
+								   of change means what." said the same thing in two sentences,
+								   and the placeholder in the field above already shows the
+								   shape of an answer. */
 								{
-									xtype: "box", cls: 'po-exp-design-hint',
-									html: 'Describe the comparison your data represents. The interpretation uses it '+
-									      'to say which direction of change means what.'
+									xtype: "box", cls: 'po-exp-design-draft',
+									html: '<button type="button" class="button btn-secondary btn-small po-exp-design-draft-btn" ' +
+									      'id="expDesignDraftBtn" disabled>' + getAIMark() + ' Draft this for me</button>' +
+									      '<span class="po-exp-design-hint">Tells the interpretation which direction of change means what.</span>' +
+									      '<span class="po-exp-design-draft-note" id="expDesignDraftNote"></span>',
+									listeners: {
+										afterrender: function() {
+											var box = this;
+											/* The consent checkbox and the omic panels are built by
+											   other parts of this view, so the wiring waits a tick
+											   for the form to finish rendering rather than reaching
+											   up through a parent that may not exist yet. */
+											setTimeout(function() { initExpDesignDraft(box); }, 200);
+										}
+									}
 								}
 							]
 						}]
@@ -1712,7 +1921,7 @@ function PA_Step1JobView() {
 							/* No padding on the outer side: the row already sits on the card
 							   inset, so the drag sources start where the headings do. */
 							padding: "10 0",
-							html: '<h2 style="text-align:center;">Available omics</h2>' +
+							html: '<h2 class="po-omics-col-title">Available omics</h2>' +
 							'<div class="availableOmicsBox" title="geneexpression"><h4><a href="javascript:void(0)"><i class="fa fa-plus-circle"></i></a> Gene expression</h4></div>' +
 							'<div class="availableOmicsBox" title="metabolomics"><h4><a href="javascript:void(0)"><i class="fa fa-plus-circle"></i></a> Metabolomics</h4></div>' +
 							'<div class="availableOmicsBox" title="proteomics"><h4><a href="javascript:void(0)"><i class="fa fa-plus-circle"></i></a> Proteomics</h4></div>' +
@@ -1728,7 +1937,7 @@ function PA_Step1JobView() {
 							flex: 2,
 							layout: {type: 'vbox',align: "stretch"},
 							items: [
-								{xtype: 'box',html: '<h2  style="text-align:center;">Selected omics</h2>'},
+								{xtype: 'box',html: '<h2 class="po-omics-col-title">Selected omics</h2>'},
 								{xtype: 'box',html: '<p class="dragHerePanel">Drag and drop here your selected <i>omics</i></p>'}
 							]
 						},
@@ -1744,7 +1953,7 @@ function PA_Step1JobView() {
 							flex: 1,
 							layout: {type: 'vbox',align: "stretch"},
 							items: [
-								{xtype: 'box',html: '<div class="content"><h5><i class="fa fa-info-circle" style="color: var(--pa-accent-blue); font-size: 50px;"></i> Help</h5><p>Drag <i>omics</i> from <b>Available omics</b> to <b>Selected omics</b>, or click the <i class="fa fa-plus-circle"  style="font-size: 18px;"></i> button.</p><p>Remove any you do not need with <i class="fa fa-trash" style="font-size: 18px;"></i>.</p><p>When you are done, click <b>Run PaintOmics</b> in the top-right corner.</p></div>'}
+								{xtype: 'box',html: '<div class="content"><h5><i class="fa fa-info-circle"></i> Help</h5><p>Drag <i>omics</i> from <b>Available omics</b> to <b>Selected omics</b>, or click the <i class="fa fa-plus-circle"></i> button.</p><p>Remove any you do not need with <span class="po-nowrap"><i class="fa fa-trash"></i>.</span></p><p>When you are done, click <b>Run PaintOmics</b> in the top-right corner.</p></div>'}
 							]
 						}]
 					}					
@@ -1756,6 +1965,13 @@ function PA_Step1JobView() {
 						me.submitFormHandler();
 					});
 					$("#exampleButton").click(function() {
+						me.showExampleChooser();
+					});
+					/* The hero's primary action. Same chooser as the toolbar button
+					   above, deliberately: the hero is where a first-time visitor
+					   looks, and "Load example" in the top-right corner is not
+					   something they have been told to look for yet. */
+					$("#poHeroExampleButton").click(function() {
 						me.showExampleChooser();
 					});
 					$("#resetButton").click(function() {
@@ -4636,4 +4852,283 @@ function fillAIProvenance(root) {
 			}
 		}
 	});
+}
+
+/*****************************************************************************
+**** "DRAFT THIS FOR ME" - EXPERIMENT DESIGN *********************************
+*****************************************************************************/
+/* Reads the header row of each data file the user has picked, sends just those
+   names to /ai_generate_exp_design, and writes the reply into the experiment
+   design box.
+
+   Only the first line of each file is read, and only the main data files --
+   never the relevant-features lists, which are one column of identifiers and
+   describe no design. Nothing is read from disk until the button is pressed. */
+
+/* Enough of the file to be sure of catching the first newline. A header row for
+   a wide matrix can be long, but not this long, and reading a fixed slice keeps
+   a multi-gigabyte upload from being pulled through memory to find one line. */
+var EXP_DESIGN_HEADER_BYTES = 262144;
+
+/* Reads the first line of `file` and calls back with its tab/comma separated
+   fields. Calls back with [] rather than failing: one unreadable file among
+   several should still let the others through. */
+function readHeaderRow(file, callback) {
+	var reader = new FileReader();
+	reader.onload = function(e) {
+		var text = String(e.target.result || "");
+		/* Whichever newline the file uses, and the first one wins -- a file
+		   with no newline at all inside the slice is treated as one long
+		   header, which the server's length caps then bound. */
+		var line = text.split(/\r\n|\r|\n/)[0] || "";
+		// A leading '#' is how these files mark the header (see the example
+		// datasets: "#geneID\tT00h\t..."), and it is not part of the name.
+		line = line.replace(/^#/, "");
+		if (!line.trim()) { callback([]); return; }
+		// Tab is the documented separator; comma is the common mistake, and
+		// falling back to it costs nothing when there is no tab to split on.
+		var parts = (line.indexOf("\t") !== -1) ? line.split("\t") : line.split(",");
+		callback(parts);
+	};
+	reader.onerror = function() { callback([]); };
+	reader.readAsText(file.slice(0, EXP_DESIGN_HEADER_BYTES));
+}
+
+/* Every main data file the user has picked, as
+   [{omicName, fileName, fileField}]. The runtime field names are omicN_file
+   for the data file and omicN_relevant_file / omicN_associations_file for the
+   others, so the pattern anchors on the end to take only the first. */
+function collectPickedOmicFiles() {
+	var picked = [];
+	Ext.each(Ext.ComponentQuery.query('filefield'), function(field) {
+		var name = field.name || "";
+		if (!/^omic\d+_file$/.test(name)) { return; }
+
+		var input = field.fileInputEl && field.fileInputEl.dom;
+		if (!input || !input.files || input.files.length === 0) { return; }
+
+		var omicPrefix = name.replace(/_file$/, "");
+		var nameField = Ext.ComponentQuery.query('[name=' + omicPrefix + '_omic_name]')[0];
+		picked.push({
+			omicName: nameField ? nameField.getValue() : omicPrefix,
+			file: input.files[0]
+		});
+	});
+	return picked;
+}
+
+/* The readable half of a servlet error.
+
+   ServerErrorManager answers a UserWarning with `message`, prefixed by the file
+   and function it was raised in:
+
+       "UserWarning: AT AIInterpretServlet.py: aiGenerateExpDesign. ERROR
+        MESSAGE: Enable AI pathway interpretation first. ..."
+
+   Everything before "ERROR MESSAGE:" is for the log, not for the person who
+   pressed the button. Same split UserController.js already does on the sign-in
+   path, with a fallback for the shapes that carry no message at all. */
+function serverErrorText(response, fallback) {
+	if (!response) { return fallback; }
+	var raw = response.errorMessage || response.message || "";
+	var split = raw.split("ERROR MESSAGE:");
+	var text = (split.length > 1 ? split[1] : raw).trim();
+	return text || fallback;
+}
+
+/* Grows the experiment design field to fit what is now in it.
+
+   The field opens at 96px, which is right for an empty box and wrong for a
+   draft: measured against the STATegra headers, a real one was 510 characters
+   and wanted 153px, so it would have opened scrolled with its last two lines
+   hidden -- and the first thing anyone does with a generated draft is read it.
+
+   Capped, because the model is not bounded to three sentences and a 2000
+   character reply would otherwise push the upload form off the screen. Past
+   the cap it scrolls, which is the correct behaviour for text that long.
+   `resize: vertical` in main.css still lets it be dragged either way. */
+var EXP_DESIGN_MIN_HEIGHT = 96;
+var EXP_DESIGN_MAX_HEIGHT = 260;
+
+function growExpDesignToFit(field, box) {
+	var input = field.inputEl && field.inputEl.dom;
+	if (!input) { return; }
+
+	/* scrollHeight only reports the content height once the element is not
+	   already taller than it, so shrink to the minimum before measuring --
+	   otherwise a field grown for a previous draft never shrinks back. */
+	field.setHeight(EXP_DESIGN_MIN_HEIGHT);
+
+	/* setHeight sizes the *component*, which here is the "Experiment design
+	   (optional)" label stacked above the input, while scrollHeight is the
+	   input's alone. Passing one to the other leaves the field short by the
+	   height of the label every time: measured, a 581-character draft wanted
+	   172px, got 155, and stayed scrolled. So measure the difference rather
+	   than assuming a value for it -- labelAlign is a config someone may
+	   change, and a hardcoded 20 would go quietly wrong when they do. */
+	var chrome = field.getHeight() - input.offsetHeight;
+	var needed = input.scrollHeight
+	           + (input.offsetHeight - input.clientHeight)   // borders
+	           + chrome;                                     // label and spacing
+	field.setHeight(Math.max(EXP_DESIGN_MIN_HEIGHT,
+	                         Math.min(needed, EXP_DESIGN_MAX_HEIGHT)));
+	if (box && box.updateLayout) { box.updateLayout(); }
+}
+
+/* Wires the button inside `box` to the consent checkbox and to the request. */
+function initExpDesignDraft(box) {
+	var button = document.getElementById("expDesignDraftBtn");
+	var note = document.getElementById("expDesignDraftNote");
+	if (!button || !note) { return; }
+
+	var consent = Ext.ComponentQuery.query('[name=aiConsent]')[0];
+	var designField = Ext.ComponentQuery.query('[name=experimentDesign]')[0];
+	if (!consent || !designField) { return; }
+
+	/* The button says why it is off rather than just being off. An unexplained
+	   disabled control on a form this long reads as a broken build. */
+	function syncEnabled() {
+		var on = consent.getValue() === true;
+		button.disabled = !on;
+		button.title = on
+			? "Reads the column names from the files you picked and asks the AI service to describe the design"
+			: "Tick “Enable AI pathway interpretation” above to use this";
+	}
+	syncEnabled();
+	consent.on('change', syncEnabled);
+
+	button.addEventListener("click", function(e) {
+		e.preventDefault();
+		if (button.disabled) { return; }
+
+		var picked = collectPickedOmicFiles();
+		if (picked.length === 0) {
+			/* The ask the user made explicitly: say so in a window rather than
+			   leaving the button to do nothing. Deliberately showWarningMessage
+			   and not confirm() -- a native modal blocks the page. */
+			showWarningMessage("Choose your data files first", {
+				message: "There is nothing to read yet. Add an omic under " +
+				         "[b]3. Choose the files to upload[/b] and pick its " +
+				         "[b]Data file[/b], then press [b]Draft this for me[/b] " +
+				         "again.[br][br]The draft is written from the column " +
+				         "names in the first row of those files.",
+				showButton: true
+			});
+			return;
+		}
+
+		button.disabled = true;
+		setNote("working", "Reading your column names…");
+
+		/* Each file is read asynchronously and the request waits for all of
+		   them; `pending` is the join. Reading is local, so this is fast even
+		   for several files. */
+		var omics = [], pending = picked.length;
+		Ext.each(picked, function(entry) {
+			readHeaderRow(entry.file, function(columns) {
+				if (columns.length) {
+					omics.push({omicName: entry.omicName, columns: columns});
+				}
+				if (--pending === 0) { send(omics); }
+			});
+		});
+	});
+
+	function send(omics) {
+		if (omics.length === 0) {
+			finish("error", "Could not read a header row from those files.");
+			return;
+		}
+
+		setNote("working", "Asking the AI service…");
+
+		var combo = Ext.ComponentQuery.query('#speciesCombobox')[0];
+		var url = (typeof SERVER_URL_AI_GENERATE_EXP_DESIGN !== "undefined")
+			? SERVER_URL_AI_GENERATE_EXP_DESIGN
+			: SERVER_URL + "ai_generate_exp_design";
+
+		$.ajax({
+			type: "POST", url: url, dataType: "json",
+			data: {
+				aiConsent: "true",
+				organism: combo ? (combo.getValue() || "") : "",
+				omics: JSON.stringify(omics)
+			}
+		}).done(function(response) {
+			if (!response || response.success !== true || !response.suggestion) {
+				finish("error", serverErrorText(response,
+					"The AI service did not return a description."));
+				return;
+			}
+			var previous = designField.getValue();
+			designField.setValue(response.suggestion);
+			growExpDesignToFit(designField, box);
+
+			/* Says what left the machine, in the number the user can check
+			   against their own file, and offers the box back the way it was.
+
+			   Kept to one line. The first version added "Edit it, or add what
+			   the comparison means", which wrapped the note onto a second row
+			   and grew the callout by exactly as much as trimming the intro
+			   paragraph had just saved -- and the caption beside the button
+			   already says what the field is for. */
+			var sent = 0;
+			Ext.each(response.columnsSent || [], function(o) { sent += o.columns.length; });
+			finish("done", "Drafted from " + sent + " column name" +
+				(sent === 1 ? "" : "s") + " — no values were sent.");
+
+			var undo = document.createElement("a");
+			undo.href = "javascript:void(0)";
+			undo.className = "po-exp-design-undo";
+			undo.textContent = previous ? "Undo" : "Clear";
+			undo.addEventListener("click", function() {
+				designField.setValue(previous || "");
+				/* Re-fit rather than restore a height saved before the draft.
+				   Saving one was the first attempt and it crept: getHeight()
+				   and setHeight() do not round-trip on this field, so every
+				   draft-then-clear cycle left it 7px taller than the last --
+				   measured 84, 91, 98, 105 over three cycles. Re-fitting is
+				   idempotent, because it derives the height from the content
+				   that is actually there now. */
+				growExpDesignToFit(designField, box);
+				setNote(null, "");
+			});
+			note.appendChild(document.createTextNode(" "));
+			note.appendChild(undo);
+		}).fail(function(xhr) {
+			/* A UserWarning from the servlet arrives here, not in done(): the
+			   error handler answers 400, so jQuery treats a perfectly
+			   well-formed refusal as a transport failure. The body is the
+			   readable half. */
+			var parsed = null;
+			try { parsed = JSON.parse(xhr.responseText); } catch (err) { /* not JSON */ }
+			finish("error", serverErrorText(parsed, "Could not reach the AI service."));
+		});
+	}
+
+	/* Writes the status line and lets the callout grow to hold it.
+
+	   The updateLayout is not decoration. ExtJS's hbox measures this section
+	   once, at render, and writes the result to .po-ai-section-body as an
+	   inline `height: 251px` -- a stylesheet cannot reach it and `overflow:
+	   visible` does not save it. The note is empty at that moment, so the two
+	   lines it grows to when the draft returns were laid out 25px *below* the
+	   panel's own bottom edge, outside its background and behind the block
+	   underneath: the text was in the DOM, `offsetParent` was set, and it was
+	   nowhere on screen. Measured before and after -- bottom 511 against a
+	   panel ending at 487, and after this call 525 against 543.
+
+	   Called on every state change rather than only on success, because the
+	   line shrinks as well as grows and a panel left tall around one line of
+	   "Reading your column names..." is the same bug facing the other way. */
+	function setNote(state, message) {
+		note.className = "po-exp-design-draft-note" + (state ? " is-" + state : "");
+		note.textContent = message;
+		if (box && box.updateLayout) { box.updateLayout(); }
+	}
+
+	function finish(state, message) {
+		setNote(state, message);
+		syncEnabled();
+	}
 }

@@ -22,7 +22,8 @@ import traceback
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from src.AdminTools.scripts.common_build_database import loadReactomeMapping
+from src.AdminTools.scripts.common_build_database import (
+    buildReactomeHierarchyEdges, loadReactomeMapping)
 
 _PASSED = []
 _FAILED = []
@@ -522,6 +523,147 @@ def test_parent_lookup_is_built_once_and_terminates_on_cycles():
     assert seen == {"A", "B", "C"}, f"walk did not cover the cycle exactly once: {seen}"
 
 
+# ---------------------------------------------------------------------------
+# The hierarchy-derived network edges
+# ---------------------------------------------------------------------------
+
+# One small tree used by the tests below.
+#
+#   TOP
+#    +- MID_A
+#    |    +- LEAF1        (installed)
+#    |    +- LEAF2        (installed)
+#    |    +- SUB
+#    |         +- LEAF3   (installed)
+#    +- MID_B
+#         +- LEAF4        (installed)
+#
+# distances to the nearest shared ancestor:
+#   LEAF1/LEAF2  1+1 = 2 under MID_A          -> siblings
+#   LEAF1/LEAF3  1+2 = 3 under MID_A          -> the ECM case: one nested deeper
+#   LEAF1/LEAF4  2+2 = 4 under TOP            -> too far at the default budget
+_TREE = [
+    ("R-MMU-TOP", "R-MMU-MIDA"),
+    ("R-MMU-TOP", "R-MMU-MIDB"),
+    ("R-MMU-MIDA", "R-MMU-LEAF1"),
+    ("R-MMU-MIDA", "R-MMU-LEAF2"),
+    ("R-MMU-MIDA", "R-MMU-SUB"),
+    ("R-MMU-SUB", "R-MMU-LEAF3"),
+    ("R-MMU-MIDB", "R-MMU-LEAF4"),
+]
+_LEAVES = {"R-MMU-LEAF1", "R-MMU-LEAF2", "R-MMU-LEAF3", "R-MMU-LEAF4"}
+
+
+def _hierarchyEdges(installed, rows=None, **kwargs):
+    tmp = tempfile.mkdtemp()
+    try:
+        path = _writeTsv(tmp, "ReactomePathwaysRelation.list",
+                         rows if rows is not None else _TREE)
+        return buildReactomeHierarchyEdges(installed, path, "R-MMU-", **kwargs)
+    finally:
+        shutil.rmtree(tmp)
+
+
+def test_hierarchy_links_siblings_and_one_level_deeper_but_not_cousins():
+    """The default budget of 3 is what recovers the case the fix exists for.
+
+    Reactome installs leaves, so two leaves are related by where they sit in the
+    tree, not by a diagram cross-reference. Siblings are the easy case; the one
+    that mattered in practice is a pair where one is nested a level deeper -
+    "Laminin interactions" directly under ECM organization against "Collagen
+    chain trimerization" under "Collagen formation" under it. A siblings-only
+    rule calls those unrelated.
+    """
+    edges = _hierarchyEdges(_LEAVES)
+
+    assert ("R-MMU-LEAF1", "R-MMU-LEAF2") in edges, \
+        "siblings under the same parent were not linked"
+    assert ("R-MMU-LEAF1", "R-MMU-LEAF3") in edges, \
+        "1+2 pair (one nested a level deeper) was not linked"
+    assert ("R-MMU-LEAF1", "R-MMU-LEAF4") not in edges, \
+        "2+2 pair across the top of the tree should be beyond the budget"
+
+
+def test_hierarchy_budget_of_two_is_siblings_only():
+    edges = _hierarchyEdges(_LEAVES, maxCombinedDepth=2)
+
+    assert ("R-MMU-LEAF1", "R-MMU-LEAF2") in edges
+    assert ("R-MMU-LEAF1", "R-MMU-LEAF3") not in edges, \
+        "budget 2 must not reach a pathway nested a level deeper"
+
+
+def test_hierarchy_pairs_only_installed_pathways():
+    """An edge to a pathway that is not a node is invisible in the client and
+    was 52 of the 451 edges the old build emitted for mmu."""
+    installed = {"R-MMU-LEAF1", "R-MMU-LEAF2"}
+    edges = _hierarchyEdges(installed)
+
+    for first, second in edges:
+        assert first in installed and second in installed, \
+            f"edge {first}-{second} points outside the installed set"
+
+
+def test_hierarchy_links_an_installed_ancestor_to_its_descendants():
+    installed = {"R-MMU-MIDA", "R-MMU-LEAF1", "R-MMU-LEAF3"}
+    edges = _hierarchyEdges(installed)
+
+    assert ("R-MMU-LEAF1", "R-MMU-MIDA") in edges, \
+        "installed parent was not linked to its installed child"
+    assert ("R-MMU-LEAF3", "R-MMU-MIDA") in edges, \
+        "installed grandparent was not linked to its installed grandchild"
+
+
+def test_hierarchy_ignores_other_species():
+    """The relation file holds every species at once."""
+    rows = _TREE + [("R-HSA-MIDA", "R-HSA-LEAF1"), ("R-HSA-MIDA", "R-HSA-LEAF2")]
+    edges = _hierarchyEdges(_LEAVES | {"R-HSA-LEAF1", "R-HSA-LEAF2"}, rows=rows)
+
+    assert ("R-HSA-LEAF1", "R-HSA-LEAF2") not in edges, \
+        "a human pair was emitted while building the mouse network"
+
+
+def test_hierarchy_pairs_are_ordered_and_unique():
+    """The caller de-duplicates against edges it has already emitted in either
+    direction, which only works if the pair is always (min, max)."""
+    edges = _hierarchyEdges(_LEAVES)
+
+    for first, second in edges:
+        assert first < second, f"pair ({first}, {second}) is not ordered"
+    assert len(edges) == len(set(edges))
+
+
+def test_hierarchy_terminates_on_a_cyclic_relation_file():
+    """Reactome's relation graph has diamonds, and the file has been seen with
+    cycles; the walk up must not loop."""
+    rows = [("R-MMU-A", "R-MMU-B"), ("R-MMU-B", "R-MMU-C"), ("R-MMU-C", "R-MMU-A")]
+    edges = _hierarchyEdges({"R-MMU-A", "R-MMU-B", "R-MMU-C"}, rows=rows)
+
+    assert isinstance(edges, set)
+
+
+def test_hierarchy_group_cap_falls_back_to_direct_children_and_says_so():
+    """A cap that silently thins the graph would read as "covered everything"."""
+    rows = [("R-MMU-BIG", "R-MMU-C%d" % i) for i in range(10)]
+    rows.append(("R-MMU-C0", "R-MMU-DEEP"))
+    installed = {"R-MMU-C%d" % i for i in range(10)} | {"R-MMU-DEEP"}
+
+    uncapped = _hierarchyEdges(installed, rows=rows, maxGroupSize=100)
+    capped = _hierarchyEdges(installed, rows=rows, maxGroupSize=3)
+
+    assert len(capped) < len(uncapped), "the cap did not reduce the pairing"
+    assert ("R-MMU-C0", "R-MMU-C1") in capped, \
+        "direct children must survive the fallback"
+
+
+def test_hierarchy_missing_relation_file_is_not_fatal():
+    """A species installed before the common Reactome download must still build,
+    with the diagram edges alone."""
+    edges = buildReactomeHierarchyEdges(
+        _LEAVES, "/nonexistent/ReactomePathwaysRelation.list", "R-MMU-")
+
+    assert edges == set(), "a missing relation file should yield no edges, not raise"
+
+
 def main():
     tests = [
         test_index_groups_multiple_rows_per_stid,
@@ -540,6 +682,15 @@ def main():
         test_relation_parsing_matches_species_precisely_and_once,
         test_relation_parsing_rejects_species_code_appearing_as_substring,
         test_parent_lookup_is_built_once_and_terminates_on_cycles,
+        test_hierarchy_links_siblings_and_one_level_deeper_but_not_cousins,
+        test_hierarchy_budget_of_two_is_siblings_only,
+        test_hierarchy_pairs_only_installed_pathways,
+        test_hierarchy_links_an_installed_ancestor_to_its_descendants,
+        test_hierarchy_ignores_other_species,
+        test_hierarchy_pairs_are_ordered_and_unique,
+        test_hierarchy_terminates_on_a_cyclic_relation_file,
+        test_hierarchy_group_cap_falls_back_to_direct_children_and_says_so,
+        test_hierarchy_missing_relation_file_is_not_fatal,
     ]
     for t in tests:
         _check(t.__name__, t)

@@ -90,18 +90,26 @@ function PA_Step3JobView() {
 	* back at step 2, so asking about mappingComp answers the question the gate
 	* was trying to ask.
 	*
-	* foundCompounds is still checked first, so nothing changes for a job in the
-	* session that produced it; mappingComp only adds the reopened case. A job
-	* with no metabolomics at all has neither, and the panels stay hidden as
-	* before.
+	* foundCompounds was checked first, ahead of mappingComp, and that is the
+	* half that had to go. Candidates exist from the moment a metabolite file is
+	* uploaded, whether or not anything resolves out of it: upload a compound
+	* file none of whose names reach a pathway and the job has candidates, an
+	* empty mappingComp, and no hub or class-activity data whatsoever -- and the
+	* first clause returned true anyway, so both panels rendered with nothing in
+	* them. It only showed in the session that produced the job, because
+	* candidates are deleted at step 2 and a reopened job has none, which is why
+	* the case reads as working every time it is checked on a reopened job.
+	*
+	* So the question is asked of the resolved compounds alone, which is what
+	* the paragraph above says these panels actually draw. All four cases land
+	* correctly: metabolomics that resolves is shown, in the session and after a
+	* reopen; metabolomics that resolves to nothing is hidden; no compound omic
+	* at all is hidden, as before.
 	*/
 	this.hasMetaboliteData = function () {
 		var model = this.getModel();
 		if (!model) {
 			return false;
-		}
-		if (model.foundCompounds && model.foundCompounds.length) {
-			return true;
 		}
 		return !!(model.mappingComp && Object.keys(model.mappingComp).length);
 	};
@@ -144,7 +152,22 @@ function PA_Step3JobView() {
 			//OPTIONS FOR NETWORK
 			minFeatures: 0.50,
 			minPValue: 0.05,
-			minSharedFeatures: 0.9,
+			/* 0.10, not 0.90.
+			   Every other statement of this default in the application says
+			   10%: the slider's own markup ships `<span ...>10</span>`, and the
+			   help tooltip beside it works its example at "Taking min=10%". The
+			   code said 0.9, so the first thing the observer did on load was
+			   drag the control to 90% and the documented example described a
+			   filter nine times looser than the one in force.
+
+			   It only bites in "Shared biological features" mode, where the
+			   threshold is compared against a Sorensen-Dice coefficient - and a
+			   Dice coefficient of 0.9 between two pathways means they share
+			   nine tenths of their matched features, which essentially nothing
+			   does. Measured on a mmu KEGG+Reactome job: the Reactome network
+			   drew 11 nodes and 1 edge at 0.9, 3 at 0.1 and 10 with the filter
+			   off entirely. So the mode existed and returned almost nothing. */
+			minSharedFeatures: 0.10,
 			colorBy : "classification",
 			backgroundLayout : false,
 			showNodeLabels : true,
@@ -813,11 +836,25 @@ function PA_Step3JobView() {
 				// AI widget is created in boxready handler
 				{ //THE TOOLBAR
 					xtype: "box",cls: "toolbar secondTopToolbar", html:
-					'<a href="javascript:void(0)" class="button btn-danger btn-right" id="resetButton"><i class="fa fa-refresh"></i> Reset view</a>' +
+					/* Short labels, and they are short on purpose. This is the widest
+					   toolbar in the app and it shares the header row with the nav:
+					   when the two meet, MainView's fitHeaderNav() drops the nav's
+					   words and leaves bare icons, which is what this screen looked
+					   like at "Reset view / Hide mapping info / Sharing options / AI
+					   Interpret". Trimming the three verbose labels - the icon beside
+					   each already carries the verb - gives back ~110px, enough for
+					   the nav to keep its words at the widths this is used at. The
+					   ladder in fitHeaderNav is still there for narrower windows; it
+					   is just no longer the normal state of the results page.
+
+					   "Hide mapping" keeps the word Hide: the handler below toggles
+					   this label by string-replacing Hide with Show, so a label
+					   without it silently stops toggling. */
+					'<a href="javascript:void(0)" class="button btn-danger btn-right" id="resetButton"><i class="fa fa-refresh"></i> Reset</a>' +
 					//'<a href="javascript:void(0)" class="button btn-default btn-right backButton"><i class="fa fa-arrow-left"></i> Go back</a>'
-					'<a href="javascript:void(0)" class="button btn-default btn-right mappingButton"><i class="fa fa-database"></i> Hide mapping info</a>' +
-					'<a href="javascript:void(0)" class="button btn-default btn-right" id="sharingButton"><i class="fa fa-share-alt"></i> Sharing options</a>' +
-					'<a href="javascript:void(0)" class="button btn-info btn-right" id="aiInterpretButton" style="display:none;">' + getAIMark(15) + ' AI Interpret</a>' +
+					'<a href="javascript:void(0)" class="button btn-default btn-right mappingButton"><i class="fa fa-database"></i> Hide mapping</a>' +
+					'<a href="javascript:void(0)" class="button btn-default btn-right" id="sharingButton"><i class="fa fa-share-alt"></i> Share</a>' +
+					'<a href="javascript:void(0)" class="button btn-info btn-right" id="aiInterpretButton" style="display:none;">' + getAIMark() + ' AI Interpret</a>' +
 					'<div id="warningMessage" style="display: none;"></div>'
 				},{ //THE SUMMARY PANEL
 					xtype: 'container', itemId: "pathwaysSummaryPanel",
@@ -836,8 +873,17 @@ function PA_Step3JobView() {
 						}, {
 							xtype: 'box',
 							cls: "contentbox omicSummaryBox",
+							/* The job ID and the URL below it were one centred <h3> with
+							   an unclosed <span class="infoTip"> inside it, so a caption
+							   inherited heading styling and the whole block sat on a
+							   centre line that nothing else in the row shares - the card
+							   beside this one is left-aligned prose on the card inset.
+							   Two elements now, both taking the inset from
+							   `div.contentbox h3` / `div.contentbox p`, so the heading,
+							   the URL and the counts below all start on one rail. */
 							html: '<h2>Pathways summary</h2>' +
-							'<h3 style="text-align:center;">Your Job ID is <b id="jobIdField">[JOB ID]</b><span id="jobName" style="display: none">[JOB NAME]</span><span class="infoTip" style=" font-size: 12px; ">You can access this job using the URL: <a id="jobURL" target="_blank" href="#">[JOBURL]</a></h3>' +
+							'<h3>Your Job ID is <b id="jobIdField">[JOB ID]</b><span id="jobName" style="display: none">[JOB NAME]</span></h3>' +
+							'<p class="po-job-url"><span class="infoTip">You can access this job using the URL: <a id="jobURL" target="_blank" href="#">[JOBURL]</a></span></p>' +
 							// The icons are decorative -- the label beside each count
 							// already names it -- so they are hidden from screen
 							// readers rather than read out as "star".
@@ -886,11 +932,68 @@ function PA_Step3JobView() {
 							/* Hide tab bar when there is only one database */
 							hidden: (me.getModel().getDatabases().length < 2),
 							defaults: {
-								height: 40
+								height: 40,
+								/* The gap between tabs, and it has to be stated here
+								   rather than in CSS: a tab bar is an ExtJS box layout,
+								   which measures each tab and writes an absolute
+								   position for it, so a `margin-right` from the
+								   stylesheet is overwritten inline and a wider tab just
+								   overlaps its neighbour. Measured that way - "KEGG"
+								   ended at 299 and "Reactome" began at 303, four pixels
+								   between two words that name different databases, so
+								   the strip read as the single phrase "KEGG Reactome"
+								   rather than as two controls. */
+								margin: '0 22 0 0'
 							},
 							height: 50,
 						},
 						listeners: {
+							/* A card layout writes the width it measured onto its
+							   child as an inline style and never re-derives it, so
+							   a tab panel that is laid out before the page column
+							   settles keeps the wrong width for the rest of the
+							   session.
+
+							   That is what happens here. The contents sidebar
+							   reserves its column only once the sections it lists
+							   exist, which is a second or so after this panel first
+							   renders, and `paTocSyncRail` re-lays out the viewport
+							   when it does - but that run stops at this panel, whose
+							   own width is by then correct, and never asks the card
+							   layout to re-place a child whose width is already
+							   written. Measured on a KEGG+Reactome job at 1440: this
+							   panel 1114 wide with its active child still 1184, so
+							   "Pathways classification" and the network's Details
+							   panel ran to x=1450 while every card outside the tabs
+							   stopped at 1380. On a job with metabolites the overhang
+							   escaped as a horizontal scrollbar on the whole page.
+
+							   Hooked on resize rather than on the sidebar, because
+							   the panel being narrower than its child is the fault
+							   itself - whatever caused it, and including a window
+							   resize. Clearing the width is what allows a re-measure;
+							   the panel's own updateLayout is what reaches the card
+							   layout. Deferred out of the layout run that raised this
+							   event, and self-limiting: after the correction no child
+							   is wider than the panel, so it does not fire again. */
+							resize: function(tabPanel, width) {
+								var stale = [];
+
+								tabPanel.items.each(function(child) {
+									if (child.getWidth && child.getWidth() > width) {
+										child.setWidth(null);
+										stale.push(child);
+									}
+								});
+
+								if (stale.length) {
+									setTimeout(function() {
+										if (!tabPanel.isDestroyed) {
+											tabPanel.updateLayout();
+										}
+									}, 0);
+								}
+							},
 							tabchange: function(tabPanel, newCard, oldCard, eOpts) {
 								/* Fire event at network element (second position) */
 								newCard.items.getAt(1).fireEvent('tabchange');
@@ -974,8 +1077,18 @@ function PA_Step3JobView() {
 						// wrapper markup placed inside them would be wiped on first filter.
 						var table_html =
 							'<table>' +
+							/* The badge column gets its own empty header rather than
+							   being swallowed by a colspan on "Database". The colspan
+							   broke this header row in two ways at once: "Database"
+							   started at the badge's edge, 50px left of the names it
+							   labels, and - because it counted as one cell - "Found"
+							   and "Significant" landed on nth-child 2 and 3, so the
+							   `th:nth-child(n+3)` rule that right-aligns the count
+							   columns missed them and both headers sat left-aligned
+							   over right-aligned numbers. */
 							'<thead><tr>' +
-								'<th colspan="2">Database</th>' +
+								'<th class="db_chip"></th>' +
+								'<th>Database</th>' +
 								'<th>Found</th>' +
 								'<th>Significant</th>' +
 							'</tr></thead><tbody>';
@@ -1381,14 +1494,26 @@ function PA_Step3PathwayClassificationView(db = "KEGG") {
 			xtype: 'box', cls: "contentbox",
 			maxWidth: 1900, html:
 			'<h2>Pathways classification (' + me.database + ' database)</h2>' +
-			'<div id="pathwayClassificationPlot1Box_' + me.dbid + '" style="padding-left: 10px;overflow:hidden;  min-height:300px; width: 45%; float: left;">'+
+			/* The card's own inset, not 10px: "Category Distribution" is the
+			   first thing under the card's heading and started 16px left of
+			   it. */
+			'<div id="pathwayClassificationPlot1Box_' + me.dbid + '" style="padding-left: var(--pa-card-inset);overflow:hidden;  min-height:300px; width: 45%; float: left;">'+
 			'  <h4>Category Distribution<span class="infoTip">Click on each slice to view the distribution of the subcategories.</span></h4> '+
 			'  <div id="pathwayDistributionsContainer_' + me.dbid + '" style="height: 240px;"></div>'+
 			'</div>' +
-			'<div id="pathwayClassificationPlot2Box_' + me.dbid + '" style="overflow:hidden;  min-height:300px; width: 55%; display:inline-block; padding: 0px 30px">'+
+			/* The card's own inset on the right, like the column beside it takes on
+			   the left. 30px was 4px past it, which is what put the Apply button
+			   below on a right edge of its own. */
+			'<div id="pathwayClassificationPlot2Box_' + me.dbid + '" style="overflow:hidden;  min-height:300px; width: 55%; display:inline-block; padding: 0px var(--pa-card-inset)">'+
 			'  <h4>Filter by category<span class="infoTip">Use this tool to <b>Show or Hide Pathways</b> based on their classification</span></h4> '+
 			'  <div id="pathwayClassificationContainer_' + me.dbid + '"></div>'+
-			'  <a href="javascript:void(0)" class="button btn-success btn-right helpTip" id="applyClassificationSettingsButton_' + me.dbid + '" style="margin: 0px 50px 17px 0px;" title="Apply changes"><i class="fa fa-check"></i> Apply</a>' +
+			/* No right margin. The 50px here stopped the only action in this card
+			   54px short of the rail its own heading, its "Filter by category"
+			   label and every classification row are squared to - measured at
+			   x=1369 against a card rail of 1423 - and 50px is not a spacing
+			   anything else on the page uses, so it read as the button having
+			   come loose rather than as an inset. */
+			'  <a href="javascript:void(0)" class="button btn-success btn-right helpTip" id="applyClassificationSettingsButton_' + me.dbid + '" style="margin: 0px 0px 17px 0px;" title="Apply changes"><i class="fa fa-check"></i> Apply</a>' +
 			'</div>',
 			listeners: {
 				boxready: function() {
@@ -1666,6 +1791,12 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 				edgesAux.push(elem.data);
 			}
 		}
+
+		/********************************************************/
+		/* STEP 2.C DESCRIBE WHAT WAS ACTUALLY DRAWN            */
+		/********************************************************/
+		me.updateNetworkSubtitle(nodesAux.length, edgesAux.length,
+			Object.keys(indexedPathways).length, visualOptions);
 
 		/********************************************************/
 		/* STEP 3. GENERATE THE NETWORK                         */
@@ -2000,6 +2131,58 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 			}, 2000);
 		}
 
+		return this;
+	};
+
+	/**
+	* Fills the status line under the toolbar.
+	*
+	* The MORE regulator-target network has carried one of these from the start
+	* ("445 nodes · 400 of 1382 edges · condition Ctr_0H"), and it is the single
+	* most useful thing in that panel: it tells you whether you are looking at a
+	* thin graph or at a filter that threw the graph away. The pathways network
+	* had no equivalent, so an empty canvas was indistinguishable from a broken
+	* one - a Reactome network that drew 11 nodes and exactly 1 edge looked
+	* identical to a rendering failure, and had to be diagnosed by reading the
+	* sigma instance out of the browser console.
+	*
+	* @param {Number} nodeCount    pathways drawn
+	* @param {Number} edgeCount    edges drawn
+	* @param {Number} totalPathways pathways this database matched at all
+	* @param {Object} visualOptions the filter state the counts came from
+	* @chainable
+	* @returns {PA_Step3PathwayNetworkView}
+	*/
+	this.updateNetworkSubtitle = function(nodeCount, edgeCount, totalPathways, visualOptions) {
+		var element = document.getElementById("step3-network-subtitle_" + this.dbid);
+		if (!element) return this;
+
+		var relation = (visualOptions.edgesClass === "s")
+			? "shared biological features"
+			: "linked biological processes";
+
+		var parts = [
+			"<b>" + nodeCount + "</b> of " + totalPathways + " " +
+				this.database + " pathways",
+			"<b>" + edgeCount + "</b> edge" + (edgeCount === 1 ? "" : "s") +
+				" — " + relation,
+			"p &le; " + visualOptions.minPValue
+		];
+
+		if (visualOptions.edgesClass === "s") {
+			parts.push("similarity &ge; " +
+				Math.round(visualOptions.minSharedFeatures * 100) + "%");
+		}
+
+		/* Named separately from "nothing is significant": a graph with nodes
+		   but no edges is the case a user reads as a bug, and it is worth
+		   saying which of the two filters produced it. */
+		if (nodeCount > 1 && edgeCount === 0) {
+			parts.push('<span class="pa-net-warn">no pathway pair passes this ' +
+				'edge filter — try the other edge type in <b>Tools</b></span>');
+		}
+
+		element.innerHTML = parts.join(" &middot; ");
 		return this;
 	};
 
@@ -2606,11 +2789,11 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 				'  <div style="text-align: center;"> </div>' +
 				'  <hr/>' +
 				'</div>' +
-				'<div style="padding: 10px;" id="sliderClusterNumberContainer_' + me.dbid + '" style="display: none;">' +
+				'<div id="sliderClusterNumberContainer_' + me.dbid + '" style="display: none;">' +
 				'  <h5>Modify number of clusters</h5>' +
 				'  <span class="infoTip">Change the number of the desired clusters and apply the results. Be aware that this is an <b>intensive</b> process that will use the queue system so the results may take some time to be retrieved.</span>' +
 				'  <p style="margin:10px;">Generate <span id="sliderClusterNumberShow_' + me.dbid + '"></span> clusters.</p>' +
-				'  <div class="slider-ui" style="margin:10px;" id="sliderClusterNumber_' + me.dbid + '"></div>' +
+				'  <div class="slider-ui" id="sliderClusterNumber_' + me.dbid + '"></div>' +
 				'  <a href="javascript:void(0)" class="button btn-success btn-right helpTip" id="applyClusterNumber_' + me.dbid + '" style="margin: 20px auto;"><i class="fa fa-check"></i> Apply</a>' +
 				'</div>' +
 				//THE PANEL WITH THE PATHWAY DETAILS
@@ -2621,15 +2804,24 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 			},{
 				xtype: 'box',  id : 'networkSettingsPanel_' + me.dbid,
 				//autoHeight: true, flex: 1,
-				cls: "contentbox lateralOptionsPanel", html:
+				// paSettingsPanel: a column of grouped controls, so its h4s are
+				// group labels rather than names and main.css tracks them out.
+				// Deliberately not on the Details panel beside it, whose h4 is
+				// whatever the network is currently coloured by.
+				cls: "contentbox lateralOptionsPanel paSettingsPanel", html:
 				//THE PANEL WITH THE VISUAL OPTIONS
 				'<div class="lateralOptionsPanel-toolbar"><a href="javascript:void(0)" class="toolbarOption helpTip hideOption" id="hideNetworkSettingsPanelButton_' + me.dbid + '" title="Hide this panel"><i class="fa fa-times"></i></a></div>'+
 				'<h2>Tools<span class="helpTip" title="Some options may affect to the table below."></h2>' +
-				'<div id="pathwayNetworkToolsBox_' + me.dbid + '" style="overflow:hidden; padding: 2px 10px;">' +
-				'  <h4>Visual settings:</h4>' +
+				'<div id="pathwayNetworkToolsBox_' + me.dbid + '" style="overflow:hidden;">' +
+				'  <h4>Visual settings</h4>' +
 				'  <h5>Node coloring: <span class="helpTip" style="float:right;" title="Change the way in which nodes are colored."></span></h5>' +
 				'  <div id="colorByContainer_' + me.dbid + '"></div>' +
-				'  <h5>Choose what edges represents: <span class="helpTip" style="float:right;" title="By default an edge between 2 nodes indicates that both pathways are closely related in biological terms. These relationships are inferred from the pathways maps which usually contains links to other KEGG pathways that indicates the existence of functional elements shared between pathways and processes. Alternatively, edges can be configured to represent the existence of shared genes or compounds between separated biological processes, where thickness of the edge increases with the similarity between both set of biological features (percentage of shared features on total features in both process)."></span></h5>' +
+				/* The tooltip used to describe only the KEGG case ("links to other
+				   KEGG pathways"), which left a Reactome or MapMan user reading
+				   an explanation of a database they were not looking at. Each
+				   database states process relatedness its own way, so say which
+				   one is being used. */
+				'  <h5>Choose what edges represents: <span class="helpTip" style="float:right;" title="<b>Linked biological processes</b> means the two pathways are related in biological terms, as the database itself states it. In KEGG that is a link drawn on a pathway map to another map; in Reactome it is the pathway hierarchy - two processes under a common parent, or a process and one nested inside it - together with any sub-pathway a diagram embeds.<br><br><b>Shared biological features</b> instead draws an edge wherever two pathways have genes or compounds in common, with the thickness increasing with the similarity between the two sets of matched features. Use the <i>Min shared features</i> slider below to set how much overlap is enough."></span></h5>' +
 				'  <div id="edgesClassContainer_' + me.dbid + '">' +
 				'    <div class="radio">' +
 				'      <input type="radio" ' + ((visualOptions.edgesClass === "l")? "checked": "")+ ' id="edgesLinkedPathways_' + me.dbid + '" name="edgesClassCheckbox-check_' + me.dbid + '" value="l">' +
@@ -2645,12 +2837,12 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 				'    <label for="show-node-labels-check_' + me.dbid + '">Show all node labels <span class="helpTip" style="float:right;" title="Shows labels for nodes (reduces performance). By default labels are visible when zooming the network."</span></label>' +
 				'  </div>'+
 				'  <h5>Label font size (<span id="fontSizeValue_' + me.dbid + '">14</span>)<span class="helpTip" style="float:right;" title="Font size of the labels."></span></h5>' +
-				'  <div class="slider-ui" style="margin:10px;" id="fontSizeSlider_' + me.dbid + '"></div>' +
+				'  <div class="slider-ui" id="fontSizeSlider_' + me.dbid + '"></div>' +
 				'  <div style="display: none;">' +
 				'  <h5>Max node size (<span id="maxNodeSizeValue_' + me.dbid + '">8</span>)<span class="helpTip" style="float:right;" title="Determines the maximum size that a node can have, scaling the others to maintain the correct ratio."</span></h5>' +
-				'  <div class="slider-ui" style="margin:10px;" id="maxNodeSizeSlider_' + me.dbid + '"></div>' +
+				'  <div class="slider-ui" id="maxNodeSizeSlider_' + me.dbid + '"></div>' +
 				'  <h5>Min node size (<span id="minNodeSizeValue_' + me.dbid + '">1</span>)<span class="helpTip" style="float:right;" title="Determines the minimum size that a node can have, scaling the others to maintain the correct ratio."</span></h5>' +
-				'  <div class="slider-ui" style="margin:10px;" id="minNodeSizeSlider_' + me.dbid + '"></div>' +
+				'  <div class="slider-ui" id="minNodeSizeSlider_' + me.dbid + '"></div>' +
 				' </div>' +
 				// '  <div class="checkbox"><input type="checkbox" id="show-edge-labels-check" name="showEdgeLabelsCheckbox">' +
 				// '    <label for="show-edge-labels-check">Show all edge labels <span class="helpTip" style="float:right;" title="Shows labels for edges (reduces performance). Edge labels indicate the percentage of shared features (genes + metabolites) shared between 2 pathways."</span></label>' +
@@ -2667,11 +2859,11 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 				'  </div>'+
 				"  <h4>Node filtering options</h4>" +
 				'  <h5>Min features in pathway (<span id="minFeaturesValue_' + me.dbid + '">50</span>%)<span class="helpTip" style="float:right;" title="Min % of features (genes + compounds) of a pathway found at the input. Pathways with lower values will be excluded from the network. E.g. Using min=50%, if we find 80 features from the input data, at a Pathway that contains 200 features, the pathway will be excluded (80 < 100)."></span></h5>' +
-				'  <div class="slider-ui" style="margin:10px;" id="minFeaturesSlider_' + me.dbid + '"></div>' +
+				'  <div class="slider-ui" id="minFeaturesSlider_' + me.dbid + '"></div>' +
 				'  <h5>Min shared features (<span id="minSharedFeaturesValue_' + me.dbid + '">10</span>%)<span class="helpTip" style="float:right;" title="Min. % of features shared between 2 pathways (using the smaller pathway as reference). Edges showing a smaller relationship will be excluded.<br>E.g. Taking min=10%, Pathway A (60 features) and B (90 features), if shared features=5 the edge will be ignored (5 < Min(60,90) * 0.1)"></span></h5>' +
-				'  <div class="slider-ui" style="margin:10px;" id="minSharedFeaturesSlider_' + me.dbid + '"></div>' +
+				'  <div class="slider-ui" id="minSharedFeaturesSlider_' + me.dbid + '"></div>' +
 				'  <h5>Min p-value for the pathway (<span id="minPValue_' + me.dbid + '">0.05</span>)<span class="helpTip" style="float:right;" title="Pathways with lower p-value (more significant) will be represented with bigger nodes. Pathways with higher p-value (less significant), will be shown as small nodes."</span></h5>' +
-				'  <div class="slider-ui" style="margin:10px;" id="minPValueSlider_' + me.dbid + '"></div>' +
+				'  <div class="slider-ui" id="minPValueSlider_' + me.dbid + '"></div>' +
 				'  <div class="checkbox"><input type="checkbox" id="use-combined-pval-check_' + me.dbid + '" name="useCombinedPvalCheckbox">' +
 				'    <label for="use-combined-pval-check_' + me.dbid + '">Always use combined p-value <span class="helpTip" style="float:right;" title="When coloring for one omic, use always the combined p-value for filtering if enabled, otherwise rely on the omic p-value."</span></label>' +
 				'  </div>'+
@@ -2684,12 +2876,14 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 				//autoHeight: true, flex: 4,
 				style: 'overflow: hidden; margin:0;', html:
 				//THE PANEL WITH THE NETWORK
-				'<div class="lateralOptionsPanel-toolbar">'+
-				'  <a href="javascript:void(0)" class="toolbarOption downloadTool helpTip" id="downloadNetworkToolSVG_' + me.dbid + '" title="Download the network (SVG)" style="margin-top: 10px;"><i class="fa fa-download"></i> Download (SVG)</a>' +
-				'  <a href="javascript:void(0)" class="toolbarOption downloadTool helpTip" id="downloadNetworkTool_' + me.dbid + '" title="Download the network (PNG)" style="margin-top: 10px;"><i class="fa fa-download"></i> Download (PNG)</a>' +
-				'</div>'+
+				/* One band, two groups. The controls that change what you are
+				   looking at sit left; the ones that act on the current view -
+				   the layout toggle, pinning positions, tooltips, and the two
+				   downloads that used to float over the title - sit right.
+				   Shapes and spacing come from .pa-net-tool in
+				   network-views.css, which the MORE network's buttons share. */
 				'<h2>Pathways network (' + me.database + ' database)<span class="helpTip" title="This Network represents the relationships between matched pathways."></h2>' +
-				'<div id="step3-network-toolbar_' + me.dbid + '">' +
+				'<div id="step3-network-toolbar_' + me.dbid + '" class="pa-net-toolbar">' +
 				' <div class="lateralOptionsPanel" id="reorderOptions_' + me.dbid + '" style="display:none;">' +
 				'  <div class="lateralOptionsPanel-toolbar">' +
 				'    <a href="javascript:void(0)" class="toolbarOption helpTip hideOption" title="Hide this panel"><i class="fa fa-times"></i></a>' +
@@ -2702,37 +2896,51 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 				'    <i class="fa fa-plus-square fa-2x"  name="more" style="color: #DA643D;"></i>' +
 				'  </span>' +
 				' </div>' +
-				'  <a href="javascript:void(0)" class="toolbarOption helpTip" id="showNetworkSettingsPanelButton_' + me.dbid + '" ><i class="fa fa-cog"></i> Configure</a>' +
+				'  <a href="javascript:void(0)" class="pa-net-tool helpTip" id="showNetworkSettingsPanelButton_' + me.dbid + '" title="Show the Tools panel"><i class="fa fa-sliders"></i> Configure</a>' +
+				'  <a href="javascript:void(0)" class="pa-net-tool helpTip" id="fullscreenSettingsPanelButton_' + me.dbid + '" title="Expand the network to the whole window"><i class="fa fa-expand"></i> Full screen</a>' +
 				'  <div class="menu">'+
-				'    <a href="javascript:void(0)" class="toolbarOption menuOption helpTip" style="display: none"><i class="fa fa-mouse-pointer"></i> Node selection</a>' +
+				'    <a href="javascript:void(0)" class="pa-net-tool menuOption helpTip" style="display: none"><i class="fa fa-mouse-pointer"></i> Node selection</a>' +
 				'    <div class="menuBody">' +
-				'      <a href="javascript:void(0)" class="toolbarOption helpTip submenuOption selectNodesOption" name="category" title="Select all nodes based on the categories/clusters for current selection"><i class="fa fa-object-ungroup"></i> Category-based selection</a>' +
-				'      <a href="javascript:void(0)" class="toolbarOption helpTip submenuOption selectNodesOption" name="free" title="Select nodes at a hand-drawn region"><i class="fa fa-cut"></i> Free select tool</a>' +
-				'      <a href="javascript:void(0)" class="toolbarOption helpTip submenuOption selectNodesOption" name="adjacent" title="Select adjacent nodes for selected nodes"><i class="fa fa-share-alt"></i> Select adjacent nodes</a>' +
-				'      <a href="javascript:void(0)" class="toolbarOption helpTip submenuOption selectNodesOption" name="all" title="Select all nodes in the network"><i class="fa fa-object-group"></i> Select all nodes</a>' +
+				'      <a href="javascript:void(0)" class="pa-net-tool helpTip submenuOption selectNodesOption" name="category" title="Select all nodes based on the categories/clusters for current selection"><i class="fa fa-object-ungroup"></i> Category-based selection</a>' +
+				'      <a href="javascript:void(0)" class="pa-net-tool helpTip submenuOption selectNodesOption" name="free" title="Select nodes at a hand-drawn region"><i class="fa fa-cut"></i> Free select tool</a>' +
+				'      <a href="javascript:void(0)" class="pa-net-tool helpTip submenuOption selectNodesOption" name="adjacent" title="Select adjacent nodes for selected nodes"><i class="fa fa-share-alt"></i> Select adjacent nodes</a>' +
+				'      <a href="javascript:void(0)" class="pa-net-tool helpTip submenuOption selectNodesOption" name="all" title="Select all nodes in the network"><i class="fa fa-object-group"></i> Select all nodes</a>' +
 				'    </div>'+
 				'  </div>' +
 				'  <div class="menu">'+
-				'    <a href="javascript:void(0)" class="toolbarOption menuOption helpTip"  style="display: none"><i class="fa fa-mouse-pointer"></i> Reorder selected nodes</a>' +
+				'    <a href="javascript:void(0)" class="pa-net-tool menuOption helpTip"  style="display: none"><i class="fa fa-mouse-pointer"></i> Reorder selected nodes</a>' +
 				'    <div class="menuBody">' +
-				'      <a href="javascript:void(0)" class="toolbarOption helpTip submenuOption reorderNodesOption" name="block" title="Organize selected nodes in to a block"><i class="fa fa-th"></i> Display as block</a>' +
-				'      <a href="javascript:void(0)" class="toolbarOption helpTip submenuOption reorderNodesOption" name="ring" title="Organize selected nodes into a ring"><i class="fa fa-spinner"></i> Display as ring</a>' +
-				'      <a href="javascript:void(0)" class="toolbarOption helpTip submenuOption reorderNodesOption" name="random" title="Set random positions for selected nodes"><i class="fa fa-random"></i> Randomize positions</a>' +
+				'      <a href="javascript:void(0)" class="pa-net-tool helpTip submenuOption reorderNodesOption" name="block" title="Organize selected nodes in to a block"><i class="fa fa-th"></i> Display as block</a>' +
+				'      <a href="javascript:void(0)" class="pa-net-tool helpTip submenuOption reorderNodesOption" name="ring" title="Organize selected nodes into a ring"><i class="fa fa-spinner"></i> Display as ring</a>' +
+				'      <a href="javascript:void(0)" class="pa-net-tool helpTip submenuOption reorderNodesOption" name="random" title="Set random positions for selected nodes"><i class="fa fa-random"></i> Randomize positions</a>' +
 				'    </div>'+
 				'  </div>' +
 				'  <div class="menu">'+
-				'    <a href="javascript:void(0)" class="toolbarOption menuOption helpTip"  style="display: none"><i class="fa fa-cog"></i> Node attributes</a>' +
+				'    <a href="javascript:void(0)" class="pa-net-tool menuOption helpTip"  style="display: none"><i class="fa fa-cog"></i> Node attributes</a>' +
 				'    <div class="menuBody">' +
-				'      <a href="javascript:void(0)" class="toolbarOption helpTip submenuOption configureNodesOption" name="size-conf" title="Increase or decrease point size"><i class="fa fa-th"></i> Change point size</a>' +
+				'      <a href="javascript:void(0)" class="pa-net-tool helpTip submenuOption configureNodesOption" name="size-conf" title="Increase or decrease point size"><i class="fa fa-th"></i> Change point size</a>' +
 				'    </div>'+
 				'  </div>' +
-				'  <a href="javascript:void(0)" class="toolbarOption helpTip" id="fullscreenSettingsPanelButton_' + me.dbid + '" ><i class="fa fa-arrows-alt"></i> Full screen</a>' +
-				'  <a href="javascript:void(0)" class="toolbarOption helpTip resumeLayout" id="resumeLayoutButton_' + me.dbid + '" style="float:right"><i class="fa fa-play"></i> Resume layout</a>' +
-				'  <a href="javascript:void(0)" class="toolbarOption resumeLayout helpTip" id="saveNodePositionsButton_' + me.dbid + '"  style="float:right"><i class="fa fa-floppy-o"></i> Save Node Positions</a>' +
-				'  <a href="javascript:void(0)" class="toolbarOption resumeLayout helpTip" id="toggleTooltipsButton_' + me.dbid + '"  style="float:right"><i class="fa fa-comment"></i> Toggle tooltips</a>' +
+				'  <span class="pa-net-toolbar-gap"></span>' +
+				'  <a href="javascript:void(0)" class="pa-net-tool helpTip resumeLayout" id="resumeLayoutButton_' + me.dbid + '" title="Start or stop the force-directed layout"><i class="fa fa-play"></i> Resume layout</a>' +
+				/* A floppy disk for "remember where I put these nodes" is a
+				   metaphor for a device none of this application's users have
+				   owned. A pin is what the action does. */
+				'  <a href="javascript:void(0)" class="pa-net-tool helpTip" id="saveNodePositionsButton_' + me.dbid + '" title="Pin the nodes where they are now, so this layout is restored next time"><i class="fa fa-thumb-tack"></i> Save positions</a>' +
+				'  <a href="javascript:void(0)" class="pa-net-tool helpTip" id="toggleTooltipsButton_' + me.dbid + '" title="Show or hide the tooltip that follows the cursor over a node"><i class="fa fa-commenting-o"></i> Tooltips</a>' +
+				'  <span class="pa-net-toolbar-sep"></span>' +
+				'  <a href="javascript:void(0)" class="pa-net-tool helpTip" id="downloadNetworkTool_' + me.dbid + '" title="Download the network (PNG)"><i class="fa fa-download"></i> PNG</a>' +
+				'  <a href="javascript:void(0)" class="pa-net-tool helpTip" id="downloadNetworkToolSVG_' + me.dbid + '" title="Download the network (SVG)"><i class="fa fa-download"></i> SVG</a>' +
 				'  <p id="step3-network-toolbar-message_' + me.dbid + '"></p>'+
 				'</div>' +
-				'<div id="pathwayNetworkBox_' + me.dbid + '" style="position: relative;overflow:hidden; height:775px; width: 100%;"><div id="pathwayNetworkWaitBox_' + me.dbid + '"><i class="fa fa-cog fa-spin"></i> Building network...</div></div>' +
+				/* The status line the MORE network already had. It is filled in
+				   by updateNetworkSubtitle() every time the graph is rebuilt. */
+				'<div class="pa-net-subtitle" id="step3-network-subtitle_' + me.dbid + '">Building network&hellip;</div>' +
+				/* No height here any more. It was 775px inline while MORE's canvas was
+			   600px in its own stylesheet, so the two graph panels on this page
+			   were different shapes for no reason either file could see. Both now
+			   read --pa-net-canvas-height from network-views.css. */
+			'<div id="pathwayNetworkBox_' + me.dbid + '" class="pa-net-canvas" style="overflow:hidden; width: 100%;"><div id="pathwayNetworkWaitBox_' + me.dbid + '"><i class="fa fa-cog fa-spin"></i> Building network...</div></div>' +
 				'<div id="pathwayNetworkBoxSVG_' + me.dbid + '" style="display: none;">'
 			}],
 			listeners: {
@@ -2745,43 +2953,43 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 				afterrender: function() {
 					//SOME EVENT HANDLERS
 					$("#minFeaturesSlider_" + me.dbid).slider({
-						value: 0,min: 0,max: 100,step: 5,
+						range: "min",value: 0,min: 0,max: 100,step: 5,
 						slide: function(event, ui) {
 							$("#minFeaturesValue_" + me.dbid).html(ui.value);
 						}
 					});
 					$("#minSharedFeaturesSlider_" + me.dbid).slider({
-						value: 0,min: 0,max: 100,step: 5,
+						range: "min",value: 0,min: 0,max: 100,step: 5,
 						slide: function(event, ui) {
 							$("#minSharedFeaturesValue_" + me.dbid).html(ui.value);
 						}
 					});
 					$("#minPValueSlider_" + me.dbid).slider({
-						value: 0,min: 0.005,max: 1,step: 0.005,
+						range: "min",value: 0,min: 0.005,max: 1,step: 0.005,
 						slide: function(event, ui) {
 							$("#minPValue_" + me.dbid).html(ui.value);
 						}
 					});
 					$("#maxNodeSizeSlider_" + me.dbid).slider({
-						value: 0,min: 1,max: 50,step: 1,
+						range: "min",value: 0,min: 1,max: 50,step: 1,
 						slide: function(event, ui) {
 							$("#maxNodeSizeValue_" + me.dbid).html(ui.value);
 						}
 					});
 					$("#minNodeSizeSlider_" + me.dbid).slider({
-						value: 0,min: 1,max: 50,step: 1,
+						range: "min",value: 0,min: 1,max: 50,step: 1,
 						slide: function(event, ui) {
 							$("#minNodeSizeValue_" + me.dbid).html(ui.value);
 						}
 					});
 					$("#fontSizeSlider_" + me.dbid).slider({
-						value: 0,min: 1,max: 50,step: 1,
+						range: "min",value: 0,min: 1,max: 50,step: 1,
 						slide: function(event, ui) {
 							$("#fontSizeValue_" + me.dbid).html(ui.value);
 						}
 					});
 					$("#sliderClusterNumber_" + me.dbid).slider({
-						value: 0,min: 1,max: 20,step: 1,
+						range: "min",value: 0,min: 1,max: 20,step: 1,
 						slide: function(event, ui) {
 							$("#sliderClusterNumberShow_" + me.dbid).html(ui.value);
 						}
@@ -3761,7 +3969,14 @@ function PA_Step3PathwayTableView() {
 				filterable: true, width:30, resizable: false,
 				renderer: function(value, metadata, record) {
 					var sourcedb = record.get("source");
-					metadata.style = "height: 40px; padding: 8px 3px;width: 40px;";
+					/* 8px of top padding centred the 24px badge in the 41px row,
+					   but nothing else in the row is centred in the row: every
+					   text cell is top-padded 5px, so its 15px line sits with
+					   its middle 7.5px higher. The badge was the only thing on
+					   its own centre line, and against 877 rows of text it read
+					   as every badge sitting low. Zero here puts the badge's
+					   middle on the text's middle. */
+					metadata.style = "height: 40px; padding: 0 3px;width: 40px;";
 					metadata.tdAttr = 'data-qtip="' + "<b>Database</b><br>" + sourcedb + '"';
 					return '<i class="classificationNameBox" style="' + $('#icon_' + sourcedb).attr('style') + ';line-height: 21px;">' + sourcedb.charAt(0) + '</i>';
 				}
@@ -3927,7 +4142,15 @@ function PA_Step3PathwayTableView() {
 		columns.push({text: 'Significance tests', columns: secondaryColumns});
 
 		columns.push({
-			xtype: 'customactioncolumn',
+			/* Centred, because its contents are. An action column renders its
+			   items centred in the cell, and with no `align` here the header
+			   defaulted to left: "External links" started at x=1383 while every
+			   "KEGG PubMed" pair below it started at 1407.5, so the only column
+			   in the grid whose label and values disagreed about their own axis
+			   was the one at the far right, with nothing after it to line up
+			   with instead. Every other value column here is already
+			   `align: "center"`. */
+			xtype: 'customactioncolumn', align: "center",
 			text: "External links", width: 150,
 			items: [{
 				icon: "fa-external-link",
@@ -4478,7 +4701,11 @@ function PA_Step3PathwayTableView() {
 			   was still making the grid size to its content rather than to the card:
 			   1318px inside a 1112px box, so "External links" was only reachable by
 			   scrolling the table sideways. Sized to the card, all nine columns fit. */
-			xtype: 'container', cls: "contentbox", items: [
+			/* Every other card on this step carries this margin, so without it
+			   the enrichment card - the last thing on the page - hung 10px
+			   outside the rail the four cards above it share, and its heading
+			   started 10px left of theirs. */
+			xtype: 'container', cls: "contentbox", style: "max-width:1900px; margin: 5px 10px;", items: [
 				{xtype: 'box', flex: 1, html: '<h2 id="pathwayEnrichmentSection">Pathway enrichment</h2>'},
 				{
 					xtype: "livesearchgrid", itemId: 'pathwaysGridPanel',
@@ -4787,6 +5014,9 @@ function PA_Step3HubAnalysis () {
 
 				border: 0,
 				maxWidth: 1900,
+				/* Same inset as every other card on this step - see the
+				   metabolite-class grid below, which had the same omission. */
+				style: "margin: 5px 10px;",
 				layout: 'column',
 				items: [
 					{
@@ -5380,6 +5610,12 @@ function PA_Step3MetaboliteView() {
 				xtype: 'container',
 				border: 0,
 				maxWidth: 1900,
+				/* The inset every other card on this step carries. Without it
+				   the metabolite card sat 10px left of the four above it and
+				   its heading started 10px left of theirs - only visible on a
+				   dataset with metabolites, which is why it outlived the same
+				   fix on the enrichment card. */
+				style: "margin: 5px 10px;",
 				layout:'column',
 
 				items: [
@@ -5898,6 +6134,13 @@ function PA_Step3RegulationView() {
 			items: [{
 				xtype: "gridpanel",
 				cls: "contentbox",
+				/* Every other card on Step 3 is laid out by a container carrying
+				   `margin: 5px 10px`; this grid had none, so it started 10px left
+				   of them and ended 10px right - the one block on a 3,000px page
+				   whose edges did not coincide with anything above or below it,
+				   and the reason its own heading sat off the rail the rest of the
+				   page's headings share. */
+				margin: "5 10",
 				store: store,
 				height: 350,
 				autoScroll: true,

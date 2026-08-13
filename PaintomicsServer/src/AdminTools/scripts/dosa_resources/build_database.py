@@ -28,7 +28,9 @@ def processEnsemblData():
         exit(1)
 
     #Get line count (for percentage)
-    total_lines = int(COMMON_BUILD_DB_TOOLS.check_output(['wc', '-l', file_name]).decode('utf-8').split(" ")[0])
+    # split() with no argument, not split(" "): BSD wc right-aligns its count, so
+    # split(" ")[0] is the empty string on macOS and int() raises before any work.
+    total_lines = int(COMMON_BUILD_DB_TOOLS.check_output(['wc', '-l', file_name]).decode('utf-8').split()[0])
 
     #Register databases and get the assigned IDs
     ensembl_transcript_db_id = COMMON_BUILD_DB_TOOLS.insertDatabase(COMMON_BUILD_DB_TOOLS.DBNAME_Entry("ensembl_transcript", "Ensembl transcript", "Identifier"))
