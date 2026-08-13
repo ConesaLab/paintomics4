@@ -102,7 +102,7 @@ function DM_MyDataListView() {
 							'    <div class="po-account-row"><dt>User name</dt><dd>' + Ext.String.htmlEncode(Ext.util.Cookies.get('userName') || '—') + '</dd></div>' +
 							'    <div class="po-account-row"><dt>Email</dt><dd>' + Ext.String.htmlEncode(Ext.util.Cookies.get('lastEmail') || '—') + '</dd></div>' +
 							'  </dl>' +
-							'  <p class="formActionRow po-account-actions"><a class="button btn-default btn-form-action" href="javascript:void(0)" id="changePassButton"><i class="fa fa-key" aria-hidden="true"></i> Change password</a></p>' +
+							'  <p data-guides="ignore" class="formActionRow po-account-actions"><a class="button btn-default btn-form-action" href="javascript:void(0)" id="changePassButton"><i class="fa fa-key" aria-hidden="true"></i> Change password</a></p>' +
 							'</div>'
 						},
 						this.myDataSummaryPanel.getComponent()

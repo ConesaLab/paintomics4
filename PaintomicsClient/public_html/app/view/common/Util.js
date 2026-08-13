@@ -587,7 +587,12 @@ function showMessage(title, data) {
         messageDialog = Ext.create('Ext.window.Window', {
             id: "messageDialog", header: false, closeAction: "hide",
             modal: true, closable: false,
-            html: "<div id='messageDialogPanel'>" +
+            /* data-guides="ignore": a centred floating dialog has no left rail
+               against the page - its x is half of whatever width the viewport
+               happens to have - and the guides overlay's column model cannot
+               hold a modal's contents together (they scatter to the body group
+               and report against a rail none of them could ever sit on). */
+            html: "<div id='messageDialogPanel' data-guides='ignore'>" +
                 " <h4 id='messageDialogTitle'></h4>" +
                 ' <div id="messageDialogBody"></div>' +
                 ' <div id="hiddenMessageDialogBody" style="display:none;"></div>' +

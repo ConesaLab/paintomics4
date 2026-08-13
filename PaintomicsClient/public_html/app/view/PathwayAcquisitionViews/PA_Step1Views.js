@@ -1196,7 +1196,15 @@ function PA_Step1JobView() {
 		container.insert(1, {
 			xtype: "box",
 			itemId: "exampleFixedNote",
-			html: '<p style="margin:0 0 10px 0;padding:8px 12px;border-left:4px solid var(--pa-accent-blue);' +
+			/* 10px left and right, because .omicbox carries `margin: 5px 10px`:
+			   the note sits in the same column as the panels it describes, and
+			   with no left margin its blue bar started 10px left of every card
+			   edge below it - the one painted edge in the column off the rail
+			   the others share. */
+			/* data-guides="ignore" for the same reason as the column title
+			   above it: its rail-mates are the card edges below, which the
+			   overlay's groups cannot offer it as company. */
+			html: '<p data-guides="ignore" style="margin:0 10px 10px;padding:8px 12px;border-left:4px solid var(--pa-accent-blue);' +
 				'background:rgba(38,132,255,0.08);font-size:12px;line-height:1.5;">' +
 				'<b>This example dataset is fixed.</b> Its omics, organism and databases come from ' +
 				'the server&rsquo;s example catalogue' +
@@ -1390,7 +1398,10 @@ function PA_Step1JobView() {
 								// screen saying the same words about different things. This
 								// card is the whole of step 1, of which uploading is the
 								// fourth of five actions it lists.
-								'<h3>Upload and run</h3>' +
+								// data-guides="ignore": the heading is led by the 26px disc,
+								// so its text deliberately starts 37px right of the rail the
+								// card's copy sits on. The disc is the thing on the rail.
+								'<h3 data-guides="ignore">Upload and run</h3>' +
 							'</div>' +
 							/* Prose, not an <ol>. This card is numbered 1, and it used to
 							   hold a list numbered 1 to 5 inside it - so the screen showed
@@ -1412,7 +1423,7 @@ function PA_Step1JobView() {
 						'<div class="po-step-card">' +
 							'<div class="po-step-head">' +
 								'<div class="po-step-number">2</div>' +
-								'<h3>Identifier and name matching</h3>' +
+								'<h3 data-guides="ignore">Identifier and name matching</h3>' +
 							'</div>' +
 							/* The opening sentence was 32 words to carry two facts: those
 							   three databases are keyed on Entrez IDs, and PaintOmics does
@@ -1430,7 +1441,7 @@ function PA_Step1JobView() {
 						'<div class="po-step-card">' +
 							'<div class="po-step-head">' +
 								'<div class="po-step-number">3</div>' +
-								'<h3>Explore results</h3>' +
+								'<h3 data-guides="ignore">Explore results</h3>' +
 							'</div>' +
 							'<p>You get a Pathways summary, a classification, a network and an enrichment analysis. Paint any of the listed pathways with <a href="javascript:void(0)" class="button btn-inline btn-small btn-paint" title="Paint this pathway"><i class="fa fa-paint-brush"></i></a>, or ask for an <b>AI-powered pathway interpretation</b> with <a href="javascript:void(0)" class="button btn-inline btn-small btn-ai">' + getAIMark() + ' AI Interpret</a>. Read more about these analyses in <a href="https://paintomics.readthedocs.io/en/latest/" target="_blank">our documentation</a>.</p>' +
 							'<div class="po-step-art">' + PO_STEP_ART_EXPLORE + '</div>' +
@@ -1937,7 +1948,12 @@ function PA_Step1JobView() {
 							flex: 2,
 							layout: {type: 'vbox',align: "stretch"},
 							items: [
-								{xtype: 'box',html: '<h2 class="po-omics-col-title">Selected omics</h2>'},
+								// data-guides="ignore": the title's 10px padding lands its type
+								// on the omic cards' edges below - a relationship the overlay's
+								// column model cannot see (the cards stand as their own groups),
+								// so measured raw it reports 270px off the form rail while
+								// sitting exactly where it was tuned to sit.
+								{xtype: 'box',html: '<h2 class="po-omics-col-title" data-guides="ignore">Selected omics</h2>'},
 								{xtype: 'box',html: '<p class="dragHerePanel">Drag and drop here your selected <i>omics</i></p>'}
 							]
 						},

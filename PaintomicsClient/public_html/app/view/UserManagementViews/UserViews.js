@@ -282,7 +282,7 @@ function SignInPanel() {
                                       }},
                                   {xtype: "box", html:
                                               '<div class="formMessage" id="invalidUserPassMessage"></div>' +
-                                              '<p class="formActionRow"><a class="button btn-primary btn-form-action" href="javascript:void(0)" id="signInLink"><i class="fa fa-sign-in" aria-hidden="true"></i> Sign in</a></p>' +
+                                              '<p data-guides="ignore" class="formActionRow"><a class="button btn-primary btn-form-action" href="javascript:void(0)" id="signInLink"><i class="fa fa-sign-in" aria-hidden="true"></i> Sign in</a></p>' +
                                               '<p class="po-auth-links"><a id="forgotPassLink" href="javascript:void(0)">Forgot your password?</a></p>' +
                                               '<p class="po-auth-alt">New to PaintOmics? <a class="signUpLink" href="javascript:void(0)">Create an account</a></p>'
                                   }
@@ -292,7 +292,7 @@ function SignInPanel() {
                               '<div class="signInColumnDivider">' +
                               '  <h2>No account</h2>' +
                               '  <p>Your job is reachable only from the URL PaintOmics gives you when it starts, so save that URL. Without it the job cannot be recovered.</p>' +
-                              '  <p class="formActionRow"><a class="button btn-default btn-form-action" href="javascript:void(0)" id="noLoginButton"><i class="fa fa-arrow-right" aria-hidden="true"></i> Continue without an account</a></p>' +
+                              '  <p data-guides="ignore" class="formActionRow"><a class="button btn-default btn-form-action" href="javascript:void(0)" id="noLoginButton"><i class="fa fa-arrow-right" aria-hidden="true"></i> Continue without an account</a></p>' +
                               '</div>'
                   			}
                       ]
@@ -437,7 +437,7 @@ function SignUpPanel() {
 									'<iframe id="dataProtection" src="conditions_iframe.html" title="Basic information about data protection"></iframe>'},
 								{xtype: "checkboxfield", name: 'conditions', id: 'conditionsCheckbox', cls: 'po-auth-consent', allowBlank: false, submitValue: true, boxLabel: '<span>I have read the <a href="conditions.html" target="_blank" id="conditionsSignup">rules, conditions and privacy policy</a>.</span>'},
                                 {xtype: "box", html: '<div class="formMessage" id="invalidSignUpMessage"></div>' +
-                                            '<p class="formActionRow"><a class="button btn-primary btn-form-action" href="javascript:void(0)" id="signUpButton"><i class="fa fa-user-plus" aria-hidden="true"></i> Create account</a></p>' +
+                                            '<p data-guides="ignore" class="formActionRow"><a class="button btn-primary btn-form-action" href="javascript:void(0)" id="signUpButton"><i class="fa fa-user-plus" aria-hidden="true"></i> Create account</a></p>' +
                                             '<p class="po-auth-links"><a id="signUpBackLink" href="javascript:void(0)">Back to sign in</a></p>'
                                 }
                             ]
@@ -446,7 +446,7 @@ function SignUpPanel() {
                             items: [
                                 {xtype: "box", html: poAuthNotice('fa-envelope-o', 'Check your inbox', '')},
                                 {xtype: "box", flex: 1, itemId: "messageBox", html: ''},
-                                {xtype: "box", html: '<p class="formActionRow"><a class="button btn-default btn-form-action" href="javascript:void(0)" id="signUpCloseButton"><i class="fa fa-check-circle-o" aria-hidden="true"></i> Close</a></p>'}
+                                {xtype: "box", html: '<p data-guides="ignore" class="formActionRow"><a class="button btn-default btn-form-action" href="javascript:void(0)" id="signUpCloseButton"><i class="fa fa-check-circle-o" aria-hidden="true"></i> Close</a></p>'}
                             ]
                         }
                     ],
@@ -508,7 +508,7 @@ function ForgetPasswordPanel() {
                                   {
                                       xtype: "box",html:
                                               '<div class="formMessage" id="invalidEmailMessage"></div>' +
-                                              '<p class="formActionRow"><a class="button btn-primary btn-form-action" href="javascript:void(0)" id="resetPassLink"><i class="fa fa-envelope-o" aria-hidden="true"></i> Send instructions</a></p>' +
+                                              '<p data-guides="ignore" class="formActionRow"><a class="button btn-primary btn-form-action" href="javascript:void(0)" id="resetPassLink"><i class="fa fa-envelope-o" aria-hidden="true"></i> Send instructions</a></p>' +
                                               '<p class="po-auth-links"><a id="forgetPasswordBackLink" href="javascript:void(0)">Back to sign in</a></p>'
                                   }
                               ]
@@ -562,7 +562,7 @@ function GuestSessionPanel(email, p) {
                             '<h4><b>Password:</b> ' + me.p + '</h4>' +
                             '<p>Data, jobs and results belonging to guest users are kept for a maximum of <b>7 days</b>.</p>' +
                             '<p><a class="signUpLink" href="javascript:void(0)">Create an account</a> to keep them for longer. It takes a few seconds.</p>' +
-                            '<p class="formActionRow"><a class="button btn-primary btn-form-action" href="javascript:void(0)" id="continueButton"><i class="fa fa-arrow-right" aria-hidden="true"></i> Start working</a></p>' +
+                            '<p data-guides="ignore" class="formActionRow"><a class="button btn-primary btn-form-action" href="javascript:void(0)" id="continueButton"><i class="fa fa-arrow-right" aria-hidden="true"></i> Start working</a></p>' +
                             '</div>',
                     listeners: {
                         afterrender: function () {
@@ -606,7 +606,7 @@ function NoLoginSessionPanel(email, p) {
                             '<p>Write down your job ID. Without an account you have no data and jobs management area, so the ID is the only way back to your results.</p>' +
                             '<p>Data, jobs and results belonging to unregistered users are kept for a maximum of <b>7 days</b>.</p>' +
                             '<p><a class="signUpLink" href="javascript:void(0)">Create an account</a> to keep them for longer. It takes a few seconds.</p>' +
-                            '<p class="formActionRow"><a class="button btn-primary btn-form-action" href="javascript:void(0)" id="continueButton"><i class="fa fa-arrow-right" aria-hidden="true"></i> Start working</a></p>' +
+                            '<p data-guides="ignore" class="formActionRow"><a class="button btn-primary btn-form-action" href="javascript:void(0)" id="continueButton"><i class="fa fa-arrow-right" aria-hidden="true"></i> Start working</a></p>' +
                             '</div>',
                     listeners: {
                         afterrender: function () {
@@ -669,7 +669,7 @@ function ChangePasswordPanel() {
                                     return true;
                                 }
                             },
-                            {xtype: "box", html: '<p class="formActionRow"><a class="button btn-primary btn-form-action" href="javascript:void(0)" id="acceptNewPassButton"><i class="fa fa-check" aria-hidden="true"></i> Save new password</a></p>' +
+                            {xtype: "box", html: '<p data-guides="ignore" class="formActionRow"><a class="button btn-primary btn-form-action" href="javascript:void(0)" id="acceptNewPassButton"><i class="fa fa-check" aria-hidden="true"></i> Save new password</a></p>' +
                                         '<p class="po-auth-links"><a id="cancelNewPassButton" href="javascript:void(0)">Cancel</a></p>'
                             }
                         ],
@@ -678,7 +678,7 @@ function ChangePasswordPanel() {
                             items: [
                                 {xtype: "box", html: poAuthNotice('fa-check-circle', 'Password changed', 'Your password has been successfully updated.')},
                                 {xtype: "box", flex: 1, itemId: "messageBox", html: ''},
-                                {xtype: "box", html: '<p class="formActionRow"><a class="button btn-default btn-form-action" id="closeNewPassButton" href="javascript:void(0)"><i class="fa fa-arrow-circle-o-left" aria-hidden="true"></i> Close</a></p>'}
+                                {xtype: "box", html: '<p data-guides="ignore" class="formActionRow"><a class="button btn-default btn-form-action" id="closeNewPassButton" href="javascript:void(0)"><i class="fa fa-arrow-circle-o-left" aria-hidden="true"></i> Close</a></p>'}
                             ]
                     }
                 ],
