@@ -1166,6 +1166,15 @@ def pathwayAcquisitionSaveSharingOptions(request, response):
         jobID = request.form.get("jobID")
         jobInstance = loadRequestedJob(jobID, "saving sharing options")
 
+        # An ownerless job ("nologin" mode stores userID None) has nobody who
+        # may hold sharing options on it: every visitor is equally anonymous,
+        # so the ownership comparison below would grant each of them ownership
+        # ('None' == 'None') of flags that pa_recover_job and the read-only
+        # guards never enforce for ownerless jobs anyway. The dialog no longer
+        # offers the controls for these jobs; this keeps direct POSTs honest.
+        if jobInstance.getUserID() is None or str(jobInstance.getUserID()) == 'None':
+            raise Exception("This job was created without an account, so it has no owner and its sharing options cannot be changed.")
+
         if str(jobInstance.getUserID()) != str(userID):
             raise Exception("Invalid user for this jobID")
 
