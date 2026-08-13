@@ -104,6 +104,55 @@ class AIConsentEnforcedTest(unittest.TestCase):
                             "the consent is checked after the pipeline is "
                             "queued, which is too late to stop anything")
 
+    def test_the_pre_job_handler_refuses_before_it_sends(self):
+        """The request-borne consent has to stop the call, not just be read.
+
+        test_every_outbound_handler_checks_consent accepts
+        `formFields.get("aiConsent")` as a consent check, which on its own is
+        satisfied by a handler that reads the field and ignores it. This is the
+        half that makes accepting it safe: the check must raise, and it must do
+        so before the LLMClient exists -- the same "before the work is queued"
+        question the initiate handler is asked above, in the form this handler
+        takes, where the outbound moment is the construction of the client
+        rather than an enqueue.
+
+        Read off the syntax tree rather than the text. The first version of
+        this asked whether "raise" appeared between the consent read and the
+        LLMClient, and a mutation that deleted the refusal outright still
+        passed it -- the handler raises for malformed input and for an empty
+        header set in between, and either one satisfied the substring. The
+        raise has to belong to the branch that tests the consent.
+        """
+        source = self.handlers.get("aiGenerateExpDesign")
+        if source is None:
+            self.skipTest("aiGenerateExpDesign not found")
+
+        tree = ast.parse(_stripComments(source))
+
+        def mentionsConsent(node):
+            return any(isinstance(sub, ast.Constant) and sub.value == "aiConsent"
+                       for sub in ast.walk(node))
+
+        refusals = [node for node in ast.walk(tree)
+                    if isinstance(node, ast.If)
+                    and mentionsConsent(node.test)
+                    and any(isinstance(sub, ast.Raise) for sub in ast.walk(node))]
+
+        self.assertTrue(refusals,
+                        "no branch tests the consent the request carries and "
+                        "raises, so a request without consent reaches the AI "
+                        "service")
+
+        clients = [node for node in ast.walk(tree)
+                   if isinstance(node, ast.Call)
+                   and isinstance(node.func, ast.Name)
+                   and node.func.id == "LLMClient"]
+        if clients:
+            self.assertLess(min(r.lineno for r in refusals),
+                            min(c.lineno for c in clients),
+                            "consent is checked after the LLM client is built, "
+                            "which is too late to stop the send")
+
     def test_the_message_names_the_setting(self):
         """So the user knows which box to tick rather than just being refused."""
         stripped = _stripComments(self.initiate)
@@ -145,14 +194,27 @@ class AIConsentEnforcedTest(unittest.TestCase):
         each build an LLMClient and send job context to the same service, and
         none of them consulted the consent. Any handler that reaches outward
         has to ask.
+
+        Consent has two homes, because one handler runs before a job exists.
+        `aiGenerateExpDesign` drafts the experiment design from the column
+        headers of files the user has only picked, on step 1 -- there is no
+        jobInstance to call getAIConsent on, so the request carries the answer
+        and the handler refuses without it. That is the same guarantee reached
+        by the only means available at that point, not a weaker one, so this
+        accepts it; but it accepts one exact expression rather than the word
+        "aiConsent" appearing anywhere, because the failure being prevented is
+        a handler that mentions consent and never tests it.
         """
+        REQUEST_BORNE_CONSENT = 'formFields.get("aiConsent")'
+
         unguarded = []
         for name, source in self.handlers.items():
             if name.startswith("_"):
                 continue
             body = _stripComments(source or "")
             sendsOutward = "LLMClient(" in body or "run_ai_pipeline" in body
-            asks = "getAIConsent" in body or "_consented(" in body
+            asks = ("getAIConsent" in body or "_consented(" in body
+                    or REQUEST_BORNE_CONSENT in body)
             if sendsOutward and not asks:
                 unguarded.append(name)
 
