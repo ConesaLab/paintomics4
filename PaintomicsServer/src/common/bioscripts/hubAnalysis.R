@@ -145,7 +145,10 @@ step4noDen <- purrr::map_dbl( all.perc, extract.noDen, step = 4) + step4den
 
 step1 = data.frame('per'=step1per, 'den'=step1den, 'noDen'= step1noDen)
 step2 = data.frame('per'=step2per, 'den'=step2den, 'noDen'= step2noDen)
-step3 = data.frame('per'=step3per, 'den'=step2den, 'noDen'= step3noDen)
+# 'den' was step2den here while the other three rows use their own step's count, so
+# every step-3 binom.test took step 2's successes against step 3's total. Copy-paste
+# slip from ff8fea3d; the step3noDen line just above always used step3den correctly.
+step3 = data.frame('per'=step3per, 'den'=step3den, 'noDen'= step3noDen)
 step4 = data.frame('per'=step4per, 'den'=step4den, 'noDen'= step4noDen)
 
 processData = function(stepNumber) {
@@ -183,11 +186,16 @@ processData = function(stepNumber) {
                           alternative = 'greater')$p.value
     }
     
-    p_adjust = p.adjust(pvalue, method = "BH", n = nrow(stepNumber_DEm))
     stepNumber_DEm$pvalue[i] <- pvalue
-    stepNumber_DEm$pvalue_adjust[i] <- p_adjust
-    
+
   }
+  # p.adjust must see the whole vector. Called per-row on a scalar (as it was here),
+  # R's BH branch collapses to min(1, p*n) -- i.e. Bonferroni, reported to the client
+  # under the "BH" name. Adjusting after the loop makes it the BH it always claimed.
+  # NOTE: this adjusts within a step. The four steps are nested by construction
+  # (step k contains step k-1) and are still adjusted separately, which is the
+  # pre-existing behaviour and a modelling decision, not a bug -- left unchanged.
+  stepNumber_DEm$pvalue_adjust <- p.adjust(stepNumber_DEm$pvalue, method = "BH")
   return(stepNumber_DEm)
 }
 print('STEP 4: Calculating percentile/p-value for each DEm...')
