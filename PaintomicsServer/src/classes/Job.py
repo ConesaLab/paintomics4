@@ -45,8 +45,13 @@ from shutil import make_archive as shutil_make_archive
 class Job(Model):
     @staticmethod
     def detect_delimiter(filename):
-        """Auto-detect whether a file uses tab or comma as delimiter."""
-        with open(filename, 'r', encoding='utf-8-sig') as f:
+        """Auto-detect whether a file uses tab or comma as delimiter.
+
+        errors='replace': delimiter sniffing only needs to see tabs and commas,
+        and this helper runs on paths ensure_utf8 has not always covered yet —
+        it must never be the line that turns a bad byte into a crash.
+        """
+        with open(filename, 'r', encoding='utf-8-sig', errors='replace') as f:
             for line in f:
                 line = line.strip()
                 if line:
@@ -548,7 +553,15 @@ class Job(Model):
                     #*************************************************************************
                     # STEP 2.1 CHECK IF IT IS HEADER, IF SO, IGNORE LINE
                     #*************************************************************************
-                    if(nLine == 1 or len(line) == 0):
+                    if len(line) == 0:
+                        # A blank row used to fall into the header branch, where
+                        # float(line[1]) raised IndexError, was swallowed, and
+                        # `fileHeader = []` overwrote the real condition names.
+                        # Give back the row number too, so a leading blank line
+                        # does not consume the header slot.
+                        nLine = nLine - 1
+                        continue
+                    if nLine == 1:
                         try:
                             float(line[1])
                         except Exception:
@@ -727,8 +740,13 @@ class Job(Model):
 
             logging.info("PARSING USER GENE BASED FILE (" + omicName + ")... DONE" )
 
-            # Total unique mapped features. "Total" if there are more than one database
-            totalMapped = foundFeatures.get("Total", list(foundFeatures.values())[0])
+            # Total unique mapped features. "Total" if there are more than one database.
+            # The fallback must stay lazy: `.get(key, expr)` evaluates expr even
+            # when the key exists, and an empty mapper result (no databases
+            # resolved) made `list({}.values())[0]` abort the job.
+            totalMapped = foundFeatures.get("Total")
+            if totalMapped is None:
+                totalMapped = next(iter(foundFeatures.values()), 0)
 
             #   0        1       2    3    4    5     6,   7   8      9        10
             #[MAPPED, UNMAPPED, MIN, P10, Q1, MEDIAN, Q3, P90, MAX, MIN_IR, Max_IR]
@@ -784,7 +802,15 @@ class Job(Model):
                     #*************************************************************************
                     # STEP 2.1 CHECK IF IT IS HEADER, IF SO, IGNORE LINE
                     #*************************************************************************
-                    if(nLine == 1 or len(line) == 0):
+                    if len(line) == 0:
+                        # A blank row used to fall into the header branch, where
+                        # float(line[1]) raised IndexError, was swallowed, and
+                        # `fileHeader = []` overwrote the real condition names.
+                        # Give back the row number too, so a leading blank line
+                        # does not consume the header slot.
+                        nLine = nLine - 1
+                        continue
+                    if nLine == 1:
                         try:
                             float(line[1])
                         except Exception:
@@ -950,6 +976,9 @@ class Job(Model):
                 #   * Forced False after a plain condition-name header (e.g. `WT\tKO`),
                 #     which signals a genuine 2-condition relevance file.
                 legacyEligible = True
+                # One warning per file for rows wider than the declared width;
+                # a 40k-row export with row-names would otherwise log 40k lines.
+                raggedRowsWarned = False
                 for line in csv_reader(inputDataFile, delimiter=detected_delimiter):
                     # csv yields [] for an empty line, and a row of empty strings
                     # for one that is only separators, so `line[0]` raised
@@ -1039,7 +1068,11 @@ class Job(Model):
                         # eligible data row look like biological IDs — that's the structural
                         # difference from a true 2-condition file where the same ID typically
                         # appears in only one column at a time.
-                        if nConditions == 2 and not isBedFormat:
+                        # A shorter row cannot be the legacy pair — indexing
+                        # line[1] on a 1-column row raised IndexError and killed
+                        # the job, and a `#Cond<TAB>` header (blank second cell)
+                        # keeps legacyEligible True, so ordinary files reached it.
+                        if nConditions == 2 and not isBedFormat and len(line) > 1:
                              if legacyEligible and Job._row_looks_like_data([line[0]]) and Job._row_looks_like_data([line[1]]):
                                  # Both columns biological IDs → legacy format, not 2 conditions.
                                  featureID = ":::".join([line[0], line[1]]).lower()
@@ -1052,7 +1085,20 @@ class Job(Model):
 
                         # Multi-condition logic: Each column (from index 0 to n) contains IDs
                         if nConditions > 1 and not isBedFormat:
-                            for colIndex, featureID in enumerate(line):
+                            # The flag lists were sized from row 1, so a wider row
+                            # (R's write.table default emits header N / rows N+1)
+                            # wrote past the end and aborted the whole job. The
+                            # declared width wins; extra cells cannot belong to
+                            # any condition, so they are dropped, once, loudly.
+                            if len(line) > nConditions and not raggedRowsWarned:
+                                raggedRowsWarned = True
+                                logging.warning(
+                                    "PARSING RELEVANT FEATURES FILE (%s): row %d has %d "
+                                    "columns but the file declares %d condition(s); "
+                                    "ignoring the extra cells (R's write.table row-names "
+                                    "produce this shape).",
+                                    fileName, nLine, len(line), nConditions)
+                            for colIndex, featureID in enumerate(line[:nConditions]):
                                 if featureID.strip():
                                     fID = featureID.lower()
                                     if fID not in relevantFeatures:

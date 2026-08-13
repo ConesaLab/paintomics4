@@ -408,6 +408,15 @@ def dataManagementDownloadFile(request, response):
 # FILES MANIPULATION
 #****************************************************************
 def saveFile(userID, uploadedFileName, options, uploadedFile, DESTINATION_DIR):
+    # An empty name would make file_path the directory itself, and the save
+    # below then open()s a directory (IsADirectoryError [Errno 21] with a
+    # trailing '//' in the path). Callers are expected to have skipped empty
+    # attachments already; this is the last line of defence.
+    if uploadedFileName is None or str(uploadedFileName).strip() == "":
+        raise UserWarning(
+            "Malformed submission: a file was attached without a filename, "
+            "so it cannot be saved.")
+
     #1. CREATE THE USER DATA DIRECTORY IF NOT EXISTS
     if(not os.path.isdir(DESTINATION_DIR)):
         os.makedirs(DESTINATION_DIR)

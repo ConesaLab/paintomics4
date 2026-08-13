@@ -184,7 +184,15 @@ def pathwayAcquisitionStep1_PART1(REQUEST, RESPONSE, QUEUE_INSTANCE, JOB_ID, EXA
             logging.info("STEP1 - FILE UPLOADING REQUEST RECEIVED")
             jobInstance.description=""
             jobInstance.setName(formFields.get("jobDescription", "")[:100])
-            specie = formFields.get("specie") #GET THE SPECIES NAME
+            specie = (formFields.get("specie") or "").strip() #GET THE SPECIES NAME
+            if not specie:
+                # Concatenated into the log below and stored on the job; a
+                # missing field used to be an opaque TypeError, and defaulting
+                # would silently run the job against the wrong database.
+                raise UserWarning(
+                    "Malformed submission: no organism was selected (the "
+                    "'specie' field is missing), so PaintOmics cannot choose "
+                    "a pathway database.")
             databases = REQUEST.form.getlist('databases[]')
             jobInstance.setOrganism(specie)
             # The submitted selection, filtered to what this server can actually
@@ -372,6 +380,19 @@ def pathwayAcquisitionStep1_PART2(jobInstance, userID, exampleMode, RESPONSE):
             "timestamp": int(time())
         })
 
+    except UnicodeDecodeError as ex:
+        jobInstance.cleanDirectories(remove_output=True)
+
+        # Last line of defence: every known read path normalises encodings
+        # first, but a bad byte that slips through must reach the user as
+        # advice about their file, not as a bare codec error.
+        handleException(
+            RESPONSE,
+            Exception("[b]One of the uploaded files is not UTF-8 encoded[/b]"
+                      "[br]Please save your files as UTF-8 text (in Excel: "
+                      "Save As → CSV UTF-8, then convert to tab-delimited) "
+                      "and submit again. (" + str(ex) + ")"),
+            __file__, "pathwayAcquisitionStep1_PART2", userID=userID)
     except Exception as ex:
         jobInstance.cleanDirectories(remove_output=True)
 

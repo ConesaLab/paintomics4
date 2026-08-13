@@ -278,8 +278,14 @@ class PathwayAcquisitionJob(Job):
             # First position: dictionary with identifiers.
             # With multiple databases "Total" is the maximum
             # Compounds omics only have one value (no dict)
-            totalMapped = omicSummary[0].get("Total", list(omicSummary[0].values())[0]) if not isinstance(
-                omicSummary[0], (int)) else omicSummary[0]
+            # Lazy fallback: .get(key, expr) evaluates expr even when the key
+            # exists, and an empty dict made list({}.values())[0] raise.
+            if isinstance(omicSummary[0], int):
+                totalMapped = omicSummary[0]
+            else:
+                totalMapped = omicSummary[0].get("Total")
+                if totalMapped is None:
+                    totalMapped = next(iter(omicSummary[0].values()), 0)
 
             # Second position: considering total if it exists
             totalUnmapped = omicSummary[1]
@@ -418,7 +424,14 @@ class PathwayAcquisitionJob(Job):
 
         logging.info("VALIDATING RELEVANT ASSOCIATION FILE (" + omicName + ")...")
         if os_path.isfile(relevantAssociationsFileName):
-            ensure_utf8(relevantAssociationsFileName)
+            # This was the one call site that dropped the reason: an unreadable
+            # relevant-associations file then crashed two lines later inside
+            # detect_delimiter instead of becoming a validation message.
+            encodingError = ensure_utf8(relevantAssociationsFileName)
+            if encodingError is not None:
+                error += " - Errors detected while processing " + \
+                         inputOmic.get("relevantAssociationsFile", "") + ": " + encodingError + ".\n"
+                return nConditions, error
             nLine = -1
             rel_assoc_delimiter = Job.detect_delimiter(relevantAssociationsFileName)
             with open(relevantAssociationsFileName, 'r', encoding='utf-8-sig', newline='') as relevantAssociationDataFile:
@@ -2093,6 +2106,18 @@ class PathwayAcquisitionJob(Job):
                         error_detail = ex.output.decode('utf-8') if ex.output else str(ex)
                         logging.error("STEP2 - Error while generating metagenes information for " + inputOmic.get("omicName") + " db: " + str(dbname))
                         logging.error(f"Subprocess output: {error_detail}")
+                        # Too few mapped features for clustering is a property
+                        # of a small upload, not a broken server: mclust reports
+                        # "no available data for fitting" on numeric(0). The
+                        # metagene trend charts are an enhancement, so skip this
+                        # omic/database pair instead of failing the whole of
+                        # step 2 for a dataset that mapped a handful of genes.
+                        if "no available data for fitting" in error_detail:
+                            logging.warning(
+                                "STEP2 - too few mapped features to cluster metagenes "
+                                "for omic '%s' (%s); continuing without metagenes.",
+                                inputOmic.get("omicName"), dbname)
+                            continue
                         raise RuntimeError(f"Metagenes generation failed for omic '{inputOmic.get('omicName')}' and database '{dbname}'. Details: {error_detail}")
 
                     # STEP 2.2 PROCESS THE RESULTING FILE
@@ -2267,8 +2292,20 @@ class PathwayAcquisitionJob(Job):
         # hub analysis rendered as a heading with nothing under it.
         #
         # Unwrap until a dict falls out, so a file written either way loads.
-        with open(interactionJSONPath, 'r') as e:
-            compoundRegulateFeatures = json.loads(e.read())
+        #
+        # Not every installed species ships hubData (87 of ~97 on the
+        # production server; a fresh install may lack it entirely). That used
+        # to be a FileNotFoundError that killed the whole of step 2 for eco
+        # and every newly installed bacterium — the hub extras must degrade,
+        # not take the pathway results down with them.
+        if os.path.isfile(interactionJSONPath):
+            with open(interactionJSONPath, 'r') as e:
+                compoundRegulateFeatures = json.loads(e.read())
+        else:
+            logging.warning("HUB ANALYSIS - %s does not exist (species installed "
+                            "without hubData); metabolite neighbours will be "
+                            "unavailable.", interactionJSONPath)
+            compoundRegulateFeatures = {}
 
         for _ in range(4):
             if isinstance(compoundRegulateFeatures, dict):
@@ -2484,6 +2521,15 @@ class PathwayAcquisitionJob(Job):
         if not userDEfeatures:
             return False
 
+        # A species installed without hubData has nothing for the R script to
+        # read; the client already renders hubAnalysisResult=False as "no hub
+        # analysis", so degrade the same way instead of crashing step 2.
+        hubDataDir = KEGG_DATA_DIR + 'current/' + self.organism + '/hubData/'
+        if not os.path.isdir(hubDataDir):
+            logging.warning("HUB ANALYSIS - %s does not exist (species installed "
+                            "without hubData); skipping hub analysis.", hubDataDir)
+            return False
+
         import csv
         with open(self.outputDir + "userDataset.csv", 'w') as w:
             writer = csv.writer(w)
@@ -2493,20 +2539,28 @@ class PathwayAcquisitionJob(Job):
             writer = csv.writer(w)
             writer.writerow(userDEfeatures)
 
-        check_call(
-            [
-                ROOT_DIRECTORY + "common/bioscripts/hubAnalysis.R",
-                '--data_dir="' + self.outputDir + '"',
-                '--inputDir="' + KEGG_DATA_DIR + 'current/' + self.organism + '/hubData/' + '"'
-            ], stderr=STDOUT
-        )
+        # The hub analysis is an enhancement panel: a failure in the R script
+        # (partial hubData, missing R deps) must not take down the pathway
+        # results that step 2 exists to produce.
+        try:
+            check_call(
+                [
+                    ROOT_DIRECTORY + "common/bioscripts/hubAnalysis.R",
+                    '--data_dir="' + self.outputDir + '"',
+                    '--inputDir="' + hubDataDir + '"'
+                ], stderr=STDOUT
+            )
 
-        hubResult = {}
+            hubResult = {}
 
-        with open(self.outputDir + 'hub_result.csv', "r") as f:
-            reader = csv.reader(f, delimiter="\t")
-            for i, line in enumerate(reader):
-                hubResult[i] = line
+            with open(self.outputDir + 'hub_result.csv', "r") as f:
+                reader = csv.reader(f, delimiter="\t")
+                for i, line in enumerate(reader):
+                    hubResult[i] = line
+        except Exception as ex:
+            logging.warning("HUB ANALYSIS - failed for %s (%s); continuing "
+                            "without hub results.", self.organism, str(ex))
+            return False
 
         self.hubAnalysisResult = hubResult
 

@@ -346,8 +346,12 @@ def mapFeatureIdentifiers(jobID, organism, databases, featureList,  matchedFeatu
                         # TODO: check why this is not always applied as there are some features without matching DB
                         featureClone.setMatchingDB(databaseConvertion_name)
 
-                        # For some IDs there might be more than one symbol, select the first one from the set
-                        featureName = cacheSymbolsIDS.get(featureID, [featureClone.getName()])[0]
+                        # For some IDs there might be more than one symbol, select the first
+                        # one from the set. A cached entry can legitimately be an empty
+                        # list (species installed with symbols=0), which indexed [0] and
+                        # aborted the whole mapping.
+                        cachedSymbols = cacheSymbolsIDS.get(featureID) or [featureClone.getName()]
+                        featureName = cachedSymbols[0]
 
                         featureClone.setName(featureName)
                         matchedFeatures.append(featureClone)
@@ -492,7 +496,8 @@ def mapFeatureNamesToKeggIDs(jobID, organism, databases, featureList, enrichment
     #***********************************************************************************
     #* STEP 4. RETURN THE RESULTS
     #***********************************************************************************
-    logging.info("FINISHED. " + str(sumFoundFeatures[list(sumFoundFeatures.keys())[0]]) + " uniquely matched features, " +  str(len(matchedFeatures)) + " features matched. " + str(len(notMatchedFeatures)) + " features not matched.")
+    logging.info("FINISHED. %s uniquely matched features, %d features matched. %d features not matched.",
+                 next(iter(sumFoundFeatures.values()), 0), len(matchedFeatures), len(notMatchedFeatures))
 
     # Materialise the proxies with ONE round trip each before returning them.
     # BaseListProxy exposes __getitem__/__len__ but not __iter__, so a caller's

@@ -291,6 +291,23 @@ class JobInformationManager(metaclass=Singleton):
                 " was uploaded from.")
         return origin
 
+    @staticmethod
+    def _requiredFileLocation(formFields, fieldName, fileLabel):
+        """Return an upload's `*_filelocation` form field, or say which one is missing.
+
+        Same contract as _requiredOrigin: these fields are read whenever an
+        origin says the file was previously uploaded ('mydata', inbuilt GTF, or
+        a cross-omic reference). A missing field used to surface as
+        AttributeError: 'NoneType' object has no attribute 'replace'.
+        """
+        location = formFields.get(fieldName)
+        if location is None or str(location).strip() == "":
+            raise UserWarning(
+                "Malformed submission: the form field '" + fieldName +
+                "' is missing or empty, so PaintOmics cannot locate the " +
+                fileLabel + " it refers to.")
+        return str(location)
+
     def saveFiles(self, uploadedFiles, formFields, userID, jobInstance, CLIENT_TMP_DIR, EXAMPLE_FILES_DIR=""):
         nOthers = 1
         uploadedDataFile = None
@@ -315,6 +332,14 @@ class JobInformationManager(metaclass=Singleton):
                 # Default matching type: gene
                 matchingType = formFields.get(uploadedFileName.replace("file","match_type"), "gene")
                 omicType = formFields.get(uploadedFileName.replace("file","omic_name"))  ##GET THE OMIC NAME: "Gene Expression", "Metabolomics", "Proteomics", .... (or user name)
+                if omicType is None:
+                    # Concatenated into paths and log lines below; None used to
+                    # surface as an opaque TypeError instead of naming the field.
+                    raise UserWarning(
+                        "Malformed submission: the form field '" +
+                        uploadedFileName.replace("file", "omic_name") +
+                        "' is missing, so PaintOmics cannot tell which omic the "
+                        "file '" + uploadedFileName + "' belongs to.")
 
                 fields["omicType"] = omicType
                 fields["dataType"] =  formFields.get(uploadedFileName.replace("file","file_type")) ##GET THE FILE TYPE: GENE EXPRESSION, ETC.
@@ -372,11 +397,15 @@ class JobInformationManager(metaclass=Singleton):
                         savedFiles[dataOmicId] = dataFileName = saveFile(userID, dataFileName, fields, uploadedDataFile, CLIENT_TMP_DIR)
 
             elif(origin == 'mydata'):
-                dataFileName = formFields.get(uploadedFileName.replace("file","filelocation")).replace("[MyData]/","")
-                logging.info("SAVE FILES  - USING ALREADY SUBMITTED FILE (data file) " + dataFileName + " FOR  " + omicType)
+                dataFileName = self._requiredFileLocation(
+                    formFields, uploadedFileName.replace("file","filelocation"),
+                    "data file").replace("[MyData]/","")
+                logging.info("SAVE FILES  - USING ALREADY SUBMITTED FILE (data file) %s FOR %s", dataFileName, omicType)
             elif(origin == 'inbuilt_gtf'):
-                dataFileName = EXAMPLE_FILES_DIR + "GTF/" + formFields.get(uploadedFileName.replace("file","filelocation")).replace("[inbuilt GTF files]/","")
-                logging.info("SAVE FILES  - USING ALREADY INBUILT GTF FILE " + dataFileName + " FOR  " + omicType)
+                dataFileName = EXAMPLE_FILES_DIR + "GTF/" + self._requiredFileLocation(
+                    formFields, uploadedFileName.replace("file","filelocation"),
+                    "inbuilt GTF file").replace("[inbuilt GTF files]/","")
+                logging.info("SAVE FILES  - USING ALREADY INBUILT GTF FILE %s FOR %s", dataFileName, omicType)
             elif('filelocation' in origin):
                 # The omic references the file of another omic
                 originName = origin.split('_', 1)[0]
@@ -392,8 +421,11 @@ class JobInformationManager(metaclass=Singleton):
                     dataFileName = uploadedDataFile.filename
 
                     # If the file was previously saved, retrieve the final name.
+                    # Keyed by the form field name, exactly as it was stored:
+                    # looking it up by the FileStorage object always returned
+                    # None and registered the omic with inputDataFile: None.
                     if dataOmicId in savedFiles:
-                        dataFileName = savedFiles.get(uploadedDataFile)
+                        dataFileName = savedFiles.get(dataOmicId)
                     else:
                         if (dataFileName == ''):
                             logging.info("\tIGNORING " + omicType + ", EMPTY FILE OR NOT PROVIDED")
@@ -410,14 +442,21 @@ class JobInformationManager(metaclass=Singleton):
                             savedFiles[dataOmicId] = dataFileName = saveFile(userID, dataFileName, fields, uploadedDataFile, CLIENT_TMP_DIR)
 
                 else:
-                    dataFileName = formFields.get(originName +  "_filelocation").replace("[MyData]/", "")
+                    dataFileName = self._requiredFileLocation(
+                        formFields, originName + "_filelocation",
+                        "referenced data file").replace("[MyData]/", "")
             else:
                 logging.info("\tIGNORING " + omicType + ", EMPTY FILE OR NOT PROVIDED")
                 continue
 
             # TODO: move this to a loop? They are the same but changing file properties
             #SAVE THE ASSOCIATED RELEVANT FEATURED FILE (IF ANY)
-            if (uploadedRelevantFile is not None):
+            # An untouched <input type=file> still submits a part with
+            # filename="" — werkzeug classifies it as a file. Saving that
+            # empty name built '<inputData>//', which open()ed the directory
+            # itself (IsADirectoryError). Same guard as the data-file branch:
+            # empty means absent.
+            if (uploadedRelevantFile is not None and (uploadedRelevantFile.filename or "") != ""):
                 relevantFileName = uploadedRelevantFile.filename
                 origin = self._requiredOrigin(
                     formFields, uploadedFileName.replace("file", "relevant") + "_origin",
@@ -427,7 +466,7 @@ class JobInformationManager(metaclass=Singleton):
                 fieldsRelevant["dataType"]= formFields.get(uploadedFileName.replace("file","relevant_file_type")) ##GET THE FILE TYPE: GENE EXPRESSION, ETC.
                 fieldsRelevant["description"] =  formFields.get(uploadedFileName.replace("file","description"), "Uploaded using the submission form.")##GET THE FILE DESCRIPTION
 
-                logging.info("STEP1 - ORIGIN FOR " + uploadedFileName.replace("file","relevant") + " IS " + origin)
+                logging.info("STEP1 - ORIGIN FOR %s IS %s", uploadedFileName.replace("file","relevant"), origin)
                 if(origin == 'client'):
                     #TODO: GENERATE AUTOMATICALLY THE DATA TYPE (Gene exp, Gene list, etc.) AND THE DESCRIPTION
                     ##SAVE THE FILE, GET THE NEW NAME IF ALREADY EXISTS
@@ -437,13 +476,15 @@ class JobInformationManager(metaclass=Singleton):
 
                     relevantFileName = saveFile(userID, relevantFileName, fieldsRelevant, uploadedRelevantFile, CLIENT_TMP_DIR)
                 else:
-                    relevantFileName = formFields.get(uploadedFileName.replace("file","relevant_filelocation")).replace("[MyData]/","")
-                    logging.info("STEP1 - USING ALREADY SUBMITTED FILE (relevant features file) " + relevantFileName + " FOR  " + omicType)
+                    relevantFileName = self._requiredFileLocation(
+                        formFields, uploadedFileName.replace("file","relevant_filelocation"),
+                        "relevant features file").replace("[MyData]/","")
+                    logging.info("STEP1 - USING ALREADY SUBMITTED FILE (relevant features file) %s FOR %s", relevantFileName, omicType)
             else:
                 relevantFileName = None
 
             #SAVE THE ASSOCIATIONS FILE (IF ANY)
-            if uploadedAssociationDataFile is not None:
+            if uploadedAssociationDataFile is not None and (uploadedAssociationDataFile.filename or "") != "":
                 associationsFileName = uploadedAssociationDataFile.filename
                 origin = self._requiredOrigin(
                     formFields, uploadedFileName.replace("file", "associations") + "_origin",
@@ -463,12 +504,14 @@ class JobInformationManager(metaclass=Singleton):
 
                     associationsFileName = saveFile(userID, associationsFileName, fieldsAssociations, uploadedAssociationDataFile, CLIENT_TMP_DIR)
                 else:
-                    associationsFileName = formFields.get(uploadedFileName.replace("file","associations_filelocation")).replace("[MyData]/","")
-                    logging.info("STEP1 - USING ALREADY SUBMITTED FILE (associationss file) " + associationsFileName + " FOR  " + omicType)
+                    associationsFileName = self._requiredFileLocation(
+                        formFields, uploadedFileName.replace("file","associations_filelocation"),
+                        "associations file").replace("[MyData]/","")
+                    logging.info("STEP1 - USING ALREADY SUBMITTED FILE (associations file) %s FOR %s", associationsFileName, omicType)
 
                 # SAVE THE RELEVANT ASSOCIATIONS FILE (IF ANY)
                 # TODO: currently only if the associations file is present
-                if uploadedAssociationRelevantFile is not None and formFields.get(uploadedFileName.replace("file", "relevant_associations") + "_origin") is not None:
+                if uploadedAssociationRelevantFile is not None and (uploadedAssociationRelevantFile.filename or "") != "" and formFields.get(uploadedFileName.replace("file", "relevant_associations") + "_origin") is not None:
                     relevantAssociationsFileName = uploadedAssociationRelevantFile.filename
                     # The enclosing condition already established this field is
                     # present; going through the same helper as the other three
@@ -492,8 +535,10 @@ class JobInformationManager(metaclass=Singleton):
 
                         relevantAssociationsFileName = saveFile(userID, relevantAssociationsFileName, fieldsRelevantAssociations, uploadedAssociationRelevantFile, CLIENT_TMP_DIR)
                     else:
-                        relevantAssociationsFileName = formFields.get(uploadedFileName.replace("file", "relevant_associations_filelocation")).replace("[MyData]/", "")
-                        logging.info("STEP1 - USING ALREADY SUBMITTED FILE (relevant associations file) " + relevantAssociationsFileName + " FOR  " + omicType)
+                        relevantAssociationsFileName = self._requiredFileLocation(
+                            formFields, uploadedFileName.replace("file", "relevant_associations_filelocation"),
+                            "relevant associations file").replace("[MyData]/", "")
+                        logging.info("STEP1 - USING ALREADY SUBMITTED FILE (relevant associations file) %s FOR %s", relevantAssociationsFileName, omicType)
             else:
                 relevantAssociationsFileName = associationsFileName = None
 

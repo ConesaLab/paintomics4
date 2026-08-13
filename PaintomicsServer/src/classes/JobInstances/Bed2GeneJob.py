@@ -174,6 +174,30 @@ class Bed2GeneJob(Job):
         logging.info("VALIDATING REGION BASED FILES..." )
         nConditions, error = self.validateFile(self.geneBasedInputOmics[0], -1, error)
 
+        # The user-supplied annotation/GTF travels as a referenceInput and was
+        # never passed through the encoding pass, so a latin-1 byte in an
+        # attribute field crashed the association script instead of validating.
+        # Gzipped references are legitimate (the script gunzips them itself)
+        # and are not text, so they are left alone.
+        # getattr, not a direct call: jobs restored from older serialisations
+        # (and the validation tests' stubs) may not carry referenceInputs.
+        try:
+            referenceInputs = self.getReferenceInputs() or []
+        except AttributeError:
+            referenceInputs = []
+        for referenceInput in referenceInputs:
+            referenceFileName = referenceInput.get("inputDataFile", "") or ""
+            if not referenceFileName or referenceFileName.endswith(".gz"):
+                continue
+            referencePath = "{path}/{file}".format(
+                path=self.getInputDir(), file=referenceFileName)
+            if os_path.isfile(referencePath):
+                encodingError = ensure_utf8(referencePath)
+                if encodingError is not None:
+                    error += (" - Errors detected while processing " +
+                              os_path.basename(referenceFileName) + ": " +
+                              encodingError + ".\n")
+
         if error != "":
             raise Exception("Errors detected in input files, please fix the following issues and try again:" + error)
 
@@ -209,17 +233,24 @@ class Bed2GeneJob(Job):
         # out of a validation routine, reaching the user as an internal error
         # rather than a message about the file. A gene name with an accent in a
         # file saved from Excel is enough to do it.
+        encodingFailed = False
         for encodingTarget in (relevantFileName, valuesFileName):
             if os_path.isfile(encodingTarget):
                 encodingError = ensure_utf8(encodingTarget)
                 if encodingError is not None:
+                    encodingFailed = True
                     error += (" - Errors detected while processing " +
                               os_path.basename(encodingTarget) + ": " +
                               encodingError + ".\n")
+        # A recorded encoding failure means the file is still non-UTF-8 on
+        # disk: falling through to the readers below crashed with the very
+        # UnicodeDecodeError the message above was written to prevent.
+        if encodingFailed:
+            return nConditions, error
 
         logging.info("VALIDATING RELEVANT REGIONS FILE (" + omicName + ")..." )
         if os_path.isfile(relevantFileName):
-            with open(relevantFileName, 'r') as inputDataFile:
+            with open(relevantFileName, 'r', encoding='utf-8-sig') as inputDataFile:
                 nLine = -1
                 erroneousLines = {}
 
@@ -263,7 +294,7 @@ class Bed2GeneJob(Job):
 
         #IF THE USER UPLOADED VALUES FOR GENE EXPRESSION
         if os_path.isfile(valuesFileName):
-            with open(valuesFileName, 'r') as inputDataFile:
+            with open(valuesFileName, 'r', encoding='utf-8-sig') as inputDataFile:
                 nLine = -1
                 erroneousLines = {}
 
