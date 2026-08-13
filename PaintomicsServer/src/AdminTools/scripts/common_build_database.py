@@ -284,12 +284,28 @@ def summariseBuild():
     stderr.write("=" * 62 + "\n")
 
     # Hand the warnings back to DBManager, which runs this build as a subprocess and
-    # otherwise only sees an exit status. Written even when empty so a stale file from
-    # a previous species is never mistaken for this one's result.
+    # otherwise only sees an exit status.
+    #
+    # The destination is whatever DBManager named in PAINTOMICS_BUILD_WARNINGS: a
+    # fresh 0600 file per species, not a fixed /tmp path that two concurrent installs
+    # would both write to and read each other's warnings out of. When the variable is
+    # absent there is no parent listening -- a build run by hand from the shell --
+    # so nothing is written and the summary above is the whole report.
+    handoffPath = os.environ.get("PAINTOMICS_BUILD_WARNINGS")
+    if not handoffPath:
+        return
+
+    # Tab-separated, one record per line, so a reason carrying either character
+    # would split into fields the reader then drops. These strings are file paths
+    # and str(exception), neither of which is under our control.
+    def oneLine(value):
+        return " ".join(str(value).split())
+
     try:
-        with open("/tmp/build_warnings.tmp", "w") as handle:
+        with open(handoffPath, "w") as handle:
             for label, reason, consequence in SKIPPED_SOURCES:
-                handle.write("\t".join([str(SPECIE), label, reason, consequence]) + "\n")
+                handle.write("\t".join([oneLine(SPECIE), oneLine(label),
+                                        oneLine(reason), oneLine(consequence)]) + "\n")
     except Exception as writeError:
         stderr.write("  (could not write the warning hand-off file: %s)\n" % writeError)
 

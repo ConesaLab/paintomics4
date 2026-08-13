@@ -12,7 +12,7 @@ import os
 #     os.environ["PATH"] = os.path.join(VENV_DIR, "bin") + os.pathsep + os.environ.get("PATH", "")
 #     os.execv(VENV_PYTHON, [VENV_PYTHON] + sys.argv)
 
-import datetime, traceback, shutil, inspect
+import datetime, traceback, shutil, inspect, tempfile
 import logging
 import logging.config
 import requests
@@ -1358,34 +1358,58 @@ def getSpecieMappingData(specie, downloadLog, dirName, step, scriptsDir):
     return mapping_errors
 
 
-def collectBuildWarnings(specie):
+def newBuildWarningsHandoff():
+    """A private file for one species build to report its skipped sources in.
+
+    mkstemp rather than a fixed name, for three reasons. Two installs running at
+    once on the same machine wrote to the same path and read each other's
+    warnings. /tmp is world-writable and a predictable name there is a file
+    anyone can pre-create as a symlink onto something we then truncate. And a
+    fixed path has to be deleted before every build to avoid inheriting the
+    previous species' list -- a fresh file cannot be stale, so that step is gone.
+
+    Created 0600 by mkstemp and handed to the child through the environment;
+    the fd is closed immediately because only the subprocess writes to it.
+    """
+    handle, path = tempfile.mkstemp(prefix="paintomics_build_warnings_", suffix=".tsv")
+    os.close(handle)
+    return path
+
+
+def collectBuildWarnings(specie, handoffPath):
     """Pull the sources the species build had to do without into the run summary.
 
     The build runs as a subprocess, so without this its warnings only ever reach
     install.log -- which is precisely the multi-MB file nobody reads to the end.
     """
-    handoff = "/tmp/build_warnings.tmp"
-    if not os.path.isfile(handoff):
+    if not handoffPath or not os.path.isfile(handoffPath):
         return
     try:
-        with open(handoff) as handle:
+        with open(handoffPath) as handle:
             for line in handle:
                 parts = line.rstrip("\n").split("\t")
                 if len(parts) >= 4 and parts[0] == specie:
                     INSTALL_WARNINGS.append((specie + " / " + parts[1], parts[2] + " -> " + parts[3]))
                     log("       ! " + parts[1] + ": " + parts[3])
-        os.remove(handoff)
     except Exception as readError:
         errorlog("could not read build warnings for " + specie + ": " + str(readError))
+    finally:
+        # In `finally`: a read that throws half way must not leave the file behind.
+        # A long batch would otherwise leak one per species into /tmp.
+        try:
+            os.remove(handoffPath)
+        except OSError:
+            pass
 
 
 def installSpecieData(specie, downloadLog, dirName, step, scriptsDir):
     start_time = time()
     log("                 INSTALLING MAPPING DATA FOR " + specie + " (" + step + ")...")
     downloadLogFile = open(downloadLog, 'a')
-    # Never inherit a previous species' warnings.
-    if os.path.isfile("/tmp/build_warnings.tmp"):
-        os.remove("/tmp/build_warnings.tmp")
+    # Where this build reports what it had to do without. Named in the environment
+    # because check_call below passes no `env=`, so the child inherits ours.
+    handoffPath = newBuildWarningsHandoff()
+    os.environ["PAINTOMICS_BUILD_WARNINGS"] = handoffPath
 
     try:
         if os.path.isfile(scriptsDir + specie + "_resources/build_database.py"):
@@ -1415,9 +1439,12 @@ def installSpecieData(specie, downloadLog, dirName, step, scriptsDir):
         raise ex
     finally:
         downloadLogFile.close()
+        # Cleared before the read, so nothing downstream can inherit a pointer to a
+        # file collectBuildWarnings is about to delete.
+        os.environ.pop("PAINTOMICS_BUILD_WARNINGS", None)
         # In `finally` so a species that failed still reports what it was missing --
         # that list is usually the explanation for the failure.
-        collectBuildWarnings(specie)
+        collectBuildWarnings(specie, handoffPath)
     return True
 
 
