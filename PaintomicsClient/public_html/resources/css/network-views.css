@@ -82,12 +82,13 @@
 	contain: inline-size;
 }
 
-/* MORE's toolbar carries labelled sliders, so it needs more air between items
-   than a row of buttons does. */
-.more-net-toolbar {
-	gap: 14px;
-	padding: 9px 12px;
-}
+/* No per-view override any more. MORE's bar carried labelled sliders and was
+   given `gap: 14px; padding: 9px 12px` to breathe around them, which made it a
+   visibly different band from the pathways bar 900px above it on the same page
+   - taller, and with its items spaced differently. The sliders have moved to
+   the side rail, next to the filters the pathways network keeps in its own
+   Tools column, so what is left in either bar is the same thing: a row of
+   controls. One band, one description. */
 
 /* Pushes everything after it to the right edge. Replaces five inline
    `float: right` declarations that were not doing anything. */
@@ -137,12 +138,11 @@
 	            color var(--pa-transition, 150ms ease);
 }
 
-/* MORE's three buttons sit among sliders rather than among other buttons, so
-   they keep a resting outline — without one they read as labels. */
-.more-net-toolbar button {
-	background-color: var(--pa-control-bg, #FFFFFF);
-	border-color: var(--pa-border);
-}
+/* MORE's three buttons used to keep a resting outline, because they sat among
+   sliders and without one they read as labels. They sit among the same kind of
+   neighbours as the pathways tools now — a search field and each other — and
+   each carries an icon, so they are legible as controls at rest and can be as
+   quiet as their counterparts two panels up. */
 
 /* The hover fill is a token pair, not a literal, because "a control lights up
    under the cursor" points in opposite directions in the two themes: on the
@@ -170,6 +170,9 @@
 .pa-net-tool > .fa {
 	font-size: 12px;
 	color: var(--pa-ink-label, #52525B);
+	/* Font Awesome's own line-height is what would otherwise decide how high the
+	   glyph sits inside a control whose height comes from its label. */
+	line-height: 1;
 }
 
 .pa-net-tool:hover > i,
@@ -179,32 +182,21 @@
 
 .pa-net-tool:focus-visible,
 .more-net-toolbar button:focus-visible,
-.more-net-toolbar select:focus-visible,
-.more-net-toolbar input:focus-visible {
+.more-net-toolbar input:focus-visible,
+.more-net-side select:focus-visible,
+.more-net-side input:focus-visible {
 	outline: 2px solid var(--pa-focus-ring, #0A84FF);
 	outline-offset: 1px;
 }
 
-/* ---- Labelled inputs (MORE) --------------------------------------------- */
+/* ---- Text and select fields --------------------------------------------- */
 
-.more-net-toolbar label {
-	display: inline-flex;
-	align-items: center;
-	gap: 6px;
-	white-space: nowrap;
-	margin: 0;
-	font-weight: 500;
-}
-
-/* Ranges get an explicit width: their intrinsic size differs enough between
-   engines that the toolbar rewraps between Chrome and Firefox without one. */
-.more-net-toolbar input[type="range"] {
-	width: 96px;
-	vertical-align: middle;
-}
-
+/* One field shape, wherever a field appears in either view: the search box in
+   the toolbar, the condition select in MORE's rail. */
 .more-net-toolbar select,
-.more-net-toolbar input[type="search"] {
+.more-net-toolbar input[type="search"],
+.more-net-side select,
+.more-net-side input[type="search"] {
 	padding: 4px 7px;
 	font-size: 12px;
 	font-family: inherit;
@@ -212,14 +204,44 @@
 	background: var(--pa-control-bg, #FFFFFF);
 	border: 1px solid var(--pa-border);
 	border-radius: var(--pa-radius-sm, 6px);
+	box-sizing: border-box;
 }
 
+/* The same 1px the tools carry, so the first control in either bar starts on
+   the same rail. */
 .more-net-toolbar input[type="search"] {
 	min-width: 190px;
+	margin: 1px;
 }
 
-/* The live readout beside each slider. Tabular figures so the toolbar does not
-   twitch sideways as the digits change while a slider is dragged. */
+/* ---- Filter fields in the side rail (MORE) ------------------------------ */
+
+/* A label stacked over its control, which is what a 216px column can hold —
+   the pathways network's Tools panel states its filters the same way ("Min
+   features in pathway (50%)" over its slider). Beside the control, as this was
+   in the toolbar, a label and a 96px range do not fit side by side here. */
+.more-net-field {
+	display: block;
+	margin: 0 0 12px;
+	font-weight: 400;
+	cursor: pointer;
+}
+
+.more-net-field select,
+.more-net-field input[type="range"] {
+	display: block;
+	width: 100%;
+	margin: 0;
+}
+
+.more-net-field input[type="range"] {
+	/* A range has no intrinsic height, and its thumb overhangs its track, so it
+	   needs the space stated or the next label sits on the thumb. */
+	height: 18px;
+}
+
+/* The live readout in each filter's label. Tabular figures so the label does
+   not twitch sideways as the digits change while a slider is dragged. */
 .more-net-r2-value,
 .more-net-coef-value,
 .more-net-edges-value {
@@ -261,10 +283,25 @@
 
 /* ---- Canvas ------------------------------------------------------------- */
 
+/* One height for both graphs. It was 775px for the pathways network, written as
+   an inline style in PA_Step3Views, and 600px for MORE's, written in
+   more-network.css — so two panels one scroll apart, on the same page, showing
+   the same kind of object, were 175px different in the one dimension a reader
+   compares them by. Declared as a variable rather than repeated, because the
+   next person to change it will change it once. */
+:root {
+	--pa-net-canvas-height: 720px;
+}
+
 .pa-net-canvas,
 .more-net-canvas {
 	position: relative;
 	background: var(--pa-surface-sunken, #F5F4EF);
+}
+
+.pa-net-canvas,
+.more-net-body {
+	height: var(--pa-net-canvas-height);
 }
 
 /* ---- Narrow viewports --------------------------------------------------- */
@@ -274,6 +311,10 @@
 	.more-net-toolbar {
 		gap: 3px;
 		padding: 6px 8px;
+	}
+
+	:root {
+		--pa-net-canvas-height: 420px;
 	}
 
 	/* At this width the two groups no longer fit on one line, and a spacer that

@@ -26,12 +26,83 @@
 	background: var(--pa-surface, #fff);
 }
 
+/* ---- The panel's own title --------------------------------------------- */
+
+/* This is an Ext panel, so its title arrives as `.x-panel-header` rather than
+   as the `<h2>` every card on this page uses. Untouched, Neptune drew it at
+   13px/700 on #F6F5F0 with 9px of padding — and because the toolbar underneath
+   is the same ivory band, the title and the toolbar fused into one 127px block
+   of beige with no edge between them. Nine hundred pixels up the page, the
+   pathways network's title is 19px/600 near-black on white, inset 26px. Two
+   titles for two panels of the same kind, agreeing on nothing.
+
+   Restated here as the card heading `div.contentbox h2` describes, declaration
+   for declaration, so the two network panels are titled the same way. Written
+   out rather than shared with that rule because this is a framework element:
+   the selector has to be specific enough to outscore Neptune's own
+   `.x-panel-header-default`, which a joint selector in main.css would not be. */
+.more-net-panel > .x-panel-header {
+	padding: 15px var(--pa-card-inset, 26px);
+	background: var(--pa-surface, #FFFFFF);
+	background-image: none;
+	border: 0;
+	border-bottom: 1px solid var(--pa-border);
+	border-radius: var(--pa-radius, 8px) var(--pa-radius, 8px) 0 0;
+}
+
+.more-net-panel > .x-panel-header .x-panel-header-text {
+	font-size: 19px;
+	font-weight: 600;
+	letter-spacing: -0.012em;
+	color: var(--pa-ink-title, #1A1A18);
+	line-height: 1.3;
+}
+
+/* The collapse control. Neptune draws it as a sprite `<img>`, which is the one
+   piece of framework chrome left on a surface that is otherwise the
+   application's own. The image keeps its box — ExtJS binds the click to the
+   tool and measures the image — but goes invisible, and a Font Awesome chevron
+   is centred over it, so the affordance matches the icons in the toolbar
+   directly below. `:has()` reads the state off the class ExtJS swaps on the
+   image, so the chevron turns over with the panel. */
+.more-net-panel > .x-panel-header .x-tool {
+	position: relative;
+	color: var(--pa-ink-label, #52525B);
+	border-radius: var(--pa-radius-sm, 6px);
+	transition: background-color var(--pa-transition, 150ms ease),
+	            color var(--pa-transition, 150ms ease);
+}
+
+.more-net-panel > .x-panel-header .x-tool:hover {
+	color: var(--pa-ink, #18181B);
+	background-color: var(--pa-control-hover-bg, #FFFFFF);
+}
+
+.more-net-panel > .x-panel-header .x-tool-img {
+	visibility: hidden;
+}
+
+.more-net-panel > .x-panel-header .x-tool::before {
+	position: absolute;
+	inset: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font: normal normal normal 13px/1 FontAwesome;
+	content: "\f077";              /* chevron-up — click to collapse */
+}
+
+.more-net-panel > .x-panel-header .x-tool:has(.x-tool-expand-bottom)::before {
+	content: "\f078";              /* chevron-down — click to expand */
+}
+
 /* ---- Canvas and side panel -------------------------------------------- */
 
+/* Height comes from --pa-net-canvas-height in network-views.css, which the
+   pathways canvas reads too. */
 .more-net-body {
 	display: flex;
 	width: 100%;
-	height: 600px;
 }
 
 /* The fill is in network-views.css; the flex behaviour is this layout's. */
@@ -57,18 +128,12 @@
 	color: var(--pa-ink-body, #444);
 }
 
-.more-net-side h6 {
-	margin: 14px 0 6px;
-	font-size: 11px;
-	font-weight: 700;
-	text-transform: uppercase;
-	letter-spacing: 0.04em;
-	color: var(--pa-ink-label, #595959);
-}
-
-.more-net-side h6:first-child {
-	margin-top: 0;
-}
+/* The group labels (`h6`) and the filter labels (`.more-net-field-label`) are
+   NOT styled here. They are the same two roles the pathways network's Tools
+   column already has — a tracked uppercase group divider and a near-black
+   control label — and they are drawn by that column's rules, which name these
+   selectors alongside their own. See "The settings-column type scale" in
+   main.css. A second description here is how the two rails drift apart. */
 
 .more-net-omic {
 	display: flex;

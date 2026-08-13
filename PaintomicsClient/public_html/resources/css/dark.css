@@ -489,9 +489,13 @@
    selected label over a 2px rule rather than a raised box - see the note there.
    Its selected ink is a literal near-black, which is the correct colour for the
    light theme and invisible here, and the rule under the label is the same
-   value. Both are stated by an id selector, so these have to carry it too. */
+   value. Both are stated by an id selector, so these have to carry it too.
+
+   The rule is an inset box-shadow, not a border - main.css moved it there so
+   the selected and unselected labels keep the same line box - so it is the
+   whole shadow that has to be restated, not a colour. */
 [data-theme="dark"] div#tabcontainer_network .x-tab.x-active {
-	border-bottom-color: var(--pa-ink-title) !important;
+	box-shadow: inset 0 -2px 0 var(--pa-ink-title);
 	background-color: transparent;
 }
 [data-theme="dark"] div#tabcontainer_network .x-tab.x-active .x-tab-inner,
@@ -1583,8 +1587,15 @@
    --pa-ink-muted and needs nothing, but it has to be restated after the general
    rule for the same source-order reason main.css gives. */
 [data-theme="dark"] div.lateralOptionsPanel h4,
-[data-theme="dark"] div.lateralOptionsPanel h5 { color: var(--pa-ink-title); }
-[data-theme="dark"] div.paSettingsPanel h4 { color: var(--pa-ink-muted); }
+[data-theme="dark"] div.lateralOptionsPanel h5,
+/* The MORE network's rail shares those two rules in main.css, so it inherits
+   the same near-black literal and the same problem here. Measured before this
+   line: "Condition", "R² ≥", "|coef| ≥" and "Edges" were #27272A on the dark
+   rail, while the readouts beside them - which resolve through --pa-ink - were
+   legible, so each filter showed its value and not its name. */
+[data-theme="dark"] .more-net-side .more-net-field-label { color: var(--pa-ink-title); }
+[data-theme="dark"] div.paSettingsPanel h4,
+[data-theme="dark"] .more-net-side h6 { color: var(--pa-ink-muted); }
 [data-theme="dark"] .lateralOptionsPanel-header { background: var(--pa-surface); }
 
 /* In-panel toolbars: the network strip, the two download chips and the ✕ that

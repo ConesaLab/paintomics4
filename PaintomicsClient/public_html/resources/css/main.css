@@ -2017,6 +2017,9 @@ div.paEmptyNote p,
 div.step4HistoryBox p,
 div.x-tip p,
 div.sigma-tooltip p,
+/* The MORE network's rail is a 216px column inside a card, so a 26px inset on
+   each side would leave its note 164px wide - two words a line. */
+div.more-net-side p,
 /* This card insets its own inner div, so its paragraphs would otherwise sit at
    52px while the heading above them sat at 26. */
 #dbs_message p {
@@ -2918,11 +2921,55 @@ div.availableOmicsBox h4 {
 .contentbox.metaboliteBox {
 	margin: 5px 0;
 }
+/* The action link that closes a card — Step 3's "Choose the pathways below and
+   Paint!", Step 2's "Download ID/Name mapping results".
+
+   Three things were wrong with `display: block; text-align: center; 18px`.
+
+   Size: 18px against 14px body copy is a 1.29 step, and the card's own h2 is
+   19px. A link inside the card was therefore within a pixel of the heading that
+   titles the card - so the card had two things claiming to be its most
+   important line, and the heading lost. 15px is a step above body copy without
+   entering heading territory.
+
+   Rail: every other line in these cards - h2, p, li - starts at
+   --pa-card-inset. `margin: 10px` plus centring put this one line on neither
+   that rail nor any other, so it floated free under a left-aligned paragraph.
+   It is the same defect the note on `#clusternumber_box .divForm` describes on
+   Step 2, and it has the same fix: put it where the prose starts.
+
+   Icon alignment: as a block with an inline `<i>` before the text, the glyph
+   sat on the text baseline and its own line-height decided how high - which is
+   the vertical misalignment visible in the screenshots. inline-flex with
+   `align-items: center` centres the two against each other and needs no magic
+   number, so it stays right if either the icon or the label changes size. */
 #download_mapping_file, #paint_link {
-	text-align: center;
-	display: block;
-	margin: 10px;
-	font-size: 18px;
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	margin: 6px var(--pa-card-inset) 16px;
+	font-size: 15px;
+	font-weight: 600;
+	line-height: 1.4;
+}
+/* One step down and unbolded: the glyph is a cue for the label, not a second
+   voice at the same weight. `line-height: 1` because Font Awesome's own is
+   what would otherwise push it off the centre the flex box just established. */
+#download_mapping_file > i, #paint_link > i {
+	font-size: 14px;
+	font-weight: 400;
+	line-height: 1;
+}
+/* Two call sites, two nestings. On Step 3 this link is a direct child of the
+   card's own div and the inset above is what puts it on the rail; on Step 2 it
+   is written inside the paragraph that introduces it, and `div.contentbox p`
+   has already applied --pa-card-inset to that paragraph - so the margin landed
+   on top of it and the link sat 52px in, 26px right of every other line in the
+   card. Measured: x=182.4 against a rail at 156.4. */
+div.contentbox p > #download_mapping_file,
+div.contentbox p > #paint_link {
+	margin-left: 0;
+	margin-right: 0;
 }
 #dbs_message, #clusternumber_box, #threshold_box {
 	margin: 10px 0;
@@ -3406,9 +3453,19 @@ div#tabcontainer_network .x-tab:hover .x-tab-inner {
 	color: #27272A;
 }
 /* The selected state. A 2px rule sitting on the bar's own hairline, in the ink
-   of the label above it - so the mark and the thing it marks are one object. */
+   of the label above it - so the mark and the thing it marks are one object.
+
+   An inset shadow rather than a `border-bottom`, and that is not a preference.
+   These tabs are sized `height: 38px` with Neptune's border-box, so a 2px
+   border comes out of the content box: the active tab's label had 36px of line
+   box to centre in and the inactive one had 38, which put "KEGG" one pixel
+   below "Reactome" on a strip whose whole job is to present them as the same
+   kind of thing. Measured: line-height 40px on the inactive tab, 38px on the
+   active. A shadow is painted inside the box without occupying it, so both
+   labels sit on one line whichever is selected. */
 div#tabcontainer_network .x-tab.x-active {
-	border-bottom: 2px solid #1A1A18 !important;
+	border-bottom: 0 !important;
+	box-shadow: inset 0 -2px 0 #1A1A18;
 }
 div#tabcontainer_network .x-tab.x-active .x-tab-inner {
 	color: #1A1A18;
@@ -4102,7 +4159,16 @@ div.lateralOptionsPanel h4 {
 	color: #1A1A18;
 	margin: 16px 0 6px;
 }
-div.paSettingsPanel h4 {
+/* The MORE network's rail is named alongside these because it is the same
+   object: a narrow column of grouped controls beside a graph, on the same page,
+   one scroll below this one. It had its own scale - `h6` at 11px/700 with
+   0.04em of tracking and no rule above it - which is close enough to the one
+   below to look like a mistake rather than a distinction, and far enough to
+   stop the two rails reading as one component. Its markup uses `h6` for the
+   group and `.more-net-field-label` for the control label; the roles map
+   exactly, so the selectors join the rules rather than restating them. */
+div.paSettingsPanel h4,
+.more-net-side h6 {
 	font-size: 11px;
 	font-weight: 600;
 	letter-spacing: 0.07em;
@@ -4112,12 +4178,15 @@ div.paSettingsPanel h4 {
 	padding-top: 16px;
 	border-top: 1px solid var(--pa-border);
 }
-div.paSettingsPanel h4:first-child {
+div.paSettingsPanel h4:first-child,
+.more-net-side h6:first-child {
 	margin-top: 4px;
 	padding-top: 0;
 	border-top: 0;
 }
-div.lateralOptionsPanel h5 {
+div.lateralOptionsPanel h5,
+.more-net-side .more-net-field-label {
+	display: block;
 	font-size: 12.5px;
 	font-weight: 600;
 	color: #27272A;
@@ -4859,10 +4928,16 @@ div.lateralOptionsPanel-header .toolbarOption.downloadTool:hover {
 .po-pathway-stats {
 	display: flex;
 	align-items: center;
-	justify-content: center;
+	/* Was `center`. This card sits beside "Pathways selection", whose heading and
+	   every line of whose prose start on --pa-card-inset; a centred row inside it
+	   gave the pair of cards two different left edges and no shared one. The
+	   counts are the card's content, not a banner, so they start where its own
+	   heading starts. */
+	justify-content: flex-start;
 	flex-wrap: wrap;
 	gap: 20px 46px;
 	margin: 24px 0 4px;
+	padding: 0 var(--pa-card-inset);
 	/* The old container set line-height: 120px to fake vertical centring.
 	   Flex does it honestly, and the tall line-height was what pushed these
 	   counts so far from the job ID above them. */
@@ -4909,9 +4984,37 @@ div.lateralOptionsPanel-header .toolbarOption.downloadTool:hover {
 	color: var(--pa-ink-title, #24252A);
 	font-variant-numeric: tabular-nums;
 }
+/* The two biggest numerals on the results page were not set in the page's own
+   typeface. `odometer-theme-default.css` ends with
+   `.odometer.odometer-theme-default { font-family: "Helvetica Neue"; line-height: 1.1em }`,
+   which is (0,2,0) against this block's (0,1,0) - so the vendor theme won both
+   declarations and 776 / 101 rendered in Helvetica Neue Light while every other
+   glyph on the page was Source Sans. At 34px that is the one place a reader can
+   actually see the difference between two grotesques.
+
+   The line-height matters as much as the face. `1.1em` on a 34px figure makes
+   the odometer's box 3.4px taller than its digits, and because the box is an
+   inline-block its baseline is the baseline of that taller line - so the label
+   beside it, aligned with `align-items: baseline`, was pushed off the numeral's
+   own baseline by exactly that amount. Measured before: label bottom 289,
+   figure bottom 298. Restoring `line-height: 1` puts the two back on one line.
+
+   Three class selectors so this beats the vendor's two without !important. */
+.po-pathway-count.odometer.odometer-theme-default {
+	font-family: inherit;
+	line-height: 1;
+}
+/* The URL caption under the job ID. A caption for the line above it, so it sits
+   tight against that line rather than a paragraph's distance from it. */
+.po-job-url {
+	margin: 0 0 2px;
+}
+/* A caption for the figure, so it sits below body copy (14px) rather than above
+   it. At 15px the label was larger than the prose in the card next door and
+   read as a second heading rather than as the unit of the number it follows. */
 .po-pathway-label {
-	font-size: 15px;
-	color: var(--pa-ink-body, #555);
+	font-size: 13px;
+	color: var(--pa-ink-muted, #595959);
 }
 
 .omicSummaryBox, .metaboliteBox {
@@ -4924,6 +5027,49 @@ div.lateralOptionsPanel-header .toolbarOption.downloadTool:hover {
 }
 .omicSummaryBox:nth-child(even), .metaboliteBox:nth-child(even) {
 	float: right;
+}
+/* Paired cards end level with each other.
+
+   `width: 49%` on two floats sets where a card starts and stops horizontally
+   and says nothing about how tall it is, so a row of two cards ended at two
+   different heights - on Step 3, "Pathways selection" ran 45px past "Pathways
+   summary" beside it, and the row read as two unrelated blocks rather than as
+   one comparison. Cards in a row are a set; a set has one bottom edge.
+
+   Applied to the wrapper ExtJS renders for a `layout: 'column'` container
+   rather than to the cards, so nothing has to know its own position: the
+   wrapper becomes a wrapping flex row and each card claims half of it minus the
+   gutter, which is the arrangement the floats were approximating. `stretch` is
+   the default `align-items`, and it is the whole point - it is what a float
+   cannot express.
+
+   `:has()` guards it to the wrappers that actually hold these cards; the same
+   classes are used inside plain `.contentbox` HTML on Step 2, where there is no
+   column layout and the floats still apply. A browser without `:has()` drops
+   the whole block and gets exactly the previous behaviour. */
+.x-column-layout-ct > * > *:has(> .contentbox.omicSummaryBox),
+.x-column-layout-ct > * > *:has(> .contentbox.metaboliteBox) {
+	/* !important, and it is the one declaration here that needs it: ExtJS writes
+	   `display: table-cell` on this wrapper as an inline style, which no
+	   stylesheet selector can outscore. Without it the wrapper stays a table
+	   cell, the cards below lose their 49% to `width: auto` and each one takes
+	   the full column - measured, on the first attempt at this rule. */
+	display: flex !important;
+	flex-wrap: wrap;
+	align-items: stretch;
+	/* 22px is what `100% - 2 × 49%` came to at this column width, so the gutter
+	   between the cards does not change. */
+	gap: 10px 22px;
+}
+.x-column-layout-ct > * > *:has(> .contentbox.omicSummaryBox) > .contentbox,
+.x-column-layout-ct > * > *:has(> .contentbox.metaboliteBox) > .contentbox {
+	float: none;
+	width: auto;
+	/* Two per row, and a third wraps to the next one at the same width - which
+	   is what the odd/even floats did. */
+	flex: 1 1 calc(50% - 22px);
+	min-width: 0;
+	margin: 0;
 }
 
 #mainViewCenterPanel.mobileMode div.omicSummaryBox,

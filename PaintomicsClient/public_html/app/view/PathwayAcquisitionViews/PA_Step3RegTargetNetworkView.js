@@ -672,72 +672,40 @@ function PA_Step3RegTargetNetworkView() {
 	};
 
 	// ---- Toolbar -----------------------------------------------------------
+	//
+	// Actions only, and in the same three groups as the pathways network's bar:
+	// what you are looking for on the left, what to do with the current view in
+	// the middle, what to take away with you on the right.
+	//
+	// The four filters that used to live here - condition, R², |coef|, edge
+	// budget - are in the side rail now. They are the same class of control as
+	// "Min features in pathway" and "Min shared features" in the pathways
+	// network's Tools column, and a reader who has learnt where one view keeps
+	// its filters should not have to learn it twice. It also cost this bar its
+	// second row: a 250px select, three labelled sliders and a search field do
+	// not fit on one line at this panel width, so the three buttons wrapped
+	// underneath and the bar was twice the height of the one on the same page.
 	this._buildToolbar = function () {
 		var host = document.getElementById(this.toolbarId);
 		if (!host) return;
 		var me = this;
 
-		var conditionOptions = this.graph.conditions.map(function (condition) {
-			return '<option value="' + Ext.String.htmlEncode(condition) + '">' +
-				Ext.String.htmlEncode(condition) + '</option>';
-		}).join("");
-
 		host.innerHTML =
 			'<div class="more-net-toolbar">' +
-				(this.graph.conditions.length > 1
-					? '<label>Condition ' +
-						'<select class="more-net-condition">' + conditionOptions + '</select>' +
-					  '</label>'
-					: '') +
-				'<label>R² ≥ <span class="more-net-r2-value">0.00</span>' +
-					'<input type="range" class="more-net-r2" min="0" max="1" step="0.05" value="0">' +
-				'</label>' +
-				'<label>|coef| ≥ <span class="more-net-coef-value">0.00</span>' +
-					'<input type="range" class="more-net-coef" min="0" max="' +
-					(Math.ceil(this.dataMaxAbsCoef * 10) / 10) +
-					'" step="0.01" value="0">' +
-				'</label>' +
-				'<label>Edges <span class="more-net-edges-value">' + DEFAULT_MAX_EDGES + '</span>' +
-					'<input type="range" class="more-net-edges" min="50" max="' +
-					EDGE_BUDGET_CEILING + '" step="50" value="' + DEFAULT_MAX_EDGES + '">' +
-				'</label>' +
-				'<input type="search" class="more-net-search" placeholder="Find a regulator or target">' +
-				'<button type="button" class="more-net-relayout">Re-layout</button>' +
-				'<button type="button" class="more-net-fit">Fit</button>' +
-				'<button type="button" class="more-net-png">PNG</button>' +
+				'<input type="search" class="more-net-search" ' +
+					'placeholder="Find a regulator or target">' +
+				'<span class="pa-net-toolbar-gap"></span>' +
+				'<button type="button" class="pa-net-tool more-net-relayout" ' +
+					'title="Run the force-directed layout again">' +
+					'<i class="fa fa-refresh"></i> Re-layout</button>' +
+				'<button type="button" class="pa-net-tool more-net-fit" ' +
+					'title="Fit the whole network into the view">' +
+					'<i class="fa fa-expand"></i> Fit</button>' +
+				'<span class="pa-net-toolbar-sep"></span>' +
+				'<button type="button" class="pa-net-tool more-net-png" ' +
+					'title="Download the network (PNG)">' +
+					'<i class="fa fa-download"></i> PNG</button>' +
 			'</div>';
-
-		var condition = host.querySelector(".more-net-condition");
-		if (condition) {
-			condition.addEventListener("change", function () {
-				me._applyCondition(this.value);
-				me._applyFilters();
-			});
-		}
-
-		var r2 = host.querySelector(".more-net-r2");
-		r2.addEventListener("input", function () {
-			me.filterState.r2Min = Number(this.value);
-			host.querySelector(".more-net-r2-value").textContent =
-				me.filterState.r2Min.toFixed(2);
-			me._applyFilters();
-		});
-
-		var coef = host.querySelector(".more-net-coef");
-		coef.addEventListener("input", function () {
-			me.filterState.absCoefMin = Number(this.value);
-			host.querySelector(".more-net-coef-value").textContent =
-				me.filterState.absCoefMin.toFixed(2);
-			me._applyFilters();
-		});
-
-		var edges = host.querySelector(".more-net-edges");
-		edges.addEventListener("input", function () {
-			me.filterState.maxEdges = Number(this.value);
-			host.querySelector(".more-net-edges-value").textContent =
-				me.filterState.maxEdges;
-			me._applyFilters();
-		});
 
 		host.querySelector(".more-net-relayout").addEventListener("click", function () {
 			me._runLayout();
@@ -793,10 +761,30 @@ function PA_Step3RegTargetNetworkView() {
 	};
 
 	// ---- Side panel --------------------------------------------------------
+	//
+	// The rail carries everything that is not an action: the filters that narrow
+	// the graph, the legend that decodes it, and the hubs it currently contains.
+	// Same division, and the same heading scale, as the pathways network's Tools
+	// column - `h6` here is styled from the rule that draws `paSettingsPanel`'s
+	// group labels, and the control labels from the one that draws its `h5`s.
 	this._buildSidePanel = function () {
 		var host = document.getElementById(this.sidePanelId);
 		if (!host) return;
 		var me = this;
+
+		var conditionOptions = this.graph.conditions.map(function (condition) {
+			return '<option value="' + Ext.String.htmlEncode(condition) + '">' +
+				Ext.String.htmlEncode(condition) + '</option>';
+		}).join("");
+
+		// One condition is not a choice, so it is stated in the status line
+		// under the toolbar rather than offered as a control here.
+		var conditionField = this.graph.conditions.length > 1
+			? '<label class="more-net-field">' +
+					'<span class="more-net-field-label">Condition</span>' +
+					'<select class="more-net-condition">' + conditionOptions + '</select>' +
+			  '</label>'
+			: '';
 
 		var legend = this.graph.omics.map(function (omic) {
 			return '<label class="more-net-omic">' +
@@ -810,6 +798,29 @@ function PA_Step3RegTargetNetworkView() {
 
 		host.innerHTML =
 			'<div class="more-net-side">' +
+				'<h6>Filters</h6>' +
+				conditionField +
+				'<label class="more-net-field">' +
+					'<span class="more-net-field-label">R² ≥ ' +
+						'<span class="more-net-r2-value">0.00</span></span>' +
+					'<input type="range" class="more-net-r2" min="0" max="1" ' +
+						'step="0.05" value="0">' +
+				'</label>' +
+				'<label class="more-net-field">' +
+					'<span class="more-net-field-label">|coef| ≥ ' +
+						'<span class="more-net-coef-value">0.00</span></span>' +
+					'<input type="range" class="more-net-coef" min="0" max="' +
+						(Math.ceil(this.dataMaxAbsCoef * 10) / 10) +
+						'" step="0.01" value="0">' +
+				'</label>' +
+				'<label class="more-net-field">' +
+					'<span class="more-net-field-label">Edges ' +
+						'<span class="more-net-edges-value">' + DEFAULT_MAX_EDGES +
+						'</span></span>' +
+					'<input type="range" class="more-net-edges" min="50" max="' +
+						EDGE_BUDGET_CEILING + '" step="50" value="' +
+						DEFAULT_MAX_EDGES + '">' +
+				'</label>' +
 				'<h6>Regulatory omics</h6>' +
 				legend +
 				'<h6>Target</h6>' +
@@ -828,6 +839,38 @@ function PA_Step3RegTargetNetworkView() {
 				'<h6>Top hubs</h6>' +
 				'<div class="more-net-hubs"></div>' +
 			'</div>';
+
+		var condition = host.querySelector(".more-net-condition");
+		if (condition) {
+			condition.addEventListener("change", function () {
+				me._applyCondition(this.value);
+				me._applyFilters();
+			});
+		}
+
+		var r2 = host.querySelector(".more-net-r2");
+		r2.addEventListener("input", function () {
+			me.filterState.r2Min = Number(this.value);
+			host.querySelector(".more-net-r2-value").textContent =
+				me.filterState.r2Min.toFixed(2);
+			me._applyFilters();
+		});
+
+		var coef = host.querySelector(".more-net-coef");
+		coef.addEventListener("input", function () {
+			me.filterState.absCoefMin = Number(this.value);
+			host.querySelector(".more-net-coef-value").textContent =
+				me.filterState.absCoefMin.toFixed(2);
+			me._applyFilters();
+		});
+
+		var edges = host.querySelector(".more-net-edges");
+		edges.addEventListener("input", function () {
+			me.filterState.maxEdges = Number(this.value);
+			host.querySelector(".more-net-edges-value").textContent =
+				me.filterState.maxEdges;
+			me._applyFilters();
+		});
 
 		Array.prototype.forEach.call(
 			host.querySelectorAll('input[data-omic]'), function (box) {
@@ -955,7 +998,13 @@ function PA_Step3RegTargetNetworkView() {
 			titleCollapse: true,
 			margin: "10 10 10 10",
 			bodyPadding: 0,
-			cls: "more-net-panel",
+			/* `contentbox` is what makes this a card: border, radius, white
+			   surface, shadow, and the overflow clip that keeps the toolbar's
+			   corners inside the radius. Without it this panel was the one block
+			   on Step 3 with no edge - a graph and a rail floating on the page
+			   between two cards - which is most of why it did not read as the
+			   same kind of object as the pathways network above it. */
+			cls: "contentbox more-net-panel",
 			html:
 				'<div id="' + this.toolbarId + '"></div>' +
 				'<div id="' + this.subtitleId + '" class="more-net-subtitle">' +

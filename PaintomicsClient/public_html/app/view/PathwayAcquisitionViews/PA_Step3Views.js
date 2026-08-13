@@ -873,8 +873,17 @@ function PA_Step3JobView() {
 						}, {
 							xtype: 'box',
 							cls: "contentbox omicSummaryBox",
+							/* The job ID and the URL below it were one centred <h3> with
+							   an unclosed <span class="infoTip"> inside it, so a caption
+							   inherited heading styling and the whole block sat on a
+							   centre line that nothing else in the row shares - the card
+							   beside this one is left-aligned prose on the card inset.
+							   Two elements now, both taking the inset from
+							   `div.contentbox h3` / `div.contentbox p`, so the heading,
+							   the URL and the counts below all start on one rail. */
 							html: '<h2>Pathways summary</h2>' +
-							'<h3 style="text-align:center;">Your Job ID is <b id="jobIdField">[JOB ID]</b><span id="jobName" style="display: none">[JOB NAME]</span><span class="infoTip" style=" font-size: 12px; ">You can access this job using the URL: <a id="jobURL" target="_blank" href="#">[JOBURL]</a></h3>' +
+							'<h3>Your Job ID is <b id="jobIdField">[JOB ID]</b><span id="jobName" style="display: none">[JOB NAME]</span></h3>' +
+							'<p class="po-job-url"><span class="infoTip">You can access this job using the URL: <a id="jobURL" target="_blank" href="#">[JOBURL]</a></span></p>' +
 							// The icons are decorative -- the label beside each count
 							// already names it -- so they are hidden from screen
 							// readers rather than read out as "star".
@@ -923,7 +932,18 @@ function PA_Step3JobView() {
 							/* Hide tab bar when there is only one database */
 							hidden: (me.getModel().getDatabases().length < 2),
 							defaults: {
-								height: 40
+								height: 40,
+								/* The gap between tabs, and it has to be stated here
+								   rather than in CSS: a tab bar is an ExtJS box layout,
+								   which measures each tab and writes an absolute
+								   position for it, so a `margin-right` from the
+								   stylesheet is overwritten inline and a wider tab just
+								   overlaps its neighbour. Measured that way - "KEGG"
+								   ended at 299 and "Reactome" began at 303, four pixels
+								   between two words that name different databases, so
+								   the strip read as the single phrase "KEGG Reactome"
+								   rather than as two controls. */
+								margin: '0 22 0 0'
 							},
 							height: 50,
 						},
@@ -2916,7 +2936,11 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 				/* The status line the MORE network already had. It is filled in
 				   by updateNetworkSubtitle() every time the graph is rebuilt. */
 				'<div class="pa-net-subtitle" id="step3-network-subtitle_' + me.dbid + '">Building network&hellip;</div>' +
-				'<div id="pathwayNetworkBox_' + me.dbid + '" class="pa-net-canvas" style="overflow:hidden; height:775px; width: 100%;"><div id="pathwayNetworkWaitBox_' + me.dbid + '"><i class="fa fa-cog fa-spin"></i> Building network...</div></div>' +
+				/* No height here any more. It was 775px inline while MORE's canvas was
+			   600px in its own stylesheet, so the two graph panels on this page
+			   were different shapes for no reason either file could see. Both now
+			   read --pa-net-canvas-height from network-views.css. */
+			'<div id="pathwayNetworkBox_' + me.dbid + '" class="pa-net-canvas" style="overflow:hidden; width: 100%;"><div id="pathwayNetworkWaitBox_' + me.dbid + '"><i class="fa fa-cog fa-spin"></i> Building network...</div></div>' +
 				'<div id="pathwayNetworkBoxSVG_' + me.dbid + '" style="display: none;">'
 			}],
 			listeners: {
@@ -6110,6 +6134,13 @@ function PA_Step3RegulationView() {
 			items: [{
 				xtype: "gridpanel",
 				cls: "contentbox",
+				/* Every other card on Step 3 is laid out by a container carrying
+				   `margin: 5px 10px`; this grid had none, so it started 10px left
+				   of them and ended 10px right - the one block on a 3,000px page
+				   whose edges did not coincide with anything above or below it,
+				   and the reason its own heading sat off the rail the rest of the
+				   page's headings share. */
+				margin: "5 10",
 				store: store,
 				height: 350,
 				autoScroll: true,
