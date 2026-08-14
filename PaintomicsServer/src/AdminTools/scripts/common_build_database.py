@@ -1899,7 +1899,7 @@ def buildReactomeHierarchyEdges(installedPathways, relationFile, speciesMarker,
 
 
 def loadReactomeMapping(filePath, keyColumn, valueColumns, minColumns,
-                        failedLines=None, specieLabel=""):
+                        failedLines=None, specieLabel="", allowEmpty=False):
     """
     Index a Reactome mapping TSV as {key: [tuple(row[c] for c in valueColumns), ...]}.
 
@@ -1912,9 +1912,15 @@ def loadReactomeMapping(filePath, keyColumn, valueColumns, minColumns,
     and shifts every identifier one field to the left, so entities map to the
     wrong genes rather than failing loudly.
 
-    Raises rather than returning an empty index: an empty mapping means the
-    upstream R step matched no rows for this species, and every downstream lookup
-    would quietly return nothing instead of reporting the real problem.
+    An empty file raises unless the caller passes allowEmpty=True. The split
+    exists because the callers' invariants differ: a per-species GENE mapping
+    can be legitimately empty (Reactome keys ddi/spo/pfa through NCBI and
+    UniProt but not Ensembl, and processReactomeData.R deliberately writes an
+    empty file for such a source -- the caller enforces the real invariant,
+    that not EVERY gene mapping is empty), while the common, all-species ChEBI
+    file has no legitimate empty state: zero rows there means a truncated
+    download, and every downstream lookup would quietly return nothing instead
+    of reporting the real problem.
     """
     if failedLines is None:
         failedLines = []
@@ -1941,10 +1947,16 @@ def loadReactomeMapping(filePath, keyColumn, valueColumns, minColumns,
             rowCount += 1
 
     if rowCount == 0:
-        raise Exception(
-            "Reactome mapping file is empty: " + filePath + "\n" +
-            "This usually means processReactomeData.R matched no rows for species '" +
-            str(specieLabel) + "'.")
+        if not allowEmpty:
+            raise Exception(
+                "Reactome mapping file is empty: " + filePath + "\n" +
+                "This file is not species-scoped, so zero rows means a truncated "
+                "or failed download (species being processed: '" +
+                str(specieLabel) + "').")
+        stderr.write("WARNING: no rows in {} for species '{}'; this identifier "
+                     "source contributes nothing.\n".format(
+                         os.path.basename(filePath), specieLabel))
+        return index
 
     stderr.write("Indexed {} rows from {} ({} distinct keys)\n".format(
         rowCount, os.path.basename(filePath), len(index)))
@@ -2026,6 +2038,19 @@ def processReactomePathwaysData():
 
 
 
+    # The ReactomePathway.txt check further down already fail-softs the KEGG
+    # build when Reactome was never downloaded - but the R script used to run
+    # BEFORE that check and die first. ptr made this real: Reactome dropped
+    # chimpanzee from its release, its download correctly skips Reactome, and
+    # the build then crashed in processReactomeData.R on three empty mappings.
+    # An absent download means "no Reactome for this species": take the same
+    # warn-and-return exit before anything Reactome-related runs.
+    if not haveInputFile("REACTOME PATHWAYS", DATA_DIR + 'ReactomePathway.txt',
+                         "Reactome was not downloaded for this species (not covered "
+                         "by the current Reactome release, or downloaded without "
+                         "--reactome=1); KEGG pathways are unaffected."):
+        return
+
     # The process will also insert information about compounds, thus discarding the previous database
     # and importing a new one, needing again the KEGG compounds.
     processKEGG2CompoundSymbolMappingData(DATA_DIR + "../common/compounds_all.list")
@@ -2042,10 +2067,24 @@ def processReactomePathwaysData():
         print(output)  # Print R script output
         print("Reactome R script completed successfully")
     except CalledProcessError as e:
+        rOutput = e.output if getattr(e, 'output', None) else ""
+        # The R script's aggregate zero-coverage stop is a fact about Reactome's
+        # release, not a build failure: every gene mapping came up empty, so
+        # there is nothing to attach genes to and installing Reactome would ship
+        # pathways with no gene mapped to anything. Take the same warn-and-return
+        # exit as a missing download -- the KEGG pathways just built are
+        # unaffected -- instead of failing the species with a misleading
+        # "check memory/R installation" error.
+        if "in any of Ensembl2Reactome, NCBI2Reactome or UniProt2Reactome" in rOutput:
+            print(rOutput)
+            print("WARNING: Reactome's current release has no gene mappings for "
+                  "species '" + str(SPECIE) + "'; skipping Reactome (KEGG "
+                  "pathways are unaffected).")
+            return
         print("ERROR: Reactome R script failed with exit code: " + str(e.returncode))
-        if hasattr(e, 'output') and e.output:
+        if rOutput:
             print("Output from R script:")
-            print(e.output)
+            print(rOutput)
         raise Exception("Failed to process Reactome data. Check memory usage and R installation.")
 
 
@@ -2067,15 +2106,28 @@ def processReactomePathwaysData():
     failedLines = FAILED_LINES["REACTOME PATHWAYS"]
 
     # stId -> [(ensembl_id, symbol), ...] and the NCBI / UniProt equivalents.
+    # allowEmpty on the three per-species gene mappings ONLY: any one of them
+    # can be legitimately empty (see loadReactomeMapping's docstring); the
+    # all-empty case is caught just below. The common ChEBI file further down
+    # keeps the raise -- empty there means a truncated download.
     ensemblByStId = loadReactomeMapping(
         mapReactomeDir + "Ensembl2Reactome.txt", keyColumn=1, valueColumns=(0, 2),
-        minColumns=3, failedLines=failedLines, specieLabel=SPECIE)
+        minColumns=3, failedLines=failedLines, specieLabel=SPECIE, allowEmpty=True)
     ncbiByStId = loadReactomeMapping(
         mapReactomeDir + "NCBI2Reactome.txt", keyColumn=1, valueColumns=(0, 2),
-        minColumns=3, failedLines=failedLines, specieLabel=SPECIE)
+        minColumns=3, failedLines=failedLines, specieLabel=SPECIE, allowEmpty=True)
     uniprotByStId = loadReactomeMapping(
         mapReactomeDir + "UniProt2Reactome.txt", keyColumn=1, valueColumns=(0, 2),
-        minColumns=3, failedLines=failedLines, specieLabel=SPECIE)
+        minColumns=3, failedLines=failedLines, specieLabel=SPECIE, allowEmpty=True)
+
+    # The invariant the old per-file check was reaching for: a species whose
+    # EVERY gene mapping is empty would install Reactome pathways with no gene
+    # attached to anything, which must fail loudly rather than ship.
+    if not ensemblByStId and not ncbiByStId and not uniprotByStId:
+        raise Exception(
+            "All three Reactome gene mappings (Ensembl, NCBI, UniProt) are "
+            "empty for species '" + str(SPECIE) + "'. Reactome does not cover "
+            "this organism; install it with --reactome=0.")
 
     # stId -> [chebi_id, ...]. This file is NOT species-filtered, so it is the
     # largest of the five and was the single worst offender in the old scan.

@@ -142,7 +142,12 @@ def test_missing_file_raises_with_species_in_message():
 
 
 def test_empty_file_raises_instead_of_silently_succeeding():
-    """The R step writes nothing when it matches no species. That must be loud."""
+    """An empty mapping raises by default -- the contract for the common ChEBI
+    file, whose only empty state is a truncated download. Per-species gene
+    mappings opt out with allowEmpty=True, because Reactome legitimately keys
+    some organisms through only a subset of the identifier systems (pfa has no
+    Ensembl rows at all); the build enforces the real invariant separately,
+    that not EVERY gene mapping is empty."""
     tmp = tempfile.mkdtemp()
     try:
         path = _writeTsv(tmp, "Ensembl2Reactome.txt", [])
@@ -154,6 +159,12 @@ def test_empty_file_raises_instead_of_silently_succeeding():
             message = str(exc)
             assert "empty" in message.lower(), f"unhelpful message: {message}"
             assert "mmu" in message, f"species missing from message: {message}"
+
+        # The tolerated path: empty is a coverage fact, and the caller gets an
+        # empty index to combine with the other identifier sources.
+        index = loadReactomeMapping(path, keyColumn=1, valueColumns=(0, 2), minColumns=3,
+                                    specieLabel="pfa", allowEmpty=True)
+        assert len(index) == 0, f"allowEmpty must return an empty index, got {dict(index)}"
     finally:
         shutil.rmtree(tmp)
 
@@ -354,7 +365,13 @@ def test_r_script_extracts_requested_species_only():
 
 
 def test_r_script_fails_loudly_for_species_reactome_lacks():
-    """Silent success was the bug: no output, exit 0, confusing failure later."""
+    """Silent success was the bug: no output, exit 0, confusing failure later.
+
+    The failure is now AGGREGATE: one empty mapping is a per-source coverage
+    fact and deliberately writes an empty output file, and only all three gene
+    mappings coming up empty stops the script. The stop message is load-bearing:
+    the Python wrapper recognises it and downgrades the species to KEGG-only
+    instead of failing the install."""
     if not shutil.which("Rscript"):
         print("      (skipped: Rscript not installed)")
         return
@@ -372,9 +389,17 @@ def test_r_script_fails_loudly_for_species_reactome_lacks():
         combined = result.stdout + result.stderr
         assert "No rows matched species 'sot'" in combined, \
             f"unhelpful failure output: {combined}"
-        assert not os.path.isfile(
-            os.path.join(tmp, "sot", "mapping", "reactome", "Ensembl2Reactome.txt")), \
-            "a partial output file was left behind"
+        # The exact phrase common_build_database.py keys the KEGG-only
+        # downgrade on; reword both together or uncovered species fail hard.
+        assert "in any of Ensembl2Reactome, NCBI2Reactome or UniProt2Reactome" in combined, \
+            f"aggregate stop message changed; the Python-side downgrade will not match: {combined}"
+
+        # The per-source empty outputs are deliberate now, not debris: the
+        # Python side reads each one independently.
+        outPath = os.path.join(tmp, "sot", "mapping", "reactome", "Ensembl2Reactome.txt")
+        assert os.path.isfile(outPath), "the empty mapping file should still be written"
+        with open(outPath) as handle:
+            assert handle.read().strip() == "", "expected an EMPTY mapping for an uncovered species"
     finally:
         shutil.rmtree(tmp)
 

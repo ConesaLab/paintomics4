@@ -13,6 +13,7 @@ import os
 #     os.execv(VENV_PYTHON, [VENV_PYTHON] + sys.argv)
 
 import datetime, traceback, shutil, inspect, tempfile
+import json
 import logging
 import logging.config
 import requests
@@ -261,7 +262,32 @@ def download_command(inputfile=None, specie=None, kegg=0, mapping=0, common=0, r
 
             if reactome:
                 log("STEP " + str(currentStep) + " Extra. DOWNLOADING REACTOME Files...")
-                downloadReactome(specie)
+                try:
+                    downloadReactome(specie)
+                except Exception as reactomeError:
+                    # Coverage is a fact about Reactome's current release, not an
+                    # error in this run: ptr (chimpanzee) has zero rows in the
+                    # 2026 ReactomePathwaysRelation dump while 15 other species
+                    # keep theirs. A species Reactome no longer projects onto
+                    # installs KEGG-only (the build already fail-softs on the
+                    # missing reactome directory); everything else - network
+                    # failures mid-crawl included - still fails the species so a
+                    # transient error cannot silently strip Reactome from it.
+                    if "No pathway relations found" in str(reactomeError):
+                        log("        WARNING: " + str(reactomeError).splitlines()[0])
+                        log("        -> Reactome's current release does not cover this organism; continuing with KEGG data only.")
+                        # Record the drop in the staged tree itself. The
+                        # promotion guard reads this marker to let the install
+                        # retire the previously installed Reactome artifacts
+                        # (which this tree legitimately lacks) instead of
+                        # refusing the whole species -- without it, the
+                        # KEGG-only outcome promised above was unreachable for
+                        # any species previously installed WITH Reactome.
+                        with open(datadir + REACTOME_NOT_COVERED_MARKER, 'w') as marker:
+                            marker.write("# Reactome release does not cover this organism. Recorded: " +
+                                         strftime("%Y%m%d %H%M") + "\n")
+                    else:
+                        raise
 
             # STEP 2.B.1 IF USER SPECIFIED THAT KEGG DATA SHOULD BE DOWNLOADED, DOWNLOAD THE KEGG DATA, OTHERWISE COPY PREVIOUS DATA (IF EXISTS)
             # 2 = updateKegg, 3 = updateKegg && updateMapping
@@ -637,6 +663,16 @@ def install_command(inputfile=None, specie=None, species=None, common=0, hub=1, 
             replaceNewVersionData(downloadDir, currentDataDir, "common", oldDataDir)
             installCommonData(currentDataDir + "common/", ROOT_DIRECTORY + "AdminTools/scripts/")
             currentStep += 1
+    except PromotionRefused as e:
+        # The guard said no BEFORE anything moved: current/common and the
+        # database are untouched, so there is nothing to restore -- and the
+        # restore below would promote the stale old/common archive over the
+        # healthy installed one. Report the refusal and stop.
+        log("        REFUSED TO INSTALL COMMON INFORMATION -- the installed data was left untouched. ABORTING!!")
+        summary.write('REFUSED TO INSTALL COMMON INFORMATION (installed data left untouched): ' + str(e) + '\n')
+        errorlog(e)
+        summary.close()
+        exit(1)
     except Exception as e:
         # TODO: RESTORE
         restorePreviousVersionData(oldDataDir, currentDataDir, "common", downloadDir + "error/")
@@ -731,6 +767,18 @@ def install_command(inputfile=None, specie=None, species=None, common=0, hub=1, 
             INSTALLED_SPECIES.append(specie)
             summary.write(specie + '\tINSTALL\tSUCCESS\t' + str(SPECIES_INSTALL[specie]) + '\n')
             log("INSTALL  " + str(SPECIES_INSTALL[specie]) + " " + specie + "...SUCCESS\n")
+        except PromotionRefused as e:
+            # Nothing moved and Mongo was never touched: the species is exactly
+            # as installed. The rollback below would promote the stale
+            # old/<specie> archive over the intact installation and rebuild the
+            # database from it -- a silent one-version regression triggered by
+            # nothing more than a stale download directory -- so a refusal is
+            # reported and the installed data left alone.
+            summary.write(specie + '\tINSTALL\tREFUSED\t' + str(SPECIES_INSTALL[specie]) + '\n')
+            log("INSTALL  " + str(SPECIES_INSTALL[specie]) + " " + specie +
+                "...REFUSED (installed data left untouched)\n")
+            errorlog(e)
+            ERRONEOUS_SPECIES.append(specie)
         except Exception as e:
             restorePreviousVersionData(oldDataDir, currentDataDir, specie, downloadDir + "error/")
             installSpecieData(specie, installLog, dirNameAux, str(step) + "/" + total,
@@ -852,7 +900,24 @@ def findolder_command(nDays):
 # ---  AUXILIAR FUNCTIONS                                                               ----
 # ------------------------------------------------------------------------------------------
 
-def replaceNewVersionData(origin, destination, dirname, backup_dir):
+# Written into download/<specie>/ when the Reactome crawl discovers the current
+# release no longer projects onto the organism; read by the promotion guard below.
+REACTOME_NOT_COVERED_MARKER = "REACTOME_NOT_COVERED"
+
+
+class PromotionRefused(Exception):
+    """The never-lose-files guard vetoed a promotion BEFORE anything moved.
+
+    This must stay distinguishable from a failure that happened mid-install:
+    on a refusal, current/<dirname> and the imported database are exactly as
+    they were, so the install_command failure path has nothing to roll back --
+    and rolling back anyway would promote the stale old/<dirname> archive over
+    a healthy installation and rebuild Mongo from it, silently regressing the
+    species one version.
+    """
+
+
+def replaceNewVersionData(origin, destination, dirname, backup_dir, isRestore=False):
     """
     Replace data in destination with data from origin.
     If origin data doesn't exist, check if we're doing a reinstall (data already in destination).
@@ -879,16 +944,49 @@ def replaceNewVersionData(origin, destination, dirname, backup_dir):
     #
     # Refuse instead. Deleting a known-stale download to proceed is a decision an admin
     # can make in one command; recovering silently archived data is not.
-    if os.path.isdir(source_path) and os.path.isdir(dest_path):
+    if os.path.isdir(source_path) and os.path.isdir(dest_path) and not isRestore:
         sourceFiles = set(os.listdir(source_path))
         destFiles = set(os.listdir(dest_path))
         # hubData is deliberately kept OUT of the download tree (see the species move
         # below), so it is missing from every staged directory by design. Counting it
         # here made this guard fire on every reinstall of a species that has hub data --
         # 87 of the 105 installed species -- which blocked reinstalling any of them.
-        missing = destFiles - sourceFiles - {"hubData"}
+        #
+        # The named files below are in the same class for the same reason: they are
+        # GENERATED by the build that runs after this promotion (mergeNetworkFiles and
+        # the Reactome/MapMan pathway processing write them into current/<specie>), so
+        # no download directory ever contains them and comparing them here refused
+        # every reinstall of an installed species. Verified against a fresh
+        # `download --kegg=1 --mapping=1 --reactome=1` of sce on 2026-08-13: the run
+        # imported the new database, then this guard refused the file promotion and
+        # the species was reported FAILED with its fresh downloads stranded.
+        # The previous versions are not lost by exempting them: the promotion archives
+        # the whole installed directory under old/ before the build regenerates them.
+        GENERATED_AT_BUILD = {
+            "hubData",
+            "pathways_network.json",
+            "REACTOME_VERSION", "gene2pathway_reactome.list",
+            "pathways_network_Reactome.json",
+            "MAPMAN_VERSION", "MAPMAN_MAPPING", "gene2pathway_mapman.list",
+            "pathways_network_MapMan.json",
+        }
+        exempt = set(GENERATED_AT_BUILD)
+        # A download that discovered Reactome no longer covers this organism
+        # records the fact in its own staged tree (see download_command).
+        # Retiring the previously installed Reactome artifacts is then the
+        # POINT of the promotion, not a loss -- they are archived under old/
+        # with the rest of the tree. Without this, the coverage fail-soft was
+        # unreachable for any species previously installed WITH Reactome: the
+        # staged tree legitimately lacked reactome/ and this guard refused
+        # every install of it. The marker itself is per-download metadata, so
+        # an old marker left in the installed tree must never block a later,
+        # Reactome-carrying download either -- hence unconditionally exempt.
+        exempt.add(REACTOME_NOT_COVERED_MARKER)
+        if REACTOME_NOT_COVERED_MARKER in sourceFiles:
+            exempt |= {"reactome", "ReactomePathway.txt", "ReactomePathwayHierarchy.json"}
+        missing = destFiles - sourceFiles - exempt
         if missing:
-            raise Exception(
+            raise PromotionRefused(
                 "Refusing to install '" + dirname + "': the download directory is missing " +
                 str(len(missing)) + " file(s) that the installed one has, so promoting it "
                 "would delete them (" + ", ".join(sorted(missing)[:6]) +
@@ -1031,7 +1129,12 @@ def reinstall_command(species=None, specie=None, inputfile=None, common=0, hub=0
 
 
 def restorePreviousVersionData(origin, destination, dirname, backup_dir):
-    replaceNewVersionData(origin, destination, dirname, backup_dir)
+    # A restore intentionally rolls back to an OLDER tree, which may lack files
+    # the failed newer install had (pfa's pre-Reactome archive vs its fresh
+    # download, observed 2026-08-13: the never-lose-files guard vetoed the
+    # rollback and the failure path itself failed). Losing the newer files is
+    # the point of a rollback, so the guard does not apply here.
+    replaceNewVersionData(origin, destination, dirname, backup_dir, isRestore=True)
 
 def downloadKEGGOrganismList(message, logFile, dirName, fileName, delay, maxTries):
     """
@@ -1190,6 +1293,7 @@ def downloadKEGGFile(message, logFile, URL, dirName, fileName, delay, maxTries):
     log(message)
 
     nTry = 1
+    lastError = None
     while nTry <= maxTries:
         wait(delay)
         try:
@@ -1225,11 +1329,24 @@ def downloadKEGGFile(message, logFile, URL, dirName, fileName, delay, maxTries):
             with open(logFile, 'a') as log_file:
                 log_file.write(f"{strftime('%Y-%m-%d %H:%M:%S')} - Error downloading {fileName}: {str(e)}\n")
 
+            lastError = e
+            # A 400 is KEGG's contract answer -- "this list/conversion does not
+            # exist" -- not a transient fault, so retrying it can never succeed.
+            # Stop immediately and let the caller classify it; the retries were
+            # pure added latency on every organism KEGG does not fully cover.
+            status = getattr(getattr(e, "response", None), "status_code", None)
+            if status == 400:
+                break
             # Only log "Trying again" if we actually will try again
             if nTry < maxTries:
                 errorlog("FAIL! Trying again... " + str(nTry + 1) + " of " + str(maxTries))
             nTry += 1
-    raise Exception('Unable to retrieve ' + fileName + " from " + URL)
+    # The cause must ride in the exception text, not only in the log file:
+    # getSpecieMappingData decides whether a failure is permanent ("400 Client
+    # Error" = KEGG does not offer this conversion) by reading str(e), and the
+    # old bare message hid the status - bvu's 400 was retried and then failed
+    # the species even after the 400-as-absence handling landed.
+    raise Exception('Unable to retrieve ' + fileName + " from " + URL + ": " + str(lastError))
 
 
 def getSpecieKeggData(specie, downloadLog, dirName, step):
@@ -1313,40 +1430,55 @@ def getSpecieMappingData(specie, downloadLog, dirName, step, scriptsDir):
 
         # we tolerate that some of the files fail on download
         error_tolerance = 3
-        try:
-            downloadKEGGFile("             * KEGG TO NCBI GeneID", downloadLog,
-                             "https://rest.kegg.jp/conv/" + specie + "/ncbi-geneid", dirName, "ncbi-geneid2kegg.list",
-                             DOWNLOAD_DELAY_1, MAX_TRIES_1)
-        except Exception as e:
-            error_tolerance -= 1;
-            mapping_errors += " ncbi-geneid"
-            if error_tolerance == 0:
-                raise Exception(
-                    "Too many errors while downloading the KEGG mapping files for organism " + specie + ": " + mapping_errors)
-            log("                       Failed!! The download process will continue...")
 
-        try:
-            downloadKEGGFile("             * KEGG TO Uniprot", downloadLog,
-                             "https://rest.kegg.jp/conv/" + specie + "/uniprot", dirName, "uniprot2kegg.list",
-                             DOWNLOAD_DELAY_1, MAX_TRIES_1)
-        except Exception as e:
-            error_tolerance -= 1;
-            mapping_errors += " uniprot2kegg"
-            if error_tolerance == 0:
-                raise Exception(
-                    "Too many errors while downloading the KEGG mapping files for organism " + specie + ": " + mapping_errors)
-            log("                       Failed!! The download process will continue...")
+        # A mapping list KEGG does not offer for this organism answers HTTP 400.
+        # That is a contract answer, not a transient failure: dosa (rice, keyed
+        # by RAP-DB ids) gets 400 for /conv/dosa/ncbi-geneid on every attempt,
+        # and csau's pathways and KGML download fine while /list/csau answers
+        # 400 -- a per-endpoint coverage gap, not an invalid organism (that
+        # case fails the KEGG data phase minutes earlier). Counting it as a
+        # mapping error failed the whole species at the end of the download.
+        # The build side already tolerates the file's absence
+        # (processKEGGMappingData warns "Unable to find ... MAPPING file" and
+        # continues), so absence is the correct translation of a 400 here.
+        # Transient errors keep their old accounting: they are real failures
+        # and still fail the species.
+        def keggDoesNotOfferIt(exc):
+            return "400 Client Error" in str(exc)
 
-        try:
-            downloadKEGGFile("             * KEGG TO Gene Symbol", downloadLog, "https://rest.kegg.jp/list/" + specie,
-                             dirName, "kegg2genesymbol.list", DOWNLOAD_DELAY_1, MAX_TRIES_1)
-        except Exception as e:
-            error_tolerance -= 1;
-            mapping_errors += " kegg2genesymbol"
-            if error_tolerance == 0:
-                raise Exception(
-                    "Too many errors while downloading the KEGG mapping files for organism " + specie + ": " + mapping_errors)
-            log("                       Failed!! The download process will continue...")
+        # One body for the three endpoint downloads below. This logic was
+        # copy-pasted per endpoint and the copies had already drifted in
+        # wording; any change to the classification must hit all of them.
+        def downloadMappingList(message, url, fileName, errorKey, absenceNote):
+            nonlocal error_tolerance, mapping_errors
+            try:
+                downloadKEGGFile(message, downloadLog, url, dirName, fileName,
+                                 DOWNLOAD_DELAY_1, MAX_TRIES_1)
+            except Exception as e:
+                if keggDoesNotOfferIt(e):
+                    log("                       " + absenceNote)
+                else:
+                    error_tolerance -= 1
+                    mapping_errors += " " + errorKey
+                    if error_tolerance == 0:
+                        raise Exception(
+                            "Too many errors while downloading the KEGG mapping files for organism " + specie + ": " + mapping_errors)
+                    log("                       Failed!! The download process will continue...")
+
+        downloadMappingList("             * KEGG TO NCBI GeneID",
+                            "https://rest.kegg.jp/conv/" + specie + "/ncbi-geneid",
+                            "ncbi-geneid2kegg.list", "ncbi-geneid",
+                            "KEGG offers no ncbi-geneid conversion for " + specie + " (HTTP 400); continuing without it.")
+
+        downloadMappingList("             * KEGG TO Uniprot",
+                            "https://rest.kegg.jp/conv/" + specie + "/uniprot",
+                            "uniprot2kegg.list", "uniprot2kegg",
+                            "KEGG offers no uniprot conversion for " + specie + " (HTTP 400); continuing without it.")
+
+        downloadMappingList("             * KEGG TO Gene Symbol",
+                            "https://rest.kegg.jp/list/" + specie,
+                            "kegg2genesymbol.list", "kegg2genesymbol",
+                            "KEGG offers no gene list for " + specie + " (HTTP 400); continuing without gene symbols.")
 
         # downloadKEGGFile("             * KEGG TO NCBI GI", downloadLog,  "http://rest.kegg.jp/conv/"+ specie +"/ncbi-gi", dirName, "ncbi-gi2kegg.list",  DOWNLOAD_DELAY_1, MAX_TRIES_1)
 
@@ -1542,9 +1674,16 @@ def getCurrentInstalledSpecies():
                 downloaded = "downloading"
             else:
                 downloaded = False
-                # Erroneous download not removed --> remove
-                if os.path.isdir(KEGG_DATA_DIR + 'download/' + organism_code):
-                    shutil.rmtree(KEGG_DATA_DIR + 'download/' + organism_code)
+                # This used to rmtree the directory as an "erroneous download not
+                # removed". A getter must not delete: a parallel `download` process
+                # wipes and recreates download/<sp> BEFORE it writes the DOWNLOADING
+                # flag, and in that window this cleanup saw an unmarked directory and
+                # destroyed it under the running download. Observed 2026-08-13: an
+                # `install --specie=ath` deleted download/bta out from under bta's
+                # Reactome crawl (which then died on a vanished output path), and this
+                # rmtree itself crashed the whole ath install when bta's error handler
+                # moved the remains to error/ mid-delete. The download step wipes its
+                # own directory at start, so stale leftovers cost nothing by staying.
 
             databaseList.append({
                 "organism_name": organism_name,
@@ -1571,6 +1710,25 @@ def generateAvailableSpeciesFile(VALID_SPECIES, species_file, installed_species_
                 species[row[1]] = row[2]
         csvfile.close()
 
+        # Custom species (customSpeciesInstaller.py) register their display
+        # names in organisms_custom.list beside organisms_all.list, because the
+        # latter is re-downloaded from KEGG on a common refresh and would drop
+        # them. A code installed in Mongo but absent from this lookup takes the
+        # raise-branch below and aborts species.json for EVERY species, so the
+        # merge is what keeps one custom organism from poisoning every later
+        # standard install.
+        # quoting=csv.QUOTE_NONE: the display names are admin-supplied
+        # (customSpeciesInstaller validates --code but not --name), and the
+        # default dialect treats a leading double quote as a field delimiter --
+        # swallowing the tab and dropping the row, which re-triggers the
+        # every-species abort this merge exists to prevent.
+        custom_file = os.path.join(os.path.dirname(species_file), "organisms_custom.list")
+        if os.path.isfile(custom_file):
+            with open(custom_file) as fh:
+                for row in csv.reader(fh, delimiter='\t', quoting=csv.QUOTE_NONE):
+                    if len(row) >= 3:
+                        species[row[1]] = row[2]
+
         listAux = []
         for specie in VALID_SPECIES:
             if isinstance(specie, dict):
@@ -1588,7 +1746,12 @@ def generateAvailableSpeciesFile(VALID_SPECIES, species_file, installed_species_
         for i, specieCode in enumerate(VALID_SPECIES):
             name = species.get(specieCode, "")
             if name != "":
-                name = '\t{"name": "' + name + '", "value": "' + specieCode + '"}'
+                # json.dumps, not string concatenation: a quote or backslash in
+                # an admin-supplied custom species name would otherwise write an
+                # unparseable species.json and break the organism dropdown for
+                # every user (customSpeciesInstaller's own regenerate uses
+                # json.dumps for the same reason).
+                name = '\t{"name": ' + json.dumps(name) + ', "value": ' + json.dumps(specieCode) + '}'
                 if i < total - 1:
                     name += ","
                 file_content += name + '\n'

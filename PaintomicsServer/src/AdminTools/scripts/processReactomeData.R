@@ -102,8 +102,27 @@ processFile <- function(fileName, outputName, specie, speciesName) {
     )
   }
 
+  # Before paying for the fallback, ask grep -q whether the species truly has
+  # zero rows here. A legitimately empty source (pfa/ddi/spo have no Ensembl
+  # rows) used to route through the whole-file read.delim below -- a
+  # several-GB, minutes-long parse of the largest tables just to confirm
+  # nothing matched, on what is now a designed success path. Exit status 1
+  # means "no match" with certainty; 0 (a match exists, so the pipe read above
+  # is what failed) and 2 (grep errored) both fall through to the full read.
+  zeroConfirmed <- FALSE
+  if ((is.null(filtered) || nrow(filtered) == 0) && !is.na(speciesName)) {
+    probeStatus <- suppressWarnings(
+      system2("grep", c("-qF", shQuote(speciesName), shQuote(inputPath))))
+    if (probeStatus == 1) {
+      zeroConfirmed <- TRUE
+      filtered <- data.frame(matrix(character(0), nrow = 0, ncol = 8),
+                             stringsAsFactors = FALSE)
+      colnames(filtered) <- paste0("V", 1:8)
+    }
+  }
+
   # Fallback: no species table entry, or grep produced nothing usable.
-  if (is.null(filtered) || nrow(filtered) == 0) {
+  if (!zeroConfirmed && (is.null(filtered) || nrow(filtered) == 0)) {
     inputData <- read.delim(inputPath, header = FALSE, quote = "",
                             comment.char = "", stringsAsFactors = FALSE)
     if (ncol(inputData) < 8) {
@@ -128,11 +147,17 @@ processFile <- function(fileName, outputName, specie, speciesName) {
   }
 
   if (nrow(filtered) == 0) {
-    stop(paste0("No rows matched species '", specie, "'",
-                if (!is.na(speciesName)) paste0(" ('", speciesName, "')") else "",
-                " in ", basename(inputPath), ".\n",
-                "Reactome does not cover every KEGG organism. Install this ",
-                "species with --reactome=0, or add it to KEGG_TO_REACTOME_SPECIES."))
+    # Not fatal on its own. Reactome does not key every organism through every
+    # identifier system: P. falciparum has 19k NCBI and 20k UniProt rows and
+    # ZERO Ensembl rows (its genes live in PlasmoDB, not Ensembl), and the old
+    # hard stop here failed the whole pfa build on the first file while the
+    # other two carried the actual mappings. Write the empty output - the
+    # Python side reads each mapping file independently and an empty one just
+    # contributes no identifiers - and let the caller decide below whether
+    # EVERY mapping came up empty, which is the real "not covered" case.
+    cat(paste0("  WARNING: no rows matched species '", specie, "'",
+               if (!is.na(speciesName)) paste0(" ('", speciesName, "')") else "",
+               " in ", basename(inputPath), "; writing an empty mapping.\n"))
   }
 
   # Column 3 is "<id> <description>"; downstream code wants only the identifier.
@@ -143,17 +168,29 @@ processFile <- function(fileName, outputName, specie, speciesName) {
               col.names = FALSE, quote = FALSE, sep = "\t")
   cat(paste0("  Wrote ", nrow(filtered), " rows for ", specie, " -> ", outputPath, "\n"))
 
+  rows <- nrow(filtered)
   rm(filtered)
   invisible(gc(verbose = FALSE))
+  rows
 }
 
 cat("STEP 1: Processing Ensembl2Reactome...\n")
-processFile("Ensembl2Reactome", "Ensembl2Reactome", specie, speciesName)
+ensemblRows <- processFile("Ensembl2Reactome", "Ensembl2Reactome", specie, speciesName)
 
 cat("STEP 2: Processing NCBI2Reactome...\n")
-processFile("NCBI2Reactome", "NCBI2Reactome", specie, speciesName)
+ncbiRows <- processFile("NCBI2Reactome", "NCBI2Reactome", specie, speciesName)
 
 cat("STEP 3: Processing UniProt2Reactome...\n")
-processFile("UniProt2Reactome", "UniProt2Reactome", specie, speciesName)
+uniprotRows <- processFile("UniProt2Reactome", "UniProt2Reactome", specie, speciesName)
+
+# Only every mapping being empty means Reactome truly does not cover the
+# organism; that still has to fail loudly rather than install a Reactome
+# database with no gene attached to anything.
+if (ensemblRows + ncbiRows + uniprotRows == 0) {
+  stop(paste0("No rows matched species '", specie, "' in any of ",
+              "Ensembl2Reactome, NCBI2Reactome or UniProt2Reactome.\n",
+              "Reactome does not cover every KEGG organism. Install this ",
+              "species with --reactome=0, or add it to KEGG_TO_REACTOME_SPECIES."))
+}
 
 cat("All Reactome data processing completed successfully.\n")

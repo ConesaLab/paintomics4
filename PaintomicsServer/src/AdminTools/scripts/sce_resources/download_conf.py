@@ -14,13 +14,16 @@ EXTERNAL_RESOURCES = {
                     "file"          :   "gene2refseq.gz",
                     "output"        :   "refseq_gene2refseq.gz",
                     "description"   :   "Source: NCBI Gene. Downloaded from NCBI FTP. Tab-delimited one line per genomic/RNA/protein set of RefSeqs",
-                    "specie-code"   :   4932
+                    # NCBI keys S. cerevisiae rows by strain: 559292 (S288C), the same
+                    # organism id already in the UniProt filename below. The species
+                    # taxid 4932 matches only ~36 mitochondrial/placeholder rows.
+                    "specie-code"   :   559292
                     },{
                     "url"           :   "ftp://ftp.ncbi.nih.gov/gene/DATA/GENE_INFO/Fungi/",
                     "file"          :   "Saccharomyces_cerevisiae.gene_info.gz",
                     "output"        :   "refseq_gene2genesymbol.gz",
                     "description"   :   "Source: NCBI Gene. Downloaded from NCBI FTP. Tab-delimited one line per gene id/gene symbol/.../synonyms/... from RefSeqs",
-                    "specie-code"   :   4932
+                    "specie-code"   :   559292
                     }
                 ],
                  "uniprot"   :   [
