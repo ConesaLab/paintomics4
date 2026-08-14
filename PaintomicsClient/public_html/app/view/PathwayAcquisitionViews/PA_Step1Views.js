@@ -5019,6 +5019,20 @@ function initExpDesignDraft(box) {
 
 		var picked = collectPickedOmicFiles();
 		if (picked.length === 0) {
+			/* A loaded example has no browser-readable files: its pickers are
+			   disabled "[example dataset]" labels and the files live on the
+			   server. Naming the scenario lets the servlet read the same
+			   header rows there, instead of dead-ending the flagship demo in
+			   the "choose your files" warning below. */
+			var step1View = (typeof application !== "undefined" && application.getMainView)
+				? application.getMainView().getSubView("PA_Step1JobView")
+				: null;
+			if (step1View && step1View.isExampleMode && step1View.isExampleMode()) {
+				button.disabled = true;
+				setNote("working", "Reading the example dataset’s column names…");
+				send([], step1View.getExampleScenarioId() || "");
+				return;
+			}
 			/* The ask the user made explicitly: say so in a window rather than
 			   leaving the button to do nothing. Deliberately showWarningMessage
 			   and not confirm() -- a native modal blocks the page. */
@@ -5050,8 +5064,12 @@ function initExpDesignDraft(box) {
 		});
 	});
 
-	function send(omics) {
-		if (omics.length === 0) {
+	/* `exampleScenarioId` is only ever passed on the example path: any string
+	   (including "" for the server's default scenario) tells the servlet to
+	   read the headers from that scenario's own files. */
+	function send(omics, exampleScenarioId) {
+		var fromExample = (exampleScenarioId !== undefined);
+		if (omics.length === 0 && !fromExample) {
 			finish("error", "Could not read a header row from those files.");
 			return;
 		}
@@ -5063,13 +5081,19 @@ function initExpDesignDraft(box) {
 			? SERVER_URL_AI_GENERATE_EXP_DESIGN
 			: SERVER_URL + "ai_generate_exp_design";
 
+		var payload = {
+			aiConsent: "true",
+			organism: combo ? (combo.getValue() || "") : "",
+			omics: JSON.stringify(omics)
+		};
+		if (fromExample) {
+			payload.exampleMode = "true";
+			payload.exampleScenario = exampleScenarioId;
+		}
+
 		$.ajax({
 			type: "POST", url: url, dataType: "json",
-			data: {
-				aiConsent: "true",
-				organism: combo ? (combo.getValue() || "") : "",
-				omics: JSON.stringify(omics)
-			}
+			data: payload
 		}).done(function(response) {
 			if (!response || response.success !== true || !response.suggestion) {
 				finish("error", serverErrorText(response,
