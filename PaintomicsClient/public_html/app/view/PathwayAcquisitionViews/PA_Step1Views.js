@@ -76,23 +76,32 @@
 
    Two pathway networks, cross-faded. Each carries its own topology and its own
    values, painted with the same bwr ramp the application paints real data with
-   - red high, white zero, blue low - and beside them a panel writes the
-   interpretation, wipes it, and writes a different one. Recolouring a single
-   fixed network was not enough: the point is that you ask about a different
-   pathway and get a different answer, so the network has to change too.
+   - red high, white zero, blue low. Recolouring a single fixed network was not
+   enough: the point is that you ask about a different pathway and get a
+   different answer, so the network has to change too.
+
+   Between the network and the panel sits the agent that actually does the
+   work: earlier versions drew the network beside the interpretation with
+   nothing between them, which read as the panel simply knowing the answer.
+   It doesn't - it queries the painted values, searches the literature, and
+   only then writes, and the citation pills at the bottom of the panel are
+   where that search shows up. So the middle of the pipeline gets a node of
+   its own: a pulse leaves the network, the agent pings while it works, a
+   second pulse carries the result on to the panel, and only then does the
+   panel start writing. One full pass per network, twice a cycle.
 
    Colours and shapes are the product's own. Circles are compounds and boxes
    are genes, exactly as the KEGG diagrams in the step cards below draw them,
-   the grey is their stroke, and the AI blue is --pa-ai-blue. Nothing here
-   invents a palette.
+   the grey is their stroke, and the agent and the citations share the AI blue
+   - --pa-ai-blue. Nothing here invents a palette.
 
    The whole cycle is 9s and never stops. Animation lives in main.css so it can
-   be turned off under prefers-reduced-motion, where the first network and a
-   finished interpretation simply render as a still. */
+   be turned off under prefers-reduced-motion, where the first network, an idle
+   agent and a finished interpretation simply render as a still. */
 var PO_HERO_VIZ_SVG =
-	'<svg class="po-hero-viz" viewBox="0 0 440 300" role="img" xmlns="http://www.w3.org/2000/svg" ' +
-		'aria-label="A pathway network is painted with your omic values, then read by the AI into a written interpretation">' +
-	'<title>From painted pathway to written interpretation</title>' +
+	'<svg class="po-hero-viz" viewBox="0 0 500 300" role="img" xmlns="http://www.w3.org/2000/svg" ' +
+		'aria-label="A pathway network hands its painted values to an AI agent, which searches the literature and writes a citation-grounded interpretation">' +
+	'<title>From painted pathway, through the AI agent, to a citation-grounded interpretation</title>' +
 
 	'<g class="po-viz-net po-viz-net-a">' +
 	'<g stroke="#878787" stroke-opacity=".5" stroke-width="1.6" fill="none">' +
@@ -153,8 +162,35 @@ var PO_HERO_VIZ_SVG =
 		'<circle cx="112" cy="214" r="11" fill="#FF0000"/>' +
 	'</g>' +
 
+	/* --- the agent: what the network hands off to, and what hands off to the
+	   panel in turn. Sits in the 91-unit gap the widened viewBox opened
+	   between the network (ends ~206) and the panel (now starts 298, shifted
+	   +60 by the translate below rather than renumbered - same reasoning as
+	   the network's own translate group elsewhere in this file: nothing that
+	   already reads correctly against the panel's original 238-434 numbering
+	   should have to be retyped just because the panel moved). ------------- */
+	'<g class="po-viz-flow po-viz-flow-in">' +
+		'<path class="po-viz-wire" d="M206 150 H233"/>' +
+		'<circle class="po-viz-pulse po-viz-pulse-in" cx="206" cy="150" r="3.4"/>' +
+	'</g>' +
+	'<g class="po-viz-agent">' +
+		'<circle class="po-viz-agent-ring po-viz-agent-ring-1" cx="253" cy="150" r="20"/>' +
+		'<circle class="po-viz-agent-ring po-viz-agent-ring-2" cx="253" cy="150" r="20"/>' +
+		'<circle class="po-viz-agent-body" cx="253" cy="150" r="20"/>' +
+		/* getAIMarkPaths()'s 24-unit box centred on the node: translate(241,138)
+		   lands its (12,12) centre on (253,150) with no rescale, leaving 8
+		   units of the badge showing on every side. */
+		'<g class="po-viz-agent-mark" transform="translate(241,138)" color="#4A90D9">' +
+			getAIMarkPaths() +
+		'</g>' +
+	'</g>' +
+	'<g class="po-viz-flow po-viz-flow-out">' +
+		'<path class="po-viz-wire" d="M273 150 H297"/>' +
+		'<circle class="po-viz-pulse po-viz-pulse-out" cx="273" cy="150" r="3.4"/>' +
+	'</g>' +
+
 	/* --- the interpretation ------------------------------------------------ */
-	'<g class="po-viz-ai">' +
+	'<g class="po-viz-ai" transform="translate(60,0)">' +
 		'<rect x="238" y="52" width="196" height="196" rx="10" class="po-viz-panel"/>' +
 		/* The same mark the AI-powered highlight below the hero uses, from the
 		   same source, rather than a second copy retyped into this diagram's

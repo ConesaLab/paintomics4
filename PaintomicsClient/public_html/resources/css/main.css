@@ -7899,6 +7899,69 @@ div.repDetectionCard h3 {
   animation-name: poVizSwapB;
 }
 
+/* The two wires either side of the agent are a fixed pipe - always drawn,
+   never animated - and only the pulse riding each one comes and goes. That
+   is the opposite of the network/panel pieces, which fade in once and then
+   hold: a wire with nothing moving on it would read as decoration, so it
+   gets no idle state worth drawing attention to. */
+.po-hero-viz .po-viz-wire {
+  fill: none;
+  stroke: #878787;
+  stroke-opacity: .5;
+  stroke-width: 1.6;
+  stroke-dasharray: 3 3;
+}
+
+.po-hero-viz .po-viz-pulse {
+  fill: var(--pa-ai-blue, #4A90D9);
+  opacity: 0;
+  animation-duration: 9s;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+
+.po-hero-viz .po-viz-pulse-in { animation-name: poVizPulseIn; }
+.po-hero-viz .po-viz-pulse-out { animation-name: poVizPulseOut; }
+
+/* The agent itself fades in once, alongside the network, rather than every
+   cycle - it is a fixture of the pipeline, not something that arrives with
+   the data. Only its ring pings each time it is doing something. */
+.po-hero-viz .po-viz-agent-body {
+  fill: var(--pa-surface, #FFFFFF);
+  stroke: var(--pa-ai-blue, #4A90D9);
+  stroke-width: 1.8;
+  opacity: 0;
+  animation: poVizIn 0.4s ease-out 0.3s forwards;
+}
+
+.po-hero-viz .po-viz-agent-mark {
+  color: var(--pa-ai-blue, #4A90D9);
+  opacity: 0;
+  animation: poVizIn 0.35s ease-out 0.4s forwards;
+}
+
+/* Two rings rather than one so the ping reads as layered activity - a single
+   ring pulsing once per network read as a notification badge, not as work
+   being done. transform-box: fill-box because these are plain <circle>s with
+   their own cx/cy; without it, scale() would expand from the SVG's origin
+   instead of the ring's own center. */
+.po-hero-viz .po-viz-agent-ring {
+  fill: none;
+  stroke: var(--pa-ai-blue, #4A90D9);
+  stroke-width: 1.5;
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation-name: poVizAgentPing;
+  animation-duration: 9s;
+  animation-timing-function: ease-out;
+  animation-iteration-count: infinite;
+}
+
+.po-hero-viz .po-viz-agent-ring-2 {
+  animation-delay: .27s;
+}
+
 .po-hero-viz .po-viz-panel {
   /* --pa-surface, not --pa-surface-quiet. The interpretation panel was the
      quiet grey because it was drawn on the white card; the diagram now sits on
@@ -7922,7 +7985,11 @@ div.repDetectionCard h3 {
 
 /* The interpretation: each line grows from its left edge, holds while it is
    read, and is wiped away. The per-line delay makes it cascade rather than
-   move as a block, which is what reading a generated answer looks like.
+   move as a block, which is what reading a generated answer looks like. The
+   delays themselves (--d, in the markup) are untouched by the agent stage
+   below - only the shared keyframes' own start point moved later, so every
+   line still lands relative to the others exactly as before, just after the
+   agent has had its turn rather than the instant the network appears.
 
    There are two answers, not one replayed. Retyping the same line lengths
    every cycle reads as a loop rather than as a new response, so the second
@@ -7965,18 +8032,62 @@ div.repDetectionCard h3 {
   100%      { opacity: 0; }
 }
 
-/* Answer A is written while network A is up, and cleared as it hands over;
-   answer B is written against network B. Between them the panel is briefly
-   empty, which is the pause a question leaves. */
+/* The pulse riding the wire from network to agent: a dot that fades in at the
+   network's edge, slides to the agent, and fades out - twice a cycle, once
+   for each network's turn. The second burst is the first shifted exactly
+   half a cycle, same as the network swap above. */
+@keyframes poVizPulseIn {
+  0%,  2%    { opacity: 0; transform: translateX(0); }
+  3%         { opacity: 1; transform: translateX(0); }
+  8%         { opacity: 1; transform: translateX(27px); }
+  9%,  52%   { opacity: 0; transform: translateX(0); }
+  53%        { opacity: 1; transform: translateX(0); }
+  58%        { opacity: 1; transform: translateX(27px); }
+  59%, 100%  { opacity: 0; transform: translateX(0); }
+}
+
+/* The agent's ring, pinging while the data it just received is being
+   searched and reasoned over. Starts as the inbound pulse is still arriving
+   and clears before the outbound one leaves, so the three overlap at their
+   edges rather than snapping from one to the next. */
+@keyframes poVizAgentPing {
+  0%,  6%    { opacity: 0;  transform: scale(.75); }
+  7%         { opacity: .8; transform: scale(.75); }
+  17%        { opacity: 0;  transform: scale(1.55); }
+  18%, 56%   { opacity: 0;  transform: scale(.75); }
+  57%        { opacity: .8; transform: scale(.75); }
+  67%        { opacity: 0;  transform: scale(1.55); }
+  68%, 100%  { opacity: 0;  transform: scale(.75); }
+}
+
+/* The pulse from agent to panel - shorter hop, same idea as the inbound one.
+   Arrives right as the panel starts writing (below), which is the point of
+   drawing it at all: the report does not start until the agent's answer
+   does. */
+@keyframes poVizPulseOut {
+  0%,  14%   { opacity: 0; transform: translateX(0); }
+  15%        { opacity: 1; transform: translateX(0); }
+  19%        { opacity: 1; transform: translateX(24px); }
+  20%, 64%   { opacity: 0; transform: translateX(0); }
+  65%        { opacity: 1; transform: translateX(0); }
+  69%        { opacity: 1; transform: translateX(24px); }
+  70%, 100%  { opacity: 0; transform: translateX(0); }
+}
+
+/* Answer A now starts once the network -> agent -> panel relay above has run
+   its course (was 9%/40%; the grow and wipe points keep their original 9-
+   point and 6-point spans, just moved later) and is cleared as network A
+   hands over to B. Answer B mirrors it against network B's own relay. */
 @keyframes poVizAnswerA {
   0%         { transform: scaleX(0); }
-  9%,  40%   { transform: scaleX(1); }
+  19%        { transform: scaleX(0); }
+  28%, 40%   { transform: scaleX(1); }
   46%, 100%  { transform: scaleX(0); }
 }
 
 @keyframes poVizAnswerB {
-  0%,  52%   { transform: scaleX(0); }
-  61%, 90%   { transform: scaleX(1); }
+  0%,  69%   { transform: scaleX(0); }
+  78%, 90%   { transform: scaleX(1); }
   96%, 100%  { transform: scaleX(0); }
 }
 
@@ -7994,4 +8105,10 @@ div.repDetectionCard h3 {
   .po-hero-viz .po-viz-ans-a .po-viz-line,
   .po-hero-viz .po-viz-ans-a .po-viz-cite { transform: scaleX(1); animation: none; }
   .po-hero-viz .po-viz-ans-b { display: none; }
+  /* The agent renders in, idle: present in the pipeline, nothing pinging or
+     travelling along the wires either side of it. */
+  .po-hero-viz .po-viz-agent-body,
+  .po-hero-viz .po-viz-agent-mark { opacity: 1; animation: none; }
+  .po-hero-viz .po-viz-agent-ring,
+  .po-hero-viz .po-viz-pulse { opacity: 0; animation: none; }
 }
