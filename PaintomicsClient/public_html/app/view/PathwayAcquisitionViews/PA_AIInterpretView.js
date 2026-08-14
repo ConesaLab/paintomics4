@@ -379,7 +379,12 @@ function PA_AIInterpretView() {
      * into a tag or an attribute, and it keeps the matcher from firing inside
      * existing links, code spans, or the References section.
      *
-     * Names are matched longest-first so "MAPK signaling pathway" wins over a
+     * Each pathway is matched by its registered name, its ID (the reports cite
+     * "(mmu00040)" and "(R-MMU-73864)" constantly), and the conservative name
+     * variants from _pathwayAliases -- exact names alone left a third of the
+     * mentioned pathways unlinked because the model paraphrases.
+     *
+     * Aliases are matched longest-first so "MAPK signaling pathway" wins over a
      * shorter pathway whose name is a prefix of it.
      *
      * Two rules keep this from burying the report in links:
@@ -388,30 +393,92 @@ function PA_AIInterpretView() {
      * produced 73 links for 11 pathways on the example job, which reads as
      * noise rather than as citations.
      *
-     * Single-word pathway names must match the registered capitalisation.
-     * Several pathways are named after the process they describe -- Apoptosis,
-     * Autophagy, Efferocytosis -- and the report uses those words as ordinary
-     * nouns constantly. "Apoptosis" heading a section is a pathway reference;
-     * "...leading to apoptosis" in prose is not, and linking it would send the
-     * user to a diagram the sentence was not talking about. Multi-word names
-     * ("Cell cycle", "Intrinsic Pathway for Apoptosis") are specific enough
-     * that case does not matter.
+     * Single-word aliases (including IDs) must match the registered
+     * capitalisation. Several pathways are named after the process they
+     * describe -- Apoptosis, Autophagy, Efferocytosis -- and the report uses
+     * those words as ordinary nouns constantly. "Apoptosis" heading a section
+     * is a pathway reference; "...leading to apoptosis" in prose is not, and
+     * linking it would send the user to a diagram the sentence was not talking
+     * about. Multi-word names ("Cell cycle", "Intrinsic Pathway for
+     * Apoptosis") are specific enough that case does not matter.
      */
+    /**
+     * Name variants a report is known to use for a registered pathway name.
+     *
+     * Derived, not exhaustive: each rule answers a paraphrase the stored
+     * reports actually contain. Measured over all 23 stored reports, 43 of
+     * 102 unlinked index entries had their pathway ID cited in the body
+     * ("(mmu00040)") and 25 more were name paraphrases -- "Citrate cycle
+     * (TCA cycle)" cited as "TCA cycle", "Pentose and glucuronate
+     * interconversions" as "Pentose/glucuronate interconversions",
+     * "Autophagy - animal" as plain "Autophagy", hyphens re-typed as
+     * en/em dashes.
+     */
+    this._pathwayAliases = function(name) {
+        var out = [];
+        var m = name.match(/^(.{4,}?)\s*\(([^()]{3,})\)$/);
+        if (m) { out.push(m[1], m[2]); }
+        if (name.indexOf(" / ") !== -1) {
+            out.push(name.replace(/ \/ /g, "/"));
+            name.split(" / ").forEach(function(part) {
+                if (part.length > 3) out.push(part);
+            });
+        }
+        if (name.indexOf(" and ") !== -1) {
+            out.push(name.replace(/ and /g, "/"));
+        }
+        if (name.indexOf(" - ") !== -1) {
+            out.push(name.replace(/ - /g, " – "));
+            out.push(name.replace(/ - /g, " — "));
+            // KEGG's scoping suffix, not part of the biological name.
+            var stripped = name.replace(
+                / - (animal|plant|fungi|yeast|other|multiple species|general)$/i, "");
+            if (stripped !== name) out.push(stripped);
+        }
+        return out;
+    };
+
     this._linkifyPathways = function(rootEl, pathways) {
         if (!pathways || !pathways.length) return;
 
         var named = pathways.filter(function(p) { return p && p.id && p.name; });
         if (!named.length) return;
-        named.sort(function(a, b) { return b.name.length - a.name.length; });
 
         var alreadyLinked = {};
 
-        var byLowerName = {};
-        var alternatives = named.map(function(p) {
-            byLowerName[p.name.toLowerCase()] = p;
-            return p.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        // Alias table: lowercased alias -> {alias, pw}, or null once two
+        // pathways both claim a derived alias -- an ambiguous shorthand must
+        // not link to either. A registered full name (or ID) outranks any
+        // derived variant; between two full names the first keeps the key.
+        var byLowerAlias = {};
+        var claim = function(alias, pw, derived) {
+            if (!alias || alias.length < 3) return;
+            var key = alias.toLowerCase();
+            var cur = byLowerAlias[key];
+            if (cur === null) return;
+            if (!cur) { byLowerAlias[key] = { alias: alias, pw: pw, derived: derived }; return; }
+            if (cur.pw.id === pw.id) return;
+            if (cur.derived && !derived) { byLowerAlias[key] = { alias: alias, pw: pw, derived: false }; return; }
+            if (cur.derived && derived) { byLowerAlias[key] = null; }
+        };
+        var me = this;
+        named.forEach(function(pw) {
+            claim(pw.name, pw, false);
+            // The reports routinely cite the ID itself: "(mmu00040)",
+            // "(R-MMU-73864)". Nothing else in prose looks like one.
+            claim(pw.id, pw, false);
+            me._pathwayAliases(pw.name).forEach(function(a) { claim(a, pw, true); });
         });
-        var pattern = new RegExp("(" + alternatives.join("|") + ")", "gi");
+
+        var entries = [];
+        for (var key in byLowerAlias) {
+            if (byLowerAlias[key]) entries.push(byLowerAlias[key]);
+        }
+        if (!entries.length) return;
+        entries.sort(function(a, b) { return b.alias.length - a.alias.length; });
+        var pattern = new RegExp("(" + entries.map(function(e) {
+            return e.alias.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        }).join("|") + ")", "gi");
 
         var SKIP = { A:1, CODE:1, PRE:1 };
         var linked = 0;
@@ -431,10 +498,16 @@ function PA_AIInterpretView() {
                         var frag = document.createDocumentFragment();
                         var cursor = 0, match;
                         while ((match = pattern.exec(text)) !== null) {
-                            var pw = byLowerName[match[1].toLowerCase()];
-                            if (!pw) continue;
+                            var entry = byLowerAlias[match[1].toLowerCase()];
+                            if (!entry) continue;
+                            var pw = entry.pw;
                             if (alreadyLinked[pw.id]) continue;
-                            if (pw.name.indexOf(" ") === -1 && match[1] !== pw.name) continue;
+                            if (entry.alias.indexOf(" ") === -1 && match[1] !== entry.alias) continue;
+                            // Not a fragment of a longer token: "Melanoma"
+                            // must not link inside "Melanomagenesis", nor an
+                            // ID inside an accession-like string.
+                            if (/[A-Za-z0-9]/.test(text.charAt(match.index - 1)) ||
+                                /[A-Za-z0-9]/.test(text.charAt(match.index + match[1].length))) continue;
                             if (match.index > cursor) {
                                 frag.appendChild(document.createTextNode(
                                     text.slice(cursor, match.index)));
