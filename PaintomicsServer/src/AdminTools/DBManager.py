@@ -969,6 +969,15 @@ def replaceNewVersionData(origin, destination, dirname, backup_dir, isRestore=Fa
             "pathways_network_Reactome.json",
             "MAPMAN_VERSION", "MAPMAN_MAPPING", "gene2pathway_mapman.list",
             "pathways_network_MapMan.json",
+            # Not generated, but never worth refusing a promotion over: an
+            # INSTALLED tree is never legitimately mid-download, so a
+            # DOWNLOADING flag inside one is cruft from a historically
+            # interrupted run. 21 species carried such flags from 2024-2025 era
+            # downloads, and on 2026-08-14 every one of them failed promotion
+            # on this single file, silently keeping stale data while the ledger
+            # said OK (the error path rebuilt Mongo from the old inputs, whose
+            # counts pass any threshold check).
+            "DOWNLOADING",
         }
         exempt = set(GENERATED_AT_BUILD)
         # A download that discovered Reactome no longer covers this organism

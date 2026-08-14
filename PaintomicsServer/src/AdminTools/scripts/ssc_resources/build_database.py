@@ -42,7 +42,11 @@ try:
     # STEP 2. PROCESS THE KEGG  & OTHER DATABASES
     #**************************************************************************
     COMMON_BUILD_DB_TOOLS.processKEGGPathwaysData()
-    #COMMON_BUILD_DB_TOOLS.processReactomePathwaysData()
+    # Was commented out, so ssc downloaded 1,227 Reactome files on every
+    # --reactome=1 run and then installed none of them (0 Reactome docs while
+    # 15 sibling species processed theirs). Reactome covers Sus scrofa (1,818
+    # relation rows, 525 crawled pathways); uncommented 2026-08-14.
+    COMMON_BUILD_DB_TOOLS.processReactomePathwaysData()
     COMMON_BUILD_DB_TOOLS.mergeNetworkFiles()
 
 
