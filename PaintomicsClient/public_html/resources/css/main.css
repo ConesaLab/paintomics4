@@ -3782,10 +3782,113 @@ div[id ^= "step3-network-toolbar_"] div[id ^= "reorderOptions"]{
 		min-height: auto !important;
  }
 
-.pathwaySummaryTable tr:nth-child(even) {
-	background: #e2eff8;
-	padding: 0;
-	margin: 0;
+/* The pathway details panel (Step 3 details card, Step 4 sidebar) ------------
+   Replaces the blue zebra table (#e2eff8 on even rows) and the bulleted
+   classification list. Zebra striping earned nothing here - three rows do not
+   need tracking help - and once the hidden per-condition rows toggle open the
+   stripes landed on arbitrary rows anyway. Hairline separators carry the
+   structure; numbers right-align in tabular figures so magnitudes line up. */
+.pa-details-label {
+	display: block;
+	font-size: 10px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+	color: var(--pa-ink-muted, #595959);
+	margin: 6px 0 4px;
+}
+.pa-details-chips {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+}
+.pa-details-chip {
+	font-size: 11px;
+	line-height: 1.4;
+	padding: 2px 9px;
+	border-radius: 999px;
+	background: var(--pa-surface-quiet, #F3F2ED);
+	border: 1px solid var(--pa-border, rgba(24, 24, 27, 0.10));
+	color: var(--pa-ink-control, #3F3F46);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	max-width: 100%;
+}
+.pa-details-table {
+	width: 100%;
+	border-collapse: collapse;
+	margin: 8px 0 4px;
+	font-size: 12px;
+}
+.pa-details-table th {
+	font-size: 10px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	color: var(--pa-ink-muted, #595959);
+	text-align: right;
+	padding: 3px 6px;
+	border-bottom: 1px solid var(--pa-border, rgba(24, 24, 27, 0.10));
+}
+.pa-details-table th:first-child {
+	text-align: left;
+}
+.pa-details-table td {
+	padding: 5px 6px;
+	border-bottom: 1px solid var(--pa-border, rgba(24, 24, 27, 0.10));
+	vertical-align: middle;
+}
+.pa-details-table tbody tr:last-child td {
+	border-bottom: none;
+}
+.pa-details-omic {
+	text-align: left;
+	font-weight: 600;
+	color: var(--pa-ink, #18181B);
+}
+.pa-details-num {
+	text-align: right;
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+	color: var(--pa-ink-control, #3F3F46);
+}
+.pa-details-actions {
+	text-align: right;
+	white-space: nowrap;
+}
+.pa-details-actions i {
+	cursor: pointer;
+	padding: 4px 5px;
+	border-radius: var(--pa-radius-sm, 6px);
+	color: var(--pa-ink-muted, #595959);
+}
+.pa-details-actions i:hover {
+	background: var(--pa-surface-quiet, #F3F2ED);
+	color: var(--pa-ink, #18181B);
+}
+.pa-details-table tr.condition-row td {
+	border-bottom: none;
+	background: var(--pa-surface-subtle, #F9F8F4);
+	font-size: 11px;
+	color: var(--pa-ink-muted, #595959);
+}
+.pa-details-table tr.condition-row td.pa-details-cond {
+	padding-left: 16px;
+	font-style: italic;
+}
+.pa-details-matchedlist h5 {
+	font-size: 11px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	color: var(--pa-ink-muted, #595959);
+	margin: 8px 0 2px;
+}
+.pa-details-matchedlist ul {
+	margin: 0 0 8px;
+	padding-left: 18px;
+	font-size: 12px;
 }
 
 /* The database tabs -----------------------------------------------------------
@@ -4470,6 +4573,46 @@ div[id ^= "sliderClusterNumberContainer_"] {
 div[id ^= "pathwayNetworkToolsBox_"] > a.button.btn-right,
 .findFeaturesContainer a.button {
 	margin-right: 0;
+}
+/* The search field and its button share one flex row. `.button` floats right,
+   which is what used to push "Search" onto its own line below the field; a
+   flex container ignores floats on its items, so declaring the row is also
+   what cancels the float. The input stretches, the button keeps its size, and
+   both are as tall as each other - align-items: stretch - so the pair reads
+   as one control squared to the panel rail. */
+.findFeaturesRow {
+	display: flex;
+	align-items: stretch;
+	gap: 6px;
+	margin: 6px 0 10px;
+}
+.findFeaturesRow .findFeaturesInput {
+	flex: 1;
+	min-width: 0;
+}
+.findFeaturesRow .findFeaturesInput input {
+	width: 100%;
+	height: 100%;
+	box-sizing: border-box;
+	margin: 0;
+	padding: 6px 10px;
+	font-family: var(--pa-font-sans);
+	font-size: 13px;
+	color: var(--pa-ink, #27272A);
+	background: var(--pa-surface, #FFFFFF);
+	border: 1px solid var(--pa-border, #D4D4D8);
+	border-radius: var(--pa-radius-sm, 6px);
+}
+.findFeaturesRow .findFeaturesInput input:focus {
+	outline: none;
+	border-color: var(--pa-focus-ring, #0A84FF);
+}
+.findFeaturesRow a.button.findFeatureButton {
+	float: none;
+	margin: 0;
+	display: flex;
+	align-items: center;
+	gap: 5px;
 }
 .lateralOptionsPanel-header h2 {
 	color: #27272A;
@@ -5738,6 +5881,41 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
 /* The one button the caption is pointing at. */
 .paToolbarMiniature .paMiniatureTarget {
 	box-shadow: 0 0 0 2px #B3261E;
+}
+/* The row's spacing is the flex gap alone. `.button` brings `margin: 0 5px`
+   from the shared rule, and five buttons' worth of those margins (50px) is
+   exactly what pushed "Go back" onto a second row at laptop card widths while
+   every width sum said the row fit. */
+.paToolbarMiniature .button {
+	margin: 0;
+}
+/* The figure must stay one row: the real toolbar it depicts is one row, and
+   "Go back" wrapping underneath on a narrow laptop turned the picture into a
+   layout it was never illustrating. The row needs ~500px at full size, so on
+   a narrower card the buttons shrink typographically - smaller type, tighter
+   padding - long before the wrap fallback above could fire. Sized by the
+   card, not the viewport: the summary cards reflow between one and two
+   columns, so viewport width says nothing about the space this figure has.
+   inline-size containment only, on the card itself - the same recipe as the
+   MORE toolbar column fix - so ExtJS keeps control of the height. */
+.omicSummaryBox {
+	container-type: inline-size;
+}
+@container (max-width: 560px) {
+	.paToolbarMiniature { gap: 4px; }
+	.paToolbarMiniature .button {
+		height: 26px;
+		padding: 0 8px;
+		gap: 4px;
+		font-size: 11px;
+	}
+}
+@container (max-width: 430px) {
+	.paToolbarMiniature .button {
+		height: 24px;
+		padding: 0 6px;
+		font-size: 10px;
+	}
 }
 
 /********************************************************************************
@@ -7302,6 +7480,20 @@ div.repDetectionCard h3 {
 	#mainViewCenterPanel.pa-has-toc {
 		padding-left: calc(var(--pa-gutter) + var(--pa-rail));
 		padding-right: max(40px, calc(100vw - var(--pa-gutter) - var(--pa-rail) - var(--pa-page-max)));
+	}
+	/* The header follows the column it sits above. On these railed pages the
+	   results column's right edge comes from the leftover-space formula above,
+	   not from --pa-gutter, so the header's utility corner (and the step
+	   actions anchored to its left) ended 48px shy of the cards directly
+	   beneath it at laptop widths - "the top button is misaligned with the
+	   body". The +20 is the inset the ExtJS step containers still add between
+	   the column edge and a card's border (two stacked 10px paddings), i.e.
+	   the edge the reader actually sees. The left side needs no counterpart:
+	   the wordmark and the TOC both already sit on --pa-gutter. fitHeaderNav's
+	   body observer re-measures --pa-header-utilities when pa-has-toc lands,
+	   so the step actions follow this padding without new script. */
+	body:has(#mainViewCenterPanel.pa-has-toc) .mainTopToolbar {
+		padding-right: calc(max(40px, 100vw - var(--pa-gutter) - var(--pa-rail) - var(--pa-page-max)) + 20px);
 	}
 	.pa-toc {
 		position: fixed;

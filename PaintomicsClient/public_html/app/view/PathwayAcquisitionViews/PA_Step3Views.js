@@ -3723,17 +3723,27 @@ function PA_Step3PathwayDetailsView() {
 		/* STEP 1. Update the name of the pathway and the classification */
 		/*****************************************************************/
 		$(componentID + " .pathwayNameLabel h4").text(this.getModel().getName());
-		$(componentID + " .pathwayClassificationLabel").html(
-			"<b>Classification:</b>"+
-			"<ul style='margin: 0;'>" +
-			"  <li>" + this.getModel().getClassification().replace(";","</li><li>") + "</li>" +
-			"</ul>");
+		/* Chips instead of a bulleted list: the two classification levels are
+		   tags, not sentences, and a <ul> spent two full lines and bullet
+		   glyphs saying so. Built with .text() per chip so a classification
+		   name can never be read as markup. */
+		var classificationChips = $("<div class='pa-details-chips'></div>");
+		this.getModel().getClassification().split(";").forEach(function(levelName) {
+			levelName = levelName.trim();
+			if (levelName !== "") {
+				classificationChips.append($("<span class='pa-details-chip'></span>").text(levelName));
+			}
+		});
+		$(componentID + " .pathwayClassificationLabel")
+			.empty()
+			.append("<span class='pa-details-label'>Classification</span>")
+			.append(classificationChips);
 
 			/*******************************************************************/
 			/* STEP 2. Fill the information about matched features and p-values*/
 			/*******************************************************************/
 			if(this.getParent().getName() !== "PA_Step3PathwayNetworkTooltipView"){
-				var htmlCode = '<thead><tr><th></th><th>Matched<br>features</th><th>p-value (Global)</th><th></th></tr></thead><tbody>';
+				var htmlCode = '<thead><tr><th></th><th title="Matched features (relevant)">Matched</th><th title="Global p-value">p-value</th><th></th></tr></thead><tbody>';
 				var significanceValues = this.getModel().getSignificanceValues();
 				var globalOmicPvalues = this.getModel().getGlobalOmicPvalues() || {};
 				var jobView = this.getParent("PA_Step3JobView") || this.getParent("PA_Step4JobView");
@@ -3748,30 +3758,31 @@ function PA_Step3PathwayDetailsView() {
 					
 					var omicID = omicName.replace(/ /g, "_");
 					
-					htmlCode += '<tr class="omic-row" data-omic="' + omicID + '"><td>' + omicName + '</td><td>' + significanceValues[omicName][0][0] + ' (' + significanceValues[omicName][0][1] + ')</td><td>' + renderedGlobalP + '</td>' +
-					            '<td class="whiteBackground">' + 
-					            '<i class="fa fa-chevron-right expandConditions" title="Show per-condition p-values" data-omic="' + omicID + '"></i> ' +
-					            (! Ext.Object.isEmpty(foundFeatures[omicName]) ? '<i class="fa fa-plus-square-o expandMatched" data-id="' + omicID + '"></i>' : '') + 
+					htmlCode += '<tr class="omic-row" data-omic="' + omicID + '"><td class="pa-details-omic">' + omicName + '</td><td class="pa-details-num">' + significanceValues[omicName][0][0] + ' (' + significanceValues[omicName][0][1] + ')</td><td class="pa-details-num">' + renderedGlobalP + '</td>' +
+					            '<td class="pa-details-actions">' +
+					            '<i class="fa fa-chevron-right expandConditions" title="Show per-condition p-values" data-omic="' + omicID + '"></i>' +
+					            (! Ext.Object.isEmpty(foundFeatures[omicName]) ? '<i class="fa fa-plus-square-o expandMatched" title="Show matched features" data-id="' + omicID + '"></i>' : '') +
 					            '</td></tr>';
-					
-					// Add per-condition rows (hidden by default)
+
+					// Add per-condition rows (hidden by default). Styled by class,
+					// not inline: an inline background is unreachable by dark.css.
 					for (var c = 0; c < significanceValues[omicName].length; c++) {
 						var condP = significanceValues[omicName][c][2];
 						var renderedCondP = (condP > 0.001 || condP === 0) ? parseFloat(condP).toFixed(6) : parseFloat(condP).toExponential(4);
 						var condName = conditionNames[c] || ("Condition " + (c+1));
-						
-						htmlCode += '<tr class="condition-row cond-row-' + omicID + '" style="display:none; background-color: #f9f9f9; font-size: 0.9em;">' +
-						            '<td style="padding-left: 20px;"><i>' + condName + '</i></td>' +
-						            '<td>' + significanceValues[omicName][c][0] + ' (' + significanceValues[omicName][c][1] + ')</td>' +
-						            '<td>' + renderedCondP + '</td><td></td></tr>';
+
+						htmlCode += '<tr class="condition-row cond-row-' + omicID + '" style="display:none;">' +
+						            '<td class="pa-details-cond">' + condName + '</td>' +
+						            '<td class="pa-details-num">' + significanceValues[omicName][c][0] + ' (' + significanceValues[omicName][c][1] + ')</td>' +
+						            '<td class="pa-details-num">' + renderedCondP + '</td><td></td></tr>';
 					}
 				}
 				htmlCode+='</tbody>';
-				$(componentID + " .pathwaySummaryTable").html('<table class="table table-condensed" style="padding: 10px;text-align: center;">'+ htmlCode + '</table>');
+				$(componentID + " .pathwaySummaryTable").html('<table class="pa-details-table">'+ htmlCode + '</table>');
 
 				var detailedHTMLcode = '';
 				Object.keys(foundFeatures).forEach(function(omicName) {
-					detailedHTMLcode += '<div id="matchedlist_' + omicName.replace(/ /g, "_") + '" style="display: none;"><h5>Matched features: ' + omicName + '</h5>';
+					detailedHTMLcode += '<div id="matchedlist_' + omicName.replace(/ /g, "_") + '" class="pa-details-matchedlist" style="display: none;"><h5>Matched features: ' + omicName + '</h5>';
 
 					if (! Ext.Object.isEmpty(foundFeatures[omicName])) {
 						// Sort alphabetically
