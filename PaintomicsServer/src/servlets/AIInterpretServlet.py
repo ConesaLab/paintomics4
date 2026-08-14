@@ -5,9 +5,8 @@ from src.common.ServerErrorManager import handleException
 from src.common.UserSessionManager import UserSessionManager
 from src.common.DAO.AIInterpretDAO import AIInterpretDAO
 from src.common.JobInformationManager import JobInformationManager
-# Agent workflow (OpenAI Agents SDK) is the pipeline; the legacy hand-rolled
-# pipeline.py remains only as the evolve harness comparator.
 from src.classes.AIInterpret.agent import run_ai_agent, _cancel_flags
+from src.classes.AIInterpret.verification import normalize_citation_markers
 from src.common.PySiQ import JobStatus
 from src.classes.AIInterpret.llm_client import LLMClient, MissingAPIKeyError
 from src.classes.AIInterpret.prompts import (SYSTEM_PROMPT_CHAT,
@@ -556,6 +555,9 @@ def aiInterpretPathway(REQUEST, RESPONSE):
             max_tokens=1500,
             temperature=AI_TEMPERATURE,
         )
+        # "[3, 5]" -> "[3], [5]": the client linkifies single [N] markers only,
+        # so an unsplit multi-citation stays plain text instead of two links.
+        report = normalize_citation_markers(report)
 
         citedPapers = [
             {k: v for k, v in p.items() if k != "sections"} for p in papers

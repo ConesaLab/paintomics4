@@ -53,6 +53,7 @@ from src.classes.AIInterpret.pubmed_client import PubMedClient
 from src.classes.AIInterpret.verification import (
     verify_report_v2, redact_unverified_v2, renumber_citations,
     parse_references_section, render_references_section,
+    normalize_citation_markers,
 )
 # The shared verdict parser: the verifier agent keeps its tools (see the
 # DANGER note in _build_agents), so its verdict arrives as free text.
@@ -1214,11 +1215,14 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats,
                        "supplied %d markers, report kept none",
                        job_id, stats["batch_citations"])
 
-    # Same deterministic references rebuild the incumbent gets. This is domain
-    # code, not orchestration, so per the fairness contract the SDK arm must
-    # receive it too -- iter00 compared an SDK report whose citations nothing
-    # could parse against an incumbent whose citations were also mostly
-    # unparseable, which measured noise rather than either architecture.
+    # "[17, 18]" -> "[17], [18]" before anything reads a marker: quote
+    # collection, rendering, verification and renumbering all match single
+    # "[N]" markers, and an unsplit multi-citation is invisible to every one of
+    # them -- the shipped report then cites entries its References section does
+    # not carry.
+    report = normalize_citation_markers(report)
+    # Deterministic references rebuild from the paper index -- asking the model
+    # to hit the parser's format by instruction fails most of the time.
     quotes = _collect_cited_quotes(llm_for_quotes, report, ctx.paper_index, job_id)
     report, rendered = render_references_section(report, ctx.paper_index, quotes)
     stats["refs_rendered"] = len(rendered)
@@ -1308,7 +1312,9 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats,
         report = str(corr.final_output)
         # The rewrite re-authors the references, so re-render them from the
         # paper index; without this the loop verifies on iteration 1 and then
-        # finishes with an unparseable section again.
+        # finishes with an unparseable section again. A rewrite also
+        # reintroduces "[17, 18]" markers, so they are re-split first.
+        report = normalize_citation_markers(report)
         quotes.update(_collect_cited_quotes(llm_for_quotes, report, ctx.paper_index,
                                             job_id, known=quotes))
         report, _ = render_references_section(report, ctx.paper_index, quotes)

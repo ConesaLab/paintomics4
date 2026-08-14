@@ -243,7 +243,12 @@ class PubMedClient:
     # ------------------------------------------------------------------
 
     def convert_pmids_to_pmcids(self, pmids):
-        """Batch PMID -> PMCID via NCBI ID Converter API. Returns {pmid: pmcid_or_None}."""
+        """Batch PMID -> PMCID via NCBI ID Converter API. Returns {pmid: pmcid_or_None}.
+
+        Keys are always strings, whatever the caller or the API supplied --
+        see the coercion below for what mixing the two silently cost.
+        """
+        pmids = [str(p) for p in pmids]
         result = {p: None for p in pmids}
         if not pmids:
             return result
@@ -259,7 +264,14 @@ class PubMedClient:
                 r.raise_for_status()
                 data = r.json()
                 for rec in data.get("records", []):
-                    pmid = rec.get("pmid", "")
+                    # The converter answers "pmid" as a JSON *number*. The
+                    # result dict is keyed by the caller's string PMIDs, so an
+                    # unconverted assignment added an integer key beside the
+                    # string key it was meant to update -- and every lookup in
+                    # fetch_papers then found None. Measured effect: 0 papers
+                    # with full text across every AI job ever stored here; the
+                    # whole three-tier fetch below this was unreachable.
+                    pmid = str(rec.get("pmid") or "")
                     pmcid = rec.get("pmcid")
                     if pmid and pmcid:
                         result[pmid] = pmcid
