@@ -401,9 +401,15 @@ def build_identifier_graph(gene2ko, transcript2gene, gene_meta, ko_names,
     directly and still resolve to the kegg_id target."""
     used_ids = set()
     dbnames = {}
+    labels = {"kegg_id": "KEGG Orthology", "kegg_gene_symbol": "Gene symbol",
+              "external_gene_id": "Gene ID", "external_transcript_id": "Transcript ID"}
     for name in ("kegg_id", "kegg_gene_symbol",
                  "external_gene_id", "external_transcript_id"):
-        dbnames[name] = {"_id": generate_random_id(used_ids), "dbname": name}
+        # Same doc shape the standard build dumps (display_label/dbname_type are
+        # what the admin tools show), so custom species read identically there.
+        dbnames[name] = {"_id": generate_random_id(used_ids), "dbname": name,
+                         "display_label": labels[name],
+                         "dbname_type": "Identifier"}
 
     xrefs = {}
 
@@ -495,22 +501,32 @@ def write_gene2pathway(kegg_data_dir, code, kegg_docs):
 
 
 def register_in_organisms_list(kegg_data_dir, code, name, lineage):
-    """Append (or replace) the species line; a code missing from this file
-    aborts species.json generation for EVERY later install (DBManager.py:1675)."""
-    path = os.path.join(kegg_data_dir, "current", "common", "organisms_all.list")
+    """Register the species name where species.json generation looks it up.
+
+    A code missing from organisms_all.list aborts species.json generation for
+    EVERY later install (DBManager.py:1675). But organisms_all.list is
+    re-downloaded from KEGG by `download --common=1`, which would silently drop
+    a custom row — so the durable registry is a sibling organisms_custom.list
+    (same 4-column format, one row per custom species) that survives common
+    refreshes, plus the row appended to organisms_all.list for everything that
+    reads it today. Re-running after a common refresh restores the row.
+    """
+    common_dir = os.path.join(kegg_data_dir, "current", "common")
     tnumber = "T9%04d" % (sum(ord(c) for c in code) % 10000)
     newline = "%s\t%s\t%s\t%s" % (tnumber, code, name, lineage)
-    lines = []
-    if os.path.isfile(path):
-        with open(path) as fh:
-            lines = [l.rstrip("\n") for l in fh]
-    lines = [l for l in lines if l.split("\t")[1:2] != [code]]
-    lines.append(newline)
-    tmp = path + ".tmp"
-    with open(tmp, "w") as fh:
-        fh.write("\n".join(lines) + "\n")
-    os.replace(tmp, path)
-    return path
+    for basename in ("organisms_all.list", "organisms_custom.list"):
+        path = os.path.join(common_dir, basename)
+        lines = []
+        if os.path.isfile(path):
+            with open(path) as fh:
+                lines = [l.rstrip("\n") for l in fh]
+        lines = [l for l in lines if l.split("\t")[1:2] != [code]]
+        lines.append(newline)
+        tmp = path + ".tmp"
+        with open(tmp, "w") as fh:
+            fh.write("\n".join(lines) + "\n")
+        os.replace(tmp, path)
+    return os.path.join(common_dir, "organisms_all.list")
 
 
 def regenerate_species_json(kegg_data_dir, mongo_host, mongo_port):
@@ -522,12 +538,18 @@ def regenerate_species_json(kegg_data_dir, mongo_host, mongo_port):
                    if n.endswith("-paintomics") and n != "global-paintomics")
     client.close()
     names = {}
-    listing = os.path.join(kegg_data_dir, "current", "common", "organisms_all.list")
-    with open(listing) as fh:
-        for line in fh:
-            row = line.rstrip("\n").split("\t")
-            if len(row) >= 3:
-                names[row[1]] = row[2]
+    common_dir = os.path.join(kegg_data_dir, "current", "common")
+    # organisms_custom.list second: custom rows win, and they survive the
+    # KEGG-refresh clobber of organisms_all.list.
+    for basename in ("organisms_all.list", "organisms_custom.list"):
+        listing = os.path.join(common_dir, basename)
+        if not os.path.isfile(listing):
+            continue
+        with open(listing) as fh:
+            for line in fh:
+                row = line.rstrip("\n").split("\t")
+                if len(row) >= 3:
+                    names[row[1]] = row[2]
     missing = [c for c in codes if not names.get(c)]
     if missing:
         raise SystemExit("These installed species are missing from "
