@@ -4628,40 +4628,6 @@ function MORESubmittingPanel(nElem, options) {
 }
 MORESubmittingPanel.prototype = new DefaultSubmittingPanel;
 
-
-window.cookieconsent.initialise({
-	container: document.getElementById("content"),
-	palette: {
-		popup: {background: "#f6f6f6"},
-		button: {background: "#2684ff"},
-	},
-	revokable: true,
-	onStatusChange: function (status) {
-		console.log(this.hasConsented() ?
-			'enable cookies' : 'disable cookies');
-	},
-	law: {
-		regionalLaw: false,
-	},
-	location: true,
-	content: {
-		header: 'Cookies used on the website!',
-		message: 'This website uses cookies to improve your experience.',
-		dismiss: 'Got it!',
-		allow: 'Allow cookies',
-		deny: 'Decline',
-		link: 'Learn more',
-		href: 'https://paintomics.uv.es/conditions.html',
-		close: '&#x274c;',
-		policy: 'Cookie Policy',
-		target: '_blank',
-	},
-	position:"bottom-left",
-	elements: {
-		link: '<a aria-label="learn more about cookies" tabindex="0" class="cc-link" href="" target="_blank"></a>'
-	}
-});
-
 /*********************************************************************
  * AI PROVENANCE                                    ******************
  *********************************************************************

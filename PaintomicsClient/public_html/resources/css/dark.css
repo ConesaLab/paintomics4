@@ -1022,13 +1022,6 @@
 [data-theme="dark"] #mainViewCenterPanel .content span { color: var(--pa-ink-body); }
 [data-theme="dark"] #mainViewCenterPanel .content h5 { color: var(--pa-ink-title); }
 
-/* The cookie-consent widget ships its own light palette. */
-[data-theme="dark"] .cc-revoke,
-[data-theme="dark"] .cc-window {
-	background: var(--pa-surface-quiet) !important;
-	color: var(--pa-ink-body) !important;
-}
-
 /* ---------------------------------------------------------------------------
    7. Prose that has no class of its own
 
