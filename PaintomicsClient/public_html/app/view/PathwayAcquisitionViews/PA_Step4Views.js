@@ -3079,16 +3079,18 @@ function PA_Step4FindFeaturesView() {
 				"<div class='lateralOptionsPanel-body findFeaturesContainer'>" +
 				'  <div>'+
 				'    <h4>Search in this pathway</h4>' +
-				'    <div class="findFeaturesInput input" style="width:170px; display:inline-block;"><input type="text" style="width:160px;"></div>'+
-				/* `margin-right: 0`, not the 5px `.button` gives every button: that
-				   5px is the gutter between two buttons sitting side by side, and
-				   this one is alone on its line. It floats right, so the gutter
-				   simply stopped it 5px short of the edge the panel's heading,
-				   its "Search in this pathway" label and every field below it are
-				   squared to - x=1301 against a rail at 1306. Written here rather
-				   than in the stylesheet because the margin is inline, and inline
-				   beats any rule that is not !important. */
-				'    <a class="button btn-info findFeatureButton helpTip" style="margin: 20px 0 20px 5px" title="Find features"><i class="fa fa-search"></i> Search</a>' +
+				/* One flex row (.findFeaturesRow, main.css) instead of an
+				   inline-block input next to a floated button: `.button` carries
+				   `float: right`, so the button dropped below the input and hung
+				   off the right edge on its own line - the field and its one
+				   action read as two unrelated controls. Flex ignores floats on
+				   its items, which is what actually pins the two to one line and
+				   one baseline; the stylesheet owns the geometry so dark.css can
+				   reach every part of it. */
+				'    <div class="findFeaturesRow">' +
+				'      <div class="findFeaturesInput input"><input type="text" placeholder="Gene, metabolite..."></div>'+
+				'      <a class="button btn-info findFeatureButton helpTip" title="Find features"><i class="fa fa-search"></i> Search</a>' +
+				'    </div>' +
 				'    <div class="applyWaitMessage" style="color:#4c4c4c; margin: 10px; display:none;"> Searching...<i class="fa fa-cog fa-spin" style=" float: left; margin-right: 10px; "></i></div>' +
 				'  </div>'+
 				'  <div class="patwaysDetailsContainer"></div>'+
@@ -3111,16 +3113,27 @@ function PA_Step4FindFeaturesView() {
 				el.find("#hideFindFeaturePanelButton").click(function() {
 					me.toggle(false);
 				});
+				/* Looked up from the container, not with `.next()`: the button
+				   now lives inside .findFeaturesRow and the wait message is the
+				   row's sibling, so a sibling walk from the button finds nothing
+				   and the search silently never ran. */
 				el.find(".findFeatureButton").click(function() {
-					$(this).next(".applyWaitMessage").fadeIn(400, function() {
+					var waitMessage = el.find(".applyWaitMessage");
+					waitMessage.fadeIn(400, function() {
 						el.find(".patwaysDetailsContainer").hide();
 						me.searchFeatures(el.find(".findFeaturesInput > input").val());
-						$(this).hide();
+						waitMessage.hide();
 					});
 				});
 				el.find(".findFeaturesInput > input").autocomplete({
 					source: availableTags,
 					minLength: 2
+				}).on("keydown", function(event) {
+					/* Enter searches. A lone text field whose Enter does nothing
+					   reads as broken, and the button is the only other way in. */
+					if (event.keyCode === 13) {
+						el.find(".findFeatureButton").click();
+					}
 				});
 
 				el.find(".backToPathwayDetailsButton").click(function() {

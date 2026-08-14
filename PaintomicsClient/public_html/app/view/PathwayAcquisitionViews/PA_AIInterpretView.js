@@ -248,6 +248,28 @@ function PA_AIInterpretView() {
     };
 
     this._preprocessMarkdown = function(text) {
+        /* The model routinely writes a SPACE where a newline belongs, gluing a
+           structure token to the tail of the previous sentence:
+               "...hepatic response [3, 6]. - **All ten pathways..."
+               "...perturbs bile secretion. ---"
+               "...biosynthetic response. ### The Flat Temporal Pattern..."
+           A glued token is not markdown at all - marked renders it literally,
+           which is how "---" and "###" ended up visible in reports. Recover the
+           newline first; the blank-line rules below then finish the job.
+           Verified against every report stored locally (see git history). */
+        // Headings glued after prose ("prose. ### Title" / "prose. #### Title")
+        text = text.replace(/([^\n])[ \t]+(#{1,6} )/g, "$1\n\n$2");
+        // Horizontal rules glued after prose, when the --- ends its line.
+        // [^\n-] keeps this off spaced em-dashes ("text --- text" stays prose
+        // because the lookahead requires end-of-line).
+        text = text.replace(/([^\n-])[ \t]+(-{3,})[ \t]*(?=\n|$)/g, "$1\n\n$2");
+        // Bullets glued after a sentence. Fires when the bullet text opens with
+        // emphasis ("- **") or a capital ("- The SPLIS feedback model...") -
+        // every glued bullet in the stored reports is one of the two, while a
+        // dash inside prose continues lowercase and is left alone.
+        text = text.replace(/([.!?:\])\*])[ \t]+- (?=\*|[A-Z])/g, "$1\n- ");
+        // Numbered items glued after a sentence ("...changes. 2. **Systematic")
+        text = text.replace(/([.!?:\])\*])[ \t]+(\d{1,2}\. )(?=\*|[A-Z])/g, "$1\n$2");
         // Ensure blank line before headings (required by CommonMark)
         text = text.replace(/([^\n])\n(#{1,6}\s)/g, "$1\n\n$2");
         // Ensure blank line before horizontal rules

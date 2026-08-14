@@ -70,8 +70,24 @@
     transform: scale(1.1);
     box-shadow: 0 4px 16px rgba(74, 144, 217, 0.6);
 }
+/* Working state. The old treatment was the fabPulse glow alone, which at
+   2s/40% opacity read as a decorative shimmer, not as "the analysis is
+   running" - users reported not being able to tell. Three signals now run
+   together: a rotating spinner ring around the launcher (the universally
+   read "busy" symbol), a faster and much wider glow pulse, and a gentle
+   breathing scale on the button itself. */
 .ai-widget-fab.is-processing {
-    animation: fabPulse 2s ease-in-out infinite;
+    animation: fabGlowPulse 1.4s ease-in-out infinite,
+               fabBreathe 1.4s ease-in-out infinite;
+}
+.ai-widget-fab.is-processing::before {
+    content: "";
+    position: absolute;
+    inset: -6px;
+    border-radius: 50%;
+    border: 3px solid rgba(74, 144, 217, 0.25);
+    border-top-color: #4a90d9;
+    animation: fabSpin 0.9s linear infinite;
 }
 .ai-widget-fab-badge {
     width: 18px;
@@ -213,16 +229,32 @@
     margin-bottom: 4px;
 }
 .ai-progress-track {
-    height: 4px;
+    height: 6px;
     background: #dde8f0;
-    border-radius: 2px;
+    border-radius: 3px;
     overflow: hidden;
 }
 .ai-progress-fill {
     height: 100%;
     background: linear-gradient(90deg, #4a90d9, #67b8f7);
-    border-radius: 2px;
+    border-radius: 3px;
     transition: width 0.5s ease;
+    position: relative;
+    overflow: hidden;
+}
+/* A sheen sweeping the filled part keeps the bar visibly alive between the
+   coarse percent updates - a static fill at 40% for a minute reads as hung. */
+.ai-progress-fill::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.55), transparent);
+    animation: progressSheen 1.2s linear infinite;
+}
+.ai-widget-progress.is-done .ai-progress-fill::after,
+.ai-widget-progress.is-error .ai-progress-fill::after {
+    animation: none;
+    content: none;
 }
 .ai-widget-progress.is-done {
     background: #e8f5e9;
@@ -628,10 +660,20 @@
     from { opacity: 0; transform: translateY(5px); }
     to { opacity: 1; transform: translateY(0); }
 }
-@keyframes fabPulse {
-    0% { box-shadow: 0 2px 8px rgba(74, 144, 217, 0.4); }
-    50% { box-shadow: 0 2px 20px rgba(74, 144, 217, 0.8); }
-    100% { box-shadow: 0 2px 8px rgba(74, 144, 217, 0.4); }
+@keyframes fabGlowPulse {
+    0%, 100% { box-shadow: 0 2px 10px rgba(74, 144, 217, 0.45); }
+    50% { box-shadow: 0 2px 28px 6px rgba(74, 144, 217, 0.85); }
+}
+@keyframes fabBreathe {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.06); }
+}
+@keyframes fabSpin {
+    to { transform: rotate(360deg); }
+}
+@keyframes progressSheen {
+    from { transform: translateX(-100%); }
+    to { transform: translateX(100%); }
 }
 @keyframes dotPulse {
     0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }

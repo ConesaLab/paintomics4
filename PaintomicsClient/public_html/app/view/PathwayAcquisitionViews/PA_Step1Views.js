@@ -1717,7 +1717,12 @@ function PA_Step1JobView() {
 									   with --pa-ai-consent-warn -- a token it already declared for
 									   exactly this and had no way to apply. Same fix, same reason, as
 									   .formMessage. */
-									boxLabel: 'Enable AI pathway interpretation (<span class="ai-consent-warn">sends your pathway results and the values of the matched features to <span id="aiProviderName">an external AI service</span></span>) ' +
+									/* "sends your results to X", not "your pathway results and the
+									   values of the matched features to X": the long form wrapped the
+									   label to three lines and buried the recipient. The enumeration
+									   of exactly which fields leave the server belongs to - and stays
+									   in - the (i) notice this label links to. */
+									boxLabel: 'Enable AI pathway interpretation (<span class="ai-consent-warn">sends your results to <span id="aiProviderName">an external AI service</span></span>) ' +
 										'<i class="fa fa-exclamation-circle ai-gdpr-info-icon" id="aiGdprInfoIcon" title="Data privacy &amp; compliance \u2014 click to learn what data is sent"></i>',
 									name: 'aiConsent', inputValue: 'true', uncheckedValue: 'false',
 									/* Off everywhere but a local instance -- a pre-ticked consent

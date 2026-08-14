@@ -571,8 +571,17 @@
 	color: var(--pa-ink-label);
 }
 
-/* Form fields */
-[data-theme="dark"] .x-form-field,
+/* Form fields.
+
+   `.x-form-field` also sits on every ExtJS checkbox and radio
+   (class="x-form-field x-form-checkbox ..."), and this blanket's !important
+   background pair beat the checkbox rules further down, which are not
+   !important: the checked box lost both its --pa-accent-blue fill and its
+   background-image tick, so a checked control rendered pixel-identical to an
+   unchecked one - on the enrichment toolbar there was no way to see whether
+   KEGG or Reactome was selected. Checkboxes and radios are excluded here so
+   the dedicated rules below can draw their two states. */
+[data-theme="dark"] .x-form-field:not(.x-form-checkbox):not(.x-form-radio),
 [data-theme="dark"] .x-form-text,
 [data-theme="dark"] .x-form-textarea,
 [data-theme="dark"] .x-form-trigger-wrap {
@@ -656,6 +665,28 @@
 	border-color: var(--pa-border);
 	color: var(--pa-ink-body);
 }
+/* The sentence in a MessageBox does not inherit the body colour above, because
+ * it is not text -- it is a form field. `Ext.window.MessageBox` builds its
+ * `msg` out of `Ext.form.field.Display`, so the element that actually carries
+ * "Are you sure you want to exit the current job?" is `.x-form-display-field`,
+ * and Neptune ships `.x-form-display-field { color: black }` for it.
+ *
+ * Neither of the two rules that look like they should have covered this does.
+ * `.x-window-body` sets an inherited colour, which stops the moment a
+ * descendant declares its own. The `.x-form-field` block near the top of this
+ * file is `!important` and would have won -- but a display field never carries
+ * that class: `x-form-field` is on the <input>, and a display field renders a
+ * <div> instead precisely because it has no input.
+ *
+ * Measured on a rendered confirm dialog: rgb(0, 0, 0) on --pa-surface #1E1F23,
+ * 1.28:1. Every alert(), confirm() and prompt() in the app was a black sentence
+ * on a black card -- the buttons and the title were correct, which is why it
+ * read as a dialog with its question missing rather than as a broken theme.
+ *
+ * Not scoped to `.x-message-box`: the leak is Neptune's default for the field
+ * type, so any display field this app grows later would arrive black too.
+ */
+[data-theme="dark"] .x-form-display-field { color: var(--pa-ink-body); }
 /* Window headers need the SURFACE as well as the text colour.
  *
  * This block used to set `color` only, which produced light text on the
@@ -1216,7 +1247,9 @@
 [data-theme="dark"] .paWeightsTip .x-tip-header,
 [data-theme="dark"] .paWeightsTip .x-tip-header-default { background: var(--pa-surface-quiet); }
 
-[data-theme="dark"] .pathwaySummaryTable tr:nth-child(even) { background: var(--pa-grid-row-alt); }
+/* The details table lost its zebra (main.css: hairline separators carry the
+   structure now, in .pa-details-table tokens that dark redefines), so the
+   even-row repaint that mirrored it is gone too. */
 /* Disabled classification chips grey out to #E8E8E8 with !important. */
 [data-theme="dark"] .step3ClassificationsTitle.disabled > i.classificationNameBox {
 	background-color: var(--pa-surface-quiet) !important;

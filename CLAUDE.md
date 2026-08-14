@@ -70,3 +70,11 @@ Before verifying:
   repaint and re-measure both.
 * **Never trigger `alert`/`confirm`/`prompt`** — a modal dialog blocks every subsequent browser
   command. Use `console.log` plus `read_console_messages` instead.
+
+## 6. Redline / alignment QA
+
+Dev-only overlay at scripts/alignment-guides.js: red rails + HUD listing
+off-rail elements. Enable with ?guides=1 or Ctrl+Alt+G.
+After any layout/spacing/CSS change: open the page with guides on,
+screenshot it, fix every off-rail element in the HUD (except ones marked
+data-guides="ignore"), and repeat until the HUD shows 0 off-rail.
