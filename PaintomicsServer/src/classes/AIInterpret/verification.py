@@ -89,6 +89,44 @@ _REFERENCE_ENTRY_RE = re.compile(r'^\[(\d+)\]', re.MULTILINE)
 # report, not to whichever entry happens to be printed last.
 _TRAILING_NOTE_RE = re.compile(r'^>\s*\*\*Note:\*\*', re.MULTILINE)
 
+# Multi-citation markers, the academic style the model falls back into no
+# matter what the prompt says: "[17, 18]", "[17;18]", "[17-19]". Every reader
+# in this module matches single "[N]" markers, so an unnormalised multi-marker
+# is invisible to all of them at once: render_references_section drops refs 17
+# and 18 from the section ("not cited"), redaction cannot remove the sentence,
+# renumbering skips the marker, and the shipped report ends with a body
+# citation pointing at entries that are not there -- which the reader sees and
+# no check does. Numbers are capped at two digits so a span of years
+# ("[2010-2015]") or any other bracketed figure is left alone, and a marker
+# directly followed by "(" is a Markdown link, not a citation.
+_MULTI_CITATION_RE = re.compile(r'\[(\d{1,2}(?:\s*[,;]\s*\d{1,2})+)\](?!\()')
+_RANGE_CITATION_RE = re.compile(r'\[(\d{1,2})\s*[-–—]\s*(\d{1,2})\](?!\()')
+
+
+def normalize_citation_markers(text):
+    """Split "[17, 18]" and "[17-19]" into "[17], [18](, [19])".
+
+    Idempotent -- single markers are untouched -- so it is applied at the
+    entry of every function that reads citation markers rather than trusting
+    each call site to remember it.
+    """
+    if not text:
+        return text
+
+    def _split_range(match):
+        start, stop = int(match.group(1)), int(match.group(2))
+        # An inverted or implausibly wide "range" is a figure, not a citation.
+        if stop <= start or stop - start > 20:
+            return match.group(0)
+        return ", ".join("[%d]" % n for n in range(start, stop + 1))
+
+    def _split_list(match):
+        numbers = re.split(r'\s*[,;]\s*', match.group(1))
+        return ", ".join("[%s]" % n for n in numbers)
+
+    text = _RANGE_CITATION_RE.sub(_split_range, text)
+    return _MULTI_CITATION_RE.sub(_split_list, text)
+
 def verify_report_v2(report_text, gene_whitelist, unique_papers, job_instance):
     """Verify a report using [N] citation format.
 
@@ -99,6 +137,7 @@ def verify_report_v2(report_text, gene_whitelist, unique_papers, job_instance):
         "ref_accuracy": float,
     }
     """
+    report_text = normalize_citation_markers(report_text)
     paper_index = {p["ref_index"]: p for p in unique_papers}
     valid_ref_indices = set(paper_index.keys())
 
@@ -200,6 +239,7 @@ def redact_unverified_v2(report_text, failed_citations):
 
     Returns (cleaned_report, removed_count).
     """
+    report_text = normalize_citation_markers(report_text)
     if not failed_citations:
         return report_text, 0
 
@@ -268,6 +308,7 @@ def renumber_citations(report_text):
 
     Returns (renumbered_report, old_to_new_mapping).
     """
+    report_text = normalize_citation_markers(report_text)
     # 1. Collect all [N] indices used in the report (body + references), in order of first appearance
     all_indices = []
     seen = set()
@@ -365,6 +406,7 @@ def parse_references_section(report_text):
         "title": str,
     }
     """
+    report_text = normalize_citation_markers(report_text)
     # Find References section.
     #
     # This used to require exactly "### References". The model writes
@@ -453,8 +495,15 @@ def render_references_section(report_text, paper_index, quotes):
     not invented: a reference to a paper we never retrieved cannot be verified,
     and emitting it would manufacture the appearance of support.
 
+    Each entry also names what its quote was found in -- "abstract" or a
+    full-text section -- so a reader can tell a citation grounded in a
+    paper's Results from one grounded in the two sentences of its abstract.
+    The label is computed here, where the quote and the paper's sections are
+    both at hand, rather than asked of the model.
+
     Returns (new_report_text, rendered_ref_indices).
     """
+    report_text = normalize_citation_markers(report_text)
     if not paper_index:
         return report_text, []
 
@@ -496,9 +545,31 @@ def render_references_section(report_text, paper_index, quotes):
         quote = re.sub(r'\s+', ' ', str(quote)).replace('"', "'").strip()
         if quote:
             lines.append('    **Cited Text:** "%s"' % quote)
+            lines.append('    *Cited from: %s*' % _quote_source(paper, quote))
         lines.append("")
 
     return body + "\n" + "\n".join(lines), cited
+
+
+def _quote_source(paper, quote):
+    """Where a quote was found: "abstract" or "full text (results)".
+
+    Located by matching rather than recorded at extraction time, because the
+    quote may have been carried forward across a correction rewrite and the
+    paper's sections are the one ground truth both stages share. When the
+    quote matches nowhere -- verification will flag it -- the label falls back
+    to what was available to search, which is still true.
+    """
+    sections = paper.get("sections") or {}
+    abstract = sections.get("abstract") or paper.get("abstract") or ""
+    if quote and abstract and _fuzzy_contains(abstract, quote):
+        return "abstract"
+    for name, text in sections.items():
+        if name == "abstract" or not text:
+            continue
+        if quote and _fuzzy_contains(text, quote):
+            return "full text (%s)" % name
+    return "full text" if paper.get("full_text_available") else "abstract"
 
 
 # ---------------------------------------------------------------------------

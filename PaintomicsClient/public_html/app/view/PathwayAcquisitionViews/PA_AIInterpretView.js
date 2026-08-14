@@ -648,7 +648,12 @@ function PA_AIInterpretView() {
             var refLabel = p.ref_index ? '[' + p.ref_index + '] ' : '';
             listHtml += '<div class="ai-citation-item" data-pmid="' + (p.pmid || "") + '">';
             listHtml += '  <div class="ai-citation-title"><span class="ai-citation-ref">' + refLabel + '</span>' + (p.title || "Untitled") + '</div>';
-            listHtml += '  <div class="ai-citation-meta">' + (p.first_author || "") + ' et al., ' + (p.journal || "") + ' (' + (p.year || "") + ')</div>';
+            /* What the agent actually read for this paper. The pipeline stores
+               full_text_available per paper; older jobs predate the field, so
+               its absence renders nothing rather than a wrong claim. */
+            var sourceRead = (p.full_text_available === true) ? ' &middot; full text read'
+                : (p.full_text_available === false) ? ' &middot; abstract read' : '';
+            listHtml += '  <div class="ai-citation-meta">' + (p.first_author || "") + ' et al., ' + (p.journal || "") + ' (' + (p.year || "") + ')' + sourceRead + '</div>';
             listHtml += '  <div class="ai-citation-pmid">PMID: ' + (p.pmid || "N/A") + '</div>';
             listHtml += '</div>';
         }

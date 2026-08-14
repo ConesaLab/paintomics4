@@ -16,7 +16,7 @@ from src.classes.AIInterpret.verification import (
     verify_report, redact_unverified,
     verify_report_v2, redact_unverified_v2, parse_references_section,
     render_references_section,
-    renumber_citations, sort_references_section,
+    renumber_citations, sort_references_section, normalize_citation_markers,
     # Reused so a quote is held to the same matching rule that will later judge
     # it; a private import beats a second, subtly different matcher.
     _fuzzy_contains, _normalize_text,
@@ -462,6 +462,13 @@ def run_ai_pipeline(job_id, experiment_design, RESPONSE):
         if _cancel_flags.get(job_id):
             raise InterruptedError("Cancelled")
 
+        # "[17, 18]" -> "[17], [18]" before anything reads a marker: quote
+        # collection, rendering, verification and renumbering all match single
+        # "[N]" markers, and an unsplit multi-citation is invisible to every
+        # one of them -- the shipped report then cites entries its References
+        # section does not carry.
+        report = normalize_citation_markers(report)
+
         # Rebuild the References section from ground truth before anything tries
         # to read it. Asking the model to hit the parser's format by instruction
         # failed in 5 of 6 measured runs -- no heading, or unquoted Cited Text,
@@ -579,7 +586,9 @@ def run_ai_pipeline(job_id, experiment_design, RESPONSE):
             # which is why the loop could check 6 citations on iteration 1 and
             # then finish with ref_accuracy 0.0. Re-render after every rewrite,
             # carrying forward the quotes already gathered so surviving
-            # citations are not re-queried.
+            # citations are not re-queried. A rewrite also reintroduces
+            # "[17, 18]" markers, so they are re-split first.
+            report = normalize_citation_markers(report)
             _quotes.update(_collect_cited_quotes(llm, report, paper_index, job_id,
                                                  known=_quotes))
             report, _rendered = render_references_section(report, paper_index, _quotes)
