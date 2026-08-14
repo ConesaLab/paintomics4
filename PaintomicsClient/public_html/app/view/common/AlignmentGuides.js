@@ -631,6 +631,32 @@
 				return true;
 			}
 		}
+		/* A stretching sibling earlier in a flex row decides where everything
+		   after it starts. The pathway panel's search row is an input with
+		   flex:1 and its button after it, so the button's left edge is
+		   wherever the input chose to stop - a function of the panel's width,
+		   not a rail any stylesheet placed. Judged on that edge it reported
+		   1.9px off a rail it was never aimed at, on every pathway a user
+		   painted.
+
+		   Deliberately checked on the element itself and NOT on its
+		   ancestors: a *container* placed after a stretcher can still have a
+		   deterministic width and real rails inside it, and walking this test
+		   up the tree would silently drop everything in it from measurement -
+		   the exact regression class the probe battery exists to catch. */
+		var flexParent = el.parentElement;
+		if (flexParent) {
+			var fp = window.getComputedStyle(flexParent);
+			if (fp.display.indexOf("flex") >= 0 &&
+			    fp.flexDirection.indexOf("row") === 0) {
+				for (var sib = el.previousElementSibling; sib;
+				     sib = sib.previousElementSibling) {
+					if (parseFloat(window.getComputedStyle(sib).flexGrow) > 0) {
+						return true;
+					}
+				}
+			}
+		}
 		return false;
 	}
 

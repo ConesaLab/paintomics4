@@ -281,7 +281,7 @@ def scenarioOrder(scenario):
     return UNORDERED_SCENARIO
 
 
-def listScenarios(exampleFilesDir, pipeline=None):
+def listScenarios(exampleFilesDir, pipeline=None, includeSuperseded=False):
     """Scenarios whose files are all present, optionally filtered by pipeline.
 
     Presence is checked rather than assumed because two scenarios legitimately
@@ -289,11 +289,27 @@ def listScenarios(exampleFilesDir, pipeline=None):
     full mouse GTF, which a manual deploy step fetches. Offering it and failing
     is worse than not offering it.
 
-    Returned in teaching order (see `scenarioOrder`), which is what the picker
-    and every per-pipeline default read.
+    A simulated stand-in hides behind its real counterpart: most simulated
+    scenarios duplicate the shape of a real STATegra scenario, so offering
+    both shows every pipeline twice. A scenario whose `supersededBy` names
+    another offered scenario of the same pipeline is omitted -- and comes back
+    the moment the counterpart's files are missing, which keeps the failure
+    policy intact (a checkout without the mouse GTF still gets a region
+    example). Supersession is honoured only within one pipeline so a
+    misconfigured mapping can never empty an entry point's offer, and it trims
+    only the *offer*: `includeSuperseded=True` is for callers that must
+    recognise every loadable scenario (chained-conversion matching), because a
+    hidden scenario is still reachable by deep link and its conversion output
+    still arrives.
+
+    Real data leads: the published STATegra scenarios are the reason to trust
+    the tool, so they are offered before the simulated lessons rather than
+    after them. Within each block the teaching order holds (see
+    `scenarioOrder`) -- one condition before six, six before per-condition
+    relevance. This is what the picker and every per-pipeline default read.
     """
     manifest = loadManifest(exampleFilesDir)
-    available = []
+    candidates = []
     for scenario in manifest["scenarios"]:
         if pipeline and scenario.get("pipeline") != pipeline:
             continue
@@ -302,9 +318,26 @@ def listScenarios(exampleFilesDir, pipeline=None):
             logging.info("EXAMPLE DATASETS - '%s' not offered, %d file(s) absent "
                          "(first: %s)", scenario.get("id"), len(missing), missing[0])
             continue
-        available.append(scenario)
+        candidates.append(scenario)
 
-    available.sort(key=lambda entry: (scenarioOrder(entry),
+    if includeSuperseded:
+        available = candidates
+    else:
+        offeredPipelines = {entry.get("id"): entry.get("pipeline")
+                            for entry in candidates}
+        available = []
+        for scenario in candidates:
+            counterpart = scenario.get("supersededBy")
+            if (counterpart and counterpart != scenario.get("id")
+                    and counterpart in offeredPipelines
+                    and offeredPipelines[counterpart] == scenario.get("pipeline")):
+                logging.info("EXAMPLE DATASETS - '%s' not offered, superseded "
+                             "by '%s'", scenario.get("id"), counterpart)
+                continue
+            available.append(scenario)
+
+    available.sort(key=lambda entry: (bool(entry.get("simulated")),
+                                      scenarioOrder(entry),
                                       str(entry.get("id") or "")))
     return available
 
@@ -616,7 +649,10 @@ def _chainedScenarioFor(exampleFilesDir, inputOmic):
     if not configOptions:
         return None
 
-    for scenario in listScenarios(exampleFilesDir):
+    # includeSuperseded: a scenario hidden from the picker behind its real
+    # counterpart is still loadable by deep link, so its conversion output
+    # must still be recognised here or its target omic is silently dropped.
+    for scenario in listScenarios(exampleFilesDir, includeSuperseded=True):
         if scenario.get("pipeline") not in CHAINED_TARGET_PIPELINES:
             continue
         fingerprint = _chainedFingerprint(scenario)

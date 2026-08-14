@@ -102,6 +102,7 @@
       "references": [],
       "simulated": true,
       "summary": "A six-point time course with one relevance list shared by every condition \u2014 the ordinary shape of a time-course submission, and the closest simulated counterpart to the real STATegra example.",
+      "supersededBy": "stategra-multiomics",
       "tests": [
         "Multi-condition heatmaps",
         "Per-condition pathway colouring",
@@ -277,6 +278,7 @@
       "references": [],
       "simulated": true,
       "summary": "Transcriptomics, proteomics, transcription factors, metabolomics and miRNA over the same six time points, sharing one planted signal so the layers agree.",
+      "supersededBy": "stategra-multiomics",
       "tests": [
         "Multi-omic pathway enrichment",
         "Compound matching",
@@ -350,6 +352,7 @@
       ],
       "simulated": true,
       "summary": "miRNA quantification plus a target-prediction table. The Regulatory Omics step pairs each miRNA with its targets and hands GENE:::miRNA rows on to the pathway analysis.",
+      "supersededBy": "stategra-mirna",
       "tests": [
         "miRNA-to-gene association",
         "Regulator/target pairing",
@@ -444,6 +447,7 @@
       ],
       "simulated": true,
       "summary": "Per-sample expression with three replicates per group, an experimental design matrix, and two candidate regulatory omics with association files. Each target is a noisy linear function of one known regulator, so what MORE should find is written down.",
+      "supersededBy": "stategra-more",
       "target": {
         "dataFile": "datasets/06-regulatory-more/data/gene_expression_targets.tab",
         "omicName": "Gene expression"
@@ -512,6 +516,7 @@
       ],
       "simulated": true,
       "summary": "Genomic regions in BED-like form with a matching synthetic GTF, so region-to-gene assignment runs without the large mouse annotation a fresh checkout does not have. Signal regions sit in promoters; 200 intergenic decoys do not.",
+      "supersededBy": "stategra-regions",
       "tests": [
         "RGmatch region-to-gene assignment",
         "Promoter/TSS area rules",

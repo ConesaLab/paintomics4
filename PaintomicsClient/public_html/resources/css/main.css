@@ -306,7 +306,17 @@ root {
      The gutter is `max()` so nothing changes below the cap - this only does
      work on displays wide enough to have the problem. */
   --pa-page-max: 1400px;
-  --pa-rail: 206px;
+
+  /* The rail is sized so the results column's visible edge lands on the
+     header's "Job view" pill, the same way the TOC's width is the wordmark's:
+     the header is the ruler for everything under it. The pill starts 166px
+     right of the gutter (147px of wordmark + 19px of menu margin, both
+     constants), and the ExtJS step containers add 20px of their own inset
+     between the column edge and a card's border, so 146 + 20 puts the card
+     exactly under the pill at every viewport width. Was 206, which left the
+     cards 60px right of anything else in the header - a rail nothing above
+     it shared. */
+  --pa-rail: 146px;
 
   /* The gutter was `max(40px, (100vw - 1400px) / 2)`, which on the 1440-1512px
      laptops this is mostly read on resolved to the 40px floor or a little over
@@ -4656,8 +4666,13 @@ div[id ^= "pathwayNetworkToolsBox_"] > a.button.btn-right,
 .step4_plotwrappers{display: inline-block;}
 
 /* These were 18px with a 2px border and steel-blue ink - roughly twice the size
-   of every other control on the page, in a panel that sits beside it. */
-div.lateralOptionsPanel input[type="text"]:not([id^=numberfield]) {
+   of every other control on the page, in a panel that sits beside it.
+
+   The find-features field opts out: it lives in a flex row that owns its
+   geometry (.findFeaturesRow above), and this rule's `margin: 6px 0` outranks
+   that row's `margin: 0` - 6px of top margin inside an align-items: stretch
+   row pushed the field below the button it shares the line with. */
+div.lateralOptionsPanel input[type="text"]:not([id^=numberfield]):not(.findFeaturesInput input) {
 	margin: 6px 0;
 	width: 100%;
 	max-width: 250px;
@@ -7499,7 +7514,12 @@ div.repDetectionCard h3 {
 		position: fixed;
 		top: 62px;
 		left: var(--pa-gutter);
-		width: 190px;
+		/* The wordmark's own width, so the column under "PaintOmics AI" ends
+		   where the wordmark does and the results column starts at the next
+		   thing in the header - the "Job view" pill (see --pa-rail). Names
+		   wrap one line earlier than they did at 190px, which the column has
+		   the vertical room for. */
+		width: 147px;
 		max-height: calc(100vh - 84px);
 		overflow-y: auto;
 		margin: 0;
