@@ -49,7 +49,18 @@
 	flex-wrap: wrap;
 	align-items: center;
 	gap: 0;
-	padding: 6px 8px;
+	/* The bar's own inset is derived, not chosen, because what has to land on
+	   the card's rail is the first control's *icon* - not the bar, and not the
+	   control's box. A tool carries 1px of margin, 1px of transparent border and
+	   8px of padding before its icon starts, so the bar is inset by the card
+	   rail less those 10px and the icon comes out on 26px exactly. The same
+	   subtraction on the right puts the last control's icon on the right rail.
+
+	   Written as 8px this card stacked three different left edges: the `h2` on
+	   --pa-card-inset (26px, so x=293 on a 1440px window), the first tool's icon
+	   on 18px (285), and the status line under it on 12px (279). Three rails
+	   inside one card, none of them agreeing with the heading that names it. */
+	padding: 6px calc(var(--pa-card-inset, 26px) - 10px);
 	background: var(--pa-surface-toolbar, #F6F5F0);
 	border-bottom: 1px solid var(--pa-border);
 	font-size: 12px;
@@ -260,7 +271,11 @@
    now carry one. */
 .pa-net-subtitle,
 .more-net-subtitle {
-	padding: 7px 12px;
+	/* The card rail, so this line starts under the `h2` that names the panel and
+	   under the first tool's icon in the bar between them, rather than on a 12px
+	   inset of its own. It is prose, so its own edge is where its glyphs start -
+	   no subtraction needed here, unlike the toolbar above. */
+	padding: 7px var(--pa-card-inset, 26px);
 	font-size: 12px;
 	line-height: 1.5;
 	color: var(--pa-ink-muted, #595959);
@@ -310,7 +325,11 @@
 	.pa-net-toolbar,
 	.more-net-toolbar {
 		gap: 3px;
-		padding: 6px 8px;
+		/* Same derivation as the full-width rule, restated only because this
+		   block is changing `gap`. Writing the literal back here would undo the
+		   rail below 900px, which is where the wrapping makes a ragged left edge
+		   easiest to see. */
+		padding: 6px calc(var(--pa-card-inset, 26px) - 10px);
 	}
 
 	:root {

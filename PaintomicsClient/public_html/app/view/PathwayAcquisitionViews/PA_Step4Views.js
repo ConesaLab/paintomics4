@@ -1008,7 +1008,7 @@ function PA_Step4KeggDiagramView() {
 			defaults: {border: false},
 			flex: 1, minWidth: 400, previousWidth: 400, width: 400,  height: ($("#mainViewCenterPanel").height() - 100),
 			html:
-			'<div class="lateralOptionsPanel-header">' +
+			'<div class="lateralOptionsPanel-header" data-guides="ignore">' +
 			'   <div class="lateralOptionsPanel-toolbar">' +
 			'    <a href="javascript:void(0)" class="toolbarOption btn-primary helpTip" id="hideDiagramPanelButton" title="Hide this panel"><i class="fa fa-times"></i></a>' +
 			'    <a href="javascript:void(0)" class="toolbarOption btn-primary helpTip" id="expandDiagramPanelButton" style="display:none;"  title="Expand this panel"><i class="fa fa-expand"></i></a>' +
@@ -2843,7 +2843,7 @@ function PA_Step4VisualOptionsView() {
 			items:[{
 				xtype: "box",
 				html:
-				"<div class='lateralOptionsPanel-header'>" +
+				"<div class='lateralOptionsPanel-header' data-guides='ignore'>" +
 				'  <div class="lateralOptionsPanel-toolbar">' +
 				'    <a href="javascript:void(0)" class="toolbarOption btn-danger helpTip" id="hideVisualSettingsPanelButton" title="Close this panel"><i class="fa fa-times"></i></a>' +
 				'  </div>' +
@@ -3070,7 +3070,7 @@ function PA_Step4FindFeaturesView() {
 				   is unreachable from any stylesheet, which is also why neither
 				   the light sheet nor dark.css could correct it: in dark mode
 				   this header stayed teal while everything around it moved. */
-				"<div class='lateralOptionsPanel-header'>" +
+				"<div class='lateralOptionsPanel-header' data-guides='ignore'>" +
 				'  <div class="lateralOptionsPanel-toolbar">' +
 				'    <a href="javascript:void(0)" class="toolbarOption btn-info helpTip" id="hideFindFeaturePanelButton" title="Close this panel"><i class="fa fa-times"></i></a>' +
 				'  </div>' +
@@ -3836,7 +3836,7 @@ function PA_Step4GlobalHeatmapView() {
 				}
 			},
 			previousWidth: 400, width: 400, minWidth: 400, html:
-			'<div class="lateralOptionsPanel-header" style="background: #2A8368;">' +
+			'<div class="lateralOptionsPanel-header" data-guides="ignore" style="background: #2A8368;">' +
 			'  <div class="lateralOptionsPanel-toolbar">' +
 			'    <a href="javascript:void(0)" class="toolbarOption btn-secondary helpTip" id="hideHeatmapPanelButton" title="Hide this panel"><i class="fa fa-times"></i></a>' +
 			'    <a href="javascript:void(0)" class="toolbarOption btn-secondary helpTip" id="configureHeatmapButton" title="Configure heatmap"><i class="fa fa-cogs"></i></a>' +
@@ -4388,7 +4388,7 @@ function PA_Step4DetailsView() {
 			},
 			items: [{
 				xtype: 'box', html:
-				'<div class="lateralOptionsPanel-header" style="background: #2A8368;">' +
+				'<div class="lateralOptionsPanel-header" data-guides="ignore" style="background: #2A8368;">' +
 				'  <div class="lateralOptionsPanel-toolbar">' +
 				'    <a class="toolbarOption btn-secondary helpTip" id="hideFeatureSetButton" title="Hide this panel"><i class="fa fa-times"></i></a>' +
 				'    <a class="toolbarOption btn-secondary helpTip" id="expandFeatureSetButton" title="Expand this panel"><i class="fa fa-expand"></i></a>' +

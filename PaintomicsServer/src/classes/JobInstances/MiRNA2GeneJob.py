@@ -156,17 +156,38 @@ class MiRNA2GeneJob(Job):
         # out of a validation routine, reaching the user as an internal error
         # rather than a message about the file. A gene name with an accent in a
         # file saved from Excel is enough to do it.
-        for encodingTarget in (relevantFileName, valuesFileName):
-            if os_path.isfile(encodingTarget):
+        # The association files (miRNA→gene reference and its relevant subset)
+        # are user uploads too, read later by detect_delimiter and the
+        # bioscripts with no encoding pass of their own — a latin-1 reference
+        # map crashed processFilesContent after validation had passed.
+        associationsFileName = inputOmic.get("associationsFile", "") or ""
+        relevantAssociationsFileName = inputOmic.get("relevantAssociationsFile", "") or ""
+        if associationsFileName:
+            associationsFileName = "{path}/{file}".format(
+                path=self.getInputDir(), file=associationsFileName)
+        if relevantAssociationsFileName:
+            relevantAssociationsFileName = "{path}/{file}".format(
+                path=self.getInputDir(), file=relevantAssociationsFileName)
+
+        encodingFailed = False
+        for encodingTarget in (relevantFileName, valuesFileName,
+                               associationsFileName, relevantAssociationsFileName):
+            if encodingTarget and os_path.isfile(encodingTarget):
                 encodingError = ensure_utf8(encodingTarget)
                 if encodingError is not None:
+                    encodingFailed = True
                     error += (" - Errors detected while processing " +
                               os_path.basename(encodingTarget) + ": " +
                               encodingError + ".\n")
+        # A recorded encoding failure means the file is still non-UTF-8 on
+        # disk: falling through to the readers below crashed with the very
+        # UnicodeDecodeError the message above was written to prevent.
+        if encodingFailed:
+            return nConditions, error
 
         logging.info("VALIDATING RELEVANT FEATURES FILE (" + omicName + ")..." )
         if os_path.isfile(relevantFileName):
-            f = open(relevantFileName, 'r')
+            f = open(relevantFileName, 'r', encoding='utf-8-sig')
             lines = f.readlines()
 
             if len(lines) > MAX_NUMBER_FEATURES:
@@ -185,7 +206,7 @@ class MiRNA2GeneJob(Job):
 
         #IF THE USER UPLOADED VALUES FOR GENE EXPRESSION
         if os_path.isfile(valuesFileName):
-            with open(valuesFileName, 'r') as inputDataFile:
+            with open(valuesFileName, 'r', encoding='utf-8-sig') as inputDataFile:
                 nLine = -1
                 erroneousLines = {}
 

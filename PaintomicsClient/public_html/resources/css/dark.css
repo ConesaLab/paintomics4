@@ -264,7 +264,8 @@
 /* Header and step-action controls. main.css states the ghost button's fill,
    ink and border literally, so all three are restated. */
 [data-theme="dark"] .mainTopToolbar .button,
-[data-theme="dark"] .secondTopToolbar .button {
+[data-theme="dark"] .secondTopToolbar .button,
+[data-theme="dark"] .paToolbarMiniature .button {
 	background-color: var(--pa-btn-default-bg);
 	color: var(--pa-btn-default-ink);
 	border-color: var(--pa-border-control);
@@ -284,10 +285,17 @@
 	background-color: var(--pa-btn-success-bg-hover);
 }
 [data-theme="dark"] .mainTopToolbar .button.btn-danger,
-[data-theme="dark"] .secondTopToolbar .button.btn-danger {
+[data-theme="dark"] .secondTopToolbar .button.btn-danger,
+[data-theme="dark"] .paToolbarMiniature .button.btn-danger {
 	background-color: transparent;
 	color: var(--pa-btn-ghost-danger-ink);
 	border-color: var(--pa-border-control);
+}
+/* The highlight ring on the miniature's Settings button: the light theme's
+   #B3261E measures poorly on the dark card, so use the same danger ink the
+   dark button itself carries. */
+[data-theme="dark"] .paToolbarMiniature .paMiniatureTarget {
+	box-shadow: 0 0 0 2px var(--pa-btn-ghost-danger-ink);
 }
 [data-theme="dark"] .mainTopToolbar .button.btn-danger:hover,
 [data-theme="dark"] .secondTopToolbar .button.btn-danger:hover {
@@ -485,22 +493,82 @@
 [data-theme="dark"] .x-tab .x-tab-inner { color: var(--pa-ink-label); }
 [data-theme="dark"] .x-tab-active .x-tab-inner { color: var(--pa-ink-strong); }
 [data-theme="dark"] .x-tab-active { background-color: var(--pa-surface); }
-/* Step 3's database tabs are the one bar main.css rebuilds from scratch, as a
-   selected label over a 2px rule rather than a raised box - see the note there.
-   Its selected ink is a literal near-black, which is the correct colour for the
-   light theme and invisible here, and the rule under the label is the same
-   value. Both are stated by an id selector, so these have to carry it too.
+/* Step 3's database tabs are the one bar main.css rebuilds from scratch - as a
+   segmented control, two pills with the selected one filled, see the note
+   there. Every colour in that rebuild is a literal chosen against the ivory
+   page: `#1A1A18` for the selected fill, `#FFFFFF` for the label knocked out of
+   it, `rgba(24,24,27,0.20)` for the hover border. All three are stated by an id
+   selector, so these have to carry one too.
 
-   The rule is an inset box-shadow, not a border - main.css moved it there so
-   the selected and unselected labels keep the same line box - so it is the
-   whole shadow that has to be restated, not a colour. */
-[data-theme="dark"] div#tabcontainer_network .x-tab.x-active {
-	box-shadow: inset 0 -2px 0 var(--pa-ink-title);
-	background-color: transparent;
+   The selected pill inverts rather than dimming. In the light theme it is the
+   darkest thing on the page and that is what makes it read as chosen at a
+   glance; the same statement here is the lightest, so the fill takes the title
+   ink and the label takes the card underneath it. Filling it with a dark grey
+   instead - the literal translation - would put the selected pill *closer* to
+   the page than the unselected one, which is the one thing this control cannot
+   afford to get backwards. */
+/* The database tabs are bookmarks now, not pills - see "The database tabs" in
+   main.css. That changes what dark mode has to say about them: the selected tab
+   is no longer a filled shape to be inverted, it is the card's own surface
+   continuing upward, so it takes --pa-surface and the seam takes the same
+   colour. Left as it was, the selected tab stayed a near-white slab with dark
+   text sitting on a dark card - the one element on the page that had not been
+   told the lights were off. */
+[data-theme="dark"] div#tabcontainer_network .x-tab {
+	background: var(--pa-surface-sunken);
+	border-color: var(--pa-border) !important;
 }
-[data-theme="dark"] div#tabcontainer_network .x-tab.x-active .x-tab-inner,
-[data-theme="dark"] div#tabcontainer_network .x-tab:hover .x-tab-inner {
+[data-theme="dark"] div#tabcontainer_network .x-tab:not(.x-active):hover {
+	background: var(--pa-control-hover-bg);
+	border-color: var(--pa-border-hover) !important;
+}
+[data-theme="dark"] div#tabcontainer_network .x-tab.x-active {
+	background: var(--pa-surface);
+	border-color: var(--pa-border) !important;
+	box-shadow: 0 1px 0 0 var(--pa-surface);
+}
+[data-theme="dark"] div#tabcontainer_network .x-tab.x-active .x-tab-inner {
 	color: var(--pa-ink-title);
+}
+[data-theme="dark"] div#tabcontainer_network .x-tab:not(.x-active) .x-tab-inner {
+	color: var(--pa-ink-muted);
+}
+[data-theme="dark"] div#tabcontainer_network .x-tab:not(.x-active):hover .x-tab-inner {
+	color: var(--pa-ink-title);
+}
+
+/* The pathway explorer card ---------------------------------------------------
+   Its two controls - the fold on "Pathway categories" and the Tools/Details
+   tabs on the network's rail - are `a` elements, and `[data-theme="dark"] a`
+   here scores the same as main.css's `a.paNetRailTab` while loading after it.
+   So without these the tabs and the fold came out link-blue on a panel where
+   nothing else is a link, and the selected rail tab could not be told from the
+   other one by colour at all. */
+[data-theme="dark"] a.paExploreFold,
+[data-theme="dark"] a.paNetRailTab,
+[data-theme="dark"] a.paNetRailHide {
+	color: var(--pa-ink-muted);
+}
+[data-theme="dark"] a.paNetRailTab.is-active {
+	color: var(--pa-ink-title);
+	background: var(--pa-surface);
+}
+[data-theme="dark"] a.paExploreFold:hover,
+[data-theme="dark"] a.paNetRailTab:hover {
+	color: var(--pa-ink-title);
+}
+[data-theme="dark"] a.paNetRailHide:hover {
+	color: var(--pa-accent-orange);
+}
+/* main.css sets a bare `h4 { color: #27272A }` and dark.css answers it only in
+   the places that had been looked at - the AI bubbles, the omic boxes, the two
+   side panels. "Category Distribution" and "Filter by category" were not among
+   them, so they were near-black on a #1E1F23 card: present in the DOM, legible
+   nowhere. Scoped to this card rather than to `div.contentbox h4`, because
+   several cards colour their h4s deliberately and a blanket rule here would
+   overwrite those without anyone noticing which. */
+[data-theme="dark"] .paExploreCard h4 {
+	color: var(--pa-ink-label);
 }
 
 /* Form fields */
@@ -1003,31 +1071,29 @@
 	background-color: var(--pa-surface) !important;
 }
 
-/* The two summary tables - "Multiple databases used" on Step 2 and its Step 3
-   twin - are white cards with near-black ink. Both are restated together
-   because they are the same table written twice in main.css.
+/* The Step 2 "Multiple databases" table - a white card with near-black ink.
+   Its former Step 3 twin (#multisource_summary) is no longer restated here: it
+   lives inside the summary band now and its light rules are written on
+   --pa-ink-* tokens over a transparent ground, so the token block above is all
+   the theming it needs.
 
    The <dt> database names are included even though they are ink, not surface:
    at #27272A on the dark card they measured 1.4:1, which is the same defect
    seen from the other side. */
-[data-theme="dark"] #dbs_message table,
-[data-theme="dark"] div#multisource_summary table {
+[data-theme="dark"] #dbs_message table {
 	background-color: var(--pa-surface-sunken);
 	border-color: var(--pa-border);
 }
-[data-theme="dark"] #dbs_message table th,
-[data-theme="dark"] div#multisource_summary table th {
+[data-theme="dark"] #dbs_message table th {
 	background-color: var(--pa-grid-header-bg);
 	border-bottom-color: var(--pa-border);
 	color: var(--pa-grid-header-ink);
 }
-[data-theme="dark"] #dbs_message table td,
-[data-theme="dark"] div#multisource_summary table td {
+[data-theme="dark"] #dbs_message table td {
 	border-top-color: var(--pa-border-row);
 	color: var(--pa-ink-body);
 }
-[data-theme="dark"] #dbs_message dt,
-[data-theme="dark"] div#multisource_summary dt { color: var(--pa-ink-title); }
+[data-theme="dark"] #dbs_message dt { color: var(--pa-ink-title); }
 
 /* ---------------------------------------------------------------------------
    10. Highcharts
@@ -1049,6 +1115,14 @@
 [data-theme="dark"] .highcharts-axis-line,
 [data-theme="dark"] .highcharts-tick { stroke: var(--pa-chart-axis); }
 [data-theme="dark"] .highcharts-grid-line { stroke: var(--pa-chart-grid); }
+/* Except on a pie. Highcharts draws `.highcharts-plot-border` for every chart
+   and leaves it unstroked, so on a chart with axes the rule above turns it into
+   the frame the axes hang off - and on the classification pie, which has no
+   axes, it turns it into a bare 513x215 rectangle floating around the slices.
+   That box is in every dark screenshot of Step 3 and belongs to nothing. */
+[data-theme="dark"] div[id ^= "pathwayDistributionsContainer_"] .highcharts-plot-border {
+	stroke: none;
+}
 [data-theme="dark"] .highcharts-axis-labels text,
 [data-theme="dark"] .highcharts-legend-item text { fill: var(--pa-chart-ink-soft) !important; }
 [data-theme="dark"] .highcharts-axis-title,
@@ -1569,6 +1643,34 @@
 }
 [data-theme="dark"] .po-pathway-label {
 	color: var(--pa-ink-body);
+}
+/* The summary band's heading strip carries the card-heading treatment (white
+   fill, hairline) on a wrapper row rather than on the h2 itself - see "The
+   summary band" in main.css - so the same move `div.contentbox h2` makes
+   above is restated for the row here, and the h2 inside it stays transparent
+   against the dark heading rule, which outscores the light transparent one. */
+[data-theme="dark"] .po-band-head {
+	background-color: var(--pa-surface);
+	border-bottom-color: var(--pa-border);
+}
+[data-theme="dark"] .po-band-card .po-band-head h2 {
+	background: transparent;
+}
+/* The job chip's fill is --pa-surface-subtle in the light theme; this file
+   redefines that token to within two points of the card it sits on, so the
+   chip would arrive as an empty outline. --pa-surface-sunken is the token for
+   a well within a surface. The ID inside it opts back out of the blanket
+   `[data-theme="dark"] b` blue - it is an identifier, not emphasis - and the
+   glyph buttons' hover wash is restated from the dark accent, same as the
+   .po-pathway-icon tiles above. */
+[data-theme="dark"] .po-job-chip {
+	background: var(--pa-surface-sunken);
+}
+[data-theme="dark"] .po-job-chip > b {
+	color: var(--pa-ink-title);
+}
+[data-theme="dark"] .po-job-chip > a:hover {
+	background: rgba(107, 168, 240, 0.18);
 }
 
 /* ---------------------------------------------------------------------------

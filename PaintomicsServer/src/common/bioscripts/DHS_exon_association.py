@@ -838,7 +838,7 @@ def run(gtf, dhs, outputfile, match_table, options=None, managed_queue=None):
         # 1. First, we save all the genes with their positions
         inputGTF = None
         if gtf[-2:] == "gz":
-            aux = gzip.open(gtf, 'rb').read().decode()
+            aux = gzip.open(gtf, 'rb').read().decode(errors='replace')
             inputGTF = aux.split("\n")
         else:
             inputGTF = open(gtf, 'r')

@@ -152,16 +152,21 @@ function PA_Step2JobView() {
 			'  <h2 >Data distribution summary <span class="helpTip" title=" "></h2>' +
 			'  <p>' +
 			'    By default, percentiles 10 and 90 set the reference range for the heatmap colours. You can change this in the pathway view: open <b>Settings</b> in the toolbar and edit <b>Reference values</b>.<br>' +
-			// settingsbutton.png was last regenerated in 2022 and shows the toolbar
-			// as it was then: a dark bar of coloured Bootstrap buttons reading
-			// "Go back / Show Pathway / Show Heatmap / Search / Settings", with a
-			// "Log out" above it. The step 4 toolbar it is meant to point at has
-			// been white pills in the reverse order since the chrome was rebuilt
-			// (98e5aa9d). The button's name is still "Settings", so the caption
-			// above is now accurate and the picture is the part that is out of
-			// date - it wants a fresh screenshot, which is not something to
-			// approximate by hand.
-			'		 <div style="margin: 15px auto;text-align:center;"><img src="resources/images/settingsbutton.png" width="400" height="73" /></div>' +
+			// This figure replaces settingsbutton.png, a 2022 screenshot of the
+			// old dark Bootstrap toolbar. It is not an image at all: it is the
+			// step-4 toolbar's own markup, styled by the same .button rules the
+			// real toolbar uses (extended to .paToolbarMiniature in main.css and
+			// dark.css), so it renders as vector text at any zoom, follows the
+			// theme, and cannot fall out of date when the toolbar is restyled.
+			// Order matches PA_Step4Views' secondTopToolbar; the ring marks the
+			// Settings button the caption above is pointing at.
+			'		 <div class="paToolbarMiniature" aria-hidden="true">' +
+			'			<span class="button btn-danger paMiniatureTarget"><i class="fa fa-wrench"></i> Settings</span>' +
+			'			<span class="button btn-info"><i class="fa fa-search"></i> Search</span>' +
+			'			<span class="button btn-secondary"><i class="fa fa-th"></i> Show Heatmap</span>' +
+			'			<span class="button btn-primary"><i class="fa fa-sitemap"></i> Show Pathway</span>' +
+			'			<span class="button btn-default"><i class="fa fa-arrow-left"></i> Go back</span>' +
+			'		 </div>' +
 			'  </p>' +
 			'</div>'
 		}];
@@ -295,7 +300,7 @@ function PA_Step2JobView() {
 					defaults: {labelAlign: "right", border: false},
 					items: numberOfClusters
 				}]
-			}, {xtype: 'container', html:'<div style="display: none;"></div>'});
+			}, {xtype: 'container', cls: 'paLayoutPad', html:'<div style="display: none;"></div>'});
 		}
 
 		if (databases.length > 1) {
@@ -337,7 +342,7 @@ function PA_Step2JobView() {
 			};
 
 			/* Add an empty container to restore "odd" position of next sibling elements */
-			omicSummaryPanelComponents.splice(2, 0, dbs_message, {xtype: 'container', html:'<div style="display: none;"></div>'});
+			omicSummaryPanelComponents.splice(2, 0, dbs_message, {xtype: 'container', cls: 'paLayoutPad', html:'<div style="display: none;"></div>'});
 		}
 
 		// Replicate-detection card — only renders when at least one omic has
@@ -353,7 +358,7 @@ function PA_Step2JobView() {
 				// container to keep the column-layout "odd/even" alignment
 				// consistent with the existing Step-2 cards.
 				omicSummaryPanelComponents.push(repComponent,
-					{xtype: 'container', html:'<div style="display: none;"></div>'});
+					{xtype: 'container', cls: 'paLayoutPad', html:'<div style="display: none;"></div>'});
 			}
 		}
 
@@ -389,7 +394,7 @@ function PA_Step2JobView() {
 					defaults: {labelAlign: "right", border: false},
 					items: thresholdMetaboliteClass
 				}]
-			}, {xtype: 'container', html:'<div style="display: none;"></div>'});
+			}, {xtype: 'container', cls: 'paLayoutPad', html:'<div style="display: none;"></div>'});
 		}
 
 		if (me.items.length > 0) {

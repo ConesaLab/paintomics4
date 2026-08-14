@@ -80,7 +80,7 @@ INDEX_HTML = os.path.join(CLIENT_ROOT, "index.html")
 # year, and recording a digest for a 300KB minified bundle only creates churn.
 PUBLISHED = {
     "app/view/common/Util.js": (
-        "1.9", "ebb2c218742ba5f0bbc7a530056b8a5673123ad9365b89e80bbd75ce82a494db"),
+        "2.0", "284b8be3fd6f8e746730408b7bacc37c9385e4ce6e76743885c3a11dae6c3ecd"),
     "app/view/common/ExtJS_extensions.js": (
         "0.7", "f1e68f670cc56064fc15649d259004ccbd96f49181ced049cffbe62c29bf1d80"),
     "app/view/common/upload/Panel.js": (
@@ -90,11 +90,11 @@ PUBLISHED = {
     # it with an unbumped marker leaves returning browsers running the old
     # copy exactly as it would for view code.
     "app/view/common/AlignmentGuides.js": (
-        "2.6", "e8132149237c69b9d53f7902c3f0fe12caccaba14ec7ff6a598988de9a25a96f"),
+        "4.1", "db648a4f47fc2a11db95275e9467cc323e6036e87b69fc3cf37646ec745aa3ff"),
     "app/view/PathwayAcquisitionViews/PA_AIInterpretView.js": (
         "0.4", "7db83c339d465cafb9bdd319ad267660d4e7bbcca4eb3fcd250736f59d5d8c6d"),
     "app/view/PathwayAcquisitionViews/PA_Step3RegTargetNetworkView.js": (
-        "0.5", "aa30804fc4b62b84e0c8ad9e9db71c0a8f478b322cc51bd4e78162cca06a1d68"),
+        "0.7", "b135712a9564f8ae0eac94daf9c567ef275c4c748dbc270fdbdeb7d25fc79e34"),
     "resources/ServerConfiguration.js": (
         "0.7", "da64ff7cfeeecef7c6c9fb8ec125199b40200988d638951e9d7817eef13da754"),
     "js/libs/linkurious/sigma.min.js": ("0.1", None),

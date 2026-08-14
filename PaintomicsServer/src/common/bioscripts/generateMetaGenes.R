@@ -2,6 +2,12 @@
 
 #Functions
 getBestIndexBy2SlopeLesser1stQuartilSlope <- function(p) {
+  # A scan over k.max < 3 yields at most one slope, and the i/i+1 walk below
+  # then reads past the end of y (y[2] is NA -> "missing value where TRUE/FALSE
+  # needed", which aborts the script). With only k = 1..2 on the curve there is
+  # no elbow to pick; the largest scanned k is the only informative answer and
+  # the clamp after the caller bounds it by the distinct-point geometry anyway.
+  if (nrow(p$data) < 3) { return(nrow(p$data)) }
   v = 2:nrow(p$data)
   y = p$data$y[v]-p$data$y[v-1]
   firstQ = summary(y)[2]
@@ -370,7 +376,21 @@ if(is.null(args$kclusters) || args$kclusters == "dynamic") {
     k.max <- round(sqrt(length(row.names(dataScaled))/2)) + 1
     if (k.max < 2) k.max <- 2
 
-    if(args$cluster=="kmeans"){
+    # The elbow scan below runs kmeans for EVERY k up to k.max, so it aborts on
+    # "more cluster centers than distinct data points" long before the clamp
+    # after this block can help. The geometry matters with two conditions: the
+    # centred, unit-norm rows occupy exactly 2 distinct locations, so any
+    # k.max > 2 kills the scan. Bound the scan by the distinguishable points
+    # (same rounding rationale as the clamp below).
+    distinctPoints <- nrow(unique(round(dataForClustering, 10)))
+    if (is.finite(distinctPoints) && k.max > distinctPoints) k.max <- distinctPoints
+
+    if (k.max < 2) {
+      # A single distinguishable profile cannot be partitioned; fviz_nbclust
+      # and Mclust both require k.max >= 2, so decide directly.
+      cat("Only", distinctPoints, "distinct metagene profile(s); using 1 cluster. ")
+      args$kclusters <- 1
+    } else if(args$cluster=="kmeans"){
       # Check best cluster using WSS. Run the elbow over the same matrix the
       # final clustering uses -- it previously scanned dataScaled while the
       # clustering ran on the distance matrix, so the chosen k described a

@@ -162,11 +162,152 @@ def showPercentage(n, total, prev, errorMessage):
     # The cost is operability, not speed -- it is only ~0.16s -- but it buries the one
     # exception an admin needs after a multi-hour failure under tens of MB with no
     # newlines. Emitting only on change drops it to 11 lines per file.
+    #
+    # Silent unless PAINTOMICS_INSTALL_VERBOSE=1. A progress bar is for a human watching
+    # a terminal; this output goes to a shared install.log that is read after the fact,
+    # where it only makes the real messages harder to find.
     percen = int(n/float(total)*10)
-    if percen == prev:
-        return prev
+    if percen == prev or not VERBOSE:
+        return percen
     stderr.write("0%[" + ("#"*percen) + (" "*(10 - percen)) + "]100% [" + str(n) + "/" + str(total) + "]\t"+ errorMessage + "\r" )
     return percen
+
+
+#**************************************************************************
+# FAIL-SOFT INPUT HANDLING
+#
+# A species is assembled from independent sources. Losing one of them costs the
+# identifier types it feeds and nothing else, so the build records what it lost and
+# carries on; only a result that cannot be used at all is worth refusing. The old
+# behaviour -- exit(1) the moment any input file was absent -- threw away organisms
+# that would have installed perfectly well with, say, no VEGA ids.
+#**************************************************************************
+def skipSource(label, reason, consequence):
+    """Record that an optional input is unusable and say what it costs."""
+    SKIPPED_SOURCES.append((label, reason, consequence))
+    stderr.write("\nWARNING [" + label + "] " + reason + "\n         -> " + consequence + "\n")
+
+
+def haveInputFile(label, fileName, consequence):
+    """True if fileName is usable; otherwise record the skip and return False.
+
+    Also rejects a file that exists but is empty, which is what a failed download
+    leaves behind and what used to be parsed into an empty identifier type.
+    """
+    if not fileName or not os.path.isfile(fileName):
+        skipSource(label, "input file not found: " + str(fileName), consequence)
+        return False
+    if os.path.getsize(fileName) == 0:
+        skipSource(label, "input file is empty: " + fileName, consequence)
+        return False
+    return True
+
+
+def assertInstallable():
+    """Refuse only a species that cannot answer a single query.
+
+    Two things make a species usable: at least one identifier the user can upload,
+    and at least one pathway to paint. Everything else is a degradation worth a
+    warning. Checked here rather than at each input so that a build missing four of
+    six sources still installs if the remaining two carry the species.
+    """
+    identifiers = sum(len(entries) for entries in xref.values())
+    pathways = len(ALL_PATHWAYS)
+
+    if identifiers == 0 or pathways == 0:
+        raise Exception(
+            "Refusing to install " + str(SPECIE) + ": the build produced " +
+            str(identifiers) + " identifier(s) and " + str(pathways) + " pathway(s), so "
+            "nothing a user uploads could ever match. Skipped sources: " +
+            (", ".join(label for label, _, _ in SKIPPED_SOURCES) or "none") +
+            ". This is the one case worth failing on -- every other missing source is "
+            "reported as a warning and installed anyway.")
+
+    return identifiers, pathways
+
+
+def countIdentifiersByType():
+    """Number of xref entries per identifier type, as the database will store them.
+
+    `xref` is keyed by SCOPE ('global'), not by identifier type -- grouping on its keys
+    reports one bucket called "global" and hides exactly what this summary exists to
+    show. The type lives on each entry as dbname_id, resolved through `dbname`.
+    """
+    perType = Counter()
+    for entries in xref.values():
+        for entry in entries.values():
+            label = dbname[entry.dbname_id].dbname if entry.dbname_id in dbname else str(entry.dbname_id)
+            perType[label] += 1
+    return perType
+
+
+def summariseBuild():
+    """One compact block per species: what was built, and what was lost."""
+    identifiers = sum(len(entries) for entries in xref.values())
+    byType = sorted(countIdentifiersByType().items())
+
+    stderr.write("\n" + "=" * 62 + "\n")
+    stderr.write("BUILD SUMMARY  " + str(SPECIE) + "\n")
+    stderr.write("=" * 62 + "\n")
+    stderr.write("  identifiers : %d across %d type(s)\n" % (identifiers, len(byType)))
+    for name, count in byType:
+        stderr.write("      %-32s %8d\n" % (name, count))
+    stderr.write("  pathways    : %d\n" % len(ALL_PATHWAYS))
+
+    dropped = {k: len(v) for k, v in FAILED_LINES.items() if v}
+    if dropped:
+        stderr.write("  rows dropped while parsing (per source):\n")
+        for k, v in sorted(dropped.items()):
+            stderr.write("      %-32s %8d\n" % (k, v))
+
+    if UNKNOWN_PATHWAY_PAIRS or PATHWAYS_WITHOUT_NODES:
+        stderr.write("  pathways missing from the shared KEGG reference:\n")
+        if UNKNOWN_PATHWAY_PAIRS:
+            unknown = sorted({p for pair in UNKNOWN_PATHWAY_PAIRS for p in pair})
+            stderr.write("      %-32s %8d  (e.g. %s)\n" % (
+                "unlinked pathway pairs", len(UNKNOWN_PATHWAY_PAIRS),
+                ", ".join(unknown[:5])))
+        if PATHWAYS_WITHOUT_NODES:
+            stderr.write("      %-32s %8d  (e.g. %s)\n" % (
+                "pathways with no node data", len(PATHWAYS_WITHOUT_NODES),
+                ", ".join(sorted(set(PATHWAYS_WITHOUT_NODES))[:5])))
+        stderr.write("      -> re-run the download with --common=1 to refresh "
+                     "pathways_all.list, then reinstall this species\n")
+
+    if SKIPPED_SOURCES:
+        stderr.write("  WARNINGS -- installed WITHOUT these sources:\n")
+        for label, reason, consequence in SKIPPED_SOURCES:
+            stderr.write("      %-20s %s\n" % (label, reason))
+            stderr.write("      %-20s -> %s\n" % ("", consequence))
+    else:
+        stderr.write("  warnings    : none\n")
+    stderr.write("=" * 62 + "\n")
+
+    # Hand the warnings back to DBManager, which runs this build as a subprocess and
+    # otherwise only sees an exit status.
+    #
+    # The destination is whatever DBManager named in PAINTOMICS_BUILD_WARNINGS: a
+    # fresh 0600 file per species, not a fixed /tmp path that two concurrent installs
+    # would both write to and read each other's warnings out of. When the variable is
+    # absent there is no parent listening -- a build run by hand from the shell --
+    # so nothing is written and the summary above is the whole report.
+    handoffPath = os.environ.get("PAINTOMICS_BUILD_WARNINGS")
+    if not handoffPath:
+        return
+
+    # Tab-separated, one record per line, so a reason carrying either character
+    # would split into fields the reader then drops. These strings are file paths
+    # and str(exception), neither of which is under our control.
+    def oneLine(value):
+        return " ".join(str(value).split())
+
+    try:
+        with open(handoffPath, "w") as handle:
+            for label, reason, consequence in SKIPPED_SOURCES:
+                handle.write("\t".join([oneLine(SPECIE), oneLine(label),
+                                        oneLine(reason), oneLine(consequence)]) + "\n")
+    except Exception as writeError:
+        stderr.write("  (could not write the warning hand-off file: %s)\n" % writeError)
 
 #**************************************************************************
 #  ______ _   _  _____ ______ __  __ ____  _
@@ -224,9 +365,9 @@ def processEnsemblData():
 
     resource = EXTERNAL_RESOURCES.get("ensembl")[0]
     file_name= DATA_DIR + "mapping/" + resource.get("output")
-    if not os.path.isfile(file_name):
-        stderr.write("Unable to find the ENSEMBL MAPPING file: " + file_name)
-        exit(1)
+    if not haveInputFile("ENSEMBL", file_name,
+                         "Ensembl gene/transcript/protein identifiers will be absent for this species"):
+        return
 
     #Get line count (for percentage)
     total_lines = int(check_output(['wc', '-l', file_name]).decode('utf-8').split()[0])
@@ -310,9 +451,9 @@ def processRefSeqData():
     file_name= DATA_DIR + "mapping/" + resource.get("output")
 
     #Check if file exists
-    if not os.path.isfile(file_name):
-        stderr.write("Unable to find the REFSEQ MAPPING file: " + file_name)
-        exit(1)
+    if not haveInputFile("REFSEQ", file_name,
+                         "RefSeq RNA/protein accessions and EntrezGene ids will be absent for this species"):
+        return
 
     #Extract the file in a temporal directory
     stderr.write("  * EXTRACTING FILE...\n")
@@ -425,9 +566,9 @@ def processRefSeqGeneSymbolData():
     file_name= DATA_DIR + "mapping/" + resource.get("output")
 
     #Check if file exists
-    if not os.path.isfile(file_name):
-        stderr.write("Unable to find the REFSEQ GENE SYMBOL MAPPING file: " + file_name)
-        exit(1)
+    if not haveInputFile("REFSEQ GENE SYMBOL", file_name,
+                         "gene symbols and their synonyms will be absent -- users cannot upload by symbol"):
+        return
 
     #Extract the file in a temporal directory
     stderr.write("  * EXTRACTING FILE...\n")
@@ -595,9 +736,9 @@ def processUniProtData():
 
     resource = EXTERNAL_RESOURCES.get("uniprot")[0]
     file_name= DATA_DIR + "mapping/" + resource.get("output")
-    if not os.path.isfile(file_name):
-        stderr.write("\n\nUnable to find the UniProt MAPPING file: " + file_name + "\n")
-        exit(1)
+    if not haveInputFile("UNIPROT", file_name,
+                         "UniProt accessions and identifiers will be absent for this species"):
+        return
 
     #Extract the file in a temporal directory
     stderr.write("  * EXTRACTING FILE...\n")
@@ -703,9 +844,9 @@ def processVegaData():
     FAILED_LINES["VEGA"]=[]
     resource = EXTERNAL_RESOURCES.get("vega")[0]
     file_name= DATA_DIR + "mapping/" + resource.get("output")
-    if not os.path.isfile(file_name):
-        stderr.write("\n\nUnable to find the ENSEMBL VEGA MAPPING file: " + file_name + "\n")
-        exit(1)
+    if not haveInputFile("VEGA", file_name,
+                         "VEGA identifiers will be absent for this species"):
+        return
 
     #Get line count (for percentage)
     total_lines = int(check_output(['wc', '-l', file_name]).decode('utf-8').split()[0])
@@ -785,34 +926,53 @@ def processMapManMappingData():
     #STEP 2. READ THE UniProt 2 KEGG FILE but DO NOT process it as it will be done in "processKEGGMappingData
     # Instead, load the contents and keep as a link table to KEGG gene ids
     ncbi_file_name= DATA_DIR + "mapping/" + "ncbi-geneid2kegg.list"
-    if not os.path.isfile(ncbi_file_name):
-        stderr.write("\n\nUnable to find the NCBI 2 KEGG MAPPING file: " + ncbi_file_name + "\n")
-        exit(1)
+    if not haveInputFile("NCBI GENE ID 2 KEGG", ncbi_file_name,
+                         "NCBI gene ids will not be linked to KEGG features for this species"):
+        return
 
     # MapMan input files. Prefer the canonical DATA_DIR/mapping/<output> location
     # (populated by the download step) and fall back to the configured `url + file`
     # for legacy installs that keep MapMan source files outside DATA_DIR.
-    def _resolveMapManPath(resource, displayName):
+    # Returns None rather than exiting: the three MapMan inputs are independent, and
+    # only the gene-to-bin file is load-bearing. Losing the other two costs metabolites
+    # or the KEGG cross-link, which is a warning, not a reason to drop the organism.
+    def _resolveMapManPath(resource, displayName, consequence):
+        if resource is None:
+            skipSource(displayName, "no such resource declared for " + str(SPECIE), consequence)
+            return None
         candidate = DATA_DIR + "mapping/" + resource.get("output")
         if os.path.isfile(candidate):
             return candidate
         fallback = resource.get("url") + resource.get("file")
         if os.path.isfile(fallback):
             return fallback
-        stderr.write("\n\nUnable to find the " + displayName + " file in either " + candidate + " or " + fallback + "\n")
-        exit(1)
+        skipSource(displayName, "not found in either " + candidate + " or " + fallback, consequence)
+        return None
 
-    mapman_cpd_resource = EXTERNAL_RESOURCES.get("metabolites")[0]
-    mapman_cpd_file_name = _resolveMapManPath(mapman_cpd_resource, "MapMan Compound 2 MapMan ID MAPPING")
+    def _firstResource(name):
+        entries = EXTERNAL_RESOURCES.get(name)
+        return entries[0] if entries else None
 
-    mapman_resource = EXTERNAL_RESOURCES.get("mapman_gene")[0]
-    mapman_file_name = _resolveMapManPath(mapman_resource, "MapMan Gene 2 MapMan ID MAPPING")
+    mapman_cpd_file_name = _resolveMapManPath(
+        _firstResource("metabolites"), "MAPMAN METABOLITES",
+        "MapMan metabolite identifiers will be absent; genes are unaffected")
 
-    mapman_kegg_resource = EXTERNAL_RESOURCES.get("mapman_kegg")[0]
-    mapman_kegg_file_name = _resolveMapManPath(mapman_kegg_resource, "MapMan Gene to KEGG ID MAPPING")
+    mapman_file_name = _resolveMapManPath(
+        _firstResource("mapman_gene"), "MAPMAN GENE 2 BIN",
+        "no MapMan bins can be assigned, so MapMan diagrams will carry no features")
+
+    mapman_kegg_file_name = _resolveMapManPath(
+        _firstResource("mapman_kegg"), "MAPMAN GENE 2 KEGG",
+        "MapMan genes will not be cross-linked to KEGG ids")
+
+    # The gene-to-bin file IS the MapMan mapping. Without it there is nothing to build,
+    # so stop here and let the species install with its KEGG data only.
+    if mapman_file_name is None:
+        return
 
     # Insert compounds
-    processMapMan2CompoundSymbolMappingData(mapman_cpd_file_name)
+    if mapman_cpd_file_name is not None:
+        processMapMan2CompoundSymbolMappingData(mapman_cpd_file_name)
 
     # Initialize the mapping_dict NCBI Gene ID => [many possible KEGG_IDs]
     ncbi_mapping_dict = defaultdict(list)
@@ -836,14 +996,19 @@ def processMapManMappingData():
             for ontology_term in ontology_terms:
                 external_mapping[ontology_term].extend([mapping_entry["mapman_gene"]])
 
-    total_lines = int(check_output(['wc', '-l', mapman_kegg_file_name]).decode('utf-8').split()[0])
+    total_lines = 0
+    genes_present = set()
 
-    with open(mapman_kegg_file_name, 'r') as mapman_file:
+    # Only the cross-link to KEGG needs this file. Without it every MapMan gene still
+    # gets inserted below, just with its own transcript instead of a shared KEGG one.
+    if mapman_kegg_file_name is not None:
+      total_lines = int(check_output(['wc', '-l', mapman_kegg_file_name]).decode('utf-8').split()[0])
+
+      with open(mapman_kegg_file_name, 'r') as mapman_file:
         i = 0
         prev = -1
         errorMessage = ""
         file_reader = csv.reader(mapman_file, delimiter="\t")
-        genes_present = set()
 
         for mapping_entry in file_reader:
             i += 1
@@ -883,14 +1048,17 @@ def processMapManMappingData():
                     insertTR_XREF(external_gi, generateRandomID())
             except Exception as ex:
                 errorMessage = "FAILED WHILE PROCESSING " + mapman_kegg_file_name +" MAPPING FILE [line " + str(i) + "]: "+ str(ex)
+                FAILED_LINES.setdefault("MAPMAN GENE 2 KEGG", []).append([errorMessage])
 
-        # If we still have info about other genes not present in that file, add them
-        all_genes = set(list(itertools.chain.from_iterable(external_mapping.values())))
+    # Every MapMan gene not already linked above gets inserted with its own transcript.
+    # Dedented out of the `with` block on purpose: when the KEGG cross-link file is
+    # absent this loop is what still populates the MapMan identifiers.
+    all_genes = set(list(itertools.chain.from_iterable(external_mapping.values())))
 
-        for remaining_gene in all_genes.difference(genes_present):
-            gene_gi = insertXREF(XREF_Entry(remaining_gene, mapman_gene_db_id, mapman_gene_desc))
+    for remaining_gene in all_genes.difference(genes_present):
+        gene_gi = insertXREF(XREF_Entry(remaining_gene, mapman_gene_db_id, mapman_gene_desc))
 
-            insertTR_XREF(gene_gi, generateRandomID())
+        insertTR_XREF(gene_gi, generateRandomID())
 
     version = open(DATA_DIR + 'MAPMAN_MAPPING', 'w')
     version.write("# CREATION DATE:\t" + strftime("%Y%m%d %H%M"))
@@ -1247,8 +1415,9 @@ def processMapManPathwaysData():
     REVERSE_MAPMAN_CPD = {v: k for k, v in MAPMAN_COMPOUNDS.items()}
 
     if not len(external_mapping):
-        stderr.write("The MapMan dictionary is not filled. Mapping files must be processed first.")
-        exit(1)
+        skipSource("MAPMAN PATHWAYS", "no MapMan gene-to-bin mapping was loaded",
+                   "MapMan diagrams are skipped entirely; KEGG pathways are unaffected")
+        return
 
     # Check if classification file exists. Prefer DATA_DIR/mapping/<output>
     # (populated by the download step) and fall back to the configured
@@ -1261,8 +1430,10 @@ def processMapManPathwaysData():
         mapman_classification_file_name = mapman_classification_resource.get("url") + mapman_classification_resource.get("file")
 
     if not os.path.isfile(mapman_classification_file_name):
-        stderr.write("\n\nUnable to find the MapMan classification file in either " + _candidate + " or " + mapman_classification_file_name + "\n")
-        exit(1)
+        skipSource("MAPMAN CLASSIFICATION",
+                   "not found in either " + _candidate + " or " + mapman_classification_file_name,
+                   "MapMan diagrams are skipped entirely; KEGG pathways are unaffected")
+        return
 
     # MapMan pathways files are the same for each species, even the XML files.
     # The handful of species compatible with MapMan will specify to download the same dataset.
@@ -1291,8 +1462,9 @@ def processMapManPathwaysData():
     except Exception as e:
         if os.path.exists(MAPMAN_DIR):
             shutil.move(MAPMAN_DIR + ".bak", MAPMAN_DIR)
-        stderr.write("Failed extraction of MapMan pathways. Aborting.")
-        exit(1)
+        skipSource("MAPMAN PATHWAYS", "could not extract " + str(pathways_file_name) + ": " + str(e),
+                   "MapMan diagrams are skipped entirely; KEGG pathways are unaffected")
+        return
 
     # Make sure to create the thumbnail directory
     if not os.path.exists(os.path.dirname(MAPMAN_DIR + "/png/thumbnails/")):
@@ -1727,7 +1899,7 @@ def buildReactomeHierarchyEdges(installedPathways, relationFile, speciesMarker,
 
 
 def loadReactomeMapping(filePath, keyColumn, valueColumns, minColumns,
-                        failedLines=None, specieLabel=""):
+                        failedLines=None, specieLabel="", allowEmpty=False):
     """
     Index a Reactome mapping TSV as {key: [tuple(row[c] for c in valueColumns), ...]}.
 
@@ -1740,9 +1912,15 @@ def loadReactomeMapping(filePath, keyColumn, valueColumns, minColumns,
     and shifts every identifier one field to the left, so entities map to the
     wrong genes rather than failing loudly.
 
-    Raises rather than returning an empty index: an empty mapping means the
-    upstream R step matched no rows for this species, and every downstream lookup
-    would quietly return nothing instead of reporting the real problem.
+    An empty file raises unless the caller passes allowEmpty=True. The split
+    exists because the callers' invariants differ: a per-species GENE mapping
+    can be legitimately empty (Reactome keys ddi/spo/pfa through NCBI and
+    UniProt but not Ensembl, and processReactomeData.R deliberately writes an
+    empty file for such a source -- the caller enforces the real invariant,
+    that not EVERY gene mapping is empty), while the common, all-species ChEBI
+    file has no legitimate empty state: zero rows there means a truncated
+    download, and every downstream lookup would quietly return nothing instead
+    of reporting the real problem.
     """
     if failedLines is None:
         failedLines = []
@@ -1769,10 +1947,16 @@ def loadReactomeMapping(filePath, keyColumn, valueColumns, minColumns,
             rowCount += 1
 
     if rowCount == 0:
-        raise Exception(
-            "Reactome mapping file is empty: " + filePath + "\n" +
-            "This usually means processReactomeData.R matched no rows for species '" +
-            str(specieLabel) + "'.")
+        if not allowEmpty:
+            raise Exception(
+                "Reactome mapping file is empty: " + filePath + "\n" +
+                "This file is not species-scoped, so zero rows means a truncated "
+                "or failed download (species being processed: '" +
+                str(specieLabel) + "').")
+        stderr.write("WARNING: no rows in {} for species '{}'; this identifier "
+                     "source contributes nothing.\n".format(
+                         os.path.basename(filePath), specieLabel))
+        return index
 
     stderr.write("Indexed {} rows from {} ({} distinct keys)\n".format(
         rowCount, os.path.basename(filePath), len(index)))
@@ -1854,6 +2038,19 @@ def processReactomePathwaysData():
 
 
 
+    # The ReactomePathway.txt check further down already fail-softs the KEGG
+    # build when Reactome was never downloaded - but the R script used to run
+    # BEFORE that check and die first. ptr made this real: Reactome dropped
+    # chimpanzee from its release, its download correctly skips Reactome, and
+    # the build then crashed in processReactomeData.R on three empty mappings.
+    # An absent download means "no Reactome for this species": take the same
+    # warn-and-return exit before anything Reactome-related runs.
+    if not haveInputFile("REACTOME PATHWAYS", DATA_DIR + 'ReactomePathway.txt',
+                         "Reactome was not downloaded for this species (not covered "
+                         "by the current Reactome release, or downloaded without "
+                         "--reactome=1); KEGG pathways are unaffected."):
+        return
+
     # The process will also insert information about compounds, thus discarding the previous database
     # and importing a new one, needing again the KEGG compounds.
     processKEGG2CompoundSymbolMappingData(DATA_DIR + "../common/compounds_all.list")
@@ -1870,10 +2067,24 @@ def processReactomePathwaysData():
         print(output)  # Print R script output
         print("Reactome R script completed successfully")
     except CalledProcessError as e:
+        rOutput = e.output if getattr(e, 'output', None) else ""
+        # The R script's aggregate zero-coverage stop is a fact about Reactome's
+        # release, not a build failure: every gene mapping came up empty, so
+        # there is nothing to attach genes to and installing Reactome would ship
+        # pathways with no gene mapped to anything. Take the same warn-and-return
+        # exit as a missing download -- the KEGG pathways just built are
+        # unaffected -- instead of failing the species with a misleading
+        # "check memory/R installation" error.
+        if "in any of Ensembl2Reactome, NCBI2Reactome or UniProt2Reactome" in rOutput:
+            print(rOutput)
+            print("WARNING: Reactome's current release has no gene mappings for "
+                  "species '" + str(SPECIE) + "'; skipping Reactome (KEGG "
+                  "pathways are unaffected).")
+            return
         print("ERROR: Reactome R script failed with exit code: " + str(e.returncode))
-        if hasattr(e, 'output') and e.output:
+        if rOutput:
             print("Output from R script:")
-            print(e.output)
+            print(rOutput)
         raise Exception("Failed to process Reactome data. Check memory usage and R installation.")
 
 
@@ -1895,15 +2106,28 @@ def processReactomePathwaysData():
     failedLines = FAILED_LINES["REACTOME PATHWAYS"]
 
     # stId -> [(ensembl_id, symbol), ...] and the NCBI / UniProt equivalents.
+    # allowEmpty on the three per-species gene mappings ONLY: any one of them
+    # can be legitimately empty (see loadReactomeMapping's docstring); the
+    # all-empty case is caught just below. The common ChEBI file further down
+    # keeps the raise -- empty there means a truncated download.
     ensemblByStId = loadReactomeMapping(
         mapReactomeDir + "Ensembl2Reactome.txt", keyColumn=1, valueColumns=(0, 2),
-        minColumns=3, failedLines=failedLines, specieLabel=SPECIE)
+        minColumns=3, failedLines=failedLines, specieLabel=SPECIE, allowEmpty=True)
     ncbiByStId = loadReactomeMapping(
         mapReactomeDir + "NCBI2Reactome.txt", keyColumn=1, valueColumns=(0, 2),
-        minColumns=3, failedLines=failedLines, specieLabel=SPECIE)
+        minColumns=3, failedLines=failedLines, specieLabel=SPECIE, allowEmpty=True)
     uniprotByStId = loadReactomeMapping(
         mapReactomeDir + "UniProt2Reactome.txt", keyColumn=1, valueColumns=(0, 2),
-        minColumns=3, failedLines=failedLines, specieLabel=SPECIE)
+        minColumns=3, failedLines=failedLines, specieLabel=SPECIE, allowEmpty=True)
+
+    # The invariant the old per-file check was reaching for: a species whose
+    # EVERY gene mapping is empty would install Reactome pathways with no gene
+    # attached to anything, which must fail loudly rather than ship.
+    if not ensemblByStId and not ncbiByStId and not uniprotByStId:
+        raise Exception(
+            "All three Reactome gene mappings (Ensembl, NCBI, UniProt) are "
+            "empty for species '" + str(SPECIE) + "'. Reactome does not cover "
+            "this organism; install it with --reactome=0.")
 
     # stId -> [chebi_id, ...]. This file is NOT species-filtered, so it is the
     # largest of the five and was the single worst offender in the old scan.
@@ -1949,14 +2173,25 @@ def processReactomePathwaysData():
 
     REACTOME_PATHWAY = DATA_DIR + 'ReactomePathway.txt'
 
+    # Absent whenever the species was downloaded without --reactome=1, and for every
+    # organism Reactome does not curate. Neither is a reason to lose the KEGG pathways
+    # that were just built, so warn and return instead of raising FileNotFoundError.
+    if not haveInputFile("REACTOME PATHWAYS", REACTOME_PATHWAY,
+                         "Reactome pathways will be absent; KEGG pathways are unaffected. "
+                         "Re-run the download with --reactome=1 if this species is curated by Reactome"):
+        return
+
     with open( file=REACTOME_PATHWAY ) as pathwayList:
         for line in pathwayList:
             PATHWAY_ID.add(line.strip())
 
     def showPercentageSimple(n, total):
+        # Unconditional and once per pathway, so ~1,000 lines for human alone. Silent
+        # unless PAINTOMICS_INSTALL_VERBOSE=1, like the other progress writer.
         percen = int( n / float( total ) * 10 )
-        stderr.write(
-            "0%[" + ("#" * percen) + (" " * (10 - percen)) + "]100% [" + str( n ) + "/" + str( total ) + "]\t" )
+        if VERBOSE:
+            stderr.write(
+                "0%[" + ("#" * percen) + (" " * (10 - percen)) + "]100% [" + str( n ) + "/" + str( total ) + "]\t" )
         return percen
 
 
@@ -2810,7 +3045,12 @@ def generatePathwaysNetwork(ALL_PATHWAYS):
                     try:
                         pathways_matrix[other_path][current_path] += 1
                     except:
-                        stderr.write("Pathways " + current_path + " or " + other_path + " not found at pathways_all.list. Updating common KEGG information may solve this issue. Reinstall this specie after that.\n")
+                        # Counted, not printed. This fires once per pathway PAIR, so a
+                        # single species emitted 235 copies of the same 140-character
+                        # sentence -- 33 KB, and the largest single contributor to
+                        # install.log. The advice in it is identical every time; what an
+                        # operator needs is the count and one example.
+                        UNKNOWN_PATHWAY_PAIRS.append((current_path, other_path))
 
 
     # Free memory
@@ -2831,8 +3071,9 @@ def generatePathwaysNetwork(ALL_PATHWAYS):
                 try:
                     NODES[previous_pathway]["data"]["total_features"] += nGenes
                 except:
-                    stderr.write("No nodes information for Pathway " + previous_pathway + ".\n")
-                    stderr.write("Updating the installed common KEGG information may solve this issue. Reinstall this species after that.\n")
+                    # Same aggregation as above: one line per pathway, same advice each
+                    # time. Reported once, with a count, by summarisePathwayGaps().
+                    PATHWAYS_WITHOUT_NODES.append(previous_pathway)
                 nGenes=0
             nGenes+=1
             previous_pathway = path_id
@@ -2915,6 +3156,13 @@ def printResults():
         stderr.write("\nERRONEOUS in print result: " + str(key) )
 
 def dumpDatabase():
+    # Every species build funnels through here, so this is the one place that can
+    # decide whether what was assembled is worth installing. Both calls are cheap and
+    # neither touches the database -- assertInstallable raises before anything is
+    # written if the result would be unusable.
+    summariseBuild()
+    assertInstallable()
+
     #STEP1. GENERATE THE TABLE feature id --> [transcripts ids]
 
     # Remove the file if already exists to avoid adding
@@ -2925,8 +3173,11 @@ def dumpDatabase():
         os.remove(dump_xref_file)
 
     # To avoid depleting the ram completely, repeat the process for each database
+    orphanFeatures = 0
+
     for dbid, db_values in transcript2xref.items():
-        stderr.write("\nDumping database " + str(dbid))
+        if VERBOSE:
+            stderr.write("\nDumping database " + str(dbid))
 
         xref2xref = defaultdict(list)
 
@@ -2946,9 +3197,18 @@ def dumpDatabase():
             if(len(item["mates"])> 0):
                 file.write(json.dumps(item, separators=(',',':')) + "\n")
             else:
-                stderr.write("No transcripts detected for " + elem.display_id + " ["+ elem.description + "]\n")
+                # One line per unlinked feature was the single largest contributor to
+                # install.log. It is a normal outcome for tens of thousands of features,
+                # so count it and report the total once.
+                orphanFeatures += 1
+                if VERBOSE:
+                    stderr.write("No transcripts detected for " + elem.display_id + " ["+ elem.description + "]\n")
 
         file.close()
+
+    if orphanFeatures:
+        stderr.write("\n  note: %d feature(s) had no linked transcript and were not dumped "
+                     "(set PAINTOMICS_INSTALL_VERBOSE=1 to list them)\n" % orphanFeatures)
 
     #STEP 2. DUMP THE transcript2xref TABLE INTO A FILE
     file = open("/tmp/dbname.tmp", 'w')
@@ -3680,6 +3940,25 @@ MAPMAN_COMPOUNDS = {}
 #OTHER AUXILIAR TABLES OR VARIABLES
 TOTAL_FEATURES = {}
 FAILED_LINES = {}
+
+# Optional inputs that were absent or unusable. A species is built from a dozen
+# independent sources and most of them only contribute one identifier type, so a
+# missing one costs that type and nothing else -- it is not a reason to abandon an
+# organism that would otherwise install. Each skip is recorded here with the
+# consequence spelled out, reported in the build summary, and re-raised as a hard
+# failure ONLY if what survives is unusable (see assertInstallable).
+SKIPPED_SOURCES = []
+
+# Set PAINTOMICS_INSTALL_VERBOSE=1 to restore the per-row progress bars and the
+# per-feature "no transcripts" lines. The default is a summary: the old output was
+# tens of MB of carriage returns per species, which buried the few lines that matter.
+VERBOSE = os.environ.get("PAINTOMICS_INSTALL_VERBOSE", "0") == "1"
+
+# Pathways referenced by the species data but absent from the shared KEGG reference.
+# Both used to print a full sentence of identical advice per occurrence; they are
+# aggregated and reported once by summarisePathwayGaps().
+UNKNOWN_PATHWAY_PAIRS = []
+PATHWAYS_WITHOUT_NODES = []
 
 
 DATA_DIR = ""

@@ -12,7 +12,8 @@ import os
 #     os.environ["PATH"] = os.path.join(VENV_DIR, "bin") + os.pathsep + os.environ.get("PATH", "")
 #     os.execv(VENV_PYTHON, [VENV_PYTHON] + sys.argv)
 
-import datetime, traceback, shutil, inspect
+import datetime, traceback, shutil, inspect, tempfile
+import json
 import logging
 import logging.config
 import requests
@@ -30,6 +31,10 @@ from conf.serverconf import KEGG_DATA_DIR, CLIENT_TMP_DIR, DOWNLOAD_DELAY_1, DOW
 from scripts.downloadReactome import *
 
 VERSION = 0.12
+
+# Degradations that did not stop an install, collected so the run ends with one
+# readable list instead of leaving them scattered through a multi-hour log.
+INSTALL_WARNINGS = []
 
 
 # ------------------------------------------------------------------------------------------
@@ -257,7 +262,32 @@ def download_command(inputfile=None, specie=None, kegg=0, mapping=0, common=0, r
 
             if reactome:
                 log("STEP " + str(currentStep) + " Extra. DOWNLOADING REACTOME Files...")
-                downloadReactome(specie)
+                try:
+                    downloadReactome(specie)
+                except Exception as reactomeError:
+                    # Coverage is a fact about Reactome's current release, not an
+                    # error in this run: ptr (chimpanzee) has zero rows in the
+                    # 2026 ReactomePathwaysRelation dump while 15 other species
+                    # keep theirs. A species Reactome no longer projects onto
+                    # installs KEGG-only (the build already fail-softs on the
+                    # missing reactome directory); everything else - network
+                    # failures mid-crawl included - still fails the species so a
+                    # transient error cannot silently strip Reactome from it.
+                    if "No pathway relations found" in str(reactomeError):
+                        log("        WARNING: " + str(reactomeError).splitlines()[0])
+                        log("        -> Reactome's current release does not cover this organism; continuing with KEGG data only.")
+                        # Record the drop in the staged tree itself. The
+                        # promotion guard reads this marker to let the install
+                        # retire the previously installed Reactome artifacts
+                        # (which this tree legitimately lacks) instead of
+                        # refusing the whole species -- without it, the
+                        # KEGG-only outcome promised above was unreachable for
+                        # any species previously installed WITH Reactome.
+                        with open(datadir + REACTOME_NOT_COVERED_MARKER, 'w') as marker:
+                            marker.write("# Reactome release does not cover this organism. Recorded: " +
+                                         strftime("%Y%m%d %H%M") + "\n")
+                    else:
+                        raise
 
             # STEP 2.B.1 IF USER SPECIFIED THAT KEGG DATA SHOULD BE DOWNLOADED, DOWNLOAD THE KEGG DATA, OTHERWISE COPY PREVIOUS DATA (IF EXISTS)
             # 2 = updateKegg, 3 = updateKegg && updateMapping
@@ -352,19 +382,28 @@ def download_command(inputfile=None, specie=None, kegg=0, mapping=0, common=0, r
         exit(0)
 
 
-def install_command(inputfile=None, specie=None, common=0, hub=1):
+def install_command(inputfile=None, specie=None, species=None, common=0, hub=1, reinstall=0):
     """
     Install the information for given species
     Usage: AdminTools.py install <options>
     Examples:
               ./DBManager.py install --specie=mmu --common=0 --hub=1
+              ./DBManager.py install --species=hsa,mmu,ath --common=0 --hub=0
+              ./DBManager.py install --species=hsa,mmu --reinstall=1
 
     Keyword arguments:
-        from_file -- a file containing a list of a list of species IDs (one per line) to be installed
-        specie    -- a valid KEGG specie code e.g. mmu, hsa
+        inputfile -- a file containing a list of species IDs (one per line) to be installed
+        specie    -- a single valid KEGG specie code e.g. mmu, hsa
+        species   -- a comma-separated list of species codes, e.g. hsa,mmu,ath
         common    -- (optional) 1 if Pathways info (classification, PNG images...) should be reinstalled, 0 to keep from previous version. Default=0
+        hub       -- (optional) 1 to build the hub-analysis data. Default=1
+        reinstall -- (optional) 1 to rebuild from the data already in current/ without
+                     promoting anything from download/. Default=0
+
+    A species whose data is missing is skipped with a warning rather than ending the
+    run, so one absent organism cannot cost a batch the other nineteen.
     """
-    if inputfile == None and specie == None:
+    if inputfile == None and specie == None and species == None:
         print("Organisms not specified, please type ./DBManager.py install -h for help")
         exit(-1)
 
@@ -404,10 +443,22 @@ def install_command(inputfile=None, specie=None, common=0, hub=1):
 
     INSTALLED_SPECIES = []
     ERRONEOUS_SPECIES = []
+    SKIPPED_SPECIES = []
 
     SPECIES_INSTALL = None
     if inputfile != None:
         SPECIES_INSTALL = readFile(inputfile)  # THE IDS FOR THE SPECIES TO UPDATE
+    elif species != None:
+        # Comma-separated list. Order is preserved so a run reads the way it was asked
+        # for, and duplicates collapse rather than installing the same species twice.
+        SPECIES_INSTALL = {}
+        for code in str(species).split(","):
+            code = code.strip()
+            if code:
+                SPECIES_INSTALL[code] = 1
+        if not SPECIES_INSTALL:
+            print("No valid species found in --species=" + str(species))
+            exit(-1)
     else:
         SPECIES_INSTALL = {specie: 1}  # THE IDS FOR THE SPECIES TO UPDATE
 
@@ -435,19 +486,48 @@ def install_command(inputfile=None, specie=None, common=0, hub=1):
         downloadSpecieDir = os.path.join(downloadDir, specie_to_check)
         currentSpecieDir = os.path.join(currentDataDir, specie_to_check)
 
-        # Check if data exists in either download or current directory
+        # Check if data exists in either download or current directory.
+        #
+        # Skip, do not exit. Killing the whole run for one absent species means a batch
+        # of twenty loses the nineteen that were ready -- and with --inputfile or a
+        # comma-separated list that is the normal case, not an edge case. The species is
+        # dropped from this run and named again in the closing summary.
+        # --reinstall builds from current/ only, so that is the directory that has to
+        # exist; a staged download is irrelevant to it.
+        if reinstall and not os.path.isdir(currentSpecieDir):
+            msg = (f"'{specie_to_check}' is not installed ({currentSpecieDir} does not "
+                   f"exist), so there is nothing to reinstall -- run install first")
+            log("WARNING: " + msg)
+            summary.write(f"{specie_to_check}\tREINSTALL\tSKIPPED\tnot installed\n")
+            INSTALL_WARNINGS.append((specie_to_check, msg))
+            SKIPPED_SPECIES.append(specie_to_check)
+            continue
+
         if not os.path.isdir(downloadSpecieDir) and not os.path.isdir(currentSpecieDir):
-            error_msg = f"ERROR: Cannot find data for species '{specie_to_check}' in either download ({downloadSpecieDir}) or current ({currentSpecieDir}) directories. Please download the species data first using the download command."
-            log(error_msg)
-            summary.write(error_msg + '\n')
-            summary.close()
-            exit(1)
+            msg = (f"no data for '{specie_to_check}' in either {downloadSpecieDir} or "
+                   f"{currentSpecieDir} -- run the download command for it first")
+            log("WARNING: " + msg)
+            summary.write(f"{specie_to_check}\tINSTALL\tSKIPPED\tno downloaded data\n")
+            INSTALL_WARNINGS.append((specie_to_check, msg))
+            SKIPPED_SPECIES.append(specie_to_check)
+            continue
 
         # Log which directory will be used
-        if os.path.isdir(downloadSpecieDir):
+        if reinstall:
+            log(f"Species '{specie_to_check}': will rebuild in place from current/")
+        elif os.path.isdir(downloadSpecieDir):
             log(f"Species '{specie_to_check}': will use new data from download directory")
         else:
             log(f"Species '{specie_to_check}': will reinstall using existing data from current directory")
+
+    # Drop the skipped ones so the install loop below never sees them.
+    for skipped in SKIPPED_SPECIES:
+        SPECIES_INSTALL.pop(skipped, None)
+
+    if not SPECIES_INSTALL:
+        log("Nothing to install: every requested species is missing its downloaded data.")
+        summary.close()
+        exit(1)
 
     # **************************************************************************
     # STEP 2. INSTALLING KEGG GLOBAL/HUB DATA
@@ -559,16 +639,21 @@ def install_command(inputfile=None, specie=None, common=0, hub=1):
                 log("STEP EXTRA: [" + hubSpecie + "] Hub data staged in the download directory; "
                     "the species install below moves it into current/.")
     except Exception as e:
-        log("        FAILED WHILE INSTALLING HUB ANALYSIS INFORMATION. UNABLE TO CONTINUE. ABORTING!!")
-        summary.write('FAILED WHILE INSTALLING HUB ANALYSIS INFORMATION. UNABLE TO CONTINUE. ABORTING!!\n')
+        # Hub analysis is an optional panel, not the species. Aborting the whole install
+        # for it is why 170 runs in the production summary.log say "UNABLE TO CONTINUE"
+        # -- every one of those species could have been installed without it and simply
+        # shown no Hub Analysis section. Warn, drop the partial hub tree, carry on.
+        log("WARNING: hub analysis could not be built (" + str(e) + ")")
+        log("         -> the species installs WITHOUT hub data; the Hub Analysis panel "
+            "will be unavailable until it is rebuilt with --hub=1")
+        summary.write('HUB ANALYSIS SKIPPED (species still installed): ' + str(e) + '\n')
+        INSTALL_WARNINGS.append(("hub analysis", str(e)))
         # rmtree, not rmdir: rmdir cannot remove a non-empty directory, so a crash after
         # the first .RData was written left the partial tree in place and every later
         # run treated it as a finished install.
         if hubDir:
             shutil.rmtree(hubDir, ignore_errors=True)
         errorlog(e)
-        summary.close()
-        exit(1)
     # ********************************************************************************
     # STEP 2.A.1 IF WE CHOOSED TO DONWLOAD THE GENERAL DATA (PATHWAYS CLASSIFICATION, ETC.)
     # ********************************************************************************
@@ -578,6 +663,16 @@ def install_command(inputfile=None, specie=None, common=0, hub=1):
             replaceNewVersionData(downloadDir, currentDataDir, "common", oldDataDir)
             installCommonData(currentDataDir + "common/", ROOT_DIRECTORY + "AdminTools/scripts/")
             currentStep += 1
+    except PromotionRefused as e:
+        # The guard said no BEFORE anything moved: current/common and the
+        # database are untouched, so there is nothing to restore -- and the
+        # restore below would promote the stale old/common archive over the
+        # healthy installed one. Report the refusal and stop.
+        log("        REFUSED TO INSTALL COMMON INFORMATION -- the installed data was left untouched. ABORTING!!")
+        summary.write('REFUSED TO INSTALL COMMON INFORMATION (installed data left untouched): ' + str(e) + '\n')
+        errorlog(e)
+        summary.close()
+        exit(1)
     except Exception as e:
         # TODO: RESTORE
         restorePreviousVersionData(oldDataDir, currentDataDir, "common", downloadDir + "error/")
@@ -620,33 +715,70 @@ def install_command(inputfile=None, specie=None, common=0, hub=1):
             # Lift it out, move the species, then put it back. The two are now independent:
             # the species move only ever sees real species data, and hub data cannot be
             # destroyed by it.
-            stagedHubDir = os.path.join(downloadDir, specie, "hubData")
-            heldHubDir = None
-            if hub_data_is_complete(stagedHubDir):
-                heldHubDir = os.path.join(downloadDir, "_hub_hold_" + specie)
-                if os.path.isdir(heldHubDir):
-                    shutil.rmtree(heldHubDir, ignore_errors=True)
-                shutil.move(stagedHubDir, heldHubDir)
-                # A download/<specie> left holding nothing must not trigger a move at all.
-                stagedSpecieDir = os.path.join(downloadDir, specie)
-                if os.path.isdir(stagedSpecieDir) and not os.listdir(stagedSpecieDir):
-                    os.rmdir(stagedSpecieDir)
+            # --reinstall rebuilds the database from what is already in current/ and
+            # touches no directories at all: nothing is promoted, archived, or moved.
+            # That is the whole point -- re-running a build after a code fix should not
+            # risk the installed data, and should not need the download tree to exist.
+            if reinstall:
+                log("        REINSTALL: rebuilding from " + dirNameAux + " (no species data is moved)")
+                # ...with one exception. The hub step above always stages into
+                # download/<specie>/hubData and relies on the species move to carry it
+                # across -- a move reinstall deliberately skips. Without this, a
+                # `reinstall --hub=1` builds the hub data, leaves all 1,637 files in
+                # download/, and reports SUCCESS with nothing installed.
+                stagedHubDir = os.path.join(downloadDir, specie, "hubData")
+                if hub_data_is_complete(stagedHubDir):
+                    installedHubDir = os.path.join(currentDataDir, specie, "hubData")
+                    if os.path.isdir(installedHubDir):
+                        shutil.rmtree(installedHubDir, ignore_errors=True)
+                    shutil.move(stagedHubDir, installedHubDir)
+                    log("        Hub analysis data installed into " + installedHubDir)
+            else:
+                stagedHubDir = os.path.join(downloadDir, specie, "hubData")
+                heldHubDir = None
+                if hub_data_is_complete(stagedHubDir):
+                    heldHubDir = os.path.join(downloadDir, "_hub_hold_" + specie)
+                    if os.path.isdir(heldHubDir):
+                        shutil.rmtree(heldHubDir, ignore_errors=True)
+                    shutil.move(stagedHubDir, heldHubDir)
+                    # A download/<specie> left holding nothing must not trigger a move at all.
+                    stagedSpecieDir = os.path.join(downloadDir, specie)
+                    if os.path.isdir(stagedSpecieDir) and not os.listdir(stagedSpecieDir):
+                        os.rmdir(stagedSpecieDir)
 
-            replaceNewVersionData(downloadDir, currentDataDir, specie, oldDataDir)
-
-            if heldHubDir:
-                installedHubDir = os.path.join(currentDataDir, specie, "hubData")
-                if os.path.isdir(installedHubDir):
-                    shutil.rmtree(installedHubDir, ignore_errors=True)
-                os.makedirs(os.path.dirname(installedHubDir), exist_ok=True)
-                shutil.move(heldHubDir, installedHubDir)
-                log("        Hub analysis data installed into " + installedHubDir)
+                # try/finally, because the restore has to happen on the failure path too.
+                # Without it, a promotion that raises between the two moves leaves the
+                # hub data orphaned in download/_hub_hold_<specie> and absent from
+                # current/ -- found as a real 60 MB directory stranded by an install that
+                # the guard had refused hours earlier.
+                try:
+                    replaceNewVersionData(downloadDir, currentDataDir, specie, oldDataDir)
+                finally:
+                    if heldHubDir and os.path.isdir(heldHubDir):
+                        installedHubDir = os.path.join(currentDataDir, specie, "hubData")
+                        if os.path.isdir(installedHubDir):
+                            shutil.rmtree(installedHubDir, ignore_errors=True)
+                        os.makedirs(os.path.dirname(installedHubDir), exist_ok=True)
+                        shutil.move(heldHubDir, installedHubDir)
+                        log("        Hub analysis data installed into " + installedHubDir)
 
             installSpecieData(specie, installLog, dirNameAux, str(step) + "/" + total,
                               ROOT_DIRECTORY + "AdminTools/scripts/")
             INSTALLED_SPECIES.append(specie)
             summary.write(specie + '\tINSTALL\tSUCCESS\t' + str(SPECIES_INSTALL[specie]) + '\n')
             log("INSTALL  " + str(SPECIES_INSTALL[specie]) + " " + specie + "...SUCCESS\n")
+        except PromotionRefused as e:
+            # Nothing moved and Mongo was never touched: the species is exactly
+            # as installed. The rollback below would promote the stale
+            # old/<specie> archive over the intact installation and rebuild the
+            # database from it -- a silent one-version regression triggered by
+            # nothing more than a stale download directory -- so a refusal is
+            # reported and the installed data left alone.
+            summary.write(specie + '\tINSTALL\tREFUSED\t' + str(SPECIES_INSTALL[specie]) + '\n')
+            log("INSTALL  " + str(SPECIES_INSTALL[specie]) + " " + specie +
+                "...REFUSED (installed data left untouched)\n")
+            errorlog(e)
+            ERRONEOUS_SPECIES.append(specie)
         except Exception as e:
             restorePreviousVersionData(oldDataDir, currentDataDir, specie, downloadDir + "error/")
             installSpecieData(specie, installLog, dirNameAux, str(step) + "/" + total,
@@ -675,6 +807,29 @@ def install_command(inputfile=None, specie=None, common=0, hub=1):
     # **************************************************************************
     log("")
     log("STEP " + str(currentStep) + ". CLOSING LOG FILES, GENERATING VERSION FILE")
+
+    # One readable block at the end. A multi-species run previously left the operator to
+    # reconstruct what happened by reading the whole log; the three lists below are the
+    # answer to "what do I have now, and what do I need to go back for".
+    # Assembled first, then emitted in one loop. log() derives its indentation from the
+    # source line's own indentation, so emitting these from inside an if/for staircases
+    # the output; building the lines up front keeps the block aligned.
+    summaryLines = ["", "=" * 62, "INSTALL SUMMARY", "=" * 62,
+                    "  installed : %d  %s" % (len(INSTALLED_SPECIES), " ".join(INSTALLED_SPECIES) or "-"),
+                    "  failed    : %d  %s" % (len(ERRONEOUS_SPECIES), " ".join(ERRONEOUS_SPECIES) or "-"),
+                    "  skipped   : %d  %s" % (len(SKIPPED_SPECIES), " ".join(SKIPPED_SPECIES) or "-")]
+
+    if INSTALL_WARNINGS:
+        summaryLines.append("  warnings  : %d (installed anyway)" % len(INSTALL_WARNINGS))
+        summaryLines.extend("      %s: %s" % (subject, detail) for subject, detail in INSTALL_WARNINGS)
+    else:
+        summaryLines.append("  warnings  : none")
+
+    summaryLines.append("=" * 62)
+
+    for summaryLine in summaryLines:
+        log(summaryLine)
+
     summary.close()
 
     version = open(currentDataDir + 'VERSION', 'a')
@@ -745,7 +900,24 @@ def findolder_command(nDays):
 # ---  AUXILIAR FUNCTIONS                                                               ----
 # ------------------------------------------------------------------------------------------
 
-def replaceNewVersionData(origin, destination, dirname, backup_dir):
+# Written into download/<specie>/ when the Reactome crawl discovers the current
+# release no longer projects onto the organism; read by the promotion guard below.
+REACTOME_NOT_COVERED_MARKER = "REACTOME_NOT_COVERED"
+
+
+class PromotionRefused(Exception):
+    """The never-lose-files guard vetoed a promotion BEFORE anything moved.
+
+    This must stay distinguishable from a failure that happened mid-install:
+    on a refusal, current/<dirname> and the imported database are exactly as
+    they were, so the install_command failure path has nothing to roll back --
+    and rolling back anyway would promote the stale old/<dirname> archive over
+    a healthy installation and rebuild Mongo from it, silently regressing the
+    species one version.
+    """
+
+
+def replaceNewVersionData(origin, destination, dirname, backup_dir, isRestore=False):
     """
     Replace data in destination with data from origin.
     If origin data doesn't exist, check if we're doing a reinstall (data already in destination).
@@ -772,12 +944,49 @@ def replaceNewVersionData(origin, destination, dirname, backup_dir):
     #
     # Refuse instead. Deleting a known-stale download to proceed is a decision an admin
     # can make in one command; recovering silently archived data is not.
-    if os.path.isdir(source_path) and os.path.isdir(dest_path):
+    if os.path.isdir(source_path) and os.path.isdir(dest_path) and not isRestore:
         sourceFiles = set(os.listdir(source_path))
         destFiles = set(os.listdir(dest_path))
-        missing = destFiles - sourceFiles
+        # hubData is deliberately kept OUT of the download tree (see the species move
+        # below), so it is missing from every staged directory by design. Counting it
+        # here made this guard fire on every reinstall of a species that has hub data --
+        # 87 of the 105 installed species -- which blocked reinstalling any of them.
+        #
+        # The named files below are in the same class for the same reason: they are
+        # GENERATED by the build that runs after this promotion (mergeNetworkFiles and
+        # the Reactome/MapMan pathway processing write them into current/<specie>), so
+        # no download directory ever contains them and comparing them here refused
+        # every reinstall of an installed species. Verified against a fresh
+        # `download --kegg=1 --mapping=1 --reactome=1` of sce on 2026-08-13: the run
+        # imported the new database, then this guard refused the file promotion and
+        # the species was reported FAILED with its fresh downloads stranded.
+        # The previous versions are not lost by exempting them: the promotion archives
+        # the whole installed directory under old/ before the build regenerates them.
+        GENERATED_AT_BUILD = {
+            "hubData",
+            "pathways_network.json",
+            "REACTOME_VERSION", "gene2pathway_reactome.list",
+            "pathways_network_Reactome.json",
+            "MAPMAN_VERSION", "MAPMAN_MAPPING", "gene2pathway_mapman.list",
+            "pathways_network_MapMan.json",
+        }
+        exempt = set(GENERATED_AT_BUILD)
+        # A download that discovered Reactome no longer covers this organism
+        # records the fact in its own staged tree (see download_command).
+        # Retiring the previously installed Reactome artifacts is then the
+        # POINT of the promotion, not a loss -- they are archived under old/
+        # with the rest of the tree. Without this, the coverage fail-soft was
+        # unreachable for any species previously installed WITH Reactome: the
+        # staged tree legitimately lacked reactome/ and this guard refused
+        # every install of it. The marker itself is per-download metadata, so
+        # an old marker left in the installed tree must never block a later,
+        # Reactome-carrying download either -- hence unconditionally exempt.
+        exempt.add(REACTOME_NOT_COVERED_MARKER)
+        if REACTOME_NOT_COVERED_MARKER in sourceFiles:
+            exempt |= {"reactome", "ReactomePathway.txt", "ReactomePathwayHierarchy.json"}
+        missing = destFiles - sourceFiles - exempt
         if missing:
-            raise Exception(
+            raise PromotionRefused(
                 "Refusing to install '" + dirname + "': the download directory is missing " +
                 str(len(missing)) + " file(s) that the installed one has, so promoting it "
                 "would delete them (" + ", ".join(sorted(missing)[:6]) +
@@ -789,6 +998,24 @@ def replaceNewVersionData(origin, destination, dirname, backup_dir):
     # Check if new data exists in download directory
     if os.path.isdir(source_path):
         # We have new data to install
+
+        # Carry hub data across the move.
+        #
+        # Exempting hubData from the guard above is only half the job: the promotion
+        # archives dest_path wholesale and moves source_path into its place, so an
+        # installed hubData that the download tree does not have would be left behind in
+        # old/ -- silently, since the guard no longer objects. Verified by doing exactly
+        # that to mmu: 1,869 files, 60 MB, gone from current/ and reported as SUCCESS.
+        #
+        # Hold it aside and put it back once the new tree is in place. It is moved, not
+        # copied, so this costs nothing on the same filesystem.
+        heldHubData = None
+        installedHubData = os.path.join(dest_path, "hubData")
+        if os.path.isdir(installedHubData) and not os.path.isdir(os.path.join(source_path, "hubData")):
+            heldHubData = os.path.join(os.path.dirname(dest_path), "_hubdata_hold_" + dirname)
+            if os.path.isdir(heldHubData):
+                shutil.rmtree(heldHubData, ignore_errors=True)
+            shutil.move(installedHubData, heldHubData)
 
         # 1. Handle Backup: If destination exists, move it to backup
         if os.path.exists(dest_path):
@@ -815,6 +1042,12 @@ def replaceNewVersionData(origin, destination, dirname, backup_dir):
             
         # Move source to destination
         shutil.move(source_path, dest_path)
+
+        # Put the held hub data back into the freshly promoted tree.
+        if heldHubData:
+            shutil.move(heldHubData, os.path.join(dest_path, "hubData"))
+            log(f"Preserved existing hub data for {dirname} across the update")
+
         log(f"Installed new data for {dirname}")
         
     elif os.path.isdir(dest_path):
@@ -870,8 +1103,38 @@ def hub_data_is_complete(path):
     return any(entry.endswith(".RData") for entry in entries)
 
 
+def reinstall_command(species=None, specie=None, inputfile=None, common=0, hub=0):
+    """
+    Rebuild the database for species that are already installed, without downloading.
+    Usage: AdminTools.py reinstall <options>
+    Examples:
+              ./DBManager.py reinstall --species=hsa,mmu,ath
+              ./DBManager.py reinstall --specie=ath --hub=1
+              ./DBManager.py reinstall --inputfile=species.txt
+
+    Reads only from KEGG_DATA/current/<specie>/ and moves nothing: no promotion from
+    download/, no archiving under old/. Use it after fixing build code, or to pick up a
+    parser change, without re-fetching gigabytes that have not changed.
+
+    A species that is not installed is skipped with a warning; the rest still run.
+    `hub` defaults to 0 here because rebuilding hub data is the slow part and is rarely
+    what you want from a re-run -- pass --hub=1 to include it.
+    """
+    if species == None and specie == None and inputfile == None:
+        print("Organisms not specified, please type ./DBManager.py reinstall -h for help")
+        exit(-1)
+
+    return install_command(inputfile=inputfile, specie=specie, species=species,
+                           common=common, hub=hub, reinstall=1)
+
+
 def restorePreviousVersionData(origin, destination, dirname, backup_dir):
-    replaceNewVersionData(origin, destination, dirname, backup_dir)
+    # A restore intentionally rolls back to an OLDER tree, which may lack files
+    # the failed newer install had (pfa's pre-Reactome archive vs its fresh
+    # download, observed 2026-08-13: the never-lose-files guard vetoed the
+    # rollback and the failure path itself failed). Losing the newer files is
+    # the point of a rollback, so the guard does not apply here.
+    replaceNewVersionData(origin, destination, dirname, backup_dir, isRestore=True)
 
 def downloadKEGGOrganismList(message, logFile, dirName, fileName, delay, maxTries):
     """
@@ -1030,6 +1293,7 @@ def downloadKEGGFile(message, logFile, URL, dirName, fileName, delay, maxTries):
     log(message)
 
     nTry = 1
+    lastError = None
     while nTry <= maxTries:
         wait(delay)
         try:
@@ -1065,11 +1329,24 @@ def downloadKEGGFile(message, logFile, URL, dirName, fileName, delay, maxTries):
             with open(logFile, 'a') as log_file:
                 log_file.write(f"{strftime('%Y-%m-%d %H:%M:%S')} - Error downloading {fileName}: {str(e)}\n")
 
+            lastError = e
+            # A 400 is KEGG's contract answer -- "this list/conversion does not
+            # exist" -- not a transient fault, so retrying it can never succeed.
+            # Stop immediately and let the caller classify it; the retries were
+            # pure added latency on every organism KEGG does not fully cover.
+            status = getattr(getattr(e, "response", None), "status_code", None)
+            if status == 400:
+                break
             # Only log "Trying again" if we actually will try again
             if nTry < maxTries:
                 errorlog("FAIL! Trying again... " + str(nTry + 1) + " of " + str(maxTries))
             nTry += 1
-    raise Exception('Unable to retrieve ' + fileName + " from " + URL)
+    # The cause must ride in the exception text, not only in the log file:
+    # getSpecieMappingData decides whether a failure is permanent ("400 Client
+    # Error" = KEGG does not offer this conversion) by reading str(e), and the
+    # old bare message hid the status - bvu's 400 was retried and then failed
+    # the species even after the 400-as-absence handling landed.
+    raise Exception('Unable to retrieve ' + fileName + " from " + URL + ": " + str(lastError))
 
 
 def getSpecieKeggData(specie, downloadLog, dirName, step):
@@ -1153,40 +1430,55 @@ def getSpecieMappingData(specie, downloadLog, dirName, step, scriptsDir):
 
         # we tolerate that some of the files fail on download
         error_tolerance = 3
-        try:
-            downloadKEGGFile("             * KEGG TO NCBI GeneID", downloadLog,
-                             "https://rest.kegg.jp/conv/" + specie + "/ncbi-geneid", dirName, "ncbi-geneid2kegg.list",
-                             DOWNLOAD_DELAY_1, MAX_TRIES_1)
-        except Exception as e:
-            error_tolerance -= 1;
-            mapping_errors += " ncbi-geneid"
-            if error_tolerance == 0:
-                raise Exception(
-                    "Too many errors while downloading the KEGG mapping files for organism " + specie + ": " + mapping_errors)
-            log("                       Failed!! The download process will continue...")
 
-        try:
-            downloadKEGGFile("             * KEGG TO Uniprot", downloadLog,
-                             "https://rest.kegg.jp/conv/" + specie + "/uniprot", dirName, "uniprot2kegg.list",
-                             DOWNLOAD_DELAY_1, MAX_TRIES_1)
-        except Exception as e:
-            error_tolerance -= 1;
-            mapping_errors += " uniprot2kegg"
-            if error_tolerance == 0:
-                raise Exception(
-                    "Too many errors while downloading the KEGG mapping files for organism " + specie + ": " + mapping_errors)
-            log("                       Failed!! The download process will continue...")
+        # A mapping list KEGG does not offer for this organism answers HTTP 400.
+        # That is a contract answer, not a transient failure: dosa (rice, keyed
+        # by RAP-DB ids) gets 400 for /conv/dosa/ncbi-geneid on every attempt,
+        # and csau's pathways and KGML download fine while /list/csau answers
+        # 400 -- a per-endpoint coverage gap, not an invalid organism (that
+        # case fails the KEGG data phase minutes earlier). Counting it as a
+        # mapping error failed the whole species at the end of the download.
+        # The build side already tolerates the file's absence
+        # (processKEGGMappingData warns "Unable to find ... MAPPING file" and
+        # continues), so absence is the correct translation of a 400 here.
+        # Transient errors keep their old accounting: they are real failures
+        # and still fail the species.
+        def keggDoesNotOfferIt(exc):
+            return "400 Client Error" in str(exc)
 
-        try:
-            downloadKEGGFile("             * KEGG TO Gene Symbol", downloadLog, "https://rest.kegg.jp/list/" + specie,
-                             dirName, "kegg2genesymbol.list", DOWNLOAD_DELAY_1, MAX_TRIES_1)
-        except Exception as e:
-            error_tolerance -= 1;
-            mapping_errors += " kegg2genesymbol"
-            if error_tolerance == 0:
-                raise Exception(
-                    "Too many errors while downloading the KEGG mapping files for organism " + specie + ": " + mapping_errors)
-            log("                       Failed!! The download process will continue...")
+        # One body for the three endpoint downloads below. This logic was
+        # copy-pasted per endpoint and the copies had already drifted in
+        # wording; any change to the classification must hit all of them.
+        def downloadMappingList(message, url, fileName, errorKey, absenceNote):
+            nonlocal error_tolerance, mapping_errors
+            try:
+                downloadKEGGFile(message, downloadLog, url, dirName, fileName,
+                                 DOWNLOAD_DELAY_1, MAX_TRIES_1)
+            except Exception as e:
+                if keggDoesNotOfferIt(e):
+                    log("                       " + absenceNote)
+                else:
+                    error_tolerance -= 1
+                    mapping_errors += " " + errorKey
+                    if error_tolerance == 0:
+                        raise Exception(
+                            "Too many errors while downloading the KEGG mapping files for organism " + specie + ": " + mapping_errors)
+                    log("                       Failed!! The download process will continue...")
+
+        downloadMappingList("             * KEGG TO NCBI GeneID",
+                            "https://rest.kegg.jp/conv/" + specie + "/ncbi-geneid",
+                            "ncbi-geneid2kegg.list", "ncbi-geneid",
+                            "KEGG offers no ncbi-geneid conversion for " + specie + " (HTTP 400); continuing without it.")
+
+        downloadMappingList("             * KEGG TO Uniprot",
+                            "https://rest.kegg.jp/conv/" + specie + "/uniprot",
+                            "uniprot2kegg.list", "uniprot2kegg",
+                            "KEGG offers no uniprot conversion for " + specie + " (HTTP 400); continuing without it.")
+
+        downloadMappingList("             * KEGG TO Gene Symbol",
+                            "https://rest.kegg.jp/list/" + specie,
+                            "kegg2genesymbol.list", "kegg2genesymbol",
+                            "KEGG offers no gene list for " + specie + " (HTTP 400); continuing without gene symbols.")
 
         # downloadKEGGFile("             * KEGG TO NCBI GI", downloadLog,  "http://rest.kegg.jp/conv/"+ specie +"/ncbi-gi", dirName, "ncbi-gi2kegg.list",  DOWNLOAD_DELAY_1, MAX_TRIES_1)
 
@@ -1198,10 +1490,58 @@ def getSpecieMappingData(specie, downloadLog, dirName, step, scriptsDir):
     return mapping_errors
 
 
+def newBuildWarningsHandoff():
+    """A private file for one species build to report its skipped sources in.
+
+    mkstemp rather than a fixed name, for three reasons. Two installs running at
+    once on the same machine wrote to the same path and read each other's
+    warnings. /tmp is world-writable and a predictable name there is a file
+    anyone can pre-create as a symlink onto something we then truncate. And a
+    fixed path has to be deleted before every build to avoid inheriting the
+    previous species' list -- a fresh file cannot be stale, so that step is gone.
+
+    Created 0600 by mkstemp and handed to the child through the environment;
+    the fd is closed immediately because only the subprocess writes to it.
+    """
+    handle, path = tempfile.mkstemp(prefix="paintomics_build_warnings_", suffix=".tsv")
+    os.close(handle)
+    return path
+
+
+def collectBuildWarnings(specie, handoffPath):
+    """Pull the sources the species build had to do without into the run summary.
+
+    The build runs as a subprocess, so without this its warnings only ever reach
+    install.log -- which is precisely the multi-MB file nobody reads to the end.
+    """
+    if not handoffPath or not os.path.isfile(handoffPath):
+        return
+    try:
+        with open(handoffPath) as handle:
+            for line in handle:
+                parts = line.rstrip("\n").split("\t")
+                if len(parts) >= 4 and parts[0] == specie:
+                    INSTALL_WARNINGS.append((specie + " / " + parts[1], parts[2] + " -> " + parts[3]))
+                    log("       ! " + parts[1] + ": " + parts[3])
+    except Exception as readError:
+        errorlog("could not read build warnings for " + specie + ": " + str(readError))
+    finally:
+        # In `finally`: a read that throws half way must not leave the file behind.
+        # A long batch would otherwise leak one per species into /tmp.
+        try:
+            os.remove(handoffPath)
+        except OSError:
+            pass
+
+
 def installSpecieData(specie, downloadLog, dirName, step, scriptsDir):
     start_time = time()
     log("                 INSTALLING MAPPING DATA FOR " + specie + " (" + step + ")...")
     downloadLogFile = open(downloadLog, 'a')
+    # Where this build reports what it had to do without. Named in the environment
+    # because check_call below passes no `env=`, so the child inherits ours.
+    handoffPath = newBuildWarningsHandoff()
+    os.environ["PAINTOMICS_BUILD_WARNINGS"] = handoffPath
 
     try:
         if os.path.isfile(scriptsDir + specie + "_resources/build_database.py"):
@@ -1231,6 +1571,12 @@ def installSpecieData(specie, downloadLog, dirName, step, scriptsDir):
         raise ex
     finally:
         downloadLogFile.close()
+        # Cleared before the read, so nothing downstream can inherit a pointer to a
+        # file collectBuildWarnings is about to delete.
+        os.environ.pop("PAINTOMICS_BUILD_WARNINGS", None)
+        # In `finally` so a species that failed still reports what it was missing --
+        # that list is usually the explanation for the failure.
+        collectBuildWarnings(specie, handoffPath)
     return True
 
 
@@ -1328,9 +1674,16 @@ def getCurrentInstalledSpecies():
                 downloaded = "downloading"
             else:
                 downloaded = False
-                # Erroneous download not removed --> remove
-                if os.path.isdir(KEGG_DATA_DIR + 'download/' + organism_code):
-                    shutil.rmtree(KEGG_DATA_DIR + 'download/' + organism_code)
+                # This used to rmtree the directory as an "erroneous download not
+                # removed". A getter must not delete: a parallel `download` process
+                # wipes and recreates download/<sp> BEFORE it writes the DOWNLOADING
+                # flag, and in that window this cleanup saw an unmarked directory and
+                # destroyed it under the running download. Observed 2026-08-13: an
+                # `install --specie=ath` deleted download/bta out from under bta's
+                # Reactome crawl (which then died on a vanished output path), and this
+                # rmtree itself crashed the whole ath install when bta's error handler
+                # moved the remains to error/ mid-delete. The download step wipes its
+                # own directory at start, so stale leftovers cost nothing by staying.
 
             databaseList.append({
                 "organism_name": organism_name,
@@ -1357,6 +1710,25 @@ def generateAvailableSpeciesFile(VALID_SPECIES, species_file, installed_species_
                 species[row[1]] = row[2]
         csvfile.close()
 
+        # Custom species (customSpeciesInstaller.py) register their display
+        # names in organisms_custom.list beside organisms_all.list, because the
+        # latter is re-downloaded from KEGG on a common refresh and would drop
+        # them. A code installed in Mongo but absent from this lookup takes the
+        # raise-branch below and aborts species.json for EVERY species, so the
+        # merge is what keeps one custom organism from poisoning every later
+        # standard install.
+        # quoting=csv.QUOTE_NONE: the display names are admin-supplied
+        # (customSpeciesInstaller validates --code but not --name), and the
+        # default dialect treats a leading double quote as a field delimiter --
+        # swallowing the tab and dropping the row, which re-triggers the
+        # every-species abort this merge exists to prevent.
+        custom_file = os.path.join(os.path.dirname(species_file), "organisms_custom.list")
+        if os.path.isfile(custom_file):
+            with open(custom_file) as fh:
+                for row in csv.reader(fh, delimiter='\t', quoting=csv.QUOTE_NONE):
+                    if len(row) >= 3:
+                        species[row[1]] = row[2]
+
         listAux = []
         for specie in VALID_SPECIES:
             if isinstance(specie, dict):
@@ -1374,7 +1746,12 @@ def generateAvailableSpeciesFile(VALID_SPECIES, species_file, installed_species_
         for i, specieCode in enumerate(VALID_SPECIES):
             name = species.get(specieCode, "")
             if name != "":
-                name = '\t{"name": "' + name + '", "value": "' + specieCode + '"}'
+                # json.dumps, not string concatenation: a quote or backslash in
+                # an admin-supplied custom species name would otherwise write an
+                # unparseable species.json and break the organism dropdown for
+                # every user (customSpeciesInstaller's own regenerate uses
+                # json.dumps for the same reason).
+                name = '\t{"name": ' + json.dumps(name) + ', "value": ' + json.dumps(specieCode) + '}'
                 if i < total - 1:
                     name += ","
                 file_content += name + '\n'

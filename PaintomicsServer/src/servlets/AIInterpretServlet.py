@@ -447,7 +447,82 @@ def _sanitizeColumnNames(rawColumns):
     return cleaned[:_EXPDESIGN_MAX_COLUMNS], dropped
 
 
-def aiGenerateExpDesign(REQUEST, RESPONSE):
+# Enough of a data file to be sure of catching its first newline; the same
+# bound the browser uses for an upload (EXP_DESIGN_HEADER_BYTES in
+# PA_Step1Views.js), so the two paths read the same amount.
+_EXPDESIGN_HEADER_BYTES = 262144
+
+
+def _looksLikeDataRow(columns):
+    """True when a file's first line is a measurement row, not a header.
+
+    Not every example file has a header: the default scenario's
+    mirna_values.tab opens directly with '<id>\\t-0.297...\\t...'. Sending that
+    line onward would put six measured values into the LLM prompt labelled as
+    column names -- exactly what the privacy contract promises never happens.
+    A header names its columns, so its labels do not parse as numbers; a data
+    row is numbers in every column after the identifier. Majority-numeric
+    decides, and the asymmetry is deliberate: wrongly skipping a header costs
+    the draft one omic's names, wrongly keeping a data row leaks values.
+    """
+    cells = [cell.strip() for cell in columns[1:] if cell.strip()]
+    if not cells:
+        return False
+    numeric = 0
+    for cell in cells:
+        try:
+            float(cell)
+            numeric += 1
+        except ValueError:
+            pass
+    return numeric * 2 >= len(cells)
+
+
+def _exampleHeaderOmics(exampleFilesDir, scenarioId):
+    """Column-header omics for an example scenario, read server-side.
+
+    The example flow disables the file pickers -- the files live in this
+    checkout, not in the browser -- so the client cannot read their header
+    rows the way it does for an upload. Reading them here keeps the privacy
+    contract unchanged: only the first row of each declared data file is
+    read, and only its column names go into the prompt; a headerless file
+    (first line already a data row) is skipped entirely.
+
+    A falsy scenarioId means the server's default scenario, exactly as the
+    bare /pa_step1/example route resolves it. An unknown id raises
+    ExampleDatasets.UnknownScenario, a UserWarning the interface renders
+    readably. A declared file that is missing or unreadable is skipped: one
+    absent omic should not cost the draft the other omics' headers.
+    """
+    from src.common import ExampleDatasets
+    scenario = ExampleDatasets.getScenario(exampleFilesDir, scenarioId or None)
+    omics = []
+    for omic in scenario.get("omics", []):
+        dataFile = omic.get("dataFile")
+        if not dataFile:
+            continue
+        path = ExampleDatasets.absolutePath(exampleFilesDir, dataFile)
+        try:
+            with open(path, "r", encoding="utf-8", errors="replace") as handle:
+                line = handle.readline(_EXPDESIGN_HEADER_BYTES)
+        except OSError:
+            continue
+        line = line.rstrip("\r\n").strip()
+        # A leading '#' marks the header row in these files; it is not part
+        # of the first column's name. Same rule the browser applies.
+        if line.startswith("#"):
+            line = line[1:]
+        if not line.strip():
+            continue
+        columns = line.split("\t") if "\t" in line else line.split(",")
+        if _looksLikeDataRow(columns):
+            continue
+        omics.append({"omicName": omic.get("omicName") or "Omic",
+                      "columns": columns})
+    return omics
+
+
+def aiGenerateExpDesign(REQUEST, RESPONSE, EXAMPLE_FILES_DIR=None):
     """Draft an experiment design description from the column headers of the
     files the user has picked, before any job exists.
 
@@ -490,6 +565,15 @@ def aiGenerateExpDesign(REQUEST, RESPONSE):
             raise UserWarning("Could not read the column headers that were sent.")
         if not isinstance(omics, list):
             raise UserWarning("Could not read the column headers that were sent.")
+
+        # A loaded example has no browser-readable files -- its pickers are
+        # disabled labels -- so the request names the scenario instead and the
+        # headers are read here, from the same files the job itself would use.
+        if not omics and formFields.get("exampleMode") == "true":
+            if not EXAMPLE_FILES_DIR:
+                raise UserWarning("This server has no example datasets configured.")
+            omics = _exampleHeaderOmics(EXAMPLE_FILES_DIR,
+                                        (formFields.get("exampleScenario") or "").strip())
 
         # Organism is a hint for the wording, never a lookup key here, so an
         # unknown code degrades to itself rather than failing the request.

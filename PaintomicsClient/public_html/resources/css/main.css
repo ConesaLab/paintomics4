@@ -547,7 +547,8 @@ a:hover {color: var(--pa-link-hover);}
    boundary, while the neutral makes 3.59. Ink #24252A is 15.29 and the
    destructive #B3261E is 6.54. */
 .mainTopToolbar .button,
-.secondTopToolbar .button {
+.secondTopToolbar .button,
+.paToolbarMiniature .button {
 	display: inline-flex;
 	align-items: center;
 	gap: 6px;
@@ -580,7 +581,8 @@ a:hover {color: var(--pa-link-hover);}
 	color: #FFFFFF;
 }
 .mainTopToolbar .button.btn-danger,
-.secondTopToolbar .button.btn-danger {
+.secondTopToolbar .button.btn-danger,
+.paToolbarMiniature .button.btn-danger {
 	background-color: #FFFFFF;
 	color: #B3261E;
 	border-color: #878787;
@@ -1042,9 +1044,13 @@ ul.submenu i.fa {
 	list-style: none;
 }
 /* 11px and tracked out: these name the columns, they are not read as content,
-   and at body size two of them would compete with the links underneath. */
+   and at body size two of them would compete with the links underneath.
+
+   No left margin: the 10px it carried parked each title between its list's
+   icon edge and its text start - on neither. The list items hang their icons
+   at the column's own edge, and that edge is the one rail the column has. */
 .navPanel-title {
-	margin: 0 0 6px 10px;
+	margin: 0 0 6px;
 	font-size: 11px;
 	font-weight: 600;
 	letter-spacing: 0.06em;
@@ -2633,6 +2639,70 @@ div.checkbox label, div.radio label {
 	padding-left: 0;
 }
 
+/* One rail for both controls, and a hanging indent for either ----------------
+   Two faults, one shape, and they were most visible in the network's Tools
+   column where radios and checkboxes are stacked in the same panel.
+
+   The first is that they did not share a left edge. The drawn box is an inline
+   `:before` at the start of the label's first line, so where the control lands
+   is whatever padding the label carries: 23px for a radio (the rule further up)
+   and 0 for a checkbox (the rule directly above). In the KEGG Tools panel that
+   put "Classification" and "Gene expression" 23px right of "Show all node
+   labels" and of every `h5` heading they sit under - a stagger with nothing
+   choosing it, in a column 214px wide.
+
+   The second is what happens when a label wraps. With the box in the first
+   line's flow, every line after the first starts at the label's content edge -
+   which is exactly where the box is - so "Linked biological / processes" put
+   "processes" underneath the radio, and "Calculate layout on / background",
+   "Always use combined p- / value" and "Shared biological / features" all did
+   the same. A wrapped line running under its own control is the one alignment
+   error a reader cannot read past, because it breaks the column that says which
+   words belong to which box.
+
+   `padding-left` plus a negative `text-indent` of the same size fixes both at
+   once: the first line is pulled back so the box sits on the container's rail,
+   and every line - first or wrapped - starts at the content edge just past it.
+   23px is the box (16px) and its gap (7px), from the `:before` rule above.
+
+   Deliberately not `display: flex` on the label, which would give the same two
+   columns without arithmetic: these labels also hold inline `<b>`/`<i>` runs,
+   and under flex each becomes its own flex item, which breaks the sentence into
+   separately-wrapping boxes. Deliberately not `position: absolute` on the box
+   either - inline is what keeps it on the first line's baseline through the
+   `vertical-align: -3px` above, at whatever font size the call site uses. */
+div.radio input[type='radio'] + label,
+div.checkbox:not(.nobox) input[type='checkbox'] + label {
+	display: block;
+	padding-left: 23px;
+	text-indent: -23px;
+}
+/* `viewbox` draws an eye glyph 23px wide and keeps the 7px gap, so its hang is
+   30px, not 23. Sharing the number would have left its wrapped lines 7px shy of
+   its first one - a smaller version of the same fault. */
+div.checkbox.viewbox input[type='checkbox'] + label {
+	padding-left: 30px;
+	text-indent: -30px;
+}
+/* `text-indent` is inherited and applies to the first line of every block box
+   inside, so a label's own block children would each be pulled 23px left. Three
+   of the checkboxes in the Tools panel carry their hint that way ("Disable the
+   auto-layout for network."), and without this reset the hint gained the
+   outdent that belongs to the control. Inline children need no reset - the
+   property does nothing to them. */
+div.radio > label > *,
+div.checkbox > label > * {
+	text-indent: 0;
+}
+/* The drawn box is itself an inline-block, so it inherits the outdent and
+   applies it to its own content. The plain checkbox and radio draw an empty
+   box and do not notice; `viewbox` draws a Font Awesome eye, which the outdent
+   would have carried 30px out of the control it belongs to. */
+div.checkbox input[type='checkbox'] + label:before,
+div.radio input[type='radio'] + label:before {
+	text-indent: 0;
+}
+
 /* Sliders ---------------------------------------------------------------------
    The seven sliders in the network's settings column, and the cluster-count one
    beside them, were jQuery UI's stock 2009 widget: a 1px #ddd frame around an
@@ -2943,7 +3013,7 @@ div.availableOmicsBox h4 {
    the vertical misalignment visible in the screenshots. inline-flex with
    `align-items: center` centres the two against each other and needs no magic
    number, so it stays right if either the icon or the label changes size. */
-#download_mapping_file, #paint_link {
+#download_mapping_file {
 	display: inline-flex;
 	align-items: center;
 	gap: 8px;
@@ -2955,7 +3025,7 @@ div.availableOmicsBox h4 {
 /* One step down and unbolded: the glyph is a cue for the label, not a second
    voice at the same weight. `line-height: 1` because Font Awesome's own is
    what would otherwise push it off the centre the flex box just established. */
-#download_mapping_file > i, #paint_link > i {
+#download_mapping_file > i {
 	font-size: 14px;
 	font-weight: 400;
 	line-height: 1;
@@ -2965,11 +3035,35 @@ div.availableOmicsBox h4 {
    is written inside the paragraph that introduces it, and `div.contentbox p`
    has already applied --pa-card-inset to that paragraph - so the margin landed
    on top of it and the link sat 52px in, 26px right of every other line in the
-   card. Measured: x=182.4 against a rail at 156.4. */
-div.contentbox p > #download_mapping_file,
-div.contentbox p > #paint_link {
+   card. Measured: x=182.4 against a rail at 156.4.
+
+   #paint_link is no longer in these rules: it is a real .button in the summary
+   band's heading row now (see "The summary band" further down). */
+div.contentbox p > #download_mapping_file {
 	margin-left: 0;
 	margin-right: 0;
+}
+/* The mapping-statistics section, revealed by "Show mapping" on Step 3.
+
+   Three faults in one card, all measured against its own contents: the ExtJS
+   vbox honors a 10px side margin every sibling section carries and this one
+   lacked, so its border sat 10px left of every other card on the page; and
+   its title and download link took --pa-card-inset (26px) while the omic
+   summary cards below them sit at the .omicbox margin (11px with the border).
+   A title over a stack of cards pads to the cards' edge - the same answer
+   "Selected omics" gives on the upload form - so the title and the link come
+   to the cards rather than four cards moving 15px for one line of type. */
+#statsViewContainer {
+	margin-left: 10px;
+	margin-right: 10px;
+}
+#statsViewContainer h2 {
+	padding-left: 11px;
+	padding-right: 11px;
+}
+#statsViewContainer > div > #download_mapping_file {
+	margin-left: 11px;
+	margin-right: 11px;
 }
 #dbs_message, #clusternumber_box, #threshold_box {
 	margin: 10px 0;
@@ -2998,7 +3092,12 @@ div.contentbox p > #paint_link {
    prose in these two cards sat 20px to the right of their own h2 and of every
    other paragraph on the page. */
 #clusternumber_box p, #threshold_box p {
-	margin: 20px 0;
+	/* 14px, not 20: the sibling "Multiple databases used" card leaves its
+	   first paragraph on the browser's default 1em margin, and the two
+	   cards' headings end on exactly the same line - so the 6px extra here
+	   was the whole reason these cards' opening lines sat on different
+	   baselines across one row. */
+	margin: 14px 0;
 }
 /* Each database gets a name, a paragraph about it, and the table of what
    matched in it. The table is the answer the card exists to give, so it is
@@ -3100,11 +3199,11 @@ div.contentbox p > #paint_link {
 	text-align: center;
 }
 
-div[id ^= "pathwayNetworkBox_"].fullscreen {
-	background-color: white;
-	width: 100%;
-	height: 100% !important;
-}
+/* `div[id^="pathwayNetworkBox_"].fullscreen` stood here and had never once
+   applied: nothing in the application adds a `fullscreen` class, and the old
+   full-screen path went through the native API, which sets a `:fullscreen`
+   pseudo-class instead. The rules that do the work now are `.paNetExpanded`,
+   further down this file with the rest of the network layout. */
 
 /* Column headers used to be rotated - 45 degrees for the p-value columns and a
    full 90 for the narrow count columns - because at the old width there was no
@@ -3216,22 +3315,287 @@ span.networkClusterImage.disabled > i {display:block;}
    what mmu and most of the example datasets produce. */
 div[id ^= "networkview_"] { max-width:1800px; margin: 5px 0; }
 div[id ^= "networkClustersContainer_"], div[id ^= "patwaysDetailsWrapper_"]{overflow-y:auto; overflow-x: hidden; padding: 2px 10px;}
-/* The Tools and Details columns beside the pathways network.
-   260px and 270px - two different widths for two panels standing side by side,
-   which is the kind of near-miss that reads as a mistake even when nobody can
-   say what is wrong. Together with their gutters they took 550px of a 1114px
-   row, so the graph they annotate got less than half the card it lives in.
 
-   216px each is the width of the MORE network's side panel one card below, so
-   the three annotation columns on this page are now one measurement, and the
-   diagram gets 662px instead of 564.
+/* The pathway explorer card ---------------------------------------------------
+   One card per database, holding what used to be four: the classification
+   panel, the network panel, and the network's "Tools" and "Details" panels. See
+   the note in PA_Step3JobView.initComponent for why they are one activity.
 
-   The height tracks the network beside it: 775px of canvas, plus the 34px
-   toolbar and the 33px status line above it. It is a literal because the
-   resizer at the foot of the panel sets these three heights together in JS -
-   see the Ext.resizer.Resizer in PA_Step3Views - so `auto` here would make one
-   of the three stop following the drag. */
-div[id ^= "networkSettingsPanel_"], div[id ^= "networkDetailsPanel_"] {width:216px; float:right; margin:0; margin-left:10px;height: 876px;overflow: auto;}
+   Nothing here draws a surface - the .contentbox the card also carries does
+   that. These rules only place the two blocks inside it and give the fold
+   control on the first one somewhere to sit. */
+.paExploreCard > .paExploreOverview {
+	/* Contains the two floated columns of the classification block, so that the
+	   network below starts under them rather than beside them. */
+	display: block;
+}
+.paExploreCard > .paExploreOverview::after,
+.paExploreFoldable::after {
+	content: "";
+	display: block;
+	clear: both;
+}
+/* The band that names the foldable block and carries its control. It is not an
+   h3 with a floated link, because a float would take the link out of the row's
+   height and the two would only line up by accident. */
+.paExploreBand {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 12px;
+	padding-right: var(--pa-card-inset);
+}
+.paExploreBand > h3 {
+	margin-bottom: 0;
+}
+a.paExploreFold {
+	flex: 0 0 auto;
+	font-size: 12px;
+	font-weight: 600;
+	color: var(--pa-ink-muted, #6B6B66);
+	text-decoration: none;
+	white-space: nowrap;
+}
+a.paExploreFold:hover {
+	color: var(--pa-accent-orange, #AD5022);
+	text-decoration: none;
+}
+a.paExploreFold i {
+	margin-right: 5px;
+}
+/* jQuery's slideToggle writes `display` inline, so the folded state is not
+   expressed here - only the clearfix above, which has to survive it. */
+.paExploreFoldable {
+	border-bottom: 1px solid var(--pa-border);
+	padding-bottom: 8px;
+	margin-bottom: 4px;
+}
+
+/* The pathways network and its rail ------------------------------------------
+   Two floated 216px columns before, "Tools" and "Details", standing side by
+   side and shown or hidden independently. Three things were wrong with that and
+   all three are structural rather than cosmetic:
+
+     - the two are never both being read. Details holds the colour legend and
+       whatever pathway was last clicked; Tools holds every control. Showing
+       them together spent 462px of a 1114px card on annotation and left the
+       diagram it annotates with 662px;
+     - a float cannot take its height from the element beside it, so the panels
+       carried `height: 876px` as a literal and the resizer had to keep three
+       heights in step by hand. It did not - see the note on that resizer;
+     - "Configure" opened a *second* column rather than switching one, so how
+       wide the graph was depended on which panels happened to be open.
+
+   One grid: the graph in column 1 spanning both rows, the rail's tab strip and
+   whichever pane is showing in column 2. The rail is one 236px column whatever
+   is in it, the graph gets the rest, and neither has to be told a height. */
+/* No gutter, and no margin on the area. The graph panel runs to the card's own
+   left edge because the toolbar inside it derives its inset from
+   --pa-card-inset - so that the first tool's icon lands on the same rail as the
+   card's heading - and an inset on this container would charge that twice. The
+   rail is separated by its own left border instead of by a gap, and docks
+   against the card's right edge for the same reason: a bordered column floating
+   10px inside a bordered card is two frames where the eye expects one. */
+.paNetArea {
+	margin: 0;
+}
+/* The grid is declared two elements below the container, and it has to be.
+   ExtJS 4's auto layout renders a `display: table` span and a
+   `display: table-cell` div between a container and its items - both generated,
+   both carrying that display as an inline style, and neither reachable by the
+   `cls` config that named .paNetArea. So the row is declared on the inner
+   wrapper, addressed by the id ExtJS derives from the container's own, and the
+   outer one is unwrapped to a block so it stops shrink-wrapping the row.
+
+   `!important` beats the inline display and nothing else. Written without it
+   the container measured 948px against a 1184px card and both panes sat at full
+   width under the graph, which is the shape this replaced. */
+.paNetArea > [id$="-outerCt"] {
+	display: block !important;
+	width: 100%;
+}
+.paNetArea > [id$="-outerCt"] > [id$="-innerCt"] {
+	display: grid !important;
+	grid-template-columns: minmax(0, 1fr) 236px;
+	grid-template-rows: auto minmax(0, 1fr);
+	gap: 0;
+	align-items: stretch;
+	width: 100%;
+}
+.paNetArea .paNetMain {
+	grid-column: 1;
+	grid-row: 1 / span 2;
+	min-width: 0;
+}
+.paNetArea .paNetRailTabs {
+	grid-column: 2;
+	grid-row: 1;
+}
+.paNetArea .paNetRailPane {
+	grid-column: 2;
+	grid-row: 2;
+	margin: 0;
+	padding-bottom: 16px;
+	overflow-y: auto;
+	overflow-x: hidden;
+	background: var(--pa-surface, #fff);
+	border: none;
+	border-left: 1px solid var(--pa-border);
+	border-radius: 0;
+}
+/* With the rail hidden the graph takes the card. The canvas has to be told when
+   that happens - a sigma renderer sizes itself once - which is why every caller
+   of this class also calls resizeNetwork(). */
+.paNetArea.is-railHidden > [id$="-outerCt"] > [id$="-innerCt"] {
+	grid-template-columns: minmax(0, 1fr);
+}
+.paNetArea.is-railHidden .paNetRailTabs,
+.paNetArea.is-railHidden .paNetRailPane {
+	display: none !important;
+}
+
+/* Below the width where a 236px column and a graph can share a row, the rail
+   goes under the graph instead of squeezing it. 900px is the breakpoint
+   network-views.css already uses to shorten the canvas, so the two changes
+   happen together rather than at two widths a reader would have to discover
+   separately. */
+@media (max-width: 900px) {
+	.paNetArea > [id$="-outerCt"] > [id$="-innerCt"] {
+		grid-template-columns: minmax(0, 1fr);
+		grid-template-rows: auto auto auto;
+	}
+	.paNetArea .paNetMain {
+		grid-column: 1;
+		grid-row: 1;
+	}
+	.paNetArea .paNetRailTabs {
+		grid-column: 1;
+		grid-row: 2;
+		border-left: none;
+		border-top: 1px solid var(--pa-border);
+	}
+	.paNetArea .paNetRailPane {
+		grid-column: 1;
+		grid-row: 3;
+		border-left: none;
+		max-height: 420px;
+	}
+}
+
+/* The rail's tabs. Segmented, sitting on top of the pane and sharing its
+   border, so the strip and the pane below read as one object rather than as a
+   control that happens to be above a box. */
+.paNetRailTabs {
+	display: flex;
+	align-items: stretch;
+	gap: 0;
+	background: var(--pa-surface-sunken, #F5F4EF);
+	border: none;
+	border-left: 1px solid var(--pa-border);
+	border-radius: 0;
+	overflow: hidden;
+}
+a.paNetRailTab {
+	flex: 1 1 0;
+	min-width: 0;
+	padding: 9px 6px;
+	font-size: 12px;
+	font-weight: 600;
+	line-height: 1.2;
+	text-align: center;
+	color: var(--pa-ink-muted, #6B6B66);
+	background: transparent;
+	border: none;
+	border-bottom: 1px solid var(--pa-border);
+	text-decoration: none;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+a.paNetRailTab:hover {
+	color: var(--pa-ink-title, #1A1A18);
+	background: var(--pa-control-hover-bg, #FFFFFF);
+	text-decoration: none;
+}
+/* The active tab loses the bottom border so it runs into the pane below it -
+   the same join the database tabs make with the card. */
+a.paNetRailTab.is-active {
+	color: var(--pa-ink-title, #1A1A18);
+	background: var(--pa-surface, #fff);
+	border-bottom-color: transparent;
+}
+a.paNetRailTab i {
+	margin-right: 5px;
+	opacity: 0.75;
+}
+a.paNetRailHide {
+	flex: 0 0 auto;
+	padding: 9px 10px;
+	font-size: 12px;
+	color: var(--pa-ink-muted, #6B6B66);
+	border-bottom: 1px solid var(--pa-border);
+	text-decoration: none;
+}
+a.paNetRailHide:hover {
+	color: var(--pa-accent-orange, #AD5022);
+	background: var(--pa-control-hover-bg, #FFFFFF);
+	text-decoration: none;
+}
+
+/* Full screen ----------------------------------------------------------------
+   The class does the covering, not the Fullscreen API, so the panel is expanded
+   even where the native request is refused - and the toolbar inside it, holding
+   the button that comes back, is expanded with it. See setFullScreenNetwork in
+   PA_Step3Views for why that is the whole point.
+
+   `:fullscreen` is matched as well so that the same rules apply when the browser
+   *does* grant the request and paints its own black backdrop behind the
+   element. */
+.paNetArea.paNetExpanded,
+.paNetArea:fullscreen {
+	/* Three `!important`s, all against inline styles ExtJS writes onto this
+	   container itself: `position: relative` for the resizer that is pinned to
+	   it, and a measured width and height from the layout run. Without the first
+	   the class applies, the z-index resolves to 9500, and the panel does not
+	   move - which is the state this looked like on the first attempt. */
+	position: fixed !important;
+	inset: 0;
+	z-index: 9500;
+	margin: 0;
+	width: auto !important;
+	height: auto !important;
+	max-width: none !important;
+	background: var(--pa-surface, #fff);
+	overflow: hidden;
+}
+/* Both generated wrappers have to be given the height, or the grid inside them
+   shrink-wraps its content and the graph stays 720px tall on a screen-high
+   panel - which is what full screen looked like before. */
+.paNetArea.paNetExpanded > [id$="-outerCt"],
+.paNetArea:fullscreen > [id$="-outerCt"],
+.paNetArea.paNetExpanded > [id$="-outerCt"] > [id$="-innerCt"],
+.paNetArea:fullscreen > [id$="-outerCt"] > [id$="-innerCt"] {
+	height: 100% !important;
+}
+.paNetArea.paNetExpanded .paNetMain,
+.paNetArea:fullscreen .paNetMain {
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+}
+/* The canvas takes the room the title, the toolbar and the status line leave. */
+.paNetArea.paNetExpanded .pa-net-canvas,
+.paNetArea:fullscreen .pa-net-canvas {
+	flex: 1 1 auto;
+	height: auto;
+	min-height: 0;
+}
+/* The resize handle is for a panel sitting in a page. Full screen has no page
+   under it to make room in. */
+.paNetArea.paNetExpanded > .x-resizable-handle,
+.paNetArea:fullscreen > .x-resizable-handle {
+	display: none;
+}
 
 /* Classification / database badge. The fill and the letter colour are set
    inline by classificationBadgeStyle() in Util.js - see the comment there for
@@ -3296,6 +3660,28 @@ i.classificationNameBox {
 	text-align: center;
 	font-weight: bold;
 	margin-bottom: 3px;
+	/* An inline-block is a block container, so it inherits `text-indent` and
+	   applies it to its own first line - and its own first line is the single
+	   letter this badge exists to centre. The hanging indent added below for the
+	   legend rows promptly pulled every letter 34px out of its circle and left a
+	   row of empty discs with a stray capital beside each. The badge's content is
+	   positioned by `text-align: center` and by nothing else. */
+	text-indent: 0;
+}
+/* The network's Details legend, one row per classification: a round badge and
+   the classification's name beside it. The badge is inline and the name is a
+   bare text node after it, so a name too long for the column wrapped back to
+   the row's left edge and its second line ran underneath the badge - "Genetic
+   Information / Processing" and "Environmental Information / Processing" both
+   did, in a panel 224px wide where they always will. The badge column and the
+   label column are then not columns at all.
+
+   Same hanging indent as the checkbox labels, and the same reasoning: the badge
+   keeps its place in the first line's flow, and every line starts past it.
+   34px is the badge (24px, border-box) and its 10px gap, from the rule above. */
+[id^="networkClustersContainer_"] > div > div {
+	padding-left: 34px;
+	text-indent: -34px;
 }
 div[id ^= "pathwayClassificationContainer"] {overflow-y: auto; overflow-x: hidden;}
 .step3ClassificationsWrapper{display: block;}
@@ -3415,10 +3801,49 @@ div[id ^= "step3-network-toolbar_"] div[id ^= "reorderOptions"]{
    "Reactome" a *thing you could press* was a 1px silver line under one of them.
    Two 23px orange words with a hairline between them is not a tab bar.
 
-   Rebuilt as one: 14px labels, the selected one near-black with a 2px accent
-   rule beneath it, the rest muted and colouring on hover. That is smaller than
-   the headings it sits above, which is correct - a tab is a control, and the
-   thing it reveals is what the reader came for.
+   Rebuilt first as one: 14px labels, the selected one near-black with a 2px
+   accent rule beneath it, the rest muted and colouring on hover. That is
+   smaller than the headings it sits above, which is correct - a tab is a
+   control, and the thing it reveals is what the reader came for.
+
+   That pass fixed what the labels said and left untouched what they *were*: a
+   word with no box around it. Measured, in this state: the KEGG tab's <a> was
+   33px wide and 38 tall - i.e. exactly as wide as the four letters, because the
+   only rule holding any horizontal padding named a `button` element (see the
+   note on .x-tab-inner below) that this ExtJS build does not render, so it
+   never applied to anything. Two bare words and a hairline still read as a
+   caption above the card, not as the switch between two databases; the whole
+   affordance rested on one of them being darker than the other.
+
+   So the labels get their boxes. Each database is a pill - a fill, a hairline,
+   a radius and a 18px hit area either side of the word - and the selected one
+   is filled near-black with a white label rather than merely being a darker
+   grey than its neighbour. The difference between "KEGG" and "Reactome" is now
+   figure/ground rather than two shades of ink, which is what a control that
+   changes the whole page below it should look like at a glance.
+
+   The gap between the tabs is set in JS, not here: see the note on
+   `defaults.margin` in PA_Step3Views.js. It was 22px, which was the distance
+   two undressed words needed to stop reading as one phrase; boxes carry their
+   own separation, and 22px between them made the pair read as two unrelated
+   buttons rather than as one control with two positions.
+
+   Last pass: bookmarks, not pills.
+
+   The pills were correct about weight and wrong about attachment. They floated
+   19px above the card they switch, so what the reader saw was two buttons and,
+   separately, a card - and nothing on the page said that pressing one of the
+   buttons was what put that card there. A pill is a button; a button's business
+   ends when you release it. What this control does is put a *different sheet*
+   in front of you, which is the one thing a bookmark tab says and a pill
+   cannot: the selected tab and the sheet are one surface, joined along an edge,
+   and the unselected one is another sheet behind it.
+
+   So: top-rounded tabs sitting directly on the card, the selected one filled in
+   the card's own surface and continuing into it across an unbroken seam, the
+   rest sunken and behind. The card gives up its top corners to receive them -
+   see the rule on .paExploreCard below - which is the price of the join and the
+   reason it reads as one object.
 
    The `!important`s below match Neptune's own on the same properties; the
    heights it hard-codes are what the strip and the tab boxes are measured from,
@@ -3427,136 +3852,155 @@ div#tabcontainer_network,
 div#tabcontainer_network .x-panel-body-default {
 	border-color: transparent;
 }
-/* The bar itself: a single hairline running the width of the block, which the
-   active tab's own rule then overpaints for its own width. */
+/* The bar's own hairline would run behind the tabs and out past the last one,
+   which is the one line a bookmark strip must not have: the edge belongs to the
+   sheet below, and the selected tab's job is to break it. */
 div#tabcontainer_network .x-tab-bar {
-	border-bottom: 1px solid var(--pa-border);
+	border-bottom: 0;
+	margin-bottom: 0;
 }
+/* One position of the control.
+
+   `margin-right` is not a typo for the gap and is deliberately absent: a tab bar
+   is an ExtJS box layout, which measures each tab and writes an absolute `left`
+   for the next one, so a margin from this stylesheet is both overwritten inline
+   and ignored by the arithmetic. The gap is a component config; this file cannot
+   set it.
+
+   No bottom border, and the radius only on the top two corners: a tab is open at
+   the edge it shares with its sheet. */
 div#tabcontainer_network .x-tab {
-	background: none;
-	border: 0 !important;
-	border-radius: 0;
-	margin-right: 4px;
-	padding: 0;
-	height: 38px !important;
-	transition: border-color var(--pa-transition);
+	background: var(--pa-surface-sunken, #F5F4EF);
+	border: 1px solid var(--pa-border) !important;
+	border-bottom: 0 !important;
+	border-radius: var(--pa-radius) var(--pa-radius) 0 0;
+	padding: 0 20px;
+	height: 36px !important;
+	transition: background-color var(--pa-transition),
+	            border-color var(--pa-transition);
 }
-div#tabcontainer_network .x-tab-inner {
+/* The label. This rule also absorbs what a `.x-tab button` selector further
+   down used to declare - `line-height: 36px !important; font-size: 14px;
+   padding: 0 14px` - and which never once applied: ExtJS 4.2.1 renders a tab as
+   `a.x-tab > span.x-tab-wrap > span.x-tab-button > span.x-tab-inner`, with no
+   `button` element anywhere in it. That dead rule is why the tabs had no
+   padding, and its 36px line-height is restated here, on the element that
+   exists: 38px of pill less its two 1px borders is a 36px content box, so the
+   label sits on the pill's centre line. */
+div#tabcontainer_network .x-tab .x-tab-inner {
 	color: var(--pa-ink-muted);
 	font-family: var(--pa-font-sans) !important;
 	font-size: 14px;
 	font-weight: 600 !important;
 	height: auto;
+	line-height: 35px;
 	transition: color var(--pa-transition);
 }
-div#tabcontainer_network .x-tab:hover .x-tab-inner {
+/* `:not(.x-active)` rather than letting source order settle it. The two
+   selectors score the same specificity, so the active pill would take the hover
+   background from whichever rule came last - and the point of the selected
+   state below is that it does not change under the cursor. */
+div#tabcontainer_network .x-tab:not(.x-active):hover {
+	background: var(--pa-control-hover-bg);
+	border-color: rgba(24, 24, 27, 0.20) !important;
+}
+div#tabcontainer_network .x-tab:not(.x-active):hover .x-tab-inner {
 	color: #27272A;
 }
-/* The selected state. A 2px rule sitting on the bar's own hairline, in the ink
-   of the label above it - so the mark and the thing it marks are one object.
+/* The selected state: the tab is the card.
 
-   An inset shadow rather than a `border-bottom`, and that is not a preference.
-   These tabs are sized `height: 38px` with Neptune's border-box, so a 2px
-   border comes out of the content box: the active tab's label had 36px of line
-   box to centre in and the inactive one had 38, which put "KEGG" one pixel
-   below "Reactome" on a strip whose whole job is to present them as the same
-   kind of thing. Measured: line-height 40px on the inactive tab, 38px on the
-   active. A shadow is painted inside the box without occupying it, so both
-   labels sit on one line whichever is selected. */
+   Same fill, same border, and a 1px shadow cast straight down that paints over
+   the card's own top border for exactly the width of the tab - which is the
+   seam. Without that one line the card's edge runs unbroken beneath every tab
+   and the selected one is merely a white box sitting on a box, which is what a
+   pill was.
+
+   No accent and no knocked-out label: the accents on this page encode data (the
+   significance tints, the database badges, the omic colours), and a control that
+   borrowed one would be claiming a meaning it does not have. Selection is
+   carried by the join, and by the label going from muted to full ink. */
 div#tabcontainer_network .x-tab.x-active {
-	border-bottom: 0 !important;
-	box-shadow: inset 0 -2px 0 #1A1A18;
+	background: var(--pa-surface, #FFFFFF);
+	border-color: var(--pa-border) !important;
+	position: relative;
+	z-index: 3;
+	box-shadow: 0 1px 0 0 var(--pa-surface, #FFFFFF);
 }
 div#tabcontainer_network .x-tab.x-active .x-tab-inner {
-	color: #1A1A18;
+	color: var(--pa-ink-title, #1A1A18);
 }
-/* Neptune's 1px filler strip under the bar. The bar draws its own border now,
-   so this would be a second line 40px below it. */
+/* The seam is a 1px overhang, so nothing between the tab and the card may clip
+   it. Neptune gives all three of these `overflow: hidden`. */
+div#tabcontainer_network .x-tab-bar,
+div#tabcontainer_network .x-tab-bar-body,
+div#tabcontainer_network .x-tab-bar .x-box-inner {
+	overflow: visible !important;
+}
+/* The card receives the tabs. Square across the top, and hard against the bar
+   above it: a rounded corner under a square-bottomed tab is the one detail that
+   gives away that these are two objects rather than one sheet. The bottom
+   corners keep the radius - that edge is the card's own.
+
+   A descendant selector, because ExtJS puts four generated wrappers between the
+   tab's panel and the card - a body, an outerCt, an innerCt, and the card's own
+   container - none of which a child combinator can be written against. */
+#tabcontainer_network .x-tabpanel-child .paExploreCard {
+	margin-top: 0;
+	border-top-left-radius: 0;
+	border-top-right-radius: 0;
+}
+/* Unless there are no tabs. A single-database organism hides the bar entirely
+   (see `tabBar.hidden` in PA_Step3Views), and a card squared off to receive
+   tabs that are not there is just a card with two corners missing - on the one
+   configuration where nobody can see why. */
+#tabcontainer_network.onedatabase .x-tabpanel-child .paExploreCard {
+	margin-top: 5px;
+	border-top-left-radius: var(--pa-radius);
+	border-top-right-radius: var(--pa-radius);
+}
+/* Neptune's 1px filler strip under the bar. Nothing draws a line there now, and
+   this would be the only one - 40px below the pills and attached to neither
+   them nor the card. */
 div#tabcontainer_network .x-tab-bar-strip {
 	display: none;
 }
 div#tabcontainer_network .x-tab-bar .x-tab-bar-body {
-	height: 38px !important;
+	height: 36px !important;
 	border: 0 !important;
 	padding: 0;
 }
 div#tabcontainer_network .x-tab-bar .x-tab-bar-body .x-box-inner {
-	height: 38px !important;
-}
-div#tabcontainer_network .x-tab-bar .x-tab-bar-body .x-box-inner .x-tab button {
-	line-height: 36px !important;
-	font-size: 14px;
-	padding: 0 14px;
+	height: 36px !important;
 }
 div#tabcontainer_network .x-tab-center {
 	margin-top: 0;
 }
-/* "Multiple databases used" card.
+/* The per-database split, inside the summary band.
 
-   The markup is master's: a .multisource_body wrapping the prose and the
-   per-database table, which replaced a layout that propped itself open with
-   min-height:200px. What changes here is the arrangement. Side by side used the
-   width but weighted the card to one side - the prose is ten times the table's
-   area and the two share no edge to align on - so they stack, prose first, with
-   the table centred underneath the text that introduces it. Symmetric at every
-   width, and no breakpoint needed.
-
-   The prose is deliberately not capped at a reading measure here: on a 1360px
-   card that leaves a column of text down one side with nothing opposite it,
-   which looks broken rather than composed. */
-div#multisource_msg .multisource_body {
-	display: block;
-	padding: 4px 0 0;
-}
-div#multisource_msg .multisource_text {
-	padding: 0 var(--pa-card-inset);
-}
-div#multisource_msg .multisource_text p {
-	margin: 0 0 12px;
-	padding: 0;
-	max-width: none;
-	line-height: 1.55;
-}
-div#multisource_msg .multisource_text p:last-child {
-	margin-bottom: 18px;
-}
-div#multisource_summary {
-	display: flex;
-	justify-content: center;
-	margin-bottom: 22px;
-}
-
-/* This was `1px solid black` - the only pure-black edge in the application, on
-   a table sitting inside an already-bordered card, so it read as a screenshot
-   pasted into the page. The cells also had no vertical padding, which is what
-   made the two database rows feel cramped against it. */
+   This table used to be the centrepiece of its own card, "Multiple databases
+   used" - two paragraphs of prose over a bordered, filled table. It sits in
+   the band's third cell now (see "The summary band" further down), where the
+   band's hairline separators already frame it, so a border and a fill of its
+   own would draw a box inside a box. Bare rows: tiny muted headers, the badge,
+   the name, two columns of lining figures. The ids on the count cells are
+   still what the pathway filters refresh, so the markup is untouched. */
 div#multisource_summary table {
-	border: 1px solid var(--pa-border);
-	border-radius: var(--pa-radius);
-	border-collapse: separate;
-	border-spacing: 0;
-	overflow: hidden;
-	background-color: #FFFFFF;
-	min-width: 320px;
+	border-collapse: collapse;
 }
 div#multisource_summary table th {
-	padding: 9px 16px;
-	border-bottom: 1px solid var(--pa-border);
-	background-color: #F9F8F4;
-	color: #52525B;
-	font-size: 11.5px;
+	padding: 0 12px 5px;
+	color: var(--pa-ink-muted, #595959);
+	font-size: 11px;
 	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
 	text-align: left;
 	white-space: nowrap;
 }
 div#multisource_summary table td {
-	padding: 10px 16px;
-	border-top: 1px solid #F1F1F3;
-	font-size: 12.5px;
-	color: #27272A;
-}
-div#multisource_summary table tr:first-child td {
-	border-top: 0;
+	padding: 4px 12px;
+	font-size: 13px;
+	color: var(--pa-ink-body, #27272A);
 }
 /* Counts read as a column of magnitudes, so they are right-aligned on lining
    figures - "368" over "520" should line up digit for digit. */
@@ -3566,24 +4010,10 @@ div#multisource_summary table td:nth-child(n+3) {
 	font-variant-numeric: tabular-nums;
 }
 /* The badge column carries no header and no label, only the coloured initial. */
-div#multisource_summary table th:first-child,
-div#multisource_summary table td:first-child {
-	width: 1%;
-	padding-right: 0;
-}
-
-/* Cell classes introduced with master's markup: the badge column carries no
-   label, the name column is the row's subject, and the significant count is
-   the number a reader is scanning for.
-
-   The rule above used to be left unclosed, so the browser's error recovery
-   swallowed this first selector as a bad declaration and `db_chip` never
-   applied - the badge column was sized by the `width: 1%` above instead. The
-   header cell is included now because the header row has a real cell for that
-   column rather than a colspan across it. */
 div#multisource_summary th.db_chip,
 div#multisource_summary td.db_chip {
 	width: 1px;                /* shrink to the chip */
+	padding-left: 0;
 	padding-right: 0;
 }
 div#multisource_summary td.db_name {
@@ -3591,7 +4021,10 @@ div#multisource_summary td.db_name {
 	font-weight: 600;
 	white-space: nowrap;
 }
-div#multisource_summary td.db_significant { color: #1a1a1a; font-weight: 600; }
+div#multisource_summary td.db_significant {
+	color: var(--pa-ink-title, #1a1a1a);
+	font-weight: 600;
+}
 
 div.onedatabase .x-panel-body-default {
 	border: none !important;
@@ -3612,11 +4045,16 @@ div.onedatabase div[id ^= "networkview_"] {
    KEGG and Reactome tabs, so "Pathways classification" and "Pathways network"
    started 1px right of the four cards outside the tabs - a hairline stagger
    down the page. Removed for one database already, via the rules above; the
-   side that had two databases is the side a reader normally sees. */
+   side that had two databases is the side a reader normally sees.
+
+   All four sides now, not just the two. There are two of these bodies nested,
+   each contributing a 1px top border, and together they held the card 2px below
+   the tab bar - which is 2px the selected tab's seam cannot reach across, and
+   the difference between a bookmark tab and a button sitting near a card.
+   Measured: tab bar bottom 127.9, card top 129.9. */
 #tabcontainer_network > .x-panel-body,
 #tabcontainer_network .x-tabpanel-child > .x-panel-body {
-	border-left-width: 0 !important;
-	border-right-width: 0 !important;
+	border-width: 0 !important;
 }
 
 /********************************************************************************
@@ -4925,24 +5363,6 @@ div.lateralOptionsPanel-header .toolbarOption.downloadTool:hover {
    glyph; the tile is a wash behind it, which is what keeps it from reading as
    a block. Both live here rather than inline so `dark.css` can reach them --
    an inline colour cannot be themed at all. */
-.po-pathway-stats {
-	display: flex;
-	align-items: center;
-	/* Was `center`. This card sits beside "Pathways selection", whose heading and
-	   every line of whose prose start on --pa-card-inset; a centred row inside it
-	   gave the pair of cards two different left edges and no shared one. The
-	   counts are the card's content, not a banner, so they start where its own
-	   heading starts. */
-	justify-content: flex-start;
-	flex-wrap: wrap;
-	gap: 20px 46px;
-	margin: 24px 0 4px;
-	padding: 0 var(--pa-card-inset);
-	/* The old container set line-height: 120px to fake vertical centring.
-	   Flex does it honestly, and the tall line-height was what pushed these
-	   counts so far from the job ID above them. */
-	line-height: 1;
-}
 .po-pathway-stat {
 	display: flex;
 	align-items: center;
@@ -4969,10 +5389,14 @@ div.lateralOptionsPanel-header .toolbarOption.downloadTool:hover {
 	background: rgba(173, 80, 34, 0.12);
 	color: var(--pa-accent-orange, #AD5022);
 }
-.po-pathway-figure {
+/* The figure stacks: numeral over label, both left-aligned, which is what
+   lets two figures of very different widths ("877" / "45") sit in cells of
+   the same height without the labels drifting to different baselines. */
+.po-band-figure {
 	display: flex;
-	align-items: baseline;
-	gap: 9px;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 8px;
 }
 /* Matches .po-stat-value, the design system's figure treatment, rather than
    inventing a second one. Tabular figures so the number does not jitter
@@ -5004,17 +5428,185 @@ div.lateralOptionsPanel-header .toolbarOption.downloadTool:hover {
 	font-family: inherit;
 	line-height: 1;
 }
-/* The URL caption under the job ID. A caption for the line above it, so it sits
-   tight against that line rather than a paragraph's distance from it. */
-.po-job-url {
-	margin: 0 0 2px;
-}
 /* A caption for the figure, so it sits below body copy (14px) rather than above
-   it. At 15px the label was larger than the prose in the card next door and
-   read as a second heading rather than as the unit of the number it follows. */
+   it. At 15px the label was larger than the prose around it and read as a
+   second heading rather than as the unit of the number it follows. */
 .po-pathway-label {
 	font-size: 13px;
 	color: var(--pa-ink-muted, #595959);
+}
+/* The summary band --------------------------------------------------------
+   One card where three used to be. The old top row was "Pathways selection" -
+   four lines of boilerplate about how significance is computed - beside
+   "Pathways summary", and a third card ("Multiple databases used") added two
+   more paragraphs over a table: ~700px of prose before the first control,
+   almost none of it varying by job. What varies now sits in a single band and
+   the boilerplate lives in the heading's tooltip; the markup comment in
+   PA_Step3Views.js tells the whole story.
+
+   Two rows. The head row is the card's heading strip - h2, the job's name,
+   then the job chip and the paint call-to-action on the right. The band under
+   it is one row of figures: the two totals, then the per-database split with
+   the one-line note that replaced the old paragraphs. Hairlines separate the
+   cells; the card's own border frames the whole, so nothing inside carries a
+   second box. */
+.po-band-head {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 10px 18px;
+	background-color: #FFFFFF;
+	border-bottom: 1px solid var(--pa-border);
+	border-radius: var(--pa-radius) var(--pa-radius) 0 0;
+	padding: 12px var(--pa-card-inset);
+}
+/* The heading's dress - white fill, hairline, inset - moved up onto the row so
+   the h2 can share a flex line with the chip and the button. Two classes and a
+   tag against `div.contentbox h2`'s one-and-two, so no !important. */
+.po-band-card .po-band-head h2 {
+	background: transparent;
+	border: 0;
+	border-radius: 0;
+	padding: 0;
+	flex: none;
+}
+/* The job's own description ("STATegra - real mouse Ikaros time course"),
+   clipped rather than wrapped: it is a subtitle, and a subtitle that can grow
+   a second line would push the actions strip off its row. The full text rides
+   the title attribute, set where the text is. */
+.po-job-name {
+	display: block;
+	flex: 1 1 160px;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: 13px;
+	color: var(--pa-ink-muted, #595959);
+}
+.po-band-actions {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	margin-left: auto;
+}
+.po-band-actions .button {
+	margin: 0;
+}
+/* The job ID as a chip: the one piece of the old card people actually used -
+   the thing you paste into a mail - reduced to the ID plus two glyph buttons,
+   open and copy. The URL itself is no longer written out; it is the page's own
+   address, and the buttons hand it over without asking anyone to select text. */
+.po-job-chip {
+	display: inline-flex;
+	align-items: center;
+	gap: 7px;
+	padding: 4px 8px 4px 14px;
+	border: 1px solid var(--pa-border);
+	border-radius: 999px;
+	background: var(--pa-surface-subtle, #F9F8F4);
+	font-size: 13px;
+	color: var(--pa-ink-muted, #595959);
+	white-space: nowrap;
+}
+.po-job-chip > b {
+	font-weight: 600;
+	color: var(--pa-ink-title, #24252A);
+	letter-spacing: 0.02em;
+}
+.po-job-chip > a {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 24px;
+	height: 24px;
+	border-radius: 50%;
+	color: var(--pa-accent-blue, #19589E);
+	font-size: 12px;
+}
+.po-job-chip > a:hover {
+	background: rgba(25, 88, 158, 0.10);
+}
+/* The moment of feedback after a copy: the glyph itself turns into a tick.
+   Green, because the tick reports success, not a link. */
+.po-job-chip > a.is-copied {
+	color: var(--pa-accent-green, #2A8368);
+}
+/* The band proper: one row of cells that together own the card's full width.
+   line-height 1 keeps the numerals from inheriting the page's paragraph
+   rhythm.
+
+   The cells grow, and that is the point of this block. Content-sized cells
+   packed left - the first version - left everything right of the database
+   table as one unbroken white field, roughly half the card at the widths a
+   desktop shows it: dead space with a shape, which reads as a card waiting
+   for content that never arrives. Growing cells put the same air *between*
+   the figures instead, each centred in its own share with a full-height
+   hairline marking the shares, so the width reads as composed rather than
+   unfilled. `stretch` is what lets those hairlines run the band's whole
+   height whatever cell happens to be tallest. */
+.po-band {
+	display: flex;
+	align-items: stretch;
+	flex-wrap: wrap;
+	gap: 16px 0;
+	padding: 20px var(--pa-card-inset) 22px;
+	line-height: 1;
+}
+.po-band .po-pathway-stat {
+	/* Equal shares, but `auto` basis: a zero basis hands "877" and its label
+	   exactly a third and lets min-width break the odometer across lines on a
+	   narrow card - the same defect the old figures panel documented. Content
+	   first, slack split evenly. */
+	flex: 1 1 auto;
+	justify-content: center;
+	padding: 0 24px;
+}
+.po-band .po-pathway-stat + .po-pathway-stat,
+.po-band .po-band-dbs {
+	border-left: 1px solid var(--pa-border);
+}
+/* The per-database cell: the mini table over its one-line note. Column, not
+   row - side by side the pair needed ~590px and pushed the band past the card
+   at the widths the contents rail leaves it. A slightly heavier share than
+   the totals, because its content is wider to begin with; its children are
+   centred individually, which the near-equal widths of the table and the
+   capped note keep from reading as ragged. */
+.po-band-dbs {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	flex: 1.4 1 auto;
+	gap: 10px;
+	padding: 0 24px;
+}
+/* Two classes, because `div.contentbox p` (0,1,2) would otherwise re-apply the
+   card inset and paragraph margins this note is opting out of. Centred text:
+   the note and the table above it are separately-centred blocks of different
+   widths, so left-aligned caption text put its edge ~30px outside the table's
+   and the pair read as misaligned rather than stacked. */
+.po-band .po-band-note {
+	margin: 0;
+	padding: 0;
+	max-width: 320px;
+	font-size: 12.5px;
+	line-height: 1.5;
+	text-align: center;
+	color: var(--pa-ink-muted, #595959);
+}
+/* When the band is too narrow for the split beside the totals - a narrow
+   window, or the contents rail taking its column - the database cell becomes
+   the band's second row, and its hairline turns horizontal with it. A viewport
+   query, not a container query: this card is a full-width box whose width
+   tracks the viewport, and ExtJS re-lays the page on window resize anyway. */
+@media (max-width: 1100px) {
+	.po-band .po-band-dbs {
+		flex-basis: 100%;
+		border-left: 0;
+		border-top: 1px solid var(--pa-border);
+		padding: 16px 0 0;
+	}
 }
 
 .omicSummaryBox, .metaboliteBox {
@@ -5076,6 +5668,76 @@ div.lateralOptionsPanel-header .toolbarOption.downloadTool:hover {
 #mainViewCenterPanel.mobileMode div.metaboliteBox,
 div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
 	width: 100%;
+}
+
+/* "Multiple databases used", "Configure the number of clusters" and the
+   metabolite-threshold card each take a full row of the step-2 flex layout.
+   They used to share a row under `align-items: stretch`, so the short config
+   card was stretched to the height of the two database tables beside it - a
+   column of white with four fields in its top corner. On its own row a card
+   is exactly as tall as its content. The id outranks the class shorthand's
+   `flex-basis` above; grow/shrink from that rule still apply. */
+#dbs_message, #clusternumber_box, #threshold_box {
+	flex-basis: 100%;
+}
+/* The empty "parity pad" containers Step 2 inserts after each full-width card
+   exist for one reason: browsers without :has() lay the cards out with the
+   odd/even floats, and the pads keep that parity intact. In the flex layout
+   they are actively harmful - a zero-width flex item still owns a 22px gap on
+   each side, so the row after the pads packed as [pad, pad, card] and the
+   card sat 44px off the left rail with its partner wrapped to the next row.
+   Hide them exactly where the flex layout applies: behind the same :has()
+   support gate. !important, because they are ExtJS containers and this must
+   win whatever the layout writes. */
+@supports selector(:has(*)) {
+	.x-column-layout-ct .paLayoutPad { display: none !important; }
+}
+/* The config fields inside the two full-width cards stay centred. The form
+   panel itself is stretched to the card by its vbox, and each field row is a
+   600px table that ExtJS positions with inline `left: 0; margin: 0` - the
+   config's `margin: 0 auto` never survives - so at full card width the fields
+   hugged the left edge. left:50% + translateX(-50%) centres each row under
+   any card width, and the !important is what lets a stylesheet outrank the
+   inline left. All rows share the same 600px width, so their labels still
+   align with each other. */
+#clusternumber_box .x-form-item,
+#threshold_box .x-form-item {
+	left: 50% !important;
+	transform: translateX(-50%);
+}
+/* ...and the 50% must resolve against the real card, not ExtJS's memory of it.
+   The panel body and box containers carry inline pixel widths measured before
+   the flex rules widened the card (815px inside a 1358px panel, observed), and
+   ExtJS does not re-measure on a CSS-driven size change. Stretching the chain
+   to 100% makes the centring above resolve against the card's true width. */
+#clusternumber_box .x-panel-body.divForm,
+#threshold_box .x-panel-body.divForm,
+#clusternumber_box .divForm .x-box-inner,
+#threshold_box .divForm .x-box-inner,
+#clusternumber_box .divForm .x-box-target,
+#threshold_box .divForm .x-box-target {
+	width: 100% !important;
+	margin-left: 0 !important;
+	margin-right: 0 !important;
+}
+
+/* The step-2 illustration of the pathway-view toolbar. It is drawn with the
+   toolbar's own markup and .button rules rather than a screenshot, so it
+   cannot fall out of date the way settingsbutton.png (2022) did - a restyle
+   of the real buttons restyles this figure in the same stroke. Not
+   interactive: it is a picture that happens to be made of markup. */
+.paToolbarMiniature {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	align-items: center;
+	gap: 8px;
+	margin: 15px auto 5px;
+	pointer-events: none;
+}
+/* The one button the caption is pointing at. */
+.paToolbarMiniature .paMiniatureTarget {
+	box-shadow: 0 0 0 2px #B3261E;
 }
 
 /********************************************************************************
@@ -5655,7 +6317,13 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
    single column of them made the card twice as tall as its own prose. */
 .po-example-tests ul {
 	margin: 0;
-	padding-left: 18px;
+	/* Hung markers, like every other list this design draws (the hero's AI
+	   panel is the pattern): the item's box starts on the card rail and the
+	   bullet is drawn inside the indent the text steps past. With the ul
+	   carrying padding-left instead, every item's box sat 18px right of the
+	   prose above it - one rail per card was the whole point of these cards. */
+	padding: 0;
+	list-style: none;
 	columns: 2;
 	column-gap: 28px;
 	font-size: 12.5px;
@@ -5664,6 +6332,20 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
 }
 .po-example-tests li {
 	break-inside: avoid;
+	position: relative;
+	padding-left: 18px;
+}
+/* Drawn, not typed, for the reason the hero's squares are: a marker that is
+   not a character is not selected with the text and not read out loud. */
+.po-example-tests li::before {
+	content: "";
+	position: absolute;
+	left: 0;
+	top: 0.6em;
+	width: 5px;
+	height: 5px;
+	border-radius: 1px;
+	background: var(--pa-ink-muted, #595959);
 }
 .po-example-actions {
 	margin-top: 14px;
@@ -6606,14 +7288,25 @@ div.repDetectionCard h3 {
 	/* Keyed off the class buildAnalysisTOC sets, so the column is only reserved
 	   on views that actually have a contents list. The pathway view has none and
 	   gets the full width. */
+	/* One rail for the whole page. The TOC used to sit at --pa-gutter-railed
+	   (which bottoms out at 40px) while the header wordmark sits at --pa-gutter
+	   (~96-110px on laptops, and ~103px further right at every width) - two
+	   left edges that never coincided, directly under each other. The header's
+	   own comment states the contract ("the wordmark lines up with the left
+	   edge of the content beneath it"), so the wordmark's rail is the master:
+	   the TOC starts on it, the results column starts after gutter + rail, and
+	   the leftover space flows to the right - the docs-site grid. The cost is
+	   ~56-68px of empty margin at laptop widths, paid for a page where every
+	   left edge derives from one token. --pa-gutter-railed keeps its definition
+	   for anything external that read it, but nothing here does any more. */
 	#mainViewCenterPanel.pa-has-toc {
-		padding-left: calc(var(--pa-rail) + var(--pa-gutter-railed));
-		padding-right: var(--pa-gutter-railed);
+		padding-left: calc(var(--pa-gutter) + var(--pa-rail));
+		padding-right: max(40px, calc(100vw - var(--pa-gutter) - var(--pa-rail) - var(--pa-page-max)));
 	}
 	.pa-toc {
 		position: fixed;
 		top: 62px;
-		left: var(--pa-gutter-railed);
+		left: var(--pa-gutter);
 		width: 190px;
 		max-height: calc(100vh - 84px);
 		overflow-y: auto;

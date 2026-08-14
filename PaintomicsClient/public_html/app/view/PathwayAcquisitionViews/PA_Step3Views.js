@@ -531,12 +531,17 @@ function PA_Step3JobView() {
 		/********************************************************/
 		/* STEP 1: LOAD SUMMARY      		                    */
 		/********************************************************/
-		$("#jobIdField").html(this.getModel().getJobID());
-		$("#jobURL").html(window.location.href).attr('href', window.location.href);
+		$("#jobIdField").text(this.getModel().getJobID());
+		/* The anchor is a glyph button now; the URL is its target, not its text.
+		   Writing the href as text was what made the old card read as a
+		   paragraph about itself. */
+		$("#jobURL").attr('href', window.location.href);
 
-		// Update Job name (description) if available
+		// Update Job name (description) if available. Long names are clipped
+		// with an ellipsis by the stylesheet, so the full text rides the title.
 		if (this.getModel().getName()) {
-			$("#jobName").html('[' + this.getModel().getName() + ']').show();
+			$("#jobName").text(this.getModel().getName())
+				.attr('title', this.getModel().getName()).show();
 		}
 
 		/********************************************************/
@@ -617,8 +622,29 @@ function PA_Step3JobView() {
 			/*         (only if updating from categories panel)     */
 			/********************************************************/
 			this.pathwayTableView.updateVisiblePathways(true);
-			this.metaboliteView.updateVisiblePathways(true);
-			this.hubAnalysisView.updateObserver(true);
+			/* Guarded, because the metabolite view is only constructed when the
+			   job resolved compounds - see hasMetaboliteData() at the top of this
+			   file - and the hub view only when it has a result to show.
+
+			   Unguarded, this line threw `Cannot read properties of null` on
+			   every job without metabolomics, and it threw *here*: before the
+			   network refresh below it, before the summary counts, and before the
+			   cache write. So on a gene-only job, choosing categories and pressing
+			   Apply redrew the pie beside the filter - that happens earlier, in
+			   the classification view - and then silently did nothing else. The
+			   network kept every node you had just hidden and the Found/
+			   Significant counts kept their unfiltered totals, which is the one
+			   reading a user would take as "the filter did not work".
+
+			   Verified on this build before the guard: hide one KEGG category,
+			   Apply, and 94 of 364 pathways go unchecked while the network still
+			   reports "25 of 364" and the summary still reports 364. */
+			if (this.metaboliteView) {
+				this.metaboliteView.updateVisiblePathways(true);
+			}
+			if (this.hubAnalysisView) {
+				this.hubAnalysisView.updateObserver(true);
+			}
 		}
 		/********************************************************/
 		/* STEP 3. UPDATE THE pathwayNetworkView VIEW           */
@@ -670,7 +696,15 @@ function PA_Step3JobView() {
 		var me = this;
 		var model = me.getModel();
 		var userID = Ext.util.Cookies.get("userID");
-		var isOwner = (userID !== undefined && String(model.getUserID()) == String(userID));
+		// A job created without an account has no owner (userID null), so the
+		// server cannot tell "the owner came back" from "anyone arrived
+		// anonymously" and never enforces the flags saved here. String(null) ==
+		// String(null) used to make every anonymous visitor the owner of an
+		// ownerless job, offering a Read-only promise nobody keeps; those jobs
+		// belong in the explanatory branch below, which already names this case.
+		var jobOwner = model.getUserID();
+		var hasOwner = (jobOwner !== null && jobOwner !== undefined && String(jobOwner) !== "null" && String(jobOwner) !== "None");
+		var isOwner = (hasOwner && userID !== null && userID !== undefined && String(jobOwner) == String(userID));
 
 		var messageDialog = Ext.create('Ext.window.Window', {
 			title: "Sharing options",
@@ -714,9 +748,10 @@ function PA_Step3JobView() {
 				 {xtype: "box", html: "<br><div style='text-align: center;'><b>You are not the owner or the job does not have an owner account so sharing options cannot be modified.</b></div>"}
 				)
 			],
-			buttons: [
-				(isOwner ?
-				{
+			// An empty object here still renders as a button: a blank blue pill
+			// beside Close for everyone in the non-owner branch. Concat, so the
+			// Save button either exists whole or not at all.
+			buttons: (isOwner ? [{
 					text: 'Save options',
 					handler : function() {
 						var allowSharing = messageDialog.queryById('linksharing').getValue();
@@ -725,9 +760,9 @@ function PA_Step3JobView() {
 						messageDialog.close();
 						me.getController().updateSharingOptions(model, allowSharing, readOnly);
 					}
-				} : {}),
+				}] : []).concat([
 				{text: 'Close', handler : function() {messageDialog.close();}}
-			]
+			])
 		});
 
 		messageDialog.center();
@@ -820,10 +855,30 @@ function PA_Step3JobView() {
 		$.each(this.getModel().getDatabases(), (function(index, db) {
 			var tabDB = {
 				title: db,
-				items: [
-					this.pathwayClassificationViews[db].getComponent(),
-					this.pathwayNetworkViews[db].getComponent()
-				]
+				/* One card, not four.
+
+				   A database tab used to draw four separate bordered surfaces:
+				   "Pathways classification", "Pathways network", and the network's
+				   two 216px side panels, "Tools" and "Details". They are one
+				   activity - choose which pathways you are looking at, then look at
+				   them - and splitting the controls for it across four boxes meant
+				   that changing what the graph shows was a matter of finding which
+				   box the control was in. The category filter and the node filters
+				   in particular sit 900px apart on screen while doing the same job.
+
+				   They are one .contentbox now. That is also what the contents
+				   strip reads: paTocSections() takes one entry per card, so the
+				   sidebar lists one "Pathway explorer" per database rather than a
+				   classification entry and a network entry that scroll to the same
+				   card. */
+				items: [{
+					xtype: 'container',
+					cls: 'contentbox paExploreCard',
+					items: [
+						this.pathwayClassificationViews[db].getComponent(),
+						this.pathwayNetworkViews[db].getComponent()
+					]
+				}]
 			}
 
 			tabContent.push(tabDB)
@@ -856,72 +911,75 @@ function PA_Step3JobView() {
 					'<a href="javascript:void(0)" class="button btn-default btn-right" id="sharingButton"><i class="fa fa-share-alt"></i> Share</a>' +
 					'<a href="javascript:void(0)" class="button btn-info btn-right" id="aiInterpretButton" style="display:none;">' + getAIMark() + ' AI Interpret</a>' +
 					'<div id="warningMessage" style="display: none;"></div>'
-				},{ //THE SUMMARY PANEL
-					xtype: 'container', itemId: "pathwaysSummaryPanel",
-					layout: 'column', style: "max-width:1900px; margin: 5px 10px; margin-top:50px;", items: [
-						{
-							xtype: 'box', cls: "contentbox omicSummaryBox", html:
-							'<div id="about">' +
-							'  <h2>Pathways selection</h2>' +
-							'  <p>' +
-							'     We found the following Pathways for the provided data.<br>Each Pathway has a set of significance values for each submitted <i>omic data</i>,' +
-							'     those values are calculated based on the total number of features (compounds and genes) for each Pathway as well as the number of features from the input involved on that Pathway.<br>' +
-							'     Additionally, when the input includes 2 or more different omic types, we provide a Combined Significance Value, which allow us to identify those Pathways that are potentially more relevant.' +
-							'  </p>' +
-							'  <a id="paint_link"><i class="fa fa-paint-brush-o"></i> Choose the pathways below and  Paint!</a> ' +
-							'</div>'
-						}, {
-							xtype: 'box',
-							cls: "contentbox omicSummaryBox",
-							/* The job ID and the URL below it were one centred <h3> with
-							   an unclosed <span class="infoTip"> inside it, so a caption
-							   inherited heading styling and the whole block sat on a
-							   centre line that nothing else in the row shares - the card
-							   beside this one is left-aligned prose on the card inset.
-							   Two elements now, both taking the inset from
-							   `div.contentbox h3` / `div.contentbox p`, so the heading,
-							   the URL and the counts below all start on one rail. */
-							html: '<h2>Pathways summary</h2>' +
-							'<h3>Your Job ID is <b id="jobIdField">[JOB ID]</b><span id="jobName" style="display: none">[JOB NAME]</span></h3>' +
-							'<p class="po-job-url"><span class="infoTip">You can access this job using the URL: <a id="jobURL" target="_blank" href="#">[JOBURL]</a></span></p>' +
-							// The icons are decorative -- the label beside each count
-							// already names it -- so they are hidden from screen
-							// readers rather than read out as "star".
-							'<div class="po-pathway-stats">' +
-							'  <div class="po-pathway-stat">' +
-							'    <span class="po-pathway-icon" aria-hidden="true"><i class="fa fa-sitemap"></i></span>' +
-							'    <span class="po-pathway-figure">' +
-							'      <div id="foundPathwaysTag" class="odometer odometer-theme-default po-pathway-count">000</div>' +
-							'      <span class="po-pathway-label">Found Pathways</span>' +
-							'    </span>' +
-							'  </div>' +
-							'  <div class="po-pathway-stat">' +
-							'    <span class="po-pathway-icon is-significant" aria-hidden="true"><i class="fa fa-star"></i></span>' +
-							'    <span class="po-pathway-figure">' +
-							'      <div id="significantPathwaysTag" class="odometer odometer-theme-default po-pathway-count">000</div>' +
-							'      <span class="po-pathway-label">Significant</span>' +
-							'    </span>' +
-							'  </div>' +
-							'</div>'
-						}
-					]
-				},
-				((me.getModel().getDatabases().length < 2) ? null :
-				{
-					xtype: 'box', cls: "contentbox", style: "max-width:1900px; margin: 5px 10px; margin-top:20px;", html:
-					'<div id="multisource_msg">' +
-					'  <h2>Multiple databases used</h2>' +
-					'  <div class="multisource_body">' +
-					'    <div class="multisource_text">' +
-					'      <p>This species has pathway data in more than one database. The tabs below give you' +
-					' separate classification and network analysis for each one.</p>' +
-					'      <p>The pathway list shows every database at once by default. Use the checkboxes in the' +
-					' search bar to narrow it down &mdash; each row is labelled with the database it came from.</p>' +
-					'    </div>' +
-					'    <div id="multisource_summary"></div>' +
+				},{ //THE SUMMARY BAND
+					/* One band, not three cards.
+
+					   This region used to be two side-by-side cards ("Pathways
+					   selection" - four lines of prose about how significance is
+					   computed - and "Pathways summary" - job ID, the full URL
+					   written out, two counts) plus a third full-width card
+					   ("Multiple databases used" - two more paragraphs and a
+					   table). Roughly 700px of reading before the first real
+					   control, and almost none of it data: the prose never
+					   changes, the URL is the one in the address bar, and the
+					   paint link scrolled nowhere.
+
+					   Everything that varies by job now sits in one card: the
+					   counts, the per-database split, the job identity. The
+					   explanation of how significance is computed - true for
+					   every job - lives in the heading's tooltip, and the two
+					   paragraphs about database tabs became the one-line note
+					   beside the table they described. The IDs are unchanged
+					   on purpose: jobIdField/jobURL/jobName are filled by
+					   updateObserver, the two odometers by the summary refresh,
+					   and #multisource_summary by the per-database table built
+					   in afterrender. */
+					xtype: 'box', itemId: "pathwaysSummaryPanel",
+					cls: "contentbox po-band-card",
+					style: "max-width:1900px; margin: 5px 10px; margin-top:50px;",
+					html:
+					'<div class="po-band-head">' +
+					'  <h2>Pathways summary<span class="helpTip" title="Each pathway is scored per submitted omic type: its significance comes from how many of its features (genes and compounds) are present in your input, against the total the pathway contains. When two or more omic types are submitted, a Combined Significance Value ranks pathways across all of them."></span></h2>' +
+					'  <span id="jobName" class="po-job-name" style="display: none"></span>' +
+					'  <div class="po-band-actions">' +
+					'    <span class="po-job-chip">Job <b id="jobIdField">&mdash;</b>' +
+					// Two glyph buttons, labelled for readers since neither has text:
+					// open the shareable URL, and put it on the clipboard.
+					'      <a id="jobURL" target="_blank" href="#" title="Open the shareable link for this job" aria-label="Open the shareable link for this job"><i class="fa fa-external-link"></i></a>' +
+					'      <a id="copyJobURL" href="javascript:void(0)" title="Copy the shareable link" aria-label="Copy the shareable link"><i class="fa fa-clipboard"></i></a>' +
+					'    </span>' +
+					'    <a id="paint_link" class="button btn-info" href="javascript:void(0)"><i class="fa fa-paint-brush"></i> Pick pathways to paint</a>' +
 					'  </div>' +
+					'</div>' +
+					// The icons are decorative -- the label beside each count
+					// already names it -- so they are hidden from screen
+					// readers rather than read out as "star".
+					'<div class="po-band">' +
+					'  <div class="po-pathway-stat">' +
+					'    <span class="po-pathway-icon" aria-hidden="true"><i class="fa fa-sitemap"></i></span>' +
+					'    <span class="po-band-figure">' +
+					'      <div id="foundPathwaysTag" class="odometer odometer-theme-default po-pathway-count">000</div>' +
+					'      <span class="po-pathway-label">Pathways found</span>' +
+					'    </span>' +
+					'  </div>' +
+					'  <div class="po-pathway-stat">' +
+					'    <span class="po-pathway-icon is-significant" aria-hidden="true"><i class="fa fa-star"></i></span>' +
+					'    <span class="po-band-figure">' +
+					'      <div id="significantPathwaysTag" class="odometer odometer-theme-default po-pathway-count">000</div>' +
+					'      <span class="po-pathway-label">Significant</span>' +
+					'    </span>' +
+					'  </div>' +
+					((me.getModel().getDatabases().length < 2) ? '' :
+					'  <div class="po-band-dbs">' +
+					'    <div id="multisource_summary"></div>' +
+					// data-guides="ignore": a lone flex item beside a table whose
+					// cells key per-column - the guides overlay has no group that
+					// can hold both, so measured raw it reports against the card
+					// rail 400px to its left while sitting in the cell's own flow.
+					'    <p class="po-band-note" data-guides="ignore">One explorer tab per database below; the enrichment table lists all of them, filterable from its search bar.</p>' +
+					'  </div>') +
 					'</div>'
-				}),
+				},
 				me.statsView.getComponent(),
 				{
 						xtype: 'tabpanel', id: 'tabcontainer_network', plain: true,
@@ -942,10 +1000,28 @@ function PA_Step3JobView() {
 								   ended at 299 and "Reactome" began at 303, four pixels
 								   between two words that name different databases, so
 								   the strip read as the single phrase "KEGG Reactome"
-								   rather than as two controls. */
-								margin: '0 22 0 0'
+								   rather than as two controls.
+
+								   22px was the answer while the tabs were bare
+								   words. They are bookmark tabs now - see "The
+								   database tabs" in main.css - and a box does
+								   its own separating: at 22 the two read as
+								   unrelated buttons that happened to land side
+								   by side rather than as one control with two
+								   positions.
+
+								   4, not 6: tabs on a folder sit close enough
+								   that the sheets behind read as a stack. At 6
+								   they were still two objects with air between
+								   them. */
+								margin: '0 4 0 0'
 							},
-							height: 50,
+							/* The bar is exactly as tall as a tab. It was 50
+							   against a 38px tab, so the tabs floated in a
+							   12px band and could not meet the card below
+							   them - which is the whole of what a bookmark
+							   tab has to do. */
+							height: 36,
 						},
 						listeners: {
 							/* A card layout writes the width it measured onto its
@@ -995,8 +1071,16 @@ function PA_Step3JobView() {
 								}
 							},
 							tabchange: function(tabPanel, newCard, oldCard, eOpts) {
-								/* Fire event at network element (second position) */
-								newCard.items.getAt(1).fireEvent('tabchange');
+								/* Looked up by id rather than by position. The two views
+								   are wrapped in one card now, so the network is no longer
+								   the tab's second child - and a position that is wrong is
+								   silent here, because fireEvent on the classification box
+								   simply matches no listener and the network never draws
+								   itself on first switch. */
+								var networkCmp = Ext.getCmp('networkview_' + newCard.title.replace(' ', '__'));
+								if (networkCmp) {
+									networkCmp.fireEvent('tabchange');
+								}
 
 								// Rebuild the contents list for the database now
 								// showing. paTocSections() skips headings whose
@@ -1054,6 +1138,59 @@ function PA_Step3JobView() {
 					});
 					$("#sharingButton").click(function() {
 						me.shareHandler();
+					});
+
+					/* The old "Choose the pathways below and Paint!" anchor had
+					   no handler at all - an instruction dressed as a control.
+					   The button goes where the instruction pointed: the
+					   enrichment table, via the contents rail's own jump so the
+					   scroll animates inside the ExtJS scroller (a smooth
+					   scrollTo on that element is silently swallowed - see
+					   paTocJumpTo in Util.js). */
+					$("#paint_link").click(function() {
+						if (typeof paTocJumpTo === "function") {
+							paTocJumpTo("Pathway enrichment");
+						} else {
+							var section = document.getElementById("pathwayEnrichmentSection");
+							if (section && section.scrollIntoView) {
+								section.scrollIntoView({block: "start"});
+							}
+						}
+					});
+
+					/* Copy the shareable URL. The glyph is the feedback: a tick
+					   for a moment, then back - no dialog, because a modal here
+					   would block every later browser command in automated runs
+					   and interrupt a human for a success they can see. */
+					$("#copyJobURL").click(function() {
+						var link = $(this);
+						var url = window.location.href;
+						var showCopied = function() {
+							link.addClass("is-copied").find("i").attr("class", "fa fa-check");
+							window.setTimeout(function() {
+								link.removeClass("is-copied").find("i").attr("class", "fa fa-clipboard");
+							}, 1500);
+						};
+						/* execCommand path for the http:// deploys where the
+						   async clipboard API is withheld from the page. */
+						var fallbackCopy = function() {
+							var scratch = document.createElement("textarea");
+							scratch.value = url;
+							scratch.setAttribute("readonly", "");
+							scratch.style.position = "absolute";
+							scratch.style.left = "-9999px";
+							document.body.appendChild(scratch);
+							scratch.select();
+							try {
+								if (document.execCommand("copy")) { showCopied(); }
+							} catch (e) { /* the open-link button remains */ }
+							document.body.removeChild(scratch);
+						};
+						if (navigator.clipboard && navigator.clipboard.writeText) {
+							navigator.clipboard.writeText(url).then(showCopied, fallbackCopy);
+						} else {
+							fallbackCopy();
+						}
 					});
 
 					// AI widget lifecycle managed by refreshAIWidget() via updateObserver()
@@ -1491,9 +1628,21 @@ function PA_Step3PathwayClassificationView(db = "KEGG") {
 		var me = this;
 
 		this.component = Ext.widget({
-			xtype: 'box', cls: "contentbox",
+			/* No `contentbox` any more: this view and the network below it share
+			   one card, which the job view wraps around both. This is the half
+			   that carries the card's own <h2>. */
+			xtype: 'box', cls: "paExploreSection paExploreOverview",
 			maxWidth: 1900, html:
-			'<h2>Pathways classification (' + me.database + ' database)</h2>' +
+			'<h2>Pathway explorer (' + me.database + ' database)<span class="helpTip" title="Choose which pathways to keep by category, then explore how the ones that remain relate to each other. Every control on this card acts on the same set of pathways, and on the table at the foot of the page."></span></h2>' +
+			/* The classification block is foldable because it is the half of the
+			   card you set once. Folded, the network gets the whole card; the
+			   button says which state it is in rather than which state it will
+			   move to, so the row reads as a label with a control on it. */
+			'<div class="paExploreBand">' +
+			'  <h3>Pathway categories</h3>' +
+			'  <a href="javascript:void(0)" class="paExploreFold" id="foldClassificationButton_' + me.dbid + '"><i class="fa fa-chevron-up"></i> Hide</a>' +
+			'</div>' +
+			'<div class="paExploreFoldable" id="classificationBody_' + me.dbid + '">' +
 			/* The card's own inset, not 10px: "Category Distribution" is the
 			   first thing under the card's heading and started 16px left of
 			   it. */
@@ -1514,11 +1663,34 @@ function PA_Step3PathwayClassificationView(db = "KEGG") {
 			   anything else on the page uses, so it read as the button having
 			   come loose rather than as an inset. */
 			'  <a href="javascript:void(0)" class="button btn-success btn-right helpTip" id="applyClassificationSettingsButton_' + me.dbid + '" style="margin: 0px 0px 17px 0px;" title="Apply changes"><i class="fa fa-check"></i> Apply</a>' +
+			'</div>' +
 			'</div>',
 			listeners: {
 				boxready: function() {
 					$("#applyClassificationSettingsButton_" + me.dbid).click(function() {
 						me.applyVisualSettings();
+					});
+
+					$("#foldClassificationButton_" + me.dbid).click(function() {
+						var button = $(this);
+						var body = $("#classificationBody_" + me.dbid);
+						var folding = body.is(":visible");
+
+						body.slideToggle(200, function() {
+							/* Highcharts sizes itself against a container it can
+							   measure, and a container inside a hidden parent
+							   measures zero. Unfolding without this leaves the pie
+							   drawn at whatever width it had when it was last
+							   visible, which is the wrong one if the window has
+							   been resized in between. */
+							if (!folding && me.highcharts) {
+								me.highcharts.reflow();
+							}
+						});
+
+						button.html(folding
+							? '<i class="fa fa-chevron-down"></i> Show'
+							: '<i class="fa fa-chevron-up"></i> Hide');
 					});
 
 					initializeTooltips(".helpTip");
@@ -2223,15 +2395,178 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 	};
 
 	/**
+	* Show one of the two panes in the network's rail, and make sure the rail
+	* itself is on screen.
+	*
+	* The rail replaced two 216px panels that stood side by side and were shown
+	* and hidden independently - which meant the graph's width depended on how
+	* many of them happened to be open, and that "Configure" opened a second
+	* column rather than switching one.
+	*
+	* @chainable
+	* @param {String} pane, either "tools" or "details"
+	* @returns {PA_Step3PathwayNetworkView} the view
+	*/
+	this.showRailPane = function(pane) {
+		var me = this;
+		var isDetails = (pane === "details");
+
+		$("#networkview_" + me.dbid).removeClass("is-railHidden");
+		$("#networkDetailsPanel_" + me.dbid).toggle(isDetails);
+		$("#networkSettingsPanel_" + me.dbid).toggle(!isDetails);
+
+		$("#networkview_" + me.dbid + " .paNetRailTab").each(function() {
+			$(this).toggleClass("is-active", $(this).attr("data-pane") === pane);
+		});
+
+		/* The rail appearing, or the panes swapping, changes nothing about the
+		   canvas' box - but coming back from a hidden rail does, and that is the
+		   same call, so it is made unconditionally rather than guessed at. */
+		me.resizeNetwork();
+
+		return this;
+	};
+
+	/**
+	* Re-measure the canvas and redraw. sigma reads its container's size once, at
+	* construction, so every change to the space around the graph - the rail
+	* opening or closing, full screen, the resizer at the foot of the card - has
+	* to be followed by this or the drawing keeps the old dimensions and the graph
+	* sits in a corner of its own panel.
+	* @chainable
+	* @returns {PA_Step3PathwayNetworkView} the view
+	*/
+	this.resizeNetwork = function() {
+		var me = this;
+
+		if (!me.network) {
+			return me;
+		}
+
+		/* Deferred one frame: called from a click handler, the layout that the
+		   class change causes has not happened yet, so an immediate resize
+		   measures the box the graph is leaving rather than the one it is
+		   entering. */
+		paDeferFrame(function() {
+			if (!me.network) {
+				return;
+			}
+			me.network.renderers.forEach(function(renderer) {
+				if (renderer.resize) {
+					renderer.resize();
+				}
+			});
+			me.network.refresh();
+		});
+
+		return me;
+	};
+
+	/**
+	* Expand the network to fill the screen, or put it back into the page.
+	*
+	* The previous implementation handed sigma's fullScreen plugin the canvas
+	* `div` on its own, and two things followed from that. The canvas keeps the
+	* height it has in the page (--pa-net-canvas-height, 720px), so full screen
+	* showed a 720px band on a black backdrop rather than a filled screen. And the
+	* toolbar holding the button is a *sibling* of that canvas, not a child, so
+	* once the browser was showing the canvas alone there was nothing on screen
+	* left to click: Escape was the only way out, and nothing said so. That is the
+	* reported fault - full screen could not be exited.
+	*
+	* Expanding the whole panel fixes both at once: the toolbar comes with it, and
+	* the button in it now reads "Exit full screen". The native request is still
+	* made where the browser allows it, so the screen really is filled; where it is
+	* refused - no user gesture, a permissions policy, an embedded frame - the
+	* class alone still covers the viewport, so the control can never leave the
+	* user somewhere they cannot get back from. Escape is bound for the same
+	* reason.
+	*
+	* @chainable
+	* @param {Boolean} expand
+	* @returns {PA_Step3PathwayNetworkView} the view
+	*/
+	this.setFullScreenNetwork = function(expand) {
+		var me = this;
+		/* The whole area, graph and rail together - not the graph alone. Full
+		   screen is where you have the most room to adjust what you are looking
+		   at, and leaving the rail behind in the page would have left
+		   "Configure" in the expanded toolbar as a control that does nothing
+		   visible. */
+		var panel = $("#networkview_" + me.dbid);
+		var button = $("#fullscreenSettingsPanelButton_" + me.dbid);
+		var caption = expand
+			? "Put the network back into the page"
+			: "Expand the network to the whole window";
+
+		if (!panel.length) {
+			return me;
+		}
+
+		panel.toggleClass("paNetExpanded", expand);
+		button.html(expand
+			? '<i class="fa fa-compress"></i> Exit full screen'
+			: '<i class="fa fa-expand"></i> Full screen');
+		button.attr("title", caption);
+		/* tooltipster copies the title into its own store at initialisation and
+		   never looks at the attribute again, so without this the button says
+		   "Exit full screen" and its tooltip still offers to expand it. */
+		if (button.hasClass("tooltipstered")) {
+			button.tooltipster("content", caption);
+		}
+
+		if (expand) {
+			var element = panel[0];
+			var request = element.requestFullscreen || element.webkitRequestFullscreen || element.msRequestFullscreen;
+
+			if (request && !me.getFullScreenElement()) {
+				/* Both shapes of failure are swallowed: older engines throw, and
+				   current ones return a promise that rejects when the click was
+				   not a user gesture. Either way the class above has already done
+				   the visible work, and an unhandled rejection here would be the
+				   only thing the user ever saw of it. */
+				try {
+					var pending = request.call(element);
+					if (pending && pending.catch) {
+						pending.catch(function() {});
+					}
+				} catch (ignored) {}
+			}
+		} else if (me.getFullScreenElement()) {
+			var release = document.exitFullscreen || document.webkitExitFullscreen || document.msExitFullscreen;
+
+			if (release) {
+				try {
+					var leaving = release.call(document);
+					if (leaving && leaving.catch) {
+						leaving.catch(function() {});
+					}
+				} catch (ignored) {}
+			}
+		}
+
+		me.resizeNetwork();
+
+		return me;
+	};
+
+	/**
+	* The element the browser is currently showing full screen, across the vendor
+	* prefixes this application's browsers still answer to.
+	* @returns {Element|null}
+	*/
+	this.getFullScreenElement = function() {
+		return document.fullscreenElement || document.webkitFullscreenElement ||
+			document.mozFullScreenElement || document.msFullscreenElement || null;
+	};
+
+	/**
 	* This function activate the fullscreen mode for the network
 	* @chainable
 	* @returns {PA_Step3PathwayNetworkView} the view
 	*/
 	this.fullScreenNetwork = function() {
-		sigma.plugins.fullScreen({
-		  container: $("#pathwayNetworkBox_" + this.dbid)[0]
-		});
-		return this;
+		return this.setFullScreenNetwork(!$("#networkview_" + this.dbid).hasClass("paNetExpanded"));
 	};
 
 
@@ -2259,16 +2594,20 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 		}
 		this.pathwayDetailsView.updateObserver(omicNames, this.getModel().getDataDistributionSummaries(), this.getParent().getVisualOptions());
 
-		if(!$("#networkDetailsPanel_" + me.dbid).is(":visible")){
-			$("#networkSettingsPanel_" + me.dbid).hide();
-			$("#networkClustersContainer_" + me.dbid).hide();
-			$("#networkDetailsPanel_" + me.dbid).show(200, function(){
-				$("#patwaysDetailsWrapper_" + me.dbid).show();
-			});
-		}else{
-			$("#networkClustersContainer_" + me.dbid).slideUp(200,function(){
+		/* One rail, so clicking a node is a pane switch rather than a panel
+		   swap: bring Details to the front, then show the pathway inside it in
+		   place of the cluster summary. */
+		var wasShowing = $("#networkDetailsPanel_" + me.dbid).is(":visible");
+
+		this.showRailPane("details");
+
+		if (wasShowing) {
+			$("#networkClustersContainer_" + me.dbid).slideUp(200, function(){
 				$("#patwaysDetailsWrapper_" + me.dbid).slideDown();
 			});
+		} else {
+			$("#networkClustersContainer_" + me.dbid).hide();
+			$("#patwaysDetailsWrapper_" + me.dbid).show();
 		}
 
 		return this;
@@ -2769,6 +3108,14 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 
 		this.component = Ext.widget({
 			xtype: 'container', id: 'networkview_' + me.dbid,
+			/* `paNetArea` is the flex row: the graph on the left, one rail of
+			   controls on the right. It was two floated 216px panels before -
+			   "Tools" and "Details" side by side - which took 462px of a 1114px
+			   card for two columns that are never both being read, and left the
+			   diagram they annotate with less than half the space. One rail with
+			   two panes gives that back, and stretches to the graph's height on
+			   its own rather than through the 876px literal the floats needed. */
+			cls: 'paNetArea',
 			/*autoHeight: true,
 			layout:
 			{
@@ -2779,10 +3126,13 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 			items: [ {
 				xtype: 'box', id: 'networkDetailsPanel_' + me.dbid,
 				//autoHeight: true, flex: 1,
-				cls: "contentbox lateralOptionsPanel", html:
+				/* No `contentbox`, and no <h2> of its own: this is a pane inside
+				   the card's rail, and the rail's tab already names it. It keeps
+				   `lateralOptionsPanel` because that is what dresses the controls
+				   inside it - and what paTocSections() looks for when deciding
+				   that a heading in here titles a control, not an analysis. */
+				cls: "lateralOptionsPanel paNetRailPane", html:
 				//THE PANEL WITH THE CLUSTERS SUMMARY
-				'<div class="lateralOptionsPanel-toolbar"><a href="javascript:void(0)" class="toolbarOption helpTip hideOption" id="hideNetworkDetailsPanelButton_' + me.dbid + '" title="Hide this panel"><i class="fa fa-times"></i></a></div>'+
-				'<h2>Details</h2>' +
 				'<div id="networkClustersContainer_' + me.dbid + '">' +
 				'  <h4>TheName For AnOmic</h4><span class="infoTip">Click on each cluster to hide/show the nodes in the network</span>' +
 				'  <h5>N Clusters founds</h5>' +
@@ -2808,10 +3158,8 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 				// group labels rather than names and main.css tracks them out.
 				// Deliberately not on the Details panel beside it, whose h4 is
 				// whatever the network is currently coloured by.
-				cls: "contentbox lateralOptionsPanel paSettingsPanel", html:
+				cls: "lateralOptionsPanel paSettingsPanel paNetRailPane", html:
 				//THE PANEL WITH THE VISUAL OPTIONS
-				'<div class="lateralOptionsPanel-toolbar"><a href="javascript:void(0)" class="toolbarOption helpTip hideOption" id="hideNetworkSettingsPanelButton_' + me.dbid + '" title="Hide this panel"><i class="fa fa-times"></i></a></div>'+
-				'<h2>Tools<span class="helpTip" title="Some options may affect to the table below."></h2>' +
 				'<div id="pathwayNetworkToolsBox_' + me.dbid + '" style="overflow:hidden;">' +
 				'  <h4>Visual settings</h4>' +
 				'  <h5>Node coloring: <span class="helpTip" style="float:right;" title="Change the way in which nodes are colored."></span></h5>' +
@@ -2872,8 +3220,27 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 				'  <a href="javascript:void(0)" class="button btn-success btn-right helpTip" id="applyNetworkSettingsButton_' + me.dbid + '" style="margin-top: 20px;" title="Apply changes"><i class="fa fa-check"></i> Apply</a>' +
 				'</div>'
 			},{
-				xtype: 'box', cls: "contentbox",
+				/* The rail's own tab strip. The two panes above are placed into one
+				   grid cell by paNetArea, so exactly one is on screen at a time and
+				   this is what says which - and what names them, now that neither
+				   pane carries a heading of its own.
+
+				   A fourth sibling rather than a wrapper around the panes: this
+				   layout is a CSS grid precisely so that the rail can be assembled
+				   without nesting the two panes inside a container, which is a
+				   change that would have had to be made inside every id-addressed
+				   selector the network code already relies on. */
+				xtype: 'box', cls: "paNetRailTabs", html:
+				'<a href="javascript:void(0)" class="paNetRailTab is-active helpTip" data-pane="tools" title="Everything that changes what the graph shows. Some options also affect the table below."><i class="fa fa-sliders"></i> Tools</a>' +
+				'<a href="javascript:void(0)" class="paNetRailTab helpTip" data-pane="details" title="The colour legend, and the detail for whichever pathway you last clicked"><i class="fa fa-info-circle"></i> Details</a>' +
+				'<a href="javascript:void(0)" class="paNetRailHide helpTip" title="Hide this panel and give the graph the whole card"><i class="fa fa-times"></i></a>'
+			},{
+				xtype: 'box', id: 'networkPanel_' + me.dbid,
 				//autoHeight: true, flex: 4,
+				/* `paNetMain` is the graph half of the grid, and the element that
+				   full screen expands - see setFullScreenNetwork. No `contentbox`:
+				   the card around the whole explorer draws the only border here. */
+				cls: "paNetMain",
 				style: 'overflow: hidden; margin:0;', html:
 				//THE PANEL WITH THE NETWORK
 				/* One band, two groups. The controls that change what you are
@@ -2882,7 +3249,12 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 				   downloads that used to float over the title - sit right.
 				   Shapes and spacing come from .pa-net-tool in
 				   network-views.css, which the MORE network's buttons share. */
-				'<h2>Pathways network (' + me.database + ' database)<span class="helpTip" title="This Network represents the relationships between matched pathways."></h2>' +
+				/* h3, not h2. The card's one h2 is "Pathway explorer" a few hundred
+				   pixels above; this names the second block inside it. The contents
+				   strip counts h2s, so a second one here would have put the network
+				   in the sidebar as an analysis separate from the card it lives
+				   in. */
+				'<h3 class="paNetTitle">Pathways network<span class="helpTip" title="This Network represents the relationships between matched pathways."></span></h3>' +
 				'<div id="step3-network-toolbar_' + me.dbid + '" class="pa-net-toolbar">' +
 				' <div class="lateralOptionsPanel" id="reorderOptions_' + me.dbid + '" style="display:none;">' +
 				'  <div class="lateralOptionsPanel-toolbar">' +
@@ -3070,6 +3442,38 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 					$("#fullscreenSettingsPanelButton_" + me.dbid).click(function() {
 						me.fullScreenNetwork();
 					});
+
+					/* Two ways out of full screen that are not the button, both of
+					   which have to leave the panel and the button agreeing with
+					   each other:
+
+					     - the browser's own exit (Escape, or the notification bar
+					       Chrome shows), which fires fullscreenchange and would
+					       otherwise leave the panel still class-expanded over the
+					       page with a button reading "Exit full screen";
+					     - Escape when the native request was refused and only the
+					       class is holding the panel open, where no fullscreenchange
+					       ever comes.
+
+					   Namespaced per database and detached first: a job reload
+					   builds these views again, and document-level handlers from the
+					   previous one would otherwise accumulate and act on panels that
+					   no longer exist. */
+					var fullScreenEvents = "fullscreenchange.paNet" + me.dbid +
+						" webkitfullscreenchange.paNet" + me.dbid +
+						" msfullscreenchange.paNet" + me.dbid;
+
+					$(document).off(fullScreenEvents).on(fullScreenEvents, function() {
+						if (!me.getFullScreenElement() && $("#networkview_" + me.dbid).hasClass("paNetExpanded")) {
+							me.setFullScreenNetwork(false);
+						}
+					});
+
+					$(document).off("keydown.paNet" + me.dbid).on("keydown.paNet" + me.dbid, function(event) {
+						if (event.key === "Escape" && $("#networkview_" + me.dbid).hasClass("paNetExpanded")) {
+							me.setFullScreenNetwork(false);
+						}
+					});
 					$("#step3-network-toolbar-message_" + me.dbid).hover(function(){
 						$(this).fadeOut(100);
 					});
@@ -3081,8 +3485,22 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 					$("#step3-network-toolbar_" + me.dbid + " .submenuOption").click(function() {
 						$(this).parent(".menuBody").first().toggle();
 					});
+					/* Tools is the pane the card opens on. Both panes were visible at
+					   once before, side by side; one has to be chosen now, and it is
+					   the one that does something - Details is a legend until a node
+					   has been clicked, and clicking a node brings it forward
+					   itself. */
+					me.showRailPane("tools");
+
 					$("#showNetworkSettingsPanelButton_" + me.dbid).click(function() {
-						$("#networkSettingsPanel_" + me.dbid).show();
+						me.showRailPane("tools");
+					});
+					$("#networkview_" + me.dbid + " .paNetRailTab").click(function() {
+						me.showRailPane($(this).attr("data-pane"));
+					});
+					$("#networkview_" + me.dbid + " .paNetRailHide").click(function() {
+						$("#networkview_" + me.dbid).addClass("is-railHidden");
+						me.resizeNetwork();
 					});
 					$("#reorderOptions_" + me.dbid + " span i").click(function() {
 						var option = $("#reorderOptions_" + me.dbid + " h3:visible");
@@ -3123,14 +3541,25 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 							beforeresize: function(resizer, width, height){
 								resizer.prevHeight= height;
 							},
+							/* Only the canvas is sized here now, and it is addressed by
+							   its real id.
+
+							   Both of those were faults. The four ids in the list had
+							   no database suffix - `#pathwayNetworkBox` where the
+							   element is `pathwayNetworkBox_KEGG` - so every selector
+							   matched nothing and dragging the handle resized
+							   precisely one thing: the Ext panel's own frame, with
+							   the graph inside it unchanged. And the three side
+							   panels were in the list because floats had to be told
+							   each other's heights; the grid stretches the rail to
+							   the graph on its own, so telling it a height now is how
+							   the two get out of step. */
 							resize: function(resizer, width, height){
 								var diff = height - resizer.prevHeight;
-								var panels = ['pathwayNetworkBox', 'networkDetailsPanel', 'networkSettingsPanel', 'patwaysDetailsContainer'];
+								var canvas = $('#pathwayNetworkBox_' + me.dbid);
 
-								for(var i in panels){
-									var elem = $('#' + panels[i]);
-									elem.height(elem.height() + diff);
-								}
+								canvas.height(canvas.height() + diff);
+								me.resizeNetwork();
 							}
 						}
 					});
@@ -3409,8 +3838,13 @@ function PA_Step3PathwayDetailsView() {
 					/****************************************************************/
 					var pathwaySource = this.getModel().getSource();
 					var thumbnail_suffix = (pathwaySource == undefined || pathwaySource == 'KEGG') ? '_thumb' : '_' + pathwaySource + '_thumb'
-					pathwayPlotwrappers.html('<div class="step3ChartWrapper" style="background-image: url('/' + location.pathname + "kegg_data/" +  this.getModel().getID() + thumbnail_suffix + '/')"></div>');
-					this.getComponent().setHeight(200);
+					/* The quotes around the url() argument have to be escaped, not
+					   closed: written as url('/' + ... the leading string literal
+					   ended early and the whole expression parsed as a chain of
+					   divisions, handing jQuery a NaN. Colouring by classification
+					   is the default, so the panel came up blank every time. Same
+					   construction as the Step 4 thumbnails. */
+					pathwayPlotwrappers.html('<div class="step3ChartWrapper" style="background-image: url(\'' + location.pathname + "kegg_data/" + this.getModel().getID() + thumbnail_suffix + '\')"></div>');
 					break;
 				}else if (metagenes === undefined){
 					/****************************************************************/
@@ -3420,7 +3854,6 @@ function PA_Step3PathwayDetailsView() {
 						"<h4 style='color: #D16949;font-size: 13px;margin: 0;'>" + omicDataType[i] + "</h4>"+
 						"<b>No data for this pathway.</b>"
 					);
-					this.getComponent().setHeight(120);
 				}else{
 					/****************************************************************/
 					/* STEP 3.C UPDATE THE HEATMAP AND THE PLOT                     */
@@ -3429,7 +3862,7 @@ function PA_Step3PathwayDetailsView() {
 					pathwayPlotwrappers.append(
 						"<div>"+
 						"  <h4>" + omicDataType[i] + "</h4>"+
-						"  <span class='tooltipDetailsSpan'><i class='fa fa-info-circle'></i> " + metagenes.length + " major trends in this pathway.</span></br>"+
+						"  <span class='tooltipDetailsSpan'><i class='fa fa-info-circle'></i> " + metagenes.length + " major trend" + (metagenes.length === 1 ? "" : "s") + " in this pathway.</span></br>"+
 						"  <div class='twoOptionsButtonWrapper'>" +
 						'      <a href="javascript:void(0)" class="button twoOptionsButton" name="heatmap-chart">Heatmap</a>'+
 						'      <a href="javascript:void(0)" class="button twoOptionsButton selected" name="line-chart">Line chart</a>'+
@@ -3460,10 +3893,34 @@ function PA_Step3PathwayDetailsView() {
 				$(this).addClass("selected");
 				parent.siblings("div.step3-tooltip-plot-container.selected").removeClass("selected").toggle();
 				parent.siblings("div.step3-tooltip-plot-container[name="+ target + "]").addClass("selected").toggle();
+				/* The heatmap is 35px per trend, the line chart a flat 100px, so
+				   the panel is a different height on either side of this toggle. */
+				me.fitToContent();
 			});
 
-			this.getComponent().setHeight(230);
+			this.fitToContent();
 
+			return this;
+		};
+
+	/**
+	* Size the box to the content it actually holds.
+	*
+	* The three branches above used to pin it to 200/120/230px whatever they had
+	* just rendered. 230px is short of what a single omic needs (242px measured
+	* on a one-line pathway name), and the box does not clip, so the tail of the
+	* chart ran out of it and under the Show details / Paint row below. A second
+	* omic, a name that wraps to two lines or the taller heatmap made the overlap
+	* worse. Measure instead of guessing.
+	* @chainable
+	* @returns {PA_Step3PathwayDetailsView}
+	*/
+	this.fitToContent = function() {
+			var component = this.getComponent(), el = component.getEl();
+			var panel = (el != null) ? el.dom.querySelector(".mainInfoPanel") : null;
+			if (panel !== null) {
+				component.setHeight(panel.offsetHeight);
+			}
 			return this;
 		};
 
@@ -3623,6 +4080,24 @@ function PA_Step3PathwayDetailsView() {
 			maxVal = Math.ceil(Math.max(maxVal, 1));
 			minVal = Math.floor(Math.min(minVal, -1));
 
+			/* The three reference lines mark the +/-1 band that turns a point's
+			   marker orange. Their labels used to be unconditional, so on a
+			   pathway whose metagene range is wide (+/-6, +/-10) all three
+			   landed within a few pixels of each other in a 100px chart and
+			   piled up into an unreadable smudge on the right edge. Draw the
+			   lines either way; label the +/-1 pair only when the text has room
+			   to clear the zero label. */
+			var referenceLine = function(value, labelled) {
+				var line = {color: '#dedede', value: value, width: 1};
+				if (labelled) {
+					line.label = {
+						text: String(value), align: 'right', x: -3, y: -2,
+						style: {color: 'gray', fontSize: '9px'}
+					};
+				}
+				return line;
+			};
+
 			var plot = new Highcharts.Chart({
 				chart: {renderTo: targetID},
 				title: null,
@@ -3633,9 +4108,9 @@ function PA_Step3PathwayDetailsView() {
 					min: minVal,
 					max: maxVal,
 					plotLines: [
-						{label: {text: '-1',align: 'right', style: {color: 'gray'}},color: '#dedede',value: -1,width: 1},
-						{label: {text: '0',align: 'right', style: {color: 'gray'}},color: '#dedede',value: 0,width: 1},
-						{label: {text: '1',align: 'right', style: {color: 'gray'}},color: '#dedede',value: 1,width: 1}
+						referenceLine(-1, true),
+						referenceLine(0, true),
+						referenceLine(1, true)
 					]},
 					series: series,
 					legend: {
@@ -3659,6 +4134,20 @@ function PA_Step3PathwayDetailsView() {
 			);
 
 			plot.yAxis[0].setExtremes(minVal, maxVal);
+
+			/* Now that the axis has real pixel dimensions, drop the +/-1 labels
+			   if they would collide. 11px is the smallest gap at which the 9px
+			   label text still clears its neighbour. */
+			var yAxis0 = plot.yAxis[0];
+			if (Math.abs(yAxis0.toPixels(0) - yAxis0.toPixels(1)) < 11) {
+				yAxis0.update({
+					plotLines: [
+						referenceLine(-1, false),
+						referenceLine(0, true),
+						referenceLine(1, false)
+					]
+				}, true);
+			}
 
 			return plot;
 		};

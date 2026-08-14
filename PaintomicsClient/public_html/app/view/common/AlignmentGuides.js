@@ -56,7 +56,12 @@
 	var SELECTOR = [
 		"h1", "h2", "h3", "h4", "h5", "h6",
 		"p", "li", "dt", "dd", "blockquote",
-		"a.button", "label", "figcaption", "th", "td",
+		/* a[class*='po-btn'] because the hero's actions are po-btn-primary /
+		   po-btn-outline / po-btn-quiet anchors, not a.button: the box-align
+		   rule below already expected them and the selector never admitted
+		   them, so the landing page's most prominent row of controls was
+		   invisible to this tool - a nudged button measured clean. */
+		"a.button", "a[class*='po-btn']", "label", "figcaption", "th", "td",
 		/* An ExtJS grid's column headers are divs, not <th>, so a selector of
 		   semantic elements cannot see them - and the tool reported the hub and
 		   metabolite-class grids as clean while every header in them sat 5px
@@ -138,14 +143,47 @@
 		var block = document.createRange();
 		block.selectNodeContents(el);
 		var union = block.getBoundingClientRect();
+		/* The first LINE's full extent, icons included. A centred action row
+		   is an icon and a label centred as one unit, but the unit's first
+		   text node starts after the icon - measuring the run alone put the
+		   sign-in button's centre 8px right of the box it is centred in
+		   exactly, half an icon of phantom misalignment on every icon-led
+		   centred line. Full-width rects are the boxes of block wrappers (a
+		   grid cell's inner div spans the cell whatever its text does) and
+		   are skipped, or every centred cell would report its own column's
+		   centre and the check would stop seeing ragged content. */
+		var elBox = el.getBoundingClientRect();
+		var rlist = block.getClientRects();
 		block.detach && block.detach();
 		var rect = (rects && rects.length) ? rects[0] : union;
 		range.detach && range.detach();
 		if (!(rect.width > 0)) { return null; }
+		var lineLeft = rect.left, lineRight = rect.right;
+		if (rlist && rlist.length) {
+			var topMin = Infinity, k;
+			for (k = 0; k < rlist.length; k++) {
+				if (rlist[k].width > 0 && Math.abs(rlist[k].width - elBox.width) >= 2 &&
+				    rlist[k].top < topMin) { topMin = rlist[k].top; }
+			}
+			if (isFinite(topMin)) {
+				var ll = Infinity, rr = -Infinity;
+				for (k = 0; k < rlist.length; k++) {
+					var rk = rlist[k];
+					if (!(rk.width > 0)) { continue; }
+					if (Math.abs(rk.width - elBox.width) < 2) { continue; }
+					if (rk.top < topMin + 4) {
+						if (rk.left < ll) { ll = rk.left; }
+						if (rk.right > rr) { rr = rk.right; }
+					}
+				}
+				if (isFinite(ll)) { lineLeft = ll; lineRight = rr; }
+			}
+		}
 		return {
 			left: rect.left, right: rect.right, top: rect.top,
 			bottom: rect.bottom, width: rect.width,
-			blockTop: union.top, blockBottom: union.bottom
+			blockTop: union.top, blockBottom: union.bottom,
+			lineLeft: lineLeft, lineRight: lineRight
 		};
 	}
 
@@ -190,6 +228,20 @@
 		for (var i = 0; i < nodes.length; i++) {
 			var el = nodes[i];
 			if (!isVisible(el)) { continue; }
+			/* A deliberate offset is declared, not detected: data-guides="ignore"
+			   on an element or an ancestor takes it out of the measurement
+			   entirely - rails, strays and baselines alike. The step cards'
+			   disc-led headings sit 37px right of the copy below them because a
+			   26px numbered disc leads them; that is the design, and no
+			   detection rule for "a heading after a small numbered thing" would
+			   earn the false negatives it risks elsewhere. */
+			if (el.closest && el.closest("[data-guides='ignore']")) { continue; }
+			/* The overlay must not measure itself. Its legend writes the
+			   faults as <li> items - elements this selector matches - and the
+			   moment any modal put enough text at body level for that group
+			   to reach quorum, the tool reported its own report as a fault
+			   1259px off a rail. */
+			if (el.closest && el.closest("#" + LAYER_ID)) { continue; }
 			if (isFlowContinuation(el)) { continue; }
 			/* ExtJS builds every form row as a table and wraps the label in a
 			   `td.x-field-label-cell`. That cell is a layout box, not a piece of
@@ -209,6 +261,18 @@
 			if ((el.tagName === "TD" || el.tagName === "TH") &&
 			    /(^|\s)x-(form|field)/.test(
 			        typeof el.className === "string" ? el.className : "")) {
+				continue;
+			}
+			/* Action-column cells hold a centred row of icon links, not data
+			   text. firstGlyphRect measures the FIRST link's run, which is a
+			   fragment of a centred line - the pathway grid's "External
+			   links" cells centre KEGG-plus-Reactome as one line whose middle
+			   is the column's middle, and the fragment read 24.6px off a
+			   header that is centred over them exactly. Fragments of centred
+			   lines are not measurable; drop the cells and let the header
+			   fall below quorum. */
+			if ((el.tagName === "TD" || el.tagName === "TH") &&
+			    /action-?col/i.test(typeof el.className === "string" ? el.className : "")) {
 				continue;
 			}
 			/* Right-anchored text has no left rail, but it does have a
@@ -241,6 +305,45 @@
 			   border box starts at the marker, which is the edge a reader
 			   actually sees line up. */
 			if (el.tagName === "LI") {
+				glyph = box;
+				boxAligned = true;
+			}
+			/* An ExtJS checkbox label is led by its box the way a list item is
+			   led by its bullet: the input sits on the rail and the words follow
+			   it, a checkbox and a gap further in. Judged on its own text edge,
+			   Step 1's consent label reported 46px off a rail its checkbox sits
+			   on exactly. The wrap cell starts where the checkbox does, which is
+			   the edge a reader actually sees line up. */
+			if (!boxAligned && el.tagName === "LABEL" &&
+			    el.classList.contains("x-form-cb-label")) {
+				var cbWrap = el.closest && el.closest("td.x-form-cb-wrap");
+				if (cbWrap) {
+					glyph = cbWrap.getBoundingClientRect();
+					boxAligned = true;
+				}
+			}
+			/* The same shape outside ExtJS: the network tools panel writes
+			   its rows as <div class=radio><input><label></label></div>, the
+			   control drawn in the label's own 23px padding. The row's box
+			   sits exactly on the panel's heading rail; measured by glyph,
+			   eleven correctly hung rows out-voted their own headings and
+			   reported them 23px off a rail that is really the indent. */
+			if (!boxAligned && el.tagName === "LABEL" &&
+			    el.previousElementSibling && el.previousElementSibling.tagName === "INPUT" &&
+			    /^(radio|checkbox)$/.test(el.previousElementSibling.type) &&
+			    el.parentElement) {
+				glyph = el.parentElement.getBoundingClientRect();
+				boxAligned = true;
+			}
+			/* An element that draws its own accent bar is aligned by that
+			   bar, like a button by its edge: the reader lines up the drawn
+			   edge, not the type behind it. The example-note callout paints a
+			   4px blue bar down its own left side with its text 16px in. Only
+			   a bar of 3px or more counts - grid cells and headers carry 1px
+			   hairlines that are borders of the lattice, not edges of the
+			   element, and box-aligning those would hide genuinely ragged
+			   cell text behind trivially aligned boxes. */
+			if (!boxAligned && parseFloat(window.getComputedStyle(el).borderLeftWidth) >= 3) {
 				glyph = box;
 				boxAligned = true;
 			}
@@ -311,14 +414,33 @@
 			var alignedRight = !boxAligned &&
 				(cs.textAlign === "right" || cs.textAlign === "end");
 			var alignedCentre = !boxAligned && (cs.textAlign === "center");
+			/* An ExtJS column header is judged on the horizontal axis only,
+			   and a centred one by its box, not its text run. Vertically,
+			   grouped headers centre a spanning header's text with 44px of
+			   padding while leaf headers sit in the lower row - framework
+			   arithmetic that read as three headers 10px off their row's
+			   baseline. Horizontally, a sort arrow or menu trigger reserves
+			   width beside the text, shifting the run's centre by half the
+			   reserve - the sorted column's header reported 8.5px off data
+			   it is centred over. The box's centre IS the column's centre,
+			   which is what a centred header has to agree with. */
+			var isExtHeader = el.classList && el.classList.contains("x-column-header-inner");
+			if (alignedCentre && isExtHeader) {
+				glyph = box;
+			}
 			var vMiddle = (el.tagName === "TD" || el.tagName === "TH") &&
 				cs.verticalAlign === "middle";
 			found.push({
 				el: el,
 				noLeftRail: noLeftRail,
 				edge: alignedRight ? "right" : (alignedCentre ? "centre" : "left"),
-				x: alignedRight ? glyph.right
-					: (alignedCentre ? (glyph.left + glyph.right) / 2 : glyph.left),
+				x: alignedRight
+					? (glyph.lineRight !== undefined ? glyph.lineRight : glyph.right)
+					: (alignedCentre
+						? (glyph.lineLeft !== undefined
+							? (glyph.lineLeft + glyph.lineRight) / 2
+							: (glyph.left + glyph.right) / 2)
+						: glyph.left),
 				top: glyph.top,
 				bottom: glyph.bottom,
 				/* A table cell set to `vertical-align: middle` is placed by the
@@ -331,9 +453,9 @@
 				   fault, and moving either one would break the centring that
 				   is actually right. */
 				vedge: vMiddle ? "middle" : "baseline",
-				baseline: vMiddle
+				baseline: isExtHeader ? NaN : (vMiddle
 					? (glyph.blockTop + glyph.blockBottom) / 2
-					: text.bottom - descentFor(el),
+					: text.bottom - descentFor(el)),
 				/* Two runs are peers when a reader would expect them to sit on
 				   one line: same element type, same size, same weight. A
 				   heading is not obliged to share a baseline with the caption
@@ -433,6 +555,17 @@
 			}
 		}
 		for (var n = el; n && n !== document.body; n = n.parentElement) {
+			/* An out-of-flow box is its own alignment context at keying time,
+			   not only as a fold barrier. ExtJS lays its box containers out
+			   with `position: absolute` wrappers, so the "Selected omics"
+			   column's title walked straight through its whole column to the
+			   bordered form body and was judged against a rail three hundred
+			   pixels to its left. The fold already refuses to cross these
+			   boundaries; keying across them asks the same wrong question. */
+			var ncs = window.getComputedStyle(n);
+			if (ncs.position === "absolute" || ncs.position === "fixed") {
+				return n;
+			}
 			var p = n.parentElement;
 			if (!p) { break; }
 			var ps = window.getComputedStyle(p);
@@ -485,6 +618,16 @@
 			   fills from its right edge, which makes its left edge a function
 			   of how wide the labels happen to be. */
 			if (s.display.indexOf("flex") >= 0 && s.flexDirection === "row-reverse") {
+				return true;
+			}
+			/* `justify-content: flex-end` packs a row from its right edge the
+			   same way row-reverse does. The example dialog's "Load this
+			   dataset" sits in a flex-end actions row at the card's bottom
+			   right; judged on its left edge it reported 544px off a rail no
+			   right-packed control could ever sit on - ten times, once per
+			   card. */
+			if (s.display.indexOf("flex") >= 0 &&
+			    /^(flex-end|end|right)$/.test(s.justifyContent)) {
 				return true;
 			}
 		}
@@ -643,6 +786,8 @@
 			return d;
 		}
 		var changed = true;
+		function foldToFixedPoint() {
+			changed = true;
 		while (changed) {
 			changed = false;
 			Array.from(groups.keys()).sort(function (a, b) {
@@ -651,6 +796,38 @@
 				var members = groups.get(key);
 				if (!members || key === root) { return; }
 				if (rowLeaders(members).length >= 2) { return; }
+				/* When a thin group dissolves out of a key that paints its own
+				   surface, what the parent column can judge is the surface's
+				   edge, not the type inset within it. The omics pills are
+				   painted boxes sitting exactly on the panel rail with their
+				   h4 10px inside; judged on the type, four correctly placed
+				   pills disagree with the title beside them, and judged not at
+				   all a drifted pill goes unreported. Fold them, but aligned
+				   to the box - the same argument that aligns a button by its
+				   edge. A member that is itself the key is already box-aligned
+				   by measure() and keeps its own x. */
+				if (key.nodeType === 1) {
+					var ks = window.getComputedStyle(key);
+					if (parseFloat(ks.borderLeftWidth) > 0 ||
+					    ks.backgroundImage !== "none" ||
+					    (ks.backgroundColor && ks.backgroundColor !== "rgba(0, 0, 0, 0)" &&
+					     ks.backgroundColor !== "transparent")) {
+						/* Unconditionally: a full-width pill (the omics chips
+						   stretch to their column below 1280px) still aligns by
+						   its painted edge, and no local geometry separates it
+						   from a panel's header band, whose type aligns to the
+						   body inset instead - both are flush painted children
+						   of their context. The one pattern where the box is
+						   the wrong reading, the lateralOptionsPanel header,
+						   declares itself data-guides="ignore" at its factory;
+						   a rule cannot know what only the design language
+						   does. */
+						var keyRect = key.getBoundingClientRect();
+						members.forEach(function (m) {
+							if (m.el !== key) { m.x = keyRect.left; }
+						});
+					}
+				}
 				for (var n = key.parentElement; n; n = n.parentElement) {
 					if (groups.has(n)) {
 						groups.get(n).push.apply(groups.get(n), members);
@@ -678,8 +855,19 @@
 					   to the panel; the fold then walked straight past the panel
 					   to the card and reported the panel's own paragraph as 22px
 					   off. Judged against the panel, it is exactly on it. */
+					/* A painted background bounds a surface as surely as a
+					   border draws one. Step 1's AI callout is a padded plate
+					   whose gradient starts exactly on the section rail and
+					   whose prose starts 22px inside it - columnKeyFor already
+					   keys that prose to the plate, but the fold walked out of
+					   it and reported the inset against the rail outside. A box
+					   that paints its own ground is its own alignment context,
+					   same as one that draws its own edge. */
 					if (n !== root && (ns.position === "fixed" || ns.position === "absolute" ||
-					    parseFloat(ns.borderLeftWidth) > 0)) {
+					    parseFloat(ns.borderLeftWidth) > 0 ||
+					    ns.backgroundImage !== "none" ||
+					    (ns.backgroundColor && ns.backgroundColor !== "rgba(0, 0, 0, 0)" &&
+					     ns.backgroundColor !== "transparent"))) {
 						groups.set(n, members);
 						groups.delete(key);
 						changed = true;
@@ -688,10 +876,67 @@
 				}
 			});
 		}
+		}
+		foldToFixedPoint();
+
+		/* Second pass: a standing surface's own edge joins its parent context.
+		   The contents of a painted card are judged inside it - that is what
+		   the groups above establish - but where the card ITSELF sits was
+		   never judged by anyone, and it is the card's edge, not its text,
+		   that a reader lines up against the column. The "Selected omics"
+		   title is padded 10px so its type lands exactly on the omic cards'
+		   edges below it; with the cards standing as their own groups the
+		   title was a loner, climbed out of its column, and reported 270px
+		   off the form rail while sitting precisely where it was designed
+		   to. The synthetic member carries no baseline - NaN drops it from
+		   the vertical check, which compares type, not boxes. */
+		var synth = [];
+		groups.forEach(function (members, key) {
+			if (!key || key.nodeType !== 1 || key === root) { return; }
+			if (rowLeaders(members).length < 2) { return; }
+			var ks = window.getComputedStyle(key);
+			var painted = parseFloat(ks.borderLeftWidth) > 0 ||
+				ks.backgroundImage !== "none" ||
+				(ks.backgroundColor && ks.backgroundColor !== "rgba(0, 0, 0, 0)" &&
+				 ks.backgroundColor !== "transparent");
+			if (!painted) { return; }
+			if (isRightAnchored(key)) { return; }
+			if (key.closest && key.closest("[data-guides='ignore']")) { return; }
+			var kr = key.getBoundingClientRect();
+			if (!(kr.width > 0)) { return; }
+			synth.push({ key: key, rect: kr });
+		});
+		synth.forEach(function (s) {
+			var pkey = s.key.parentElement ? columnKeyFor(s.key.parentElement) : root;
+			if (pkey === s.key) { return; }
+			/* A box corroborates a neighbourhood; it does not found one. With
+			   no group at its parent key the box has no designed rail-mates -
+			   the help panel's edge sits where the layout's column split puts
+			   it - and a synthetic member laddering out of an empty context
+			   reported that split as a 914px fault. */
+			if (!groups.has(pkey)) { return; }
+			groups.get(pkey).push({
+				el: s.key, noLeftRail: false, edge: "left",
+				x: s.rect.left, top: s.rect.top, bottom: s.rect.bottom,
+				vedge: "baseline", baseline: NaN, peer: "surface-box",
+				label: "[box] " + (s.key.id || (typeof s.key.className === "string" &&
+					s.key.className ? s.key.className.split(/\s+/)[0] : s.key.tagName.toLowerCase()))
+			});
+		});
+		foldToFixedPoint();
 
 		var columns = [];
 		groups.forEach(function (members, key) {
-			var leaders = rowLeaders(members);
+			/* Axes are only comparable within one edge family: a left edge, a
+			   centre and a right edge are three different questions, and one
+			   vote across them elected the sign-in dialog's rail from a mix
+			   of field edges and button centres - a number nothing in the
+			   dialog was designed against, with every centred row 50-160px
+			   "off" it. Each family gets its own rows, quorum and rail. */
+			["left", "centre", "right"].forEach(function (edgeKind) {
+			var fam = members.filter(function (m) { return m.edge === edgeKind; });
+			if (!fam.length) { return; }
+			var leaders = rowLeaders(fam);
 			/* One row is one thing, and one thing is always aligned with
 			   itself. Anything still thin after the fold above has no enclosing
 			   group to be judged against, so it is reported as neither a rail
@@ -708,6 +953,7 @@
 				onRail: rail.members.length,
 				rows: leaders.length,
 				strays: rails.slice(1).reduce(function (acc, r) { return acc.concat(r.members); }, [])
+			});
 			});
 		});
 		return columns;
@@ -933,6 +1179,22 @@
 		if (state.timer) { window.clearTimeout(state.timer); state.timer = 0; }
 	}
 
+	/* A one-line name for a column key, for report(). A stray is only
+	   diagnosable when the report says which column judged it: "22px off
+	   rail 140" reads as a page fault until the key shows the element was
+	   measured against the wrong neighbourhood, which is a tool fault. */
+	function keyDesc(key) {
+		if (!key) { return "?"; }
+		if (key.extColumn) { return "extcol:" + key.extColumn; }
+		if (key.table) { return "tablecol:" + (key.table.id || "anon") + ":" + key.column; }
+		if (key.nodeType === 1) {
+			return key.tagName.toLowerCase() + (key.id ? "#" + key.id : "") +
+				((typeof key.className === "string" && key.className)
+					? "." + key.className.split(/\s+/).slice(0, 2).join(".") : "");
+		}
+		return String(key);
+	}
+
 	var api = {
 		on: on,
 		off: off,
@@ -974,7 +1236,8 @@
 							rail: Math.round(col.rail * 10) / 10,
 							tag: m.el.tagName.toLowerCase(),
 							cls: (typeof m.el.className === "string" ? m.el.className : "").slice(0, 60),
-							label: m.label
+							label: m.label,
+							col: keyDesc(col.key)
 						});
 					});
 				});
@@ -993,6 +1256,10 @@
 				return {
 					viewport: window.innerWidth,
 					column: columnEdges(),
+					columns: (opts && opts.columns) ? columns.map(function (c) {
+						return { key: keyDesc(c.key), rail: Math.round(c.rail * 10) / 10,
+						         rows: c.rows, onRail: c.onRail, strays: c.strays.length };
+					}) : undefined,
 					measured: hits.length,
 					rails: columns.map(function (c) { return Math.round(c.rail); })
 						.filter(function (x, i, a) { return a.indexOf(x) === i; })

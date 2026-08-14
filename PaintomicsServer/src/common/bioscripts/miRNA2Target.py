@@ -129,7 +129,7 @@ def run(referenceFile, relevantReferenceFile, dataFile, geneExpresion, corrOutpu
     #STEP 2. FILL THE TABLE WITH ALL THE TARGETS FOR EACH MIRNA
     print("STEP 2. Reading miRNA -> targets file...")
 
-    with open(referenceFile, 'r') as inputDataFile:
+    with open(referenceFile, 'r', encoding='utf-8-sig', errors='replace') as inputDataFile:
         for line in csv_reader(inputDataFile, delimiter="\t"):
             if line[0] in miRNAtable:
                 miRNAtable[line[0]]["targets"].append(line[1])

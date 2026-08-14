@@ -17,6 +17,10 @@
 #  More info http://bioinfo.cipf.es/paintomics
 #  Technical contact paintomics4@gmail.com
 #**************************************************************
+import codecs
+import os
+import tempfile
+
 from PIL.Image import open as image_open
 from chardet import detect # get the encoding of a file
 
@@ -244,6 +248,46 @@ def _decodes_as_utf8(sample, isPartial):
         return isPartial and exc.start >= len(sample) - 3
 
 
+# Containers and spreadsheets are not text in any encoding: transcoding them
+# "succeeds" under any single-byte codec and rewrites the archive as mojibake.
+# Sniffed by magic number so the user gets the message they actually need.
+_BINARY_MAGIC = (
+    (b"PK\x03\x04", "an Excel/zip file (.xlsx/.zip)"),
+    (b"\xd0\xcf\x11\xe0", "a legacy Excel file (.xls)"),
+    (b"\x1f\x8b", "a gzip-compressed file (.gz)"),
+    (b"%PDF", "a PDF document"),
+)
+
+
+def _binary_upload_reason(sample):
+    """A human-readable description when `sample` opens a known binary format.
+
+    NUL bytes are deliberately NOT treated as evidence here: UTF-16 text is
+    full of them and is a supported (transcoded) upload encoding. The NUL
+    check lives in ensure_utf8, after chardet has had the chance to call the
+    file UTF-16/32.
+    """
+    for magic, description in _BINARY_MAGIC:
+        if sample.startswith(magic):
+            return description
+    return None
+
+
+def _whole_file_is_utf8(filepath):
+    """Stream-decode the entire file as UTF-8, in bounded memory."""
+    decoder = codecs.getincrementaldecoder('utf-8-sig')()
+    try:
+        with open(filepath, 'rb') as handle:
+            while True:
+                chunk = handle.read(1 << 20)
+                if not chunk:
+                    decoder.decode(b'', final=True)
+                    return True
+                decoder.decode(chunk)
+    except UnicodeDecodeError:
+        return False
+
+
 def ensure_utf8(filepath):
     """Rewrite `filepath` as UTF-8 in place when it is in some other encoding.
 
@@ -256,6 +300,11 @@ def ensure_utf8(filepath):
     unsafe: single-byte codecs such as cp1252 accept *any* byte sequence, so a
     misdetected UTF-8 file would be silently rewritten into mojibake rather
     than left alone.
+
+    The prefix bounds only the chardet GUESS. The UTF-8 verdict must cover the
+    whole file, because every downstream reader decodes the whole file: a
+    multi-MB upload whose single bad byte sat past the sniff window used to
+    pass here and then raise UnicodeDecodeError in the csv loop.
     """
     with open(filepath, 'rb') as handle:
         sample = handle.read(_ENCODING_SNIFF_BYTES + 1)
@@ -264,24 +313,71 @@ def ensure_utf8(filepath):
     if not sample:
         return None
 
+    binaryReason = _binary_upload_reason(sample)
+    if binaryReason is not None:
+        return ("this looks like " + binaryReason +
+                ", not a text table; please export it as tab-delimited UTF-8 text")
+
     isPartial = len(sample) > _ENCODING_SNIFF_BYTES
     if _decodes_as_utf8(sample, isPartial):
-        return None
+        if not isPartial or _whole_file_is_utf8(filepath):
+            return None
+        # The prefix is clean UTF-8 but a later byte is not: fall through to
+        # chardet with the evidence we have, exactly as for a bad prefix.
 
     detected = detect(sample).get('encoding')
     if not detected:
+        if b"\x00" in sample:
+            return ("this looks like a binary file, not a text table; "
+                    "please export it as tab-delimited UTF-8 text")
         return "the character encoding could not be determined, please save the file as UTF-8"
 
-    try:
-        with open(filepath, 'rb') as handle:
-            text = handle.read().decode(detected)
-    except (UnicodeDecodeError, LookupError):
+    # NUL bytes in anything but a UTF-16/32 family file mean binary content:
+    # single-byte codecs would "decode" it happily and rewrite the upload as
+    # mojibake, moving the crash downstream to `_csv.Error: line contains NUL`.
+    if b"\x00" in sample and not detected.lower().replace("-", "").startswith(("utf16", "utf32")):
+        return ("this looks like a binary file, not a text table; "
+                "please export it as tab-delimited UTF-8 text")
+
+    # The guess came from the prefix, so it can be too narrow for the byte
+    # that actually offends (an all-ASCII prefix guesses 'ascii' even when a
+    # latin-1 byte sits at row 20,000). cp1252/latin-1 are the real-world
+    # superset codecs for that shape, so fall through to them before giving
+    # up; latin-1 accepts any byte, keeping the transcode total for text-ish
+    # files, while true binaries were already rejected above.
+    text = None
+    candidates = [detected]
+    for fallback in ("cp1252", "latin-1"):
+        if fallback not in [c.lower() for c in candidates]:
+            candidates.append(fallback)
+    with open(filepath, 'rb') as handle:
+        raw = handle.read()
+    for candidate in candidates:
+        try:
+            text = raw.decode(candidate)
+            break
+        except (UnicodeDecodeError, LookupError):
+            continue
+    del raw
+    if text is None:
         return ("the file could not be read as " + str(detected) +
                 ", please save it as UTF-8")
 
     # newline='' keeps the line endings exactly as decoded; the readers below
     # already cope with CRLF, and rewriting them here would be a silent edit of
-    # the user's file.
-    with open(filepath, 'w', encoding='utf-8', newline='') as handle:
-        handle.write(text)
+    # the user's file. Written to a sibling temp file and os.replace()d so a
+    # concurrent job referencing the same [MyData] file never observes a
+    # half-written table.
+    directory = os.path.dirname(filepath) or "."
+    fd, tmpPath = tempfile.mkstemp(prefix=".utf8_", dir=directory)
+    try:
+        with os.fdopen(fd, 'w', encoding='utf-8', newline='') as handle:
+            handle.write(text)
+        os.replace(tmpPath, filepath)
+    except BaseException:
+        try:
+            os.remove(tmpPath)
+        except OSError:
+            pass
+        raise
     return None

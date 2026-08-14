@@ -602,7 +602,7 @@ class Application(object):
 
         @self.app.route(SERVER_SUBDOMAIN + '/ai_generate_exp_design', methods=['OPTIONS', 'POST'])
         def aiGenerateExpDesignHandler():
-            return aiGenerateExpDesign(request, Response()).getResponse()
+            return aiGenerateExpDesign(request, Response(), self.EXAMPLE_FILES_DIR).getResponse()
         #*******************************************************************************************
         # AI INTERPRETATION SERVLETS HANDLERS - END
         #############################################################################################
