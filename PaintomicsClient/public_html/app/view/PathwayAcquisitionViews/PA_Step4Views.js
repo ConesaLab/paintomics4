@@ -1509,6 +1509,11 @@ function PA_Step4KeggDiagramFeatureSetTooltip() {
 				$(domEl).find(".boxTitleLabel span").html(htmlTitle).show();
 
 				showBoxTitle = true;
+			} else {
+				// The title span shares .boxTitleLabel with the Genes/Metagenes
+				// toggle: when metagenes reveal the container without a box
+				// title, the template placeholder must not ride along.
+				$(domEl).find(".boxTitleLabel span").hide();
 			}
 
 			var buttonWrapper = $(domEl).find(".twoOptionsButtonWrapper");
