@@ -308,6 +308,25 @@ class JobInformationManager(metaclass=Singleton):
                 fileLabel + " it refers to.")
         return str(location)
 
+    @staticmethod
+    def _fileByReference(formFields, uploadedFileName, suffix):
+        """Whether a secondary file arrives by reference instead of as an upload.
+
+        "Use a file from My Data" and every chained conversion (regions,
+        miRNA, MORE) submit a secondary file as `<omic>_<suffix>_filelocation`
+        plus a non-client `<omic>_<suffix>_origin`, with the matching
+        `<input type=file>` part legitimately empty. Such a file is present
+        and must be registered; judging presence by the upload part alone
+        silently dropped it (measured: the region example's relevant-features
+        list, and with it every significant pathway in the job).
+        """
+        origin = formFields.get(uploadedFileName.replace("file", suffix) + "_origin")
+        if origin in (None, "", "client"):
+            return False
+        location = formFields.get(
+            uploadedFileName.replace("file", suffix + "_filelocation"))
+        return location is not None and str(location).strip() != ""
+
     def saveFiles(self, uploadedFiles, formFields, userID, jobInstance, CLIENT_TMP_DIR, EXAMPLE_FILES_DIR=""):
         nOthers = 1
         uploadedDataFile = None
@@ -456,8 +475,18 @@ class JobInformationManager(metaclass=Singleton):
             # empty name built '<inputData>//', which open()ed the directory
             # itself (IsADirectoryError). Same guard as the data-file branch:
             # empty means absent.
-            if (uploadedRelevantFile is not None and (uploadedRelevantFile.filename or "") != ""):
-                relevantFileName = uploadedRelevantFile.filename
+            #
+            # Absent as an UPLOAD is not absent as a FILE, though: a secondary
+            # file can also arrive by reference ("_filelocation" + a non-client
+            # "_origin"), with the file part legitimately empty — that is what
+            # "Use a file from My Data" posts, and what every chained
+            # conversion (regions, miRNA) posts for its own outputs. Gating on
+            # the part alone dropped those silently: the region example
+            # registered relevantFeaturesFile: None and reported 829 pathways
+            # with 0 significant on data with a planted signal.
+            if (uploadedRelevantFile is not None and (uploadedRelevantFile.filename or "") != "") \
+                    or self._fileByReference(formFields, uploadedFileName, "relevant"):
+                relevantFileName = uploadedRelevantFile.filename if uploadedRelevantFile is not None else ""
                 origin = self._requiredOrigin(
                     formFields, uploadedFileName.replace("file", "relevant") + "_origin",
                     "relevant features file") ##GET THE ORIGIN OF THE FILE. IF CLIENT -> SAVE THE FILE
@@ -484,8 +513,12 @@ class JobInformationManager(metaclass=Singleton):
                 relevantFileName = None
 
             #SAVE THE ASSOCIATIONS FILE (IF ANY)
-            if uploadedAssociationDataFile is not None and (uploadedAssociationDataFile.filename or "") != "":
-                associationsFileName = uploadedAssociationDataFile.filename
+            # Same shape as the relevant-features branch above: an empty part
+            # with a "_filelocation" reference is a present file, not an
+            # absent one.
+            if (uploadedAssociationDataFile is not None and (uploadedAssociationDataFile.filename or "") != "") \
+                    or self._fileByReference(formFields, uploadedFileName, "associations"):
+                associationsFileName = uploadedAssociationDataFile.filename if uploadedAssociationDataFile is not None else ""
                 origin = self._requiredOrigin(
                     formFields, uploadedFileName.replace("file", "associations") + "_origin",
                     "associations file") ##GET THE ORIGIN OF THE FILE. IF CLIENT -> SAVE THE FILE
@@ -511,8 +544,10 @@ class JobInformationManager(metaclass=Singleton):
 
                 # SAVE THE RELEVANT ASSOCIATIONS FILE (IF ANY)
                 # TODO: currently only if the associations file is present
-                if uploadedAssociationRelevantFile is not None and (uploadedAssociationRelevantFile.filename or "") != "" and formFields.get(uploadedFileName.replace("file", "relevant_associations") + "_origin") is not None:
-                    relevantAssociationsFileName = uploadedAssociationRelevantFile.filename
+                if ((uploadedAssociationRelevantFile is not None and (uploadedAssociationRelevantFile.filename or "") != ""
+                        and formFields.get(uploadedFileName.replace("file", "relevant_associations") + "_origin") is not None)
+                        or self._fileByReference(formFields, uploadedFileName, "relevant_associations")):
+                    relevantAssociationsFileName = uploadedAssociationRelevantFile.filename if uploadedAssociationRelevantFile is not None else ""
                     # The enclosing condition already established this field is
                     # present; going through the same helper as the other three
                     # keeps every origin lookup uniform rather than leaving one
