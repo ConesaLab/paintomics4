@@ -339,6 +339,7 @@ def buildGeneMultiCondition(context):
         "databases": ["KEGG", "Reactome"],
         "conditions": TIME_COURSE,
         "simulated": True,
+        "supersededBy": "stategra-multiomics",
         "omics": [{
             "omicName": "Gene expression",
             "omicType": "gene",
@@ -605,6 +606,7 @@ def buildMultiomics(context):
         "databases": ["KEGG", "Reactome"],
         "conditions": TIME_COURSE,
         "simulated": True,
+        "supersededBy": "stategra-multiomics",
         "omics": omics,
         "references": [],
         "extraFiles": [{
@@ -749,6 +751,7 @@ def buildRegulatoryMirna(context):
         "databases": ["KEGG"],
         "conditions": TIME_COURSE,
         "simulated": True,
+        "supersededBy": "stategra-mirna",
         "omics": [
             {
                 "omicName": "miRNA-seq",
@@ -1082,6 +1085,7 @@ def buildRegulatoryMore(context):
         "databases": ["KEGG"],
         "conditions": MORE_GROUPS,
         "simulated": True,
+        "supersededBy": "stategra-more",
         "samples": sampleNames,
         "target": {
             "omicName": "Gene expression",
@@ -1248,6 +1252,7 @@ def buildRegionBased(context):
         "databases": ["KEGG"],
         "conditions": TIME_COURSE,
         "simulated": True,
+        "supersededBy": "stategra-regions",
         "omics": [{
             "omicName": "DNase-seq",
             "omicType": "region",
