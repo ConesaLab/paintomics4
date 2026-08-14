@@ -92,9 +92,9 @@ PUBLISHED = {
     # it with an unbumped marker leaves returning browsers running the old
     # copy exactly as it would for view code.
     "app/view/common/AlignmentGuides.js": (
-        "4.1", "db648a4f47fc2a11db95275e9467cc323e6036e87b69fc3cf37646ec745aa3ff"),
+        "4.2", "ce2ba85063e8059eb2cc4c8e1992744854a14ad0db6f866213b8df1136650a59"),
     "app/view/PathwayAcquisitionViews/PA_AIInterpretView.js": (
-        "0.4", "7db83c339d465cafb9bdd319ad267660d4e7bbcca4eb3fcd250736f59d5d8c6d"),
+        "0.6", "220aaea6269eafd08b10f8e6f9f0fefca952b7412cfc7c76c53617e383f65572"),
     "app/view/PathwayAcquisitionViews/PA_Step3RegTargetNetworkView.js": (
         "0.7", "b135712a9564f8ae0eac94daf9c567ef275c4c748dbc270fdbdeb7d25fc79e34"),
     "resources/ServerConfiguration.js": (
