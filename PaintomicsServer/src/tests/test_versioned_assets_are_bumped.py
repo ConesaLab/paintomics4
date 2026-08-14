@@ -83,6 +83,8 @@ PUBLISHED = {
         "2.0", "284b8be3fd6f8e746730408b7bacc37c9385e4ce6e76743885c3a11dae6c3ecd"),
     "app/view/common/ExtJS_extensions.js": (
         "0.7", "f1e68f670cc56064fc15649d259004ccbd96f49181ced049cffbe62c29bf1d80"),
+    "app/view/common/CookieConsent.js": (
+        "1.0", "e170c539dea089b0d88e090becd968d43a699aa319dbd02e681b75384a57f403"),
     "app/view/common/upload/Panel.js": (
         "0.2", "34264cdec6faef81e46d28982f348003180b2e06d0af696f815f1b5b2a7a7458"),
     # A development overlay, inert until ctrl+alt+G, and still recorded here:
