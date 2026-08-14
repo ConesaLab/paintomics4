@@ -7984,8 +7984,12 @@ div.repDetectionCard h3 {
 .po-hero-viz .po-viz-title { fill: var(--pa-ink-title, #1A1A18); }
 
 /* The interpretation: each line grows from its left edge, holds while it is
-   read, and is wiped away. The per-line delay makes it cascade rather than
-   move as a block, which is what reading a generated answer looks like. The
+   read, and fades out in place. It used to clear the same way it grew - scaleX
+   back to 0 against the same left origin - which read as the text sliding
+   backward off the panel toward the network and agent, now that those sit to
+   its left; a fade removes the direction entirely. The per-line delay makes
+   growth cascade rather than move as a block, which is what reading a
+   generated answer looks like. The
    delays themselves (--d, in the markup) are untouched by the agent stage
    below - only the shared keyframes' own start point moved later, so every
    line still lands relative to the others exactly as before, just after the
@@ -7998,8 +8002,10 @@ div.repDetectionCard h3 {
    screen. */
 .po-hero-viz .po-viz-line,
 .po-hero-viz .po-viz-cite {
+  --po-viz-on-opacity: 1;
   transform: scaleX(0);
   transform-origin: left center;
+  opacity: 0;
   animation-duration: 9s;
   animation-timing-function: cubic-bezier(.2,.7,.3,1);
   animation-delay: var(--d, 0s);
@@ -8014,8 +8020,11 @@ div.repDetectionCard h3 {
 
 .po-hero-viz .po-viz-line { fill: var(--pa-border); }
 /* The citations are the one thing in the panel that is not grey: an
-   interpretation you can check is the point of the feature. */
-.po-hero-viz .po-viz-cite { fill: #4A90D9; opacity: .32; }
+   interpretation you can check is the point of the feature. Its .32 rest
+   opacity is read by the shared keyframes below through --po-viz-on-opacity,
+   so it still fades in and out in step with the lines around it without
+   ever reaching their full opacity. */
+.po-hero-viz .po-viz-cite { --po-viz-on-opacity: .32; fill: #4A90D9; }
 
 @keyframes poVizIn { to { opacity: 1; } }
 
@@ -8078,17 +8087,23 @@ div.repDetectionCard h3 {
    its course (was 9%/40%; the grow and wipe points keep their original 9-
    point and 6-point spans, just moved later) and is cleared as network A
    hands over to B. Answer B mirrors it against network B's own relay. */
+/* Growing (scaleX from a left origin) reads as writing; clearing used to run
+   the same scaleX back to 0, which reads as the text sliding back the way it
+   came - toward the network and agent, now that those sit to the panel's
+   left. So only the grow edge moves the width; the clear edge is a fade in
+   place; both share these keyframes via opacity: var(--po-viz-on-opacity),
+   which resolves to each element's own rest opacity (1 for lines, .32 for
+   citations). */
 @keyframes poVizAnswerA {
-  0%         { transform: scaleX(0); }
-  19%        { transform: scaleX(0); }
-  28%, 40%   { transform: scaleX(1); }
-  46%, 100%  { transform: scaleX(0); }
+  0%,  19%   { transform: scaleX(0); opacity: 0; }
+  28%, 40%   { transform: scaleX(1); opacity: var(--po-viz-on-opacity); }
+  46%, 100%  { transform: scaleX(1); opacity: 0; }
 }
 
 @keyframes poVizAnswerB {
-  0%,  69%   { transform: scaleX(0); }
-  78%, 90%   { transform: scaleX(1); }
-  96%, 100%  { transform: scaleX(0); }
+  0%,  69%   { transform: scaleX(0); opacity: 0; }
+  78%, 90%   { transform: scaleX(1); opacity: var(--po-viz-on-opacity); }
+  96%, 100%  { transform: scaleX(1); opacity: 0; }
 }
 
 /* Anyone who has asked for less motion gets the finished picture and no loop:
@@ -8103,7 +8118,7 @@ div.repDetectionCard h3 {
   .po-hero-viz .po-viz-mark,
   .po-hero-viz .po-viz-title { opacity: 1; animation: none; }
   .po-hero-viz .po-viz-ans-a .po-viz-line,
-  .po-hero-viz .po-viz-ans-a .po-viz-cite { transform: scaleX(1); animation: none; }
+  .po-hero-viz .po-viz-ans-a .po-viz-cite { transform: scaleX(1); opacity: var(--po-viz-on-opacity); animation: none; }
   .po-hero-viz .po-viz-ans-b { display: none; }
   /* The agent renders in, idle: present in the pipeline, nothing pinging or
      travelling along the wires either side of it. */
