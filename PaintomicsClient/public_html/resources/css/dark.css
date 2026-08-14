@@ -264,7 +264,8 @@
 /* Header and step-action controls. main.css states the ghost button's fill,
    ink and border literally, so all three are restated. */
 [data-theme="dark"] .mainTopToolbar .button,
-[data-theme="dark"] .secondTopToolbar .button {
+[data-theme="dark"] .secondTopToolbar .button,
+[data-theme="dark"] .paToolbarMiniature .button {
 	background-color: var(--pa-btn-default-bg);
 	color: var(--pa-btn-default-ink);
 	border-color: var(--pa-border-control);
@@ -284,10 +285,17 @@
 	background-color: var(--pa-btn-success-bg-hover);
 }
 [data-theme="dark"] .mainTopToolbar .button.btn-danger,
-[data-theme="dark"] .secondTopToolbar .button.btn-danger {
+[data-theme="dark"] .secondTopToolbar .button.btn-danger,
+[data-theme="dark"] .paToolbarMiniature .button.btn-danger {
 	background-color: transparent;
 	color: var(--pa-btn-ghost-danger-ink);
 	border-color: var(--pa-border-control);
+}
+/* The highlight ring on the miniature's Settings button: the light theme's
+   #B3261E measures poorly on the dark card, so use the same danger ink the
+   dark button itself carries. */
+[data-theme="dark"] .paToolbarMiniature .paMiniatureTarget {
+	box-shadow: 0 0 0 2px var(--pa-btn-ghost-danger-ink);
 }
 [data-theme="dark"] .mainTopToolbar .button.btn-danger:hover,
 [data-theme="dark"] .secondTopToolbar .button.btn-danger:hover {

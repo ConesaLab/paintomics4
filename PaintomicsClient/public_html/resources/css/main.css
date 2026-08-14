@@ -547,7 +547,8 @@ a:hover {color: var(--pa-link-hover);}
    boundary, while the neutral makes 3.59. Ink #24252A is 15.29 and the
    destructive #B3261E is 6.54. */
 .mainTopToolbar .button,
-.secondTopToolbar .button {
+.secondTopToolbar .button,
+.paToolbarMiniature .button {
 	display: inline-flex;
 	align-items: center;
 	gap: 6px;
@@ -580,7 +581,8 @@ a:hover {color: var(--pa-link-hover);}
 	color: #FFFFFF;
 }
 .mainTopToolbar .button.btn-danger,
-.secondTopToolbar .button.btn-danger {
+.secondTopToolbar .button.btn-danger,
+.paToolbarMiniature .button.btn-danger {
 	background-color: #FFFFFF;
 	color: #B3261E;
 	border-color: #878787;
@@ -5668,6 +5670,76 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
 	width: 100%;
 }
 
+/* "Multiple databases used", "Configure the number of clusters" and the
+   metabolite-threshold card each take a full row of the step-2 flex layout.
+   They used to share a row under `align-items: stretch`, so the short config
+   card was stretched to the height of the two database tables beside it - a
+   column of white with four fields in its top corner. On its own row a card
+   is exactly as tall as its content. The id outranks the class shorthand's
+   `flex-basis` above; grow/shrink from that rule still apply. */
+#dbs_message, #clusternumber_box, #threshold_box {
+	flex-basis: 100%;
+}
+/* The empty "parity pad" containers Step 2 inserts after each full-width card
+   exist for one reason: browsers without :has() lay the cards out with the
+   odd/even floats, and the pads keep that parity intact. In the flex layout
+   they are actively harmful - a zero-width flex item still owns a 22px gap on
+   each side, so the row after the pads packed as [pad, pad, card] and the
+   card sat 44px off the left rail with its partner wrapped to the next row.
+   Hide them exactly where the flex layout applies: behind the same :has()
+   support gate. !important, because they are ExtJS containers and this must
+   win whatever the layout writes. */
+@supports selector(:has(*)) {
+	.x-column-layout-ct .paLayoutPad { display: none !important; }
+}
+/* The config fields inside the two full-width cards stay centred. The form
+   panel itself is stretched to the card by its vbox, and each field row is a
+   600px table that ExtJS positions with inline `left: 0; margin: 0` - the
+   config's `margin: 0 auto` never survives - so at full card width the fields
+   hugged the left edge. left:50% + translateX(-50%) centres each row under
+   any card width, and the !important is what lets a stylesheet outrank the
+   inline left. All rows share the same 600px width, so their labels still
+   align with each other. */
+#clusternumber_box .x-form-item,
+#threshold_box .x-form-item {
+	left: 50% !important;
+	transform: translateX(-50%);
+}
+/* ...and the 50% must resolve against the real card, not ExtJS's memory of it.
+   The panel body and box containers carry inline pixel widths measured before
+   the flex rules widened the card (815px inside a 1358px panel, observed), and
+   ExtJS does not re-measure on a CSS-driven size change. Stretching the chain
+   to 100% makes the centring above resolve against the card's true width. */
+#clusternumber_box .x-panel-body.divForm,
+#threshold_box .x-panel-body.divForm,
+#clusternumber_box .divForm .x-box-inner,
+#threshold_box .divForm .x-box-inner,
+#clusternumber_box .divForm .x-box-target,
+#threshold_box .divForm .x-box-target {
+	width: 100% !important;
+	margin-left: 0 !important;
+	margin-right: 0 !important;
+}
+
+/* The step-2 illustration of the pathway-view toolbar. It is drawn with the
+   toolbar's own markup and .button rules rather than a screenshot, so it
+   cannot fall out of date the way settingsbutton.png (2022) did - a restyle
+   of the real buttons restyles this figure in the same stroke. Not
+   interactive: it is a picture that happens to be made of markup. */
+.paToolbarMiniature {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	align-items: center;
+	gap: 8px;
+	margin: 15px auto 5px;
+	pointer-events: none;
+}
+/* The one button the caption is pointing at. */
+.paToolbarMiniature .paMiniatureTarget {
+	box-shadow: 0 0 0 2px #B3261E;
+}
+
 /********************************************************************************
 ** REGISTRATION FORM
 *********************************************************************************/
@@ -7216,14 +7288,25 @@ div.repDetectionCard h3 {
 	/* Keyed off the class buildAnalysisTOC sets, so the column is only reserved
 	   on views that actually have a contents list. The pathway view has none and
 	   gets the full width. */
+	/* One rail for the whole page. The TOC used to sit at --pa-gutter-railed
+	   (which bottoms out at 40px) while the header wordmark sits at --pa-gutter
+	   (~96-110px on laptops, and ~103px further right at every width) - two
+	   left edges that never coincided, directly under each other. The header's
+	   own comment states the contract ("the wordmark lines up with the left
+	   edge of the content beneath it"), so the wordmark's rail is the master:
+	   the TOC starts on it, the results column starts after gutter + rail, and
+	   the leftover space flows to the right - the docs-site grid. The cost is
+	   ~56-68px of empty margin at laptop widths, paid for a page where every
+	   left edge derives from one token. --pa-gutter-railed keeps its definition
+	   for anything external that read it, but nothing here does any more. */
 	#mainViewCenterPanel.pa-has-toc {
-		padding-left: calc(var(--pa-rail) + var(--pa-gutter-railed));
-		padding-right: var(--pa-gutter-railed);
+		padding-left: calc(var(--pa-gutter) + var(--pa-rail));
+		padding-right: max(40px, calc(100vw - var(--pa-gutter) - var(--pa-rail) - var(--pa-page-max)));
 	}
 	.pa-toc {
 		position: fixed;
 		top: 62px;
-		left: var(--pa-gutter-railed);
+		left: var(--pa-gutter);
 		width: 190px;
 		max-height: calc(100vh - 84px);
 		overflow-y: auto;
