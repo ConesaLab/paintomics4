@@ -2112,9 +2112,16 @@ class PathwayAcquisitionJob(Job):
                         # metagene trend charts are an enhancement, so skip this
                         # omic/database pair instead of failing the whole of
                         # step 2 for a dataset that mapped a handful of genes.
-                        if "no available data for fitting" in error_detail:
+                        # "more cluster centers than distinct data points" is the
+                        # k-means flavour of the same situation (e.g. 2-condition
+                        # designs collapse every centred profile onto 2 points).
+                        degenerate_data_messages = (
+                            "no available data for fitting",
+                            "more cluster centers than distinct data points",
+                        )
+                        if any(m in error_detail for m in degenerate_data_messages):
                             logging.warning(
-                                "STEP2 - too few mapped features to cluster metagenes "
+                                "STEP2 - degenerate metagene geometry, cannot cluster "
                                 "for omic '%s' (%s); continuing without metagenes.",
                                 inputOmic.get("omicName"), dbname)
                             continue
