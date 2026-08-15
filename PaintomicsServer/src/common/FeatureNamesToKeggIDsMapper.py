@@ -1,5 +1,6 @@
 from pymongo import MongoClient
 import logging, itertools
+import os, sys, signal
 from multiprocessing import Process, cpu_count, Manager, RawArray
 from math import ceil
 from re import compile as compile_re, IGNORECASE as IGNORECASE_re
@@ -15,6 +16,41 @@ from src.classes.FoundFeature import FoundFeature
 
 from src.conf.organismDB import dicDatabases
 from src.conf.serverconf import MONGODB_HOST, MONGODB_PORT, MAX_THREADS, MAX_WAIT_THREADS #MULTITHREADING
+
+
+def _refreshStandardStreamsInForkChild():
+    """
+    The mapping workers below are forked from a server process that keeps
+    serving requests on other threads. A fork can land while one of those
+    threads is mid-write, and the child then inherits sys.stdout/sys.stderr
+    (and logging file streams) whose buffer locks are held by a thread that
+    does not exist in the child: its first print/log call blocks forever.
+    CPython re-initialises logging's OWN locks after a fork, but not the
+    locks inside buffered IO objects, so the streams themselves must be
+    replaced. Observed in production as a worker frozen in
+    PyThread_acquire_lock_timed under a progress print until the
+    MAX_WAIT_THREADS timeout killed the job -- and terminate() could not
+    reap it, because the child also inherits uWSGI's SIGTERM handler, so
+    the default disposition is restored here as well.
+    """
+    sys.stdout = open(1, "w", buffering=1, closefd=False)
+    sys.stderr = open(2, "w", buffering=1, closefd=False)
+    loggers = [logging.getLogger()] + [
+        logger for logger in logging.Logger.manager.loggerDict.values()
+        if isinstance(logger, logging.Logger)]
+    for handler in {h for logger in loggers for h in logger.handlers}:
+        try:
+            if isinstance(handler, logging.FileHandler):
+                handler.stream = handler._open()
+            elif isinstance(handler, logging.StreamHandler):
+                handler.setStream(sys.stderr)
+        except Exception:
+            pass
+    signal.signal(signal.SIGTERM, signal.SIG_DFL)
+
+
+if hasattr(os, "register_at_fork"):
+    os.register_at_fork(after_in_child=_refreshStandardStreamsInForkChild)
 
 #*****************************************************************
 #   _____ ____  __  __ __  __  ____  _   _
@@ -136,7 +172,7 @@ def findIDsByFeaturesName(jobID, featureNames, db, databaseConvertion_id):
 
             KeggInformationManager().updateTranslationCache(jobID, matchedFeatures, "id", databaseConvertion_id)
     except Exception as ex:
-        print("EXCEPTION " + str(ex))
+        logging.error("EXCEPTION %s", ex)
     finally:
         matchedFeatures.update(cachedFeatureIDs)
 
@@ -293,18 +329,7 @@ def mapFeatureIdentifiers(jobID, organism, databases, featureList,  matchedFeatu
         # Use a set to track which features matched in any database (O(1) lookups)
         localMatchedFeatures = set()
 
-        total = len(featureList)
-        current = 0
-        prev = -1
-
         for feature in featureList:
-            current += 1
-            if (current * 100 / total) % 20 == 0:
-                aux = (current * 100 / total)
-                if aux != prev:
-                    prev = aux
-                    print("Processed " + str(prev) + "% of " + str(total) + " total features")
-
             originalName = feature.getName()
             featureMatchedInAnyDB = False
             # Track featureIDs already cloned for THIS feature across the database
@@ -411,7 +436,6 @@ def mapFeatureNamesToKeggIDs(jobID, organism, databases, featureList, enrichment
     logging.info("USING " + str(nThreads) + " THREADS")
     logging.info("INPUT " + str(len(featureList)) + " FEATURES")
     logging.info("ORGANISM " + organism)
-    logging.info("USING " + str(nThreads) + " THREADS")
 
     #GET THE NUMBER OF GENES TO BE PROCESSED PER THREAD
     nLinesPerThread = int(ceil(len(featureList)/nThreads)) + 1

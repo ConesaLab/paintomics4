@@ -1,6 +1,6 @@
 # STATegra — real mouse Ikaros time course (5 omics)
 
-Five omics over six time points from the published STATegra mouse Ikaros time course. Real measurements, not simulated — the reference every simulated scenario is shaped against. The full published release: 12,762 genes, 2,384 protein groups, 194,881 gene–miRNA pairs, all 52,788 DNase regions collapsed onto genes. See the Provenance section of the README for how each layer is derived.
+Five omics over six time points from the published STATegra mouse Ikaros time course. Real measurements, not simulated — the reference every simulated scenario is shaped against. The full published release: 12,762 genes, 2,384 protein groups, the strongest 42,421 of 194,881 gene–miRNA pairs (every measured miRNA kept), all 52,788 DNase regions collapsed onto genes. See the Provenance section of the README for how each layer is derived.
 
 |  |  |
 | --- | --- |
@@ -54,7 +54,7 @@ Published as Gomez-Cabrero et al., *STATegra, a comprehensive multi-omics datase
 | Metabolomics | 58 compounds — complete | MetaboLights MTBLS283 |
 | Gene expression | 12,762 genes — complete | GSE75417, published CQN+ComBat pipeline |
 | Proteomics | 2,384 of 2,396 groups (9 lack a gene symbol, 3 duplicate one) | PXD003263 |
-| miRNA-seq | 194,881 gene–miRNA pairs over all 333 target-annotated measured miRNAs | GSE75394 |
+| miRNA-seq | 42,421 gene–miRNA pairs: each gene's 5 strongest negative regulators ∪ each miRNA's 20 strongest targets (Kendall τ over the six-ratio profiles) out of all 194,881 annotation pairs; all 333 target-annotated measured miRNAs kept | GSE75394 |
 | DNase-seq | 23,273 gene rows from all 52,788 consensus DHS regions | GSE75390 |
 
 The values are a re-derivation, not the pre-2026 numbers rescaled: the old files carried ratios from an unrecorded normalisation that the public releases do not reproduce. Each omic follows its published preprocessing script from [STATegraData/STATegraData](https://github.com/STATegraData/STATegraData), then per-time-point Ikaros-minus-Control means. Relevance is the induction contrast (Welch 18-vs-18, BH FDR, effect floor; per-time-point Fisher-combined for proteomics), stated fully in `stategrafull.py`. The gene-level miRNA and DNase layers are the server's own tools run at full scale: miRNA2Target pairing over the miRBase target table, and RGmatch with Bed2GeneJob's defaults collapsing regions onto genes. The region form is the `stategra-regions` scenario.

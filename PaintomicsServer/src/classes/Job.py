@@ -610,8 +610,6 @@ class Job(Model):
                             omicValueAux.setOmicName(omicName)
                             # Get multi-condition relevance list
                             relList = relevantFeatures.get(line[0].lower(), [])
-                            if relList:
-                                logging.info(f"DEBUG: Found relevance for {line[0]}: {relList}")
                             omicValueAux.setRelevant(relList)
                             omicValueAux.setRelevantAssociation(line[0].lower() in relevantAssociationFeatures)
                             omicValueAux.setValues(numericValues)
@@ -647,8 +645,6 @@ class Job(Model):
                             omicValueAux.setOmicName(omicName)
                             # Get multi-condition relevance list
                             relList = relevantFeatures.get(line[0].lower(), [])
-                            if relList:
-                                logging.info(f"DEBUG: Found relevance for {line[0]}: {relList}")
                             omicValueAux.setRelevant(relList)
                             omicValueAux.setRelevantAssociation(line[0].lower() in relevantAssociationFeatures)
                             omicValueAux.setValues(numericValues)
