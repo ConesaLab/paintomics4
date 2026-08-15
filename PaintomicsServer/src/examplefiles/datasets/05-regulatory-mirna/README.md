@@ -31,13 +31,13 @@ miRNA quantification plus a target-prediction table. The Regulatory Omics step p
 
 ## Expected result
 
-* **associations** — 2358
+* **associations** — 2364
 * **diffuseRelevantRate** — 0.05
 * **miRNAs** — 300
 * **minTargetCoverage** — 0.696
 * **pathwaysFile** — `expected_pathways.txt`
-* **relevantFeatures** — 399
-* **relevantMiRNAs** — 188
+* **relevantFeatures** — 401
+* **relevantMiRNAs** — 194
 * **signalFeatures** — 299
 * **signalFeaturesFile** — `signal_features.txt`
 * **targetCoverage** — [0.696, 0.714, 0.696, 0.705, 0.701, 0.706]

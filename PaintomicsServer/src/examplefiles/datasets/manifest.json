@@ -1,7 +1,7 @@
 {
   "defaultScenario": "stategra-multiomics",
   "generator": "src/AdminTools/scripts/exampledata",
-  "keggVersion": "# DOWNLOAD DATE:\t20251118 1350",
+  "keggVersion": "# DOWNLOAD DATE:\t20260813 1250",
   "scenarios": [
     {
       "conditions": [
@@ -14,7 +14,7 @@
         "diffuseRelevantRate": 0.05,
         "minTargetCoverage": 0.688,
         "pathwaysFile": "datasets/01-gene-single-condition/expected/expected_pathways.txt",
-        "relevantFeatures": 954,
+        "relevantFeatures": 956,
         "signalFeatures": 414,
         "signalFeaturesFile": "datasets/01-gene-single-condition/expected/signal_features.txt",
         "targetCoverage": [
@@ -102,6 +102,7 @@
       "references": [],
       "simulated": true,
       "summary": "A six-point time course with one relevance list shared by every condition \u2014 the ordinary shape of a time-course submission, and the closest simulated counterpart to the real STATegra example.",
+      "supersededBy": "stategra-multiomics",
       "tests": [
         "Multi-condition heatmaps",
         "Per-condition pathway colouring",
@@ -188,23 +189,23 @@
       "expected": {
         "compoundTargetCoverage": [
           0.681,
-          0.656,
-          0.639,
+          0.664,
+          0.611,
           0.423,
           0.543,
-          0.5,
+          0.438,
           0.727,
           0.5
         ],
-        "compoundUniverse": 4612,
+        "compoundUniverse": 4667,
         "diffuseRelevantRate": 0.05,
         "minTargetCoverage": 0.694,
         "namedCompounds": 400,
         "omicCount": 5,
         "pathwaysFile": "datasets/04-multiomics-integration/expected/expected_pathways.txt",
-        "relevantCompounds": 495,
+        "relevantCompounds": 496,
         "relevantFeatures": 829,
-        "signalCompounds": 252,
+        "signalCompounds": 253,
         "signalFeatures": 324,
         "signalFeaturesFile": "datasets/04-multiomics-integration/expected/signal_features.txt",
         "targetCoverage": [
@@ -213,7 +214,7 @@
           0.709,
           0.705,
           0.707,
-          0.719,
+          0.716,
           0.694,
           0.706
         ],
@@ -277,6 +278,7 @@
       "references": [],
       "simulated": true,
       "summary": "Transcriptomics, proteomics, transcription factors, metabolomics and miRNA over the same six time points, sharing one planted signal so the layers agree.",
+      "supersededBy": "stategra-multiomics",
       "tests": [
         "Multi-omic pathway enrichment",
         "Compound matching",
@@ -299,13 +301,13 @@
         "KEGG"
       ],
       "expected": {
-        "associations": 2358,
+        "associations": 2364,
         "diffuseRelevantRate": 0.05,
         "miRNAs": 300,
         "minTargetCoverage": 0.696,
         "pathwaysFile": "datasets/05-regulatory-mirna/expected/expected_pathways.txt",
-        "relevantFeatures": 399,
-        "relevantMiRNAs": 188,
+        "relevantFeatures": 401,
+        "relevantMiRNAs": 194,
         "signalFeatures": 299,
         "signalFeaturesFile": "datasets/05-regulatory-mirna/expected/signal_features.txt",
         "targetCoverage": [
@@ -350,6 +352,7 @@
       ],
       "simulated": true,
       "summary": "miRNA quantification plus a target-prediction table. The Regulatory Omics step pairs each miRNA with its targets and hands GENE:::miRNA rows on to the pathway analysis.",
+      "supersededBy": "stategra-mirna",
       "tests": [
         "miRNA-to-gene association",
         "Regulator/target pairing",
@@ -444,6 +447,7 @@
       ],
       "simulated": true,
       "summary": "Per-sample expression with three replicates per group, an experimental design matrix, and two candidate regulatory omics with association files. Each target is a noisy linear function of one known regulator, so what MORE should find is written down.",
+      "supersededBy": "stategra-more",
       "target": {
         "dataFile": "datasets/06-regulatory-more/data/gene_expression_targets.tab",
         "omicName": "Gene expression"
@@ -512,6 +516,7 @@
       ],
       "simulated": true,
       "summary": "Genomic regions in BED-like form with a matching synthetic GTF, so region-to-gene assignment runs without the large mouse annotation a fresh checkout does not have. Signal regions sit in promoters; 200 intergenic decoys do not.",
+      "supersededBy": "stategra-regions",
       "tests": [
         "RGmatch region-to-gene assignment",
         "Promoter/TSS area rules",
@@ -578,27 +583,25 @@
       "organism": "mmu",
       "pipeline": "pathway-acquisition",
       "provenance": [
-        "Published as Gomez-Cabrero et al., *STATegra, a comprehensive multi-omics dataset of B-cell differentiation in mouse*, Sci Data 6:256 (2019), [doi:10.1038/s41597-019-0202-7](https://doi.org/10.1038/s41597-019-0202-7). Mouse B3 pre-B cell line, Ikaros induced by tamoxifen, Ikaros-over-control log ratios at six time points.",
+        "Published as Gomez-Cabrero et al., *STATegra, a comprehensive multi-omics dataset of B-cell differentiation in mouse*, Sci Data 6:256 (2019), [doi:10.1038/s41597-019-0202-7](https://doi.org/10.1038/s41597-019-0202-7). Mouse B3 pre-B cell line, Ikaros induced by tamoxifen, Ikaros-over-control log2 ratios at six time points, mean of three biological replicates per arm.",
         "",
-        "**These files are a reduced copy.** The reduction predates this repository -- the blobs are byte-identical to their first commit and nothing here can regenerate them -- so the scale is recorded rather than corrected:",
+        "**Full published scale since 2026-08-15**, rebuilt from the deposited data by `src/AdminTools/scripts/exampledata/stategrafull.py` (the shipped files were previously a reduced copy -- 6,336 of 12,762 genes, 1,109 of 2,396 protein groups, 5,000 capped miRNA pairs, 10,273 gene rows of DNase):",
         "",
-        "| omic | shipped | full release |",
+        "| omic | shipped | source |",
         "| --- | --- | --- |",
-        "| Metabolomics | 58 compounds | 58 \u2014 **complete** |",
-        "| Gene expression | 6,336 genes | 12,762 (GSE75417) |",
-        "| Proteomics | 1,109 proteins | 2,396 protein groups (PXD003263) |",
-        "| miRNA-seq | 5,878 gene\u2013miRNA pairs, 238 miRNAs | 468 miRNAs (GSE75394) |",
-        "| DNase-seq | 10,273 gene rows | 52,788 consensus DHS regions (GSE75390) |",
+        "| Metabolomics | 58 compounds \u2014 complete | MetaboLights MTBLS283 |",
+        "| Gene expression | 12,762 genes \u2014 complete | GSE75417, published CQN+ComBat pipeline |",
+        "| Proteomics | 2,384 of 2,396 groups (9 lack a gene symbol, 3 duplicate one) | PXD003263 |",
+        "| miRNA-seq | 42,421 gene\u2013miRNA pairs: each gene's 5 strongest negative regulators \u222a each miRNA's 20 strongest targets (Kendall \u03c4 over the six-ratio profiles) out of all 194,881 annotation pairs; all 333 target-annotated measured miRNAs kept | GSE75394 |",
+        "| DNase-seq | 23,273 gene rows from all 52,788 consensus DHS regions | GSE75390 |",
         "",
-        "The gene-expression cut is effect-size dependent, not random: roughly half of the low-amplitude genes are kept but only ~3% of the highest, which is a detection/low-count filter stacked with a further reduction. The DNase rows are regions already collapsed onto genes; the region form is the `stategra-regions` scenario.",
-        "",
-        "Full data, all confirmed reachable: [STATegraData/STATegraData](https://github.com/STATegraData/STATegraData) carries analysis-ready matrices for every omic and is the best entry point; otherwise GEO [GSE75417](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE75417) (mRNA), [GSE75390](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE75390) (DNase), [GSE75394](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE75394) (miRNA), MetaboLights MTBLS283, PRIDE PXD003263. Note the shipped values are ratios from an unrecorded normalisation that GSE75417 does not reproduce, so scaling any layer up is a re-derivation, not an extension.",
+        "The values are a re-derivation, not the pre-2026 numbers rescaled: the old files carried ratios from an unrecorded normalisation that the public releases do not reproduce. Each omic follows its published preprocessing script from [STATegraData/STATegraData](https://github.com/STATegraData/STATegraData), then per-time-point Ikaros-minus-Control means. Relevance is the induction contrast (Welch 18-vs-18, BH FDR, effect floor; per-time-point Fisher-combined for proteomics), stated fully in `stategrafull.py`. The gene-level miRNA and DNase layers are the server's own tools run at full scale: miRNA2Target pairing over the miRBase target table, and RGmatch with Bed2GeneJob's defaults collapsing regions onto genes. The region form is the `stategra-regions` scenario.",
         "",
         "A sixth layer, \"Transcription factor\", was retired on 2026-08-11 as a duplicate of gene expression; see `examplefiles/archive/retired/`."
       ],
       "references": [],
       "simulated": false,
-      "summary": "Five omics over six time points from the published STATegra mouse Ikaros time course. Real measurements, not simulated \u2014 the reference every simulated scenario is shaped against. A reduced copy of the release, not the whole of it: see the Provenance section of the README for the per-omic scale and where the full data is.",
+      "summary": "Five omics over six time points from the published STATegra mouse Ikaros time course. Real measurements, not simulated \u2014 the reference every simulated scenario is shaped against. The full published release: 12,762 genes, 2,384 protein groups, the strongest 42,421 of 194,881 gene\u2013miRNA pairs (every measured miRNA kept), all 52,788 DNase regions collapsed onto genes. See the Provenance section of the README for how each layer is derived.",
       "tests": [
         "The full multi-omic pipeline on real data",
         "Metabolite hub analysis",
@@ -643,7 +646,7 @@
         }
       ],
       "simulated": false,
-      "summary": "The unmapped DNase-seq regions from the STATegra time course, for the Regions2Genes step. Requires the full mouse annotation, which is fetched by a deploy step and is absent from a fresh checkout.",
+      "summary": "All 52,788 consensus DNase-seq regions from the STATegra time course, unmapped, for the Regions2Genes step. Requires the full mouse annotation, which is fetched by a deploy step and is absent from a fresh checkout.",
       "tests": [
         "RGmatch on real regions",
         "Region-to-gene assignment at scale"
