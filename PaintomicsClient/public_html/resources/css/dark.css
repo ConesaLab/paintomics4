@@ -1119,6 +1119,14 @@
 }
 [data-theme="dark"] #dbs_message dt { color: var(--pa-ink-title); }
 
+/* The compound disambiguation cards. main.css inks every bare h4 #27272A and
+   this file answers that card by card rather than with a blanket (the
+   .paExploreCard note in section 2 says why); the "N compounds found" and
+   "N alternative compounds found" counters on these cards were not among the
+   answers, so they sat at 1.4:1 on the dark card. Label ink, not body ink:
+   they are secondary counts over the checkbox lists that carry the content. */
+[data-theme="dark"] .metaboliteBox h4 { color: var(--pa-ink-label); }
+
 /* ---------------------------------------------------------------------------
    10. Highcharts
 
@@ -1160,6 +1168,21 @@
 	background: var(--pa-surface-quiet) !important;
 	color: var(--pa-ink-body) !important;
 	border-color: var(--pa-border) !important;
+}
+/* The classification pie's percentage labels are HTML (useHTML), not SVG text,
+   so the fill rules above never touched them. Highcharts writes its drilldown
+   default inline on the span - navy #003399, underlined - which was 1.9:1 on
+   the dark card and needs !important to beat. Drillable labels take the link
+   colour because clicking them is the pie's whole interaction; a drilled-down
+   level has nothing further to open and reads as plain chart ink. The
+   category badge inside each label keeps its own inline ink and fill (it is
+   type-coding, same as the slices), and neither rule reaches it: they colour
+   the wrapper span only, and the badge's inline value beats inheritance. */
+[data-theme="dark"] div[id^="pathwayDistributionsContainer_"] .highcharts-data-label > span {
+	color: var(--pa-chart-ink) !important;
+}
+[data-theme="dark"] div[id^="pathwayDistributionsContainer_"] .highcharts-drilldown-data-label > span {
+	color: var(--pa-link) !important;
 }
 
 /* ---------------------------------------------------------------------------
@@ -1326,13 +1349,9 @@
 [data-theme="dark"] div.lateralOptionsPanel div.updateMessageContainer h3 { color: var(--pa-ink-title); }
 [data-theme="dark"] .step4PathwayThumbnailHover { background-color: rgba(23, 24, 27, 0.67); }
 [data-theme="dark"] td.whiteBackground { background: var(--pa-surface); }
-/* The Heatmap / Line chart pair. The unselected half is a light grey that reads
-   brighter than the panel it sits on; the selected half keeps its accent. */
-[data-theme="dark"] a.button.twoOptionsButton {
-	background: var(--pa-btn-default-bg);
-	color: var(--pa-btn-default-ink);
-	border-color: var(--pa-border-control);
-}
+/* The Heatmap/Line-chart and Genes/Metagenes segmented control (twoOptionsButton,
+   main.css) is built entirely from surface and ink tokens now, so it themes
+   itself - no dark override needed here any more. */
 
 /* ---------------------------------------------------------------------------
    13. Controls and widgets that appear on more than one step
