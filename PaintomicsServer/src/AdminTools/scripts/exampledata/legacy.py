@@ -89,7 +89,7 @@ MULTIOMICS_PROVENANCE = [
     "| Metabolomics | 58 compounds — complete | MetaboLights MTBLS283 |",
     "| Gene expression | 12,762 genes — complete | GSE75417, published CQN+ComBat pipeline |",
     "| Proteomics | 2,384 of 2,396 groups (9 lack a gene symbol, 3 duplicate one) | PXD003263 |",
-    "| miRNA-seq | 194,881 gene–miRNA pairs over all 333 target-annotated measured miRNAs | GSE75394 |",
+    "| miRNA-seq | 42,421 gene–miRNA pairs: each gene's 5 strongest negative regulators ∪ each miRNA's 20 strongest targets (Kendall τ over the six-ratio profiles) out of all 194,881 annotation pairs; all 333 target-annotated measured miRNAs kept | GSE75394 |",
     "| DNase-seq | 23,273 gene rows from all 52,788 consensus DHS regions | GSE75390 |",
     "",
     "The values are a re-derivation, not the pre-2026 numbers rescaled: the old "
@@ -150,7 +150,8 @@ def buildStategraMultiomics(context):
                     "mouse Ikaros time course. Real measurements, not simulated — "
                     "the reference every simulated scenario is shaped against. "
                     "The full published release: 12,762 genes, 2,384 protein "
-                    "groups, 194,881 gene–miRNA pairs, all 52,788 DNase regions "
+                    "groups, the strongest 42,421 of 194,881 gene–miRNA pairs "
+                    "(every measured miRNA kept), all 52,788 DNase regions "
                     "collapsed onto genes. See the Provenance section of the "
                     "README for how each layer is derived."),
         "tests": ["The full multi-omic pipeline on real data",

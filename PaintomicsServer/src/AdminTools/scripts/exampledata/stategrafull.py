@@ -117,6 +117,22 @@ GE_FDR, GE_MIN_EFFECT = 0.05, 0.58            # 1.5-fold on expression
 PROT_FDR, PROT_MIN_EFFECT = 0.01, 1.0         # 2-fold on protein abundance
 DNASE_FDR, DNASE_MIN_EFFECT = 0.05, 0.5       # 1.4-fold on accessibility
 
+# The redundancy cap on the derived gene-miRNA pair file. All 194,881
+# annotation pairs over the measured miRNAs are computed, ranked by Kendall
+# tau between the gene's and the miRNA's six-timepoint ratio profiles (the
+# statistic the server's own miRNA2Target uses in the interactive scenario,
+# where repression = negative correlation), and only each gene's strongest
+# negative regulators plus each miRNA's strongest targets are shipped. The
+# union keeps every one of the 333 miRNAs and every targeted gene present
+# while dropping the redundant weak pairs: pathway painting and enrichment
+# are gene-level, so a gene's 23rd-weakest regulator adds a parse row, a
+# Mongo feature document and enrichment-count work but no biology the top
+# five did not already carry. Measured on production, the uncapped file made
+# the example ~2x slower end to end (step 1: 41 s -> 59 s local) and wrote
+# ~195k feature documents per run.
+MIRNA_TOP_PER_GENE = 5
+MIRNA_TOP_PER_MIRNA = 20
+
 VALUE_FORMAT = "%.6f"
 
 GE_CONDITIONS = ["Ikaros/Control_%dh" % t for t in TIMES]
@@ -302,8 +318,10 @@ def buildGeneExpression(sourceDir, outputRoot):
                 ["#geneID"] + GE_CONDITIONS, ids, ratios)
     relevantIds = sorted(identifier for identifier, keep in zip(ids, relevant) if keep)
     writeIds(os.path.join(dataDir, "gene_expression_relevant.tab"), relevantIds)
+    # geneIndex carries each gene's shipped six-ratio profile so that
+    # buildMirnaPairs can rank annotation pairs by profile correlation.
     return {"genes": len(ids), "relevant": len(relevantIds),
-            "geneIndex": dict.fromkeys(ids)}
+            "geneIndex": dict(zip(ids, ratios))}
 
 
 # ---------------------------------------------------------------------------
@@ -379,10 +397,23 @@ def buildProteomics(sourceDir, outputRoot):
 # miRNA pairs
 # ---------------------------------------------------------------------------
 
+def _pairwiseDifferenceSigns(profile):
+    """The C(6,2)=15 pairwise-difference signs of a six-value profile.
+
+    Kendall's tau-a between two profiles is then the mean elementwise product
+    of their sign vectors -- one dot product per candidate pair instead of a
+    scipy call, and identical ordering for tie-free float profiles.
+    """
+    n = len(profile)
+    return np.sign(np.array([profile[j] - profile[i]
+                             for i in range(n) for j in range(i + 1, n)]))
+
+
 def buildMirnaPairs(outputRoot, geneIndex):
     mirnaDir = _dataDir(outputRoot, MIRNA_FOLDER)
 
     values = {}
+    profiles = {}
     with open(os.path.join(mirnaDir, "mirna_unmapped_values.tab")) as handle:
         next(handle)  # header (six condition labels, no ID label)
         for line in handle:
@@ -390,6 +421,8 @@ def buildMirnaPairs(outputRoot, geneIndex):
             # Keep the source text verbatim: re-formatting 469 floats gains
             # nothing and loses byte-identity with scenario 10.
             values[cells[0]] = "\t".join(cells[1:])
+            profiles[cells[0]] = _pairwiseDifferenceSigns(
+                np.array([float(cell) for cell in cells[1:]]))
 
     with open(os.path.join(mirnaDir, "mirna_unmapped_relevant.tab")) as handle:
         relevantMirnas = {line.strip() for line in handle if line.strip()}
@@ -402,6 +435,34 @@ def buildMirnaPairs(outputRoot, geneIndex):
             if cells[0] in values and cells[1] in geneIndex:
                 pairs.add((cells[1], cells[0]))
 
+    # Rank every annotation pair by tau between the gene's and the miRNA's
+    # shipped profiles (most negative = strongest repression candidate), then
+    # keep the union of each gene's top MIRNA_TOP_PER_GENE regulators and each
+    # miRNA's top MIRNA_TOP_PER_MIRNA targets. A tau that cannot be computed
+    # (a constant or NaN profile) sorts last via the 2.0 sentinel; name-level
+    # tie-breaks keep the selection deterministic across runs.
+    geneSigns = {}
+    byGene = defaultdict(list)
+    byMirna = defaultdict(list)
+    for gene, mirna in pairs:
+        signs = geneSigns.get(gene)
+        if signs is None:
+            signs = geneSigns[gene] = _pairwiseDifferenceSigns(
+                np.asarray(geneIndex[gene], dtype=float))
+        tau = float(np.dot(signs, profiles[mirna])) / len(signs)
+        if not np.isfinite(tau):
+            tau = 2.0
+        byGene[gene].append((tau, mirna))
+        byMirna[mirna].append((tau, gene))
+
+    kept = set()
+    for gene, candidates in byGene.items():
+        for tau, mirna in sorted(candidates)[:MIRNA_TOP_PER_GENE]:
+            kept.add((gene, mirna))
+    for mirna, candidates in byMirna.items():
+        for tau, gene in sorted(candidates)[:MIRNA_TOP_PER_MIRNA]:
+            kept.add((gene, mirna))
+
     dataDir = _dataDir(outputRoot, MULTIOMICS_FOLDER)
     relevantPairs = 0
     with open(os.path.join(dataDir, "mirna_values.tab"), "w") as valuesOut, \
@@ -413,13 +474,15 @@ def buildMirnaPairs(outputRoot, geneIndex):
         # the identifier heuristic then read the file as bare gene IDs --
         # 44,091 relevant pairs became 0 matching relevant features.
         relevantOut.write("# Gene name\tmiRNA ID\n")
-        for gene, mirna in sorted(pairs):
+        for gene, mirna in sorted(kept):
             valuesOut.write(gene + ":::" + mirna + "\t" + values[mirna] + "\n")
             if mirna in relevantMirnas:
                 relevantOut.write(gene + "\t" + mirna + "\n")
                 relevantPairs += 1
-    return {"pairs": len(pairs),
-            "mirnas": len({mirna for _gene, mirna in pairs}),
+    return {"pairs": len(kept),
+            "annotationPairs": len(pairs),
+            "mirnas": len({mirna for _gene, mirna in kept}),
+            "genes": len({gene for gene, _mirna in kept}),
             "relevantPairs": relevantPairs}
 
 
@@ -561,8 +624,11 @@ def main():
               "(%(droppedNoSymbol)d without a symbol dropped, %(filledGroups)d "
               "empty groups placeholdered), %(relevant)d relevant" % prot)
         mirna = buildMirnaPairs(outputRoot, ge["geneIndex"])
-        print("miRNA: %(pairs)d gene-miRNA pairs over %(mirnas)d miRNAs, "
-              "%(relevantPairs)d relevant pairs" % mirna)
+        print("miRNA: %(pairs)d of %(annotationPairs)d annotation pairs kept "
+              "(top %(topGene)d/gene + top %(topMirna)d/miRNA by tau) over "
+              "%(mirnas)d miRNAs and %(genes)d genes, %(relevantPairs)d "
+              "relevant pairs" % dict(mirna, topGene=MIRNA_TOP_PER_GENE,
+                                      topMirna=MIRNA_TOP_PER_MIRNA))
         dnase = buildDnase(arguments.source, outputRoot, arguments.gtf)
         print("DNase: %(regions)d regions (%(relevantRegions)d relevant) -> "
               "%(genes)d genes (%(relevantGenes)d relevant)" % dnase)
