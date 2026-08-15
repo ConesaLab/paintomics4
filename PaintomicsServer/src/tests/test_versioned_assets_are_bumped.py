@@ -94,7 +94,7 @@ PUBLISHED = {
     "app/view/common/AlignmentGuides.js": (
         "4.2", "ce2ba85063e8059eb2cc4c8e1992744854a14ad0db6f866213b8df1136650a59"),
     "app/view/PathwayAcquisitionViews/PA_AIInterpretView.js": (
-        "0.6", "220aaea6269eafd08b10f8e6f9f0fefca952b7412cfc7c76c53617e383f65572"),
+        "0.7", "b009d48e1d6d5d027b80cb59ccdc8e26c2f73f6d9d96443ca8fb62e43530f1e2"),
     "app/view/PathwayAcquisitionViews/PA_Step3RegTargetNetworkView.js": (
         "0.7", "b135712a9564f8ae0eac94daf9c567ef275c4c748dbc270fdbdeb7d25fc79e34"),
     "resources/ServerConfiguration.js": (
