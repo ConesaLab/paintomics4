@@ -2043,39 +2043,41 @@ div.more-net-side p,
 	padding-right: 0;
 }
 
+/* A flat segmented control: a sunken track holding two borderless options,
+   the active one raised on its own chip. Replaces the old beveled grey/blue
+   pill (still visible in git blame) with the same token set every other
+   control in the app already draws from, so it themes for free instead of
+   needing its own dark.css entry. Shared by this tooltip's Genes/Metagenes
+   and Heatmap/Line-chart pickers, and by the Step 3 pathway-info rail panel's
+   identical toggle. */
+div.twoOptionsButtonWrapper {
+	display: inline-flex;
+	gap: 2px;
+	padding: 3px;
+	margin: 10px 0;
+	background-color: var(--pa-surface-sunken);
+	border-radius: var(--pa-radius-sm);
+}
 a.button.twoOptionsButton {
 	float: none;
-	font-size: 9px;
-	margin: -1px;
-	padding: 5px;
-	background-color: #BDBDBD;
-	/* Outer edge. The #BDBDBD half is 1.88:1 against the white panel it sits on,
-	   so the control's extent was hard to see even though the split between its
-	   two halves was obvious. #767676 is 4.54:1 on white. The fills are left
-	   exactly as they are - they encode which option is active, which is the
-	   decision recorded below - and because the two halves overlap by the -1px
-	   margin above, their borders collapse into a single outline rather than
-	   drawing a seam down the middle. */
-	border-color: #767676;
-	/* This is a segmented control (Heatmap / Line chart), not a disabled
-	   button - both halves are clickable, `.selected` just marks the active
-	   one - so both states have to meet AA. It inherited .button's #E2E2E2
-	   label, which gave 1.45:1 on the grey half and 2.51:1 on the blue.
-	   The two fills encode which option is active, so they stay as they are
-	   and the ink goes dark instead: 9.26:1 and 5.35:1. */
-	color: #1A1A1A;
-	border-radius: 0px;
+	font-size: 11px;
+	font-weight: 600;
+	margin: 0;
+	padding: 5px 12px;
+	background-color: transparent;
+	border: none;
+	border-radius: var(--pa-radius-sm);
+	color: var(--pa-ink-label);
+	transition: background-color var(--pa-transition), color var(--pa-transition), box-shadow var(--pa-transition);
 }
-a.button.twoOptionsButton:first-child {
-	border-radius: 5px 0px 0px 5px;
-}
-a.button.twoOptionsButton:last-child {
-	border-radius: 0px 5px 5px 0px;
+a.button.twoOptionsButton:hover:not(.selected) {
+	color: var(--pa-ink);
 }
 a.button.twoOptionsButton.selected {
-	background-color: #6992BE;
+	background-color: var(--pa-surface);
+	color: var(--pa-ink);
+	box-shadow: var(--pa-shadow-inset);
 }
-div.twoOptionsButtonWrapper{text-align: center;margin: 10px 0px;}
 
 /*****************************************************************************
 **** FORMULARY STYLES ********************************************************
@@ -2291,12 +2293,20 @@ body > .x-mask {
    element so it cannot carry the ::before/::after that would redraw the ✕.
    A muted grey keeps the knocked-out glyph legible and stops the control from
    being the brightest thing in a header whose whole point is now to be quiet. */
-.x-window .x-tool-img.x-tool-close {
+.x-window .x-tool-img.x-tool-close,
+.x-window .x-tool-img.x-tool-pin,
+.x-window .x-tool-img.x-tool-unpin,
+.x-window .x-tool-img.x-tool-plus,
+.x-window .x-tool-img.x-tool-minus {
 	background-color: #8A8B92;
 	border-radius: 3px;
 	transition: background-color var(--pa-transition);
 }
-.x-window .x-tool-img.x-tool-close:hover {
+.x-window .x-tool-img.x-tool-close:hover,
+.x-window .x-tool-img.x-tool-pin:hover,
+.x-window .x-tool-img.x-tool-unpin:hover,
+.x-window .x-tool-img.x-tool-plus:hover,
+.x-window .x-tool-img.x-tool-minus:hover {
 	background-color: #5A5B62;
 }
 
@@ -4241,7 +4251,8 @@ i.masterRegulator:before {
 .boxTitleLabel {
 	font-weight: bold;
 	padding-top: 5px;
-	border-bottom: 1px solid #3892d3;
+	padding-bottom: 8px;
+	border-bottom: 1px solid var(--pa-border);
 }
 
 /*PATHWAYS THUMBNAILS FOR HISTORY PANEL*/
@@ -5110,7 +5121,7 @@ div.omicSelection div.omicPosition + div {
 /***********************************************************/
 
 .tooltipDetailsSpan {
-	color: #317AB6;
+	color: var(--pa-link);
 	cursor: pointer
 }
 .tooltipDetailsSpan a {

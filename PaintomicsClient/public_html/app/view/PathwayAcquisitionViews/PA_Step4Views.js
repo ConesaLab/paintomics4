@@ -1573,9 +1573,8 @@ function PA_Step4KeggDiagramFeatureSetTooltip() {
 		this.featureView.setClosable(true);
 
 		this.component = Ext.create('Ext.window.Window', {
-			target: "", 
+			target: "",
 			layout: "auto",
-			style: "background: #fff; border: solid 2px #B7C7CF; border-radius : 2px; margin:0; padding:0;",
 			resizable: false, bodyPadding:0,
 			autoHeight: true, width: 280, minHeight:240,
 			closable: false,
@@ -1630,7 +1629,7 @@ function PA_Step4KeggDiagramFeatureSetTooltip() {
 				{
 					xtype: "box", html:
 					'<div style="text-align: center;margin: 10px 0px;">'+
-					'  <a href="javascript:void(0)" class="step4TooltipMoreButton" class="button btn-primary btn-no-float"><i class="fa fa-search-plus"></i> Show details</a>'+
+					'  <a href="javascript:void(0)" class="step4TooltipMoreButton button btn-primary btn-no-float"><i class="fa fa-search-plus"></i> Show details</a>'+
 					'</div>'
 				}
 			],
@@ -1644,7 +1643,13 @@ function PA_Step4KeggDiagramFeatureSetTooltip() {
 				boxready: function() {
 					//SOME EVENT HANDLERS
 					var domEl = me.getComponent().el.dom;
-					
+
+					// This window is anchored to wherever the user clicked on the
+					// diagram (showBy above), never to a fixed page position, so it
+					// can never land on the page's column rails - same case as
+					// #messageDialogPanel in AlignmentGuides.js's ignore list.
+					domEl.setAttribute("data-guides", "ignore");
+
 					$(domEl).find(".step4TooltipMoreButton").click(function() {
 						me.getComponent().hide();
 						me.showFeatureSetDetails(me.targetID, me.getModel());
@@ -2129,8 +2134,12 @@ function PA_Step4KeggDiagramFeatureView(showButtons) {
 			series: series,
 			plotOptions: {
 				heatmap: {
-					borderColor: "#000000",
-					borderWidth: 0.5,
+					// A light gap instead of a black grid: it reads as separation
+					// between saturated cells on both the light and dark surface this
+					// chart sits on, without a hairline that goes muddy against the
+					// diverging blue/red fills.
+					borderColor: "rgba(255,255,255,0.55)",
+					borderWidth: 1.5,
 					dataLabels: {
 						enabled: true,
 						useHTML: true,

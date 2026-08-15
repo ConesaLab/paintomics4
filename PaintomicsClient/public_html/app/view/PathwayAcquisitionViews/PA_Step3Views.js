@@ -1703,6 +1703,20 @@ function PA_Step3PathwayClassificationView(db = "KEGG") {
 }
 PA_Step3PathwayClassificationView.prototype = new View();
 
+/**
+* The ink sigma paints node labels with. Sigma renders to canvas, so dark.css
+* cannot reach the labels the way it reaches the rest of the page: the colour
+* has to be resolved here and handed over as a settings value. --pa-chart-ink
+* is defined only under [data-theme="dark"], so in the light theme the lookup
+* comes back empty and the historical black stands.
+*
+* @returns {String}
+*/
+function paNetworkLabelInk() {
+	var ink = window.getComputedStyle(document.documentElement).getPropertyValue("--pa-chart-ink").trim();
+	return (ink !== "") ? ink : "#000";
+}
+
 function PA_Step3PathwayNetworkView(db = "KEGG") {
 	/**
 	* About this view: this view (PA_Step3PathwayNetworkView) is used to visualize
@@ -1716,6 +1730,7 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 	***********************************************************************/
 	this.name = "PA_Step3PathwayNetworkView";
 	this.network = null;
+	this.themeObserver = null;
 	this.tooltips = null;
 	this.filters = null;
 	this.select = null;
@@ -2016,9 +2031,26 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 				// min/maxNodeSize:
 				minNodeSize: visualOptions.minNodeSize,
 				maxNodeSize: visualOptions.maxNodeSize,
-				defaultLabelSize: visualOptions.fontSize
+				defaultLabelSize: visualOptions.fontSize,
+				defaultLabelColor: paNetworkLabelInk()
 			}
 		});
+
+		/* The label ink is baked into canvas pixels at render time, so a theme
+		   flip after this point would strand black labels on the dark ground
+		   (or pale ones on white). One observer per view, registered on the
+		   first render only: updateObserver re-runs on every Apply and kills
+		   the old sigma instance, so the callback reads me.network at fire
+		   time instead of closing over an instance that may be dead. */
+		if (me.themeObserver === null && window.MutationObserver !== undefined) {
+			me.themeObserver = new MutationObserver(function () {
+				if (me.network !== null) {
+					me.network.settings({defaultLabelColor: paNetworkLabelInk()});
+					me.network.renderers[0].render();
+				}
+			});
+			me.themeObserver.observe(document.documentElement, {attributes: true, attributeFilter: ["data-theme"]});
+		}
 
 		/********************************************************/
 		/* STEP 4. GENERATE THE GLYPS                           */
