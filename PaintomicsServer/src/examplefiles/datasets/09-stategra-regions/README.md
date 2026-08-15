@@ -1,6 +1,6 @@
 # STATegra — DNase regions (real, needs the mouse GTF)
 
-The unmapped DNase-seq regions from the STATegra time course, for the Regions2Genes step. Requires the full mouse annotation, which is fetched by a deploy step and is absent from a fresh checkout.
+All 52,788 consensus DNase-seq regions from the STATegra time course, unmapped, for the Regions2Genes step. Requires the full mouse annotation, which is fetched by a deploy step and is absent from a fresh checkout.
 
 |  |  |
 | --- | --- |

@@ -64,13 +64,26 @@ class RealCatalogueBundleTest(unittest.TestCase):
         shutil.rmtree(cls.directory, ignore_errors=True)
 
     def test_every_file_the_picker_would_run_on_is_in_the_archive(self):
-        """The equality the static zip broke: downloadable == loadable."""
+        """The equality the static zip broke: downloadable == loadable.
+
+        With one stated exception: a member over MAX_MEMBER_BYTES is skipped
+        by design (the deploy-fetched mouse GTF -- half a gigabyte a download
+        click must not incur) and the contract for it is to be *named in the
+        document* instead. Asserting bare membership here made the test fail
+        on exactly the machines that have the GTF, which is every deployment.
+        """
         self.assertTrue(self.scenarios, "no scenarios available to test")
         for scenario in self.scenarios:
             for relative in ExampleDatasets.declaredFiles(scenario):
                 absolute = ExampleDatasets.absolutePath(REAL_EXAMPLE_FILES, relative)
                 if not os.path.isfile(absolute):
                     continue                    # listScenarios would have dropped it
+                if os.path.getsize(absolute) > ExampleBundle.MAX_MEMBER_BYTES:
+                    self.assertIn(relative, self.document,
+                                  "'%s' runs on %s, which is too large to "
+                                  "bundle, so the document must say so"
+                                  % (scenario.get("id"), relative))
+                    continue
                 self.assertIn(PREFIX + relative, self.names,
                               "'%s' runs on %s but it is not in the archive"
                               % (scenario.get("id"), relative))
