@@ -27,7 +27,7 @@ One condition and one relevant-features list: the smallest input PaintOmics acce
 * **diffuseRelevantRate** — 0.05
 * **minTargetCoverage** — 0.688
 * **pathwaysFile** — `expected_pathways.txt`
-* **relevantFeatures** — 954
+* **relevantFeatures** — 956
 * **signalFeatures** — 414
 * **signalFeaturesFile** — `signal_features.txt`
 * **targetCoverage** — [0.727, 0.704, 0.706, 0.698, 0.688, 0.705, 0.696, 0.699]

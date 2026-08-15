@@ -50,19 +50,19 @@ Transcriptomics, proteomics, transcription factors, metabolomics and miRNA over 
 
 ## Expected result
 
-* **compoundTargetCoverage** — [0.681, 0.656, 0.639, 0.423, 0.543, 0.5, 0.727, 0.5]
-* **compoundUniverse** — 4612
+* **compoundTargetCoverage** — [0.681, 0.664, 0.611, 0.423, 0.543, 0.438, 0.727, 0.5]
+* **compoundUniverse** — 4667
 * **diffuseRelevantRate** — 0.05
 * **minTargetCoverage** — 0.694
 * **namedCompounds** — 400
 * **omicCount** — 5
 * **pathwaysFile** — `expected_pathways.txt`
-* **relevantCompounds** — 495
+* **relevantCompounds** — 496
 * **relevantFeatures** — 829
-* **signalCompounds** — 252
+* **signalCompounds** — 253
 * **signalFeatures** — 324
 * **signalFeaturesFile** — `signal_features.txt`
-* **targetCoverage** — [0.722, 0.7, 0.709, 0.705, 0.707, 0.719, 0.694, 0.706]
+* **targetCoverage** — [0.722, 0.7, 0.709, 0.705, 0.707, 0.716, 0.694, 0.706]
 * **targetLeakageCap** — 3.0
 * **targetPathways** — 8
 
