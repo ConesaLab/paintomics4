@@ -86,7 +86,7 @@ PUBLISHED = {
     "app/view/common/upload/Panel.js": (
         "0.2", "34264cdec6faef81e46d28982f348003180b2e06d0af696f815f1b5b2a7a7458"),
     "app/view/PathwayAcquisitionViews/PA_AIInterpretView.js": (
-        "0.3", "6a8fae1b64d3b5ff5a68e2deb36460a1e4f1932128aa283f2adad6062bacaa30"),
+        "0.4", "738f990cc71e868c616da19a5c83359a95d669960302ef7205221bc814422815"),
     "app/view/PathwayAcquisitionViews/PA_Step3RegTargetNetworkView.js": (
         "0.4", "4d92961b47ef064b8150e8514d52dea5b5f0467d31281d3b580b6049df6a2e76"),
     "resources/ServerConfiguration.js": (
