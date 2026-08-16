@@ -46,6 +46,7 @@ CRITICAL = (
     "src.paintomicsserver",
     "src.classes.AIInterpret.agent",
     "src.classes.AIInterpret.shared",
+    "src.classes.AIInterpret.clusters",
     "src.classes.AIInterpret.llm_client",
     "src.classes.AIInterpret.verification",
     "src.classes.AIInterpret.context_builder",

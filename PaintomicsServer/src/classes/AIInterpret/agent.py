@@ -62,8 +62,19 @@ from src.classes.AIInterpret.shared import (
     _build_local_paper_index, _remap_citation_indices, _shared_gene_core,
 )
 from src.classes.AIInterpret.llm_client import LLMClient
+# Cluster-first interpretation (AI_CLUSTER_MODE=1): the shared-feature
+# pathway network is partitioned and every significant pathway is interpreted
+# inside its cluster. Off by default so the base arm stays reproducible.
+from src.classes.AIInterpret import clusters as clusters_mod
 
 logger = logging.getLogger(__name__)
+
+# How many pathways one cluster-mode interpretation batch may hold (units are
+# never split; a bigger cluster travels alone) and how many batches run at
+# once. Cluster mode has ~5x the batches of the top-15 path, so it needs a
+# bound the three-batch path never did.
+CLUSTER_BATCH_MAX = int(os.getenv("AI_CLUSTER_BATCH_MAX", "8"))
+CLUSTER_CONCURRENCY = int(os.getenv("AI_CLUSTER_CONCURRENCY", "6"))
 
 # Tuning knobs for the SDK arm. Separate from the shared AI_* settings so
 # sweeping this workflow keeps its behaviour stable mid-comparison.
@@ -374,6 +385,20 @@ def _completeness_gaps(report, pathways):
     return missing_pw, gaps
 
 
+def _reattach_blocks(report, blocks):
+    """Put deterministic blocks (the pathway and cluster tables) back if a
+    correction rewrite dropped them, keeping them ahead of the References
+    section. Blocks already present are left where they are."""
+    from src.classes.AIInterpret.verification import _REFERENCES_HEADING_RE
+    m = _REFERENCES_HEADING_RE.search(report)
+    body = report[:m.start()].rstrip() if m else report.rstrip()
+    refs = report[m.start():] if m else ""
+    for heading, text in blocks:
+        if text and heading not in body:
+            body += "\n\n" + text.rstrip()
+    return body + ("\n\n" + refs if refs else "\n")
+
+
 def _pick_best_draft(drafts, pathways, papers):
     """Choose among synthesis drafts on evidence the DATA provides.
 
@@ -644,13 +669,50 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats,
     organism = job_instance.getOrganism()
     organism_name = get_organism_name(organism)
     pathways = build_pathway_context(job_instance, max_pathways=budgets["max_pathways"])
+    # Cluster mode widens the pathway set from the top-N by p-value to every
+    # significant pathway the network draws, grouped by shared matched
+    # features. The list stays in global rank order -- clustering decides what
+    # is discussed together, never the order of emphasis (evolve round 1 vs 2).
+    partition = None
+    if clusters_mod.CLUSTER_MODE:
+        try:
+            candidate = clusters_mod.build_partition(job_instance)
+            member_ids = clusters_mod.partition_member_ids(candidate)
+            if candidate.get("clusters") and member_ids:
+                partition = candidate
+                pathways = build_pathway_context(job_instance, pathway_ids=member_ids)
+                logger.info("[%s][sdk] cluster mode: %s", job_id,
+                            clusters_mod.partition_summary(partition))
+            else:
+                logger.info("[%s][sdk] cluster mode found no clusters (%s); using the "
+                            "rank-ordered top-%d", job_id,
+                            clusters_mod.partition_summary(candidate), len(pathways))
+        except Exception as e:
+            logger.warning("[%s][sdk] cluster mode failed (%s); using the rank-ordered "
+                           "top-%d", job_id, e, len(pathways))
+            partition = None
+    ctx_by_id = {p["id"]: p for p in pathways}
     if hooks and hooks.get("pathways"):
         try:
             hooks["pathways"](pathways)
         except Exception:
             logger.debug("pathway-index hook failed", exc_info=True)
+    if partition is not None and hooks and hooks.get("partition"):
+        try:
+            hooks["partition"](partition)
+        except Exception:
+            logger.debug("partition hook failed", exc_info=True)
+    if partition is not None:
+        stats["clusters"] = len(partition["clusters"])
+        stats["cluster_pathways"] = len(pathways)
+        stats["cluster_standalone"] = len(partition["standalone"])
+        stats["cluster_further"] = len(partition["further"])
     gene_whitelist = build_gene_symbol_whitelist(job_instance)
-    major, minor = triage_pathways(pathways)
+    # The planner and the cross-omic matrix keep the top-N view even in
+    # cluster mode: the wider set reaches literature through per-cluster
+    # queries below, and a 100-pathway planner prompt is not a better planner.
+    plan_pathways = pathways[:budgets["max_pathways"]] if partition is not None else pathways
+    major, minor = triage_pathways(plan_pathways)
     matrix = build_cross_omic_matrix(major)
 
     ctx = AgentContext(job_instance=job_instance, job_id=job_id,
@@ -680,20 +742,26 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats,
     # Keys must match build_pathway_context's current record shape: the old
     # p.get("pvalue")/p.get("omics") read fields that no longer exist, so
     # every triage line said "p=None, omics=0" and the agent picked on names.
-    pathway_lines = "\n".join(
-        "- %s (combined p=%.3g, significant omics=%s)"
-        % (p.get("name"), p.get("combined_pvalue") or 1.0,
-           p.get("significant_omic_count", "?"))
-        for p in pathways)
-    triage_res = await Runner.run(
-        agents["triage"],
-        "Experiment: %s\nOrganism: %s\n\nEnriched pathways:\n%s\n\n"
-        "Select up to %d to investigate." % (experiment_design, organism_name,
-                                             pathway_lines, budgets["max_pathways"]),
-        context=ctx, max_turns=3)
-    picks = triage_res.final_output.picks
+    if partition is None:
+        pathway_lines = "\n".join(
+            "- %s (combined p=%.3g, significant omics=%s)"
+            % (p.get("name"), p.get("combined_pvalue") or 1.0,
+               p.get("significant_omic_count", "?"))
+            for p in pathways)
+        triage_res = await Runner.run(
+            agents["triage"],
+            "Experiment: %s\nOrganism: %s\n\nEnriched pathways:\n%s\n\n"
+            "Select up to %d to investigate." % (experiment_design, organism_name,
+                                                 pathway_lines, budgets["max_pathways"]),
+            context=ctx, max_turns=3)
+        picks = triage_res.final_output.picks
+        logger.info("[%s][sdk] triage picked %d pathways", job_id, len(picks))
+    else:
+        # The partition already decided what is investigated (every
+        # significant pathway, in its cluster); the triage pick is not
+        # consumed downstream, so cluster mode skips the call.
+        picks = []
     stats["triage_s"] = time.time() - t0
-    logger.info("[%s][sdk] triage picked %d pathways", job_id, len(picks))
 
     # -- Phase 2: search planning -------------------------------------------
     _hb("searching_pubmed", 15, "Planning literature searches...")
@@ -717,6 +785,19 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats,
     # batching the fetches costs N+1. That is what makes a wider search budget
     # affordable inside 300s: 88 tasks previously blew past 600s.
     _fetched = {}   # pmid -> paper, filled by the batched fetch below
+    # task.pathway is the attribution key. The planner and the per-pathway
+    # backfill use a pathway name; cluster-mode queries use the cluster id so
+    # one search feeds every member's drill-down. This maps a key back to the
+    # pathway names a paper should be attributed to.
+    attribution = {}
+
+    def _attributed(task):
+        return list(attribution.get(task.pathway) or [task.pathway])
+
+    def _task_display(task):
+        names = attribution.get(task.pathway)
+        return ", ".join(names[:4]) + (" ..." if names and len(names) > 4 else "") \
+            if names else task.pathway
 
     async def _search_only(task):
         try:
@@ -758,7 +839,7 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats,
             "Precision beats volume: a kept paper with no quotable finding costs "
             "a citation, since the claim it was attached to is then removed. An "
             "empty list is correct when nothing fits."
-            % (experiment_design, organism_name, task.pathway, task.query, listing),
+            % (experiment_design, organism_name, _task_display(task), task.query, listing),
             context=ctx, max_turns=3)
         answered = {str(x).strip() for x in (res.final_output.pmids or [])}
         candidates = {str(p.get("pmid")) for p in papers}
@@ -783,7 +864,7 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats,
                 # erase every other pathway it was found for. The dedup below
                 # merges these lists back together.
                 paper = dict(p)
-                paper["pathways"] = [task.pathway]
+                paper["pathways"] = _attributed(task)
                 out.append(paper)
         # Which stage is actually starving the citation count: PubMed returning
         # little, or the filter rejecting most of what it returns? Without this
@@ -821,7 +902,29 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats,
                                              for t in system_terms)
                         if system_terms else "")
         budget = SDK_BACKFILL_MAX_TASKS
-        for pw in pathways:
+        if partition is not None:
+            # One or two gene-anchored queries per cluster from its shared
+            # core (one per standalone / further pathway), in cluster rank
+            # order so the budget goes to the strongest clusters first.
+            # Attributed to every member, so a paper found for a cluster is
+            # available to each member's interpretation and drill-down.
+            seen_queries = {t.query for t in tasks}
+            n_before = len(tasks)
+            for query, key, names, why in clusters_mod.cluster_search_queries(
+                    partition, ctx_by_id, organism_name, system_angle):
+                if len(tasks) >= budget:
+                    logger.info("[%s][sdk] backfill budget of %d tasks reached; "
+                                "remaining clusters get no extra search", job_id, budget)
+                    break
+                if query in seen_queries:
+                    continue
+                seen_queries.add(query)
+                attribution[key] = names
+                tasks.append(SearchTask(query=query, pathway=key, rationale=why))
+            logger.info("[%s][sdk] %d cluster search tasks added (%d total, system "
+                        "angle: %s)", job_id, len(tasks) - n_before, len(tasks),
+                        system_angle or "none")
+        for pw in (pathways if partition is None else []):
             if pw["name"] in covered:
                 continue
             if len(tasks) >= budget:
@@ -907,7 +1010,7 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats,
                            "the top %d hits", job_id, task.query[:60], r, len(fallback))
             for p in fallback:
                 paper = dict(p)
-                paper["pathways"] = [task.pathway]
+                paper["pathways"] = _attributed(task)
                 all_papers.append(paper)
             continue
         all_papers.extend(r)
@@ -959,7 +1062,7 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats,
     _hb("interpreting", 45, "Generating interpretation with evidence extraction...")
     t0 = time.time()
 
-    async def _one_batch(batch):
+    async def _one_batch(batch, unit_batch=None):
         names = {p["name"] for p in batch}
         batch_papers = [p for p in unique_papers
                         if names & set(p.get("pathways", []))]
@@ -985,6 +1088,10 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats,
         prompt = prompts_mod.build_batch_interpretation_prompt(
             batch, local_papers, experiment_design, organism_name)
         prompt += _shared_gene_core(batch, ctx.job_instance)
+        if unit_batch:
+            # Cluster context: what the members share, their global ranks,
+            # and the instruction to interpret each cluster as one unit.
+            prompt += "\n\n" + clusters_mod.render_units_block(unit_batch, partition)
         # Features corroborated across independent assays. The pathway context
         # reaches genes only through the top enriched pathways, so a gene with
         # signal in two or three layers that sits outside those pathways is
@@ -1002,10 +1109,33 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats,
                                max_turns=SDK_INTERPRET_TURNS)
         return _remap_citation_indices(str(res.final_output), local_to_global)
 
-    batches = [pathways[i:i + AI_PATHWAYS_PER_BATCH]
-               for i in range(0, len(pathways), AI_PATHWAYS_PER_BATCH)]
-    batch_reports = await asyncio.gather(*[_one_batch(b) for b in batches],
-                                         return_exceptions=True)
+    if partition is not None:
+        # One unit per cluster (never split), small units packed together,
+        # standalone pathways alone, the 'further' pool in chunks; the
+        # fan-out is bounded because there are ~5x more batches than the
+        # top-15 path ever ran.
+        units = clusters_mod.build_units(partition, ctx_by_id)
+        unit_batches = clusters_mod.pack_units(units, CLUSTER_BATCH_MAX)
+        bsem = asyncio.Semaphore(CLUSTER_CONCURRENCY)
+
+        async def _bounded_batch(ub):
+            async with bsem:
+                return await _one_batch(clusters_mod.batch_pathways(ub), ub)
+
+        stats["cluster_units"] = len(units)
+        batches = unit_batches
+        batch_reports = await asyncio.gather(*[_bounded_batch(ub) for ub in unit_batches],
+                                             return_exceptions=True)
+    else:
+        batches = [pathways[i:i + AI_PATHWAYS_PER_BATCH]
+                   for i in range(0, len(pathways), AI_PATHWAYS_PER_BATCH)]
+        batch_reports = await asyncio.gather(*[_one_batch(b) for b in batches],
+                                             return_exceptions=True)
+    failed_batches = sum(1 for b in batch_reports if isinstance(b, Exception))
+    if failed_batches:
+        logger.warning("[%s][sdk] %d of %d interpretation batches failed", job_id,
+                       failed_batches, len(batch_reports))
+    stats["batches_failed"] = failed_batches
     batch_reports = [b for b in batch_reports if not isinstance(b, Exception)]
     stats["interpret_s"] = time.time() - t0
     # Some runs finish with zero citations while others on identical settings
@@ -1035,6 +1165,14 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats,
                          + render_pathway_table(pathways))
     except Exception:
         pass
+    if partition is not None:
+        # The cluster map: which pathways belong together and why, with
+        # every member's global rank, plus the rules that keep the report's
+        # emphasis on rank while its themes follow the clusters.
+        try:
+            synth_prompt += "\n\n" + clusters_mod.render_synthesis_block(partition, ctx_by_id)
+        except Exception as e:
+            logger.warning("[%s][sdk] cluster synthesis block failed: %s", job_id, e)
     # Pin the citable range. Measured: the synthesis emitted 82 distinct markers
     # against 47 real papers -- it numbers citations past the end of the list it
     # was given. render_references_section drops the invalid ones, so nothing
@@ -1175,6 +1313,13 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats,
     table = render_pathway_table(pathways)
     if table:
         report = report.rstrip() + "\n\n" + table + "\n"
+    cluster_table = ""
+    if partition is not None:
+        try:
+            cluster_table = clusters_mod.render_partition_table(partition, ctx_by_id)
+            report = report.rstrip() + "\n\n" + cluster_table + "\n"
+        except Exception as e:
+            logger.warning("[%s][sdk] cluster table failed: %s", job_id, e)
     stats["synth_s"] = time.time() - t0
     stats["synth_citations"] = len(set(re.findall(r'\[(\d+)\]', str(report))))
 
@@ -1341,6 +1486,13 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats,
                                             job_id, known=quotes))
         report, _ = render_references_section(report, ctx.paper_index, quotes)
     stats["verify_loop_s"] = time.time() - t0
+    if partition is not None:
+        # A correction rewrite re-authors the whole report and can drop the
+        # appended data tables; they are data, not prose, so put them back.
+        report = _reattach_blocks(report, [
+            ("## Enriched Pathway Summary", table),
+            ("## Pathway Clusters", cluster_table),
+        ])
     stats["verify_iterations"] = verify_iters
 
     # -- Phase 6: the programmatic safety net ---------------------------------
@@ -1462,6 +1614,7 @@ def run_ai_agent(job_id, experiment_design, RESPONSE):
                 job_id, {"status": s, "percent": p, "detail": d}),
             "cancelled": lambda: bool(_cancel_flags.get(job_id)),
             "pathways": lambda pw: dao.save_pathway_index(job_id, pw),
+            "partition": lambda part: dao.save_clusters(job_id, part),
         }
         out = run_agent_workflow(job_instance, job_id, experiment_design,
                                hooks=hooks)
