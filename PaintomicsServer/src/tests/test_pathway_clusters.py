@@ -183,6 +183,15 @@ class PartitionTest(unittest.TestCase):
         self.assertEqual(json.dumps(self.part, sort_keys=True, default=str),
                          json.dumps(again, sort_keys=True, default=str))
 
+    def test_always_include_pins_the_callers_top_n(self):
+        # The plain path's top-N must never fall out of the cluster universe,
+        # whatever the network filters say (round 6 B1 lost a rank-8 pathway).
+        part = C.build_partition(self.job, self.params, always_include=["mmu00009"])
+        self.assertIn("mmu00009", part["nodes"])
+        self.assertIn("mmu00009", part["unit_of"])
+        # Rank order is still by p-value: the forced (p=0.5) pathway ranks last.
+        self.assertEqual(part["nodes"][-1], "mmu00009")
+
     def test_cap_split_never_emits_singletons_as_clusters(self):
         # Force a tiny cap so the A cluster must be split.
         part = C.build_partition(self.job, dict(self.params, cap=2, attach=0.99))

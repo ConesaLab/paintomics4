@@ -64,7 +64,12 @@ CLUSTER_MODE = os.getenv("AI_CLUSTER_MODE", "0") == "1"
 DEFAULT_PARAMS = {
     # Node universe: what the Step 3 network draws under its default filters.
     "min_pvalue": float(os.getenv("AI_CLUSTER_MIN_PVALUE", "0.05")),
-    "min_features": float(os.getenv("AI_CLUSTER_MIN_FEATURES", "0.5")),
+    # The network view also hides pathways with < 50% of their features
+    # matched; that is visual de-clutter, not a significance rule, and applying
+    # it here dropped a top-8 pathway from the AI's universe entirely (round 6
+    # B1: 'Ribosome biogenesis in eukaryotes' absent from the report). Off by
+    # default; the caller also pins its top-N via always_include.
+    "min_features": float(os.getenv("AI_CLUSTER_MIN_FEATURES", "0")),
     "max_nodes": int(os.getenv("AI_CLUSTER_MAX_NODES", "150")),
     # Partition. Dice 0.25 rather than the slider's 0.10: at 0.10 the top raw
     # group on the STATegra example is 47 pathways of hub-gene overlap and any
@@ -254,35 +259,45 @@ def _load_total_features(organism):
     return totals
 
 
-def select_network_nodes(job_instance, params=None):
+def select_network_nodes(job_instance, params=None, always_include=None):
     """The significant pathways the network draws, ranked by combined p.
 
     Returns a list of (pathway_id, pathway) in rank order (best p first, ties
     by id). Applies the network view's defaults: combined Fisher p <= min_pvalue
     (min over conditions), matched features >= min_features x pathway total
-    when the pathway total is known, and drops the organism-wide map
-    (<org>01100). Capped at max_nodes by rank.
+    when the pathway total is known and min_features > 0, and drops the
+    organism-wide map (<org>01100). ``always_include`` ids are kept regardless
+    of the filters (the caller's top-N by p-value must never fall out of the
+    universe). Capped at max_nodes by rank, forced ids first.
     """
     p = dict(DEFAULT_PARAMS, **(params or {}))
     matched = job_instance.getMatchedPathways() or {}
     organism = str(job_instance.getOrganism() or "")
     totals = _load_total_features(organism) if p["min_features"] > 0 else {}
+    forced = {str(i) for i in (always_include or [])}
     rows = []
     for pid, pw in matched.items():
         pid = str(pid)
         if pid == organism + "01100":
             continue
         pval = _fisher_min_pvalue(pw)
-        if pval is None or pval > p["min_pvalue"]:
-            continue
-        n_matched = len(getattr(pw, "matchedGenes", None) or []) + \
-            len(getattr(pw, "matchedCompounds", None) or [])
-        total = totals.get(pid)
-        if total and total * p["min_features"] > n_matched:
-            continue
-        rows.append((pval, pid, pw))
-    rows.sort(key=lambda r: (r[0], r[1]))
-    return [(pid, pw) for _p, pid, pw in rows[:p["max_nodes"]]]
+        if pval is None:
+            pval = 1.0
+        keep = pid in forced
+        if not keep:
+            if pval > p["min_pvalue"]:
+                continue
+            n_matched = len(getattr(pw, "matchedGenes", None) or []) + \
+                len(getattr(pw, "matchedCompounds", None) or [])
+            total = totals.get(pid)
+            if total and total * p["min_features"] > n_matched:
+                continue
+        rows.append((pid not in forced, pval, pid, pw))
+    rows.sort(key=lambda r: (r[0], r[1], r[2]))
+    kept = rows[:p["max_nodes"]]
+    # Rank order is by p-value alone; forcing only decides membership.
+    kept.sort(key=lambda r: (r[1], r[2]))
+    return [(pid, pw) for _f, _p, pid, pw in kept]
 
 
 # ---------------------------------------------------------------------------
@@ -343,7 +358,7 @@ def _split_to_cap(index_list, dist, cap):
     return out
 
 
-def build_partition(job_instance, params=None, feature_map=None):
+def build_partition(job_instance, params=None, feature_map=None, always_include=None):
     """Compute the deterministic partition. Returns a plain dict:
 
     {
@@ -359,7 +374,7 @@ def build_partition(job_instance, params=None, feature_map=None):
     An empty universe returns clusters=[] with the other fields empty.
     """
     p = dict(DEFAULT_PARAMS, **(params or {}))
-    ranked = select_network_nodes(job_instance, p)
+    ranked = select_network_nodes(job_instance, p, always_include)
     ids = [pid for pid, _pw in ranked]
     pw_by_id = dict(ranked)
     ranks = {pid: i + 1 for i, pid in enumerate(ids)}

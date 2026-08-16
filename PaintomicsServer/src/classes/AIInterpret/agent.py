@@ -699,7 +699,11 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats,
     partition = None
     if clusters_mod.CLUSTER_MODE:
         try:
-            candidate = clusters_mod.build_partition(job_instance)
+            # The top-N by p-value the plain path would have shown are pinned
+            # into the universe: a change that widens the context must never
+            # drop a pathway the narrower one presented.
+            candidate = clusters_mod.build_partition(
+                job_instance, always_include=[p["id"] for p in pathways])
             member_ids = clusters_mod.partition_member_ids(candidate)
             if candidate.get("clusters") and member_ids:
                 partition = candidate
