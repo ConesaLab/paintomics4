@@ -217,9 +217,11 @@ def configure_sdk():
         return (isinstance(e, _oai.APIStatusError)
                 and getattr(e, "status_code", None) in _RETRY_STATUSES)
 
+    _ATTEMPTS = 4  # one call plus three retries
+
     async def _paced_create(*args, **kwargs):
         last = None
-        for attempt in range(4):
+        for attempt in range(_ATTEMPTS):
             await pacer.wait()
             try:
                 return await _orig_create(*args, **kwargs)
@@ -227,11 +229,16 @@ def configure_sdk():
                 if not _transient(e):
                     raise
                 last = e
-                logger.warning("SDK transport retry %d/3 after %s%s",
-                               attempt + 1, type(e).__name__,
-                               " %s" % getattr(e, "status_code", "")
-                               if getattr(e, "status_code", None) else "")
-                await asyncio.sleep(min(2 ** attempt * 2, 15))
+                status = getattr(e, "status_code", None)
+                if attempt + 1 < _ATTEMPTS:
+                    logger.warning("SDK transport retry %d/%d after %s%s",
+                                   attempt + 1, _ATTEMPTS - 1, type(e).__name__,
+                                   " %s" % status if status else "")
+                    await asyncio.sleep(min(2 ** attempt * 2, 15))
+                else:
+                    logger.warning("SDK transport giving up after %d attempts (%s%s)",
+                                   _ATTEMPTS, type(e).__name__,
+                                   " %s" % status if status else "")
         raise last
 
     client.chat.completions.create = _paced_create
