@@ -5,7 +5,9 @@ from src.common.ServerErrorManager import handleException
 from src.common.UserSessionManager import UserSessionManager
 from src.common.DAO.AIInterpretDAO import AIInterpretDAO
 from src.common.JobInformationManager import JobInformationManager
-from src.classes.AIInterpret.pipeline import run_ai_pipeline, _cancel_flags
+# Agent workflow (OpenAI Agents SDK) is the pipeline; the legacy hand-rolled
+# pipeline.py remains only as the evolve harness comparator.
+from src.classes.AIInterpret.agent import run_ai_agent, _cancel_flags
 from src.common.PySiQ import JobStatus
 from src.classes.AIInterpret.llm_client import LLMClient, MissingAPIKeyError
 from src.classes.AIInterpret.prompts import (SYSTEM_PROMPT_CHAT,
@@ -206,7 +208,7 @@ def aiInterpretInitiate(REQUEST, RESPONSE, QUEUE_INSTANCE):
 
         # Enqueue the AI pipeline
         QUEUE_INSTANCE.enqueue(
-            fn=run_ai_pipeline,
+            fn=run_ai_agent,
             args=(jobID, experimentDesign, RESPONSE),
             timeout=900,
             job_id=ai_job_id

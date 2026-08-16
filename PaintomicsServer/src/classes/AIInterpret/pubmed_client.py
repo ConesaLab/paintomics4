@@ -1,3 +1,4 @@
+import os
 import threading
 import time
 import requests
@@ -23,6 +24,88 @@ _SECTION_KEYWORDS = {
     "discussion": {"discussion", "conclusion", "interpretation", "implication", "significance"},
 }
 _SKIP_SECTIONS = {"method", "material", "experimental", "supplementary", "supplement", "appendix"}
+
+
+# ---------------------------------------------------------------------------
+# Retrieval guard (agentevolve)
+# ---------------------------------------------------------------------------
+# This client can fetch the full text of the paper a benchmark is using as its
+# answer key. Verified: an esearch for "STATegra" returns both source papers at
+# rank 1, and both are open access in PMC. A report that simply read the answer
+# is indistinguishable, downstream, from one that derived it -- no scorer, no
+# shuffle control and no held-out split catches it, because the text really
+# does say the right things.
+#
+# So the block happens here, at the only place the bytes can enter. Two rules:
+#
+#   blocklist     every identifier in the study's cluster. STATegra spans five
+#                 Europe PMC records -- journal papers, preprints, a companion
+#                 data descriptor -- so blocking one PMID closes nothing.
+#   date ceiling  nothing published after the study's earliest public version.
+#                 Catches the papers that cite it, which restate its findings.
+#
+# Configured per fold by the harness, via the environment so the guard survives
+# into the worker processes the pipeline forks.
+_RETRIEVAL_GUARD = {"blocked": frozenset(), "ceiling": None, "loaded": False}
+
+# Every id this client actually returned, for after-the-fact audit. A guard
+# nobody can check is a guard nobody should trust.
+RETRIEVAL_LOG = []
+
+
+def _norm_id(value):
+    """PMID, PMCID and DOI onto one comparable form."""
+    v = str(value or "").strip().lower()
+    if v.startswith("pmc"):
+        v = v[3:]
+    if v.startswith("https://doi.org/"):
+        v = v[len("https://doi.org/"):]
+    return v.rstrip(".")
+
+
+def set_retrieval_guard(blocked_ids=(), date_ceiling=None):
+    """Refuse these identifiers, and anything published after `date_ceiling`."""
+    _RETRIEVAL_GUARD["blocked"] = frozenset(_norm_id(b) for b in blocked_ids if b)
+    _RETRIEVAL_GUARD["ceiling"] = date_ceiling
+    _RETRIEVAL_GUARD["loaded"] = True
+    logger.info("retrieval guard: %d id(s) blocked, ceiling=%s",
+                len(_RETRIEVAL_GUARD["blocked"]), date_ceiling)
+
+
+def _guard():
+    if not _RETRIEVAL_GUARD["loaded"]:
+        raw = os.environ.get("AGENTEVOLVE_BLOCKLIST", "")
+        set_retrieval_guard(
+            [x for x in re.split(r"[,\s]+", raw) if x],
+            os.environ.get("AGENTEVOLVE_DATE_CEILING") or None)
+    return _RETRIEVAL_GUARD
+
+
+def is_blocked(*ids):
+    g = _guard()
+    return any(_norm_id(i) in g["blocked"] for i in ids if i)
+
+
+def _after_ceiling(year):
+    g = _guard()
+    if not g["ceiling"] or not year:
+        return False
+    try:
+        return int(str(year)[:4]) > int(str(g["ceiling"])[:4])
+    except (TypeError, ValueError):
+        return False
+
+
+def _filter_ids(pmids):
+    kept = []
+    for pmid in pmids or []:
+        if is_blocked(pmid):
+            logger.warning("retrieval guard: refused blocked id %s", pmid)
+            continue
+        kept.append(pmid)
+        RETRIEVAL_LOG.append(str(pmid))
+    return kept
+
 
 
 class PubMedClient:
@@ -111,17 +194,29 @@ class PubMedClient:
                   "retmax": max_results, "retmode": "json"}
         r = self._request_with_retry("GET", self.ESEARCH_URL, params=params, timeout=15)
         r.raise_for_status()
-        return r.json().get("esearchresult", {}).get("idlist", [])
+        return _filter_ids(r.json().get("esearchresult", {}).get("idlist", []))
 
     def fetch_abstracts(self, pmids):
         """EFetch: returns list of {pmid, title, abstract, authors, year, journal}."""
+        if not pmids:
+            return []
+        pmids = _filter_ids(pmids)
         if not pmids:
             return []
         params = {**self._base_params(), "db": "pubmed", "id": ",".join(pmids),
                   "retmode": "xml", "rettype": "abstract"}
         r = self._request_with_retry("GET", self.EFETCH_URL, params=params, timeout=15)
         r.raise_for_status()
-        return self._parse_xml(r.text)
+        # The ceiling needs the year, which only exists after parsing -- so it
+        # is applied here rather than alongside the id filter above.
+        papers = self._parse_xml(r.text)
+        kept = [p for p in papers
+                if not is_blocked(p.get("pmid"), p.get("doi"))
+                and not _after_ceiling(p.get("year"))]
+        if len(kept) != len(papers):
+            logger.warning("retrieval guard: dropped %d paper(s) after parsing",
+                           len(papers) - len(kept))
+        return kept
 
     def _parse_xml(self, xml_text):
         papers = []
@@ -174,6 +269,9 @@ class PubMedClient:
 
     def fetch_pmc_full_text(self, pmcid):
         """Fetch full text XML from PMC EFetch, parse into sections. Returns dict or None."""
+        if is_blocked(pmcid):
+            logger.warning("retrieval guard: refused full text for blocked %s", pmcid)
+            return None
         try:
             params = {**self._base_params(), "db": "pmc", "id": pmcid, "retmode": "xml"}
             r = self._request_with_retry("GET", self.PMC_EFETCH_URL, params=params)
@@ -251,6 +349,9 @@ class PubMedClient:
 
     def fetch_europepmc_full_text(self, pmcid):
         """Tier 2 fallback: fetch full text XML from Europe PMC using PMCID. Returns sections dict or None."""
+        if is_blocked(pmcid):
+            logger.warning("retrieval guard: refused full text for blocked %s", pmcid)
+            return None
         time.sleep(AI_EUROPEPMC_DELAY)
         try:
             url = f"{self.EUROPEPMC_URL}/{pmcid}/fullTextXML"

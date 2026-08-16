@@ -2,6 +2,7 @@ import requests
 import json
 import os
 import logging
+import random
 import threading
 import time
 
@@ -28,6 +29,78 @@ SHORT_CALL_TIMEOUT = (15, int(os.getenv("AI_SHORT_CALL_READ_TIMEOUT", "45")))
 # parsing rather than failing the run.
 _SCHEMA_SUPPORT = {}       # api_base -> bool
 _SCHEMA_SUPPORT_LOCK = threading.Lock()
+
+
+# ---------------------------------------------------------------------------
+# Aggregate admission control
+# ---------------------------------------------------------------------------
+# The 429 handler below retries, and that is not the same thing as staying
+# under a limit. Every phase here fans out across a ThreadPoolExecutor, so N
+# workers hit the ceiling within the same second, each sleeps the SAME fixed
+# 5s, and all N retry in the same instant -- a thundering herd that re-triggers
+# the limit it is backing off from. Measured on the CSIC gateway (60 req/min):
+# six verification sub-agents exhausted all three attempts and the run finished
+# with fewer verified citations than it planned.
+#
+# Retrying is recovery. This is prevention: one token bucket per endpoint,
+# shared across every thread in the process, so the AGGREGATE request rate
+# cannot exceed the ceiling in the first place.
+#
+# Default off. A limiter that silently paces production would be a behaviour
+# change nobody asked for, and the right ceiling is a property of the token,
+# not of the code -- so it is opt-in per deployment via AI_LLM_MAX_RPM.
+_LIMITERS = {}             # api_base -> _RateLimiter
+_LIMITERS_LOCK = threading.Lock()
+
+
+class _RateLimiter:
+    """Token bucket. `acquire()` blocks until a request may be sent.
+
+    Capacity is one minute's worth of tokens, so a burst after an idle period
+    is allowed to run at full width -- the ceiling being respected is a RATE,
+    and refusing to burst would cost throughput without protecting anything.
+    """
+
+    def __init__(self, rpm):
+        self.rate = float(rpm) / 60.0          # tokens per second
+        self.capacity = float(rpm)
+        self._tokens = float(rpm)
+        self._last = time.monotonic()
+        self._lock = threading.Lock()
+
+    def acquire(self):
+        # Held across the sleep deliberately. Releasing it would let every
+        # waiting thread compute the same wait from the same empty bucket and
+        # wake together, which is the herd this exists to prevent; serialising
+        # the waiters makes them leave one at a time, at the bucket's rate.
+        with self._lock:
+            while True:
+                now = time.monotonic()
+                self._tokens = min(self.capacity,
+                                   self._tokens + (now - self._last) * self.rate)
+                self._last = now
+                if self._tokens >= 1.0:
+                    self._tokens -= 1.0
+                    return
+                time.sleep((1.0 - self._tokens) / self.rate)
+
+
+def _limiter_for(api_base):
+    """The shared limiter for an endpoint, or None when pacing is off."""
+    try:
+        rpm = int(os.getenv("AI_LLM_MAX_RPM", "0"))
+    except (TypeError, ValueError):
+        return None
+    if rpm <= 0:
+        return None
+    with _LIMITERS_LOCK:
+        lim = _LIMITERS.get(api_base)
+        # Rebuild when the setting changes, so a harness can retune between
+        # runs in one process without restarting it.
+        if lim is None or lim.capacity != float(rpm):
+            lim = _RateLimiter(rpm)
+            _LIMITERS[api_base] = lim
+        return lim
 
 
 def json_schema_format(name, schema):
@@ -116,6 +189,9 @@ class LLMClient:
                            "max_tokens": max_tokens, "temperature": temperature}
                 if response_format is not None:
                     payload["response_format"] = response_format
+                limiter = _limiter_for(self.api_base)
+                if limiter is not None:
+                    limiter.acquire()
                 r = requests.post(
                     f"{self.api_base}/chat/completions",
                     headers={"Authorization": f"Bearer {self.api_key}",
@@ -155,6 +231,12 @@ class LLMClient:
                             wait = max(wait, int(e.response.headers.get("Retry-After", 0)))
                         except (AttributeError, TypeError, ValueError):
                             pass  # missing or unusable Retry-After: keep the backoff
+                        # Jitter, because a fixed schedule makes every worker
+                        # that hit the ceiling in the same second retry in the
+                        # same second, re-triggering it. Additive and one-sided
+                        # so the wait can only grow -- never dipping back under
+                        # a Retry-After the server explicitly asked for.
+                        wait += random.uniform(0, 0.5 * wait)
                         logger.warning("LLM rate limited (429), retrying in %ss "
                                        "(attempt %d/3)", wait, attempt + 1)
                         time.sleep(wait)
