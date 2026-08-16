@@ -71,6 +71,8 @@ function PA_Step3JobView() {
 	this.hubAnalysisView = null;
 	this.aiWidget = null;
 	this.aiJobID = null;
+	// Shared-feature pathway partition from the AI report (cluster mode), or null.
+	this.aiClusters = null;
 	this.pollTimerID = null;
 
 	/**
@@ -794,6 +796,7 @@ function PA_Step3JobView() {
 			this.aiWidget.destroy();
 			this.aiWidget = null;
 		}
+		this.aiClusters = null;
 		this.aiJobID = null;
 		$("#aiInterpretButton").hide();
 	};
@@ -820,6 +823,16 @@ function PA_Step3JobView() {
 		$("#aiInterpretButton").show();
 		me.aiWidget = new PA_AIInterpretView();
 		me.aiWidget.init(jobID);
+		// Cluster mode: the report carries the shared-feature partition it was
+		// written from. Keep it on the Step 3 view and let each pathway network
+		// offer "AI pathway clusters" as a colouring; the network itself is
+		// only redrawn when the user applies the option.
+		me.aiWidget.onClustersLoaded = function(clusters) {
+			me.aiClusters = (clusters && clusters.clusters && clusters.clusters.length) ? clusters : null;
+			$.each(me.pathwayNetworkViews, function(db, view) {
+				try { view.updateObserver(); } catch (e) { console.warn(e); }
+			});
+		};
 		me.aiWidget.onRetry = function() {
 			$.ajax({
 				type: "POST", url: SERVER_URL_AI_INTERPRET_INITIATE,
@@ -1824,7 +1837,7 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 				var selectedCombinedPvalueMethod = me.getParent().visualOptions.selectedCombinedMethod;
 				var selectedAdjustingMethod = visualOptions.networkPvalMethod;
 				var useCombinedPvalue = visualOptions.useCombinedPvalCheckbox;
-				var methodSelected =  (visualOptions.colorBy === "classification" || useCombinedPvalue) ? selectedCombinedPvalueMethod : visualOptions.colorBy;
+				var methodSelected =  (visualOptions.colorBy === "classification" || visualOptions.colorBy === "aiclusters" || useCombinedPvalue) ? selectedCombinedPvalueMethod : visualOptions.colorBy;
 
 				/*
 					The adjusted p-values are different in the job has been category filtered (number of tests decreases).
@@ -1894,6 +1907,15 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 				elem.data.clusters =  [];
 				if(visualOptions.colorBy === "classification"){ //Color by classification
 					elem.data.colors.push(this.getParent().getClassificationColor(elem.data.parent[0]));
+				}else if(visualOptions.colorBy === "aiclusters"){ //Color by the AI report's shared-feature clusters
+					var aiCluster = me.getAIClusterOf(elem.data.id);
+					if(aiCluster){
+						CLUSTERS[aiCluster.id] = me.getAIClusterColor(aiCluster.id);
+						elem.data.colors.push(CLUSTERS[aiCluster.id]);
+						elem.data.clusters.push(aiCluster.id);
+					}else{
+						elem.data.colors.push("#dfdfdf"); // standalone / further: not in any cluster
+					}
 				}else{ //Color by metagenes clusters
 					var metagenes = matchedPathway.metagenes[visualOptions.colorBy];
 					if(metagenes){
@@ -2172,7 +2194,7 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 		this.network.bind('hovers', function(e) {
 			if(e.data.current.nodes.length > 0 && me.showTooltips){
 				PA_Step3PathwayNetworkTooltipView().timeoutID = setTimeout(function(){
-					PA_Step3PathwayNetworkTooltipView().show(e.data.captor.clientX, e.data.captor.clientY, me.getModel().getPathway(e.data.current.nodes[0].id), [visualOptions.colorBy], me.getModel().getDataDistributionSummaries(), visualOptions);
+					PA_Step3PathwayNetworkTooltipView().show(e.data.captor.clientX, e.data.captor.clientY, me.getModel().getPathway(e.data.current.nodes[0].id), (visualOptions.colorBy === "aiclusters" ? [] : [visualOptions.colorBy]), me.getModel().getDataDistributionSummaries(), visualOptions);
 				}, 600);
 			}else{
 				clearTimeout(PA_Step3PathwayNetworkTooltipView().timeoutID);
@@ -2200,6 +2222,35 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 			}
 			$("#networkClustersContainer_" + me.dbid + " div").html(htmlCode);
 			$("#sliderClusterNumberContainer_" + me.dbid).hide();
+		}else if(visualOptions.colorBy === "aiclusters"){
+			// One legend entry per AI cluster with a node in this network:
+			// colour, label, member count; grey = not in any cluster.
+			var ai = me.getParent().aiClusters || {clusters: []};
+			var drawnIds = Object.keys(CLUSTERS);
+			$("#networkClustersContainer_" + me.dbid + " h4").text("Coloring by AI pathway clusters");
+			$("#networkClustersContainer_" + me.dbid + " h5").text(drawnIds.length + " of " + ai.clusters.length + " clusters have nodes in this network. Grey nodes belong to no cluster.");
+			$.each(ai.clusters, function(i, c){
+				if(!CLUSTERS[c.id]){ return; }
+				var members = (c.members || []).length + (c.satellites || []).length;
+				htmlCode += '<span class="networkClusterImage networkAICluster" name="' + c.id + '" title="' + Ext.String.htmlEncode((c.core || []).slice(0, 8).join(", ")) + '">' +
+					'<i class="fa fa-eye-slash fa-2x"></i>' +
+					'<p><i class="fa fa-square" style="color:' + CLUSTERS[c.id] + '"></i> ' + c.id + ' &middot; ' + Ext.String.htmlEncode(c.label || "") + ' (' + members + ')</p></span>';
+			});
+			$("#networkClustersContainer_" + me.dbid + " div").html(htmlCode);
+			$("#sliderClusterNumberContainer_" + me.dbid).hide();
+			// Same click-to-hide behaviour as the metagene clusters.
+			$("#networkClustersContainer_" + me.dbid + " .networkClusterImage").click(function(){
+				var cluster = $(this).attr("name");
+				if($(this).hasClass("disabled")){
+					$(this).removeClass("disabled");
+					me.filters.undo('cluster-filter-' + cluster).apply();
+				}else{
+					$(this).addClass("disabled");
+					me.filters.nodesBy(function(node, params) {
+						return node.clusters.indexOf(params.cluster) === -1;
+					}, {cluster: cluster}, 'cluster-filter-' + cluster).apply();
+				}
+			});
 		}else{
 			var clusterNumber = Object.keys(CLUSTERS).length;
 			var totalClusters = TOTAL_CLUSTERS[visualOptions.colorBy].size;
@@ -2679,6 +2730,30 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 	this.getClusterColor= function(cluster){
 		return getClusterColor(cluster);
 	};
+	/**
+	 * The AI report's shared-feature cluster containing a pathway, or null.
+	 * Read from the partition the Step 3 view keeps (aiClusters).
+	 */
+	this.getAIClusterOf = function(pathwayID){
+		var ai = this.getParent().aiClusters;
+		if(!ai || !ai.clusters){ return null; }
+		for(var i = 0; i < ai.clusters.length; i++){
+			var c = ai.clusters[i];
+			if((c.members || []).indexOf(pathwayID) !== -1 || (c.satellites || []).indexOf(pathwayID) !== -1){
+				return c;
+			}
+		}
+		return null;
+	};
+	/**
+	 * A stable colour per AI cluster id ("C01" -> palette slot 1), so the same
+	 * cluster is drawn in the same colour in the KEGG and the Reactome network.
+	 */
+	this.getAIClusterColor = function(clusterID){
+		var n = parseInt(String(clusterID).replace(/[^0-9]/g, ""), 10);
+		if(isNaN(n)){ n = 0; }
+		return getClusterColor(n % 20);
+	};
 
 	this.updateNodePositions = function(updateCache, preserveExisting=false){
 		var visualOptions = this.getParent().getVisualOptions(this.database);
@@ -3062,6 +3137,13 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 			'<div class="radio">' +
 			'  <input type="radio" ' + ((visualOptions.colorBy === inputOmics[i].omicName)? "checked": "")+ ' id="' + inputOmics[i].omicName.replace(/ /g, "_").toLowerCase() + '-check_' + this.dbid + '" name="colorByCheckbox_' + this.dbid + '" value="' + inputOmics[i].omicName + '">' +
 			'  <label for="' + inputOmics[i].omicName.replace(/ /g, "_").toLowerCase() + '-check_' + this.dbid + '">' + inputOmics[i].omicName + '</label>' +
+			'</div>';
+		}
+		if(this.getParent().aiClusters){
+			htmlContent +=
+			'<div class="radio">' +
+			'  <input type="radio" ' + ((visualOptions.colorBy === "aiclusters")? "checked": "")+ ' id="aiclusters-check_' + this.dbid + '" name="colorByCheckbox_' + this.dbid + '" value="aiclusters">' +
+			'  <label for="aiclusters-check_' + this.dbid + '">AI pathway clusters</label>' +
 			'</div>';
 		}
 		$("#colorByContainer_" + this.dbid).html(htmlContent);
