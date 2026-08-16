@@ -1274,6 +1274,7 @@
 [data-theme="dark"] div[id ^= "pathwayNetworkBox_"].fullscreen { background-color: var(--pa-surface-page); }
 [data-theme="dark"] div[id ^= "pathwayNetworkWaitBox_"] { background-color: rgba(23, 24, 27, 0.76); }
 [data-theme="dark"] span.networkClusterImage > i { background-color: rgba(30, 31, 35, 0.54); }
+[data-theme="dark"] span.networkClusterImage.networkAICluster:hover { background-color: rgba(255, 255, 255, 0.06); }
 /* The network toolbar, its status line and its two popovers used to need three
    translucent literals here because main.css painted them with
    `rgba(255,255,255,.91)`. They are stated in tokens now - see

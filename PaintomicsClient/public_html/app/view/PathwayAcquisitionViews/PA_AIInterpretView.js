@@ -22,6 +22,12 @@ function PA_AIInterpretView() {
     // id/name/source of the pathways the report was written from, used to turn
     // pathway mentions into links.
     this.pathwayIndex = [];
+    // The shared-feature pathway partition the report was written from
+    // (cluster mode only): {clusters:[{id,label,members,satellites,core}],
+    // standalone:[ids], further:[ids]}. Handed to the Step 3 view through
+    // onClustersLoaded so the pathway network can colour nodes by cluster.
+    this.clusters = null;
+    this.onClustersLoaded = null;
     this._pathwayRequestInFlight = null;
 
     this.init = function(jobID) {
@@ -186,8 +192,11 @@ function PA_AIInterpretView() {
             $progress.hide();
             $fab.removeClass("is-processing");
             $badge.css("background", "#66bb6a").html("&#10003;").show();
-            // Auto-load if expanded
-            if (this.isExpanded && !this.reportLoaded) {
+            // Load as soon as it is ready, expanded or not: the Step 3
+            // network's "AI pathway clusters" colouring reads the partition
+            // the report carries, so waiting for the panel to be opened would
+            // hide that option until then.
+            if (!this.reportLoaded) {
                 this.loadReport();
             }
         } else if (status === "error") {
@@ -230,9 +239,13 @@ function PA_AIInterpretView() {
             success: function(response) {
                 if (response.success && response.report) {
                     me.pathwayIndex = response.pathways || [];
+                    me.clusters = response.clusters || null;
                     me.displayReport(response.report, response.papers || [], me.pathwayIndex);
                     me.displayCitations(response.papers || []);
                     me.reportLoaded = true;
+                    if (me.onClustersLoaded) {
+                        try { me.onClustersLoaded(me.clusters); } catch (e) { console.warn(e); }
+                    }
                 } else if (response.status === "error") {
                     me.addMessage("assistant",
                         "The AI interpretation failed: **" + (response.message || "Unknown error") + "**");

@@ -6,14 +6,24 @@ import re
 import os
 
 
-def build_pathway_context(job_instance, max_pathways=15):
-    """Extract curated data for LLM. Target: <5,000 tokens for pathway section."""
+def build_pathway_context(job_instance, max_pathways=15, pathway_ids=None):
+    """Extract curated data for LLM. Target: <5,000 tokens for pathway section.
+
+    ``pathway_ids`` selects an explicit set (any size, unknown ids ignored)
+    instead of the top ``max_pathways`` by combined p; the result is still in
+    rank order, so callers that present pathways keep the global ranking.
+    """
     matched = job_instance.getMatchedPathways()
     input_genes = job_instance.getInputGenesData()
     header_map = _build_omic_header_map(job_instance)
 
     # Sort by best combined p-value
-    sorted_pws = sorted(matched.values(), key=lambda pw: _best_pval(pw))[:max_pathways]
+    if pathway_ids is not None:
+        wanted = {str(pid) for pid in pathway_ids}
+        sorted_pws = sorted((pw for pid, pw in matched.items() if str(pid) in wanted),
+                            key=lambda pw: (_best_pval(pw), str(pw.ID)))
+    else:
+        sorted_pws = sorted(matched.values(), key=lambda pw: _best_pval(pw))[:max_pathways]
 
     pathways = []
     for pw in sorted_pws:

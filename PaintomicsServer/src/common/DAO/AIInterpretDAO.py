@@ -84,6 +84,39 @@ class AIInterpretDAO(DAO):
         doc = collection.find_one({"jobID": job_id}, {"pathwayIndex": 1})
         return (doc or {}).get("pathwayIndex", []) or []
 
+    def save_clusters(self, job_id, partition):
+        """Store the shared-feature pathway partition the report was written
+        from (cluster mode only): clusters with member ids, shared-core
+        symbols and hub flag, plus the standalone / further pathway ids and
+        the parameters. Compact by design -- ranks and p-values are already
+        in pathwayIndex, and feature keys stay out of the document."""
+        clusters = [
+            {"id": c.get("id"), "label": c.get("label"),
+             "members": list(c.get("members") or []),
+             "satellites": list(c.get("satellites") or []),
+             "core": [f.get("symbol") for f in (c.get("core") or [])],
+             "hub_driven": bool(c.get("hub_driven")),
+             "sources": list(c.get("sources") or [])}
+            for c in (partition.get("clusters") or [])
+        ]
+        doc = {"method": partition.get("method"), "version": partition.get("version"),
+               "params": {k: v for k, v in (partition.get("params") or {}).items()},
+               "nodes": len(partition.get("nodes") or []),
+               "clusters": clusters,
+               "standalone": list(partition.get("standalone") or []),
+               "further": list(partition.get("further") or [])}
+        collection = self.dbManager.getCollection(self.collectionName)
+        collection.update_one(
+            {"jobID": job_id},
+            {"$set": {"clusters": doc, "updatedAt": datetime.utcnow()}},
+            upsert=True
+        )
+
+    def get_clusters(self, job_id):
+        collection = self.dbManager.getCollection(self.collectionName)
+        doc = collection.find_one({"jobID": job_id}, {"clusters": 1})
+        return (doc or {}).get("clusters") or None
+
     def get_pathway_report(self, job_id, pathway_id):
         """Return a cached per-pathway interpretation, or None.
 

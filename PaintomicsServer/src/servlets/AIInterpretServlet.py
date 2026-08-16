@@ -318,6 +318,10 @@ def aiInterpretReport(REQUEST, RESPONSE):
                 # Lets the client turn pathway names in the report prose into
                 # links that open the pathway. Sent as id/name/source only.
                 "pathways": record.get("pathwayIndex", []),
+                # Cluster mode only: the shared-feature partition the report
+                # was written from (cluster ids, labels, member ids, core
+                # symbols), so the network view can colour by cluster.
+                "clusters": record.get("clusters"),
             })
     except Exception as ex:
         handleException(RESPONSE, ex, __file__, "aiInterpretReport", userID=userID)
@@ -641,6 +645,46 @@ def aiGenerateExpDesign(REQUEST, RESPONSE, EXAMPLE_FILES_DIR=None):
         return RESPONSE
 
 
+def _clusterContextBlock(clusters, pathwayID, pathwayIndex):
+    """Prompt text describing the stored cluster a pathway belongs to, or "".
+
+    Reads the compact partition AIInterpretDAO.save_clusters stores; names come
+    from the pathway index. Never raises -- a malformed record just yields no
+    block, and the drill-down proceeds as it did before cluster mode.
+    """
+    try:
+        if not clusters:
+            return ""
+        names = {p.get("id"): p.get("name") for p in (pathwayIndex or [])}
+        for c in clusters.get("clusters") or []:
+            members = list(c.get("members") or [])
+            satellites = list(c.get("satellites") or [])
+            if pathwayID not in members and pathwayID not in satellites:
+                continue
+            others = [names.get(pid, pid) for pid in members + satellites if pid != pathwayID]
+            lines = ["## Cluster context (from the analysis)",
+                     "This pathway belongs to %s (%s), a group of %d pathways that share "
+                     "matched features%s." % (
+                         c.get("id"), c.get("label"), len(members) + len(satellites),
+                         " (loosely connected)" if pathwayID in satellites else "")]
+            if others:
+                lines.append("Other members: " + "; ".join(others))
+            core = [s for s in (c.get("core") or []) if s]
+            if core:
+                lines.append("Shared core: " + ", ".join(core[:12]))
+            if c.get("hub_driven"):
+                lines.append("The cluster is held together only by hub features common to "
+                             "the whole network; do not present it as one module.")
+            lines.append("Say what THIS pathway adds beyond what the cluster shares.")
+            return "\n".join(lines)
+        if pathwayID in (clusters.get("standalone") or []):
+            return ("## Cluster context (from the analysis)\nThis pathway shares no cluster "
+                    "with any other significant pathway (standalone).")
+        return ""
+    except Exception:
+        return ""
+
+
 def aiInterpretPathway(REQUEST, RESPONSE):
     """Return a focused AI interpretation of one pathway.
 
@@ -709,7 +753,10 @@ def aiInterpretPathway(REQUEST, RESPONSE):
         # Rebuild the full context and pick this pathway out of it. The stored
         # index deliberately holds only display fields; the gene-level detail
         # the prompt needs has to be recomputed.
-        allPathways = build_pathway_context(jobInstance, max_pathways=AI_MAX_PATHWAYS)
+        # Selected by id rather than "top AI_MAX_PATHWAYS by p-value": in
+        # cluster mode the index covers every significant pathway, most of
+        # which sit far below the top 15.
+        allPathways = build_pathway_context(jobInstance, pathway_ids=[pathwayID])
         pathway = next((p for p in allPathways if p.get("id") == pathwayID), None)
         if pathway is None:
             raise UserWarning("Pathway " + pathwayID + " is no longer present in this job's results.")
@@ -725,6 +772,12 @@ def aiInterpretPathway(REQUEST, RESPONSE):
         organismName = get_organism_name(jobInstance.getOrganism())
         llm = LLMClient(AI_PROVIDERS[AI_LLM_PROVIDER], AI_LLM_PROVIDER)
         prompt = build_pathway_focus_prompt(pathway, papers, experimentDesign, organismName)
+        # Cluster mode: tell the focus prompt which cluster this pathway sits
+        # in and what its members share, so the drill-down can say what this
+        # pathway adds beyond its cluster rather than re-describing the core.
+        clusterBlock = _clusterContextBlock(record.get("clusters"), pathwayID, pathwayIndex)
+        if clusterBlock:
+            prompt += "\n\n" + clusterBlock
 
         report = llm.complete(
             messages=[
