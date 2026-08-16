@@ -75,6 +75,17 @@ logger = logging.getLogger(__name__)
 # bound the three-batch path never did.
 CLUSTER_BATCH_MAX = int(os.getenv("AI_CLUSTER_BATCH_MAX", "8"))
 CLUSTER_CONCURRENCY = int(os.getenv("AI_CLUSTER_CONCURRENCY", "6"))
+# Two tiers of interpretation in cluster mode. A unit that carries a top-N
+# (by p-value) pathway gets the full tool-loop interpreter, capped at
+# CLUSTER_INTERPRET_TURNS; every other unit gets one single-shot
+# call from the same instructions without tools. Measured: a full-protocol
+# cluster run at 8 turns x 14 batches blew a 600 s cap on the gateway, where
+# parallel tool loops serialise; single-shot calls parallelise.
+CLUSTER_INTERPRET_TURNS = int(os.getenv("AI_CLUSTER_INTERPRET_TURNS", "5"))
+# AI_CLUSTER_TOOLS=0 makes every cluster batch single-shot (no data tools) --
+# the cheap mode for gateways whose tool loops crawl, and the mode a
+# qualitative smoke can run on a backend that never finishes a tool loop.
+CLUSTER_TOOLS = os.getenv("AI_CLUSTER_TOOLS", "1") == "1"
 
 # Tuning knobs for the SDK arm. Separate from the shared AI_* settings so
 # sweeping this workflow keeps its behaviour stable mid-comparison.
@@ -615,6 +626,17 @@ def _build_agents():
         tools=DATA_TOOLS,           # SDK drives the tool loop
     )
 
+    # Cluster mode's second tier: the same brief, no tools, one call. Used for
+    # units without a top-N or multi-omic pathway, where the data block in the
+    # prompt already carries what the tools would fetch.
+    interpreter_light = Agent[AgentContext](
+        name="Pathway Interpreter (single-shot)",
+        model=_model(),
+        instructions=prompts_mod.SYSTEM_PROMPT_INTERPRET,
+        model_settings=ms,
+        tools=[],
+    )
+
     synthesizer = Agent[AgentContext](
         name="Report Writer",
         model=_model(),
@@ -644,7 +666,8 @@ def _build_agents():
         tools=VERIFY_TOOLS,
     )
     return dict(triage=triage_agent, planner=search_planner, filter=paper_filter,
-                interpret=interpreter, synth=synthesizer, verify=verifier)
+                interpret=interpreter, interpret_light=interpreter_light,
+                synth=synthesizer, verify=verifier)
 
 
 # ---------------------------------------------------------------------------
@@ -1105,8 +1128,21 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats,
         # times, and the rushed retries pulled off-lineage claims into the report
         # (GATA3 presented as a B-cell regulator) and dropped the score to 5.00.
         # Speed bought that way is not speed.
-        res = await Runner.run(agents["interpret"], prompt, context=ctx,
-                               max_turns=SDK_INTERPRET_TURNS)
+        agent_key, turns = "interpret", SDK_INTERPRET_TURNS
+        if unit_batch:
+            # Heavy = the unit holds one of the top-N pathways by p-value, the
+            # set the top-N path interpreted with tools. "Or any multi-omic
+            # pathway" was tried first: on the STATegra fold that made every
+            # one of the 14 batches heavy (36 of 101 nodes are multi-omic), so
+            # it saved nothing.
+            core_ids = {p["id"] for p in pathways[:budgets["max_pathways"]]}
+            heavy = CLUSTER_TOOLS and any(p["id"] in core_ids for p in batch)
+            agent_key = "interpret" if heavy else "interpret_light"
+            turns = CLUSTER_INTERPRET_TURNS if heavy else 2
+            logger.info("[%s][sdk] cluster batch %s: %d pathways, %s",
+                        job_id, "/".join(u["id"] for u in unit_batch), len(batch),
+                        "full tool loop" if heavy else "single-shot")
+        res = await Runner.run(agents[agent_key], prompt, context=ctx, max_turns=turns)
         return _remap_citation_indices(str(res.final_output), local_to_global)
 
     if partition is not None:

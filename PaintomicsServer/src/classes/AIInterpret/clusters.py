@@ -78,6 +78,9 @@ DEFAULT_PARAMS = {
     "standalone_top": int(os.getenv("AI_CLUSTER_STANDALONE_TOP", "10")),
     "hub_fraction": float(os.getenv("AI_CLUSTER_HUB_FRACTION", "0.25")),
     "core_limit": 12,
+    # PubMed queries per cluster (1 = core genes + experimental system; 2 adds
+    # a second core-gene set). Each query costs a search and a screener call.
+    "queries_per_cluster": int(os.getenv("AI_CLUSTER_QUERIES", "1")),
 }
 METHOD = "hier-average-dice"
 VERSION = 1
@@ -767,14 +770,17 @@ def cluster_search_queries(partition, pathway_ctx_by_id, organism_name, system_a
         genes = genes[:6]
         if not genes:
             continue
-        yield ("(%s) AND (%s)" % (" OR ".join(genes[:3]), organism_name), c["id"], names,
-               "cluster core genes")
-        if system_angle:
-            yield ("(%s) AND %s" % (" OR ".join(genes[:3]), system_angle), c["id"], names,
-                   "cluster core genes, experimental system")
-        elif len(genes) > 3:
-            yield ("(%s) AND (%s)" % (" OR ".join(genes[3:6]), organism_name), c["id"], names,
-                   "cluster core genes (second set)")
+        n_q = int((partition.get("params") or {}).get("queries_per_cluster", 1) or 1)
+        first = ("(%s) AND %s" % (" OR ".join(genes[:3]), system_angle) if system_angle
+                 else "(%s) AND (%s)" % (" OR ".join(genes[:3]), organism_name))
+        yield (first, c["id"], names, "cluster core genes")
+        if n_q >= 2:
+            if system_angle:
+                yield ("(%s) AND (%s)" % (" OR ".join(genes[:3]), organism_name), c["id"], names,
+                       "cluster core genes, organism")
+            elif len(genes) > 3:
+                yield ("(%s) AND (%s)" % (" OR ".join(genes[3:6]), organism_name), c["id"], names,
+                       "cluster core genes (second set)")
     for kind in ("standalone", "further"):
         for pid in partition.get(kind) or []:
             pw = pathway_ctx_by_id.get(pid)
