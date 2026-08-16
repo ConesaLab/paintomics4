@@ -56,7 +56,7 @@ class ConfigureLoggingTest(unittest.TestCase):
     def setUpClass(cls):
         # Created before configureLogging runs, which is exactly the case that
         # disable_existing_loggers=True used to break.
-        cls.moduleLogger = logging.getLogger("src.classes.AIInterpret.pipeline")
+        cls.moduleLogger = logging.getLogger("src.classes.AIInterpret.agent")
 
         handle = tempfile.NamedTemporaryFile("w", suffix=".cfg", delete=False)
         handle.write(CONFIG)

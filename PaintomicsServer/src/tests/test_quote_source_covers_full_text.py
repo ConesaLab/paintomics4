@@ -28,7 +28,7 @@ import unittest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
-from src.classes.AIInterpret.pipeline import _quote_source_text
+from src.classes.AIInterpret.shared import _quote_source_text
 
 
 def _paper(**sections):

@@ -1,8 +1,8 @@
 """Local-to-global citation remapping.
 
 Batches are numbered [1..n] and remapped afterwards because models renumber
-citations from 1 regardless of the indices they are handed. Both the threaded
-pipeline and the SDK pipeline now depend on this, and nothing covered it.
+citations from 1 regardless of the indices they are handed. The agent
+workflow depends on this for every interpretation batch.
 
 The failure it guards against is silent and total: a batch handed its global
 indices ([7], [12], [15]) either gets renumbered anyway -- so every marker
@@ -20,7 +20,7 @@ SERVER_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__
 sys.path.insert(0, os.path.join(SERVER_ROOT, "src"))
 sys.path.insert(0, SERVER_ROOT)
 
-from src.classes.AIInterpret.pipeline import (
+from src.classes.AIInterpret.shared import (
     _build_local_paper_index, _remap_citation_indices,
 )
 
