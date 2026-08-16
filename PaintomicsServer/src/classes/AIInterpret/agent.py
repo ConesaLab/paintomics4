@@ -1146,7 +1146,22 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats,
             logger.info("[%s][sdk] cluster batch %s: %d pathways, %s",
                         job_id, "/".join(u["id"] for u in unit_batch), len(batch),
                         "full tool loop" if heavy else "single-shot")
-        res = await Runner.run(agents[agent_key], prompt, context=ctx, max_turns=turns)
+        try:
+            res = await Runner.run(agents[agent_key], prompt, context=ctx, max_turns=turns)
+        except Exception as e:
+            if not (unit_batch and agent_key == "interpret"):
+                raise
+            # A tool loop that runs out of turns (an 11-pathway cluster can
+            # ask for a timecourse per member) or dies on the gateway must not
+            # take its whole cluster out of the report: answer it in one call
+            # from the same brief instead. Measured: 4 of 14 batches were lost
+            # this way in one servlet run before this fallback existed.
+            logger.warning("[%s][sdk] cluster batch %s: tool loop failed (%s: %s); "
+                           "retrying single-shot", job_id,
+                           "/".join(u["id"] for u in unit_batch), type(e).__name__,
+                           str(e)[:120])
+            res = await Runner.run(agents["interpret_light"], prompt, context=ctx,
+                                   max_turns=2)
         return _remap_citation_indices(str(res.final_output), local_to_global)
 
     if partition is not None:
@@ -1171,7 +1186,14 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats,
                    for i in range(0, len(pathways), AI_PATHWAYS_PER_BATCH)]
         batch_reports = await asyncio.gather(*[_one_batch(b) for b in batches],
                                              return_exceptions=True)
-    failed_batches = sum(1 for b in batch_reports if isinstance(b, Exception))
+    failed_batches = 0
+    for i, b in enumerate(batch_reports):
+        if isinstance(b, Exception):
+            failed_batches += 1
+            label = ("/".join(u["id"] for u in batches[i]) if partition is not None
+                     else "batch %d" % (i + 1))
+            logger.warning("[%s][sdk] interpretation batch %s failed: %s: %s", job_id,
+                           label, type(b).__name__, str(b)[:160])
     if failed_batches:
         logger.warning("[%s][sdk] %d of %d interpretation batches failed", job_id,
                        failed_batches, len(batch_reports))
