@@ -1372,7 +1372,13 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats,
     # before the references rebuild, so citation extraction sees the prose the
     # model wrote rather than table rows -- a quote lookup pointed at a table
     # cell has nothing to find.
-    table = render_pathway_table(pathways)
+    # In cluster mode the report carries NO enrichment table: the full table
+    # stays in the synthesis prompt, where its grounding effect was measured,
+    # but at the end of a report a 100-row table is noise for a reader and
+    # nothing a paper would include -- the Pathway Clusters table below is the
+    # one deterministic block that earns its place there (it defines the
+    # cluster ids the prose uses). The plain path keeps its table as before.
+    table = "" if partition is not None else render_pathway_table(pathways)
     if table:
         report = report.rstrip() + "\n\n" + table + "\n"
     cluster_table = ""
@@ -1409,7 +1415,14 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats,
     # against 11 real papers), so the threshold was always satisfied and the
     # top-up never once fired on runs that badly needed it.
     valid_indices = {p["ref_index"] for p in unique_papers}
-    cited_now = ({int(n) for n in re.findall(r'\[(\d+)\]', str(report))}
+    # Count markers in the BODY only. A synthesis that lists its papers in a
+    # References section of its own but never cites them in the text (seen
+    # live: 25 entries, 0 in-text markers, 0 rendered) must trigger the
+    # top-up, and counting the bibliography's [N] hid exactly that case.
+    from src.classes.AIInterpret.verification import _REFERENCES_HEADING_RE as _REFS_RE
+    _ref_m = _REFS_RE.search(str(report))
+    _body_for_count = str(report)[:_ref_m.start()] if _ref_m else str(report)
+    cited_now = ({int(n) for n in re.findall(r'\[(\d+)\]', _body_for_count)}
                  & valid_indices)
     uncited = [p for p in unique_papers if p["ref_index"] not in cited_now]
     if uncited and len(cited_now) < SDK_MIN_CITATIONS:
