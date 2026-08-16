@@ -1380,6 +1380,15 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats,
         try:
             cluster_table = clusters_mod.render_partition_table(partition, ctx_by_id)
             report = report.rstrip() + "\n\n" + cluster_table + "\n"
+            # The reading note goes under the report's title (or at the very
+            # top): the ids must be explained before the reader meets them.
+            note = clusters_mod.render_reading_note(partition)
+            if note and note not in report:
+                lines = report.split("\n", 1)
+                if lines[0].lstrip().startswith("# ") and len(lines) > 1:
+                    report = lines[0] + "\n\n" + note + "\n" + lines[1]
+                else:
+                    report = note + "\n\n" + report
         except Exception as e:
             logger.warning("[%s][sdk] cluster table failed: %s", job_id, e)
     stats["synth_s"] = time.time() - t0
@@ -1555,6 +1564,9 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats,
             ("## Enriched Pathway Summary", table),
             ("## Pathway Clusters", cluster_table),
         ])
+        note = clusters_mod.render_reading_note(partition)
+        if note and note not in report:
+            report = note + "\n\n" + report
     stats["verify_iterations"] = verify_iters
 
     # -- Phase 6: the programmatic safety net ---------------------------------

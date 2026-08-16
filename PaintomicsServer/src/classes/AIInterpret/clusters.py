@@ -717,16 +717,39 @@ def render_synthesis_block(partition, pathway_ctx_by_id):
         "Writing rules for the clusters:",
         "- Key Findings lead with the highest-RANKED pathways and their clusters; rank, "
         "not cluster size, decides emphasis.",
+        "- The ids C01, C02 ... are shorthand the reader does not know yet. NEVER refer to a "
+        "cluster by its bare id. The first time a cluster appears anywhere (Key Findings, a "
+        "theme, a bullet) name it by what it is and show two or three member pathways, e.g. "
+        "'the G-protein / second-messenger signalling cluster (C02: Cholinergic synapse, "
+        "Chemokine signaling, Apelin signaling ...)'; afterwards write 'the G-protein "
+        "signalling cluster (C02)'. A sentence like 'Clusters C02, C03, C04 are rewired' "
+        "with no names is not acceptable.",
         "- Use the clusters as the themes of 'Cross-Pathway Themes' and group 'Detailed "
-        "Pathway Analysis' by cluster, in the order given (best-ranked member first), "
-        "heading each as '### Cxx -- <label>' and naming every member (a member with little "
-        "to add gets one clause, not silence).",
+        "Pathway Analysis' by cluster, in the order given (best-ranked member first). Head "
+        "each section '### Cxx -- <your short biological name for the cluster> "
+        "(<best-ranked member> +N related)' -- the short name is yours, the member name is "
+        "the database's -- and name every member (a member with little to add gets one "
+        "clause, not silence).",
         "- Add a 'Standalone pathways' subsection for the standalone ones and a one-line "
         "reading for each further pathway; nothing significant is dropped.",
         "- A HUB-DRIVEN cluster is shared-gene overlap: say so; do not narrate it as one "
         "coordinated module.",
     ]
     return "\n".join(lines)
+
+
+def render_reading_note(partition):
+    """One italic line for the top of a cluster-mode report, so a reader meets
+    'C01' knowing what it stands for and where the full list is."""
+    n = len(partition.get("clusters") or [])
+    if not n:
+        return ""
+    return ("*How to read this report: the %d significant pathways were grouped into %d "
+            "clusters of pathways that share matched genes and compounds (C01 to C%02d, "
+            "numbered by their most significant member). A cluster is named where it is "
+            "first discussed; the full membership of every cluster is in the Pathway "
+            "Clusters table at the end, and in the app each cluster id can be hovered "
+            "for its members.*" % (len(partition.get("nodes") or []), n, n))
 
 
 def render_partition_table(partition, pathway_ctx_by_id):

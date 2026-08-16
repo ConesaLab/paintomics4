@@ -100,6 +100,13 @@ function PA_AIInterpretView() {
             me.openPathway($(this).attr("data-pathway-id"),
                            $(this).attr("data-pathway-name"));
         });
+        // A cluster id in the prose jumps to that cluster's row in the
+        // Pathway Clusters table (the id's definition); the hover title
+        // already names the cluster and its members.
+        this.$root.find(".ai-widget-messages").on("click", ".ai-cluster-link", function(e) {
+            e.preventDefault();
+            me.revealCluster($(this).attr("data-cluster"));
+        });
     };
 
     this.show = function() {
@@ -576,6 +583,84 @@ function PA_AIInterpretView() {
         return linked;
     };
 
+    /**
+     * Cluster ids ("C01") in the report prose become hover-explained links.
+     *
+     * The report groups pathways into clusters and refers to them by id, which
+     * a reader meets before the table that defines them. Each id in the body
+     * gets a title carrying the cluster's label and member pathways, and a
+     * click scrolls to its row in the Pathway Clusters table. Only ids of real
+     * clusters are touched; text inside links, code and the table itself is
+     * left alone (the table row is the destination, not a link).
+     */
+    this._linkifyClusters = function(rootEl, clusters, pathways) {
+        var list = clusters && clusters.clusters;
+        if (!list || !list.length) return;
+        var nameOf = {};
+        (pathways || []).forEach(function(p) { if (p && p.id) nameOf[p.id] = p.name; });
+        var byId = {};
+        list.forEach(function(c) {
+            if (!c || !c.id) return;
+            var members = (c.members || []).concat(c.satellites || [])
+                .map(function(id) { return nameOf[id] || id; });
+            var shown = members.slice(0, 6).join("; ") + (members.length > 6 ? "; +" + (members.length - 6) + " more" : "");
+            byId[c.id] = c.id + " — " + (c.label || "") + "\n" + shown +
+                (c.hub_driven ? "\n(held together by hub genes shared across the network)" : "") +
+                "\nClick to see the cluster in the table.";
+        });
+        var SKIP = { A: 1, CODE: 1, PRE: 1, SCRIPT: 1, STYLE: 1, TABLE: 1, H1: 1 };
+        var pattern = /\bC\d{2}\b/g;
+        var walk = function(node) {
+            var child = node.firstChild;
+            while (child) {
+                var next = child.nextSibling;
+                if (child.nodeType === 1) {
+                    if (!SKIP[child.tagName.toUpperCase()]) walk(child);
+                } else if (child.nodeType === 3 && child.nodeValue && /C\d\d/.test(child.nodeValue)) {
+                    var text = child.nodeValue;
+                    var frag = document.createDocumentFragment();
+                    var cursor = 0, match;
+                    pattern.lastIndex = 0;
+                    while ((match = pattern.exec(text)) !== null) {
+                        var title = byId[match[0]];
+                        if (!title) continue;
+                        if (match.index > cursor) {
+                            frag.appendChild(document.createTextNode(text.slice(cursor, match.index)));
+                        }
+                        var a = document.createElement("a");
+                        a.className = "ai-cluster-link";
+                        a.setAttribute("href", "#");
+                        a.setAttribute("data-cluster", match[0]);
+                        a.setAttribute("title", title);
+                        a.appendChild(document.createTextNode(match[0]));
+                        frag.appendChild(a);
+                        cursor = match.index + match[0].length;
+                    }
+                    if (cursor > 0) {
+                        if (cursor < text.length) frag.appendChild(document.createTextNode(text.slice(cursor)));
+                        node.replaceChild(frag, child);
+                    }
+                }
+                child = next;
+            }
+        };
+        walk(rootEl);
+    };
+
+    /** Scroll the Pathway Clusters table row for a cluster id into view and flash it. */
+    this.revealCluster = function(clusterID) {
+        if (!this.$root || !clusterID) return;
+        var cells = this.$root.find(".ai-widget-messages table td").filter(function() {
+            return $(this).text().trim().indexOf(clusterID + " ") === 0 ||
+                   $(this).text().trim() === clusterID;
+        });
+        var row = cells.first().closest("tr");
+        if (!row.length) return;
+        row[0].scrollIntoView({ behavior: "smooth", block: "center" });
+        row.addClass("ai-cluster-row-flash");
+        setTimeout(function() { row.removeClass("ai-cluster-row-flash"); }, 2200);
+    };
+
     this.displayReport = function(reportText, papers, pathways) {
         var html = "";
         try {
@@ -610,6 +695,7 @@ function PA_AIInterpretView() {
         var holder = document.createElement("div");
         holder.innerHTML = html;
         this._linkifyPathways(holder, pathways);
+        this._linkifyClusters(holder, this.clusters, pathways);
 
         /* Who wrote this. The report is model output that gets read, quoted and
            pasted into drafts, so the attribution rides inside the bubble rather
