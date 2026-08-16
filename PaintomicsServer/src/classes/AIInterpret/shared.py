@@ -43,18 +43,44 @@ def _quote_source_text(paper, max_chars=None):
     and quote checking read from one source. If they disagreed -- extract from
     the abstract, verify against full text or the reverse -- valid citations
     would be refuted for being in the wrong half of the paper.
+
+    The budget is split per section rather than cut once from the top.
+    Sections arrive in document order (introduction first), so a flat
+    ``text[:max_chars]`` kept abstract + introduction and silently discarded
+    Results and Discussion: across every stored report, not one citation was
+    ever labelled "full text (results)". The sentences that support a
+    mechanistic claim live exactly there, so each non-empty section now gets
+    an equal share of what remains (an underfull section's share rolls over),
+    with the abstract taken in full first -- it is short, and its one-sentence
+    statements of the finding are the strongest quote candidates.
     """
     if max_chars is None:
-        max_chars = int(os.getenv("AI_QUOTE_SOURCE_CHARS", "12000"))
+        max_chars = int(os.getenv("AI_QUOTE_SOURCE_CHARS", "18000"))
     sections = paper.get("sections") or {}
     if sections:
-        # Abstract first: the strongest one-sentence statements of a finding
-        # tend to live there, and truncation should not cut them off.
-        ordered = [sections.get("abstract") or ""]
-        ordered += [v for k, v in sections.items() if k != "abstract" and v]
-        text = "\n".join(t for t in ordered if t).strip()
+        remaining = max_chars
+        parts = []
+        abstract = (sections.get("abstract") or "").strip()
+        if abstract:
+            parts.append(abstract[:remaining])
+            remaining -= len(parts[-1]) + 1
+        # Results and Discussion ahead of Introduction: when the budget is
+        # tight, the front matter is what a quote can best afford to lose.
+        rest = [k for k in ("results", "discussion", "introduction", "other")
+                if (sections.get(k) or "").strip()]
+        rest += [k for k in sections
+                 if k != "abstract" and k not in rest and (sections[k] or "").strip()]
+        for i, key in enumerate(rest):
+            if remaining <= 200:
+                break
+            share = remaining // (len(rest) - i)
+            chunk = sections[key].strip()[:share]
+            if chunk:
+                parts.append(chunk)
+                remaining -= len(chunk) + 1
+        text = "\n".join(parts).strip()
         if text:
-            return text[:max_chars]
+            return text
     return (paper.get("abstract") or "")[:max_chars]
 
 
@@ -218,7 +244,10 @@ def _collect_cited_quotes(llm, report, paper_index, job_id, known=None):
             'PAPER: "%s"\nTEXT: %s\n\n'
             'Quote the single sentence from the paper text that best supports '
             'ANY ONE of those claims -- they are alternatives, so you need only '
-            'find support for one. Copy it verbatim: do not paraphrase, shorten, '
+            'find support for one. When a sentence from the Results or '
+            'Discussion supports a claim as well as one from the abstract, '
+            'prefer it: it is the evidence itself rather than the summary. '
+            'Copy it verbatim: do not paraphrase, shorten, '
             'or write a sentence of your own. If no sentence in the text '
             'supports any of them, set supports=false and cited_text to an empty '
             'string. Answering "no support" is correct and useful; inventing a '
