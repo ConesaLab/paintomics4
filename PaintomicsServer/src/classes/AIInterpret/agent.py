@@ -47,7 +47,7 @@ from src.classes.AIInterpret import prompts as prompts_mod
 from src.classes.AIInterpret.context_builder import (
     build_pathway_context, build_gene_symbol_whitelist, get_organism_name,
     triage_pathways, build_cross_omic_matrix, build_key_regulators_block,
-    render_pathway_table, render_pathway_table_compact,
+    render_pathway_table,
 )
 from src.classes.AIInterpret.pubmed_client import PubMedClient
 from src.classes.AIInterpret.verification import (
@@ -1372,15 +1372,13 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats,
     # before the references rebuild, so citation extraction sees the prose the
     # model wrote rather than table rows -- a quote lookup pointed at a table
     # cell has nothing to find.
-    # In cluster mode the report gets the compact table (rank, p, layers,
-    # cluster) -- the full one with gene lists stays in the synthesis prompt,
-    # where the grounding was measured, but a 100-row wall of gene values is
-    # not what a reader or a paper wants at the end of a report.
-    if partition is not None:
-        table = render_pathway_table_compact(
-            pathways, cluster_of=partition.get("unit_of") or {})
-    else:
-        table = render_pathway_table(pathways)
+    # In cluster mode the report carries NO enrichment table: the full table
+    # stays in the synthesis prompt, where its grounding effect was measured,
+    # but at the end of a report a 100-row table is noise for a reader and
+    # nothing a paper would include -- the Pathway Clusters table below is the
+    # one deterministic block that earns its place there (it defines the
+    # cluster ids the prose uses). The plain path keeps its table as before.
+    table = "" if partition is not None else render_pathway_table(pathways)
     if table:
         report = report.rstrip() + "\n\n" + table + "\n"
     cluster_table = ""
