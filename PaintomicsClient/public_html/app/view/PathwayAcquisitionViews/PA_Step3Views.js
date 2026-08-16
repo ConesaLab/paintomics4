@@ -1776,6 +1776,13 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 	this.generateNetwork = function(data, forceStop=false) {
 		var me = this;
 		var visualOptions = this.getParent().getVisualOptions(this.database);
+		// A colouring saved from an earlier visit may name the AI clusters
+		// before this visit's report has loaded (or for a job with no cluster
+		// report at all); without a partition every node would draw grey with
+		// an empty legend, so fall back to the classification colouring.
+		if (visualOptions.colorBy === "aiclusters" && !this.getParent().aiClusters) {
+			visualOptions.colorBy = "classification";
+		}
 		var indexedPathways = this.getParent().getIndexedPathways(this.database);
 		var CLUSTERS = {};
 		var TOTAL_CLUSTERS = this.getModel().getClusterNumber()[this.database];

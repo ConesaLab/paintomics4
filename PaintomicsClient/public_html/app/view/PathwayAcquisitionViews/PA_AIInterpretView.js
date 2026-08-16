@@ -192,8 +192,11 @@ function PA_AIInterpretView() {
             $progress.hide();
             $fab.removeClass("is-processing");
             $badge.css("background", "#66bb6a").html("&#10003;").show();
-            // Auto-load if expanded
-            if (this.isExpanded && !this.reportLoaded) {
+            // Load as soon as it is ready, expanded or not: the Step 3
+            // network's "AI pathway clusters" colouring reads the partition
+            // the report carries, so waiting for the panel to be opened would
+            // hide that option until then.
+            if (!this.reportLoaded) {
                 this.loadReport();
             }
         } else if (status === "error") {
