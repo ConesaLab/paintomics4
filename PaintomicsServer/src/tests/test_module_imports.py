@@ -7,7 +7,7 @@ The 2026-08-06 master merge deleted ``llm_client.py`` and stripped
 ``verify_report()`` out of ``verification.py``. Neither produced a git
 conflict -- dev had not touched those regions since the merge base, so git
 applied master's deletions silently. The result was a tree where
-``src.classes.AIInterpret.pipeline`` could not be imported at all.
+``src.classes.AIInterpret.pipeline`` (now ``agent``) could not be imported at all.
 
 Every one of the then-existing suites passed on that broken tree, because
 none of them import ``pipeline``. A suite that only exercises the modules it
@@ -44,7 +44,8 @@ EXCLUDED_PREFIXES = (
 # instead of hiding in a count. These are the runtime entry points.
 CRITICAL = (
     "src.paintomicsserver",
-    "src.classes.AIInterpret.pipeline",
+    "src.classes.AIInterpret.agent",
+    "src.classes.AIInterpret.shared",
     "src.classes.AIInterpret.llm_client",
     "src.classes.AIInterpret.verification",
     "src.classes.AIInterpret.context_builder",
@@ -141,15 +142,18 @@ def test_critical_runtime_modules_import():
                        "\n    ".join(broken)
 
 
-def test_pipeline_finds_the_symbols_it_imports_from_verification():
-    """The exact shape of the merge break: pipeline importing a name that
-    verification no longer defines. Importing pipeline covers this, but this
-    asserts the contract directly so the cause is obvious, not inferred."""
+def test_agent_finds_the_symbols_it_imports_from_verification():
+    """The exact shape of the 2026-08-06 merge break: the entry module
+    importing a name that verification no longer defines. Importing agent
+    covers this, but this asserts the contract directly so the cause is
+    obvious, not inferred."""
     from src.classes.AIInterpret import verification
 
-    for symbol in ("verify_report", "verify_report_v2", "parse_references_section"):
+    for symbol in ("verify_report_v2", "redact_unverified_v2",
+                   "renumber_citations", "parse_references_section",
+                   "render_references_section"):
         assert hasattr(verification, symbol), (
-            "verification.%s is gone; pipeline.py imports it" % symbol
+            "verification.%s is gone; agent.py imports it" % symbol
         )
 
 
@@ -166,7 +170,7 @@ def main():
     tests = [
         test_every_tracked_module_imports,
         test_critical_runtime_modules_import,
-        test_pipeline_finds_the_symbols_it_imports_from_verification,
+        test_agent_finds_the_symbols_it_imports_from_verification,
     ]
     for t in tests:
         _check(t.__name__, t)

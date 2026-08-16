@@ -1,27 +1,23 @@
-"""OpenAI Agents SDK implementation of the AI interpretation pipeline.
+"""The AI interpretation agent workflow, built on the OpenAI Agents SDK.
 
-EXPERIMENTAL -- built to be measured against the hand-rolled ``pipeline.py``,
-not to replace it. Left untracked until the comparison decides its fate.
+This is the production entry point for AI interpretation: the SDK's ``Runner``
+drives the agent loop and tool round-trips, and structured phases declare a
+pydantic ``output_type`` instead of parsing free text. Everything that is not
+orchestration lives in sibling modules and is shared by import:
 
-Fairness contract
------------------
-This is an orchestration A/B test, so everything that is *not* orchestration is
-shared with ``pipeline.py`` by import, never re-implemented here:
-
-  * the same prompts (``prompts.py``)
-  * the same tool bodies (``tools.py`` ``_exec_*`` / executor factories)
-  * the same literature retrieval (``pubmed_client.py``)
-  * the same context builders (``context_builder.py``)
-  * the same budgets from ``serverconf.py``
-
-What differs, and only this: the SDK's ``Runner`` drives the agent loop and the
-tool round-trips instead of ``LLMClient.complete_with_tools``, and structured
-phases declare a pydantic ``output_type`` instead of parsing free text. That
-isolates the variable under test -- any quality difference we measure is
-attributable to orchestration, not to a rewritten prompt.
+  * prompts (``prompts.py``), tool bodies (``tools.py``)
+  * literature retrieval (``pubmed_client.py``)
+  * context builders (``context_builder.py``)
+  * cross-pipeline helpers (``shared.py``)
+  * budgets from ``serverconf.py``
 
 The SDK is async-first while PaintOmics runs on PySiQ's threads, so the public
-entry point stays synchronous and owns its own event loop (see ``run_sdk_pipeline``).
+entry points stay synchronous and own their own event loop:
+
+  * ``run_ai_agent(job_id, experiment_design, RESPONSE)`` -- servlet-facing
+    adapter (DAO progress, persistence, cancellation, concurrency semaphore).
+  * ``run_agent_workflow(job_instance, job_id, experiment_design)`` -- the bare
+    workflow, also used by the AgentEvolve replay harness (``--arm sdk``).
 """
 import asyncio
 import json
@@ -43,8 +39,8 @@ from pydantic import BaseModel, Field
 from src.conf.serverconf import (
     AI_LLM_PROVIDER, AI_PROVIDERS, AI_MAX_PATHWAYS, AI_PATHWAYS_PER_BATCH,
     AI_TEMPERATURE, AI_MAX_SEARCH_TASKS, AI_PAPERS_PER_SEARCH_TASK,
-    AI_SEARCH_SUBAGENT_WORKERS, AI_VERIFICATION_WORKERS,
-    AI_MAX_VERIFICATION_ITERATIONS,
+    AI_PAPERS_KEPT_PER_TASK, AI_SEARCH_SUBAGENT_WORKERS,
+    AI_VERIFICATION_WORKERS, AI_MAX_VERIFICATION_ITERATIONS,
 )
 from src.classes.AIInterpret import tools as tools_mod
 from src.classes.AIInterpret import prompts as prompts_mod
@@ -57,27 +53,31 @@ from src.classes.AIInterpret.pubmed_client import PubMedClient
 from src.classes.AIInterpret.verification import (
     verify_report_v2, redact_unverified_v2, renumber_citations,
     parse_references_section, render_references_section,
+    normalize_citation_markers,
 )
-# Reuse the incumbent's verdict parser rather than writing a second one: the
-# SDK verifier must keep its tools (see the DANGER note in _build_agents), so
-# its verdict arrives as free text either way.
-from src.classes.AIInterpret.pipeline import (
+# The shared verdict parser: the verifier agent keeps its tools (see the
+# DANGER note in _build_agents), so its verdict arrives as free text.
+from src.classes.AIInterpret.shared import (
     _parse_json_verdict, _collect_cited_quotes,
-    _build_local_paper_index, _remap_citation_indices,
+    _build_local_paper_index, _remap_citation_indices, _shared_gene_core,
 )
 from src.classes.AIInterpret.llm_client import LLMClient
 
 logger = logging.getLogger(__name__)
 
 # Tuning knobs for the SDK arm. Separate from the shared AI_* settings so
-# sweeping this pipeline never changes the incumbent's behaviour mid-comparison.
+# sweeping this workflow keeps its behaviour stable mid-comparison.
 SDK_VERIFY_CONCURRENCY = int(os.getenv("AI_SDK_VERIFY_CONCURRENCY", "8"))
 SDK_SEARCH_CONCURRENCY = int(os.getenv("AI_SDK_SEARCH_CONCURRENCY",
                                         str(AI_SEARCH_SUBAGENT_WORKERS)))
 # Search every triaged pathway rather than only the planner's task list: PubMed
 # retrieval is 6-10s of a 300s budget, so breadth here is nearly free, and
 # citations are the metric we are short on.
-SDK_SEARCH_ALL_PATHWAYS = os.getenv("AI_SDK_SEARCH_ALL_PATHWAYS", "0") == "1"
+SDK_SEARCH_ALL_PATHWAYS = os.getenv("AI_SDK_SEARCH_ALL_PATHWAYS", "1") == "1"
+# Ceiling on the total search-task list once per-pathway backfill is added
+# (planner tasks + up to three angles per uncovered pathway). Unbounded, a
+# 40-pathway triage would issue 120+ PubMed queries and their screening calls.
+SDK_BACKFILL_MAX_TASKS = int(os.getenv("AI_SDK_BACKFILL_MAX_TASKS", "45"))
 # Papers shown to one interpretation batch. More retrieved literature is good;
 # more literature *per prompt* is not -- see the cap in _one_batch.
 SDK_PAPERS_PER_BATCH = int(os.getenv("AI_SDK_PAPERS_PER_BATCH", "10"))
@@ -108,8 +108,80 @@ SDK_SYNTH_DRAFTS = int(os.getenv("AI_SDK_SYNTH_DRAFTS", "1"))
 # site: it works, and it costs ~190s for a quality change that measured negative.
 SDK_GAP_FILL = os.getenv("AI_SDK_GAP_FILL", "0") == "1"
 
+_SYSTEM_STOPWORDS = frozenset("""
+a an the and or of in on at to for from with without by as is are was were be
+been being this that these those it its their there here into over under
+between across per via using used use data dataset datasets sample samples
+study analysis experiment experimental design condition conditions time course
+timecourse series omics omic multi multiomics layer layers level levels five
+four three two one several multiple various different profile profiles
+""".split())
+
+
+def _system_terms(experiment_design, limit=3):
+    """Up to `limit` content words from the user's experiment description, for
+    a PubMed angle tied to the experimental system.
+
+    Free text such as "murine B-cell precursor differentiation time course,
+    five omics layers" yields ["murine", "B-cell", "precursor"]; generic words
+    (time, course, omics, layers ...) and short tokens are dropped, and an
+    empty or all-generic design yields [] so the caller adds no such angle.
+    """
+    if not experiment_design:
+        return []
+    terms = []
+    for tok in re.findall(r"[A-Za-z][A-Za-z0-9\-]{2,}", experiment_design):
+        low = tok.lower()
+        if low in _SYSTEM_STOPWORDS or low.isdigit() or low in terms:
+            continue
+        terms.append(low)
+        if len(terms) >= limit:
+            break
+    return terms
+
+
+# Servlet-facing state: the servlet flips
+# _cancel_flags[job_id] to cancel, and the semaphore bounds concurrent runs.
+import threading
+from src.conf.serverconf import AI_MAX_CONCURRENT_PIPELINES
+_cancel_flags = {}
+_agent_semaphore = threading.Semaphore(AI_MAX_CONCURRENT_PIPELINES)
+
 _sdk_configured = False
 _MODEL_OBJ = None
+
+
+class _AsyncPacer:
+    """Space gateway calls to AI_LLM_MAX_RPM requests/min (0 disables).
+
+    The SDK drives its own AsyncOpenAI client, so LLMClient's token bucket --
+    the thing that took the live arm from 6 lost sub-agents to 0 -- never sees
+    these calls. Without this shim an SDK run is unpaced against a gateway
+    with a measured ceiling of 60/min, and its scores are not comparable to a
+    paced live run (round 1p: same agent, pacing alone moved the gap +0.27).
+
+    The pace is one process-wide schedule: run_agent_workflow owns a fresh
+    event loop per job and up to AI_MAX_CONCURRENT_PIPELINES jobs run on
+    separate threads, all against the same gateway. The reservation below has
+    no await inside it, so a plain threading.Lock guards it correctly across
+    loops and threads alike -- an asyncio.Lock would bind to one loop and
+    either leak per job or trip over a reused loop id.
+    """
+
+    def __init__(self, rpm):
+        self._interval = 60.0 / rpm if rpm > 0 else 0.0
+        self._next = 0.0
+        self._lock = threading.Lock()
+
+    async def wait(self):
+        if not self._interval:
+            return
+        with self._lock:
+            now = time.monotonic()
+            delay = self._next - now
+            self._next = max(now, self._next) + self._interval
+        if delay > 0:
+            await asyncio.sleep(delay)
 
 
 def configure_sdk():
@@ -119,6 +191,59 @@ def configure_sdk():
         return
     provider = AI_PROVIDERS[AI_LLM_PROVIDER]
     client = AsyncOpenAI(base_url=provider["api_base"], api_key=provider["api_key"])
+
+    # Honour the same pacing knob as LLMClient. Applied at the transport
+    # method the SDK actually calls, so every agent turn and tool round-trip
+    # is spaced -- not just the calls this module makes directly.
+    rpm = int(os.getenv("AI_LLM_MAX_RPM", "0") or 0)
+    pacer = _AsyncPacer(rpm)
+    _orig_create = client.chat.completions.create
+
+    # One shim for pacing AND resilience: the CSIC gateway answers with bare
+    # 500s ("connection reset by peer" from the vLLM behind litellm) during
+    # load spikes, and a transient 500 must cost a retry, not the whole run --
+    # LLMClient already behaves this way; the SDK transport has to match.
+    import openai as _oai
+
+    # 408 Request Timeout arrives as a bare APIStatusError (no dedicated
+    # subclass); the gateway answers with it when a long tool-loop turn
+    # outlives its upstream budget, and it is exactly as transient as a 5xx.
+    _RETRY_STATUSES = {408, 409}
+
+    def _transient(e):
+        if isinstance(e, (_oai.InternalServerError, _oai.APIConnectionError,
+                          _oai.APITimeoutError, _oai.RateLimitError)):
+            return True
+        return (isinstance(e, _oai.APIStatusError)
+                and getattr(e, "status_code", None) in _RETRY_STATUSES)
+
+    _ATTEMPTS = 4  # one call plus three retries
+
+    async def _paced_create(*args, **kwargs):
+        last = None
+        for attempt in range(_ATTEMPTS):
+            await pacer.wait()
+            try:
+                return await _orig_create(*args, **kwargs)
+            except _oai.APIError as e:
+                if not _transient(e):
+                    raise
+                last = e
+                status = getattr(e, "status_code", None)
+                if attempt + 1 < _ATTEMPTS:
+                    logger.warning("SDK transport retry %d/%d after %s%s",
+                                   attempt + 1, _ATTEMPTS - 1, type(e).__name__,
+                                   " %s" % status if status else "")
+                    await asyncio.sleep(min(2 ** attempt * 2, 15))
+                else:
+                    logger.warning("SDK transport giving up after %d attempts (%s%s)",
+                                   _ATTEMPTS, type(e).__name__,
+                                   " %s" % status if status else "")
+        raise last
+
+    client.chat.completions.create = _paced_create
+    logger.info("Agents SDK transport armed: pacing %s rpm, retry x3 on 5xx/timeouts",
+                rpm or "off")
     # chat_completions, not the Responses API: the CSIC gateway is vLLM, which
     # speaks /chat/completions only.
     set_default_openai_api("chat_completions")
@@ -167,7 +292,7 @@ def _completeness_gaps(report, pathways):
     warrants it -- marginal p-values are only flagged if some layer really is
     marginal, single-layer pathways only if some pathway really is carried by
     one assay. Asking for a caveat the data does not support would be inviting
-    the model to invent one, which is the failure mode this whole pipeline is
+    the model to invent one, which is the failure mode this whole workflow is
     built to avoid.
 
     Returns (missing_pathway_names, missing_caveat_instructions).
@@ -254,14 +379,14 @@ def _pick_best_draft(drafts, pathways, papers):
 
     The synthesis is stochastic to a degree that dominates every other variable
     measured here -- the same settings produce reports scoring 8.50 and 17.00 --
-    so a single draw is not the best this pipeline can do. Generating several
+    so a single draw is not the best this workflow can do. Generating several
     and keeping the best is how the tellme loop handles the same narrator.
 
     Selection deliberately never consults the evaluation rubric. It counts
     things the job itself defines: how many of the enriched pathways the draft
     actually discusses, how many retrieved papers it cites, and how many
     distinct caveats it raises. Score the drafts against the rubric and the
-    pipeline starts optimising for the marker list rather than for the reader,
+    workflow starts optimising for the marker list rather than for the reader,
     which is the failure the rubric's ANTI markers exist to catch.
 
     Returns (best_draft, [per-draft score breakdowns]).
@@ -325,7 +450,7 @@ async def run_hedged(agent, prompt, ctx, max_turns=6, timeout=None, label=""):
 # ---------------------------------------------------------------------------
 
 @dataclass
-class PipelineContext:
+class AgentContext:
     """Threaded through every agent and tool via RunContextWrapper."""
     job_instance: Any
     job_id: str
@@ -369,12 +494,12 @@ class Verdict(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Tools -- thin SDK wrappers over the SAME bodies pipeline.py calls.
+# Tools -- thin SDK wrappers over the shared tool bodies in tools.py.
 # No behaviour is redefined here; only the calling convention changes.
 # ---------------------------------------------------------------------------
 
 @function_tool
-def get_gene_timecourse(ctx: RunContextWrapper[PipelineContext], gene_symbol: str) -> str:
+def get_gene_timecourse(ctx: RunContextWrapper[AgentContext], gene_symbol: str) -> str:
     """Return all timepoint values for a gene across every omic layer."""
     ctx.context.tool_calls += 1
     return tools_mod.execute_tool("get_gene_timecourse", ctx.context.job_instance,
@@ -382,7 +507,7 @@ def get_gene_timecourse(ctx: RunContextWrapper[PipelineContext], gene_symbol: st
 
 
 @function_tool
-def get_pathway_genes(ctx: RunContextWrapper[PipelineContext], pathway_name: str) -> str:
+def get_pathway_genes(ctx: RunContextWrapper[AgentContext], pathway_name: str) -> str:
     """Return all matched genes in a pathway with their measured values."""
     ctx.context.tool_calls += 1
     return tools_mod.execute_tool("get_pathway_genes", ctx.context.job_instance,
@@ -390,7 +515,7 @@ def get_pathway_genes(ctx: RunContextWrapper[PipelineContext], pathway_name: str
 
 
 @function_tool
-def compare_genes(ctx: RunContextWrapper[PipelineContext], gene_symbols: list[str]) -> str:
+def compare_genes(ctx: RunContextWrapper[AgentContext], gene_symbols: list[str]) -> str:
     """Side-by-side comparison of several genes across all omic layers."""
     ctx.context.tool_calls += 1
     return tools_mod.execute_tool("compare_genes", ctx.context.job_instance,
@@ -398,7 +523,7 @@ def compare_genes(ctx: RunContextWrapper[PipelineContext], gene_symbols: list[st
 
 
 @function_tool
-def search_paper_text(ctx: RunContextWrapper[PipelineContext], ref_index: int, query: str) -> str:
+def search_paper_text(ctx: RunContextWrapper[AgentContext], ref_index: int, query: str) -> str:
     """Search the full text of a cited paper for a phrase. ref_index is the [n] citation number."""
     ctx.context.tool_calls += 1
     executor = tools_mod.build_verification_executor(ctx.context.paper_index)
@@ -406,7 +531,7 @@ def search_paper_text(ctx: RunContextWrapper[PipelineContext], ref_index: int, q
 
 
 @function_tool
-def fetch_paper_section(ctx: RunContextWrapper[PipelineContext], ref_index: int, section: str) -> str:
+def fetch_paper_section(ctx: RunContextWrapper[AgentContext], ref_index: int, section: str) -> str:
     """Fetch a named section (abstract, results, discussion) of a cited paper."""
     ctx.context.tool_calls += 1
     executor = tools_mod.build_verification_executor(ctx.context.paper_index)
@@ -425,7 +550,7 @@ def _build_agents():
     ms = ModelSettings(temperature=AI_TEMPERATURE)
     strict = ModelSettings(temperature=0.1)
 
-    triage_agent = Agent[PipelineContext](
+    triage_agent = Agent[AgentContext](
         name="Triage Agent",
         model=_model(),
         instructions=(
@@ -439,7 +564,7 @@ def _build_agents():
         tools=[],
     )
 
-    search_planner = Agent[PipelineContext](
+    search_planner = Agent[AgentContext](
         name="Search Planner",
         model=_model(),
         instructions=prompts_mod.SYSTEM_PROMPT_SEARCH_PLANNER,
@@ -448,7 +573,7 @@ def _build_agents():
         tools=[],
     )
 
-    paper_filter = Agent[PipelineContext](
+    paper_filter = Agent[AgentContext](
         name="Paper Filter",
         model=_model(),
         instructions=prompts_mod.SYSTEM_PROMPT_SEARCH_SUBAGENT,
@@ -457,7 +582,7 @@ def _build_agents():
         tools=[],
     )
 
-    interpreter = Agent[PipelineContext](
+    interpreter = Agent[AgentContext](
         name="Pathway Interpreter",
         model=_model(),
         instructions=prompts_mod.SYSTEM_PROMPT_INTERPRET,
@@ -465,7 +590,7 @@ def _build_agents():
         tools=DATA_TOOLS,           # SDK drives the tool loop
     )
 
-    synthesizer = Agent[PipelineContext](
+    synthesizer = Agent[AgentContext](
         name="Report Writer",
         model=_model(),
         instructions=prompts_mod.SYSTEM_PROMPT_SYNTHESIZE,
@@ -486,7 +611,7 @@ def _build_agents():
     # "unchecked" into "checked and passed". So tools win and the verdict is
     # parsed from text -- the same trade llm_client.complete_with_tools_json
     # makes by coercing only after the tool loop has finished.
-    verifier = Agent[PipelineContext](
+    verifier = Agent[AgentContext](
         name="Claim Verifier",
         model=_model(),
         instructions=prompts_mod.SYSTEM_PROMPT_VERIFICATION,
@@ -501,18 +626,34 @@ def _build_agents():
 # Orchestration
 # ---------------------------------------------------------------------------
 
-async def _run_async(job_instance, job_id, experiment_design, budgets, stats):
+async def _run_async(job_instance, job_id, experiment_design, budgets, stats,
+                     hooks=None):
+    def _hb(status, percent, detail):
+        """Report progress to the servlet layer and honour cancellation."""
+        if hooks and hooks.get("progress"):
+            try:
+                hooks["progress"](status, percent, detail)
+            except Exception:
+                logger.debug("progress hook failed", exc_info=True)
+        if hooks and hooks.get("cancelled") and hooks["cancelled"]():
+            raise InterruptedError("Cancelled")
+
     configure_sdk()
     agents = _build_agents()
 
     organism = job_instance.getOrganism()
     organism_name = get_organism_name(organism)
     pathways = build_pathway_context(job_instance, max_pathways=budgets["max_pathways"])
+    if hooks and hooks.get("pathways"):
+        try:
+            hooks["pathways"](pathways)
+        except Exception:
+            logger.debug("pathway-index hook failed", exc_info=True)
     gene_whitelist = build_gene_symbol_whitelist(job_instance)
     major, minor = triage_pathways(pathways)
     matrix = build_cross_omic_matrix(major)
 
-    ctx = PipelineContext(job_instance=job_instance, job_id=job_id,
+    ctx = AgentContext(job_instance=job_instance, job_id=job_id,
                           organism_name=organism_name,
                           experiment_design=experiment_design or "")
     # The quote collector is shared domain code and is synchronous; it gets a
@@ -534,10 +675,15 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats):
         regulators_block = ""
 
     # -- Phase 1: triage -----------------------------------------------------
+    _hb("extracting", 10, "Reading the enrichment results...")
     t0 = time.time()
+    # Keys must match build_pathway_context's current record shape: the old
+    # p.get("pvalue")/p.get("omics") read fields that no longer exist, so
+    # every triage line said "p=None, omics=0" and the agent picked on names.
     pathway_lines = "\n".join(
-        "- %s (p=%s, omics=%s)" % (p.get("name"), p.get("pvalue"),
-                                   len(p.get("omics", []) or []))
+        "- %s (combined p=%.3g, significant omics=%s)"
+        % (p.get("name"), p.get("combined_pvalue") or 1.0,
+           p.get("significant_omic_count", "?"))
         for p in pathways)
     triage_res = await Runner.run(
         agents["triage"],
@@ -550,6 +696,7 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats):
     logger.info("[%s][sdk] triage picked %d pathways", job_id, len(picks))
 
     # -- Phase 2: search planning -------------------------------------------
+    _hb("searching_pubmed", 15, "Planning literature searches...")
     t0 = time.time()
     plan_prompt = prompts_mod.build_search_planner_prompt(
         major, matrix, gene_whitelist, experiment_design, organism_name,
@@ -560,6 +707,7 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats):
     logger.info("[%s][sdk] planner produced %d search tasks", job_id, len(tasks))
 
     # -- Phase 3: literature retrieval (shared domain code, concurrent) ------
+    _hb("searching_pubmed", 25, "Retrieving literature...")
     t0 = time.time()
     pubmed = PubMedClient()
 
@@ -612,7 +760,21 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats):
             "empty list is correct when nothing fits."
             % (experiment_design, organism_name, task.pathway, task.query, listing),
             context=ctx, max_turns=3)
-        keep = set(res.final_output.pmids)
+        answered = {str(x).strip() for x in (res.final_output.pmids or [])}
+        candidates = {str(p.get("pmid")) for p in papers}
+        keep = answered & candidates
+        # Three outcomes, only one of them a judgement. An explicit empty list
+        # is the screener saying nothing fits, and the prompt asks for exactly
+        # that when it is true -- honour it. A non-empty list that names no
+        # candidate is a malformed answer (invented or garbled PMIDs), not a
+        # verdict, and dropping the whole task on it silently starves the report
+        # of literature; keep the top hits instead, as PubMed ranked them.
+        if answered and not keep:
+            logger.warning("[%s][sdk] screener for '%s' returned %d PMID(s), none "
+                           "among the %d candidates; keeping the top %d hits",
+                           job_id, task.query[:60], len(answered), len(candidates),
+                           AI_PAPERS_KEPT_PER_TASK)
+            keep = {str(p.get("pmid")) for p in papers[:AI_PAPERS_KEPT_PER_TASK]}
         out = []
         for p in papers:
             if str(p.get("pmid")) in keep:
@@ -650,10 +812,23 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats):
         # named after a disease, and searching that label returns the disease's
         # literature instead of this experiment's biology.
         covered = {t.pathway for t in tasks}
-        anchor = (experiment_design or organism_name)[:120]
+        # The system angle comes from the user's own experiment description,
+        # never from a fixed phrase: a hard-coded "B cell OR lymphocyte" here
+        # (a leftover from tuning on one dataset) would pull immunology papers
+        # into a plant or yeast report. Empty design -> no system angle at all.
+        system_terms = _system_terms(experiment_design)
+        system_angle = ("(%s)" % " OR ".join('"%s"' % t if " " in t else t
+                                             for t in system_terms)
+                        if system_terms else "")
+        budget = SDK_BACKFILL_MAX_TASKS
         for pw in pathways:
             if pw["name"] in covered:
                 continue
+            if len(tasks) >= budget:
+                logger.info("[%s][sdk] backfill budget of %d tasks reached; "
+                            "remaining uncovered pathways get no extra search",
+                            job_id, budget)
+                break
             genes = [g["symbol"] for g in pw.get("top_genes", [])[:6]
                      if g.get("relevant")]
             variants = []
@@ -663,15 +838,15 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats):
                     variants.append("(%s) AND (%s)" % (" OR ".join(genes[3:6]), organism_name))
                 # One angle tied to the experimental system rather than the
                 # organism, which "Mus musculus" alone does not narrow.
-                variants.append('(%s) AND ("B cell" OR lymphocyte OR differentiation)'
-                                % " OR ".join(genes[:3]))
+                if system_angle:
+                    variants.append("(%s) AND %s" % (" OR ".join(genes[:3]), system_angle))
             else:
                 variants.append('"%s"[Title/Abstract]' % pw["name"])
-            for v in variants:
+            for v in variants[:max(0, budget - len(tasks))]:
                 tasks.append(SearchTask(query=v, pathway=pw["name"],
                                         rationale="per-pathway coverage backfill"))
         logger.info("[%s][sdk] %d search tasks after per-pathway backfill "
-                    "(anchor: %s)", job_id, len(tasks), anchor[:40])
+                    "(system angle: %s)", job_id, len(tasks), system_angle or "none")
 
     # Bound the fan-out. A bare asyncio.gather over every task issues all the
     # PubMed requests at once and earns a wall of HTTP 429s -- the threaded arm
@@ -722,9 +897,18 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats):
         *[_bounded_filter(t, pmids) for t, pmids in task_pmids],
         return_exceptions=True)
     all_papers = []
-    for r in filter_results:
+    for (task, pmids), r in zip(task_pmids, filter_results):
         if isinstance(r, Exception):
-            logger.warning("[%s][sdk] filter task failed: %s", job_id, r)
+            # A dead screener is not a verdict either: fall back to the top
+            # hits so a gateway hiccup on one sub-agent costs precision on one
+            # task, not that task's entire literature.
+            fallback = [_fetched[p] for p in pmids if p in _fetched][:AI_PAPERS_KEPT_PER_TASK]
+            logger.warning("[%s][sdk] filter task failed for '%s' (%s); keeping "
+                           "the top %d hits", job_id, task.query[:60], r, len(fallback))
+            for p in fallback:
+                paper = dict(p)
+                paper["pathways"] = [task.pathway]
+                all_papers.append(paper)
             continue
         all_papers.extend(r)
 
@@ -772,6 +956,7 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats):
                 job_id, len(unique_papers), stats["full_text_papers"])
 
     # -- Phase 4: batched interpretation (SDK drives the tool loop) ----------
+    _hb("interpreting", 45, "Generating interpretation with evidence extraction...")
     t0 = time.time()
 
     async def _one_batch(batch):
@@ -799,6 +984,7 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats):
         local_papers, local_to_global = _build_local_paper_index(batch_papers)
         prompt = prompts_mod.build_batch_interpretation_prompt(
             batch, local_papers, experiment_design, organism_name)
+        prompt += _shared_gene_core(batch, ctx.job_instance)
         # Features corroborated across independent assays. The pathway context
         # reaches genes only through the top enriched pathways, so a gene with
         # signal in two or three layers that sits outside those pathways is
@@ -837,9 +1023,18 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats):
                 stats["batch_citations"])
 
     # -- Phase 5: synthesis --------------------------------------------------
+    _hb("synthesizing", 78, "Synthesizing report...")
     t0 = time.time()
     synth_prompt = prompts_mod.build_synthesis_prompt_v2(
         batch_reports, experiment_design, organism_name, unique_papers)
+    # Round-3 KEEP (evolve loop): the synthesis must SEE the numbers, not
+    # merely know a table will be appended -- prompt-visibility measured
+    # claim +0.029 / rank +0.027 on the live arm.
+    try:
+        synth_prompt += ("\n\n## Pathway significance table (from the data)\n"
+                         + render_pathway_table(pathways))
+    except Exception:
+        pass
     # Pin the citable range. Measured: the synthesis emitted 82 distinct markers
     # against 47 real papers -- it numbers citations past the end of the list it
     # was given. render_references_section drops the invalid ones, so nothing
@@ -1042,11 +1237,14 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats):
                        "supplied %d markers, report kept none",
                        job_id, stats["batch_citations"])
 
-    # Same deterministic references rebuild the incumbent gets. This is domain
-    # code, not orchestration, so per the fairness contract the SDK arm must
-    # receive it too -- iter00 compared an SDK report whose citations nothing
-    # could parse against an incumbent whose citations were also mostly
-    # unparseable, which measured noise rather than either architecture.
+    # "[17, 18]" -> "[17], [18]" before anything reads a marker: quote
+    # collection, rendering, verification and renumbering all match single
+    # "[N]" markers, and an unsplit multi-citation is invisible to every one of
+    # them -- the shipped report then cites entries its References section does
+    # not carry.
+    report = normalize_citation_markers(report)
+    # Deterministic references rebuild from the paper index -- asking the model
+    # to hit the parser's format by instruction fails most of the time.
     quotes = _collect_cited_quotes(llm_for_quotes, report, ctx.paper_index, job_id)
     report, rendered = render_references_section(report, ctx.paper_index, quotes)
     stats["refs_rendered"] = len(rendered)
@@ -1055,6 +1253,7 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats):
                 job_id, len(rendered), len(quotes))
 
     # -- Phase 5b: iterative verify -> correct, the SDK's turn at pipeline.py's
+    _hb("verifying", 85, "Verifying citations...")
     # Phase 4. Same budget (AI_MAX_VERIFICATION_ITERATIONS), same per-citation
     # sub-agent shape, same correction prompt; Runner and asyncio replace
     # complete_with_tools and ThreadPoolExecutor. Without this the SDK arm would
@@ -1133,19 +1332,20 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats):
             % (report, prompts_mod.build_correction_prompt(report, failed)),
             context=ctx, max_turns=3)
         report = str(corr.final_output)
-        # The rewrite re-authors the references, so re-render as the incumbent
-        # does; without this the loop verifies on iteration 1 and then finishes
-        # with an unparseable section again.
+        # The rewrite re-authors the references, so re-render them from the
+        # paper index; without this the loop verifies on iteration 1 and then
+        # finishes with an unparseable section again. A rewrite also
+        # reintroduces "[17, 18]" markers, so they are re-split first.
+        report = normalize_citation_markers(report)
         quotes.update(_collect_cited_quotes(llm_for_quotes, report, ctx.paper_index,
                                             job_id, known=quotes))
         report, _ = render_references_section(report, ctx.paper_index, quotes)
     stats["verify_loop_s"] = time.time() - t0
     stats["verify_iterations"] = verify_iters
 
-    # -- Phase 6: the SAME programmatic safety net pipeline.py applies --------
-    # verification.py is domain code, not orchestration, so per the fairness
-    # contract the SDK arm must be held to it too. Skipping it here would flatter
-    # the SDK by comparing an unredacted report against a redacted one.
+    # -- Phase 6: the programmatic safety net ---------------------------------
+    # verification.py is domain code, not orchestration: whatever the agents
+    # concluded, unverifiable citations are redacted here, deterministically.
     t0 = time.time()
     final = verify_report_v2(report, gene_whitelist, unique_papers, job_instance)
     if final.get("failed_citations"):
@@ -1166,7 +1366,8 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats):
     return report, unique_papers, ctx
 
 
-def run_sdk_pipeline(job_instance, job_id, experiment_design, budgets=None):
+def run_agent_workflow(job_instance, job_id, experiment_design, budgets=None,
+                     hooks=None):
     """Synchronous entry point.
 
     PySiQ hands us a worker thread, so we own an event loop here rather than
@@ -1178,6 +1379,142 @@ def run_sdk_pipeline(job_instance, job_id, experiment_design, budgets=None):
     stats = {}
     t0 = time.time()
     report, papers, ctx = asyncio.run(
-        _run_async(job_instance, job_id, experiment_design, budgets, stats))
+        _run_async(job_instance, job_id, experiment_design, budgets, stats,
+                   hooks=hooks))
     stats["total_s"] = time.time() - t0
     return {"report": report, "papers": papers, "stats": stats}
+
+
+class _Heartbeat:
+    """Background thread that touches the job's updatedAt every interval.
+
+    The servlet's stale-job check declares a run dead when its record has not
+    changed for AI_STALE_JOB_TIMEOUT (10 min). The workflow only reports
+    progress at phase boundaries, and the interpretation phase alone can run
+    longer than that -- batches with tool loops serialise on the gateway --
+    so without this a healthy run was flipped to "error" mid-interpretation
+    (measured: 'interpreting 45' at 120 s, watchdog at 721 s, batches still
+    running). Runs from before the semaphore is acquired, so a job waiting for
+    a permit is also seen as alive rather than dead.
+    """
+
+    def __init__(self, job_id, interval=30):
+        self._job_id = job_id
+        self._interval = interval
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._run, daemon=True,
+                                        name="ai-heartbeat-%s" % job_id)
+
+    def start(self):
+        self._thread.start()
+
+    def stop(self):
+        self._stop.set()
+
+    def _run(self):
+        from src.common.DAO.AIInterpretDAO import AIInterpretDAO
+        while not self._stop.wait(self._interval):
+            # Best-effort, but never silent, and the connection is closed in a
+            # finally: DBManager builds a new MongoClient per DAO, and this
+            # beats every 30 s for the whole life of a job.
+            dao = None
+            try:
+                dao = AIInterpretDAO()
+                dao.touch(self._job_id)
+            except Exception:
+                logger.debug("[%s] heartbeat touch failed", self._job_id,
+                             exc_info=True)
+            finally:
+                if dao is not None:
+                    dao.closeConnection()
+
+
+def run_ai_agent(job_id, experiment_design, RESPONSE):
+    """Servlet entry point — drop-in replacement for pipeline.run_ai_agent.
+
+    Same contract the servlet and PySiQ rely on: DAO progress milestones the
+    UI polls, pathway-index and papers persistence, cancellation via
+    _cancel_flags, the concurrency semaphore, and the same RESPONSE payloads.
+    The agent workflow (Runner-driven phases) happens inside run_agent_workflow.
+    """
+    from src.common.JobInformationManager import JobInformationManager
+    from src.common.DAO.AIInterpretDAO import AIInterpretDAO
+
+    dao = None
+    acquired = False
+    heartbeat = _Heartbeat(job_id)
+    try:
+        dao = AIInterpretDAO()
+        dao.save_progress(job_id, {"status": "extracting", "percent": 5,
+                                   "detail": "Loading analysis results..."})
+        dao.save_progress(job_id, {"experimentDesign": experiment_design or ""})
+        heartbeat.start()
+
+        job_instance = JobInformationManager().loadJobInstance(job_id)
+        if job_instance is None:
+            raise UserWarning("Job %s was not found." % job_id)
+
+        _agent_semaphore.acquire()
+        acquired = True
+
+        hooks = {
+            "progress": lambda s, p, d: dao.save_progress(
+                job_id, {"status": s, "percent": p, "detail": d}),
+            "cancelled": lambda: bool(_cancel_flags.get(job_id)),
+            "pathways": lambda pw: dao.save_pathway_index(job_id, pw),
+        }
+        out = run_agent_workflow(job_instance, job_id, experiment_design,
+                               hooks=hooks)
+        report = out.get("report") or ""
+        papers = out.get("papers") or []
+        if papers:
+            dao.save_papers(job_id, papers)
+        # A finished run with an empty report is a failure wearing success's
+        # clothes (two such runs scored as data in evolve round 5); refuse it.
+        if not report.strip():
+            raise RuntimeError("The agent workflow produced an empty report.")
+
+        known = {p.get("ref_index") for p in papers}
+        cited = {int(n) for n in re.findall(r"\[(\d+)\]", report)} & known
+        with_full = sum(1 for p in papers if p.get("ref_index") in cited
+                        and p.get("full_text_available"))
+        detail = (f"Ready — {len(cited)} of {len(papers)} retrieved papers "
+                  f"cited ({with_full} with full text)")
+        stats = out.get("stats") or {}
+        dao.save_progress(job_id, {
+            "status": "done", "percent": 100, "detail": detail,
+            "report": report,
+            # The stored contract: "verification" is verify_report_v2's dict
+            # (references_section_found, citations_checked, failed_citations);
+            # timings and counters live beside it, not inside it.
+            "verification": stats.get("verification") or {},
+            "stats": {k: v for k, v in stats.items() if k != "verification"},
+        })
+        RESPONSE.setContent({"success": True, "jobID": job_id, "status": "done"})
+
+    except InterruptedError:
+        if dao:
+            dao.save_progress(job_id, {"status": "cancelled", "percent": 0,
+                                       "detail": "Cancelled by user"})
+        RESPONSE.setContent({"success": True, "jobID": job_id,
+                             "status": "cancelled"})
+    except Exception as ex:
+        logger.exception("agent workflow failed for job %s", job_id)
+        if dao:
+            try:
+                dao.save_progress(job_id, {"status": "error", "percent": 0,
+                                           "detail": str(ex)})
+            except Exception:
+                pass
+        from src.common.ServerErrorManager import handleException
+        handleException(RESPONSE, ex, __file__, "run_ai_agent")
+    finally:
+        if acquired:
+            _agent_semaphore.release()
+        heartbeat.stop()
+        _cancel_flags.pop(job_id, None)
+        if dao:
+            try:
+                dao.closeConnection()
+            except Exception:
+                pass

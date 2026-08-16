@@ -303,6 +303,16 @@ def build_search_planner_prompt(pathways, cross_omic_matrix, gene_whitelist,
     # -- Task --
     lines.append(f"\n## Task")
     lines.append(f"Design up to {max_tasks} strategic PubMed search tasks.")
+    # Query style matters more than query count: natural-language phrases
+    # ("PKC signaling in B cell development") return 0-2 hits under a date
+    # ceiling, which is how a whole run ends up citing nothing. Boolean
+    # queries over 2-3 concrete entities are what PubMed's parser rewards.
+    lines.append(
+        "Write each query in PubMed search syntax, not natural prose: 2-3 "
+        "concrete entities joined with AND (gene/protein symbol, pathway or "
+        "process term, optionally the biological system), e.g. "
+        '"Ikzf1 AND pre-B cell", "Bcl2 AND autophagy AND regulation". '
+        "Avoid filler words; never write a full sentence as a query.")
     lines.append("Return ONLY a JSON array — no markdown fencing, no commentary.")
 
     return "\n".join(lines)

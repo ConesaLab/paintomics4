@@ -7,7 +7,7 @@ from src.common.ServerErrorManager import handleException
 from src.common.UserSessionManager import UserSessionManager
 from src.common.DAO.AIInterpretDAO import AIInterpretDAO
 from src.common.JobInformationManager import JobInformationManager
-from src.classes.AIInterpret.pipeline import run_ai_pipeline, _cancel_flags
+from src.classes.AIInterpret.agent import run_ai_agent, _cancel_flags
 from src.classes.AIInterpret.verification import normalize_citation_markers
 from src.common.PySiQ import JobStatus
 from src.classes.AIInterpret.llm_client import LLMClient, MissingAPIKeyError
@@ -209,7 +209,7 @@ def aiInterpretInitiate(REQUEST, RESPONSE, QUEUE_INSTANCE):
 
         # Enqueue the AI pipeline
         QUEUE_INSTANCE.enqueue(
-            fn=run_ai_pipeline,
+            fn=run_ai_agent,
             args=(jobID, experimentDesign, RESPONSE),
             timeout=900,
             job_id=ai_job_id

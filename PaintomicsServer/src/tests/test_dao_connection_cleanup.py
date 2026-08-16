@@ -54,7 +54,7 @@ MUST_CLOSE_IN_FINALLY = [
     # connection comes back. This one beats every 30s for the whole life of a
     # job, swallows the error with a bare `pass`, and runs once per concurrent
     # job -- so a flaky database leaks a client every half minute, silently.
-    ("classes/AIInterpret/pipeline.py", "_run"),
+    ("classes/AIInterpret/agent.py", "_run"),
 ]
 
 

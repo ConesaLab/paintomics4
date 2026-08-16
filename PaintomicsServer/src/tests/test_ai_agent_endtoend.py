@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""The AI pipeline, run end to end against a local stand-in gateway.
+"""The AI agent workflow, run end to end against a local stand-in gateway.
 
 Why this exists
 ---------------
-Nothing ran `run_ai_pipeline`. It needs a live LLM, and a deployment without
+Nothing ran `run_ai_agent`. It needs a live LLM, and a deployment without
 `AI_CSIC_API_KEY` cannot reach one -- so phase sequencing, the reference
 rendering, and the citation verification loop were all covered only by unit
 tests of their parts.
@@ -40,7 +40,7 @@ rather than glossed.
 
 Usage:
     cd PaintomicsServer
-    python -m src.tests.test_ai_pipeline_endtoend [--jobID XXXX]
+    python -m src.tests.test_ai_agent_endtoend [--jobID XXXX]
 """
 import argparse
 import json
@@ -59,25 +59,56 @@ JOB_ID = os.environ.get("AI_E2E_JOB_ID")
 # The stand-in gateway
 # ---------------------------------------------------------------------------
 
-def _instanceFor(schema):
-    """A minimal value satisfying `schema`, so the schema path runs for real."""
+def _instanceFor(schema, root=None, depth=0):
+    """A minimal value satisfying `schema`, so the schema path runs for real.
+
+    The Agents SDK derives its output schemas from pydantic models, which
+    emit ``$defs`` + ``$ref`` and ``anyOf`` for Optional fields; a stub that
+    cannot follow those hands the workflow a string where it required an
+    object, and the run dies in triage.
+    """
     if not isinstance(schema, dict):
         return None
+    root = root if root is not None else schema
+    if depth > 12:  # recursive models: bottom out rather than loop forever
+        return None
+    if "$ref" in schema:
+        ref = schema["$ref"]
+        target = root
+        for part in ref.lstrip("#/").split("/"):
+            target = (target or {}).get(part, {})
+        return _instanceFor(target, root, depth + 1)
+    for key in ("anyOf", "oneOf"):
+        if schema.get(key):
+            # Prefer the non-null branch so required content is populated.
+            options = [o for o in schema[key]
+                       if not (isinstance(o, dict) and o.get("type") == "null")]
+            return _instanceFor((options or schema[key])[0], root, depth + 1)
+    if schema.get("allOf"):
+        merged = {}
+        for part in schema["allOf"]:
+            merged.update(part if isinstance(part, dict) else {})
+        return _instanceFor(merged, root, depth + 1)
+    if schema.get("enum"):
+        return schema["enum"][0]
     kind = schema.get("type")
+    if isinstance(kind, list):
+        kind = next((k for k in kind if k != "null"), kind[0])
     if kind == "object":
         properties = schema.get("properties") or {}
         required = schema.get("required") or list(properties.keys())
-        return {name: _instanceFor(properties.get(name, {})) for name in required}
+        return {name: _instanceFor(properties.get(name, {}), root, depth + 1)
+                for name in required}
     if kind == "array":
-        return [_instanceFor(schema.get("items") or {})]
+        return [_instanceFor(schema.get("items") or {}, root, depth + 1)]
     if kind == "integer":
         return 1
     if kind == "number":
         return 1.0
     if kind == "boolean":
         return True
-    if schema.get("enum"):
-        return schema["enum"][0]
+    if kind == "null":
+        return None
     return "stub"
 
 
@@ -157,12 +188,21 @@ class AiPipelineEndToEndTest(unittest.TestCase):
         serverconf.AI_PROVIDERS[serverconf.AI_LLM_PROVIDER].update(
             {"api_base": baseUrl, "api_key": "stub", "model": "stub-model"})
 
+        # The SDK client is built once and cached; force a rebuild so it picks
+        # up the stand-in gateway, and switch pacing off -- the stub answers
+        # instantly and a 55 rpm gait would only slow the suite.
+        os.environ["AI_LLM_MAX_RPM"] = "0"
+        import src.classes.AIInterpret.agent as agent
+        agent._sdk_configured = False
+        agent._MODEL_OBJ = None
+
         # Keep the run short: the point is the contract, not the breadth.
-        import src.classes.AIInterpret.pipeline as pipeline
-        cls._savedBudgets = (pipeline.AI_MAX_PATHWAYS,
-                             pipeline.AI_PAPERS_PER_PATHWAY)
-        pipeline.AI_MAX_PATHWAYS = 2
-        pipeline.AI_PAPERS_PER_PATHWAY = 2
+        cls._savedBudgets = (agent.AI_MAX_PATHWAYS,
+                             agent.AI_MAX_SEARCH_TASKS,
+                             agent.AI_PAPERS_PER_SEARCH_TASK)
+        agent.AI_MAX_PATHWAYS = 2
+        agent.AI_MAX_SEARCH_TASKS = 1
+        agent.AI_PAPERS_PER_SEARCH_TASK = 2
 
         # Running the pipeline overwrites this job's stored interpretation.
         # That record may be a real report someone wants, so keep the previous
@@ -171,14 +211,14 @@ class AiPipelineEndToEndTest(unittest.TestCase):
         from src.common.DAO.AIInterpretDAO import AIInterpretDAO
         cls._priorRecord = AIInterpretDAO().find_by_job_id(cls.jobID)
 
-        from src.classes.AIInterpret.pipeline import run_ai_pipeline
+        from src.classes.AIInterpret.agent import run_ai_agent
         from src.paintomicsserver import Response
         try:
-            run_ai_pipeline(cls.jobID, "End-to-end stub run.", Response())
+            run_ai_agent(cls.jobID, "End-to-end stub run.", Response())
         except Exception as exc:                       # network, Mongo, R...
             cls.server.shutdown()
             cls._restorePriorRecord()
-            raise unittest.SkipTest("pipeline could not run: %s" % exc)
+            raise unittest.SkipTest("the agent workflow could not run: %s" % exc)
 
         cls.stored = AIInterpretDAO().find_by_job_id(cls.jobID)
 
@@ -224,9 +264,13 @@ class AiPipelineEndToEndTest(unittest.TestCase):
         if hasattr(cls, "_saved"):
             serverconf.AI_PROVIDERS[serverconf.AI_LLM_PROVIDER].update(cls._saved)
         if hasattr(cls, "_savedBudgets"):
-            import src.classes.AIInterpret.pipeline as pipeline
-            (pipeline.AI_MAX_PATHWAYS,
-             pipeline.AI_PAPERS_PER_PATHWAY) = cls._savedBudgets
+            import src.classes.AIInterpret.agent as agent
+            (agent.AI_MAX_PATHWAYS,
+             agent.AI_MAX_SEARCH_TASKS,
+             agent.AI_PAPERS_PER_SEARCH_TASK) = cls._savedBudgets
+            # Un-cache the stub client so a later run rebuilds from live conf.
+            agent._sdk_configured = False
+            agent._MODEL_OBJ = None
 
     # -- the run happened at all -------------------------------------------
 
