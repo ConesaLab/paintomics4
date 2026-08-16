@@ -434,6 +434,44 @@ def build_gene_symbol_whitelist(job_instance):
     return whitelist
 
 
+def render_pathway_table_compact(pathways, cluster_of=None):
+    """The enrichment result as a reader (or a paper) wants it: rank, pathway,
+    source, combined p, which omic layers were significant, and -- when the
+    report is organised by clusters -- the cluster. No gene lists and no raw
+    values: those belong in the prompt, where they ground the writing, not
+    in a 100-row table at the end of the report.
+    """
+    if not pathways:
+        return ""
+    cluster_of = cluster_of or {}
+    lines = ["## Enriched Pathway Summary", "",
+             "*Every significant pathway of the analysis, in rank order (combined "
+             "p-value). 'Significant layers' are the omic layers with p <= 0.05 for "
+             "that pathway.*", "",
+             "| # | Pathway | Source | Combined p | Significant layers | Cluster |",
+             "|---|---|---|---|---|---|"]
+    for i, pw in enumerate(pathways, 1):
+        pvalue = pw.get("combined_pvalue")
+        try:
+            pvalue = "%.2e" % float(pvalue)
+        except (TypeError, ValueError):
+            pvalue = str(pvalue)
+        sig = []
+        for part in str(pw.get("per_omic") or "").split(";"):
+            m = re.match(r"\s*(.+?):\s*p=([0-9.eE+-]+)", part)
+            if m:
+                try:
+                    if float(m.group(2)) <= AI_MAJOR_PATHWAY_MAX_PVAL:
+                        sig.append(m.group(1).strip())
+                except ValueError:
+                    pass
+        lines.append("| %d | %s | %s | %s | %s | %s |" % (
+            i, str(pw.get("name", "")).replace("|", "/"), pw.get("source", ""),
+            pvalue, ", ".join(sig) or "-",
+            str(cluster_of.get(pw.get("id"), "-")).replace("|", "/")))
+    return "\n".join(lines)
+
+
 def render_pathway_table(pathways, max_genes=6):
     """Render the enrichment result as a markdown table, from the data.
 

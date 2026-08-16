@@ -47,7 +47,7 @@ from src.classes.AIInterpret import prompts as prompts_mod
 from src.classes.AIInterpret.context_builder import (
     build_pathway_context, build_gene_symbol_whitelist, get_organism_name,
     triage_pathways, build_cross_omic_matrix, build_key_regulators_block,
-    render_pathway_table,
+    render_pathway_table, render_pathway_table_compact,
 )
 from src.classes.AIInterpret.pubmed_client import PubMedClient
 from src.classes.AIInterpret.verification import (
@@ -1372,7 +1372,15 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats,
     # before the references rebuild, so citation extraction sees the prose the
     # model wrote rather than table rows -- a quote lookup pointed at a table
     # cell has nothing to find.
-    table = render_pathway_table(pathways)
+    # In cluster mode the report gets the compact table (rank, p, layers,
+    # cluster) -- the full one with gene lists stays in the synthesis prompt,
+    # where the grounding was measured, but a 100-row wall of gene values is
+    # not what a reader or a paper wants at the end of a report.
+    if partition is not None:
+        table = render_pathway_table_compact(
+            pathways, cluster_of=partition.get("unit_of") or {})
+    else:
+        table = render_pathway_table(pathways)
     if table:
         report = report.rstrip() + "\n\n" + table + "\n"
     cluster_table = ""
@@ -1409,7 +1417,14 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats,
     # against 11 real papers), so the threshold was always satisfied and the
     # top-up never once fired on runs that badly needed it.
     valid_indices = {p["ref_index"] for p in unique_papers}
-    cited_now = ({int(n) for n in re.findall(r'\[(\d+)\]', str(report))}
+    # Count markers in the BODY only. A synthesis that lists its papers in a
+    # References section of its own but never cites them in the text (seen
+    # live: 25 entries, 0 in-text markers, 0 rendered) must trigger the
+    # top-up, and counting the bibliography's [N] hid exactly that case.
+    from src.classes.AIInterpret.verification import _REFERENCES_HEADING_RE as _REFS_RE
+    _ref_m = _REFS_RE.search(str(report))
+    _body_for_count = str(report)[:_ref_m.start()] if _ref_m else str(report)
+    cited_now = ({int(n) for n in re.findall(r'\[(\d+)\]', _body_for_count)}
                  & valid_indices)
     uncited = [p for p in unique_papers if p["ref_index"] not in cited_now]
     if uncited and len(cited_now) < SDK_MIN_CITATIONS:
