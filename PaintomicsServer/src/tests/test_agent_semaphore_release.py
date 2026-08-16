@@ -111,6 +111,70 @@ class ReleaseOrderingTest(unittest.TestCase):
                         "permits were not returned despite releasing first")
 
 
+class HeartbeatTest(unittest.TestCase):
+    """The servlet's stale-job check flips a run to "error" after 10 minutes
+    without a record update, and the interpretation phase alone can outlast
+    that. A live run was killed this way (interpreting 45 at 120 s, watchdog at
+    721 s, batches still running), so the heartbeat is part of the contract:
+    started before the permit wait, stopped in the finally."""
+
+    def test_the_workflow_starts_and_stops_a_heartbeat(self):
+        import inspect
+        from src.classes.AIInterpret import agent
+
+        source = inspect.getsource(agent.run_ai_agent)
+        body, finallyBlock = source.rsplit("finally:", 1)
+        self.assertIn("heartbeat.start()", body,
+                      "run_ai_agent no longer starts a heartbeat; the stale-job "
+                      "watchdog will kill any interpretation phase over 10 min")
+        self.assertIn("heartbeat.stop()", finallyBlock,
+                      "the heartbeat is not stopped in the finally; a finished "
+                      "job keeps touching its record forever")
+        # Started before the permit wait, so a queued job is seen as alive too.
+        self.assertLess(body.index("heartbeat.start()"),
+                        body.index("_agent_semaphore.acquire()"),
+                        "the heartbeat starts after the semaphore wait; a job "
+                        "queued behind two running ones is flagged dead")
+
+    def test_the_heartbeat_touches_and_stops(self):
+        """Behavioural check with the DAO stubbed: it touches on its interval
+        and stops touching once told to."""
+        import sys
+        import time
+        import types
+        from src.classes.AIInterpret import agent
+
+        touches = []
+
+        class _DAO:
+            def touch(self, job_id):
+                touches.append(job_id)
+
+            def closeConnection(self):
+                pass
+
+        fake = types.ModuleType("src.common.DAO.AIInterpretDAO")
+        fake.AIInterpretDAO = _DAO
+        real = sys.modules.get("src.common.DAO.AIInterpretDAO")
+        sys.modules["src.common.DAO.AIInterpretDAO"] = fake
+        try:
+            hb = agent._Heartbeat("job-x", interval=0.05)
+            hb.start()
+            time.sleep(0.3)
+            hb.stop()
+            seen = len(touches)
+            time.sleep(0.2)
+        finally:
+            if real is not None:
+                sys.modules["src.common.DAO.AIInterpretDAO"] = real
+            else:
+                sys.modules.pop("src.common.DAO.AIInterpretDAO", None)
+
+        self.assertGreaterEqual(seen, 3, "the heartbeat did not touch on its interval")
+        self.assertLessEqual(len(touches) - seen, 1,
+                             "the heartbeat kept touching after stop()")
+
+
 class CancelFlagCleanupTest(unittest.TestCase):
     """A finished or failed job must not leave its cancel flag behind: a stale
     flag makes the *next* run of the same job cancel itself immediately."""

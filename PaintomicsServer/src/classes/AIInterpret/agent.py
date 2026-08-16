@@ -205,17 +205,32 @@ def configure_sdk():
     # LLMClient already behaves this way; the SDK transport has to match.
     import openai as _oai
 
+    # 408 Request Timeout arrives as a bare APIStatusError (no dedicated
+    # subclass); the gateway answers with it when a long tool-loop turn
+    # outlives its upstream budget, and it is exactly as transient as a 5xx.
+    _RETRY_STATUSES = {408, 409}
+
+    def _transient(e):
+        if isinstance(e, (_oai.InternalServerError, _oai.APIConnectionError,
+                          _oai.APITimeoutError, _oai.RateLimitError)):
+            return True
+        return (isinstance(e, _oai.APIStatusError)
+                and getattr(e, "status_code", None) in _RETRY_STATUSES)
+
     async def _paced_create(*args, **kwargs):
         last = None
         for attempt in range(4):
             await pacer.wait()
             try:
                 return await _orig_create(*args, **kwargs)
-            except (_oai.InternalServerError, _oai.APIConnectionError,
-                    _oai.APITimeoutError, _oai.RateLimitError) as e:
+            except _oai.APIError as e:
+                if not _transient(e):
+                    raise
                 last = e
-                logger.warning("SDK transport retry %d/3 after %s",
-                               attempt + 1, type(e).__name__)
+                logger.warning("SDK transport retry %d/3 after %s%s",
+                               attempt + 1, type(e).__name__,
+                               " %s" % getattr(e, "status_code", "")
+                               if getattr(e, "status_code", None) else "")
                 await asyncio.sleep(min(2 ** attempt * 2, 15))
         raise last
 
@@ -1363,6 +1378,50 @@ def run_agent_workflow(job_instance, job_id, experiment_design, budgets=None,
     return {"report": report, "papers": papers, "stats": stats}
 
 
+class _Heartbeat:
+    """Background thread that touches the job's updatedAt every interval.
+
+    The servlet's stale-job check declares a run dead when its record has not
+    changed for AI_STALE_JOB_TIMEOUT (10 min). The workflow only reports
+    progress at phase boundaries, and the interpretation phase alone can run
+    longer than that -- batches with tool loops serialise on the gateway --
+    so without this a healthy run was flipped to "error" mid-interpretation
+    (measured: 'interpreting 45' at 120 s, watchdog at 721 s, batches still
+    running). Runs from before the semaphore is acquired, so a job waiting for
+    a permit is also seen as alive rather than dead.
+    """
+
+    def __init__(self, job_id, interval=30):
+        self._job_id = job_id
+        self._interval = interval
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._run, daemon=True,
+                                        name="ai-heartbeat-%s" % job_id)
+
+    def start(self):
+        self._thread.start()
+
+    def stop(self):
+        self._stop.set()
+
+    def _run(self):
+        from src.common.DAO.AIInterpretDAO import AIInterpretDAO
+        while not self._stop.wait(self._interval):
+            # Best-effort, but never silent, and the connection is closed in a
+            # finally: DBManager builds a new MongoClient per DAO, and this
+            # beats every 30 s for the whole life of a job.
+            dao = None
+            try:
+                dao = AIInterpretDAO()
+                dao.touch(self._job_id)
+            except Exception:
+                logger.debug("[%s] heartbeat touch failed", self._job_id,
+                             exc_info=True)
+            finally:
+                if dao is not None:
+                    dao.closeConnection()
+
+
 def run_ai_agent(job_id, experiment_design, RESPONSE):
     """Servlet entry point — drop-in replacement for pipeline.run_ai_agent.
 
@@ -1376,11 +1435,13 @@ def run_ai_agent(job_id, experiment_design, RESPONSE):
 
     dao = None
     acquired = False
+    heartbeat = _Heartbeat(job_id)
     try:
         dao = AIInterpretDAO()
         dao.save_progress(job_id, {"status": "extracting", "percent": 5,
                                    "detail": "Loading analysis results..."})
         dao.save_progress(job_id, {"experimentDesign": experiment_design or ""})
+        heartbeat.start()
 
         job_instance = JobInformationManager().loadJobInstance(job_id)
         if job_instance is None:
@@ -1443,6 +1504,7 @@ def run_ai_agent(job_id, experiment_design, RESPONSE):
     finally:
         if acquired:
             _agent_semaphore.release()
+        heartbeat.stop()
         _cancel_flags.pop(job_id, None)
         if dao:
             try:
