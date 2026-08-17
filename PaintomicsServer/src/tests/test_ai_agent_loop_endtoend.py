@@ -138,6 +138,11 @@ class _Handler(BaseHTTPRequestHandler):
         ("search_literature", {"query": "Ikaros B-cell precursor differentiation",
                                "topic_tag": "stub-pathway"}),
         ("notebook_write", {"note": "Scripted finding: layers co-regulate."}),
+        # Submitted twice on purpose. A thin, undelegated first submit is nudged
+        # exactly once (see agent_loop.submit_report), and the second is accepted
+        # whatever it looks like -- so this scripts the contract rather than
+        # working around it, and would fail if the nudge ever became a veto.
+        ("submit_report", {"report_markdown": DRAFT}),
         ("submit_report", {"report_markdown": DRAFT}),
     ]
 
@@ -290,8 +295,16 @@ class AiAgentLoopEndToEndTest(unittest.TestCase):
     # -- the loop ran, through the door ------------------------------------
 
     def test_the_lead_made_tool_calls(self):
-        self.assertGreaterEqual(_Handler.lead_turns, 6,
+        self.assertGreaterEqual(_Handler.lead_turns, 7,
                                 "the Lead never walked its scripted toolbelt")
+
+    def test_the_thin_undelegated_submit_was_nudged_once(self):
+        """The nudge fired, and did not become a veto: the second submit landed."""
+        trace = [e for e in ((self.stored or {}).get("toolTrace") or [])
+                 if e.get("tool") == "submit_report"]
+        results = [str(e.get("result")) for e in trace]
+        assert any("nudged" in r for r in results), results
+        assert any("accepted" in r for r in results), results
 
     def test_the_cluster_tool_ran(self):
         """The branch whose call signature was wrong in the first live run."""
