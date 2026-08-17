@@ -139,6 +139,18 @@ def _canonicalise(artifacts):
             step["omicsValuesID"] = {
                 key: "|".join(sorted(value.split("|"))) if isinstance(value, str) else value
                 for key, value in table.items()}
+        # A feature's omicsValues list is assembled in the order the mapper
+        # workers delivered their clones -- racy on master, so its order is
+        # already meaningless to the client (which looks entries up by
+        # omicName). Sorted into a canonical order before comparing; the
+        # multiset is what is compared.
+        features = step.get("omicsValues")
+        if isinstance(features, dict):
+            for feature in features.values():
+                values = feature.get("omicsValues") if isinstance(feature, dict) else None
+                if isinstance(values, list):
+                    feature["omicsValues"] = sorted(
+                        values, key=lambda item: json.dumps(item, sort_keys=True, default=str))
     return artifacts
 
 
@@ -206,6 +218,9 @@ def main():
     parser.add_argument("--noise-runs", nargs=2, metavar=("RUN_X", "RUN_Y"),
                         help="two run names under --a (e.g. run1 run2) whose "
                              "mutual differences define the baseline's own noise")
+    parser.add_argument("--noise-from",
+                        help="derive the noise classes from this bench_all tree "
+                             "(with --noise-runs) instead of from --a")
     args = parser.parse_args()
 
     scenarios = sorted(
@@ -219,9 +234,10 @@ def main():
     noise = None
     if args.noise_runs:
         noise = set()
-        for scenario in scenarios:
-            noiseA = os.path.join(args.a, scenario, args.noise_runs[0])
-            noiseB = os.path.join(args.a, scenario, args.noise_runs[1])
+        noiseRoot = args.noise_from or args.a
+        for scenario in sorted(os.listdir(noiseRoot)):
+            noiseA = os.path.join(noiseRoot, scenario, args.noise_runs[0])
+            noiseB = os.path.join(noiseRoot, scenario, args.noise_runs[1])
             if os.path.isdir(noiseA) and os.path.isdir(noiseB):
                 noise |= noiseClasses(noiseA, noiseB, args.rtol)
         print("baseline noise classes (%d): %s" % (len(noise), sorted(noise)))
