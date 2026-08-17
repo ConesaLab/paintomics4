@@ -691,10 +691,21 @@ async def delegate_interpretation(ctx: RunContextWrapper[LoopContext],
     # single-shot one, different instructions -- [N] markers on quotable claims
     # rather than "(PMID: X)" prose. Built here rather than in _build_agents so
     # the workflow arm keeps exactly the agents it was measured with.
+    # REVERTED to the workflow arm's interpreter prompt, on evidence. Giving the
+    # sub-agents their own instructions -- [N] markers, and "cite only where you
+    # could point to a specific sentence" -- suppressed the citations the report
+    # is built from: the merge went 5 -> 18 markers under the old prompt (round
+    # 11) and 7 -> 10, then 7 -> 3, under the new one (rounds 13-15), until the
+    # grounded-citation guard started rejecting the stitch outright for costing
+    # grounding. Careful phrasing produced caution, not accuracy.
+    #
+    # The PMID format it asks for is fine now: resolve_pmid_mentions converts the
+    # markers inside the merge, and the full-text upgrade was taught to count
+    # PMID-form citations, which was the real defect behind that format.
     interpreter = Agent[LoopContext](
         name="Delegated Interpreter",
         model=_model(),
-        instructions=prompts_mod.SYSTEM_PROMPT_DELEGATED_INTERPRET,
+        instructions=prompts_mod.SYSTEM_PROMPT_INTERPRET,
         model_settings=ModelSettings(temperature=AI_TEMPERATURE),
         tools=[],
     )
