@@ -123,10 +123,29 @@ def _short(value, limit=120):
     return text if len(text) <= limit else text[:limit] + "..."
 
 
+def _canonicalise(artifacts):
+    """Normalise fields whose byte form depends on the process, not the data.
+
+    `omicsValuesID` (Job.getValueIdTable) joins a Python *set* of names with
+    '|', so the token order follows the process's string-hash seed: two
+    server processes give different strings for the same set. The tokens are
+    sorted here; the client only ever splits the string into a search blob.
+    """
+    for step in artifacts.values():
+        if not isinstance(step, dict):
+            continue
+        table = step.get("omicsValuesID")
+        if isinstance(table, dict):
+            step["omicsValuesID"] = {
+                key: "|".join(sorted(value.split("|"))) if isinstance(value, str) else value
+                for key, value in table.items()}
+    return artifacts
+
+
 def loadArtifacts(runDir):
     path = os.path.join(runDir, "artifacts.json.gz")
     with gzip.open(path, "rt", encoding="utf-8") as handle:
-        return json.load(handle)
+        return _canonicalise(json.load(handle))
 
 
 _PATH_INDEX = re.compile(r"\[\d+\]")
