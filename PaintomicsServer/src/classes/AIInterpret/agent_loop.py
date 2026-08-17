@@ -38,6 +38,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import time
 from dataclasses import dataclass, field
 from typing import Any
@@ -172,6 +173,14 @@ VERIFY_MAX_SECONDS = float(os.getenv("AI_AGENT_VERIFY_MAX_SECONDS", "300"))
 # genuine refutations), the verify loop 291 s -> 117 s and the run 485 s -> 338 s.
 # AI_AGENT_VERIFY_PREFETCH=0 restores the tool-loop verifier for comparison.
 VERIFY_PREFETCH = os.getenv("AI_AGENT_VERIFY_PREFETCH", "1") == "1"
+# How many abstract-only papers may be upgraded to full text before quoting.
+# Measured: the workflow arm cites 13-14 full-text papers of ~21 (~65 %) because
+# it batch-fetches full text for everything it retrieves; this arm cited 2-4 of
+# 11-19 (~20 %) because it upgraded lazily, one paper per read_paper call. A
+# quote has to be found VERBATIM in the paper, and a 250-word abstract rarely
+# contains the sentence a specific claim needs -- so the citation arrives
+# unquotable and the net strips it. That is most of the grounding gap.
+FULLTEXT_MAX_PAPERS = int(os.getenv("AI_AGENT_FULLTEXT_MAX", "24"))
 # Verify->correct rounds at the gate. 2 = one verification pass, one
 # correction, one re-verification -- the 600 s budget does not fit the
 # workflow arm's 3 (its own no-progress rule usually stops at 2 anyway).
@@ -880,6 +889,43 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
     # arm's grounding property -- per-batch attributed slices, preserved through
     # synthesis -- without its fixed control flow: the agent still chose what to
     # investigate, what to delegate and what to submit.
+    # ---- give the citations something to be quoted FROM --------------------
+    # Deterministic, batched, and placed before the merge guard so both its quote
+    # probe and the gate's collection see the fuller text. Bounded by the clock
+    # like every other post-loop step, and skipped without ceremony when tight.
+    cited_anywhere = set()
+    for text in ctx.delegated + [report]:
+        cited_anywhere |= {int(n) for n in re.findall(r"\[(\d+)\]", text or "")}
+    thin = [ctx.paper_index[r] for r in sorted(cited_anywhere)
+            if r in ctx.paper_index
+            and ctx.paper_index[r].get("fetch_tier") == "abstract_only"]
+    fulltext_budget = ((ctx.started_at + AGENT_RUN_SECONDS) - time.time()
+                       - GATE_MIN_SECONDS - 60)
+    if thin and fulltext_budget > 20:
+        t_f = time.time()
+        try:
+            upgraded = await bounded(
+                asyncio.to_thread(ctx.pubmed.fetch_papers,
+                                  [p["pmid"] for p in thin[:FULLTEXT_MAX_PAPERS]]),
+                min(fulltext_budget, 90), label="full-text upgrade")
+            by_pmid = {str(p.get("pmid")): p for p in (upgraded or [])}
+            gained = 0
+            for paper in thin[:FULLTEXT_MAX_PAPERS]:
+                fresh = by_pmid.get(str(paper.get("pmid")))
+                if fresh and fresh.get("fetch_tier") != "abstract_only":
+                    fresh["ref_index"] = paper["ref_index"]
+                    fresh["pathways"] = paper.get("pathways", [])
+                    ctx.paper_index[paper["ref_index"]] = fresh
+                    gained += 1
+            stats["fulltext_upgraded"] = "%d of %d cited abstracts" % (gained,
+                                                                      len(thin))
+        except (Exception, asyncio.TimeoutError) as e:
+            stats["fulltext_failed"] = "%s: %s" % (type(e).__name__, e)
+        stats["fulltext_s"] = time.time() - t_f
+    elif thin:
+        stats["fulltext_skipped"] = "%d thin papers, %ds left" % (
+            len(thin), max(0, int(fulltext_budget)))
+
     premade_quotes = None
     merge_budget = ((ctx.started_at + AGENT_RUN_SECONDS) - time.time()
                     - GATE_MIN_SECONDS)
