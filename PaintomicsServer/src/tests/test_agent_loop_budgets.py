@@ -132,6 +132,23 @@ def test_registered_papers_default_to_abstract_only():
     assert paper["sections"]["abstract"] == "a"
 
 
+# -- the stitched report must stay inside the size ceiling -----------------
+
+def test_the_stitch_cap_leaves_room_for_tables_and_references():
+    """The comparison rule rejects a report outside [0.6x, 2.0x] of the workflow
+    arm's 41 293 chars, i.e. above 82 586. A run at cap 42 000 shipped 61 090, so
+    tables + references + framing cost about 19 000 on top of the stitched
+    detail. The cap has to leave that much headroom."""
+    OVERHEAD = 19000          # measured: 61 090 shipped from a 42 000 cap
+    CEILING = 82586           # 2.0x the workflow arm's mean report
+    assert L.STITCH_MAX_CHARS + OVERHEAD <= CEILING, (
+        "cap %d + %d overhead would ship %d chars, past the %d ceiling"
+        % (L.STITCH_MAX_CHARS, OVERHEAD, L.STITCH_MAX_CHARS + OVERHEAD, CEILING))
+    # ...and be worth having: below the workflow arm's own prose it cannot cover
+    # the same ground.
+    assert L.STITCH_MAX_CHARS >= 39237, L.STITCH_MAX_CHARS
+
+
 # -- post-loop work must fit the clock that is left ------------------------
 
 def test_the_gate_floor_is_big_enough_for_the_gate():
@@ -213,6 +230,7 @@ def main():
               test_the_same_pmid_never_gets_a_second_number,
               test_a_paper_without_a_pmid_is_skipped,
               test_registered_papers_default_to_abstract_only,
+              test_the_stitch_cap_leaves_room_for_tables_and_references,
               test_the_gate_floor_is_big_enough_for_the_gate,
               test_a_merge_with_no_time_left_is_skipped_not_attempted,
               test_a_merge_early_in_a_run_gets_a_real_budget,

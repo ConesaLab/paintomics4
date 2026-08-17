@@ -142,7 +142,12 @@ GATE_MIN_SECONDS = float(os.getenv("AI_AGENT_GATE_MIN", "130"))
 # Ceiling on the stitched per-pathway detail. Measured: stitching every delegated
 # report verbatim produced a 90 621-char report, 2.2x the workflow arm's, which
 # is not "thorough" but unreadable.
-STITCH_MAX_CHARS = int(os.getenv("AI_AGENT_STITCH_MAX_CHARS", "42000"))
+# 42 000 was a first guess and it bound too tightly: with it, a run shipped
+# 61 090 chars against a 82 586-char sanity ceiling and lost coverage (12 pathways
+# named against the workflow arm's 15) because the truncated tail took its
+# citations with it. 56 000 leaves the report around 75 000 -- still inside the
+# ceiling, with the paragraphs that carry the grounding.
+STITCH_MAX_CHARS = int(os.getenv("AI_AGENT_STITCH_MAX_CHARS", "56000"))
 # The LLM verify->correct loop's share of the clock. It is the single most
 # expensive thing in a run once grounding works -- 291 s to check 19 citations,
 # the same price the workflow arm pays for 20 -- and it is also the most
@@ -162,7 +167,11 @@ VERIFY_MAX_SECONDS = float(os.getenv("AI_AGENT_VERIFY_MAX_SECONDS", "300"))
 # is left with the one judgement only it can make -- does this text support this
 # claim. No tools, one call, no turns to exhaust. The deterministic quote check
 # in verify_report_v2 still runs afterwards either way.
-VERIFY_PREFETCH = os.getenv("AI_AGENT_VERIFY_PREFETCH", "0") == "1"
+# Default ON as of the measurement above: 29 of 29 calls returned a verdict at a
+# median 2 464 ms, redactions fell 12 -> 2 (the survivors being the only two
+# genuine refutations), the verify loop 291 s -> 117 s and the run 485 s -> 338 s.
+# AI_AGENT_VERIFY_PREFETCH=0 restores the tool-loop verifier for comparison.
+VERIFY_PREFETCH = os.getenv("AI_AGENT_VERIFY_PREFETCH", "1") == "1"
 # Verify->correct rounds at the gate. 2 = one verification pass, one
 # correction, one re-verification -- the 600 s budget does not fit the
 # workflow arm's 3 (its own no-progress rule usually stops at 2 anyway).
@@ -871,6 +880,7 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
     # arm's grounding property -- per-batch attributed slices, preserved through
     # synthesis -- without its fixed control flow: the agent still chose what to
     # investigate, what to delegate and what to submit.
+    premade_quotes = None
     merge_budget = ((ctx.started_at + AGENT_RUN_SECONDS) - time.time()
                     - GATE_MIN_SECONDS)
     if ctx.delegated and MERGE_DELEGATED and merge_budget < 30:
@@ -952,15 +962,35 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
                 stats["merge_failed"] = "%s: %s" % (type(e).__name__, e)
                 candidate = report
         after = len(count_body_citations(candidate, valid))
-        # Same guard either way: a merge may only make the report fuller, and may
-        # never cost it citations.
-        if len(candidate) > 1.2 * len(str(report)) and after >= before:
+        # Count GROUNDED citations, not markers. The first version of this guard
+        # compared raw [N] counts, and a stitch that added thirty markers passed
+        # it -- then the deterministic net removed them all for having no quote:
+        # one run reported 22 verifier calls, 5 refutations, and 32 redactions,
+        # which is arithmetic that only works if two thirds of the citations were
+        # never quote-backed at all. A citation without a quote is not grounding,
+        # it is a number in brackets.
+        #
+        # Quote collection costs ~3 s (measured), so the guard can afford to ask
+        # the real question, and the quotes it collects are reused by the gate
+        # rather than recomputed.
+        quote_probe = LLMClient(AI_PROVIDERS[AI_LLM_PROVIDER])
+        grounded_before = len(_collect_cited_quotes(
+            quote_probe, str(report), ctx.paper_index, job_id))
+        grounded_after_quotes = _collect_cited_quotes(
+            quote_probe, candidate, ctx.paper_index, job_id)
+        grounded_after = len(grounded_after_quotes)
+        if (len(candidate) > 1.2 * len(str(report))
+                and after >= before and grounded_after >= grounded_before):
             stats["merge_gain_chars"] = len(candidate) - len(str(report))
             stats["merge_citations"] = "%d->%d" % (before, after)
+            stats["merge_grounded"] = "%d->%d" % (grounded_before, grounded_after)
             report = candidate
+            premade_quotes = grounded_after_quotes
         else:
-            stats["merge_rejected"] = "len %d->%d, cites %d->%d" % (
-                len(str(report)), len(candidate), before, after)
+            stats["merge_rejected"] = (
+                "len %d->%d, cites %d->%d, GROUNDED %d->%d"
+                % (len(str(report)), len(candidate), before, after,
+                   grounded_before, grounded_after))
         stats["merge_mode"] = MERGE_MODE
         stats["merge_s"] = time.time() - t_m
 
@@ -1032,7 +1062,13 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
     llm_for_quotes = LLMClient(AI_PROVIDERS[AI_LLM_PROVIDER])
     _hb(ctx, "verifying", 80, "Collecting supporting quotes...")
     t_q = time.time()
-    quotes = _collect_cited_quotes(llm_for_quotes, report, ctx.paper_index, job_id)
+    if premade_quotes is not None:
+        # The merge guard already collected these for the text it accepted.
+        quotes = premade_quotes
+        stats["quotes_reused"] = len(quotes)
+    else:
+        quotes = _collect_cited_quotes(llm_for_quotes, report, ctx.paper_index,
+                                       job_id)
     stats["quotes_s"] = time.time() - t_q
     report, rendered = render_references_section(report, ctx.paper_index, quotes)
     stats["refs_rendered"] = len(rendered)
