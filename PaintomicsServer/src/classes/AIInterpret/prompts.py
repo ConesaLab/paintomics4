@@ -765,10 +765,12 @@ the top-ranked pathways, compare_gene_profiles on the genes that drive them \
 3. Search the literature with search_literature. BROAD queries only: two or \
 three gene symbols joined by OR plus at most one biological term, e.g. \
 "(Ikzf1 OR Ccnd2) AND B cell differentiation". A query with three AND clauses \
-returns nothing and still spends budget. Use read_paper on the papers you mean \
-to cite for a specific claim -- nearly half the papers opened that way end up \
-cited, and a citation with no quotable sentence behind it is removed from the \
-report along with the claim it supports.
+returns nothing and still spends budget. Use read_paper selectively: for a \
+specific claim whose support you are unsure of, not as a routine step before \
+citing. Measured over 28 runs, citations whose paper was read first verify no \
+better than citations made from the abstract (78 % against 84 %), so reading \
+earns its ~2 s when it changes your mind about a paper, not when it confirms \
+what the abstract already told you.
 4. Get breadth by DELEGATING, not by writing everything yourself: call \
 delegate_interpretation a few times, covering all the top-ranked pathways and \
 clusters between them. SEARCH FIRST for the pathways you are about to \

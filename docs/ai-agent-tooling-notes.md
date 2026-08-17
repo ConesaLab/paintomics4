@@ -182,6 +182,33 @@ And a fourth, in the same family: the merge guard compared **markers** rather
 than **grounded citations**, so a stitch that added thirty unquotable markers
 passed the check and lost all thirty at the net.
 
+## Fifth measurement — 28 runs, and read_paper does not do what I claimed
+
+| question | answer |
+|---|---|
+| of papers OPENED, how many get cited? | 15 of 74 (**20 %**) — was 45 % at 8 runs |
+| of papers CITED, how many were opened first? | 15 of 133 (**11 %**) |
+| do read-backed citations verify better? | **no**: 78 % pass vs 84 % for never-read |
+| runs that delegate at all | **15 of 29 (52 %)** |
+
+The middle two are the ones that matter. `opened -> cited` alone cannot separate
+"reading is useless" from "reading correctly rejected the paper" — rejecting a
+source before it becomes an unquotable citation is the tool working. But
+`cited <- opened` says reading is not on the path to a citation at all (11 %),
+and the verification split says read-backed citations do **not** survive better.
+So `read_paper` is marginal: fine to keep at 2.2 s, wrong to urge.
+
+**The prompt has been corrected accordingly**, and the lesson is about prompts as
+much as tools: it had been telling the agent "nearly half the papers opened that
+way end up cited", a number I put there from eight runs which twenty-eight runs
+more than halved. **Do not put a payoff figure in a prompt unless it is stable
+enough to survive the next twenty runs** — the model believes it, and a stale
+number is a confident instruction to do the wrong thing.
+
+Delegation adoption is the other headline: only half of runs delegate at all, and
+the ones that do not stitch nothing and ship a fifth of the prose. `submit_report`
+now nudges exactly once on a thin undelegated draft.
+
 ## Rules for adding a tool here
 
 - Say what it costs if it costs more than a few seconds; say it is free if it is.

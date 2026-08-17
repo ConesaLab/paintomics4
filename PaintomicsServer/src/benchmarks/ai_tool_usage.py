@@ -139,8 +139,19 @@ def main():
     except Exception:
         pass
 
+    # Delegation adoption, called out because it predicts the report: runs that
+    # skip delegate_interpretation stitch nothing, and two replicates of identical
+    # code came out 47 094 vs 10 043 chars of prose on exactly that difference.
+    delegated_runs = per_run.get("delegate_interpretation", 0)
+    print("\ndelegation: %d of %d runs called delegate_interpretation (%.0f%%)"
+          % (delegated_runs, n, 100.0 * delegated_runs / n))
+    if delegated_runs < n:
+        print("  the rest stitched nothing, which costs most of the report's"
+              "\n  per-pathway detail -- submit_report now nudges once when a thin"
+              "\n  draft arrives undelegated")
+
     # read_paper payoff: opened -> cited, matched on PMID.
-    opened, cited_after, checked = 0, 0, 0
+    opened, cited_after, checked, cited_total = 0, 0, 0, 0
     for job, _stamp, events in runs:
         pmids = {m.group(1) for e in events if e.get("tool") == "read_paper"
                  for m in [re.search(r"pmid=(\S+)", str(e.get("args")))] if m}
@@ -152,17 +163,63 @@ def main():
         checked += 1
         opened += len(pmids)
         cited_after += len(pmids & cited)
+        cited_total += len(cited)
     if opened:
-        print("\nread_paper payoff over %d run(s) whose report is still stored:"
-              % checked)
-        print("  papers opened: %d · of those cited in the shipped report: %d (%.0f%%)"
-              % (opened, cited_after, 100.0 * cited_after / opened))
-        print("  (a low rate means reading is not what decides a citation, and the"
-              "\n   tool is costing 3 s a call for something the abstract already"
-              "\n   settled; a high rate argues for reading MORE before citing)")
+        print("\nread_paper, over %d run(s) whose report is still stored:" % checked)
+        print("  opened -> cited:  %d of %d (%.0f%%)"
+              % (cited_after, opened, 100.0 * cited_after / opened))
+        if cited_total:
+            print("  cited <- opened:  %d of %d (%.0f%%)"
+                  % (cited_after, cited_total, 100.0 * cited_after / cited_total))
+        print("  The second number is the one that matters. opened->cited alone"
+              "\n  cannot tell 'reading is useless' from 'reading correctly"
+              "\n  rejected the paper', and rejecting a source before it becomes an"
+              "\n  unquotable citation is the tool working. cited<-opened says"
+              "\n  whether reading is on the critical path to a citation at all.")
     else:
         print("\nread_paper payoff: no run yet carries pmid= in its trace"
               "\n  (added after the first six rounds; re-run to populate)")
+
+    # Does reading a paper make its citation survive verification? This is the
+    # question that decides whether read_paper is worth its 2.2 s, and it can be
+    # answered inside a single run: read_paper records the ref_index it opened,
+    # the gate records a verdict per ref_index, and both are pre-renumbering, so
+    # they join directly. (Across runs they cannot -- renumber_citations rewrites
+    # every index at the gate.)
+    read_ok = read_bad = unread_ok = unread_bad = 0
+    for _job, _stamp, events in runs:
+        opened_refs = set()
+        for e in events:
+            if e.get("tool") == "read_paper":
+                m = re.search(r"\[(\d+)\]", str(e.get("args")))
+                if m:
+                    opened_refs.add(int(m.group(1)))
+        for e in events:
+            if not e.get("gate") or "verify_citation" not in str(e.get("tool")):
+                continue
+            m = re.search(r"\[(\d+)\]", str(e.get("args")))
+            if not m:
+                continue
+            ref = int(m.group(1))
+            good = "supports=True" in str(e.get("result"))
+            if ref in opened_refs:
+                read_ok += good
+                read_bad += not good
+            else:
+                unread_ok += good
+                unread_bad += not good
+    if read_ok + read_bad + unread_ok + unread_bad:
+        def rate(ok, bad):
+            total = ok + bad
+            return "%d/%d (%.0f%%)" % (ok, total, 100.0 * ok / total) if total else "n/a"
+        print("\ncitations that PASSED verification, split by whether the agent"
+              "\nhad opened the paper with read_paper first:")
+        print("  read first:     %s" % rate(read_ok, read_bad))
+        print("  never read:     %s" % rate(unread_ok, unread_bad))
+        print("  If reading does not raise the pass rate, read_paper is costing"
+              "\n  2.2 s a call to confirm what the abstract already said, and the"
+              "\n  prompt should stop urging it. If it does, reading is the cheapest"
+              "\n  grounding available and the agent should do more of it.")
 
 
 if __name__ == "__main__":
