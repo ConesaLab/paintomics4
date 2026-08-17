@@ -1958,8 +1958,25 @@ def run_ai_agent(job_id, experiment_design, RESPONSE):
             "pathways": lambda pw: dao.save_pathway_index(job_id, pw),
             "partition": lambda part: dao.save_clusters(job_id, part),
         }
-        out = run_agent_workflow(job_instance, job_id, experiment_design,
-                               hooks=hooks)
+        # AI_FULL_AGENT=1 swaps the fixed six-phase workflow for the Lead
+        # Interpreter loop (agent_loop.py; design in docs/diagrams/
+        # paintomics-ai-agent-proposal.drawio). Same contract either way:
+        # {report, papers, stats}, the same DAO milestones, the same gate.
+        if os.getenv("AI_FULL_AGENT", "0") == "1":
+            from src.classes.AIInterpret.agent_loop import run_agent_loop_workflow
+            # A retry appends to the previous run's journal otherwise: the first
+            # live re-run left 27 dead events sitting above 34 live ones in one
+            # array, with nothing marking the boundary. The journal describes
+            # THIS run.
+            dao.save_progress(job_id, {"toolTrace": [], "notebook": []})
+            hooks["tool_event"] = lambda e: dao.append_tool_event(job_id, e)
+            hooks["notebook"] = lambda nb: dao.save_progress(
+                job_id, {"notebook": nb})
+            out = run_agent_loop_workflow(job_instance, job_id,
+                                          experiment_design, hooks=hooks)
+        else:
+            out = run_agent_workflow(job_instance, job_id, experiment_design,
+                                     hooks=hooks)
         report = out.get("report") or ""
         papers = out.get("papers") or []
         if papers:

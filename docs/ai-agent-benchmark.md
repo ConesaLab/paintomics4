@@ -1,0 +1,171 @@
+# Full-agent arm vs the six-phase workflow, on STATegra, under 600 s
+
+Both arms interpret the same jobs, built from
+`PaintomicsServer/src/examplefiles/datasets/08-stategra-multiomics` through
+`/pa_step1/example/stategra-multiomics` + step 2 (887 pathways matched, 5 omic
+layers, 6 time points), against the live CSIC gateway, with a 600 s ceiling.
+
+## Protocol, pre-registered before the first run
+
+Replicates are paired on identical jobs and the arm order is reversed between
+pairs, because one fold cannot measure a change on this gateway: two runs of the
+*same* agent have decomposed to gaps of +0.037 and +0.302 on the AgentEvolve
+fold score. The agent arm was declared better only if **all** of:
+
+1. every agent replicate finishes `status=done` within 600 s;
+2. mean body citations (resolving to retrieved papers, post-redaction) ≥ base;
+3. mean redactions ≤ base + 2;
+4. mean pathway coverage in prose ≥ base;
+5. report length within [0.6×, 2.0×] of the base mean.
+
+Any agent replicate erroring or overrunning while the base arm completes is a
+loss regardless of the other numbers. Ties break on full-text citations, then
+default to the incumbent.
+
+## Round 1 — as built
+
+Two replicates per arm, paired on the same two jobs, arm order reversed between
+pairs. Every run finished `done` inside the ceiling.
+
+| | base r1 | base r2 | agent r1 | agent r2 |
+|---|---|---|---|---|
+| wall clock | 184 s | 478 s | 172 s | 176 s |
+| report | 35 006 | 47 580 | 20 330 | 19 321 chars |
+| **prose** (excl. appended tables + references) | — | **39 237** | **6 825** | — chars |
+| cited papers in body | 22 | 20 | 9 | 4 |
+| redactions | 4 | 5 | 0 | 0 |
+| pathways named in prose | — | 15 | 6 | — |
+| tool calls | 347 | — | 34 | 38 |
+| literature searches | 150 hits / 35 kept | — | 16 of 18 budget | 16 |
+| pathways in scope | top 15 by combined p | top 15 | **102** | **102** |
+
+The agent chose to widen its own scope — it called `cluster_pathways`
+unprompted, which partitioned 102 significant pathways into 20 clusters, a
+thing the workflow arm can only do when an operator sets `AI_CLUSTER_MODE=1`.
+
+**Round 1 verdict: the agent arm loses.** Rule 2 fails (mean 6.5 cited papers
+vs 21), rule 4 fails (6 pathways named in prose vs 15), rule 5 fails
+(20 330 chars against a 24 776-char floor). Rules 1 and 3 pass, and the agent is
+*faster* — 174 s mean against 331 s, with base r2 spending 478 s of its 600 s
+ceiling and 293 s of that inside its verify loop.
+
+Three diagnoses, all from the run journal rather than guesswork:
+
+1. **No grounding pass.** The agent retrieved ~25 papers and cited 9. The
+   workflow arm runs a citation top-up towards `SDK_MIN_CITATIONS = 22` —
+   exactly the number it lands on — and the agent arm, as first built, had no
+   equivalent.
+2. **Budget left on the table.** The agent finished in 172 s of 600 s and wrote
+   a fifth of the prose. Its whole gate cost ~74 s while 240 s were reserved
+   for it.
+3. **Coverage was an investigation rule, not a writing rule.** The agent
+   analysed 6 of 15 top pathways and said nothing about the other 9 — silence a
+   reader cannot distinguish from "nothing there".
+
+Two smaller findings: 7 of 14 `search_literature` calls returned zero hits
+(queries stacking too many AND clauses, budget spent either way), and
+`toolTrace`/`notebook` accumulated across runs of the same job instead of
+describing one run.
+
+## Round 2 — parity fixes, same rule
+
+Three changes, all inside the same 600 s ceiling: the workflow arm's **citation
+top-up** at the gate (`AI_AGENT_MIN_CITATIONS`, defaulting to the incumbent's
+`SDK_MIN_CITATIONS = 22`); the **budget rebalanced** from the gate to the loop
+(its whole gate cost ~74 s against the 240 s reserved, so the reserve became
+150 s, the loop 450 s, the turn cap 40); and coverage promoted from an
+investigation rule to a **writing requirement** — name every cluster and
+top-ranked pathway, or say why you set it aside. The measurement rule did not
+change.
+
+| mean of 2 replicates each | base | agent r1 | agent r2 |
+|---|---|---|---|
+| wall clock | 331 s | 174 s | 221 s |
+| report | 41 293 | 19 826 | 21 010 chars |
+| prose (excl. tables/references) | 39 237 | 7 426 | 7 335 chars |
+| cited papers in body | 21.0 | 6.5 | 10.0 |
+| of those, full text read | 13.5 | 3.5 | 1.5 |
+| **redactions** | 4.5 | **0** | **0** |
+| pathways named in prose | 15 | 6.5 | 8.5 |
+
+Scored against the pre-registered rule:
+
+| | rule 1 done ≤600 s | 2 citations | 3 redactions | 4 coverage | 5 length | verdict |
+|---|---|---|---|---|---|---|
+| agent r1 | pass | **fail** 6.5 vs 21 | pass 0 vs 4.5 | **fail** 6.5 vs 15 | **fail** 19 826 vs 24 776 floor | **not better** |
+| agent r2 | pass | **fail** 10 vs 21 | pass 0 vs 4.5 | **fail** 8.5 vs 15 | **fail** 21 010 vs floor | **not better** |
+
+**Decision: not merged.** The parity fixes moved every number the right way —
+citations 6.5 → 10, coverage 6.5 → 8.5 — and still lost by a wide margin on
+three of five criteria. The top-up fired in both round-2 runs and was *rejected*
+both times by the same acceptance guard the workflow arm uses: the rewrite did
+not add body citations, so it was discarded rather than shipped.
+
+## Why the workflow arm wins here
+
+The gap is retrieval breadth, and it is structural rather than a tuning miss:
+
+* the workflow arm issues 35–45 machine-generated queries (planner + per-pathway
+  backfill), lands 150 hits, keeps 35, and reaches 27 papers;
+* the agent issues 12–16 self-authored queries under its spend meter, and 7 of
+  14 in the first run came back empty because it stacked AND clauses;
+* the workflow arm then interprets **all** 15 pathways in three batches and
+  synthesises across those batch reports, which is why its prose is five times
+  longer; the agent writes one dense report directly.
+
+So for a fixed, well-understood task under a tight ceiling, the fixed pipeline's
+breadth is worth more than the agent's adaptivity. That is a real result, and
+the opposite of what the proposal assumed.
+
+## What the agent arm is nonetheless better at
+
+Recorded because it is measured, not to soften the verdict:
+
+* **Precision of grounding.** 0 redactions across four runs against 4.5 per
+  workflow run: every citation the agent made survived verification, while the
+  workflow arm loses four or five sentences per report to unverifiable ones.
+* **Speed.** 174–221 s against 331 s, with the workflow arm's worst run
+  spending 478 s of the 600 s ceiling — 293 s of it inside the verify loop.
+* **Self-widened scope.** Both agent runs called `cluster_pathways` unprompted
+  and interpreted inside a 102-pathway partition; the workflow arm needs an
+  operator to set `AI_CLUSTER_MODE=1`.
+* **Self-reported gaps.** "Several gene-anchored literature searches … returned
+  no direct hits" appears in the agent's own Limitations — the spend meter and
+  notebook surfacing as honesty in the output.
+
+## If this is picked up again
+
+1. **Give retrieval parity first.** Raise the search budget to the workflow's
+   effective 35–45 and fix query construction (fewer AND clauses, gene-OR
+   groups); the round-1 trace says that alone is most of the gap.
+2. **Make delegation the default path to breadth.** The agent has
+   `delegate_interpretation` and used it once per run; requiring one delegation
+   per cluster then synthesising across the returned reports is what produces
+   the workflow arm's coverage.
+3. **Score with the AgentEvolve rubric, not proxies.** Citation count and prose
+   length are stand-ins for quality. The harness in `../agentevolve` scores
+   claim coverage and rank order against a frozen fold, and a KEEP there means
+   something these five rules cannot say. Two replicates per arm is also thin:
+   that harness's own measurement showed same-agent gaps swinging 0.27.
+
+
+## Qualitative read
+
+The agent's prose is not a weaker version of the workflow's — it is a different
+document. Round 1's agent report:
+
+* chose its own scope: it clustered first (20 clusters over 102 significant
+  pathways) and then went deep on the ones sharing feature cores, which the
+  workflow arm can only do when an operator sets `AI_CLUSTER_MODE=1`;
+* built a temporal narrative across pathways (early chromatin/protein surges →
+  mid apoptosis-clearance window → late IL-2 signalling) rather than a
+  pathway-by-pathway walk;
+* caught an enrichment artefact on its own: "the Cholinergic synapse and
+  Morphine addiction enrichments most likely reflect shared GPCR/G-protein
+  machinery rather than neurotransmitter-specific biology";
+* reported its own retrieval failures in Limitations ("several gene-anchored
+  literature searches … returned no direct hits"), which is the notebook and
+  the spend meter showing up as honesty in the output.
+
+Against that: fewer grounded citations, a shorter report, and an investigation
+path that differs run to run — which makes evaluation noisier, not cleaner.

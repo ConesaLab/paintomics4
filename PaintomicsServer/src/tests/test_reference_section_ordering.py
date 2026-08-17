@@ -188,6 +188,22 @@ def test_the_agent_workflow_sorts_after_renumbering():
         "the sort has to run after the renumbering, or it orders the old labels")
 
 
+def test_the_agent_loop_sorts_after_renumbering():
+    """The full-agent arm (agent_loop.py) ships through the same gate; a
+    sequence that lives in two modules can regress in either one."""
+    import inspect
+    from src.classes.AIInterpret import agent_loop
+
+    source = inspect.getsource(agent_loop._run_loop_async)
+    assert "renumber_citations(" in source, (
+        "the agent loop's gate no longer renumbers at all")
+    assert "sort_references_section(" in source, (
+        "the agent loop never calls sort_references_section")
+    assert (source.index("renumber_citations(")
+            < source.index("sort_references_section(")), (
+        "the agent loop's sort has to run after the renumbering")
+
+
 def main():
     for t in (test_renumbering_alone_leaves_the_section_scrambled,
               test_final_section_reads_in_order,
@@ -198,7 +214,8 @@ def main():
               test_report_without_references_is_untouched,
               test_single_entry_is_untouched,
               test_ten_sorts_after_nine_not_before_it,
-              test_the_agent_workflow_sorts_after_renumbering):
+              test_the_agent_workflow_sorts_after_renumbering,
+              test_the_agent_loop_sorts_after_renumbering):
         _check(t.__name__, t)
 
     print("\nPassed: %d / %d" % (len(_PASSED), len(_PASSED) + len(_FAILED)))

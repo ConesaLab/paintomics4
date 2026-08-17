@@ -37,6 +37,20 @@ class AIInterpretDAO(DAO):
             upsert=True
         )
 
+    def append_tool_event(self, job_id, event):
+        """Append one agent tool-call event to the job's toolTrace.
+
+        Capped at the last 200 events so a chatty run cannot grow the
+        document without bound; the full trace lives in the server log.
+        """
+        collection = self.dbManager.getCollection(self.collectionName)
+        collection.update_one(
+            {"jobID": job_id},
+            {"$push": {"toolTrace": {"$each": [event], "$slice": -200}},
+             "$set": {"updatedAt": datetime.utcnow()}},
+            upsert=True
+        )
+
     def append_chat(self, job_id, role, content):
         """Append a message to conversation history."""
         collection = self.dbManager.getCollection(self.collectionName)

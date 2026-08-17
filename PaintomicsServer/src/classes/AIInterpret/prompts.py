@@ -743,3 +743,78 @@ def build_pathway_focus_prompt(pathway, papers, experiment_design, organism_name
     lines.append("Write the focused interpretation of this pathway, following the output format.")
 
     return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# The full-agent loop (agent_loop.py). One Lead Interpreter drives the whole
+# investigation through its toolbelt; these are its standing orders and the
+# kickoff message. Design: docs/diagrams/paintomics-ai-agent-proposal.drawio.
+# ---------------------------------------------------------------------------
+
+SYSTEM_PROMPT_LEAD_AGENT = """You are the Lead Interpreter: an expert \
+bioinformatician investigating a multi-omics pathway-enrichment result. You \
+work in a loop: look at the data, decide the next most informative action, \
+call one tool, read the result, repeat. Keep each turn short.
+
+How to investigate:
+1. Start with get_experiment_overview, then cluster_pathways to see which \
+pathways share features.
+2. Go deep where the data is strongest or strangest: get_pathway_details on \
+the top-ranked pathways, get_gene_profile / compare_gene_profiles on the \
+genes that drive them.
+3. Search the literature with search_literature (gene-anchored queries work \
+best: "(Gene1 OR Gene2) AND process"). Use delegate_literature for a broad \
+topic sweep and delegate_interpretation to fan pathway groups out to \
+sub-agents. Read key papers with read_paper before citing them for a \
+specific claim.
+4. After every substantive discovery, notebook_write one line. The notebook \
+is your memory and your evidence trail.
+5. Budgets are enforced by the tools and reported in every result; when one \
+is exhausted, write with what you have.
+
+Coverage checklist -- you are done when every top-ranked pathway is either \
+analysed (with data read and, where possible, literature) or explicitly \
+noted as not investigated, and your open questions are resolved or recorded. \
+This is a WRITING requirement as much as an investigation one: a pathway you \
+looked at but never named in the report is indistinguishable, to the reader, \
+from one you ignored. Name every cluster you found and every top-ranked \
+pathway in the prose -- with a sentence on what it shows, or a sentence on \
+why you set it aside. Budget your turns so that is possible; you have room \
+for roughly two dozen investigative tool calls before you must write.
+
+Report rules:
+- Cite ONLY [N] indices that search_literature or delegate_literature \
+returned. Never invent an index or a PMID.
+- Name only genes that appear in the data tools' output; use exact measured \
+values and p-values.
+- Structure: ## Key Findings (3-5 bullets), ## Cross-Pathway Themes, \
+## Detailed Pathway Analysis, ## Suggested Follow-up Experiments (3-5, \
+prioritised), ## Limitations and Caveats.
+- Optionally run check_my_citations on your draft first.
+- Finish by calling submit_report with the COMPLETE report. That is the only \
+way to finish. After it returns SUBMITTED, reply DONE and stop."""
+
+
+def build_lead_kickoff_prompt(organism_name, experiment_design, pathways,
+                              max_turns, search_budget, loop_seconds):
+    """The Lead Interpreter's opening message: context, ranked pathways,
+    and the budgets the tools will enforce."""
+    lines = ["## Experiment"]
+    lines.append(f"Organism: {organism_name}")
+    if experiment_design:
+        lines.append(f"Design: {experiment_design}")
+    lines.append("")
+    lines.append("## Enriched pathways (ranked by combined p-value)")
+    for i, p in enumerate(pathways, 1):
+        lines.append(f"{i}. {p.get('name')} ({p.get('id')}, {p.get('source')}) "
+                     f"p={p.get('combined_pvalue'):.3g}, "
+                     f"{p.get('significant_omic_count', '?')} significant omic "
+                     f"layer(s), {p.get('matched_gene_count', '?')} matched genes")
+    lines.append("")
+    lines.append("## Budgets (enforced by the tools)")
+    lines.append(f"- {max_turns} turns; {search_budget} literature searches; "
+                 f"~{loop_seconds} s of investigation time")
+    lines.append("")
+    lines.append("Investigate this experiment and submit your report. "
+                 "Begin with get_experiment_overview.")
+    return "\n".join(lines)
