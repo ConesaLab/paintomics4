@@ -134,9 +134,68 @@ not the tens of seconds assumed (it is not worth optimising), and
   in runs whose citations were then redacted at the gate — a check that always
   passes is worse than none (the same trap as the rubber-stamping verifier).
 
+## Fourth measurement — 17 runs
+
+| tool | calls | runs using it | median ms |
+|---|---|---|---|
+| `search_literature` | 92 | **17/17** | 1 699 |
+| `notebook_write` | 41 | **17/17** | 3 |
+| `get_pathway_details` | 20 | **17/17** | 0 |
+| `get_experiment_overview` | 17 | **17/17** | 73 |
+| `cluster_pathways` | 17 | **17/17** | 412 |
+| `submit_report` | 16 | 16/17 | 0 |
+| `read_paper` | 45 | 9/17 | 2 210 |
+| `delegate_interpretation` | 22 | 9/17 | **29 020** |
+| `check_my_citations` | 8 | 8/17 | 10 |
+| `compare_gene_profiles` | 1 | 1/17 | 9 |
+| `delegate_literature` | **0** | **0/17** | — |
+
+`read_paper` payoff rose with the sample: **38 papers opened, 17 cited (45 %)**.
+Reading is worth its 2.2 s and the prompt now says so.
+
+Thirteen tools are now ten. `get_gene_profile` folded into
+`compare_gene_profiles` (same tool, different arity); `notebook_read` removed
+(the SDK already keeps the notebook in context); `delegate_literature` removed
+(0/17, and `search_literature` covers it since the Lead learned to write broad
+queries). `compare_gene_profiles` survives at 1/17 because it is free and is the
+only gene-level view left — adoption is evidence about a tool, not a verdict on
+a capability.
+
+## The failure this framework kept repeating
+
+Three separate defects this session were the same bug wearing different clothes:
+**instrumentation that cannot report failure.**
+
+1. **The Claim Verifier that could not lose.** Given `tools=` and `output_type=`
+   together, vLLM's grammar made it answer before it could call a tool, so it
+   returned `supports_claim=true` having read nothing. (Recorded in `agent.py`;
+   it is why the verifier keeps tools and parses text.)
+2. **`check_my_citations`, which always passed.** It ran `verify_report_v2` over
+   a *draft*, and that function reads quotes out of a References section a draft
+   does not have — so it answered "0 failed" in all eight runs that consulted it,
+   including runs that then lost 12-17 citations at the gate.
+3. **The silent branch.** The full-text upgrade recorded nothing when it did not
+   fire, so two rounds of inference could not establish why. It now records its
+   candidate counts including the zero case.
+
+And a fourth, in the same family: the merge guard compared **markers** rather
+than **grounded citations**, so a stitch that added thirty unquotable markers
+passed the check and lost all thirty at the net.
+
 ## Rules for adding a tool here
 
 - Say what it costs if it costs more than a few seconds; say it is free if it is.
 - Enforce budgets inside the tool and report the remainder in the result.
 - Return the reason for an empty result, not just the emptiness.
 - If two tools differ only by arity, that is one tool.
+- **A check that cannot fail is not a check.** Before shipping a guard, construct
+  the input that must make it complain, and confirm it does.
+- **A branch that says nothing when it does nothing cannot be debugged.** Record
+  the zero case.
+- **Measure the outcome, not the proxy.** Citations are markers; grounding is
+  markers that survive quote collection and verification. Optimising the first
+  moved the second in the wrong direction for six rounds.
+- **If a tool loop only fetches what a function could fetch, it is latency and a
+  failure mode, not agency.** Deterministic retrieval plus one judgement call
+  beat the Claim Verifier's tool loop on speed (2.5 s vs 45 s timeouts) *and*
+  reliability (29/29 verdicts vs 9-of-14 turn exhaustion) at once.
