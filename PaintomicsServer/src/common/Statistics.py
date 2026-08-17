@@ -1,5 +1,7 @@
 import logging
 from math import log, isfinite
+import numpy as np
+from scipy import special as _special
 from scipy.stats import chi2, fisher_exact, combine_pvalues, hypergeom
 from statsmodels.sandbox.stats.multicomp import multipletests
 
@@ -178,7 +180,14 @@ def calculateCombinedFisher(significanceValuesList):
 
     accumulatedValue = accumulatedValue * -2
 
-    combined = chi2.sf(accumulatedValue, 2*len(pvalues))
+    # chi2.sf(x, df) is sc.chdtrc(df, x) after the distribution wrapper's
+    # argument checks (chi2_gen._sf), which cost ~20 us per call against
+    # ~0.5 us for the function itself; this runs once per pathway per
+    # condition. accumulatedValue is finite and >= 0 here (every p <= 1 and
+    # floored at 1e-300), so the wrapper's support handling never changes the
+    # answer -- pinned bit for bit against chi2.sf in
+    # test_combined_pvalue_kernels_match_scipy.
+    combined = _special.chdtrc(2*len(pvalues), accumulatedValue)
 
     # The same backstop calculateStoufferCombinedPvalue carries, for the same
     # reason: a non-finite result is serialised as invalid JSON and takes the
@@ -239,6 +248,33 @@ def adjustPvalues(pvaluesList):
     return adjusted_pvalues
 
 
+def _stoufferPvalue(pvalues, weights):
+    """
+    scipy.stats.combine_pvalues(pvalues, 'stouffer', weights).pvalue, computed
+    the way scipy computes it -- Zi = norm.isf(p); Z = dot(w, Zi)/||w||;
+    p = norm.sf(Z) -- but calling the special functions those distribution
+    methods reduce to (norm.isf is -ndtri, norm.sf is ndtr(-x)) instead of
+    going through combine_pvalues' axis/nan-policy wrapper and two
+    rv_continuous method calls, which cost ~145 us per call against ~3 us
+    here. This runs a few times per matched pathway. Same numpy operations,
+    same dtypes (weights stay integer when the caller passed integers, as
+    scipy's np.atleast_1d keeps them), same C functions: bit-identical to
+    combine_pvalues over 80,000 random cases including int/float/None weights
+    and the 1e-300 / 0.9999999999 clamps -- pinned in
+    test_combined_pvalue_kernels_match_scipy.
+    """
+    p = np.atleast_1d(pvalues)
+    if weights is None:
+        w = np.ones_like(p)
+    else:
+        w = np.atleast_1d(weights)
+    Zi = -_special.ndtri(p)
+    statistic = np.dot(w, Zi) / np.linalg.norm(w)
+    # A numpy float64, as combine_pvalues returned (a float subclass, so
+    # every consumer -- isfinite, JSON, BSON -- sees the same value).
+    return _special.ndtr(-statistic)
+
+
 def calculateStoufferCombinedPvalue(pvalues, weights):
     # Stouffer method cannot deal with p-values equal to 1, returning Nan
     # Prevent that by removing a small value in those cases
@@ -276,9 +312,7 @@ def calculateStoufferCombinedPvalue(pvalues, weights):
             return 1.0
 
     # P-value in third position ([nFeatures, nRelevantFeatures, pValue])
-    combinedPvalue = combine_pvalues(curatedPvalues, 'stouffer', weights)
-
-    result = combinedPvalue[1]
+    result = _stoufferPvalue(curatedPvalues, weights)
 
     # Backstop for any other degenerate input: a non-finite float would be
     # serialised as invalid JSON and break the client the same way.
