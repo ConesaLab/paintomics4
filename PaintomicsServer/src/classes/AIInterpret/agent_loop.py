@@ -54,6 +54,7 @@ from src.classes.AIInterpret import clusters as clusters_mod
 from src.classes.AIInterpret.agent import (
     AgentContext, _build_agents, bounded, configure_sdk, _model, run_hedged,
     SDK_LONG_CALL_TIMEOUT, SDK_VERIFY_CONCURRENCY, SDK_MIN_CITATIONS,
+    SDK_CALL_TIMEOUT,
 )
 from src.classes.AIInterpret.context_builder import (
     build_pathway_context, build_gene_symbol_whitelist, get_organism_name,
@@ -138,6 +139,30 @@ MERGE_MODE = os.getenv("AI_AGENT_MERGE_MODE", "stitch")
 # put a run at 602 s and it died on the 600 s ceiling with nothing to show. A
 # step that can push a run past its deadline is not optional work, it is a bug.
 GATE_MIN_SECONDS = float(os.getenv("AI_AGENT_GATE_MIN", "130"))
+# Ceiling on the stitched per-pathway detail. Measured: stitching every delegated
+# report verbatim produced a 90 621-char report, 2.2x the workflow arm's, which
+# is not "thorough" but unreadable.
+STITCH_MAX_CHARS = int(os.getenv("AI_AGENT_STITCH_MAX_CHARS", "42000"))
+# The LLM verify->correct loop's share of the clock. It is the single most
+# expensive thing in a run once grounding works -- 291 s to check 19 citations,
+# the same price the workflow arm pays for 20 -- and it is also the most
+# interruptible: whatever it does not reach, verify_report_v2 and
+# redact_unverified_v2 still handle deterministically. So it gets a slice, not
+# a promise.
+VERIFY_MAX_SECONDS = float(os.getenv("AI_AGENT_VERIFY_MAX_SECONDS", "300"))
+# Hand the verifier its evidence instead of making it hunt for it.
+# Measured: 9 of the 14 redactions in the best-grounded run so far were the
+# Claim Verifier reporting "Max turns (6) exceeded" -- it spent its whole tool
+# budget on search_paper_text round-trips and never returned a verdict, and a
+# verifier that raises counts as a failure, so real citations were redacted for a
+# tooling reason. The same warning appears in the workflow arm's logs.
+#
+# Finding the quote in the paper is mechanical: tools.py does it in pure Python.
+# So the passage is extracted in code and pasted into the prompt, and the model
+# is left with the one judgement only it can make -- does this text support this
+# claim. No tools, one call, no turns to exhaust. The deterministic quote check
+# in verify_report_v2 still runs afterwards either way.
+VERIFY_PREFETCH = os.getenv("AI_AGENT_VERIFY_PREFETCH", "0") == "1"
 # Verify->correct rounds at the gate. 2 = one verification pass, one
 # correction, one re-verification -- the 600 s budget does not fit the
 # workflow arm's 3 (its own no-progress rule usually stops at 2 anyway).
@@ -234,6 +259,31 @@ def _trace(ctx, tool, args_summary, result, started):
     # Turn-count progress: the loop has no phases, so the bar walks with work.
     percent = min(70, 15 + int(55 * len(ctx.trace) / max(AGENT_MAX_TURNS, 1)))
     _hb(ctx, "interpreting", percent, "Agent: %s" % tool)
+
+
+def _trace_gate(ctx, tool, args_summary, result, started):
+    """Archive a GATE-side LLM call (verification, quotes) as its own event.
+
+    The toolbelt trace answers "which tools does the Lead use". It says nothing
+    about the per-citation verifier, which is the most expensive LLM consumer in
+    a run -- 291 s of a 597 s run, hedged calls timing out at 45 s and retrying,
+    9 of 14 redactions caused by it exhausting its turns rather than refuting
+    anything. Instrumentation that cannot see the biggest cost is not
+    instrumentation.
+
+    Marked `gate: True` and deliberately NOT counted in ctx.tool_calls, so the
+    toolbelt numbers stay comparable across every round measured so far.
+    """
+    ctx.trace.append({
+        "seq": len(ctx.trace) + 1,
+        "t": round(time.time() - ctx.started_at, 1),
+        "gate": True,
+        "tool": tool,
+        "args": str(args_summary)[:120],
+        "result": str(result)[:160],
+        "ms": int((time.time() - started) * 1000),
+    })
+    _archive_trace(ctx)
 
 
 def _ledger_note(ctx):
@@ -836,6 +886,15 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
         valid = {p["ref_index"] for p in papers_now}
         before = len(count_body_citations(str(report), valid))
         detail = "\n\n".join(ctx.delegated)
+        if len(detail) > STITCH_MAX_CHARS:
+            # Delegations arrive in rank order, so truncating the tail drops the
+            # lowest-ranked pathways' paragraphs -- the ones the report can most
+            # afford to lose -- and says so rather than trailing off mid-sentence.
+            detail = (detail[:STITCH_MAX_CHARS].rsplit("\n\n", 1)[0]
+                      + "\n\n*(Lower-ranked pathways are listed in the tables "
+                        "below; their per-pathway analysis was trimmed to keep "
+                        "this report readable.)*")
+            stats["stitch_truncated"] = True
         if MERGE_MODE == "stitch":
             framing_prompt = (
                 "You are finishing a multi-omics interpretation report.\n\n"
@@ -972,20 +1031,70 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
 
     llm_for_quotes = LLMClient(AI_PROVIDERS[AI_LLM_PROVIDER])
     _hb(ctx, "verifying", 80, "Collecting supporting quotes...")
+    t_q = time.time()
     quotes = _collect_cited_quotes(llm_for_quotes, report, ctx.paper_index, job_id)
+    stats["quotes_s"] = time.time() - t_q
     report, rendered = render_references_section(report, ctx.paper_index, quotes)
     stats["refs_rendered"] = len(rendered)
     stats["quotes_supplied"] = len(quotes)
 
     _hb(ctx, "verifying", 85, "Verifying citations...")
+    # Same instructions as agents["verify"], no tools: with the passage in the
+    # prompt there is nothing to look up, and nothing to run out of turns on.
+    verifier_solo = Agent[LoopContext](
+        name="Claim Verifier (prefetched)",
+        model=_model(),
+        instructions=prompts_mod.SYSTEM_PROMPT_VERIFICATION,
+        model_settings=ModelSettings(temperature=0.1),
+        tools=[],
+    )
     t0 = time.time()
+    verify_deadline = min(t0 + VERIFY_MAX_SECONDS,
+                          ctx.started_at + AGENT_RUN_SECONDS - 45)
     previous_failures = None
     for _iteration in range(VERIFY_ITERATIONS):
+        if time.time() > verify_deadline:
+            stats["verify_cut_short"] = _iteration
+            logger.info("[%s][loop] verification out of clock after %d round(s); "
+                        "the programmatic net takes the rest", job_id, _iteration)
+            break
         citations = parse_references_section(report)
         to_verify = [c for c in citations if c.get("cited_text")]
         if not to_verify:
             break
         vsem = asyncio.Semaphore(SDK_VERIFY_CONCURRENCY)
+
+        async def _verify_one_prefetched(cit):
+            """One short call, with the paper's own words already in the prompt."""
+            async with vsem:
+                executor = tools_mod.build_verification_executor(ctx.paper_index)
+                passage = ""
+                try:
+                    passage = executor("search_paper_text",
+                                       {"ref_index": cit["ref_index"],
+                                        "query": (cit["cited_text"] or "")[:180]})
+                    if not passage or passage.lower().startswith("error"):
+                        passage = executor("fetch_paper_section",
+                                           {"ref_index": cit["ref_index"],
+                                            "section": "abstract"})
+                except Exception as e:
+                    passage = "(the paper's text could not be searched: %s)" % e
+                prompt = (prompts_mod.build_verification_prompt(
+                              cit["claim_sentence"], cit["cited_text"],
+                              cit["ref_index"])
+                          + "\n\n## What paper [%s] actually says, retrieved for "
+                            "you\n%s\n\nJudge from the text above. Do not ask for "
+                            "more; if the quote is not in it, say so."
+                          % (cit["ref_index"], passage[:6000]))
+                try:
+                    r = await bounded(
+                        Runner.run(verifier_solo, prompt, context=ctx, max_turns=2),
+                        SDK_CALL_TIMEOUT, label="verify[%s]" % cit["ref_index"])
+                    return cit, str(r.final_output)
+                except Exception as e:
+                    logger.warning("[%s][loop] prefetched verifier failed for "
+                                   "[%s]: %s", job_id, cit["ref_index"], e)
+                    return cit, ""
 
         async def _verify_one(cit):
             async with vsem:
@@ -1002,7 +1111,48 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
                                    job_id, cit["ref_index"], e)
                     return cit, ""
 
-        verdicts = await asyncio.gather(*[_verify_one(c) for c in to_verify])
+        checker = _verify_one_prefetched if VERIFY_PREFETCH else _verify_one
+
+        async def _timed(cit):
+            started = time.time()
+            cit, text = await checker(cit)
+            verdict = _parse_json_verdict(text) if text else None
+            _trace_gate(ctx, "verify_citation" + ("_prefetched" if VERIFY_PREFETCH
+                                                  else "_toolloop"),
+                        "[%s]" % cit["ref_index"],
+                        "no verdict (raised or empty)" if verdict is None else
+                        "match=%s supports=%s" % (verdict.get("text_match"),
+                                                  verdict.get("supports_claim")),
+                        started)
+            return cit, text
+
+        # Hard-bound the fan-out itself, not just the decision to start another
+        # round. A deadline checked at the top of the loop bounds nothing: one
+        # round over nineteen citations, each hedged at 45 s x2 across eight
+        # workers, ran a run to 602 s and it died on the ceiling with a finished
+        # report it never got to ship.
+        #
+        # Whatever does not finish in time counts as unverified, which is exactly
+        # what verify_report_v2 and redact_unverified_v2 handle deterministically
+        # a few lines below. Stopping early costs a redaction; overrunning costs
+        # the entire interpretation.
+        budget = max(20.0, verify_deadline - time.time())
+        tasks = [asyncio.ensure_future(_timed(c)) for c in to_verify]
+        done, pending = await asyncio.wait(tasks, timeout=budget)
+        for task in pending:
+            task.cancel()
+        if pending:
+            stats["verify_unchecked"] = (stats.get("verify_unchecked", 0)
+                                         + len(pending))
+            logger.info("[%s][loop] %d of %d citations unchecked when the clock "
+                        "ran out; the programmatic net takes them", job_id,
+                        len(pending), len(to_verify))
+        verdicts = []
+        for task in done:
+            try:
+                verdicts.append(task.result())
+            except Exception:
+                continue
         failed = []
         for cit, text in verdicts:
             v = _parse_json_verdict(text) if text else {
