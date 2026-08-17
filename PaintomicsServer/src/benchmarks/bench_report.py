@@ -12,7 +12,7 @@ import json
 import os
 import statistics
 
-from src.benchmarks.bench_compare import compareScenario
+from src.benchmarks.bench_compare import compareScenario, noiseClasses
 
 
 def loadRuns(root, scenario):
@@ -62,10 +62,27 @@ def main():
     parser.add_argument("--rtol", type=float, default=1e-12)
     parser.add_argument("--out", required=True)
     parser.add_argument("--title", default="PaintOmics pipeline benchmark: baseline vs candidate")
+    parser.add_argument("--noise-runs", nargs="+", metavar="RUN",
+                        help="derive the baseline's own noise classes from the pairwise "
+                             "differences between these runs of every scenario (under "
+                             "--noise-from, else --a); the timing-run verdict then reads "
+                             "WITHIN-NOISE when a candidate differs only in those classes")
+    parser.add_argument("--noise-from",
+                        help="tree holding the --noise-runs (e.g. master with 1 and 6 workers)")
     args = parser.parse_args()
 
     scenarios = sorted(name for name in set(os.listdir(args.a)) & set(os.listdir(args.b))
                        if os.path.isdir(os.path.join(args.a, name)) and os.path.isdir(os.path.join(args.b, name)))
+    noise = None
+    if args.noise_runs:
+        noise = set()
+        noiseRoot = args.noise_from or args.a
+        for scenario in sorted(os.listdir(noiseRoot)):
+            runs = [os.path.join(noiseRoot, scenario, run) for run in args.noise_runs]
+            runs = [run for run in runs if os.path.isdir(run)]
+            for index in range(1, len(runs)):
+                noise |= noiseClasses(runs[0], runs[index], args.rtol)
+
     lines = ["# %s" % args.title, ""]
     lines.append("| Scenario | Baseline median (s) | Candidate median (s) | Speed-up | Runs (A/B) | Equivalence (timing runs) | Equivalence (strict, 1 worker) |")
     lines.append("|---|---:|---:|---:|:-:|:-:|:-:|")
@@ -76,7 +93,8 @@ def main():
         totalB, phasesB = medians(runsB)
         try:
             verdict, comparison = compareScenario(os.path.join(args.a, scenario, "run1"),
-                                                  os.path.join(args.b, scenario, "run1"), args.rtol)
+                                                  os.path.join(args.b, scenario, "run1"), args.rtol,
+                                                  noise)
         except Exception as exc:
             verdict, comparison = "ERROR: %s" % exc, None
         strictVerdict = "-"
