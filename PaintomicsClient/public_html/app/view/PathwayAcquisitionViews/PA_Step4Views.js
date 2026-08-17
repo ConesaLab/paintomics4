@@ -4048,6 +4048,18 @@ function PA_Step4DetailsView() {
 		var jobModelDV = this.getParent("PA_Step4JobView") ? this.getParent("PA_Step4JobView").getModel() : null;
 		var replicateModeDV = jobModelDV && jobModelDV.getReplicateMode ? jobModelDV.getReplicateMode() : "replicates";
 
+		// Offer "Neighbouring features" only where it can resolve to something:
+		// the neighbour lists are keyed by KEGG compound id. The panel is one
+		// instance reused for every box, so this is set on each model load, and
+		// stale output from the previous box goes with it.
+		var isMetaboliteSet = String(featureType || "").toLowerCase().indexOf("compound") > -1;
+		var neighbourSection = this.getComponent().queryById("neighbouringFeaturesSection");
+		if (neighbourSection) {
+			neighbourSection.setVisible(isMetaboliteSet);
+		}
+		$("#featureFamilyOverviewContainerRegulate").empty();
+		$("#inputLevel").val("");
+
 		/**
 		* This function fills recursively a table ordering by omicType
 		*/
@@ -4396,6 +4408,134 @@ function PA_Step4DetailsView() {
 		return plot;
 	};
 
+	/**
+	* Draw the neighbours of this feature set's metabolite at the requested
+	* network step -- or say why there are none.
+	*
+	* Every empty case used to be `console.warn(...); return`, so a click that
+	* resolved to nothing looked identical to a click that did nothing. The one
+	* users met first is the level box, which opens blank: the very first press
+	* of Show Features always landed there. See paNeighbourRequest(), which owns
+	* the decision and the wording, and paNeighbourRows(), which converts the
+	* OmicValues in globalExpressionData into the row shape this panel's
+	* heatmap/plot pair reads.
+	*/
+	this.showNeighbouringFeatures = function () {
+		var me = this;
+		var elem = $("#featureFamilyOverviewContainerRegulate");
+		elem.empty();
+
+		var note = function (message) {
+			elem.append('<div class="contentbox paEmptyNote"><p>' +
+				Ext.String.htmlEncode(message) + '</p></div>');
+		};
+
+		var features = this.getModel() ? this.getModel().getFeatures() : null;
+		var mainFeature = (features && features.length && features[0].getFeature)
+			? features[0].getFeature() : null;
+
+		if (!mainFeature || !mainFeature.getID()) {
+			note("This box carries no identified feature, so its neighbours cannot be looked up.");
+			return;
+		}
+
+		var jobModel = this.getParent("PA_Step4JobView") ? this.getParent("PA_Step4JobView").getModel() : null;
+		var request = paNeighbourRequest({
+			featureID: mainFeature.getID(),
+			featureType: mainFeature.getFeatureType(),
+			neighbourMap: jobModel ? jobModel.getCompoundRegulateFeatures() : null,
+			level: $("#inputLevel").val()
+		});
+
+		if (!request.ok) {
+			note(request.message);
+			return;
+		}
+
+		/* Same floor the resize handler applies to every .PA_step5_plotContainer
+		   in this panel: the container is about 370px wide, so the bare
+		   `width - 400` this used to emit was a negative CSS length. */
+		var divWidth = Math.max(300, elem.width() - 400);
+		var distributionSummaries = this.getParent("PA_Step4PathwayView").getDataDistributionSummaries();
+		var visualOptions = this.getParent("PA_Step4PathwayView").getVisualOptions();
+		var replicateMode = (jobModel && jobModel.getReplicateMode) ? jobModel.getReplicateMode() : "replicates";
+		var globalExpressionData = jobModel ? jobModel.getGlobalExpressionData() : {};
+
+		/* One block per omic the neighbours can carry values in: neighbours are
+		   gene ids, and a KEGG compound id can also name a measured metabolite. */
+		var blocks = [
+			{omicName: "Gene expression", divId: "Gene_expression_heatmapContainer_regulate",
+			 source: globalExpressionData.inputGene},
+			{omicName: "Metabolomics", divId: "Compound_expression_heatmapContainer_regulate",
+			 source: globalExpressionData.inputCompound}
+		];
+
+		var painted = 0;
+
+		for (var b = 0; b < blocks.length; b++) {
+			var block = blocks[b];
+			var measured = [];
+
+			for (var i = 0; i < request.neighbours.length; i++) {
+				var omicValue = block.source ? block.source[request.neighbours[i]] : undefined;
+				if (omicValue) {
+					measured.push(omicValue);
+				}
+			}
+
+			var rows = paNeighbourRows(measured, replicateMode);
+			if (rows.length === 0) {
+				continue;
+			}
+			painted++;
+
+			elem.append(
+				"<div class='contentbox'>" +
+				"  <h3>" + block.omicName + "<span><input type='checkbox' id='" + block.divId + "_cb_relevant' value='" + block.omicName + "'/>Only relevant</span></h3>" +
+				"  <div class='PA_step5_heatmapContainer' id='" + block.divId + "' style='height: " + ((rows.length * 30) + 100) + "px'><i class='fa fa-cog fa-spin'></i> Loading..</div>" +
+				"  <div class='PA_step5_plotContainer' id='" + block.divId + "_plotContainer' style='width:" + divWidth + "px;height: " + ((rows.length * 30) + 100) + "px'><i class='fa fa-cog fa-spin'></i> Loading..</div>" +
+				"</div>");
+
+			/* Bound per block so each checkbox redraws its own pair. Highcharts
+			   appends to whatever is in renderTo, so the previous chart is
+			   destroyed rather than left underneath the new one. */
+			(function (block, rows) {
+				var charts = [];
+
+				var draw = function (visibleRows) {
+					for (var c = 0; c < charts.length; c++) {
+						charts[c] && charts[c].destroy();
+					}
+					$("#" + block.divId).height(visibleRows.length * 30 + 100);
+					charts = [
+						me.generateHeatmap(block.divId, block.omicName, visibleRows, distributionSummaries, visualOptions),
+						me.generatePlot(block.divId + "_plotContainer", block.omicName, visibleRows, distributionSummaries, block.divId + "_plotlegendContainer", visualOptions)
+					];
+				};
+
+				draw(rows);
+
+				$("#" + block.divId + "_cb_relevant").change(function () {
+					/* Highcharts does not hide the y labels of hidden series, so
+					   redrawing beats toggling visibility. isRelevant is a
+					   boolean on these rows -- paNeighbourRows() resolved the
+					   OmicValue methods, which is what the old
+					   `x.isRelevant || x.isRelevantAssociation` never did. */
+					draw($(this).is(":checked")
+						? rows.filter(function (row) { return row.isRelevant || row.isRelevantAssociation; })
+						: rows);
+				});
+			})(block, rows);
+		}
+
+		if (painted === 0) {
+			note("This metabolite has " + request.neighbours.length + " neighbour" +
+				(request.neighbours.length === 1 ? "" : "s") + " at " + request.level +
+				" step" + (request.level === 1 ? "" : "s") +
+				", but none of them carry measured values in the omics you uploaded.");
+		}
+	};
+
 	this.initComponent = function () {
 		var me = this;
 
@@ -4433,14 +4573,21 @@ function PA_Step4DetailsView() {
 					{xtype: 'box', html: "<div id='featureFamilyOverviewContainer'></div>"},
 
 
-					{xtype: "box", html: '<h2>Neighbouring features</h2>'},
-					{
-						xtype: "box", html:
-							'  <div>' +
-							'    Please enter a level (1-4): <input type="number" style="width:80px;height:30px"  id="inputLevel">' +
-							'    <a class="button btn-info helpTip" id="showFeatureButton" title="Show Features"><i class="fa fa-search"></i> Show Features</a>' +
-							'    <div class="applyWaitMessage" style="color:#4c4c4c; margin: 10px;"> Searching...<i class="fa fa-cog fa-spin" style=" float: left; margin-right: 10px; "></i></div>' +
-							'  </div>'
+					/* Metabolites only -- neighbours come from the KEGG compound
+					   interaction network, so a gene box has nothing to look up.
+					   Hidden by default and revealed in updateObserver() for the
+					   feature sets it applies to; it used to be offered on every
+					   box, where pressing it could only ever do nothing.
+					   The "Searching..." spinner that sat under the button is
+					   gone: div.applyWaitMessage is display:none in main.css and
+					   nothing ever faded this one in, so it promised feedback
+					   the button did not give. */
+					{xtype: "box", itemId: "neighbouringFeaturesSection", hidden: true, html:
+						'<h2>Neighbouring features</h2>' +
+						'  <div>' +
+						'    Please enter a level (1-4): <input type="number" min="1" max="4" style="width:80px;height:30px"  id="inputLevel">' +
+						'    <a class="button btn-info helpTip" id="showFeatureButton" title="Show the neighbours of this metabolite at the given number of network steps"><i class="fa fa-search"></i> Show Features</a>' +
+						'  </div>'
 					},
 					{xtype: 'box', html: "<div id='featureFamilyOverviewContainerRegulate'></div>"}
 
@@ -4460,123 +4607,7 @@ function PA_Step4DetailsView() {
 						me.shrink();
 					});
 					$("#showFeatureButton").click(function () {
-						let elem = $("#featureFamilyOverviewContainerRegulate");
-						elem.empty();
-						let divWidth = elem.width() - 400;
-
-						let features = me.getModel().features;
-						if (!features || features.length === 0) { console.warn('No features'); return; }
-						if (!features[0].feature || !features[0].feature.ID) { console.warn('No feature ID'); return; }
-						let featureID = features[0].feature.ID
-						let compoundRegulateFeatures = me.getParent().getParent().model.compoundRegulateFeatures;
-						if (!compoundRegulateFeatures || !compoundRegulateFeatures[featureID]) { console.warn('No regulate data for', featureID); return; }
-						compoundRegulateFeatures = compoundRegulateFeatures[featureID]
-						let inputLevel = document.getElementById('inputLevel').value
-						if (!compoundRegulateFeatures[inputLevel]) { console.warn('No data for input level', inputLevel); return; }
-						let regulateFeatures = compoundRegulateFeatures[inputLevel]
-						let divId = ["Gene_expression_heatmapContainer_regulate", "Compound_expression_heatmapContainer_regulate"]
-						let omicName = ["Gene expression", "Metabolomics"]
-						let distributionSummaries = me.getParent("PA_Step4PathwayView").getDataDistributionSummaries()
-						let visualOptions = me.getParent("PA_Step4PathwayView").getVisualOptions()
-						let regulateOmicsValueGene = []
-						let regulateOmicsValueComp = []
-						let omicValues, featureName;
-						let entriesTable = {}, entriesTableMetagenes = {};
-
-						for (let i = 0; i < regulateFeatures.length; i++) {
-							let regulateFeature = regulateFeatures[i]
-							try {
-								regulateOmicsValueGene.push(me.getParent().getParent().model.globalExpressionData['inputGene'][regulateFeature])
-							} catch (e) {
-								console.log('No expression data for: ' + regulateFeature)
-							}
-						}
-
-						for (let i = 0; i < regulateFeatures.length; i++) {
-							let regulateFeature = regulateFeatures[i]
-							try {
-								regulateOmicsValueComp.push(me.getParent().getParent().model.globalExpressionData['inputCompound'][regulateFeature])
-							} catch (e) {
-								console.log('No expression data for: ' + regulateFeature)
-							}
-						}
-
-
-						regulateOmicsValueComp = regulateOmicsValueComp.filter(function (x) {
-								return x !== undefined;
-							}
-						);
-						regulateOmicsValueGene = regulateOmicsValueGene.filter(function (x) {
-								return x !== undefined;
-							}
-						);
-
-						if (regulateOmicsValueGene.length > 0) {
-							htmlCode =
-								"<div class='contentbox'>" +
-								"  <h3>" + omicName[0] + "<span><input type='checkbox' id='" + divId[0] + "_cb_relevant' value='" + omicName[0] + "'/>Only relevant</span></h3>" +
-								"  <div class='PA_step5_heatmapContainer' id='Gene_expression_heatmapContainer_regulate'  style='height: " + ((regulateOmicsValueGene.length * 30) + 100) + "px'><i class='fa fa-cog fa-spin'></i> Loading..</div>" +
-								"  <div class='PA_step5_plotContainer' id='" + divId[0] + "_plotContainer'  style='width:" + divWidth + "px;height: " + ((regulateOmicsValueGene.length * 30) + 100) + "px'><i class='fa fa-cog fa-spin'></i> Loading..</div>" +
-								"</div>";
-							elem.append(htmlCode);
-							heatmapGene = me.generateHeatmap(divId[0], omicName[0], regulateOmicsValueGene, distributionSummaries, visualOptions)
-							plot = me.generatePlot(divId[0] + "_plotContainer", omicName[0], regulateOmicsValueGene, distributionSummaries, divId[0] + "_plotlegendContainer", visualOptions);
-
-							// Link event individually to save heatmap reference
-							$("#"+divId[0]+"_cb_relevant").change(function () {
-								let onlyRelevants = $(this).is(":checked");
-
-								// Highcharts does not automatically hide Y labels when hiding series, so it is easier and faster
-								// to recreate the whole graphic.
-								let omicValues = regulateOmicsValueGene;
-
-								if (onlyRelevants) {
-									omicValues = omicValues.filter(x => x.isRelevant || x.isRelevantAssociation);
-								}
-
-								$('#' + divId[0]).height(omicValues.length * 30 + 100);
-
-								heatmapGene = me.generateHeatmap(divId[0], omicName[0], omicValues, distributionSummaries, visualOptions)
-								plot = me.generatePlot(divId[0] + "_plotContainer", omicName[0], omicValues, distributionSummaries, divId[0] + "_plotlegendContainer", visualOptions);
-
-							});
-
-						}
-
-
-						if (regulateOmicsValueComp.length > 0) {
-							htmlCode =
-								"<div class='contentbox'>" +
-								"  <h3>" + omicName[1] + "<span><input type='checkbox' id='" + divId[1] + "_cb_relevant' value='" + omicName[1] + "'/>Only relevant</span></h3>" +
-								"  <div class='PA_step5_heatmapContainer' id='Compound_expression_heatmapContainer_regulate'  style='height: " + ((regulateOmicsValueComp.length * 30) + 100) + "px'><i class='fa fa-cog fa-spin'></i> Loading..</div>" +
-								"  <div class='PA_step5_plotContainer' id='" + divId[1] + "_plotContainer'  style='width:" + divWidth + "px;height: " + ((regulateOmicsValueComp.length * 30) + 100) + "px'><i class='fa fa-cog fa-spin'></i> Loading..</div>" +
-
-								"</div>";
-							elem.append(htmlCode);
-							heatmapComp =me.generateHeatmap(divId[1], omicName[1], regulateOmicsValueComp, distributionSummaries, visualOptions)
-							plot = me.generatePlot(divId[1] + "_plotContainer", omicName[1], regulateOmicsValueComp, distributionSummaries, divId[1] + "_plotlegendContainer", visualOptions);
-
-							$("#"+divId[1]+"_cb_relevant").change(function () {
-								let onlyRelevants = $(this).is(":checked");
-
-								// Highcharts does not automatically hide Y labels when hiding series, so it is easier and faster
-								// to recreate the whole graphic.
-								let omicValues = regulateOmicsValueComp;
-
-								if (onlyRelevants) {
-									omicValues = omicValues.filter(x => x.isRelevant || x.isRelevantAssociation);
-								}
-
-								$('#' + divId[1]).height(omicValues.length * 30 + 100);
-
-								heatmapComp = me.generateHeatmap(divId[1], omicName[1], omicValues, distributionSummaries, visualOptions)
-								plot = me.generatePlot(divId[1] + "_plotContainer", omicName[1], omicValues, distributionSummaries, divId[1] + "_plotlegendContainer", visualOptions);
-
-							});
-
-						}
-
-
+						me.showNeighbouringFeatures();
 					});
 					initializeTooltips(".helpTip");
 				},
