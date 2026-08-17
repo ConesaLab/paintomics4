@@ -855,7 +855,12 @@ def pathwayAcquisitionRecoverJob(request, response, QUEUE_INSTANCE):
         safe_adjustPvalue = _as_dict_or_list(jobInstance.adjustPvalue)
         safe_totalRelevantFeaturesInCategory = _as_dict_or_list(jobInstance.totalRelevantFeaturesInCategory)
         safe_featureSummary = jobInstance.featureSummary if isinstance(jobInstance.featureSummary, list) else [0, 0]
-        safe_compoundRegulateFeatures = _as_dict(jobInstance.compoundRegulateFeatures)
+        # Derived from kegg_interaction.json + inputCompoundsData, not read back
+        # from the document: the field is cache-only (PAINTOMICS4_LARGE_FIELDS),
+        # so the attribute is None on any process that did not run step 2 and
+        # Step 4's "Neighbouring features" panel had nothing to work with on
+        # every job opened from its link. See getCompoundRegulateFeatures().
+        safe_compoundRegulateFeatures = _as_dict(jobInstance.getCompoundRegulateFeatures())
         safe_globalExpressionData = _as_dict(jobInstance.getGlobalExpressionData())
         safe_hubAnalysisResult = _as_dict(jobInstance.hubAnalysisResult)
 

@@ -2479,32 +2479,21 @@ class PathwayAcquisitionJob(Job):
         from collections import defaultdict
 
         brPath = os.path.dirname(__file__) + "/../../common/br08001.json"
-        interactionJSONPath = os.path.join(KEGG_DATA_DIR, "current", self.organism, "hubData", "kegg_interaction.json")
 
         # Load classification File
         with open(brPath, 'r') as f:
             temp = json.loads(f.read())
 
-        # The whole compound -> neighbour map, served from a per-process cache
-        # of the file (see _loadCompoundNeighbourMap); {} when the species has
-        # no hubData or the file is not a compound map -- both already warned.
-        # The file covers every compound KEGG knows about - 79 MB for mmu - and
-        # the whole map used to be handed to the browser on every step 3. Only
-        # the compounds in this analysis can ever be looked up, so the rest is
-        # dropped before it reaches the response or the in-memory job cache.
-        neighbourMap = _loadCompoundNeighbourMap(interactionJSONPath)
-        inputCompoundIDs = set(self.inputCompoundsData.keys())
-        matchedNeighbourIDs = inputCompoundIDs & set(neighbourMap.keys())
-
-        if neighbourMap and not matchedNeighbourIDs:
-            logging.warning("HUB ANALYSIS - none of the %d input compounds appear in %s; "
-                            "check that both use KEGG compound IDs.",
-                            len(inputCompoundIDs), interactionJSONPath)
-
-        compoundRegulateFeatures = {
-            compoundID: json.loads(neighbourMap[compoundID])
-            for compoundID in matchedNeighbourIDs
-        }
+        # The compound -> neighbour map for this job's compounds, from the
+        # per-process cache of kegg_interaction.json; {} when the species has no
+        # hubData or the file is not a compound map -- both already warned.
+        # One implementation, in getCompoundRegulateFeatures(), because the
+        # recovery path needs the same derivation: the field is cache-only, so
+        # reading the attribute there gave a reopened job nothing. Cleared first
+        # so re-running step 2 with a different compound selection recomputes
+        # rather than returning what the previous run cached.
+        self.compoundRegulateFeatures = None
+        compoundRegulateFeatures = self.getCompoundRegulateFeatures()
 
         temp2 = temp["children"]
 
@@ -2623,6 +2612,64 @@ class PathwayAcquisitionJob(Job):
         self.compoundRegulateFeatures = compoundRegulateFeatures
 
         return self.mappingComp, self.pValueInDict, self.classificationDict, self.exprssionMetabolites, self.adjustPvalue, self.totalRelevantFeaturesInCategory, self.featureSummary, self.compoundRegulateFeatures
+
+    def getCompoundRegulateFeatures(self):
+        """
+        {compoundID: {"1": [geneID, ...], ..., "4": [...]}} for this job's
+        compounds -- the input to Step 4's "Neighbouring features" panel and to
+        the Step 3 hub-analysis Paint column.
+
+        Derived, not stored. The field is in PAINTOMICS4_LARGE_FIELDS (2.67 MB
+        on the six-omic example), so it is never written to MongoDB and the
+        attribute is None on any process that did not run step 2 itself -- i.e.
+        on every job opened from its URL after a restart. Returning the
+        attribute there made both panels dead, silently.
+
+        Nothing needs storing: the map is `kegg_interaction.json` (static per
+        organism, parsed once per process by _loadCompoundNeighbourMap)
+        intersected with `inputCompoundsData`, and inputCompoundsData is
+        persisted. This is the same arrangement getGlobalExpressionData() has
+        always had, which is why that field -- in the same LARGE_FIELDS set --
+        survives a reopen and this one did not.
+
+        A job with no compounds returns {} without touching the file: it is
+        34 MB locally and 79 MB for production mmu, and gene-only jobs are the
+        common case.
+
+        The dict check is the whole point of the guard, not defensiveness:
+        DAO.adaptBSON turns every None leaf into the STRING "None" -- documented
+        there, depended on across the database -- so a reopened job arrives with
+        `compoundRegulateFeatures == "None"`, which is truthy. Testing
+        truthiness alone returned that string, the servlet's _as_dict() turned
+        it into {}, and the recovery path was exactly as dead as before.
+        Measured: `repr(job.compoundRegulateFeatures)` after loadJobInstance is
+        `'None'`, four characters.
+        """
+        if isinstance(self.compoundRegulateFeatures, dict) and self.compoundRegulateFeatures:
+            return self.compoundRegulateFeatures
+
+        inputCompoundIDs = set((self.inputCompoundsData or {}).keys())
+        if not inputCompoundIDs:
+            return {}
+
+        interactionJSONPath = os_path.join(
+            KEGG_DATA_DIR, "current", self.organism, "hubData",
+            "kegg_interaction.json")
+
+        neighbourMap = _loadCompoundNeighbourMap(interactionJSONPath)
+        matchedNeighbourIDs = inputCompoundIDs & set(neighbourMap.keys())
+
+        if neighbourMap and not matchedNeighbourIDs:
+            logging.warning("HUB ANALYSIS - none of the %d input compounds appear in %s; "
+                            "check that both use KEGG compound IDs.",
+                            len(inputCompoundIDs), interactionJSONPath)
+
+        self.compoundRegulateFeatures = {
+            compoundID: _json.loads(neighbourMap[compoundID])
+            for compoundID in matchedNeighbourIDs
+        }
+
+        return self.compoundRegulateFeatures
 
     def getGlobalExpressionData(self):
         globalExpressionDataGene = defaultdict(dict)

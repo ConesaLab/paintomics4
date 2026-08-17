@@ -7225,6 +7225,164 @@ var paSharedOmicHeader = function (jobModel, omicNames, columnCount) {
  * aggregation, one whose aggregation is stale, and one rendered by a caller
  * that never learned about modes.
  */
+/**
+ * Which neighbour list a "Neighbouring features" request resolves to, or the
+ * reason there is none -- in words the panel can print.
+ *
+ * The Step-4 details panel asked for the list inline and guarded each way it
+ * could come back empty with `console.warn(...); return`. Four of them, and the
+ * first one every user meets is the level box: it opens blank, so the very
+ * first click lands on `neighbourMap[featureID][""]`, warns to a console nobody
+ * has open, and draws nothing. From the outside that is a button that does not
+ * work, which is exactly how it was reported.
+ *
+ * Deciding here, and returning the reason rather than nothing, is what lets the
+ * panel say which of the four it hit. They are genuinely different situations:
+ * a level that was never typed is the user's next action, a species installed
+ * without hubData is not something they can fix, and a metabolite that KEGG's
+ * interaction network does not cover is a fact about the metabolite.
+ *
+ * `level` is checked against /^[1-4]$/ on the trimmed string rather than parsed:
+ * `parseInt("1.9")` and `parseInt("1e9")` are both 1, and the input is a
+ * number field the user can type anything into.
+ *
+ * @param {Object} request {featureID, featureType, neighbourMap, level}
+ * @return {Object} {ok:true, level, neighbours} | {ok:false, reason, message}
+ */
+var paNeighbourRequest = function (request) {
+	request = request || {};
+
+	var featureID = request.featureID;
+	var featureType = (request.featureType === undefined || request.featureType === null)
+		? "" : String(request.featureType).toLowerCase();
+	var neighbourMap = request.neighbourMap;
+	var typed = (request.level === undefined || request.level === null)
+		? "" : String(request.level).trim();
+
+	/* Feature type first: no level will ever help a gene box, so saying
+	   "enter a level" there would be a wrong instruction, not a partial one. */
+	if (featureType !== "" && featureType.indexOf("compound") === -1) {
+		return {
+			ok: false, reason: "not-a-metabolite",
+			message: "Neighbouring features are defined for metabolites only — " +
+				"they come from the KEGG compound interaction network. This box holds " +
+				"features of another type."
+		};
+	}
+
+	if (typed === "") {
+		return {
+			ok: false, reason: "no-level",
+			message: "Enter how many network steps to look out from this metabolite " +
+				"(1 to 4), then press Show Features."
+		};
+	}
+
+	if (!/^[1-4]$/.test(typed)) {
+		return {
+			ok: false, reason: "bad-level",
+			message: "Neighbours are held for 1 to 4 network steps. “" + typed +
+				"” is not one of them."
+		};
+	}
+
+	var level = parseInt(typed, 10);
+
+	if (!neighbourMap || Object.keys(neighbourMap).length === 0) {
+		return {
+			ok: false, reason: "no-map", level: level,
+			message: "No metabolite interaction network is available for this " +
+				"analysis. It comes from the species' hubData, which not every " +
+				"installed species ships."
+		};
+	}
+
+	/* JSON object keys are strings; the level is read back as a number above. */
+	var byStep = neighbourMap[featureID];
+	if (!byStep) {
+		return {
+			ok: false, reason: "not-in-network", level: level,
+			message: "This metabolite is not in the KEGG compound interaction " +
+				"network, so it has no neighbours to show."
+		};
+	}
+
+	var neighbours = byStep[level] !== undefined ? byStep[level] : byStep[String(level)];
+	if (!neighbours || !neighbours.length) {
+		return {
+			ok: false, reason: "no-neighbours-at-level", level: level,
+			message: "This metabolite has no neighbours at " + level + " step" +
+				(level === 1 ? "" : "s") + "."
+		};
+	}
+
+	return {ok: true, level: level, neighbours: neighbours};
+};
+
+/**
+ * OmicValues rendered as the plain rows the Step-4 details heatmap/plot pair
+ * reads -- the same shape `addTableEntrie()` builds.
+ *
+ * `globalExpressionData` arrives as JSON and `setGlobalExpressionData` turns
+ * every entry into an OmicValue, on which `isRelevant` and
+ * `isRelevantAssociation` are METHODS. The neighbours panel handed those
+ * instances straight to a renderer written for `addTableEntrie` rows, where the
+ * same two names are booleans. Nothing threw -- the names, ids and values are
+ * plain properties either way, so the charts drew -- but every test of them
+ * silently inverted:
+ *
+ *   `omicsValue.isRelevant === true`            a function is not true, so no
+ *                                               row ever got its `*` marker
+ *   `x.isRelevant || x.isRelevantAssociation`   a function is truthy, so the
+ *                                               "Only relevant" checkbox kept
+ *                                               all 69 rows and looked dead
+ *
+ * and `significance` was absent entirely, so the per-condition stars the rest
+ * of the panel draws were missing here. Converting at the boundary fixes all
+ * three at once and keeps one row shape in the renderer.
+ *
+ * @param {Array}  omicValues    OmicValue instances (or already-plain rows)
+ * @param {String} replicateMode "replicates" | "samples"
+ */
+var paNeighbourRows = function (omicValues, replicateMode) {
+	var rows = [];
+
+	for (var i = 0; i < (omicValues ? omicValues.length : 0); i++) {
+		var omicValue = omicValues[i];
+		if (!omicValue) {
+			continue;
+		}
+
+		var values = omicValue.getValues ? omicValue.getValues(replicateMode) : omicValue.values;
+
+		/* One boolean per drawn cell, same contract as addTableEntrie(). */
+		var significance = [];
+		for (var c = 0; c < (values ? values.length : 0); c++) {
+			significance.push(omicValue.isRelevant
+				? omicValue.isRelevant(c, replicateMode) === true
+				: false);
+		}
+
+		rows.push({
+			keggName: omicValue.keggName !== undefined ? omicValue.keggName : omicValue.inputName,
+			inputName: omicValue.inputName,
+			originalName: omicValue.originalName,
+			isRelevant: omicValue.isRelevant
+				? omicValue.isRelevant(undefined, replicateMode) === true
+				: omicValue.relevant === true,
+			isRelevantAssociation: omicValue.isRelevantAssociation
+				? omicValue.isRelevantAssociation() === true
+				: omicValue.relevantAssociation === true,
+			significance: significance,
+			/* No `sampleValues` on purpose: the mode is already applied above,
+			   and paValuesForHeader() would otherwise apply it a second time. */
+			values: values
+		});
+	}
+
+	return rows;
+};
+
 var paValuesForHeader = function (omicValue, omicHeader) {
 	/* Position 0 of a header row is the feature-id column. */
 	var labelled = (omicHeader && omicHeader.length > 1) ? omicHeader.length - 1 : 0;
