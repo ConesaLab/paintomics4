@@ -889,6 +889,12 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
             and ctx.paper_index[r].get("fetch_tier") == "abstract_only"]
     fulltext_budget = ((ctx.started_at + AGENT_RUN_SECONDS) - time.time()
                        - GATE_MIN_SECONDS - 60)
+    # Always recorded, including the zero case. The first run with this step
+    # showed no upgrade stat at all and left me inferring why from stored
+    # documents -- a branch that says nothing when it does nothing is a branch
+    # you cannot debug.
+    stats["fulltext_candidates"] = "%d cited, %d thin, %ds budget" % (
+        len(cited_anywhere), len(thin), max(0, int(fulltext_budget)))
     if thin and fulltext_budget > 20:
         t_f = time.time()
         try:
