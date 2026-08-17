@@ -199,6 +199,82 @@ class ClientConfigurationTest(unittest.TestCase):
         self.assertEqual(raw, "raw-stream")
 
 
+class RateLimitRetryTest(unittest.TestCase):
+    """429 gets a patient policy of its own.
+
+    With the client's own retries switched off (see above), the shim is the
+    only thing standing between a 60 rpm key and a verification phase that
+    fans out 28 citations at once. A 429 answers instantly and costs nothing
+    to retry -- unlike a 408 that took eight minutes to arrive -- so it gets
+    more attempts and honours Retry-After, instead of the four quick tries
+    that made the first live run redact citations the gateway had merely
+    throttled.
+    """
+
+    def setUp(self):
+        import src.classes.AIInterpret.agent as agent
+        self.agent = agent
+        self._saved = (agent._sdk_configured, agent._MODEL_OBJ)
+        agent._sdk_configured = False
+        agent._MODEL_OBJ = None
+        agent.configure_sdk()
+        self.client = agent._MODEL_OBJ._client
+        self.sleeps = []
+        self._real_sleep = asyncio.sleep
+
+        async def fake_sleep(d):
+            self.sleeps.append(d)
+        agent.asyncio.sleep = fake_sleep
+
+    def tearDown(self):
+        self.agent.asyncio.sleep = self._real_sleep
+        self.agent._sdk_configured, self.agent._MODEL_OBJ = self._saved
+
+    def _rate_limited(self, times, retry_after=None):
+        import openai, httpx
+        state = {"n": 0}
+
+        async def fake_orig(*args, **kwargs):
+            if state["n"] < times:
+                state["n"] += 1
+                headers = {"retry-after": str(retry_after)} if retry_after else {}
+                resp = httpx.Response(429, headers=headers,
+                                      request=httpx.Request("POST", "http://x"))
+                raise openai.RateLimitError("slow down", response=resp, body=None)
+            return _FakeStream([_chunk(delta={"content": "ok"}, finish_reason="stop")])
+        self.client.chat.completions._pa_orig_create = fake_orig
+        return state
+
+    def test_six_throttles_in_a_row_still_succeed(self):
+        state = self._rate_limited(6)
+        done = asyncio.run(self.client.chat.completions.create(model="m", messages=[]))
+        self.assertEqual(done.choices[0].message.content, "ok")
+        self.assertEqual(state["n"], 6)
+        self.assertEqual(len(self.sleeps), 6)
+        # Backoff grows and is capped, never a fixed 2 s.
+        self.assertGreater(self.sleeps[-1], self.sleeps[0])
+        self.assertLessEqual(max(self.sleeps), 30.0)
+
+    def test_retry_after_header_is_honoured(self):
+        self._rate_limited(1, retry_after=7)
+        asyncio.run(self.client.chat.completions.create(model="m", messages=[]))
+        self.assertEqual(self.sleeps, [7.0])
+
+    def test_a_408_keeps_the_short_policy(self):
+        # Each 408 already cost minutes on the wire; four attempts is plenty.
+        import openai, httpx
+        state = {"n": 0}
+
+        async def fake_orig(*args, **kwargs):
+            state["n"] += 1
+            resp = httpx.Response(408, request=httpx.Request("POST", "http://x"))
+            raise openai.APIStatusError("timeout", response=resp, body=None)
+        self.client.chat.completions._pa_orig_create = fake_orig
+        with self.assertRaises(openai.APIStatusError):
+            asyncio.run(self.client.chat.completions.create(model="m", messages=[]))
+        self.assertEqual(state["n"], 4)
+
+
 class BoundedAwaitTest(unittest.TestCase):
 
     def test_bounded_cancels_at_the_deadline(self):

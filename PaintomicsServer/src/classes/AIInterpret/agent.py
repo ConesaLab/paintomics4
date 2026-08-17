@@ -395,6 +395,23 @@ def configure_sdk():
                 and getattr(e, "status_code", None) in _RETRY_STATUSES)
 
     _ATTEMPTS = 4  # one call plus three retries
+    # 429 has a policy of its own. A throttled request answers instantly and
+    # costs nothing to retry, where a 408 already cost minutes on the wire; and
+    # with the client's own retries off (max_retries=0) this shim is all that
+    # stands between a 60 rpm key and a verification phase that fans out 28
+    # citations at once. Four quick tries there redacted citations the gateway
+    # had merely throttled (live run 11n0VMC305). Retry-After is honoured when
+    # the gateway sends it; otherwise the wait grows to a 30 s cap.
+    _RATE_ATTEMPTS = 8
+
+    def _retry_after(e):
+        response = getattr(e, "response", None)
+        headers = getattr(response, "headers", None)
+        value = headers.get("retry-after") if headers else None
+        try:
+            return float(value) if value else None
+        except (TypeError, ValueError):
+            return None
 
     async def _issue(*args, **kwargs):
         # A caller that streams for itself (Runner.run_streamed) gets the raw
@@ -410,33 +427,39 @@ def configure_sdk():
         return await _stream_to_completion(stream)
 
     async def _paced_create(*args, **kwargs):
-        last = None
-        for attempt in range(_ATTEMPTS):
+        attempt = 0
+        while True:
             await pacer.wait()
             try:
                 return await _issue(*args, **kwargs)
             except (_oai.APIError, httpx.HTTPError, _EmptyStream) as e:
                 if not _transient(e):
                     raise
-                last = e
+                attempt += 1
+                throttled = isinstance(e, _oai.RateLimitError)
+                limit = _RATE_ATTEMPTS if throttled else _ATTEMPTS
                 status = getattr(e, "status_code", None)
-                if attempt + 1 < _ATTEMPTS:
-                    logger.warning("SDK transport retry %d/%d after %s%s",
-                                   attempt + 1, _ATTEMPTS - 1, type(e).__name__,
-                                   " %s" % status if status else "")
-                    await asyncio.sleep(min(2 ** attempt * 2, 15))
-                else:
+                if attempt >= limit:
                     logger.warning("SDK transport giving up after %d attempts (%s%s)",
-                                   _ATTEMPTS, type(e).__name__,
+                                   attempt, type(e).__name__,
                                    " %s" % status if status else "")
-        raise last
+                    raise
+                if throttled:
+                    delay = _retry_after(e) or min(3.0 * 2 ** (attempt - 1), 30.0)
+                else:
+                    delay = min(2 ** (attempt - 1) * 2, 15)
+                logger.warning("SDK transport retry %d/%d after %s%s (waiting %.0fs)",
+                               attempt, limit - 1, type(e).__name__,
+                               " %s" % status if status else "", delay)
+                await asyncio.sleep(delay)
 
     # The original stays reachable as _pa_orig_create: tests substitute it,
     # and a provider that cannot stream is pointed back at it by AI_SDK_STREAM=0.
     completions.create = _paced_create
     logger.info("Agents SDK transport armed: pacing %s rpm, streaming %s, "
-                "retry x3 on 5xx/timeouts, read timeout %ss",
-                rpm or "off", "on" if SDK_STREAM else "off", SDK_HTTP_READ_TIMEOUT)
+                "retry x%d on 5xx/timeouts and x%d on 429, read timeout %ss",
+                rpm or "off", "on" if SDK_STREAM else "off",
+                _ATTEMPTS - 1, _RATE_ATTEMPTS - 1, SDK_HTTP_READ_TIMEOUT)
     # chat_completions, not the Responses API: the CSIC gateway is vLLM, which
     # speaks /chat/completions only.
     set_default_openai_api("chat_completions")
