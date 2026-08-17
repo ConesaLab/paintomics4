@@ -28,6 +28,7 @@ import json
 import logging
 import multiprocessing
 import os
+import re
 import sys
 import time
 import uuid
@@ -419,9 +420,19 @@ def runMore(scenarioId, outDir, timer):
                job, None, response, {})
 
     content = response.getContent() or {}
+    # jobIDs are per-run and output filenames embed a minute-resolution
+    # timestamp; both are expected to differ between runs (A/A verified: the
+    # file CONTENTS are identical). Normalize so comparisons see the science.
+    normalized = {}
+    for key, value in content.items():
+        if key == "jobID":
+            value = "<jobID>"
+        elif isinstance(value, str):
+            value = re.sub(r"\d{12}", "<TS>", value)
+        normalized[key] = value
     artifacts = {"responseKeys": sorted(content.keys()),
                  "success": content.get("success"),
-                 "response": content,
+                 "response": normalized,
                  "outputFiles": _fileContents(job.getOutputDir(), ["*.tab", "*.csv"])}
     job.cleanDirectories()
     return {"more": artifacts}
