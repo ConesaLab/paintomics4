@@ -853,7 +853,12 @@ def getCompoundNameTable(db=None, revalidate=True):
         size = db.kegg_compounds.estimated_document_count()
         if _compoundNameTable is None or _compoundNameTableSize != size:
             started = time.monotonic()
-            _compoundNameTable = _CompoundNameTable(list(db.kegg_compounds.find({})))
+            # Without _id: nothing reads it (mapCompoundsIdentifiers uses id and
+            # name), and an ObjectId leaf keeps all 93k dicts on the garbage
+            # collector's radar for the life of the process -- ~0.2 s per full
+            # collection, measured -- whereas dicts of plain strings are
+            # untracked after the first pass.
+            _compoundNameTable = _CompoundNameTable(list(db.kegg_compounds.find({}, {"_id": 0})))
             _compoundNameTableSize = size
             logging.info("LOADED %d KEGG COMPOUND NAMES INTO MEMORY IN %.2fs",
                          size, time.monotonic() - started)
