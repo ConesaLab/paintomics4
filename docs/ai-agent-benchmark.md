@@ -213,6 +213,46 @@ stands at not better, and the citation gap is a property of writing one report
 from a shared reference list rather than three batch reports each grounded in its
 own attributed slice.**
 
+## Rounds 7-15 — a loop, and what it moved
+
+Run every ten minutes against the same two jobs and the same rule. The changes
+that survived their measurement, in the order the evidence arrived:
+
+| change | what it was measured to do |
+|---|---|
+| **stitch** instead of re-authoring the delegated reports | merge citations 9 -> 15, 10 -> 19; prose 8 870 -> 38 480 |
+| **prefetched, tool-less verifier** | redactions 12 -> 2, verify loop 291 s -> 117 s, run 485 s -> 338 s |
+| **grounded-citation merge guard** | refuses a stitch that adds markers without quotes (one rejection: 7 -> 3 citations, correctly declined) |
+| **PMID-aware full-text upgrade** | cited papers with full text 4 -> 9 (64 %, matching the workflow arm) |
+| **stitch cap 42 k -> 56 k** | pathways named 12 -> 15 |
+| **clock-bounded post-loop work** | two runs had died at 602 s of a 600 s ceiling |
+| **toolbelt 13 -> 10** | schema cost removed for tools with no adoption |
+
+And the changes that were measured WORSE and reverted, which cost less to record
+than to rediscover:
+
+| change | why it was reverted |
+|---|---|
+| search hits 5 -> 10 (tried twice) | round 6: citations 11 -> 7. round 12: 14 -> 11.5, redactions 5 -> 8.5. A bigger pool spreads each delegation's ten attributed papers thinner |
+| delegated sub-agents get their own [N] prompt | merge citations 5 -> 18 became 7 -> 3; a caution about quotability produced caution, not accuracy |
+| `read_paper` urged in the prompt on a 45 % payoff | the figure was 8 runs old; at 28 runs it is 20 %, and read-backed citations verify *no better* (78 % vs 84 %) |
+
+### The result is a frontier, not a hill
+
+| mean of 2 | wall | prose | paths | cites | redactions |
+|---|---|---|---|---|---|
+| base (workflow arm) | 331 s | 39 237 | 15.0 | **21.0** | 4.5 |
+| r10 | 414 s | 61 580 | 16.0 | 17.0 | 16.0 |
+| r11 | 421 s | 60 826 | **16.5** | 14.0 | 5.0 |
+| r15 | **270 s** | 10 252 | 12.5 | 11.5 | **0.0** |
+
+r15 ships nothing unsupported and covers least; r10 covers most and strips most;
+r11 is the balance and passes 4 of 5 rules. The workflow arm sits outside all of
+them: more grounded citations *and* more of them stripped. "Citation grounded" is
+therefore two numbers, not one -- markers that arrive, and markers that survive --
+and every round that optimised the first moved the second the wrong way until the
+guard started counting the second directly.
+
 ## A production defect this uncovered (affects the shipped workflow arm too)
 
 Round 3's high redaction count exposed a real fault in `redact_unverified_v2`,
