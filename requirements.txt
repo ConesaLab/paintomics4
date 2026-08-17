@@ -119,6 +119,11 @@ chardet==5.2.0
 # --- AI interpretation pipeline (src/classes/AIInterpret/) ---
 openai==2.25.0
 openai-agents==0.8.4
+# Imported directly by AIInterpret/agent.py (httpx.Timeout for the SDK client,
+# httpx.HTTPError while iterating a completion stream). openai pulls it in
+# anyway; pinned here so the direct import is declared, at the version openai
+# 2.25.0 resolves to.
+httpx==0.28.1
 # No longer strictly required, and kept deliberately. openai-agents' models use
 # PEP 604 annotations ("float | None"), which pydantic cannot evaluate before
 # 3.10 without this backport -- on 3.9, `import agents` raised TypeError at

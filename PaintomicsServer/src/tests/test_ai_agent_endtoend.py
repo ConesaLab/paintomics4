@@ -119,6 +119,7 @@ SYNTHESIS = ("## Summary\n\nCoordinated regulation is visible across the "
 
 class _Handler(BaseHTTPRequestHandler):
     served = []
+    streamed = 0
 
     def log_message(self, *args):
         pass
@@ -134,6 +135,38 @@ class _Handler(BaseHTTPRequestHandler):
         schema = ((payload.get("response_format") or {})
                   .get("json_schema") or {}).get("schema")
         content = json.dumps(_instanceFor(schema)) if schema else SYNTHESIS
+
+        if payload.get("stream"):
+            # The SDK transport streams every call and folds the chunks back
+            # (agent._stream_to_completion), so the stand-in must speak SSE
+            # the way vLLM does: role first, content in pieces, a closing
+            # finish_reason, usage last, then [DONE].
+            _Handler.streamed += 1
+            half = max(1, len(content) // 2)
+            chunks = [
+                {"delta": {"role": "assistant", "content": ""}},
+                {"delta": {"content": content[:half]}},
+                {"delta": {"content": content[half:]}},
+                {"delta": {}, "finish_reason": "stop"},
+            ]
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.send_header("Cache-Control", "no-cache")
+            self.end_headers()
+            for i, c in enumerate(chunks):
+                event = {"id": "chatcmpl-stub", "object": "chat.completion.chunk",
+                         "created": 1, "model": "stub-model",
+                         "choices": [dict({"index": 0, "finish_reason": None}, **c)]}
+                self.wfile.write(("data: " + json.dumps(event) + "\n\n").encode())
+            if (payload.get("stream_options") or {}).get("include_usage"):
+                usage = {"id": "chatcmpl-stub", "object": "chat.completion.chunk",
+                         "created": 1, "model": "stub-model", "choices": [],
+                         "usage": {"prompt_tokens": 1, "completion_tokens": 1,
+                                   "total_tokens": 2}}
+                self.wfile.write(("data: " + json.dumps(usage) + "\n\n").encode())
+            self.wfile.write(b"data: [DONE]\n\n")
+            self.wfile.flush()
+            return
 
         body = json.dumps({
             "choices": [{"index": 0, "finish_reason": "stop",
@@ -182,6 +215,7 @@ class AiPipelineEndToEndTest(unittest.TestCase):
 
         cls.server, baseUrl = _startGateway()
         _Handler.served = []
+        _Handler.streamed = 0
 
         from src.conf import serverconf
         cls._saved = dict(serverconf.AI_PROVIDERS[serverconf.AI_LLM_PROVIDER])
@@ -277,6 +311,13 @@ class AiPipelineEndToEndTest(unittest.TestCase):
     def test_the_pipeline_called_the_gateway(self):
         self.assertTrue(_Handler.served,
                         "the pipeline made no LLM request at all")
+
+    def test_the_sdk_calls_were_streamed(self):
+        # The transport issues every completion as a stream (see
+        # test_ai_sdk_transport for why); a run that reached the gateway
+        # without one streamed request would mean the shim is not on the path.
+        self.assertGreater(_Handler.streamed, 0,
+                           "no SDK call arrived at the gateway as a stream")
 
     def test_the_run_is_recorded_as_done(self):
         self.assertEqual((self.stored or {}).get("status"), "done")
