@@ -101,6 +101,59 @@ three of five criteria. The top-up fired in both round-2 runs and was *rejected*
 both times by the same acceptance guard the workflow arm uses: the rewrite did
 not add body citations, so it was discarded rather than shipped.
 
+## Round 3 — retrieval parity and delegation for breadth
+
+The three diagnoses above, acted on: search budget 18 → **40** (the workflow's
+effective 35–45); the `search_literature` description now teaches the query
+shape that works (`(GeneA OR GeneB) AND one term` — round 1 lost half its
+searches to stacked AND clauses); the system prompt makes **delegation the route
+to breadth** ("call `delegate_interpretation` a few times, covering all the
+top-ranked pathways… skipping it is why a report ends up covering six"); and the
+Detailed Pathway Analysis section is declared non-optional.
+
+The instructions were followed and the retrieval problem was solved — replicate 1
+issued 14 searches with **zero empty results** (against 7 of 14 empty in round 1)
+and delegated twice, early. It did not change the outcome:
+
+| mean of 2 replicates | base | round 1 | round 2 | round 3 |
+|---|---|---|---|---|
+| wall clock | 331 s | 174 s | 221 s | 236 s |
+| prose | 39 237 | 7 426 | 7 335 | 8 870 chars |
+| pathways named | 15 | 6.5 | 8.5 | 9.0 |
+| cited papers | 21.0 | 6.5 | 10.0 | 7.5 |
+| redactions | 4.5 | 0 | 0 | **7.0** |
+
+More literature reached the report and more of it failed verification, so round 3
+loses a fourth criterion (redactions) while gaining nothing on the other three.
+**Final verdict: not better, in three rounds — rules 2, 3, 4 and 5 all fail.**
+
+Across six agent runs and three configurations the prose stays at 7–9 k
+characters whatever the budget, instruction or retrieval breadth: the agent
+synthesises delegated material into a compact summary instead of carrying its
+detail through. That is the shape of this arm, not a tuning miss, and it is
+where any future attempt has to start.
+
+## A production defect this uncovered (affects the shipped workflow arm too)
+
+Round 3's high redaction count exposed a real fault in `redact_unverified_v2`,
+which **both** arms use:
+
+```python
+report = ("## Key Findings\nIkaros represses Ccr2 [3].\n\n"
+          "## Cross-Pathway Themes\nA shared GPCR module underlies four enrichments.\n\n"
+          "## Limitations\nSingle time course.\n")
+redact_unverified_v2(report, [{"ref_index": 3, ...}])
+# -> "## Cross-Pathway Themes\nA shared GPCR module underlies four enrichments. ## Limitations\nSingle time course."
+```
+
+The body is split on sentence boundaries and rejoined with a single space, so
+(1) the heading *preceding* a redacted sentence is inside the same chunk and is
+deleted with it, and (2) the *following* heading lands mid-line and stops
+rendering as a heading. The two workflow runs measured here redacted 4 and 5
+citations each, so shipped reports have been losing structure this way already —
+it only became obvious at 14. Fixing it changes the incumbent's output and so
+belongs in its own PR with its own before/after.
+
 ## Why the workflow arm wins here
 
 The gap is retrieval breadth, and it is structural rather than a tuning miss:

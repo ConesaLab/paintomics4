@@ -96,7 +96,11 @@ AGENT_MAX_TURNS = int(os.getenv("AI_AGENT_MAX_TURNS", "40"))
 # The literature spend meter: how many search_literature calls one run may
 # make. Enforced in the tool -- the agent is TOLD the remaining budget in
 # every result instead of being trusted to count.
-SEARCH_BUDGET = int(os.getenv("AI_AGENT_SEARCH_BUDGET", "18"))
+# Parity with the workflow arm, which issues 35-45 queries (planner + per-pathway
+# backfill) and reaches 27 papers. At 18 the agent retrieved a third of that and
+# lost on citations for want of literature rather than judgement -- measured
+# over four runs, see docs/ai-agent-benchmark.md.
+SEARCH_BUDGET = int(os.getenv("AI_AGENT_SEARCH_BUDGET", "40"))
 # Tool-output ledger: total characters of tool results the loop may consume,
 # a proxy token backstop on the input side (the model's context is the real
 # resource; characters are what this layer can measure without a tokenizer).
@@ -399,7 +403,7 @@ def _register_papers(c, papers, tag):
 @function_tool
 async def search_literature(ctx: RunContextWrapper[LoopContext], query: str,
                             topic_tag: str) -> str:
-    """Search PubMed. Returns papers as [N] entries you may cite. topic_tag names the pathway/theme this search supports. Spend-metered."""
+    """Search PubMed. Returns papers as [N] entries you may cite. Keep queries BROAD: two or three gene symbols joined by OR, AND at most one biological term, e.g. "(Ikzf1 OR Ccnd2) AND B cell differentiation". Extra AND clauses return nothing and still cost budget. topic_tag names the pathway/theme this search supports. Spend-metered."""
     c = ctx.context
     t0 = time.time()
     guard = _time_guard(c)

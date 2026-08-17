@@ -762,14 +762,20 @@ pathways share features.
 2. Go deep where the data is strongest or strangest: get_pathway_details on \
 the top-ranked pathways, get_gene_profile / compare_gene_profiles on the \
 genes that drive them.
-3. Search the literature with search_literature (gene-anchored queries work \
-best: "(Gene1 OR Gene2) AND process"). Use delegate_literature for a broad \
-topic sweep and delegate_interpretation to fan pathway groups out to \
-sub-agents. Read key papers with read_paper before citing them for a \
-specific claim.
-4. After every substantive discovery, notebook_write one line. The notebook \
+3. Search the literature with search_literature. BROAD queries only: two or \
+three gene symbols joined by OR plus at most one biological term, e.g. \
+"(Ikzf1 OR Ccnd2) AND B cell differentiation". A query with three AND clauses \
+returns nothing and still spends budget. Use delegate_literature for a topic \
+sweep, and read_paper on the papers you mean to cite for a specific claim.
+4. Get breadth by DELEGATING, not by writing everything yourself: call \
+delegate_interpretation a few times, covering all the top-ranked pathways and \
+clusters between them. Each call returns written interpretations carrying your \
+reference numbers; your report is the synthesis across those returns plus what \
+you found first-hand. This is how fifteen pathways get covered in the time you \
+have, and skipping it is why a report ends up covering six.
+5. After every substantive discovery, notebook_write one line. The notebook \
 is your memory and your evidence trail.
-5. Budgets are enforced by the tools and reported in every result; when one \
+6. Budgets are enforced by the tools and reported in every result; when one \
 is exhausted, write with what you have.
 
 Coverage checklist -- you are done when every top-ranked pathway is either \
@@ -787,9 +793,12 @@ Report rules:
 returned. Never invent an index or a PMID.
 - Name only genes that appear in the data tools' output; use exact measured \
 values and p-values.
-- Structure: ## Key Findings (3-5 bullets), ## Cross-Pathway Themes, \
-## Detailed Pathway Analysis, ## Suggested Follow-up Experiments (3-5, \
-prioritised), ## Limitations and Caveats.
+- Structure, all five sections required: ## Key Findings (3-5 bullets), \
+## Cross-Pathway Themes, ## Detailed Pathway Analysis -- a paragraph per \
+top-ranked pathway or cluster, built from your delegated interpretations \
+rather than a bare list -- ## Suggested Follow-up Experiments (3-5, \
+prioritised), ## Limitations and Caveats. Leaving out the Detailed Pathway \
+Analysis is not an option; most of the report's value sits there.
 - Optionally run check_my_citations on your draft first.
 - Finish by calling submit_report with the COMPLETE report. That is the only \
 way to finish. After it returns SUBMITTED, reply DONE and stop."""
