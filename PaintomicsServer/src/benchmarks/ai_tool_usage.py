@@ -112,6 +112,8 @@ def main():
         seen = set()
         for e in events:
             tool = e.get("tool")
+            if tool == "__config__":
+                continue
             calls[tool] += 1
             latency[tool].append(e.get("ms") or 0)
             seen.add(tool)
@@ -120,6 +122,19 @@ def main():
 
     n = len(runs)
     print("%d archived run(s), %d tool calls\n" % (n, sum(calls.values())))
+
+    # Distinct configurations present, so a table of averages cannot silently mix
+    # two different agents. Runs before the fingerprint existed show as unknown.
+    configs = Counter()
+    for _job, _stamp, events in runs:
+        cfg = next((e.get("result") for e in events
+                    if e.get("tool") == "__config__"), None)
+        configs[cfg or "(not stamped)"] += 1
+    if len(configs) > 1:
+        print("configurations in this sample:")
+        for cfg, count in configs.most_common():
+            print("  %2d run(s)  %s" % (count, cfg[:150]))
+        print()
     print("%-26s %6s %8s %9s %9s" % ("tool", "calls", "runs", "median ms", "max ms"))
     for tool, count in calls.most_common():
         values = sorted(latency[tool])

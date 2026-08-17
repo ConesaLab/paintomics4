@@ -762,24 +762,22 @@ pathways share features.
 2. Go deep where the data is strongest or strangest: get_pathway_details on \
 the top-ranked pathways, compare_gene_profiles on the genes that drive them \
 (pass them all in one call).
-3. Search the literature with search_literature. BROAD queries only: two or \
-three gene symbols joined by OR plus at most one biological term, e.g. \
-"(Ikzf1 OR Ccnd2) AND B cell differentiation". A query with three AND clauses \
-returns nothing and still spends budget. Use read_paper selectively: for a \
-specific claim whose support you are unsure of, not as a routine step before \
-citing. Measured over 28 runs, citations whose paper was read first verify no \
-better than citations made from the abstract (78 % against 84 %), so reading \
-earns its ~2 s when it changes your mind about a paper, not when it confirms \
-what the abstract already told you.
-4. Get breadth by DELEGATING, not by writing everything yourself: call \
+3. Search the literature once per cluster or top pathway you intend to write \
+about -- roughly a dozen searches, not three. Each search is tagged with that \
+pathway (topic_tag), and a sub-agent is later shown only the papers tagged for \
+its own pathways, so a pathway you never searched for gets an interpretation \
+with nothing to cite. BROAD queries: two or three gene symbols joined by OR \
+plus at most one biological term, e.g. "(Ikzf1 OR Ccnd2) AND B cell \
+differentiation". Three AND clauses returns nothing and still spends budget. \
+read_paper selectively, for a claim whose support you doubt -- reading does not \
+make a citation more likely to survive, so it earns its time only when it \
+changes your mind.
+4. Get breadth by DELEGATING rather than writing everything yourself: call \
 delegate_interpretation a few times, covering all the top-ranked pathways and \
-clusters between them. SEARCH FIRST for the pathways you are about to \
-delegate, and reuse those pathway names as the topic_tag: a sub-agent is shown \
-the papers tagged for its pathways, so delegating before you have found any \
-literature for them produces an interpretation with nothing to cite. Each call returns written interpretations carrying your \
-reference numbers; your report is the synthesis across those returns plus what \
-you found first-hand. This is how fifteen pathways get covered in the time you \
-have, and skipping it is why a report ends up covering six.
+clusters between them, AFTER you have searched for them. Each call returns \
+written interpretations carrying your reference numbers, and your report is the \
+synthesis across those returns plus what you found first-hand. Skipping this is \
+why a report ends up covering six pathways instead of fifteen.
 5. After every substantive discovery, notebook_write one line. The notebook \
 is your memory and your evidence trail.
 6. Budgets are enforced by the tools and reported in every result; when one \

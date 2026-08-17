@@ -860,6 +860,24 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
         tools=TOOLBELT,
     )
 
+    # Stamp the configuration into the run's own trace. Every analysis so far has
+    # depended on me remembering which round carried which knobs -- and one of
+    # them (the delegated-interpreter prompt) took three rounds to convict
+    # because its effect was mixed with two other changes. A run that cannot say
+    # what it was is a measurement waiting to be misattributed.
+    _trace_gate(ctx, "__config__", "run start", json.dumps({
+        "merge_mode": MERGE_MODE,
+        "verify_prefetch": VERIFY_PREFETCH,
+        "stitch_max": STITCH_MAX_CHARS,
+        "search_budget": SEARCH_BUDGET,
+        "search_hits": SEARCH_HITS,
+        "delegate_papers": DELEGATE_PAPERS,
+        "max_turns": AGENT_MAX_TURNS,
+        "gate_reserve": GATE_RESERVE_SECONDS,
+        "lead_prompt_chars": len(prompts_mod.SYSTEM_PROMPT_LEAD_AGENT),
+        "tools": len(TOOLBELT),
+    }), time.time())
+
     _hb(ctx, "extracting", 10, "Agent reading the enrichment results...")
     kickoff = prompts_mod.build_lead_kickoff_prompt(
         organism_name, experiment_design, pathways, AGENT_MAX_TURNS,
