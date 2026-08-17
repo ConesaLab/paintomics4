@@ -26,6 +26,7 @@
 import getopt
 import sys
 import os.path
+import numpy as np
 import scipy.stats
 from csv import reader as csv_reader
 from collections import defaultdict
@@ -91,6 +92,38 @@ def print_usage():
     print("\nVersion 0.1 August 2016\n")
 
 
+def toFloats(values):
+    """Decimal text -> float, or the cells untouched if any of them is not a
+    number.
+
+    Called once per row while the files are read, instead of once per
+    (miRNA, target) pair inside getScore(): the same miRNA row used to be
+    re-parsed for every one of its targets (209 of them on average in the
+    STATegra example), and a gene row once for every miRNA targeting it.
+
+    The fallback is not defensive padding, it is required. The gene expression
+    file is read WITHOUT skipping its header, so `geneTable` legitimately
+    contains a row keyed '#geneID' whose cells are condition names. Converting
+    eagerly and letting that raise would abort the read before the output file
+    is even opened -- a different failure, and a different (empty) output, than
+    the one this script has always produced. Keeping the raw cells makes such a
+    row fail exactly where it failed before: inside the scoring loop, on the
+    first pair that actually uses it, under the blanket handler that keeps the
+    partial file.
+    """
+    try:
+        return [float(value) for value in values]
+    except ValueError:
+        return values
+
+
+def asFloats(values):
+    """Convert only if the caller has not already done it (see toFloats)."""
+    if values and type(values[0]) is str:
+        return [float(value) for value in values]
+    return values
+
+
 def run(referenceFile, relevantReferenceFile, dataFile, geneExpresion, corrOutputFile, method="fc"):
     miRNAtable = {}
     geneTable = {}
@@ -120,7 +153,11 @@ def run(referenceFile, relevantReferenceFile, dataFile, geneExpresion, corrOutpu
                 else:
                     dataFile_header = rawHeader[1:]      # first cell labels the ID column
 
-            miRNAtable[line[0]] = {"values" : line[1:], "targets" : list()}
+            # "values" stays as text because it is written back out verbatim on
+            # every result row; "floats" is the same row parsed once, for the
+            # correlation.
+            miRNAtable[line[0]] = {"values" : line[1:], "targets" : list(),
+                                   "floats" : toFloats(line[1:])}
     inputDataFile.close()
 
     if dataFile_header is None:
@@ -148,7 +185,8 @@ def run(referenceFile, relevantReferenceFile, dataFile, geneExpresion, corrOutpu
             print("STEP 3. Processing mRNA expression file...")
             with open(geneExpresion, 'r') as inputDataFile:
                 for line in csv_reader(inputDataFile, delimiter="\t"):
-                    geneTable[line[0]] = line[1:]
+                    # Only ever read by getScore, so it can be stored parsed.
+                    geneTable[line[0]] = toFloats(line[1:])
             inputDataFile.close()
         else:
             print("STEP 3. No mRNA expression file was provided...")
@@ -166,17 +204,34 @@ def run(referenceFile, relevantReferenceFile, dataFile, geneExpresion, corrOutpu
                 print("Processed " + str(current*100/total) + "% of " + str(total) + " total miRNAs")
 
             miRNA_values = miRNAtable[miRNA_id]["values"]
+            miRNA_floats = miRNAtable[miRNA_id]["floats"]
             miRNA_targets = miRNAtable[miRNA_id]["targets"]
 
-            for target_id in miRNA_targets:
-                if useCorrelation:
-                    target_values = geneTable.get(target_id, None)
+            # Both are the same for every target of this miRNA, so they are
+            # built once here rather than once per pair.
+            rowPrefix = miRNA_id + "\t"
+            rowSuffix = "\t" + "\t".join(miRNA_values) + "\n"
 
-                    if method == "fc" or target_values is not None:
-                        score = getScore(miRNA_values, target_values, method)
-                        outputFile.write(miRNA_id + "\t" + target_id + "\t" + str(score) + "\t" + method + "\t" + "\t".join(miRNA_values) + "\n")
-                else:
-                    outputFile.write(miRNA_id + "\t" + target_id + "\t" + str(0) + "\t" + "Association" + "\t" + "\t".join(miRNA_values) + "\n")
+            # One writelines() per miRNA instead of one write() per pair. The
+            # rows are appended in the order they were produced, so the file is
+            # byte for byte the one the per-pair writes produced. The finally
+            # matters for the one case where that is not obvious: if a pair
+            # raises, the handler below keeps whatever is in the file, so the
+            # rows this miRNA already produced have to reach it -- otherwise a
+            # failing run would truncate at a different place than it used to.
+            rows = []
+            try:
+                for target_id in miRNA_targets:
+                    if useCorrelation:
+                        target_values = geneTable.get(target_id, None)
+
+                        if method == "fc" or target_values is not None:
+                            score = getScore(miRNA_floats, target_values, method)
+                            rows.append(rowPrefix + target_id + "\t" + str(score) + "\t" + method + rowSuffix)
+                    else:
+                        rows.append(rowPrefix + target_id + "\t" + str(0) + "\t" + "Association" + rowSuffix)
+            finally:
+                outputFile.writelines(rows)
     except Exception as e:
         print("Exception catched " +  str(e))
         pass
@@ -186,20 +241,88 @@ def run(referenceFile, relevantReferenceFile, dataFile, geneExpresion, corrOutpu
 
     return True
 
+
+def kendallTauB(x, y):
+    """
+    scipy.stats.kendalltau(x, y).correlation for the short numeric rows this
+    converter scores (n_conditions values per feature), bit for bit.
+
+    kendalltau spends most of its ~58 us per call on the p-value -- an exact
+    enumeration for short tie-free rows -- which the caller never reads; on
+    the shipped STATegra example that is 97,983 pairs. The concordant,
+    discordant and tied pair counts are the same integers scipy derives (its
+    dis from _kendall_dis, xtie/ytie/ntie from the dense ranks), and the
+    finish is scipy's own expression on them --
+    ``con_minus_dis / np.sqrt(tot - xtie) / np.sqrt(tot - ytie)`` clamped
+    with ``np.minimum(1., max(-1., tau))`` -- so the float, and its str()
+    that reaches the output file, are unchanged: verified against scipy over
+    120,000 random rows (ties, constants, perfect (anti)correlation, NaN,
+    lengths 1-12) and pinned by test_kendall_kernel_matches_scipy. Rows that
+    are not all numbers (a header or a text cell that toFloats() refused) go
+    to scipy itself, which compares them however it always did.
+    """
+    n = len(x)
+    if n != len(y) or n == 0:
+        return scipy.stats.kendalltau(x, y).correlation
+    for value in x:
+        if not isinstance(value, (int, float)):
+            return scipy.stats.kendalltau(x, y).correlation
+    for value in y:
+        if not isinstance(value, (int, float)):
+            return scipy.stats.kendalltau(x, y).correlation
+    for value in x:
+        if value != value:  # NaN propagates, as scipy's nan_policy does
+            return np.nan
+    for value in y:
+        if value != value:
+            return np.nan
+    tot = (n * (n - 1)) // 2
+    xtie = ytie = con = dis = 0
+    for i in range(n - 1):
+        xi = x[i]
+        yi = y[i]
+        for j in range(i + 1, n):
+            dx = xi - x[j]
+            dy = yi - y[j]
+            if dx == 0:
+                xtie += 1
+                if dy == 0:
+                    ytie += 1
+            elif dy == 0:
+                ytie += 1
+            elif (dx > 0) == (dy > 0):
+                con += 1
+            else:
+                dis += 1
+    if xtie == tot or ytie == tot:
+        return np.nan
+    con_minus_dis = con - dis
+    tau = con_minus_dis / np.sqrt(tot - xtie) / np.sqrt(tot - ytie)
+    return np.minimum(1., max(-1., tau))
+
+
 def getScore(values_1, values_2, method):
+    """The score for one (miRNA, target) pair.
+
+    Both arguments may arrive already parsed (run() does that once per row) or
+    as raw text (any other caller, and rows toFloats() refused); asFloats()
+    settles it. scipy is still the numeric authority for all three
+    correlations -- the same function, on the same values -- so the scores, and
+    therefore their str(), are unchanged.
+    """
     if method == "fc":
         #CALCULATE THE FOLD CHANGE
         import random
         return random.uniform(-1, 1)
     elif method == "spearman":
         #CALCULATE THE CORRELATION USING SPEARMAN
-        return scipy.stats.spearmanr([float(i) for i in values_1], [float(i) for i in values_2]).correlation
+        return scipy.stats.spearmanr(asFloats(values_1), asFloats(values_2)).correlation
     elif method == "kendall":
-        #CALCULATE THE CORRELATION USING KENDALL
-        return scipy.stats.kendalltau([float(i) for i in values_1], [float(i) for i in values_2]).correlation
+        #CALCULATE THE CORRELATION USING KENDALL (same value as scipy, see kendallTauB)
+        return kendallTauB(asFloats(values_1), asFloats(values_2))
     elif method == "pearson":
         #CALCULATE THE CORRELATION USING PEARSON
-        return scipy.stats.pearsonr([float(i) for i in values_1], [float(i) for i in values_2])[0]
+        return scipy.stats.pearsonr(asFloats(values_1), asFloats(values_2))[0]
 
 if __name__ == "__main__":
     main()

@@ -26,6 +26,10 @@ from src.servlets.DataManagementServlet import copyFile
 from src.common.Util import ensure_utf8
 from src.common.bioscripts.DHS_exon_association import run as run_DHS_exon_association
 from src.conf.serverconf import MAX_WAIT_THREADS #MULTITHREADING
+# Aliased: this class's __init__ takes a parameter literally named
+# CLIENT_TMP_DIR, and a module-level name spelled the same way is a trap for
+# the next person to touch it.
+from src.conf.serverconf import CLIENT_TMP_DIR as SERVER_CLIENT_TMP_DIR
 
 from os import path as os_path, mkdir as os_mkdir
 from csv import reader as csv_reader
@@ -105,7 +109,15 @@ class Bed2GeneJob(Job):
             "perc_area": self.geneAreaPercentage,
             "perc_region": self.regionAreaPercentage,
             "gene_id_tag": self.geneIDtag,
-            "ignore_missing": self.ignoreMissing
+            "ignore_missing": self.ignoreMissing,
+            # Where run() keeps its parsed-annotation sidecars. One directory
+            # shared by every job, deliberately: the win only exists when the
+            # SECOND job against the same GTF finds what the first one parsed,
+            # and the built-in annotations (examplefiles/GTF/) are the same
+            # files for every user. Nothing job-specific may be written here --
+            # the temporal directory is wiped at the end of each job, which is
+            # exactly what a cache must survive.
+            "cache_dir": SERVER_CLIENT_TMP_DIR + "gtfcache"
         }
 
     def getJobDescription(self, generate=False, dataFile="", relevantFile="", gtfFile=""):

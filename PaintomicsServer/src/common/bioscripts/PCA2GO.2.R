@@ -59,12 +59,64 @@ eigen.val <- NULL
 go.sel <- sort(unique(annotation[,2]), method = "radix")
 n.ge <- NULL
 X.loadings <- vector(mode = "list", length = 0)
+# Group the annotation by pathway ONCE. The lookup this replaces --
+# annotation[annotation[,2] == go.sel[i], 1] -- rescanned the whole table and
+# built a fresh data.frame subset for every pathway: 524 x 183,636 string
+# comparisons for mmu Reactome, and that scan, not the c x c eigen
+# decomposition, was where this function spent its time.
+#
+# The vector each iteration reads is the same one the scan produced, element for
+# element: split() groups by exact string equality -- the predicate == used --
+# and keeps each group in the table's order of appearance, which is the order a
+# logical subset returns rows in.
+#
+# The groups are addressed BY POSITION, which is why the levels are pinned to
+# go.sel: split() then returns exactly one group per go.sel entry, in go.sel
+# order, including empty ones. Addressing them by name -- ann_by_go[[go.sel[i]]]
+# -- would be wrong twice over. read.table's as.is=TRUE only suppresses the
+# factor conversion, not type.convert, so an annotation whose pathway column is
+# all digits arrives as integer; a `[[` with an integer subscript indexes by
+# POSITION, silently handing a pathway another pathway's genes (and then running
+# off the end). And `l[[""]]` is NULL, no error, so a pathway id read from an
+# empty field would silently lose its members. No installed organism has either
+# shape (KEGG path:mmu00010, Reactome R-MMU-111885, MapMan text bins), but the
+# old full-table scan was immune by construction and this must be too.
+#
+# The one input that reads differently either way is an NA in the pathway
+# column: sort() drops NA, so go.sel never carries one, and the old scan's
+# `annotation[,2] == go.sel[i]` returned NA for those rows, which a data.frame
+# logical subset turns into one extra NA element inside *every* pathway's
+# gene.sel. That NA reached only total.genes -- is.element(rownames, NA) is
+# always FALSE, so X.sel never saw it -- and total.genes has no consumer
+# (generateMetaGenes.R reads $X.sel and $X.loadings only). Dropping it changes
+# no output byte.
+ann_by_go <- split(annotation[,1], factor(annotation[,2], levels = go.sel))
+# Loop-invariant: nothing below modifies X.
+X.rownames <- rownames(X)
+# Collect each pathway's contribution and concatenate once after the loop.
+# Growing variab / tot.variab / eigen.val / n.ge / n.go with c() and X.sel with
+# cbind() reallocated and copied the whole accumulated object on every pathway
+# (O(P^2) element copies). Concatenation order is the loop order either way, so
+# every assembled object is identical -- including total.genes, because unique()
+# of the concatenation keeps first-appearance order, exactly what the
+# incremental unique() built.
+n.sel <- length(go.sel)
+genes.parts <- vector("list", n.sel)
+X.sel.parts <- vector("list", n.sel)
+variab.parts <- vector("list", n.sel)
+tot.variab.parts <- vector("list", n.sel)
+eigen.val.parts <- vector("list", n.sel)
+n.ge.parts <- vector("list", n.sel)
+n.go.parts <- vector("list", n.sel)
 # PCAs for all GOs loop
-   for (i in 1: length(go.sel)) {
-	gene.sel <- annotation[annotation[,2] == go.sel[i],1]
+# seq_along, not 1:length(): an empty annotation made the old form walk i = 1
+# and then i = 0, which the table scan absorbed silently but a by-name lookup
+# would not. With at least one pathway the two are the same sequence.
+   for (i in seq_along(go.sel)) {
+	gene.sel <- ann_by_go[[i]]
         if (length(gene.sel) > 1) {
-      total.genes <- unique(c(total.genes, gene.sel))
-      gene.sel <- is.element(rownames(X), gene.sel)
+      genes.parts[[i]] <- gene.sel
+      gene.sel <- is.element(X.rownames, gene.sel)
       if (length(which(gene.sel)) > 1) {
          # drop = FALSE: a single-column X (one condition) would collapse this
          # subset to a plain vector, nrow() would return NULL, and the guard
@@ -92,7 +144,7 @@ X.loadings <- vector(mode = "list", length = 0)
 		pca.sel <- PCA.GENES(t(gene.sel))  # pca
 		eigen <- pca.sel$eigen$values
 		tot.var <- sum(eigen)
-		eigen.val <- c(eigen.val, tot.var)
+		eigen.val.parts[[i]] <- tot.var
 		rank <- length(which(eigen > 1e-16))
 		level <- 1
 		# num fac
@@ -107,22 +159,35 @@ X.loadings <- vector(mode = "list", length = 0)
 			abs.val.bycomp <- mean(apply(pca.sel$Xoff,2,var)) * nrow(gene.sel)
 			fac <- length(which(eigen >= abs.val.bycomp * var.cutoff / sqrt(level)))
 		}
-		tot.variab <- c(tot.variab, pca.sel$var.exp[,1])
+		tot.variab.parts[[i]] <- pca.sel$var.exp[,1]
 		#variab <- c(variab, pca.sel$var.exp[1:fac,1])
 		if (fac > 0 ) { # num fac
-		
-            	variab <- c(variab, pca.sel$var.exp[1:fac,1])
-            	n.ge <- c(n.ge, nrow(gene.sel))
-      		n.go <- c(n.go, fac)
+
+            	variab.parts[[i]] <- pca.sel$var.exp[1:fac,1]
+            	n.ge.parts[[i]] <- nrow(gene.sel)
+      		n.go.parts[[i]] <- fac
       		data.h <- as.matrix(pca.sel$scores[,1:fac])
                 loads <-  as.matrix(pca.sel$loadings[, 1:fac])
 		colnames(data.h) <- paste(go.sel[i], c(1:fac), sep="_")
-      		X.sel <- cbind(X.sel,data.h) # attach to results matrix
+      		X.sel.parts[[i]] <- data.h # attach to results matrix
                 for (u in 1:fac)  { X.loadings[[length(X.loadings)+1]] <- loads[,u] }
                	}
             }
 	}
    }
+# Assemble what the loop collected. c()/unique() over the parts reproduces the
+# incremental construction exactly, and keeps the empty case in the type the
+# initialisation chose: unlist() of an all-NULL list is NULL, so c(numeric(0),
+# NULL) stays numeric(0) for variab/tot.variab and c(NULL, NULL) stays NULL for
+# the rest. cbind() likewise ignores the NULL slots, and do.call(cbind, list())
+# is NULL -- the value the "no metagenes" branch downstream tests for.
+total.genes <- unique(unlist(genes.parts, use.names = FALSE))
+eigen.val <- c(eigen.val, unlist(eigen.val.parts, use.names = FALSE))
+tot.variab <- c(tot.variab, unlist(tot.variab.parts, use.names = FALSE))
+variab <- c(variab, unlist(variab.parts, use.names = FALSE))
+n.ge <- c(n.ge, unlist(n.ge.parts, use.names = FALSE))
+n.go <- c(n.go, unlist(n.go.parts, use.names = FALSE))
+X.sel <- do.call(cbind, X.sel.parts[!vapply(X.sel.parts, is.null, TRUE)])
 # Rearrange result
 if (!is.null(X.sel)) {
     rownames(X.sel) <- colnames(X)
@@ -176,12 +241,25 @@ CENTROID2GO <- function (X, annotation, var.cutoff = 2, fac.sel = "rel.abs")
   n.go <- NULL
   total.genes <- NULL
   metagene.names <- character(0)
+  # Same two rewrites as PCA2GO.2, for the same reasons: one split() of the
+  # annotation instead of one full-table scan per pathway -- levels pinned to
+  # go.sel so the groups can be addressed by POSITION, which is exact whatever
+  # the pathway column's type or spelling (see the long note in PCA2GO.2) -- and
+  # per-pathway pieces concatenated once instead of grown in place.
+  ann_by_go <- split(annotation[, 1], factor(annotation[, 2], levels = go.sel))
+  X.rownames <- rownames(X)
+  n.sel <- length(go.sel)
+  genes.parts <- vector("list", n.sel)
+  X.sel.parts <- vector("list", n.sel)
+  name.parts <- vector("list", n.sel)
+  n.ge.parts <- vector("list", n.sel)
+  n.go.parts <- vector("list", n.sel)
 
-  for (i in 1:length(go.sel)) {
-    gene.sel <- annotation[annotation[, 2] == go.sel[i], 1]
+  for (i in seq_along(go.sel)) {
+    gene.sel <- ann_by_go[[i]]
     if (length(gene.sel) > 1) {
-      total.genes <- unique(c(total.genes, gene.sel))
-      member <- is.element(rownames(X), gene.sel)
+      genes.parts[[i]] <- gene.sel
+      member <- is.element(X.rownames, gene.sel)
       # Same floor as PCA2GO.2: a single measured gene is not a pathway
       # summary, it is that gene.
       if (length(which(member)) > 1) {
@@ -195,15 +273,24 @@ CENTROID2GO <- function (X, annotation, var.cutoff = 2, fac.sel = "rel.abs")
         if (nrow(values) < 2) next
         centroid <- apply(values, 2, median, na.rm = TRUE)
         if (!all(is.finite(centroid))) next
-        X.sel <- cbind(X.sel, centroid)
-        metagene.names <- c(metagene.names, paste(go.sel[i], 1, sep = "_"))
+        X.sel.parts[[i]] <- centroid
+        name.parts[[i]] <- paste(go.sel[i], 1, sep = "_")
         X.loadings[[length(X.loadings) + 1]] <- setNames(rep(1, nrow(values)),
                                                          rownames(values))
-        n.ge <- c(n.ge, nrow(values))
-        n.go <- c(n.go, 1)
+        n.ge.parts[[i]] <- nrow(values)
+        n.go.parts[[i]] <- 1
       }
     }
   }
+  # cbind() of the collected centroid vectors: the column names it derives are
+  # different (the incremental form deparsed the argument to "centroid" every
+  # time) but both are overwritten by metagene.names below, and the row names
+  # come from the vectors themselves either way.
+  total.genes <- unique(unlist(genes.parts, use.names = FALSE))
+  X.sel <- do.call(cbind, X.sel.parts[!vapply(X.sel.parts, is.null, TRUE)])
+  metagene.names <- c(metagene.names, unlist(name.parts, use.names = FALSE))
+  n.ge <- c(n.ge, unlist(n.ge.parts, use.names = FALSE))
+  n.go <- c(n.go, unlist(n.go.parts, use.names = FALSE))
   if (!is.null(X.sel)) {
     colnames(X.sel) <- metagene.names
     rownames(X.sel) <- colnames(X)

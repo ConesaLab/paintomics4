@@ -1,12 +1,31 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 # Author: Pedro Furió Tarí
+"""RGmatch: associate genomic regions (BED) with genes from an annotation (GTF).
+
+Importable (`run()`, which is what the web app calls) and runnable from the
+command line (see `usage()`).
+
+One thing to know before running it anywhere: **run() writes a sidecar cache of
+the parsed annotation to disk.** Parsing a real genome dominates the job, so the
+result is pickled next to nothing in particular -- into the directory named by
+the "cache_dir" option. Callers that pass no "cache_dir" (this module's own
+main(), and the example-data generator in
+src/AdminTools/scripts/exampledata/stategrafull.py) fall back to
+`<tempfile.gettempdir()>/paintomics-gtfcache`, where a mouse-sized annotation
+leaves a ~29MB file per (GTF, mtime, size, tag) combination. The web app points
+"cache_dir" at `<CLIENT_TMP>/gtfcache` instead. Nothing prunes either directory.
+"""
 
 import getopt
 import sys
+import os
 import os.path
 import gzip
+import hashlib
+import pickle
 import re
+import tempfile
 
 # Global variables
 rules          = ["TSS","1st_EXON","PROMOTER","TTS","INTRON","GENE_BODY","UPSTREAM","DOWNSTREAM"]
@@ -35,11 +54,18 @@ check_strand   = False
 RUN_OPTION_KEYS = frozenset([
     "presortedGTF", "rules", "perc_area", "perc_region", "tss", "tts",
     "promoter", "distance", "level", "gene_id_tag", "tran_id_tag",
-    "ignore_missing", "check_strand",
+    "ignore_missing", "check_strand", "cache_dir",
 ])
 
 # Values accepted for the "level" option / -r flag.
 REPORT_LEVELS = ("exon", "transcript", "gene")
+
+# Bumped whenever the parsed annotation changes shape -- the pickled record
+# classes, what the payload holds, or what the parser does with a GTF line.
+# It is part of the cache key, so an old sidecar written by an older build is
+# never read back into a newer one.
+GTF_CACHE_FORMAT = 1
+GTF_CACHE_SUFFIX = ".rgcache"
 
 class Candidate:
     def __init__(self, start, end, strand, exon_number, area, transcript, gene, distance, pctg_region, pctg_area, tssdist, ttsdist):
@@ -93,12 +119,34 @@ class Candidate:
         return self.ttsdist
 
 
-# Objects to store the annotations from the GTF file
+# Objects to store the annotations from the GTF file.
+#
+# The three record classes below are instantiated once per GTF row -- 843k
+# exons, 143k transcripts and 55k genes for the bundled mouse annotation -- so
+# they carry `__slots__`: no per-instance __dict__ is ~100 bytes saved on every
+# one of the million objects, and nothing anywhere sets an attribute on them
+# that is not declared here (they are used only inside this module).
+#
+# `__slots__` alone would make pickling SLOWER and bigger, because the default
+# reduction for a slotted object ships a {slot: value} dict. The explicit
+# __getstate__/__setstate__ pair ships a plain tuple instead, which is what
+# makes the annotation cache (see run()) worth having: measured on the bundled
+# mouse GTF, 18.7MB and 0.43s to load the exon records versus 28.0MB / 0.68s
+# with the default slotted reduction. Every state tuple below is non-empty, so
+# pickle always calls __setstate__ back (a falsy state is skipped).
 class Myexons:
+    __slots__ = ("start", "end", "exon")
+
     def __init__(self, start, end, exon):
         self.start = start
         self.end = end
         self.exon = exon
+
+    def __getstate__(self):
+        return (self.start, self.end, self.exon)
+
+    def __setstate__(self, state):
+        self.start, self.end, self.exon = state
 
     def getStart(self):
         return self.start
@@ -114,11 +162,19 @@ class Myexons:
 
 
 class Mytranscripts:
+    __slots__ = ("myexons", "trans_id", "start", "end")
+
     def __init__(self, trans_id):
         self.myexons = []
         self.trans_id = trans_id
         self.start = sys.maxsize
         self.end = 0
+
+    def __getstate__(self):
+        return (self.myexons, self.trans_id, self.start, self.end)
+
+    def __setstate__(self, state):
+        self.myexons, self.trans_id, self.start, self.end = state
 
     def addExon(self, myexon):
         self.myexons.append(myexon)
@@ -174,12 +230,22 @@ class Mytranscripts:
 
 
 class Mygenes:
+    __slots__ = ("mytranscripts", "start", "end", "gene_id", "strand")
+
     def __init__(self, gene_id, strand):
         self.mytranscripts = []
         self.start = sys.maxsize
         self.end = 0
         self.gene_id = gene_id
         self.strand = strand
+
+    def __getstate__(self):
+        return (self.mytranscripts, self.start, self.end, self.gene_id,
+                self.strand)
+
+    def __setstate__(self, state):
+        (self.mytranscripts, self.start, self.end, self.gene_id,
+         self.strand) = state
 
     def getGeneID(self):
         return self.gene_id
@@ -214,6 +280,347 @@ class Mygenes:
 
     def getStrand(self):
         return self.strand
+
+
+##*****************************************************************************
+## GTF attribute extraction
+##*****************************************************************************
+
+def extractAttribute(attributes, tag):
+    """The value of `tag` in a GTF attributes column.
+
+    This reproduces, character for character, what
+        re.search(r'<tag> \"?(.*?)\"?;', attributes).group(1)
+    used to return for every attribute string a GTF row can carry -- it is only
+    about twice as fast, and the parser calls it twice for every one of the ~1M
+    rows of a mouse annotation.
+
+    There is exactly ONE class of string where the two disagree, and it names
+    itself: `re`'s '.' does not match a newline, while `str.find(';', ...)`
+    crosses one. So an attributes column holding a newline with a ';' somewhere
+    after it diverges -- 'gene_id a\\nb;' is AttributeError from the regex and
+    'a\\nb' here.
+
+    That shape cannot reach this function: both readers split the file on '\\n'
+    before a row's attributes column exists, so the only newline a row can
+    carry is a trailing one with nothing after it, while a divergence needs a
+    ';' *after* the newline. Fuzzing with '\\n' in the alphabet (see
+    test_gtf_cache_and_attribute_parsing.py) finds divergences only in strings
+    containing a newline, and none at all once the strings are shaped like the
+    rows the two readers actually produce.
+
+    The regex it replaces has three behaviours that are easy to lose:
+
+    * The quotes are OPTIONAL on both sides, so `gene_id ABC;` yields `ABC`
+      exactly as `gene_id "ABC";` yields `ABC`.
+    * The group is non-greedy and the closing quote is greedy, so the value
+      ends at the FIRST ';' at or after the value start, minus one preceding
+      '"' if there is one. `gene_id "A;B";` therefore yields `A`, not `A;B`.
+    * The match is leftmost: an occurrence of the tag with no ';' after it
+      anywhere is not a match, and the search continues at the next
+      occurrence.
+
+    A tag that is not present at all made `re.search(...)` return None and the
+    caller crash on `.group(1)` with AttributeError. That is deliberately kept
+    -- a GTF row without a gene_id is malformed and must not be accepted in
+    silence -- but the message now names the tag and shows the row instead of
+    saying "'NoneType' object has no attribute 'group'". The exception CLASS is
+    unchanged so that any caller distinguishing exception types still sees what
+    it saw before.
+    """
+    needle = tag + " "
+    needleLength = len(needle)
+    position = attributes.find(needle)
+    while position != -1:
+        cursor = position + needleLength
+        # Optional opening quote: '"?' is greedy, so it takes the quote when
+        # one is there and the value starts after it.
+        if attributes[cursor:cursor + 1] == '"':
+            cursor += 1
+        semicolon = attributes.find(";", cursor)
+        if semicolon != -1:
+            # Optional closing quote, also greedy: it can only sit in the one
+            # position immediately before the ';'.
+            end = semicolon
+            if end > cursor and attributes[end - 1] == '"':
+                end -= 1
+            return attributes[cursor:end]
+        # No ';' after this occurrence means the regex would have failed here
+        # and moved on to the next one.
+        position = attributes.find(needle, position + 1)
+
+    raise AttributeError(
+        "The GTF row carries no %r attribute (or none followed by ';'), so the "
+        "annotation cannot be read: %r" % (tag, attributes[:200]))
+
+
+##*****************************************************************************
+## Parsed-annotation cache
+##*****************************************************************************
+
+def gtfCacheKey(gtf, gene_id_tag, tran_id_tag, matchTable):
+    """Everything the parse depends on, or None if it cannot be determined.
+
+    The GTF is identified by absolute path + mtime + size rather than by a
+    digest of its contents: hashing 566MB on every job would cost more than the
+    parse it is meant to save. The remaining entries are the ONLY other inputs
+    to the load loop -- the two attribute tags (they are compiled into the
+    extraction) and the chromosome match table (it renames every chromosome
+    key). Everything else run() accepts (rules, distance, tss, tts, promoter,
+    the area percentages, level, ignore_missing, check_strand, presortedGTF)
+    is consumed by the region scan, long after the annotation is built, and so
+    is deliberately absent: including it would only cause needless misses.
+
+    The limitation of mtime+size, stated plainly: an annotation replaced by a
+    DIFFERENT file of the SAME byte count whose mtime is then restored -- which
+    is what `cp -p`, `tar -x` and `rsync --times` do -- is not detected, and the
+    stale sidecar is served. Demonstrated, so it is a trade-off and not an
+    oversight: hashing 566MB on every job would cost more than the parse the
+    cache exists to skip. Anyone replacing an installed GTF in place should
+    bump `GTF_CACHE_FORMAT` or clear the cache directory. The narrower race --
+    the GTF changing WHILE it is being parsed -- is handled: run() re-stats
+    after parseGTF and refuses to persist a torn parse.
+    """
+    try:
+        gtfPath = os.path.abspath(gtf)
+        gtfStat = os.stat(gtfPath)
+        matchEntry = None
+        if matchTable is not None:
+            matchPath = os.path.abspath(matchTable)
+            matchStat = os.stat(matchPath)
+            matchEntry = (matchPath, matchStat.st_mtime_ns, matchStat.st_size)
+        return (GTF_CACHE_FORMAT, gtfPath, gtfStat.st_mtime_ns,
+                gtfStat.st_size, gene_id_tag, tran_id_tag, matchEntry)
+    except Exception:
+        # An unstattable GTF is the parse's problem to report, not the cache's.
+        return None
+
+
+def gtfCachePath(key, cacheDir):
+    """Where the sidecar for `key` lives, creating the directory if needed.
+
+    One rule, deliberately: a directory that exists for this and nothing else.
+    Writing the sidecar "next to the GTF" was the other candidate and is
+    rejected -- the bundled annotations live inside the checked-out repository
+    (datasets/07-region-based/data/synthetic_mmu.gtf is a tracked file) and an
+    uploaded one lives in the user's own input directory, so both would gain a
+    surprise multi-megabyte neighbour.
+
+    `cacheDir` is what the caller passes as the "cache_dir" option -- the web
+    app points it at <CLIENT_TMP>/gtfcache. The command-line entry point passes
+    nothing, and falls back to the system temporary directory.
+    """
+    if not cacheDir:
+        cacheDir = os.path.join(tempfile.gettempdir(), "paintomics-gtfcache")
+    os.makedirs(cacheDir, exist_ok=True)
+
+    digest = hashlib.sha256(repr(key).encode("utf-8")).hexdigest()[:32]
+    # A readable prefix so a human can tell the sidecars apart; the digest is
+    # what actually distinguishes them.
+    label = "".join(character if character.isalnum() or character in "._-"
+                    else "_" for character in os.path.basename(key[1]))[:48]
+    return os.path.join(cacheDir, "%s.%s%s" % (label, digest, GTF_CACHE_SUFFIX))
+
+
+def loadGtfCache(path, key):
+    """The cached (genes, allTranscripts) for `key`, or None.
+
+    Never raises: a truncated, unpicklable, half-written or simply foreign file
+    means "no cache", and the caller parses the GTF as it always did. The key
+    is stored inside the file and compared again here, so a digest collision or
+    a stale file reused under the same name cannot feed the wrong annotation
+    into a run.
+    """
+    try:
+        with open(path, "rb") as handle:
+            stored = pickle.load(handle)
+    except Exception:
+        return None
+
+    try:
+        if (not isinstance(stored, tuple) or len(stored) != 2
+                or stored[0] != key):
+            return None
+        payload = stored[1]
+        if (not isinstance(payload, tuple) or len(payload) != 2
+                or not isinstance(payload[0], dict)
+                or not isinstance(payload[1], dict)):
+            return None
+        if not payload[0]:
+            # An annotation with no chromosomes is not a cache hit worth having:
+            # served, it means either zero associations or the "incomplete GTF"
+            # abort, which is a silent wrong answer. A GTF that really parses to
+            # nothing costs one wasted parse per job and reports itself honestly.
+            return None
+        return payload
+    except Exception:
+        return None
+
+
+def storeGtfCache(path, key, payload):
+    """Write the sidecar atomically. Never raises: a job must not fail because
+    its cache could not be written (read-only directory, full disk, a parallel
+    job writing the same key)."""
+    temporaryPath = None
+    try:
+        handle, temporaryPath = tempfile.mkstemp(
+            dir=os.path.dirname(path), suffix=".tmp")
+        with os.fdopen(handle, "wb") as sink:
+            pickle.dump((key, payload), sink, protocol=pickle.HIGHEST_PROTOCOL)
+        os.replace(temporaryPath, path)
+        return True
+    except Exception:
+        if temporaryPath is not None:
+            try:
+                os.unlink(temporaryPath)
+            except OSError:
+                pass
+        return False
+
+
+def parseGTF(gtf, gene_id_tag, tran_id_tag, match_table):
+    """Build the annotation the region scan works against.
+
+    Returns (genes, allTranscripts):
+      genes           chromosome -> [Mygenes], in first-seen order
+      allTranscripts  transcript id -> Mytranscripts
+
+    The gene objects are shared between the two structures and carry their
+    transcripts, which carry their exons, so pickling the pair in ONE call
+    preserves every shared reference. `allGenes` is deliberately not returned:
+    nothing downstream of the exon-renumbering pass below ever reads it.
+
+    Extracted verbatim out of run() so the result can be cached; the only
+    change to the loop itself is extractAttribute() in place of two re.search
+    calls per row, which returns exactly the same strings (see its docstring).
+
+    `match_table` here is the already-loaded {gtf chromosome: bed chromosome}
+    dict, not the path.
+    """
+    inputGTF = None
+    if gtf[-2:] == "gz":
+        aux = gzip.open(gtf, 'rb').read().decode(errors='replace')
+        inputGTF = aux.split("\n")
+    else:
+        inputGTF = open(gtf, 'r')
+    genes = {}
+    allTranscripts = {}
+    allGenes  = {}
+    # Flags will tell me if "transcript" and "gene" flags can be found inside the GTF file. If they are not found,
+    # the start and end positions will have to be measured based on the exons.
+    geneFlag  = False
+    transFlag = False
+
+    for line in inputGTF:
+        # Avoid comments
+        if line and line[0] != "#":
+            linea_split = line.split("\t")
+            chrom = linea_split[0]
+            start = int(linea_split[3])
+            end   = int(linea_split[4])
+            strand = linea_split[6]
+
+            popurri = linea_split[8]
+
+            # Rename chrom if match_table exists
+            if match_table is not None:
+                chrom = match_table[chrom]
+
+            if linea_split[2] == "exon":
+
+                gene_id       = extractAttribute(popurri, gene_id_tag)
+                transcript_id = extractAttribute(popurri, tran_id_tag)
+
+                # The exon number will be calculated later
+                exon_number = None
+
+                myexon = Myexons(start, end, exon_number)
+
+                flag_transcript = False
+                if transcript_id not in allTranscripts:
+                    allTranscripts[transcript_id] = Mytranscripts(transcript_id)
+                    flag_transcript = True
+                allTranscripts[transcript_id].addExon(myexon)
+
+                if chrom not in genes:
+                    genes[chrom] = []
+
+                if gene_id not in allGenes:
+                    allGenes[gene_id] = Mygenes(gene_id, strand)
+                    genes[chrom].append(allGenes[gene_id])
+                if flag_transcript is True:
+                    # Transcript not added in gene
+                    allGenes[gene_id].addTranscript(allTranscripts[transcript_id])
+
+
+            elif linea_split[2] == "transcript":
+
+                transFlag = True
+
+                gene_id = extractAttribute(popurri, gene_id_tag)
+                transcript_id = extractAttribute(popurri, tran_id_tag)
+
+                flag_transcript = False
+                if transcript_id not in allTranscripts:
+                    allTranscripts[transcript_id] = Mytranscripts(transcript_id)
+                    flag_transcript = True
+                allTranscripts[transcript_id].setLength(start, end)
+
+                if chrom not in genes:
+                    genes[chrom] = []
+
+                if gene_id not in allGenes:
+                    allGenes[gene_id] = Mygenes(gene_id, strand)
+                    genes[chrom].append(allGenes[gene_id])
+                if flag_transcript is True:
+                    # Transcript not added in gene
+                    allGenes[gene_id].addTranscript(allTranscripts[transcript_id])
+
+
+            elif linea_split[2] == "gene":
+
+                geneFlag = True
+
+                gene_id = extractAttribute(popurri, gene_id_tag)
+
+
+                if chrom not in genes:
+                    genes[chrom] = []
+
+                if gene_id not in allGenes:
+                    allGenes[gene_id] = Mygenes(gene_id, strand)
+                    genes[chrom].append(allGenes[gene_id])
+                allGenes[gene_id].setLength(start, end)
+
+    if gtf[-2:] == "gz":
+        inputGTF = None
+    else:
+        inputGTF.close()
+
+    # Check exon number in transcripts
+    for gene_id in allGenes:
+        for transcript in allGenes[gene_id].getTranscripts():
+            transcript.checkExonNumbers(allGenes[gene_id].getStrand())
+
+            if transFlag is False:
+                allTranscripts[transcript.getTranscriptID()].calculateSize()
+
+    if geneFlag is False:
+        for gene in allGenes:
+            allGenes[gene].calculateSize()
+
+    return genes, allTranscripts
+
+
+def reportCacheEvent(message):
+    """Opt-in tracing for the annotation cache.
+
+    Off by default and on purpose: the association kernel runs in a forked
+    child, and unconditional writes to the inherited stderr of a forked process
+    are exactly the shape of problem that wedged the compound mapper.
+    """
+    if os.environ.get("PAINTOMICS_GTF_CACHE_DEBUG"):
+        sys.stderr.write("GTF CACHE: " + message + "\n")
 
 
 def main():
@@ -824,135 +1231,82 @@ def run(gtf, dhs, outputfile, match_table, options=None, managed_queue=None):
                 "Unknown report level %r for the region-to-gene association. "
                 "Expected one of: %s." % (level, ", ".join(REPORT_LEVELS)))
 
-        # The gene/transcript tags are only ever consumed through these two
-        # regexes, which the getopt path recompiles but this one did not -- so
-        # a GTF annotated with, say, gene_name was parsed looking for gene_id
-        # and every lookup raised AttributeError on a None match. Recompile
-        # unconditionally, so a second run() in the same interpreter cannot
-        # inherit the previous call's tag.
+        # The gene/transcript tags are only ever consumed through the attribute
+        # extraction, which the getopt path re-derived but this one did not --
+        # so a GTF annotated with, say, gene_name was parsed looking for
+        # gene_id and every lookup raised AttributeError on a missing tag. The
+        # tags are re-read from the options on every call, so a second run() in
+        # the same interpreter cannot inherit the previous call's tag.
+        #
+        # The two patterns are still compiled, unused as they now are: the tag
+        # arrives from a web form, and compiling it is what has always rejected
+        # a tag that is not a valid pattern (an unbalanced parenthesis, say).
+        # Keeping the compile keeps that rejection. What it deliberately does
+        # NOT keep is the tag being interpreted AS a pattern -- extractAttribute
+        # matches it literally, so a tag containing '.' or '*' now means those
+        # characters instead of silently matching anything. For every tag the
+        # web app and the examples use (gene_id, transcript_id, gene_name) the
+        # two readings are the same string.
         gene_id_re = re.compile(r"{0} \"?(.*?)\"?;".format(gene_id_tag))
         tran_id_re = re.compile(r"{0} \"?(.*?)\"?;".format(tran_id_tag))
         ## END CODE ADDED BY RAFA ##
         ############################
 
-        # 1. First, we save all the genes with their positions
-        inputGTF = None
-        if gtf[-2:] == "gz":
-            aux = gzip.open(gtf, 'rb').read().decode(errors='replace')
-            inputGTF = aux.split("\n")
-        else:
-            inputGTF = open(gtf, 'r')
-        genes = {}
-        allTranscripts = {}
-        allGenes  = {}
-        # Flags will tell me if "transcript" and "gene" flags can be found inside the GTF file. If they are not found,
-        # the start and end positions will have to be measured based on the exons.
-        geneFlag  = False
-        transFlag = False
+        # 1. First, we save all the genes with their positions.
+        #
+        # Parsing the annotation is the single most expensive thing this
+        # function does on a real genome (~3.6s of an 8.4s mouse job, and it is
+        # repeated in full for every job because the kernel runs in a fresh
+        # forked child), and it depends on nothing but the GTF itself and the
+        # two attribute tags. So it is cached: gtfCacheKey() names every
+        # parse-time input, and a hit skips both the load loop and the exon
+        # renumbering pass below. Only the annotation is ever cached -- never
+        # the regions/BED side, which is per-job data.
+        # Captured before `match_table` is rebound from a path to the loaded
+        # dict a few lines down; the key needs the path, and so does the
+        # re-stat after the parse.
+        matchTablePath = match_table
+        cacheKey = gtfCacheKey(gtf, gene_id_tag, tran_id_tag, matchTablePath)
+        cachePath = None
+        cached = None
+        if cacheKey is not None:
+            try:
+                cachePath = gtfCachePath(cacheKey, options.get("cache_dir"))
+                cached = loadGtfCache(cachePath, cacheKey)
+            except Exception:
+                # A cache that cannot even be located must not stop the run.
+                cachePath = None
+                cached = None
 
         # Prepare a match table to transform the GTF chromosome/scaffolds IDs to the
-        # ones used in the BED regions file
+        # ones used in the BED regions file. Loaded on the cached path too, so
+        # that an unreadable match table still fails the same way it always did.
         if match_table is not None:
             with open(match_table, 'r') as table_file:
                 match_table = dict(match_line.strip().split('\t') for match_line in table_file)
 
-        for line in inputGTF:
-            # Avoid comments
-            if line and line[0] != "#":
-                linea_split = line.split("\t")
-                chrom = linea_split[0]
-                start = int(linea_split[3])
-                end   = int(linea_split[4])
-                strand = linea_split[6]
-
-                popurri = linea_split[8]
-
-                # Rename chrom if match_table exists
-                if match_table is not None:
-                    chrom = match_table[chrom]
-
-                if linea_split[2] == "exon":
-
-                    gene_id       = re.search(gene_id_re, popurri).group(1)
-                    transcript_id = re.search(tran_id_re, popurri).group(1)
-
-                    # The exon number will be calculated later
-                    exon_number = None
-
-                    myexon = Myexons(start, end, exon_number)
-
-                    flag_transcript = False
-                    if transcript_id not in allTranscripts:
-                        allTranscripts[transcript_id] = Mytranscripts(transcript_id)
-                        flag_transcript = True
-                    allTranscripts[transcript_id].addExon(myexon)
-
-                    if chrom not in genes:
-                        genes[chrom] = []
-
-                    if gene_id not in allGenes:
-                        allGenes[gene_id] = Mygenes(gene_id, strand)
-                        genes[chrom].append(allGenes[gene_id])
-                    if flag_transcript is True:
-                        # Transcript not added in gene
-                        allGenes[gene_id].addTranscript(allTranscripts[transcript_id])
-
-
-                elif linea_split[2] == "transcript":
-
-                    transFlag = True
-
-                    gene_id = re.search(gene_id_re, popurri).group(1)
-                    transcript_id = re.search(tran_id_re, popurri).group(1)
-
-                    flag_transcript = False
-                    if transcript_id not in allTranscripts:
-                        allTranscripts[transcript_id] = Mytranscripts(transcript_id)
-                        flag_transcript = True
-                    allTranscripts[transcript_id].setLength(start, end)
-
-                    if chrom not in genes:
-                        genes[chrom] = []
-
-                    if gene_id not in allGenes:
-                        allGenes[gene_id] = Mygenes(gene_id, strand)
-                        genes[chrom].append(allGenes[gene_id])
-                    if flag_transcript is True:
-                        # Transcript not added in gene
-                        allGenes[gene_id].addTranscript(allTranscripts[transcript_id])
-
-
-                elif linea_split[2] == "gene":
-
-                    geneFlag = True
-
-                    gene_id = re.search(gene_id_re, popurri).group(1)
-
-
-                    if chrom not in genes:
-                        genes[chrom] = []
-
-                    if gene_id not in allGenes:
-                        allGenes[gene_id] = Mygenes(gene_id, strand)
-                        genes[chrom].append(allGenes[gene_id])
-                    allGenes[gene_id].setLength(start, end)
-
-        if gtf[-2:] == "gz":
-            inputGTF = None
+        if cached is not None:
+            reportCacheEvent("hit %s" % cachePath)
+            genes, allTranscripts = cached
         else:
-            inputGTF.close()
-
-        # Check exon number in transcripts
-        for gene_id in allGenes:
-            for transcript in allGenes[gene_id].getTranscripts():
-                transcript.checkExonNumbers(allGenes[gene_id].getStrand())
-
-                if transFlag is False:
-                    allTranscripts[transcript.getTranscriptID()].calculateSize()
-
-        if geneFlag is False:
-            for gene in allGenes:
-                allGenes[gene].calculateSize()
+            reportCacheEvent("miss %s" % cachePath)
+            genes, allTranscripts = parseGTF(gtf, gene_id_tag, tran_id_tag,
+                                             match_table)
+            # Re-stat before persisting. The key was taken before the read; if
+            # the GTF moved underneath the parse, what is in memory is a torn
+            # mixture of two files. Using it for THIS job is the behaviour that
+            # has always been there, but writing it to disk would hand the same
+            # torn annotation to every later job under the pre-change key.
+            if (cachePath is not None
+                    and gtfCacheKey(gtf, gene_id_tag, tran_id_tag,
+                                    matchTablePath) == cacheKey):
+                stored = storeGtfCache(cachePath, cacheKey,
+                                       (genes, allTranscripts))
+                reportCacheEvent(("stored " if stored else "not stored ")
+                                 + str(cachePath))
+            else:
+                reportCacheEvent("not stored (annotation changed during the "
+                                 "parse) " + str(cachePath))
 
         inputDHS = None
         if dhs[-2:] == "gz":

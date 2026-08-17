@@ -2,7 +2,6 @@ import logging.handlers
 import logging
 
 from collections import deque, defaultdict
-from pymongo import MongoClient
 from threading import RLock as threading_lock
 from src.common.Util import Singleton
 
@@ -98,7 +97,7 @@ class KeggInformationManager(metaclass=Singleton):
 
             selectedDict = self.translationCache.get(jobID)[dbID][type]
 
-            return {featureID: selectedDict.get(featureID) for featureID in featureIDs if featureID in selectedDict.keys()}
+            return {featureID: selectedDict.get(featureID) for featureID in featureIDs if featureID in selectedDict}
         except Exception as ex:
             raise ex
         finally:
@@ -115,8 +114,10 @@ class KeggInformationManager(metaclass=Singleton):
             self.lock.acquire() #LOCK CACHE
 
             if self.translationCache.get(jobID) != None:
-                # self.translationCache.get(jobID)[dbID][type] = dict(self.translationCache.get(jobID)[dbID][type].items() + newDataTable.items())
-                self.translationCache.get(jobID)[dbID][type] = {**self.translationCache.get(jobID)[dbID][type], **newDataTable}
+                # In place: the previous `{**old, **new}` rebuilt (and rehashed)
+                # the whole table on every 250-name batch, O(cache) per call.
+                # Same result -- the newer entry wins in both spellings.
+                self.translationCache.get(jobID)[dbID][type].update(newDataTable)
             return True
         except Exception as ex:
                 raise ex
@@ -335,10 +336,21 @@ class KeggInformationManager(metaclass=Singleton):
         @returns
         """
         from src.conf.serverconf import MONGODB_HOST, MONGODB_PORT
-        client = MongoClient(MONGODB_HOST, MONGODB_PORT)
+        from src.common.DBmanager import getSharedClient, SharedClientHandle
+
+        # The shared, pid-keyed process client instead of a fresh MongoClient
+        # per organism load. Same host, same port, same database, same queries.
+        #
+        # It is handed back wrapped because every caller of this method owns
+        # what it is given and closes it in a finally -- and the process client
+        # is not this caller's to close: other threads are serving requests on
+        # it. The wrapper forwards everything except close(), which becomes the
+        # reference drop it now means. `db` is taken from the real client, so
+        # queries never go through the wrapper at all.
+        client = getSharedClient(MONGODB_HOST, MONGODB_PORT)
         db = client[organism + "-paintomics"]
 
-        return client, db
+        return SharedClientHandle(client), db
 
     def getKeggDataDir(self):
         return self.KEGG_DATA_DIR

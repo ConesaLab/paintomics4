@@ -4,6 +4,7 @@ import os, sys, signal, time
 import re
 from multiprocessing import Process, cpu_count, Manager, RawArray
 from math import ceil
+from bisect import bisect_right
 from re import compile as compile_re, IGNORECASE as IGNORECASE_re
 from collections import defaultdict
 from operator import attrgetter
@@ -185,18 +186,37 @@ def findIDsByFeaturesName(jobID, featureNames, db, databaseConvertion_id):
 
     notCachedIds = set(featureNames).difference(set(cachedFeatureIDs.keys()))
 
+    # One xref document per input name, its mates resolved by a $lookup whose
+    # sub-pipeline filters on the target dbname_id INSIDE the join, so mongod
+    # walks the (dbname_id, _id) index and never materialises the mates that
+    # belong to other databases. The previous form -- $unwind every mate, look
+    # each one up by _id in full, THEN drop the ~90% with the wrong dbname_id
+    # -- was measured 3-4.5x slower on the same batches (mmu, 12,762 names:
+    # 4.05 s -> 1.24 s per database), and these round trips are ~98% of the
+    # identifier-mapping phase.
+    #
+    # The result must be the same as the old form to the last detail: one
+    # display_id per (input name, matching mate) pair, in the order of the
+    # input's mates array, concatenated over the input's documents in scan
+    # order. The join returns hits in index order, so they are re-walked here
+    # in mates order (a duplicated mate would be emitted twice, as $unwind
+    # did). Verified identical, per-name list order included, on the bundled
+    # gene, protein and symbol lookups.
     listMongoPipeline = [
         {"$match": {"display_id": {"$in": list(notCachedIds)}}},
-        {"$unwind": "$mates"},
         {"$lookup": {
             "from": "xref",
-            "localField": "mates",
-            "foreignField": "_id",
-            "as": "unwind_mate"
+            "let": {"m": {"$ifNull": ["$mates", []]}},
+            "pipeline": [
+                {"$match": {"$expr": {"$and": [
+                    {"$eq": ["$dbname_id", databaseConvertion_id]},
+                    {"$in": ["$_id", "$$m"]}]}}},
+                {"$project": {"_id": 1, "display_id": 1}}
+            ],
+            "as": "hits"
         }},
-        {"$match": {"unwind_mate.dbname_id": databaseConvertion_id}},
-        {"$replaceRoot": {"newRoot": { "$mergeObjects": [{ "$arrayElemAt": ["$unwind_mate", 0]}, {"original_display_id": "$display_id"}]}}},
-        {"$project": {"_id": 0, "display_id": 1, "original_display_id": 1}}
+        {"$match": {"hits.0": {"$exists": True}}},
+        {"$project": {"_id": 0, "display_id": 1, "mates": 1, "hits": 1}}
     ]
 
     matchedFeatures = defaultdict(list)
@@ -206,8 +226,26 @@ def findIDsByFeaturesName(jobID, featureNames, db, databaseConvertion_id):
             listResultCursor = db.xref.aggregate(listMongoPipeline, batchSize = 2000)
 
             for foundFeature in listResultCursor:
-                matchedFeatures[foundFeature.get("original_display_id")].append(str(foundFeature.get("display_id")))
+                hitsByID = {hit.get("_id"): hit.get("display_id") for hit in foundFeature.get("hits", [])}
+                translations = matchedFeatures[foundFeature.get("display_id")]
+                for mate in foundFeature.get("mates", []):
+                    if mate in hitsByID:
+                        translations.append(str(hitsByID[mate]))
 
+            # Record the misses too, as empty lists -- in the returned table
+            # as well as in the cache, so a forked worker hands them back to
+            # the parent with its hits. Only hits used to be cached, so a name
+            # with no translation in this database was sent to MongoDB again
+            # by every later omic (and by every symbol pass that saw the same
+            # id) although the answer cannot change within a job. An empty
+            # list reads exactly like an absent entry to every consumer:
+            # `if featureIDs:` is False, chain.from_iterable adds nothing,
+            # `cached or [fallback]` falls back. Keyed by the same (jobID,
+            # database) as the hits, so a miss in one database can never mask
+            # a hit in another.
+            for name in notCachedIds:
+                if name not in matchedFeatures:
+                    matchedFeatures[name] = []
             KeggInformationManager().updateTranslationCache(jobID, matchedFeatures, "id", databaseConvertion_id)
     except Exception as ex:
         logging.error("EXCEPTION %s", ex)
@@ -244,7 +282,50 @@ def findGeneSymbolByFeatureID(jobID, featureID, organism, db, databaseConvertion
     except Exception as ex:
         return None, False
 
-def mapFeatureIdentifiers(jobID, organism, databases, featureList,  matchedFeatures, notMatchedFeatures, foundFeatures, enrichment, progressArray=None, progressSlot=0):
+def resolveDatabaseIds(organism, databases, db=None):
+    """
+    The MongoDB `dbname` ids for the ID and gene-symbol databases of each user
+    selected database. Constant per organism, so the parent resolves them once
+    per mapping call and hands them to every worker instead of each of the six
+    workers issuing the same 2 x n_db find_one calls.
+
+    @returns ({dbname: id-database _id}, {dbname: symbol-database _id})
+    """
+    databaseConvertion = getDatabasesByOrganismCode(organism)
+    gene_databases = databaseConvertion[0]
+    symbol_databases = databaseConvertion[1]
+    client = None
+    if db is None:
+        client, db = getConnectionByOrganismCode(organism)
+    try:
+        databaseConvertion_ids = {dbname: db.dbname.find_one({"dbname": gene_databases.get(dbname)}, {"item": 1, "qty": 1}).get("_id") for dbname in databases}
+        databaseGeneSymbol_ids = {dbname: db.dbname.find_one({"dbname": symbol_databases.get(dbname)}, {"item": 1, "qty": 1}).get("_id") for dbname in databases}
+    finally:
+        if client is not None:
+            client.close()
+    return databaseConvertion_ids, databaseGeneSymbol_ids
+
+
+def _handOver(target, slot, items):
+    """
+    Give a worker's result list to the parent. With ``slot`` set the list is
+    stored at that index of a pre-sized shared list, so the parent can
+    concatenate the workers' results in WORKER ORDER -- which is the input
+    order, i.e. exactly what one sequential pass produces. Appending as the
+    workers happened to finish (the previous form) made the order of the
+    matched features depend on scheduling, and everything downstream that
+    merges duplicates by keeping the first one seen (unifyAndSort on the
+    compound sets, addInputGeneData/addInputCompoundData combining values)
+    then differed from run to run. Without a slot (the direct, in-process
+    call) the items are simply appended.
+    """
+    if slot is None:
+        target.extend(items)
+    else:
+        target[slot] = items
+
+
+def mapFeatureIdentifiers(jobID, organism, databases, featureList,  matchedFeatures, notMatchedFeatures, foundFeatures, enrichment, progressArray=None, progressSlot=0, databaseIds=None, cacheTables=None, resultSlot=None):
     """
     This function is used to query the database in different threads.
 
@@ -259,6 +340,15 @@ def mapFeatureIdentifiers(jobID, organism, databases, featureList,  matchedFeatu
                      progressArray[progressSlot]. Defaults to None so the direct,
                      non-forked call in Job.parseGeneBasedFiles is unaffected.
     @param  {Integer} progressSlot, this worker's index in progressArray
+    @param  {Tuple}  databaseIds, optional (id-database ids, symbol-database ids)
+                     already resolved by the parent (see resolveDatabaseIds);
+                     resolved here when None.
+    @param  {List}   cacheTables, optional shared list; when given, this worker
+                     appends ONE dict {dbname_id: {name: [ids]}} holding every
+                     translation it looked up, so the parent can merge it into
+                     the job's translation cache. A forked worker's own cache
+                     writes die with the process, which is why, before this,
+                     every omic of a job re-queried MongoDB for the same names.
 
     @returns True
     """
@@ -280,8 +370,9 @@ def mapFeatureIdentifiers(jobID, organism, databases, featureList,  matchedFeatu
 
     client, db  = getConnectionByOrganismCode(organism)
 
-    databaseConvertion_ids = {dbname: db.dbname.find_one({"dbname": gene_databases.get(dbname)}, {"item": 1, "qty": 1}).get("_id") for dbname in databases}
-    databaseGeneSymbol_ids = {dbname: db.dbname.find_one({"dbname": symbol_databases.get(dbname)}, {"item": 1, "qty": 1}).get("_id") for dbname in databases}
+    if databaseIds is None:
+        databaseIds = resolveDatabaseIds(organism, databases, db)
+    databaseConvertion_ids, databaseGeneSymbol_ids = databaseIds
 
     # Iterate symbol-capable databases first so the per-featureID dedup below keeps
     # the clone whose name was resolved against a real gene-symbol database
@@ -367,6 +458,15 @@ def mapFeatureIdentifiers(jobID, organism, databases, featureList,  matchedFeatu
         # Use a set to track which features matched in any database (O(1) lookups)
         localMatchedFeatures = set()
 
+        # Accumulate locally and hand over ONCE at the end. `matchedFeatures`
+        # is a Manager list proxy in the forked path, and every append on it
+        # is a pickle plus a socket round trip to the manager process --
+        # measured at ~92us each, 40k clones per big omic, six workers
+        # serialising on one manager. Element order within this worker is
+        # unchanged; the interleaving between workers was never deterministic.
+        localMatched = []
+        localNotMatched = []
+
         for feature in featureList:
             originalName = feature.getName()
             featureMatchedInAnyDB = False
@@ -417,11 +517,11 @@ def mapFeatureIdentifiers(jobID, organism, databases, featureList,  matchedFeatu
                         featureName = cachedSymbols[0]
 
                         featureClone.setName(featureName)
-                        matchedFeatures.append(featureClone)
+                        localMatched.append(featureClone)
 
             # Only add to notMatchedFeatures if it didn't match in ANY database
             if not featureMatchedInAnyDB:
-                notMatchedFeatures.append(feature)
+                localNotMatched.append(feature)
             else:
                 # Track that this feature was matched (for deduplication if needed)
                 localMatchedFeatures.add(originalName)
@@ -429,11 +529,29 @@ def mapFeatureIdentifiers(jobID, organism, databases, featureList,  matchedFeatu
         #*************************************************************************************
         # STORE THE RESULTS
         #*************************************************************************************
+        _handOver(matchedFeatures, resultSlot, localMatched)
+        _handOver(notMatchedFeatures, resultSlot, localNotMatched)
+
+        if cacheTables is not None:
+            # Everything this worker resolved, keyed exactly as
+            # findIDsByFeaturesName keys the translation cache: name -> ids
+            # under the id database, id -> symbols under the symbol database
+            # (one and the same table when the two databases coincide, as for
+            # Reactome). Misses are in here as empty lists too.
+            tables = {}
+            for databaseConvertion_name in databases:
+                tables.setdefault(databaseConvertion_ids.get(databaseConvertion_name), {}).update(
+                    allCacheFeatureIDS[databaseConvertion_name])
+                tables.setdefault(databaseGeneSymbol_ids.get(databaseConvertion_name), {}).update(
+                    allCacheSymbolsIDS[databaseConvertion_name])
+            cacheTables.append(tables)
 
         # If only one database was used for the species, remove the redundant "Total" counter
         if len(databaseConvertion_ids) < 2:
             matches.pop("Total", None)
 
+        # Exactly one append per worker: the parent counts these to detect a
+        # worker that died silently (see mapFeatureNamesToKeggIDs).
         foundFeatures.append(matches)
 
         return matchedFeatures, notMatchedFeatures, foundFeatures
@@ -489,10 +607,17 @@ def mapFeatureNamesToKeggIDs(jobID, organism, databases, featureList, enrichment
 
 
     manager=Manager()
-    #CONCATENATE THE OUTPUT LISTS
-    matchedFeatures = manager.list()
-    notMatchedFeatures= manager.list()
+    #CONCATENATE THE OUTPUT LISTS -- one slot per worker, filled by that worker,
+    # read back in worker (= input) order: see _handOver.
+    matchedFeatures = manager.list([None] * len(genesListParts))
+    notMatchedFeatures= manager.list([None] * len(genesListParts))
     foundFeatures = manager.list()
+    # One entry per worker: the translations it resolved, merged into the
+    # job's cache below so the NEXT omic's workers inherit them at fork time.
+    cacheTables = manager.list()
+
+    # Resolved once here rather than 2 x n_db find_one calls in each worker.
+    databaseIds = resolveDatabaseIds(organism, databases)
 
     #***********************************************************************************
     #* STEP 2. START THE MAPPING USING N DIFFERENT THREADS IN PARALLEL
@@ -511,7 +636,7 @@ def mapFeatureNamesToKeggIDs(jobID, organism, databases, featureList, enrichment
         threadsList = []
         i=0
         for genesListPart in genesListParts:
-            thread = Process(target=mapFeatureIdentifiers, args=(jobID, organism, databases, genesListPart, matchedFeatures, notMatchedFeatures, foundFeatures, enrichment, progressArray, i))
+            thread = Process(target=mapFeatureIdentifiers, args=(jobID, organism, databases, genesListPart, matchedFeatures, notMatchedFeatures, foundFeatures, enrichment, progressArray, i, databaseIds, cacheTables, i))
             threadsList.append(thread)
             thread.start()
             i+=1
@@ -556,19 +681,27 @@ def mapFeatureNamesToKeggIDs(jobID, organism, databases, featureList, enrichment
     for dbname in sumFoundFeatures.keys():
         sumFoundFeatures[dbname] = len(set(itertools.chain.from_iterable(dbmatches[dbname] for dbmatches in foundFeatures)))
 
+    # Carry the workers' translations into the parent's cache. The children
+    # wrote them into their OWN copy of the KeggInformationManager singleton
+    # (fork is copy-on-write), so until now the parent's cache -- the one the
+    # next omic's workers are forked from -- stayed empty for the whole job
+    # and a 4-omic upload paid the full MongoDB mapping cost four times over.
+    keggInformationManager = KeggInformationManager()
+    for tables in cacheTables[:]:
+        for dbID, table in tables.items():
+            keggInformationManager.updateTranslationCache(jobID, table, "id", dbID)
+
     #***********************************************************************************
     #* STEP 4. RETURN THE RESULTS
     #***********************************************************************************
+    # One round trip each (a slice carries the whole list), then the workers'
+    # lists concatenated in worker order -- the order a sequential pass over
+    # the input produces.
+    matchedFeatures = list(itertools.chain.from_iterable(part for part in matchedFeatures[:] if part is not None))
+    notMatchedFeatures = list(itertools.chain.from_iterable(part for part in notMatchedFeatures[:] if part is not None))
+
     logging.info("FINISHED. %s uniquely matched features, %d features matched. %d features not matched.",
                  next(iter(sumFoundFeatures.values()), 0), len(matchedFeatures), len(notMatchedFeatures))
-
-    # Materialise the proxies with ONE round trip each before returning them.
-    # BaseListProxy exposes __getitem__/__len__ but not __iter__, so a caller's
-    # `for x in matchedFeatures` falls back to the sequence protocol and pays an
-    # IPC round trip per element — measured at 92us x 39,527 elements = 6.9s of an
-    # 83s job. A slice is a single __getitem__ call carrying the whole list, 10x
-    # faster in-container. `list(proxy)` does NOT help: it iterates the same way.
-    matchedFeatures, notMatchedFeatures = matchedFeatures[:], notMatchedFeatures[:]
     # The Manager server is a forked process holding a copy of everything the
     # workers sent it; release it now rather than when the GC gets round to it.
     manager.shutdown()
@@ -591,6 +724,148 @@ def mapFeatureNamesToKeggIDs(jobID, organism, databases, featureList, enrichment
 # input row. A name over the cap is treated as too generic to be a substring
 # query and only its exact-name hits are kept.
 MAX_COMPOUND_MATCHES = int(os.getenv("PAINTOMICS_MAX_COMPOUND_MATCHES", "500"))
+
+
+class _CompoundNameCursor(object):
+    """The slice of pymongo's Cursor that findCompoundIDByFeatureName uses."""
+
+    def __init__(self, docs):
+        self._docs = docs
+        self._limit = None
+
+    def limit(self, n):
+        self._limit = n
+        return self
+
+    def __iter__(self):
+        docs = self._docs if self._limit is None else self._docs[:self._limit]
+        return iter(docs)
+
+
+class _CompoundNameTable(object):
+    """
+    An in-memory stand-in for the ``kegg_compounds`` collection: the same
+    ``find({"name": {"$regex": pattern}}).limit(n)`` calls, answered from RAM.
+
+    kegg_compounds is a static 93k-document, 1.3 MB collection with only a
+    text index, which a case-insensitive substring regex cannot use, so every
+    metabolite name used to cost a full collection scan on mongod (20-50 ms
+    each -- 40 s for a 4,667-row file even spread over six workers). Here the
+    lower-cased names are joined into ONE haystack string and searched with
+    str.find, which walks the whole 1.3 MB in well under a millisecond, and
+    the hit positions are mapped back to documents in collection order.
+
+    Semantics reproduced from the MongoDB query exactly as
+    findCompoundIDByFeatureName issues it: an escaped literal (substring,
+    case-insensitive) or the same literal anchored ``^...$`` (whole-name,
+    case-insensitive), documents returned in natural (load) order, ``limit``
+    honoured on that order. Any other pattern falls back to evaluating the
+    compiled regex against every name, which is always correct and merely
+    slow. Candidates found by the fast path are re-checked with the compiled
+    pattern, so nothing the regex would reject can be returned.
+    """
+
+    def __init__(self, docs):
+        self.docs = docs
+        names = [str(doc.get("name", "")) for doc in docs]
+        # A name containing the separator could straddle two entries; the
+        # generic path is safe for that (never seen in KEGG, checked anyway).
+        self._fastPathOK = not any("\n" in name for name in names)
+        lowered = [name.lower() for name in names]
+        self._haystack = "\n".join(lowered)
+        self._lowered = lowered
+        starts = []
+        position = 0
+        for name in lowered:
+            starts.append(position)
+            position += len(name) + 1
+        self._starts = starts
+
+    # -- collection interface -------------------------------------------------
+    @property
+    def kegg_compounds(self):
+        return self
+
+    def find(self, query):
+        pattern = query["name"]["$regex"]
+        return _CompoundNameCursor(self._matchingDocs(pattern))
+
+    # -- matching -------------------------------------------------------------
+    @staticmethod
+    def _literalOf(pattern):
+        """The literal a re.escape()d (optionally ^...$ anchored) pattern
+        stands for, plus whether it was anchored; None if not that shape."""
+        source = pattern.pattern
+        anchored = len(source) >= 2 and source.startswith("^") and source.endswith("$")
+        core = source[1:-1] if anchored else source
+        literal = re.sub(r"\\(.)", r"\1", core, flags=re.S)
+        if re.escape(literal) != core:
+            return None, anchored
+        return literal, anchored
+
+    def _matchingDocs(self, pattern):
+        literal, anchored = self._literalOf(pattern)
+        caseInsensitive = bool(pattern.flags & re.IGNORECASE)
+        if literal is None or not caseInsensitive or not self._fastPathOK or literal == "":
+            return [doc for doc in self.docs if pattern.search(str(doc.get("name", "")))]
+        needle = literal.lower()
+        if anchored:
+            candidates = [index for index, name in enumerate(self._lowered) if name == needle]
+        else:
+            candidates = []
+            haystack, starts = self._haystack, self._starts
+            position = haystack.find(needle)
+            while position != -1:
+                index = bisect_right(starts, position) - 1
+                candidates.append(index)
+                nextDoc = index + 1
+                if nextDoc >= len(starts):
+                    break
+                position = haystack.find(needle, starts[nextDoc])
+        docs = self.docs
+        return [docs[index] for index in candidates
+                if pattern.search(str(docs[index].get("name", "")))]
+
+
+_compoundNameTable = None
+_compoundNameTableSize = None
+
+
+def getCompoundNameTable(db=None, revalidate=True):
+    """
+    The process-wide _CompoundNameTable, loaded from ``global-paintomics``
+    on first use and reused for the life of the process. kegg_compounds only
+    changes when the installer runs, which already requires a server restart
+    for every other in-memory dataset; with ``revalidate`` the document count
+    is re-checked so an in-place reload of the collection is still noticed.
+    Loaded in the PARENT before the workers fork, so all of them share one
+    copy-on-write table (a worker passes revalidate=False: it inherited the
+    table the parent just validated and must not open a connection of its own
+    just to count).
+    """
+    global _compoundNameTable, _compoundNameTableSize
+    if _compoundNameTable is not None and not revalidate:
+        return _compoundNameTable
+    client = None
+    if db is None:
+        client, db = getConnectionByOrganismCode("global")
+    try:
+        size = db.kegg_compounds.estimated_document_count()
+        if _compoundNameTable is None or _compoundNameTableSize != size:
+            started = time.monotonic()
+            # Without _id: nothing reads it (mapCompoundsIdentifiers uses id and
+            # name), and an ObjectId leaf keeps all 93k dicts on the garbage
+            # collector's radar for the life of the process -- ~0.2 s per full
+            # collection, measured -- whereas dicts of plain strings are
+            # untracked after the first pass.
+            _compoundNameTable = _CompoundNameTable(list(db.kegg_compounds.find({}, {"_id": 0})))
+            _compoundNameTableSize = size
+            logging.info("LOADED %d KEGG COMPOUND NAMES INTO MEMORY IN %.2fs",
+                         size, time.monotonic() - started)
+        return _compoundNameTable
+    finally:
+        if client is not None:
+            client.close()
 
 
 def isPlaceholderCompoundName(featureName):
@@ -655,7 +930,7 @@ def findCompoundIDByFeatureName(jobID, featureName, db):
     except Exception as ex:
         return matchedFeatures, False
 
-def mapCompoundsIdentifiers(jobID, featureList, matchedFeatures, notMatchedFeatures, foundFeatures):
+def mapCompoundsIdentifiers(jobID, featureList, matchedFeatures, notMatchedFeatures, foundFeatures, resultSlot=None):
     """
     This function is used to query the database in different threads.
 
@@ -671,7 +946,15 @@ def mapCompoundsIdentifiers(jobID, featureList, matchedFeatures, notMatchedFeatu
     #***********************************************************************************
     #* STEP 2. GET THE CORRESPONDING DATABASE FOR CURRENT SPECIE
     #***********************************************************************************
-    client, db  = getConnectionByOrganismCode("global")
+    # The in-memory copy of kegg_compounds (see _CompoundNameTable), inherited
+    # from the parent that loaded it before forking. It answers exactly the
+    # find(...).limit(...) calls findCompoundIDByFeatureName makes.
+    db = getCompoundNameTable(revalidate=False)
+
+    # Local accumulation, one hand-over per list at the end: see the same
+    # note in mapFeatureIdentifiers.
+    localMatched = []
+    localNotMatched = []
 
     try:
         matches=0
@@ -745,13 +1028,15 @@ def mapCompoundsIdentifiers(jobID, featureList, matchedFeatures, notMatchedFeatu
                         del matchedElement.getOtherCompounds()[i]
 
                     #Add the CompoundSet to the list
-                    matchedFeatures.append(matchedElement)
+                    localMatched.append(matchedElement)
                 else:
-                    notMatchedFeatures.append(feature)
+                    localNotMatched.append(feature)
 
         #*************************************************************************************
         # STORE THE RESULTS
         #*************************************************************************************
+        _handOver(matchedFeatures, resultSlot, localMatched)
+        _handOver(notMatchedFeatures, resultSlot, localNotMatched)
         foundFeatures.append(matches)
         # matchedCompoundIDsTablesList.append(matchedCompoundIDsTable)
 
@@ -759,8 +1044,6 @@ def mapCompoundsIdentifiers(jobID, featureList, matchedFeatures, notMatchedFeatu
 
     except Exception as ex:
         raise ex
-    finally:
-        client.close()
 
 def mapFeatureNamesToCompoundsIDs(jobID, featureList):
     """
@@ -791,12 +1074,16 @@ def mapFeatureNamesToCompoundsIDs(jobID, featureList):
     #SPLIT THE ARRAY IN n PARTS
     compoundsListParts = chunks(featureList, nLinesPerThread)
 
+    # Load (or revalidate) the in-memory kegg_compounds table BEFORE forking so
+    # every worker inherits the same copy instead of scanning MongoDB per name.
+    getCompoundNameTable()
+
     manager=Manager()
 
-    #CONCATENATE THE OUTPUT LISTS
-
-    matchedFeatures = manager.list()
-    notMatchedFeatures= manager.list()
+    #CONCATENATE THE OUTPUT LISTS -- one slot per worker, read back in worker
+    # (= input) order: see _handOver.
+    matchedFeatures = manager.list([None] * len(compoundsListParts))
+    notMatchedFeatures= manager.list([None] * len(compoundsListParts))
     foundFeatures= manager.list([0]*nThreads)
 
     #matchedFeatures = list()
@@ -814,7 +1101,7 @@ def mapFeatureNamesToCompoundsIDs(jobID, featureList):
         threadsList = []
         i=0
         for compoundListPart in compoundsListParts:
-            thread = Process(target=mapCompoundsIdentifiers, args=(jobID, compoundListPart, matchedFeatures, notMatchedFeatures, foundFeatures))
+            thread = Process(target=mapCompoundsIdentifiers, args=(jobID, compoundListPart, matchedFeatures, notMatchedFeatures, foundFeatures, i))
             threadsList.append(thread)
             thread.start()
             i+=1
@@ -845,14 +1132,13 @@ def mapFeatureNamesToCompoundsIDs(jobID, featureList):
 
     foundFeatures = sum(foundFeatures)
 
+    # One round trip each, concatenated in worker (= input) order.
+    matchedFeatures = list(itertools.chain.from_iterable(part for part in matchedFeatures[:] if part is not None))
+    notMatchedFeatures = list(itertools.chain.from_iterable(part for part in notMatchedFeatures[:] if part is not None))
+
     #***********************************************************************************
     #* STEP 4. RETURN THE RESULTS
     #***********************************************************************************
     logging.info("FINISHED. " + str(foundFeatures) + " uniquely matched compounds, " +  str(len(matchedFeatures)) + " compounds matched. " + str(len(notMatchedFeatures)) + " compounds not matched.")
-
-    # One round trip each instead of one per element — see the note on the same
-    # return in mapFeatureNamesToKeggIDs. Compound lists are short today (58 in the
-    # bundled example), so this is correctness-by-consistency rather than a win.
-    matchedFeatures, notMatchedFeatures = matchedFeatures[:], notMatchedFeatures[:]
     manager.shutdown()
     return foundFeatures, matchedFeatures, notMatchedFeatures

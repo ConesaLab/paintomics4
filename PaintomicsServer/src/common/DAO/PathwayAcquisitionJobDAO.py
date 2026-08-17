@@ -35,12 +35,34 @@ class PathwayAcquisitionJobDAO(DAO):
             for feature in match:
                 jobInstance.addFoundCompound(feature)
 
+            # One pass over the job's features instead of two.
+            #
+            # This used to be findAll({jobID, featureType:"Gene"}) followed by
+            # findAll({jobID, featureType:"Compound"}): two cursors, two index
+            # walks and two full adaptBSON/parseBSON passes over the same jobID
+            # slice, which on a large job is 40k documents' worth of setup paid
+            # twice. Both scans walk the same jobID range in the same direction,
+            # so partitioning one cursor on the featureType the document itself
+            # carries yields each type in exactly the order its own query did,
+            # and genes are still added before compounds -- the insertion order
+            # of inputGenesData / inputCompoundsData is unchanged.
+            #
+            # A document with any other featureType (or none) was returned by
+            # neither query and is still added to neither dict.
             auxDAO = FeatureDAO(dbManager=self.dbManager)
-            match = auxDAO.findAll({"jobID":id, "featureType" : "Gene"})
+            match = auxDAO.findAll({"jobID": id})
+            geneFeatures = []
+            compoundFeatures = []
             for feature in match:
+                featureType = getattr(feature, "featureType", None)
+                if featureType == "Gene":
+                    geneFeatures.append(feature)
+                elif featureType == "Compound":
+                    compoundFeatures.append(feature)
+
+            for feature in geneFeatures:
                 jobInstance.addInputGeneData(feature)
-            match = auxDAO.findAll({"jobID":id, "featureType" : "Compound"})
-            for feature in match:
+            for feature in compoundFeatures:
                 jobInstance.addInputCompoundData(feature)
 
             auxDAO = PathwayDAO(dbManager=self.dbManager)

@@ -3,11 +3,24 @@
 
 Why this exists
 ---------------
-`DBmanager.openConnection` builds a **new `MongoClient` per DAO**, and PyMongo
-runs topology-monitor threads for each one. Measured on this machine: ten
-managers left unclosed take the process from 1 thread to 26, and closing them
-returns it to 1. A leaked DAO is therefore ~2.5 leaked threads plus its sockets,
-not merely an idle object waiting for the collector.
+It began as a thread leak. `DBmanager.openConnection` used to build a **new
+`MongoClient` per DAO**, each with its own PyMongo topology-monitor threads:
+measured on this machine, ten managers left unclosed took the process from 1
+thread to 26, and closing them returned it to 1. A leaked DAO was ~2.5 leaked
+threads plus its sockets.
+
+**That cost is gone.** `DBmanager` now hands out one process-wide client keyed
+on `(host, port, pid)`, `closeConnection` is a reference drop, and
+`getCollection` looks the client up on every call -- so an unclosed manager
+costs nothing at all. `SharedClientCostTest` below measures exactly that, and
+it is what the old `LeakCostTest` was replaced with: a test that asserted
+leaking still costs threads would now be asserting the bug this change removed.
+
+The finally rule above survives the reason it was written for. What it enforces
+now is that a DAO does not outlive the request that made it: a manager kept
+past its handler is the one way a stale client reference can still be carried
+across a `fork()` (the mapper and enrichment workers are forked children), and
+"close it in a finally" is the shape the codebase settled on for that.
 
 Several handlers closed theirs on the success path only:
 
@@ -36,6 +49,8 @@ import sys
 import unittest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
+
+from src.common import DBmanager as DBmanagerModule
 
 _SRC = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -98,52 +113,76 @@ class ConnectionCleanupTest(unittest.TestCase):
             + "\n  ".join(offending))
 
 
-class LeakCostTest(unittest.TestCase):
-    """The measurement behind the rule, so it is not taken on faith."""
+class SharedClientCostTest(unittest.TestCase):
+    """The measurement behind the rule, re-taken after the shared client.
 
-    def test_an_unclosed_manager_costs_threads(self):
-        import threading
-        from src.common.DBmanager import DBmanager
+    Replaces the old LeakCostTest, which asserted that unclosed managers cost
+    threads. They no longer do, and the old test only stayed green by running
+    before anything else had opened the process client -- so it would have gone
+    red the moment another Mongo-touching test sorted ahead of it, on a change
+    that is behaving perfectly.
+    """
 
+    def _warmedManager(self):
+        """A manager whose query has already built the process client."""
         try:
-            baseline = threading.active_count()
-            managers = []
-            for _ in range(5):
-                manager = DBmanager()
-                manager.getCollection("userCollection")
-                managers.append(manager)
-            leaked = threading.active_count()
+            manager = DBmanagerModule.DBmanager()
+            manager.getCollection("userCollection").find_one({})
+            return manager
         except Exception as exc:
             raise unittest.SkipTest("no reachable mongod: %s" % exc)
 
-        try:
-            self.assertGreater(
-                leaked, baseline,
-                "leaking DAO connections no longer costs threads; if PyMongo "
-                "changed, the finally rule above may be over-strict")
-        finally:
-            for manager in managers:
-                manager.closeConnection()
+    def test_unclosed_managers_cost_no_threads(self):
+        import threading
 
-    def test_closing_returns_the_threads(self):
+        self._warmedManager()          # the client (and its monitor) now exists
+
+        baseline = threading.active_count()
+        managers = []
+        for _ in range(10):
+            manager = DBmanagerModule.DBmanager()
+            manager.getCollection("userCollection").find_one({})
+            managers.append(manager)   # deliberately never closed
+
+        self.assertEqual(
+            threading.active_count(), baseline,
+            "ten unclosed DBmanagers cost threads again. They are supposed to "
+            "share one process-wide MongoClient; if each is building its own, "
+            "the connection-per-DAO regression is back")
+
+        self.assertEqual(
+            len({id(manager.getConnection()) for manager in managers}), 1,
+            "the managers did not all get the same client object")
+
+    def test_closing_does_not_disturb_the_process_client(self):
         import threading
         import time
-        from src.common.DBmanager import DBmanager
 
-        try:
-            baseline = threading.active_count()
-            managers = [DBmanager() for _ in range(5)]
-            for manager in managers:
-                manager.getCollection("userCollection")
-        except Exception as exc:
-            raise unittest.SkipTest("no reachable mongod: %s" % exc)
+        manager = self._warmedManager()
+        client = manager.getConnection()
 
-        for manager in managers:
-            manager.closeConnection()
-        time.sleep(1)
+        others = []
+        for _ in range(10):
+            other = DBmanagerModule.DBmanager()
+            other.getCollection("userCollection").find_one({})
+            others.append(other)
 
-        self.assertLessEqual(threading.active_count(), baseline + 2,
-                             "closing did not return the monitor threads")
+        baseline = threading.active_count()
+        for other in others:
+            other.closeConnection()
+        time.sleep(0.5)
+
+        self.assertEqual(threading.active_count(), baseline,
+                         "closeConnection tore something down; it is supposed "
+                         "to be a reference drop on a shared client")
+        self.assertIsNone(others[0].getConnection(),
+                          "closeConnection must still clear this manager's reference")
+
+        # the client is untouched and still serves the next caller
+        after = DBmanagerModule.DBmanager()
+        after.getCollection("userCollection").find_one({})
+        self.assertIs(after.getConnection(), client,
+                      "a closed manager took the process client with it")
 
 
 def main():
