@@ -20,6 +20,34 @@ from conf.serverconf import (
 
 from src.common.Util import sendEmail
 
+# Directories directly under CLIENT_TMP that are NOT user directories.
+#
+# Everything else there is read as a "<userID>" directory, and STEP 7 rmtree's
+# any of them that no user in the database claims. "nologin" was always
+# excluded; "gtfcache" is the shared GTF cache Bed2GeneJob points at
+# (Bed2GeneJob.getOptions -> "cache_dir": CLIENT_TMP + "gtfcache"), and no user
+# will ever own it, so every cleanup run would have deleted the whole cache and
+# made the next regions-to-genes job re-parse its annotation from scratch.
+NON_USER_CLIENT_TMP_DIRS = ("nologin", "gtfcache")
+
+# Every index the running server depends on, as (collection, create_index keys).
+# Shared with paintomicsserver so startup and the nightly cron cannot drift:
+# rebuildIndexes is on a 24h timer, so without the startup pass a fresh
+# deployment answers every jobID query with a collection scan until it fires.
+#
+# aiInterpretationCollection was missing entirely. Its documents average 125KB
+# and ai_interpret_status polls {"jobID": ...} every few seconds for the whole
+# length of a multi-minute report, so it was the collection that most needed
+# the index and the only one that never had it.
+JOBID_INDEXES = [
+    ('jobInstanceCollection', "jobID"),
+    ('featuresCollection', "jobID"),
+    ('featuresCollection', [("jobID", 1), ("featureType", 1)]),
+    ('pathwaysCollection', "jobID"),
+    ('foundFeaturesCollection', "jobID"),
+    ('aiInterpretationCollection', "jobID"),
+]
+
 def cleanDatabases(force=False):
     log("Starting Clean Databases routine")
 
@@ -31,8 +59,9 @@ def cleanDatabases(force=False):
     # STEP 1. GET ALL USERS BY DIRECTORY
     user_dirs = os.listdir(CLIENT_TMP_DIR)
 
-    if "nologin" in user_dirs:
-        user_dirs.remove("nologin")
+    for reservedDir in NON_USER_CLIENT_TMP_DIRS:
+        if reservedDir in user_dirs:
+            user_dirs.remove(reservedDir)
 
     # STEP 2. GET ALL USERS IN DB
     users_list = connection[MONGODB_DATABASE]['userCollection'].find()
@@ -265,25 +294,32 @@ def fixUserDataByUserID(connection, user_id):
         os.makedirs(path, exist_ok=True)
 
 def rebuildIndexes(connection):
-    dbs = ['userCollection', 'jobInstanceCollection', 'foundFeaturesCollection', 'featuresCollection', 'pathwaysCollection', 'visualOptionsCollection', 'fileCollection', 'messageCollection']
-    existing_collections = set(connection[MONGODB_DATABASE].list_collection_names())
-    for db in dbs:
-        if db not in existing_collections:
-            log("Skipping index rebuild for database " + db + " (collection missing)")
-            continue
-        log("Rebuilding indexes for database " + db)
-        try:
-            connection[MONGODB_DATABASE][db].reindex()
-        except OperationFailure as err:
-            log("Failed to rebuild indexes for database " + db + ": " + str(err))
-
-    # Create indexes on jobID for collections that are queried by jobID
+    # The daily reindex() loop that used to stand here is gone.
+    #
+    # It rebuilt every index of all eight job collections from scratch, inside
+    # the single serving process, once every 24h -- including featuresCollection
+    # (2.85M documents / 2.1GB on this machine), which takes a strong collection
+    # lock for the duration. It produced no observable output: the indexes it
+    # rebuilt were the indexes it started with.
+    #
+    # It was also a live crash. reindex() is deprecated in pymongo 3.11 and
+    # REMOVED in pymongo 4, which requirements.txt now pins: under pymongo 4
+    # `collection.reindex` resolves to a *sub-collection* named "reindex"
+    # instead of a method, and calling it raises TypeError, which the
+    # `except OperationFailure` did not catch. The cron would have died before
+    # reaching the create_index calls below -- and this function is the only
+    # place job indexes are ever created, so a fresh deployment would have run
+    # every jobID query as a collection scan.
+    #
+    # The create_index calls stay: they are idempotent, cheap when the index
+    # exists, and they are the point of the whole function.
     log("Creating jobID indexes...")
-    connection[MONGODB_DATABASE]['jobInstanceCollection'].create_index("jobID")
-    connection[MONGODB_DATABASE]['featuresCollection'].create_index("jobID")
-    connection[MONGODB_DATABASE]['featuresCollection'].create_index([("jobID", 1), ("featureType", 1)])
-    connection[MONGODB_DATABASE]['pathwaysCollection'].create_index("jobID")
-    connection[MONGODB_DATABASE]['foundFeaturesCollection'].create_index("jobID")
+    for collectionName, keys in JOBID_INDEXES:
+        try:
+            connection[MONGODB_DATABASE][collectionName].create_index(keys)
+        except OperationFailure as err:
+            # One unindexable collection must not cost the others their index.
+            log("Failed to create index " + str(keys) + " on " + collectionName + ": " + str(err))
     log("jobID indexes created.")
 
 def log(msg):

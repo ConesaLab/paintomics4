@@ -107,6 +107,7 @@ class Application(object):
         KeggInformationManager(KEGG_DATA_DIR) #INITIALIZE THE SINGLETON
         JobInformationManager()#INITIALIZE THE SINGLETON
 
+        self.ensureIndexes()      #CREATE THE jobID INDEXES IF MISSING (IDEMPOTENT)
         self.startScheludeTasks() #CLEAN DATA EVERY N HOURS
 
         self.queue = Queue()
@@ -812,6 +813,38 @@ class Application(object):
         configureLogging(self.ROOT_DIRECTORY + 'conf/logging.cfg')
 
         #self.app.config['MAX_CONTENT_LENGTH'] = SERVER_MAX_CONTENT_LENGTH * pow(1024, 2)
+
+    def ensureIndexes(self):
+        # Idempotent and near-free when the indexes exist. Until now they were
+        # created only by the 24h cron, so a fresh deployment scanned
+        # collections for its first day -- and aiInterpretationCollection,
+        # which the AI status poll hits every few seconds, was never in that
+        # list.
+        #
+        # On a daemon thread, NOT the boot path. Boot did no MongoDB I/O at all
+        # before this call existed, and the two cases where it is slow are
+        # exactly the cases where the server most needs to come up: an
+        # unreachable mongod costs the 30 s server-selection timeout, and a
+        # deployment restored from a mongodump without indexes pays the whole
+        # build of a 2.85M-document featuresCollection index. Both used to
+        # happen on the cron's background thread; neither should hold the port
+        # closed. Daemon so it can never keep a shutting-down process alive.
+        def createIndexes():
+            from src.AdminTools.scripts.clean_databases import JOBID_INDEXES
+            from src.common.DBmanager import getSharedClient
+            from src.conf.serverconf import MONGODB_DATABASE
+            try:
+                database = getSharedClient()[MONGODB_DATABASE]
+                for collectionName, keys in JOBID_INDEXES:
+                    database[collectionName].create_index(keys)
+                logging.info("jobID indexes ensured.")
+            except Exception as ex:
+                # An unreachable database must not stop the server from
+                # serving; it did not before this call existed.
+                logging.warning("Could not ensure jobID indexes at startup: " + str(ex))
+
+        import threading
+        threading.Thread(target=createIndexes, name="ensureIndexes", daemon=True).start()
 
     def startScheludeTasks(self):
         from apscheduler.schedulers.background import BackgroundScheduler

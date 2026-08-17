@@ -585,12 +585,15 @@ class JobInformationManager(metaclass=Singleton):
                 elif(matchingType.lower() == "reference_file"):
                     jobInstance.addReferenceInput({"omicName": omicType, "fileType": dataType, "inputDataFile": dataFileName})
 
-    # Both of these close in a finally rather than after the call: DBmanager
-    # builds a new MongoClient per DAO, each with its own monitor threads, so a
-    # query that raises leaves those threads behind. The raising case is a
-    # database that is unreachable, which is when every request is failing at
-    # once -- leaking a client per failure makes the outage worse rather than
-    # merely noisier.
+    # Both of these close in a finally rather than after the call. That used to
+    # be about leaked threads -- DBmanager built a new MongoClient per DAO, with
+    # its own monitor threads, and a query that raised left them behind, exactly
+    # when the database was already unreachable and every request was failing at
+    # once. DBmanager now hands out one process-wide client, so the finally no
+    # longer buys back threads; it stays because it is the shape the rule in
+    # src/tests/test_dao_connection_cleanup.py enforces, it costs nothing, and a
+    # DAO that outlives its request is the one way a manager can still carry a
+    # client reference across a fork.
     def getVisualOptions(self, jobID):
         daoInstance = VisualOptionsDAO()
         try:
@@ -606,17 +609,30 @@ class JobInformationManager(metaclass=Singleton):
         finally:
             daoInstance.closeConnection()
 
+    # The three below never released their DAO at all -- not on the error path,
+    # not on the success path. touchAccessDate in particular runs on every
+    # loadJobInstance, cache hit included, and the AI routes load a job several
+    # times per report, so a single run left a handful of managers behind.
     def storeSharingOptions(self, jobInstance):
         daoInstance = PathwayAcquisitionJobDAO()
-        daoInstance.update(jobInstance, {"fieldList": ["allowSharing", "readOnly"]})
+        try:
+            daoInstance.update(jobInstance, {"fieldList": ["allowSharing", "readOnly"]})
+        finally:
+            daoInstance.closeConnection()
 
     def touchAccessDate(self, jobID):
         jobInstanceDAO = PathwayAcquisitionJobDAO()
-        jobInstanceDAO.touch(jobID)
+        try:
+            jobInstanceDAO.touch(jobID)
+        finally:
+            jobInstanceDAO.closeConnection()
 
     def storePathways(self, jobInstance):
         daoInstance = PathwayDAO()
-        logging.info("STORE PATHWAYS - REMOVING PATHWAYS TO DATABASE...")
-        daoInstance.removeAll({"jobID": jobInstance.getJobID()})
-        logging.info("STORE PATHWAYS - SAVING PATHWAYS TO DATABASE...")
-        daoInstance.insertAll(jobInstance.getMatchedPathways().values(), {"jobID": jobInstance.getJobID()})
+        try:
+            logging.info("STORE PATHWAYS - REMOVING PATHWAYS TO DATABASE...")
+            daoInstance.removeAll({"jobID": jobInstance.getJobID()})
+            logging.info("STORE PATHWAYS - SAVING PATHWAYS TO DATABASE...")
+            daoInstance.insertAll(jobInstance.getMatchedPathways().values(), {"jobID": jobInstance.getJobID()})
+        finally:
+            daoInstance.closeConnection()
