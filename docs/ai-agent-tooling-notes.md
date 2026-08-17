@@ -95,6 +95,35 @@ Round 6's two surviving traces showed `compare_gene_profiles` as never called;
 round 7 called it. Removing a tool on two traces would have been wrong, and it is
 exactly why the archive exists. **Adoption needs runs, not calls.**
 
+## Third measurement — the gate, which was the biggest cost and invisible
+
+Gate-side LLM calls are now archived as `gate: True` events. The first numbers
+settled a question that had been costing citations for the whole experiment:
+
+| verifier | per call | verdict returned? | redactions it caused |
+|---|---|---|---|
+| tool loop (`search_paper_text` + `fetch_paper_section`) | 45 s hedge timeouts, ~90 s worst | **9 of 14 failures were "Max turns (6) exceeded"** | 12–14 per run |
+| prefetched, tool-less | **median 2 464 ms** | **29 of 29** | 2 per run |
+
+29 prefetched calls returned 27 `match=True supports=True` and 2 genuine
+refutations — and the run's redaction count was exactly 2. **Ten of the twelve
+redactions in the previous configuration were a verifier that never reached a
+verdict, not a citation that failed.** Verify-loop wall clock fell 291 s → 117 s
+and the whole run 485 s → 338 s.
+
+The lesson generalises past this arm: **if a tool loop exists only to fetch
+something a function could fetch, it is not agency, it is latency and a failure
+mode.** Locating a quote in a paper is `str.find` with a fuzzy fallback; judging
+whether it supports a claim is the part that needs a model. Splitting those two
+made the check faster, more reliable, and cheaper.
+
+The same `Max turns (6) exceeded` warning appears in the **workflow arm's** logs,
+so its shipped reports lose citations the same way. That fix belongs in its own PR.
+
+Also measured, ending two suspicions: the quote-collection phase costs **3 s**,
+not the tens of seconds assumed (it is not worth optimising), and
+`read_paper`'s payoff held at 40 % (5 opened, 2 cited).
+
 ## Open questions the archive will answer
 
 - Are `get_gene_profile`, `notebook_read` and `delegate_literature` dead weight?
