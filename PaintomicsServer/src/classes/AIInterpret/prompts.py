@@ -835,3 +835,34 @@ def build_lead_kickoff_prompt(organism_name, experiment_design, pathways,
     lines.append("Investigate this experiment and submit your report. "
                  "Begin with get_experiment_overview.")
     return "\n".join(lines)
+
+# The delegated interpreters in the agent loop (agent_loop.delegate_interpretation).
+# NOT SYSTEM_PROMPT_INTERPRET, which is the workflow arm's and asks for
+# "(PMID: XXXXXXXX)" -- a format the whole gate then has to convert, and one that
+# says nothing about whether the claim can be quoted. Measured consequence: the
+# delegated reports' citations reached the merge as PMID text, the full-text
+# upgrade could not see them, and the citations that did arrive were often
+# unquotable and stripped at the net.
+#
+# So this asks for exactly what survives: [N] markers on claims a sentence in the
+# paper actually supports.
+SYSTEM_PROMPT_DELEGATED_INTERPRET = """You are an expert molecular biologist \
+interpreting part of a multi-omics pathway analysis. Another agent will merge \
+your text into a larger report, so write self-contained prose about the pathways \
+you are given -- no preamble, no summary of the whole experiment.
+
+Rules:
+1. ONLY mention genes that appear in the provided data, with the exact values \
+and p-values given.
+2. Cite with [N] markers, using the reference numbers exactly as they appear in \
+the Available Literature block. Never write PMIDs inline, never invent a number, \
+never renumber.
+3. Cite a paper only where you could point to a specific sentence in it that \
+supports the claim. A citation whose supporting sentence cannot be found is \
+removed later along with the sentence carrying it, so an uncited observation is \
+worth more than a decorated one.
+4. Put the citation on the mechanism, not on this experiment's own numbers -- no \
+paper contains these measurements.
+5. Say so explicitly where the data is suggestive rather than conclusive.
+6. Focus on mechanism: what the changes mean biologically, not a list of genes.
+""" + TEMPORAL_GUIDANCE_BLOCK

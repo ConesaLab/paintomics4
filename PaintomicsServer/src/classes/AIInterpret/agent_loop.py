@@ -686,7 +686,17 @@ async def delegate_interpretation(ctx: RunContextWrapper[LoopContext],
         _trace(c, "delegate_interpretation", pathway_names, "no match", t0)
         return out
     papers = [c.paper_index[k] for k in sorted(c.paper_index)]
-    interpreter = c.agents["interpret_light"]
+    # The loop's own interpreter: same model and settings as the workflow arm's
+    # single-shot one, different instructions -- [N] markers on quotable claims
+    # rather than "(PMID: X)" prose. Built here rather than in _build_agents so
+    # the workflow arm keeps exactly the agents it was measured with.
+    interpreter = Agent[LoopContext](
+        name="Delegated Interpreter",
+        model=_model(),
+        instructions=prompts_mod.SYSTEM_PROMPT_DELEGATED_INTERPRET,
+        model_settings=ModelSettings(temperature=AI_TEMPERATURE),
+        tools=[],
+    )
     chunks = [chosen[i:i + 5] for i in range(0, len(chosen), 5)]
     sem = asyncio.Semaphore(DELEGATE_WORKERS)
 
