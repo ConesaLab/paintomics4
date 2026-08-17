@@ -319,11 +319,13 @@ def _fileContents(directory, patterns):
     return collected
 
 
-_NAME_NOISE = re.compile(r"(_\d{8,14}(_\d+)?)(?=\.|$)|_[A-Za-z0-9]{10}(?=\.|_|$)")
+_NAME_NOISE = re.compile(r"_?\d{8,14}(_\d{1,5})?(?=\.|_|$)")
 
 
-def _normalizedName(name):
+def _normalizedName(name, jobID=""):
     """Strip the date/seed/jobID tokens converters embed in file names."""
+    if jobID:
+        name = name.replace(jobID + "_", "").replace(jobID, "")
     return _NAME_NOISE.sub("", name)
 
 
@@ -341,12 +343,12 @@ def _conversionOutputs(job, outputs):
                 with bundle.open(member) as handle:
                     text = io.TextIOWrapper(handle, encoding="utf-8",
                                             errors="replace").read()
-                collected["zipMembers"][_normalizedName(member)] = text
+                collected["zipMembers"][_normalizedName(member, job.getJobID())] = text
     for copied in outputs[1:]:
         path = os.path.join(job.getInputDir(), copied)
         if os.path.isfile(path):
             with open(path, "r", encoding="utf-8", errors="replace") as handle:
-                collected["inputDirCopies"][_normalizedName(copied)] = handle.read()
+                collected["inputDirCopies"][_normalizedName(copied, job.getJobID())] = handle.read()
     return collected
 
 
