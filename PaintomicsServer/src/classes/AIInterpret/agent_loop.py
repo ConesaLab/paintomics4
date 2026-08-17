@@ -35,6 +35,7 @@ else (servlet, queue, DAO contract, progress statuses) is unchanged, so the
 two arms stay comparable run for run.
 """
 import asyncio
+import json
 import logging
 import os
 import time
@@ -155,6 +156,7 @@ class LoopContext(AgentContext):
     next_ref: int = 1
     submitted_report: str = ""
     started_at: float = 0.0                             # loop start (wall clock)
+    archived: list = field(default_factory=list)         # events already on disk
     hard_deadline: float = 0.0                          # loop must be done by
 
 
@@ -167,6 +169,31 @@ def _hb(ctx, status, percent, detail):
             logger.debug("progress hook failed", exc_info=True)
     if hooks.get("cancelled") and hooks["cancelled"]():
         raise InterruptedError("Cancelled")
+
+
+def _archive_trace(ctx):
+    """Append this run's trace to a per-run JSONL file.
+
+    The DAO keeps the last 200 events of the current run because that is what a
+    UI needs. Deciding which TOOLS are worth their place needs the opposite:
+    every run, kept. Measured the hard way -- twelve benchmark runs produced two
+    surviving traces, so "never called" could not be told apart from "not called
+    in the run that happened to be last", and four tools sat unjudged.
+
+    Best-effort by design: a failed write must never affect an interpretation.
+    """
+    try:
+        from src.conf.serverconf import CLIENT_TMP_DIR
+        directory = os.path.join(CLIENT_TMP_DIR, "ai_traces")
+        os.makedirs(directory, exist_ok=True)
+        stamp = int(ctx.started_at) if ctx.started_at else 0
+        path = os.path.join(directory, "%s-%d.jsonl" % (ctx.job_id, stamp))
+        with open(path, "a") as handle:
+            for event in ctx.trace[len(ctx.archived):]:
+                handle.write(json.dumps(event) + "\n")
+        ctx.archived = list(ctx.trace)
+    except Exception:
+        logger.debug("trace archive failed", exc_info=True)
 
 
 def _trace(ctx, tool, args_summary, result, started):
@@ -186,6 +213,7 @@ def _trace(ctx, tool, args_summary, result, started):
     }
     ctx.trace.append(event)
     ctx.tool_calls += 1
+    _archive_trace(ctx)
     hooks = ctx.hooks or {}
     if hooks.get("tool_event"):
         try:
@@ -288,7 +316,7 @@ def get_experiment_overview(ctx: RunContextWrapper[LoopContext]) -> str:
 @function_tool
 def get_pathway_details(ctx: RunContextWrapper[LoopContext],
                         pathway_names: list[str]) -> str:
-    """Detailed data (p-values per layer, top genes with temporal profiles) for the named or ID'd pathways."""
+    """Detailed data (p-values per layer, top genes with temporal profiles) for the named or ID'd pathways. Instant and free -- read the data before theorising about it, and ask for several pathways at once."""
     c = ctx.context
     t0 = time.time()
     guard = _time_guard(c)
@@ -316,7 +344,7 @@ def get_pathway_details(ctx: RunContextWrapper[LoopContext],
 
 @function_tool
 def get_gene_profile(ctx: RunContextWrapper[LoopContext], gene_symbol: str) -> str:
-    """All measured timepoint values for one gene across every omic layer."""
+    """All measured timepoint values for one gene across every omic layer. Instant and free."""
     c = ctx.context
     t0 = time.time()
     out = _spend(c, tools_mod.execute_tool(
@@ -328,7 +356,7 @@ def get_gene_profile(ctx: RunContextWrapper[LoopContext], gene_symbol: str) -> s
 @function_tool
 def compare_gene_profiles(ctx: RunContextWrapper[LoopContext],
                           gene_symbols: list[str]) -> str:
-    """Side-by-side measured values for several genes (max 10) across all omic layers."""
+    """Side-by-side measured values for several genes (max 10) across all omic layers. Instant and free -- prefer this over one get_gene_profile call per gene."""
     c = ctx.context
     t0 = time.time()
     out = _spend(c, tools_mod.execute_tool(
@@ -339,7 +367,7 @@ def compare_gene_profiles(ctx: RunContextWrapper[LoopContext],
 
 @function_tool
 def cluster_pathways(ctx: RunContextWrapper[LoopContext]) -> str:
-    """Group the significant pathways by shared matched features (deterministic; no LLM). Returns clusters with their shared gene cores."""
+    """Group the significant pathways by shared matched features (deterministic; no LLM). Returns clusters with their shared gene cores. Costs about half a second; worth calling once, early."""
     c = ctx.context
     t0 = time.time()
     guard = _time_guard(c)
@@ -418,7 +446,7 @@ def _register_papers(c, papers, tag):
 @function_tool
 async def search_literature(ctx: RunContextWrapper[LoopContext], query: str,
                             topic_tag: str) -> str:
-    """Search PubMed. Returns papers as [N] entries you may cite. Keep queries BROAD: two or three gene symbols joined by OR, AND at most one biological term, e.g. "(Ikzf1 OR Ccnd2) AND B cell differentiation". Extra AND clauses return nothing and still cost budget. topic_tag names the pathway/theme this search supports. Spend-metered."""
+    """Search PubMed (about 2 s). Returns papers as [N] entries you may cite. Keep queries BROAD: two or three gene symbols joined by OR, AND at most one biological term, e.g. "(Ikzf1 OR Ccnd2) AND B cell differentiation". Extra AND clauses return nothing and still cost budget. topic_tag names the pathway/theme this search supports. Spend-metered."""
     c = ctx.context
     t0 = time.time()
     guard = _time_guard(c)
@@ -465,7 +493,7 @@ async def search_literature(ctx: RunContextWrapper[LoopContext], query: str,
 @function_tool
 async def read_paper(ctx: RunContextWrapper[LoopContext], ref_index: int,
                      section: str) -> str:
-    """Read one section (abstract, introduction, results, discussion, other) of a retrieved paper [N]. Fetches full text on first use."""
+    """Read one section (abstract, introduction, results, discussion, other) of a retrieved paper [N]. Fetches full text on first use, about 3 s. Do this before citing a paper for a specific claim -- an unread citation is the kind the verifier removes."""
     c = ctx.context
     t0 = time.time()
     guard = _time_guard(c)
@@ -500,7 +528,7 @@ async def read_paper(ctx: RunContextWrapper[LoopContext], ref_index: int,
 
 @function_tool
 def notebook_write(ctx: RunContextWrapper[LoopContext], note: str) -> str:
-    """Record a finding, hypothesis or open question in your run notebook. Write one after every substantive discovery."""
+    """Record a finding, hypothesis or open question in your run notebook. Free. Write one after every substantive discovery -- it is what the report is assembled from."""
     c = ctx.context
     t0 = time.time()
     c.notebook.append(note.strip())
@@ -563,7 +591,7 @@ async def _single_shot(agent, prompt, ctx, timeout, label):
 @function_tool
 async def delegate_interpretation(ctx: RunContextWrapper[LoopContext],
                                   pathway_names: list[str], focus: str) -> str:
-    """Delegate deep interpretation of up to ~10 named pathways to Cluster Interpreter sub-agents (parallel, single-shot). Returns their reports; their [N] citations use your reference numbers."""
+    """Delegate deep interpretation of up to ~10 named pathways to Cluster Interpreter sub-agents (parallel, single-shot). Returns their reports; their [N] citations use your reference numbers. EXPENSIVE: about 25 seconds per call, the costliest thing you can do -- but it is also where breadth comes from, so plan two or three calls covering everything rather than one per pathway."""
     c = ctx.context
     t0 = time.time()
     guard = _time_guard(c)

@@ -132,6 +132,48 @@ def test_registered_papers_default_to_abstract_only():
     assert paper["sections"]["abstract"] == "a"
 
 
+# -- the trace archive ------------------------------------------------------
+
+def test_each_event_is_archived_once():
+    """Twelve benchmark runs left two surviving traces, because the DAO keeps
+    only the current run. The archive is what makes tool usefulness measurable,
+    so it must record every event exactly once and never duplicate on reflush."""
+    import json as _json
+    import tempfile
+    ctx = _ctx()
+    with tempfile.TemporaryDirectory() as tmp:
+        import src.conf.serverconf as conf
+        saved = conf.CLIENT_TMP_DIR
+        conf.CLIENT_TMP_DIR = tmp
+        try:
+            L._trace(ctx, "search_literature", "q", "5 hits", time.time())
+            L._trace(ctx, "read_paper", "[1] results", "900 chars", time.time())
+            L._archive_trace(ctx)          # a reflush must not duplicate
+            path = os.path.join(tmp, "ai_traces",
+                                "%s-%d.jsonl" % (ctx.job_id, int(ctx.started_at)))
+            lines = [l for l in open(path).read().splitlines() if l.strip()]
+        finally:
+            conf.CLIENT_TMP_DIR = saved
+    assert len(lines) == 2, lines
+    tools = [_json.loads(l)["tool"] for l in lines]
+    assert tools == ["search_literature", "read_paper"], tools
+    assert _json.loads(lines[0])["seq"] == 1
+
+
+def test_archiving_never_breaks_a_run():
+    """An unwritable directory must cost nothing: the trace is instrumentation,
+    the interpretation is the product."""
+    ctx = _ctx()
+    import src.conf.serverconf as conf
+    saved = conf.CLIENT_TMP_DIR
+    conf.CLIENT_TMP_DIR = "/proc/definitely-not-writable"
+    try:
+        L._trace(ctx, "notebook_write", "note", "ok", time.time())   # must not raise
+    finally:
+        conf.CLIENT_TMP_DIR = saved
+    assert len(ctx.trace) == 1
+
+
 def main():
     for t in (test_tool_output_under_budget_is_returned_whole,
               test_tool_output_over_budget_is_cut_and_says_so,
@@ -143,7 +185,9 @@ def main():
               test_papers_get_stable_increasing_reference_numbers,
               test_the_same_pmid_never_gets_a_second_number,
               test_a_paper_without_a_pmid_is_skipped,
-              test_registered_papers_default_to_abstract_only):
+              test_registered_papers_default_to_abstract_only,
+              test_each_event_is_archived_once,
+              test_archiving_never_breaks_a_run):
         _check(t.__name__, t)
     print("\nPassed: %d / %d" % (len(_PASSED), len(_PASSED) + len(_FAILED)))
     if _FAILED:
