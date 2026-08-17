@@ -129,7 +129,39 @@ def loadArtifacts(runDir):
         return json.load(handle)
 
 
-def compareScenario(dirA, dirB, rtol):
+_PATH_INDEX = re.compile(r"\[\d+\]")
+
+
+def pathClass(path):
+    """A path with its data-dependent parts collapsed: list indices become
+    [*], and from the third segment on every segment that has no lower-case
+    letter (feature IDs, symbols, numeric keys -- schema keys are camelCase)
+    becomes *, so `.step3.omicsValues.GSTP1.omicsValues[2].inputName` and the
+    same field of another feature share a class."""
+    generic = _PATH_INDEX.sub("[*]", path)
+    parts = generic.split(".")
+    for index in range(3, len(parts)):
+        segment = parts[index]
+        if segment and not any(ch.islower() for ch in segment.replace("[*]", "")):
+            parts[index] = "*"
+    return ".".join(parts)
+
+
+def noiseClasses(dirA, dirB, rtol):
+    """The diff classes two runs of the SAME code produce (run-to-run
+    noise, e.g. which of two aliases wins a symbol-keyed slot after the
+    forked mapper workers race). Used to tell a candidate's differences
+    from the baseline's own nondeterminism."""
+    comparison = Comparison(rtol)
+    comparison.compare(loadArtifacts(dirA), loadArtifacts(dirB))
+    return {pathClass(path) for path, kind, _ in comparison.diffs}
+
+
+def compareScenario(dirA, dirB, rtol, noise=None):
+    """Verdicts: IDENTICAL; EQUIVALENT (floats within rtol only);
+    WITHIN-NOISE (every remaining difference falls in a class the baseline
+    produces between two runs of itself -- only when `noise` is given);
+    DIFFERENT."""
     comparison = Comparison(rtol)
     comparison.compare(loadArtifacts(dirA), loadArtifacts(dirB))
     hard = [d for d in comparison.diffs if d[1] not in ("float",)]
@@ -137,6 +169,12 @@ def compareScenario(dirA, dirB, rtol):
         return "IDENTICAL", comparison
     if not hard and comparison.maxFloatRel <= rtol:
         return "EQUIVALENT", comparison
+    if noise is not None:
+        outside = [d for d in comparison.diffs
+                   if d[1] != "float" and pathClass(d[0]) not in noise]
+        if not outside:
+            return "WITHIN-NOISE", comparison
+        comparison.outsideNoise = outside
     return "DIFFERENT", comparison
 
 
@@ -146,11 +184,28 @@ def main():
     parser.add_argument("--b", required=True, help="candidate bench_all --out dir")
     parser.add_argument("--run", default="run1")
     parser.add_argument("--rtol", type=float, default=1e-12)
+    parser.add_argument("--noise-runs", nargs=2, metavar=("RUN_X", "RUN_Y"),
+                        help="two run names under --a (e.g. run1 run2) whose "
+                             "mutual differences define the baseline's own noise")
     args = parser.parse_args()
 
     scenarios = sorted(
         name for name in os.listdir(args.a)
         if os.path.isdir(os.path.join(args.a, name, args.run)))
+
+    # The baseline's own run-to-run noise, pooled over every scenario: the
+    # mechanism (forked mapper workers racing on which alias fills a slot)
+    # is the same whatever the dataset, and one pair of runs of one dataset
+    # samples only some of the slots it can hit.
+    noise = None
+    if args.noise_runs:
+        noise = set()
+        for scenario in scenarios:
+            noiseA = os.path.join(args.a, scenario, args.noise_runs[0])
+            noiseB = os.path.join(args.a, scenario, args.noise_runs[1])
+            if os.path.isdir(noiseA) and os.path.isdir(noiseB):
+                noise |= noiseClasses(noiseA, noiseB, args.rtol)
+        print("baseline noise classes (%d): %s" % (len(noise), sorted(noise)))
 
     exitCode = 0
     for scenario in scenarios:
@@ -161,7 +216,7 @@ def main():
             exitCode = 1
             continue
         try:
-            verdict, comparison = compareScenario(dirA, dirB, args.rtol)
+            verdict, comparison = compareScenario(dirA, dirB, args.rtol, noise)
         except Exception as exc:
             print("%-32s ERROR %s" % (scenario, exc))
             exitCode = 1
@@ -173,7 +228,8 @@ def main():
         if verdict == "DIFFERENT":
             exitCode = 1
             shown = 0
-            for path, kind, detail in comparison.diffs:
+            reportable = getattr(comparison, "outsideNoise", None) or comparison.diffs
+            for path, kind, detail in reportable:
                 if kind == "float":
                     continue
                 print("    %s [%s] %s" % (path or "<root>", kind, detail))

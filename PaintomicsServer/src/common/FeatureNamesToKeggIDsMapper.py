@@ -306,7 +306,26 @@ def resolveDatabaseIds(organism, databases, db=None):
     return databaseConvertion_ids, databaseGeneSymbol_ids
 
 
-def mapFeatureIdentifiers(jobID, organism, databases, featureList,  matchedFeatures, notMatchedFeatures, foundFeatures, enrichment, progressArray=None, progressSlot=0, databaseIds=None, cacheTables=None):
+def _handOver(target, slot, items):
+    """
+    Give a worker's result list to the parent. With ``slot`` set the list is
+    stored at that index of a pre-sized shared list, so the parent can
+    concatenate the workers' results in WORKER ORDER -- which is the input
+    order, i.e. exactly what one sequential pass produces. Appending as the
+    workers happened to finish (the previous form) made the order of the
+    matched features depend on scheduling, and everything downstream that
+    merges duplicates by keeping the first one seen (unifyAndSort on the
+    compound sets, addInputGeneData/addInputCompoundData combining values)
+    then differed from run to run. Without a slot (the direct, in-process
+    call) the items are simply appended.
+    """
+    if slot is None:
+        target.extend(items)
+    else:
+        target[slot] = items
+
+
+def mapFeatureIdentifiers(jobID, organism, databases, featureList,  matchedFeatures, notMatchedFeatures, foundFeatures, enrichment, progressArray=None, progressSlot=0, databaseIds=None, cacheTables=None, resultSlot=None):
     """
     This function is used to query the database in different threads.
 
@@ -510,8 +529,8 @@ def mapFeatureIdentifiers(jobID, organism, databases, featureList,  matchedFeatu
         #*************************************************************************************
         # STORE THE RESULTS
         #*************************************************************************************
-        matchedFeatures.extend(localMatched)
-        notMatchedFeatures.extend(localNotMatched)
+        _handOver(matchedFeatures, resultSlot, localMatched)
+        _handOver(notMatchedFeatures, resultSlot, localNotMatched)
 
         if cacheTables is not None:
             # Everything this worker resolved, keyed exactly as
@@ -588,9 +607,10 @@ def mapFeatureNamesToKeggIDs(jobID, organism, databases, featureList, enrichment
 
 
     manager=Manager()
-    #CONCATENATE THE OUTPUT LISTS
-    matchedFeatures = manager.list()
-    notMatchedFeatures= manager.list()
+    #CONCATENATE THE OUTPUT LISTS -- one slot per worker, filled by that worker,
+    # read back in worker (= input) order: see _handOver.
+    matchedFeatures = manager.list([None] * len(genesListParts))
+    notMatchedFeatures= manager.list([None] * len(genesListParts))
     foundFeatures = manager.list()
     # One entry per worker: the translations it resolved, merged into the
     # job's cache below so the NEXT omic's workers inherit them at fork time.
@@ -616,7 +636,7 @@ def mapFeatureNamesToKeggIDs(jobID, organism, databases, featureList, enrichment
         threadsList = []
         i=0
         for genesListPart in genesListParts:
-            thread = Process(target=mapFeatureIdentifiers, args=(jobID, organism, databases, genesListPart, matchedFeatures, notMatchedFeatures, foundFeatures, enrichment, progressArray, i, databaseIds, cacheTables))
+            thread = Process(target=mapFeatureIdentifiers, args=(jobID, organism, databases, genesListPart, matchedFeatures, notMatchedFeatures, foundFeatures, enrichment, progressArray, i, databaseIds, cacheTables, i))
             threadsList.append(thread)
             thread.start()
             i+=1
@@ -674,16 +694,14 @@ def mapFeatureNamesToKeggIDs(jobID, organism, databases, featureList, enrichment
     #***********************************************************************************
     #* STEP 4. RETURN THE RESULTS
     #***********************************************************************************
+    # One round trip each (a slice carries the whole list), then the workers'
+    # lists concatenated in worker order -- the order a sequential pass over
+    # the input produces.
+    matchedFeatures = list(itertools.chain.from_iterable(part for part in matchedFeatures[:] if part is not None))
+    notMatchedFeatures = list(itertools.chain.from_iterable(part for part in notMatchedFeatures[:] if part is not None))
+
     logging.info("FINISHED. %s uniquely matched features, %d features matched. %d features not matched.",
                  next(iter(sumFoundFeatures.values()), 0), len(matchedFeatures), len(notMatchedFeatures))
-
-    # Materialise the proxies with ONE round trip each before returning them.
-    # BaseListProxy exposes __getitem__/__len__ but not __iter__, so a caller's
-    # `for x in matchedFeatures` falls back to the sequence protocol and pays an
-    # IPC round trip per element — measured at 92us x 39,527 elements = 6.9s of an
-    # 83s job. A slice is a single __getitem__ call carrying the whole list, 10x
-    # faster in-container. `list(proxy)` does NOT help: it iterates the same way.
-    matchedFeatures, notMatchedFeatures = matchedFeatures[:], notMatchedFeatures[:]
     # The Manager server is a forked process holding a copy of everything the
     # workers sent it; release it now rather than when the GC gets round to it.
     manager.shutdown()
@@ -907,7 +925,7 @@ def findCompoundIDByFeatureName(jobID, featureName, db):
     except Exception as ex:
         return matchedFeatures, False
 
-def mapCompoundsIdentifiers(jobID, featureList, matchedFeatures, notMatchedFeatures, foundFeatures):
+def mapCompoundsIdentifiers(jobID, featureList, matchedFeatures, notMatchedFeatures, foundFeatures, resultSlot=None):
     """
     This function is used to query the database in different threads.
 
@@ -1012,8 +1030,8 @@ def mapCompoundsIdentifiers(jobID, featureList, matchedFeatures, notMatchedFeatu
         #*************************************************************************************
         # STORE THE RESULTS
         #*************************************************************************************
-        matchedFeatures.extend(localMatched)
-        notMatchedFeatures.extend(localNotMatched)
+        _handOver(matchedFeatures, resultSlot, localMatched)
+        _handOver(notMatchedFeatures, resultSlot, localNotMatched)
         foundFeatures.append(matches)
         # matchedCompoundIDsTablesList.append(matchedCompoundIDsTable)
 
@@ -1057,10 +1075,10 @@ def mapFeatureNamesToCompoundsIDs(jobID, featureList):
 
     manager=Manager()
 
-    #CONCATENATE THE OUTPUT LISTS
-
-    matchedFeatures = manager.list()
-    notMatchedFeatures= manager.list()
+    #CONCATENATE THE OUTPUT LISTS -- one slot per worker, read back in worker
+    # (= input) order: see _handOver.
+    matchedFeatures = manager.list([None] * len(compoundsListParts))
+    notMatchedFeatures= manager.list([None] * len(compoundsListParts))
     foundFeatures= manager.list([0]*nThreads)
 
     #matchedFeatures = list()
@@ -1078,7 +1096,7 @@ def mapFeatureNamesToCompoundsIDs(jobID, featureList):
         threadsList = []
         i=0
         for compoundListPart in compoundsListParts:
-            thread = Process(target=mapCompoundsIdentifiers, args=(jobID, compoundListPart, matchedFeatures, notMatchedFeatures, foundFeatures))
+            thread = Process(target=mapCompoundsIdentifiers, args=(jobID, compoundListPart, matchedFeatures, notMatchedFeatures, foundFeatures, i))
             threadsList.append(thread)
             thread.start()
             i+=1
@@ -1109,14 +1127,13 @@ def mapFeatureNamesToCompoundsIDs(jobID, featureList):
 
     foundFeatures = sum(foundFeatures)
 
+    # One round trip each, concatenated in worker (= input) order.
+    matchedFeatures = list(itertools.chain.from_iterable(part for part in matchedFeatures[:] if part is not None))
+    notMatchedFeatures = list(itertools.chain.from_iterable(part for part in notMatchedFeatures[:] if part is not None))
+
     #***********************************************************************************
     #* STEP 4. RETURN THE RESULTS
     #***********************************************************************************
     logging.info("FINISHED. " + str(foundFeatures) + " uniquely matched compounds, " +  str(len(matchedFeatures)) + " compounds matched. " + str(len(notMatchedFeatures)) + " compounds not matched.")
-
-    # One round trip each instead of one per element — see the note on the same
-    # return in mapFeatureNamesToKeggIDs. Compound lists are short today (58 in the
-    # bundled example), so this is correctness-by-consistency rather than a win.
-    matchedFeatures, notMatchedFeatures = matchedFeatures[:], notMatchedFeatures[:]
     manager.shutdown()
     return foundFeatures, matchedFeatures, notMatchedFeatures
