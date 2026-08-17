@@ -161,6 +161,33 @@ def test_ten_sorts_after_nine_not_before_it():
     assert _labels(out) == list(range(1, 12)), _labels(out)
 
 
+# ---------------------------------------------------------------------------
+# The wiring, which is the part that actually broke.
+#
+# Every test above calls sort_references_section itself, through the local
+# _pipeline helper -- so all of them passed while not one shipped report was
+# sorted. The sorter was wired into pipeline.py (0616e2df); the Agents SDK
+# rewrite (8a6a7dbd) replaced that module and did not carry the call across,
+# leaving a function whose only remaining caller was this test file. A helper
+# that reimplements the production sequence proves nothing about the
+# production sequence, so this asserts against the real one.
+# ---------------------------------------------------------------------------
+
+def test_the_agent_workflow_sorts_after_renumbering():
+    import inspect
+    from src.classes.AIInterpret import agent
+
+    source = inspect.getsource(agent._run_async)
+    assert "renumber_citations(" in source, "phase 6 no longer renumbers at all"
+    assert "sort_references_section(" in source, (
+        "the agent workflow never calls sort_references_section, so every "
+        "shipped report prints its References in render order while the body "
+        "is numbered by first mention")
+    assert (source.index("renumber_citations(")
+            < source.index("sort_references_section(")), (
+        "the sort has to run after the renumbering, or it orders the old labels")
+
+
 def main():
     for t in (test_renumbering_alone_leaves_the_section_scrambled,
               test_final_section_reads_in_order,
@@ -170,7 +197,8 @@ def main():
               test_an_already_ordered_section_is_untouched,
               test_report_without_references_is_untouched,
               test_single_entry_is_untouched,
-              test_ten_sorts_after_nine_not_before_it):
+              test_ten_sorts_after_nine_not_before_it,
+              test_the_agent_workflow_sorts_after_renumbering):
         _check(t.__name__, t)
 
     print("\nPassed: %d / %d" % (len(_PASSED), len(_PASSED) + len(_FAILED)))

@@ -54,6 +54,7 @@ from src.classes.AIInterpret.context_builder import (
 from src.classes.AIInterpret.pubmed_client import PubMedClient
 from src.classes.AIInterpret.verification import (
     verify_report_v2, redact_unverified_v2, renumber_citations,
+    sort_references_section,
     parse_references_section, render_references_section,
     normalize_citation_markers, resolve_pmid_mentions, count_body_citations,
 )
@@ -1821,6 +1822,15 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats,
         report, removed = redact_unverified_v2(report, final["failed_citations"])
         final["redacted_count"] = removed
     report, citation_mapping = renumber_citations(report)
+    # ...and then put the entries back in the order of the labels they now
+    # carry. Renumbering rewrites the markers where they stand, so a section
+    # rendered in ascending old index order ends up printed as [1], [5], [3],
+    # [2], [4] -- every entry pointing at the right paper, the list itself
+    # unreadable. Nothing downstream can catch it, because the citations are
+    # all still valid; only the reader sees it. This call existed in
+    # pipeline.py (0616e2df) and was dropped when the SDK workflow replaced
+    # that module, so every report shipped since has been scrambled.
+    report = sort_references_section(report)
     if citation_mapping:
         kept = []
         for p in unique_papers:
