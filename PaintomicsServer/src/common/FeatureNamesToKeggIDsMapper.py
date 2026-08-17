@@ -290,6 +290,31 @@ def resolveDatabaseIds(organism, databases, db=None):
     try:
         databaseConvertion_ids = {dbname: db.dbname.find_one({"dbname": gene_databases.get(dbname)}, {"item": 1, "qty": 1}).get("_id") for dbname in databases}
         databaseGeneSymbol_ids = {dbname: db.dbname.find_one({"dbname": symbol_databases.get(dbname)}, {"item": 1, "qty": 1}).get("_id") for dbname in databases}
+
+        # Some databases declare THEMSELVES as their symbol database (every
+        # Reactome entry and three MapMan entries in organismDB map e.g.
+        # reactome_gene_id -> reactome_gene_id). Translating a feature ID
+        # through the very database it came from is the identity at best, so
+        # matched clones kept the user's raw input identifier as their display
+        # name and the Reactome pathway views painted "ENSMUSG..." on every
+        # gene box. The xref mates graph does link those feature IDs to the
+        # organism's real symbol table (mmu: GNAI3 -> Gnai3 via
+        # refseq_gene_symbol), so such databases borrow a configured symbol
+        # database that is not its own ID database -- KEGG's by explicit
+        # preference (it is the one true gene-symbol table in every current
+        # organism config), never by dict order. Organisms without one (cfa)
+        # keep the old behaviour.
+        degenerate = [dbname for dbname in databases
+                      if symbol_databases.get(dbname) == gene_databases.get(dbname)]
+        realSymbolDB = next((symbolDB for dbname, symbolDB
+                             in sorted(symbol_databases.items(),
+                                       key=lambda entry: entry[0] != "KEGG")
+                             if symbolDB != gene_databases.get(dbname)), None)
+        if degenerate and realSymbolDB is not None:
+            realSymbolDoc = db.dbname.find_one({"dbname": realSymbolDB}, {"item": 1, "qty": 1})
+            if realSymbolDoc is not None:
+                for dbname in degenerate:
+                    databaseGeneSymbol_ids[dbname] = realSymbolDoc.get("_id")
     finally:
         if client is not None:
             client.close()
@@ -396,6 +421,10 @@ def mapFeatureIdentifiers(jobID, organism, databases, featureList,  matchedFeatu
         # Cache all database results upfront
         allCacheFeatureIDS = {}
         allCacheSymbolsIDS = {}
+        # Databases whose symbol cache was additionally keyed by input name
+        # below, and only those, may use the per-name fallback when naming a
+        # clone.
+        nameKeyedSymbolDatabases = set()
 
         for databaseConvertion_name in databases:
             # Reset the cache per database
@@ -406,10 +435,13 @@ def mapFeatureIdentifiers(jobID, organism, databases, featureList,  matchedFeatu
             databaseConvertion_id = databaseConvertion_ids.get(databaseConvertion_name)
             databaseGeneSymbol_id = databaseGeneSymbol_ids.get(databaseConvertion_name)
 
-            # Check if ID and symbol databases are the same to avoid duplicate queries
-            # This happens with Reactome where both map to 'reactome_gene_id'
-            sameDatabase = (gene_databases.get(databaseConvertion_name) ==
-                          symbol_databases.get(databaseConvertion_name))
+            # Skip the symbol pass only when it would query the ID database
+            # itself (an identity translation). Compared on the RESOLVED ids:
+            # resolveDatabaseIds redirects databases configured as their own
+            # symbol database (Reactome, some MapMan) to the organism's real
+            # symbol table, and those must run the second query or matched
+            # clones keep the raw input identifier as their display name.
+            sameDatabase = (databaseConvertion_id == databaseGeneSymbol_id)
 
             # Populate the feature and symbol cache
             for featureNameBatch in featureNamesBatches:
@@ -425,6 +457,30 @@ def mapFeatureIdentifiers(jobID, organism, databases, featureList,  matchedFeatu
                     # Query for symbols separately
                     newSymbolIDs = findIDsByFeaturesName(jobID, list(chain.from_iterable(newFeatureIDs.values())), db,
                                                          databaseGeneSymbol_id)
+
+                    # A symbol table can be populated for a DIFFERENT id space
+                    # than the one being translated -- Reactome's gene IDs are
+                    # matched against KEGG's gene-symbol table, where mmu's
+                    # GNAI3 has a mate (Gnai3) but GNA12 has none at all
+                    # (3.5k of STATegra's 8.4k Reactome clones). The INPUT
+                    # name's own xref group does carry the symbol
+                    # (ENSMUSG00000000149 -> Gna12), so a name with ANY
+                    # symbol-less matched feature ID is looked up as well and
+                    # used as the per-feature fallback below (ANY, not all:
+                    # one name can resolve to several feature IDs and only
+                    # some of them carry a symbol -- 73 extra raw-ID clones
+                    # on STATegra when this asked for all of them).
+                    # Decided on the RESULTS, never on the organism config:
+                    # normalising organismDB.py to say what this code does
+                    # must not silently switch the fallback off.
+                    namesWithoutSymbol = [
+                        name for name, featureIDs in newFeatureIDs.items()
+                        if any(not newSymbolIDs.get(featureID)
+                               for featureID in featureIDs)]
+                    if namesWithoutSymbol:
+                        newSymbolIDs.update(findIDsByFeaturesName(
+                            jobID, namesWithoutSymbol, db, databaseGeneSymbol_id))
+                        nameKeyedSymbolDatabases.add(databaseConvertion_name)
 
                 cacheSymbolsIDS.update(newSymbolIDs)
 
@@ -502,8 +558,15 @@ def mapFeatureIdentifiers(jobID, organism, databases, featureList,  matchedFeatu
                         # For some IDs there might be more than one symbol, select the first
                         # one from the set. A cached entry can legitimately be an empty
                         # list (species installed with symbols=0), which indexed [0] and
-                        # aborted the whole mapping.
-                        cachedSymbols = cacheSymbolsIDS.get(featureID) or [featureClone.getName()]
+                        # aborted the whole mapping. Databases redirected to a borrowed
+                        # symbol table fall back to the input name's own symbol (its xref
+                        # group carries one even when the feature ID's does not), and only
+                        # then to the raw input name.
+                        cachedSymbols = cacheSymbolsIDS.get(featureID)
+                        if not cachedSymbols and databaseConvertion_name in nameKeyedSymbolDatabases:
+                            cachedSymbols = cacheSymbolsIDS.get(originalName)
+                        if not cachedSymbols:
+                            cachedSymbols = [featureClone.getName()]
                         featureName = cachedSymbols[0]
 
                         featureClone.setName(featureName)
