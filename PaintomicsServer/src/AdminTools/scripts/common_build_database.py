@@ -925,10 +925,17 @@ def processMapManMappingData():
 
     #STEP 2. READ THE UniProt 2 KEGG FILE but DO NOT process it as it will be done in "processKEGGMappingData
     # Instead, load the contents and keep as a link table to KEGG gene ids
+    #
+    # This file only feeds the mapman_kegg cross-link below, which is itself optional
+    # (see mapman_kegg_file_name). An unconditional `return` here used to end the whole
+    # function whenever KEGG has no ncbi-geneid conversion for a species (HTTP 400,
+    # e.g. bvu) -- discarding the species' own gene-to-bin MapMan data too, even though
+    # nothing downstream needed this file for it. Missing it now only means the
+    # cross-link loop finds no matches, which it already handles: every gene falls
+    # through to the standalone-transcript fallback below instead.
     ncbi_file_name= DATA_DIR + "mapping/" + "ncbi-geneid2kegg.list"
-    if not haveInputFile("NCBI GENE ID 2 KEGG", ncbi_file_name,
-                         "NCBI gene ids will not be linked to KEGG features for this species"):
-        return
+    haveNcbiMapping = haveInputFile("NCBI GENE ID 2 KEGG", ncbi_file_name,
+                         "NCBI gene ids will not be linked to KEGG features for this species")
 
     # MapMan input files. Prefer the canonical DATA_DIR/mapping/<output> location
     # (populated by the download step) and fall back to the configured `url + file`
@@ -977,11 +984,12 @@ def processMapManMappingData():
     # Initialize the mapping_dict NCBI Gene ID => [many possible KEGG_IDs]
     ncbi_mapping_dict = defaultdict(list)
 
-    with open(ncbi_file_name, 'r') as mapping_file:
-        dict_reader = csv.DictReader(mapping_file, fieldnames=["ncbi_gene", "kegg_id"], delimiter="\t")
-        for mapping_entry in dict_reader:
-            # Remove prefix
-            ncbi_mapping_dict[mapping_entry["ncbi_gene"].replace("ncbi-geneid:", "")] += [mapping_entry["kegg_id"].replace(SPECIE + ":", "")]
+    if haveNcbiMapping:
+        with open(ncbi_file_name, 'r') as mapping_file:
+            dict_reader = csv.DictReader(mapping_file, fieldnames=["ncbi_gene", "kegg_id"], delimiter="\t")
+            for mapping_entry in dict_reader:
+                # Remove prefix
+                ncbi_mapping_dict[mapping_entry["ncbi_gene"].replace("ncbi-geneid:", "")] += [mapping_entry["kegg_id"].replace(SPECIE + ":", "")]
 
     # Initialize the mapping dict MapmMan Gene => [many possible MapMan feature IDs]
     external_mapping = defaultdict(list)
