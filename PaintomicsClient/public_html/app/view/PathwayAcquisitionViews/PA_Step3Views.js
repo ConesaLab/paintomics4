@@ -771,18 +771,47 @@ function PA_Step3JobView() {
 		messageDialog.show();
 	};
 
+	// The poll is a self-rescheduling chain, so every answer -- including the
+	// ones that are not answers -- has to decide what happens next. This
+	// rescheduled only from `success` and declared no `error` handler at all,
+	// so a single request that did not land ended the chain for good.
+	// Measured in Chrome against a real job: five healthy polls, a server
+	// restart, a sixth answering `ERR http=0`, and the page never issued
+	// another status request. The interpretation finished and was stored,
+	// while the widget sat at "Generating interpretation..." with an empty
+	// message area until the page was reloaded -- which is exactly how the bug
+	// was reported. A run polls every 3s for 5-15 minutes, so one blip (a
+	// deploy, a sleep/wake, a VPN reconnect) was enough to trigger it.
+	//
+	// Only done/error/cancelled end the chain now. A transport failure backs
+	// off so a server that is down is not hammered, and the normal cadence
+	// returns as soon as it answers again.
 	this.pollAIStatus = function() {
 		var me = this;
+		var BACKOFF_CEILING = 30000;
+		var schedule = function(delay) {
+			if (!me.aiWidget) { return; }   // widget gone: nothing left to update
+			me.pollTimerID = setTimeout(function() { me.pollAIStatus(); }, delay);
+		};
 		$.ajax({
 			type: "POST", url: SERVER_URL_AI_INTERPRET_STATUS,
 			data: { jobID: me.getModel().getJobID() },
 			success: function(r) {
-				if (r.success && me.aiWidget) {
-					me.aiWidget.updateProgress(r.status, r.percent, r.detail);
-					if (r.status !== "done" && r.status !== "error" && r.status !== "cancelled") {
-						me.pollTimerID = setTimeout(function() { me.pollAIStatus(); }, AI_POLL_INTERVAL);
-					}
+				if (!me.aiWidget) { return; }
+				// success:false is what the servlet returns for any handled
+				// exception -- an expired session, a Mongo hiccup. It is not a
+				// statement about the job, so keep watching.
+				if (!r || !r.success) { schedule(AI_POLL_INTERVAL); return; }
+				me.aiPollFailures = 0;
+				me.aiWidget.updateProgress(r.status, r.percent, r.detail);
+				if (r.status !== "done" && r.status !== "error" && r.status !== "cancelled") {
+					schedule(AI_POLL_INTERVAL);
 				}
+			},
+			error: function() {
+				me.aiPollFailures = (me.aiPollFailures || 0) + 1;
+				schedule(Math.min(AI_POLL_INTERVAL * Math.pow(2, me.aiPollFailures - 1),
+				                  BACKOFF_CEILING));
 			}
 		});
 	};
