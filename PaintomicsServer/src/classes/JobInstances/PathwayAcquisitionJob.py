@@ -42,6 +42,7 @@ from src.common.ReplicateDetection import detect_replicates, aggregate_replicate
 from src.common.DesignFile import parse_design, derive_groupings
 
 from src.common.KeggInformationManager import KeggInformationManager
+from src.common.FeatureNamesToKeggIDsMapper import _joinAllWithinDeadline
 from src.common import JobProgress
 
 from src.classes.Job import Job
@@ -102,23 +103,163 @@ PAINTOMICS4_LARGE_FIELDS = {
 }
 
 
-def _matchPathways(jobInstance, pathwaysList, genesInAllPathways, compoundsInAllPathways, inputGenes,
-                    inputCompounds, totalFeaturesByOmic, totalRelevantFeaturesByOmic, matchedPathways,
-                    mappedRatiosByOmic, enrichmentByOmic):
-    """Module-level wrapper so multiprocessing.Process can pickle the target."""
-    keggInformationManager = KeggInformationManager()
+import json as _json
+import threading as _threading
 
-    # OPTIMIZATION: Pre-calculate lookups once per thread instead of per pathway
+# One organism's kegg_interaction.json, parsed once per process:
+# (path, mtime, size) -> {compoundID: compact JSON text of its neighbours}.
+_compoundNeighbourCache = {"key": None, "map": None}
+_compoundNeighbourCacheLock = _threading.Lock()
+
+
+def _loadCompoundNeighbourMap(interactionJSONPath):
+    """
+    {compoundID: JSON text} for every compound in ``interactionJSONPath``,
+    or {} when the file is missing or does not hold a compound map (both
+    logged, exactly as before).
+
+    kegg_interaction.json is the whole KEGG compound -> neighbour map (34 MB
+    locally, 79 MB for production mmu) and it was read and json.loads()ed on
+    every step 2 with metabolites -- ~370 MB of transient Python objects
+    (~1 GB on the production file) to look up the 50-100 compounds of one
+    job. It is per-organism, static between installs, so it is parsed once
+    per process and kept as one compact JSON string per compound: about the
+    size of the file itself, and a lookup is json.loads of one small string
+    -- the same dict/list/str the full parse produced. One organism is kept
+    (the last used); the key includes mtime and size so a reinstall in place
+    is noticed.
+
+    The file is double-encoded: the top level is a one-element list holding
+    the JSON *text* of the map, not the map itself; a file written either
+    way loads (unwrapped until a dict falls out).
+
+    Not every installed species ships hubData (87 of ~97 on the production
+    server; a fresh install may lack it entirely). That used to be a
+    FileNotFoundError that killed the whole of step 2 for eco and every newly
+    installed bacterium -- the hub extras must degrade, not take the pathway
+    results down with them.
+    """
+    if not os_path.isfile(interactionJSONPath):
+        logging.warning("HUB ANALYSIS - %s does not exist (species installed "
+                        "without hubData); metabolite neighbours will be "
+                        "unavailable.", interactionJSONPath)
+        return {}
+
+    stat = os.stat(interactionJSONPath)
+    key = (interactionJSONPath, stat.st_mtime, stat.st_size)
+    with _compoundNeighbourCacheLock:
+        if _compoundNeighbourCache["key"] == key:
+            return _compoundNeighbourCache["map"]
+
+        with open(interactionJSONPath, 'r') as e:
+            compoundRegulateFeatures = _json.loads(e.read())
+
+        for _ in range(4):
+            if isinstance(compoundRegulateFeatures, dict):
+                break
+            if isinstance(compoundRegulateFeatures, list) and len(compoundRegulateFeatures) == 1:
+                compoundRegulateFeatures = compoundRegulateFeatures[0]
+            elif isinstance(compoundRegulateFeatures, str):
+                compoundRegulateFeatures = _json.loads(compoundRegulateFeatures)
+            else:
+                break
+
+        if not isinstance(compoundRegulateFeatures, dict):
+            logging.warning("HUB ANALYSIS - %s holds %s, not a compound map; "
+                            "metabolite neighbours will be unavailable.",
+                            interactionJSONPath, type(compoundRegulateFeatures).__name__)
+            return {}
+
+        compact = {compoundID: _json.dumps(neighbours, separators=(",", ":"))
+                   for compoundID, neighbours in compoundRegulateFeatures.items()}
+        _compoundNeighbourCache["key"] = key
+        _compoundNeighbourCache["map"] = compact
+        logging.info("HUB ANALYSIS - cached %d compound neighbour entries from %s",
+                     len(compact), interactionJSONPath)
+        return compact
+
+
+def _metagenesParallelism():
+    """How many omics' R scripts run at once. Each Rscript peaks near 260 MB
+    (cluster + mclust + factoextra/ggplot2), so this is bounded by memory
+    before cores; 3 is safe on the 8 GB production host. 1 restores the old
+    strictly sequential behaviour."""
+    try:
+        return max(1, int(os.getenv("PAINTOMICS_METAGENES_PARALLEL", "3")))
+    except ValueError:
+        return 3
+
+
+def _runMetagenesScripts(omicNames, databases, commands):
+    """
+    Run one generateMetaGenes.R per (omic, database) -- `commands[(omic, db)]`
+    is (argv, kClusters) -- with the OMICS in parallel and each omic's databases
+    one after another (see generateMetagenesList for why), and return
+    {(omic, db): (returncode, output bytes)} exactly as check_output would have
+    observed each run. A launch failure (e.g. no Rscript) is stored as
+    (None, OSError) and re-raised where the sequential loop would have met it,
+    so the caller's error handling is unchanged.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+    from subprocess import Popen, PIPE
+
+    def runOmic(omicName):
+        omicResults = {}
+        for dbname in databases:
+            argv = commands[(omicName, dbname)][0]
+            try:
+                process = Popen(argv, stdout=PIPE, stderr=STDOUT)
+                output, _ = process.communicate()
+                omicResults[(omicName, dbname)] = (process.returncode, output)
+            except OSError as ex:
+                omicResults[(omicName, dbname)] = (None, ex)
+        return omicResults
+
+    results = {}
+    workers = min(_metagenesParallelism(), max(1, len(omicNames)))
+    if workers <= 1:
+        for omicName in omicNames:
+            results.update(runOmic(omicName))
+        return results
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        for omicResults in pool.map(runOmic, omicNames):
+            results.update(omicResults)
+    return results
+
+
+def _inputFeatureLookups(inputGenes, inputCompounds):
+    """The per-job lookups every enrichment worker needs: features indexed by
+    lower-cased ID, and whether the job carries more than one condition.
+
+    Computed ONCE by the parent (they depend only on the input) and handed to
+    the workers, which used to rebuild them six times over.
+    """
     inputGenesDict = {g.getID().lower(): g for g in inputGenes}
     inputCompoundsDict = {c.getID().lower(): c for c in inputCompounds}
 
-    # OPTIMIZATION: Determine multi-condition mode once per thread
     max_conditions = 1
     for feature in chain(inputGenes, inputCompounds):
         for ov in feature.getOmicsValues():
             if isinstance(ov.relevant, list):
                 max_conditions = max(max_conditions, len(ov.relevant))
-    has_multi_cond = max_conditions > 1
+    return inputGenesDict, inputCompoundsDict, max_conditions > 1
+
+
+def _matchPathways(jobInstance, pathwaysList, genesInAllPathways, compoundsInAllPathways, inputGenes,
+                    inputCompounds, totalFeaturesByOmic, totalRelevantFeaturesByOmic, matchedPathways,
+                    mappedRatiosByOmic, enrichmentByOmic, lookups=None):
+    """Module-level wrapper so multiprocessing.Process can pickle the target."""
+    keggInformationManager = KeggInformationManager()
+
+    if lookups is None:
+        lookups = _inputFeatureLookups(inputGenes, inputCompounds)
+    inputGenesDict, inputCompoundsDict, has_multi_cond = lookups
+
+    # Collected locally and handed to the parent in ONE update at the end.
+    # `matchedPathways` is a Manager dict proxy in the forked path: every
+    # per-pathway assignment on it was a pickle of the whole Pathway plus a
+    # socket round trip to the manager process, ~900 of them per job.
+    localMatched = {}
 
     for pathwayID in pathwaysList:
         genesInPathway = genesInAllPathways.get(pathwayID)
@@ -142,7 +283,9 @@ def _matchPathways(jobInstance, pathwaysList, genesInAllPathways, compoundsInAll
             pathway.setClassification(
                 keggInformationManager.getPathwayClassificationByID(jobInstance.getOrganism(), pathwayID))
             pathway.setSource(sourceDB)
-            matchedPathways[pathwayID] = pathway
+            localMatched[pathwayID] = pathway
+
+    matchedPathways.update(localMatched)
 
 
 class PathwayAcquisitionJob(Job):
@@ -1396,12 +1539,15 @@ class PathwayAcquisitionJob(Job):
         #                 totalFeaturesByOmic, totalRelevantFeaturesByOmic, matchedPathways, mappedRatiosByOmic,
         #                 enrichmentByOmic )
 
+        # Once here, inherited by every forked worker, instead of once per worker.
+        lookups = _inputFeatureLookups(inputGenes, inputCompounds)
+
         # LAUNCH THE THREADS
         for pathwayIDsList in pathwaysListParts:
             thread = Process(target=_matchPathways, args=(
                 self, pathwayIDsList, allGenesInPathway, allCompoundsInPathway, inputGenes, inputCompounds,
                 totalFeaturesByOmic, totalRelevantFeaturesByOmic, matchedPathways, mappedRatiosByOmic,
-                enrichmentByOmic))
+                enrichmentByOmic, lookups))
             threadsList.append(thread)
             thread.start()
 
@@ -1416,13 +1562,13 @@ class PathwayAcquisitionJob(Job):
                 threadClass = Process( target=_matchPathways, args=(
                     self, classNameList, classGene, classComp, inputGenes, inputCompounds,
                     totalFeaturesByOmic, totalRelevantFeaturesByOmic, matchedClass, mappedRatiosByOmic,
-                    enrichmentByOmic) )
+                    enrichmentByOmic, lookups) )
                 threadsList.append( threadClass )
                 threadClass.start()
 
-        # WAIT UNTIL ALL THREADS FINISH
-        for thread in threadsList:
-            thread.join(MAX_WAIT_THREADS)
+        # WAIT UNTIL ALL THREADS FINISH -- one shared budget, not one per
+        # worker (the same rule the identifier mapper applies).
+        _joinAllWithinDeadline(threadsList, MAX_WAIT_THREADS)
 
         isFinished = True
         for thread in threadsList:
@@ -1432,6 +1578,7 @@ class PathwayAcquisitionJob(Job):
                 logging.info("THREAD TERMINATED IN generatePathwaysList")
 
         if not isFinished:
+            manager.shutdown()
             raise Exception(
                 'Your data took too long to process and it was killed. Try again later or upload smaller files if it persists.')
 
@@ -1444,6 +1591,10 @@ class PathwayAcquisitionJob(Job):
         if 'Reactome' in self.databases:
             self.setMatchedClass(dict(matchedClass))
             #self.setReactomeClass(reactomeClass)
+
+        # The manager server is a forked process holding a copy of every
+        # matched pathway; release it now instead of when the GC gets round to it.
+        manager.shutdown()
 
         pvalues_list = defaultdict(dict)
         combined_pvalues_list = defaultdict(dict)
@@ -2052,11 +2203,11 @@ class PathwayAcquisitionJob(Job):
         @param {type}
         @returns
         """
-        # STEP 1. EXTRACT THE COMPRESSED FILE WITH THE MAPPING FILES
-        zipFile(self.getOutputDir() + "/mapping_results_" + self.getJobID() + ".zip").extractall(
-            path=self.getTemporalDir())
-
-        # STEP 2. GENERATE THE DATA FOR EACH OMIC DATA TYPE
+        # STEP 1. EXTRACT THE MAPPING FILES THE R SCRIPT READS
+        # Only the `<omic>_matched.txt` members: they are the R script's only
+        # input, and re-inflating every omic's matched AND unmatched files (the
+        # whole zip) on every call made the single-omic slider recompute pay for
+        # the entire job.
         filtered_omics = self.geneBasedInputOmics
         filtered_databases = self.getDatabases()
 
@@ -2067,6 +2218,14 @@ class PathwayAcquisitionJob(Job):
         if database:
             filtered_databases = set(database).intersection(set(filtered_databases))
 
+        with zipFile(self.getOutputDir() + "/mapping_results_" + self.getJobID() + ".zip") as mappingZip:
+            wanted = {inputOmic.get("omicName") + "_matched.txt" for inputOmic in filtered_omics}
+            for member in mappingZip.namelist():
+                if member in wanted:
+                    mappingZip.extract(member, path=self.getTemporalDir())
+
+        # STEP 2. GENERATE THE DATA FOR EACH OMIC DATA TYPE
+
         # This loop is the whole of the metagenes phase and its size is known
         # exactly before it starts, so the bar here is a real count rather than a
         # clock-based guess. It is ~50% of step 2, and without this it showed a
@@ -2076,32 +2235,54 @@ class PathwayAcquisitionJob(Job):
         JobProgress.units(self.getJobID(), 0, total=metageneUnits,
                           detail="0 of %d" % metageneUnits)
 
+        # One Rscript per (omic, database) pair, each paying R start-up plus the
+        # cluster/mclust/factoextra library load plus the annotation read before
+        # any work -- ~1.3 s here, several seconds on the production CPU, times
+        # 10-18 pairs, run one after another. The R processes are independent
+        # (their own seeds, their own output files, named by omic and database),
+        # so the OMICS run concurrently; the databases of one omic stay
+        # sequential because the elbow plot `<omic>_elbow.png` carries no
+        # database suffix and the last database written must keep winning.
+        # Results are consumed below in the original loop order, so logging,
+        # error handling, pathway updates and progress ticks are unchanged.
+        commands = {}
+        for inputOmic in filtered_omics:
+            for dbname in filtered_databases:
+                inputFile = self.getTemporalDir() + "/" + inputOmic.get("omicName") + '_matched.txt'
+                kClusters = str(dict(clusterNumber).get(inputOmic.get("omicName"), "dynamic"))
+                commands[(inputOmic.get("omicName"), dbname)] = ([
+                    "Rscript",
+                    ROOT_DIRECTORY + "common/bioscripts/generateMetaGenes.R",
+                    '--specie=' + self.getOrganism(),
+                    '--input_file=' + inputFile,
+                    '--output_prefix=' + inputOmic.get("omicName"),
+                    '--data_dir=' + self.getTemporalDir(),
+                    '--kegg_dir=' + KEGG_DATA_DIR,
+                    '--sources_dir=' + ROOT_DIRECTORY + 'common/bioscripts/',
+                    '--kclusters=' + kClusters if kClusters.isdigit() else '',
+                    '--database=' + dbname if dbname != "KEGG" else ''], kClusters)
+
+        results = _runMetagenesScripts(
+            [inputOmic.get("omicName") for inputOmic in filtered_omics],
+            list(filtered_databases), commands)
+
         for inputOmic in filtered_omics:
             # STEP 2.1 EXECUTE THE R SCRIPT FOR EACH DATABASE
             for dbname in filtered_databases:
                 try:
                     logging.info("GENERATING METAGENES INFORMATION FOR " + str(dbname) + "...CALLING")
-                    inputFile = self.getTemporalDir() + "/" + inputOmic.get("omicName") + '_matched.txt'
-                    # Select number of clusters, default to dynamic
-
-                    kClusters = str(dict(clusterNumber).get(inputOmic.get("omicName"), "dynamic"))
+                    kClusters = commands[(inputOmic.get("omicName"), dbname)][1]
                     logging.info("kClusters=" + str(kClusters))
                     logging.info(str(ROOT_DIRECTORY))
 
                     logging.info("dbname is " + str(dbname))
 
                     try:
-                        output = check_output([
-                            "Rscript",
-                            ROOT_DIRECTORY + "common/bioscripts/generateMetaGenes.R",
-                            '--specie=' + self.getOrganism(),
-                            '--input_file=' + inputFile,
-                            '--output_prefix=' + inputOmic.get("omicName"),
-                            '--data_dir=' + self.getTemporalDir(),
-                            '--kegg_dir=' + KEGG_DATA_DIR,
-                            '--sources_dir=' + ROOT_DIRECTORY + 'common/bioscripts/',
-                            '--kclusters=' + kClusters if kClusters.isdigit() else '',
-                            '--database=' + dbname if dbname != "KEGG" else ''], stderr=STDOUT)
+                        returncode, output = results[(inputOmic.get("omicName"), dbname)]
+                        if returncode is None:
+                            raise output  # the OSError check_output would have raised here
+                        if returncode != 0:
+                            raise CalledProcessError(returncode, "Rscript", output=output)
                     except CalledProcessError as ex:
                         error_detail = ex.output.decode('utf-8') if ex.output else str(ex)
                         logging.error("STEP2 - Error while generating metagenes information for " + inputOmic.get("omicName") + " db: " + str(dbname))
@@ -2139,16 +2320,19 @@ class PathwayAcquisitionJob(Job):
                                                 ("_" + str(dbname).lower() + ".tab" if dbname != "KEGG" else ".tab")
 
                     if os_path.exists(metagenesFileName):
+                        metageneRows = 0
                         with open(metagenesFileName, 'r') as inputDataFile:
                             for line in csv_reader(inputDataFile, delimiter="\t"):
                                 if line[0] in self.matchedPathways:
                                     self.matchedPathways.get(line[0]).addMetagenes(inputOmic.get("omicName"),
                                                                                    {"metagene": line[1], "cluster": line[2],
                                                                                     "values": line[3:]})
-                                    logging.info(
-                                        "pathway:" + str(line[0]) + " metaGene:" + str(line[1]) + " cluster:" + str(
-                                            line[2]) + " values:" + str(line[3:]))
-                        inputDataFile.close()
+                                    metageneRows += 1
+                        # One line per (omic, database) rather than one per
+                        # metagene row: the per-row form was hundreds to
+                        # thousands of formatted writes per job.
+                        logging.info("METAGENES - %d rows added for omic '%s' (%s) from %s",
+                                     metageneRows, inputOmic.get("omicName"), dbname, metagenesFileName)
                     else:
                         logging.warning(f"Metagenes file {metagenesFileName} not found. This is expected if no matches were found for db {dbname}.")
 
@@ -2164,8 +2348,19 @@ class PathwayAcquisitionJob(Job):
                 JobProgress.units(self.getJobID(), metagenesDone,
                                   detail="%d of %d" % (metagenesDone, metageneUnits))
 
-        call("rm " +  self.getOutputDir()  + "*.png", shell=True)
-        call("mv " + self.getTemporalDir() + "/" + "*.png " + self.getOutputDir(), shell=True)
+        # The metagene thumbnails move from the temporal dir into the output
+        # dir, replacing last time's; os calls instead of `rm`/`mv` through a
+        # shell (two process spawns and a shell glob per call).
+        for oldPNG in glob.glob(os_path.join(self.getOutputDir(), "*.png")):
+            try:
+                os.remove(oldPNG)
+            except OSError:
+                pass
+        for newPNG in glob.glob(os_path.join(self.getTemporalDir(), "*.png")):
+            try:
+                os.replace(newPNG, os_path.join(self.getOutputDir(), os_path.basename(newPNG)))
+            except OSError as ex:
+                logging.warning("METAGENES - could not move %s: %s", newPNG, ex)
         return self
 
     # JSON <-> BSON FUNCTIONS ------------------------------------------------------------------------------------------------------
@@ -2289,61 +2484,25 @@ class PathwayAcquisitionJob(Job):
         # Load classification File
         with open(brPath, 'r') as f:
             temp = json.loads(f.read())
-            print(temp)
 
-        # kegg_interaction.json is double-encoded: the top level is a one-element
-        # list holding the JSON *text* of the neighbour map, not the map itself.
-        # decode-then-dumps-then-loads was a round trip that returned that same
-        # list, so every lookup below missed and the client received a list where
-        # it expected a dict. That is why "Metabolite regulates Features" on the
-        # hub analysis rendered as a heading with nothing under it.
-        #
-        # Unwrap until a dict falls out, so a file written either way loads.
-        #
-        # Not every installed species ships hubData (87 of ~97 on the
-        # production server; a fresh install may lack it entirely). That used
-        # to be a FileNotFoundError that killed the whole of step 2 for eco
-        # and every newly installed bacterium — the hub extras must degrade,
-        # not take the pathway results down with them.
-        if os.path.isfile(interactionJSONPath):
-            with open(interactionJSONPath, 'r') as e:
-                compoundRegulateFeatures = json.loads(e.read())
-        else:
-            logging.warning("HUB ANALYSIS - %s does not exist (species installed "
-                            "without hubData); metabolite neighbours will be "
-                            "unavailable.", interactionJSONPath)
-            compoundRegulateFeatures = {}
-
-        for _ in range(4):
-            if isinstance(compoundRegulateFeatures, dict):
-                break
-            if isinstance(compoundRegulateFeatures, list) and len(compoundRegulateFeatures) == 1:
-                compoundRegulateFeatures = compoundRegulateFeatures[0]
-            elif isinstance(compoundRegulateFeatures, str):
-                compoundRegulateFeatures = json.loads(compoundRegulateFeatures)
-            else:
-                break
-
-        if not isinstance(compoundRegulateFeatures, dict):
-            logging.warning("HUB ANALYSIS - %s holds %s, not a compound map; "
-                            "metabolite neighbours will be unavailable.",
-                            interactionJSONPath, type(compoundRegulateFeatures).__name__)
-            compoundRegulateFeatures = {}
-
+        # The whole compound -> neighbour map, served from a per-process cache
+        # of the file (see _loadCompoundNeighbourMap); {} when the species has
+        # no hubData or the file is not a compound map -- both already warned.
         # The file covers every compound KEGG knows about - 79 MB for mmu - and
         # the whole map used to be handed to the browser on every step 3. Only
         # the compounds in this analysis can ever be looked up, so the rest is
         # dropped before it reaches the response or the in-memory job cache.
+        neighbourMap = _loadCompoundNeighbourMap(interactionJSONPath)
         inputCompoundIDs = set(self.inputCompoundsData.keys())
-        matchedNeighbourIDs = inputCompoundIDs & set(compoundRegulateFeatures.keys())
+        matchedNeighbourIDs = inputCompoundIDs & set(neighbourMap.keys())
 
-        if compoundRegulateFeatures and not matchedNeighbourIDs:
+        if neighbourMap and not matchedNeighbourIDs:
             logging.warning("HUB ANALYSIS - none of the %d input compounds appear in %s; "
                             "check that both use KEGG compound IDs.",
                             len(inputCompoundIDs), interactionJSONPath)
 
         compoundRegulateFeatures = {
-            compoundID: compoundRegulateFeatures[compoundID]
+            compoundID: json.loads(neighbourMap[compoundID])
             for compoundID in matchedNeighbourIDs
         }
 

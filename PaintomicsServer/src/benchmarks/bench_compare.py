@@ -21,6 +21,7 @@ import gzip
 import json
 import math
 import os
+import re
 import sys
 
 # Dict paths whose KEY ORDER is part of the contract (client iterates and
@@ -65,6 +66,8 @@ class Comparison(object):
                            _short(a), _short(b)))
             return
         if a != b:
+            if isinstance(a, str) and _stripCheckout(a) == _stripCheckout(b):
+                return  # same file, different checkout root (A vs B worktree)
             self.record(path, "value", "%r vs %r" % (_short(a), _short(b)))
 
     def _floats(self, a, b, path):
@@ -104,6 +107,15 @@ class Comparison(object):
         for key in keysA:
             if key in b:
                 self.compare(a[key], b[key], "%s.%s" % (path, key))
+
+
+_CHECKOUT_ROOT = re.compile(r"^.*?/PaintomicsServer/")
+
+
+def _stripCheckout(text):
+    """Absolute example-file paths embed the checkout the run used; the A and
+    B sides of a comparison are different worktrees by construction."""
+    return _CHECKOUT_ROOT.sub("<checkout>/PaintomicsServer/", text)
 
 
 def _short(value, limit=120):
