@@ -133,6 +133,86 @@ synthesises delegated material into a compact summary instead of carrying its
 detail through. That is the shape of this arm, not a tuning miss, and it is
 where any future attempt has to start.
 
+## Round 4 — carry the delegated detail into the report
+
+Round 3's diagnosis named report *construction* as the last untested lever: the
+agent had the same material as the workflow arm (its delegated interpretations)
+and summarised it away. So the gate now merges the sub-agents' reports with the
+Lead's draft in one Report Writer pass — the workflow arm's own phase-5 shape —
+kept only if the result is at least 1.2× longer and cites no less
+(`AI_AGENT_MERGE_DELEGATED=0` restores round 3).
+
+That fixed the two size criteria outright:
+
+| mean of 2 | base | round 3 | round 4 |
+|---|---|---|---|
+| prose | 39 237 | 8 870 | **38 480** chars |
+| pathways named | 15 | 9.0 | **18.5** |
+| cited papers | 21.0 | 7.5 | 4.5 |
+| redactions | 4.5 | 7.0 | **3.5** |
+| wall clock | 331 s | 236 s | 360 s |
+
+Four of five rules pass — coverage now *exceeds* the workflow arm — and only
+citations fail, worse than before: an interpretation written about pathways whose
+literature the sub-agent was never shown has nothing to cite, and
+`delegate_interpretation` was handing every sub-agent the same arbitrary first
+twelve papers.
+
+## Round 5 — attribute the literature to the pathways being delegated
+
+Mirrors `agent.py::_one_batch`: each delegation is shown the papers *attributed*
+to its own pathways (the `topic_tag` the Lead passes to `search_literature`,
+matched loosely), capped at ten, full text first — plus a prompt rule to search
+before delegating. Replicate 1: citations **5 → 10**, prose 32 169, 16 pathways,
+5 redactions, 398 s.
+
+Both replicates: citations 11.0, coverage 16.5, prose 28 468, redactions 5.5,
+384 s — **the arm's best measured state, 4 of 5 rules, still short only on
+citations (11 vs 21).**
+
+The remaining ceiling looked mechanical: the citation top-up never fired, because
+*every* retrieved paper was already cited. The agent's index held ~13 papers
+where the workflow arm's held 27 — ten queries at five hits each, overlapping
+heavily because they are gene-anchored on the same pathways.
+
+## Round 6 — widening the pool, which made it worse
+
+Search hits per query 5 → 10. The pool filled exactly as predicted ("10 hits, 10
+new" on every query, ~49 papers against round 5's ~13) and citations **fell to
+7.0** with redactions **doubling to 10.5** and replicate variance blowing out
+(3 and 11 citations from identical code).
+
+This is the incumbent's own measurement reappearing one level up. `agent.py`
+records it for its batches:
+
+> Loosening the relevance filter raised the kept pool from ~30 to 106 papers and
+> citations COLLAPSED 15 → 3: a batch handed 20+ abstracts cites fewer of them,
+> not more.
+
+The per-delegation cap (10 papers) held, but the merge step hands the Report
+Writer the *full* master reference list, and a writer given ninety references
+cites three. **Reverted** — the branch keeps round 5, and `AI_AGENT_SEARCH_HITS`
+carries the note so nobody widens it again.
+
+## All six rounds
+
+| mean of 2 replicates | base | r1 | r2 | r3 | r4 | r5 | r6 |
+|---|---|---|---|---|---|---|---|
+| wall clock (s) | 331 | 174 | 221 | 236 | 360 | 384 | 379 |
+| prose chars | 39 237 | 7 426 | 7 335 | 8 870 | 38 480 | 28 468 | 31 974 |
+| pathways named | 15 | 6.5 | 8.5 | 9.0 | **18.5** | **16.5** | 16.5 |
+| cited papers | **21.0** | 6.5 | 10.0 | 7.5 | 4.5 | 11.0 | 7.0 |
+| redactions | 4.5 | 0 | 0 | 7.0 | **3.5** | 5.5 | 10.5 |
+| rules passed | — | 2/5 | 2/5 | 1/5 | **4/5** | **4/5** | 3/5 |
+
+Rounds 4 and 5 pass everything except citations, and coverage *exceeds* the
+workflow arm. Rule 2 never comes close: six configurations put the agent between
+4.5 and 11 cited papers against a stable 21, and the two levers that should have
+fixed it — more searching, a bigger pool — moved it the wrong way. **The verdict
+stands at not better, and the citation gap is a property of writing one report
+from a shared reference list rather than three batch reports each grounded in its
+own attributed slice.**
+
 ## A production defect this uncovered (affects the shipped workflow arm too)
 
 Round 3's high redaction count exposed a real fault in `redact_unverified_v2`,

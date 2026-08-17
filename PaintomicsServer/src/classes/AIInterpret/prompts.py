@@ -769,7 +769,10 @@ returns nothing and still spends budget. Use delegate_literature for a topic \
 sweep, and read_paper on the papers you mean to cite for a specific claim.
 4. Get breadth by DELEGATING, not by writing everything yourself: call \
 delegate_interpretation a few times, covering all the top-ranked pathways and \
-clusters between them. Each call returns written interpretations carrying your \
+clusters between them. SEARCH FIRST for the pathways you are about to \
+delegate, and reuse those pathway names as the topic_tag: a sub-agent is shown \
+the papers tagged for its pathways, so delegating before you have found any \
+literature for them produces an interpretation with nothing to cite. Each call returns written interpretations carrying your \
 reference numbers; your report is the synthesis across those returns plus what \
 you found first-hand. This is how fifteen pathways get covered in the time you \
 have, and skipping it is why a report ends up covering six.

@@ -105,6 +105,16 @@ SEARCH_BUDGET = int(os.getenv("AI_AGENT_SEARCH_BUDGET", "40"))
 # a proxy token backstop on the input side (the model's context is the real
 # resource; characters are what this layer can measure without a tokenizer).
 TOOL_CHAR_BUDGET = int(os.getenv("AI_AGENT_TOOL_CHAR_BUDGET", "400000"))
+# Papers shown to one delegated interpretation. Same value and the same reason
+# as the workflow arm's SDK_PAPERS_PER_BATCH.
+DELEGATE_PAPERS = int(os.getenv("AI_AGENT_DELEGATE_PAPERS", "10"))
+# Hits per search. Deliberately NOT widened: round 6 tried ten and the pool grew
+# from ~13 papers to ~49 while citations collapsed 11 -> 3 and redactions rose
+# 5.5 -> 11. It is the same effect agent.py records for its batches ("a batch
+# handed 20+ abstracts cites fewer of them, not more") reappearing at the merge
+# step, which hands the Report Writer the whole master reference list. More
+# literature in one prompt buys fewer citations, not more.
+SEARCH_HITS = int(os.getenv("AI_AGENT_SEARCH_HITS", str(AI_PAPERS_PER_SEARCH_TASK)))
 # Parallel single-shot calls one delegate_* tool may run at once.
 DELEGATE_WORKERS = int(os.getenv("AI_AGENT_DELEGATE_WORKERS", "4"))
 # Below this many cited papers the gate asks the Report Writer once more to
@@ -112,6 +122,10 @@ DELEGATE_WORKERS = int(os.getenv("AI_AGENT_DELEGATE_WORKERS", "4"))
 # workflow arm (SDK_MIN_CITATIONS): the two arms are only comparable if the
 # incumbent's own grounding pass exists on both sides.
 MIN_CITATIONS = int(os.getenv("AI_AGENT_MIN_CITATIONS", str(SDK_MIN_CITATIONS)))
+# Merge the sub-agents' interpretations into the final report rather than
+# shipping the Lead's compression of them. AI_AGENT_MERGE_DELEGATED=0 restores
+# the round-3 behaviour for comparison.
+MERGE_DELEGATED = os.getenv("AI_AGENT_MERGE_DELEGATED", "1") == "1"
 # Verify->correct rounds at the gate. 2 = one verification pass, one
 # correction, one re-verification -- the 600 s budget does not fit the
 # workflow arm's 3 (its own no-progress rule usually stops at 2 anyway).
@@ -133,6 +147,7 @@ class LoopContext(AgentContext):
     pubmed: Any = None                                  # PubMedClient
     hooks: dict = field(default_factory=dict)
     notebook: list = field(default_factory=list)
+    delegated: list = field(default_factory=list)      # sub-agent interpretations
     trace: list = field(default_factory=list)           # toolTrace events
     searches_used: int = 0
     tool_chars: int = 0
@@ -416,8 +431,7 @@ async def search_literature(ctx: RunContextWrapper[LoopContext], query: str,
         return out
     c.searches_used += 1
     try:
-        pmids = await asyncio.to_thread(c.pubmed.search, query,
-                                        AI_PAPERS_PER_SEARCH_TASK)
+        pmids = await asyncio.to_thread(c.pubmed.search, query, SEARCH_HITS)
         new = [p for p in pmids if str(p) not in c.pmid_to_ref]
         papers = (await asyncio.to_thread(c.pubmed.fetch_abstracts, new)
                   if new else [])
@@ -568,16 +582,52 @@ async def delegate_interpretation(ctx: RunContextWrapper[LoopContext],
     chunks = [chosen[i:i + 5] for i in range(0, len(chosen), 5)]
     sem = asyncio.Semaphore(DELEGATE_WORKERS)
 
+    def _papers_for(chunk):
+        """The papers ATTRIBUTED to this chunk's pathways, as the workflow arm
+        selects them (agent.py::_one_batch).
+
+        Handing every sub-agent the same arbitrary first-N papers is why round 4
+        wrote 39 k characters and cited four of them: an interpretation of
+        pathways whose literature it was never shown has nothing to cite. The
+        topic_tag the Lead passes to search_literature is the attribution key,
+        matched loosely because the Lead writes it in its own words.
+        """
+        names = {str(p.get("name", "")).lower() for p in chunk}
+        ids = {str(p.get("id", "")).lower() for p in chunk}
+        hits = []
+        for paper in papers:
+            tags = [str(t).lower() for t in (paper.get("pathways") or [])]
+            if any(t in names or t in ids
+                   or any(t in n or n in t for n in names if n and t)
+                   for t in tags):
+                hits.append(paper)
+        # No attribution match (the Lead tagged by theme, not pathway): fall back
+        # to the most recently retrieved, which are its latest lines of enquiry.
+        if not hits:
+            hits = papers[-DELEGATE_PAPERS:]
+        # Cap what one prompt reasons over. The workflow arm measured citations
+        # COLLAPSING 15 -> 3 when a batch was handed 20+ abstracts, so more
+        # literature per prompt is not better; full text first, then earliest.
+        if len(hits) > DELEGATE_PAPERS:
+            hits = sorted(hits, key=lambda p: (not p.get("full_text_available"),
+                                               p.get("ref_index", 0)))[:DELEGATE_PAPERS]
+        return hits
+
     async def _one(chunk):
         async with sem:
             prompt = prompts_mod.build_batch_interpretation_prompt(
-                chunk, papers[:12], c.experiment_design, c.organism_name)
+                chunk, _papers_for(chunk), c.experiment_design, c.organism_name)
             if focus:
                 prompt += "\n\nFocus of this delegation: %s" % focus
             return await _single_shot(interpreter, prompt, c, 150,
                                       "delegate[%d pathways]" % len(chunk))
 
     reports = await asyncio.gather(*[_one(ch) for ch in chunks])
+    # Keep the sub-agents' text: measured over three rounds, the Lead compresses
+    # these interpretations into a summary a fifth the length of the workflow
+    # arm's report, and the detail is lost with them. The gate re-synthesises
+    # from what is kept here (see _merge_delegated).
+    c.delegated.extend(r for r in reports if r)
     out = "\n\n---\n\n".join(r for r in reports if r) or "(delegation produced nothing)"
     out = _spend(c, out + _ledger_note(c))
     _trace(c, "delegate_interpretation",
@@ -609,8 +659,7 @@ async def delegate_literature(ctx: RunContextWrapper[LoopContext],
             break
         c.searches_used += 1
         try:
-            pmids = await asyncio.to_thread(c.pubmed.search, q,
-                                            AI_PAPERS_PER_SEARCH_TASK)
+            pmids = await asyncio.to_thread(c.pubmed.search, q, SEARCH_HITS)
             new = [p for p in pmids if str(p) not in c.pmid_to_ref]
             papers = (await asyncio.to_thread(c.pubmed.fetch_abstracts, new)
                       if new else [])
@@ -735,6 +784,43 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
             raise RuntimeError("The agent produced no report (loop: %s; "
                                "forced synthesis: %s)" %
                                (stats.get("loop_backstop", "ended"), e))
+
+    # ---- carry the delegated detail into the report ------------------------
+    # The workflow arm's 39 k of prose comes from synthesising ACROSS its three
+    # batch reports; the agent had the same material (its delegations) and
+    # summarised it away, which is the whole of the measured gap after retrieval
+    # was fixed. So the submitted draft and the sub-agents' reports are merged
+    # by one Report Writer pass -- and kept only if it is genuinely fuller and
+    # cites at least as much, so a "merge" can never shrink the report.
+    if ctx.delegated and MERGE_DELEGATED:
+        t_m = time.time()
+        papers_now = [ctx.paper_index[k] for k in sorted(ctx.paper_index)]
+        valid = {p["ref_index"] for p in papers_now}
+        before = len(count_body_citations(str(report), valid))
+        prompt = prompts_mod.build_synthesis_prompt_v2(
+            ctx.delegated + ["## The lead interpreter's own draft\n" + report],
+            experiment_design, organism_name, papers_now)
+        prompt += ("\n\nThe last block is the lead interpreter's draft: keep its "
+                   "structure, its Key Findings and its judgements, and restore "
+                   "the per-pathway detail from the batch reports that the draft "
+                   "compressed away. Every pathway named in any block gets its "
+                   "own paragraph. Do not invent citations.")
+        try:
+            merged = await bounded(
+                Runner.run(agents["synth"], prompt, context=ctx, max_turns=3),
+                SDK_LONG_CALL_TIMEOUT, label="delegated merge")
+            candidate = resolve_pmid_mentions(str(merged.final_output),
+                                              ctx.paper_index)
+            after = len(count_body_citations(candidate, valid))
+            if len(candidate) > 1.2 * len(str(report)) and after >= before:
+                stats["merge_gain_chars"] = len(candidate) - len(str(report))
+                report = candidate
+            else:
+                stats["merge_rejected"] = True
+        except (Exception, asyncio.TimeoutError) as e:
+            stats["merge_failed"] = "%s: %s" % (type(e).__name__, e)
+            logger.warning("[%s][loop] delegated merge failed: %s", job_id, e)
+        stats["merge_s"] = time.time() - t_m
 
     # The deterministic tables ride below the prose, exactly as the workflow
     # arm ships them (its phase 5d): data the job already holds is appended,
