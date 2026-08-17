@@ -107,7 +107,7 @@ cat("STEP 3. Load input data, ")
 #dir.create(args$data_dir, showWarnings = FALSE)
 setwd(args$data_dir)
 # Read the reference file
-genes2pathway <- data.frame(read.table(file=args$kegg_dir, header=FALSE, sep="\t", quote="", as.is=TRUE))
+genes2pathway <- data.frame(read.table(file=args$kegg_dir, header=FALSE, sep="\t", quote="", comment.char="", as.is=TRUE))
 # genes2pathway <-data.frame(lapply(genes2pathway, function(v) {
 #   # if (is.character(v)) return(tolower(v))
 #   # else return(v)
@@ -126,7 +126,14 @@ genes2pathway[,1] <- tolower(genes2pathway[,1])
 # Example (n = 6 conditions, so 11 columns):
 # ENSMUSG00000000001	Gnai3	14679	KEGG	0.01523	0.01042	0.04686	0.01663	0.04748	0.04169	0
 #                                                                                                 ^ relevance flag
-input_data <- read.table(file=args$input_file, header=FALSE, sep="\t", quote="")
+#
+# comment.char="" is load-bearing: column 2 is a display name straight out of
+# the organism database, and real gene symbols contain '#' (potato ptt#2-1,
+# human mt-GrpE#1, fly CG#6450). Under R's default comment.char="#" the rest of
+# such a line is discarded, the row loses columns, and read.table aborts the
+# whole metagenes phase with "line N did not have M elements" -- which surfaces
+# to the user as step 2 failing outright for that organism.
+input_data <- read.table(file=args$input_file, header=FALSE, sep="\t", quote="", comment.char="")
 
 # CANONICALISE ROW ORDER ------------------------------------------------------
 # The writer of <omic>_matched.txt (Job.py) emits its rows in an order that is
