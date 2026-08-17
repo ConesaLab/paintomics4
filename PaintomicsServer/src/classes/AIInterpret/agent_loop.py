@@ -613,25 +613,48 @@ def notebook_write(ctx: RunContextWrapper[LoopContext], note: str) -> str:
 
 @function_tool
 def check_my_citations(ctx: RunContextWrapper[LoopContext], draft: str) -> str:
-    """Advisory pre-check of a draft's [N] citations against the retrieved papers (deterministic). The mandatory exit gate still runs after you submit."""
+    """Check a draft's [N] citations BEFORE submitting: which resolve to real papers, and which have no supporting quote and will therefore be dropped. Costs a few seconds. Worth running once on your finished draft."""
     c = ctx.context
     t0 = time.time()
-    papers = [c.paper_index[k] for k in sorted(c.paper_index)]
+    guard = _time_guard(c)
+    if guard:
+        return guard
+    valid = set(c.paper_index)
+    text = normalize_citation_markers(draft)
+    cited = count_body_citations(text, valid)
+    invalid = sorted({int(n) for n in re.findall(r"\[(\d+)\]", text)} - valid)
+
+    # The real question. verify_report_v2 cannot answer it on a draft -- it reads
+    # quotes out of a References section the draft does not have yet, so it
+    # reported "0 failed" for every draft ever passed to it, in eight runs. What
+    # decides whether a citation survives is whether a verbatim supporting
+    # sentence exists in the paper, and _collect_cited_quotes answers exactly
+    # that for ~3 s.
+    quotes = {}
     try:
-        result = verify_report_v2(normalize_citation_markers(draft),
-                                  c.gene_whitelist, papers, c.job_instance)
+        quotes = _collect_cited_quotes(
+            LLMClient(AI_PROVIDERS[AI_LLM_PROVIDER]), text, c.paper_index, c.job_id)
     except Exception as e:
-        out = "Check failed: %s" % e
-        _trace(c, "check_my_citations", "%d chars" % len(draft), out, t0)
-        return out
-    failed = result.get("failed_citations") or []
-    lines = ["citations checked: %s" % result.get("citations_checked"),
-             "invalid or unsupported: %d" % len(failed)]
-    for f in failed[:10]:
-        lines.append("- [%s] %s" % (f.get("ref_index"), f.get("reason", "")[:140]))
+        logger.warning("[%s][loop] pre-submit quote check failed: %s", c.job_id, e)
+    unquotable = sorted(cited - set(quotes))
+
+    lines = ["%d citation(s) in the draft; %d have a supporting quote."
+             % (len(cited), len(quotes))]
+    if invalid:
+        lines.append("INVALID, no such paper -- remove these: %s"
+                     % ", ".join("[%d]" % i for i in invalid[:15]))
+    if unquotable:
+        lines.append("NO SUPPORTING QUOTE FOUND, these will be removed from the "
+                     "report along with the sentence carrying them: %s"
+                     % ", ".join("[%d]" % i for i in unquotable[:15]))
+        lines.append("Either cite a different paper for that claim, soften the "
+                     "claim to what the paper does say, or read_paper first and "
+                     "cite the sentence you find.")
+    if not invalid and not unquotable:
+        lines.append("Every citation resolves and is quotable.")
     out = _spend(c, "\n".join(lines))
     _trace(c, "check_my_citations", "%d chars" % len(draft),
-           "%d failed" % len(failed), t0)
+           "%d cited, %d unquotable" % (len(cited), len(unquotable)), t0)
     return out
 
 
@@ -722,43 +745,6 @@ async def delegate_interpretation(ctx: RunContextWrapper[LoopContext],
 
 
 @function_tool
-async def delegate_literature(ctx: RunContextWrapper[LoopContext],
-                              topic: str, gene_symbols: list[str]) -> str:
-    """Delegate a literature sweep on one topic to the Literature Agent sub-agent: it issues up to 3 gene-anchored searches from your remaining budget and summarises what it found."""
-    c = ctx.context
-    t0 = time.time()
-    guard = _time_guard(c)
-    if guard:
-        return guard
-    genes = [g for g in (gene_symbols or []) if g][:4]
-    queries = []
-    if genes:
-        queries.append("(%s) AND %s" % (" OR ".join(genes), topic))
-        if len(genes) > 1:
-            queries.append("(%s) AND %s" % (" OR ".join(genes[:2]), c.organism_name))
-    queries.append(topic)
-    found = []
-    for q in queries[:3]:
-        if c.searches_used >= SEARCH_BUDGET:
-            found.append("(search budget exhausted)")
-            break
-        c.searches_used += 1
-        try:
-            pmids = await asyncio.to_thread(c.pubmed.search, q, SEARCH_HITS)
-            new = [p for p in pmids if str(p) not in c.pmid_to_ref]
-            papers = (await asyncio.to_thread(c.pubmed.fetch_abstracts, new)
-                      if new else [])
-            found.extend(_register_papers(c, papers, topic))
-        except Exception as e:
-            found.append("(search '%s' failed: %s)" % (q, e))
-    out = ("Literature sweep on '%s':\n%s" % (topic, "\n".join(found) or "(nothing new)")
-           + _ledger_note(c))
-    out = _spend(c, out)
-    _trace(c, "delegate_literature", topic, "%d lines" % len(found), t0)
-    return out
-
-
-@function_tool
 def submit_report(ctx: RunContextWrapper[LoopContext], report_markdown: str) -> str:
     """Submit your final report (markdown, [N] citations). The only way to finish. It goes to the mandatory verification gate, never straight to the user."""
     c = ctx.context
@@ -779,10 +765,12 @@ def submit_report(ctx: RunContextWrapper[LoopContext], report_markdown: str) -> 
 # argument, and notebook_read re-read what the SDK already keeps in context.
 # Every tool here costs its schema in EVERY Decide turn, so an unused tool is a
 # tax on the prompt that carries the whole investigation.
+# Ten. delegate_literature went uncalled in all 17 archived runs -- the Lead
+# writes its own queries and search_literature covers the same ground -- and a
+# declared tool is not free: its schema rides in every Decide turn of every run.
 TOOLBELT = [get_experiment_overview, get_pathway_details, compare_gene_profiles,
             cluster_pathways, search_literature, read_paper, notebook_write,
-            check_my_citations, delegate_interpretation, delegate_literature,
-            submit_report]
+            check_my_citations, delegate_interpretation, submit_report]
 
 
 # ---------------------------------------------------------------------------

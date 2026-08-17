@@ -765,8 +765,10 @@ the top-ranked pathways, compare_gene_profiles on the genes that drive them \
 3. Search the literature with search_literature. BROAD queries only: two or \
 three gene symbols joined by OR plus at most one biological term, e.g. \
 "(Ikzf1 OR Ccnd2) AND B cell differentiation". A query with three AND clauses \
-returns nothing and still spends budget. Use delegate_literature for a topic \
-sweep, and read_paper on the papers you mean to cite for a specific claim.
+returns nothing and still spends budget. Use read_paper on the papers you mean \
+to cite for a specific claim -- nearly half the papers opened that way end up \
+cited, and a citation with no quotable sentence behind it is removed from the \
+report along with the claim it supports.
 4. Get breadth by DELEGATING, not by writing everything yourself: call \
 delegate_interpretation a few times, covering all the top-ranked pathways and \
 clusters between them. SEARCH FIRST for the pathways you are about to \
@@ -792,8 +794,11 @@ why you set it aside. Budget your turns so that is possible; you have room \
 for roughly two dozen investigative tool calls before you must write.
 
 Report rules:
-- Cite ONLY [N] indices that search_literature or delegate_literature \
-returned. Never invent an index or a PMID.
+- Cite ONLY [N] indices that search_literature returned. Never invent an index \
+or a PMID.
+- Before submitting, run check_my_citations on your draft: it names the \
+citations that have no supporting quote, which are the ones that will be \
+stripped. Fix or drop them rather than shipping them.
 - Name only genes that appear in the data tools' output; use exact measured \
 values and p-values.
 - Structure, all five sections required: ## Key Findings (3-5 bullets), \
