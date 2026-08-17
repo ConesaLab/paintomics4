@@ -232,8 +232,55 @@ dataset completed in 189 s.
 
 ## 5. paintomics.uv.es after the deploy
 
-_Filled in below after deployment (same driver, same scenarios, compared
-with the runs above using `bench_compare --noise-runs`)._
+Master `0976b4c4` (PR #33) was deployed at 14:29 UTC and immediately hung
+every mapping: the `$lookup` sub-pipeline of PR #33 is fast on MongoDB 8.2
+but MongoDB 4.4 (production) cannot index it, so every batch became a
+collection scan of the 1.1 M-document `xref`. It was hot-fixed live at
+14:48 UTC (classic pipeline restored), and PR #34 replaced the lookup with
+two plain indexed `find`s -- 9x faster than the classic aggregation on
+MongoDB 4.4 itself and still 0.8 s for 12,762 genes on 8.2 -- deployed at
+15:15 UTC. The measurements below are that final code, same driver, same
+scenarios, nothing else running:
+
+| Scenario | run | total (s) | step 1 | step 2 | step 3 |
+|---|---|---:|---:|---:|---:|
+| gene-single-condition | 1 | 14.7 | 3.4 | 6.0 | 5.4 |
+| gene-single-condition | 2 | 14.6 | 3.2 | 6.0 | 5.3 |
+| gene-multi-condition | 1 | 20.2 | 4.1 | 9.5 | 6.5 |
+| gene-multi-condition | 2 | 17.9 | 3.4 | 9.2 | 5.2 |
+| gene-multi-condition-relevance | 1 | 17.6 | 3.6 | 8.3 | 5.8 |
+| gene-multi-condition-relevance | 2 | 18.2 | 3.6 | 9.0 | 5.5 |
+| multiomics-integration | 1 | 52.6 | 9.3 | 37.0 | 6.1 |
+| multiomics-integration | 2 | 53.6 | 10.7 | 35.0 | 7.8 |
+| stategra-multiomics | 1 | 54.6 | 18.1 | 27.9 | 8.5 |
+| stategra-multiomics | 2 | 58.6 | 22.5 | 25.9 | 10.1 |
+
+| Scenario | before (median total) | after | speed-up | before step 1 → after | before step 2 → after |
+|---|---:|---:|---:|---|---|
+| gene-single-condition | 40.9 s | 14.7 s | 2.8x | 19.2 → 3.3 s | 11.2 → 6.0 s |
+| gene-multi-condition | 39.0 s | 19.1 s | 2.0x | 18.8 → 3.8 s | 13.5 → 9.4 s |
+| gene-multi-condition-relevance | 40.6 s | 17.9 s | 2.3x | 18.1 → 3.6 s | 13.1 → 8.7 s |
+| multiomics-integration | 188.8 s (+1 run killed at 900 s) | 53.1 s | 3.6x | 69.9 → 10.0 s | 99.0 → 36.0 s |
+| stategra-multiomics | 198.1 s | 56.6 s | 3.5x | 96.9 → 20.3 s | 78.5 → 26.9 s |
+
+Equivalence on production (before vs after, different server processes):
+every pathway p-value, adjusted and combined p-value, matched member set,
+significance count, hub and metabolite-class result and step-3 graphical
+payload is IDENTICAL for the three gene scenarios and EQUIVALENT for the two
+5-omic scenarios (largest relative difference 8.6e-14, in combined p-values
+only). That last-digit movement is master's own: the omic p-values are
+combined in the order a set of gene IDs iterates, which follows the process
+hash seed (unpinned on the server) -- master alone, run under two seeds,
+moves the same fields by up to 2.3e-15 (259 values on STATegra). The
+remaining before/after differences are the display-slot classes of §3
+(which alias fills a symbol-keyed slot, list orders), for which the original
+code's own two runs on production disagree with each other as well
+(`bench_compare --noise-runs`: WITHIN-NOISE for all five scenarios).
+
+The full 5-omic STATegra example was also run through the UI on the live
+site with the AI interpretation enabled (job `w15JXC232h`): 898 pathways /
+105 significant, hub and class panels populated, and the AI report ("105
+significant pathways grouped into 23 clusters", cited key findings) rendered.
 
 ## 6. Method
 
