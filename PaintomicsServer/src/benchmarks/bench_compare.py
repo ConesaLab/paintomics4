@@ -26,9 +26,11 @@ import sys
 
 # Dict paths whose KEY ORDER is part of the contract (client iterates and
 # renders in insertion order).
-ORDERED_DICT_PATHS = (
-    "step2.classificationDict",
-)
+# (classificationDict was listed here at first; both its key order and its
+# per-category compound lists come from iterating a set of compound IDs, so
+# on a server whose hash seed is not pinned they differ from process to
+# process on master itself. Compared keyed, lists sorted.)
+ORDERED_DICT_PATHS = ()
 
 MAX_REPORTED_DIFFS = 40
 
@@ -144,6 +146,23 @@ def _canonicalise(artifacts):
         # already meaningless to the client (which looks entries up by
         # omicName). Sorted into a canonical order before comparing; the
         # multiset is what is compared.
+        # A pathway's / class's matchedGenes and matchedCompounds are filled by
+        # iterating a set of IDs, so their order follows the process's string
+        # hash seed (unpinned on the server); the client reads their length
+        # and builds a search set from them. Compared sorted.
+        for key in ("pathwaysInfo", "classInfo"):
+            table = step.get(key)
+            entries = table.values() if isinstance(table, dict) else (table if isinstance(table, list) else [])
+            for entry in entries:
+                if isinstance(entry, dict):
+                    for field in ("matchedGenes", "matchedCompounds"):
+                        if isinstance(entry.get(field), list):
+                            entry[field] = sorted(entry[field], key=str)
+        classification = step.get("classificationDict")
+        if isinstance(classification, dict):
+            step["classificationDict"] = {
+                key: sorted(value, key=str) if isinstance(value, list) else value
+                for key, value in classification.items()}
         features = step.get("omicsValues")
         if isinstance(features, dict):
             for feature in features.values():
