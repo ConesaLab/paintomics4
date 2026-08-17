@@ -127,6 +127,88 @@ def normalize_citation_markers(text):
     text = _RANGE_CITATION_RE.sub(_split_range, text)
     return _MULTI_CITATION_RE.sub(_split_list, text)
 
+# An inline PMID mention, in the forms the model actually writes when it
+# cites by identifier instead of by marker: "(PMID 42565800)", "PMID: 42565800",
+# "PMIDs 42505068 and 42371798", "(PMID: 1; PMID: 2)". One match covers a whole
+# group so the connective words go with the numbers it joins.
+# The parentheses are consumed only as a pair, so "(see PMID 1)" keeps its
+# closing bracket while "(PMID 1)" loses both.
+_PMID_LIST = r'\d{5,9}(?:\s*(?:,|;|/|&|and)\s*(?:PMIDs?\s*:?\s*#?\s*)?\d{5,9})*'
+_PMID_MENTION_RE = re.compile(
+    r'\(\s*PMIDs?\s*:?\s*#?\s*(?P<a>' + _PMID_LIST + r')\s*\)'   # "(PMID 1)", "(PMIDs 1 and 2)"
+    r'|\bPMIDs?\s*:?\s*#?\s*(?P<b>' + _PMID_LIST + r')',            # bare "PMID 1", "PMIDs 1, 2"
+    re.IGNORECASE)
+
+
+def resolve_pmid_mentions(text, paper_index):
+    """Rewrite inline PMID mentions of retrieved papers as [N] markers.
+
+    Every reader of citations here matches "[N]" in the body of the report:
+    quote collection, rendering, verification, renumbering. When the model
+    cites a paper by its PMID instead -- which it did 90 times in one live
+    synthesis, keeping "[N]" for a bibliography of its own -- all of that
+    support is invisible and the report ships with no references. The mapping
+    PMID -> ref_index is exact and known, so the mention is rewritten rather
+    than the model re-asked.
+
+    Only PMIDs that were retrieved are converted; an unknown PMID stays as
+    text, where verification will treat the sentence as uncited rather than
+    manufacture a reference to a paper nobody fetched. The model's own
+    References section (if any) is left as written: render_references_section
+    replaces it wholesale, and rewriting it would only create body-looking
+    markers below the heading. Idempotent, and a no-op without a paper index.
+    """
+    if not text or not paper_index:
+        return text
+    by_pmid = {}
+    for idx, paper in paper_index.items():
+        pmid = str((paper or {}).get("pmid") or "").strip()
+        if pmid:
+            by_pmid[pmid] = idx
+    if not by_pmid:
+        return text
+
+    ref_match = _REFERENCES_HEADING_RE.search(text)
+    body, tail = ((text[:ref_match.start()], text[ref_match.start():])
+                  if ref_match else (text, ""))
+
+    def _swap(match):
+        numbers = re.findall(r'\d{5,9}', match.group("a") or match.group("b") or "")
+        known = [by_pmid[n] for n in numbers if n in by_pmid]
+        if not known:
+            return match.group(0)
+        if len(known) == len(numbers):
+            return ", ".join("[%d]" % i for i in known)
+        # A mixed group: convert what we have, keep the rest as text.
+        parts = ["[%d]" % by_pmid[n] if n in by_pmid else "PMID %s" % n
+                 for n in numbers]
+        return ", ".join(parts)
+
+    body = _PMID_MENTION_RE.sub(_swap, body)
+    # "axis (PMID 1) provides" became "axis [3] provides" -- the surrounding
+    # spacing was the parenthesis's; the marker wants a single space each side.
+    body = re.sub(r'[ \t]+(\[\d+\])', r' \1', body)
+    body = re.sub(r'(\[\d+\])[ \t]+([.,;:)])', r'\1\2', body)
+    return body + tail
+
+
+def count_body_citations(report_text, valid_indices):
+    """The set of retrieved-paper markers cited in the BODY of the report.
+
+    A model that lists its papers under a References heading and never cites
+    them in the text has cited nothing: the section is discarded by
+    render_references_section, and only body markers survive to be verified.
+    Both the citation top-up's gate and its acceptance test read this, so
+    they cannot disagree with each other -- they did once (PR #28 fixed the
+    gate alone), and a top-up whose whole contribution was a bibliography was
+    accepted as having "added 56 citations".
+    """
+    text = normalize_citation_markers(report_text or "")
+    ref_match = _REFERENCES_HEADING_RE.search(text)
+    body = text[:ref_match.start()] if ref_match else text
+    return {int(n) for n in re.findall(r'\[(\d+)\]', body)} & set(valid_indices)
+
+
 def verify_report_v2(report_text, gene_whitelist, unique_papers, job_instance):
     """Verify a report using [N] citation format.
 

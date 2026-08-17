@@ -89,7 +89,12 @@ function JobController() {
 						// heading has no heading, and the one line that matters ("Running job
 						// X") was indistinguishable from the two lines of housekeeping under
 						// it. The body slot has existed on this dialog all along.
-						var title = "Running job " + jobID;
+						// A conversion job (regions/miRNA/MORE to genes) is named for
+						// what it prepares, so the analysis job that follows -- with
+						// its own id -- does not read as the same job renumbered.
+						var title = other.jobLabel
+							? other.jobLabel + " (conversion job " + jobID + ")..."
+							: "Running job " + jobID;
 						var body = "";
 						var progress = null;
 
@@ -127,6 +132,61 @@ function JobController() {
 	};
 
 	/**
+	* One submission at a time per Step 1 form.
+	*
+	* On 2026-08-17 the live server received the same STATegra example form
+	* twice, three seconds apart, from one browser (jobs Ov57R61V4y and
+	* yL0zFsu5xt). Nothing here refused the second POST: both jobs ran through
+	* the whole of step 1, the client polled both, and whichever callback landed
+	* last owned the view -- so the job id the dialog had been announcing was
+	* not the one step 2 continued with. Seen from the user's side, "the job id
+	* changed between step 1 and step 2".
+	*
+	* The lock is a flag on the job view. It is taken when a submission starts
+	* (either entry point below), released when that submission's own callback
+	* or error path runs, and a submit that arrives while it is held is refused
+	* with a note naming the job already under way. `step1ActiveJobID` records
+	* which job the view is following, so a callback for any other job -- a
+	* stale poll from a submission the lock did not exist for -- cannot take
+	* the view over.
+	*
+	* @param {JobView} jobView
+	* @returns {Boolean} true when the caller may proceed
+	*/
+	this.beginStep1Submission = function (jobView) {
+		if (jobView.step1SubmitInFlight === true) {
+			var active = jobView.step1ActiveJobID;
+			console.warn("Step 1 submit ignored: " + (active ? "job " + active + " is" : "a submission is") + " already in progress for this form.");
+			showInfoMessage(active ? "Job " + active + " is already running" : "Your files are already being submitted", {
+				message: "This form has already been submitted. Please wait for the current job to finish before submitting again.",
+				logMessage: "Duplicate step 1 submission refused.",
+				showSpin: true
+			});
+			return false;
+		}
+		jobView.step1SubmitInFlight = true;
+		jobView.step1ActiveJobID = null;
+		return true;
+	};
+
+	this.endStep1Submission = function (jobView) {
+		jobView.step1SubmitInFlight = false;
+	};
+
+	/**
+	* Reset abandons whatever the Step 1 form was following: the lock is
+	* released and the active id cleared, so a late poll for the abandoned job
+	* is dropped rather than resurrecting it, and a fresh submission is allowed.
+	*/
+	this.abandonStep1Submission = function () {
+		var step1View = application.getMainView().getSubView("PA_Step1JobView");
+		if (step1View !== undefined) {
+			step1View.step1SubmitInFlight = false;
+			step1View.step1ActiveJobID = null;
+		}
+	};
+
+	/**
 	* This function gets a list of of RegionBasedOmicViews/miRNABasedOmicView and send each item to
 	* server for processing.
 	*
@@ -144,6 +204,9 @@ function JobController() {
 
 		//CHECK FORM VALIDITY
 		if (jobView.checkForm() === true) {
+			if (!me.beginStep1Submission(jobView)) {
+				return false;
+			}
 
 			var regionURL = SERVER_URL_DM_FROMBED2GENES;
 			var miRNAURL = SERVER_URL_DM_FROMMIRNA2GENES;
@@ -239,7 +302,13 @@ function JobController() {
 					success: function (form, action) {
 						var response = JSON.parse(action.response.responseText);
 
-						showInfoMessage("Job " + response.jobID + " is waiting at job queue...", {logMessage: "Now Job is in the queue...", showSpin: true, append: true, itemId: response.jobID, icon: "clock-o"});
+						// These are conversion jobs (regions/miRNA/MORE to genes), each
+						// with its own id, and the pathway analysis that follows gets
+						// another. Said so in the dialog, because a line reading
+						// "Job X is waiting" followed by "Running job Y" reads as the
+						// job having changed id.
+						var omicLabel = (itemsContainer.queryById("omicNameField") && itemsContainer.queryById("omicNameField").getValue()) || "input";
+						showInfoMessage("Preparing " + omicLabel + " (conversion job " + response.jobID + ") is waiting at job queue...", {logMessage: "Now Job is in the queue...", showSpin: true, append: true, itemId: response.jobID, icon: "clock-o"});
 
 						/* Restore elements used to create the temporal form */
 						_restoreElements();			
@@ -252,7 +321,7 @@ function JobController() {
 						* @returns {undefined}
 						*/
 						var callback = function (response, jobID, jobView, other) {
-							showInfoMessage("Job " + jobID + " finished successfully.", {logMessage: "Job " + jobID + " finished.", showSpin: true, append: true, itemId: jobID, icon: "check-circle-o"});
+							showInfoMessage("Preparing " + omicLabel + " (conversion job " + jobID + ") finished successfully.", {logMessage: "Job " + jobID + " finished.", showSpin: true, append: true, itemId: jobID, icon: "check-circle-o"});
 
 							jobView.pendingRequests--;
 
@@ -269,15 +338,18 @@ function JobController() {
 
 							if (jobView.pendingRequests === 0) {
 								if (jobView.failedRequests === 0) {
-									me.step1OnFormSubmitHandler(jobView);
+									// The lock taken above carries over into the pathway
+									// submission; `chained` tells it not to take a second one.
+									me.step1OnFormSubmitHandler(jobView, {chained: true});
 								} else {
+									me.endStep1Submission(jobView);
 									showErrorMessage("Ops!... Something went wrong during the request files processing.", {message: "One or more files were not succesfully processed.</br>Please check the form for more info."});
 								}
 							}
 						};
 
 						var errorHandler = function (response, jobID, jobView, other) {
-							showInfoMessage("Job " + jobID + " finished with errors.", {logMessage: "Job " + jobID + " finished.", showSpin: true, append: other.multipleJobs, itemId: jobID, icon: "times-circle-o"});
+							showInfoMessage("Preparing " + omicLabel + " (conversion job " + jobID + ") finished with errors.", {logMessage: "Job " + jobID + " finished.", showSpin: true, append: other.multipleJobs, itemId: jobID, icon: "times-circle-o"});
 
 							//WHAT TO DO IN CASE OF ERROR
 							jobView.failedRequests++;
@@ -291,13 +363,14 @@ function JobController() {
 							}
 
 							if (jobView.pendingRequests === 0) {
+								me.endStep1Submission(jobView);
 								showErrorMessage("Ops!... Something went wrong during the request files processing.", {
 									message: "One or more files were not succesfully processed.</br>Please check the form for more information."
 								});
 							}
 						};
 
-						me.checkJobStatus(response.jobID, jobView, callback, {subview: subview, errorHandler: errorHandler, multipleJobs: true});
+						me.checkJobStatus(response.jobID, jobView, callback, {subview: subview, errorHandler: errorHandler, multipleJobs: true, jobLabel: "Preparing " + omicLabel});
 
 						if (genericBasedOmic.length > 0) {
 							sendRequest(jobView, genericBasedOmic);
@@ -307,6 +380,7 @@ function JobController() {
 						/* Restore elements used to create the temporal form */
 						_restoreElements();
 
+						me.endStep1Submission(jobView);
 						extJSErrorHandler(form, responseObj);
 					}
 				});
@@ -327,7 +401,8 @@ function JobController() {
 	* @param {type} jobView
 	* @returns {undefined}
 	************************************************************/
-	this.step1OnFormSubmitHandler = function (jobView) {
+	this.step1OnFormSubmitHandler = function (jobView, options) {
+		options = (options || {});
 		var URL = SERVER_URL_PA_STEP1;
 		// Only a pathway-acquisition example submits step 1 as an example. The
 		// pre-processing pipelines (regions2genes, mirna2genes, more) have
@@ -341,6 +416,12 @@ function JobController() {
 
 		if (jobView.checkForm() === true) {
 			var me = this;
+			// A chained call arrives from the pre-processing pipeline already
+			// holding the lock (see beginStep1Submission); every other call
+			// takes it here, and is refused if it is held.
+			if (options.chained !== true && !me.beginStep1Submission(jobView)) {
+				return false;
+			}
 			var form = jobView.getComponent().down("form").getForm();
 
 			showInfoMessage("Uploading files...", {logMessage: "New Job created, submitting files...", showSpin: true});
@@ -349,6 +430,9 @@ function JobController() {
 				success: function (form, action) {
 					var response = JSON.parse(action.response.responseText);
 					console.log("JOB " + response.jobID + " is queued ");
+					// The job this view now follows. A poll callback for any
+					// other id is stale and is dropped in `callback` below.
+					jobView.step1ActiveJobID = response.jobID;
 
 					showInfoMessage("Waiting at job queue...", {logMessage: "Now Job is in the queue...", showSpin: true, icon: "clock-o"});
 					/**
@@ -359,6 +443,11 @@ function JobController() {
 					* @returns {undefined}
 					*/
 					var callback = function (response, jobID, jobView) {
+						if (jobView.step1ActiveJobID !== jobID) {
+							console.warn("Ignoring step 1 result for job " + jobID + ": this form is following job " + jobView.step1ActiveJobID + ".");
+							return;
+						}
+						me.endStep1Submission(jobView);
 						showSuccessMessage("Done", {logMessage: "FILES PROCESSED SUCCESSFULLY"});
 						//Wait 0.5 sec and update the page content with the STEP2 content
 						showInfoMessage("Generating Metabolites list...", {showTimeout: 0.5, showSpin: true});
@@ -456,11 +545,28 @@ function JobController() {
 						showSuccessMessage("Done", {logMessage: "Generating Metabolites list...DONE", showTimeout: 1, closeTimeout: 0.5});
 					};
 
-					me.checkJobStatus(response.jobID, jobView, callback, {}, true);
+					// A job that fails on the queue (a validation error in the
+					// files, say) must hand the form back too, or the lock would
+					// refuse the corrected resubmission.
+					var errorHandler = function (errorResponse, jobID, jobView) {
+						if (jobView.step1ActiveJobID === jobID) {
+							me.endStep1Submission(jobView);
+						}
+						ajaxErrorHandler(errorResponse);
+					};
+					me.checkJobStatus(response.jobID, jobView, callback, {errorHandler: errorHandler}, true);
 				},
-				failure: extJSErrorHandler
+				failure: function (form, responseObj) {
+					me.endStep1Submission(jobView);
+					extJSErrorHandler(form, responseObj);
+				}
 			});
 		} else {
+			if (options.chained === true) {
+				// The pipeline took the lock before its conversion jobs ran;
+				// a form that fails validation here must not keep it.
+				this.endStep1Submission(jobView);
+			}
 			showErrorMessage("Invalid form. <br/> Please provide at least: <span style='color: auto;text-decoration: underline;'>Gene expression /Metabolomics /Proteomics data.</span> Also, please make sure to <span style='color: auto;text-decoration: underline;'>select an organism.</span>", {height: 150, width: 400, showReportButton:false});
 			return false;
 		}
@@ -1179,6 +1285,7 @@ function JobController() {
 		var me = this;
 		if (force === true) {
 			me.cleanStoredApplicationData();
+			me.abandonStep1Submission();
 			me.showJobInstance(new JobInstance(null));
 			if (callback !== undefined) {
 				callback();
@@ -1189,6 +1296,7 @@ function JobController() {
 		Ext.MessageBox.confirm('Confirm', 'Are you sure you want to exit the current job?', function (opcion) {
 			if (opcion === "yes") {
 				me.cleanStoredApplicationData();
+				me.abandonStep1Submission();
 				me.showJobInstance(new JobInstance(null));
 				if (callback !== undefined) {
 					callback();

@@ -33,7 +33,9 @@ from agents import (
     function_tool, set_default_openai_api, set_default_openai_client,
     set_tracing_disabled,
 )
+import httpx
 from openai import AsyncOpenAI
+from openai.types.chat import ChatCompletion
 from pydantic import BaseModel, Field
 
 from src.conf.serverconf import (
@@ -53,7 +55,7 @@ from src.classes.AIInterpret.pubmed_client import PubMedClient
 from src.classes.AIInterpret.verification import (
     verify_report_v2, redact_unverified_v2, renumber_citations,
     parse_references_section, render_references_section,
-    normalize_citation_markers,
+    normalize_citation_markers, resolve_pmid_mentions, count_body_citations,
 )
 # The shared verdict parser: the verifier agent keeps its tools (see the
 # DANGER note in _build_agents), so its verdict arrives as free text.
@@ -129,6 +131,29 @@ SDK_SYNTH_DRAFTS = int(os.getenv("AI_SDK_SYNTH_DRAFTS", "1"))
 # Deterministic completeness pass. Off by default -- see the note at its call
 # site: it works, and it costs ~190s for a quality change that measured negative.
 SDK_GAP_FILL = os.getenv("AI_SDK_GAP_FILL", "0") == "1"
+# Every chat completion is issued as a stream and folded back into a
+# ChatCompletion for the SDK (see _stream_to_completion). Measured on the CSIC
+# gateway 2026-08-17: a non-streamed generation has ~120 s per attempt before
+# the gateway abandons it (14k tokens: HTTP 200 after 477 s = four attempts;
+# the citation top-up of a 105-pathway report: HTTP 408 after 489 s, three
+# times over), while a streamed 25k-token generation completed in 203 s --
+# the budget is per read, not per response. Set AI_SDK_STREAM=0 only for a
+# provider that cannot stream chat completions.
+SDK_STREAM = os.getenv("AI_SDK_STREAM", "1") != "0"
+# httpx read timeout, per read: with streaming that is "no token for this
+# long", not "the whole answer in this long". Generous, because a large prompt
+# queues behind other work before its first token; a stalled stream still
+# surfaces as APITimeoutError and gets the shim's retry.
+SDK_HTTP_READ_TIMEOUT = float(os.getenv("AI_SDK_HTTP_READ_TIMEOUT", "180"))
+# Wall-clock cap on one long-form call (synthesis draft, gap-fill, top-up,
+# correction rewrite). These echo or write a whole report, so they cannot use
+# run_hedged's 45 s straggler cutoff -- but nor may they run unbounded: two
+# live runs sat 90+ minutes inside one top-up before this existed.
+SDK_LONG_CALL_TIMEOUT = float(os.getenv("AI_SDK_LONG_CALL_TIMEOUT", "600"))
+# The whole interpretation, end to end. A run that is still going after this
+# has stalled somewhere the phase caps did not reach; better an error the user
+# can retry than a job that reads as running for the rest of the day.
+AI_MAX_RUN_SECONDS = float(os.getenv("AI_MAX_RUN_SECONDS", "2700"))
 
 _SYSTEM_STOPWORDS = frozenset("""
 a an the and or of in on at to for from with without by as is are was were be
@@ -206,20 +231,145 @@ class _AsyncPacer:
             await asyncio.sleep(delay)
 
 
+class _EmptyStream(Exception):
+    """The gateway closed a completion stream without a single choice."""
+
+
+async def _stream_to_completion(stream):
+    """Fold a chat-completion chunk stream into one ChatCompletion.
+
+    The SDK's non-streaming path calls ``create(stream=False)`` and reads a
+    ``ChatCompletion``. We issue the request as a stream instead (see
+    SDK_STREAM for why) and rebuild the object it expects: content deltas
+    concatenate, tool-call deltas join by ``index`` (name and id arrive in the
+    first fragment, arguments trickle in over the rest), the last non-null
+    ``finish_reason`` wins, and ``usage`` is whatever the final chunk carried
+    (vLLM sends it only when ``stream_options.include_usage`` is set).
+
+    Provider-specific delta fields the SDK does not read (DeepSeek's
+    ``reasoning_content``, for one) are dropped here on purpose.
+    """
+    content = []
+    role = None
+    refusal = []
+    tool_calls = {}          # index -> {"id", "type", "name", "arguments"}
+    finish_reason = None
+    usage = None
+    meta = {}
+    saw_choice = False
+    try:
+        async for chunk in stream:
+            if not meta:
+                meta = {"id": chunk.id, "created": chunk.created,
+                        "model": chunk.model,
+                        "system_fingerprint": getattr(chunk, "system_fingerprint", None)}
+            if getattr(chunk, "usage", None) is not None:
+                usage = chunk.usage
+            for choice in (chunk.choices or []):
+                saw_choice = True
+                delta = choice.delta
+                if delta is None:
+                    continue
+                if delta.role:
+                    role = delta.role
+                if delta.content:
+                    content.append(delta.content)
+                if getattr(delta, "refusal", None):
+                    refusal.append(delta.refusal)
+                for tc in (delta.tool_calls or []):
+                    slot = tool_calls.setdefault(tc.index, {
+                        "id": None, "type": "function", "name": "", "arguments": ""})
+                    if tc.id:
+                        slot["id"] = tc.id
+                    if tc.type:
+                        slot["type"] = tc.type
+                    fn = tc.function
+                    if fn is not None:
+                        if fn.name:
+                            slot["name"] += fn.name
+                        if fn.arguments:
+                            slot["arguments"] += fn.arguments
+                if choice.finish_reason:
+                    finish_reason = choice.finish_reason
+    finally:
+        close = getattr(stream, "close", None)
+        if close is not None:
+            try:
+                await close()
+            except Exception:
+                pass
+    if not saw_choice:
+        raise _EmptyStream("completion stream ended without any choice")
+
+    message = {"role": role or "assistant",
+               "content": "".join(content) if content else None,
+               "refusal": "".join(refusal) if refusal else None}
+    if tool_calls:
+        message["tool_calls"] = [
+            {"id": slot["id"] or "call_%d" % idx, "type": slot["type"] or "function",
+             "function": {"name": slot["name"], "arguments": slot["arguments"]}}
+            for idx, slot in sorted(tool_calls.items())]
+    if finish_reason is None:
+        # vLLM always closes with one; a provider that does not has still
+        # answered, so record the answer rather than discard it.
+        finish_reason = "tool_calls" if tool_calls else "stop"
+        logger.warning("completion stream ended without finish_reason; assuming %s",
+                       finish_reason)
+    payload = {
+        "id": meta.get("id") or "chatcmpl-stream",
+        "object": "chat.completion",
+        "created": meta.get("created") or int(time.time()),
+        "model": meta.get("model") or "",
+        "system_fingerprint": meta.get("system_fingerprint"),
+        "choices": [{"index": 0, "finish_reason": finish_reason,
+                     "message": message, "logprobs": None}],
+        "usage": usage.model_dump() if usage is not None else None,
+    }
+    return ChatCompletion.model_validate(payload)
+
+
+async def bounded(awaitable, timeout, label=""):
+    """``asyncio.wait_for`` with the reason on the record.
+
+    Every long-form model call goes through here so a stall has a ceiling: the
+    task is cancelled at ``timeout`` and asyncio.TimeoutError propagates to a
+    caller that decides whether the phase was optional (skip it) or not (fail
+    the run). Logged at WARNING because a timeout here is always news.
+    """
+    try:
+        return await asyncio.wait_for(awaitable, timeout=timeout)
+    except asyncio.TimeoutError:
+        logger.warning("[bounded] %s exceeded %ss and was cancelled",
+                       label or "call", timeout)
+        raise
+
+
 def configure_sdk():
     """Point the SDK at our OpenAI-compatible gateway. Idempotent."""
     global _sdk_configured, _MODEL_OBJ
     if _sdk_configured:
         return
     provider = AI_PROVIDERS[AI_LLM_PROVIDER]
-    client = AsyncOpenAI(base_url=provider["api_base"], api_key=provider["api_key"])
+    # max_retries=0: the shim below is the ONE retry policy. The client's own
+    # default (2) stacked under the shim's 4 attempts turned a single 408 --
+    # eight minutes each on this gateway -- into twelve of them, and that is
+    # how two live runs spent 90+ minutes inside one citation top-up.
+    # The read timeout is per read: with streaming (SDK_STREAM) it bounds the
+    # silence between tokens, and a stalled request surfaces as
+    # APITimeoutError instead of holding the phase open.
+    client = AsyncOpenAI(
+        base_url=provider["api_base"], api_key=provider["api_key"],
+        max_retries=0,
+        timeout=httpx.Timeout(connect=30.0, read=SDK_HTTP_READ_TIMEOUT,
+                              write=60.0, pool=30.0))
 
     # Honour the same pacing knob as LLMClient. Applied at the transport
     # method the SDK actually calls, so every agent turn and tool round-trip
     # is spaced -- not just the calls this module makes directly.
     rpm = int(os.getenv("AI_LLM_MAX_RPM", "0") or 0)
     pacer = _AsyncPacer(rpm)
-    _orig_create = client.chat.completions.create
+    completions = client.chat.completions
+    completions._pa_orig_create = completions.create
 
     # One shim for pacing AND resilience: the CSIC gateway answers with bare
     # 500s ("connection reset by peer" from the vLLM behind litellm) during
@@ -236,18 +386,36 @@ def configure_sdk():
         if isinstance(e, (_oai.InternalServerError, _oai.APIConnectionError,
                           _oai.APITimeoutError, _oai.RateLimitError)):
             return True
+        if isinstance(e, (httpx.HTTPError, _EmptyStream)):
+            # Raised while *iterating* a stream (openai wraps only the initial
+            # request): a dropped connection, a read timeout between tokens,
+            # or a stream that closed empty. All as transient as a 5xx.
+            return True
         return (isinstance(e, _oai.APIStatusError)
                 and getattr(e, "status_code", None) in _RETRY_STATUSES)
 
     _ATTEMPTS = 4  # one call plus three retries
+
+    async def _issue(*args, **kwargs):
+        # A caller that streams for itself (Runner.run_streamed) gets the raw
+        # stream; every other call is issued as a stream and folded, because
+        # on this gateway a non-streamed answer has ~120 s per attempt and a
+        # streamed one has that per token.
+        orig = completions._pa_orig_create
+        if kwargs.get("stream") is True or not SDK_STREAM:
+            return await orig(*args, **kwargs)
+        kwargs = dict(kwargs, stream=True,
+                      stream_options={"include_usage": True})
+        stream = await orig(*args, **kwargs)
+        return await _stream_to_completion(stream)
 
     async def _paced_create(*args, **kwargs):
         last = None
         for attempt in range(_ATTEMPTS):
             await pacer.wait()
             try:
-                return await _orig_create(*args, **kwargs)
-            except _oai.APIError as e:
+                return await _issue(*args, **kwargs)
+            except (_oai.APIError, httpx.HTTPError, _EmptyStream) as e:
                 if not _transient(e):
                     raise
                 last = e
@@ -263,9 +431,12 @@ def configure_sdk():
                                    " %s" % status if status else "")
         raise last
 
-    client.chat.completions.create = _paced_create
-    logger.info("Agents SDK transport armed: pacing %s rpm, retry x3 on 5xx/timeouts",
-                rpm or "off")
+    # The original stays reachable as _pa_orig_create: tests substitute it,
+    # and a provider that cannot stream is pointed back at it by AI_SDK_STREAM=0.
+    completions.create = _paced_create
+    logger.info("Agents SDK transport armed: pacing %s rpm, streaming %s, "
+                "retry x3 on 5xx/timeouts, read timeout %ss",
+                rpm or "off", "on" if SDK_STREAM else "off", SDK_HTTP_READ_TIMEOUT)
     # chat_completions, not the Responses API: the CSIC gateway is vLLM, which
     # speaks /chat/completions only.
     set_default_openai_api("chat_completions")
@@ -1308,16 +1479,32 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats,
     # was no longer interpreting each pathway in the context of the analysis it
     # had just written. The coupling was doing real work, and buying 100s by
     # discarding it was a bad trade.
+    # Each draft is bounded (SDK_LONG_CALL_TIMEOUT); a draft that never comes
+    # back is an exception here like any other, and only a run with no draft
+    # at all fails.
     drafts = await asyncio.gather(
-        *[Runner.run(agents["synth"], synth_prompt, context=ctx, max_turns=3)
-          for _ in range(SDK_SYNTH_DRAFTS)],
+        *[bounded(Runner.run(agents["synth"], synth_prompt, context=ctx, max_turns=3),
+                  SDK_LONG_CALL_TIMEOUT, label="synthesis draft %d" % i)
+          for i in range(SDK_SYNTH_DRAFTS)],
         return_exceptions=True)
-    drafts = [str(d.final_output) for d in drafts if not isinstance(d, Exception)]
+    failures = [d for d in drafts if isinstance(d, BaseException)]
+    for f in failures:
+        logger.warning("[%s][sdk] synthesis draft failed: %s: %s",
+                       job_id, type(f).__name__, f)
+    drafts = [str(d.final_output) for d in drafts if not isinstance(d, BaseException)]
     if not drafts:
-        raise RuntimeError("all synthesis drafts failed")
+        raise RuntimeError("all synthesis drafts failed (%s)" % (
+            "; ".join("%s: %s" % (type(f).__name__, f) for f in failures) or "no drafts"))
     report, draft_scores = _pick_best_draft(drafts, pathways, unique_papers)
     stats["synth_drafts"] = len(drafts)
     stats["draft_scores"] = draft_scores
+    # The model sometimes cites by identifier -- "(PMID 42565800)", 90 times
+    # in one live draft -- and keeps "[N]" for a bibliography of its own.
+    # Every downstream reader matches "[N]" in the body, so those citations
+    # are converted here, deterministically, from the exact PMID -> index
+    # map; done before the top-up gate so a draft that cited well by PMID is
+    # not sent for a rewrite it does not need.
+    report = resolve_pmid_mentions(report, {p["ref_index"]: p for p in unique_papers})
     # Close the gaps the draft left, before anything else touches the report.
     # One targeted revision naming exactly what is missing, rather than another
     # sample of the same distribution.
@@ -1350,9 +1537,9 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats,
             request.append("MISSING CAVEATS -- each is warranted by this "
                            "dataset:\n%s\n" % "\n".join("  - %s" % g for g in gaps))
         try:
-            revised = await Runner.run(
+            revised = await bounded(Runner.run(
                 agents["synth"], "\n".join(request) + "\n\n## Report\n\n" + report,
-                context=ctx, max_turns=3)
+                context=ctx, max_turns=3), SDK_LONG_CALL_TIMEOUT, label="gap-fill")
             candidate = str(revised.final_output)
             # Only accept a revision that grew the report; a "revision" that
             # summarises it away would trade real content for checklist items.
@@ -1362,8 +1549,9 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats,
             else:
                 logger.warning("[%s][sdk] gap-fill discarded (%d -> %d chars)",
                                job_id, len(report), len(candidate))
-        except Exception as e:
-            logger.warning("[%s][sdk] gap-fill failed: %s", job_id, e)
+        except (Exception, asyncio.TimeoutError) as e:
+            logger.warning("[%s][sdk] gap-fill failed: %s: %s",
+                           job_id, type(e).__name__, e)
         stats["gap_fill_s"] = time.time() - t_gap
         logger.info("[%s][sdk] gap-fill: %d pathways, %d caveats requested",
                     job_id, len(missing_pw), len(gaps))
@@ -1419,11 +1607,10 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats,
     # References section of its own but never cites them in the text (seen
     # live: 25 entries, 0 in-text markers, 0 rendered) must trigger the
     # top-up, and counting the bibliography's [N] hid exactly that case.
-    from src.classes.AIInterpret.verification import _REFERENCES_HEADING_RE as _REFS_RE
-    _ref_m = _REFS_RE.search(str(report))
-    _body_for_count = str(report)[:_ref_m.start()] if _ref_m else str(report)
-    cited_now = ({int(n) for n in re.findall(r'\[(\d+)\]', _body_for_count)}
-                 & valid_indices)
+    # The acceptance test below uses the same helper, so the two cannot
+    # disagree -- they did once, and a rewrite whose whole contribution was
+    # a bibliography was accepted as "56 citations added".
+    cited_now = count_body_citations(str(report), valid_indices)
     uncited = [p for p in unique_papers if p["ref_index"] not in cited_now]
     if uncited and len(cited_now) < SDK_MIN_CITATIONS:
         listing = "\n".join(
@@ -1431,8 +1618,13 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats,
                               (p.get("abstract") or "")[:220])
             for p in uncited[:30])
         t_top = time.time()
+        # Optional pass, bounded: the report is already complete without it,
+        # so a top-up that outlives SDK_LONG_CALL_TIMEOUT is skipped, not
+        # waited on. (Two live runs sat 90+ min here before this bound existed:
+        # this call echoes the whole report, and on the CSIC gateway that
+        # answer outran the per-attempt budget until streaming was added.)
         try:
-            topped = await Runner.run(
+            topped = await bounded(Runner.run(
                 agents["synth"],
                 "Here is your report:\n\n%s\n\n"
                 "These retrieved papers are not cited anywhere in it:\n\n%s\n\n"
@@ -1444,12 +1636,12 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats,
                 "removed later along with the claim it sits on, so forcing one "
                 "in costs you the finding. Leaving a paper uncited is a fine "
                 "outcome." % (report, listing),
-                context=ctx, max_turns=3)
-            candidate = str(topped.final_output)
+                context=ctx, max_turns=3), SDK_LONG_CALL_TIMEOUT, label="citation top-up")
+            candidate = resolve_pmid_mentions(
+                str(topped.final_output), {p["ref_index"]: p for p in unique_papers})
             # Guard against the "rewrite" degenerating into a summary: keep the
-            # top-up only if it preserved the report and added citations.
-            added = len({int(n) for n in re.findall(r'\[(\d+)\]', candidate)}
-                        & valid_indices)
+            # top-up only if it preserved the report and added BODY citations.
+            added = len(count_body_citations(candidate, valid_indices))
             if len(candidate) > 0.6 * len(str(report)) and added > len(cited_now):
                 report = candidate
                 stats["topup_added"] = added - len(cited_now)
@@ -1458,8 +1650,10 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats,
                 logger.warning("[%s][sdk] citation top-up discarded (len %d->%d, "
                                "citations %d->%d)", job_id, len(str(report)),
                                len(candidate), len(cited_now), added)
-        except Exception as e:
-            logger.warning("[%s][sdk] citation top-up failed: %s", job_id, e)
+        except (Exception, asyncio.TimeoutError) as e:
+            stats["topup_failed"] = "%s: %s" % (type(e).__name__, e)
+            logger.warning("[%s][sdk] citation top-up failed: %s: %s",
+                           job_id, type(e).__name__, e)
         stats["topup_s"] = time.time() - t_top
     if stats.get("batch_citations") and not stats["synth_citations"]:
         logger.warning("[%s][sdk] synthesis dropped ALL citations: batches "
@@ -1555,12 +1749,25 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats,
                         "(%d citations will be redacted instead)", job_id, len(failed))
             break
 
-        corr = await Runner.run(
-            agents["synth"],
-            "Here is your report:\n\n%s\n\n%s"
-            % (report, prompts_mod.build_correction_prompt(report, failed)),
-            context=ctx, max_turns=3)
-        report = str(corr.final_output)
+        # The rewrite is a full-report echo like the top-up, and it is
+        # optional in the same way: the programmatic net (phase 6) redacts
+        # whatever still fails. So a rewrite that times out or raises ends the
+        # loop with the report as it stands, rather than ending the run.
+        try:
+            corr = await bounded(Runner.run(
+                agents["synth"],
+                "Here is your report:\n\n%s\n\n%s"
+                % (report, prompts_mod.build_correction_prompt(report, failed)),
+                context=ctx, max_turns=3), SDK_LONG_CALL_TIMEOUT,
+                label="correction rewrite %d" % (_iteration + 1))
+        except (Exception, asyncio.TimeoutError) as e:
+            logger.warning("[%s][sdk] correction rewrite failed: %s: %s; keeping "
+                           "the report and leaving %d citation(s) to the "
+                           "programmatic net", job_id, type(e).__name__, e,
+                           len(failed))
+            stats["correction_failed"] = "%s: %s" % (type(e).__name__, e)
+            break
+        report = resolve_pmid_mentions(str(corr.final_output), ctx.paper_index)
         # The rewrite re-authors the references, so re-render them from the
         # paper index; without this the loop verifies on iteration 1 and then
         # finishes with an unparseable section again. A rewrite also
@@ -1617,9 +1824,24 @@ def run_agent_workflow(job_instance, job_id, experiment_design, budgets=None,
                           "max_search_tasks": AI_MAX_SEARCH_TASKS}
     stats = {}
     t0 = time.time()
-    report, papers, ctx = asyncio.run(
-        _run_async(job_instance, job_id, experiment_design, budgets, stats,
-                   hooks=hooks))
+
+    async def _with_deadline():
+        # The last line of defence against "still running" as a permanent
+        # state. Every phase has its own cap; this one catches whatever they
+        # miss, and turns it into an error the UI can show and the user can
+        # retry, instead of a heartbeat that keeps a dead run looking alive.
+        try:
+            return await asyncio.wait_for(
+                _run_async(job_instance, job_id, experiment_design, budgets,
+                           stats, hooks=hooks),
+                timeout=AI_MAX_RUN_SECONDS)
+        except asyncio.TimeoutError:
+            raise RuntimeError(
+                "The interpretation exceeded its %d-minute limit and was "
+                "stopped. The literature gateway was slow to answer; please "
+                "try again later." % int(AI_MAX_RUN_SECONDS // 60))
+
+    report, papers, ctx = asyncio.run(_with_deadline())
     stats["total_s"] = time.time() - t0
     return {"report": report, "papers": papers, "stats": stats}
 
