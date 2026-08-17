@@ -881,9 +881,20 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
     # Deterministic, batched, and placed before the merge guard so both its quote
     # probe and the gate's collection see the fuller text. Bounded by the clock
     # like every other post-loop step, and skipped without ceremony when tight.
+    # Count BOTH citation forms. The delegated reports cite by PMID -- their
+    # instructions (SYSTEM_PROMPT_INTERPRET) say "(PMID: XXXXXXXX)" -- and those
+    # only become [N] markers when resolve_pmid_mentions runs inside the merge,
+    # which is after this step. Counting markers alone saw 5 citations where the
+    # run actually had 18, so this step found "0 thin" every time and quietly did
+    # nothing: the diagnostic said "5 cited, 0 thin" and that number was the bug.
     cited_anywhere = set()
     for text in ctx.delegated + [report]:
-        cited_anywhere |= {int(n) for n in re.findall(r"\[(\d+)\]", text or "")}
+        text = text or ""
+        cited_anywhere |= {int(n) for n in re.findall(r"\[(\d+)\]", text)}
+        for pmid in re.findall(r"PMID:?\s*(\d{6,9})", text):
+            ref = ctx.pmid_to_ref.get(str(pmid))
+            if ref:
+                cited_anywhere.add(ref)
     thin = [ctx.paper_index[r] for r in sorted(cited_anywhere)
             if r in ctx.paper_index
             and ctx.paper_index[r].get("fetch_tier") == "abstract_only"]
