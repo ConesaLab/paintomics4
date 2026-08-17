@@ -64,7 +64,8 @@ def main():
     parser.add_argument("--title", default="PaintOmics pipeline benchmark: baseline vs candidate")
     args = parser.parse_args()
 
-    scenarios = sorted(set(os.listdir(args.a)) & set(os.listdir(args.b)))
+    scenarios = sorted(name for name in set(os.listdir(args.a)) & set(os.listdir(args.b))
+                       if os.path.isdir(os.path.join(args.a, name)) and os.path.isdir(os.path.join(args.b, name)))
     lines = ["# %s" % args.title, ""]
     lines.append("| Scenario | Baseline median (s) | Candidate median (s) | Speed-up | Runs (A/B) | Equivalence (timing runs) | Equivalence (strict, 1 worker) |")
     lines.append("|---|---:|---:|---:|:-:|:-:|:-:|")
