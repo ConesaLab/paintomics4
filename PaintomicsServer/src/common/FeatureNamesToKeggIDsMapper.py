@@ -1,6 +1,7 @@
 from pymongo import MongoClient
 import logging, itertools
-import os, sys, signal
+import os, sys, signal, time
+import re
 from multiprocessing import Process, cpu_count, Manager, RawArray
 from math import ceil
 from re import compile as compile_re, IGNORECASE as IGNORECASE_re
@@ -18,6 +19,11 @@ from src.conf.organismDB import dicDatabases
 from src.conf.serverconf import MONGODB_HOST, MONGODB_PORT, MAX_THREADS, MAX_WAIT_THREADS #MULTITHREADING
 
 
+# The parent's stream objects, kept alive in the fork child on purpose: see
+# _refreshStandardStreamsInForkChild. Never read; never emptied.
+_inheritedStreams = []
+
+
 def _refreshStandardStreamsInForkChild():
     """
     The mapping workers below are forked from a server process that keeps
@@ -32,7 +38,24 @@ def _refreshStandardStreamsInForkChild():
     MAX_WAIT_THREADS timeout killed the job -- and terminate() could not
     reap it, because the child also inherits uWSGI's SIGTERM handler, so
     the default disposition is restored here as well.
+
+    Two rules keep this hook from re-creating the very deadlock it exists
+    to prevent (both were violated by its first version, and a Manager
+    server child sat frozen for 32 minutes on paintomics.uv.es on
+    2026-08-17, its parent's ``Manager()`` blocked forever waiting for the
+    child's address, one queue worker gone until the service restarted):
+
+      * never FLUSH an inherited stream in the child. That is what
+        ``StreamHandler.setStream`` does before swapping, so handlers get
+        their ``stream`` attribute assigned directly instead;
+      * never DROP the last reference to an inherited stream in the child.
+        A TextIOWrapper's finaliser closes it, and closing flushes -- the
+        same lock again, this time from inside garbage collection. The old
+        objects are parked in ``_inheritedStreams`` for the life of the
+        child; whatever they buffered belongs to the parent, which still
+        holds them and will write it out itself.
     """
+    _inheritedStreams.extend((sys.stdout, sys.stderr))
     sys.stdout = open(1, "w", buffering=1, closefd=False)
     sys.stderr = open(2, "w", buffering=1, closefd=False)
     loggers = [logging.getLogger()] + [
@@ -41,12 +64,27 @@ def _refreshStandardStreamsInForkChild():
     for handler in {h for logger in loggers for h in logger.handlers}:
         try:
             if isinstance(handler, logging.FileHandler):
+                _inheritedStreams.append(handler.stream)
                 handler.stream = handler._open()
             elif isinstance(handler, logging.StreamHandler):
-                handler.setStream(sys.stderr)
+                _inheritedStreams.append(handler.stream)
+                handler.stream = sys.stderr
         except Exception:
             pass
     signal.signal(signal.SIGTERM, signal.SIG_DFL)
+
+
+def _joinAllWithinDeadline(processes, seconds):
+    """
+    Wait for every process in ``processes`` but never longer than ``seconds``
+    IN TOTAL. ``for p in processes: p.join(seconds)`` -- the previous form --
+    gives every process its own budget, so with six workers the "took too
+    long" kill only fired after up to six times MAX_WAIT_THREADS (90 minutes
+    at the configured 900 s), while the client kept polling.
+    """
+    deadline = time.monotonic() + seconds
+    for process in processes:
+        process.join(max(0.0, deadline - time.monotonic()))
 
 
 if hasattr(os, "register_at_fork"):
@@ -478,9 +516,8 @@ def mapFeatureNamesToKeggIDs(jobID, organism, databases, featureList, enrichment
             thread.start()
             i+=1
 
-        #WAIT UNTIL ALL THREADS FINISHED
-        for thread in threadsList:
-            thread.join(MAX_WAIT_THREADS)
+        #WAIT UNTIL ALL THREADS FINISHED (one shared budget, not one per thread)
+        _joinAllWithinDeadline(threadsList, MAX_WAIT_THREADS)
 
         isFinished = True
         for thread in threadsList:
@@ -495,6 +532,7 @@ def mapFeatureNamesToKeggIDs(jobID, organism, databases, featureList, enrichment
 
 
     except Exception as ex:
+        manager.shutdown()
         raise ex
 
     #***********************************************************************************
@@ -506,6 +544,7 @@ def mapFeatureNamesToKeggIDs(jobID, organism, databases, featureList, enrichment
     # input, and _matched.txt is written short — wrong results reported as success.
     # Every child appends exactly once, so a short list means a child was lost.
     if len(foundFeatures) != len(threadsList):
+        manager.shutdown()
         raise Exception(
             "Identifier mapping lost %d of %d worker processes. This is usually "
             "memory pressure on the server; please try again, and upload smaller "
@@ -529,7 +568,11 @@ def mapFeatureNamesToKeggIDs(jobID, organism, databases, featureList, enrichment
     # IPC round trip per element — measured at 92us x 39,527 elements = 6.9s of an
     # 83s job. A slice is a single __getitem__ call carrying the whole list, 10x
     # faster in-container. `list(proxy)` does NOT help: it iterates the same way.
-    return sumFoundFeatures, matchedFeatures[:], notMatchedFeatures[:]
+    matchedFeatures, notMatchedFeatures = matchedFeatures[:], notMatchedFeatures[:]
+    # The Manager server is a forked process holding a copy of everything the
+    # workers sent it; release it now rather than when the GC gets round to it.
+    manager.shutdown()
+    return sumFoundFeatures, matchedFeatures, notMatchedFeatures
 
 # *****************************************************************
 #    _____ ____  __  __ _____   ____  _    _ _   _ _____   _____
@@ -540,9 +583,38 @@ def mapFeatureNamesToKeggIDs(jobID, organism, databases, featureList, enrichment
 #   \_____\____/|_|  |_|_|     \____/ \____/|_| \_|_____/|_____/
 #
 # *****************************************************************
+# Upper bound on the compound-name candidates one input name may produce.
+# The lookup is a case-insensitive SUBSTRING match, so a generic name matches a
+# lot: on the 99k-name kegg_compounds collection "glucose" hits 198, "acid"
+# 2,648, "a" 26,711 and "-" 19,778. Every hit is a cloned Feature pushed
+# through a Manager pipe, so an unbounded match is a memory bill paid per
+# input row. A name over the cap is treated as too generic to be a substring
+# query and only its exact-name hits are kept.
+MAX_COMPOUND_MATCHES = int(os.getenv("PAINTOMICS_MAX_COMPOUND_MATCHES", "500"))
+
+
+def isPlaceholderCompoundName(featureName):
+    """
+    True when ``featureName`` cannot identify anything: empty, or made only of
+    punctuation such as ``-``, ``.``, ``?`` or ``N/A``-style dashes that
+    spreadsheets and pipelines leave in place of a missing identifier.
+
+    Why this matters: on 2026-08-17 a metabolomics upload on paintomics.uv.es
+    carried 1,172 rows whose identifier column was ``-``. Each became the
+    regex ``.*-.*``, matched the 19,778 KEGG compound names containing a
+    hyphen, and cloned the input feature once per hit -- 23 million Feature
+    objects into a Manager process that reached 3.8 GB, filled the 8 GB
+    machine plus its 4 GB of swap, and left every other job on the server
+    (including unrelated gene-expression mappings) crawling in swap for
+    26 minutes until the processes were killed by hand.
+    """
+    return not any(ch.isalnum() for ch in (featureName or ""))
+
+
 def findCompoundIDByFeatureName(jobID, featureName, db):
     """
-    This function queries the MongoDB looking for the associated gene ID for the given gene name
+    This function queries the MongoDB looking for the KEGG compounds whose name
+    contains the given feature name (case-insensitive).
 
     @param {String} jobID, the identifier for the running job, necessary to for the temporal caches
     @param {String} featureName, the name for the feature that we want to map
@@ -557,12 +629,27 @@ def findCompoundIDByFeatureName(jobID, featureName, db):
     #     return featureIDs, True
 
     matchedFeatures=[]
+    name = (featureName or "").strip()
+    if isPlaceholderCompoundName(name):
+        return matchedFeatures, False
     try:
-        cursor = db.kegg_compounds.find({"name": {"$regex" : compile_re(".*" + featureName +".*", IGNORECASE_re) }})
+        # The name is data, not a pattern: escape it. Unescaped, "NAD+" read as
+        # "NA" then one or more "D", "(R)-lactate" as a group that never
+        # matches its own parentheses, and a lone "." as any compound at all.
+        # $regex is a substring search already, so no ".*" padding is needed.
+        pattern = compile_re(re.escape(name), IGNORECASE_re)
+        cursor = db.kegg_compounds.find({"name": {"$regex": pattern}}).limit(MAX_COMPOUND_MATCHES + 1)
         # See findIDsByFeatureName: Cursor.count() is gone in pymongo 4 and the
         # surrounding except would have hidden the failure entirely.
         for item in cursor:
             matchedFeatures.append(item)
+
+        if len(matchedFeatures) > MAX_COMPOUND_MATCHES:
+            # Too generic for a substring query; keep exact-name hits only.
+            exact = compile_re("^" + re.escape(name) + "$", IGNORECASE_re)
+            matchedFeatures = list(db.kegg_compounds.find({"name": {"$regex": exact}}).limit(MAX_COMPOUND_MATCHES))
+            logging.warning("COMPOUND NAME %r MATCHES MORE THAN %d KEGG NAMES; KEEPING %d EXACT MATCH(ES) ONLY (JOB %s)",
+                            name, MAX_COMPOUND_MATCHES, len(matchedFeatures), jobID)
 
         return matchedFeatures, len(matchedFeatures) > 0
     except Exception as ex:
@@ -732,9 +819,8 @@ def mapFeatureNamesToCompoundsIDs(jobID, featureList):
             thread.start()
             i+=1
 
-        #WAIT UNTIL ALL THREADS FINISHED
-        for thread in threadsList:
-            thread.join(MAX_WAIT_THREADS)
+        #WAIT UNTIL ALL THREADS FINISHED (one shared budget, not one per thread)
+        _joinAllWithinDeadline(threadsList, MAX_WAIT_THREADS)
 
         isFinished = True
         for thread in threadsList:
@@ -747,6 +833,7 @@ def mapFeatureNamesToCompoundsIDs(jobID, featureList):
             raise Exception('Your data took too long to process and it was killed. Try it again later or upload smaller files if it persists.')
 
     except Exception as ex:
+        manager.shutdown()
         raise ex
 
     #***********************************************************************************
@@ -766,4 +853,6 @@ def mapFeatureNamesToCompoundsIDs(jobID, featureList):
     # One round trip each instead of one per element — see the note on the same
     # return in mapFeatureNamesToKeggIDs. Compound lists are short today (58 in the
     # bundled example), so this is correctness-by-consistency rather than a win.
-    return foundFeatures, matchedFeatures[:], notMatchedFeatures[:]
+    matchedFeatures, notMatchedFeatures = matchedFeatures[:], notMatchedFeatures[:]
+    manager.shutdown()
+    return foundFeatures, matchedFeatures, notMatchedFeatures
