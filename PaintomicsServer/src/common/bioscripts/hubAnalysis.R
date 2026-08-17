@@ -32,29 +32,107 @@ tryCatch(
 
 
 all_met_neigh <- list()
-for (i in 1: length(dir(args$inputDir))) {
-  if(grepl(".RData", dir(args$inputDir)[i], fixed=TRUE)){
-    load(paste0(args$inputDir,dir(args$inputDir)[i]))
+# dir() was re-evaluated three times per iteration (once for the loop bound,
+# once for the grepl, once for the load path): 1,865 iterations x a readdir of
+# 1,869 entries each time. On mmu that directory listing, not the 60 MB of
+# .RData, was where this loop spent its time -- measured 4.9 s per 1,865 dir()
+# calls on the same directory, ~9.7 s of the 10.8 s loop. The listing cannot
+# change while the loop runs, so read it once.
+files <- dir(args$inputDir)
+for (i in 1: length(files)) {
+  if(grepl(".RData", files[i], fixed=TRUE)){
+    load(paste0(args$inputDir,files[i]))
     theTablesFlat <- flatten(theTables)
+    # The per-call unwrapping the scorer below used to do
+    # (`if (class(neighbours) == "list") neighbours <- neighbours[[1]]`), hoisted
+    # here so the block encoding downstream always sees plain id vectors. On
+    # installed hubData flatten() already returns them, so this is a no-op.
+    #
+    # It unwraps to the bottom rather than one level, because the block encoding
+    # measures each radius with length() while unlist() flattens recursively: a
+    # radius still wrapped after one unwrap would advance the block's read
+    # cursor by 1 instead of by its id count and so corrupt the counts of every
+    # LATER metabolite in the same block. The old per-call form could only
+    # produce garbage for the one (metabolite, radius) pair it was handed; that
+    # containment has to survive here, and unwrapping fully is what gives it.
+    theTablesFlat <- lapply(theTablesFlat, function(v) {
+      while (is.list(v)) v <- v[[1]]
+      v
+    })
     all_met_neigh[[i]] <- theTablesFlat
     names(all_met_neigh)[i] <- names(theTables)[1]
     names(all_met_neigh[[i]]) <- paste(names(theTables)[1], 1:4, sep = "_")
   }
 }
 
-PercDEinMetaboliteNeighbours <- function (neighbours, genes, DEG) {
-  # This function calculate the number of DEG among a given metabolite gene neighbours
-  if (class(neighbours) == "list") {neighbours = neighbours[[1]]}
-  measured_neighbours <- intersect(neighbours, genes)
-  DEneigbhours <- intersect(measured_neighbours, DEG) # neighbours that are DE
-  notDEneigbhours <- setdiff(measured_neighbours, DEneigbhours) # neighbours that are notDE
-  neigh <- length (neighbours)
-  measured_neigh <- length (measured_neighbours)
-  DEN <- length(DEneigbhours)
-  noDEN <- length(notDEneigbhours)
-  percDEN <- round(DEN/(noDEN+DEN),4)
-  result <- c(KEEG_neighbours = neigh, InDataset_neighbours = measured_neigh,
-              DEN = DEN, noDEN = noDEN, percDEN = percDEN)
+PercDEinMetaboliteNeighbours <- function (all_met_neigh, genes, DEG, blockIds = 200000L) {
+  # This function calculates the number of DEG among a given metabolite gene
+  # neighbours -- for every metabolite and every neighbourhood radius at once.
+  #
+  # It used to be called once per (metabolite, radius) pair, ~7,500 times, and
+  # each call ran intersect(neighbours, genes) then intersect(., DEG).
+  # intersect() is match()-based and match() builds a fresh hash table of its
+  # `table` argument on every call, so the whole measured-genes vector (6.5k on
+  # this mmu dataset, up to 40k on a large upload) and the DEG vector were
+  # re-hashed for each pair: tens to hundreds of millions of hash insertions to
+  # produce five counts per pair.
+  #
+  # Here each block of metabolites is hashed once: every id in the block is
+  # mapped to an index into the block's own id universe (one match() for the
+  # block), and that universe's membership of genes / DEG is one match() each.
+  # Everything per radius is then integer work -- unique() over codes and
+  # logical indexing -- i.e. O(neighbours), with no table rebuild. Blocks are
+  # cut by id count rather than metabolite count so the temporary integer
+  # vectors stay bounded whatever the size of an organism's hubData (mmu:
+  # 4.0M ids across 1,865 metabolites; hsa is an order of magnitude larger).
+  #
+  # Every count is the one the set operations produced, by construction:
+  #   InDataset_neighbours = |intersect(neighbours, genes)|. intersect() returns
+  #     unique matches, and only its length is ever read, so deduplicating
+  #     before the filter (unique() of the codes) gives the same number.
+  #   DEN   = |intersect(measured, DEG)|, measured being already unique.
+  #   noDEN = |setdiff(measured, DEneighbours)| = |measured| - DEN, because
+  #     DEneighbours is a subset of an already-unique measured.
+  #   KEEG_neighbours = length(neighbours) WITH duplicates -- the one count that
+  #     is not deduplicated, and it stays that way.
+  #   percDEN = round(DEN/(noDEN+DEN), 4) = round(DEN/|measured|, 4), which is
+  #     NaN for a metabolite with no measured neighbour exactly as 0/0 was.
+  statNames <- c("KEEG_neighbours", "InDataset_neighbours", "DEN", "noDEN", "percDEN")
+  nMet <- length(all_met_neigh)
+  result <- vector("list", nMet)
+  first <- 1L
+  while (first <= nMet) {
+    last <- first; held <- 0L
+    repeat {
+      held <- held + sum(lengths(all_met_neigh[[last]]))
+      if (last >= nMet || held >= blockIds) break
+      last <- last + 1L
+    }
+    block <- all_met_neigh[first:last]
+    blockIdVector <- unlist(block, use.names = FALSE)
+    universe <- unique(blockIdVector)
+    inGenes <- match(universe, genes, 0L) > 0L
+    inDEG <- match(universe, DEG, 0L) > 0L
+    codes <- match(blockIdVector, universe)
+    at <- 0L                                  # read cursor into codes
+    for (b in seq_along(block)) {
+      radii <- block[[b]]
+      counts <- vapply(seq_along(radii), function(r) {
+        neigh <- length(radii[[r]])
+        code <- unique(codes[at + seq_len(neigh)])
+        at <<- at + neigh
+        measured <- code[inGenes[code]]
+        DEN <- sum(inDEG[measured])
+        measured_neigh <- length(measured)
+        noDEN <- measured_neigh - DEN
+        c(neigh, measured_neigh, DEN, noDEN, round(DEN/(noDEN+DEN), 4))
+      }, numeric(5))
+      dimnames(counts) <- list(statNames, names(radii))
+      result[[first + b - 1L]] <- as.data.frame(counts)
+    }
+    first <- last + 1L
+  }
+  names(result) <- names(all_met_neigh)
   result
 }
 prepare_KEGG <- function (kegg_interactions, features, significant_features) {
@@ -107,12 +185,12 @@ if (length(DEm) == 0 && length(mydata$metabolites)) {
   DEm = mydata$metabolites 
 }
 
-myfunction <- function (x) {
-  as.data.frame(purrr::map(x, PercDEinMetaboliteNeighbours,
-                           genes = mydata["genes"][[1]], DEG = mydata["DEG"][[1]])) }
-
 print('STEP 3: calculating the number of DEG among a given metabolite gene neighbours...')
-all.perc <- purrr::map(all_met_neigh, myfunction)
+# One call for every metabolite x radius (the per-pair purrr::map this replaces
+# is what re-hashed genes/DEG 7,500 times); the returned list is the same list
+# of per-metabolite data.frames, one column per radius, five named rows.
+all.perc <- PercDEinMetaboliteNeighbours(all_met_neigh, genes = mydata["genes"][[1]],
+                                         DEG = mydata["DEG"][[1]])
 
 extract.per <- function (x, step) {
   value <- x[5,step]
@@ -170,22 +248,32 @@ processData = function(stepNumber) {
     return(emptyResult)
   }
   #Calculate percentile for each DEm
-  percentile <- as.vector(apply(stepNumber_DEm, 1,  function(x) ecdf(stepNumber_except_DEm$Density)(x)))
+  # The step function is built from the background densities, which do not
+  # change across DEm rows, so build it once and evaluate it on the whole
+  # column instead of rebuilding it per row inside apply().
+  backgroundEcdf <- ecdf(stepNumber_except_DEm$Density)
+  percentile <- as.vector(backgroundEcdf(stepNumber_DEm$Density))
   stepNumber_DEm$Name = rownames(stepNumber_DEm)
   stepNumber_DEm$Percentile <- percentile
   #Calculate p-value for each DEm
   stepNumber_DEm$pvalue <- NA
   stepNumber_DEm$pvalue_adjust <- NA
+  # Loop-invariant: both columns were re-subset by the full DEm row-name vector
+  # on every iteration (an O(nDEm x nMetabolites) row-name match each time) only
+  # to read element i out of the result. Same values, resolved once.
+  demRows <- rownames(stepNumber_DEm)
+  demDEN <- as.numeric(stepNumber[demRows, 2])
+  demTotal <- as.numeric(stepNumber[demRows, 3])
   for (i in 1:nrow(stepNumber_DEm)) {
-    if (as.numeric(stepNumber[rownames(stepNumber_DEm),3])[i] == 0) {
+    if (demTotal[i] == 0) {
       pvalue = 1
     } else {
-      pvalue = binom.test(as.numeric(stepNumber[rownames(stepNumber_DEm),2])[i],
-                          as.numeric(stepNumber[rownames(stepNumber_DEm),3])[i],
+      pvalue = binom.test(demDEN[i],
+                          demTotal[i],
                           p = globalSigPer,
                           alternative = 'greater')$p.value
     }
-    
+
     stepNumber_DEm$pvalue[i] <- pvalue
 
   }
@@ -217,8 +305,13 @@ final_result$DEN <- rep(NA_real_, nrow(final_result))
 final_result$noDEN <- rep(NA_real_, nrow(final_result))
 #extract DE/noDE neighbors
 if (nrow(final_result) > 0){
+  # Resolve every output row's metabolite to its position in all.perc in one
+  # match() instead of a by-name list lookup plus an as.data.frame() rebuild per
+  # row. The names come from all.perc itself (via the step data.frames' row
+  # names), so every one of them resolves.
+  percIndex <- match(final_result$Name, names(all.perc))
   for (i in seq_len(nrow(final_result))){
-    neighbors <- as.data.frame(all.perc[final_result$Name[i]])[3:4,final_result$Step[i]]
+    neighbors <- all.perc[[percIndex[i]]][3:4,final_result$Step[i]]
     DEN = neighbors[1]
     noDEN = neighbors[2]
     final_result$DEN[i] <- DEN
