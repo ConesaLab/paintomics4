@@ -209,6 +209,7 @@ class LoopContext(AgentContext):
     pmid_to_ref: dict = field(default_factory=dict)
     next_ref: int = 1
     submitted_report: str = ""
+    submit_attempts: int = 0                            # nudges are one-shot
     started_at: float = 0.0                             # loop start (wall clock)
     archived: list = field(default_factory=list)         # events already on disk
     hard_deadline: float = 0.0                          # loop must be done by
@@ -759,6 +760,29 @@ def submit_report(ctx: RunContextWrapper[LoopContext], report_markdown: str) -> 
     """Submit your final report (markdown, [N] citations). The only way to finish. It goes to the mandatory verification gate, never straight to the user."""
     c = ctx.context
     t0 = time.time()
+    c.submit_attempts += 1
+    # One nudge, never a veto. Measured: two replicates of the same code differed
+    # by a factor of five in prose and 15 vs 9 pathways named, and the difference
+    # was that one of them never called delegate_interpretation -- so nothing was
+    # stitched and the report covered a fraction of the experiment. Delegation is
+    # the behaviour the whole report rests on and it is entirely optional, which
+    # is fine as a choice and expensive as an oversight. So the first submit that
+    # arrives thin and undelegated says so; the second goes through regardless,
+    # because a tool that can refuse twice is a workflow step wearing a tool's
+    # clothes.
+    if (c.submit_attempts == 1 and not c.delegated
+            and len(report_markdown.strip()) < 9000):
+        out = ("NOT SUBMITTED YET (this is the only time you will be asked). You "
+               "have not delegated any pathway analysis, and %d characters cannot "
+               "cover %d enriched pathways -- the per-pathway detail is what makes "
+               "a report usable. Call delegate_interpretation over the top "
+               "clusters (two calls cover everything, ~30 s each), then submit "
+               "again. If you have a considered reason to submit as it stands, "
+               "call submit_report again now and it will be accepted."
+               % (len(report_markdown.strip()), len(c.pathways)))
+        _trace(c, "submit_report", "%d chars, no delegation"
+               % len(report_markdown.strip()), "nudged once", t0)
+        return out
     if len(report_markdown.strip()) < 500:
         out = ("REJECTED: that is not a report (%d chars). Write the full "
                "analysis: Key Findings, Cross-Pathway Themes, Detailed Pathway "

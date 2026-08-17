@@ -132,6 +132,29 @@ def test_registered_papers_default_to_abstract_only():
     assert paper["sections"]["abstract"] == "a"
 
 
+# -- the delegation nudge is a nudge, not a veto ---------------------------
+
+def test_the_submit_nudge_fires_once_then_never_blocks():
+    """Two replicates of identical code differed 5x in prose because one never
+    delegated. The first thin, undelegated submit is told so; the second is
+    accepted whatever it looks like -- a tool that can refuse twice has become a
+    workflow step."""
+    import inspect
+    src = inspect.getsource(L)
+    assert "submit_attempts == 1" in src, (
+        "the nudge is not gated on the first attempt, so it can block twice")
+    assert "submit_attempts += 1" in src
+    assert "< 500" in src, "the unconditional stub-report floor was lost"
+
+
+def test_the_nudge_threshold_sits_below_a_real_report():
+    """It must not fire on a finished report: measured runs ship 24 000-79 000
+    chars, the smallest good one about 24 900."""
+    import inspect
+    assert "< 9000" in inspect.getsource(L), (
+        "the nudge threshold moved; re-check it against real run sizes")
+
+
 # -- the stitched report must stay inside the size ceiling -----------------
 
 def test_the_stitch_cap_leaves_room_for_tables_and_references():
@@ -230,6 +253,8 @@ def main():
               test_the_same_pmid_never_gets_a_second_number,
               test_a_paper_without_a_pmid_is_skipped,
               test_registered_papers_default_to_abstract_only,
+              test_the_submit_nudge_fires_once_then_never_blocks,
+              test_the_nudge_threshold_sits_below_a_real_report,
               test_the_stitch_cap_leaves_room_for_tables_and_references,
               test_the_gate_floor_is_big_enough_for_the_gate,
               test_a_merge_with_no_time_left_is_skipped_not_attempted,
