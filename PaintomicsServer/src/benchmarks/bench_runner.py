@@ -319,6 +319,37 @@ def _fileContents(directory, patterns):
     return collected
 
 
+_NAME_NOISE = re.compile(r"(_\d{8,14}(_\d+)?)(?=\.|$)|_[A-Za-z0-9]{10}(?=\.|_|$)")
+
+
+def _normalizedName(name):
+    """Strip the date/seed/jobID tokens converters embed in file names."""
+    return _NAME_NOISE.sub("", name)
+
+
+def _conversionOutputs(job, outputs):
+    """Everything a conversion job leaves behind, keyed by normalized name:
+    the members of its results zip (the temporal dir as it was before
+    cleanDirectories) and the files it copied into the input dir."""
+    collected = {"zipMembers": {}, "inputDirCopies": {}}
+    if not outputs:
+        return collected
+    zipPath = os.path.join(job.getOutputDir(), outputs[0])
+    if os.path.isfile(zipPath):
+        with zipfile.ZipFile(zipPath) as bundle:
+            for member in sorted(bundle.namelist()):
+                with bundle.open(member) as handle:
+                    text = io.TextIOWrapper(handle, encoding="utf-8",
+                                            errors="replace").read()
+                collected["zipMembers"][_normalizedName(member)] = text
+    for copied in outputs[1:]:
+        path = os.path.join(job.getInputDir(), copied)
+        if os.path.isfile(path):
+            with open(path, "r", encoding="utf-8", errors="replace") as handle:
+                collected["inputDirCopies"][_normalizedName(copied)] = handle.read()
+    return collected
+
+
 def runMiRNA2Genes(scenarioId, outDir, timer):
     from src.classes.JobInstances.MiRNA2GeneJob import MiRNA2GeneJob
 
@@ -340,22 +371,15 @@ def runMiRNA2Genes(scenarioId, outDir, timer):
     job.enrichment = "genes"
 
     timer.time("mirna.validateInput", job.validateInput)
-    timer.time("mirna.fromMiRNA2Genes", job.fromMiRNA2Genes)
+    outputs = timer.time("mirna.fromMiRNA2Genes", job.fromMiRNA2Genes)
     timer.time("mirna.store", JobInformationManager().storeJobInstance, job, 1)
 
-    artifacts = {
-        "temporalFiles": _fileContents(job.getTemporalDir(), [
-            "miRNAMatch_output.txt",
-        ]),
-        "outputFiles": _fileContents(job.getOutputDir(), [
-            "regulator2Gene_output_*.tab",
-            "regulator2Gene_relevant_*.tab",
-            "regulator_associations*.tab",
-            "regulator_relevant_associations*.tab",
-            "genesToMiRNA*",
-        ]),
-    }
-    job.cleanDirectories()
+    # fromMiRNA2Genes wipes the temporal dir on the way out; what survives is
+    # the results zip in the output dir (every intermediate and output file)
+    # and the copies written into the user's input dir, which are the files
+    # pa_step1 will consume. Names embed a date and a random seed, so
+    # contents are keyed by normalized name.
+    artifacts = _conversionOutputs(job, outputs)
     return {"conversion": artifacts}
 
 
@@ -384,21 +408,10 @@ def runRegions2Genes(scenarioId, outDir, timer):
     job.reportRegions = ["all"]
 
     timer.time("bed.validateInput", job.validateInput)
-    timer.time("bed.fromBED2Genes", job.fromBED2Genes)
+    outputs = timer.time("bed.fromBED2Genes", job.fromBED2Genes)
     timer.time("bed.store", JobInformationManager().storeJobInstance, job, 1)
 
-    artifacts = {
-        "temporalFiles": _fileContents(job.getTemporalDir(), [
-            "RGMatch_output.txt",
-            "regionsToGene.tab",
-            "genesToRegions.tab",
-        ]),
-        "outputFiles": _fileContents(job.getOutputDir(), [
-            "B2G_output_*.tab",
-            "B2G_relevant_*.tab",
-        ]),
-    }
-    job.cleanDirectories()
+    artifacts = _conversionOutputs(job, outputs)
     return {"conversion": artifacts}
 
 
