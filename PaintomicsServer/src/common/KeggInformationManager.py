@@ -98,7 +98,7 @@ class KeggInformationManager(metaclass=Singleton):
 
             selectedDict = self.translationCache.get(jobID)[dbID][type]
 
-            return {featureID: selectedDict.get(featureID) for featureID in featureIDs if featureID in selectedDict.keys()}
+            return {featureID: selectedDict.get(featureID) for featureID in featureIDs if featureID in selectedDict}
         except Exception as ex:
             raise ex
         finally:
@@ -115,8 +115,10 @@ class KeggInformationManager(metaclass=Singleton):
             self.lock.acquire() #LOCK CACHE
 
             if self.translationCache.get(jobID) != None:
-                # self.translationCache.get(jobID)[dbID][type] = dict(self.translationCache.get(jobID)[dbID][type].items() + newDataTable.items())
-                self.translationCache.get(jobID)[dbID][type] = {**self.translationCache.get(jobID)[dbID][type], **newDataTable}
+                # In place: the previous `{**old, **new}` rebuilt (and rehashed)
+                # the whole table on every 250-name batch, O(cache) per call.
+                # Same result -- the newer entry wins in both spellings.
+                self.translationCache.get(jobID)[dbID][type].update(newDataTable)
             return True
         except Exception as ex:
                 raise ex
