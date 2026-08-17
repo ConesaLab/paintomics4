@@ -172,8 +172,10 @@ class NonFiniteBackstopTest(unittest.TestCase):
     """
 
     def test_fisher_backstop(self):
-        with mock.patch("src.common.Statistics.chi2") as chi2:
-            chi2.sf.return_value = NAN
+        # The combination is chdtrc(df, x) now (the function chi2.sf reduces
+        # to); the guard after it is what this test pins.
+        with mock.patch("src.common.Statistics._special") as special:
+            special.chdtrc.return_value = NAN
 
             result = calculateCombinedFisher([_entry(0.01), _entry(0.2)])
 
@@ -182,8 +184,11 @@ class NonFiniteBackstopTest(unittest.TestCase):
                          "Fisher; it would be serialised as invalid JSON")
 
     def test_stouffer_backstop(self):
-        with mock.patch("src.common.Statistics.combine_pvalues") as combine:
-            combine.return_value = (0.0, INF)
+        # Stouffer is computed by _stoufferPvalue (bit-identical to
+        # combine_pvalues, see test_combined_pvalue_kernels_match_scipy);
+        # the guard after it is what this test pins.
+        with mock.patch("src.common.Statistics._stoufferPvalue") as stouffer:
+            stouffer.return_value = INF
 
             result = calculateStoufferCombinedPvalue(
                 [_entry(0.01), _entry(0.2)], [1, 1])
