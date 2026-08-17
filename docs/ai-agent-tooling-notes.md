@@ -55,6 +55,46 @@ PY
 3. **`read_paper` states its purpose, not just its mechanics** — an uncited-but-read
    paper is cheap, an unread-but-cited one is what the verifier removes.
 
+## Second measurement — four archived runs, 62 calls (`python -m src.benchmarks.ai_tool_usage`)
+
+| tool | calls | runs using it | median ms |
+|---|---|---|---|
+| `search_literature` | 20 | **4/4** | 1 673 |
+| `notebook_write` | 7 | **4/4** | 2 |
+| `delegate_interpretation` | 7 | 2/4 | **28 620** |
+| `read_paper` | 9 | 2/4 | 2 263 |
+| `get_experiment_overview` · `get_pathway_details` · `cluster_pathways` · `submit_report` | 4 each | **4/4** | 0–420 |
+| `check_my_citations` | 2 | 2/4 | 15 |
+| `compare_gene_profiles` | 1 | 1/4 | 9 |
+| `get_gene_profile` · `notebook_read` · `delegate_literature` | 0 | 0/4 | — |
+
+**`read_paper` payoff: 5 papers opened, 2 cited in the shipped report (40 %).**
+Reading is neither decorative nor decisive — worth its 2.3 s, not worth making
+mandatory. This is measurable only because the trace now records `pmid=`:
+`renumber_citations` rewrites every `ref_index` at the gate, so PMIDs are the
+only key that survives into the stored papers.
+
+### What this changed
+
+- **Thirteen tools became eleven.** `get_gene_profile` was
+  `compare_gene_profiles` with one argument (my own rule above: if two tools
+  differ only by arity, that is one tool), and `notebook_read` re-read what the
+  SDK already keeps in the conversation. Both went uncalled in every archived
+  run, but the reason to remove them is structural — each cost its schema in
+  **every** Decide turn of every run.
+- **Delegation latency is per CALL, not per pathway** — 28.6 s median whether it
+  covers three pathways or ten, and two runs spent ~100 s on 3.5 calls each. The
+  description now says covering ten pathways in one call costs what three would.
+- `delegate_literature` stays for now: uncalled in these four runs, but earlier
+  rounds did use it, and four runs is not enough to retire a tool that has been
+  used.
+
+### A trap this nearly caused
+
+Round 6's two surviving traces showed `compare_gene_profiles` as never called;
+round 7 called it. Removing a tool on two traces would have been wrong, and it is
+exactly why the archive exists. **Adoption needs runs, not calls.**
+
 ## Open questions the archive will answer
 
 - Are `get_gene_profile`, `notebook_read` and `delegate_literature` dead weight?

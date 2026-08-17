@@ -132,6 +132,33 @@ def test_registered_papers_default_to_abstract_only():
     assert paper["sections"]["abstract"] == "a"
 
 
+# -- post-loop work must fit the clock that is left ------------------------
+
+def test_the_gate_floor_is_big_enough_for_the_gate():
+    """Round 7 r1 died at 602 s of a 600 s ceiling: a 50 s merge ran after a
+    450 s loop with only 150 s reserved, and the gate had nothing left. The
+    floor has to cover quotes + per-citation verification + the net."""
+    assert L.GATE_MIN_SECONDS >= 120, L.GATE_MIN_SECONDS
+    assert L.GATE_MIN_SECONDS <= L.GATE_RESERVE_SECONDS, (
+        "the gate floor cannot exceed the reserve the loop already gives up")
+
+
+def test_a_merge_with_no_time_left_is_skipped_not_attempted():
+    """The decision is arithmetic, so it is testable without a gateway: with the
+    deadline already inside the gate floor there must be no budget to merge."""
+    ctx = _ctx(started_at=time.time() - (L.AGENT_RUN_SECONDS - L.GATE_MIN_SECONDS + 10))
+    budget = ((ctx.started_at + L.AGENT_RUN_SECONDS) - time.time()
+              - L.GATE_MIN_SECONDS)
+    assert budget < 30, budget          # the branch agent_loop takes to skip
+
+
+def test_a_merge_early_in_a_run_gets_a_real_budget():
+    ctx = _ctx(started_at=time.time() - 60)
+    budget = ((ctx.started_at + L.AGENT_RUN_SECONDS) - time.time()
+              - L.GATE_MIN_SECONDS)
+    assert budget > 200, budget
+
+
 # -- the trace archive ------------------------------------------------------
 
 def test_each_event_is_archived_once():
@@ -186,6 +213,9 @@ def main():
               test_the_same_pmid_never_gets_a_second_number,
               test_a_paper_without_a_pmid_is_skipped,
               test_registered_papers_default_to_abstract_only,
+              test_the_gate_floor_is_big_enough_for_the_gate,
+              test_a_merge_with_no_time_left_is_skipped_not_attempted,
+              test_a_merge_early_in_a_run_gets_a_real_budget,
               test_each_event_is_archived_once,
               test_archiving_never_breaks_a_run):
         _check(t.__name__, t)

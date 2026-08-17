@@ -127,6 +127,17 @@ MIN_CITATIONS = int(os.getenv("AI_AGENT_MIN_CITATIONS", str(SDK_MIN_CITATIONS)))
 # shipping the Lead's compression of them. AI_AGENT_MERGE_DELEGATED=0 restores
 # the round-3 behaviour for comparison.
 MERGE_DELEGATED = os.getenv("AI_AGENT_MERGE_DELEGATED", "1") == "1"
+# "stitch" keeps each delegated report's own grounded text and spends the writer
+# call only on framing prose; "rewrite" is round 4-5's single pass over
+# everything, which measured 4.5-11 citations because the writer saw the whole
+# reference list at once.
+MERGE_MODE = os.getenv("AI_AGENT_MERGE_MODE", "stitch")
+# The gate's own floor. Post-loop work (the merge) is bounded by the clock that
+# is actually left after reserving this, and skipped when there is not enough --
+# measured the hard way: a 50 s merge on top of a 450 s loop and a 150 s reserve
+# put a run at 602 s and it died on the 600 s ceiling with nothing to show. A
+# step that can push a run past its deadline is not optional work, it is a bug.
+GATE_MIN_SECONDS = float(os.getenv("AI_AGENT_GATE_MIN", "130"))
 # Verify->correct rounds at the gate. 2 = one verification pass, one
 # correction, one re-verification -- the 600 s budget does not fit the
 # workflow arm's 3 (its own no-progress rule usually stops at 2 anyway).
@@ -343,20 +354,9 @@ def get_pathway_details(ctx: RunContextWrapper[LoopContext],
 
 
 @function_tool
-def get_gene_profile(ctx: RunContextWrapper[LoopContext], gene_symbol: str) -> str:
-    """All measured timepoint values for one gene across every omic layer. Instant and free."""
-    c = ctx.context
-    t0 = time.time()
-    out = _spend(c, tools_mod.execute_tool(
-        "get_gene_timecourse", c.job_instance, {"gene_symbol": gene_symbol}))
-    _trace(c, "get_gene_profile", gene_symbol, out[:60], t0)
-    return out
-
-
-@function_tool
 def compare_gene_profiles(ctx: RunContextWrapper[LoopContext],
                           gene_symbols: list[str]) -> str:
-    """Side-by-side measured values for several genes (max 10) across all omic layers. Instant and free -- prefer this over one get_gene_profile call per gene."""
+    """Measured values for one or several genes (max 10) across every omic layer, side by side. Instant and free -- pass every gene you are comparing in ONE call."""
     c = ctx.context
     t0 = time.time()
     out = _spend(c, tools_mod.execute_tool(
@@ -521,7 +521,8 @@ async def read_paper(ctx: RunContextWrapper[LoopContext], ref_index: int,
     out = executor("fetch_paper_section",
                    {"ref_index": int(ref_index), "section": section})
     out = _spend(c, out + _ledger_note(c))
-    _trace(c, "read_paper", "[%s] %s" % (ref_index, section),
+    _trace(c, "read_paper",
+           "[%s] %s pmid=%s" % (ref_index, section, paper.get("pmid")),
            "%d chars" % len(out), t0)
     return out
 
@@ -539,18 +540,6 @@ def notebook_write(ctx: RunContextWrapper[LoopContext], note: str) -> str:
             logger.debug("notebook hook failed", exc_info=True)
     out = "Noted (%d entries)." % len(c.notebook)
     _trace(c, "notebook_write", note[:80], out, t0)
-    return out
-
-
-@function_tool
-def notebook_read(ctx: RunContextWrapper[LoopContext]) -> str:
-    """Re-read your run notebook (numbered)."""
-    c = ctx.context
-    t0 = time.time()
-    out = "\n".join("%d. %s" % (i, n) for i, n in enumerate(c.notebook, 1)) \
-          or "(the notebook is empty)"
-    out = _spend(c, out)
-    _trace(c, "notebook_read", "", "%d entries" % len(c.notebook), t0)
     return out
 
 
@@ -591,7 +580,7 @@ async def _single_shot(agent, prompt, ctx, timeout, label):
 @function_tool
 async def delegate_interpretation(ctx: RunContextWrapper[LoopContext],
                                   pathway_names: list[str], focus: str) -> str:
-    """Delegate deep interpretation of up to ~10 named pathways to Cluster Interpreter sub-agents (parallel, single-shot). Returns their reports; their [N] citations use your reference numbers. EXPENSIVE: about 25 seconds per call, the costliest thing you can do -- but it is also where breadth comes from, so plan two or three calls covering everything rather than one per pathway."""
+    """Delegate deep interpretation of up to ~10 named pathways to Cluster Interpreter sub-agents (parallel, single-shot). Returns their reports; their [N] citations use your reference numbers. EXPENSIVE: about 30 seconds per CALL regardless of how many pathways it covers, so covering ten pathways in one call costs what three would. It is where breadth comes from -- make two calls that cover everything, never one per pathway."""
     c = ctx.context
     t0 = time.time()
     guard = _time_guard(c)
@@ -718,10 +707,14 @@ def submit_report(ctx: RunContextWrapper[LoopContext], report_markdown: str) -> 
     return "SUBMITTED. Reply with the single word DONE and stop."
 
 
-TOOLBELT = [get_experiment_overview, get_pathway_details, get_gene_profile,
-            compare_gene_profiles, cluster_pathways, search_literature,
-            read_paper, notebook_write, notebook_read, check_my_citations,
-            delegate_interpretation, delegate_literature, submit_report]
+# Eleven, not thirteen: get_gene_profile was compare_gene_profiles with one
+# argument, and notebook_read re-read what the SDK already keeps in context.
+# Every tool here costs its schema in EVERY Decide turn, so an unused tool is a
+# tax on the prompt that carries the whole investigation.
+TOOLBELT = [get_experiment_overview, get_pathway_details, compare_gene_profiles,
+            cluster_pathways, search_literature, read_paper, notebook_write,
+            check_my_citations, delegate_interpretation, delegate_literature,
+            submit_report]
 
 
 # ---------------------------------------------------------------------------
@@ -814,40 +807,102 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
                                (stats.get("loop_backstop", "ended"), e))
 
     # ---- carry the delegated detail into the report ------------------------
-    # The workflow arm's 39 k of prose comes from synthesising ACROSS its three
-    # batch reports; the agent had the same material (its delegations) and
-    # summarised it away, which is the whole of the measured gap after retrieval
-    # was fixed. So the submitted draft and the sub-agents' reports are merged
-    # by one Report Writer pass -- and kept only if it is genuinely fuller and
-    # cites at least as much, so a "merge" can never shrink the report.
-    if ctx.delegated and MERGE_DELEGATED:
+    # Round 4 merged by RE-AUTHORING: one Report Writer pass over the draft plus
+    # every delegated report, with the full master reference list attached. It
+    # fixed length (8 870 -> 38 480 chars) and coverage (9 -> 18.5 pathways) and
+    # wrecked grounding -- citations fell to 4.5, and round 6 showed why: a writer
+    # handed ninety references cites three of them. agent.py records the same
+    # effect for its batches ("a batch handed 20+ abstracts cites fewer of them").
+    #
+    # The delegated reports are ALREADY grounded: each was written against the <=10
+    # papers attributed to its own pathways. So do not re-author them. Stitch them
+    # in as the per-pathway analysis and spend the single writer call only on the
+    # framing prose, where reference dilution costs nothing. That is the workflow
+    # arm's grounding property -- per-batch attributed slices, preserved through
+    # synthesis -- without its fixed control flow: the agent still chose what to
+    # investigate, what to delegate and what to submit.
+    merge_budget = ((ctx.started_at + AGENT_RUN_SECONDS) - time.time()
+                    - GATE_MIN_SECONDS)
+    if ctx.delegated and MERGE_DELEGATED and merge_budget < 30:
+        stats["merge_skipped"] = ("%ds left, the gate needs %ds"
+                                  % (max(0, int(merge_budget + GATE_MIN_SECONDS)),
+                                     int(GATE_MIN_SECONDS)))
+        logger.info("[%s][loop] skipping the merge: %s", job_id,
+                    stats["merge_skipped"])
+    elif ctx.delegated and MERGE_DELEGATED:
         t_m = time.time()
+        merge_timeout = min(SDK_LONG_CALL_TIMEOUT, merge_budget)
         papers_now = [ctx.paper_index[k] for k in sorted(ctx.paper_index)]
         valid = {p["ref_index"] for p in papers_now}
         before = len(count_body_citations(str(report), valid))
-        prompt = prompts_mod.build_synthesis_prompt_v2(
-            ctx.delegated + ["## The lead interpreter's own draft\n" + report],
-            experiment_design, organism_name, papers_now)
-        prompt += ("\n\nThe last block is the lead interpreter's draft: keep its "
-                   "structure, its Key Findings and its judgements, and restore "
-                   "the per-pathway detail from the batch reports that the draft "
-                   "compressed away. Every pathway named in any block gets its "
-                   "own paragraph. Do not invent citations.")
-        try:
-            merged = await bounded(
-                Runner.run(agents["synth"], prompt, context=ctx, max_turns=3),
-                SDK_LONG_CALL_TIMEOUT, label="delegated merge")
-            candidate = resolve_pmid_mentions(str(merged.final_output),
-                                              ctx.paper_index)
-            after = len(count_body_citations(candidate, valid))
-            if len(candidate) > 1.2 * len(str(report)) and after >= before:
-                stats["merge_gain_chars"] = len(candidate) - len(str(report))
-                report = candidate
+        detail = "\n\n".join(ctx.delegated)
+        if MERGE_MODE == "stitch":
+            framing_prompt = (
+                "You are finishing a multi-omics interpretation report.\n\n"
+                "## The lead interpreter's draft\n%s\n\n"
+                "## The per-pathway analyses that will follow it verbatim\n%s\n\n"
+                "## Task\nWrite ONLY these sections, in this order, as markdown:\n"
+                "## Key Findings (3-5 bullets, the most important results across "
+                "everything above)\n"
+                "## Cross-Pathway Themes (shared mechanisms and crosstalk; name "
+                "the pathways)\n\n"
+                "Then stop -- do NOT write a pathway-by-pathway section, it is "
+                "already written and will be appended after yours. Afterwards add:\n"
+                "## Suggested Follow-up Experiments (3-5, prioritised, each with "
+                "technique, rationale, expected outcome)\n"
+                "## Limitations and Caveats\n\n"
+                "Reuse [N] citation markers ONLY where they already appear above "
+                "for that claim. Do not invent markers and do not renumber."
+                % (report, detail[:60000]))
+            try:
+                framed = await bounded(
+                    Runner.run(agents["synth"], framing_prompt, context=ctx,
+                               max_turns=3),
+                    merge_timeout, label="framing")
+                framing = str(framed.final_output)
+            except (Exception, asyncio.TimeoutError) as e:
+                stats["framing_failed"] = "%s: %s" % (type(e).__name__, e)
+                framing = report
+            # Splice: framing's forward-looking sections stay last, the stitched
+            # per-pathway detail goes between themes and follow-ups.
+            marker = "## Suggested Follow-up Experiments"
+            if marker in framing:
+                head, tail = framing.split(marker, 1)
+                candidate = "%s\n## Detailed Pathway Analysis\n\n%s\n\n%s%s" % (
+                    head.rstrip(), detail, marker, tail)
             else:
-                stats["merge_rejected"] = True
-        except (Exception, asyncio.TimeoutError) as e:
-            stats["merge_failed"] = "%s: %s" % (type(e).__name__, e)
-            logger.warning("[%s][loop] delegated merge failed: %s", job_id, e)
+                candidate = "%s\n\n## Detailed Pathway Analysis\n\n%s" % (
+                    framing.rstrip(), detail)
+            candidate = resolve_pmid_mentions(candidate, ctx.paper_index)
+        else:
+            prompt = prompts_mod.build_synthesis_prompt_v2(
+                ctx.delegated + ["## The lead interpreter's own draft\n" + report],
+                experiment_design, organism_name, papers_now)
+            prompt += ("\n\nThe last block is the lead interpreter's draft: keep "
+                       "its structure, its Key Findings and its judgements, and "
+                       "restore the per-pathway detail from the batch reports that "
+                       "the draft compressed away. Every pathway named in any block "
+                       "gets its own paragraph. Do not invent citations.")
+            try:
+                merged = await bounded(
+                    Runner.run(agents["synth"], prompt, context=ctx, max_turns=3),
+                    merge_timeout, label="delegated merge")
+                candidate = resolve_pmid_mentions(str(merged.final_output),
+                                                  ctx.paper_index)
+            except (Exception, asyncio.TimeoutError) as e:
+                stats["merge_failed"] = "%s: %s" % (type(e).__name__, e)
+                candidate = report
+        after = len(count_body_citations(candidate, valid))
+        # Same guard either way: a merge may only make the report fuller, and may
+        # never cost it citations.
+        if len(candidate) > 1.2 * len(str(report)) and after >= before:
+            stats["merge_gain_chars"] = len(candidate) - len(str(report))
+            stats["merge_citations"] = "%d->%d" % (before, after)
+            report = candidate
+        else:
+            stats["merge_rejected"] = "len %d->%d, cites %d->%d" % (
+                len(str(report)), len(candidate), before, after)
+        stats["merge_mode"] = MERGE_MODE
         stats["merge_s"] = time.time() - t_m
 
     # The deterministic tables ride below the prose, exactly as the workflow

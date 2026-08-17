@@ -760,8 +760,8 @@ How to investigate:
 1. Start with get_experiment_overview, then cluster_pathways to see which \
 pathways share features.
 2. Go deep where the data is strongest or strangest: get_pathway_details on \
-the top-ranked pathways, get_gene_profile / compare_gene_profiles on the \
-genes that drive them.
+the top-ranked pathways, compare_gene_profiles on the genes that drive them \
+(pass them all in one call).
 3. Search the literature with search_literature. BROAD queries only: two or \
 three gene symbols joined by OR plus at most one biological term, e.g. \
 "(Ikzf1 OR Ccnd2) AND B cell differentiation". A query with three AND clauses \
