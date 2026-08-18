@@ -121,6 +121,17 @@ DELEGATE_PAPERS = int(os.getenv("AI_AGENT_DELEGATE_PAPERS", "10"))
 SEARCH_HITS = int(os.getenv("AI_AGENT_SEARCH_HITS", str(AI_PAPERS_PER_SEARCH_TASK)))
 # Parallel single-shot calls one delegate_* tool may run at once.
 DELEGATE_WORKERS = int(os.getenv("AI_AGENT_DELEGATE_WORKERS", "4"))
+DELEGATE_MAX_PATHWAYS = int(os.getenv("AI_AGENT_DELEGATE_MAX_PATHWAYS", "20"))
+"""Pathways one delegate call may cover, chunked five to a sub-agent.
+
+Was 10, which is two chunks -- so two of the four worker slots never ran and
+the arm had half the places a citation can be born. Base writes fourteen
+batches, each citing its own papers, and converts 58% of retrieved papers
+into shipped citations against this arm's 16%. Twenty pathways is four
+chunks, which fills DELEGATE_WORKERS exactly, so the extra breadth is free
+in wall clock: four sub-agents run in the time two did.
+"""
+
 DELEGATE_QUOTE_SECONDS = float(os.getenv("AI_AGENT_DELEGATE_QUOTE_SECONDS", "45"))
 """Ceiling on grounding a delegation's citations, so it cannot eat the run.
 
@@ -900,7 +911,7 @@ def _quote_shelf(c, chunk, papers):
 @function_tool(failure_error_function=_tool_failure("delegate_interpretation"))
 async def delegate_interpretation(ctx: RunContextWrapper[LoopContext],
                                   pathway_names: list[str], focus: str) -> str:
-    """Delegate deep interpretation of up to ~10 named pathways to Cluster Interpreter sub-agents (parallel, single-shot). Returns their reports; their [N] citations use your reference numbers. EXPENSIVE: about 30 seconds per CALL regardless of how many pathways it covers, so covering ten pathways in one call costs what three would. It is where breadth comes from -- make two calls that cover everything, never one per pathway."""
+    """Delegate deep interpretation of up to ~20 named pathways to Cluster Interpreter sub-agents (parallel, single-shot). Returns their reports; their [N] citations use your reference numbers. EXPENSIVE: about 30 seconds per CALL regardless of how many pathways it covers -- the sub-agents run in parallel, four at a time -- so covering twenty pathways in one call costs what three would. It is where breadth comes from, and every pathway you delegate is somewhere a citation can be earned: make ONE call that covers everything, never one per pathway."""
     c = ctx.context
     t0 = time.time()
     guard = _time_guard(c)
@@ -909,7 +920,8 @@ async def delegate_interpretation(ctx: RunContextWrapper[LoopContext],
     wanted = {w.strip().lower() for w in pathway_names if w and w.strip()}
     chosen = [p for p in c.pathways
               if {str(p.get("name", "")).lower(), str(p.get("id", "")).lower()} & wanted
-              or any(w in str(p.get("name", "")).lower() for w in wanted)][:10]
+              or any(w in str(p.get("name", "")).lower() for w in wanted)
+              ][:DELEGATE_MAX_PATHWAYS]
     if not chosen:
         out = "No enriched pathway matches %s." % pathway_names
         _trace(c, "delegate_interpretation", pathway_names, "no match", t0)
@@ -1772,6 +1784,11 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
         unique_papers = kept
     stats["verify_s"] = time.time() - t0
     stats["tool_calls"] = ctx.tool_calls
+    # The TRUE retrieval count, into stats so it reaches the stored record and
+    # the scorer. It was stamped only into the outcome trace before, so the
+    # scorer kept falling back to len(papers) -- the reference list the gate had
+    # already filtered -- and reported 9 for a run that retrieved 68.
+    stats["papers_retrieved"] = len(ctx.paper_index)
     stats["verification"] = final
     # Stamp the outcome next to the tool calls that produced it. Mongo keeps one
     # interpretation per JOB, so it can answer "how did this job's last run go"

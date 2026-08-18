@@ -680,3 +680,51 @@ writing produces the prose.
 **Verify first, score second.** The trace must show a non-empty shelf and a
 check whose citation count matches the shipping text, before any rule is read.
 Round 26 scored a fix that never ran.
+
+## Round 28: 4 of 5 rules, the best this arm has done
+
+| | base | agent-v28 | r1 | r2 |
+|---|---|---|---|---|
+| citations | 20.0 | 9.0 **FAIL** | 10 | 8 |
+| redactions | 13.5 | 5.0 **PASS** | 10 | 0 |
+| prose coverage | 14.5 | 16.5 **PASS** | 17 | 16 |
+| length | | **PASS** | | |
+| wall_s | | | 557 | 475 |
+
+Rule 3 passes for the first time in 28 rounds, and by a wide margin -- the arm
+now redacts less than a third as often as the shipped one. The replicate spread,
+which has been the loudest thing in this data (11 vs 0 in round 25), collapsed
+to 10 vs 8.
+
+The trajectory says the diagnosis was right:
+
+    r25   5.5 citations / 22 redactions   2 of 5
+    r26   0.0           / 45              2 of 5
+    r27   4.5           / 26              3 of 5
+    r28   9.0           /  5              4 of 5
+
+### The remaining gap is conversion, not retrieval
+
+`papers_retrieved` misled me twice. Fixed properly, the runs read:
+
+| | papers retrieved | citations shipped | conversion |
+|---|---|---|---|
+| base | 34.5 | 20 | **58%** |
+| agent | 63, 60 | 10, 8 | **16%** |
+
+The agent retrieves nearly twice what the shipped arm does and converts a
+quarter as well. Retrieval was never the problem, and the "stop rewarding
+retrieval volume" note withdrawn earlier was doubly wrong.
+
+The likely cause is where citations can be born. Base writes fourteen batches,
+each citing its own papers. This arm wrote a draft plus two delegate calls of
+one or two chunks -- and `DELEGATE_WORKERS` is 4, so two slots never ran at all.
+
+Round 29 raises the delegation cap from 10 pathways to 20, which is four chunks
+and fills the pool exactly. Four sub-agents run in the wall clock two used, so
+the extra breadth is free.
+
+**Prediction:** citations up towards base, redactions staying low, wall clock
+flat. **Falsifier:** citations flat at ~9 with four chunks demonstrably running
+-- which would mean the ceiling is what the agent is willing to claim, not how
+many places it has to claim it, and the honest next step is the hybrid.
