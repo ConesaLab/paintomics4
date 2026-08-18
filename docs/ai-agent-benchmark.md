@@ -1499,3 +1499,34 @@ remaining structural difference between the arms.
 
 **Not predicted:** coverage. The agent arm has beaten base on coverage for three
 rounds and a smaller pool could cut either way.
+
+## Round 38 scored: 4 of 5 rules, and the gap is one number
+
+| mean of 4 | base-v38 | agent-v38 |
+|---|---|---|
+| wall_s | 345 | 403 |
+| citations_in_body | **22.2** | 16.8 |
+| failed_citations | 1.00 | **0.75** |
+| redacted | 2.2 | **1.5** |
+| prose_pathways_covered | 13.5 | **15.0** |
+| themes_cited / retrieved | **13.0 / 14.0** | 7.0 / 14.2 |
+| papers_retrieved | 29 | 90 |
+
+Rules 1, 3, 4, 5 pass. Rule 2 fails at 16.8 against 22.2. The arm now beats the
+incumbent on redactions AND coverage, finishes inside the ceiling on every
+replicate, and its whole remaining deficit is 5.4 citations.
+
+Both arms retrieved ~14 themes. Base cited papers from 13 of them; this arm from
+7. It carries 3.1x the papers to do it. That is the entire rule-2 gap, and it is
+not a writing-quality difference: the arm's citations FAIL less often (0.75 vs
+1.00) and cost less prose when they do (1.5 vs 2.2 redacted).
+
+**Everything that could have explained it has now been excluded by measurement:**
+chunk count (base's batches emit zero markers), retrieval volume (r = +0.16 over
+72 runs; the 145-paper replicate converted SIX themes against a 65-paper
+replicate's seven), delegation attribution (3 matched, 0 fallback), and writing
+quality (better failure and redaction rates than base).
+
+What remains is that base screens every search and this arm screens nothing, and
+that 47% of everything this arm retrieves lands outside any writer's 40-paper
+window. Round 39 tests the screen alone.
