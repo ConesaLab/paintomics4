@@ -608,6 +608,27 @@ def cmd_round(args):
     return cmd_score(argparse.Namespace(outdir=args.outdir))
 
 
+def pin_both_arms():
+    """Import BOTH arms before a round starts, so their code cannot mix vintages.
+
+    agent.py imports agent_loop LAZILY, inside run_ai_agent, only when
+    AI_FULL_AGENT=1. A round therefore loads the shipped arm at launch and the
+    agent arm minutes later -- and an edit in between leaves the process holding
+    a NEW agent_loop against the ALREADY-LOADED old verification module.
+
+    Measured, round 37: verification.py gained quote_provenance after launch, and
+    both agent replicates died with "cannot import name 'quote_provenance'" at
+    wall 0 while the base replicates ran perfectly. The rule I had been relying
+    on all session -- "the bench runs in-process, so a mid-round edit cannot
+    contaminate a running round" -- is true only for modules already imported.
+
+    Importing both here makes the round's code a snapshot taken at launch, which
+    is what the config fingerprint has always claimed it was.
+    """
+    import src.classes.AIInterpret.agent            # noqa: F401
+    import src.classes.AIInterpret.agent_loop       # noqa: F401
+
+
 def enable_stage_logging():
     """Let the pipeline's own INFO diagnostics reach the round's log.
 
@@ -634,6 +655,7 @@ def enable_stage_logging():
 
 def main(argv=None):
     enable_stage_logging()
+    pin_both_arms()
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     sub = parser.add_subparsers(dest="command", required=True)
 
