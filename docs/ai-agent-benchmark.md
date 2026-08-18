@@ -1976,3 +1976,46 @@ is a reason to run the round, not a result.
 Coverage at 11 is below round 43's 14.7 and is the number to watch: if the Lead
 spends its turns citing the uncited pool and covers fewer pathways for it, the
 trade moves from rule 3 to rule 4 and nothing is won.
+
+## Round 43 scored: 4/5, and the full-text repair is refuted
+
+Rules 1, 2, 4, 5 pass. Rule 3 fails, and its own diagnostics name the cause:
+
+```
+3 redactions <= base + 2   FAIL  (22.0 vs 5.2)
+     failed_citations     7.5 vs 2.2
+     topup_added         12.5 vs 3.0
+     topup_added_failed   7.5 vs 0.0
+     sentences_dropped    8.5 vs 3.0
+```
+
+`topup_added_failed` equals `failed_citations` for the twentieth consecutive
+replicate, and base's equals zero. The full-text repair ran throughout this round
+and did not move it: fetching text is not what those citations were missing.
+
+**What the arm now is:** citations 19.0 against base's 15.8, coverage 15.0 against
+13.0, every replicate inside the ceiling, length in range -- and one stage
+generating every failure it has.
+
+## Round 44 pre-registration (written before the round ran)
+
+`AI_AGENT_TOPUP=0` with `AI_AGENT_SHOW_UNCITED=1`. The top-up stops bolting
+citations onto finished sentences; `check_my_citations`, which every run calls
+before submitting, names the retrieved papers the draft cites nowhere so the Lead
+can cite them while the sentence is still being written.
+
+**Prediction.**
+- `failed_citations` falls to **<= 1**, because every failure for twenty
+  replicates has come from the stage being removed and the Lead's own citations
+  have never failed.
+- `redacted` falls under base + 2; **rule 3 passes**, which would make this the
+  first 5/5 in the series.
+- `citations_in_body` holds **>= base**. The smoke run gave 19 without the top-up
+  against round 43's 20.0 with it, so the work moves rather than vanishing.
+- `note_subjects_blank` stays near 0 of ~10.
+
+**Falsifier, and the number I expect to argue about:** coverage. The smoke run
+came in at 11 against round 43's 15.0. If the Lead spends its turns citing the
+uncited pool and covers fewer pathways for it, the trade has moved from rule 3 to
+rule 4 and nothing is won -- in which case the answer is to cap the top-up rather
+than remove it, keeping the first few additions that base shows are safe.
