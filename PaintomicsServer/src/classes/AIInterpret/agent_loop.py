@@ -411,6 +411,13 @@ def _code_fingerprint():
         parts = [inspect.getsource(_sys.modules[__name__]),
                  prompts_mod.SYSTEM_PROMPT_LEAD_AGENT]
         parts.extend(sorted(str(t.description or "") for t in TOOLBELT))
+        # Flags decide behaviour without touching a byte of source, so hashing
+        # source alone left the exact hole this function exists to close:
+        # AI_SENTENCE_REPAIR=1 and =0 run different pipelines and stamped the
+        # same fingerprint. Anything that gates a stage belongs here.
+        parts.extend(["SENTENCE_REPAIR=%s" % SENTENCE_REPAIR,
+                      "SDK_STREAM=%s" % os.getenv("AI_SDK_STREAM", ""),
+                      "FULL_AGENT=%s" % os.getenv("AI_FULL_AGENT", "")])
         return hashlib.sha1("".join(parts).encode("utf-8")).hexdigest()[:10]
     except Exception:
         logger.debug("code fingerprint failed", exc_info=True)
@@ -1435,6 +1442,9 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
         "search_hits": SEARCH_HITS,
         "delegate_papers": DELEGATE_PAPERS,
         "delegate_chunk": DELEGATE_CHUNK,
+        # In plain text as well as in the hash: the fingerprint proves two runs
+        # differ, this says how.
+        "sentence_repair": SENTENCE_REPAIR,
         "max_turns": AGENT_MAX_TURNS,
         "gate_reserve": GATE_RESERVE_SECONDS,
         "lead_prompt_chars": len(prompts_mod.SYSTEM_PROMPT_LEAD_AGENT),
