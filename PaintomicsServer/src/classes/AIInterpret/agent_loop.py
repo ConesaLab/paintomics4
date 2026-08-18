@@ -1791,12 +1791,25 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
         previous_failures = len(failed)
         if _iteration == VERIFY_ITERATIONS - 1:
             break
+        # A correction rewrite regenerates the entire report. Measured at 117 s
+        # inside verify_loop_s, and it was bounded only by a per-call timeout --
+        # so the last thing a run out of time did was start the most expensive
+        # call it has. What is already verified ships; what failed is redacted
+        # deterministically a few lines below, with no model needed.
+        correction_budget = ((ctx.started_at + AGENT_RUN_SECONDS) - time.time()
+                             - GATE_MIN_SECONDS)
+        if correction_budget < 30:
+            stats["correction_skipped"] = "%.0f s left" % max(0, correction_budget)
+            logger.info("[%s][loop] correction rewrite skipped: %.0f s left",
+                        job_id, correction_budget)
+            break
         try:
             corr = await bounded(Runner.run(
                 agents["synth"],
                 "Here is your report:\n\n%s\n\n%s"
                 % (report, prompts_mod.build_correction_prompt(report, failed)),
-                context=ctx, max_turns=3), SDK_LONG_CALL_TIMEOUT,
+                context=ctx, max_turns=3),
+                min(SDK_LONG_CALL_TIMEOUT, correction_budget),
                 label="loop correction rewrite")
         except (Exception, asyncio.TimeoutError) as e:
             stats["correction_failed"] = "%s: %s" % (type(e).__name__, e)

@@ -446,6 +446,51 @@ def test_the_citation_top_up_checks_the_clock():
 
 
 
+def test_the_correction_rewrite_checks_the_clock():
+    """It regenerates the whole report, and was bounded only by a per-call
+    timeout -- so the last thing a run out of time did was start the most
+    expensive call it has. What is already verified ships either way; what
+    failed is redacted deterministically with no model needed."""
+    import inspect
+    src = inspect.getsource(L._run_loop_async)
+    assert "correction_budget" in src, "the rewrite does not look at the clock"
+    assert "correction_skipped" in src, "a skipped rewrite leaves no trace"
+    assert "min(SDK_LONG_CALL_TIMEOUT, correction_budget)" in src, (
+        "the rewrite can still run longer than the run has left")
+
+
+def test_no_expensive_post_loop_call_is_left_on_a_bare_timeout():
+    """The recurring shape in this arm: an expensive step guarded on a quality
+    threshold but not on the clock. The delegation nudge, the merge probes, the
+    top-up and the correction rewrite were all written that way."""
+    import ast, inspect
+    src = inspect.getsource(L)
+    tree = ast.parse(src)
+    fn = next(n for n in ast.walk(tree)
+              if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+              and n.name == "_run_loop_async")
+    # These are safe on a fixed timeout: the top-up is gated on entry by
+    # TOPUP_MIN_SECONDS, and forced synthesis is the last-resort path that
+    # exists precisely to produce something when everything else failed.
+    ALLOWED = {"loop citation top-up", "forced synthesis"}
+    offenders = []
+    for node in ast.walk(fn):
+        if not (isinstance(node, ast.Call) and getattr(node.func, "id", "") == "bounded"):
+            continue
+        if len(node.args) < 2:
+            continue
+        label = next((k.value.value for k in node.keywords
+                      if k.arg == "label" and isinstance(k.value, ast.Constant)), "?")
+        expr = " ".join((ast.get_source_segment(src, node.args[1]) or "").split())
+        clockish = any(t in expr for t in ("remaining", "hard_deadline", "started_at",
+                                           "budget", "left", "min(", "merge_timeout"))
+        if not clockish and label not in ALLOWED and label != "?":
+            offenders.append("%s (%s)" % (label, expr))
+    assert not offenders, ("expensive post-loop calls bounded by a fixed timeout "
+                           "rather than the remaining run: %s" % ", ".join(offenders))
+
+
+
 def main():
     for t in (test_tool_output_under_budget_is_returned_whole,
               test_tool_output_over_budget_is_cut_and_says_so,
@@ -478,7 +523,9 @@ def main():
               test_the_code_fingerprint_is_real,
               test_the_fingerprint_moves_when_behaviour_moves,
               test_the_grounding_sieve_asks_the_question_the_right_way_round,
-              test_the_citation_top_up_checks_the_clock):
+              test_the_citation_top_up_checks_the_clock,
+              test_the_correction_rewrite_checks_the_clock,
+              test_no_expensive_post_loop_call_is_left_on_a_bare_timeout):
         _check(t.__name__, t)
     print("\nPassed: %d / %d" % (len(_PASSED), len(_PASSED) + len(_FAILED)))
     if _FAILED:
