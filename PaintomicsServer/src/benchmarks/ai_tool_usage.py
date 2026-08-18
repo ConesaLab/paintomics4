@@ -138,6 +138,21 @@ def main():
     n = len(runs)
     print("%d archived run(s), %d tool calls\n" % (n, sum(calls.values())))
 
+    # Tools that RAISED. Before failure handlers existed these were invisible:
+    # the SDK swallows a tool exception into a string and _trace runs at the end
+    # of the tool, so a tool failing on every call looked exactly like a tool
+    # nobody called. Runs archived before that fix show nothing here.
+    failures = Counter()
+    for _job, _stamp, events in runs:
+        for e in events:
+            if str(e.get("result", "")).startswith("ERROR"):
+                failures[e.get("tool")] += 1
+    if failures:
+        print("tools that RAISED (these are defects, not usage signals):")
+        for tool, count in failures.most_common():
+            print("  %-26s %d failure(s) of %d call(s)" % (tool, count, calls[tool]))
+        print()
+
     # Distinct configurations present, so a table of averages cannot silently mix
     # two different agents. Runs before the fingerprint existed show as unknown.
     configs = Counter()

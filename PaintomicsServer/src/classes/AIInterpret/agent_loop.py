@@ -434,7 +434,41 @@ def _pathway_block(p):
     return "\n".join(lines)
 
 
-@function_tool
+def _tool_failure(name):
+    """Make a raising tool visible instead of silently generic.
+
+    The SDK catches any exception a tool raises and hands the model
+    "An error occurred while running the tool", then carries on. Because _trace
+    runs at the END of each tool, a raise also means no trace event at all -- so
+    a tool that fails on every call looks, in the archive, exactly like a tool
+    the agent chose not to use. Every adoption and cost figure measured so far
+    counts successful calls only.
+
+    This was not theoretical: the first version of the delegation-cache tests
+    passed against a fixture that raised KeyError on every call, because the
+    swallowed error came back as an ordinary string.
+
+    The handler records the failure in the run journal (so it reaches the
+    frontend activity feed and the trace archive) and tells the model what broke
+    and not to repeat it unchanged.
+    """
+    def handler(ctx, error):
+        c = getattr(ctx, "context", None)
+        detail = "%s: %s" % (type(error).__name__, error)
+        if c is not None:
+            try:
+                _trace(c, name, "(raised)", "ERROR " + detail, time.time())
+            except Exception:
+                logger.debug("failed to trace a tool failure", exc_info=True)
+        logger.warning("[AGENT] tool %s raised: %s", name, detail, exc_info=True)
+        return ("%s failed -- %s. This is a fault in the tool, not in what you "
+                "asked for. Do not call it again with the same arguments; use "
+                "another tool or carry on with what you have." % (name, detail))
+    handler.tool_name = name
+    return handler
+
+
+@function_tool(failure_error_function=_tool_failure("get_experiment_overview"))
 def get_experiment_overview(ctx: RunContextWrapper[LoopContext]) -> str:
     """The experiment at a glance: design, enriched pathway table, cross-omic matrix and key regulators. Start here."""
     c = ctx.context
@@ -459,7 +493,7 @@ def get_experiment_overview(ctx: RunContextWrapper[LoopContext]) -> str:
     return out
 
 
-@function_tool
+@function_tool(failure_error_function=_tool_failure("get_pathway_details"))
 def get_pathway_details(ctx: RunContextWrapper[LoopContext],
                         pathway_names: list[str]) -> str:
     """Detailed data (p-values per layer, top genes with temporal profiles) for the named or ID'd pathways. Instant and free -- read the data before theorising about it, and ask for several pathways at once."""
@@ -488,7 +522,7 @@ def get_pathway_details(ctx: RunContextWrapper[LoopContext],
     return out
 
 
-@function_tool
+@function_tool(failure_error_function=_tool_failure("compare_gene_profiles"))
 def compare_gene_profiles(ctx: RunContextWrapper[LoopContext],
                           gene_symbols: list[str]) -> str:
     """Measured values for one or several genes (max 10) across every omic layer, side by side. Instant and free -- pass every gene you are comparing in ONE call."""
@@ -500,7 +534,7 @@ def compare_gene_profiles(ctx: RunContextWrapper[LoopContext],
     return out
 
 
-@function_tool
+@function_tool(failure_error_function=_tool_failure("cluster_pathways"))
 def cluster_pathways(ctx: RunContextWrapper[LoopContext]) -> str:
     """Group the significant pathways by shared matched features (deterministic; no LLM). Returns clusters with their shared gene cores. Costs about half a second; worth calling once, early."""
     c = ctx.context
@@ -578,7 +612,7 @@ def _register_papers(c, papers, tag):
     return listed
 
 
-@function_tool
+@function_tool(failure_error_function=_tool_failure("search_literature"))
 async def search_literature(ctx: RunContextWrapper[LoopContext], query: str,
                             topic_tag: str) -> str:
     """Search PubMed (about 2 s). Returns papers as [N] entries you may cite. Keep queries BROAD: two or three gene symbols joined by OR, AND at most one biological term, e.g. "(Ikzf1 OR Ccnd2) AND B cell differentiation". Extra AND clauses return nothing and still cost budget. topic_tag names the pathway/theme this search supports. Spend-metered."""
@@ -627,7 +661,7 @@ async def search_literature(ctx: RunContextWrapper[LoopContext], query: str,
     return out
 
 
-@function_tool
+@function_tool(failure_error_function=_tool_failure("read_paper"))
 async def read_paper(ctx: RunContextWrapper[LoopContext], ref_index: int,
                      section: str) -> str:
     """Read one section (abstract, introduction, results, discussion, other) of a retrieved paper [N]. Fetches full text on first use, about 3 s. Do this before citing a paper for a specific claim -- an unread citation is the kind the verifier removes."""
@@ -664,7 +698,7 @@ async def read_paper(ctx: RunContextWrapper[LoopContext], ref_index: int,
     return out
 
 
-@function_tool
+@function_tool(failure_error_function=_tool_failure("notebook_write"))
 def notebook_write(ctx: RunContextWrapper[LoopContext], note: str) -> str:
     """Record a finding, hypothesis or open question in your run notebook. Free. Write one after every substantive discovery -- it is what the report is assembled from."""
     c = ctx.context
@@ -680,7 +714,7 @@ def notebook_write(ctx: RunContextWrapper[LoopContext], note: str) -> str:
     return out
 
 
-@function_tool
+@function_tool(failure_error_function=_tool_failure("check_my_citations"))
 def check_my_citations(ctx: RunContextWrapper[LoopContext], draft: str) -> str:
     """Check a draft's [N] citations BEFORE submitting: which resolve to real papers, and which have no supporting quote and will therefore be dropped. Costs a few seconds. Worth running once on your finished draft."""
     c = ctx.context
@@ -737,7 +771,7 @@ async def _single_shot(agent, prompt, ctx, timeout, label):
         return ""
 
 
-@function_tool
+@function_tool(failure_error_function=_tool_failure("delegate_interpretation"))
 async def delegate_interpretation(ctx: RunContextWrapper[LoopContext],
                                   pathway_names: list[str], focus: str) -> str:
     """Delegate deep interpretation of up to ~10 named pathways to Cluster Interpreter sub-agents (parallel, single-shot). Returns their reports; their [N] citations use your reference numbers. EXPENSIVE: about 30 seconds per CALL regardless of how many pathways it covers, so covering ten pathways in one call costs what three would. It is where breadth comes from -- make two calls that cover everything, never one per pathway."""
@@ -862,7 +896,7 @@ async def delegate_interpretation(ctx: RunContextWrapper[LoopContext],
     return out
 
 
-@function_tool
+@function_tool(failure_error_function=_tool_failure("submit_report"))
 def submit_report(ctx: RunContextWrapper[LoopContext], report_markdown: str) -> str:
     """Submit your final report (markdown, [N] citations). The only way to finish. It goes to the mandatory verification gate, never straight to the user."""
     c = ctx.context

@@ -305,3 +305,37 @@ the rules are structurally neutral on well-formed markdown, and exactly one
 report changed -- an after-a-colon bullet the model really had glued. So the
 model does do it, about a hundredth as often as the redactor did, and old
 reports in the database still need recovering.
+
+## Two tool-building defects found by measuring, not guessing (2026-08-18)
+
+**A repeated delegation costs 30 s of a 600 s budget.** Over 60 archived runs,
+`delegate_interpretation` was re-issued with identical arguments in 7 of them,
+at 25-62 s each. That is 269 of the 271 seconds the agent spends re-answering
+itself -- the overall duplicate-call rate is only 2%, and every other tool is
+cheap enough that a repeat does not matter. The tool now caches per run on the
+*resolved* pathway set, so a renamed request still hits, and returns the stored
+analysis with the coverage ledger attached. A different focus still runs.
+
+Note what this is not: the agent is not being forbidden anything. It asks, it
+gets the answer, and it is told the answer is one it already had.
+
+**A tool that raises looked like a tool nobody called.** The SDK catches tool
+exceptions, hands the model "An error occurred while running the tool", and
+carries on -- and because `_trace` runs at the end of a tool, a raise left no
+trace event at all. So every adoption and cost figure in this document counts
+successful calls only, and a tool broken on every call would have been read as
+one the agent declined to use.
+
+That is not hypothetical. The first version of the delegation-cache tests passed
+against a fixture that raised `KeyError` on every single call, because the
+swallowed error came back as an ordinary string and the assertions were about
+the string.
+
+Each tool now passes a `failure_error_function` that records the failure in the
+run journal -- so it reaches the frontend activity feed and the archive -- and
+tells the model what broke and not to repeat it unchanged. The analyzer prints a
+failures section, and an AST test asserts every tool has a handler named for
+itself, so a copy-paste cannot file one tool's failures under another.
+
+Retained logs show no swallowed failures in the 60 archived runs, but those logs
+do not go back far enough to be evidence of absence. From here it is recorded.
