@@ -134,6 +134,82 @@ def test_a_round_interleaves_the_arms():
 
 
 
+def _probe(status=None, connect_error=None, timeout=False, key="k"):
+    """Drive cmd_ready with the network stubbed, capturing what it says."""
+    import io, socket, contextlib
+    import requests
+    import src.benchmarks.ai_arm_bench as B
+    from src.conf import serverconf
+
+    class _Resp:
+        status_code = status
+        text = "<html>504</html>"
+
+    real_conn, real_post = socket.create_connection, requests.post
+    real_providers = serverconf.AI_PROVIDERS
+    provider = serverconf.AI_LLM_PROVIDER
+    serverconf.AI_PROVIDERS = dict(real_providers)
+    serverconf.AI_PROVIDERS[provider] = dict(real_providers[provider], api_key=key)
+
+    def conn(*_a, **_kw):
+        if connect_error:
+            raise OSError(connect_error)
+        class _S:
+            def close(self):
+                pass
+        return _S()
+
+    def post(*_a, **_kw):
+        if timeout:
+            raise requests.Timeout("read timed out")
+        return _Resp()
+
+    socket.create_connection, requests.post = conn, post
+    buf = io.StringIO()
+    try:
+        with contextlib.redirect_stdout(buf):
+            code = B.cmd_ready(None)
+    finally:
+        socket.create_connection, requests.post = real_conn, real_post
+        serverconf.AI_PROVIDERS = real_providers
+    return code, buf.getvalue()
+
+
+def test_a_healthy_gateway_is_ready():
+    code, said = _probe(status=200)
+    assert code == 0 and "ready" in said, (code, said)
+
+
+def test_a_504_names_the_upstream_not_the_network():
+    """Two and a half hours of outage were reported as "unreachable", which
+    points at the wrong thing: the host resolved, TCP connected in 0.02 s and
+    TLS handshook. Only the model service behind the proxy was down."""
+    code, said = _probe(status=504)
+    assert code == 1
+    assert "behind it is down" in said, said
+    assert "unreachable" not in said.lower(), (
+        "still blaming the network for an upstream failure: %s" % said)
+
+
+def test_a_refused_connection_names_the_network():
+    code, said = _probe(connect_error="Connection refused")
+    assert code == 1
+    assert "not the model service" in said, said
+
+
+def test_a_hang_is_distinguished_from_a_refusal():
+    code, said = _probe(timeout=True)
+    assert code == 1
+    assert "hanging" in said, said
+
+
+def test_a_missing_key_is_not_reported_as_an_outage():
+    code, said = _probe(key="")
+    assert code == 1
+    assert "no API key" in said, said
+
+
+
 def _check(name, fn):
     try:
         fn()
@@ -156,7 +232,12 @@ def main():
               test_the_prose_cut_excludes_appended_tables,
               test_the_prose_cut_takes_the_earliest_marker,
               test_a_round_refuses_to_start_when_the_gateway_is_down,
-              test_a_round_interleaves_the_arms):
+              test_a_round_interleaves_the_arms,
+              test_a_healthy_gateway_is_ready,
+              test_a_504_names_the_upstream_not_the_network,
+              test_a_refused_connection_names_the_network,
+              test_a_hang_is_distinguished_from_a_refusal,
+              test_a_missing_key_is_not_reported_as_an_outage):
         _check(t.__name__, t)
     print("\nPassed: %d / %d" % (len(_PASSED), len(_PASSED) + len(_FAILED)))
     if _FAILED:

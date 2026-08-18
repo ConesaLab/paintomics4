@@ -491,3 +491,23 @@ weather land entirely on one side of the comparison. It scores at the end.
 
 Twelve tests cover the five rules, the prose cut, the refusal (exit 2, nothing
 written) and the interleaving.
+
+### What the outage of 2026-08-18 actually was
+
+Reported for two and a half hours as "gateway unreachable", which pointed at the
+wrong layer. Diagnosed properly:
+
+    DNS            llm.iiia.es -> 161.111.18.39
+    TCP connect    OK in 0.02 s
+    TLS handshake  OK, TLSv1.3
+    GET /v1/models HTTP 504 Gateway Time-out, from nginx, after 60 s
+
+The proxy was healthy throughout and answering. What was down was the model
+service behind it, and even a trivial `/models` listing 504ed -- so it was not
+load, not the model, not the key, and nothing on this side.
+
+`ready` now separates the three cases, because they call for different
+responses: a name that will not resolve or a refused connection is the network
+or the host; a 5xx from the proxy means the gateway is up and its upstream is
+down; no answer at all means the upstream is hanging rather than refusing. Five
+tests cover the classification.

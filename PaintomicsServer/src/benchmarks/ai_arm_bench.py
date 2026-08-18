@@ -69,23 +69,61 @@ def prose_of(report):
 # -- ready -----------------------------------------------------------------
 
 def cmd_ready(_args):
+    """Is the gateway answering? Exit 0 if yes, 1 if not -- and say WHICH failure.
+
+    "Unreachable" was the wrong word for two and a half hours of outage. The
+    host resolved, TCP connected in 0.02 s and TLS handshook; what failed was the
+    model service behind the proxy, which nginx eventually reported as HTTP 504.
+    A probe that calls all of that "unreachable" sends you looking at your own
+    network. The three cases need different responses:
+
+        cannot resolve / connect  -> your side, or the host is gone
+        proxy answers 5xx         -> the gateway is up, its upstream is down
+        no answer at all in time  -> upstream is hanging rather than refusing
+    """
+    import socket
     import requests
     from src.conf.serverconf import AI_PROVIDERS, AI_LLM_PROVIDER
     cfg = AI_PROVIDERS[AI_LLM_PROVIDER]
+    base = cfg["api_base"].rstrip("/")
+    host = base.split("//")[-1].split("/")[0]
+
+    if not cfg.get("api_key"):
+        print("no API key configured for provider %r" % AI_LLM_PROVIDER)
+        return 1
+    try:
+        socket.create_connection((host, 443), timeout=10).close()
+    except Exception as exc:
+        print("cannot reach %s: %s: %s -- this is the network or the host, "
+              "not the model service" % (host, type(exc).__name__, str(exc)[:70]))
+        return 1
+
     try:
         response = requests.post(
-            cfg["api_base"].rstrip("/") + "/chat/completions",
+            base + "/chat/completions",
             headers={"Authorization": "Bearer %s" % cfg["api_key"],
                      "Content-Type": "application/json"},
             json={"model": cfg["model"], "max_tokens": 4, "temperature": 0.0,
                   "messages": [{"role": "user", "content": "say ready"}]},
             timeout=(10, 45))
-        if response.status_code == 200:
-            print("gateway ready")
-            return 0
-        print("gateway unhealthy: HTTP %d" % response.status_code)
+    except requests.Timeout:
+        print("%s accepts connections but did not answer an 8-token call in 45 s: "
+              "the proxy is up and its upstream is hanging" % host)
+        return 1
     except Exception as exc:
-        print("gateway unreachable: %s" % str(exc)[:110])
+        print("gateway probe failed: %s: %s" % (type(exc).__name__, str(exc)[:80]))
+        return 1
+
+    if response.status_code == 200:
+        print("gateway ready")
+        return 0
+    if response.status_code in (502, 503, 504):
+        print("%s answered HTTP %d: the proxy is healthy, the model service "
+              "behind it is down. Nothing to fix on this side."
+              % (host, response.status_code))
+    else:
+        print("gateway unhealthy: HTTP %d %s"
+              % (response.status_code, response.text[:80].replace("\n", " ")))
     return 1
 
 
