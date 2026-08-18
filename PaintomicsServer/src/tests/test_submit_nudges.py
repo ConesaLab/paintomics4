@@ -119,7 +119,10 @@ def test_check_my_citations_records_what_it_flagged():
     c.paper_index = {1: {"ref_index": 1, "pmid": "1"},
                      2: {"ref_index": 2, "pmid": "2"}}
     original = M._collect_cited_quotes
-    M._collect_cited_quotes = lambda client, text, index, job: {1: "a quote"}
+    # signature must match the real one, including known= -- the tool swallows
+    # a TypeError here and would report every citation as unquotable
+    M._collect_cited_quotes = (lambda client, text, index, job, known=None:
+                               {1: "a quote"})
     try:
         asyncio.new_event_loop().run_until_complete(
             L.check_my_citations.on_invoke_tool(
@@ -189,6 +192,35 @@ def test_the_threshold_excludes_the_gate_reserve():
 
 
 
+def test_check_my_citations_checks_the_delegated_text_too():
+    """The gate ships draft + merged delegated analyses. Checking the draft
+    alone checks the wrong artifact: on a live run an agent submitted 11
+    citations it had checked and grounded, and 6 survived, because the merge
+    brought in citations this tool had never seen."""
+    import src.classes.AIInterpret.agent_loop as M
+    c = _context()
+    c.paper_index = {1: {"ref_index": 1, "pmid": "1"}, 2: {"ref_index": 2, "pmid": "2"}}
+    c.delegated = ["A delegated paragraph citing [2]."]
+    seen = {}
+    original = M._collect_cited_quotes
+
+    def _fake(client, text, index, job, known=None):
+        seen["text"] = text
+        return {1: "a quote"}
+    M._collect_cited_quotes = _fake
+    try:
+        out = asyncio.new_event_loop().run_until_complete(
+            L.check_my_citations.on_invoke_tool(
+                RunContextWrapper(context=c),
+                json.dumps({"draft": "My own claim [1]."})))
+    finally:
+        M._collect_cited_quotes = original
+    assert "[2]" in seen.get("text", ""), (
+        "the delegated text was not part of what was checked")
+    assert "[2]" in str(out), "the ungrounded delegated citation was not reported"
+
+
+
 def _check(name, fn):
     try:
         fn()
@@ -209,7 +241,8 @@ def main():
               test_a_nudge_is_not_issued_when_the_clock_cannot_afford_it,
               test_the_delegation_nudge_checks_the_clock_too,
               test_a_nudge_still_fires_with_time_in_hand,
-              test_the_threshold_excludes_the_gate_reserve):
+              test_the_threshold_excludes_the_gate_reserve,
+              test_check_my_citations_checks_the_delegated_text_too):
         _check(t.__name__, t)
     print("\nPassed: %d / %d" % (len(_PASSED), len(_PASSED) + len(_FAILED)))
     if _FAILED:

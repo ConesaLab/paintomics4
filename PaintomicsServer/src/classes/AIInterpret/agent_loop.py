@@ -771,8 +771,18 @@ def check_my_citations(ctx: RunContextWrapper[LoopContext], draft: str) -> str:
     if guard:
         return guard
     valid = set(c.paper_index)
+    # Check what will SHIP, not just what was typed here. The gate merges the
+    # delegated analyses into the report, and measured over rounds 25-27 those
+    # carried most of the citations: an agent submitted 11 citations it had
+    # checked and grounded and the report went out with 6, because the merge
+    # brought in citations this tool had never seen. Checking the draft alone is
+    # checking the wrong artifact.
+    delegated = "\n\n".join(c.delegated)
     text = normalize_citation_markers(draft)
-    cited = count_body_citations(text, valid)
+    shipping = normalize_citation_markers(draft + "\n\n" + delegated) if delegated else text
+    cited_draft = count_body_citations(text, valid)
+    cited = count_body_citations(shipping, valid)
+    text = shipping
     invalid = sorted({int(n) for n in re.findall(r"\[(\d+)\]", text)} - valid)
 
     # The real question. verify_report_v2 cannot answer it on a draft -- it reads
@@ -783,14 +793,18 @@ def check_my_citations(ctx: RunContextWrapper[LoopContext], draft: str) -> str:
     # that for ~3 s.
     quotes = {}
     try:
-        quotes = _collect_cited_quotes(
-            LLMClient(AI_PROVIDERS[AI_LLM_PROVIDER]), text, c.paper_index, c.job_id)
+        quotes = dict(c.quotes)
+        quotes.update(_collect_cited_quotes(
+            LLMClient(AI_PROVIDERS[AI_LLM_PROVIDER]), text, c.paper_index,
+            c.job_id, known=quotes))
+        c.quotes.update(quotes)
     except Exception as e:
         logger.warning("[%s][loop] pre-submit quote check failed: %s", c.job_id, e)
     unquotable = sorted(cited - set(quotes))
 
-    lines = ["%d citation(s) in the draft; %d have a supporting quote."
-             % (len(cited), len(quotes))]
+    lines = ["%d citation(s) will ship (%d in this draft, the rest in the "
+             "delegated analyses the gate merges in); %d have a supporting quote."
+             % (len(cited), len(cited_draft), len(quotes))]
     if invalid:
         lines.append("INVALID, no such paper -- remove these: %s"
                      % ", ".join("[%d]" % i for i in invalid[:15]))
@@ -823,6 +837,45 @@ async def _single_shot(agent, prompt, ctx, timeout, label):
     except (Exception, asyncio.TimeoutError) as e:
         logger.warning("[%s][loop] %s failed: %s", ctx.job_id, label, e)
         return ""
+
+
+def _quote_shelf(c, chunk, papers):
+    """Candidate supporting sentences, pulled BEFORE the sub-agent writes.
+
+    The arm loses citations because it writes claims and then hunts for support.
+    The shipped workflow arm does not have that problem: it writes each citation
+    in the same call that holds the paper, so the quote is findable afterwards
+    because the sentence was written from it.
+
+    This inverts the sub-agent the same way. For each paper assigned to a chunk,
+    pull the passages that match that chunk's pathways and genes and hand them to
+    the writer as the evidence it may cite. search_paper_text is a 1 ms substring
+    and keyword search -- no model, no gateway -- so a shelf for ten papers costs
+    nothing measurable.
+    """
+    executor = tools_mod.build_verification_executor(c.paper_index)
+    terms = [str(p.get("name") or "") for p in chunk if p.get("name")]
+    for pathway in chunk:
+        for gene in (pathway.get("top_genes") or [])[:4]:
+            symbol = gene.get("symbol")
+            if symbol:
+                terms.append(str(symbol))
+    shelf = {}
+    for paper in papers:
+        ref = paper.get("ref_index")
+        if ref is None:
+            continue
+        for term in terms[:8]:
+            try:
+                passage = executor("search_paper_text",
+                                   {"ref_index": ref, "query": term})
+            except Exception:
+                continue
+            if passage and not passage.lower().startswith(("error", "no text",
+                                                           "no match")):
+                shelf[ref] = passage.strip()[:600]
+                break
+    return shelf
 
 
 @function_tool(failure_error_function=_tool_failure("delegate_interpretation"))
@@ -924,8 +977,12 @@ async def delegate_interpretation(ctx: RunContextWrapper[LoopContext],
 
     async def _one(chunk):
         async with sem:
+            chunk_papers = _papers_for(chunk)
+            shelf = _quote_shelf(c, chunk, chunk_papers)
             prompt = prompts_mod.build_batch_interpretation_prompt(
-                chunk, _papers_for(chunk), c.experiment_design, c.organism_name)
+                chunk, chunk_papers, c.experiment_design, c.organism_name)
+            if shelf:
+                prompt += prompts_mod.build_evidence_shelf_block(shelf)
             if focus:
                 prompt += "\n\nFocus of this delegation: %s" % focus
             return await _single_shot(interpreter, prompt, c, 150,

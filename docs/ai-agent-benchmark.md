@@ -650,3 +650,33 @@ the code as round 26 ran it.
 round 25's configuration, and worth keeping as exactly that -- it says the
 0-citation collapse is not rare, since it has now happened in three of four
 agent replicates across two rounds.
+
+## Round 28, pre-registered: write from quotes, and check what ships
+
+Two changes, both aimed at the same seam.
+
+**1. The sub-agent gets its evidence before it writes.** For each delegated
+chunk, `search_paper_text` (a 1 ms substring search, no model) pulls the
+passages matching that chunk's pathways and genes, and they go into the prompt
+as "Evidence you may cite -- cite [N] only where you are using that paper's
+passage, and write the claim so the passage supports it." This is what the
+shipped arm does implicitly by writing with abstracts in context, and it is why
+its citations survive.
+
+**2. `check_my_citations` checks draft + delegated text.** It was validating
+about 9 KB of the ~60 KB that ships. Round 27 is the cost of that: the agent
+submitted 11 citations it had checked and grounded, and 6 survived.
+
+**Prediction.** Citations up substantially -- the mechanism now matches the arm
+that scores 21. Redactions down. Wall clock roughly flat: the shelf is free and
+the extra checking reuses quotes already collected at delegation.
+
+**Falsifier.** Citations stay near 5 while the shelf is demonstrably in the
+prompt and the check demonstrably covers the delegated text. That would mean
+writing-from-quotes is not the mechanism behind base's advantage, and the honest
+next step is the hybrid -- agent decides what to investigate, base-style batched
+writing produces the prose.
+
+**Verify first, score second.** The trace must show a non-empty shelf and a
+check whose citation count matches the shipping text, before any rule is read.
+Round 26 scored a fix that never ran.

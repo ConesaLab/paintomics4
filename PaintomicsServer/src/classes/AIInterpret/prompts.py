@@ -835,3 +835,22 @@ def build_lead_kickoff_prompt(organism_name, experiment_design, pathways,
                  "Begin with get_experiment_overview.")
     return "\n".join(lines)
 
+def build_evidence_shelf_block(shelf):
+    """The passages a delegated interpreter may cite, handed over before it writes.
+
+    Citations fail verification when a claim is written first and support is
+    looked for afterwards: the gate needs a verbatim sentence from the paper, and
+    a claim composed without one usually has none. Giving the writer the actual
+    passages first makes the citation true by construction -- which is exactly
+    why the workflow arm's citations survive, since it writes with the abstracts
+    in context.
+    """
+    lines = ["\n\n## Evidence you may cite",
+             "These passages come from the papers above. Cite [N] ONLY where you "
+             "are using that paper's passage, and write the claim so the passage "
+             "actually supports it. If none of them supports a point you want to "
+             "make, make the point without a citation -- an uncited observation "
+             "is honest, an unsupported citation is deleted."]
+    for ref in sorted(shelf):
+        lines.append('\n[%d] "%s"' % (ref, shelf[ref].replace("\n", " ")[:500]))
+    return "\n".join(lines)
