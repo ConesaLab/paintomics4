@@ -240,6 +240,41 @@ def test_a_finished_run_still_reports_everything():
 
 
 
+def test_a_salvaged_partial_report_is_not_averaged_in():
+    """The timeout salvage shipped its first live report in round 33: base-r2
+    hit 600 s at "references rendered" and stored 30 citations with 0
+    redactions -- the best-looking numbers of the round, produced entirely
+    because verification and redaction never ran. Counting that as a normal
+    replicate would have credited the shipped arm for a failure."""
+    from src.benchmarks.ai_arm_bench import _measure, _mean
+    salvaged = {"status": "done",
+                "report": "Claim [1]. Claim [2].\n\n### References\n\n[1] P.\n[2] Q.\n",
+                "papers": [{"ref_index": 1}, {"ref_index": 2}],
+                "verification": {"redacted_count": 0},
+                "stats": {"timed_out_at_stage": "references rendered"}}
+    row = _measure(salvaged, "base", "JOB", 602.1)
+    assert row["partial_report"] is True, "the partial report was not flagged"
+    assert row["timed_out_at_stage"] == "references rendered", (
+        "the stage is what tells a reader WHY the numbers look good")
+    assert row["citations_in_body"] == 2, "the value is still recorded"
+
+    finished = _measure({"status": "done",
+                         "report": "One [1].\n\n### References\n\n[1] P.\n",
+                         "papers": [{"ref_index": 1}],
+                         "verification": {"redacted_count": 5}}, "base", "J", 400.0)
+    rows = [finished, row]
+    assert _mean(rows, "citations_in_body") == 1, (
+        "the unverified partial inflated the citation mean")
+    assert _mean(rows, "redacted") == 5, "the partial deflated the redaction mean"
+    assert _mean(rows, "wall_s") == 501.05, (
+        "wall clock is real for a partial run and must still count")
+
+
+def test_a_partial_replicate_still_fails_the_time_rule():
+    """Excluded from the means, NOT excused: 602 s is over the ceiling."""
+    assert _verdict([_row(wall_s=602.1, partial_report=True)]) is False
+
+
 def _check(name, fn):
     try:
         fn()
@@ -269,7 +304,9 @@ def main():
               test_a_hang_is_distinguished_from_a_refusal,
               test_a_missing_key_is_not_reported_as_an_outage,
               test_a_failed_run_does_not_report_the_previous_run_s_numbers,
-              test_a_finished_run_still_reports_everything):
+              test_a_finished_run_still_reports_everything,
+              test_a_salvaged_partial_report_is_not_averaged_in,
+              test_a_partial_replicate_still_fails_the_time_rule):
         _check(t.__name__, t)
     print("\nPassed: %d / %d" % (len(_PASSED), len(_PASSED) + len(_FAILED)))
     if _FAILED:

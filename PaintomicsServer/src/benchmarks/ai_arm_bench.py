@@ -198,10 +198,19 @@ def _measure(record, arm, job_id, wall, response=None):
     covered = [pw.get("name") for pw in pathway_index
                if pw.get("name") and pw["name"].lower() in prose.lower()]
 
+    # A salvaged partial report is not comparable to a finished one. It ships
+    # BEFORE verification and redaction, so its citation count is inflated by
+    # exactly the citations a complete run would have removed: round 33's
+    # base-r2 timed out at "references rendered" and reported 30 citations with
+    # 0 redactions, its best-looking numbers of the round, precisely because the
+    # gate never ran. Counted as a run, flagged, and kept out of the means.
+    partial = bool((record.get("stats") or {}).get("timed_out_at_stage"))
     return {
         "arm": arm,
         "jobID": job_id,
         "status": record.get("status"),
+        "partial_report": partial or None,
+        "timed_out_at_stage": (record.get("stats") or {}).get("timed_out_at_stage"),
         "wall_s": round(wall, 1),
         "report_chars": len(report),
         "prose_chars": len(prose),
@@ -234,13 +243,25 @@ METRICS = ("wall_s", "prose_chars", "report_chars", "citations_in_body",
            "papers_retrieved", "papers_in_references")
 
 
+REPORT_DERIVED = {"citations_in_body", "redacted", "prose_pathways_covered",
+                  "full_text_cited", "report_chars", "prose_chars",
+                  "prose_citations", "papers_in_references"}
+
+
 def _mean(rows, key):
     """Mean over the runs that HAVE the value; failed runs carry none.
+
+    Report-derived quantities skip salvaged partial runs: they ship before
+    verification, so their citation counts are inflated by whatever the gate
+    would have removed. wall_s and status still count -- a partial run is a run,
+    and it still fails rule 1.
 
     Reported alongside the replicate count so a mean over one surviving run of
     two cannot be read as a mean over two.
     """
-    values = [r[key] for r in rows if r.get(key) is not None]
+    usable = [r for r in rows
+              if not (r.get("partial_report") and key in REPORT_DERIVED)]
+    values = [r[key] for r in usable if r.get(key) is not None]
     return statistics.mean(values) if values else None
 
 
@@ -308,6 +329,10 @@ def cmd_score(args):
         print("%-26s %s" % (metric, cells))
     print("%-26s %s" % ("replicates",
                         "".join("%12d" % len(groups[k]) for k in order)))
+    print("%-26s %s" % ("of which partial",
+                        "".join("%12d" % sum(1 for r in groups[k]
+                                             if r.get("partial_report"))
+                                for k in order)))
     print("%-26s %s" % ("of which measurable",
                         "".join("%12d" % sum(1 for r in groups[k]
                                              if not r.get("stale_record"))
