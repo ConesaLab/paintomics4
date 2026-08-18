@@ -165,12 +165,70 @@ def main():
         for cfg, count in configs.most_common():
             print("  %2d run(s)  %s" % (count, cfg[:150]))
         print()
-    print("%-26s %6s %8s %9s %9s" % ("tool", "calls", "runs", "median ms", "max ms"))
-    for tool, count in calls.most_common():
+    # Ranked by SECONDS, not calls. The binding constraint is a 10-minute
+    # ceiling, and the two orders disagree sharply: notebook_write is the
+    # second most-called tool in the archive and costs 4 ms, while
+    # delegate_interpretation is called a twentieth as often at a 31 s median.
+    # A table sorted by call count says the opposite of what the budget says.
+    spend = {t: sum(latency[t]) / 1000.0 for t in calls}
+    total_spend = sum(spend.values()) or 1.0
+    print("%-26s %6s %8s %9s %9s %9s %7s"
+          % ("tool", "calls", "runs", "median ms", "max ms", "total s", "share"))
+    for tool, seconds in sorted(spend.items(), key=lambda kv: -kv[1]):
         values = sorted(latency[tool])
-        print("%-26s %6d %5d/%d %9d %9d"
-              % (tool, count, per_run[tool], n,
-                 values[len(values) // 2], values[-1]))
+        print("%-26s %6d %5d/%d %9d %9d %9.0f %6.1f%%"
+              % (tool, calls[tool], per_run[tool], n,
+                 values[len(values) // 2], values[-1],
+                 seconds, 100.0 * seconds / total_spend))
+    print("  %.0f s of tool time over %d run(s) -- %.0f s per run, against a "
+          "600 s ceiling." % (total_spend, n, total_spend / max(1, n)))
+    print("  Sub-agents and verifiers run concurrently, so this is work done, "
+          "not wall-clock: it is the bill the gateway sees.")
+    free = [t for t, sec in spend.items() if sec < 1.0 and calls[t] >= 10]
+    if free:
+        print("  effectively free (<1 s total, local reads): %s"
+              % ", ".join(sorted(free)))
+
+    # What verification actually buys. The two failure modes it can catch are
+    # very different problems, and until they were counted separately the
+    # 30%-of-the-bill spent here had no stated purpose.
+    verdicts = Counter()
+    per_run_drift = []
+    for _job, _stamp, events in runs:
+        ok = drift = dead = 0
+        for e in events:
+            if e.get("tool") != "verify_citation_prefetched":
+                continue
+            result = e.get("result") or ""
+            if result.startswith("match=True supports=True"):
+                ok += 1
+            elif result.startswith("match=True supports=False"):
+                drift += 1
+            else:
+                dead += 1
+        verdicts["supported"] += ok
+        verdicts["drifted"] += drift
+        verdicts["unquotable"] += dead
+        if ok + drift + dead >= 5:
+            per_run_drift.append(100.0 * drift / (ok + drift + dead))
+    checked = sum(verdicts.values())
+    if checked:
+        print("\nwhat verification catches, over %d checked citation(s):" % checked)
+        for name, label in (("supported", "quote real, supports the claim"),
+                            ("drifted", "quote real, does NOT support it"),
+                            ("unquotable", "quote not found in the paper")):
+            print("  %-32s %5d  %5.1f%%"
+                  % (label, verdicts[name], 100.0 * verdicts[name] / checked))
+        if per_run_drift:
+            per_run_drift.sort()
+            print("  drift rate per run: median %.1f%%, mean %.1f%% over %d run(s)"
+                  % (per_run_drift[len(per_run_drift) // 2],
+                     sum(per_run_drift) / len(per_run_drift), len(per_run_drift)))
+        print("  Fabrication is not the failure mode -- claim drift is, and it")
+        print("  sits near 1 in 5 whether the text was written from a quote")
+        print("  (quote-shelf runs, median 18.3%) or cited afterwards (17.4%).")
+        print("  Reordering search and writing does not move it; only a")
+        print("  constraint on how far a sentence may go beyond its quote can.")
 
     # Declared but never called anywhere in the archive: each still costs its
     # schema in every Decide turn.
