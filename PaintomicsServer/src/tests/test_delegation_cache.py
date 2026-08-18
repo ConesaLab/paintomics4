@@ -264,6 +264,32 @@ def test_the_gate_reuses_what_delegation_grounded():
 
 
 
+def test_grounding_sees_citations_written_as_PMIDs():
+    """The bug round 26 measured instead of testing.
+
+    The delegated sub-agents are told to write "(PMID: 12345)", not "[N]" --
+    that prompt was reverted to the workflow arm's on evidence, and the markers
+    are only converted later, inside the merge. The grounding step guarded on
+    '[' being present, so it was never true: no quotes were collected, the gate
+    found none either, references rendered without Cited Text, and the run
+    shipped 0 citations with 54 redactions. The fix RAN in the sense that the
+    code was loaded; it never executed a line that mattered.
+    """
+    def body(calls):
+        c = _context()
+        c.paper_index = {1: _paper(1)}          # pmid "10001"
+        out = _call(L.delegate_interpretation, c, pathway_names=["Cell cycle"], focus="")
+        assert "[1]" in out, (
+            "PMID citations were not resolved, so grounding cannot see them: %r"
+            % out[:160])
+        assert c.quotes, "nothing was grounded even though the text cites a paper"
+        assert any("delegate_grounding" == e.get("tool") for e in c.trace), (
+            "the grounding step left no trace event, which is how the round-26 "
+            "failure hid: %r" % [e.get("tool") for e in c.trace])
+    _with_quotes(body, quotes={1: "a verbatim sentence"}, cites="(PMID: 10001)")
+
+
+
 def _check(name, fn):
     try:
         fn()
@@ -285,7 +311,8 @@ def main():
               test_delegation_grounds_its_own_citations,
               test_the_lead_is_told_which_citations_cannot_be_grounded,
               test_grounding_failure_does_not_lose_the_delegation,
-              test_the_gate_reuses_what_delegation_grounded):
+              test_the_gate_reuses_what_delegation_grounded,
+              test_grounding_sees_citations_written_as_PMIDs):
         _check(t.__name__, t)
     print("\nPassed: %d / %d" % (len(_PASSED), len(_PASSED) + len(_FAILED)))
     if _FAILED:

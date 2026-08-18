@@ -938,6 +938,13 @@ async def delegate_interpretation(ctx: RunContextWrapper[LoopContext],
     # from what is kept here (see _merge_delegated).
     c.delegated.extend(r for r in reports if r)
     out = "\n\n---\n\n".join(r for r in reports if r) or "(delegation produced nothing)"
+    # The sub-agents are told to write "(PMID: 12345)", not "[N]" -- that prompt
+    # was reverted to the workflow arm's on evidence, and the markers are only
+    # converted later, inside the merge. Convert here instead: the Lead then
+    # reads the same citation form it must check, and the grounding step below
+    # can see citations at all. Without this its guard is simply never true, and
+    # round 26 measured a fix that had not run.
+    out = resolve_pmid_mentions(out, c.paper_index)
 
     # Ground the sub-agents' citations NOW, while their papers are the ones in
     # hand -- and tell the Lead which ones cannot be grounded.

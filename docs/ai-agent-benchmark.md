@@ -626,3 +626,27 @@ is the signature of the agent dropping claims rather than grounding them, and it
 would mean the seam was not the binding constraint.
 
 The five rules and the two jobs are unchanged.
+
+## Round 26 measured a fix that never ran
+
+The grounding step added before round 26 was guarded on `"[" in out` -- but the
+delegated sub-agents are told to write `(PMID: 12345)`, not `[N]`. That prompt
+was reverted to the workflow arm's on evidence months of rounds ago, and the
+markers are only converted later, inside the merge. The guard was therefore
+never true. No quotes were collected at delegation, the gate found none either,
+references rendered with no Cited Text, and `agent-v26-r1` shipped **0 citations
+with 54 redactions** -- the round-25 r2 failure, now in r1 as well.
+
+The trace is what caught it: no `delegate_grounding` event existed at all. Had
+the event been there with a poor result, the honest reading would have been "the
+fix does not help". Its absence says something different and more useful.
+
+`resolve_pmid_mentions` now runs on the delegated text before grounding, so the
+Lead reads the same citation form it has to check. A regression test drives the
+tool with PMID-form output and asserts the trace event exists; it fails against
+the code as round 26 ran it.
+
+**Round 26 is therefore not a test of the fix.** It is a second replication of
+round 25's configuration, and worth keeping as exactly that -- it says the
+0-citation collapse is not rare, since it has now happened in three of four
+agent replicates across two rounds.
