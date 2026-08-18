@@ -395,3 +395,48 @@ document. Round 1's agent report:
 
 Against that: fewer grounded citations, a shorter report, and an investigation
 path that differs run to run — which makes evaluation noisier, not cleaner.
+
+## Round 25, queued: the outage bundle (pre-registered 9e291e18a2)
+
+The CSIC gateway has been returning 504s on a bare 8-token probe since ~04:00 on
+2026-08-18. Nothing has been scored since round 19/20, and work continued on
+things that do not need a gateway. That leaves a bundle of unscored changes, so
+the design is written down BEFORE the numbers exist.
+
+Every run from here stamps `code` -- a hash of the module source, the Lead
+prompt and every tool description -- so runs of different agents can no longer be
+averaged together. The bundle below is fingerprint `9e291e18a2`.
+
+**Unscored changes, in the order they were made**
+
+| # | change | expected direction |
+|---|---|---|
+| 1 | symmetric grounding sieve in the merge guard | more stitches accepted |
+| 2 | quote probes bounded by the clock | no run past 600 s |
+| 3 | model-free fallback when synthesis dies | a report instead of an error |
+| 4 | structure-preserving redaction | no effect on counts; report readable |
+| 5 | delegation cache | ~40 s back in the 7-in-60 runs that repeat one |
+| 6 | tool failures traced | measurement only |
+| 7 | one nudge when flagged citations survive to submit | fewer redactions |
+
+**Protocol** -- unchanged: jobs 73I734364H and 1354co025T, two replicates each,
+the same 5 rules. The bundle is measured as a bundle first; 14 runs to attribute
+seven changes individually is not affordable at ~8 minutes a run.
+
+**Pre-registered bisect order, if the bundle fails a rule.** Written now so it
+cannot be chosen after seeing which way the numbers went:
+
+1. **the citation nudge (7)** -- the only change that can *lose* citations. The
+   agent may delete a flagged claim rather than ground it, which would show as
+   citations down and redactions down together.
+2. **the delegation cache (5)** -- a cache hit returns an identical analysis
+   where a re-run would have produced a fresh one; if the repeat was doing
+   useful work, coverage drops.
+3. **the merge sieve (1)** -- it changes which draft ships.
+
+4-6 are not bisect candidates: they cannot alter a report that does not error.
+
+**The honest statement of where this stands.** Seven changes, one measured
+baseline, zero runs. Each is argued from the archive -- 60 runs, 1892 tool calls
+-- and none is argued from a scored comparison. Reasoning from traces is how the
+hypotheses were found; it is not evidence that the bundle is better.

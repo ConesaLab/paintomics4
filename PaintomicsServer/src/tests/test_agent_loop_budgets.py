@@ -375,6 +375,37 @@ def test_every_test_in_this_file_actually_runs():
 
 
 
+def test_the_code_fingerprint_is_real():
+    """The stamp must identify the agent, and it fails silently by design.
+
+    _code_fingerprint() catches everything and returns "unknown", so a typo
+    inside it degrades every run's identity without a single error. The first
+    version did exactly that -- it referenced `sys` where the module does not
+    import it, and stamped "unknown" while looking like it worked.
+    """
+    fp = L._code_fingerprint()
+    assert fp != "unknown", "the fingerprint is failing and swallowing the reason"
+    assert len(fp) == 10 and all(ch in "0123456789abcdef" for ch in fp), (
+        "not a hex digest: %r" % fp)
+    assert L._code_fingerprint() == fp, "the fingerprint is not stable within a build"
+
+
+def test_the_fingerprint_moves_when_behaviour_moves():
+    """Constants are stamped already; the point of this is everything else --
+    a nudge, a cache, a reworded tool description."""
+    import src.classes.AIInterpret.prompts as P
+    before = L._code_fingerprint()
+    original = P.SYSTEM_PROMPT_LEAD_AGENT
+    P.SYSTEM_PROMPT_LEAD_AGENT = original + " one more instruction"
+    try:
+        after = L._code_fingerprint()
+    finally:
+        P.SYSTEM_PROMPT_LEAD_AGENT = original
+    assert before != after, ("a changed Lead prompt left the fingerprint alone, so "
+                            "two different agents would be averaged together")
+
+
+
 def main():
     for t in (test_tool_output_under_budget_is_returned_whole,
               test_tool_output_over_budget_is_cut_and_says_so,
@@ -403,7 +434,9 @@ def main():
               test_each_event_is_archived_once,
               test_archiving_never_breaks_a_run,
               test_outcome_stamp_never_costs_the_report,
-              test_every_test_in_this_file_actually_runs):
+              test_every_test_in_this_file_actually_runs,
+              test_the_code_fingerprint_is_real,
+              test_the_fingerprint_moves_when_behaviour_moves):
         _check(t.__name__, t)
     print("\nPassed: %d / %d" % (len(_PASSED), len(_PASSED) + len(_FAILED)))
     if _FAILED:

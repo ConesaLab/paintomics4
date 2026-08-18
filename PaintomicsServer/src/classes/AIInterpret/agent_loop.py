@@ -312,6 +312,31 @@ def _trace_gate(ctx, tool, args_summary, result, started):
     _archive_trace(ctx)
 
 
+def _code_fingerprint():
+    """A short hash of everything that decides how this agent behaves.
+
+    The config stamp records tunable constants, which is what the early rounds
+    varied. It cannot see a behaviour change: a delegation cache, a nudge, a
+    reworded tool description all leave the constants identical, so two runs of
+    genuinely different agents stamp the same line and get averaged together.
+
+    Hashing the module source, the Lead's prompt and every tool description
+    catches all of them without a hand-kept list that would drift out of date.
+    It says "these runs are the same code", never what changed -- git does that.
+    """
+    try:
+        import hashlib
+        import inspect
+        import sys as _sys
+        parts = [inspect.getsource(_sys.modules[__name__]),
+                 prompts_mod.SYSTEM_PROMPT_LEAD_AGENT]
+        parts.extend(sorted(str(t.description or "") for t in TOOLBELT))
+        return hashlib.sha1("".join(parts).encode("utf-8")).hexdigest()[:10]
+    except Exception:
+        logger.debug("code fingerprint failed", exc_info=True)
+        return "unknown"
+
+
 def _ledger_note(ctx):
     remaining = max(0, int(ctx.hard_deadline - time.time()))
     note = ("\n[budget: %d searches left · %d s left · %d/%d tool-output chars"
@@ -1028,6 +1053,9 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
     # because its effect was mixed with two other changes. A run that cannot say
     # what it was is a measurement waiting to be misattributed.
     _trace_gate(ctx, "__config__", "run start", json.dumps({
+        # First, so it survives any truncation downstream: two runs share a
+        # fingerprint exactly when they are the same agent.
+        "code": _code_fingerprint(),
         "merge_mode": MERGE_MODE,
         "verify_prefetch": VERIFY_PREFETCH,
         "stitch_max": STITCH_MAX_CHARS,
