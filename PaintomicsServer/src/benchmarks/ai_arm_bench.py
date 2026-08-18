@@ -202,7 +202,12 @@ STAGE_COUNTS = ("verify_iterations", "batches_failed", "truncated_calls",
                 "sentences_repaired", "repairs_rejected", "repair_unlocatable",
                 "verify_citations_checked", "verify_memo_skipped",
                 # Verifier deaths. 53 across rounds 34-36, all in the base arm.
-                "verifier_raised")
+                "verifier_raised",
+                # Tool YIELD, not adoption or cost: did the surviving quote come
+                # from the abstract search already had, or from a full-text
+                # upgrade that read_paper and the fetch stage paid for?
+                "quotes_from_abstract", "quotes_from_full_text",
+                "quotes_unlocatable_here")
 
 # Itemised bills. A per-tool breakdown is the only form in which "which tool is
 # worth its place" can be asked of the archive rather than of one live run.

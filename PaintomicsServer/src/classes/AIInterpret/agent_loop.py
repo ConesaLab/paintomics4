@@ -72,7 +72,7 @@ from src.classes.AIInterpret.verification import (
     count_body_citations, normalize_citation_markers, parse_references_section,
     redact_unverified_v2, render_references_section, renumber_citations,
     resolve_pmid_mentions, score_topup_survival, sort_references_section,
-    theme_conversion,
+    quote_provenance, theme_conversion,
     verify_report_v2,
 )
 
@@ -2148,6 +2148,10 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
     t0 = time.time()
     final = verify_report_v2(report, gene_whitelist, unique_papers, job_instance)
     score_topup_survival(stats, final)
+    # Which retrieval machinery the surviving quotes actually came from. Placed
+    # here on purpose: renumber_citations rewrites every ref_index a few lines
+    # below, and the quotes dict is keyed on the OLD ones.
+    stats.update(quote_provenance(quotes, ctx.paper_index))
     if final.get("failed_citations"):
         report, removed = redact_unverified_v2(report, final["failed_citations"])
         final["redacted_count"] = removed

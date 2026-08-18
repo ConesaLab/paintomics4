@@ -500,6 +500,49 @@ def theme_conversion(retrieved_papers, cited_papers):
     return len(retrieved), len(cited & retrieved)
 
 
+def quote_provenance(quotes, paper_index):
+    """Where the SURVIVING quotes actually came from: abstract, or full text.
+
+    Adoption and cost are answered for every tool now -- all nine at 100%, and
+    the character bill says what each spends. Neither says which tool's output
+    ends up cited, and that is the question that decides whether a tool earns
+    its place.
+
+    This answers it for the most expensive retrieval machinery in the pipeline.
+    A quote found in the abstract was free: search_literature already fetched it.
+    A quote found only deeper cost a full-text upgrade -- an NCBI/Europe PMC
+    round trip, and read_paper's ~11 kB a run of context. If the surviving quotes
+    are overwhelmingly abstract quotes, that machinery is being paid for and not
+    used; if they are not, it is load-bearing and the cost is the price of
+    grounding.
+
+    Returns {"quotes_from_abstract": n, "quotes_from_full_text": n,
+             "quotes_unlocatable": n}. Unlocatable is its own bucket rather than
+    being folded into either: a quote the deterministic matcher cannot find in
+    the paper at all is a different fact about the pipeline, and hiding it inside
+    "full text" would flatter the machinery this measures.
+    """
+    from_abstract = from_full = unlocatable = 0
+    for ref, quote in (quotes or {}).items():
+        text = (quote or "").strip()
+        if not text:
+            continue
+        paper = (paper_index or {}).get(ref) or {}
+        abstract = paper.get("abstract") or ""
+        sections = paper.get("sections") or {}
+        deeper = "\n".join(str(v) for k, v in sections.items()
+                            if k != "abstract" and v)
+        if abstract and _fuzzy_contains(abstract, text):
+            from_abstract += 1
+        elif deeper and _fuzzy_contains(deeper, text):
+            from_full += 1
+        else:
+            unlocatable += 1
+    return {"quotes_from_abstract": from_abstract,
+            "quotes_from_full_text": from_full,
+            "quotes_unlocatable_here": unlocatable}
+
+
 def score_topup_survival(stats, verification):
     """Price the top-up's bet: did the citations it added survive the gate?
 
