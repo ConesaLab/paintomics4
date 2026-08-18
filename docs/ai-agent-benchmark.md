@@ -1758,3 +1758,29 @@ already exists to answer it. Predicted if run: coverage falls toward base,
 citations hold or rise as the report concentrates, context and wall clock fall
 sharply. That is the experiment after round 41, and it is the last stage in this
 arm that has never been measured against its cost.
+
+## Round 41 scored, and round 42 pre-registration
+
+Round 41 (screen + SEARCH_HITS=10): **4 of 5**. Rule 2 passes for the first time
+(23.5 vs 22.2), rule 4 passes (14.5 vs 12.0), rule 3 fails at 6.5 vs 1.2.
+
+Per replicate, redactions were **2, 0, 0, 24**. Three replicates would pass rule 3
+comfortably (mean 0.67 against a 3.2 allowance); the fourth carries the whole
+failure. It shipped 26 citations -- the most in the round -- and 6 failed
+citations took 24 markers with them.
+
+**Round 42 is a straight replication of round 41.** No new hypothesis: the only
+question is whether r4's redaction spike is variance or a property of the
+configuration. Same flags, base interleaved.
+
+- If redactions come in near 0.7 and rule 3 passes, the configuration is 5/5 and
+  needs one more round to meet the two-consecutive bar.
+- If a replicate spikes again, the spike IS the configuration -- a bigger pool
+  buys citations and occasionally buys a paper cited four times that fails -- and
+  the fix moves to reducing repeat citation of a single paper.
+
+**Not a behavioural change, recorded for honesty:** the code fingerprint differs
+from round 41 because `sentences_dropped` was added (a counter) and a dead
+function was deleted. Neither touches what the pipeline does. `sentences_dropped`
+also means round 42 can finally say whether a redaction spike destroys twenty-four
+arguments or six papers cited four times each.
