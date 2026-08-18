@@ -995,7 +995,17 @@ VERIFY_MEMO = os.getenv("AI_VERIFY_MEMO", "0") == "1"
 # Finding the quote is mechanical and tools.py does it in pure Python, so the
 # passage is extracted in code and pasted into the prompt. The model is left with
 # the one judgement only it can make. Off by default for one measuring round.
-VERIFY_PREFETCH = os.getenv("AI_VERIFY_PREFETCH", "0") == "1"
+# DEFAULT ON as of round 37, on the measured result: over 4 replicates against
+# base-v35's rewrite path, verifier deaths went ~5/run -> 0, redactions 10.0 ->
+# 3.0, the verify loop 259.5 s -> 135.8 s, wall 418.7 s -> 298.4 s, and gateway
+# rate-limit retries 10.0/run -> 0.0. The verify loop also began CONVERGING --
+# 15 failed -> 2 -> 0 -- instead of exiting on no progress.
+# Citations came in at 20.25 against 22.8, so the one prediction that did not
+# hold was "citations hold or rise"; the drop sits inside this arm's own
+# round-to-round range (22.8, 17.8) and is recorded rather than explained away.
+# AI_VERIFY_PREFETCH=0 restores the tool-loop verifier for comparison.
+VERIFY_PREFETCH = (os.getenv("AI_VERIFY_PREFETCH") or "1").strip().lower() \
+    not in ("0", "false", "no")
 
 
 def _prefetched_evidence_block(paper_index, cit):

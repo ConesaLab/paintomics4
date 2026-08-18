@@ -1402,3 +1402,59 @@ should fall from 56 kB a run towards ~34 kB after the per-layer summary, and
 `tool_chars` overall from ~168 kB. Coverage has beaten base for two rounds and
 this round's changes touch the data the agent reasons from, so a coverage move is
 possible in either direction and is not being predicted.
+
+## Round 37 scored: prefetch ships. 4 of 5 predictions confirmed
+
+The agent arm's four replicates are VOID -- they died at wall 0 on an ImportError
+caused by editing `verification.py` mid-round (see below). Base was the
+pre-registered test and is unaffected.
+
+| base arm, mean of 4 | v35 (rewrite) | v36 (repair) | **v37 (prefetch)** |
+|---|---|---|---|
+| wall_s | 418.7 | 359.2 | **298.4** |
+| verify_loop_s | 259.5 | 169.9 | **135.8** |
+| failed_citations | 4.00 | 6.00 | **1.50** |
+| redacted | 10.0 | 13.8 | **3.00** |
+| citations_in_body | 22.8 | 17.8 | 20.25 |
+| gateway_retries | -- | 10.0 | **0.00** |
+
+- `verifier_raised` near zero -- **CONFIRMED**, absent from every row.
+- `redacted` falls from 10.0 -- **CONFIRMED**, 3.00, a 70% drop.
+- `verify_loop_s` falls from 259.5 -- **CONFIRMED**, 135.8, a 48% drop.
+- `gateway_retries` falls from 10.0 -- **CONFIRMED**, 0.00.
+- `citations` hold at ~22.8 or rise -- **NOT CONFIRMED**: 20.25, an 11% fall.
+
+The falsifier is not triggered: redactions fell alongside the verifier deaths, so
+those deaths WERE costing real citations. The verify loop also began converging --
+15 failed -> 2 -> 0 -- where it used to exit on no progress.
+
+`base-r4` carries the whole citation shortfall (17 cites, 5 failed, 10 redacted,
+coverage 9; the other three are 24/0/0, 20/0/0, 20/1/2). The 11% drop sits inside
+this arm's own round-to-round range and is recorded, not explained away.
+
+**Shipped:** `AI_VERIFY_PREFETCH` now defaults ON for the shipped arm. This is
+the first change this whole series has moved into the incumbent, and it came from
+porting something the agent arm had proven rounds ago -- the value of the
+experiment was not the new arm but the fix it surfaced for the old one.
+
+## Round 38 pre-registration (written before the round ran)
+
+Purpose is **recovery and baseline**, not a hypothesis. Round 37 lost the agent
+arm, and three instruments have never produced a reading on both arms.
+
+- The agent arm must RUN. Its four v37 rows were ImportErrors; `pin_both_arms()`
+  now loads both arms before dispatch so a mid-round edit cannot split vintages.
+- First readings, no predictions: `batches` / `batches_with_citations` /
+  `batch_citations` / `synth_citations`; `quotes_from_abstract` vs
+  `quotes_from_full_text`; `themes_retrieved` / `themes_cited` on both arms;
+  `delegate_matched` / `delegate_fallback`.
+- Prefetch is now the default, so base-v38 should reproduce base-v37 within noise.
+  If it does not, prefetch's result was round-specific and the shipped default
+  goes back.
+
+**What the batch counters decide.** Round 37's log showed `3 batches, 0 citing`
+three times over -- base's interpretation batches emitting no `[N]` at all, while
+the run shipped 17-24 citations. If that reproduces, `DELEGATE_CHUNK`'s premise
+("the shipped arm writes fourteen batches, each citing its own papers") is false,
+chunk COUNT is not what converts papers, and the round-38-as-planned
+DELEGATE_CHUNK experiment is dropped rather than run.

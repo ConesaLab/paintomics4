@@ -91,8 +91,12 @@ def test_a_verifier_death_is_counted_now():
     assert 'stats["verifier_raised"]' in src
 
 
-def test_the_flag_is_off_for_one_measuring_round():
-    assert A.VERIFY_PREFETCH is False
+def test_it_is_on_by_default_now():
+    """Round 37 measured it over 4 replicates: verifier deaths ~5/run -> 0,
+    redactions 10.0 -> 3.0, verify loop 259.5 s -> 135.8 s, gateway retries
+    10.0 -> 0.0. An exported-but-empty flag counts as unset, the same footgun
+    the top-up switch had."""
+    assert A.VERIFY_PREFETCH is True
 
 
 def test_the_call_site_passes_something_that_exists():
@@ -181,7 +185,7 @@ def main():
               test_the_passage_is_capped,
               test_prefetch_drops_the_turn_budget_to_two,
               test_a_verifier_death_is_counted_now,
-              test_the_flag_is_off_for_one_measuring_round,
+              test_it_is_on_by_default_now,
               test_the_call_site_passes_something_that_exists,
               test_the_signature_takes_an_index_not_a_context,
               test_the_prefetch_verifier_has_no_tools,
