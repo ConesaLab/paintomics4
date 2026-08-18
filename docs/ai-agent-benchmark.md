@@ -834,3 +834,41 @@ of two cannot be read as a mean over two. Two tests.
 round did -- 914 s against 600. Whether the sieve repair raises citations is
 still unmeasured, because the only replicate that could have shown it never
 finished.
+
+## Round 30: the sieve repair works, and exposes the next problem
+
+One replicate errored at the ceiling (914 s) and its metrics were the stale
+record described above. The other completed and is the best run this arm has
+produced.
+
+    merge_grounded       9->12     (0->0 for the five rounds before)
+    quotes_unverifiable  0         (11 of 11 before)
+    quotes_reused        15
+
+| | base-r2 | agent-v30-r2 | v29-r2 |
+|---|---|---|---|
+| citations | 24 | **16** | 10 |
+| redactions | 4 | **0** | 9 |
+| prose coverage | 15 | 15 | 18 |
+| wall_s | 352 | 455 | 402 |
+| report chars | 36 930 | 78 776 | 72 153 |
+
+**Sixteen citations with zero redactions**: every citation it shipped was
+grounded. Citations up 60% on round 29, redactions to nothing.
+
+Scored against the five rules this replicate is 3 of 5, and the second failure
+is new:
+
+    5 length within [0.6x, 2.0x]   FAIL   2.13x
+
+Prose 62 161 characters against base's 26 599. The rule exists to catch
+degenerate output and it is pre-registered, so it is not being relaxed after the
+fact -- but it names something real. The arm now grounds well and says too much:
+the merge concatenates every sub-agent's text, and more writing units make a
+longer report, not a denser one.
+
+**Two problems remain, and they pull against each other.** Citations are 16
+against 24, which argues for more writing units; length is 2.13x, which argues
+for fewer or shorter ones. The measurement that separates them is citations per
+thousand characters of prose: base 0.90, this arm 0.26. The arm does not need
+more text, it needs the text it has to carry more evidence.
