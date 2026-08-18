@@ -1210,3 +1210,41 @@ metric's first round cannot also be its test. (Round 34 got this wrong twice.)
 
 **Unchanged.** The five scoring rules, and the expectation that the arm still
 fails rules 2 and 4 -- nothing here targets citation count or coverage.
+
+## Trying one idea from J-Space (pre-registered)
+
+Reviewed `J-Space-Cognition-Suite-V3.6` (a prompt-layer cognitive-control skill,
+~115 kB). Most of it does not transfer: it is written for a conversational model
+that self-routes its own effort, while the Lead Interpreter has a fixed system
+prompt, typed tools, hard budgets and a mandatory gate -- the decisions J-Space
+hands to the model are the ones this pipeline deliberately took away from it.
+Its entry file alone is 15,988 chars against our Lead's whole 3,606-char system
+prompt, and a tool loop re-sends the system prompt on every one of ~40 Decide
+turns.
+
+**The one transferable idea**: externalised state should name its own subject so
+downstream readers can find it, rather than being prose a reader has to parse.
+This toolbelt already proves the pattern works -- `search_literature`'s
+`topic_tag` is exactly that, and it is the attribution key the whole retrieval
+measure rests on.
+
+**The change.** `notebook_write(note, subject)` takes a second required argument,
+the same shape as `topic_tag`. `_unrepresented_notes` matches on the declared
+subject and falls back to the old entity-guessing regex when it is blank.
+
+**Prediction.** The notebook reader stops guessing, so the "findings you recorded
+that this draft does not mention" line becomes accurate rather than
+approximately right. Expect `prose_pathways_covered` to hold or rise in the agent
+arm. Expect no change to citations: this addresses what gets WRITTEN ABOUT, not
+what gets cited.
+
+**Falsifier.** If coverage does not hold or rise, the structure was overhead --
+one more required argument on every Decide turn, for a reader nothing acts on --
+and it comes out. A blank `subject` rate above ~30% is the same verdict by
+another route: the model declining the field is evidence the field is wrong.
+
+**Not claimed.** J-Space's benchmark table is not evidence for this. Its values
+are single-run with no confidence intervals, comparators come from different
+vendors' harnesses, and the efficiency figures use scaling coefficients the
+README states are intentionally omitted. This is one idea taken on its own
+merits and measured here.

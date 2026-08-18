@@ -88,6 +88,58 @@ def test_the_reader_is_actually_wired_into_the_tool():
         "check_my_citations does not read the notebook")
 
 
+def test_a_named_subject_beats_guessing_at_the_prose():
+    """The J-Space ledger idea, in the shape this toolbelt already proves works:
+    externalised state names its own subject, the way search_literature's
+    topic_tag does. The reader then matches on what the agent SAID the note was
+    about instead of on entities scraped out of its prose."""
+    notes = ["the arrest is driven by the transcriptional programme"]
+    # No entity token in the note at all -- the old reader could not judge it.
+    assert unrep(notes, "We discuss Ikzf1 at length.", subjects=["Ikzf1"]) == []
+    assert unrep(notes, "The report says nothing of it.",
+                 subjects=["Ikzf1"]) == notes
+
+
+def test_a_named_subject_is_believed_over_a_coincidental_token():
+    """A note whose prose happens to contain a word that appears in the report
+    is not thereby represented; the subject is what decides."""
+    notes = ["Glycolysis is not the driver here; Ikzf1 is"]
+    out = unrep(notes, "Glycolysis rises sharply.", subjects=["Ikzf1"])
+    assert out == notes, "a coincidental token overrode the declared subject"
+
+
+def test_a_note_with_no_subject_still_falls_back_to_the_old_reader():
+    """Subjects can be blank -- the model may leave one out -- and a blank must
+    degrade to the previous behaviour, not to silence."""
+    assert unrep(["Cd47 marks efferocytosis"], "nothing here", subjects=[""]) == [
+        "Cd47 marks efferocytosis"]
+    assert unrep(["Cd47 marks efferocytosis"], "Cd47 is central", subjects=[""]) == []
+
+
+def test_a_short_subjects_list_does_not_crash():
+    """The two lists are appended in one place, but a resumed or salvaged run
+    must not raise on a ragged pair."""
+    notes = ["Abc1 finding", "Def2 finding"]
+    assert unrep(notes, "", subjects=["Abc1"]) == notes
+
+
+def test_the_tool_records_one_subject_per_note():
+    """Parallel lists only work if they stay aligned."""
+    import inspect
+    src = inspect.getsource(L)
+    start = src.index("def notebook_write(")
+    end = src.index("@function_tool", start)
+    body = src[start:end]
+    assert "c.notebook.append" in body and "c.note_subjects.append" in body, (
+        "a note can be recorded without its subject; the lists would drift")
+
+
+def test_the_description_tells_the_agent_what_subject_is_for():
+    tool = [t for t in L.TOOLBELT if t.name == "notebook_write"][0]
+    assert "subject" in tool.description.lower()
+    assert len(tool.description) <= 700
+
+
 def _check(name, fn):
     try:
         fn()
@@ -107,7 +159,13 @@ def main():
               test_the_list_is_capped,
               test_a_long_note_is_truncated,
               test_empty_inputs_are_safe,
-              test_the_reader_is_actually_wired_into_the_tool):
+              test_the_reader_is_actually_wired_into_the_tool,
+              test_a_named_subject_beats_guessing_at_the_prose,
+              test_a_named_subject_is_believed_over_a_coincidental_token,
+              test_a_note_with_no_subject_still_falls_back_to_the_old_reader,
+              test_a_short_subjects_list_does_not_crash,
+              test_the_tool_records_one_subject_per_note,
+              test_the_description_tells_the_agent_what_subject_is_for):
         _check(t.__name__, t)
     print("\nPassed: %d / %d" % (len(_PASSED), len(_PASSED) + len(_FAILED)))
     if _FAILED:

@@ -279,6 +279,9 @@ class LoopContext(AgentContext):
     searched_tags: set = field(default_factory=set)     # topic_tags with a search
     # Did each delegated chunk get ITS OWN literature, or the fallback?
     delegate_attribution: dict = field(default_factory=dict)
+    # What each note is ABOUT, in the agent's own words -- parallel to notebook
+    # so the two fallback paths keep rendering plain strings.
+    note_subjects: list = field(default_factory=list)
     tool_chars: int = 0
     # Per-tool attribution of the same ledger. The total tells the agent
     # what it has left; the breakdown tells US which tool is eating the
@@ -433,7 +436,7 @@ def _ledger_note(ctx):
     return note + "]"
 
 
-def _unrepresented_notes(notebook, text, limit=5):
+def _unrepresented_notes(notebook, text, limit=5, subjects=None):
     """Notes the agent recorded whose subject never reached the draft.
 
     notebook_write has 100% adoption -- every one of 25 real runs called it, a
@@ -453,14 +456,25 @@ def _unrepresented_notes(notebook, text, limit=5):
     note with no identifiable entity is not judged at all.
     """
     lowered = (text or "").lower()
+    subjects = list(subjects or [])
     missing = []
-    for note in (notebook or []):
-        tokens = re.findall(r"\b[A-Z][A-Za-z0-9]{2,}\b|\b[a-z]+\d+[a-z0-9]*\b",
-                            note or "")
-        if not tokens:
-            continue                      # nothing checkable; do not guess
-        if not any(t.lower() in lowered for t in tokens):
-            missing.append(" ".join(note.split())[:110])
+    for i, note in enumerate(notebook or []):
+        subject = subjects[i].strip() if i < len(subjects) and subjects[i] else ""
+        if subject:
+            # Told, not inferred. The agent named what the note is about, so the
+            # match is on that phrase rather than on entities guessed out of
+            # prose -- the difference between a reader that is right and one
+            # that is usually right.
+            if subject.lower() in lowered:
+                continue
+        else:
+            tokens = re.findall(
+                r"\b[A-Z][A-Za-z0-9]{2,}\b|\b[a-z]+\d+[a-z0-9]*\b", note or "")
+            if not tokens:
+                continue                  # nothing checkable; do not guess
+            if any(t.lower() in lowered for t in tokens):
+                continue
+        missing.append(" ".join(note.split())[:110])
     return missing[:limit]
 
 
@@ -904,11 +918,13 @@ async def read_paper(ctx: RunContextWrapper[LoopContext], ref_index: int,
 
 
 @function_tool(failure_error_function=_tool_failure("notebook_write"))
-def notebook_write(ctx: RunContextWrapper[LoopContext], note: str) -> str:
-    """Record a finding, hypothesis or open question in your run notebook. Free. Write one after every substantive discovery -- it is what the report is assembled from."""
+def notebook_write(ctx: RunContextWrapper[LoopContext], note: str,
+                   subject: str) -> str:
+    """Record a finding, hypothesis or open question in your run notebook. Free. subject is the pathway, gene or theme it is about -- one short phrase, the same way topic_tag names a search. Write one after every substantive discovery -- it is what the report is assembled from."""
     c = ctx.context
     t0 = time.time()
     c.notebook.append(note.strip())
+    c.note_subjects.append((subject or "").strip())
     if (c.hooks or {}).get("notebook"):
         try:
             c.hooks["notebook"](list(c.notebook))
@@ -984,7 +1000,7 @@ def check_my_citations(ctx: RunContextWrapper[LoopContext], draft: str) -> str:
     # evidence it was being judged against. The quotes are already collected
     # above; withholding them was free to nobody.
     lines.extend(_quote_evidence_lines(cited, quotes))
-    orphaned = _unrepresented_notes(c.notebook, text)
+    orphaned = _unrepresented_notes(c.notebook, text, subjects=c.note_subjects)
     if orphaned:
         lines.append("Findings you recorded that this draft does not mention -- "
                      "add them or drop them deliberately:")
