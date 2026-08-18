@@ -34,7 +34,11 @@ def test_the_upgrade_runs_on_what_the_topup_just_cited():
     # the CALL, not the def: searching the bare name finds `async def` first,
     # which sits ~93 000 characters earlier in this module.
     i = src.index('stats["topup_added_refs"] = sorted')
-    window = src[i:i + 1600]
+    # Bounded by the ACCEPT branch's end, not a character count. The first
+    # version used 1600 characters and broke the moment another statement was
+    # added between the anchor and the call -- a test that fails when correct
+    # code moves is a test that will be silenced rather than believed.
+    window = src[i:src.index('stats["topup_rejected"]', i)]
     assert "await _upgrade_new_citations(" in window, (
         "the top-up's new citations never get full text")
     assert 'stats["topup_added_refs"])' in window, (
