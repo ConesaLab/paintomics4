@@ -342,21 +342,73 @@ def _is_structural(line):
             or line.strip() in ("---", "***", "___"))
 
 
-def _redact_sentences(text, bad_patterns):
-    """Drop sentences citing a failed index, keeping the original whitespace.
+# A run of citations written as one list: "[2]", "[2], [4]", "[2], [9] and [4]".
+_CITATION_RUN = re.compile(r'\[\d+\](?:\s*(?:,\s*and|,|and|&)\s*\[\d+\])*')
+
+
+def _prune_citation_run(run, bad_indices):
+    """Re-render a citation list with the failed indices dropped.
+
+    Editing the markers in place and patching the punctuation afterwards does
+    not work: "from [1] and [9] agrees" becomes "from [1] and agrees", and
+    "rose [9], [2]" becomes "rose, [2]". Treating the whole list as one token
+    and writing it out again from the survivors avoids inventing those.
+    """
+    indices = [int(n) for n in re.findall(r'\[(\d+)\]', run)]
+    seen, kept = set(), []
+    for i in indices:
+        if i not in bad_indices and i not in seen:
+            seen.add(i)
+            kept.append(i)
+    if not kept:
+        return ""
+    if len(kept) == 1:
+        return "[%d]" % kept[0]
+    return "%s and [%d]" % (", ".join("[%d]" % i for i in kept[:-1]), kept[-1])
+
+
+def _tidy_after_marker_removal(sentence, bad_indices):
+    """Drop the failed citations from every list in the sentence, then close up."""
+    sentence = _CITATION_RUN.sub(
+        lambda m: _prune_citation_run(m.group(0), bad_indices), sentence)
+    sentence = re.sub(r'\s+(?=[.!?,;:])', '', sentence)   # " ." -> "."
+    sentence = re.sub(r'\(\s*\)', '', sentence)            # "()" left behind
+    sentence = re.sub(r'\s{2,}', ' ', sentence)
+    return sentence
+
+
+def _redact_sentences(text, bad_patterns, bad_indices=None):
+    """Remove failed citations, and the sentence only when nothing is left.
 
     Splitting with a capturing group keeps every separator, so the surviving
     sentences are rejoined with exactly the whitespace that was between them --
     newlines included. When a removed sentence was followed by a paragraph
     break, that break is kept, otherwise the paragraphs either side would merge.
+
+    A sentence that ALSO cites something verified keeps its place, with only the
+    failed marker taken out. Deleting it outright destroys evidence that passed:
+    39% of citation-bearing sentences in the stored reports carry two or more
+    citations, and one carried ten -- so one bad index could take nine good ones
+    with it. Measured on a live run, an agent submitted 11 citations it had
+    checked and grounded and the gate returned 6.
     """
     parts = re.split(r'((?<=[.!?])\s+)', text)
     kept, removed = [], 0
     for i in range(0, len(parts), 2):
         sentence = parts[i]
         separator = parts[i + 1] if i + 1 < len(parts) else ""
-        if sentence.strip() and any(bp in sentence for bp in bad_patterns):
-            removed += 1
+        hits = [bp for bp in bad_patterns if bp in sentence]
+        if sentence.strip() and hits:
+            here = {int(n) for n in re.findall(r'\[(\d+)\]', sentence)}
+            survivors = here - set(bad_indices or [])
+            removed += len(hits)
+            if survivors:
+                # keep the claim; it still stands on a citation that verified
+                kept.append(_tidy_after_marker_removal(sentence,
+                                                       set(bad_indices or [])))
+                if separator:
+                    kept.append(separator)
+                continue
             if "\n" in separator and kept:
                 kept.append(separator)          # keep the block boundary
         else:
@@ -393,7 +445,7 @@ def _drop_orphan_headings(lines):
     return [l for i, l in enumerate(lines) if i not in drop]
 
 
-def _redact_body(body, bad_patterns):
+def _redact_body(body, bad_patterns, bad_indices=None):
     """Sentence-level redaction that leaves headings, lists and tables in place."""
     segments, prose, removed = [], [], 0
     in_fence = False
@@ -402,7 +454,8 @@ def _redact_body(body, bad_patterns):
         nonlocal removed
         if not prose:
             return
-        cleaned, count = _redact_sentences("\n".join(prose), bad_patterns)
+        cleaned, count = _redact_sentences("\n".join(prose), bad_patterns,
+                                           bad_indices)
         removed += count
         if cleaned.strip():
             segments.append(cleaned.rstrip())
@@ -447,7 +500,7 @@ def redact_unverified_v2(report_text, failed_citations):
         refs_section = ""
 
     # Remove body sentences that cite bad indices, leaving structure intact
-    clean_body, removed = _redact_body(body, bad_patterns)
+    clean_body, removed = _redact_body(body, bad_patterns, bad_indices)
 
     # Remove bad reference entries from References section
     if refs_section:

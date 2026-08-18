@@ -878,3 +878,32 @@ right answer immediately, and did.
 The diagram is corrected. The real levers are one wave of delegation instead of
 two, grounding citations inside the sub-agent, and rewriting only the failed
 sections rather than the whole report.
+
+## Redaction was killing verified citations too (2026-08-18)
+
+Round 27's first agent replicate submitted **11 citations it had checked and
+grounded** -- `check_my_citations` returned "11 cited, 0 unquotable" -- and the
+gate returned **6**. The grounding fix worked (10 quotes collected at delegation,
+all reused by the gate) and the report still lost half its evidence.
+
+The cause is in `redact_unverified_v2`: a failed citation takes its whole
+**sentence** with it. Measured over the recent corpus, **39% of citation-bearing
+sentences carry two or more citations** -- one carried ten:
+
+    Papers [2], [10], [3], [5], [9], [1], [8], [6], [7], and [4] provide
+    mechanistic support for specific pathways
+
+One bad index there destroys nine verified ones.
+
+A sentence that still cites something verified now keeps its place, with only
+the failed marker removed. A sentence resting solely on failed citations is
+still deleted, because the claim has nothing left behind it.
+
+Editing markers in place does not work -- it produces "from [1] and agrees" and
+"rose, [2]". The whole citation list is treated as one token and re-rendered
+from its survivors, so `[2], [9], and [4]` becomes `[2] and [4]`, and an Oxford
+comma in ordinary prose is left alone.
+
+Replayed over the stored reports: 9 sentences that were deleted would now be
+kept, carrying 18 verified citations between them. Five tests, including the
+ten-citation case.

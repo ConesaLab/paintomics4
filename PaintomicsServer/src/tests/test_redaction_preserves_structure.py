@@ -216,6 +216,57 @@ def test_a_run_that_retrieved_nothing_makes_no_claim():
 
 
 
+def test_a_sentence_keeps_its_place_when_another_citation_verified():
+    """39% of citation-bearing sentences in the stored reports carry two or more
+    citations, and one carried ten. Deleting the sentence for one bad index
+    destroys the evidence that passed: on a live run an agent submitted 11
+    citations it had checked and grounded, and the gate returned 6."""
+    text = ("Papers [2], [9], and [4] support this claim.\n\n"
+            "### References\n\n[2] A.\n[4] B.\n[9] C.\n")
+    out, _ = redact_unverified_v2(text, [{"ref_index": 9}])
+    body = _body(out)
+    assert "support this claim" in body, "the whole sentence was deleted"
+    assert "[2]" in body and "[4]" in body, "verified citations were lost with it"
+    assert "[9]" not in body
+
+
+def test_a_sentence_resting_only_on_a_failed_citation_still_goes():
+    text = "Only [9] backs this.\n\n### References\n\n[9] C.\n"
+    out, _ = redact_unverified_v2(text, [{"ref_index": 9}])
+    assert "backs this" not in _body(out), "an unsupported claim survived"
+
+
+def test_the_surviving_citation_list_reads_correctly():
+    """Editing markers in place produced 'from [1] and agrees' and 'rose, [2]'.
+    The list is re-rendered from its survivors instead."""
+    for text, bad, expect_in, expect_out in (
+            ("Evidence from [1] and [9] agrees.", 9, "from [1] agrees", " and agrees"),
+            ("Rose sharply [9], [2].", 9, "sharply [2]", ", [2]"),
+            ("A list [3], [9], [5] repeated.", 9, "[3] and [5] repeated", ", ,")):
+        full = text + "\n\n### References\n\n[1] A.\n[2] B.\n[3] C.\n[5] D.\n[9] E.\n"
+        body = _body(redact_unverified_v2(full, [{"ref_index": bad}])[0])
+        assert expect_in in body, "expected %r in %r" % (expect_in, body)
+        assert expect_out not in body, "left %r behind: %r" % (expect_out, body)
+
+
+def test_prose_commas_are_not_touched():
+    text = ("Fruit, vegetables, and grain rose [9], [2].\n\n"
+            "### References\n\n[2] B.\n[9] E.\n")
+    body = _body(redact_unverified_v2(text, [{"ref_index": 9}])[0])
+    assert "Fruit, vegetables, and grain" in body, "an Oxford comma in prose was eaten"
+
+
+def test_a_ten_citation_sentence_loses_only_the_bad_one():
+    import re
+    cites = ", ".join("[%d]" % i for i in range(1, 11))
+    text = ("Papers %s provide mechanistic support.\n\n### References\n\n" % cites
+            + "".join("[%d] Paper.\n" % i for i in range(1, 11)))
+    body = _body(redact_unverified_v2(text, [{"ref_index": 7}])[0])
+    kept = {int(n) for n in re.findall(r"\[(\d+)\]", body)}
+    assert kept == set(range(1, 11)) - {7}, "expected nine survivors, got %s" % sorted(kept)
+
+
+
 def _check(name, fn):
     try:
         fn()
@@ -243,7 +294,12 @@ def main():
               test_redaction_never_glues_a_structure_token_to_prose,
               test_a_report_that_grounded_nothing_says_so,
               test_a_grounded_report_gets_no_note,
-              test_a_run_that_retrieved_nothing_makes_no_claim):
+              test_a_run_that_retrieved_nothing_makes_no_claim,
+              test_a_sentence_keeps_its_place_when_another_citation_verified,
+              test_a_sentence_resting_only_on_a_failed_citation_still_goes,
+              test_the_surviving_citation_list_reads_correctly,
+              test_prose_commas_are_not_touched,
+              test_a_ten_citation_sentence_loses_only_the_bad_one):
         _check(t.__name__, t)
     print("\nPassed: %d / %d" % (len(_PASSED), len(_PASSED) + len(_FAILED)))
     if _FAILED:
