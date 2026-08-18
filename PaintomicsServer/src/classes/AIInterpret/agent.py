@@ -20,6 +20,7 @@ entry points stay synchronous and own their own event loop:
     workflow, also used by the AgentEvolve replay harness (``--arm sdk``).
 """
 import asyncio
+import contextvars
 import json
 import logging
 import os
@@ -151,6 +152,28 @@ SDK_HTTP_READ_TIMEOUT = float(os.getenv("AI_SDK_HTTP_READ_TIMEOUT", "180"))
 # run_hedged's 45 s straggler cutoff -- but nor may they run unbounded: two
 # live runs sat 90+ minutes inside one top-up before this existed.
 SDK_LONG_CALL_TIMEOUT = float(os.getenv("AI_SDK_LONG_CALL_TIMEOUT", "600"))
+# The run's own deadline, visible to the transport. Every phase-level guard in
+# this file bounds the work it starts, but the retry shim underneath them had a
+# budget of its own -- 4 attempts x a 180 s read timeout, 8 when throttled --
+# and no idea when the run was due. A single Lead call spent 1604 s that way,
+# without issuing one tool call, and the run finished at 1722 s against a 600 s
+# ceiling. A ContextVar because it is per-run and inherited by every task the
+# run spawns, where a module global would leak between concurrent jobs.
+_RUN_DEADLINE = contextvars.ContextVar("ai_run_deadline", default=None)
+# Below this there is no point starting another attempt: it cannot return
+# anything the caller will still be alive to use.
+RETRY_MIN_ATTEMPT_SECONDS = float(os.getenv("AI_RETRY_MIN_ATTEMPT", "20"))
+
+
+def set_run_deadline(when):
+    """Arm the transport's deadline for this run. `when` is an epoch time."""
+    _RUN_DEADLINE.set(when)
+
+
+def _run_seconds_left():
+    """Seconds until the run is due, or None when no deadline is armed."""
+    when = _RUN_DEADLINE.get()
+    return None if when is None else when - time.time()
 # The whole interpretation, end to end. A run that is still going after this
 # has stalled somewhere the phase caps did not reach; better an error the user
 # can retry than a job that reads as running for the rest of the day.
@@ -205,6 +228,9 @@ _cancel_flags = {}
 _agent_semaphore = threading.Semaphore(AI_MAX_CONCURRENT_PIPELINES)
 
 _sdk_configured = False
+# The configured client, kept reachable so the retry shim can be driven in a
+# test: its worst case is longer than a whole run, so it needs one.
+_CLIENT = None
 _MODEL_OBJ = None
 
 
@@ -372,7 +398,7 @@ async def bounded(awaitable, timeout, label=""):
 
 def configure_sdk():
     """Point the SDK at our OpenAI-compatible gateway. Idempotent."""
-    global _sdk_configured, _MODEL_OBJ
+    global _sdk_configured, _MODEL_OBJ, _CLIENT
     if _sdk_configured:
         return
     provider = AI_PROVIDERS[AI_LLM_PROVIDER]
@@ -383,7 +409,7 @@ def configure_sdk():
     # The read timeout is per read: with streaming (SDK_STREAM) it bounds the
     # silence between tokens, and a stalled request surfaces as
     # APITimeoutError instead of holding the phase open.
-    client = AsyncOpenAI(
+    client = _CLIENT = AsyncOpenAI(
         base_url=provider["api_base"], api_key=provider["api_key"],
         max_retries=0,
         timeout=httpx.Timeout(connect=30.0, read=SDK_HTTP_READ_TIMEOUT,
@@ -458,6 +484,12 @@ def configure_sdk():
             await pacer.wait()
             try:
                 return await _issue(*args, **kwargs)
+            except asyncio.CancelledError:
+                # Never retry a cancellation. httpx maps some cancellations
+                # during a stream read onto its own error types, and the
+                # transient test below would answer True for those -- turning
+                # "the run is over" into "sleep, then try again".
+                raise
             except (_oai.APIError, httpx.HTTPError, _EmptyStream) as e:
                 if not _transient(e):
                     raise
@@ -474,6 +506,14 @@ def configure_sdk():
                     delay = _retry_after(e) or min(3.0 * 2 ** (attempt - 1), 30.0)
                 else:
                     delay = min(2 ** (attempt - 1) * 2, 15)
+                left = _run_seconds_left()
+                if left is not None and left < delay + RETRY_MIN_ATTEMPT_SECONDS:
+                    logger.warning("SDK transport stopping after %d attempt(s) "
+                                   "(%s%s): %.0fs left of the run, an attempt "
+                                   "needs %.0fs", attempt, type(e).__name__,
+                                   " %s" % status if status else "", left,
+                                   delay + RETRY_MIN_ATTEMPT_SECONDS)
+                    raise
                 logger.warning("SDK transport retry %d/%d after %s%s (waiting %.0fs)",
                                attempt, limit - 1, type(e).__name__,
                                " %s" % status if status else "", delay)
@@ -936,6 +976,7 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats,
             raise InterruptedError("Cancelled")
 
     run_start = time.time()
+    set_run_deadline(run_start + AI_MAX_RUN_SECONDS)
     configure_sdk()
     agents = _build_agents()
 

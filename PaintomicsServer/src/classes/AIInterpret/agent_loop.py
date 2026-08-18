@@ -55,7 +55,7 @@ from src.classes.AIInterpret import clusters as clusters_mod
 from src.classes.AIInterpret.agent import (
     AgentContext, _build_agents, bounded, configure_sdk, _model, run_hedged,
     SDK_LONG_CALL_TIMEOUT, SDK_VERIFY_CONCURRENCY, SDK_MIN_CITATIONS,
-    SDK_CALL_TIMEOUT,
+    SDK_CALL_TIMEOUT, set_run_deadline,
 )
 from src.classes.AIInterpret.context_builder import (
     build_pathway_context, build_gene_symbol_whitelist, get_organism_name,
