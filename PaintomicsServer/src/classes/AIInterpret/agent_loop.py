@@ -300,7 +300,10 @@ def _trace_gate(ctx, tool, args_summary, result, started):
         "gate": True,
         "tool": tool,
         "args": str(args_summary)[:120],
-        "result": str(result)[:160],
+        # The config stamp is the one event whose whole value IS its text; the
+        # 160-char cap cut its JSON mid-string and made every run unparseable by
+        # the analyzer that the stamp exists to feed.
+        "result": (str(result) if tool == "__config__" else str(result)[:160]),
         "ms": int((time.time() - started) * 1000),
     })
     _archive_trace(ctx)
@@ -1118,7 +1121,24 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
             stats["merge_gain_chars"] = len(candidate) - len(str(report))
             stats["merge_citations"] = "%d->%d" % (before, after)
             stats["merge_grounded"] = "%d->%d" % (grounded_before, grounded_after)
-            report = candidate
+            # Strip the citations we already know have no quote. The guard
+            # accepts a stitch when grounded citations RISE, so it can pass a
+            # batch that adds ten grounded markers and eleven unquotable ones --
+            # measured: one run had 33 verifier calls, 4 refutations and 15
+            # redactions, the other 11 coming from the net removing citations
+            # with no quote at all, and redaction takes the whole SENTENCE with
+            # them. The claim usually came from the data, not the paper; the
+            # citation was the decoration. So drop the decoration here and let
+            # the sentence stand, rather than let the gate delete both.
+            keep = set(grounded_after_quotes)
+            def _strip(match):
+                return "" if int(match.group(1)) not in keep else match.group(0)
+            trimmed = re.sub(r"\s*\[(\d+)\]", _strip, candidate)
+            dropped = (len(count_body_citations(candidate, valid))
+                       - len(count_body_citations(trimmed, valid)))
+            if dropped:
+                stats["unquotable_markers_dropped"] = dropped
+            report = trimmed
             premade_quotes = grounded_after_quotes
         else:
             stats["merge_rejected"] = (
