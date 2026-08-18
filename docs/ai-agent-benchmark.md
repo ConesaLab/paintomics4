@@ -2019,3 +2019,36 @@ came in at 11 against round 43's 15.0. If the Lead spends its turns citing the
 uncited pool and covers fewer pathways for it, the trade has moved from rule 3 to
 rule 4 and nothing is won -- in which case the answer is to cap the top-up rather
 than remove it, keeping the first few additions that base shows are safe.
+
+### The cap fallback is refuted before it was needed
+
+Round 44's pre-registration named a fallback: if removing the top-up costs
+coverage, cap it instead, keeping "the first few additions that base shows are
+safe". Across 26 replicates with both counters recorded:
+
+```
+base    added <=5 -> 14% failure rate | added >5 -> 0%   (including one run of 14)
+agent   added <=5 -> 50%              | added >5 -> 40%
+```
+
+**The agent arm's top-up fails at 40-50% whatever the volume.** Capping would
+shrink the count, not the rate, and would cost citations to buy a proportional
+reduction in failures. The fallback is dead.
+
+Base is the opposite: its top-up added 14 in round 44's first replicate and failed
+NONE of them, while that run still recorded 2 failed citations -- so in base the
+failures come from somewhere else entirely. Only in the agent arm is the top-up
+the sole source.
+
+**What distinguishes the two top-ups.** Base's operates on a report the synthesis
+wrote with the whole reference list in view. This arm's operates on a STITCHED
+report: the Lead's draft plus delegated per-pathway analyses that cite nothing at
+all (`delegate_markers` = 0 on every replicate). So the top-up is bolting
+citations onto prose written from the data alone, which never had literature
+behind it and was never shaped to be citable.
+
+That is a better explanation than volume, and it is testable -- whether the failed
+citations sit in delegated sections rather than the Lead's own -- but it needs a
+mapping from sentence to source section that nothing currently records. Round 44
+sidesteps it: with the top-up off, the Lead cites its own sentences and the
+delegated text keeps citing nothing.
