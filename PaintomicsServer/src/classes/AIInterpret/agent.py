@@ -954,9 +954,23 @@ def _build_agents():
         model_settings=strict,
         tools=VERIFY_TOOLS,
     )
+    # The prefetch path's verifier: same instructions, NO tools. Porting the
+    # prompt alone was not enough -- measured on a smoke run, prefetch with the
+    # tool-carrying verifier still produced "Max turns (2) exceeded" four times,
+    # because the model can still choose to call a tool and now has two turns to
+    # exhaust instead of six. It failed FASTER. The agent arm's version has
+    # tools=[] for this reason and says so: "No tools, one call, no turns to
+    # exhaust."
+    verifier_solo = Agent[AgentContext](
+        name="Claim Verifier (prefetched)",
+        model=_model(),
+        instructions=prompts_mod.SYSTEM_PROMPT_VERIFICATION,
+        model_settings=strict,
+        tools=[],
+    )
     return dict(triage=triage_agent, planner=search_planner, filter=paper_filter,
                 interpret=interpreter, interpret_light=interpreter_light,
-                synth=synthesizer, verify=verifier)
+                synth=synthesizer, verify=verifier, verify_solo=verifier_solo)
 
 
 # ---------------------------------------------------------------------------
@@ -984,8 +998,15 @@ VERIFY_MEMO = os.getenv("AI_VERIFY_MEMO", "0") == "1"
 VERIFY_PREFETCH = os.getenv("AI_VERIFY_PREFETCH", "0") == "1"
 
 
-def _prefetched_evidence_block(ctx, cit):
+def _prefetched_evidence_block(paper_index, cit):
     """The paper's own words, found in Python and pasted into the prompt.
+
+    Takes the paper index itself, not a context. The first version took `ctx` and
+    read `ctx.context.paper_index`, copied from a @function_tool where ctx IS a
+    RunContextWrapper -- but this arm's _verify_one is handed a bare
+    AgentContext, so every verification raised AttributeError and the round died
+    with status=error on its first replicate. The test passed because its stub
+    was hand-rolled to match the wrong assumption. An index has one shape.
 
     This is the whole of the port: searching a paper for a quote is mechanical,
     tools.py already does it, and making a six-turn agent do it with tool calls
@@ -993,7 +1014,7 @@ def _prefetched_evidence_block(ctx, cit):
     all. Failing to find the passage is not fatal -- the model is told so, and
     the deterministic quote check in verify_report_v2 runs afterwards either way.
     """
-    executor = tools_mod.build_verification_executor(ctx.context.paper_index)
+    executor = tools_mod.build_verification_executor(paper_index)
     try:
         passage = executor("search_paper_text",
                            {"ref_index": cit["ref_index"],
@@ -2035,13 +2056,15 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats,
             async with vsem:
                 prompt = prompts_mod.build_verification_prompt(
                     cit["claim_sentence"], cit["cited_text"], cit["ref_index"])
-                turns = 6
+                checker, turns = agents["verify"], 6
                 if VERIFY_PREFETCH:
-                    prompt += _prefetched_evidence_block(ctx, cit)
-                    turns = 2       # no tools to call, so no turns to exhaust
+                    prompt += _prefetched_evidence_block(ctx.paper_index, cit)
+                    # The tools-free twin: with the passage in the prompt there
+                    # is nothing to call, so two turns is generous.
+                    checker, turns = agents["verify_solo"], 2
                 try:
                     r = await run_hedged(
-                        agents["verify"], prompt, ctx, max_turns=turns,
+                        checker, prompt, ctx, max_turns=turns,
                         label="verify[%s]" % cit["ref_index"])
                     return cit, str(r.final_output)
                 except Exception as e:  # a dead sub-agent must not pass as verified
