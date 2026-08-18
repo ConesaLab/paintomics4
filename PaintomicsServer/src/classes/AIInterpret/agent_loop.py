@@ -678,8 +678,16 @@ def _pathway_block(p):
     if p.get("per_omic"):
         lines.append("Per-omic: %s" % p["per_omic"])
     for g in (p.get("top_genes") or [])[:10]:
+        # context_builder emits "omic_name"; this read "omic" and got None every
+        # time, so every gene line the agent saw was "None: -0.42@0h, ...; None:
+        # ...; None: ..." -- three unlabelled layers per gene in a MULTI-OMICS
+        # tool, with no way to tell transcript from protein from metabolite.
+        # Found by measuring context cost: get_pathway_details is 33.7% of the
+        # per-tool character bill, the largest single consumer, so it was the
+        # first thing read closely.
         profs = "; ".join(
-            "%s: %s (%s)" % (op.get("omic"), op.get("values", op.get("value_pairs", "")),
+            "%s: %s (%s)" % (op.get("omic_name") or op.get("omic") or "omic?",
+                             op.get("values", op.get("value_pairs", "")),
                              op.get("pattern", ""))
             for op in (g.get("omic_profiles") or []))
         lines.append("- %s%s [effect %.2f] %s"
