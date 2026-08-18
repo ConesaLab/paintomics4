@@ -1812,7 +1812,26 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats,
                                    job_id, cit["ref_index"], e)
                     return cit, ""
 
-        verdicts = await asyncio.gather(*[_verify_one(c) for c in to_verify])
+        # Bound the fan-out itself, not just the decision to start it. The
+        # guard above uses this run's previous iteration as the estimate, and
+        # the FIRST iteration has none -- so a 486 s round (measured) sails past
+        # a 90 s default and the run dies holding a finished report it never
+        # shipped. The agent arm learned this the same way and the fix is the
+        # same: whatever does not finish in time counts as unverified, which is
+        # exactly what phase 6 redacts deterministically in ~0.1 s. Stopping
+        # early costs a redaction; overrunning costs the whole interpretation.
+        budget = max(20.0, _seconds_left(run_start) - VERIFY_TAIL_RESERVE)
+        tasks = [asyncio.ensure_future(_verify_one(c)) for c in to_verify]
+        done, pending = await asyncio.wait(tasks, timeout=budget)
+        for task in pending:
+            task.cancel()
+        if pending:
+            stats["verify_unchecked"] = (stats.get("verify_unchecked", 0)
+                                         + len(pending))
+            logger.info("[%s][sdk] %d of %d citations unchecked when the clock "
+                        "ran out; the programmatic net takes them", job_id,
+                        len(pending), len(to_verify))
+        verdicts = [t.result() for t in done if not t.cancelled()]
         failed = []
         for cit, text in verdicts:
             v = _parse_json_verdict(text) if text else {
@@ -1832,7 +1851,7 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats,
                                         else "claim")})
         failed.sort(key=lambda c: c["ref_index"])
         logger.info("[%s][sdk] VERIFY iter %d: %d checked, %d failed",
-                    job_id, _iteration + 1, len(to_verify), len(failed))
+                    job_id, _iteration + 1, len(verdicts), len(failed))
         if not failed:
             break
         # Stop when a round fixes nothing. Where the citation is simply wrong --

@@ -94,6 +94,24 @@ def test_the_reserves_fit_inside_a_ten_minute_run():
         "rarely start" % first)
 
 
+def test_the_fanout_itself_is_bounded_not_just_its_start():
+    """The guard above estimates from this run's PREVIOUS iteration, and the
+    first iteration has none. A 486 s round (measured) would sail past the 90 s
+    default, so the fan-out carries its own deadline and cancels the stragglers.
+    The agent arm hit this first: 19 citations, each hedged 45 s x2 over 8
+    workers, ran to 602 s holding a finished report it never shipped."""
+    import inspect
+    from src.classes.AIInterpret import agent as A
+    body = inspect.getsource(A._run_async)
+    assert "asyncio.gather(*[_verify_one" not in body, (
+        "the verification fan-out is unbounded again; a single round can "
+        "outlive the whole run")
+    assert "asyncio.wait(tasks, timeout=budget)" in body
+    assert "verify_unchecked" in body, (
+        "citations dropped for time are invisible; the count must be recorded")
+    assert "task.cancel()" in body, "stragglers are left running"
+
+
 def _check(name, fn):
     try:
         fn()
@@ -112,7 +130,8 @@ def main():
               test_the_tail_is_always_reserved,
               test_the_rewrite_is_guarded_too,
               test_seconds_left_counts_down_from_the_cap,
-              test_the_reserves_fit_inside_a_ten_minute_run):
+              test_the_reserves_fit_inside_a_ten_minute_run,
+              test_the_fanout_itself_is_bounded_not_just_its_start):
         _check(t.__name__, t)
     print("\nPassed: %d / %d" % (len(_PASSED), len(_PASSED) + len(_FAILED)))
     if _FAILED:
