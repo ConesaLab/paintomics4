@@ -393,7 +393,7 @@ def _redact_sentences(text, bad_patterns, bad_indices=None):
     checked and grounded and the gate returned 6.
     """
     parts = re.split(r'((?<=[.!?])\s+)', text)
-    kept, removed = [], 0
+    kept, removed, dropped = [], 0, 0
     for i in range(0, len(parts), 2):
         sentence = parts[i]
         separator = parts[i + 1] if i + 1 < len(parts) else ""
@@ -409,13 +409,14 @@ def _redact_sentences(text, bad_patterns, bad_indices=None):
                 if separator:
                     kept.append(separator)
                 continue
+            dropped += 1                     # the CLAIM went, not just a marker
             if "\n" in separator and kept:
                 kept.append(separator)          # keep the block boundary
         else:
             kept.append(sentence)
             if separator:
                 kept.append(separator)
-    return "".join(kept), removed
+    return "".join(kept), removed, dropped
 
 
 def _drop_orphan_headings(lines):
@@ -447,16 +448,17 @@ def _drop_orphan_headings(lines):
 
 def _redact_body(body, bad_patterns, bad_indices=None):
     """Sentence-level redaction that leaves headings, lists and tables in place."""
-    segments, prose, removed = [], [], 0
+    segments, prose, removed, dropped = [], [], 0, 0
     in_fence = False
 
     def flush():
-        nonlocal removed
+        nonlocal removed, dropped
         if not prose:
             return
-        cleaned, count = _redact_sentences("\n".join(prose), bad_patterns,
-                                           bad_indices)
+        cleaned, count, gone = _redact_sentences("\n".join(prose), bad_patterns,
+                                                 bad_indices)
         removed += count
+        dropped += gone
         if cleaned.strip():
             segments.append(cleaned.rstrip())
         prose.clear()
@@ -474,7 +476,7 @@ def _redact_body(body, bad_patterns, bad_indices=None):
     flush()
 
     lines = "\n".join(segments).split("\n")
-    return "\n".join(_drop_orphan_headings(lines)), removed
+    return "\n".join(_drop_orphan_headings(lines)), removed, dropped
 
 
 def theme_conversion(retrieved_papers, cited_papers):
@@ -565,10 +567,30 @@ def score_topup_survival(stats, verification):
     stats["topup_added_failed"] = len(set(added) & failed)
 
 
+# The claims a redaction actually destroyed, as opposed to the markers it took
+# out. Kept beside the function rather than added to its return type, because
+# every caller unpacks a 2-tuple and the count is a diagnostic, not a result.
+_LAST_REDACTION = {"sentences_dropped": 0}
+
+
+def last_sentences_dropped():
+    """Claims destroyed by the most recent redaction in this process."""
+    return _LAST_REDACTION.get("sentences_dropped", 0)
+
+
 def redact_unverified_v2(report_text, failed_citations):
     """Remove sentences citing failed [N] indices and their References entries.
 
-    Returns (cleaned_report, removed_count).
+    Returns (cleaned_report, removed_count) where removed_count is the number of
+    bad MARKERS taken out of the body plus the reference entries dropped -- not
+    the number of claims lost. A sentence citing a failed paper twice counts
+    twice; a sentence that keeps another verified citation counts too, although
+    the claim survives intact.
+
+    That distinction was blurred for a long time -- including in this project's
+    own notes, which described the count as "sentences lost" and once reported
+    "1 failed citation = 15 lost sentences" when it meant 15 markers. The number
+    of claims actually destroyed is recorded separately as `sentences_dropped`.
     """
     report_text = normalize_citation_markers(report_text)
     if not failed_citations:
@@ -588,9 +610,11 @@ def redact_unverified_v2(report_text, failed_citations):
         refs_section = ""
 
     # Remove body sentences that cite bad indices, leaving structure intact
-    clean_body, removed = _redact_body(body, bad_patterns, bad_indices)
+    clean_body, removed, sentences_dropped = _redact_body(body, bad_patterns,
+                                                          bad_indices)
 
     # Remove bad reference entries from References section
+    _LAST_REDACTION["sentences_dropped"] = sentences_dropped
     if refs_section:
         ref_lines = refs_section.split("\n")
         clean_ref_lines = []

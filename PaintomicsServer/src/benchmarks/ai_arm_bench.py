@@ -222,6 +222,9 @@ STAGE_COUNTS = ("verify_iterations", "batches_failed", "truncated_calls",
                 "delegate_papers_shown", "delegate_markers",
                 # The screen base has always had and this arm never did.
                 "papers_screened_out",
+                # Claims destroyed, as distinct from `redacted`, which counts
+                # markers removed plus dropped reference entries.
+                "sentences_dropped",
                 # Turns spent re-reading an abstract already in the listing.
                 "abstract_rereads")
 

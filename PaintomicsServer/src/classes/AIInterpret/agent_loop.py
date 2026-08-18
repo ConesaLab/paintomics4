@@ -72,7 +72,7 @@ from src.classes.AIInterpret.verification import (
     count_body_citations, normalize_citation_markers, parse_references_section,
     redact_unverified_v2, render_references_section, renumber_citations,
     resolve_pmid_mentions, score_topup_survival, sort_references_section,
-    quote_provenance, theme_conversion,
+    last_sentences_dropped, quote_provenance, theme_conversion,
     verify_report_v2,
 )
 
@@ -2488,6 +2488,12 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
     if final.get("failed_citations"):
         report, removed = redact_unverified_v2(report, final["failed_citations"])
         final["redacted_count"] = removed
+        # Markers taken out vs claims destroyed. `redacted` has always counted
+        # the former -- bad markers plus dropped reference entries -- while this
+        # project's notes described it as sentences lost. A sentence that keeps
+        # another verified citation survives with the bad marker stripped, so the
+        # two numbers can differ by a factor of three.
+        stats["sentences_dropped"] = last_sentences_dropped()
     report, citation_mapping = renumber_citations(report)
     report = sort_references_section(report)
     if citation_mapping:

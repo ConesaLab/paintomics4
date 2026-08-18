@@ -59,6 +59,7 @@ from src.classes.AIInterpret.verification import (
     parse_references_section, render_references_section,
     normalize_citation_markers, resolve_pmid_mentions, count_body_citations,
     score_topup_survival, theme_conversion, quote_provenance,
+    last_sentences_dropped,
 )
 # The shared verdict parser: the verifier agent keeps its tools (see the
 # DANGER note in _build_agents), so its verdict arrives as free text.
@@ -2266,6 +2267,12 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats,
     if final.get("failed_citations"):
         report, removed = redact_unverified_v2(report, final["failed_citations"])
         final["redacted_count"] = removed
+        # Markers taken out vs claims destroyed. `redacted` has always counted
+        # the former -- bad markers plus dropped reference entries -- while this
+        # project's notes described it as sentences lost. A sentence that keeps
+        # another verified citation survives with the bad marker stripped, so the
+        # two numbers can differ by a factor of three.
+        stats["sentences_dropped"] = last_sentences_dropped()
     report, citation_mapping = renumber_citations(report)
     # ...and then put the entries back in the order of the labels they now
     # carry. Renumbering rewrites the markers where they stand, so a section
