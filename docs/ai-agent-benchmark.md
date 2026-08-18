@@ -1458,3 +1458,44 @@ the run shipped 17-24 citations. If that reproduces, `DELEGATE_CHUNK`'s premise
 ("the shipped arm writes fourteen batches, each citing its own papers") is false,
 chunk COUNT is not what converts papers, and the round-38-as-planned
 DELEGATE_CHUNK experiment is dropped rather than run.
+
+## Round 39 pre-registration (written before the round ran)
+
+**AI_AGENT_SCREEN_PAPERS=1 on the agent arm, nothing else changed.** Base is
+interleaved as control and untouched, so a base move means gateway weather.
+
+**Why this and not the earlier plans.** Rounds 34-38 established, and then
+dismantled, three candidate causes of the citation gap:
+- chunk count -- premise false; base's interpretation batches emit ZERO `[N]`
+  (four observations), so its citations are born in the synthesis.
+- retrieval volume -- not the cause; corr(papers, citations) = +0.16 over 72 runs,
+  and within round 38 the replicate that retrieved 145 papers converted SIX of 14
+  themes against 65 papers converting seven.
+- delegation attribution -- refuted; 3 chunks matched, 0 fallbacks.
+
+What survives is the screen. Round 38, same jobs and denominator: base carried
+27-31 papers and converted 13.3 of 14.3 themes (93%); the agent arm carried
+65-145 and converted 6.5 of 14 (46%). Per paper base ships ~0.78 citations, this
+arm ~0.22. The screen is the one mechanism base has always had that this arm
+never did.
+
+**Prediction, stated on ABSOLUTE counts and the screen-proof denominator.**
+`themes_retrieved` cannot be the denominator here: a screen that rejects every hit
+for a theme removes that theme from the denominator too, so the ratio would rise
+with nothing more cited -- the screen grading itself. `tags_searched` is recorded
+when a search RUNS, before any hit is fetched, and is pinned by test.
+- `tags_with_a_cited_paper` rises from 6.5-7 to **>= 10** out of ~14 searched.
+- `citations_in_body` rises from 15.0 to **>= 18**.
+- `papers_retrieved` falls from 65-145 to **~25-40**.
+- `wall_s` holds under 600 s. The screen adds one short call per search, ~20
+  searches, serial inside the loop -- perhaps +50 s -- against a smaller pool
+  making delegation, quoting and verification cheaper.
+
+**Falsifier.** If the pool shrinks and `tags_with_a_cited_paper` does not rise,
+screening is not what converts papers into citations, and the deficit is in the
+writers rather than the pool -- which would make FRAMING_MAY_CITE the next test
+and would leave "one writer holding the whole reference list" as the only
+remaining structural difference between the arms.
+
+**Not predicted:** coverage. The agent arm has beaten base on coverage for three
+rounds and a smaller pool could cut either way.

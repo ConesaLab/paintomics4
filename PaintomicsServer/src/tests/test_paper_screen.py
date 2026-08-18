@@ -118,6 +118,29 @@ def test_both_arms_screen_to_the_same_standard():
     assert "prompts_mod.SYSTEM_PROMPT_SEARCH_SUBAGENT" in inspect.getsource(A)
 
 
+def test_the_screen_cannot_shrink_the_metrics_denominator():
+    """The hazard in measuring this experiment at all.
+
+    themes_retrieved counts themes that brought a paper back. A screen that
+    rejects every hit for a theme removes that theme from the DENOMINATOR too, so
+    themes_cited/themes_retrieved can rise while nothing more is cited -- the
+    screen would grade itself. searched_tags is immune: it is recorded when a
+    search RUNS, before any hit is fetched or screened.
+
+    This pins the ordering, because moving the tag record below the fetch would
+    break the denominator silently and the number would still look sensible.
+    """
+    src = inspect.getsource(L)
+    i = src.index("async def search_literature(")
+    body = src[i:src.index("@function_tool", i)]
+    tagged = body.index("c.searched_tags.add(")
+    fetched = body.index("fetch_abstracts")
+    screened = body.index("_screen_papers(")
+    assert tagged < fetched < screened, (
+        "the theme is recorded after fetching or screening, so the screen can "
+        "shrink its own denominator")
+
+
 def _check(name, fn):
     try:
         fn()
@@ -136,7 +159,8 @@ def main():
               test_no_papers_in_means_no_call_out,
               test_it_lives_inside_the_search_tool,
               test_the_screen_is_off_by_default_and_stamped,
-              test_both_arms_screen_to_the_same_standard):
+              test_both_arms_screen_to_the_same_standard,
+              test_the_screen_cannot_shrink_the_metrics_denominator):
         _check(t.__name__, t)
     print("\nPassed: %d / %d" % (len(_PASSED), len(_PASSED) + len(_FAILED)))
     if _FAILED:

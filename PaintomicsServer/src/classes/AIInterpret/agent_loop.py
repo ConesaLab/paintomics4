@@ -1046,6 +1046,13 @@ async def search_literature(ctx: RunContextWrapper[LoopContext], query: str,
         return out
     c.searches_used += 1
     if topic_tag:
+        # Recorded HERE, before any hit is fetched or screened, and that ordering
+        # is the metric's whole validity. `searched_tags` is the only denominator
+        # the paper screen cannot shrink: themes_retrieved counts themes that
+        # brought a paper back, so a screen rejecting every hit for a theme
+        # removes it from the denominator too and
+        # themes_cited/themes_retrieved rises with no extra citation earned.
+        # A search that ran is a search that ran, however little survives it.
         c.searched_tags.add(str(topic_tag).strip().lower())
     try:
         pmids = await asyncio.to_thread(c.pubmed.search, query, SEARCH_HITS)
