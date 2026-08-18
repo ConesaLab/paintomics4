@@ -1645,3 +1645,43 @@ Consequences, both applied:
 The measurement that produced the wrong conclusion was the same one that
 corrected it, three iterations apart. The counter existed for the earlier
 question and answered a later one.
+
+### Round 41 candidate: SEARCH_HITS, a dead lever revived by a regime change
+
+Pool size decomposes as candidates x keep-rate, and the two rounds separate them:
+
+| run | candidates | keep rate | pool | citations |
+|---|---|---|---|---|
+| v39-r1 | 155 | 24% | 37 | 26 |
+| v39-r3 | 190 | 9% | 17 | 8 |
+| v40-r1 | 93 | 28% | 26 | 19 |
+
+The adaptive stance did its job: v40-r1 has the highest keep rate recorded. Its
+pool stayed flat only because that run saw 93 candidates against 155-190.
+
+So the remaining lever is candidate supply, and `SEARCH_HITS` is the knob --
+which I declared dead two days of rounds ago on this evidence, recorded in the
+code: "round 6 tried ten and the pool grew from ~13 papers to ~49 while citations
+collapsed 11 -> 3 and redactions rose 5.5 -> 11".
+
+**That measurement was taken WITHOUT a screen**, and it is precisely a measurement
+of what happens when unscreened literature enters the pool: the 49 papers were
+mostly keyword-only, the writers drowned, and citations fell. The screen now
+removes 72-91% of candidates before they reach the pool at all. Raising hits
+feeds the screen more to reject, not the writers more to drown in.
+
+This is not a rehabilitation of the original hypothesis ("more literature is
+better"), which stays refuted. It is the observation that the experiment measured
+a different pipeline from the one that exists now.
+
+**Pre-registered for round 41 (SEARCH_HITS=10, screen on):**
+- candidates roughly double, keep rate holds near 21-28%, pool reaches **>= 33**
+- citations follow the fitted line: 0.91 x 33 - 7.2 = **>= 22**, past base's ~20.5
+- redactions must NOT rise: if the screen is admitting weaker papers under
+  volume, that shows up here first
+- every replicate inside 600 s; the screen adds no calls, only longer candidate
+  lists per call
+
+**Falsifier.** If citations fall or redactions rise, the round-6 result was about
+literature volume itself and not about screening, `SEARCH_HITS` goes back to 5
+permanently, and the pool must be raised through more searches instead.
