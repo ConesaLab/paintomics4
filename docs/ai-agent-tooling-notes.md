@@ -786,3 +786,30 @@ the caveats that make an interpretation honest are supposed to live.
 
 Measured, not enforced. submit_report already asks one question per run and a
 second gate would make it a workflow step.
+
+## Reports were being truncated, silently (2026-08-18)
+
+Two recent reports have no Limitations section, and the prompts do ask for one
+-- `SYSTEM_PROMPT_SYNTHESIZE` says "End with 'Limitations and Caveats' section"
+and `build_synthesis_prompt_v2` lists it. So the instruction was not the problem.
+
+Reading the tails settled it. `22sU1dOIiw` ends on the bare heading `### 4.`
+with nothing after it. That is not a stylistic choice, it is the output stopping
+mid-heading: the model hit its token limit, and Limitations is the last section,
+so Limitations is what was lost. (A trailing `---` is normal -- reports that do
+have Limitations end that way too, which is why the tails had to be read rather
+than pattern-matched.)
+
+`finish_reason` was already captured by the streaming shim and never looked at,
+so a truncated answer was returned as though it were complete. It now logs a
+warning naming the character count, appends to a process-wide list, and
+`run_ai_agent` stamps `truncated_calls` on the stored record -- scoped to the
+run, so the count belongs to that job rather than to whatever ran before it.
+
+Detection only. Raising the token cap or asking for a continuation is a decision
+that needs measurement, and the gateway has been down since 04:00. But from here
+a truncated interpretation can be told from a short one, which was not possible
+before: the two reports above are indistinguishable, in the database, from
+reports whose author simply had less to say.
+
+Two tests drive the shim with a truncated stream and a complete one.

@@ -236,6 +236,12 @@ class _EmptyStream(Exception):
     """The gateway closed a completion stream without a single choice."""
 
 
+
+# Lengths of answers the model cut off at its token limit, this process.
+# Read by run_ai_agent to stamp `truncated_calls` on the stored record.
+_TRUNCATIONS = []
+
+
 async def _stream_to_completion(stream):
     """Fold a chat-completion chunk stream into one ChatCompletion.
 
@@ -316,6 +322,16 @@ async def _stream_to_completion(stream):
         finish_reason = "tool_calls" if tool_calls else "stop"
         logger.warning("completion stream ended without finish_reason; assuming %s",
                        finish_reason)
+    elif finish_reason == "length":
+        # The model ran out of output budget mid-sentence and the partial text
+        # ships as if it were finished. That is how a stored report ends on the
+        # bare heading "### 4." with no Limitations section after it: the last
+        # section is simply where the tokens ran out, and nothing anywhere said
+        # so. Counted so a truncated interpretation can be told from a short one.
+        _TRUNCATIONS.append(len("".join(content)))
+        logger.warning("[AI] completion TRUNCATED at the token limit after %d "
+                       "characters; the tail of this answer is missing",
+                       len("".join(content)))
     payload = {
         "id": meta.get("id") or "chatcmpl-stream",
         "object": "chat.completion",
@@ -1936,6 +1952,9 @@ def run_ai_agent(job_id, experiment_design, RESPONSE):
 
     dao = None
     acquired = False
+    # Where this run starts in the process-wide truncation log, so the count
+    # stamped below belongs to this job and not to whatever ran before it.
+    truncations_at_start = len(_TRUNCATIONS)
     heartbeat = _Heartbeat(job_id)
     try:
         dao = AIInterpretDAO()
@@ -2000,7 +2019,8 @@ def run_ai_agent(job_id, experiment_design, RESPONSE):
             # (references_section_found, citations_checked, failed_citations);
             # timings and counters live beside it, not inside it.
             "verification": stats.get("verification") or {},
-            "stats": {k: v for k, v in stats.items() if k != "verification"},
+            "stats": dict({k: v for k, v in stats.items() if k != "verification"},
+                          truncated_calls=len(_TRUNCATIONS) - truncations_at_start),
         })
         RESPONSE.setContent({"success": True, "jobID": job_id, "status": "done"})
 
