@@ -473,3 +473,21 @@ fingerprint `9e291e18a2` is one arm, and no other pooling will be reported.
 
 Ten tests pin the five rules and the prose cut, so the rule cannot drift once
 the numbers exist.
+
+### Round 25 is now one command
+
+The harness was missing the piece that starts a round: creating the jobs. That
+lived only in the scratchpad, and pointed at the wrong checkout.
+
+    python -m src.benchmarks.ai_arm_bench jobs 2          # fresh STATegra jobs
+    python -m src.benchmarks.ai_arm_bench round <j1>,<j2> <dir> --label agent-v25
+
+`round` probes the gateway first and **refuses to start** if it is not
+answering -- two replicates once spent ten minutes each against a gateway
+returning 504 and produced two outage reports dressed as results. It then runs
+base/agent/base/agent, interleaved on purpose: gateway throughput drifts over
+tens of minutes, and running one arm's replicates back to back lets that
+weather land entirely on one side of the comparison. It scores at the end.
+
+Twelve tests cover the five rules, the prose cut, the refusal (exit 2, nothing
+written) and the interleaving.

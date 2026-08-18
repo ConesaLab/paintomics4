@@ -258,6 +258,70 @@ def cmd_score(args):
     return 0
 
 
+# -- jobs ------------------------------------------------------------------
+
+def cmd_jobs(args):
+    """Create fresh STATegra jobs (step 1 + step 2) to measure against.
+
+    The protocol needs jobs that exist before an arm runs, and this was the one
+    piece that never made it into the repository -- so the documented round
+    could not actually be started from a clean checkout. Requires the server to
+    be running locally.
+    """
+    from src.benchmarks.bench_http import Client, _selectedCompounds
+    client = Client(args.server, verify=False)
+    ids = []
+    for i in range(args.count):
+        started = time.time()
+        step1 = client.post("/pa_step1/example/stategra-multiomics")
+        job_id = step1["jobID"]
+        first = client.waitForJob(job_id, "step1")
+        selected = _selectedCompounds(first.get("matchedMetabolites", []))
+        form = [("jobID", job_id)] + [("selectedCompounds[]", c) for c in selected]
+        client.post("/pa_step2", data=form)
+        second = client.waitForJob(job_id, "step2")
+        print("job %d/%d: %s  (%d pathways, %.0f s)"
+              % (i + 1, args.count, job_id, len(second.get("pathwaysInfo") or {}),
+                 time.time() - started), flush=True)
+        ids.append(job_id)
+    print(json.dumps(ids))
+    return 0
+
+
+# -- round -----------------------------------------------------------------
+
+def cmd_round(args):
+    """One complete round: gateway check, interleaved replicates, verdict.
+
+    Interleaved base/agent/base/agent on purpose. The gateway's throughput
+    varies over tens of minutes, and running one arm's replicates back to back
+    lets that weather land entirely on one side of the comparison.
+    """
+    if cmd_ready(args) != 0:
+        print("round not started: the gateway is not answering. "
+              "A ten-minute replicate against a 504 is an outage report, "
+              "not a measurement.")
+        return 2
+
+    jobs = args.jobs.split(",")
+    plan = []
+    for replicate, job in enumerate(jobs, start=1):
+        plan.append((job, "base", "base-r%d" % replicate))
+        plan.append((job, "agent", "%s-r%d" % (args.label, replicate)))
+
+    for job, arm, label in plan:
+        print("\n=== %s  job=%s  %s" % (label, job, time.strftime("%H:%M:%S")),
+              flush=True)
+        run_args = argparse.Namespace(jobID=job, arm=arm, outdir=args.outdir,
+                                      label=label, design=args.design)
+        try:
+            cmd_run(run_args)
+        except Exception as exc:                  # one bad replicate is data
+            print("%s FAILED: %s: %s" % (label, type(exc).__name__, exc))
+    print("\n=== verdict ===")
+    return cmd_score(argparse.Namespace(outdir=args.outdir))
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     sub = parser.add_subparsers(dest="command", required=True)
@@ -275,8 +339,20 @@ def main(argv=None):
     score = sub.add_parser("score", help="apply the pre-registered rules")
     score.add_argument("outdir")
 
+    jobs = sub.add_parser("jobs", help="create fresh STATegra jobs to measure on")
+    jobs.add_argument("count", type=int, nargs="?", default=2)
+    jobs.add_argument("--server", default="http://localhost:8000")
+
+    rnd = sub.add_parser("round", help="gateway check, interleaved replicates, verdict")
+    rnd.add_argument("jobs", help="comma-separated jobIDs, one per replicate pair")
+    rnd.add_argument("outdir")
+    rnd.add_argument("--label", default="agent",
+                     help="agent-arm label, e.g. agent-v25")
+    rnd.add_argument("--design", default=STATEGRA_DESIGN)
+
     args = parser.parse_args(argv)
-    return {"ready": cmd_ready, "run": cmd_run, "score": cmd_score}[args.command](args)
+    return {"ready": cmd_ready, "run": cmd_run, "score": cmd_score,
+            "jobs": cmd_jobs, "round": cmd_round}[args.command](args)
 
 
 if __name__ == "__main__":

@@ -90,6 +90,50 @@ def test_the_prose_cut_takes_the_earliest_marker():
     assert prose_of(report).strip() == "Analysis."
 
 
+def test_a_round_refuses_to_start_when_the_gateway_is_down():
+    """The guard that exists because two replicates once burned ten minutes
+    each against a gateway returning 504 and produced two outage reports
+    dressed as results."""
+    import argparse
+    import src.benchmarks.ai_arm_bench as B
+    ran = []
+    original_ready, original_run = B.cmd_ready, B.cmd_run
+    B.cmd_ready = lambda _a: 1                       # gateway down
+    B.cmd_run = lambda a: ran.append(a.label)
+    try:
+        code = B.cmd_round(argparse.Namespace(
+            jobs="JOB1", outdir="/tmp/does-not-matter", label="agent-v25",
+            design="d"))
+    finally:
+        B.cmd_ready, B.cmd_run = original_ready, original_run
+    assert code == 2, "a round with no gateway must not exit 0, got %r" % code
+    assert ran == [], "replicates ran against a dead gateway: %s" % ran
+
+
+def test_a_round_interleaves_the_arms():
+    """Gateway throughput drifts over tens of minutes. Running one arm's
+    replicates back to back lets that weather land on one side of the
+    comparison."""
+    import argparse
+    import src.benchmarks.ai_arm_bench as B
+    ran = []
+    original_ready, original_run, original_score = B.cmd_ready, B.cmd_run, B.cmd_score
+    B.cmd_ready = lambda _a: 0
+    B.cmd_run = lambda a: ran.append((a.arm, a.label))
+    B.cmd_score = lambda _a: 0
+    try:
+        B.cmd_round(argparse.Namespace(jobs="JOB1,JOB2", outdir="/tmp/x",
+                                       label="agent-v25", design="d"))
+    finally:
+        B.cmd_ready, B.cmd_run, B.cmd_score = original_ready, original_run, original_score
+    arms = [arm for arm, _ in ran]
+    assert arms == ["base", "agent", "base", "agent"], (
+        "arms were not interleaved: %s" % arms)
+    assert [l for _, l in ran] == ["base-r1", "agent-v25-r1",
+                                   "base-r2", "agent-v25-r2"]
+
+
+
 def _check(name, fn):
     try:
         fn()
@@ -110,7 +154,9 @@ def main():
               test_a_degenerate_report_fails_the_length_guard,
               test_no_replicates_is_not_a_pass,
               test_the_prose_cut_excludes_appended_tables,
-              test_the_prose_cut_takes_the_earliest_marker):
+              test_the_prose_cut_takes_the_earliest_marker,
+              test_a_round_refuses_to_start_when_the_gateway_is_down,
+              test_a_round_interleaves_the_arms):
         _check(t.__name__, t)
     print("\nPassed: %d / %d" % (len(_PASSED), len(_PASSED) + len(_FAILED)))
     if _FAILED:
