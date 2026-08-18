@@ -377,6 +377,7 @@ class LoopContext(AgentContext):
     delegate_attribution: dict = field(default_factory=dict)
     delegate_markers: int = 0                          # distinct [N] the sub-agents wrote
     papers_screened_out: int = 0                       # hits the screen rejected
+    abstract_rereads: int = 0                          # turns spent re-reading the listing
     # What each note is ABOUT, in the agent's own words -- parallel to notebook
     # so the two fallback paths keep rendering plain strings.
     note_subjects: list = field(default_factory=list)
@@ -1171,6 +1172,24 @@ async def read_paper(ctx: RunContextWrapper[LoopContext], ref_index: int,
     executor = tools_mod.build_verification_executor(c.paper_index)
     out = executor("fetch_paper_section",
                    {"ref_index": int(ref_index), "section": section})
+    # An abstract re-read costs a TURN for text the agent already has. Measured
+    # across the archive: 477 of 517 read_paper calls (92%) asked for the
+    # abstract, against 32 for results and 7 for everything else -- roughly six
+    # of a run's ~39 turns spent re-reading the listing. The tool answers anyway,
+    # because refusing would strand a plan mid-step, but it says what would
+    # actually be new. The deeper sections are where 30% of surviving quotes come
+    # from (47 of 157 across seven runs), so this is a nudge toward the tier that
+    # earns its cost, not away from reading.
+    if str(section).strip().lower() in ("", "abstract"):
+        deeper = [k for k, v in (paper.get("sections") or {}).items()
+                  if k != "abstract" and v]
+        out += ("\n[This abstract was already in your search results, so this "
+                "turn added no new text. %s]"
+                % ("Sections you have not seen: %s." % ", ".join(sorted(deeper))
+                   if deeper else
+                   "Ask for results or discussion to fetch full text -- that is "
+                   "where a quotable sentence for a specific claim usually sits."))
+        c.abstract_rereads += 1
     out = _spend(c, out + _ledger_note(c), "read_paper")
     _trace(c, "read_paper",
            "[%s] %s pmid=%s" % (ref_index, section, paper.get("pmid")),
@@ -1753,6 +1772,7 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
         stats["delegate_fallback"] = ctx.delegate_attribution.get("fallback", 0)
         stats["delegate_papers_shown"] = ctx.delegate_attribution.get("papers_shown", 0)
     stats["delegate_markers"] = ctx.delegate_markers
+    stats["abstract_rereads"] = ctx.abstract_rereads
     if SCREEN_PAPERS:
         stats["papers_screened_out"] = ctx.papers_screened_out
     # The context bill, itemised. TOOL_CHAR_BUDGET was enforced from the first

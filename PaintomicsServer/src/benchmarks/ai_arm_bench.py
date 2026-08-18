@@ -221,7 +221,9 @@ STAGE_COUNTS = ("verify_iterations", "batches_failed", "truncated_calls",
                 # were shown, and how many distinct [N] they actually wrote.
                 "delegate_papers_shown", "delegate_markers",
                 # The screen base has always had and this arm never did.
-                "papers_screened_out")
+                "papers_screened_out",
+                # Turns spent re-reading an abstract already in the listing.
+                "abstract_rereads")
 
 # Itemised bills. A per-tool breakdown is the only form in which "which tool is
 # worth its place" can be asked of the archive rather than of one live run.

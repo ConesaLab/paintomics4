@@ -103,6 +103,37 @@ def test_the_description_tells_the_agent_which_call_is_free():
         "read_paper does not tell the agent the abstract is free: %r" % text[:200])
 
 
+def test_an_abstract_reread_says_it_bought_nothing():
+    """92% of reads ask for the abstract already in the listing.
+
+    Measured across the archive: 477 of 517 read_paper calls asked for the
+    abstract, 32 for results, 7 for everything else -- roughly six of a run's ~39
+    turns spent re-reading text the search had already shown. The tool still
+    answers, because refusing would strand a plan mid-step, but it now says what
+    would actually be new. Deeper sections carry 30% of surviving quotes (47 of
+    157 over seven runs), so the nudge is toward the tier that earns its cost.
+    """
+    import asyncio, time
+    from src.classes.AIInterpret import agent_loop as L
+    ctx = L.LoopContext(job_instance=None, job_id="T", organism_name="mmu",
+                        experiment_design="", started_at=time.time(),
+                        hard_deadline=time.time() + 600)
+    ctx.paper_index = {1: {"ref_index": 1, "pmid": "1", "title": "t",
+                           "abstract": "an abstract",
+                           "sections": {"abstract": "an abstract",
+                                        "results": "the results"},
+                           "fetch_tier": "europepmc"}}
+    # asyncio.run, not get_event_loop: an earlier test in this file closes the
+    # default loop, and get_event_loop then raises rather than making a new one.
+    out = asyncio.run(
+        L.read_paper.on_invoke_tool(
+            type("W", (), {"context": ctx})(),
+            '{"ref_index": 1, "section": "abstract"}'))
+    assert "already in your search results" in out, out
+    assert "results" in out, "it does not name the section that would be new"
+    assert ctx.abstract_rereads == 1
+
+
 def _check(name, fn):
     try:
         fn()
@@ -118,7 +149,8 @@ def main():
               test_any_other_section_still_upgrades,
               test_an_empty_abstract_still_upgrades,
               test_an_already_upgraded_paper_is_not_refetched,
-              test_the_description_tells_the_agent_which_call_is_free):
+              test_the_description_tells_the_agent_which_call_is_free,
+              test_an_abstract_reread_says_it_bought_nothing):
         _check(t.__name__, t)
     print("\nPassed: %d / %d" % (len(_PASSED), len(_PASSED) + len(_FAILED)))
     if _FAILED:
