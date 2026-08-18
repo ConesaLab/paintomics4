@@ -481,3 +481,38 @@ set than requested, and nothing anywhere says so. Failing soft is right here;
 failing silently is not. It now warns, naming the organism and the requested
 threshold, and four tests pin that the warning fires when the filter is skipped
 and stays quiet when none was asked for.
+
+## A closed hypothesis: preferring open-access papers at search time (2026-08-18)
+
+Since abstract-only papers lose citations four times as often, the obvious next
+move is to retrieve papers that have full text -- mark PMC availability in
+`search_literature` so the agent can prefer groundable sources. Before building
+it, the question that decides whether it would help: are the papers that lose
+their citations *available* in PMC and simply never fetched, or not in PMC at
+all?
+
+Sampled against NCBI's ID converter, all failures together said 73% of them were
+in PMC against 42% of the papers that kept their citations -- which reads as a
+retrieval failure worth fixing.
+
+Split by run date, it says the opposite:
+
+| abstract-only papers that lost their citations | in PMC |
+|---|---|
+| runs before the full-text fetch landed | 43 of 60 (72%) |
+| runs on or after 2026-08-14 | 5 of 13 (38%) |
+
+The headline was the historical bug -- reports written when the pipeline fetched
+no full text at all -- reappearing in a pooled average. In current behaviour the
+majority of papers that lose a citation are genuinely not in PMC, so the ceiling
+is open-access coverage, not retrieval strategy, and a marker would mostly label
+papers whose text nobody can get.
+
+**Not built.** n=13 is too small to act on either, and the honest reading of it
+argues against the change rather than for it.
+
+This is the third time in one session that splitting stored data by date
+reversed a conclusion -- the March reports that looked like a live redaction
+defect, the missing stats that looked like lost telemetry, and now this. The
+database holds several code eras at once, and a pooled average over it describes
+none of them.
