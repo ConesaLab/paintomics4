@@ -182,6 +182,25 @@ MERGE_DELEGATED = os.getenv("AI_AGENT_MERGE_DELEGATED", "1") == "1"
 # everything, which measured 4.5-11 citations because the writer saw the whole
 # reference list at once.
 MERGE_MODE = os.getenv("AI_AGENT_MERGE_MODE", "stitch")
+SHOW_WINDOW = os.getenv("AI_AGENT_SHOW_WINDOW", "0") == "1"
+"""Tell the Lead how many of its papers can still reach a writer.
+
+The constraint that actually binds retrieval is invisible to the agent. Only
+DELEGATE_PAPERS x the number of chunks -- at most 4 x 10 = 40 papers -- can ever
+be shown to a writer, so anything retrieved past that cannot become a citation
+however good it is. Measured across 72 archived runs: 3 189 papers retrieved, 872
+cited, and 1 501 of them (47%) fetched BEYOND any writer's window.
+
+The ledger already tells the agent what it MAY spend -- searches left, seconds
+left, tool-output characters, clusters still unlit. It has never told it that the
+pool is full. So the agent keeps buying literature that arrives structurally
+uncitable, and every one of those papers still costs ~400 characters of listing
+in the context of every later turn.
+
+Off by default: it is a prompt change, so it changes behaviour and belongs in its
+own round rather than riding along with the paper screen.
+"""
+
 SCREEN_PAPERS = os.getenv("AI_AGENT_SCREEN_PAPERS", "0") == "1"
 """Screen search hits for a quotable finding before they enter the pool.
 
@@ -494,7 +513,8 @@ def _code_fingerprint():
         # source alone left the exact hole this function exists to close:
         # AI_SENTENCE_REPAIR=1 and =0 run different pipelines and stamped the
         # same fingerprint. Anything that gates a stage belongs here.
-        parts.extend(["SCREEN_PAPERS=%s" % SCREEN_PAPERS,
+        parts.extend(["SHOW_WINDOW=%s" % SHOW_WINDOW,
+                      "SCREEN_PAPERS=%s" % SCREEN_PAPERS,
                       "FRAMING_MAY_CITE=%s" % FRAMING_MAY_CITE,
                       "TOPUP_ENABLED=%s" % TOPUP_ENABLED,
                       "SENTENCE_REPAIR=%s" % SENTENCE_REPAIR,
@@ -504,6 +524,20 @@ def _code_fingerprint():
     except Exception:
         logger.debug("code fingerprint failed", exc_info=True)
         return "unknown"
+
+
+def _writer_window(ctx):
+    """How many retrieved papers can still be SHOWN to a writer.
+
+    Delegation chunks its pathways DELEGATE_CHUNK at a time and hands each chunk
+    at most DELEGATE_PAPERS papers, so the whole run can only ever put
+    chunks x DELEGATE_PAPERS papers in front of a writer -- 40 at the shipped
+    settings. It is not a soft preference: a paper outside that window has no
+    path to a citation.
+    """
+    pathways = min(len(ctx.pathways or []), DELEGATE_MAX_PATHWAYS)
+    chunks = max(1, -(-pathways // DELEGATE_CHUNK))     # ceil
+    return chunks * DELEGATE_PAPERS
 
 
 def _ledger_note(ctx):
@@ -522,6 +556,16 @@ def _ledger_note(ctx):
         if units:
             note += (" · literature searched for %d of %d clusters"
                      % (len(ctx.searched_tags), units))
+    if SHOW_WINDOW:
+        held = len(ctx.paper_index)
+        window = _writer_window(ctx)
+        if held >= window:
+            note += (" · %d papers held and the writers can only read about %d "
+                     "of them -- more searching cannot add a citation now, only "
+                     "better-targeted searching can" % (held, window))
+        else:
+            note += (" · %d papers held, room for about %d more before the "
+                     "writers' limit" % (held, window - held))
     return note + "]"
 
 
@@ -1668,6 +1712,7 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
         "topup_enabled": TOPUP_ENABLED,
         "framing_may_cite": FRAMING_MAY_CITE,
         "screen_papers": SCREEN_PAPERS,
+        "show_window": SHOW_WINDOW,
         "max_turns": AGENT_MAX_TURNS,
         "gate_reserve": GATE_RESERVE_SECONDS,
         "lead_prompt_chars": len(prompts_mod.SYSTEM_PROMPT_LEAD_AGENT),
