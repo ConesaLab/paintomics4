@@ -116,6 +116,38 @@ def test_the_flag_reaches_the_fingerprint_and_the_stamp():
     assert '"framing_may_cite"' in stamp
 
 
+def test_the_prompt_BUILDS_with_the_flag_off():
+    """The test that was missing, and the reason a dark change broke production.
+
+    Every other test in this file reads source text. None of them built the
+    prompt -- so `base + (branch_a if flag else branch_b) % (report, detail)`
+    passed them all, while % (binding tighter than +) formatted the BRANCH, which
+    has no placeholders when the flag is off. TypeError, 153 s into every agent
+    replicate, on the DEFAULT path.
+    """
+    loop = _load("0")
+    out = loop._build_framing_prompt(_Ctx(), "THE DRAFT", "THE DETAIL")
+    assert "THE DRAFT" in out and "THE DETAIL" in out
+    assert "Do not invent markers" in out
+    assert "%s" not in out, "an unfilled placeholder survived into the prompt"
+
+
+def test_the_prompt_BUILDS_with_the_flag_on():
+    loop = _load("1")
+    out = loop._build_framing_prompt(_Ctx(), "THE DRAFT", "THE DETAIL")
+    assert "THE DRAFT" in out and "THE DETAIL" in out
+    assert "Cite from the reference list below" in out
+    assert "[2] A paper nobody cited" in out, "the citable list is missing"
+    assert "%s" not in out
+
+
+def test_neither_branch_leaks_the_other():
+    on = _load("1")._build_framing_prompt(_Ctx(), "d", "x")
+    off = _load("0")._build_framing_prompt(_Ctx(), "d", "x")
+    assert "Do not invent markers" not in on
+    assert "Reference list you may cite" not in off
+
+
 def _check(name, fn):
     try:
         fn()
@@ -133,7 +165,10 @@ def main():
               test_the_list_is_capped,
               test_the_permission_replaces_the_prohibition,
               test_the_delegates_own_markers_are_protected,
-              test_the_flag_reaches_the_fingerprint_and_the_stamp):
+              test_the_flag_reaches_the_fingerprint_and_the_stamp,
+              test_the_prompt_BUILDS_with_the_flag_off,
+              test_the_prompt_BUILDS_with_the_flag_on,
+              test_neither_branch_leaks_the_other):
         _check(t.__name__, t)
     print("\nPassed: %d / %d" % (len(_PASSED), len(_PASSED) + len(_FAILED)))
     if _FAILED:

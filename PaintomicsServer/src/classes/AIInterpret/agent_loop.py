@@ -773,6 +773,48 @@ def _ctx_by_id(ctx):
     return {p["id"]: p for p in ctx.pathways}
 
 
+def _build_framing_prompt(ctx, report, detail):
+    """The framing call's prompt, built where it can be TESTED.
+
+    It lived inline inside _run_loop_async, so every test of it inspected
+    source text instead of building it -- and a precedence bug survived all
+    of them. `base + (branch_a if flag else branch_b) % (report, detail)`
+    formats the BRANCH, because % binds tighter than +, and the off-branch
+    has no placeholders. That is a TypeError 153 s into every agent
+    replicate, on the DEFAULT path, from a change meant to be dark.
+    """
+    return (
+        "You are finishing a multi-omics interpretation report.\n\n"
+        "## The lead interpreter's draft\n%s\n\n"
+        "## The per-pathway analyses that will follow it verbatim\n%s\n\n"
+        "## Task\nWrite ONLY these sections, in this order, as markdown:\n"
+        "## Key Findings (3-5 bullets, the most important results across "
+        "everything above)\n"
+        "## Cross-Pathway Themes (shared mechanisms and crosstalk; name "
+        "the pathways)\n\n"
+        "Then stop -- do NOT write a pathway-by-pathway section, it is "
+        "already written and will be appended after yours. Afterwards add:\n"
+        "## Suggested Follow-up Experiments (3-5, prioritised, each with "
+        "technique, rationale, expected outcome)\n"
+        "## Limitations and Caveats\n\n"
+        # The %-format is applied to THIS string and nothing else. An
+        # earlier version wrote `base + (branch_a if flag else branch_b)
+        # % (report, detail)` -- and % binds tighter than +, so the
+        # formatting landed on the BRANCH, which has no placeholders when
+        # the flag is off. That broke the DEFAULT path with a TypeError
+        # 153 s into every agent replicate, and no test caught it because
+        # every test inspected the source instead of building the prompt.
+        % (report, detail[:60000])
+        + (("Cite from the reference list below where a paper genuinely "
+            "supports a claim you make in YOUR sections. Do not touch the "
+            "per-pathway analyses' own markers and do not renumber "
+            "anything.\n\n## Reference list you may cite\n%s")
+           % _citable_reference_list(ctx)
+           if FRAMING_MAY_CITE else
+           "Reuse [N] citation markers ONLY where they already appear "
+           "above for that claim. Do not invent markers and do not "
+           "renumber."))
+
 def _citable_reference_list(ctx, limit=40):
     """The papers the framing call may cite, as [N] title (author, year).
 
@@ -1913,30 +1955,7 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
                         "this report readable.)*")
             stats["stitch_truncated"] = True
         if MERGE_MODE == "stitch":
-            framing_prompt = (
-                "You are finishing a multi-omics interpretation report.\n\n"
-                "## The lead interpreter's draft\n%s\n\n"
-                "## The per-pathway analyses that will follow it verbatim\n%s\n\n"
-                "## Task\nWrite ONLY these sections, in this order, as markdown:\n"
-                "## Key Findings (3-5 bullets, the most important results across "
-                "everything above)\n"
-                "## Cross-Pathway Themes (shared mechanisms and crosstalk; name "
-                "the pathways)\n\n"
-                "Then stop -- do NOT write a pathway-by-pathway section, it is "
-                "already written and will be appended after yours. Afterwards add:\n"
-                "## Suggested Follow-up Experiments (3-5, prioritised, each with "
-                "technique, rationale, expected outcome)\n"
-                "## Limitations and Caveats\n\n"
-                + ("Cite from the reference list below where a paper genuinely "
-                   "supports a claim you make in YOUR sections. Do not touch the "
-                   "per-pathway analyses' own markers and do not renumber "
-                   "anything.\n\n## Reference list you may cite\n%s"
-                   % _citable_reference_list(ctx)
-                   if FRAMING_MAY_CITE else
-                   "Reuse [N] citation markers ONLY where they already appear "
-                   "above for that claim. Do not invent markers and do not "
-                   "renumber.")
-                % (report, detail[:60000]))
+            framing_prompt = _build_framing_prompt(ctx, report, detail[:60000])
             try:
                 framed = await bounded(
                     Runner.run(agents["synth"], framing_prompt, context=ctx,
