@@ -373,3 +373,37 @@ remedies the tool already suggests. The second submit is always accepted, and
 this shares the single nudge with the delegation one -- only one question per
 run, ever. A tool that can refuse twice is a workflow step wearing a tool's
 clothes.
+
+## Where the ten minutes actually goes (2026-08-18)
+
+Measured over the archived runs, by subtracting traced work from wall clock:
+
+| | share |
+|---|---|
+| tool execution | 32% |
+| the exit gate | 18% |
+| **the Lead's own model turns** | **50%** |
+
+Half the run is the agent thinking between calls, which is not something a cache
+or a bound can reclaim. Two things follow.
+
+**A hypothesis that turned out to be wrong.** Every Decide turn re-sends the
+whole conversation, so I expected thinking time to grow as context accumulated,
+which would have made big tool outputs expensive far beyond their own latency.
+It does not: median gap by turn bucket runs 0.4, 1.0, 1.6, 0.3, 0.1 s. Whatever
+governs turn latency here, it is not context length, and tool-output size is not
+the lever it looked like.
+
+**The gap after a submit is the biggest single event in a run:** median 58 s,
+mean 69 s over 47 of them. That is the agent rewriting a ten-thousand-character
+report after a nudge. So a nudge is not free advice -- it costs about a minute.
+
+Both nudges now check the clock first (`NUDGE_MIN_SECONDS`, 90 s against
+`hard_deadline`). Below that, asking for a rewrite buys a minute of work that
+cannot finish, and the run ends worse than if it had shipped what it had.
+
+The threshold is measured against `hard_deadline`, which already has the gate
+reserve subtracted. The first version added the reserve on top and required
+210 s, which silently disabled the nudge inside the end-to-end test's 300 s
+budget -- both submits went through and only the e2e suite noticed. A unit test
+now pins the semantics as well as the behaviour.

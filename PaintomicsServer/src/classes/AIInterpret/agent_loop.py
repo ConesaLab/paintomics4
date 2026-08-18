@@ -188,6 +188,21 @@ FULLTEXT_MAX_PAPERS = int(os.getenv("AI_AGENT_FULLTEXT_MAX", "24"))
 VERIFY_ITERATIONS = min(int(os.getenv("AI_AGENT_VERIFY_ITERATIONS", "2")),
                         AI_MAX_VERIFICATION_ITERATIONS)
 
+NUDGE_MIN_SECONDS = float(os.getenv("AI_AGENT_NUDGE_MIN", "90"))
+"""Don't ask the agent to redo work there is no time to redo.
+
+Measured over the archived runs, the gap after a submit_report -- the agent
+rewriting a ten-thousand-character report -- runs a median 58 s and a mean 69 s.
+A nudge with less than that left costs a minute of rewriting and delivers
+nothing.
+
+Measured against `hard_deadline`, which ALREADY has GATE_RESERVE_SECONDS taken
+off it, so the exit gate is not part of this sum. The first version added the
+gate reserve on top and set the bar at 210 s, which silently disabled the nudge
+in the end-to-end test's 300 s budget -- both submits sailed through and the
+suite caught it.
+"""
+
 
 @dataclass
 class LoopContext(AgentContext):
@@ -943,8 +958,10 @@ def submit_report(ctx: RunContextWrapper[LoopContext], report_markdown: str) -> 
     # arrives thin and undelegated says so; the second goes through regardless,
     # because a tool that can refuse twice is a workflow step wearing a tool's
     # clothes.
+    time_to_act = c.hard_deadline - time.time()
     if (c.submit_attempts == 1 and not c.delegated
-            and len(report_markdown.strip()) < 9000):
+            and len(report_markdown.strip()) < 9000
+            and time_to_act > NUDGE_MIN_SECONDS):
         out = ("NOT SUBMITTED YET (this is the only time you will be asked). You "
                "have not delegated any pathway analysis, and %d characters cannot "
                "cover %d enriched pathways -- the per-pathway detail is what makes "
@@ -974,7 +991,8 @@ def submit_report(ctx: RunContextWrapper[LoopContext], report_markdown: str) -> 
     # that can refuse twice is a workflow step wearing a tool's clothes.
     still_flagged = sorted(i for i in c.flagged_citations
                            if ("[%d]" % i) in report_markdown)
-    if c.submit_attempts == 1 and still_flagged:
+    if (c.submit_attempts == 1 and still_flagged
+            and time_to_act > NUDGE_MIN_SECONDS):
         out = ("NOT SUBMITTED YET (this is the only time you will be asked). "
                "Your own check_my_citations run found no supporting quote for "
                "%s, and they are still in this draft -- the gate will delete "

@@ -94,10 +94,10 @@ def test_only_one_nudge_can_fire_in_a_run():
     c = _context()
     c.delegated = []                             # delegation nudge applies
     c.flagged_citations = {3}                    # citation nudge would too
-    first = _submit(c, "Short draft with a claim [3]. " * 20)
+    first = _submit(c, "A draft with a claim [3] and prose. " * 100)
     assert "NOT SUBMITTED YET" in first
     assert "delegate" in first.lower(), "the delegation nudge should come first"
-    second = _submit(c, "Short draft with a claim [3]. " * 20)
+    second = _submit(c, "A draft with a claim [3] and prose. " * 100)
     assert "SUBMITTED" in second, (
         "a second nudge fired; submit_report can now refuse twice: %s" % second[:150])
 
@@ -131,6 +131,64 @@ def test_check_my_citations_records_what_it_flagged():
         "expected [2] flagged as unquotable, got %r" % c.flagged_citations)
 
 
+def test_a_nudge_is_not_issued_when_the_clock_cannot_afford_it():
+    """A nudge asks for a rewrite. Measured over the archived runs, the gap
+    after a submit -- the agent rewriting a ten-thousand-character report -- runs
+    a median 58 s and a mean 69 s, and the exit gate needs GATE_MIN_SECONDS
+    after that. Asking with 90 s left buys a worse ending: a minute of rewriting
+    and then a gate cut short, instead of a verified report."""
+    c = _context()
+    c.delegated = ["something"]
+    c.flagged_citations = {3}
+    c.hard_deadline = time.time() + 45          # not enough to rewrite
+    out = _submit(c, LONG + " A claim [3].")
+    assert "SUBMITTED" in out, (
+        "nudged with 90 s left; the gate would be cut short: %s" % out[:120])
+
+
+def test_the_delegation_nudge_checks_the_clock_too():
+    c = _context()
+    c.delegated = []
+    c.flagged_citations = set()
+    c.hard_deadline = time.time() + 90
+    # over 500 chars so it is a report, under 9000 so the nudge would apply
+    out = _submit(c, "An undelegated draft with real prose. " * 100)
+    assert "SUBMITTED" in out, "the delegation nudge ignored the clock: %s" % out[:120]
+
+
+def test_a_nudge_still_fires_with_time_in_hand():
+    """The guard must not silently disable the nudge in a normal run: a nudge at
+    the 400 s mark of a 600 s budget has time for both the rewrite and the gate."""
+    c = _context()
+    c.delegated = ["something"]
+    c.flagged_citations = {3}
+    c.hard_deadline = time.time() + 300
+    out = _submit(c, LONG + " A claim [3].")
+    assert "NOT SUBMITTED YET" in out, (
+        "the clock guard swallowed a nudge that had time: %s" % out[:120])
+
+
+
+def test_the_threshold_excludes_the_gate_reserve():
+    """hard_deadline already has GATE_RESERVE_SECONDS taken off it.
+
+    The first version of this guard added the gate reserve on top and required
+    210 s, which silently disabled the nudge in the end-to-end test's 300 s
+    budget: both submits were accepted and nothing complained until the e2e
+    suite failed. 150 s left on the loop clock is a normal mid-run moment and
+    must still nudge.
+    """
+    c = _context()
+    c.delegated = ["something"]
+    c.flagged_citations = {3}
+    c.hard_deadline = time.time() + 150
+    out = _submit(c, LONG + " A claim [3].")
+    assert "NOT SUBMITTED YET" in out, (
+        "150 s of loop clock did not nudge; the threshold is double-counting "
+        "the gate reserve: %s" % out[:120])
+
+
+
 def _check(name, fn):
     try:
         fn()
@@ -147,7 +205,11 @@ def main():
               test_a_fixed_draft_is_not_questioned,
               test_only_one_nudge_can_fire_in_a_run,
               test_a_draft_that_is_not_a_report_is_still_rejected_as_such,
-              test_check_my_citations_records_what_it_flagged):
+              test_check_my_citations_records_what_it_flagged,
+              test_a_nudge_is_not_issued_when_the_clock_cannot_afford_it,
+              test_the_delegation_nudge_checks_the_clock_too,
+              test_a_nudge_still_fires_with_time_in_hand,
+              test_the_threshold_excludes_the_gate_reserve):
         _check(t.__name__, t)
     print("\nPassed: %d / %d" % (len(_PASSED), len(_PASSED) + len(_FAILED)))
     if _FAILED:
