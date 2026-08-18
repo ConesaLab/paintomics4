@@ -1869,3 +1869,35 @@ top-up now identified as the sole source of failed citations, that round's rise 
 better explained by the top-up than by the evidence block -- but that is a
 retrospective excuse for a failed prediction, not a result, and the block remains
 unverified.
+
+## Round 42: the replication fails, and names the real problem
+
+Round 42 repeated round 41's configuration exactly. Zero gateway retries in both
+rounds, same two jobs, same flags.
+
+```
+agent citations   v41 [22, 22, 24, 26]  mean 23.5
+                  v42 [13, 14, 20]      mean 15.7
+```
+
+The ranges do not overlap. **Round 41's rule-2 pass did not reproduce**, which is
+what a replication is for and why the two-consecutive-rounds bar exists.
+
+**What moved with it:** `topup_added` fell 14.0 -> 6.0 in the agent arm (and
+6.0 -> 2.0 in base). Since the top-up supplies up to 60% of this arm's citations,
+its variance IS the arm's citation variance. The configuration does not reliably
+beat base; it reliably *can*.
+
+**And the new counter reframes rule 3.** Redactions read 8.3 against base's 3.0 --
+a clear failure -- while claims actually destroyed read **1.3 against 1.0**. The
+gap is markers, not content: this arm cites the same failed paper in several
+places, and most of those sentences survive because they carry another verified
+citation. The rule stands as pre-registered, but what it penalises here is
+citation density rather than lost argument.
+
+**Conclusion.** The remaining work is not another feature. It is variance, and the
+top-up is both the largest source of citations (60%), the sole source of failed
+citations (every replicate, rounds 39-41), and now the largest source of
+round-to-round swing. Round 43 -- `AI_AGENT_TOPUP=0` with
+`AI_AGENT_SHOW_UNCITED=1`, moving that work into the Lead's draft where the
+evidence is in view -- is now motivated three ways instead of one.
