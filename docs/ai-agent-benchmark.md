@@ -1901,3 +1901,47 @@ citations (every replicate, rounds 39-41), and now the largest source of
 round-to-round swing. Round 43 -- `AI_AGENT_TOPUP=0` with
 `AI_AGENT_SHOW_UNCITED=1`, moving that work into the Lead's draft where the
 evidence is in view -- is now motivated three ways instead of one.
+
+## Round 43 pre-registration (written before the round ran)
+
+Round 42 scored 3/5 and its diagnostics named the cause without being asked:
+
+```
+3 redactions <= base + 2   FAIL  (11.5 vs 3.0)
+     failed_citations     3.2 vs 1.5
+     topup_added          7.8 vs 2.0
+     topup_added_failed   3.2 vs 0.5      <- equals failed_citations again
+     sentences_dropped    2.5 vs 1.3
+```
+
+Sixteen replicates across rounds 39-42 now agree: every failed citation is one
+the top-up added.
+
+**Two fixes exist and only one can be tested at a time.**
+
+- *Remove the stage*: `AI_AGENT_TOPUP=0` with `AI_AGENT_SHOW_UNCITED=1`, moving
+  the work into the Lead's draft. Risks the 44% of citations the top-up supplies.
+- *Fix the stage*: give the top-up's new citations the full text the upgrade
+  skipped. Smaller, keeps the citations, and targets the measured mechanism --
+  the upgrade fetches full text for papers ALREADY cited, so the papers the
+  top-up is about to cite are exactly the ones it passed over, leaving each new
+  citation pointing at an abstract with no quotable sentence.
+
+**Round 43 tests the second**, because it is the smaller change and does not
+gamble the arm's largest citation source on an untested substitute. It is already
+in the code and runs whenever the top-up runs, so round 43 is round 42's
+configuration with nothing added.
+
+**Prediction.**
+- `topup_added_failed` falls from 3.2 to **<= 1**, and `failed_citations` follows
+  it, since the two have been equal in every replicate.
+- `redacted` falls from 11.5 to **<= base + 2**; rule 3 passes.
+- `citations_in_body` holds near 17.8 -- this makes existing citations survivable
+  rather than adding new ones.
+- `topup_fulltext_gained` records how many papers actually upgraded; if it is 0
+  the mechanism never fired and the round says nothing.
+
+**Falsifier.** If `topup_added_failed` stays high while `topup_fulltext_gained` is
+non-zero, then abstract-only was not why those citations failed, and the top-up
+is choosing papers that cannot support the claims regardless of how much text is
+fetched -- which would make removing the stage the only remaining option.
