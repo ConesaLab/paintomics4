@@ -228,6 +228,39 @@
     color: #336;
     margin-bottom: 4px;
 }
+/* ── Activity feed ──
+   The agent's own tool calls, streamed under the bar while it works. A
+   ten-minute run used to show a percentage and one sentence; this shows which
+   pathways it examined, what it searched for, when it delegated. */
+.ai-activity {
+    list-style: none;
+    margin: 6px 0 0;
+    padding: 0;
+    /* The feed is capped at six events plus a count, so it never needs to
+       scroll; a max-height only clipped the last row in half. */
+    overflow: hidden;
+}
+.ai-activity-row {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    font-size: var(--pa-ai-fs-xs, 11px);
+    line-height: 1.5;
+    color: #45506b;
+    white-space: nowrap;
+}
+.ai-activity-tool { flex: 0 0 auto; font-weight: 600; }
+.ai-activity-detail {
+    flex: 1 1 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: #6b7a99;
+}
+.ai-activity-ms { flex: 0 0 auto; color: #8a93a8; font-variant-numeric: tabular-nums; }
+.ai-activity-row.is-count { color: #8a93a8; font-style: italic; }
+.ai-activity-row.is-failed .ai-activity-tool,
+.ai-activity-row.is-failed .ai-activity-detail { color: #b23b3b; }
+
 .ai-progress-track {
     height: 6px;
     background: #dde8f0;

@@ -51,6 +51,7 @@ function PA_AIInterpretView() {
             '    <div class="ai-widget-progress" style="display:none;">' +
             '      <div class="ai-progress-detail">Starting...</div>' +
             '      <div class="ai-progress-track"><div class="ai-progress-fill" style="width:0%"></div></div>' +
+            '      <ul class="ai-activity" style="display:none"></ul>' +
             '    </div>' +
             '    <div class="ai-widget-messages"></div>' +
             '    <div class="ai-widget-input-area">' +
@@ -187,8 +188,65 @@ function PA_AIInterpretView() {
 
     this._lastStatus = null;
 
-    this.updateProgress = function(status, percent, detail) {
+    /* What the agent is doing, not just how far along it is.
+
+       The full-agent arm records every tool call it makes, and that trace used
+       to reach MongoDB and stop there -- the status endpoint never returned it,
+       so a ten-minute run showed a percentage and a sentence. These are the
+       agent's own decisions: which pathways it looked at, what it searched for,
+       which paper it opened, when it delegated. */
+    var TOOL_LABELS = {
+        get_experiment_overview: "Read the experiment",
+        get_pathway_details: "Examined pathways",
+        compare_gene_profiles: "Compared gene profiles",
+        cluster_pathways: "Grouped pathways by shared genes",
+        search_literature: "Searched PubMed",
+        read_paper: "Read a paper",
+        notebook_write: "Noted a finding",
+        check_my_citations: "Checked its citations",
+        delegate_interpretation: "Delegated pathway analysis",
+        submit_report: "Submitted the report"
+    };
+
+    this._renderActivity = function(trace, total) {
+        var $list = this.$root && this.$root.find(".ai-activity");
+        if (!$list || !$list.length) { return; }
+        if (!trace || !trace.length) { $list.hide(); return; }
+
+        /* Built as DOM nodes with .text(), not concatenated HTML: these strings
+           are tool arguments -- the agent's own search queries and pathway
+           names -- and they reach this feed without passing the report
+           sanitiser. */
+        $list.empty();
+        if (total > trace.length) {
+            $list.append($('<li class="ai-activity-row is-count">')
+                         .text(total + " tool calls so far"));
+        }
+        trace.slice(-6).forEach(function(e) {
+            var result = String(e.result === null || e.result === undefined ? "" : e.result);
+            var failed = result.indexOf("ERROR") === 0;
+            var detail = failed ? "failed"
+                : String(e.args === null || e.args === undefined ? "" : e.args);
+            var $row = $('<li class="ai-activity-row">');
+            if (failed) { $row.addClass("is-failed"); }
+            $row.append($('<span class="ai-activity-tool">')
+                        .text(TOOL_LABELS[e.tool] || e.tool || ""));
+            if (detail) {
+                $row.append($('<span class="ai-activity-detail">')
+                            .text(detail.slice(0, 64)));
+            }
+            if (e.ms > 1500) {
+                $row.append($('<span class="ai-activity-ms">')
+                            .text(Math.round(e.ms / 1000) + "s"));
+            }
+            $list.append($row);
+        });
+        $list.show();
+    };
+
+    this.updateProgress = function(status, percent, detail, trace, toolCalls) {
         if (!this.$root) return;
+        this._renderActivity(trace, toolCalls);
         var $progress = this.$root.find(".ai-widget-progress");
         var $fab = this.$root.find(".ai-widget-fab");
         var $badge = this.$root.find(".ai-widget-fab-badge");

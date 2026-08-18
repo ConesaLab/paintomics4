@@ -263,6 +263,13 @@ def aiInterpretStatus(REQUEST, RESPONSE):
                     })
                     status = "error"
 
+            # What the agent has been DOING, not just how far along it is. The
+            # full-agent arm records every tool call, and until now that trace
+            # reached MongoDB and stopped there: the API never returned it, so
+            # a ten-minute run showed the user a percentage and nothing else.
+            # Trimmed to the tail because the widget shows a short feed and a
+            # long run makes hundreds of calls.
+            trace = record.get("toolTrace") or []
             RESPONSE.setContent({
                 "success": True,
                 "jobID": jobID,
@@ -270,6 +277,11 @@ def aiInterpretStatus(REQUEST, RESPONSE):
                 "percent": record.get("percent", 0) if status != "error" else 0,
                 "detail": record.get("detail", "") if status != "error"
                     else "Pipeline interrupted (no progress for 10 min). Click Retry.",
+                "toolTrace": [{"tool": e.get("tool"), "args": e.get("args"),
+                               "result": e.get("result"), "ms": e.get("ms"),
+                               "t": e.get("t")}
+                              for e in trace[-12:] if isinstance(e, dict)],
+                "toolCalls": len(trace),
             })
     except Exception as ex:
         handleException(RESPONSE, ex, __file__, "aiInterpretStatus", userID=userID)
