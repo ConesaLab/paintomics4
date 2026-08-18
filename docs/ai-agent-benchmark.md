@@ -928,3 +928,36 @@ anyone ships.
 That single condition explains the shape of round 31: a dense, well-grounded,
 narrow report -- the Lead's own draft, with the delegated breadth discarded at
 the last step.
+
+## How noisy is the target? Base's own spread, n=14
+
+| | n | min | max | mean | stdev |
+|---|---|---|---|---|---|
+| base citations | 14 | 10 | 26 | 19.0 | 4.2 |
+| base prose coverage | 14 | 11 | 15 | 14.1 | ~1.4 |
+
+**The shipped arm's citation count varies by 16 between replicates of identical
+code.** With two replicates a round, the standard error on a round's base mean
+is about 3 citations. Round 31 is the illustration: base-r1 returned 14 and
+base-r2 returned 26, so the agent's 14 passed rule 2 against one replicate and
+failed it against the round mean of 20.
+
+Consequences worth stating plainly:
+
+* **A round-level verdict at n=2 is weak evidence.** "4 of 5 rules" in one round
+  and "3 of 5" in the next can be the same arm meeting a different draw.
+* **Rule 2 is the noisiest rule**, and it is the one the arm has been judged on
+  for thirty-one rounds. Rules 3 and 4 sit on quantities with much smaller
+  spread -- redactions and coverage -- and those verdicts are worth more.
+* **The agent's own spread has fallen** while base's has not: rounds 28-31 gave
+  10, 8, 6, 10, 16, 14 citations, against base's 10 to 26 across the same period.
+
+The pre-registered protocol compares within a round, interleaved, and that stays
+-- swapping to a pooled baseline after seeing the numbers is exactly the move the
+pre-registration exists to prevent. But every verdict from here is reported with
+base's spread beside it, and a claim that the arm "matched base" means it cleared
+a target drawn from a distribution with a standard deviation of 4.2.
+
+The cheapest fix is more replicates per round rather than a different comparator.
+At four replicates an arm the standard error halves, and a round costs about
+twenty minutes more.
