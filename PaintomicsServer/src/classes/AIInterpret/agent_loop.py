@@ -182,6 +182,28 @@ MERGE_DELEGATED = os.getenv("AI_AGENT_MERGE_DELEGATED", "1") == "1"
 # everything, which measured 4.5-11 citations because the writer saw the whole
 # reference list at once.
 MERGE_MODE = os.getenv("AI_AGENT_MERGE_MODE", "stitch")
+FRAMING_MAY_CITE = os.getenv("AI_AGENT_FRAMING_MAY_CITE", "0") == "1"
+"""Whether the framing call may cite papers the delegated analyses never used.
+
+Measured round 38, same denominator on both arms: base converted 13 of 14
+retrieved themes into cited papers; this arm converted 7 of 14. Base's
+interpretation batches cite NOTHING (0 of 3 batches, 0 markers) and its synthesis
+produces 31 markers -- so in the shipped arm the citations are written FRESH by
+one writer holding the whole reference list.
+
+This arm cannot do that, by instruction. The framing prompt says "Reuse [N]
+citation markers ONLY where they already appear above for that claim. Do not
+invent markers." So a theme no delegate happened to cover can never be cited,
+however good the paper is -- which is the 7-of-14 gap stated as a rule.
+
+Off by default because the instruction is not arbitrary: MERGE_MODE="rewrite"
+tried letting one writer redo everything with the full list in view and measured
+4.5-11 citations, worse than stitch. The difference matters -- rewriting text
+that ALREADY carries markers loses them (the same failure as the sentence-repair
+marker drop), while writing fresh sections that carry none can only add. This
+flag targets the second case only: the framing sections, which today carry no
+citations at all.
+"""
 # The gate's own floor. Post-loop work (the merge) is bounded by the clock that
 # is actually left after reserving this, and skipped when there is not enough --
 # measured the hard way: a 50 s merge on top of a 450 s loop and a 150 s reserve
@@ -452,7 +474,8 @@ def _code_fingerprint():
         # source alone left the exact hole this function exists to close:
         # AI_SENTENCE_REPAIR=1 and =0 run different pipelines and stamped the
         # same fingerprint. Anything that gates a stage belongs here.
-        parts.extend(["TOPUP_ENABLED=%s" % TOPUP_ENABLED,
+        parts.extend(["FRAMING_MAY_CITE=%s" % FRAMING_MAY_CITE,
+                      "TOPUP_ENABLED=%s" % TOPUP_ENABLED,
                       "SENTENCE_REPAIR=%s" % SENTENCE_REPAIR,
                       "SDK_STREAM=%s" % os.getenv("AI_SDK_STREAM", ""),
                       "FULL_AGENT=%s" % os.getenv("AI_FULL_AGENT", "")])
@@ -682,6 +705,23 @@ def _verified_quotes(ctx, quotes):
 def _ctx_by_id(ctx):
     """id -> pathway context dict, for the cluster renderers."""
     return {p["id"]: p for p in ctx.pathways}
+
+
+def _citable_reference_list(ctx, limit=40):
+    """The papers the framing call may cite, as [N] title (author, year).
+
+    Only papers already in the index, so a marker cannot point at nothing; the
+    gate would redact it anyway, but a citation that was never citable wastes a
+    verification slot. Uncited papers come first -- they are the ones a theme
+    gap is made of.
+    """
+    papers = [ctx.paper_index[k] for k in sorted(ctx.paper_index)]
+    cited = {int(n) for n in re.findall(r"\[(\d+)\]", "\n".join(ctx.delegated))}
+    papers.sort(key=lambda p: p.get("ref_index") in cited)
+    return "\n".join(
+        "[%d] %s (%s, %s)" % (p["ref_index"], (p.get("title") or "")[:110],
+                              p.get("first_author", "?"), p.get("year", "?"))
+        for p in papers[:limit])
 
 
 def _profile_summary(profiles):
@@ -1543,6 +1583,7 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
         # differ, this says how.
         "sentence_repair": SENTENCE_REPAIR,
         "topup_enabled": TOPUP_ENABLED,
+        "framing_may_cite": FRAMING_MAY_CITE,
         "max_turns": AGENT_MAX_TURNS,
         "gate_reserve": GATE_RESERVE_SECONDS,
         "lead_prompt_chars": len(prompts_mod.SYSTEM_PROMPT_LEAD_AGENT),
@@ -1735,8 +1776,15 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
                 "## Suggested Follow-up Experiments (3-5, prioritised, each with "
                 "technique, rationale, expected outcome)\n"
                 "## Limitations and Caveats\n\n"
-                "Reuse [N] citation markers ONLY where they already appear above "
-                "for that claim. Do not invent markers and do not renumber."
+                + ("Cite from the reference list below where a paper genuinely "
+                   "supports a claim you make in YOUR sections. Do not touch the "
+                   "per-pathway analyses' own markers and do not renumber "
+                   "anything.\n\n## Reference list you may cite\n%s"
+                   % _citable_reference_list(ctx)
+                   if FRAMING_MAY_CITE else
+                   "Reuse [N] citation markers ONLY where they already appear "
+                   "above for that claim. Do not invent markers and do not "
+                   "renumber.")
                 % (report, detail[:60000]))
             try:
                 framed = await bounded(
