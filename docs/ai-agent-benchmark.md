@@ -237,6 +237,31 @@ than to rediscover:
 | delegated sub-agents get their own [N] prompt | merge citations 5 -> 18 became 7 -> 3; a caution about quotability produced caution, not accuracy |
 | `read_paper` urged in the prompt on a 45 % payoff | the figure was 8 runs old; at 28 runs it is 20 %, and read-backed citations verify *no better* (78 % vs 84 %) |
 
+### Round 17 — tie searching to coverage, and the frontier moves
+
+One change: search once per cluster you mean to write about, rather than a few
+times overall. It is the opposite of the wider-query change that failed twice --
+more queries add papers with their OWN attribution tags, wider queries dilute the
+slices that already exist.
+
+| | r1 | r2 | mean |
+|---|---|---|---|
+| searches | 28 | 16 | 22 |
+| citations | **18** | 12 | **15.0** |
+| redactions | 5 | 5 | **5.0** |
+| cited papers with full text | 13 (68 %) | 8 | 10.5 |
+| pathways named | 16 | 17 | 16.5 |
+
+**4 of 5 rules**, citations at their highest mean and redactions steady -- the
+first time in seventeen rounds that grounding rose without quality falling. r1
+alone reached 18 citations with 68 % full text, beating the workflow arm's 65 %.
+
+And the number that tells the next move: **citations track searches at about 0.64
+each** (28 -> 18, 16 -> 12). The instruction sets a floor on searching, not a
+target, so the spread in citations IS the spread in searching. Another
+instruction will not fix that -- the replicate that searched 16 times had already
+read the one that exists.
+
 ### The result is a frontier, not a hill
 
 | mean of 2 | wall | prose | paths | cites | redactions |
