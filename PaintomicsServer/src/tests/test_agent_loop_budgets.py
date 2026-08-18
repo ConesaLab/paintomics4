@@ -69,6 +69,26 @@ def test_the_ledger_line_reports_what_is_left():
     assert "s left" in note and "chars" in note, note
 
 
+# -- a dead gateway must not discard gathered work -------------------------
+
+def test_the_fallback_assembles_what_was_gathered_without_a_model():
+    ctx = _ctx()
+    ctx.notebook = ["Ikaros represses Ccr2 across the time course.",
+                    "Efferocytosis is the only three-layer pathway."]
+    ctx.delegated = ["### Cytokine signalling\nCcr2 falls monotonically [3]."]
+    report = L._assemble_without_synthesis(ctx)
+    assert "without synthesis" in report.splitlines()[0].lower(), report[:80]
+    assert "not been through the usual verification" in report, (
+        "the reader must be told this text skipped the gate's checks")
+    assert "Ikaros represses Ccr2" in report and "Cytokine signalling" in report
+
+
+def test_the_fallback_refuses_to_invent_a_report_from_nothing():
+    """With nothing gathered it returns empty, so the caller fails honestly
+    rather than shipping a header and a disclaimer as if it were an analysis."""
+    assert L._assemble_without_synthesis(_ctx()) == ""
+
+
 # -- nothing after the loop may run unbounded ------------------------------
 
 def test_every_post_loop_llm_step_is_clock_bounded():
@@ -313,6 +333,8 @@ def main():
     for t in (test_tool_output_under_budget_is_returned_whole,
               test_tool_output_over_budget_is_cut_and_says_so,
               test_the_ledger_line_reports_what_is_left,
+              test_the_fallback_assembles_what_was_gathered_without_a_model,
+              test_the_fallback_refuses_to_invent_a_report_from_nothing,
               test_every_post_loop_llm_step_is_clock_bounded,
               test_the_grounding_sieve_is_applied_to_both_sides,
               test_the_sieve_keeps_only_findable_quotes,

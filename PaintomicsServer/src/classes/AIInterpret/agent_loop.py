@@ -362,6 +362,35 @@ def _time_guard(ctx):
 # The toolbelt. Docstrings are the tool descriptions the model sees.
 # ---------------------------------------------------------------------------
 
+def _assemble_without_synthesis(ctx):
+    """The report a run can still produce when no model is reachable.
+
+    Measured: a 504 from the gateway killed the loop, then killed the forced
+    synthesis that exists to rescue it, and a run holding two delegated analyses,
+    a notebook and retrieved papers shipped nothing. This assembles what was
+    gathered -- no model, no network -- and says what it is at the top so no
+    reader mistakes it for a finished interpretation.
+
+    Returns "" when nothing was gathered, so the caller can fail honestly
+    instead of shipping a stub.
+    """
+    pieces = ["# Interpretation (assembled without synthesis)",
+              "",
+              "*The language model became unavailable before this report could "
+              "be written. What follows is the material the run had already "
+              "gathered: the analyses its sub-agents completed, the findings it "
+              "recorded, and the enrichment data itself. It has not been "
+              "synthesised, and its citations have not been through the usual "
+              "verification.*"]
+    if ctx.notebook:
+        pieces += ["", "## Findings recorded during the investigation", ""]
+        pieces += ["- %s" % n for n in ctx.notebook]
+    if ctx.delegated:
+        pieces += ["", "## Pathway analyses", "", "\n\n".join(ctx.delegated)]
+    report = "\n".join(pieces)
+    return report if (ctx.notebook or ctx.delegated) else ""
+
+
 def _verified_quotes(ctx, quotes):
     """Keep only quotes the gate's own matcher can find in their paper.
 
@@ -975,21 +1004,8 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
             logger.warning("[%s][loop] synthesis unavailable (%s); assembling "
                            "the report from gathered material without a model",
                            job_id, e)
-            pieces = ["# Interpretation (assembled without synthesis)",
-                      "",
-                      "*The language model became unavailable before this report "
-                      "could be written. What follows is the material the run had "
-                      "already gathered: the analyses its sub-agents completed, "
-                      "the findings it recorded, and the enrichment data itself. "
-                      "It has not been synthesised, and its citations have not "
-                      "been through the usual verification.*"]
-            if ctx.notebook:
-                pieces += ["", "## Findings recorded during the investigation", ""]
-                pieces += ["- %s" % n for n in ctx.notebook]
-            if ctx.delegated:
-                pieces += ["", "## Pathway analyses", "", "\n\n".join(ctx.delegated)]
-            report = "\n".join(pieces)
-            if len(report.strip()) < 400:
+            report = _assemble_without_synthesis(ctx)
+            if not report.strip():
                 raise RuntimeError(
                     "The agent produced no report and had nothing gathered to "
                     "fall back on (loop: %s; synthesis: %s)"
