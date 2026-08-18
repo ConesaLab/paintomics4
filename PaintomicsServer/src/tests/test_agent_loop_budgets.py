@@ -69,6 +69,31 @@ def test_the_ledger_line_reports_what_is_left():
     assert "s left" in note and "chars" in note, note
 
 
+# -- the ledger reports coverage, not only budget ---------------------------
+
+def test_the_ledger_shows_cluster_coverage_once_there_is_a_map():
+    """Budget says what may still be spent; coverage says what is still unlit.
+    Two replicates of identical code searched 20 and 14 times (25 vs 15
+    citations), and neither could see how much of its own partition had
+    literature behind it."""
+    ctx = _ctx()
+    assert "clusters" not in L._ledger_note(ctx), (
+        "coverage must not be claimed before cluster_pathways has run")
+    ctx.partition = {"clusters": [{"id": "C%02d" % i} for i in range(1, 21)],
+                     "standalone": ["a", "b"]}
+    ctx.searched_tags = {"cytokine signalling", "ribosome biogenesis"}
+    note = L._ledger_note(ctx)
+    assert "literature searched for 2 of 22 clusters" in note, note
+
+
+def test_a_search_records_its_topic_tag():
+    """The coverage count is only as good as the tagging behind it."""
+    import inspect
+    src = inspect.getsource(L)
+    assert "searched_tags.add" in src, (
+        "searches no longer record their topic_tag, so coverage cannot be counted")
+
+
 # -- the clock --------------------------------------------------------------
 
 def test_the_time_guard_is_quiet_while_there_is_time():
@@ -245,6 +270,8 @@ def main():
     for t in (test_tool_output_under_budget_is_returned_whole,
               test_tool_output_over_budget_is_cut_and_says_so,
               test_the_ledger_line_reports_what_is_left,
+              test_the_ledger_shows_cluster_coverage_once_there_is_a_map,
+              test_a_search_records_its_topic_tag,
               test_the_time_guard_is_quiet_while_there_is_time,
               test_the_time_guard_stops_investigation_with_time_left_to_write,
               test_the_write_reserve_leaves_room_for_a_long_generation,
