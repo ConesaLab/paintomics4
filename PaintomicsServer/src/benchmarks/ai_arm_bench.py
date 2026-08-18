@@ -165,6 +165,19 @@ def cmd_run(args):
     return 0 if metrics["status"] == "done" else 1
 
 
+SALVAGE_MARK = "**Incomplete interpretation.**"
+_SALVAGE_STAGE = re.compile(r"last completed stage:\s*([^)]+)\)")
+
+
+def _salvage_stage(report_text):
+    """The stage named in the salvage header, or None for a complete report."""
+    head = (report_text or "")[:600]
+    if SALVAGE_MARK not in head:
+        return None
+    found = _SALVAGE_STAGE.search(head)
+    return found.group(1).strip() if found else "unknown"
+
+
 def _measure(record, arm, job_id, wall, response=None):
     """Metrics for one run -- or an honest blank when the run did not finish.
 
@@ -204,13 +217,20 @@ def _measure(record, arm, job_id, wall, response=None):
     # base-r2 timed out at "references rendered" and reported 30 citations with
     # 0 redactions, its best-looking numbers of the round, precisely because the
     # gate never ran. Counted as a run, flagged, and kept out of the means.
-    partial = bool((record.get("stats") or {}).get("timed_out_at_stage"))
+    stage = (record.get("stats") or {}).get("timed_out_at_stage")
+    if not stage:
+        # The salvage stamps its own header into the report. Read that too: the
+        # stats dict is per-run and can be absent (an older metrics file, a
+        # record re-read after the next run overwrote stats), while the header
+        # travels with the text the user actually sees.
+        stage = _salvage_stage(report)
+    partial = bool(stage)
     return {
         "arm": arm,
         "jobID": job_id,
         "status": record.get("status"),
         "partial_report": partial or None,
-        "timed_out_at_stage": (record.get("stats") or {}).get("timed_out_at_stage"),
+        "timed_out_at_stage": stage,
         "wall_s": round(wall, 1),
         "report_chars": len(report),
         "prose_chars": len(prose),

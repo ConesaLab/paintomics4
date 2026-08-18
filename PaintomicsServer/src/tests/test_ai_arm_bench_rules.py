@@ -275,6 +275,28 @@ def test_a_partial_replicate_still_fails_the_time_rule():
     assert _verdict([_row(wall_s=602.1, partial_report=True)]) is False
 
 
+def test_a_partial_report_is_recognised_from_the_report_alone():
+    """Round 33's base-r2 was measured before the flag existed, and by the time
+    it could be re-read the next replicate had overwritten the job's stats. The
+    salvage header travels with the report text, so the flag does not depend on
+    a stats dict surviving."""
+    from src.benchmarks.ai_arm_bench import _measure
+    header = ("> **Incomplete interpretation.** The 10-minute limit was reached "
+              "while the pipeline was still working (last completed stage: "
+              "references rendered), so this report is what had been produced "
+              "by then.\n\nBody [1].\n\n### References\n\n[1] P.\n")
+    row = _measure({"status": "done", "report": header, "papers": [],
+                    "verification": {"redacted_count": 0}}, "base", "J", 602.1)
+    assert row["partial_report"] is True, "no stats, so the header was ignored"
+    assert row["timed_out_at_stage"] == "references rendered"
+
+    complete = _measure({"status": "done", "report": "# Report\n\nBody [1].\n",
+                         "papers": [], "verification": {"redacted_count": 0}},
+                        "base", "J", 300.0)
+    assert complete.get("partial_report") is None, (
+        "a complete report was flagged partial; every run would be excluded")
+
+
 def _check(name, fn):
     try:
         fn()
@@ -306,7 +328,8 @@ def main():
               test_a_failed_run_does_not_report_the_previous_run_s_numbers,
               test_a_finished_run_still_reports_everything,
               test_a_salvaged_partial_report_is_not_averaged_in,
-              test_a_partial_replicate_still_fails_the_time_rule):
+              test_a_partial_replicate_still_fails_the_time_rule,
+              test_a_partial_report_is_recognised_from_the_report_alone):
         _check(t.__name__, t)
     print("\nPassed: %d / %d" % (len(_PASSED), len(_PASSED) + len(_FAILED)))
     if _FAILED:
