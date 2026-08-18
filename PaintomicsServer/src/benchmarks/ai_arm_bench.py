@@ -176,7 +176,14 @@ STAGE_COUNTS = ("verify_iterations", "batches_failed", "truncated_calls",
                 # The other half of the top-up's bet. Recording only
                 # topup_added archives its wins and drops its losses, and a
                 # stage measured on its wins alone can never be retired.
-                "topup_added_failed", "topup_rejected")
+                "topup_added_failed", "topup_rejected",
+                # Seconds are half of what a tool costs; the other half is the
+                # context every later turn has to carry.
+                "tool_chars")
+
+# Itemised bills. A per-tool breakdown is the only form in which "which tool is
+# worth its place" can be asked of the archive rather than of one live run.
+STAGE_MAPS = ("tool_chars_by_tool",)
 
 # Outcomes whose value is a sentence, not a number: a stage that skipped or
 # failed says WHY, and "absent from the archive" reads identically to "never
@@ -197,6 +204,10 @@ def _stage_budget(stats):
         value = stats.get(key)
         if value:
             out[key] = str(value)[:120]
+    for key in STAGE_MAPS:
+        value = stats.get(key)
+        if isinstance(value, dict) and value:
+            out[key] = {str(k): v for k, v in value.items()}
     return out
 
 

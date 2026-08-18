@@ -276,6 +276,10 @@ class LoopContext(AgentContext):
     searches_used: int = 0
     searched_tags: set = field(default_factory=set)     # topic_tags with a search
     tool_chars: int = 0
+    # Per-tool attribution of the same ledger. The total tells the agent
+    # what it has left; the breakdown tells US which tool is eating the
+    # context the investigation has to reason through.
+    tool_chars_by_tool: dict = field(default_factory=dict)
     pmid_to_ref: dict = field(default_factory=dict)
     next_ref: int = 1
     submitted_report: str = ""
@@ -425,9 +429,21 @@ def _ledger_note(ctx):
     return note + "]"
 
 
-def _spend(ctx, text):
-    """Count a tool result against the character ledger before returning it."""
+def _spend(ctx, text, tool=None):
+    """Count a tool result against the character ledger before returning it.
+
+    Seconds are only half of what a tool costs. Every character it returns
+    enters the Lead's context and is re-sent on EVERY later Decide turn, so a
+    tool that answers in 6 kB where 600 bytes would do is taxing the whole
+    remainder of the investigation -- and the trace records a hand-written
+    summary of each result, never its size. Attributing the ledger per tool is
+    what makes "which tool is worth its place" answerable on context as well as
+    on clock.
+    """
     ctx.tool_chars += len(text)
+    if tool:
+        ctx.tool_chars_by_tool[tool] = (ctx.tool_chars_by_tool.get(tool, 0)
+                                        + len(text))
     if ctx.tool_chars > TOOL_CHAR_BUDGET:
         return (text[: max(0, TOOL_CHAR_BUDGET - (ctx.tool_chars - len(text)))]
                 + "\n[TOOL BUDGET EXHAUSTED — write your report from the "
@@ -602,7 +618,8 @@ def get_experiment_overview(ctx: RunContextWrapper[LoopContext]) -> str:
         parts.append(build_key_regulators_block(c.job_instance, limit=30))
     except Exception as e:
         logger.warning("[%s][loop] regulators block failed: %s", c.job_id, e)
-    out = _spend(c, "\n\n".join(x for x in parts if x) + _ledger_note(c))
+    out = _spend(c, "\n\n".join(x for x in parts if x) + _ledger_note(c),
+                 "get_experiment_overview")
     _trace(c, "get_experiment_overview", "", "%d chars" % len(out), t0)
     return out
 
@@ -631,7 +648,7 @@ def get_pathway_details(ctx: RunContextWrapper[LoopContext],
                   ", ".join(p.get("name", "?") for p in c.pathways[:30])))
     else:
         out = "\n\n".join(blocks) + _ledger_note(c)
-    out = _spend(c, out)
+    out = _spend(c, out, "get_pathway_details")
     _trace(c, "get_pathway_details", pathway_names, matched_ids or "none", t0)
     return out
 
@@ -676,7 +693,7 @@ def cluster_pathways(ctx: RunContextWrapper[LoopContext]) -> str:
         out = "No clusters found: the significant pathways share too few features."
     else:
         out = clusters_mod.render_partition_table(c.partition, _ctx_by_id(c))
-    out = _spend(c, out + _ledger_note(c))
+    out = _spend(c, out + _ledger_note(c), "cluster_pathways")
     _trace(c, "cluster_pathways", "",
            clusters_mod.partition_summary(c.partition) if c.partition else "none", t0)
     return out
@@ -756,7 +773,7 @@ async def search_literature(ctx: RunContextWrapper[LoopContext], query: str,
     else:
         body = "\n".join(listed)
     out = "Results for '%s': %s%s" % (query, body, _ledger_note(c))
-    out = _spend(c, out)
+    out = _spend(c, out, "search_literature")
     _trace(c, "search_literature", query, "%d hits, %d new" %
            (len(pmids), len(listed)), t0)
     return out
@@ -800,7 +817,7 @@ async def read_paper(ctx: RunContextWrapper[LoopContext], ref_index: int,
     executor = tools_mod.build_verification_executor(c.paper_index)
     out = executor("fetch_paper_section",
                    {"ref_index": int(ref_index), "section": section})
-    out = _spend(c, out + _ledger_note(c))
+    out = _spend(c, out + _ledger_note(c), "read_paper")
     _trace(c, "read_paper",
            "[%s] %s pmid=%s" % (ref_index, section, paper.get("pmid")),
            "%d chars" % len(out), t0)
@@ -884,7 +901,7 @@ def check_my_citations(ctx: RunContextWrapper[LoopContext], draft: str) -> str:
     # 10/4 -> 10/0), and none got worse. The 18 that checked once sometimes
     # submitted with citations this tool had already flagged.
     c.flagged_citations = set(unquotable)
-    out = _spend(c, "\n".join(lines))
+    out = _spend(c, "\n".join(lines), "check_my_citations")
     _trace(c, "check_my_citations", "%d chars" % len(draft),
            "%d cited, %d unquotable" % (len(cited), len(unquotable)), t0)
     return out
@@ -994,7 +1011,8 @@ async def delegate_interpretation(ctx: RunContextWrapper[LoopContext],
                          "-- it was not run again, which just saved you about 30 "
                          "seconds. Do not request it a third time; spend the "
                          "budget on what is still uncovered.\n\n"
-                         + cached + _ledger_note(c)))
+                         + cached + _ledger_note(c)),
+                     "delegate_interpretation")
         _trace(c, "delegate_interpretation",
                "%d pathways (cached)" % len(chosen), "cache hit", t0)
         return out
@@ -1134,7 +1152,7 @@ async def delegate_interpretation(ctx: RunContextWrapper[LoopContext],
     # would both pad the merge toward STITCH_MAX_CHARS and let the same claim be
     # counted twice when the stitch is compared with the draft.
     c.delegation_cache[cache_key] = out
-    out = _spend(c, out + _ledger_note(c))
+    out = _spend(c, out + _ledger_note(c), "delegate_interpretation")
     _trace(c, "delegate_interpretation",
            "%d pathways / %d chunks" % (len(chosen), len(chunks)),
            "%d chars" % len(out), t0)
@@ -1319,6 +1337,12 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
     stats["agent_tool_calls"] = len(ctx.trace)
     stats["agent_searches"] = ctx.searches_used
     stats["agent_notebook"] = len(ctx.notebook)
+    # The context bill, itemised. TOOL_CHAR_BUDGET was enforced from the first
+    # run and archived by none of them: the agent was shown its own spend on
+    # every turn while the record kept no total, so no completed run could say
+    # which tool ate the context the investigation had to reason through.
+    stats["tool_chars"] = ctx.tool_chars
+    stats["tool_chars_by_tool"] = dict(ctx.tool_chars_by_tool)
 
     report = ctx.submitted_report
     if not report.strip():
