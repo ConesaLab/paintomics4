@@ -275,6 +275,8 @@ class LoopContext(AgentContext):
     trace: list = field(default_factory=list)           # toolTrace events
     searches_used: int = 0
     searched_tags: set = field(default_factory=set)     # topic_tags with a search
+    # Did each delegated chunk get ITS OWN literature, or the fallback?
+    delegate_attribution: dict = field(default_factory=dict)
     tool_chars: int = 0
     # Per-tool attribution of the same ledger. The total tells the agent
     # what it has left; the breakdown tells US which tool is eating the
@@ -1108,6 +1110,7 @@ async def delegate_interpretation(ctx: RunContextWrapper[LoopContext],
         return out
 
     papers = [c.paper_index[k] for k in sorted(c.paper_index)]
+    ctx_local = c
     # The loop's own interpreter: same model and settings as the workflow arm's
     # single-shot one, different instructions -- [N] markers on quotable claims
     # rather than "(PMID: X)" prose. Built here rather than in _build_agents so
@@ -1155,8 +1158,21 @@ async def delegate_interpretation(ctx: RunContextWrapper[LoopContext],
                 hits.append(paper)
         # No attribution match (the Lead tagged by theme, not pathway): fall back
         # to the most recently retrieved, which are its latest lines of enquiry.
+        #
+        # Counted, because this fallback quietly restores the very failure the
+        # attribution exists to prevent -- a sub-agent reasoning over papers
+        # retrieved for somebody else's pathways, which is round 4's 39 k
+        # characters and four citations. Measured separately: ~15 themes are
+        # searched per run and only ~8 put a paper in the references, and a
+        # chunk handed the wrong literature is the leading explanation left
+        # standing. It was invisible: both paths return papers, so the prompt
+        # looks identical from the outside.
+        tally = ctx_local.delegate_attribution
         if not hits:
+            tally["fallback"] = tally.get("fallback", 0) + 1
             hits = papers[-DELEGATE_PAPERS:]
+        else:
+            tally["matched"] = tally.get("matched", 0) + 1
         # Cap what one prompt reasons over. The workflow arm measured citations
         # COLLAPSING 15 -> 3 when a batch was handed 20+ abstracts, so more
         # literature per prompt is not better; full text first, then earliest.
@@ -1427,6 +1443,9 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
     stats["agent_tool_calls"] = len(ctx.trace)
     stats["agent_searches"] = ctx.searches_used
     stats["agent_notebook"] = len(ctx.notebook)
+    if ctx.delegate_attribution:
+        stats["delegate_matched"] = ctx.delegate_attribution.get("matched", 0)
+        stats["delegate_fallback"] = ctx.delegate_attribution.get("fallback", 0)
     # The context bill, itemised. TOOL_CHAR_BUDGET was enforced from the first
     # run and archived by none of them: the agent was shown its own spend on
     # every turn while the record kept no total, so no completed run could say

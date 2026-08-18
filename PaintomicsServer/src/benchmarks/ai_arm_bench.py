@@ -183,7 +183,10 @@ STAGE_COUNTS = ("verify_iterations", "batches_failed", "truncated_calls",
                 # Which searches reached the report. Retrieval novelty is
                 # ~99.9%; conversion to a citation is ~12%, so the useful
                 # question is per-theme, not per-call.
-                "tags_searched", "tags_with_a_cited_paper")
+                "tags_searched", "tags_with_a_cited_paper",
+                # Did each delegated chunk get its own literature, or the
+                # fallback that hands it somebody else's?
+                "delegate_matched", "delegate_fallback")
 
 # Itemised bills. A per-tool breakdown is the only form in which "which tool is
 # worth its place" can be asked of the archive rather than of one live run.
