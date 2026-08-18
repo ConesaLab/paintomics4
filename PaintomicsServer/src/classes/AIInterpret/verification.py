@@ -477,6 +477,29 @@ def _redact_body(body, bad_patterns, bad_indices=None):
     return "\n".join(_drop_orphan_headings(lines)), removed
 
 
+def theme_conversion(retrieved_papers, cited_papers):
+    """Themes that produced a retrieved paper vs themes that produced a CITED one.
+
+    Both arms tag every paper with the pathway/theme its search was run for, so
+    this is the one retrieval measure that is directly comparable between them.
+    The agent arm's own `tags_searched` counts every search including the barren
+    ones, which is a different and arm-specific question -- for a comparison the
+    denominator has to be themes that actually brought literature back.
+
+    Why it matters: the agent arm retrieves ~3x more papers than base and cites
+    fewer, and until both arms report on the same denominator there is no way to
+    say whether that is a retrieval problem or a writing one.
+
+    Returns (themes_with_a_paper, themes_with_a_cited_paper).
+    """
+    def tags(papers):
+        return {str(t).strip().lower()
+                for paper in (papers or [])
+                for t in (paper.get("pathways") or []) if str(t).strip()}
+    retrieved, cited = tags(retrieved_papers), tags(cited_papers)
+    return len(retrieved), len(cited & retrieved)
+
+
 def score_topup_survival(stats, verification):
     """Price the top-up's bet: did the citations it added survive the gate?
 

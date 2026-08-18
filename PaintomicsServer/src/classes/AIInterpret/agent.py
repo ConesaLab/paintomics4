@@ -58,7 +58,7 @@ from src.classes.AIInterpret.verification import (
     sort_references_section,
     parse_references_section, render_references_section,
     normalize_citation_markers, resolve_pmid_mentions, count_body_citations,
-    score_topup_survival,
+    score_topup_survival, theme_conversion,
 )
 # The shared verdict parser: the verifier agent keeps its tools (see the
 # DANGER note in _build_agents), so its verdict arrives as free text.
@@ -2103,6 +2103,12 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats,
         unique_papers = kept
     stats["verify_s"] = time.time() - t0
     stats["tool_calls"] = ctx.tool_calls
+    # Comparable across arms: themes that brought literature back, and themes
+    # whose literature survived into the references.
+    retrieved_all = list(ctx.paper_index.values()) if ctx.paper_index else []
+    themes, converted = theme_conversion(retrieved_all, unique_papers)
+    stats["themes_retrieved"] = themes
+    stats["themes_cited"] = converted
     stats["verification"] = final
     return report, unique_papers, ctx
 

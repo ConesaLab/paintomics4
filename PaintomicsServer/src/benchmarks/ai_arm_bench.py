@@ -186,7 +186,9 @@ STAGE_COUNTS = ("verify_iterations", "batches_failed", "truncated_calls",
                 "tags_searched", "tags_with_a_cited_paper",
                 # Did each delegated chunk get its own literature, or the
                 # fallback that hands it somebody else's?
-                "delegate_matched", "delegate_fallback")
+                "delegate_matched", "delegate_fallback",
+                # The one retrieval measure both arms report on equal terms.
+                "themes_retrieved", "themes_cited")
 
 # Itemised bills. A per-tool breakdown is the only form in which "which tool is
 # worth its place" can be asked of the archive rather than of one live run.

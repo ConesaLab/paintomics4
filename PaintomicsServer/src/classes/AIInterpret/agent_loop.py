@@ -70,6 +70,7 @@ from src.classes.AIInterpret.verification import (
     count_body_citations, normalize_citation_markers, parse_references_section,
     redact_unverified_v2, render_references_section, renumber_citations,
     resolve_pmid_mentions, score_topup_survival, sort_references_section,
+    theme_conversion,
     verify_report_v2,
 )
 
@@ -2064,6 +2065,12 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
     searched, converted = _theme_conversion(ctx.searched_tags, unique_papers)
     stats["tags_searched"] = searched
     stats["tags_with_a_cited_paper"] = converted
+    # Comparable across arms: themes that brought literature back, and themes
+    # whose literature survived into the references.
+    retrieved_all = list(ctx.paper_index.values()) if ctx.paper_index else []
+    themes, converted = theme_conversion(retrieved_all, unique_papers)
+    stats["themes_retrieved"] = themes
+    stats["themes_cited"] = converted
     stats["verification"] = final
     # Stamp the outcome next to the tool calls that produced it. Mongo keeps one
     # interpretation per JOB, so it can answer "how did this job's last run go"
