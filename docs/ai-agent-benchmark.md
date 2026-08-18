@@ -1181,3 +1181,32 @@ and did not touch its OUTPUT. Ceiling and floor are separate problems.
 base retrieves 34 to cite 21. Conversion, not retrieval, and not damage.
 `tags_searched` / `tags_with_a_cited_paper` land in round 35 to say whether the
 loss is themes it searches but never writes about.
+
+## Round 35 pre-registration (written before the round ran)
+
+Round 35 carries THREE behavioural changes, not one. That breaks the
+one-change-per-round rule, so they are predicted against metrics that separate
+them; where they cannot be separated, that is stated rather than papered over.
+
+1. **NCBI API key** (environment, see above). Expect fewer HTTP 429s in the log
+   and `papers_retrieved` flat or up. NOT expected to move citations on its own.
+2. **`read_paper` serves a cached abstract without a full-text upgrade.** 90% of
+   reads asked for the abstract the search had already fetched. Expect read_paper
+   to get cheaper, no metric to regress.
+3. **`check_my_citations` returns the supporting quote for each citation.**
+   Expect `failed_citations` DOWN in the agent arm: the agent can now see the
+   drift the gate is about to punish. Expect `tool_chars` for that tool UP by
+   roughly 2 kB per call, which is the price being paid for it.
+
+**Falsifier for (3), the only real hypothesis here.** If `failed_citations` does
+not fall in the agent arm, then showing the evidence did not change what the
+agent wrote, and drift is not addressable at the self-check -- which moves the
+target to the gate's correction step and away from the toolbelt.
+
+**Baseline, not test.** `topup_added_failed`, `tool_chars_by_tool`,
+`tags_searched` and `tags_with_a_cited_paper` first record in this round. Round
+35 ESTABLISHES their baseline; no prediction is made about them, because a
+metric's first round cannot also be its test. (Round 34 got this wrong twice.)
+
+**Unchanged.** The five scoring rules, and the expectation that the arm still
+fails rules 2 and 4 -- nothing here targets citation count or coverage.
