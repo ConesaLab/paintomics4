@@ -1527,8 +1527,17 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
         stats["quotes_unverifiable"] = len(raw_after) - len(grounded_after_quotes)
         grounded_before = len(before_quotes)
         grounded_after = len(grounded_after_quotes)
+        # Judged on GROUNDED citations, not the raw marker count. The raw count
+        # includes citations with no quote, which the very next block strips out
+        # on acceptance and which the gate would delete anyway -- so requiring it
+        # to rise rejects stitches for losing citations that were never going to
+        # survive. Round 31 measured exactly that: "len 11209->55618, cites
+        # 15->12, GROUNDED 8->10" -- a candidate with two MORE grounded
+        # citations and 44 000 characters of pathway coverage, thrown away
+        # because three unquotable markers went with it. That run shipped 10
+        # pathways against base's 15.
         if (len(candidate) > 1.2 * len(str(report))
-                and after >= before and grounded_after >= grounded_before):
+                and grounded_after >= grounded_before):
             stats["merge_gain_chars"] = len(candidate) - len(str(report))
             stats["merge_citations"] = "%d->%d" % (before, after)
             stats["merge_grounded"] = "%d->%d" % (grounded_before, grounded_after)

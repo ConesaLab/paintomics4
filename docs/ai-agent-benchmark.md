@@ -894,3 +894,37 @@ to commit, not the prompt.
 
 Round 31 runs first with the clock guards alone, because an arm that cannot hold
 600 s cannot be judged on anything else.
+
+## Round 31 r1: rule 2 passes for the first time
+
+With the clock guards in and nothing else changed:
+
+| | base-r1 | agent-v31-r1 |
+|---|---|---|
+| citations | 14 | **14  PASS** |
+| redactions | 19 | **8  PASS** |
+| wall_s | 342 | **351  PASS** |
+| length | 27 913 | 25 196 (0.90x) **PASS** |
+| prose coverage | 15 | 10  **FAIL** |
+| citations / 1000 chars prose | 0.64 | **1.41** |
+
+4 of 5, and the first replicate in thirty-one rounds to match the shipped arm on
+citations. The clock guards held it at 351 s where round 30 needed 914. Evidence
+density is now more than double base's.
+
+**Coverage failed for a reason worth reading.** The stats:
+
+    merge_rejected  len 11209->55618, cites 15->12, GROUNDED 8->10
+
+The guard threw away a stitch that had **two more grounded citations** and 44 000
+characters of pathway coverage, because three raw markers went with it. Those
+three had no quote: the block immediately after acceptance strips exactly such
+markers, and the gate deletes them after that. The guard was refusing candidates
+for losing citations that were never going to survive.
+
+It now judges on grounded citations alone. Raw marker count is not a quantity
+anyone ships.
+
+That single condition explains the shape of round 31: a dense, well-grounded,
+narrow report -- the Lead's own draft, with the delegated breadth discarded at
+the last step.

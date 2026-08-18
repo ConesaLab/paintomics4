@@ -491,6 +491,26 @@ def test_no_expensive_post_loop_call_is_left_on_a_bare_timeout():
 
 
 
+def test_the_merge_is_judged_on_grounded_citations_not_raw_markers():
+    """Round 31: "len 11209->55618, cites 15->12, GROUNDED 8->10" -- rejected.
+
+    The stitch had two more grounded citations and 44 000 characters of pathway
+    coverage, and was thrown away because three markers with no quote went with
+    it. Those three would have been stripped on acceptance by the very next
+    block, and deleted by the gate after that. The run shipped 10 pathways
+    against base's 15 as a result.
+    """
+    import inspect
+    src = inspect.getsource(L._run_loop_async)
+    i = src.index("grounded_after >= grounded_before")
+    condition = src[max(0, i - 300):i + 40]
+    assert "after >= before and" not in condition, (
+        "the merge still requires the raw marker count to rise, so it rejects "
+        "stitches for losing citations that would not have survived")
+    assert "grounded_after >= grounded_before" in condition
+
+
+
 def main():
     for t in (test_tool_output_under_budget_is_returned_whole,
               test_tool_output_over_budget_is_cut_and_says_so,
@@ -525,7 +545,8 @@ def main():
               test_the_grounding_sieve_asks_the_question_the_right_way_round,
               test_the_citation_top_up_checks_the_clock,
               test_the_correction_rewrite_checks_the_clock,
-              test_no_expensive_post_loop_call_is_left_on_a_bare_timeout):
+              test_no_expensive_post_loop_call_is_left_on_a_bare_timeout,
+              test_the_merge_is_judged_on_grounded_citations_not_raw_markers):
         _check(t.__name__, t)
     print("\nPassed: %d / %d" % (len(_PASSED), len(_PASSED) + len(_FAILED)))
     if _FAILED:
