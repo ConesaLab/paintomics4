@@ -574,3 +574,27 @@ leftover line is gone; the prompt is 3581 characters and names the tool once.
 A test now asserts the prompt never calls it optional and describes it in one
 place only, since a second description is how the contradiction arose. Verified
 against the old wording.
+
+## Orphaned prompts (2026-08-18)
+
+Twelve `SYSTEM_PROMPT_*` constants exist; three were sent by nothing. No dynamic
+lookup exists in the codebase, so a plain reference search settles it.
+
+`SYSTEM_PROMPT_DELEGATED_INTERPRET` was mine, written this session to ask the
+delegated interpreters for exactly the citations the gate can verify. It was
+measured and reverted on the evidence -- the merge went 5 -> 18 citations under
+the old prompt against 7 -> 3 and then 7 -> 10 under the new one -- and then sat
+in the file looking exactly like the prompt that is actually used. The next
+person tuning delegation would have edited it and measured nothing. Removed.
+
+`SYSTEM_PROMPT_INTERPRET_V2` and `SYSTEM_PROMPT_SYNTHESIZE_V2` date from the
+March 2026 commit that introduced AI interpretation and have never been
+referenced since. They are named in the test's allowlist rather than deleted
+from a branch about the agent arm -- visible instead of merely unused, and a
+candidate for a cleanup against master.
+
+A test now fails on any new orphan, checked against a deliberately introduced
+one. It also caught a mistake of mine while being written: the first removal cut
+at the closing quotes and left `+ TEMPORAL_GUIDANCE_BLOCK` dangling, because
+these constants are concatenations rather than plain strings. The file would not
+import; reverted and redone by line range.

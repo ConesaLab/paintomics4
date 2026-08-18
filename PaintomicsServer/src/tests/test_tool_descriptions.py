@@ -104,6 +104,45 @@ def test_the_lead_prompt_does_not_contradict_itself_about_checking_citations():
 
 
 
+# Unused since the March 2026 feature commit that introduced them, and never
+# referenced since. Left in place rather than deleted from a branch about the
+# agent arm -- named here so they are visible instead of merely unused.
+KNOWN_ORPHAN_PROMPTS = {"SYSTEM_PROMPT_INTERPRET_V2", "SYSTEM_PROMPT_SYNTHESIZE_V2"}
+
+
+def test_no_new_orphan_prompts():
+    """A prompt nobody sends is dead weight that reads as live configuration.
+
+    SYSTEM_PROMPT_DELEGATED_INTERPRET was written, measured, reverted on the
+    evidence -- citations fell 5 -> 18 under the old prompt against 7 -> 3 under
+    it -- and then sat in the file looking exactly like the prompt that is
+    actually used. The next person to tune delegation would have edited it and
+    measured nothing.
+    """
+    import re
+    from src.classes.AIInterpret import prompts
+
+    root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
+    sources = []
+    for base, _dirs, files in os.walk(os.path.join(root, "src")):
+        if "/tests" in base or "__pycache__" in base:
+            continue
+        for name in files:
+            if name.endswith(".py") and name != "prompts.py":
+                with open(os.path.join(base, name)) as handle:
+                    sources.append(handle.read())
+    blob = "\n".join(sources)
+
+    orphans = sorted(name for name in dir(prompts)
+                     if name.startswith("SYSTEM_PROMPT")
+                     and name not in KNOWN_ORPHAN_PROMPTS
+                     and name not in blob)
+    assert not orphans, (
+        "prompt constants nobody sends: %s -- delete them or wire them up"
+        % ", ".join(orphans))
+
+
+
 def _check(name, fn):
     try:
         fn()
@@ -119,7 +158,8 @@ def main():
               test_every_tool_has_a_description,
               test_descriptions_stay_affordable,
               test_a_timing_claim_belongs_only_to_a_tool_that_costs_time,
-              test_the_lead_prompt_does_not_contradict_itself_about_checking_citations):
+              test_the_lead_prompt_does_not_contradict_itself_about_checking_citations,
+              test_no_new_orphan_prompts):
         _check(t.__name__, t)
     print("\nPassed: %d / %d" % (len(_PASSED), len(_PASSED) + len(_FAILED)))
     if _FAILED:
