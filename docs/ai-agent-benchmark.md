@@ -1832,3 +1832,40 @@ redactions near zero, citations holding near 23 because the work moves rather
 than vanishes, and ~100 s returned. Falsifier: if citations collapse toward 10,
 the Lead cannot do that job, the stage is load-bearing despite the damage, and the
 fix becomes verifying the top-up's additions before accepting them.
+
+## Audit of every change made this session
+
+Written because the session's most expensive mistakes were re-deciding settled
+questions and never checking whether my own changes worked.
+
+### Verified by measurement
+
+| change | effect | status |
+|---|---|---|
+| prefetch verifier (ported from the agent arm) | verifier deaths ~5/run -> 0, redactions 10 -> 3, verify loop -48%, gateway retries 10 -> 0 | **shipped as default** |
+| paper screen inside `search_literature` | theme conversion 7/14 -> 13/13; rule 2 passes for the first time | flag, on in rounds 39-42 |
+| per-layer profile summary | `get_pathway_details` 52.3 k -> 35.2 k chars/run, and says more | always on |
+| `read_paper` serves the cached abstract + names the unseen sections | that tool 11.0 k -> 2.1 k chars/run; deeper reads 9% -> 23% of calls | always on |
+| omics-layer labelling (`omic_name`) | correctness: every gene line had read `None:` in a multi-omics tool | always on |
+
+### Refuted by measurement, and reverted
+
+| change | why it failed |
+|---|---|
+| sentence repair | citations -22% (base) / -34% (agent), redactions up; flag left off |
+| adaptive screen FLOOR | keep rate 24% -> 28-32%, failures 0.50 -> 3.33, redactions 1.2 -> 8.7 |
+| pool CEILING | added on one replicate, refuted by the next (pool 89 -> 24 citations, 0 redactions) |
+| `SHOW_WINDOW` | premise falsified -- `delegate_markers` = 0, so the delegation window never bounded citations. Deleted |
+
+### Built and NEVER measured
+
+`AI_VERIFY_MEMO`, `AI_AGENT_FRAMING_MAY_CITE`, `AI_AGENT_SHOW_UNCITED`, the
+notebook `subject` argument, and the top-up full-text upgrade. Each is defensible
+and none is evidence. They are listed here so they are not mistaken for results.
+
+One entry deserves its own line: the `check_my_citations` quote-evidence block was
+**falsified** in round 35 (`failed_citations` rose) and never reverted. With the
+top-up now identified as the sole source of failed citations, that round's rise is
+better explained by the top-up than by the evidence block -- but that is a
+retrospective excuse for a failed prediction, not a result, and the block remains
+unverified.
