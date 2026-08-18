@@ -1327,3 +1327,43 @@ round that can say what weather it met rather than inferring it from a log.
 
 **Baseline, not test:** `themes_retrieved`/`themes_cited` on both arms,
 `delegate_matched`/`delegate_fallback`, and the notebook `subject` blank rate.
+
+## Round 36 scored: sentence repair buys time and pays for it in grounding
+
+| mean of 4 | base-v35 | base-v36 | agent-v35 | agent-v36 |
+|---|---|---|---|---|
+| wall_s | 418.7 | **359.2** | 378.8 | **293.2** |
+| verify_loop_s | 259.5 | **169.9** | 110.9 | **8.4** |
+| citations_in_body | 22.8 | 17.8 | 15.5 | 10.3 |
+| failed_citations | 4.00 | 6.00 | 1.75 | 4.25 |
+| redacted | 10.0 | 13.8 | 5.75 | 16.5 |
+| prose_pathways_covered | 14.25 | 12.50 | 16.50 | 16.25 |
+| sentences_repaired | -- | 4.0 | -- | 5.75 |
+| gateway_retries | -- | 10.0 | -- | 0.0 |
+
+**The time half of the prediction held and the grounding half failed, in both
+arms.** `verify_loop_s` fell 35% in base and 92% in the agent arm, and wall time
+came down 14% and 23%. But the prediction also said `redacted` holds or falls and
+citations hold: redactions rose 38% and 187%, citations fell 22% and 34%.
+Sentence repair as tested is a FAIL.
+
+**The mechanism is identified and was live during this round.** The guardrails let
+a repaired sentence drop its `[N]` marker -- a decision I made deliberately,
+reasoning that losing a citation beats losing a sentence. That is right for a
+TEXT failure and wrong for DRIFT, which is 20% of failures against 0.4%: there
+the quote is real, so a narrowed sentence is still a cited claim, and dropping the
+marker turns a fixable citation into a lost one plus an orphaned reference. Fixed
+AFTER this round launched, so the round could not benefit. Repair gets exactly one
+retest with the fix; if citations fall again, it is dead.
+
+**An unpredicted finding worth more than the verdict.** `gateway_retries` -- first
+recorded this round -- is **10.0 per base run and 0.0 per agent run**. The base
+arm absorbs every transport rate-limit retry in the round. That is what a
+six-turn verifier agent per citation, over ~25 citations and 3 iterations, does to
+a shared gateway, and it is independent evidence for the prefetch port: the agent
+arm makes the same judgements with one short call each and draws no retries at
+all.
+
+**Also unchanged and now conspicuous:** the agent arm passes coverage again
+(16.25 vs 12.50) and fails citations. Coverage has held above base for two rounds
+running.
