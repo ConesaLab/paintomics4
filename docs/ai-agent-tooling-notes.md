@@ -680,3 +680,34 @@ Twelve of twelve consistent, with nothing fabricated and nothing misattributed
 in the sample. n=12 is small and only the newest reports were sampled, so this
 is evidence the grounding is real rather than proof that it always is -- but it
 is the first check of that claim made from outside the pipeline that produced it.
+
+## The citation audit is a command now (2026-08-18)
+
+The grounding checks above were one-off scripts. They are the checks that answer
+the question the whole framework exists for, so they belong in the repository:
+
+    python -m src.benchmarks.ai_citation_audit integrity [--since YYYY-MM-DD]
+    python -m src.benchmarks.ai_citation_audit quotes    [--since ...]
+    python -m src.benchmarks.ai_citation_audit pubmed    [--since ...] [--sample N]
+
+`integrity` is cheap and covers everything: citations with no reference entry,
+reference entries nothing cites, gaps in the numbering. `quotes` checks every
+Cited Text against the paper copy stored beside it. `pubmed` is the independent
+one -- it re-fetches from NCBI and checks against text this system never stored,
+and reports quotes from full-text papers separately rather than counting a
+body sentence as missing because it is not in the abstract.
+
+Every mode takes `--since`, because the database holds several code eras and
+three conclusions this session reversed when the same data was split by date
+rather than pooled.
+
+Current state, reports since 2026-08-14: 16 checked, no dangling citations, 242
+quotes all matching their stored paper, and an independent re-fetch of 10 coming
+back 6 matched, 4 correctly from full text, 0 unexplained. Nine of the sixteen
+still carry uncited reference entries -- written before the pruning fix, which is
+what that fix stops.
+
+Five tests pin the parsers, because the failure that matters is not a false
+alarm but a silent zero: a renamed heading or reworded label would make the
+auditor report no problems out of no quotes, which looks exactly like a clean
+corpus.
