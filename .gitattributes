@@ -5,6 +5,15 @@
 * text eol=lf
 
 # Denote all files that are truly binary and should not be modified.
+# Compressed archives MUST be listed here: with `* text eol=lf` above, git
+# rewrites CRLF byte pairs inside the compressed stream, which silently
+# truncates the payload rather than failing -- a gzipped mapping file came
+# back 15,834 of its 25,466 lines and still looked like a valid commit.
+*.gz binary
+*.gzip binary
+*.tgz binary
+*.bz2 binary
+*.xz binary
 *.png binary
 *.jpg binary
 *.jpeg binary
