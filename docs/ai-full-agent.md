@@ -137,3 +137,22 @@ drawio -x -f pdf -a --crop -e -o paintomics-ai-framework.pdf paintomics-ai-frame
 `-e` embeds the diagram XML in the export, so a PNG round-trips back into
 draw.io. draw.io's CLI truncates the IEND chunk of `-e` PNGs; repair with the
 `repair_png.py` helper from the drawio skill if a viewer rejects one.
+
+## Activity feed: the states, verified in the browser
+
+The feed under the progress bar is driven by `toolTrace` from
+`ai_interpret_status`. Four states, checked in Chrome against the running app:
+
+| state | what the reader sees |
+|---|---|
+| workflow arm (no `toolTrace` in the response) | nothing -- the list stays hidden |
+| agent arm before its first tool call (empty array) | nothing |
+| agent arm running | up to six rows, newest last, plus a total when there are more |
+| status `done` | the whole progress block hides, feed with it |
+
+The empty case matters: the shipped workflow arm writes no tool trace, so its
+runs show a progress bar and no feed. That is correct, not a broken feed.
+
+Long arguments truncate with an ellipsis inside the 380 px panel -- measured, the
+row's scroll width equals the list's client width and the page does not scroll
+sideways.
