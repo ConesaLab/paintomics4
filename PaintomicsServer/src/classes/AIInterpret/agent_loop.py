@@ -231,6 +231,29 @@ FULLTEXT_MAX_PAPERS = int(os.getenv("AI_AGENT_FULLTEXT_MAX", "24"))
 VERIFY_ITERATIONS = min(int(os.getenv("AI_AGENT_VERIFY_ITERATIONS", "2")),
                         AI_MAX_VERIFICATION_ITERATIONS)
 
+TOPUP_ENABLED = (os.getenv("AI_AGENT_TOPUP") or "1").strip().lower() \
+    not in ("0", "false", "no")
+"""Whether the citation top-up stage runs at all.
+
+It is the largest workflow remnant left in this arm. Measured over round 36:
+99 s of a 304 s run -- 32.5% of the wall clock -- and it fires on EVERY run,
+because the trigger is "citations under MIN_CITATIONS" and this arm is always
+under it. Together with the merge (5.2%) it is 37.7% of the clock spent on two
+stages that sit outside the Lead-then-Verifier shape.
+
+It is also a bet with asymmetric stakes, priced only since this session: it adds
+[N] markers to sentences that already stood on their own, so a marker that
+verifies buys one citation and a marker that fails costs the WHOLE SENTENCE.
+Round 34 recorded 5 added and 0 failed on one job and 2 added against 2 failures
+on another.
+
+The Lead already owns this job: check_my_citations is in its belt, at 100%
+adoption, and it is called while the draft can still change. A dedicated flag
+rather than AI_AGENT_MIN_CITATIONS=0 so the config stamp and the code
+fingerprint both record which pipeline ran -- the same reason the fingerprint
+now hashes flags.
+"""
+
 TOPUP_MIN_SECONDS = float(os.getenv("AI_AGENT_TOPUP_MIN", "200"))
 """Clock a citation top-up needs before it is worth starting.
 
@@ -415,7 +438,8 @@ def _code_fingerprint():
         # source alone left the exact hole this function exists to close:
         # AI_SENTENCE_REPAIR=1 and =0 run different pipelines and stamped the
         # same fingerprint. Anything that gates a stage belongs here.
-        parts.extend(["SENTENCE_REPAIR=%s" % SENTENCE_REPAIR,
+        parts.extend(["TOPUP_ENABLED=%s" % TOPUP_ENABLED,
+                      "SENTENCE_REPAIR=%s" % SENTENCE_REPAIR,
                       "SDK_STREAM=%s" % os.getenv("AI_SDK_STREAM", ""),
                       "FULL_AGENT=%s" % os.getenv("AI_FULL_AGENT", "")])
         return hashlib.sha1("".join(parts).encode("utf-8")).hexdigest()[:10]
@@ -1445,6 +1469,7 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
         # In plain text as well as in the hash: the fingerprint proves two runs
         # differ, this says how.
         "sentence_repair": SENTENCE_REPAIR,
+        "topup_enabled": TOPUP_ENABLED,
         "max_turns": AGENT_MAX_TURNS,
         "gate_reserve": GATE_RESERVE_SECONDS,
         "lead_prompt_chars": len(prompts_mod.SYSTEM_PROMPT_LEAD_AGENT),
@@ -1801,7 +1826,11 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
     cited_now = count_body_citations(str(report), valid_indices)
     uncited = [p for p in unique_papers if p["ref_index"] not in cited_now]
     topup_headroom = (ctx.started_at + AGENT_RUN_SECONDS) - time.time()
-    if uncited and len(cited_now) < MIN_CITATIONS and topup_headroom < TOPUP_MIN_SECONDS:
+    if not TOPUP_ENABLED:
+        stats["topup_disabled"] = True
+        logger.info("[%s][loop] citation top-up disabled; the Lead's own "
+                    "check_my_citations is the only citation pass", job_id)
+    elif uncited and len(cited_now) < MIN_CITATIONS and topup_headroom < TOPUP_MIN_SECONDS:
         # Skipped, and said so: an unexplained absence in the stats is the same
         # shape as a step that silently never ran.
         stats["topup_skipped"] = "%.0f s left, needs %.0f" % (topup_headroom,
