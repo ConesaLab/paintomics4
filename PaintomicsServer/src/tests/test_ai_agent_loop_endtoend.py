@@ -217,6 +217,10 @@ class AiAgentLoopEndToEndTest(unittest.TestCase):
 
         os.environ["AI_LLM_MAX_RPM"] = "0"
         os.environ["AI_FULL_AGENT"] = "1"
+        # So the trace archive can tell a scripted run from a real one; the tool
+        # statistics are read from that archive and must not count either as the
+        # other.
+        os.environ["AI_AGENT_RUN_LABEL"] = "stub-e2e"
         import src.classes.AIInterpret.agent as agent
         import src.classes.AIInterpret.agent_loop as agent_loop
         agent._sdk_configured = False
@@ -280,6 +284,7 @@ class AiAgentLoopEndToEndTest(unittest.TestCase):
             cls.server.shutdown()
         cls._restorePriorRecord()
         os.environ.pop("AI_FULL_AGENT", None)
+        os.environ.pop("AI_AGENT_RUN_LABEL", None)
         from src.conf import serverconf
         if hasattr(cls, "_saved"):
             serverconf.AI_PROVIDERS[serverconf.AI_LLM_PROVIDER].update(cls._saved)

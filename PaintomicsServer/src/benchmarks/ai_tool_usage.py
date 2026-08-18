@@ -94,6 +94,8 @@ def main():
                         help="trace directory (default: CLIENT_TMP/ai_traces)")
     parser.add_argument("--since", type=int, default=0,
                         help="only runs whose loop-start stamp is >= this")
+    parser.add_argument("--include-stubs", action="store_true",
+                        help="also count scripted end-to-end test runs")
     args = parser.parse_args()
 
     directory = args.traces
@@ -101,6 +103,19 @@ def main():
         from src.conf.serverconf import CLIENT_TMP_DIR
         directory = os.path.join(CLIENT_TMP_DIR, "ai_traces")
     runs = _runs(directory, args.since)
+    if not args.include_stubs:
+        kept = []
+        for entry in runs:
+            cfg = next((e.get("result") for e in entry[2]
+                        if e.get("tool") == "__config__"), "")
+            if '"label": "stub' in (cfg or ""):
+                continue
+            kept.append(entry)
+        dropped = len(runs) - len(kept)
+        runs = kept
+        if dropped:
+            print("(excluded %d scripted end-to-end run(s); --include-stubs to keep)"
+                  % dropped)
     if not runs:
         print("no archived traces in %s" % directory)
         return

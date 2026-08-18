@@ -891,6 +891,11 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
         "gate_reserve": GATE_RESERVE_SECONDS,
         "lead_prompt_chars": len(prompts_mod.SYSTEM_PROMPT_LEAD_AGENT),
         "tools": len(TOOLBELT),
+        # Synthetic runs must be separable from real ones. The end-to-end test
+        # drives a scripted agent against a stand-in gateway with a 2-search
+        # budget, and two of those had already landed in the tool-adoption
+        # tables as if a model had chosen those calls.
+        "label": os.getenv("AI_AGENT_RUN_LABEL", "live"),
     }), time.time())
 
     _hb(ctx, "extracting", 10, "Agent reading the enrichment results...")
