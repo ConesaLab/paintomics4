@@ -845,3 +845,36 @@ inline precisely so it could have them.
 that found those also mis-scored one: `22sU1dOIiw`'s truncated `### 4.` sits at
 the end of a long single line, so a last-line check missed it. The truncation
 rate of 7 in 56 stored reports is therefore a floor, not a figure.)
+
+## A concurrency claim I got wrong, and the correction (2026-08-18)
+
+Reading the round-25 traces I computed, for the gate's 22 verifier calls, 47 s of
+work inside a 55 s window, called it 0.9x, concluded the fan-out was serialised,
+and drew that on the diagram as a defect with a named cause: a synchronous
+`search_paper_text` blocking the event loop.
+
+Three measurements later, all of it was wrong:
+
+| test | result |
+|---|---|
+| time `search_paper_text` directly | **1 ms**, not seconds -- cannot serialise anything |
+| 8 concurrent calls to the gateway | 4.8 s of work in 0.7 s wall = **7.3x** -- the gateway parallelises |
+| overlap of the 22 verifier intervals | **peak 11 concurrent** |
+
+The timeline settles it: two bursts of eleven verifiers, every one starting at
+the same instant (272.5 s and 324.1 s into the run) and finishing within ~4 s.
+That is healthy 11-wide parallelism.
+
+My ratio was an artifact of dividing total work by a span that contained
+something else entirely: the **48 s gap between the two verification rounds**,
+which is a single long-form correction rewrite. The gate's serial cost is that
+rewrite, not the fan-out.
+
+The lesson is narrow and worth keeping: a work/span ratio is only a concurrency
+measure when the span contains nothing but that work. Computing overlap from
+per-event intervals -- which the trace already carried -- would have given the
+right answer immediately, and did.
+
+The diagram is corrected. The real levers are one wave of delegation instead of
+two, grounding citations inside the sub-agent, and rewriting only the failed
+sections rather than the whole report.

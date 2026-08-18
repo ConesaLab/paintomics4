@@ -86,7 +86,7 @@
         <mxCell id="quotes" value="_collect_cited_quotes&#xa;find a verbatim sentence per citation" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="bandC">
           <mxGeometry x="26" y="132" width="200" height="58" as="geometry" />
         </mxCell>
-        <mxCell id="fan" value="per-citation verifiers &#8212; Semaphore(8)" style="swimlane;startSize=26;html=1;fillColor=#ffffff;strokeColor=#b85450;fontSize=11;fontStyle=1;" vertex="1" parent="bandC">
+        <mxCell id="fan" value="per-citation verifiers &#8212; Semaphore(8), peak 11 observed" style="swimlane;startSize=26;html=1;fillColor=#ffffff;strokeColor=#b85450;fontSize=11;fontStyle=1;" vertex="1" parent="bandC">
           <mxGeometry x="280" y="46" width="330" height="150" as="geometry" />
         </mxCell>
         <mxCell id="v1" value="verify [1]" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;" vertex="1" parent="fan">
@@ -98,7 +98,7 @@
         <mxCell id="v3" value="&#8230; 22 in a run" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;" vertex="1" parent="fan">
           <mxGeometry x="16" y="110" width="140" height="30" as="geometry" />
         </mxCell>
-        <mxCell id="block" value="&lt;b&gt;BLOCKS THE EVENT LOOP&lt;/b&gt;&#xa;search_paper_text() runs&#xa;synchronously inside each&#xa;async task &#8212; CPU-bound&#xa;fuzzy search over full text" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=10;align=left;spacingLeft=8;verticalAlign=top;spacingTop=6;" vertex="1" parent="fan">
+        <mxCell id="block" value="&lt;b&gt;HEALTHY&lt;/b&gt;&#xa;2 bursts of &lt;b&gt;11 concurrent&lt;/b&gt;&#xa;verifiers, each burst done&#xa;in ~4 s (272.5 s and&#xa;324.1 s into the run)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;align=left;spacingLeft=8;verticalAlign=top;spacingTop=6;" vertex="1" parent="fan">
           <mxGeometry x="172" y="34" width="146" height="106" as="geometry" />
         </mxCell>
         <mxCell id="chain" value="deterministic chain &#8212; no LLM&#xa;verify_report_v2 &#8594; redact_unverified_v2 &#8594;&#xa;renumber_citations &#8594; sort_references_section" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="bandC">
@@ -113,7 +113,7 @@
         <mxCell id="eC3" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#82b366;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="bandC" source="fan" target="chain">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="noteC" value="&lt;b&gt;Configured 8-way. Measured 0.9&#215;.&lt;/b&gt;&#xa;22 gate calls, 47 s of work inside a 54 s&#xa;window &#8212; i.e. they ran one after another.&#xa;Fixing this returns ~40 s of a 600 s budget." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11;align=left;spacingLeft=10;verticalAlign=top;spacingTop=8;" vertex="1" parent="bandC">
+        <mxCell id="noteC" value="&lt;b&gt;The serial cost is BETWEEN the bursts.&lt;/b&gt;&#xa;Verification runs twice. The 48 s gap between&#xa;round 1 (ends 276.6 s) and round 2 (starts&#xa;324.1 s) is ONE correction rewrite &#8212; a single&#xa;long-form model call that rewrites the report.&#xa;That, not the fan-out, is the gate&#8217;s serial cost." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;align=left;spacingLeft=10;verticalAlign=top;spacingTop=8;" vertex="1" parent="bandC">
           <mxGeometry x="280" y="216" width="330" height="96" as="geometry" />
         </mxCell>
         <mxCell id="noteC2" value="&lt;b&gt;The seam that sank r2&lt;/b&gt;&#xa;check_my_citations validates the &lt;i&gt;draft&lt;/i&gt;&#xa;(7 726 chars, 7 citations, all grounded).&#xa;The gate then merges 52 000 chars carrying&#xa;&lt;b&gt;44 citations the agent never checked&lt;/b&gt;,&#xa;cannot ground them in the time left, and&#xa;redacts every one &#8594; 0 citations shipped." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;align=left;spacingLeft=10;verticalAlign=top;spacingTop=8;" vertex="1" parent="bandC">
@@ -129,7 +129,7 @@
         <mxCell id="s1b" value="Tool execution&#xa;&lt;b&gt;32%&lt;/b&gt;  &#8212; delegation dominates it" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;align=left;spacingLeft=10;" vertex="1" parent="side1">
           <mxGeometry x="20" y="98" width="380" height="46" as="geometry" />
         </mxCell>
-        <mxCell id="s1c" value="Exit gate&#xa;&lt;b&gt;18%&lt;/b&gt;  &#8212; serialised where it need not be" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;align=left;spacingLeft=10;" vertex="1" parent="side1">
+        <mxCell id="s1c" value="Exit gate&#xa;&lt;b&gt;18%&lt;/b&gt;  &#8212; fan-out is fine; the rewrite is not" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;align=left;spacingLeft=10;" vertex="1" parent="side1">
           <mxGeometry x="20" y="154" width="380" height="46" as="geometry" />
         </mxCell>
 
@@ -142,17 +142,17 @@
         <mxCell id="s2b" value="Sub-agents (DELEGATE_WORKERS)&#xa;configured: 4  &#183;  measured: &lt;b&gt;2&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;align=left;spacingLeft=10;" vertex="1" parent="side2">
           <mxGeometry x="20" y="96" width="380" height="44" as="geometry" />
         </mxCell>
-        <mxCell id="s2c" value="Citation verifiers (SDK_VERIFY_CONCURRENCY)&#xa;configured: 8  &#183;  measured: &lt;b&gt;0.9&#215;&lt;/b&gt;  &#8212; a bug" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11;align=left;spacingLeft=10;" vertex="1" parent="side2">
+        <mxCell id="s2c" value="Citation verifiers (SDK_VERIFY_CONCURRENCY)&#xa;configured: 8  &#183;  measured: &lt;b&gt;11 at once&lt;/b&gt;, 2 bursts" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;align=left;spacingLeft=10;" vertex="1" parent="side2">
           <mxGeometry x="20" y="150" width="380" height="44" as="geometry" />
         </mxCell>
         <mxCell id="s2d" value="Literature search&#xa;configured: none  &#183;  measured: &lt;b&gt;1&lt;/b&gt;, 22&#8211;25 per run, serial" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=11;align=left;spacingLeft=10;" vertex="1" parent="side2">
           <mxGeometry x="20" y="204" width="380" height="46" as="geometry" />
         </mxCell>
 
-        <mxCell id="side3" value="So: peak parallelism is 2" style="swimlane;startSize=30;html=1;fillColor=#ffffff;strokeColor=#b85450;fontStyle=1;fontSize=13;" vertex="1" parent="1">
+        <mxCell id="side3" value="Peak: 11 in the gate, 2 in the loop" style="swimlane;startSize=30;html=1;fillColor=#ffffff;strokeColor=#b85450;fontStyle=1;fontSize=13;" vertex="1" parent="1">
           <mxGeometry x="1220" y="650" width="420" height="330" as="geometry" />
         </mxCell>
-        <mxCell id="s3a" value="Across a 330 s run the system has more than one&#xa;model call in flight for roughly &lt;b&gt;60 s&lt;/b&gt; &#8212; the two&#xa;delegation waves. Everything else is one call at a time.&#xa;&#xa;&lt;b&gt;Three ways to widen it&lt;/b&gt;&#xa;1.  Unblock the verifier fan-out (to_thread the&#xa;    synchronous search). Free 8&#215;, no design change.&#xa;2.  Delegate in one wave of 4&#8211;6 chunks instead of&#xa;    two waves of 1&#8211;2, so breadth costs 30 s not 60 s.&#xa;3.  Let the sub-agent ground its own citations while&#xa;    it still holds the papers &#8212; parallel work that also&#xa;    closes the seam above." style="text;html=1;align=left;verticalAlign=top;fontSize=11;spacingLeft=6;" vertex="1" parent="side3">
+        <mxCell id="s3a" value="Across a 330 s run the system has more than one&#xa;model call in flight for roughly &lt;b&gt;70 s&lt;/b&gt; &#8212; two&#xa;delegation waves plus two verifier bursts.&#xa;Everything else is one call at a time.&#xa;&#xa;&lt;b&gt;Three ways to widen it&lt;/b&gt;&#xa;1.  Delegate in one wave of 4&#8211;6 chunks instead of&#xa;    two waves of 1&#8211;2: breadth costs 30 s, not 60 s.&#xa;2.  Let each sub-agent ground its own citations&#xa;    while it still holds its papers &#8212; parallel work&#xa;    that also closes the seam below.&#xa;3.  The gate&#8217;s 48 s correction rewrite is one&#xa;    serial call. Rewriting only the failed&#xa;    sections would cut most of it.&#xa;&#xa;&lt;i&gt;Not a lever: the verifier fan-out. It already&#xa;runs 11 wide and finishes a burst in 4 s.&lt;/i&gt;" style="text;html=1;align=left;verticalAlign=top;fontSize=11;spacingLeft=6;" vertex="1" parent="side3">
           <mxGeometry x="16" y="40" width="392" height="280" as="geometry" />
         </mxCell>
 
