@@ -937,3 +937,36 @@ rather than from this metric.
 Runs now stamp `papers_retrieved` from the paper index itself, and the scorer
 reports `papers_in_references` beside it. The two differ by exactly the amount
 the gate removed, which is worth seeing.
+
+## Where the conversion gap comes from: papers no writer ever sees
+
+With `papers_retrieved` finally measuring retrieval rather than the surviving
+reference list, round 29 reads:
+
+| | retrieved | cited | conversion |
+|---|---|---|---|
+| base | 19.5 | 14.5 | **74%** |
+| agent | 75 | 6 | **8%** |
+
+The arithmetic of the arm explains it. `DELEGATE_PAPERS` is 10, chunks are 5
+pathways, and 15 pathways make 3 chunks. A writing unit can therefore see at
+most 3 x 10 = **30** of the 75 papers retrieved. The other 45 were searched for,
+fetched, and never shown to anyone -- they cannot become citations, whatever the
+grounding machinery does downstream.
+
+The shipped arm has no such gap: ~19.5 papers spread across fourteen batches,
+so nearly every paper reaches a writer that could cite it.
+
+Two levers follow, and they pull in opposite directions on cost:
+
+1. **More writing units.** Chunks of 3 pathways rather than 5 gives five units
+   for the same breadth, so up to 50 papers reach a writer. Five chunks against
+   four workers is two waves, about 60 s instead of 30 -- affordable, since
+   round 29 came in at 399 s against a 600 s ceiling.
+2. **Retrieve less.** Fifteen searches at ~2 s each buy 75 papers of which 45
+   are unusable by construction. That is 30 s of budget spent on paper the arm
+   has no way to read.
+
+Lever 1 raises citations; lever 2 only saves time. Lever 1 is the experiment
+worth running, and it is the same "writing units" ratio that predicted the gap:
+base has fourteen, this arm has about five.
