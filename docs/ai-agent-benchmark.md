@@ -1729,3 +1729,32 @@ a known 4/5 baseline: the bar stays where it was, and candidate supply doubles.
 from pool SIZE rather than paper quality -- volume itself dilutes -- and
 SEARCH_HITS returns to 5 permanently, leaving round 39's configuration as the
 arm's best and final form.
+
+### Tool economics, measured before and after the screen
+
+Per-tool context cost, the bill each tool imposes on every later Decide turn:
+
+| tool | before (r34-38) | after (r39-41) | change |
+|---|---|---|---|
+| get_pathway_details | 52.3 k | 35.2 k | -33% (per-layer profile summary) |
+| search_literature | 36.7 k | 18.1 k | -51% (the screen) |
+| read_paper | 11.0 k | 2.1 k | **-81%** (abstract served from cache) |
+| delegate_interpretation | 42.3 k | 37.6 k | flat |
+| **total** | **163 k** | **112 k** | **-31%** |
+
+Three tool-building changes are paying: summarising profiles per omics layer
+rather than dumping every feature, screening papers before they enter the pool,
+and serving an abstract the search already fetched instead of re-fetching it.
+
+**That promotes delegate_interpretation to the largest consumer, at 33.5% of the
+bill -- and it produces ZERO citations** (`delegate_markers` = 0 on every
+replicate measured). What it buys is coverage: the stitched per-pathway analyses
+are why this arm covers 16.2 pathways against base's 14.2, and why its reports run
+46-64 k characters against base's 34-37 k.
+
+So the open question is priced: **is two pathways of coverage worth a third of the
+context budget and the dilution that comes with it?** `AI_AGENT_MERGE_DELEGATED=0`
+already exists to answer it. Predicted if run: coverage falls toward base,
+citations hold or rise as the report concentrates, context and wall clock fall
+sharply. That is the experiment after round 41, and it is the last stage in this
+arm that has never been measured against its cost.
