@@ -121,6 +121,12 @@ DELEGATE_PAPERS = int(os.getenv("AI_AGENT_DELEGATE_PAPERS", "10"))
 SEARCH_HITS = int(os.getenv("AI_AGENT_SEARCH_HITS", str(AI_PAPERS_PER_SEARCH_TASK)))
 # Parallel single-shot calls one delegate_* tool may run at once.
 DELEGATE_WORKERS = int(os.getenv("AI_AGENT_DELEGATE_WORKERS", "4"))
+DELEGATE_QUOTE_SECONDS = float(os.getenv("AI_AGENT_DELEGATE_QUOTE_SECONDS", "45"))
+"""Ceiling on grounding a delegation's citations, so it cannot eat the run.
+
+Collection is a thread pool of 8 and costs about 5 s for 20 citations; 45 s
+is room for a wide delegation plus a slow gateway, and no more.
+"""
 # Below this many cited papers the gate asks the Report Writer once more to
 # use the literature the agent retrieved but never cited. Same floor as the
 # workflow arm (SDK_MIN_CITATIONS): the two arms are only comparable if the
@@ -231,6 +237,7 @@ class LoopContext(AgentContext):
     archived: list = field(default_factory=list)         # events already on disk
     hard_deadline: float = 0.0                          # loop must be done by
     delegation_cache: dict = field(default_factory=dict)  # resolved key -> report
+    quotes: dict = field(default_factory=dict)          # ref_index -> verbatim quote
     flagged_citations: set = field(default_factory=set)   # unquotable at last check
 
 
@@ -931,6 +938,46 @@ async def delegate_interpretation(ctx: RunContextWrapper[LoopContext],
     # from what is kept here (see _merge_delegated).
     c.delegated.extend(r for r in reports if r)
     out = "\n\n---\n\n".join(r for r in reports if r) or "(delegation produced nothing)"
+
+    # Ground the sub-agents' citations NOW, while their papers are the ones in
+    # hand -- and tell the Lead which ones cannot be grounded.
+    #
+    # Round 25 r2 is why. The agent submitted a 7 726-character draft carrying 7
+    # citations, every one checked with check_my_citations and grounded. The gate
+    # then merged in 52 000 characters of this delegated text, carrying citations
+    # the agent had never checked, could not find quotes for them in the time it
+    # had left, and redacted all of them: a 64 830-character report shipped with
+    # ZERO citations. check_my_citations was validating the draft while the gate
+    # shipped draft + merge.
+    #
+    # Collection is a thread pool of 8, so ~20 citations cost about 5 s. The
+    # quotes are cached on the context and reused by the gate, which is the part
+    # that stops the collapse; the message back is what lets the Lead act.
+    ungrounded = []
+    if out and "[" in out:
+        t_q = time.time()
+        try:
+            fresh = await bounded(
+                asyncio.to_thread(_collect_cited_quotes,
+                                  LLMClient(AI_PROVIDERS[AI_LLM_PROVIDER]), out,
+                                  c.paper_index, c.job_id, c.quotes),
+                DELEGATE_QUOTE_SECONDS, label="delegate quote grounding")
+            c.quotes.update(fresh or {})
+        except (Exception, asyncio.TimeoutError) as exc:
+            logger.warning("[%s][loop] delegated-citation grounding failed: %s",
+                           c.job_id, exc)
+        cited_here = {int(n) for n in re.findall(r"\[(\d+)\]", out)} & set(c.paper_index)
+        ungrounded = sorted(cited_here - set(c.quotes))
+        _trace(c, "delegate_grounding",
+               "%d cited" % len(cited_here),
+               "%d grounded, %d not (%.1fs)"
+               % (len(cited_here) - len(ungrounded), len(ungrounded), time.time() - t_q),
+               t_q)
+    if ungrounded:
+        out += ("\n\n[grounding] %d citation(s) in this analysis have no verifiable "
+                "quote yet: %s. The gate deletes each one along with its sentence, "
+                "so read_paper on them, or drop them from what you keep."
+                % (len(ungrounded), ", ".join("[%d]" % i for i in ungrounded[:12])))
     # Cached for the run, and deliberately NOT re-appended to c.delegated on a
     # hit: the gate stitches from that list, and a duplicated interpretation
     # would both pad the merge toward STITCH_MAX_CHARS and let the same claim be
@@ -1448,11 +1495,18 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
     t_q = time.time()
     if premade_quotes is not None:
         # The merge guard already collected these for the text it accepted.
-        quotes = premade_quotes
+        quotes = dict(ctx.quotes)
+        quotes.update(premade_quotes)
         stats["quotes_reused"] = len(quotes)
     else:
-        quotes = _collect_cited_quotes(llm_for_quotes, report, ctx.paper_index,
-                                       job_id)
+        # Seeded with whatever delegation already grounded: those citations were
+        # quoted while the sub-agent's own papers were in hand, and re-deriving
+        # them here, against a merged report and a shrinking clock, is what left
+        # round 25's second replicate with no citations at all.
+        quotes = dict(ctx.quotes)
+        stats["quotes_from_delegation"] = len(quotes)
+        quotes.update(_collect_cited_quotes(llm_for_quotes, report,
+                                            ctx.paper_index, job_id, known=quotes))
     stats["quotes_s"] = time.time() - t_q
     report, rendered = render_references_section(report, ctx.paper_index, quotes)
     stats["refs_rendered"] = len(rendered)

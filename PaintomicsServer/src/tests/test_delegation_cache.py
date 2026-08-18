@@ -72,6 +72,15 @@ def _context():
     return c
 
 
+def _paper(ref):
+    """The shape build_batch_interpretation_prompt actually reads."""
+    return {"ref_index": ref, "pmid": str(10000 + ref), "title": "Paper %d" % ref,
+            "first_author": "Author", "journal": "Journal", "year": "2024",
+            "abstract": "An abstract for paper %d." % ref, "pathways": [],
+            "sections": {"abstract": "An abstract for paper %d." % ref}}
+
+
+
 def _call(tool, ctx, **kwargs):
     """Invoke a @function_tool the way the SDK does.
 
@@ -186,6 +195,75 @@ def test_a_cache_hit_is_fast():
     _with_stub(body)
 
 
+def _with_quotes(fn, quotes=None, boom=False, cites="[1]"):
+    """Run fn with the sub-agents stubbed AND quote collection stubbed."""
+    calls = []
+    original_shot, original_quotes = L._single_shot, L._collect_cited_quotes
+
+    async def _fake_shot(agent, prompt, c, max_turns, label):
+        calls.append(label)
+        return "Interpretation of %s %s." % (label, cites)
+    L._single_shot = _fake_shot
+
+    def _fake_quotes(llm, report, index, job, known=None):
+        if boom:
+            raise RuntimeError("quote service down")
+        return dict(quotes or {})
+    L._collect_cited_quotes = _fake_quotes
+    try:
+        return fn(calls)
+    finally:
+        L._single_shot, L._collect_cited_quotes = original_shot, original_quotes
+
+
+def test_delegation_grounds_its_own_citations():
+    """Round 25 r2: the agent's 7 citations were all grounded, the gate then
+    merged in delegated text carrying citations nobody had checked, could not
+    quote them in the time left, and shipped a 64 830-character report with
+    zero citations. The quotes are collected here, where the papers are."""
+    def body(calls):
+        c = _context()
+        c.paper_index = {1: _paper(1), 2: _paper(2)}
+        _call(L.delegate_interpretation, c, pathway_names=["Cell cycle"], focus="")
+        assert c.quotes, "delegation grounded nothing and cached nothing"
+        assert 1 in c.quotes, "the grounded citation is not on the context"
+    _with_quotes(body, quotes={1: "a verbatim sentence"})
+
+
+def test_the_lead_is_told_which_citations_cannot_be_grounded():
+    """Information, not a veto: the Lead decides whether to read the paper,
+    cite something else, or drop the claim."""
+    def body(calls):
+        c = _context()
+        c.paper_index = {1: _paper(1), 2: _paper(2)}
+        out = _call(L.delegate_interpretation, c, pathway_names=["Cell cycle"], focus="")
+        assert "[grounding]" in out, "the Lead was not told: %s" % out[-200:]
+        assert "[2]" in out.split("[grounding]")[1], "the ungrounded index is not named"
+        assert "[1]" not in out.split("[grounding]")[1], "a grounded citation was flagged"
+    _with_quotes(body, quotes={1: "a verbatim sentence"}, cites="[1] and [2]")
+
+
+def test_grounding_failure_does_not_lose_the_delegation():
+    """The analysis is worth more than its citation check; a quote service that
+    falls over must not discard 27 000 characters of interpretation."""
+    def body(calls):
+        c = _context()
+        c.paper_index = {1: _paper(1)}
+        out = _call(L.delegate_interpretation, c, pathway_names=["Cell cycle"], focus="")
+        assert "Interpretation of" in out, "the delegated text was lost: %s" % out[:120]
+    _with_quotes(body, boom=True)
+
+
+def test_the_gate_reuses_what_delegation_grounded():
+    """Source-level: the gate must seed from ctx.quotes rather than re-derive
+    them against a merged report and a shrinking clock."""
+    import inspect
+    src = inspect.getsource(L._run_loop_async)
+    assert "dict(ctx.quotes)" in src, "the gate does not seed from the delegation's quotes"
+    assert "known=quotes" in src, "the gate re-collects quotes it already has"
+
+
+
 def _check(name, fn):
     try:
         fn()
@@ -203,7 +281,11 @@ def main():
               test_a_different_focus_is_a_different_question,
               test_a_different_pathway_set_is_not_a_hit,
               test_the_cache_hit_is_visible_in_the_trace,
-              test_a_cache_hit_is_fast):
+              test_a_cache_hit_is_fast,
+              test_delegation_grounds_its_own_citations,
+              test_the_lead_is_told_which_citations_cannot_be_grounded,
+              test_grounding_failure_does_not_lose_the_delegation,
+              test_the_gate_reuses_what_delegation_grounded):
         _check(t.__name__, t)
     print("\nPassed: %d / %d" % (len(_PASSED), len(_PASSED) + len(_FAILED)))
     if _FAILED:
