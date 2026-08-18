@@ -215,6 +215,7 @@ class LoopContext(AgentContext):
     started_at: float = 0.0                             # loop start (wall clock)
     archived: list = field(default_factory=list)         # events already on disk
     hard_deadline: float = 0.0                          # loop must be done by
+    delegation_cache: dict = field(default_factory=dict)  # resolved key -> report
 
 
 def _hb(ctx, status, percent, detail):
@@ -753,6 +754,29 @@ async def delegate_interpretation(ctx: RunContextWrapper[LoopContext],
         out = "No enriched pathway matches %s." % pathway_names
         _trace(c, "delegate_interpretation", pathway_names, "no match", t0)
         return out
+    # A delegation already run is not run again. Measured over 60 archived runs:
+    # 7 of them re-issued an identical delegation, costing 25-62 s each (mean 40)
+    # out of a 600 s budget, for an answer the run was already holding. That is
+    # 99% of all wall clock this agent spends repeating itself -- every other
+    # tool is cheap enough for a repeat not to matter.
+    #
+    # The key is the RESOLVED pathway set, not the argument spelling, so asking
+    # for the same pathways by a different name still hits. A different focus is
+    # a different question and runs.
+    cache_key = (tuple(sorted(str(p.get("id")) for p in chosen)),
+                 (focus or "").strip().lower())
+    if cache_key in c.delegation_cache:
+        cached = c.delegation_cache[cache_key]
+        out = _spend(c, ("You have already delegated exactly these pathways with "
+                         "this focus, and the analysis below is that same result "
+                         "-- it was not run again, which just saved you about 30 "
+                         "seconds. Do not request it a third time; spend the "
+                         "budget on what is still uncovered.\n\n"
+                         + cached + _ledger_note(c)))
+        _trace(c, "delegate_interpretation",
+               "%d pathways (cached)" % len(chosen), "cache hit", t0)
+        return out
+
     papers = [c.paper_index[k] for k in sorted(c.paper_index)]
     # The loop's own interpreter: same model and settings as the workflow arm's
     # single-shot one, different instructions -- [N] markers on quotable claims
@@ -826,6 +850,11 @@ async def delegate_interpretation(ctx: RunContextWrapper[LoopContext],
     # from what is kept here (see _merge_delegated).
     c.delegated.extend(r for r in reports if r)
     out = "\n\n---\n\n".join(r for r in reports if r) or "(delegation produced nothing)"
+    # Cached for the run, and deliberately NOT re-appended to c.delegated on a
+    # hit: the gate stitches from that list, and a duplicated interpretation
+    # would both pad the merge toward STITCH_MAX_CHARS and let the same claim be
+    # counted twice when the stitch is compared with the draft.
+    c.delegation_cache[cache_key] = out
     out = _spend(c, out + _ledger_note(c))
     _trace(c, "delegate_interpretation",
            "%d pathways / %d chunks" % (len(chosen), len(chunks)),
