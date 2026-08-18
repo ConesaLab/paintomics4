@@ -1706,6 +1706,12 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
                 body, {p["ref_index"] for p in unique_papers})),
             "redacted": final.get("redacted_count", 0),
             "papers": len(unique_papers),
+            # unique_papers is filtered to the SURVIVING references above -- but
+            # only when citation_mapping is non-empty. A run that keeps its
+            # citations therefore reports a small number and a run that loses
+            # every one reports the full retrieval, so the metric reads
+            # backwards exactly when it matters. The index is the truth.
+            "papers_retrieved": len(ctx.paper_index),
             "full_text_papers": sum(1 for p in unique_papers
                                     if p.get("full_text_available")),
             "seconds": round(time.time() - ctx.started_at, 1),

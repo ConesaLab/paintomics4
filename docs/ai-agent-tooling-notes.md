@@ -907,3 +907,33 @@ comma in ordinary prose is left alone.
 Replayed over the stored reports: 9 sentences that were deleted would now be
 kept, carrying 18 verified citations between them. Five tests, including the
 ten-citation case.
+
+## A metric that read backwards, and the conclusion it cost (2026-08-18)
+
+Round 27's agent replicates reported 6 and 3 "papers retrieved" against base's
+22, which looked like retrieval had collapsed. It had not: those runs made 26 and
+18 searches. The metric was wrong.
+
+`papers_retrieved` was read from the stored `papers` array, which the gate
+filters down to the references that SURVIVED -- but only when
+`citation_mapping` is non-empty:
+
+    if citation_mapping:
+        unique_papers = [p for p in unique_papers if p["ref_index"] in citation_mapping]
+
+A run that keeps its citations therefore reports a small number, and a run that
+loses every one skips the filter entirely and reports the full retrieval. **The
+worse the run, the more papers it appears to have retrieved.**
+
+That inverted metric produced a conclusion recorded earlier in this document:
+"stop rewarding retrieval volume -- r2 pulled 102 papers and scored zero, r1
+pulled 11 and scored 11." Those numbers are the artifact, not the cause. 102 was
+not breadth; it was the signature of total citation failure. **The claim is
+withdrawn.** Whether retrieval breadth helps or hurts grounding is now an open
+question, and the earlier finding that abstract-only papers fail 4x more often
+stands on its own data, which came from the papers array of individual reports
+rather than from this metric.
+
+Runs now stamp `papers_retrieved` from the paper index itself, and the scorer
+reports `papers_in_references` beside it. The two differ by exactly the amount
+the gate removed, which is worth seeing.

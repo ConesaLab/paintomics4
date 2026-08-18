@@ -187,7 +187,13 @@ def _measure(record, arm, job_id, wall, response=None):
         "wall_s": round(wall, 1),
         "report_chars": len(report),
         "prose_chars": len(prose),
-        "papers_retrieved": len(papers),
+        # `papers` is the reference list that survived, not what was retrieved:
+        # it is filtered to cited papers only when citations survive, so a
+        # collapsed run reports MORE papers than a healthy one. Prefer the
+        # run's own retrieval count and keep the reference count separately.
+        "papers_retrieved": (stats.get("papers_retrieved")
+                             or stats.get("papers") or len(papers)),
+        "papers_in_references": len(papers),
         "citations_in_body": len(cited),
         "prose_citations": len({int(n) for n in re.findall(r"\[(\d+)\]", prose)}),
         "full_text_cited": sum(1 for p in papers
@@ -207,7 +213,7 @@ def _measure(record, arm, job_id, wall, response=None):
 
 METRICS = ("wall_s", "prose_chars", "report_chars", "citations_in_body",
            "full_text_cited", "redacted", "prose_pathways_covered",
-           "papers_retrieved")
+           "papers_retrieved", "papers_in_references")
 
 
 def _mean(rows, key):
