@@ -429,6 +429,21 @@ def _ledger_note(ctx):
     return note + "]"
 
 
+def _theme_conversion(searched_tags, cited_papers):
+    """How many searched themes put a paper in the finished references.
+
+    Returns (themes_searched, themes_that_converted). The tags on a paper are
+    whatever the Lead typed into topic_tag, so they are matched the way
+    search_literature stores them -- stripped and lowercased -- and a paper
+    carrying no tag simply votes for nothing.
+    """
+    cited = {str(t).strip().lower()
+             for paper in (cited_papers or [])
+             for t in (paper.get("pathways") or []) if str(t).strip()}
+    searched = {str(t).strip().lower() for t in (searched_tags or []) if str(t).strip()}
+    return len(searched), len(cited & searched)
+
+
 def _spend(ctx, text, tool=None):
     """Count a tool result against the character ledger before returning it.
 
@@ -1927,6 +1942,18 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
     # scorer kept falling back to len(papers) -- the reference list the gate had
     # already filtered -- and reported 9 for a run that retrieved 68.
     stats["papers_retrieved"] = len(ctx.paper_index)
+    # Which SEARCHES earned their place. search_literature is ~60% of every tool
+    # call the Lead makes, it retrieves at ~99.9% novelty -- and 88% of what it
+    # brings back is never cited. Retrieval is not the waste; conversion is.
+    #
+    # Each search is tagged with the theme it supports, and that tag rides on
+    # every paper it registered, so the tags left on the CITED papers say which
+    # searches reached the report and which only spent budget. A per-tag figure
+    # is the difference between "the agent over-searches" (untrue: novelty is
+    # near-perfect) and "the agent searches themes it never writes about".
+    searched, converted = _theme_conversion(ctx.searched_tags, unique_papers)
+    stats["tags_searched"] = searched
+    stats["tags_with_a_cited_paper"] = converted
     stats["verification"] = final
     # Stamp the outcome next to the tool calls that produced it. Mongo keeps one
     # interpretation per JOB, so it can answer "how did this job's last run go"

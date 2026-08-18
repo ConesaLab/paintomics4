@@ -179,7 +179,11 @@ STAGE_COUNTS = ("verify_iterations", "batches_failed", "truncated_calls",
                 "topup_added_failed", "topup_rejected",
                 # Seconds are half of what a tool costs; the other half is the
                 # context every later turn has to carry.
-                "tool_chars")
+                "tool_chars",
+                # Which searches reached the report. Retrieval novelty is
+                # ~99.9%; conversion to a citation is ~12%, so the useful
+                # question is per-theme, not per-call.
+                "tags_searched", "tags_with_a_cited_paper")
 
 # Itemised bills. A per-tool breakdown is the only form in which "which tool is
 # worth its place" can be asked of the archive rather than of one live run.
