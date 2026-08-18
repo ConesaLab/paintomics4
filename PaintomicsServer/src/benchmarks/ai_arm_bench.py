@@ -596,7 +596,32 @@ def cmd_round(args):
     return cmd_score(argparse.Namespace(outdir=args.outdir))
 
 
+def enable_stage_logging():
+    """Let the pipeline's own INFO diagnostics reach the round's log.
+
+    They were suppressed, and it cost a round. The per-iteration verify line
+    ("VERIFY iter 2: 25 checked, 5 failed") and the sentence-repair line ("8
+    fixed, 3 rejected, 0 unplaceable") are both logger.info, the benchmark ran
+    at WARNING, and the log contained ZERO INFO lines -- so when the archived
+    stats were also missing, there was no second channel to fall back on and
+    round 36 had to be stopped and relaunched.
+
+    Scoped to the pipeline's own loggers: the SDK and urllib3 at INFO would bury
+    them.
+    """
+    import logging
+    logging.basicConfig(level=logging.WARNING,
+                        format="%(levelname)s:%(name)s:%(message)s")
+    for name in ("src.classes.AIInterpret.agent",
+                 "src.classes.AIInterpret.agent_loop",
+                 "src.classes.AIInterpret.verification",
+                 "src.classes.AIInterpret.clusters",
+                 "src.benchmarks.ai_arm_bench"):
+        logging.getLogger(name).setLevel(logging.INFO)
+
+
 def main(argv=None):
+    enable_stage_logging()
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     sub = parser.add_subparsers(dest="command", required=True)
 

@@ -154,6 +154,33 @@ def test_the_flag_is_off_by_default():
     assert A.SENTENCE_REPAIR is False
 
 
+def test_a_drift_repair_that_drops_its_citation_is_rejected():
+    """The quote is real -- that is what drift means -- so the narrowed sentence
+    is still a cited claim. Dropping [N] turns a fixable citation into a lost
+    one, and the reference it leaves behind is redacted along with the sentence."""
+    s = "Glycolytic flux increases sharply in the treated group [3]."
+    out, n, stats = _run(REPORT, [_fail(s)], {s: "Glycolytic flux is elevated."})
+    assert n == 0 and out == REPORT, "a repair silently dropped its citation"
+    assert stats["repairs_rejected"] == 1
+
+
+def test_a_drift_repair_keeping_its_citation_is_accepted():
+    s = "Glycolytic flux increases sharply in the treated group [3]."
+    fixed = "Glycolytic flux is elevated in the treated group [3]."
+    out, n, _ = _run(REPORT, [_fail(s)], {s: fixed})
+    assert n == 1 and fixed in out
+
+
+def test_a_text_mode_repair_may_drop_the_citation():
+    """Here the quote is NOT in the paper, so keeping the marker would force the
+    model to retain a citation it was just told is unsupportable."""
+    s = "Glycolytic flux increases sharply in the treated group [3]."
+    out, n, _ = _run(REPORT, [_fail(s, mode="text")],
+                     {s: "Glycolytic flux is elevated in the treated group."})
+    assert n == 1, "a text-mode repair was forced to keep an unsupportable citation"
+    assert "Glycolytic flux is elevated in the treated group." in out
+
+
 def _check(name, fn):
     try:
         fn()
@@ -173,7 +200,10 @@ def main():
               test_an_empty_answer_is_rejected,
               test_one_failed_call_does_not_lose_the_others,
               test_both_repairs_land_when_both_succeed,
-              test_the_flag_is_off_by_default):
+              test_the_flag_is_off_by_default,
+              test_a_drift_repair_that_drops_its_citation_is_rejected,
+              test_a_drift_repair_keeping_its_citation_is_accepted,
+              test_a_text_mode_repair_may_drop_the_citation):
         _check(t.__name__, t)
     print("\nPassed: %d / %d" % (len(_PASSED), len(_PASSED) + len(_FAILED)))
     if _FAILED:

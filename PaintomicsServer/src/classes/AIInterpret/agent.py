@@ -1046,6 +1046,20 @@ async def _repair_sentences(agent, ctx, report, failed, job_id, stats, timeout):
         if not text or "\n" in text or len(text) > 2 * len(original) + 120:
             rejected += 1
             continue
+        # A DRIFT repair must keep its citation. The quote is real -- that is
+        # what "drift" means -- so a sentence narrowed to what the quote does
+        # support is still a cited claim, and dropping the marker converts a
+        # fixable citation into a lost one. Round 36's first agent replicate
+        # repaired 8 sentences and shipped 11 citations against a 15.5 mean,
+        # losing 29 sentences to redaction.
+        #
+        # A TEXT repair is the opposite case: the quote is not in the paper, so
+        # the marker SHOULD be able to go, and requiring it would force the
+        # model to keep a citation it has just been told is unsupportable.
+        marker = "[%d]" % fc.get("ref_index", 0)
+        if fc.get("mode") != "text" and marker not in text:
+            rejected += 1
+            continue
         text = " ".join(text.split())
         if report.count(original) != 1:      # an earlier repair moved it
             rejected += 1
