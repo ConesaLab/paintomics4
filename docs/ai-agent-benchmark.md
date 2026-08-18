@@ -1784,3 +1784,51 @@ from round 41 because `sentences_dropped` was added (a counter) and a dead
 function was deleted. Neither touches what the pipeline does. `sentences_dropped`
 also means round 42 can finally say whether a redaction spike destroys twenty-four
 arguments or six papers cited four times each.
+
+## The top-up is the sole source of failed citations
+
+Reading a column that had been recorded for many rounds and never looked at:
+
+| run | citations | topup added | topup failed | failed_citations | redacted |
+|---|---|---|---|---|---|
+| v39-r1 | 26 | 9 | 1 | 1 | 3 |
+| v39-r2 | 22 | 8 | 0 | 0 | 0 |
+| v39-r3 | 8 | 1 | 1 | 1 | 2 |
+| v39-r4 | 14 | 1 | 0 | 0 | 0 |
+| v40-r1 | 19 | 11 | 2 | 2 | 5 |
+| v40-r2 | 18 | 6 | 3 | 3 | 6 |
+| v40-r3 | 19 | 12 | 5 | 5 | 15 |
+| v40-r4 | 18 | 6 | 3 | 3 | 6 |
+| v41-r1 | 22 | 8 | 1 | 1 | 2 |
+| v41-r2 | 24 | -- | -- | **0** | **0** |
+| v41-r3 | 22 | -- | -- | **0** | **0** |
+| v41-r4 | 26 | 20 | 6 | 6 | 24 |
+
+`topup_added_failed` counts |top-up's references INTERSECT failed references|. It
+equals `failed_citations` in **every row**, which means every failed citation in
+every measured run was one the top-up added. Not one originated in the Lead's own
+draft. The two replicates where the top-up never fired shipped zero failures and
+zero redactions.
+
+That is not a definitional artefact: the two numbers are equal only when the
+failed set is a SUBSET of the top-up's additions.
+
+**Mechanism, already priced and then forgotten.** The top-up takes a finished
+report and bolts `[N]` onto sentences that already stood on their own. A marker
+that verifies buys a citation; one that fails costs the sentence. Its share of
+all citations grew with the pool: 27% (v39), 47% (v40), **60% (v41)** -- so it is
+now both the largest source of citations AND the only source of failures.
+
+**What this reorders.** Rule 3 has been failing for three rounds and every
+hypothesis I pursued -- screening strictness, pool ceilings, delegation
+attribution, the delegation window, framing permissions -- was about something
+else. The answer was in a column added several rounds earlier to price this exact
+stage.
+
+**Round 43 (after round 42's replication):** `AI_AGENT_TOPUP=0` with
+`AI_AGENT_SHOW_UNCITED=1`. The Lead cites the uncited pool itself while drafting,
+with the evidence in view; nothing is bolted on afterwards. Predict failures and
+redactions near zero, citations holding near 23 because the work moves rather
+than vanishes, and ~100 s returned. Falsifier: if citations collapse toward 10,
+the Lead cannot do that job, the stage is load-bearing despite the damage, and the
+fix becomes verifying the top-up's additions before accepting them.
