@@ -407,3 +407,50 @@ reserve subtracted. The first version added the reserve on top and required
 210 s, which silently disabled the nudge inside the end-to-end test's 300 s
 budget -- both submits went through and only the e2e suite noticed. A unit test
 now pins the semantics as well as the behaviour.
+
+## How citations actually die (2026-08-18)
+
+Every stored report was examined for WHY its citations were removed. The answer
+was not what the design assumes.
+
+**All 123 citation failures across 29 reports have one reason: "Reference [N]
+has no Cited Text."** Not one is a Claim Verifier refuting a claim. The failure
+is a deterministic check in `verify_report_v2`: a reference entry with no quote
+attached fails, and every sentence citing it is deleted. The per-citation LLM
+verification -- the most expensive consumer in a run, 18% of wall clock -- is
+not what kills citations. What kills them is that no supporting quote was found
+in the text we hold.
+
+**Which makes holding the text the whole game:**
+
+| papers whose citations were redacted | rate |
+|---|---|
+| full text available | 4 / 176 (2%) |
+| abstract only | 92 / 1113 (8%) |
+
+Four times the failure rate, and only 14% of retrieved papers arrive with full
+text. This is the largest single lever on citation grounding found so far.
+
+**A correction I nearly published.** Three reports lost every citation they had
+(23/23, 14/14, 14/14) and held zero full-text papers, which looked like a live
+defect in the shipped arm. They are dated 2026-03-04 and predate the full-text
+fix; recent workflow runs hold 6-11 full-text papers. Checking the dates before
+writing it up is the only reason that is a footnote instead of a false alarm.
+
+**It also explains an earlier result that looked damning for read_paper.**
+Reading a paper does not raise the per-citation verifier's pass rate (73% read
+vs 84% unread, n=28 runs). But `read_paper` upgrades an abstract-only paper to
+full text as a side effect -- and so does the agent arm's post-loop upgrade,
+automatically, for every cited-but-thin paper. Measured on two runs, that step
+recovered 8 of 13 and 11 of 17 thin cited papers with 232 s and 269 s of budget
+in hand, so it is neither starved nor rare.
+
+So the most likely reading is that read_paper's grounding value is largely
+*already delivered* by the automatic upgrade, and what reading adds beyond it is
+the agent's ability to quote precisely rather than the availability of text to
+quote from. That is a hypothesis with a mechanism, not a measurement, and it is
+recorded as such.
+
+Nothing in the agent was changed on the strength of this. Eight changes already
+await round 25, and a ninth argued from correlation is how a bundle becomes
+unattributable.
