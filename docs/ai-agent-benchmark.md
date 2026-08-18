@@ -1567,3 +1567,58 @@ tool to question next is delegation itself: it costs loop turns and merge time
 and contributes zero citations, so the question is whether its prose earns the
 dilution. That is measurable directly -- AI_AGENT_MERGE_DELEGATED=0 already
 exists.
+
+## Round 39 scored: the screen works, its floor was the defect
+
+4 of 5 rules. Rule 2 fails 17.5 vs 20.5. Coverage 16.2 vs 14.2, redactions level
+at 1.2, every replicate inside the ceiling.
+
+| replicate | papers kept | citations | themes |
+|---|---|---|---|
+| r1 | 37 | 26 | 13/13 |
+| r2 | 31 | 22 | 12/15 |
+| r4 | 23 | 14 | 10/15 |
+| r3 | 17 | 8 | 7/13 |
+
+**Two of four replicates beat base outright** (26 and 22 against 23 and 18). The
+mean is dragged down by r3, which kept 9% of its candidates where r1 kept 24% --
+the same code and prompt, no target size, so a screener running strict on every
+search starves the pool.
+
+**The regression that makes this actionable:**
+
+```
+SCREENED   (n=4):  citations = 0.91 x papers - 7.2    r = +0.997
+UNSCREENED (n=16): citations = 0.017 x papers + 12.7  r = +0.116
+```
+
+A screened paper is worth 0.91 citations; an unscreened one was worth 0.02. That
+is a 50x difference in marginal value, and it resolves every earlier confusion
+about retrieval volume: before screening, more papers bought nothing measurable
+(which is why r = +0.16 across 72 runs); after screening, pool size very nearly
+determines citations.
+
+So the deficit is no longer "the arm cannot convert literature". It converts at
+91%. It simply does not hold enough.
+
+## Round 40 pre-registration (written before the round ran)
+
+**Adaptive screen strictness, nothing else.** The stance now depends on the pool:
+permissive below half the writers' window, ordinary near it, strict once full.
+Base is interleaved and untouched.
+
+**Prediction, from the fitted line rather than from hope.**
+- `papers_retrieved` rises from 27 to **>= 31**, and no replicate falls below 24
+  (r3's 17 is the failure being fixed).
+- `citations_in_body` >= **21**, which is 0.91 x 31 - 7.2 rounded down. Rule 2
+  passes if the pool lands anywhere in its target band.
+- Coverage holds above base, as it has for four rounds.
+- Every replicate inside 600 s. The screen adds one short call per search.
+
+**Falsifier.** If the pool rises and citations do NOT follow the fitted line,
+then 0.91 was an artefact of four points and pool size is not the lever -- which
+would send the question back to what the Lead does with the papers it holds.
+
+**Honest caveat recorded in advance:** one smoke run of the adaptive screen on
+the harder job kept 24 papers and shipped 14 citations, which sits ON the line
+but below the target band. The fix may narrow variance without raising the mean.
