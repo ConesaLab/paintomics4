@@ -267,3 +267,41 @@ an anchor that did not match, once through a list that holds references rather
 than calls. A suite that skips a test reports confidence it has not earned, so
 there is now a test that parses its own file and fails if any `test_` function
 is not reachable from `main()`.
+
+## The redactor was destroying the report it cleaned (2026-08-18)
+
+`redact_unverified_v2` split the body on `(?<=[.!?])\s+` and rejoined with `" "`.
+That split consumes the whitespace after a full stop, and in markdown that
+whitespace is the newline before a heading or a bullet. One failed citation was
+enough to delete any heading glued to a removed sentence, inline the rest into
+prose, and collapse every list.
+
+Both arms call it, so this damaged **shipped** interpretations, not just the
+draft agent arm.
+
+The cause was provable from the stored reports:
+
+| stored reports | n | carried glued structure tokens | mean per report |
+|---|---|---|---|
+| with a redaction | 29 | **29 / 29** | 37.6 |
+| with no redaction | 27 | **0 / 27** | 0 |
+
+The client's `_preprocessMarkdown` had attributed this to the model -- "the model
+routinely writes a SPACE where a newline belongs", verified against the stored
+reports. The correlation is real; the direction was wrong. Redaction wrote the
+space.
+
+Redaction is now block-aware: headings, tables, fenced code and blank lines pass
+through untouched, sentences are removed with their original separators intact,
+and a heading whose section lost all its prose is dropped rather than left
+standing over nothing. Rendered side by side in Chrome on stored report
+`sv02V5dAE4`, the same redaction goes from 13 list items and 9 paragraphs to 46
+and 31 -- the old output showed literal `*` markers in the middle of paragraphs.
+
+14 tests pin it, 6 of which fail against the old implementation.
+
+**The frontend shim stays.** Checked in the browser against all 27 clean reports:
+the rules are structurally neutral on well-formed markdown, and exactly one
+report changed -- an after-a-colon bullet the model really had glued. So the
+model does do it, about a hundredth as often as the redactor did, and old
+reports in the database still need recovering.

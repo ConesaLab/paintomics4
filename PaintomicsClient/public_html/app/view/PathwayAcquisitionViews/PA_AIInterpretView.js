@@ -268,15 +268,30 @@ function PA_AIInterpretView() {
     };
 
     this._preprocessMarkdown = function(text) {
-        /* The model routinely writes a SPACE where a newline belongs, gluing a
-           structure token to the tail of the previous sentence:
+        /* Structure tokens glued to the tail of the previous sentence:
                "...hepatic response [3, 6]. - **All ten pathways..."
                "...perturbs bile secretion. ---"
                "...biosynthetic response. ### The Flat Temporal Pattern..."
            A glued token is not markdown at all - marked renders it literally,
-           which is how "---" and "###" ended up visible in reports. Recover the
-           newline first; the blank-line rules below then finish the job.
-           Verified against every report stored locally (see git history). */
+           which is how "---" and "###" ended up visible in reports.
+
+           This was originally read as model behaviour. It is overwhelmingly not:
+           the cause was redact_unverified_v2 on the server, which split the body
+           on sentence boundaries and rejoined with " ", swallowing the newline
+           before every heading and bullet that followed a full stop. Over the 56
+           reports stored locally the split is clean - 29 of 29 reports with a
+           redaction carry glued tokens (mean 37.6 each), 0 of 27 without a
+           redaction do. The server now redacts without touching layout.
+
+           The model does glue occasionally: running these rules over the 27
+           clean reports changed the rendered structure of exactly one, an
+           after-a-colon bullet. So the rules stay, for that case and as a
+           compatibility shim - reports written before the server fix are still
+           in the database and still open in this view.
+
+           On well-formed markdown they are structurally neutral, checked in the
+           browser over those 27 reports plus 4 outputs of the fixed redactor:
+           blank lines get normalised, no heading or list item is added or lost. */
         // Headings glued after prose ("prose. ### Title" / "prose. #### Title")
         text = text.replace(/([^\n])[ \t]+(#{1,6} )/g, "$1\n\n$2");
         // Horizontal rules glued after prose, when the --- ends its line.

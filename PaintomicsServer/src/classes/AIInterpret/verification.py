@@ -316,6 +316,114 @@ def verify_report_v2(report_text, gene_whitelist, unique_papers, job_instance):
     }
 
 
+# -- structure-preserving redaction ---------------------------------------
+#
+# Redaction used to split the body on sentence boundaries and rejoin with " ".
+# The split pattern consumes the whitespace after a full stop, and in markdown
+# that whitespace is usually the newline before a heading or a bullet, so every
+# paragraph break that followed a sentence collapsed and any heading glued to a
+# removed sentence disappeared with it. A report with one failed citation came
+# back as a wall of text with its sections missing -- and since the frontend
+# renders this as markdown, the damage was visible to every reader.
+#
+# The rule now: only whole sentences that cite a failed index are removed, and
+# nothing else in the document moves.
+
+_HEADING_RE = re.compile(r'^\s{0,3}(#{1,6})\s')
+_FENCE_RE = re.compile(r'^\s*(```|~~~)')
+_TABLE_RE = re.compile(r'^\s*\|')
+
+
+def _is_structural(line):
+    """A line that carries layout rather than prose, and must survive verbatim."""
+    return (not line.strip()
+            or _HEADING_RE.match(line)
+            or _TABLE_RE.match(line)
+            or line.strip() in ("---", "***", "___"))
+
+
+def _redact_sentences(text, bad_patterns):
+    """Drop sentences citing a failed index, keeping the original whitespace.
+
+    Splitting with a capturing group keeps every separator, so the surviving
+    sentences are rejoined with exactly the whitespace that was between them --
+    newlines included. When a removed sentence was followed by a paragraph
+    break, that break is kept, otherwise the paragraphs either side would merge.
+    """
+    parts = re.split(r'((?<=[.!?])\s+)', text)
+    kept, removed = [], 0
+    for i in range(0, len(parts), 2):
+        sentence = parts[i]
+        separator = parts[i + 1] if i + 1 < len(parts) else ""
+        if sentence.strip() and any(bp in sentence for bp in bad_patterns):
+            removed += 1
+            if "\n" in separator and kept:
+                kept.append(separator)          # keep the block boundary
+        else:
+            kept.append(sentence)
+            if separator:
+                kept.append(separator)
+    return "".join(kept), removed
+
+
+def _drop_orphan_headings(lines):
+    """Remove a heading whose section lost all of its prose to redaction.
+
+    A heading left standing over nothing reads as a rendering failure. A heading
+    is orphaned only when everything down to the next heading of the same or a
+    higher level is blank -- a parent heading whose subsections still have text
+    is kept.
+    """
+    levels = [len(_HEADING_RE.match(l).group(1)) if _HEADING_RE.match(l) else None
+              for l in lines]
+    drop = set()
+    for i, level in enumerate(levels):
+        if level is None:
+            continue
+        has_content = False
+        for j in range(i + 1, len(lines)):
+            other = levels[j]
+            if other is not None and other <= level:
+                break
+            if other is None and lines[j].strip():
+                has_content = True
+                break
+        if not has_content:
+            drop.add(i)
+    return [l for i, l in enumerate(lines) if i not in drop]
+
+
+def _redact_body(body, bad_patterns):
+    """Sentence-level redaction that leaves headings, lists and tables in place."""
+    segments, prose, removed = [], [], 0
+    in_fence = False
+
+    def flush():
+        nonlocal removed
+        if not prose:
+            return
+        cleaned, count = _redact_sentences("\n".join(prose), bad_patterns)
+        removed += count
+        if cleaned.strip():
+            segments.append(cleaned.rstrip())
+        prose.clear()
+
+    for line in body.split("\n"):
+        if _FENCE_RE.match(line):               # code fences pass through whole
+            flush()
+            in_fence = not in_fence
+            segments.append(line)
+        elif in_fence or _is_structural(line):
+            flush()
+            segments.append(line)
+        else:
+            prose.append(line)
+    flush()
+
+    lines = "\n".join(segments).split("\n")
+    return "\n".join(_drop_orphan_headings(lines)), removed
+
+
 def redact_unverified_v2(report_text, failed_citations):
     """Remove sentences citing failed [N] indices and their References entries.
 
@@ -338,16 +446,8 @@ def redact_unverified_v2(report_text, failed_citations):
         body = report_text
         refs_section = ""
 
-    # Remove body sentences that cite bad indices
-    sentences = re.split(r'(?<=[.!?])\s+', body)
-    clean_sentences = []
-    removed = 0
-    for s in sentences:
-        if any(bp in s for bp in bad_patterns):
-            removed += 1
-        else:
-            clean_sentences.append(s)
-    clean_body = " ".join(clean_sentences)
+    # Remove body sentences that cite bad indices, leaving structure intact
+    clean_body, removed = _redact_body(body, bad_patterns)
 
     # Remove bad reference entries from References section
     if refs_section:
