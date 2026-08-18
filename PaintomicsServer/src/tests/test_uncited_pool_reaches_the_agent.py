@@ -86,6 +86,23 @@ def test_it_is_wired_into_the_tool_every_run_calls():
     assert "_uncited_papers(c.paper_index, cited)" in body
 
 
+def test_it_ships_dark_so_the_next_round_can_REPLICATE():
+    """Not about this change: about the bar.
+
+    Round 39 is the first round where the agent arm leads every rule, and the
+    shipping bar is 5/5 on two CONSECUTIVE rounds. A change landing between them
+    -- however well motivated -- turns the replication into a new experiment, and
+    a bar that never sees the same configuration twice can never be met. This is
+    the discipline that the sentence-repair and framing rounds lacked.
+    """
+    assert L.SHOW_UNCITED is False
+    src = inspect.getsource(L)
+    i = src.index("def check_my_citations(")
+    body = src[i:src.index("@function_tool", i)]
+    assert "if SHOW_UNCITED else []" in body, (
+        "the nudge is live, so round 40 cannot replicate round 39")
+
+
 def test_it_reads_what_will_SHIP_not_just_the_draft():
     """check_my_citations already checks draft plus delegated analyses, because
     the merge brings citations this tool never saw. The uncited list must be
@@ -116,6 +133,7 @@ def main():
               test_empty_inputs_are_safe,
               test_the_advice_does_not_encourage_stuffing,
               test_it_is_wired_into_the_tool_every_run_calls,
+              test_it_ships_dark_so_the_next_round_can_REPLICATE,
               test_it_reads_what_will_SHIP_not_just_the_draft):
         _check(t.__name__, t)
     print("\nPassed: %d / %d" % (len(_PASSED), len(_PASSED) + len(_FAILED)))

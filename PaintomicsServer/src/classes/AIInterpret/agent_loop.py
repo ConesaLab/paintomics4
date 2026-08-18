@@ -182,6 +182,20 @@ MERGE_DELEGATED = os.getenv("AI_AGENT_MERGE_DELEGATED", "1") == "1"
 # everything, which measured 4.5-11 citations because the writer saw the whole
 # reference list at once.
 MERGE_MODE = os.getenv("AI_AGENT_MERGE_MODE", "stitch")
+SHOW_UNCITED = os.getenv("AI_AGENT_SHOW_UNCITED", "0") == "1"
+"""Whether check_my_citations names the retrieved papers the draft never cites.
+
+Off by default for a reason that is about the EXPERIMENT, not the change. Round
+39 is the first round in which the agent arm leads every rule, and the shipping
+bar is 5/5 on two consecutive rounds -- so round 40 has to be a replication of
+round 39's exact configuration. A change committed between them, however good,
+turns the replication into a new experiment and the bar can never be met.
+
+The change itself is sound and measured-motivated: the top-up costs 83.5 s (24%
+of a run) and supplies 9 of 26 citations by bolting markers onto finished prose.
+It waits for the round after the replication.
+"""
+
 SHOW_WINDOW = os.getenv("AI_AGENT_SHOW_WINDOW", "0") == "1"
 """Tell the Lead how many of its papers can still reach a writer.
 
@@ -514,7 +528,8 @@ def _code_fingerprint():
         # source alone left the exact hole this function exists to close:
         # AI_SENTENCE_REPAIR=1 and =0 run different pipelines and stamped the
         # same fingerprint. Anything that gates a stage belongs here.
-        parts.extend(["SHOW_WINDOW=%s" % SHOW_WINDOW,
+        parts.extend(["SHOW_UNCITED=%s" % SHOW_UNCITED,
+                      "SHOW_WINDOW=%s" % SHOW_WINDOW,
                       "SCREEN_PAPERS=%s" % SCREEN_PAPERS,
                       "FRAMING_MAY_CITE=%s" % FRAMING_MAY_CITE,
                       "TOPUP_ENABLED=%s" % TOPUP_ENABLED,
@@ -1364,7 +1379,7 @@ def check_my_citations(ctx: RunContextWrapper[LoopContext], draft: str) -> str:
     # evidence it was being judged against. The quotes are already collected
     # above; withholding them was free to nobody.
     lines.extend(_quote_evidence_lines(cited, quotes))
-    unused = _uncited_papers(c.paper_index, cited)
+    unused = _uncited_papers(c.paper_index, cited) if SHOW_UNCITED else []
     if unused:
         lines.append("Retrieved papers your draft cites NOWHERE -- if one "
                      "genuinely supports a claim you are making, cite it in the "
@@ -1827,6 +1842,7 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
         "framing_may_cite": FRAMING_MAY_CITE,
         "screen_papers": SCREEN_PAPERS,
         "show_window": SHOW_WINDOW,
+        "show_uncited": SHOW_UNCITED,
         "max_turns": AGENT_MAX_TURNS,
         "gate_reserve": GATE_RESERVE_SECONDS,
         "lead_prompt_chars": len(prompts_mod.SYSTEM_PROMPT_LEAD_AGENT),
