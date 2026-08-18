@@ -55,7 +55,7 @@ from src.classes.AIInterpret import clusters as clusters_mod
 from src.classes.AIInterpret.agent import (
     AgentContext, _build_agents, bounded, configure_sdk, _model, run_hedged,
     SDK_LONG_CALL_TIMEOUT, SDK_VERIFY_CONCURRENCY, SDK_MIN_CITATIONS,
-    SDK_CALL_TIMEOUT, set_run_deadline,
+    SDK_CALL_TIMEOUT, SENTENCE_REPAIR, _repair_sentences, set_run_deadline,
 )
 from src.classes.AIInterpret.context_builder import (
     build_pathway_context, build_gene_symbol_whitelist, get_organism_name,
@@ -427,6 +427,37 @@ def _ledger_note(ctx):
             note += (" · literature searched for %d of %d clusters"
                      % (len(ctx.searched_tags), units))
     return note + "]"
+
+
+def _unrepresented_notes(notebook, text, limit=5):
+    """Notes the agent recorded whose subject never reached the draft.
+
+    notebook_write has 100% adoption -- every one of 25 real runs called it, a
+    median of 3 times -- and until now its stored output had exactly two
+    readers, both on failure paths: the forced synthesis and the model-free
+    assembly. Measured across 64 archived runs, ONE hit those (2%). On the other
+    98% the agent wrote notes that nothing ever read.
+
+    That does not make the tool worthless -- the note stays in the SDK's
+    conversation context, which is its own kind of rehearsal -- but a store with
+    no reader cannot help the report. This gives it one, for free: a finding the
+    agent thought worth recording and then left out is either a deliberate cut
+    or a dropped finding, and only the agent knows which.
+
+    Judged on entity-like tokens (gene symbols, pathway names) rather than
+    whole-note matching, because a note is prose and the report rephrases it. A
+    note with no identifiable entity is not judged at all.
+    """
+    lowered = (text or "").lower()
+    missing = []
+    for note in (notebook or []):
+        tokens = re.findall(r"\b[A-Z][A-Za-z0-9]{2,}\b|\b[a-z]+\d+[a-z0-9]*\b",
+                            note or "")
+        if not tokens:
+            continue                      # nothing checkable; do not guess
+        if not any(t.lower() in lowered for t in tokens):
+            missing.append(" ".join(note.split())[:110])
+    return missing[:limit]
 
 
 def _quote_evidence_lines(cited, quotes, limit=12):
@@ -949,6 +980,11 @@ def check_my_citations(ctx: RunContextWrapper[LoopContext], draft: str) -> str:
     # evidence it was being judged against. The quotes are already collected
     # above; withholding them was free to nobody.
     lines.extend(_quote_evidence_lines(cited, quotes))
+    orphaned = _unrepresented_notes(c.notebook, text)
+    if orphaned:
+        lines.append("Findings you recorded that this draft does not mention -- "
+                     "add them or drop them deliberately:")
+        lines.extend("  - %s" % n for n in orphaned)
     # Remembered so submit_report can tell whether the agent acted on its own
     # check. Measured over 28 runs that called this tool: the 10 that re-checked
     # after a bad result improved every time (11/6 -> 7/0, 14/7 -> 8/0,
@@ -1805,6 +1841,7 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
             logger.info("[%s][loop] verification out of clock after %d round(s); "
                         "the programmatic net takes the rest", job_id, _iteration)
             break
+        stats["verify_iterations"] = _iteration + 1
         citations = parse_references_section(report)
         to_verify = [c for c in citations if c.get("cited_text")]
         if not to_verify:
@@ -1939,6 +1976,21 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
             logger.info("[%s][loop] correction rewrite skipped: %.0f s left",
                         job_id, correction_budget)
             break
+        if SENTENCE_REPAIR:
+            # Same trade as the shipped arm: repair the failed sentences
+            # themselves, in parallel, and leave everything else alone. The
+            # References section, its quotes and the appended tables all stay
+            # valid, so the three repair steps below are not needed either.
+            report, fixed = await _repair_sentences(
+                agents["synth"], ctx, report, failed, job_id, stats,
+                min(SDK_CALL_TIMEOUT, correction_budget))
+            if not fixed:
+                logger.info("[%s][loop] no sentence could be repaired; leaving "
+                            "%d citation(s) to the programmatic net",
+                            job_id, len(failed))
+                break
+            continue
+
         try:
             corr = await bounded(Runner.run(
                 agents["synth"],
