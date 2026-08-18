@@ -226,3 +226,44 @@ now nudges exactly once on a thin undelegated draft.
   failure mode, not agency.** Deterministic retrieval plus one judgement call
   beat the Claim Verifier's tool loop on speed (2.5 s vs 45 s timeouts) *and*
   reliability (29/29 verdicts vs 9-of-14 turn exhaustion) at once.
+
+## The archive now records its own outcome (2026-08-18)
+
+Each run stamps a `__outcome__` event as its last trace line: prose length,
+surviving citations, redactions, papers, full-text papers, seconds. This closes
+a gap that made one whole class of question unanswerable.
+
+The question was "does calling this tool produce a better report?" -- the only
+version of tool usefulness that matters, as against adoption (it gets called)
+and cost (what the call takes). The first attempt joined traces to MongoDB and
+came back **n=1**, because Mongo stores one interpretation per *job* and the
+benchmark reuses two jobs for every run. Forty runs, two retrievable outcomes.
+The archive is per run, so putting the outcome there makes the association
+computable over the whole history from the next run on.
+
+The stamp sits inside `try/except Exception`. It runs on the return path of a
+run that has already spent ten minutes and its gateway budget; nothing it can
+hit is worth discarding a finished interpretation for. A test asserts the guard
+is there.
+
+### read_paper, at n=28 runs
+
+| citations that passed verification | rate |
+|---|---|
+| agent had opened the paper first | 185/252 (73%) |
+| never opened | 413/490 (84%) |
+
+Reading still does not raise the pass rate -- the gap has held, and widened
+slightly, since it was first measured at n=8. The prompt no longer claims a
+payoff for reading. What reading is *for* is rejecting a paper before it becomes
+an unquotable citation, and that shows up as a lower cited-share, not a higher
+pass rate.
+
+### A test suite can silently skip a test
+
+`main()` in the budget suite lists tests by hand. Twice in this loop a test was
+added, the suite printed all green, and the count had not moved -- once through
+an anchor that did not match, once through a list that holds references rather
+than calls. A suite that skips a test reports confidence it has not earned, so
+there is now a test that parses its own file and fails if any `test_` function
+is not reachable from `main()`.

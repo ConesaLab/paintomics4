@@ -329,6 +329,52 @@ def test_archiving_never_breaks_a_run():
     assert len(ctx.trace) == 1
 
 
+def test_outcome_stamp_never_costs_the_report():
+    """A measurement failure must not discard a finished interpretation.
+
+    The outcome stamp runs on the return path of a run that has already spent
+    its ten minutes and its gateway budget. It reads fields off the paper list
+    (ref_index) that a delegated or fallback path could leave out. If that throw
+    escaped, the run would report an error while holding a complete report --
+    the worst possible trade for a line of telemetry.
+    """
+    import ast, inspect
+    src = inspect.getsource(L)
+    tree = ast.parse(src)
+    fn = next(n for n in ast.walk(tree)
+              if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+              and "__outcome__" in (ast.get_source_segment(src, n) or ""))
+    guarded = False
+    for node in ast.walk(fn):
+        if not isinstance(node, ast.Try):
+            continue
+        seg = ast.get_source_segment(src, node) or ""
+        if "__outcome__" not in seg:
+            continue
+        if any(h.type is None or getattr(h.type, "id", "") == "Exception"
+               for h in node.handlers):
+            guarded = True
+    assert guarded, "the __outcome__ stamp must sit inside try/except Exception"
+
+
+
+def test_every_test_in_this_file_actually_runs():
+    """main() lists tests by hand, so a new one can be defined and never run.
+
+    That happened twice in this loop: a test was added, the suite printed all
+    green, and the count had not moved. A suite that silently skips a test is
+    worse than one that lacks it -- it reports confidence it has not earned.
+    """
+    import re as _re
+    src = open(__file__.replace(".pyc", ".py")).read()
+    defined = set(_re.findall(r"^def (test_\w+)", src, _re.M))
+    listed = set(_re.findall(r"\b(test_\w+)\b", src[src.index("\ndef main("):]))
+    orphans = sorted(defined - listed)
+    assert not orphans, ("defined but never run from main(): %s"
+                         % ", ".join(orphans))
+
+
+
 def main():
     for t in (test_tool_output_under_budget_is_returned_whole,
               test_tool_output_over_budget_is_cut_and_says_so,
@@ -355,7 +401,9 @@ def main():
               test_a_merge_with_no_time_left_is_skipped_not_attempted,
               test_a_merge_early_in_a_run_gets_a_real_budget,
               test_each_event_is_archived_once,
-              test_archiving_never_breaks_a_run):
+              test_archiving_never_breaks_a_run,
+              test_outcome_stamp_never_costs_the_report,
+              test_every_test_in_this_file_actually_runs):
         _check(t.__name__, t)
     print("\nPassed: %d / %d" % (len(_PASSED), len(_PASSED) + len(_FAILED)))
     if _FAILED:

@@ -1490,6 +1490,30 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
     stats["verify_s"] = time.time() - t0
     stats["tool_calls"] = ctx.tool_calls
     stats["verification"] = final
+    # Stamp the outcome next to the tool calls that produced it. Mongo keeps one
+    # interpretation per JOB, so it can answer "how did this job's last run go"
+    # and nothing else -- an association between a tool and the report it helped
+    # produce came out at n=1 because two jobs were reused for forty runs. The
+    # archive now closes that loop: configuration at the start, tool calls in the
+    # middle, outcome at the end, one self-contained file per run.
+    try:
+        body = str(report).split("### References")[0]
+        _trace_gate(ctx, "__outcome__", "run end", json.dumps({
+            "prose_chars": len(body),
+            "citations": len(count_body_citations(
+                body, {p["ref_index"] for p in unique_papers})),
+            "redacted": final.get("redacted_count", 0),
+            "papers": len(unique_papers),
+            "full_text_papers": sum(1 for p in unique_papers
+                                    if p.get("full_text_available")),
+            "seconds": round(time.time() - ctx.started_at, 1),
+        }), time.time())
+    except Exception as exc:                      # never lose a finished report
+        # This is measurement, and it sits on the return path of a run that has
+        # already spent its ten minutes. Nothing it can hit -- a paper without a
+        # ref_index, a report that is not a string -- is worth discarding the
+        # interpretation for. Log and hand back the report.
+        logging.warning("[AGENT] outcome stamp failed: %s", exc)
     if hooks.get("notebook") and ctx.notebook:
         try:
             hooks["notebook"](list(ctx.notebook))

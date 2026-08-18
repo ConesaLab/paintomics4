@@ -206,7 +206,9 @@ def main():
               "\n  rejected the paper', and rejecting a source before it becomes an"
               "\n  unquotable citation is the tool working. cited<-opened says"
               "\n  whether reading is on the critical path to a citation at all.")
-    else:
+    _outcomes(runs)
+
+    if not opened:
         print("\nread_paper payoff: no run yet carries pmid= in its trace"
               "\n  (added after the first six rounds; re-run to populate)")
 
@@ -250,6 +252,53 @@ def main():
               "\n  2.2 s a call to confirm what the abstract already said, and the"
               "\n  prompt should stop urging it. If it does, reading is the cheapest"
               "\n  grounding available and the agent should do more of it.")
+
+
+def _outcomes(runs):
+    """Associate each tool with the outcome of the runs that used it.
+
+    Reads the run's own __outcome__ stamp rather than MongoDB: the database keeps
+    one interpretation per JOB, so with two jobs reused across forty runs it
+    could answer this for two of them. The archive carries configuration,
+    tool calls and outcome per run, which is what an association needs.
+
+    Correlation, not cause -- an agent that delegates may differ in other ways.
+    It is still the only per-tool outcome signal there is, and it was decisive
+    once: runs that never delegated shipped a fifth of the prose.
+    """
+    from collections import defaultdict as _dd
+    with_tool, without_tool = _dd(list), _dd(list)
+    watched = ("delegate_interpretation", "read_paper", "cluster_pathways",
+               "check_my_citations", "compare_gene_profiles", "notebook_write")
+    scored = 0
+    for _job, _stamp, events in runs:
+        outcome = next((e.get("result") for e in events
+                        if e.get("tool") == "__outcome__"), None)
+        if not outcome:
+            continue
+        try:
+            outcome = json.loads(outcome)
+        except ValueError:
+            continue
+        scored += 1
+        used = {e.get("tool") for e in events if not e.get("gate")}
+        for tool in watched:
+            (with_tool if tool in used else without_tool)[tool].append(outcome)
+    if not scored:
+        print("\noutcome by tool: no run carries an __outcome__ stamp yet"
+              "\n  (added late in the loop; it fills in from the next run on)")
+        return
+    print("\noutcome by tool over %d scored run(s) -- correlation, not cause:" % scored)
+    print("  %-26s %20s %20s" % ("tool", "used: prose/cites", "not used"))
+    for tool in watched:
+        a, b = with_tool[tool], without_tool[tool]
+        if not a and not b:
+            continue
+        def avg(rs, k):
+            return sum(r.get(k, 0) for r in rs) / len(rs) if rs else 0
+        print("  %-26s %11.0f /%5.1f %11.0f /%5.1f  (n=%d/%d)"
+              % (tool, avg(a, "prose_chars"), avg(a, "citations"),
+                 avg(b, "prose_chars"), avg(b, "citations"), len(a), len(b)))
 
 
 if __name__ == "__main__":
