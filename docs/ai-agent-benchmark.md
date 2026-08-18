@@ -784,3 +784,28 @@ with a quote that is in its paper and one that is not.
 This is the fifth defect in this arm found by reading stats rather than scores,
 and the second where my own instrumentation reported a plausible number that
 meant something else entirely.
+
+## Round 29 result, and round 30 pre-registered
+
+Round 29: **4 of 5 rules**, two rounds in a row. Citations 8.0 against base 14.5
+(the only failure), redactions 8.5 against 8.5, coverage 17.5 against 14.0, wall
+399 s and 470 s. The corrected prediction held -- one delegate call of three
+parallel chunks instead of two sequential calls cut ~160 s, and citations stayed
+flat, exactly as the withdrawal of the original prediction said they would.
+
+**Round 30 isolates the sieve repair.** One change: `_verified_quotes` now asks
+whether the quote is in the paper rather than whether the paper is in the quote.
+The merge guard has been comparing zero grounded against zero grounded since the
+outage, so it has been choosing between draft and stitch on a tie-break rather
+than on evidence.
+
+**Verify before scoring:** `merge_grounded` must no longer read `0->0`. If it
+does, the repair did not reach the code path and the round measures nothing --
+the round-26 lesson, now a standing check.
+
+**Prediction:** the guard makes an informed choice for the first time, so it
+should keep the stitch when the stitch is better grounded. Citations up modestly
+or flat; redactions flat or down. **Falsifier:** `merge_grounded` shows real
+numbers and citations still sit at 8 -- which would mean the merge was never
+choosing badly, and the conversion gap is entirely upstream, in the 45 of 75
+papers no writer ever sees.
