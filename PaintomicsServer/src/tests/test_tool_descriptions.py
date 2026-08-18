@@ -182,7 +182,35 @@ KNOWN_ORPHAN_DEFS = {
     "build_synthesis_prompt",
     "build_interpretation_executor",
     "redact_unverified",
+    # Surfaced when this check moved from regex to AST, which stopped counting
+    # docstring and test mentions as calls. Both predate the agent arm and both
+    # have a live successor; deleting shipped code is a separate change against
+    # master, so they are pinned rather than removed.
+    "Verdict",          # superseded by _parse_json_verdict's free-text parsing
+    "verify_report",    # superseded by verify_report_v2
 }
+
+
+def _loads_of(name, source):
+    """How many times `name` is READ in this source, by the parser's reckoning.
+
+    Counts ast.Name loads and attribute accesses; ignores the def itself, and
+    ignores every mention that is only text -- docstrings, comments, prose in a
+    commit-worthy explanation. That distinction is the whole point: a function
+    referred to in its own docstring is not a function anybody calls.
+    """
+    import ast as _ast
+    try:
+        tree = _ast.parse(source)
+    except SyntaxError:
+        return 0
+    n = 0
+    for node in _ast.walk(tree):
+        if isinstance(node, _ast.Name) and node.id == name:
+            n += 1
+        elif isinstance(node, _ast.Attribute) and node.attr == name:
+            n += 1
+    return n
 
 
 def test_no_new_orphan_definitions_in_the_ai_package():
@@ -216,9 +244,15 @@ def test_no_new_orphan_definitions_in_the_ai_package():
                 name = node.name
                 if name.startswith("__") or name in KNOWN_ORPHAN_DEFS:
                     continue
-                hits = sum(len(re.findall(r"\b%s\b" % re.escape(name), body))
-                           - (1 if other == path else 0)
-                           for other, body in sources.items())
+                # Counted from the AST, not from text. A regex over sources
+                # counts the name in its own docstring, in a comment, and in a
+                # test -- so _writer_window scored three "uses" while having
+                # zero call sites, and this test passed while the function was
+                # dead. Tests are excluded on purpose: a helper alive only in
+                # its own test is still dead in the product.
+                hits = sum(_loads_of(name, body)
+                           for other, body in sources.items()
+                           if "/tests/" not in other.replace("\\", "/"))
                 if hits <= 0:
                     orphans.append("%s:%s" % (os.path.basename(path), name))
     assert not orphans, (

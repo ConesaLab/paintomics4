@@ -193,9 +193,9 @@ so a pool of 35 predicts ~25 citations, comfortably past the incumbent's 20.5,
 and the replicate that kept 17 papers shipped 8. Every kept paper is worth about
 0.91 citations once screening has removed the keyword-only ones.
 
-This deliberately does NOT use _writer_window(). That function describes how many
-papers a DELEGATED writer can be shown, and measurement killed the assumption
-that it bounds citations: delegate_markers is 0 on every replicate, so the
+The target is NOT the delegation window (DELEGATE_PAPERS x chunks). That
+described how many papers a delegated writer can be shown, and measurement
+killed the assumption that it bounds citations: delegate_markers is 0 on every replicate, so the
 delegated analyses cite nothing at all. The Lead writes the citing draft and sees
 every paper through the search listings, so the delegation window has no say in
 how many citations a run can carry.
@@ -539,20 +539,6 @@ def _code_fingerprint():
     except Exception:
         logger.debug("code fingerprint failed", exc_info=True)
         return "unknown"
-
-
-def _writer_window(ctx):
-    """How many retrieved papers can still be SHOWN to a writer.
-
-    Delegation chunks its pathways DELEGATE_CHUNK at a time and hands each chunk
-    at most DELEGATE_PAPERS papers, so the whole run can only ever put
-    chunks x DELEGATE_PAPERS papers in front of a writer -- 40 at the shipped
-    settings. It is not a soft preference: a paper outside that window has no
-    path to a citation.
-    """
-    pathways = min(len(ctx.pathways or []), DELEGATE_MAX_PATHWAYS)
-    chunks = max(1, -(-pathways // DELEGATE_CHUNK))     # ceil
-    return chunks * DELEGATE_PAPERS
 
 
 def _ledger_note(ctx):
