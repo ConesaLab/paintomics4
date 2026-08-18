@@ -21,6 +21,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import os
+import re
 import sys
 import traceback
 
@@ -141,6 +142,58 @@ def test_the_screen_cannot_shrink_the_metrics_denominator():
         "shrink its own denominator")
 
 
+def test_an_all_rejected_search_does_not_tell_the_agent_to_broaden():
+    """A defect the screen introduced, caught before it shipped a second round.
+
+    The tool's only signal for "nothing to show" was an empty list, and empty
+    meant one thing before the screen: PubMed matched nothing, so the query is
+    too narrow -- broaden it. With the screen, empty has a second and opposite
+    cause: PubMed matched fine and every hit was rejected as keyword-only.
+    Broadening there returns MORE marginal papers for the screen to reject, so
+    the old advice spends budget making the problem worse.
+    """
+    src = inspect.getsource(L)
+    i = src.index("if not listed and screened_here:")
+    branch = src[i:src.index("elif not listed:", i)]
+    # Assert on the ASSEMBLED message, not the source. A prompt written across
+    # adjacent string literals contains no sentence contiguously -- "Broadening "
+    # ends one literal and "will return..." starts the next -- so a substring
+    # test against source fails on text that is perfectly correct at runtime.
+    # This is the third time in one session that reading source instead of
+    # building the value produced a wrong answer.
+    assembled = re.sub(r'"\s*\n\s*"', "", branch)
+    assert "Broadening will return more of the same" in assembled, assembled
+    assert "probably too narrow" not in assembled, (
+        "the all-rejected branch still gives the broaden-your-query advice")
+
+
+def test_the_original_empty_message_survives_for_a_real_no_hit():
+    """7 of 14 searches once came back genuinely empty from over-stacked AND
+    clauses; that advice is still right when nothing matched."""
+    src = inspect.getsource(L)
+    i = src.index("elif not listed:")
+    branch = src[i:i + 700]
+    assert "probably too narrow" in branch and "Drop an AND clause" in branch
+
+
+def test_a_partly_screened_search_says_how_many_were_dropped():
+    """A query whose hits are mostly keyword-only is a query worth changing, and
+    the agent cannot see that from a shortened list alone."""
+    src = inspect.getsource(L)
+    assert "further hit(s) were screened out as keyword-only" in src
+
+
+def test_the_two_empty_causes_cannot_collapse_back_together():
+    """screened_here must be initialised on every path, or an all-rejected search
+    would fall through to the wrong branch whenever the screen is off."""
+    src = inspect.getsource(L)
+    i = src.index("async def search_literature(")
+    body = src[i:src.index("@function_tool", i)]
+    init = body.index("screened_here = 0")
+    used = body.index("if not listed and screened_here:")
+    assert init < used, "screened_here is used before it is set"
+
+
 def _check(name, fn):
     try:
         fn()
@@ -160,7 +213,11 @@ def main():
               test_it_lives_inside_the_search_tool,
               test_the_screen_is_off_by_default_and_stamped,
               test_both_arms_screen_to_the_same_standard,
-              test_the_screen_cannot_shrink_the_metrics_denominator):
+              test_the_screen_cannot_shrink_the_metrics_denominator,
+              test_an_all_rejected_search_does_not_tell_the_agent_to_broaden,
+              test_the_original_empty_message_survives_for_a_real_no_hit,
+              test_a_partly_screened_search_says_how_many_were_dropped,
+              test_the_two_empty_causes_cannot_collapse_back_together):
         _check(t.__name__, t)
     print("\nPassed: %d / %d" % (len(_PASSED), len(_PASSED) + len(_FAILED)))
     if _FAILED:

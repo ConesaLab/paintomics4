@@ -1146,9 +1146,10 @@ async def search_literature(ctx: RunContextWrapper[LoopContext], query: str,
         new = [p for p in pmids if str(p) not in c.pmid_to_ref]
         papers = (await asyncio.to_thread(c.pubmed.fetch_abstracts, new)
                   if new else [])
+        screened_here = 0
         if SCREEN_PAPERS and papers:
-            papers, dropped = await _screen_papers(c, papers, query, topic_tag)
-            c.papers_screened_out += dropped
+            papers, screened_here = await _screen_papers(c, papers, query, topic_tag)
+            c.papers_screened_out += screened_here
     except Exception as e:
         out = "Search failed (%s). The budget was still spent." % e
         _trace(c, "search_literature", query, out, t0)
@@ -1160,7 +1161,21 @@ async def search_literature(ctx: RunContextWrapper[LoopContext], query: str,
             p = c.paper_index[ref]
             listed.append("[%d] %s (%s) — already retrieved"
                           % (ref, p.get("title", "")[:110], p.get("year", "?")))
-    if not listed:
+    if not listed and screened_here:
+        # Empty for the OPPOSITE reason, and the opposite advice. The screen
+        # rejected everything PubMed returned, so the query reached literature
+        # that exists and does not hold a quotable mechanism finding. Telling
+        # the agent to broaden here -- which is what the message below says --
+        # would return more of the same and spend more budget having it
+        # rejected again. This is a defect I introduced with the screen: the
+        # only signal the tool had for "nothing to show" was an empty list.
+        body = ("PubMed matched %d paper(s) for that query and the screen "
+                "rejected all of them -- they share the keywords but hold no "
+                "specific quotable finding about this mechanism. Broadening "
+                "will return more of the same. Try a different mechanism angle, "
+                "a different gene set, or accept that this theme has no "
+                "literature worth citing." % screened_here)
+    elif not listed:
         # Measured in the first live runs: 7 of 14 searches came back empty
         # because the query stacked too many AND terms. The budget was spent
         # either way, so the result says how to spend the next one better.
@@ -1169,6 +1184,9 @@ async def search_literature(ctx: RunContextWrapper[LoopContext], query: str,
                 "with OR, or search the biology without the organism term.")
     else:
         body = "\n".join(listed)
+    if listed and screened_here:
+        body += ("\n(%d further hit(s) were screened out as keyword-only.)"
+                 % screened_here)
     out = "Results for '%s': %s%s" % (query, body, _ledger_note(c))
     out = _spend(c, out, "search_literature")
     _trace(c, "search_literature", query, "%d hits, %d new" %
