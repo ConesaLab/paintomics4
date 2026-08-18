@@ -598,3 +598,31 @@ one. It also caught a mistake of mine while being written: the first removal cut
 at the closing quotes and left `+ TEMPORAL_GUIDANCE_BLOCK` dangling, because
 these constants are concatenations rather than plain strings. The file would not
 import; reverted and redone by line range.
+
+## Dead code in the AI package (2026-08-18)
+
+`agent_loop.py` was written across 25 rounds with several reverts, so it was the
+obvious place to look: 27 functions, 20 constants, **all referenced**. Nothing
+to remove.
+
+The shipped package is a different story. Of 166 top-level definitions in
+`src/classes/AIInterpret`, five are called from nowhere:
+
+| definition | file |
+|---|---|
+| `redact_unverified` | verification.py |
+| `build_synthesis_prompt` | prompts.py |
+| `build_two_pass_interpretation_prompt` | prompts.py |
+| `build_subagent_filter_prompt` | prompts.py |
+| `build_interpretation_executor` | tools.py |
+
+`redact_unverified` is the v1 of the redactor whose v2 was fixed this session --
+exactly the trap worth naming. Someone fixing that bug could edit the dead twin,
+see their tests pass against a function nobody calls, and ship nothing. It is
+also why `build_synthesis_prompt` reads as live: it is the only caller of
+`SYSTEM_PROMPT_SYNTHESIZE`, so a reference search on the prompt alone finds a
+user and stops there. Dead code hides behind dead code.
+
+They are pinned in a test allowlist rather than deleted -- removing shipped code
+belongs in a change against master, not in a branch about the agent arm -- and
+the guard fails on any NEW orphan, verified by adding one.

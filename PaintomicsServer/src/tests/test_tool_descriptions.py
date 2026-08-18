@@ -143,6 +143,63 @@ def test_no_new_orphan_prompts():
 
 
 
+# Top-level definitions in src/classes/AIInterpret that nothing calls, as of
+# 2026-08-18. All predate the agent-arm work and live on the shipped path;
+# recorded here so they are visible, and so a NEW one fails the build.
+# redact_unverified is the v1 of the redactor whose v2 was fixed this session --
+# precisely the shape of trap that matters: editing the dead twin measures
+# nothing.
+KNOWN_ORPHAN_DEFS = {
+    "build_subagent_filter_prompt",
+    "build_two_pass_interpretation_prompt",
+    "build_synthesis_prompt",
+    "build_interpretation_executor",
+    "redact_unverified",
+}
+
+
+def test_no_new_orphan_definitions_in_the_ai_package():
+    """A function nobody calls reads as live code to the next person.
+
+    166 top-level definitions in src/classes/AIInterpret; five are called from
+    nowhere. That set is pinned rather than deleted -- removing shipped code is
+    a separate change against master -- but it must not grow.
+    """
+    import ast
+    import re
+
+    root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
+    package = os.path.join(root, "src", "classes", "AIInterpret")
+    sources = {}
+    for base, dirs, files in os.walk(os.path.join(root, "src")):
+        if "__pycache__" in base:
+            continue
+        for name in files:
+            if name.endswith(".py"):
+                path = os.path.join(base, name)
+                with open(path) as handle:
+                    sources[path] = handle.read()
+
+    orphans = []
+    for path, text in sorted(sources.items()):
+        if not path.startswith(package):
+            continue
+        for node in ast.parse(text).body:
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                name = node.name
+                if name.startswith("__") or name in KNOWN_ORPHAN_DEFS:
+                    continue
+                hits = sum(len(re.findall(r"\b%s\b" % re.escape(name), body))
+                           - (1 if other == path else 0)
+                           for other, body in sources.items())
+                if hits <= 0:
+                    orphans.append("%s:%s" % (os.path.basename(path), name))
+    assert not orphans, (
+        "definitions nothing calls: %s -- wire them up, delete them, or add them "
+        "to KNOWN_ORPHAN_DEFS with a reason" % ", ".join(orphans))
+
+
+
 def _check(name, fn):
     try:
         fn()
@@ -159,7 +216,8 @@ def main():
               test_descriptions_stay_affordable,
               test_a_timing_claim_belongs_only_to_a_tool_that_costs_time,
               test_the_lead_prompt_does_not_contradict_itself_about_checking_citations,
-              test_no_new_orphan_prompts):
+              test_no_new_orphan_prompts,
+              test_no_new_orphan_definitions_in_the_ai_package):
         _check(t.__name__, t)
     print("\nPassed: %d / %d" % (len(_PASSED), len(_PASSED) + len(_FAILED)))
     if _FAILED:
