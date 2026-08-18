@@ -1071,3 +1071,30 @@ produce one.
 
 That is a bigger user-facing win than any citation-count improvement measured so
 far, and it is independent of which arm wins.
+
+## A timeout now ships what exists (2026-08-18)
+
+Roughly one base run in seven reaches the ten-minute ceiling -- median 399 s,
+max 602 across 14 archived runs, two errored. Until now that run raised, every
+phase's work was discarded, and the user who had waited ten minutes was told to
+try again. A synthesised report with rendered references was sitting in memory
+at the moment the clock expired.
+
+The report is stashed at three points where it is coherent enough to read --
+after synthesis, after references are rendered, after verification -- and the
+timeout handler ships the latest one under a header that says what it is:
+
+    > **Incomplete interpretation.** The 10-minute limit was reached while the
+    > pipeline was still working (last completed stage: references rendered), so
+    > this report is what had been produced by then. Citations present here were
+    > rendered but may not all have passed verification...
+
+`timed_out_at_stage` goes into the stored stats, so how far runs get before
+expiring becomes measurable rather than anecdotal.
+
+A run that times out before any report exists still errors -- salvage must not
+manufacture a report from nothing, and a whitespace draft is not a report.
+
+Found while testing rather than while writing: `_partial_result` popped the
+stage before the caller read it, so `timed_out_at_stage` would have recorded "?"
+every time. The stat is set where the value is known.

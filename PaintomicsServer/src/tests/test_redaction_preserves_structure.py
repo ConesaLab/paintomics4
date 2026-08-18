@@ -30,7 +30,8 @@ import traceback
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
 from src.classes.AIInterpret.verification import redact_unverified_v2  # noqa: E402
-from src.classes.AIInterpret.agent import _note_if_ungrounded  # noqa: E402
+from src.classes.AIInterpret.agent import (_note_if_ungrounded,  # noqa: E402
+                                           _keep_partial, _partial_result)
 
 _PASSED, _FAILED = [], []
 
@@ -267,6 +268,33 @@ def test_a_ten_citation_sentence_loses_only_the_bad_one():
 
 
 
+def test_a_timeout_ships_what_exists_rather_than_nothing():
+    """Roughly one base run in seven hits the ten-minute ceiling -- median 399 s,
+    max 602 over 14 archived runs. Today that run raises and every phase's work
+    is discarded, so a user who waited ten minutes is told to try again while a
+    synthesised report with rendered references sat in memory."""
+    stats = {}
+    _keep_partial(stats, "Glycolysis is repressed [1].", [{"ref_index": 1}],
+                  "references rendered")
+    salvaged = _partial_result(stats, 10)
+    assert salvaged is not None, "a report existed and was still discarded"
+    report, papers = salvaged
+    assert "Incomplete interpretation" in report, "the reader is not warned"
+    assert "references rendered" in report, "the reader cannot tell how far it got"
+    assert "Glycolysis is repressed [1]." in report, "the work itself was lost"
+    assert len(papers) == 1
+    assert stats.get("timed_out_at_stage") == "references rendered"
+
+
+def test_a_timeout_with_nothing_to_show_still_fails():
+    """Salvage must not manufacture a report out of an empty run."""
+    assert _partial_result({}, 10) is None
+    stats = {}
+    _keep_partial(stats, "   ", [], "synthesis")
+    assert _partial_result(stats, 10) is None, "whitespace was shipped as a report"
+
+
+
 def _check(name, fn):
     try:
         fn()
@@ -295,6 +323,8 @@ def main():
               test_a_report_that_grounded_nothing_says_so,
               test_a_grounded_report_gets_no_note,
               test_a_run_that_retrieved_nothing_makes_no_claim,
+              test_a_timeout_ships_what_exists_rather_than_nothing,
+              test_a_timeout_with_nothing_to_show_still_fails,
               test_a_sentence_keeps_its_place_when_another_citation_verified,
               test_a_sentence_resting_only_on_a_failed_citation_still_goes,
               test_the_surviving_citation_list_reads_correctly,

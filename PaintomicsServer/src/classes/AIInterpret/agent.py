@@ -1545,6 +1545,7 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats,
     # map; done before the top-up gate so a draft that cited well by PMID is
     # not sent for a rewrite it does not need.
     report = resolve_pmid_mentions(report, {p["ref_index"]: p for p in unique_papers})
+    _keep_partial(stats, report, unique_papers, "synthesis")
     # Close the gaps the draft left, before anything else touches the report.
     # One targeted revision naming exactly what is missing, rather than another
     # sample of the same distribution.
@@ -1711,6 +1712,7 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats,
     quotes = _collect_cited_quotes(llm_for_quotes, report, ctx.paper_index, job_id)
     report, rendered = render_references_section(report, ctx.paper_index, quotes)
     stats["refs_rendered"] = len(rendered)
+    _keep_partial(stats, report, unique_papers, "references rendered")
     stats["quotes_supplied"] = len(quotes)
     logger.info("[%s][sdk] references rebuilt: %d rendered, %d quotes",
                 job_id, len(rendered), len(quotes))
@@ -1848,6 +1850,7 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats,
     # pipeline.py (0616e2df) and was dropped when the SDK workflow replaced
     # that module, so every report shipped since has been scrambled.
     report = sort_references_section(report)
+    _keep_partial(stats, report, unique_papers, "verification")
     if citation_mapping:
         kept = []
         for p in unique_papers:
@@ -1886,14 +1889,59 @@ def run_agent_workflow(job_instance, job_id, experiment_design, budgets=None,
                            stats, hooks=hooks),
                 timeout=AI_MAX_RUN_SECONDS)
         except asyncio.TimeoutError:
+            minutes = int(AI_MAX_RUN_SECONDS // 60)
+            salvaged = _partial_result(stats, minutes)
+            if salvaged:
+                report, papers = salvaged
+                logger.warning("[%s] timed out at %d minutes; shipping the "
+                               "partial report (%d chars, %d papers)",
+                               job_id, minutes, len(report), len(papers))
+                return report, papers, None
             raise RuntimeError(
                 "The interpretation exceeded its %d-minute limit and was "
-                "stopped. The literature gateway was slow to answer; please "
-                "try again later." % int(AI_MAX_RUN_SECONDS // 60))
+                "stopped before any report existed. The literature gateway was "
+                "slow to answer; please try again later." % minutes)
 
     report, papers, ctx = asyncio.run(_with_deadline())
     stats["total_s"] = time.time() - t0
     return {"report": report, "papers": papers, "stats": stats}
+
+
+def _keep_partial(stats, report, papers, stage):
+    """Stash the report as it stands, so a timeout has something to ship.
+
+    Measured over 14 base runs: median 399 s, and roughly one run in seven hits
+    the ten-minute ceiling. Today that run raises, every phase's work is
+    discarded, and the user who waited ten minutes is told to try again -- while
+    a synthesised report with rendered references existed in memory at the
+    moment the clock expired.
+
+    Called at the points where the report is coherent enough to read.
+    """
+    if report and str(report).strip():
+        stats["_partial_report"] = str(report)
+        stats["_partial_papers"] = list(papers or [])
+        stats["_partial_stage"] = stage
+
+
+def _partial_result(stats, minutes):
+    """Turn whatever survived into a report the reader can trust the shape of."""
+    report = stats.pop("_partial_report", "")
+    papers = stats.pop("_partial_papers", [])
+    stage = stats.pop("_partial_stage", "synthesis")
+    if not report:
+        return None
+    # Set here, not by the caller: the caller reads it AFTER this function has
+    # popped it, so it always saw "?" -- caught by testing the stat rather than
+    # the report.
+    stats["timed_out_at_stage"] = stage
+    header = (
+        "> **Incomplete interpretation.** The %d-minute limit was reached while "
+        "the pipeline was still working (last completed stage: %s), so this "
+        "report is what had been produced by then. Citations present here were "
+        "rendered but may not all have passed verification, and later sections "
+        "may be missing. Re-running usually completes.\n\n" % (minutes, stage))
+    return header + report, papers
 
 
 class _Heartbeat:
