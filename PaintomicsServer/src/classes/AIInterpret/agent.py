@@ -1714,6 +1714,7 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats,
     stats["quotes_supplied"] = len(quotes)
     logger.info("[%s][sdk] references rebuilt: %d rendered, %d quotes",
                 job_id, len(rendered), len(quotes))
+    report = _note_if_ungrounded(report, rendered, ctx.paper_index, job_id)
 
     # -- Phase 5b: iterative verify -> correct, the SDK's turn at pipeline.py's
     _hb("verifying", 85, "Verifying citations...")
@@ -1937,6 +1938,33 @@ class _Heartbeat:
             finally:
                 if dao is not None:
                     dao.closeConnection()
+
+
+def _note_if_ungrounded(report, rendered, paper_index, job_id=""):
+    """Say so, in the report, when not one citation could be grounded.
+
+    One stored run retrieved 56 papers, wrote 56 citations in synthesis, found
+    quotes for none of them, rendered no references, and shipped 49 752
+    characters of interpretation with status "done" and a cheerful "Ready" in
+    the progress line. Its own verification score was 0.07. Nothing in the text
+    told the reader that not a single claim was backed by a paper -- and the
+    text is what gets read, shared and exported, long after the progress line is
+    gone.
+
+    Only when papers were actually retrieved: a run that searched for nothing
+    has no literature claim to walk back.
+    """
+    if rendered or not paper_index:
+        return report
+    logger.warning("[%s] NO references could be grounded from %d papers; "
+                   "the report now says so", job_id, len(paper_index))
+    return report.rstrip() + (
+        "\n\n> **Note on evidence:** no citation in this report could be matched "
+        "to a verifiable sentence in the %d retrieved paper(s), so the "
+        "literature references were removed. What remains rests on the measured "
+        "data alone and has not been corroborated against published work.\n"
+        % len(paper_index))
+
 
 
 def run_ai_agent(job_id, experiment_design, RESPONSE):

@@ -813,3 +813,35 @@ before: the two reports above are indistinguishable, in the database, from
 reports whose author simply had less to say.
 
 Two tests drive the shim with a truncated stream and a complete one.
+
+## A report that grounded nothing, shipped as "Ready" (2026-08-18)
+
+`n6e03200f1`, 2026-08-17, status `done`:
+
+    batches 14, batches_with_citations 0, batch_citations 0
+    synth_citations 56, quotes_supplied 0, refs_rendered 0
+    verification: score 0.07, ref_accuracy 0.0, references_section_found False
+    detail: "Ready - 0 of 56 retrieved papers cited"
+
+Fifty-six papers retrieved, fifty-six citations written during synthesis, quotes
+found for none of them, no references rendered -- and 49 752 characters of
+interpretation shipped with a cheerful progress line. The pipeline knew: it
+scored the report 0.07 and said so in `detail`.
+
+The report did not. Searching all 49 752 characters for any sentence about
+citations, references or evidence returns nothing relevant. It ends on a pathway
+table. A reader cannot tell it apart from a fully cited report -- and the report
+is what gets read, shared and exported, long after the progress line is gone.
+
+It now ends with a note naming the number of papers that were tried and stating
+plainly that what remains rests on the measured data alone and has not been
+corroborated against published work. Only when papers were actually retrieved: a
+run that searched for nothing has no literature claim to walk back.
+
+Three tests. The logic was extracted into `_note_if_ungrounded` rather than left
+inline precisely so it could have them.
+
+(Found while checking why two reports lacked a Limitations section. The scan
+that found those also mis-scored one: `22sU1dOIiw`'s truncated `### 4.` sits at
+the end of a long single line, so a last-line check missed it. The truncation
+rate of 7 in 56 stored reports is therefore a floor, not a figure.)

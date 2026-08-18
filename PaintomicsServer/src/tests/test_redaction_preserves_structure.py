@@ -30,6 +30,7 @@ import traceback
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
 from src.classes.AIInterpret.verification import redact_unverified_v2  # noqa: E402
+from src.classes.AIInterpret.agent import _note_if_ungrounded  # noqa: E402
 
 _PASSED, _FAILED = [], []
 
@@ -192,6 +193,29 @@ def test_redaction_never_glues_a_structure_token_to_prose():
 
 
 
+def test_a_report_that_grounded_nothing_says_so():
+    """One stored run retrieved 56 papers, wrote 56 citations, found quotes for
+    none, rendered no references, and shipped 49 752 characters as "done" with
+    a verification score of 0.07. Nothing in the text said the interpretation
+    was uncorroborated, and the text outlives the progress line."""
+    out = _note_if_ungrounded("Findings without citations.", [], {1: {}, 2: {}})
+    assert "Note on evidence" in out, "an ungrounded report shipped silently"
+    assert "2 retrieved paper" in out, "the note does not say how many were tried"
+    assert "measured data alone" in out
+
+
+def test_a_grounded_report_gets_no_note():
+    out = _note_if_ungrounded("Findings [1].", [{"ref_index": 1}], {1: {}})
+    assert "Note on evidence" not in out, "a cited report was labelled ungrounded"
+
+
+def test_a_run_that_retrieved_nothing_makes_no_claim():
+    """No papers means no literature claim to walk back."""
+    out = _note_if_ungrounded("Data-only findings.", [], {})
+    assert "Note on evidence" not in out
+
+
+
 def _check(name, fn):
     try:
         fn()
@@ -216,7 +240,10 @@ def main():
               test_code_fences_pass_through_whole,
               test_a_sentence_spanning_two_lines_is_removed_whole,
               test_removed_count_covers_body_and_references,
-              test_redaction_never_glues_a_structure_token_to_prose):
+              test_redaction_never_glues_a_structure_token_to_prose,
+              test_a_report_that_grounded_nothing_says_so,
+              test_a_grounded_report_gets_no_note,
+              test_a_run_that_retrieved_nothing_makes_no_claim):
         _check(t.__name__, t)
     print("\nPassed: %d / %d" % (len(_PASSED), len(_PASSED) + len(_FAILED)))
     if _FAILED:
