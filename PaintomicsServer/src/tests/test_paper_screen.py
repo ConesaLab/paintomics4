@@ -217,33 +217,32 @@ def _prompt_for(pool_size, n_pathways=15):
     return captured["p"]
 
 
-def test_a_starved_pool_makes_the_screen_permissive():
-    """The failure this fixes. Round 39: two replicates kept 24% of candidates,
-    reached 13/13 themes and shipped 22-26 citations; a third kept 9%, reached
-    7/13 and shipped EIGHT -- same prompt, same code, pool starved to 17 papers
-    against a 30-paper window. A filter with no target size cannot tell "nothing
-    here is good" from "I have kept enough"."""
-    p = _prompt_for(4)          # target pool is 35
-    assert "thin paper beats an empty theme" in p, p
-    assert "keep ONLY what is clearly better" not in p
+def test_the_standard_does_not_move_with_the_pool():
+    """Round 40 measured what happens when it does.
+
+    Making strictness depend on the pool -- permissive below half the target, on
+    the reasoning that a thin paper beats an empty theme -- raised the keep rate
+    24% -> 28-32% and barely moved the pool (27 -> 29), while failures went
+    0.50 -> 3.33, redactions 1.2 -> 8.7 and coverage 16.2 -> 11.7 across three
+    replicates.
+
+    The bar is what makes a screened paper worth 0.91 citations. A thin paper does
+    not beat an empty theme: it costs the sentence it lands on. Starvation is
+    answered with more candidates, not a lower standard.
+    """
+    for pool in (2, 20, 60):
+        p = _prompt_for(pool)
+        assert "specific quotable finding" in p
+        assert "thin paper beats an empty theme" not in p, (
+            "the permissive stance is back at pool=%d" % pool)
+        assert "keep ONLY what is clearly better" not in p
 
 
-def test_a_full_pool_makes_the_screen_strict():
-    p = _prompt_for(40)
-    assert "keep ONLY what is clearly better" in p, p
-    assert "thin paper beats an empty theme" not in p
-
-
-def test_a_half_full_pool_keeps_the_ordinary_standard():
-    p = _prompt_for(20)
-    assert "Keep the ones with a specific quotable finding" in p, p
-
-
-def test_the_stance_names_the_actual_numbers():
-    """A stance that says 'some' teaches the screener nothing; the point is that
-    the tool knows both numbers and the screener does not."""
+def test_the_pool_size_is_still_reported():
+    """The screener should know where it stands even though the bar does not
+    move -- the number is context, not permission."""
     p = _prompt_for(4)
-    assert "only 4 papers" in p and "about 35" in p, p
+    assert "hold 4 papers" in p and "about 35" in p, p
 
 
 def test_the_target_is_not_the_delegation_window():
@@ -289,10 +288,8 @@ def main():
               test_the_original_empty_message_survives_for_a_real_no_hit,
               test_a_partly_screened_search_says_how_many_were_dropped,
               test_the_two_empty_causes_cannot_collapse_back_together,
-              test_a_starved_pool_makes_the_screen_permissive,
-              test_a_full_pool_makes_the_screen_strict,
-              test_a_half_full_pool_keeps_the_ordinary_standard,
-              test_the_stance_names_the_actual_numbers,
+              test_the_standard_does_not_move_with_the_pool,
+              test_the_pool_size_is_still_reported,
               test_the_target_is_not_the_delegation_window):
         _check(t.__name__, t)
     print("\nPassed: %d / %d" % (len(_PASSED), len(_PASSED) + len(_FAILED)))

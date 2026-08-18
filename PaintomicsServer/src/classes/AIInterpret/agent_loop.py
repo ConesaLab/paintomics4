@@ -1088,35 +1088,22 @@ async def _screen_papers(ctx, papers, query, topic_tag):
         output_type=RelevantPMIDs,
         tools=[],
     )
-    # Strictness has to know the budget. Measured round 39: two replicates kept
-    # 24% of candidates, reached 13 of 13 themes and shipped 22-26 citations; a
-    # third kept 9%, reached 7 of 13 themes and shipped EIGHT. Same prompt, same
-    # code -- the screen simply ran strict on every search and starved the pool
-    # to 17 papers against a 30-40 writer window.
+    # Strictness stays CONSTANT. Round 40 made it depend on the pool -- permissive
+    # below half the target, on the reasoning that a thin paper beats an empty
+    # theme -- and measured the cost over three replicates: keep rate rose
+    # 24% -> 28-32%, the pool barely moved (27 -> 29), and failures went
+    # 0.50 -> 3.33, redactions 1.2 -> 8.7, coverage 16.2 -> 11.7.
     #
-    # A filter with no target size cannot tell "nothing here is good" from "I
-    # have already kept enough", and those need opposite answers. The tool knows
-    # both numbers; the screener did not.
-    pool, window = len(ctx.paper_index), SCREEN_TARGET_POOL
-    if pool >= window:
-        stance = ("You already hold %d papers and the writers can only read about "
-                  "%d, so keep ONLY what is clearly better than what is already "
-                  "there. An empty list is the right answer unless something here "
-                  "is excellent." % (pool, window))
-    elif pool < window // 2:
-        stance = ("You hold only %d papers and the writers have room for about "
-                  "%d. Keep anything with a plausibly quotable finding -- at this "
-                  "point a thin paper beats an empty theme, and a theme with no "
-                  "paper can never be cited at all." % (pool, window))
-    else:
-        stance = ("You hold %d papers with room for about %d. Keep the ones with "
-                  "a specific quotable finding." % (pool, window))
-    # Each piece is finished BEFORE it is joined. Writing this as
-    # `("...%s..." + stance + "...") % args` puts the formatting on the trailing
-    # literal instead of the whole expression, because % binds tighter than + --
-    # the same bug that killed every agent replicate of round 39's first launch,
-    # reproduced here within the hour by the same hand. Formatting first and
-    # concatenating after makes the mistake unavailable.
+    # The bar is what makes a screened paper worth 0.91 citations. Lowering it
+    # admits papers that cannot be quoted, their citations fail, and redaction
+    # takes the sentence and its pathway mention with them. A thin paper does NOT
+    # beat an empty theme; it costs the sentence it lands on.
+    #
+    # Starvation (round 39 r3 kept 9% and shipped 8 citations) is real, and the
+    # answer is more candidates, not a lower standard: raise supply, keep the bar.
+    stance = ("Keep the ones with a specific quotable finding. You hold %d papers "
+              "and about %d is a healthy pool for this report."
+              % (len(ctx.paper_index), SCREEN_TARGET_POOL))
     header = ("Experiment: %s\nOrganism: %s\nTheme: %s\nQuery: %s\n\n"
               "Candidate papers:\n%s\n\n"
               % (ctx.experiment_design, ctx.organism_name, topic_tag or "-",
