@@ -1248,3 +1248,48 @@ are single-run with no confidence intervals, comparators come from different
 vendors' harnesses, and the efficiency figures use scaling coefficients the
 README states are intentionally omitted. This is one idea taken on its own
 merits and measured here.
+
+## Round 35 scored: the hypothesis is falsified, and coverage moved anyway
+
+| mean of 4 | agent-v34 | agent-v35 | base-v34 | base-v35 |
+|---|---|---|---|---|
+| failed_citations | 1.25 | **1.75** | 1.50 | **4.00** |
+| redacted | 4.00 | 5.75 | 4.00 | 10.00 |
+| citations_in_body | 15.25 | 15.50 | 21.25 | 22.75 |
+| prose_pathways_covered | 12.25 | **16.50** | 13.00 | 14.25 |
+| wall_s | 365 | 379 | 430 | 419 |
+
+**The one real hypothesis is FALSIFIED.** Showing the agent its supporting quotes
+in `check_my_citations` was predicted to drop `failed_citations` in the agent
+arm. It rose, 1.25 -> 1.75. By the falsifier written before the round: drift is
+not addressable at the self-check, and the target moves to the gate's correction
+step rather than the toolbelt.
+
+The confound is real and does not rescue it. Gateway rate-limit retries went
+from ONE across round 34 to SIXTEEN in round 35, and base -- whose behaviour
+nothing this round touched -- got much worse on the same metric (1.50 -> 4.00,
++167%) than the agent arm did (+40%). So the whole round degraded and the agent
+arm degraded less. That is a relative improvement against an absolute
+prediction, and the prediction was absolute. It stands falsified; the confound
+is why the next round records gateway weather per run instead of inferring it
+from a log afterwards.
+
+**Coverage rose 12.25 -> 16.50 (+35%)** and rule 4 passes for the first time
+(16.5 vs 14.2). **4 of 5 rules now pass** -- the agent arm's best result; only
+citations still fails (15.5 vs 22.8). I cannot attribute the coverage gain,
+because three changes shipped together. That is the price of breaking the
+one-change rule, which was stated in advance rather than discovered afterwards.
+
+**The finding worth more than the prediction.** Per-theme conversion across the
+four replicates: **8/15, 8/14, 8/18, 5/14**. Themes that convert sit near EIGHT
+regardless of whether fourteen or eighteen were searched. That is not a
+conversion rate -- a rate would scale with the denominator -- it is a conversion
+CEILING. It also reconciles two results that looked contradictory: retrieving
+more does buy more citations (r = +0.52) while the number of distinct themes
+reaching the report does not move.
+
+A structural cause fits: `DELEGATE_CHUNK` is 5, ~15 pathways make 3 chunks, and
+each chunk's interpretation can only carry the themes its own papers cover. If
+the ceiling is the chunking, no amount of extra searching lifts it, and
+`SEARCH_HITS` -- queued as the "find more" lever -- would be spending budget
+against a wall. That reorders the queue: test the ceiling first.
