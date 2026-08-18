@@ -500,6 +500,49 @@ def judge(agent_rows, base_rows):
     return rules, all(passed for _, passed, _ in rules)
 
 
+# Diagnostics printed beside every failing rule, chosen because each one has
+# already explained a failure that cost rounds to chase by other means.
+RULE_DIAGNOSTICS = {
+    "2 citations": ("papers_retrieved", "papers_screened_out", "topup_added",
+                    "tags_with_a_cited_paper", "tags_searched"),
+    "3 redactions": ("failed_citations", "topup_added", "topup_added_failed",
+                     "sentences_dropped", "failed_refs"),
+    "4 prose coverage": ("delegate_markers", "prose_chars", "sentences_dropped"),
+    "1 every replicate": ("loop_s", "topup_s", "verify_loop_s", "gateway_retries"),
+    "5 length": ("prose_chars", "report_chars"),
+}
+
+
+def _diagnose(label, rows, base_rows):
+    """The columns that explain THIS rule, printed only when it fails.
+
+    Every metric here was already being recorded when a failure it explains went
+    unexplained. topup_added_failed equalled failed_citations in all twelve
+    replicates of rounds 39-41 -- every failed citation came from the top-up --
+    while rule 3 was chased through screening strictness, pool ceilings,
+    delegation attribution and framing permissions. The number was archived and
+    nobody read it.
+
+    A benchmark that stores a diagnostic and never surfaces it has the same
+    failure mode as one that never stored it, and costs more to build.
+    """
+    keys = next((v for k, v in RULE_DIAGNOSTICS.items() if label.startswith(k)), ())
+    out = []
+    for key in keys:
+        vals = [r.get(key) for r in rows if r.get(key) is not None]
+        if not vals:
+            continue
+        if all(isinstance(v, (int, float)) for v in vals):
+            mine = sum(vals) / len(vals)
+            theirs = [r.get(key) for r in base_rows
+                      if isinstance(r.get(key), (int, float))]
+            cmp = (" vs %.1f" % (sum(theirs) / len(theirs))) if theirs else ""
+            out.append("%s %.1f%s" % (key, mine, cmp))
+        else:
+            out.append("%s %s" % (key, vals[0]))
+    return out
+
+
 def cmd_score(args):
     runs = []
     for path in sorted(glob.glob(os.path.join(args.outdir, "*.json"))):
@@ -550,6 +593,9 @@ def cmd_score(args):
         print("\n%s:" % key)
         for label, passed, detail in rules:
             print("  %-38s %-5s (%s)" % (label, "PASS" if passed else "FAIL", detail))
+            if not passed:
+                for line in _diagnose(label, groups[key], base):
+                    print("       %s" % line)
         print("  => %s" % ("BETTER than base"
                            if verdict else "NOT better - the incumbent stands"))
     return 0
