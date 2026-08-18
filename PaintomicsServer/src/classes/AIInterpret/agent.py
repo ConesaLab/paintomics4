@@ -935,6 +935,85 @@ def _build_agents():
 # Orchestration
 # ---------------------------------------------------------------------------
 
+SENTENCE_REPAIR = os.getenv("AI_SENTENCE_REPAIR", "0") == "1"
+SENTENCE_REPAIR_WORKERS = int(os.getenv("AI_SENTENCE_REPAIR_WORKERS", "6"))
+
+
+async def _repair_sentences(agent, ctx, report, failed, job_id, stats, timeout):
+    """Repair each failed citation's own sentence, independently and at once.
+
+    This is the fan-out the pipeline was missing. Fixing citation [7] does not
+    depend on fixing [12], so the repairs are genuinely independent work -- but
+    they were being done by handing one model the whole report and asking for a
+    corrected copy. Measured: a base verify iteration costs ~83 s, of which the
+    8-way verification fan-out is ~8 s and the full-report rewrite is the rest,
+    three times per run.
+
+    The rewrite is also destructive in ways the surrounding code then repairs:
+    it re-authors the References section (so every quote is re-collected and the
+    section re-rendered) and drops the appended data tables (which
+    _reattach_blocks puts back). Changing one sentence changes one sentence, so
+    none of that follows.
+
+    Returns (report, repaired_count). A repair that cannot be placed exactly is
+    skipped, not forced -- the programmatic net still redacts whatever fails,
+    so the worst case here is the behaviour we already had.
+    """
+    locatable = [fc for fc in failed
+                 if fc.get("claim_sentence")
+                 and report.count(fc["claim_sentence"]) == 1]
+    if len(locatable) < len(failed):
+        # A sentence the verifier quoted but that no longer appears verbatim
+        # (or appears twice) cannot be substituted safely.
+        stats["repair_unlocatable"] = len(failed) - len(locatable)
+    if not locatable:
+        return report, 0
+
+    sem = asyncio.Semaphore(SENTENCE_REPAIR_WORKERS)
+
+    async def _one(fc):
+        async with sem:
+            try:
+                result = await bounded(
+                    Runner.run(agent,
+                               prompts_mod.build_sentence_repair_prompt(fc),
+                               context=ctx, max_turns=2),
+                    timeout, label="repair [%s]" % fc.get("ref_index"))
+            except (Exception, asyncio.TimeoutError) as e:
+                logger.warning("[%s][sdk] sentence repair for [%s] failed: %s",
+                               job_id, fc.get("ref_index"), e)
+                return fc, None
+            # Kept RAW. A single sentence has no line breaks, and that is the
+            # sharpest signal that the model answered with something else --
+            # a preamble, an apology, the report echoed back. Collapsing
+            # whitespace first would destroy the evidence.
+            return fc, str(result.final_output).strip()
+
+    repaired = rejected = 0
+    for fc, text in await asyncio.gather(*[_one(fc) for fc in locatable]):
+        original = fc["claim_sentence"]
+        # A repair is accepted only if it still looks like ONE sentence taking
+        # the place of one sentence. An answer that runs away -- a preamble, an
+        # apology, the whole report echoed back -- would silently replace a
+        # paragraph, which is the failure mode that makes an unattended
+        # substitution dangerous.
+        if not text or "\n" in text or len(text) > 2 * len(original) + 120:
+            rejected += 1
+            continue
+        text = " ".join(text.split())
+        if report.count(original) != 1:      # an earlier repair moved it
+            rejected += 1
+            continue
+        report = report.replace(original, text, 1)
+        repaired += 1
+    stats["sentences_repaired"] = repaired
+    if rejected:
+        stats["repairs_rejected"] = rejected
+    logger.info("[%s][sdk] sentence repair: %d fixed, %d rejected, %d unplaceable",
+                job_id, repaired, rejected, len(failed) - len(locatable))
+    return report, repaired
+
+
 def _budget_allows(left, measured_cost, default_cost,
                    reserve=None):
     """Is there room for one more unit of OPTIONAL work before the deadline?
@@ -1942,6 +2021,22 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats,
                         VERIFY_REWRITE_RESERVE + VERIFY_TAIL_RESERVE, len(failed))
             stats["rewrite_skipped_for_time"] = "%.0fs left" % left
             break
+        if SENTENCE_REPAIR:
+            # Repair the failed sentences themselves, in parallel, instead of
+            # regenerating the report around them. Only those sentences change,
+            # so the References section, the quotes behind it and the appended
+            # tables all stay valid -- none of the repair-of-the-repair below
+            # is needed.
+            report, fixed = await _repair_sentences(
+                agents["synth"], ctx, report, failed, job_id, stats,
+                SDK_CALL_TIMEOUT)
+            if not fixed:
+                logger.info("[%s][sdk] no sentence could be repaired; leaving "
+                            "%d citation(s) to the programmatic net",
+                            job_id, len(failed))
+                break
+            continue
+
         try:
             corr = await bounded(Runner.run(
                 agents["synth"],

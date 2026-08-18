@@ -625,6 +625,49 @@ Respond with ONLY this JSON (no markdown fencing):
 - If both checks pass: empty string."""
 
 
+def build_sentence_repair_prompt(fc):
+    """Repair ONE sentence, shown only that sentence and the quote under it.
+
+    The alternative -- and what the pipeline did for 35 rounds -- is to hand the
+    model the entire report and ask it to fix four sentences. That costs a full
+    long-form generation (~75 s of a base run's 83 s verify iteration), and it
+    is destructive in ways the code then has to undo: the rewrite re-authors the
+    References section, so every quote must be re-collected and the section
+    re-rendered, and it drops the appended data tables, which _reattach_blocks
+    exists to put back.
+
+    Repairing one sentence changes one sentence. Nothing else in the report can
+    move, so none of that repair-of-the-repair is needed, and the repairs are
+    independent of each other -- which is what makes them safe to run at once.
+    """
+    if fc.get("mode") == "text":
+        task = ("The quoted sentence is NOT in that paper. Rewrite the sentence "
+                "so it states only what you can support, or state the finding "
+                "without attributing it to this paper.")
+    else:
+        task = ("The quote is real, but the sentence claims more than the quote "
+                "supports. Rewrite the SENTENCE so the quote below fully "
+                "supports it. Narrowing the claim is the correct outcome -- "
+                "restating the same claim in different words is not.")
+    lines = [
+        "Repair one sentence from a scientific report.", "",
+        "SENTENCE: %s" % fc.get("claim_sentence", ""), "",
+        'QUOTE FROM THE CITED PAPER: "%s"' % fc.get("cited_text", ""), "",
+        "PROBLEM: %s" % fc.get("reason", ""), "",
+        task, "",
+        "Rules:",
+        "- Keep the [%d] citation marker exactly where it belongs."
+        % fc.get("ref_index", 0),
+        "- Add no facts from anywhere else; you may only narrow or restate.",
+        "- Keep any surrounding markdown (bold, italics, list markers) intact.",
+        "- Reply with the repaired sentence and NOTHING else: no preamble, no "
+        "quotation marks around it, no explanation.",
+    ]
+    if fc.get("suggested_fix"):
+        lines.append('- The verifier suggested: "%s"' % fc["suggested_fix"])
+    return "\n".join(lines)
+
+
 def build_correction_prompt(report, failed_citations):
     """Build prompt instructing the LLM to correct failed citations in its report."""
     lines = ["## Citation Issues Found", ""]
