@@ -809,3 +809,28 @@ or flat; redactions flat or down. **Falsifier:** `merge_grounded` shows real
 numbers and citations still sit at 8 -- which would mean the merge was never
 choosing badly, and the conversion gap is entirely upstream, in the 45 of 75
 papers no writer ever sees.
+
+## Round 30 r1: the agent breached the ceiling, and the harness lied about it
+
+    status  error      wall  914.4 s
+    detail  "The agent interpretation exceeded its 10-minute limit"
+
+The run was stopped at the limit the whole exercise is built around. But the
+metrics file recorded **17 citations, 19 redactions, 32 393 characters** -- and
+those are base-r1's numbers, identical field for field. MongoDB keeps one
+interpretation per JOB, the errored run never wrote its own, and `_measure`
+happily read whatever was there.
+
+For a few minutes that looked like the best citation count this arm had ever
+produced, and it would have been reported as evidence that the sieve repair
+worked. It is evidence of nothing.
+
+`_measure` now returns status, wall clock and a `stale_record` flag for any run
+that did not finish, and nothing report-derived. The score table prints "of
+which measurable" beside the replicate count, so a mean over one surviving run
+of two cannot be read as a mean over two. Two tests.
+
+**What round 30 does say.** The agent arm hit the wall clock, which no previous
+round did -- 914 s against 600. Whether the sieve repair raises citations is
+still unmeasured, because the only replicate that could have shown it never
+finished.

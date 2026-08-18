@@ -210,6 +210,36 @@ def test_a_missing_key_is_not_reported_as_an_outage():
 
 
 
+def test_a_failed_run_does_not_report_the_previous_run_s_numbers():
+    """MongoDB keeps one interpretation per JOB, so a run that errors leaves the
+    record written by whatever ran last -- usually the other arm, minutes
+    earlier. Round 30's errored agent replicate reported 17 citations, 19
+    redactions and 32 393 characters: base-r1's numbers exactly, and briefly the
+    best citation count this arm had ever produced."""
+    from src.benchmarks.ai_arm_bench import _measure
+    stale = {"status": "error", "detail": "exceeded its 10-minute limit",
+             "report": "Someone else's report [1].\n\n### References\n\n[1] P.\n",
+             "papers": [{"ref_index": 1}], "verification": {"redacted_count": 19}}
+    row = _measure(stale, "agent", "JOB", 914.4)
+    assert row.get("stale_record") is True
+    assert row.get("citations_in_body") is None, (
+        "an errored run reported citations from another run's record")
+    assert row.get("redacted") is None
+    assert row["wall_s"] == 914.4, "wall clock and status are real and must survive"
+    assert row["status"] == "error"
+
+
+def test_a_finished_run_still_reports_everything():
+    from src.benchmarks.ai_arm_bench import _measure
+    good = {"status": "done",
+            "report": "A claim [1].\n\n### References\n\n[1] P.\n",
+            "papers": [{"ref_index": 1}], "verification": {"redacted_count": 2}}
+    row = _measure(good, "agent", "JOB", 400.0)
+    assert not row.get("stale_record")
+    assert row["citations_in_body"] == 1 and row["redacted"] == 2
+
+
+
 def _check(name, fn):
     try:
         fn()
@@ -237,7 +267,9 @@ def main():
               test_a_504_names_the_upstream_not_the_network,
               test_a_refused_connection_names_the_network,
               test_a_hang_is_distinguished_from_a_refusal,
-              test_a_missing_key_is_not_reported_as_an_outage):
+              test_a_missing_key_is_not_reported_as_an_outage,
+              test_a_failed_run_does_not_report_the_previous_run_s_numbers,
+              test_a_finished_run_still_reports_everything):
         _check(t.__name__, t)
     print("\nPassed: %d / %d" % (len(_PASSED), len(_PASSED) + len(_FAILED)))
     if _FAILED:

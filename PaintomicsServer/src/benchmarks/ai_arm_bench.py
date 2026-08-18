@@ -166,6 +166,24 @@ def cmd_run(args):
 
 
 def _measure(record, arm, job_id, wall, response=None):
+    """Metrics for one run -- or an honest blank when the run did not finish.
+
+    MongoDB keeps one interpretation per JOB. A run that errors never writes its
+    own record, so everything report-derived read here belongs to whatever ran
+    on this job LAST -- usually the other arm, minutes earlier. Round 30's
+    errored agent replicate reported 17 citations, 19 redactions and 32 393
+    characters: base-r1's numbers exactly, and briefly the best citation count
+    this arm had ever "produced".
+
+    Report-derived fields are therefore left None unless the record says done.
+    wall_s and status are real either way, and rule 1 fails on both.
+    """
+    if record.get("status") != "done":
+        return {
+            "arm": arm, "jobID": job_id, "status": record.get("status"),
+            "wall_s": round(wall, 1), "detail": record.get("detail"),
+            "stale_record": True,
+        }
     report = record.get("report") or ""
     papers = record.get("papers") or []
     stats = record.get("stats") or {}
@@ -217,6 +235,11 @@ METRICS = ("wall_s", "prose_chars", "report_chars", "citations_in_body",
 
 
 def _mean(rows, key):
+    """Mean over the runs that HAVE the value; failed runs carry none.
+
+    Reported alongside the replicate count so a mean over one surviving run of
+    two cannot be read as a mean over two.
+    """
     values = [r[key] for r in rows if r.get(key) is not None]
     return statistics.mean(values) if values else None
 
@@ -285,6 +308,10 @@ def cmd_score(args):
         print("%-26s %s" % (metric, cells))
     print("%-26s %s" % ("replicates",
                         "".join("%12d" % len(groups[k]) for k in order)))
+    print("%-26s %s" % ("of which measurable",
+                        "".join("%12d" % sum(1 for r in groups[k]
+                                             if not r.get("stale_record"))
+                                for k in order)))
 
     base = groups.get("base") or []
     if not base:
