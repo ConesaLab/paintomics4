@@ -203,6 +203,47 @@ def cmd_pubmed(args):
     return 1 if missing else 0
 
 
+REQUIRED_SECTIONS = (("Key Findings", r"key findings"),
+                     ("Cross-Pathway Themes", r"cross[- ]pathway"),
+                     ("Detailed Pathway Analysis", r"detailed pathway"),
+                     ("Follow-up Experiments", r"follow[- ]up"),
+                     ("Limitations", r"limitation"))
+
+# A heading that names a pathway: "3. Morphine Addiction (mmu05032)", or a
+# Reactome/KEGG id anywhere in it.
+PATHWAY_HEADING = re.compile(r"(\b(?:mmu|hsa|ath|R-[A-Z]{3})[-\w]*\d|^\d+\.\s+\w)")
+
+
+def cmd_structure(args):
+    """Which of the five required sections each report actually has.
+
+    Reported alongside a count of pathway-named headings, because the two
+    failures look identical to a keyword search and are not the same thing: one
+    agent report has no "Detailed Pathway Analysis" heading but eleven numbered
+    pathway sections carrying exactly that content, while two others simply have
+    no Limitations -- and Limitations is where the caveats that make an
+    interpretation honest are supposed to live.
+    """
+    rows = _reports(args.since)
+    print("%-12s %-12s %7s %9s  %s"
+          % ("date", "job", "heads", "pathway", "missing headings"))
+    incomplete = 0
+    for when, job, report, _papers in rows:
+        heads = re.findall(r"^#{2,3}\s+(.+)$", report, re.M)
+        lowered = [h.lower() for h in heads]
+        missing = [name for name, pattern in REQUIRED_SECTIONS
+                   if not any(re.search(pattern, h) for h in lowered)]
+        pathway_heads = sum(1 for h in heads if PATHWAY_HEADING.search(h))
+        if missing:
+            incomplete += 1
+        print("%-12s %-12s %7d %9d  %s"
+              % (when, job, len(heads), pathway_heads, ", ".join(missing) or "-"))
+    print("\n%d of %d report(s) miss a required heading" % (incomplete, len(rows)))
+    print("A missing 'Detailed Pathway Analysis' next to a high pathway-heading "
+          "count is a restructured report, not an incomplete one.")
+    return 0
+
+
 def main(argv=None):
     # --since belongs to every subcommand, and reads naturally after it. The
     # database holds several code eras at once; three conclusions this session
@@ -216,11 +257,12 @@ def main(argv=None):
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("integrity", parents=[common])
     sub.add_parser("quotes", parents=[common])
+    sub.add_parser("structure", parents=[common])
     pubmed = sub.add_parser("pubmed", parents=[common])
     pubmed.add_argument("--sample", type=int, default=12)
     args = parser.parse_args(argv)
     return {"integrity": cmd_integrity, "quotes": cmd_quotes,
-            "pubmed": cmd_pubmed}[args.command](args)
+            "pubmed": cmd_pubmed, "structure": cmd_structure}[args.command](args)
 
 
 if __name__ == "__main__":

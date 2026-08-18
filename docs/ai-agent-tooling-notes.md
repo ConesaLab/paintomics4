@@ -738,3 +738,51 @@ have shown.
 What it does not check: whether the quote SUPPORTS the sentence it is attached
 to. That is a judgement, it needs a model, and the gateway has been down since
 04:00. It is the obvious next audit.
+
+## Can quote relevance be screened without a model? No (2026-08-18)
+
+The remaining unchecked half of grounding is whether a quote SUPPORTS the
+sentence it is attached to. That is a judgement and needs a model, so I tried a
+cheap proxy: content-word overlap between each claim sentence and its quote,
+across 487 pairs from recent reports.
+
+Median overlap 0.25, mean 0.31, and the five weakest pairs all scored 0.00 --
+none of which survived reading:
+
+  * one claim cited [3] and [5]; the metric compared it against [5]'s quote
+    while the sentence was making [3]'s point;
+  * one was a Limitations entry *criticising its own citation* -- "Reference
+    [17] discusses lipid-induced NK cell dysfunction in DLBCL, not metabolic
+    reprogramming" -- which is the agent doing exactly the right thing;
+  * others differed only by tokenisation (PLCβ, hsa-mir-122, hyphenated names).
+
+So the metric flags good behaviour and punctuation, and 0.25 median means it
+barely discriminates anyway. **Not built into the auditor.** The honest position
+is that this half of the claim is unverified until the gateway returns.
+
+The failed attempt did surface something worth keeping: 4 of 16 recent reports
+name a specific citation's weakness in their own Limitations -- "the available
+references do not directly address these specific pathways, so interpretations
+rest on internal temporal coherence rather than external evidence". That is the
+behaviour a reader most needs and it was not asked for explicitly.
+
+## Reports are missing required sections (2026-08-18)
+
+`ai_citation_audit structure` checks the five sections the prompt requires. Of
+16 recent reports, 3 miss a heading -- but two different things look identical
+to a keyword search, which is why the mode reports pathway-named headings beside
+the missing ones:
+
+| report | headings | pathway-named | missing |
+|---|---|---|---|
+| 1354co025T (agent) | 26 | 14 | Detailed Pathway Analysis |
+| 5g3vaE24BQ | 16 | 7 | Limitations |
+| 22sU1dOIiw | 8 | 1 | Limitations |
+
+The agent report has no "Detailed Pathway Analysis" heading and eleven numbered
+pathway sections carrying exactly that content: restructured, not incomplete.
+The other two genuinely have no Limitations at all -- and Limitations is where
+the caveats that make an interpretation honest are supposed to live.
+
+Measured, not enforced. submit_report already asks one question per run and a
+second gate would make it a workflow step.
