@@ -511,3 +511,30 @@ responses: a name that will not resolve or a refused connection is the network
 or the host; a 5xx from the proxy means the gateway is up and its upstream is
 down; no answer at all means the upstream is hanging rather than refusing. Five
 tests cover the classification.
+
+### Round 25 launched 2026-08-18 08:42, and the bundle is bigger than pre-registered
+
+The gateway answered at 08:42 after four hours and forty minutes of 504s. The
+round started immediately: `73I734364H,1354co025T`, base/agent interleaved,
+label `agent-v25`.
+
+**The fingerprint has moved: `9e291e18a2` at pre-registration, `e92a9a5737` at
+launch.** Work continued during the outage, so the arm being measured is not
+byte-identical to the one the bisect order was written for. What changed after
+pre-registration:
+
+| change | can it move the numbers? |
+|---|---|
+| read_paper description corrected (claimed reading helps survival; it does not) | possibly -- it is prompt text the Lead reads every turn |
+| "Optionally run check_my_citations" removed from the Lead prompt | possibly -- it should raise re-checks, which measured well |
+| orphaned `SYSTEM_PROMPT_DELEGATED_INTERPRET` deleted | no -- nothing sent it |
+| uncited references pruned before renumbering | slightly -- fewer reference entries, same citations |
+| truncation detection, ungrounded-report note | no -- observability, and the note only fires when nothing grounded |
+
+Two of those are prompt text, so the pre-registered bisect order gains a step at
+the front: **if the bundle fails a rule, suspect the two prompt edits before the
+citation nudge**, because they are the newest and the least measured.
+
+Saying this before the numbers exist is the whole point of writing it down. The
+alternative -- quietly reporting the result against the old fingerprint -- would
+have been a measurement of something other than what the document claims.
