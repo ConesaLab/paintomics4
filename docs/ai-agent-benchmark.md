@@ -1530,3 +1530,40 @@ quality (better failure and redaction rates than base).
 What remains is that base screens every search and this arm screens nothing, and
 that 47% of everything this arm retrieves lands outside any writer's 40-paper
 window. Round 39 tests the screen alone.
+
+## Round 39, replicate 1: the screen works, and it corrects the roadmap
+
+```
+agent-v39-r1  wall 355 | cites 26 | failed 1 | redact 3 | cov 17
+              papers 37 kept of 155 | tags_with_a_cited_paper 13/13
+base-r1       wall 295 | cites 23 | failed 1 | redact 3 | cov 15
+```
+
+Same job, and the agent arm beats the incumbent on citations AND coverage for the
+first time in 39 rounds. Theme conversion went 7/14 -> 13/13. Every
+pre-registered number is met on this replicate (n=1 each, so nothing is claimed
+yet).
+
+**Two planned experiments are now refuted by their own instrumentation.**
+
+`delegate_markers = 0`. The delegated sub-agents wrote NOT ONE `[N]` -- exactly
+like base's interpretation batches. So this arm's citations are not born in
+delegation either. With `topup_added = 9` of 26 citations, the actual sources are
+the Lead's own draft (~17) and the top-up (9).
+
+That kills two queued changes:
+- **AI_AGENT_TOPUP=0 must NOT be run as planned.** The top-up supplies 35% of the
+  citations in this replicate. Its 83.5 s is 24% of the wall clock and it is
+  buying a third of the grounding, which is a different trade entirely from the
+  "asymmetric bet nobody measured" it looked like two rounds ago.
+- **FRAMING_MAY_CITE is aimed at a problem the screen removed.** It exists to let
+  the framing call cite themes no delegate covered; theme conversion is now 13/13,
+  so there is nothing left for it to reach.
+
+**What it opens instead.** `delegate_interpretation` produces prose that carries
+no citations, and that prose is stitched verbatim into the report -- which is why
+this arm ships 63 850 characters against base's 37 081 while citing less. The
+tool to question next is delegation itself: it costs loop turns and merge time
+and contributes zero citations, so the question is whether its prose earns the
+dilution. That is measurable directly -- AI_AGENT_MERGE_DELEGATED=0 already
+exists.
