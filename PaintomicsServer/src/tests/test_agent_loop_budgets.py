@@ -511,6 +511,40 @@ def test_the_merge_is_judged_on_grounded_citations_not_raw_markers():
 
 
 
+def test_the_merge_requires_the_extra_length_to_buy_something():
+    """Round 31 rejected a stitch with two MORE grounded citations because three
+    unquotable markers went with it. Round 32 then accepted 35 120 characters
+    for grounded 9->9. Too strict, then too loose: the test is that grounding
+    must not fall AND either grounding or coverage must rise."""
+    import inspect
+    src = inspect.getsource(L._run_loop_async)
+    i = src.index("buys_something")
+    window = src[max(0, i - 400):i + 200]
+    assert "coverage_after > coverage_before" in window, (
+        "coverage is not a currency the merge can accept on")
+    assert "grounded_after > grounded_before" in window
+    assert "grounded_after >= grounded_before" in src, (
+        "the merge could accept a stitch that LOSES grounded citations")
+
+
+def test_pathways_named_counts_only_pathways_in_the_run():
+    class _Ctx:
+        pathways = [{"name": "Glycolysis"}, {"name": "Cell cycle"},
+                    {"name": "Apoptosis"}]
+    assert L._pathways_named("Glycolysis rises; the Cell cycle stalls.", _Ctx()) == 2
+    assert L._pathways_named("Nothing relevant here.", _Ctx()) == 0
+    assert L._pathways_named("", _Ctx()) == 0
+
+
+def test_the_stitch_cap_is_a_number_not_a_request():
+    """Round 32 asked the writer for shorter prose in the prompt, recorded the
+    prediction, and the falsifier fired: 44 593 characters of prose in a report
+    2.16x base's. Length is bounded by a cap now."""
+    assert L.STITCH_MAX_CHARS <= 40000, (
+        "the stitch cap is back above the length that failed rule 5")
+
+
+
 def main():
     for t in (test_tool_output_under_budget_is_returned_whole,
               test_tool_output_over_budget_is_cut_and_says_so,
@@ -546,7 +580,10 @@ def main():
               test_the_citation_top_up_checks_the_clock,
               test_the_correction_rewrite_checks_the_clock,
               test_no_expensive_post_loop_call_is_left_on_a_bare_timeout,
-              test_the_merge_is_judged_on_grounded_citations_not_raw_markers):
+              test_the_merge_is_judged_on_grounded_citations_not_raw_markers,
+              test_the_merge_requires_the_extra_length_to_buy_something,
+              test_pathways_named_counts_only_pathways_in_the_run,
+              test_the_stitch_cap_is_a_number_not_a_request):
         _check(t.__name__, t)
     print("\nPassed: %d / %d" % (len(_PASSED), len(_PASSED) + len(_FAILED)))
     if _FAILED:

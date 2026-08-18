@@ -180,7 +180,16 @@ GATE_MIN_SECONDS = float(os.getenv("AI_AGENT_GATE_MIN", "130"))
 # named against the workflow arm's 15) because the truncated tail took its
 # citations with it. 56 000 leaves the report around 75 000 -- still inside the
 # ceiling, with the paragraphs that carry the grounding.
-STITCH_MAX_CHARS = int(os.getenv("AI_AGENT_STITCH_MAX_CHARS", "56000"))
+STITCH_MAX_CHARS = int(os.getenv("AI_AGENT_STITCH_MAX_CHARS", "40000"))
+"""Ceiling on the delegated text handed to the merge.
+
+Was 56 000. Round 32 shipped 44 593 characters of prose in a 60 258-character
+report -- 2.16x the shipped arm's, failing the length rule that exists to catch
+degenerate output. The round before that tried to fix length by ASKING the
+writer for less (separate data claims from literature claims, drop mechanism you
+cannot point at); the prediction was recorded, the falsifier fired, and prose
+length turned out not to be under prompt control. A cap is.
+"""
 # The LLM verify->correct loop's share of the clock. It is the single most
 # expensive thing in a run once grounding works -- 291 s to check 19 citations,
 # the same price the workflow arm pays for 20 -- and it is also the most
@@ -475,6 +484,19 @@ def _assemble_without_synthesis(ctx):
         pieces += ["", "## Pathway analyses", "", "\n\n".join(ctx.delegated)]
     report = "\n".join(pieces)
     return report if (ctx.notebook or ctx.delegated) else ""
+
+
+def _pathways_named(text, ctx):
+    """How many of the run's pathways this text actually discusses.
+
+    The merge needs a second currency besides grounding. A stitch that adds
+    35 000 characters and no grounded citation is padding; the same stitch is
+    worth taking if it doubles the pathways the report covers, which is what
+    round 32 measured -- coverage 10 to 19 with grounding flat at 9.
+    """
+    lowered = (text or "").lower()
+    return sum(1 for p in ctx.pathways
+               if p.get("name") and str(p["name"]).lower() in lowered)
 
 
 def _verified_quotes(ctx, quotes):
@@ -1536,8 +1558,20 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
         # citations and 44 000 characters of pathway coverage, thrown away
         # because three unquotable markers went with it. That run shipped 10
         # pathways against base's 15.
+        # Grounding must not fall, and the extra length must buy something:
+        # more grounded citations, or more of the experiment covered. Round 31
+        # rejected a stitch with two MORE grounded citations because three
+        # unquotable markers went with it; round 32 accepted 35 120 characters
+        # for grounded 9->9. Requiring the raw count to rise is too strict and
+        # requiring nothing is too loose.
+        coverage_before = _pathways_named(str(report), ctx)
+        coverage_after = _pathways_named(candidate, ctx)
+        stats["merge_coverage"] = "%d->%d" % (coverage_before, coverage_after)
+        buys_something = (grounded_after > grounded_before
+                          or coverage_after > coverage_before)
         if (len(candidate) > 1.2 * len(str(report))
-                and grounded_after >= grounded_before):
+                and grounded_after >= grounded_before
+                and buys_something):
             stats["merge_gain_chars"] = len(candidate) - len(str(report))
             stats["merge_citations"] = "%d->%d" % (before, after)
             stats["merge_grounded"] = "%d->%d" % (grounded_before, grounded_after)
