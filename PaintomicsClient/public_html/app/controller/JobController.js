@@ -833,6 +833,21 @@ function JobController() {
 					jobView.generateNetwork(pathwaysNetworkData);
 				});
 
+			} else if (jobView.database == "OmniPath") {
+			    $.getJSON(SERVER_URL_GET_PATHWAY_NETWORK_OMNIPATH + "/" + jobView.getModel().getOrganism(), function (pathwaysNetworkData) {
+					pathwaysNetworkData.id = jobView.getModel().getOrganism();
+					pathwaysNetworkData.timestamp = Math.floor( Date.now() / 1000 );
+
+					me.updateStoredApplicationDataIndexDB("networks", pathwaysNetworkData);
+					jobView.generateNetwork(pathwaysNetworkData);
+				});
+
+			} else {
+				/* A source with no network file reached this branch silently and left
+				   the tab spinning forever, which reads as a broken view rather than
+				   an absent one. */
+				console.warn("No pathway network available for database: " + jobView.database);
+				jobView.generateNetwork({nodes: [], edges: []});
 			}
 		};
 		

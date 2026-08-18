@@ -1100,7 +1100,7 @@ function PA_Step1JobView() {
 			var installed = getInstalledDatabasesFor(organism);
 			var applied = ["KEGG"];
 
-			Ext.each(["MapMan", "Reactome"], function(database) {
+			Ext.each(["MapMan", "Reactome", "OmniPath"], function(database) {
 				var box = me.getComponent().queryById(database.toLowerCase() + "DB");
 				if (!box) { return; }
 
@@ -1637,6 +1637,13 @@ function PA_Step1JobView() {
 									{ boxLabel: 'Reactome', name: 'databases[]', inputValue: 'Reactome',
 									  checked: false, disabled: true,
 									  itemId: 'reactomeDB', id: 'reactomeDB'},
+									/* OmniPath ships no pathway diagrams, so its pathways open as an
+									   interactive interaction network rather than a painted map. The
+									   web service serves human, mouse and rat only, so for every
+									   other organism this box stays disabled. */
+									{ boxLabel: 'OmniPath', name: 'databases[]', inputValue: 'OmniPath',
+									  checked: false, disabled: true,
+									  itemId: 'omnipathDB', id: 'omnipathDB'},
 							]
 						},
 						{

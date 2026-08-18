@@ -186,6 +186,46 @@ class Application(object):
         def get_pathway_network_mapman(specie):
             return send_from_directory( KEGG_DATA_DIR + 'current/' + specie, 'pathways_network_MapMan.json' )
 
+        @self.app.route( SERVER_SUBDOMAIN + '/kegg_data/pathway_network_omnipath/<path:specie>' )
+        def get_pathway_network_omnipath(specie):
+            return send_from_directory( KEGG_DATA_DIR + 'current/' + specie, 'pathways_network_OmniPath.json' )
+
+        ##*******************************************************************************************
+        ##* GET THE INTERACTION NETWORK OF ONE OmniPath PATHWAY
+        ##*
+        ##* The other three sources ship a diagram, so their "network" is a single
+        ##* static file per species describing how whole pathways connect. OmniPath
+        ##* has no diagram: the pathway IS a network, and the client draws it. The
+        ##* whole edge set runs to ~1.3 MB per organism, which is why it is read one
+        ##* pathway at a time from its own collection rather than folded into the
+        ##* pathway documents KeggInformationManager caches for 25 organisms at once.
+        ##*******************************************************************************************
+        @self.app.route(SERVER_SUBDOMAIN + '/omnipath_network/<path:specie>/<path:pathwayID>')
+        def get_omnipath_network(specie, pathwayID):
+            # Both segments land in a MongoDB query and a database name, so they
+            # are constrained to the character set the installer emits rather
+            # than trusted. Anything else is a bad request, not a lookup.
+            specie = sub(r'\W+', '', specie)
+            pathwayID = sub(r'\W+', '', pathwayID)
+            if not specie or not pathwayID:
+                return jsonify({"success": False, "errorMessage": "Invalid organism or pathway"}), 400
+
+            handle = None
+            try:
+                handle, db = KeggInformationManager().getConnectionByOrganismCode(specie)
+                network = db["omnipath_network"].find_one({"ID": pathwayID}, {"_id": 0})
+            except Exception as ex:
+                logging.error("OMNIPATH NETWORK %s/%s: %s", specie, pathwayID, ex)
+                return jsonify({"success": False, "errorMessage": "Network unavailable"}), 500
+            finally:
+                if handle is not None:
+                    handle.close()
+
+            if network is None:
+                return jsonify({"success": False,
+                                "errorMessage": "No OmniPath network for " + pathwayID}), 404
+            return jsonify({"success": True, "network": network})
+
 
         ##*******************************************************************************************
         ##* GET DATA FROM CLIENT TMP DIR

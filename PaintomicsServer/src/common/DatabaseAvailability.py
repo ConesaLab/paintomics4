@@ -59,7 +59,7 @@ from src.conf.organismDB import dicDatabases
 #: Every database the client can draw a checkbox for, in the order it draws
 #: them. Anything MongoDB reports that is not in here is ignored rather than
 #: forwarded to a client that has no box to put it in.
-KNOWN_DATABASES = ("KEGG", "MapMan", "Reactome")
+KNOWN_DATABASES = ("KEGG", "MapMan", "Reactome", "OmniPath")
 
 #: KEGG is not a choice. `PathwayAcquisitionServlet` unions it into every job's
 #: databases regardless of what was submitted, and the checkbox that represents

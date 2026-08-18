@@ -208,6 +208,27 @@ class KeggInformationManager(metaclass=Singleton):
         finally:
                 self.lock.release() #UNLOCK CACHE
 
+    def getPathwayCanvasSizeByID(self, organism, pathwayID):
+        """Canvas a diagram-less source laid its pathway out on, or None.
+
+        Sources with a drawn diagram have their size measured from the PNG.
+        A source that has no diagram stores the canvas its installer computed
+        the layout on, so the viewer still has a coordinate space to scale the
+        feature boxes into.
+        """
+        try:
+            self.lock.acquire()  # LOCK CACHE
+
+            pathway = self.getKeggData(organism).get("pathways").get(pathwayID, None)
+            if pathway is None:
+                return None
+            width, height = pathway.get("imageWidth"), pathway.get("imageHeight")
+            if isinstance(width, int) and isinstance(height, int) and width and height:
+                return (width, height)
+            return None
+        finally:
+            self.lock.release()  # UNLOCK CACHE
+
     def getAllFeatureIDsByPathwayID(self, organism, pathwayID):
         """
         This function...

@@ -117,6 +117,11 @@ SERVER_URL_EXAMPLE_DATASETS_DOWNLOAD = SERVER_URL_EXAMPLE_DATASETS + "/download"
 SERVER_URL_GET_PATHWAY_NETWORK = SERVER_URL + "kegg_data/pathway_network";
 SERVER_URL_GET_PATHWAY_NETWORK_REACTOME = SERVER_URL + "kegg_data/pathway_network_reactome";
 SERVER_URL_GET_PATHWAY_NETWORK_MAPMAN = SERVER_URL + "kegg_data/pathway_network_mapman";
+SERVER_URL_GET_PATHWAY_NETWORK_OMNIPATH = SERVER_URL + "kegg_data/pathway_network_omnipath";
+// One OmniPath pathway's own interaction network, fetched as
+// <organism>/<pathwayID> only when that pathway is opened. OmniPath ships no
+// diagram, so this IS the pathway view rather than an overview of it.
+SERVER_URL_GET_OMNIPATH_NETWORK = SERVER_URL + "omnipath_network";
 
 SERVER_URL_GET_AVAILABLE_SPECIES = SERVER_URL + "kegg_data/species.json";
 // {organism: [databases]} for every organism this deployment installed, read

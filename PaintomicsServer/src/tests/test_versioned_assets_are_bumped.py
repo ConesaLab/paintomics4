@@ -97,8 +97,12 @@ PUBLISHED = {
         "1.0", "1250cdec9f81a78bc2e4c2a7229c4628f7a4c6105a261dbf03987da8b3950290"),
     "app/view/PathwayAcquisitionViews/PA_Step3RegTargetNetworkView.js": (
         "0.7", "b135712a9564f8ae0eac94daf9c567ef275c4c748dbc270fdbdeb7d25fc79e34"),
+    # OmniPath ships no diagram, so its pathways render as an interactive graph
+    # rather than as boxes painted over a raster; this is that view.
+    "app/view/PathwayAcquisitionViews/PA_Step4OmniPathNetworkView.js": (
+        "0.1", "fbcdaeb4087e5edb65c09fa347ac22f0d001331c502fedfbd973ba9893d50e15"),
     "resources/ServerConfiguration.js": (
-        "0.7", "da64ff7cfeeecef7c6c9fb8ec125199b40200988d638951e9d7817eef13da754"),
+        "0.8", "2ed37a88c3dadb286bc798bfe164a0617e4388a782d843b036bcf9235bd8db7b"),
     "js/libs/linkurious/sigma.min.js": ("0.1", None),
     "js/libs/linkurious/plugins.js": ("0.2", None),
     # Versioned by its release rather than by a counter. A vendored library is

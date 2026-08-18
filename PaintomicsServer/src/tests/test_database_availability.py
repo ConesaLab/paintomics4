@@ -149,7 +149,19 @@ class InstalledDatabasesTest(unittest.TestCase):
         ticked and is then dropped.
         """
         client = clientFor(mmu=None)
-        self.assertEqual(["KEGG", "Reactome"],
+
+        # Derived from the conf rather than written out. Spelling the answer as
+        # ["KEGG", "Reactome"] made this test assert mmu's 2026 conf rather than
+        # the property it is named for, and it duly broke the day OmniPath was
+        # added for mmu -- a conf change, with the fallback behaving exactly as
+        # intended. What must hold is that the fallback IS the mappable set,
+        # ordered by KNOWN_DATABASES, whatever that set happens to contain.
+        from src.conf.organismDB import dicDatabases
+        mappable = set(dicDatabases["mmu"][0]) | {DatabaseAvailability.MANDATORY_DATABASE}
+        expected = [database for database in DatabaseAvailability.KNOWN_DATABASES
+                    if database in mappable]
+
+        self.assertEqual(expected,
                          DatabaseAvailability.getInstalledDatabases("mmu", client=client))
 
     def test_no_organism_yields_kegg(self):

@@ -995,6 +995,65 @@ function PA_Step4KeggDiagramView() {
 	};
 
 	/**
+	* Render an OmniPath pathway as an interactive interaction network.
+	*
+	* The other three sources paint their features over a diagram; OmniPath has
+	* none, so its pathway is drawn as the signed, directed graph it actually
+	* is. The nodes reuse the identical painted glyphs the raster views place on
+	* their diagrams, so a gene carries the same colours here as on a KEGG map.
+	*
+	* @param {jQuery} bodyEl the panel body to render into
+	* @param {Object} dataDistributionSummaries
+	* @param {Object} visualOptions
+	*/
+	this.renderOmniPathNetwork = function(bodyEl, dataDistributionSummaries, visualOptions) {
+		/* The organism lives on the job model, several views up: this view's own
+		   parent is the pathway panel and carries no model of its own. */
+		var organism = null, node = this;
+		for (var hop = 0; hop < 6 && node && !organism; hop++) {
+			try {
+				var nodeModel = node.getModel && node.getModel();
+				if (nodeModel && typeof nodeModel.getOrganism === "function") {
+					organism = nodeModel.getOrganism();
+				}
+			} catch (error) { /* not this one; keep climbing */ }
+			node = (node.getParent ? node.getParent() : null);
+		}
+		if (!organism) {
+			try { organism = application.mainView.currentView.getModel().getOrganism(); }
+			catch (error) { organism = null; }
+		}
+		if (!organism) {
+			bodyEl.html('<p class="omnipath-net-status">Could not resolve the organism ' +
+				'for this pathway, so its interaction network cannot be loaded.</p>');
+			return;
+		}
+
+		this.omniPathNetwork = new PA_Step4OmniPathNetworkView().render(bodyEl, {
+			organism: organism,
+			pathwayID: this.getModel().getID(),
+			items: this.items,
+			summaries: dataDistributionSummaries,
+			visual: visualOptions,
+			maxEdges: 900
+		});
+	};
+
+	/**
+	* Wire the panel's own toolbar. Shared by the raster and network views: the
+	* header exists either way, and without this its buttons are inert on an
+	* OmniPath pathway.
+	*/
+	this.bindDiagramPanelControls = function() {
+		var me = this;
+		$("#hideDiagramPanelButton").click(function() { me.getParent().hideDiagramPanel(); });
+		$("#expandDiagramPanelButton").click(function() { me.expand(); });
+		$("#shrinkDiagramPanelButton").click(function() { me.shrink(); });
+		$("#downloadDiagramPanelButton").click(function() { me.download(); });
+	};
+
+
+	/**
 	* This function generates the component (EXTJS) using the content of the model
 	* @returns {Ext.ComponentView} The visual component
 	*/
@@ -1025,6 +1084,17 @@ function PA_Step4KeggDiagramView() {
 					var graphicalOptions = me.getModel().getGraphicalOptions();
 					var dataDistributionSummaries = me.getParent().getDataDistributionSummaries();
 					var visualOptions = me.getParent().getVisualOptions();
+
+					/* OmniPath carries no diagram, so there is no raster to scale
+					   feature boxes onto and no geometry worth preserving. Its
+					   pathway IS a network, and it is rendered as one the user can
+					   actually move and interrogate. */
+					if (me.getModel().getSource() === "OmniPath") {
+						me.renderOmniPathNetwork($(this.el.dom).find(".lateralOptionsPanel-body"),
+							dataDistributionSummaries, visualOptions);
+						me.bindDiagramPanelControls();
+						return;
+					}
 
 					//GET THE VIEW PORT AND IF THE IMAGE IS BIGGER, CALCULATE THE ADJUST FACTOR
 					var viewportWidth = $(this.el.dom).width();
@@ -1064,8 +1134,9 @@ function PA_Step4KeggDiagramView() {
 					// Background image
 					// For KEGG we only need to pass the digit code, but for MapMan
 					// the full ID is required.
-					var is_kegg = (me.model.getSource() == undefined || me.model.getSource() == "KEGG");
-					var canvas_dir = is_kegg ? me.model.getID().replace(/\D/g, '') : me.model.getID() + '_' + me.model.getSource();
+					var source = me.model.getSource();
+					var is_kegg = (source == undefined || source == "KEGG");
+					var canvas_dir = is_kegg ? me.model.getID().replace(/\D/g, '') : me.model.getID() + '_' + source;
 
 					canvas.image(location.pathname + "kegg_data/" + canvas_dir, imageWidth, imageHeight).addClass("keggImageBack");
 
@@ -1119,6 +1190,13 @@ function PA_Step4KeggDiagramView() {
 					});
 				},
 				beforedestroy: function() {
+					/* Cytoscape owns a canvas and a layout worker; destroying the
+					   Ext panel around it leaves both running. */
+					if (me.omniPathNetwork) {
+						me.omniPathNetwork.destroy();
+						me.omniPathNetwork = null;
+					}
+
 					//REMOVE ALL PA_Step4KeggDiagramFeatureSetView
 					for (var i in me.items) {
 						me.items[i].getModel().deleteObserver(me.items[i]);
