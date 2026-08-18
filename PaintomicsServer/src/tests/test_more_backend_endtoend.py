@@ -197,5 +197,40 @@ class MoreRsEndToEndTest(unittest.TestCase):
         self.assertGreater(checked, 0, "no rows were checked")
 
 
+class MoreRsMlrEndToEndTest(MoreRsEndToEndTest):
+    """The same job on the MLR path, which reaches the port only by name.
+
+    Subclassed so every assertion in the PLS1 case is re-run against MLR: the
+    output contract (`MORE_output_*` carrying every input pair, unfiltered, and
+    the star file staying significance-filtered) is method-independent, and it
+    was method-independent code that broke last time.
+
+    `engine = "rust"` is not decoration. `_resolveMOREBackend` sends MLR to the
+    port **only** when a caller names it -- with `auto`, or with no engine at
+    all, MLR stays on R so that stored jobs and older clients keep the numbers
+    they have already seen. If that invariant ever inverts, this test starts
+    passing for the wrong reason, so `test_mlr_without_an_explicit_engine_uses_r`
+    guards the other side of it.
+    """
+
+    def setUp(self):
+        super(MoreRsMlrEndToEndTest, self).setUp()
+        self.job.method = "MLR"
+        self.job.engine = "rust"
+
+    def test_the_backend_actually_chosen_is_the_port(self):
+        """Otherwise this whole class could be silently exercising R."""
+        backend = MOREServlet._resolveMOREBackend(
+            "MLR", "runMORE.R", binaryPath=BINARY, engine="rust")
+        self.assertEqual(backend, [BINARY])
+
+    def test_mlr_without_an_explicit_engine_uses_r(self):
+        for engine in (None, "auto"):
+            backend = MOREServlet._resolveMOREBackend(
+                "MLR", "runMORE.R", binaryPath=BINARY, engine=engine)
+            self.assertEqual(backend[0], "Rscript",
+                             "MLR with engine=%r must stay on R" % (engine,))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

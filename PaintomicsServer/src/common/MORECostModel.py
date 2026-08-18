@@ -125,6 +125,36 @@ _PER_GENE_SECONDS = {
     ("MLR", "rust"): 0.263,
 }
 
+# MORE's own cross-validation fold rule (`mynfolds`, auxFunctions.R:452), which
+# the port reproduces exactly. It is a *step* function and it steps DOWN: below
+# 50 samples MORE cross-validates leave-one-out, so the fold count equals the
+# sample count, and at 50 it collapses to 5.
+def _moreFolds(samples):
+    samples = int(samples or 0)
+    if samples < 50:
+        return max(samples, 1)
+    if samples < 100:
+        return 5
+    if samples < 200:
+        return 7
+    return 10
+
+
+# Fold count at the reference shape (36 samples -> leave-one-out).
+_FOLDS0 = _moreFolds(N0)
+
+# Above this many regulators per gene the port's MLR cost stops rising. With
+# `interactions = TRUE` the design carries G + p*G columns, so by p ~ 12 on a
+# 12-group study it already exceeds the sample count and glmnet's active set is
+# bounded by n rather than by p. Measured at n=36, G=12, 200 targets:
+#
+#   p =  3 -> 0.0518 s/gene      p = 20 -> 0.2346 s/gene
+#   p =  6 -> 0.1220 s/gene      p = 30 -> 0.2257 s/gene
+#   p = 12 -> 0.2254 s/gene
+#
+# i.e. linear to p=12 and flat after, which no single exponent expresses.
+_RUST_MLR_P_SATURATION = 12.0
+
 # Exponent on regulators-per-gene, fitted per method over p = 5..30. Both well
 # under 1 -- see the module docstring for why the obvious O(p^2) reading is
 # wrong.
@@ -451,6 +481,9 @@ def estimateSeconds(shape, method, engine):
         # than a fast port, so prefer that row before the global fallback.
         _PER_GENE_SECONDS.get((method, "r"), _FALLBACK_PER_GENE))
 
+    if (method, engine) == ("MLR", "rust"):
+        return SAFETY * perGene * shape.modelledGenes * _rustMlrShapeTerm(shape)
+
     regTerm = 1.0
     if shape.regPerGene > 0:
         regTerm = (shape.regPerGene / P0) ** _REG_EXPONENT.get(
@@ -462,6 +495,45 @@ def estimateSeconds(shape, method, engine):
             _DESIGN_EXPONENT.get(method, _DEFAULT_DESIGN_EXPONENT))
 
     return SAFETY * perGene * shape.modelledGenes * regTerm * designTerm
+
+
+def _rustMlrShapeTerm(shape):
+    """Shape multiplier for MLR on the port, which the R exponents get wrong.
+
+    The R rows fit a power law in `samples * groups`. That form cannot describe
+    the port, because the port's cost is dominated by the fold count and MORE's
+    fold rule steps *down* at 50 samples. Measured, 60 targets, p = 30:
+
+    | samples | groups | folds | measured s/gene | R-exponent model |
+    | --- | --- | --- | --- | --- |
+    | 36 | 12 | 36 (LOO) | 0.2257 | 0.2630 |
+    | 48 | 12 | 48 (LOO) | 0.3204 | 0.2842  **under by 1.13x** |
+    | 48 | 16 | 48 (LOO) | 0.4143 | 0.3072  **under by 1.35x** |
+    | 51 | 17 | 5        | 0.0504 | 0.3174  over by 6.3x |
+
+    Under-prediction is the failure that matters: it waves through a job that
+    then runs to the queue timeout, which is exactly what this module exists to
+    prevent. A power law cannot avoid it here, because a 60-sample study is
+    *cheaper* than a 36-sample one (5 folds against 36) while `samples*groups`
+    says the opposite -- measured 0.0391 against 0.1928 s/gene at p = 12.
+
+    So the port's MLR cost is modelled on the terms that actually drive it:
+    linear in `folds + 1` (the folds plus the full-data fit), linear in groups,
+    and linear in regulators-per-gene up to the saturation point above. Against
+    every shape measured -- including the two real datasets, `rand1` at 0.2347
+    and the STATegra example at 0.0261 s/gene -- this over-predicts by between
+    1.08x and 2.55x and never under-predicts.
+    """
+    folds = _moreFolds(shape.samples) if shape.samples > 0 else _FOLDS0
+    foldTerm = (folds + 1.0) / (_FOLDS0 + 1.0)
+
+    groupTerm = (shape.groups / G0) if shape.groups > 0 else 1.0
+
+    regTerm = 1.0
+    if shape.regPerGene > 0:
+        regTerm = min(shape.regPerGene, _RUST_MLR_P_SATURATION) / _RUST_MLR_P_SATURATION
+
+    return foldTerm * groupTerm * regTerm
 
 
 def _formatDuration(seconds):

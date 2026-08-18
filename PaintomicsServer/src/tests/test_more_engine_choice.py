@@ -65,15 +65,17 @@ class EngineIdTest(unittest.TestCase):
         self.assertEqual(MOREServlet.engineIdFor("PLS1", "r"), "r-pls1")
         self.assertEqual(MOREServlet.engineIdFor("PLS1", "rust"), "rust-pls1")
 
-    def test_mlr_on_the_port_falls_back_to_the_engine_that_can_run_it(self):
+    def test_mlr_on_the_port_resolves_to_the_port(self):
         """There is no rust-MLR entry, and asking for one is not an error.
 
-        Not because the port lacks MLR -- it implements it in full -- but
-        because R's MLR draws its group representative from the RNG
-        (`sample(correlacionados, 1)`, MORE_MLR.R:811/:860/:1049), so the port
-        can sit inside R's seed band and never on a given run of it.
+        The port reproduces R's RNG stream now -- R's Mersenne-Twister,
+        `set.seed`'s scrambling and `R_unif_index`'s rejection sampling -- so
+        the collinearity representatives that `sample()` picks match exactly and
+        the catalogue can offer the pair. It is still opt-in rather than the
+        default, because reproducing R's *draws* is not reproducing R's
+        *rounding*; see `test_mlr_defaults_to_r_even_with_a_binary_installed`.
         """
-        self.assertEqual(MOREServlet.engineIdFor("MLR", "rust"), "r-mlr")
+        self.assertEqual(MOREServlet.engineIdFor("MLR", "rust"), "rust-mlr")
 
     def test_an_unknown_method_resolves_to_nothing_rather_than_something(self):
         """None is the answer that lets a caller tell "not offered" apart from
@@ -144,11 +146,40 @@ class ResolveWithAnExplicitEngineTest(unittest.TestCase):
                                                 engine="rust"),
                 ["Rscript", R_SCRIPT])
 
-    def test_asking_for_rust_for_mlr_runs_mlr_on_r(self):
+    def test_asking_for_rust_for_mlr_runs_mlr_on_the_port(self):
         self.assertEqual(
             MOREServlet._resolveMOREBackend("MLR", R_SCRIPT, self.binary,
                                             engine="rust"),
-            ["Rscript", R_SCRIPT])
+            [self.binary])
+
+    def test_mlr_defaults_to_r_even_with_a_binary_installed(self):
+        """The invariant that protects numbers users have already seen.
+
+        PLS1 goes to the port unasked because swapping it is invisible --
+        byte-identical output. MLR does not: MORE runs glmnet at a tolerance
+        where coordinate descent has not converged, and where permuting the
+        design columns moves glmnet's own answer by 3.0e-03 relative, so a
+        cross-validated (alpha, lambda) tie can fall either way and a few edges
+        differ. A stored job, an older client and a scripted POST all arrive
+        here with no engine or with `auto`, and every one of them must keep
+        getting R.
+        """
+        for engine in (None, "", "auto", "AUTO"):
+            self.assertEqual(
+                MOREServlet._resolveMOREBackend("MLR", R_SCRIPT, self.binary,
+                                                engine=engine),
+                ["Rscript", R_SCRIPT],
+                "MLR with engine=%r must stay on R" % (engine,))
+
+    def test_rust_mlr_falls_back_to_r_when_no_binary_is_installed(self):
+        """Same rule as PLS1: a host without the port answers slowly, not with
+        an error. `engineRefusal` is what turns this into a message; this is the
+        belt to that's braces."""
+        with mock.patch.object(MOREServlet, "_discoverMoreRs", return_value=""):
+            self.assertEqual(
+                MOREServlet._resolveMOREBackend("MLR", R_SCRIPT, "",
+                                                engine="rust"),
+                ["Rscript", R_SCRIPT])
 
     def test_the_off_switch_still_beats_an_explicit_rust_request(self):
         """`off` is the operator's decision and outranks the user's."""
@@ -206,23 +237,35 @@ class AvailabilityTest(unittest.TestCase):
              mock.patch.object(MOREServlet, "_rustBinary", return_value=binary):
             return MOREServlet.describeMOREBackends()
 
-    def test_everything_installed_offers_all_three(self):
+    def test_everything_installed_offers_all_four(self):
         report = self._describe(ALL_INSTALLED, "/usr/local/bin/more-rs")
         self.assertEqual([e["id"] for e in report["engines"] if e["available"]],
-                         ["rust-pls1", "r-pls1", "r-mlr"])
+                         ["rust-pls1", "r-pls1", "r-mlr", "rust-mlr"])
         self.assertEqual(report["default"], "rust-pls1")
+
+    def test_the_catalogue_covers_both_methods_on_both_engines(self):
+        """A missing cell reads as "does not exist" rather than "not installed
+        here", which is the whole reason unavailable entries stay listed."""
+        pairs = {(e["method"], e["engine"]) for e in MOREServlet.MORE_ENGINES}
+        self.assertEqual(pairs, {("PLS1", "r"), ("PLS1", "rust"),
+                                 ("MLR", "r"), ("MLR", "rust")})
 
     def test_r_present_but_its_packages_absent_disables_both_r_engines(self):
         """The deploy image, exactly.
 
-        Note *both*: it is easy to think only MLR is at risk, because MLR is
+        Note *both*: it is easy to think only MLR is at risk, because MLR was
         the R-only method. R PLS1 is equally dead there, and a check that
         disabled MLR alone would leave a reference option that cannot run.
+
+        Since `rust-mlr` exists this image can run MLR at all for the first
+        time -- the static musl binary needs neither R nor the MORE package,
+        both of which are absent there.
         """
         report = self._describe(DRAGO, "/opt/paintomics/more-rs")
         available = {e["id"]: e["available"] for e in report["engines"]}
         self.assertEqual(available,
-                         {"rust-pls1": True, "r-pls1": False, "r-mlr": False})
+                         {"rust-pls1": True, "r-pls1": False,
+                          "r-mlr": False, "rust-mlr": True})
         self.assertEqual(report["default"], "rust-pls1")
         for entry in report["engines"]:
             if not entry["available"]:
