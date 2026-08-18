@@ -764,7 +764,7 @@ async def search_literature(ctx: RunContextWrapper[LoopContext], query: str,
 @function_tool(failure_error_function=_tool_failure("read_paper"))
 async def read_paper(ctx: RunContextWrapper[LoopContext], ref_index: int,
                      section: str) -> str:
-    """Read one section (abstract, introduction, results, discussion, other) of a retrieved paper [N]. Fetches full text on first use, about 3 s. Use it to check a paper really says what you want to cite it for. Reading is for deciding, not for unlocking text: a paper you cite has its full text fetched anyway, and reading first does not by itself make a citation survive."""
+    """Read one section (abstract, introduction, results, discussion, other) of a retrieved paper [N]. section="abstract" is free and instant -- the search already fetched it. Any other section fetches full text on first use, about 3 s. Use it to check a paper really says what you want to cite it for. Reading is for deciding, not for unlocking text: a paper you cite has its full text fetched anyway, and reading first does not by itself make a citation survive."""
     c = ctx.context
     t0 = time.time()
     guard = _time_guard(c)
@@ -775,7 +775,15 @@ async def read_paper(ctx: RunContextWrapper[LoopContext], ref_index: int,
         out = "No paper [%s]. Cite only indices search_literature returned." % ref_index
         _trace(c, "read_paper", ref_index, "unknown ref", t0)
         return out
-    if paper.get("fetch_tier") == "abstract_only":
+    # search_literature already fetched every abstract into paper_index, and
+    # 342 of 378 reads across the archive asked for exactly that -- yet the
+    # upgrade below ran first regardless, paying ~2.6 s of NCBI time to return
+    # text the process was already holding. Upgrade only when the request needs
+    # more than the abstract, or when the abstract came back empty.
+    wants_abstract = str(section or "").strip().lower() == "abstract"
+    have_abstract = bool(((paper.get("sections") or {}).get("abstract") or "").strip())
+    if paper.get("fetch_tier") == "abstract_only" and not (wants_abstract
+                                                           and have_abstract):
         try:
             upgraded = await asyncio.to_thread(c.pubmed.fetch_papers,
                                                [paper["pmid"]])
