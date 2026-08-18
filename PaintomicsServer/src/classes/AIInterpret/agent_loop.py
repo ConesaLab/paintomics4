@@ -66,6 +66,7 @@ from src.classes.AIInterpret.llm_client import LLMClient
 from src.classes.AIInterpret.pubmed_client import PubMedClient
 from src.classes.AIInterpret.shared import _collect_cited_quotes, _parse_json_verdict
 from src.classes.AIInterpret.verification import (
+    _fuzzy_contains,
     count_body_citations, normalize_citation_markers, parse_references_section,
     redact_unverified_v2, render_references_section, renumber_citations,
     resolve_pmid_mentions, sort_references_section, verify_report_v2,
@@ -1115,6 +1116,19 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
             quote_probe, str(report), ctx.paper_index, job_id))
         grounded_after_quotes = _collect_cited_quotes(
             quote_probe, candidate, ctx.paper_index, job_id)
+        # Keep only the quotes that the gate's own matcher can find in the paper.
+        # A model reporting that it found support is not the same fact as the
+        # support being there, and the gate checks the second.
+        verified_quotes = {}
+        for ref, quote in grounded_after_quotes.items():
+            paper = ctx.paper_index.get(ref) or {}
+            text = " ".join((paper.get("sections") or {}).values()) or (
+                paper.get("abstract") or "")
+            if quote and text and _fuzzy_contains(quote, text):
+                verified_quotes[ref] = quote
+        stats["quotes_unverifiable"] = (len(grounded_after_quotes)
+                                        - len(verified_quotes))
+        grounded_after_quotes = verified_quotes
         grounded_after = len(grounded_after_quotes)
         if (len(candidate) > 1.2 * len(str(report))
                 and after >= before and grounded_after >= grounded_before):
