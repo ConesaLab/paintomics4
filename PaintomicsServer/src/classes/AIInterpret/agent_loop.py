@@ -964,9 +964,36 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
                               SDK_LONG_CALL_TIMEOUT, label="forced synthesis")
             report = str(r.final_output)
         except (Exception, asyncio.TimeoutError) as e:
-            raise RuntimeError("The agent produced no report (loop: %s; "
-                               "forced synthesis: %s)" %
-                               (stats.get("loop_backstop", "ended"), e))
+            # Last resort, and it calls no model at all. The forced synthesis
+            # above needs the same gateway that just failed -- measured: a 504
+            # from the gateway killed the loop, then killed the synthesis, and a
+            # run that had already delegated two interpretations, kept a
+            # notebook and retrieved papers shipped NOTHING. Material that has
+            # been gathered should not be lost to the thing that stopped the
+            # gathering.
+            stats["deterministic_fallback"] = "%s: %s" % (type(e).__name__, e)
+            logger.warning("[%s][loop] synthesis unavailable (%s); assembling "
+                           "the report from gathered material without a model",
+                           job_id, e)
+            pieces = ["# Interpretation (assembled without synthesis)",
+                      "",
+                      "*The language model became unavailable before this report "
+                      "could be written. What follows is the material the run had "
+                      "already gathered: the analyses its sub-agents completed, "
+                      "the findings it recorded, and the enrichment data itself. "
+                      "It has not been synthesised, and its citations have not "
+                      "been through the usual verification.*"]
+            if ctx.notebook:
+                pieces += ["", "## Findings recorded during the investigation", ""]
+                pieces += ["- %s" % n for n in ctx.notebook]
+            if ctx.delegated:
+                pieces += ["", "## Pathway analyses", "", "\n\n".join(ctx.delegated)]
+            report = "\n".join(pieces)
+            if len(report.strip()) < 400:
+                raise RuntimeError(
+                    "The agent produced no report and had nothing gathered to "
+                    "fall back on (loop: %s; synthesis: %s)"
+                    % (stats.get("loop_backstop", "ended"), e))
 
     # ---- carry the delegated detail into the report ------------------------
     # Round 4 merged by RE-AUTHORING: one Report Writer pass over the draft plus
