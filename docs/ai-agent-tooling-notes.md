@@ -655,3 +655,28 @@ numbering gaps they left. Conservative where it matters: a report whose
 citations were all removed keeps its section rather than being left with an
 empty heading. Five tests; over the stored corpus the change would have removed
 17 entries across 11 reports and touched nothing else.
+
+## Are the citations actually grounded? (2026-08-18)
+
+The framework's central claim is that a citation carries a verbatim sentence
+from the paper it points at. That had never been checked against the papers
+themselves -- only enforced at generation time by the gate.
+
+**Against our stored copies:** 459 of 476 quotes across 37 reports appear in the
+paper they are attributed to (96.4%). Every report since 2026-08-14 is at zero
+unmatched; the 17 misses are older.
+
+That number is weaker than it looks, and worth saying so: the gate enforced this
+property with this same fuzzy matcher, so re-running it largely confirms the
+gate ran. It is a consistency check, not an independent one.
+
+**Against PubMed, re-fetched:** 12 quotes from the four newest reports were
+checked against text fetched fresh from NCBI -- text this system never stored.
+Ten matched the abstract directly. The other two came from papers held as PMC
+full text (40 394 and 31 426 characters), so their sentences are in the body and
+correctly absent from the abstract.
+
+Twelve of twelve consistent, with nothing fabricated and nothing misattributed
+in the sample. n=12 is small and only the newest reports were sampled, so this
+is evidence the grounding is real rather than proof that it always is -- but it
+is the first check of that claim made from outside the pipeline that produced it.
