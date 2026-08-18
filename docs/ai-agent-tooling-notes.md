@@ -546,3 +546,31 @@ description may promise an outcome the gate decides ("the verifier removes",
 advertise a seconds figure, and the belt's descriptions must stay under 3500
 characters in total -- currently 2381, largest 422. Both guards were checked
 against the wording they are meant to catch.
+
+## The prompt contradicted itself about the best tool (2026-08-18)
+
+Auditing the Lead's system prompt the way the tool descriptions were audited.
+
+Its numeric claims hold: "roughly a dozen searches" against a measured ~9 per
+run, "delegate a few times" against 2.1, "roughly two dozen investigative tool
+calls" against 22-54, and "six pathways instead of fifteen" against 6.5 for runs
+that never delegated versus about 16 for runs that did. The read_paper sentence
+carries the corrected version -- reading does not make a citation more likely to
+survive, so it earns its time only when it changes your mind.
+
+One defect, and an expensive one to leave in place. The report rules said:
+
+    - Before submitting, run check_my_citations on your draft: ... Fix or drop
+      them rather than shipping them.
+    ...
+    - Optionally run check_my_citations on your draft first.
+
+Three bullets apart, requiring and excusing the same call. check_my_citations is
+the most valuable tool measured so far -- of 28 runs that called it, the 10 that
+ran it again after a bad result improved every time and none got worse -- and
+"optionally" is exactly the word most likely to stop it being run twice. The
+leftover line is gone; the prompt is 3581 characters and names the tool once.
+
+A test now asserts the prompt never calls it optional and describes it in one
+place only, since a second description is how the contradiction arose. Verified
+against the old wording.

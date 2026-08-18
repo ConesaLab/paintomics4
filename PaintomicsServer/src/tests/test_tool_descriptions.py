@@ -81,6 +81,29 @@ def test_a_timing_claim_belongs_only_to_a_tool_that_costs_time():
                 % (tool.name, says_seconds.group(0)))
 
 
+def test_the_lead_prompt_does_not_contradict_itself_about_checking_citations():
+    """The prompt told the agent both to run check_my_citations before
+    submitting and that running it was optional, three bullets apart.
+
+    That matters more than a tidiness point: of the 28 archived runs that called
+    the tool, the 10 that ran it again after a bad result improved every time and
+    none got worse. Marking the most valuable tool in the belt "optional" is the
+    line most likely to stop it being used twice.
+    """
+    from src.classes.AIInterpret import prompts
+    text = prompts.SYSTEM_PROMPT_LEAD_AGENT
+    mentions = [l.strip() for l in text.split("\n") if "check_my_citations" in l]
+    assert mentions, "the prompt no longer mentions check_my_citations at all"
+    optional = [l for l in mentions
+                if "optional" in l.lower() or "if you like" in l.lower()]
+    assert not optional, ("the prompt calls check_my_citations optional while also "
+                          "requiring it: %s" % optional)
+    assert len(mentions) == 1, (
+        "check_my_citations is described in %d separate places, which is how the "
+        "contradiction arose: %s" % (len(mentions), mentions))
+
+
+
 def _check(name, fn):
     try:
         fn()
@@ -95,7 +118,8 @@ def main():
     for t in (test_no_description_promises_a_verification_outcome,
               test_every_tool_has_a_description,
               test_descriptions_stay_affordable,
-              test_a_timing_claim_belongs_only_to_a_tool_that_costs_time):
+              test_a_timing_claim_belongs_only_to_a_tool_that_costs_time,
+              test_the_lead_prompt_does_not_contradict_itself_about_checking_citations):
         _check(t.__name__, t)
     print("\nPassed: %d / %d" % (len(_PASSED), len(_PASSED) + len(_FAILED)))
     if _FAILED:

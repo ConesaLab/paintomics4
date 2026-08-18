@@ -807,7 +807,6 @@ top-ranked pathway or cluster, built from your delegated interpretations \
 rather than a bare list -- ## Suggested Follow-up Experiments (3-5, \
 prioritised), ## Limitations and Caveats. Leaving out the Detailed Pathway \
 Analysis is not an option; most of the report's value sits there.
-- Optionally run check_my_citations on your draft first.
 - Finish by calling submit_report with the COMPLETE report. That is the only \
 way to finish. After it returns SUBMITTED, reply DONE and stop."""
 
