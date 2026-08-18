@@ -1035,3 +1035,39 @@ anything missing, so the only cost of stopping early is a quote collected twice.
 
 Each attempt LOOKED correct and logged its warning; only timing the call showed
 which one worked.
+
+## The shipped arm misses the ten-minute limit too (2026-08-18)
+
+Round 32's `base-r3` errored:
+
+    status  error   wall  600.0
+    detail  "The interpretation exceeded its 10-minute limit and was stopped.
+             The literature gateway was slow to answer; please try again later."
+
+It is not an isolated draw. Across 14 archived base runs:
+
+    min 184 s   median 399 s   max 602 s   mean 413 s
+    over 500 s: 3 of 14 (21%)      over 550 s: 2
+
+Two errored at the ceiling, a third finished 12 seconds inside it. **The
+production interpreter fails the ten-minute requirement in roughly one run in
+seven**, and the user sees an error after waiting the full ten minutes.
+
+Two things follow.
+
+**For the comparison.** Rule 1 has been treated as an agent-specific weakness --
+round 30's 914 s run read as a disqualifying flaw. It is a property of the
+pipeline, not of the arm: whichever arm runs, a slow literature gateway can eat
+the budget. The agent arm's overruns are worse (914 s against a hard 600 s
+ceiling) and its clock guards were still the right fix, but the shipped arm is
+not the safe baseline the rule implies.
+
+**For production.** This is the user-visible failure that matters most: ten
+minutes of waiting, then "please try again later", with the work discarded. The
+partial report exists at that moment -- the loop had a draft, the gate had
+quotes -- and nothing ships it. An interpretation that says "verified 8 of 14
+citations before the time ran out" beats an error message, and both arms could
+produce one.
+
+That is a bigger user-facing win than any citation-count improvement measured so
+far, and it is independent of which arm wins.
