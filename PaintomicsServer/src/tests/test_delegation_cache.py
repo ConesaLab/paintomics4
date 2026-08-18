@@ -290,6 +290,28 @@ def test_grounding_sees_citations_written_as_PMIDs():
 
 
 
+def test_the_evidence_shelf_hands_over_paper_text_not_tool_framing():
+    """search_paper_text answers a human: "Found 3 passage(s) in paper [1]:
+    --- Passage 1 --- ...". Passing that through as evidence invites the writer
+    to quote the framing, and the gate then hunts for that sentence in the paper
+    and does not find it."""
+    raw = ("Found 3 passage(s) in paper [1]:\n\n--- Passage 1 ---\n"
+           "Polyamine depletion arrests these cells in G1 and blocks entry to S phase.\n"
+           "--- Passage 2 ---\nIkaros binds the Ccnd2 promoter during differentiation.")
+    cleaned = L._clean_passage(raw)
+    assert "Found" not in cleaned and "Passage 1" not in cleaned, (
+        "tool framing survived into the evidence: %r" % cleaned[:90])
+    assert "Polyamine depletion arrests" in cleaned
+    assert "Ikaros binds" in cleaned, "only one passage was kept"
+
+
+def test_a_shelf_entry_is_dropped_when_nothing_usable_is_found():
+    assert L._clean_passage("Found 0 passage(s) in paper [1]:") == ""
+    assert L._clean_passage("--- Passage 1 ---\nshort") == "", (
+        "a fragment too short to be evidence was kept")
+
+
+
 def _check(name, fn):
     try:
         fn()
@@ -312,7 +334,9 @@ def main():
               test_the_lead_is_told_which_citations_cannot_be_grounded,
               test_grounding_failure_does_not_lose_the_delegation,
               test_the_gate_reuses_what_delegation_grounded,
-              test_grounding_sees_citations_written_as_PMIDs):
+              test_grounding_sees_citations_written_as_PMIDs,
+              test_the_evidence_shelf_hands_over_paper_text_not_tool_framing,
+              test_a_shelf_entry_is_dropped_when_nothing_usable_is_found):
         _check(t.__name__, t)
     print("\nPassed: %d / %d" % (len(_PASSED), len(_PASSED) + len(_FAILED)))
     if _FAILED:

@@ -839,6 +839,23 @@ async def _single_shot(agent, prompt, ctx, timeout, label):
         return ""
 
 
+def _clean_passage(raw):
+    """Strip the search tool's framing so the writer sees only paper text.
+
+    search_paper_text answers a human: "Found 3 passage(s) in paper [1]:
+    --- Passage 1 --- ...". Handing that to a model as evidence invites it to
+    quote the framing, and the gate then looks for that sentence in the paper
+    and does not find it.
+    """
+    body = re.sub(r'^\s*Found\s+\d+\s+passage\(s\)[^:]*:', '', raw).strip()
+    parts = [p.strip() for p in re.split(r'-{2,}\s*Passage\s*\d+\s*-{2,}', body)]
+    parts = [p for p in parts if len(p) > 40]
+    if not parts:
+        return ""
+    # Two passages is enough context to write from without burying the prompt.
+    return "  ".join(parts[:2])[:600]
+
+
 def _quote_shelf(c, chunk, papers):
     """Candidate supporting sentences, pulled BEFORE the sub-agent writes.
 
@@ -873,8 +890,10 @@ def _quote_shelf(c, chunk, papers):
                 continue
             if passage and not passage.lower().startswith(("error", "no text",
                                                            "no match")):
-                shelf[ref] = passage.strip()[:600]
-                break
+                cleaned = _clean_passage(passage)
+                if cleaned:
+                    shelf[ref] = cleaned
+                    break
     return shelf
 
 
@@ -978,7 +997,12 @@ async def delegate_interpretation(ctx: RunContextWrapper[LoopContext],
     async def _one(chunk):
         async with sem:
             chunk_papers = _papers_for(chunk)
+            t_shelf = time.time()
             shelf = _quote_shelf(c, chunk, chunk_papers)
+            # Traced because an untraced step cannot be told apart from a step
+            # that never ran, and round 26 was scored on exactly that mistake.
+            _trace(c, "quote_shelf", "%d papers" % len(chunk_papers),
+                   "%d passage(s)" % len(shelf), t_shelf)
             prompt = prompts_mod.build_batch_interpretation_prompt(
                 chunk, chunk_papers, c.experiment_design, c.organism_name)
             if shelf:
