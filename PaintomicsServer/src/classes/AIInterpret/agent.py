@@ -2248,6 +2248,16 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats,
     # concluded, unverifiable citations are redacted here, deterministically.
     t0 = time.time()
     final = verify_report_v2(report, gene_whitelist, unique_papers, job_instance)
+    # WHICH references failed, not just how many. The count cannot answer the
+    # question round 40 raised -- are the failures concentrated in papers admitted
+    # while the screen was being permissive? -- because a paper's ref_index IS its
+    # admission order. stats["verification"] holds this and is a dict, so the
+    # bench drops it and every archived round kept only the total.
+    _failed = final.get("failed_citations") or []
+    if _failed:
+        stats["failed_refs"] = ",".join(
+            str(c.get("ref_index")) for c in _failed
+            if isinstance(c.get("ref_index"), int))
     score_topup_survival(stats, final)
     # Which retrieval machinery the surviving quotes actually came from. Placed
     # here on purpose: renumber_citations rewrites every ref_index a few lines
