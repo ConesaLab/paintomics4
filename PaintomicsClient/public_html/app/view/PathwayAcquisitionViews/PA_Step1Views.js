@@ -4732,7 +4732,18 @@ var MORE_ENGINES_FALLBACK = [
 	 unavailableReason: "", label: "MLR — R engine",
 	 detail: "Elastic-net multiple linear regression. Slower than PLS1 and " +
 	         "harder to reproduce, and it reports no p-values, so the alpha " +
-	         "and VIP thresholds do not apply."}
+	         "and VIP thresholds do not apply."},
+	/* Listed last and labelled opt-in, mirroring the server. The port
+	   reproduces R's random draws exactly, so collinear regulators are grouped
+	   and represented identically; it does not reproduce R's rounding, because
+	   MORE runs the solver at a tolerance where it has not converged. A few
+	   borderline regulators can therefore differ. */
+	{id: "rust-mlr", method: "MLR", engine: "rust", available: true,
+	 unavailableReason: "", label: "MLR — Rust engine (opt-in)",
+	 detail: "The same elastic-net model, reimplemented and much faster. It " +
+	         "reproduces R's random draws exactly but not R's rounding, so a " +
+	         "small number of borderline regulators can differ from the R " +
+	         "engine."}
 ];
 
 /* Fills `combo` from /more_backends, and selects the server's default. */

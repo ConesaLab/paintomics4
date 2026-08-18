@@ -110,12 +110,28 @@ MORE_ENGINES = [
         "engine": "r",
         "label": "MLR — R engine",
         # Every clause here was read out of the MORE sources rather than
-        # recalled: the random representative is `sample(correlacionados, 1)`
-        # at MORE_MLR.R:811, :860 and :1049; the single `coefficient` column is
-        # built at :689-691, against MORE_PLS.R:599 which builds `coefficient`
+        # recalled: the single `coefficient` column is built at
+        # MORE_MLR.R:689-691, against MORE_PLS.R:599 which builds `coefficient`
         # AND `pvalue`; and `grep -rn 'step(\|stepAIC\|regsubsets' MORE/R` is
         # empty, so nothing here may describe MLR as stepwise however natural
         # that assumption is.
+        #
+        # The RNG claim used to read "sample(correlacionados, 1) at :811, :860
+        # and :1049". Two of those were wrong. Established by shimming
+        # base::sample and tracing a live more() run rather than by grepping --
+        # a plain grep for `sample(` misses :811 and :860 if it also filters out
+        # lines containing `#`, because both carry a trailing comment. The
+        # reachable draws on this path are:
+        #
+        #   MORE_MLR.R:811  sample(correlacionados, 1)   nrow(mycor) == 1, once
+        #   MORE_MLR.R:860  sample(correlacionados, 1)   once per COMPLETE clique
+        #   MORE_MLR.R:922  sample(names(which(sums == max(sums))), 1)
+        #                                                only on a degree+sum tie
+        #   glmnet cv.glmnet  foldid = sample(rep(seq(nfolds), length = N))
+        #                                                11 per target
+        #
+        # :1049/:1098/:1160 are the same three inside CollinearityFilter2, which
+        # `GetMLR` never reaches -- it passes col.filter = 'cor'.
         #
         # The last point is why this option is listed third rather than second.
         # The usual reason given for choosing MLR is that it returns real
@@ -129,6 +145,45 @@ MORE_ENGINES = [
                    "alpha and VIP thresholds do not apply. Prefer PLS1 unless "
                    "you have many more samples than candidate regulators per "
                    "gene."),
+    },
+    {
+        "id": "rust-mlr",
+        "method": "MLR",
+        "engine": "rust",
+        "label": "MLR — Rust engine (opt-in)",
+        # Listed last, and opt-in rather than default, for a reason that is
+        # measured rather than cautious. The port reproduces R's *decisions* on
+        # this path exactly -- it reimplements R's Mersenne-Twister and
+        # `R_unif_index`, so `set.seed(123)` and every draw after it match:
+        # 8157/8157 draws on the bundled STATegra example, 2830/2830 on the
+        # simulated one, and zero collinearity-representative mismatches on
+        # either. Two of the four output files come out byte-identical.
+        #
+        # What it does not reproduce is R's *arithmetic*, and that is not a
+        # defect that can be fixed. MORE runs glmnet at `epsilon = 1e-5`, where
+        # coordinate descent has not converged: on one fit glmnet's own
+        # objective falls 2.682616e-02 -> 2.640738e-02 as `thres` goes 1e-5 ->
+        # 1e-14. At 1e-5 its answer is not even a function of the data -- merely
+        # permuting the design columns, which cannot move the optimum, shifts
+        # the objective by 3.0e-03 relative (against 5.4e-07 once converged).
+        # So a cross-validated (alpha, lambda) tie can fall either way, and a
+        # handful of edges differ: edge Jaccard 0.991 on the real example,
+        # 0.886-0.923 on the simulated one. The port's disagreement with R is
+        # smaller than R's disagreement with itself under that neutral
+        # permutation, which is the only bar an independent implementation can
+        # be held to.
+        #
+        # Hence: offered, labelled, and never substituted silently. PLS1 earned
+        # a silent default by being byte-identical; this has not.
+        "detail": ("The same elastic-net model as the R engine, reimplemented, "
+                   "and roughly 8-30x faster. It reproduces R's random draws "
+                   "exactly, so collinear regulators are grouped and "
+                   "represented identically. It does not reproduce R's "
+                   "rounding: MORE runs the solver at a tolerance where it has "
+                   "not converged, and where R does not reproduce itself "
+                   "either, so a small number of borderline regulators can "
+                   "differ. Choose it for speed, or the R engine to match "
+                   "numbers you have already published."),
     },
 ]
 
@@ -155,8 +210,10 @@ def engineIdFor(method, engine=None):
     for entry in MORE_ENGINES:
         if entry["method"] == method and entry["engine"] == normalised:
             return entry["id"]
-    # A recognised method with an engine that cannot run it -- MLR on the port
-    # is the only case -- falls back to the engine that can.
+    # A recognised method with an engine that cannot run it falls back to the
+    # engine that can. No pair reaches this today (the catalogue covers both
+    # methods on both engines), but it is what keeps an unknown engine string
+    # from becoming a None the callers have to special-case.
     for entry in MORE_ENGINES:
         if entry["method"] == method:
             return entry["id"]
@@ -190,20 +247,29 @@ def _resolveMOREBackend(method, rScript, binaryPath=None, engine=None):
     invisible to whoever reads the results, which is what makes a silent
     default legitimate.
 
-    R's MLR path is **not** deterministic. It draws from the RNG in three
-    places, the visible one being ``sample(correlacionados, 1)``, which picks
-    which member of a collapsed clique of correlated regulators survives as the
-    group representative. The port implements MLR in full -- elastic net,
-    collinearity grouping and all -- but it cannot be byte-equal to something
-    that is not equal to itself: R's own answer moves between seeds, and the
-    port was measured to sit *inside that seed band* rather than on any one
-    point in it. Group membership is deterministic and the expansion reports
-    every member, so the edge set is stable either way; what moves is which
-    member a collapsed group's coefficients are attributed to. That is a
-    difference worth opting into and a bad one to impose, so MLR keeps the
-    engine whose numbers its users have already seen. Any method this function
-    does not recognise goes to R for the blunter reason that R owns the full
-    method surface.
+    R's MLR path draws from the RNG, and the port now reproduces that stream
+    rather than merely sitting inside its spread: it reimplements R's
+    Mersenne-Twister, ``set.seed``'s scrambling and ``R_unif_index``'s rejection
+    sampling, so every draw matches -- 8157 of 8157 on the bundled STATegra
+    example, 2830 of 2830 on the simulated one, with zero
+    collinearity-representative mismatches on either. Two of the four output
+    files come out byte-identical.
+
+    It still does not get a silent default, and the reason is arithmetic rather
+    than randomness. MORE hands glmnet ``epsilon = 1e-5``, at which coordinate
+    descent has not converged -- glmnet's own objective on one fit falls
+    2.682616e-02 to 2.640738e-02 as ``thres`` goes 1e-5 to 1e-14 -- and at that
+    tolerance its answer is not a function of the data: permuting the design
+    columns, which cannot move the optimum, shifts the objective by 3.0e-03
+    relative against 5.4e-07 once converged. A cross-validated (alpha, lambda)
+    tie can therefore fall either way, and a few edges differ (edge Jaccard
+    0.991 on the real example). The port's gap to R is smaller than R's gap to
+    itself under that permutation, which is the only bar an independent
+    implementation can be held to -- but it is not byte-equality, so MLR goes to
+    the port only when a caller names ``rust``. PLS1 earned its silent default
+    by being byte-identical; this has not. Any method this function does not
+    recognise goes to R for the blunter reason that R owns the full method
+    surface.
 
     R also wins whenever the port cannot actually be run:
 
@@ -240,7 +306,11 @@ def _resolveMOREBackend(method, rScript, binaryPath=None, engine=None):
     # ` PLS1 ` both exit with "must be PLS1 or MLR" -- so normalising here
     # would route a value the port refuses away from the backend that might
     # accept it, turning a slow analysis into a failed one.
-    if method == "PLS1":
+    # PLS1 may reach the port without being asked for, because swapping it is
+    # invisible (byte-identical output). MLR may not: it goes to the port only
+    # when the engine was named, so `auto` -- an older client, a stored job, a
+    # scripted POST -- keeps the numbers its users have already seen.
+    if method == "PLS1" or (method == "MLR" and wanted == "rust"):
         # Blank means "go and find one", not "use R". Only an explicit path is
         # worth warning about when it fails to resolve -- a host with no binary
         # at all is the ordinary case and has to stay quiet, unless the engine

@@ -238,9 +238,10 @@ class Estimate(unittest.TestCase):
         wins only ~4.7x, and that purely from rayon. An earlier draft
         extrapolated the MLR row from the PLS1 ratio and got 0.0040 s/gene
         against a measured 0.263: a 30-minute job quoted at 30 seconds, in
-        exactly the case this module exists to catch. Latent only because
-        _resolveMOREBackend sends MLR to R unconditionally -- so lock it here,
-        where a future engine change cannot quietly re-open it.
+        exactly the case this module exists to catch. No longer latent --
+        `rust-mlr` is a catalogue entry and _resolveMOREBackend routes MLR to
+        the port when a caller names `rust` -- so this is now guarding a live
+        code path rather than a dormant one.
         """
         shape = self.shape()
         pls1Speedup = (estimateSeconds(shape, "PLS1", "r")
@@ -387,5 +388,83 @@ class Budget(unittest.TestCase):
         self.assertIn("association file", message)
 
 
+class RustMlrShapeModel(unittest.TestCase):
+    """The port's MLR cost against every shape actually measured.
+
+    The R rows fit a power law in `samples * groups`. That form cannot describe
+    the port, because its cost is dominated by the cross-validation fold count
+    and MORE's fold rule (`mynfolds`, auxFunctions.R:452) is a step function
+    that steps **down** at 50 samples: below 50 it is leave-one-out, at 50 it
+    collapses to 5. Measured consequence, p = 12: a 60-sample study costs
+    0.0391 s/gene where a 36-sample one costs 0.1928 -- five times *less* work
+    from more data, while `samples * groups` says 1.7x more.
+
+    With the R exponents the estimate under-predicted rust MLR by up to 1.35x
+    just below the fold cliff, and under-prediction is the failure that matters:
+    it waves a job through to die on the queue timeout, which is the exact
+    outcome this module exists to prevent.
+    """
+
+    def shape(self, genes, regPerGene, samples, groups):
+        return MOREShape(modelledGenes=genes, samples=samples, groups=groups,
+                         regPerGene=regPerGene)
+
+    # (label, genes, regPerGene, samples, groups, measured seconds-per-gene).
+    # Synthetic rows are 60-200 target sweeps on this machine; `rand1` and
+    # `stategra` are the two real datasets.
+    MEASURED = [
+        ("p=3",              200,  3.00, 36, 12, 0.05180),
+        ("p=6",              200,  6.00, 36, 12, 0.12200),
+        ("p=12",             200, 12.00, 36, 12, 0.22540),
+        ("p=20",             200, 20.00, 36, 12, 0.23460),
+        ("p=30",             200, 30.00, 36, 12, 0.22570),
+        ("rand1",             98, 29.71, 36, 12, 0.23469),
+        ("stategra",         957,  3.04, 36, 12, 0.02612),
+        ("n=48 G=12 (LOO)",   60, 30.00, 48, 12, 0.32042),
+        ("n=48 G=16 (LOO)",   60, 30.00, 48, 16, 0.41430),
+        ("n=51 G=17 (5-fold)", 60, 30.00, 51, 17, 0.05040),
+        ("n=60 G=12 (5-fold)", 100, 12.00, 60, 12, 0.03912),
+    ]
+
+    def test_never_under_predicts_any_measured_shape(self):
+        """Over-prediction refuses a job that would have fitted; that is
+        recoverable and visible. Under-prediction accepts one that cannot, and
+        the user waits out the whole timeout to learn nothing."""
+        for label, genes, reg, samples, groups, measured in self.MEASURED:
+            est = estimateSeconds(self.shape(genes, reg, samples, groups),
+                                  "MLR", "rust") / genes
+            self.assertGreaterEqual(
+                est, measured,
+                "%s: model %.5f s/gene under-predicts the measured %.5f"
+                % (label, est, measured))
+
+    def test_does_not_over_predict_by_more_than_a_factor_of_three(self):
+        """A guard that quotes ten times the truth refuses analyses a
+        scientist is entitled to run, which is its other failure mode."""
+        for label, genes, reg, samples, groups, measured in self.MEASURED:
+            est = estimateSeconds(self.shape(genes, reg, samples, groups),
+                                  "MLR", "rust") / genes
+            self.assertLess(est / measured, 3.0,
+                            "%s: model over-predicts by %.2fx"
+                            % (label, est / measured))
+
+    def test_the_fold_cliff_makes_more_samples_cheaper(self):
+        """The property no power law in samples*groups can express."""
+        loo = estimateSeconds(self.shape(100, 12.0, 48, 12), "MLR", "rust")
+        fiveFold = estimateSeconds(self.shape(100, 12.0, 51, 12), "MLR", "rust")
+        self.assertLess(fiveFold, loo,
+                        "51 samples cross-validates 5-fold and 48 samples "
+                        "leave-one-out, so the larger study must be cheaper")
+
+    def test_the_r_rows_are_untouched_by_the_rust_shape_model(self):
+        """The new term is scoped to ("MLR", "rust"); R's calibration stands."""
+        shape = self.shape(1000, 30.0, 36, 12)
+        self.assertAlmostEqual(estimateSeconds(shape, "MLR", "r"), 1198.0, places=3)
+        self.assertAlmostEqual(estimateSeconds(shape, "PLS1", "r"), 607.0, places=3)
+
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
