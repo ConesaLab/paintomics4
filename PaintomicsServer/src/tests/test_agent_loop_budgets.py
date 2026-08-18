@@ -69,6 +69,24 @@ def test_the_ledger_line_reports_what_is_left():
     assert "s left" in note and "chars" in note, note
 
 
+# -- nothing after the loop may run unbounded ------------------------------
+
+def test_every_post_loop_llm_step_is_clock_bounded():
+    """A run died at 601 s of a 600 s ceiling because the guard's quote probes
+    sat outside merge_timeout: they make one LLM call per cited paper and the
+    guard runs them twice. Each post-loop step that can call a model must be
+    wrapped in bounded()."""
+    import inspect
+    src = inspect.getsource(L._run_loop_async)
+    # the probes, the writer call, the correction rewrite and the framing call
+    assert src.count("await bounded(") >= 5, (
+        "only %d bounded call(s) after the loop; an unbounded one can breach the "
+        "ceiling" % src.count("await bounded("))
+    assert "quote probe (draft)" in src and "quote probe (candidate)" in src, (
+        "the quote probes are not bounded by name; they were the last unbounded "
+        "work in the run")
+
+
 # -- the merge guard must compare like with like ---------------------------
 
 def test_the_grounding_sieve_is_applied_to_both_sides():
@@ -295,6 +313,7 @@ def main():
     for t in (test_tool_output_under_budget_is_returned_whole,
               test_tool_output_over_budget_is_cut_and_says_so,
               test_the_ledger_line_reports_what_is_left,
+              test_every_post_loop_llm_step_is_clock_bounded,
               test_the_grounding_sieve_is_applied_to_both_sides,
               test_the_sieve_keeps_only_findable_quotes,
               test_the_ledger_shows_cluster_coverage_once_there_is_a_map,

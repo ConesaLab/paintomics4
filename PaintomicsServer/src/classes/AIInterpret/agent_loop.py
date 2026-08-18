@@ -1133,10 +1133,31 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
         quote_probe = LLMClient(AI_PROVIDERS[AI_LLM_PROVIDER])
         # Both sides through the same sieve: a model reporting support is not the
         # same fact as the support being there, and the gate checks the second.
-        before_quotes = _verified_quotes(ctx, _collect_cited_quotes(
-            quote_probe, str(report), ctx.paper_index, job_id))
-        raw_after = _collect_cited_quotes(quote_probe, candidate,
-                                          ctx.paper_index, job_id)
+        #
+        # Bounded, because these were the last unbounded work left in the run.
+        # _collect_cited_quotes makes one LLM call per cited paper and the guard
+        # runs it twice; with twenty papers on a slow gateway that is minutes,
+        # and it sat OUTSIDE merge_timeout, which bounds only the writer call.
+        # A run died at 601 s of a 600 s ceiling here. Every step after the loop
+        # now answers to the clock, without exception.
+        probe_budget = max(20.0, min(merge_timeout,
+                                     (ctx.started_at + AGENT_RUN_SECONDS)
+                                     - time.time() - GATE_MIN_SECONDS))
+        try:
+            before_quotes = _verified_quotes(ctx, await bounded(
+                asyncio.to_thread(_collect_cited_quotes, quote_probe,
+                                  str(report), ctx.paper_index, job_id),
+                probe_budget / 2, label="quote probe (draft)"))
+            raw_after = await bounded(
+                asyncio.to_thread(_collect_cited_quotes, quote_probe,
+                                  candidate, ctx.paper_index, job_id),
+                probe_budget / 2, label="quote probe (candidate)")
+        except (Exception, asyncio.TimeoutError) as e:
+            # No probe, no informed judgement: keep the draft rather than accept
+            # a stitch whose grounding could not be checked.
+            stats["merge_probe_failed"] = "%s: %s" % (type(e).__name__, e)
+            stats["merge_s"] = time.time() - t_m
+            before_quotes, raw_after, candidate = {}, {}, str(report)
         grounded_after_quotes = _verified_quotes(ctx, raw_after)
         stats["quotes_unverifiable"] = len(raw_after) - len(grounded_after_quotes)
         grounded_before = len(before_quotes)
