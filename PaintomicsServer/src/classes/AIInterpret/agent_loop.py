@@ -612,6 +612,30 @@ def _unrepresented_notes(notebook, text, limit=5, subjects=None):
     return missing[:limit]
 
 
+def _uncited_papers(paper_index, cited, limit=12):
+    """Retrieved papers nothing in the draft cites, newest reference first.
+
+    This is precisely the top-up's input, moved to where the agent can act on it.
+    Measured round 39: the top-up costs 83.5 s -- 24% of the run -- and supplies 9
+    of 26 citations by taking the finished report and adding markers to sentences
+    that already stood on their own. That is the asymmetric bet priced earlier:
+    a marker that verifies buys a citation, one that fails costs the whole
+    sentence.
+
+    The Lead already has check_my_citations in its belt, calls it in every run,
+    and calls it while the draft can still change. Handing it the same list lets
+    the citation be written into the sentence rather than bolted onto it, which
+    is the difference between a claim that was drafted with evidence and one that
+    had evidence attached afterwards.
+    """
+    missing = [p for ref, p in sorted((paper_index or {}).items())
+               if ref not in (cited or set())]
+    # Papers with full text first: a quotable sentence for a specific claim
+    # usually sits in Results, and 30% of surviving quotes come from there.
+    missing.sort(key=lambda p: not p.get("full_text_available"))
+    return missing[:limit]
+
+
 def _quote_evidence_lines(cited, quotes, limit=12):
     """The quotes themselves, for the agent to read against its own sentences.
 
@@ -1340,6 +1364,17 @@ def check_my_citations(ctx: RunContextWrapper[LoopContext], draft: str) -> str:
     # evidence it was being judged against. The quotes are already collected
     # above; withholding them was free to nobody.
     lines.extend(_quote_evidence_lines(cited, quotes))
+    unused = _uncited_papers(c.paper_index, cited)
+    if unused:
+        lines.append("Retrieved papers your draft cites NOWHERE -- if one "
+                     "genuinely supports a claim you are making, cite it in the "
+                     "sentence now rather than leaving the gate to bolt it on "
+                     "afterwards. Leaving a paper uncited is a fine outcome; "
+                     "forcing one in costs the sentence it lands on:")
+        lines.extend("  [%d] %s%s" % (p["ref_index"],
+                                      (p.get("title") or "")[:95],
+                                      " (full text)" if p.get("full_text_available") else "")
+                     for p in unused)
     orphaned = _unrepresented_notes(c.notebook, text, subjects=c.note_subjects)
     if orphaned:
         lines.append("Findings you recorded that this draft does not mention -- "
