@@ -440,3 +440,36 @@ cannot be chosen after seeing which way the numbers went:
 baseline, zero runs. Each is argued from the archive -- 60 runs, 1892 tool calls
 -- and none is argued from a scored comparison. Reasoning from traces is how the
 hypotheses were found; it is not evidence that the bundle is better.
+
+## The harness is in the repository now (2026-08-18)
+
+This document described a protocol that nothing in the repository could execute.
+The runner, the scorer, the gateway probe and twenty-five drive scripts lived in
+a session scratchpad -- a temporary directory. Round 25 was pre-registered
+against a runner that would have disappeared with it.
+
+    python -m src.benchmarks.ai_arm_bench ready
+    python -m src.benchmarks.ai_arm_bench run <jobID> <base|agent> <dir> --label agent-v25-r1
+    python -m src.benchmarks.ai_arm_bench score <dir>
+
+The per-run metrics for rounds 1-24 are kept in
+`src/benchmarks/history/ai_arm/` (49 runs, 200 KB). Scoring that directory
+reproduces every verdict in this document, including the ones that went against
+the agent arm. The reports themselves, 2.4 MB of prose, are not kept.
+
+Two things the port fixed or fixed in place:
+
+**The prose cut is now permanent.** Coverage counts a pathway only if it is
+named before the first appended table. The original metric counted the whole
+report, and both arms append a table of pathway names, which is how the agent
+arm once scored 102/102 for pathways it had never analysed.
+
+**Grouping is part of the protocol, because it changes the answer.**
+`agent-v20` alone fails rule 3 -- redactions 7.5 against base 4.5 + 2. Pooled
+with `agent-v19` it passes at 6.25, which is the "4 of 5 rules" figure quoted
+earlier in this document. Both readings are honest and they disagree. Round 25
+therefore fixes its grouping in advance: every replicate stamped with code
+fingerprint `9e291e18a2` is one arm, and no other pooling will be reported.
+
+Ten tests pin the five rules and the prose cut, so the rule cannot drift once
+the numbers exist.
