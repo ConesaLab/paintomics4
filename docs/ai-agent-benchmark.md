@@ -728,3 +728,28 @@ the extra breadth is free.
 flat. **Falsifier:** citations flat at ~9 with four chunks demonstrably running
 -- which would mean the ceiling is what the agent is willing to claim, not how
 many places it has to claim it, and the honest next step is the hybrid.
+
+### Correcting round 29's prediction, before the numbers
+
+The cap was not the binding constraint. Round 28's Lead asked for **6 and 9**
+pathways in two calls -- it never reached the old cap of 10. So raising the cap
+to 20 does not create more places a citation can be born; it lets the same ~15
+pathways be covered in one call of three or four parallel chunks instead of two
+sequential calls of two.
+
+**Revised prediction: wall clock down by roughly the length of one delegation
+(~30 s), citations roughly flat.** The earlier prediction of "citations up
+towards base" was reasoning from a constraint that was not binding, and it is
+withdrawn rather than quietly left to be judged against the result.
+
+What the numbers still cannot be:
+* if citations rise anyway, the extra parallel breadth mattered after all;
+* if wall clock does not fall, the Lead ignored the "make ONE call" wording and
+  the change is inert -- the same shape as round 26's guard that never fired.
+
+**The next lever this points at.** Base writes fourteen batches, each citing its
+own papers; this arm writes four chunks plus a draft, about five writing units.
+That ratio, not pathway count, tracks the citation gap of 9 against 20. The
+experiment that follows is smaller chunks -- three pathways per sub-agent rather
+than five, giving five to seven writing units for the same breadth, still inside
+one or two parallel waves.
