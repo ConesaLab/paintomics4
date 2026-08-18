@@ -162,28 +162,44 @@ def cmd_pubmed(args):
 
     client = PubMedClient()
     fresh = {}
+
+    # Abstracts for everything, then FULL TEXT for the papers whose quotes are
+    # supposed to come from the body. Excusing those on the grounds that an
+    # abstract cannot contain them is not a check -- a fabricated body sentence
+    # would pass it silently. Re-fetching the body is the only way to know.
     for paper in client.fetch_abstracts([p[1] for p in pairs]) or []:
         fresh[str(paper.get("pmid"))] = " ".join(
             [paper.get("title") or "", paper.get("abstract") or ""])
+    deep = sorted({pmid for _job, pmid, has_full, _q in pairs if has_full})
+    if deep:
+        print("re-fetching full text for %d of them\n" % len(deep), flush=True)
+        for paper in client.fetch_papers(deep) or []:
+            pmid = str(paper.get("pmid"))
+            body = " ".join(str(v) for v in (paper.get("sections") or {}).values())
+            if body.strip():
+                fresh[pmid] = fresh.get(pmid, "") + " " + body
 
-    matched = from_full_text = missing = 0
+    matched = matched_in_body = missing = unfetchable = 0
     for job, pmid, has_full_text, quote in pairs:
         text = fresh.get(pmid, "")
         if not text.strip():
-            missing += 1
+            unfetchable += 1
             continue
         if _fuzzy_contains(text, quote, THRESHOLD):
-            matched += 1
-        elif has_full_text:
-            # the sentence is in the body; an abstract cannot contain it
-            from_full_text += 1
+            if has_full_text:
+                matched_in_body += 1
+            else:
+                matched += 1
         else:
-            print("  NOT FOUND  %s pmid=%s %r" % (job, pmid, quote[:70]))
+            print("  NOT FOUND  %s pmid=%s full_text=%s %r"
+                  % (job, pmid, has_full_text, quote[:70]))
             missing += 1
-    print("\n%d matched the freshly fetched abstract" % matched)
-    print("%d came from full-text papers, so correctly absent from the abstract"
-          % from_full_text)
-    print("%d unexplained" % missing)
+    # Labelled by what was re-fetched for that paper, not by where in it the
+    # sentence turned up: a full-text paper's haystack includes its abstract.
+    print("\n%d matched (abstract-only paper, abstract re-fetched)" % matched)
+    print("%d matched (full-text paper, body re-fetched from PMC)" % matched_in_body)
+    print("%d not found in either" % missing)
+    print("%d could not be re-fetched at all" % unfetchable)
     return 1 if missing else 0
 
 

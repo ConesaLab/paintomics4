@@ -711,3 +711,30 @@ Five tests pin the parsers, because the failure that matters is not a false
 alarm but a silent zero: a renamed heading or reworded label would make the
 auditor report no problems out of no quotes, which looks exactly like a clean
 corpus.
+
+## The grounding claim, checked end to end (2026-08-18)
+
+The first independent pass excused seventeen quotes because they came from
+full-text papers and an abstract cannot contain a body sentence. That is not a
+check -- a fabricated body sentence passes it silently. The auditor now
+re-fetches the body from PMC for exactly those papers.
+
+Sixty quotes from reports written since 2026-08-14, checked against text this
+system never stored:
+
+| | |
+|---|---|
+| matched (abstract-only paper, abstract re-fetched) | 24 |
+| matched (full-text paper, body re-fetched from PMC) | 36 |
+| **not found in either** | **0** |
+| could not be re-fetched | 0 |
+
+Sixty of sixty. Nothing excused, nothing fabricated, nothing misattributed, and
+every paper re-fetchable. This is the framework's central claim -- a citation
+carries a verbatim sentence from the paper it points at -- verified from outside
+the pipeline that produces it, at a sample size where a systematic problem would
+have shown.
+
+What it does not check: whether the quote SUPPORTS the sentence it is attached
+to. That is a judgement, it needs a model, and the gateway has been down since
+04:00. It is the obvious next audit.
