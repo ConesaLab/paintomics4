@@ -602,3 +602,27 @@ The pre-registered bisect is not needed: the failure is not one of the nine
 changes, it is a seam between the loop and the gate that every version of this
 arm has had. The changes did what they were supposed to: r1's zero redactions
 are the evidence.
+
+## Round 26, pre-registered: does grounding at delegation time fix the seam?
+
+Fingerprint `90fd3e74c7`. One change from round 25: `delegate_interpretation`
+grounds its own citations as the sub-agents return, caches the quotes on the
+context, seeds the gate from them, and names the ungrounded indices to the Lead.
+
+**Prediction, written before the run.** Round 25's replicates split on exactly
+one thing -- whether the merged text's citations could be grounded in the time
+left (r1: 11 citations, 0 redactions; r2: 0 citations, 44 redactions). If the
+diagnosis is right:
+
+| | expectation |
+|---|---|
+| redactions | **down**, and the r1/r2 spread should collapse |
+| citations | **up or level** -- the merge stops shedding them |
+| wall clock | +5 to +15 s per delegation, still under 600 s |
+| `quotes_from_delegation` | non-zero in the stored stats |
+
+**What would falsify it:** citations fall again while redactions also fall. That
+is the signature of the agent dropping claims rather than grounding them, and it
+would mean the seam was not the binding constraint.
+
+The five rules and the two jobs are unchanged.
