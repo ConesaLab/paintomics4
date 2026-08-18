@@ -237,27 +237,37 @@ def test_the_standard_does_not_move_with_the_pool():
             "the permissive stance is back at pool=%d" % pool)
 
 
-def test_a_pool_past_the_target_raises_the_bar():
-    """The ceiling, added on round 41's evidence.
+def test_neither_a_floor_NOR_a_ceiling_moves_the_bar():
+    """Both pool-dependent stances are refuted; this pins the standard flat.
 
-    Across nine screened replicates citations rise with the pool only to about
-    40, and the single run at 55 papers shipped 22 citations with coverage 12 --
-    worse on both than the 37-paper run that shipped 26 with coverage 17. Past
-    the target, more literature in one report buys fewer citations.
+    The FLOOR (round 40): "a thin paper beats an empty theme" below half the
+    target. Keep rate rose to 28-32%, failures 0.50 -> 3.33, redactions
+    1.2 -> 8.7.
 
-    Raising the bar cannot admit a weak paper, which is what separates this from
-    the permissive branch that round 40 refuted."""
-    p = _prompt_for(40)
-    assert "Keep ONLY what is clearly stronger" in p, p
-    assert "past the 35 this report needs" in p
+    The CEILING (added and removed inside one round): I justified it on a single
+    replicate -- pool 55 shipping 22 citations against a 37-paper run's 26 -- and
+    the next replicate landed at pool 89 with 24 citations and zero redactions.
+    Across ten screened runs r(pool, citations) = +0.62, median 23 citations
+    above 35 papers against 18 below, and the pool-37 runs alone span 18 to 26.
+    """
+    for pool in (2, 20, 34, 40, 90):
+        p = _prompt_for(pool)
+        assert "specific quotable finding" in p
+        assert "thin paper beats an empty theme" not in p, pool
+        assert "clearly stronger" not in p, (
+            "a ceiling is back at pool=%d; more screened literature measured "
+            "better, not worse" % pool)
 
 
-def test_the_floor_stays_gone():
-    """The refuted half must not creep back in with the restored half."""
+def test_there_is_exactly_one_stance():
+    """Both pool-dependent variants are gone, so exactly one stance is built.
+
+    Counting them is the cheap guard against a branch creeping back: the floor
+    was refuted by round 40 and the ceiling by round 41's second replicate, and
+    each was added because a single run looked convincing."""
     import inspect
     src = inspect.getsource(L._screen_papers)
-    assert "thin paper beats" not in src or "does NOT" in src
-    assert src.count("stance = (") == 2, "a third stance reappeared"
+    assert src.count("stance = (") == 1, "a pool-dependent stance is back"
 
 
 def test_the_pool_size_is_still_reported():
@@ -311,8 +321,8 @@ def main():
               test_a_partly_screened_search_says_how_many_were_dropped,
               test_the_two_empty_causes_cannot_collapse_back_together,
               test_the_standard_does_not_move_with_the_pool,
-              test_a_pool_past_the_target_raises_the_bar,
-              test_the_floor_stays_gone,
+              test_neither_a_floor_NOR_a_ceiling_moves_the_bar,
+              test_there_is_exactly_one_stance,
               test_the_pool_size_is_still_reported,
               test_the_target_is_not_the_delegation_window):
         _check(t.__name__, t)
