@@ -1106,3 +1106,38 @@ including `redacted <= base + 2`. That rule was authored before any data and it
 measures what the reader actually loses. `failed_citations` and
 `sentences_per_failed_citation` are now recorded alongside it as diagnostics,
 not as replacements -- a rule edited after seeing the numbers is not a rule.
+
+## Regime change before round 35: the NCBI client was running unkeyed
+
+Every round up to and including 34 retrieved literature from NCBI E-utilities
+**without an API key**. `AI_PUBMED_API_KEY` was empty in the local `.env` while
+production (`paintomics.uv.es`) has held a 36-character key all along, so the
+benchmark has been measuring a client capped at 3 req/s that production does
+not run. The key is now set locally and verified: `api_key` is accepted, client
+spacing drops 0.40 s -> 0.11 s, and the retry depth drops 4 -> 2.
+
+**This is an environment change, not a code change, and it is not a hypothesis
+being tested.** It is recorded here so a shift in round 35 is not misread as an
+effect of the correction-prompt or instrumentation work:
+
+- Rounds <= 34: unkeyed, 3 req/s ceiling, 4 retries. Round 34's log shows 10
+  HTTP 429s across six runs; `pubmed_client` documents earlier measurements of
+  4-6 lost searches per run of 15, and a lost search is literature the report
+  never sees.
+- Round 35 onward: keyed, ~9 req/s, 2 retries.
+
+**What was NOT observed.** An isolated 6-query burst showed no throughput gain
+(2.9 s keyed vs 2.4 s unkeyed, zero throttle events either way). The key only
+bites under the sustained concurrency of a real run -- searches racing the
+per-citation verifiers -- which is exactly where round 34's 429s appeared. So
+the expected effect is *fewer dropped searches*, not faster ones, and if
+retrieval counts do not move, the key was never the binding constraint.
+
+Both arms share one `pubmed_client`, so within-round comparisons stay valid;
+only cross-round absolute retrieval counts are affected.
+
+**Next lever, deliberately NOT pulled this round.** `SEARCH_HITS` is 5 -- each
+query takes only PubMed's top five hits, against a 40-search budget (200 papers
+theoretical maximum). Raising it is the most direct "find more" change
+available and the key makes it affordable, but landing it in the same round as
+the key would make both unattributable. It waits for round 36.
