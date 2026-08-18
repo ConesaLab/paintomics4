@@ -223,7 +223,7 @@ def test_a_starved_pool_makes_the_screen_permissive():
     7/13 and shipped EIGHT -- same prompt, same code, pool starved to 17 papers
     against a 30-paper window. A filter with no target size cannot tell "nothing
     here is good" from "I have kept enough"."""
-    p = _prompt_for(4)          # window is 30 for 15 pathways
+    p = _prompt_for(4)          # target pool is 35
     assert "thin paper beats an empty theme" in p, p
     assert "keep ONLY what is clearly better" not in p
 
@@ -243,7 +243,26 @@ def test_the_stance_names_the_actual_numbers():
     """A stance that says 'some' teaches the screener nothing; the point is that
     the tool knows both numbers and the screener does not."""
     p = _prompt_for(4)
-    assert "only 4 papers" in p and "about 30" in p, p
+    assert "only 4 papers" in p and "about 35" in p, p
+
+
+def test_the_target_is_not_the_delegation_window():
+    """A correction to my own analysis, kept as a test so it cannot come back.
+
+    I had the screen aiming at _writer_window() -- DELEGATE_PAPERS x chunks --
+    on the reasoning that a paper no writer can be shown cannot be cited. Then
+    delegate_markers came in at ZERO on all four of round 39's replicates: the
+    delegated analyses cite nothing whatever. The Lead writes the citing draft
+    and sees every paper through the search listings, so the delegation window
+    has no say in how many citations a run can carry.
+
+    The target now comes from the measured line, citations = 0.91 x papers - 7.2.
+    """
+    import inspect
+    src = inspect.getsource(L._screen_papers)
+    assert "SCREEN_TARGET_POOL" in src
+    assert "_writer_window" not in src, (
+        "the screen is aiming at the delegation window again")
 
 
 def _check(name, fn):
@@ -273,7 +292,8 @@ def main():
               test_a_starved_pool_makes_the_screen_permissive,
               test_a_full_pool_makes_the_screen_strict,
               test_a_half_full_pool_keeps_the_ordinary_standard,
-              test_the_stance_names_the_actual_numbers):
+              test_the_stance_names_the_actual_numbers,
+              test_the_target_is_not_the_delegation_window):
         _check(t.__name__, t)
     print("\nPassed: %d / %d" % (len(_PASSED), len(_PASSED) + len(_FAILED)))
     if _FAILED:

@@ -182,6 +182,25 @@ MERGE_DELEGATED = os.getenv("AI_AGENT_MERGE_DELEGATED", "1") == "1"
 # everything, which measured 4.5-11 citations because the writer saw the whole
 # reference list at once.
 MERGE_MODE = os.getenv("AI_AGENT_MERGE_MODE", "stitch")
+SCREEN_TARGET_POOL = int(os.getenv("AI_AGENT_SCREEN_TARGET", "35"))
+"""How many screened papers the pool should aim for.
+
+Derived, not guessed. Across round 39's four screened replicates:
+
+    citations = 0.91 x papers - 7.2   (r = +0.997)
+
+so a pool of 35 predicts ~25 citations, comfortably past the incumbent's 20.5,
+and the replicate that kept 17 papers shipped 8. Every kept paper is worth about
+0.91 citations once screening has removed the keyword-only ones.
+
+This deliberately does NOT use _writer_window(). That function describes how many
+papers a DELEGATED writer can be shown, and measurement killed the assumption
+that it bounds citations: delegate_markers is 0 on every replicate, so the
+delegated analyses cite nothing at all. The Lead writes the citing draft and sees
+every paper through the search listings, so the delegation window has no say in
+how many citations a run can carry.
+"""
+
 SHOW_UNCITED = os.getenv("AI_AGENT_SHOW_UNCITED", "0") == "1"
 """Whether check_my_citations names the retrieved papers the draft never cites.
 
@@ -194,25 +213,6 @@ turns the replication into a new experiment and the bar can never be met.
 The change itself is sound and measured-motivated: the top-up costs 83.5 s (24%
 of a run) and supplies 9 of 26 citations by bolting markers onto finished prose.
 It waits for the round after the replication.
-"""
-
-SHOW_WINDOW = os.getenv("AI_AGENT_SHOW_WINDOW", "0") == "1"
-"""Tell the Lead how many of its papers can still reach a writer.
-
-The constraint that actually binds retrieval is invisible to the agent. Only
-DELEGATE_PAPERS x the number of chunks -- at most 4 x 10 = 40 papers -- can ever
-be shown to a writer, so anything retrieved past that cannot become a citation
-however good it is. Measured across 72 archived runs: 3 189 papers retrieved, 872
-cited, and 1 501 of them (47%) fetched BEYOND any writer's window.
-
-The ledger already tells the agent what it MAY spend -- searches left, seconds
-left, tool-output characters, clusters still unlit. It has never told it that the
-pool is full. So the agent keeps buying literature that arrives structurally
-uncitable, and every one of those papers still costs ~400 characters of listing
-in the context of every later turn.
-
-Off by default: it is a prompt change, so it changes behaviour and belongs in its
-own round rather than riding along with the paper screen.
 """
 
 SCREEN_PAPERS = os.getenv("AI_AGENT_SCREEN_PAPERS", "0") == "1"
@@ -529,7 +529,6 @@ def _code_fingerprint():
         # AI_SENTENCE_REPAIR=1 and =0 run different pipelines and stamped the
         # same fingerprint. Anything that gates a stage belongs here.
         parts.extend(["SHOW_UNCITED=%s" % SHOW_UNCITED,
-                      "SHOW_WINDOW=%s" % SHOW_WINDOW,
                       "SCREEN_PAPERS=%s" % SCREEN_PAPERS,
                       "FRAMING_MAY_CITE=%s" % FRAMING_MAY_CITE,
                       "TOPUP_ENABLED=%s" % TOPUP_ENABLED,
@@ -572,16 +571,6 @@ def _ledger_note(ctx):
         if units:
             note += (" · literature searched for %d of %d clusters"
                      % (len(ctx.searched_tags), units))
-    if SHOW_WINDOW:
-        held = len(ctx.paper_index)
-        window = _writer_window(ctx)
-        if held >= window:
-            note += (" · %d papers held and the writers can only read about %d "
-                     "of them -- more searching cannot add a citation now, only "
-                     "better-targeted searching can" % (held, window))
-        else:
-            note += (" · %d papers held, room for about %d more before the "
-                     "writers' limit" % (held, window - held))
     return note + "]"
 
 
@@ -1108,7 +1097,7 @@ async def _screen_papers(ctx, papers, query, topic_tag):
     # A filter with no target size cannot tell "nothing here is good" from "I
     # have already kept enough", and those need opposite answers. The tool knows
     # both numbers; the screener did not.
-    pool, window = len(ctx.paper_index), _writer_window(ctx)
+    pool, window = len(ctx.paper_index), SCREEN_TARGET_POOL
     if pool >= window:
         stance = ("You already hold %d papers and the writers can only read about "
                   "%d, so keep ONLY what is clearly better than what is already "
@@ -1869,7 +1858,6 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
         "topup_enabled": TOPUP_ENABLED,
         "framing_may_cite": FRAMING_MAY_CITE,
         "screen_papers": SCREEN_PAPERS,
-        "show_window": SHOW_WINDOW,
         "show_uncited": SHOW_UNCITED,
         "max_turns": AGENT_MAX_TURNS,
         "gate_reserve": GATE_RESERVE_SECONDS,

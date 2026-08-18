@@ -1622,3 +1622,26 @@ would send the question back to what the Lead does with the papers it holds.
 **Honest caveat recorded in advance:** one smoke run of the adaptive screen on
 the harder job kept 24 papers and shipped 14 citations, which sits ON the line
 but below the target band. The fix may narrow variance without raising the mean.
+
+### Correction: the "writers' window" does not bound citations
+
+Two rounds ago I concluded that only DELEGATE_PAPERS x chunks = 40 papers can
+ever reach a writer, and therefore that 47% of everything this arm retrieves is
+"structurally uncitable". The arithmetic was right and the conclusion was wrong.
+
+`delegate_markers` is **0 on every replicate measured** (round 39, all four). The
+delegated analyses cite nothing at all, so DELEGATE_PAPERS cannot gate the
+citation count. The Lead writes the citing draft and sees every paper through the
+search listings; the delegation window bounds only what the delegated writers
+read, and they contribute prose and coverage rather than citations.
+
+Consequences, both applied:
+- The paper screen now targets `SCREEN_TARGET_POOL` (35), derived from the fitted
+  line citations = 0.91 x papers - 7.2, instead of the delegation window.
+- `AI_AGENT_SHOW_WINDOW` is **deleted**. It would have told the agent "more
+  searching cannot add a citation now" once the pool passed 40 -- which is false,
+  and a dark feature built on a falsified premise is worse than no feature.
+
+The measurement that produced the wrong conclusion was the same one that
+corrected it, three iterations apart. The counter existed for the earlier
+question and answered a later one.
