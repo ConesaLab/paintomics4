@@ -188,7 +188,10 @@ STAGE_COUNTS = ("verify_iterations", "batches_failed", "truncated_calls",
                 # fallback that hands it somebody else's?
                 "delegate_matched", "delegate_fallback",
                 # The one retrieval measure both arms report on equal terms.
-                "themes_retrieved", "themes_cited")
+                "themes_retrieved", "themes_cited",
+                # Gateway weather. Round 34 saw 1 transport rate-limit retry
+                # across 8 replicates; round 35 saw 16.
+                "gateway_retries", "gateway_rate_limited")
 
 # Itemised bills. A per-tool breakdown is the only form in which "which tool is
 # worth its place" can be asked of the archive rather than of one live run.

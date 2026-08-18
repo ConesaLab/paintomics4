@@ -55,7 +55,8 @@ from src.classes.AIInterpret import clusters as clusters_mod
 from src.classes.AIInterpret.agent import (
     AgentContext, _build_agents, bounded, configure_sdk, _model, run_hedged,
     SDK_LONG_CALL_TIMEOUT, SDK_VERIFY_CONCURRENCY, SDK_MIN_CITATIONS,
-    SDK_CALL_TIMEOUT, SENTENCE_REPAIR, _repair_sentences, set_run_deadline,
+    SDK_CALL_TIMEOUT, SENTENCE_REPAIR, _repair_sentences,
+    reset_run_retries, run_retry_counts, set_run_deadline,
 )
 from src.classes.AIInterpret.context_builder import (
     build_pathway_context, build_gene_symbol_whitelist, get_organism_name,
@@ -1381,6 +1382,15 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
                       started_at=time.time(),
                       hard_deadline=time.time() + AGENT_RUN_SECONDS
                                     - GATE_RESERVE_SECONDS)
+    # The transport retries on its own budget, and without this it never learns
+    # the run's. This arm IMPORTED set_run_deadline and never called it -- so
+    # _run_seconds_left() returned None here, the guard that refuses a retry it
+    # cannot finish in time never fired, and the shim could go on retrying past
+    # the deadline the rest of the arm respects. Every other bound (the loop's
+    # _time_guard, AGENT_RUN_SECONDS, bounded() per call) sits ABOVE the
+    # transport, which is why runs still finished and the hole stayed invisible.
+    set_run_deadline(ctx.hard_deadline)
+    reset_run_retries()
 
     lead = Agent[LoopContext](
         name="Lead Interpreter",
@@ -2071,6 +2081,10 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
     themes, converted = theme_conversion(retrieved_all, unique_papers)
     stats["themes_retrieved"] = themes
     stats["themes_cited"] = converted
+    _retries = run_retry_counts()
+    if _retries:
+        stats["gateway_retries"] = _retries.get("transport", 0)
+        stats["gateway_rate_limited"] = _retries.get("rate_limited", 0)
     stats["verification"] = final
     # Stamp the outcome next to the tool calls that produced it. Mongo keeps one
     # interpretation per JOB, so it can answer "how did this job's last run go"

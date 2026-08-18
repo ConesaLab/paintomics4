@@ -161,6 +161,14 @@ SDK_LONG_CALL_TIMEOUT = float(os.getenv("AI_SDK_LONG_CALL_TIMEOUT", "600"))
 # ceiling. A ContextVar because it is per-run and inherited by every task the
 # run spawns, where a module global would leak between concurrent jobs.
 _RUN_DEADLINE = contextvars.ContextVar("ai_run_deadline", default=None)
+# Gateway weather, per run. Round 34 logged ONE transport rate-limit retry
+# across eight replicates; round 35 logged sixteen. That is a swing large
+# enough to move failure counts and wall times on its own, and it lived only in
+# the log -- so every archived comparison silently assumed the two rounds met
+# the same gateway. A ContextVar for the same reason the deadline is one: it is
+# inherited by child tasks, where a module global would bleed between
+# concurrent jobs.
+_RUN_RETRIES = contextvars.ContextVar("ai_run_retries", default=None)
 # Below this there is no point starting another attempt: it cannot return
 # anything the caller will still be alive to use.
 RETRY_MIN_ATTEMPT_SECONDS = float(os.getenv("AI_RETRY_MIN_ATTEMPT", "20"))
@@ -169,6 +177,25 @@ RETRY_MIN_ATTEMPT_SECONDS = float(os.getenv("AI_RETRY_MIN_ATTEMPT", "20"))
 def set_run_deadline(when):
     """Arm the transport's deadline for this run. `when` is an epoch time."""
     _RUN_DEADLINE.set(when)
+
+
+def reset_run_retries():
+    """Start a run's retry tally. Call once, where the deadline is set."""
+    _RUN_RETRIES.set({"transport": 0, "rate_limited": 0})
+
+
+def run_retry_counts():
+    """The tally, or an empty dict if nothing armed one."""
+    return dict(_RUN_RETRIES.get() or {})
+
+
+def _count_retry(exc):
+    tally = _RUN_RETRIES.get()
+    if tally is None:
+        return
+    tally["transport"] = tally.get("transport", 0) + 1
+    if "ratelimit" in type(exc).__name__.lower():
+        tally["rate_limited"] = tally.get("rate_limited", 0) + 1
 
 
 def _run_seconds_left():
@@ -515,6 +542,7 @@ def configure_sdk():
                                    " %s" % status if status else "", left,
                                    delay + RETRY_MIN_ATTEMPT_SECONDS)
                     raise
+                _count_retry(e)
                 logger.warning("SDK transport retry %d/%d after %s%s (waiting %.0fs)",
                                attempt, limit - 1, type(e).__name__,
                                " %s" % status if status else "", delay)
@@ -1057,6 +1085,7 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats,
 
     run_start = time.time()
     set_run_deadline(run_start + AI_MAX_RUN_SECONDS)
+    reset_run_retries()
     configure_sdk()
     agents = _build_agents()
 
@@ -2109,6 +2138,12 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats,
     themes, converted = theme_conversion(retrieved_all, unique_papers)
     stats["themes_retrieved"] = themes
     stats["themes_cited"] = converted
+    # What the gateway did to this run, so a round can be compared against one
+    # that met different weather instead of assuming it met the same.
+    _retries = run_retry_counts()
+    if _retries:
+        stats["gateway_retries"] = _retries.get("transport", 0)
+        stats["gateway_rate_limited"] = _retries.get("rate_limited", 0)
     stats["verification"] = final
     return report, unique_papers, ctx
 
