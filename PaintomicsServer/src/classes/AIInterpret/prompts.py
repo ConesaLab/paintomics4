@@ -610,8 +610,19 @@ Respond with ONLY this JSON (no markdown fencing):
     "supports_claim": true/false,
     "reasoning": "brief explanation",
     "actual_text": "the closest matching text found in the paper, if any",
-    "suggested_fix": "suggested replacement cited text if text_match is false, or empty string"
-}}"""
+    "suggested_fix": "the repair, chosen by which check failed -- see below"
+}}
+
+## What suggested_fix must contain
+- If **text_match** is false: the correct cited text from the paper.
+- If **text_match** is true but **supports_claim** is false: a rewritten
+  **Claim** sentence that the Cited Text does support. This is the common case.
+  The quote is real; the sentence built on it goes further than it can carry.
+  Narrow the sentence to what the passage establishes -- keep it as informative
+  as the evidence allows, keep the [{ref_index}] marker, and do not add facts
+  from anywhere else. If nothing in the passage supports any version of the
+  claim, return an empty string.
+- If both checks pass: empty string."""
 
 
 def build_correction_prompt(report, failed_citations):
@@ -621,22 +632,48 @@ def build_correction_prompt(report, failed_citations):
                  "Please correct them.")
     lines.append("")
 
+    # Two failure modes, and they need opposite repairs. Measured over 1006
+    # checked citations: 0.4% were quotes not in the paper, 20.1% were real
+    # quotes carrying a claim that goes further than they support. Telling the
+    # model to "correct the Cited Text to match the actual paper" fixes the
+    # rare one and is a no-op for the common one -- the cited text already
+    # matches. That is why the loop logs 10 failures, 10 failures, 10 failures
+    # and stops for lack of progress after burning a full rewrite each round.
+    drifted = [fc for fc in failed_citations if fc.get("mode") != "text"]
     for fc in failed_citations:
         lines.append(f"### [{fc['ref_index']}] Issue")
         lines.append(f"- **Problem:** {fc['reason']}")
+        if fc.get("mode") == "text":
+            lines.append("- **What is wrong:** the quoted text is not in the paper.")
+        else:
+            lines.append("- **What is wrong:** the quote is real, but your "
+                         "sentence claims more than it supports. Change the "
+                         "SENTENCE, not the quote.")
         lines.append(f"- **Your Cited Text:** \"{fc['cited_text']}\"")
+        if fc.get("claim_sentence"):
+            lines.append(f"- **Your sentence:** \"{fc['claim_sentence']}\"")
         if fc.get("actual_text"):
             lines.append(f"- **Actual text found:** \"{fc['actual_text']}\"")
         if fc.get("suggested_fix"):
-            lines.append(f"- **Suggested fix:** \"{fc['suggested_fix']}\"")
+            label = ("Suggested cited text" if fc.get("mode") == "text"
+                     else "Suggested sentence")
+            lines.append(f"- **{label}:** \"{fc['suggested_fix']}\"")
         lines.append("")
 
     lines.append("## Instructions")
-    lines.append("1. For each issue, either correct the **Cited Text** to match the actual paper, "
-                 "or remove the citation if no supporting evidence exists.")
-    lines.append("2. Do NOT change citations that were not flagged.")
-    lines.append("3. Preserve all [N] reference indices.")
-    lines.append("4. Output the COMPLETE corrected report.")
+    lines.append("1. Where the quoted text is not in the paper, correct the "
+                 "**Cited Text** or remove the citation.")
+    lines.append("2. Where the quote is real but oversold, rewrite **your "
+                 "sentence** so the quote supports it. Narrowing a claim is the "
+                 "correct outcome; do not restate the same claim in new words, "
+                 "and do not delete the sentence if a narrower true version "
+                 "exists.")
+    if drifted:
+        lines.append("   %d of the %d issues below are this kind."
+                     % (len(drifted), len(failed_citations)))
+    lines.append("3. Do NOT change citations that were not flagged.")
+    lines.append("4. Preserve all [N] reference indices.")
+    lines.append("5. Output the COMPLETE corrected report.")
 
     return "\n".join(lines)
 

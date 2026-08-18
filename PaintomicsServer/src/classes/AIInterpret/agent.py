@@ -1824,7 +1824,12 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats,
                                "cited_text": cit["cited_text"],
                                "claim_sentence": cit["claim_sentence"],
                                "actual_text": v.get("actual_text", ""),
-                               "suggested_fix": v.get("suggested_fix", "")})
+                               "suggested_fix": v.get("suggested_fix", ""),
+                               # Which repair the correction prompt should ask
+                               # for: a real quote with an oversold sentence
+                               # needs the SENTENCE changed, not the quote.
+                               "mode": ("text" if not v.get("text_match")
+                                        else "claim")})
         failed.sort(key=lambda c: c["ref_index"])
         logger.info("[%s][sdk] VERIFY iter %d: %d checked, %d failed",
                     job_id, _iteration + 1, len(to_verify), len(failed))
