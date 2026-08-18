@@ -991,3 +991,45 @@ Citations at or above base with four replicates smoothing the draw.
 **Falsifier:** coverage recovers and density collapses back to ~0.3, meaning the
 density instruction does nothing once the stitch is accepted, and the two
 changes simply trade against each other.
+
+## Round 32 r1: the falsifier fired
+
+Written before the round: *"coverage recovers and density collapses back to ~0.3,
+meaning the density instruction does nothing once the stitch is accepted, and the
+two changes simply trade against each other."*
+
+| run | citations | prose | coverage | density/1000 | redactions |
+|---|---|---|---|---|---|
+| base-r1 | 19 | 19 292 | 10 | 0.98 | 12 |
+| agent-v32-r1 | 14 | 44 593 | **19** | **0.31** | **0** |
+| agent-v31-r1 | 14 | 9 916 | 10 | 1.41 | 8 |
+
+Coverage recovered from 10 to 19 and redactions went to zero. Density fell from
+1.41 to 0.31. **The prompt did not shorten the prose.** Telling the writer to
+keep data claims apart from literature claims, and to leave out mechanism it
+cannot point at, changed the length of the delegated text by nothing that
+survives the merge.
+
+The instruction is not being kept on the grounds that it "should" help. It was
+predicted to help, it did not, and the honest reading is that prose length here
+is not under prompt control.
+
+### And the merge criterion is now too permissive
+
+    merge_grounded     9->9
+    merge_gain_chars   35120
+
+The guard accepted 35 000 extra characters for **zero additional grounded
+citations**, because the new condition only requires grounding not to fall.
+Round 31 rejected good stitches by demanding the raw marker count rise; round 32
+accepts empty ones by demanding nothing at all. Neither is the right test.
+
+What the report actually needs from a stitch is more grounded evidence OR more
+pathways covered -- and 35 000 characters that deliver neither is padding. The
+next criterion is that at least one must improve, with length bounded
+deterministically rather than by instruction.
+
+Note what round 32 r1 IS: 14 citations, **zero** redactions, 19 pathways against
+base's 10, inside 458 s. Its only failing rules are citations (14 v 19) and
+length (2.16x). That is the best-shaped report this arm has produced; it is too
+long, and the way to fix length is a cap, not a request.
