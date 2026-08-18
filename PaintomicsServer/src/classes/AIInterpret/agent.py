@@ -236,6 +236,11 @@ class _EmptyStream(Exception):
     """The gateway closed a completion stream without a single choice."""
 
 
+# Lengths of answers the model cut off at its token limit, this process.
+# Read by run_ai_agent to stamp `truncated_calls` on the stored record.
+_TRUNCATIONS = []
+
+
 async def _stream_to_completion(stream):
     """Fold a chat-completion chunk stream into one ChatCompletion.
 
@@ -316,6 +321,16 @@ async def _stream_to_completion(stream):
         finish_reason = "tool_calls" if tool_calls else "stop"
         logger.warning("completion stream ended without finish_reason; assuming %s",
                        finish_reason)
+    elif finish_reason == "length":
+        # The model ran out of output budget mid-sentence and the partial
+        # text ships as if it were finished. That is how a stored report
+        # ends on the bare heading "### 4." with no Limitations section
+        # after it: the last section is where the tokens ran out, and
+        # nothing anywhere said so.
+        _TRUNCATIONS.append(len("".join(content)))
+        logger.warning("[AI] completion TRUNCATED at the token limit after "
+                       "%d characters; the tail of this answer is missing",
+                       len("".join(content)))
     payload = {
         "id": meta.get("id") or "chatcmpl-stream",
         "object": "chat.completion",
@@ -1698,6 +1713,7 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats,
     stats["quotes_supplied"] = len(quotes)
     logger.info("[%s][sdk] references rebuilt: %d rendered, %d quotes",
                 job_id, len(rendered), len(quotes))
+    report = _note_if_ungrounded(report, rendered, ctx.paper_index, job_id)
 
     # -- Phase 5b: iterative verify -> correct, the SDK's turn at pipeline.py's
     _hb("verifying", 85, "Verifying citations...")
@@ -1923,6 +1939,33 @@ class _Heartbeat:
                     dao.closeConnection()
 
 
+def _note_if_ungrounded(report, rendered, paper_index, job_id=""):
+    """Say so, in the report, when not one citation could be grounded.
+
+    One stored run retrieved 56 papers, wrote 56 citations in synthesis, found
+    quotes for none of them, rendered no references, and shipped 49 752
+    characters of interpretation with status "done" and a cheerful "Ready" in
+    the progress line. Its own verification score was 0.07. Nothing in the text
+    told the reader that not a single claim was backed by a paper -- and the
+    text is what gets read, shared and exported, long after the progress line is
+    gone.
+
+    Only when papers were actually retrieved: a run that searched for nothing
+    has no literature claim to walk back.
+    """
+    if rendered or not paper_index:
+        return report
+    logger.warning("[%s] NO references could be grounded from %d papers; "
+                   "the report now says so", job_id, len(paper_index))
+    return report.rstrip() + (
+        "\n\n> **Note on evidence:** no citation in this report could be matched "
+        "to a verifiable sentence in the %d retrieved paper(s), so the "
+        "literature references were removed. What remains rests on the measured "
+        "data alone and has not been corroborated against published work.\n"
+        % len(paper_index))
+
+
+
 def run_ai_agent(job_id, experiment_design, RESPONSE):
     """Servlet entry point — drop-in replacement for pipeline.run_ai_agent.
 
@@ -1936,6 +1979,9 @@ def run_ai_agent(job_id, experiment_design, RESPONSE):
 
     dao = None
     acquired = False
+    # Where this run starts in the process-wide truncation log, so the
+    # count stamped below belongs to this job and not to an earlier one.
+    truncations_at_start = len(_TRUNCATIONS)
     heartbeat = _Heartbeat(job_id)
     try:
         dao = AIInterpretDAO()
@@ -1983,7 +2029,8 @@ def run_ai_agent(job_id, experiment_design, RESPONSE):
             # (references_section_found, citations_checked, failed_citations);
             # timings and counters live beside it, not inside it.
             "verification": stats.get("verification") or {},
-            "stats": {k: v for k, v in stats.items() if k != "verification"},
+            "stats": dict({k: v for k, v in stats.items() if k != "verification"},
+                          truncated_calls=len(_TRUNCATIONS) - truncations_at_start),
         })
         RESPONSE.setContent({"success": True, "jobID": job_id, "status": "done"})
 
