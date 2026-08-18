@@ -216,7 +216,10 @@ STAGE_COUNTS = ("verify_iterations", "batches_failed", "truncated_calls",
                 # from outside. Set since the counter was written and archived
                 # by nothing, so there is no history to check it against.
                 "batches", "batches_with_citations", "batch_citations",
-                "synth_citations")
+                "synth_citations",
+                # The agent arm's symmetric pair: what its delegated writers
+                # were shown, and how many distinct [N] they actually wrote.
+                "delegate_papers_shown", "delegate_markers")
 
 # Itemised bills. A per-tool breakdown is the only form in which "which tool is
 # worth its place" can be asked of the archive rather than of one live run.

@@ -315,6 +315,7 @@ class LoopContext(AgentContext):
     searched_tags: set = field(default_factory=set)     # topic_tags with a search
     # Did each delegated chunk get ITS OWN literature, or the fallback?
     delegate_attribution: dict = field(default_factory=dict)
+    delegate_markers: int = 0                          # distinct [N] the sub-agents wrote
     # What each note is ABOUT, in the agent's own words -- parallel to notebook
     # so the two fallback paths keep rendering plain strings.
     note_subjects: list = field(default_factory=list)
@@ -1279,6 +1280,8 @@ async def delegate_interpretation(ctx: RunContextWrapper[LoopContext],
         # standing. It was invisible: both paths return papers, so the prompt
         # looks identical from the outside.
         tally = ctx_local.delegate_attribution
+        tally["papers_shown"] = tally.get("papers_shown", 0) + len(
+            hits if hits else papers[-DELEGATE_PAPERS:])
         if not hits:
             tally["fallback"] = tally.get("fallback", 0) + 1
             hits = papers[-DELEGATE_PAPERS:]
@@ -1316,6 +1319,14 @@ async def delegate_interpretation(ctx: RunContextWrapper[LoopContext],
     # arm's report, and the detail is lost with them. The gate re-synthesises
     # from what is kept here (see _merge_delegated).
     c.delegated.extend(r for r in reports if r)
+    # The agent arm's answer to base's batch_citations, which has existed for
+    # rounds while this arm had no equivalent. Base logs "3 batches, 0 citing, 0
+    # distinct markers" -- its interpretation batches cite NOTHING and the
+    # citations are born in the synthesis. Without the same count here there is
+    # no way to say whether this arm's writers cite and the merge loses it, or
+    # they never cite either. Two different problems, identical from outside.
+    c.delegate_markers = len({m for r in reports if r
+                              for m in re.findall(r"\[(\d+)\]", r)})
     out = "\n\n---\n\n".join(r for r in reports if r) or "(delegation produced nothing)"
     # The sub-agents are told to write "(PMID: 12345)", not "[N]" -- that prompt
     # was reverted to the workflow arm's on evidence, and the markers are only
@@ -1570,6 +1581,8 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
     if ctx.delegate_attribution:
         stats["delegate_matched"] = ctx.delegate_attribution.get("matched", 0)
         stats["delegate_fallback"] = ctx.delegate_attribution.get("fallback", 0)
+        stats["delegate_papers_shown"] = ctx.delegate_attribution.get("papers_shown", 0)
+    stats["delegate_markers"] = ctx.delegate_markers
     # The context bill, itemised. TOOL_CHAR_BUDGET was enforced from the first
     # run and archived by none of them: the agent was shown its own spend on
     # every turn while the record kept no total, so no completed run could say
