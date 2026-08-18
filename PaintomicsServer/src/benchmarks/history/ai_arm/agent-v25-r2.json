@@ -1,20 +1,19 @@
 {
- "arm": "base",
+ "arm": "agent",
  "jobID": "1354co025T",
  "status": "done",
- "wall_s": 348.4,
- "report_chars": 29000,
- "prose_chars": 22892,
- "papers_retrieved": 15,
- "citations_in_body": 14,
- "prose_citations": 14,
- "full_text_cited": 10,
- "redacted": 12,
- "pathways_indexed": 15,
- "prose_pathways_covered": 15,
+ "wall_s": 339.4,
+ "report_chars": 64830,
+ "prose_chars": 55006,
+ "papers_retrieved": 102,
+ "citations_in_body": 0,
+ "prose_citations": 0,
+ "full_text_cited": 0,
+ "redacted": 44,
+ "pathways_indexed": 102,
+ "prose_pathways_covered": 14,
  "prose_pathway_names": [
-  "AGE-RAGE signaling pathway in diabetic complications",
-  "Aldosterone synthesis and secretion",
+  "Apoptosis",
   "Cell surface interactions at the vascular wall",
   "Cholinergic synapse",
   "Cytokine-cytokine receptor interaction",
@@ -27,9 +26,9 @@
   "Rap1 signaling pathway",
   "Regulation of RUNX1 Expression and Activity",
   "Ribosome biogenesis in eukaryotes",
-  "Viral protein interaction with cytokine and cytokine receptor"
+  "Thyroid hormone synthesis"
  ],
- "tool_calls": 249,
+ "tool_calls": 46,
  "forced_synthesis": false,
- "detail": "Ready \u2014 15 of 15 retrieved papers cited (11 with full text)"
+ "detail": "Ready \u2014 0 of 102 retrieved papers cited (0 with full text)"
 }
