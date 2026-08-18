@@ -230,12 +230,34 @@ def test_the_standard_does_not_move_with_the_pool():
     not beat an empty theme: it costs the sentence it lands on. Starvation is
     answered with more candidates, not a lower standard.
     """
-    for pool in (2, 20, 60):
+    for pool in (2, 20, 34):
         p = _prompt_for(pool)
         assert "specific quotable finding" in p
         assert "thin paper beats an empty theme" not in p, (
             "the permissive stance is back at pool=%d" % pool)
-        assert "keep ONLY what is clearly better" not in p
+
+
+def test_a_pool_past_the_target_raises_the_bar():
+    """The ceiling, added on round 41's evidence.
+
+    Across nine screened replicates citations rise with the pool only to about
+    40, and the single run at 55 papers shipped 22 citations with coverage 12 --
+    worse on both than the 37-paper run that shipped 26 with coverage 17. Past
+    the target, more literature in one report buys fewer citations.
+
+    Raising the bar cannot admit a weak paper, which is what separates this from
+    the permissive branch that round 40 refuted."""
+    p = _prompt_for(40)
+    assert "Keep ONLY what is clearly stronger" in p, p
+    assert "past the 35 this report needs" in p
+
+
+def test_the_floor_stays_gone():
+    """The refuted half must not creep back in with the restored half."""
+    import inspect
+    src = inspect.getsource(L._screen_papers)
+    assert "thin paper beats" not in src or "does NOT" in src
+    assert src.count("stance = (") == 2, "a third stance reappeared"
 
 
 def test_the_pool_size_is_still_reported():
@@ -289,6 +311,8 @@ def main():
               test_a_partly_screened_search_says_how_many_were_dropped,
               test_the_two_empty_causes_cannot_collapse_back_together,
               test_the_standard_does_not_move_with_the_pool,
+              test_a_pool_past_the_target_raises_the_bar,
+              test_the_floor_stays_gone,
               test_the_pool_size_is_still_reported,
               test_the_target_is_not_the_delegation_window):
         _check(t.__name__, t)

@@ -1101,9 +1101,29 @@ async def _screen_papers(ctx, papers, query, topic_tag):
     #
     # Starvation (round 39 r3 kept 9% and shipped 8 citations) is real, and the
     # answer is more candidates, not a lower standard: raise supply, keep the bar.
-    stance = ("Keep the ones with a specific quotable finding. You hold %d papers "
-              "and about %d is a healthy pool for this report."
-              % (len(ctx.paper_index), SCREEN_TARGET_POOL))
+    # Two stances, and only one of them moves the bar -- upward. Round 40 tried
+    # three and the PERMISSIVE branch did the damage: below half the target it
+    # told the screener a thin paper beats an empty theme, the keep rate rose to
+    # 28-32%, and failures went 0.50 -> 3.33 with redactions 1.2 -> 8.7. That
+    # branch is gone for good.
+    #
+    # A ceiling is the opposite move and the evidence now asks for one. Across
+    # nine screened replicates citations rise with the pool only up to about 40
+    # (fit 0.65 x pool - 1.0 below that), and the one run at 55 papers shipped 22
+    # citations with coverage 12 -- worse on both than the 37-paper run that
+    # shipped 26 with coverage 17. Past the target, more literature in one report
+    # buys fewer citations, which is the same effect round 6 measured at the
+    # batch level and round 41 has now reproduced at the pool level.
+    pool = len(ctx.paper_index)
+    if pool >= SCREEN_TARGET_POOL:
+        stance = ("You already hold %d papers, past the %d this report needs. "
+                  "Keep ONLY what is clearly stronger than what is already there "
+                  "-- an empty list is the right answer unless something here is "
+                  "excellent." % (pool, SCREEN_TARGET_POOL))
+    else:
+        stance = ("Keep the ones with a specific quotable finding. You hold %d "
+                  "papers and about %d is a healthy pool for this report."
+                  % (pool, SCREEN_TARGET_POOL))
     header = ("Experiment: %s\nOrganism: %s\nTheme: %s\nQuery: %s\n\n"
               "Candidate papers:\n%s\n\n"
               % (ctx.experiment_design, ctx.organism_name, topic_tag or "-",
