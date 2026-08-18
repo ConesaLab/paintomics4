@@ -1068,3 +1068,41 @@ question worth answering.
 
 **Falsifier:** length falls and coverage falls with it, meaning the cap simply
 truncates the delegated analyses and the arm buys brevity by dropping pathways.
+
+## Round 34 — pre-registered, written before the round ran
+
+Round 33 exposed two defects that had nothing to do with the arms:
+
+1. The retry transport could outlive the run (agent-v33-r2: 1722 s against a
+   600 s ceiling, 1604 s of it inside one model call with no tool activity).
+2. The correction loop was asking for the wrong repair in 98% of failures --
+   `suggested_fix` was defined only for "quote not in the paper" (0.4% of
+   cases) while the dominant failure is a real quote carrying an oversold
+   sentence (20.1%), and the instruction told the model to fix the quote.
+
+Both are fixed. Round 34 measures what the second one buys, and the prediction
+is written here first so it cannot be adjusted afterwards.
+
+**Prediction.** With the correction prompt aimed at the actual failure:
+
+- `failed_citations` after the verify loop falls. Base ran 1-4; expect the
+  loop to repair rather than stall, so fewer survive to redaction.
+- `redacted` (sentences lost) falls in BOTH arms, and falls further in the
+  agent arm, where the amplification is larger: agent-v33-r3 lost 15 sentences
+  to ONE failed citation because a stitched report cites the same paper across
+  many per-pathway sections, where a base run loses 2-3 for the same mistake.
+- `verify_loop_s` falls or holds. The loop currently spends a full-report
+  rewrite per round achieving nothing and exits on "no progress"; a rewrite
+  that works should converge in the same or fewer iterations.
+- No replicate exceeds 600 s, now that the transport respects the deadline.
+
+**Falsifier.** If `redacted` does not fall, the correction rewrite was never
+the binding constraint and the remaining damage is structural -- one paper
+carrying fifteen sentences -- which would make citation REUSE, not citation
+quality, the thing to attack next.
+
+**Not being changed.** The five pre-registered rules stay exactly as written,
+including `redacted <= base + 2`. That rule was authored before any data and it
+measures what the reader actually loses. `failed_citations` and
+`sentences_per_failed_citation` are now recorded alongside it as diagnostics,
+not as replacements -- a rule edited after seeing the numbers is not a rule.

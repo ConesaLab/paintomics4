@@ -297,6 +297,35 @@ def test_a_partial_report_is_recognised_from_the_report_alone():
         "a complete report was flagged partial; every run would be excluded")
 
 
+def test_failed_citations_and_lost_sentences_are_recorded_separately():
+    """They diverge by arm and they mean different things. agent-v33-r3 had ONE
+    citation fail and lost 15 sentences to it -- a stitched report cites the
+    same paper across many per-pathway sections, so one bad citation is
+    catastrophic there and merely annoying in a base run."""
+    from src.benchmarks.ai_arm_bench import _measure
+    rec = {"status": "done",
+           "report": "A [1]. B [1]. C [2].\n\n### References\n\n[1] P.\n[2] Q.\n",
+           "papers": [{"ref_index": 1}, {"ref_index": 2}],
+           "verification": {"redacted_count": 15, "citations_checked": 17,
+                            "failed_citations": [{"ref_index": 1}]}}
+    row = _measure(rec, "agent", "J", 400.0)
+    assert row["redacted"] == 15, "the pre-registered rule's metric must not move"
+    assert row["failed_citations"] == 1
+    assert row["citations_checked"] == 17
+    assert row["sentences_per_failed_citation"] == 15.0, (
+        "the amplification factor is the whole point of recording both")
+
+
+def test_no_failed_citations_means_no_amplification_figure():
+    from src.benchmarks.ai_arm_bench import _measure
+    row = _measure({"status": "done", "report": "A [1].\n\n### References\n\n[1] P.\n",
+                    "papers": [{"ref_index": 1}],
+                    "verification": {"redacted_count": 0, "failed_citations": []}},
+                   "base", "J", 300.0)
+    assert row["failed_citations"] == 0
+    assert "sentences_per_failed_citation" not in row, "divided by zero failures"
+
+
 def _check(name, fn):
     try:
         fn()
@@ -329,7 +358,9 @@ def main():
               test_a_finished_run_still_reports_everything,
               test_a_salvaged_partial_report_is_not_averaged_in,
               test_a_partial_replicate_still_fails_the_time_rule,
-              test_a_partial_report_is_recognised_from_the_report_alone):
+              test_a_partial_report_is_recognised_from_the_report_alone,
+              test_failed_citations_and_lost_sentences_are_recorded_separately,
+              test_no_failed_citations_means_no_amplification_figure):
         _check(t.__name__, t)
     print("\nPassed: %d / %d" % (len(_PASSED), len(_PASSED) + len(_FAILED)))
     if _FAILED:

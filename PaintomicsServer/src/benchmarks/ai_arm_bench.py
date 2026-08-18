@@ -275,6 +275,23 @@ def _measure(record, arm, job_id, wall, response=None):
         "forced_synthesis": stats.get("forced_synthesis", False),
         "detail": record.get("detail"),
     }
+    # "redacted" counts SENTENCES removed plus reference entries, not distinct
+    # citations -- and those two diverge hard by arm. agent-v33-r3 had ONE
+    # citation fail verification and lost 15 sentences to it, because a stitched
+    # report cites the same paper across many per-pathway sections; base loses
+    # 2-3 for the same mistake. Both numbers are real and they answer different
+    # questions, so both are recorded. The pre-registered rule keeps using
+    # "redacted": it was written before the data and it measures what the reader
+    # actually loses.
+    failed = (record.get("verification") or {}).get("failed_citations")
+    if isinstance(failed, list):
+        row["failed_citations"] = len(failed)
+        if failed and isinstance(row.get("redacted"), int):
+            row["sentences_per_failed_citation"] = round(
+                float(row["redacted"]) / len(failed), 1)
+    checked = (record.get("verification") or {}).get("citations_checked")
+    if isinstance(checked, int):
+        row["citations_checked"] = checked
     row.update(_stage_budget(stats))
     return row
 
