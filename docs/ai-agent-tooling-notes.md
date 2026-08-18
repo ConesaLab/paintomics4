@@ -1098,3 +1098,46 @@ manufacture a report from nothing, and a whitespace draft is not a report.
 Found while testing rather than while writing: `_partial_result` popped the
 stage before the caller read it, so `timed_out_at_stage` would have recorded "?"
 every time. The stat is set where the value is known.
+
+## Which tool is really useful: what the correlations can and cannot say
+
+52 scored runs, correlating how often each tool was called against the citations
+the run shipped. The first table looked decisive and was mostly an artifact.
+
+**Era dominates.** `quote_shelf` correlated +0.85 with citations -- and appears
+only in runs 33 to 51 of 52, so it is measuring "the code got better", not the
+tool. `submit_report` correlated **-0.81**: runs with two submits averaged 0.0
+citations against 8.8 for one submit. That is not the nudge causing harm, it is
+the old collapsed era, where the nudge fired AND the seam bug zeroed citations.
+
+**Within one code era (n=16)** the picture is narrower and more honest:
+
+| tool | calls | r(citations) | range |
+|---|---|---|---|
+| search_literature | 159 | **+0.91** | 1..28 |
+| check_my_citations | 13 | +0.88 | 0..3 |
+| notebook_write | 38 | +0.75 | 1..8 |
+| read_paper | 41 | +0.65 | 0..13 |
+| delegate / grounding / shelf | | +0.96 | 0..1 -- all the same binary |
+
+The +0.96 group is one variable wearing three names: *did this run delegate at
+all*. A run that did not produced zero citations, so every delegation-adjacent
+tool correlates perfectly. Only `search_literature` has real spread (1 to 28
+calls) with a real signal.
+
+**The structural limit.** A tool used in every run cannot be evaluated this way
+at all -- five of six had no contrast, and the "not used" column was empty.
+Measuring a tool that is never omitted requires ablation, one round per tool.
+
+### compare_gene_profiles removed
+
+13 calls across 72 archived runs, **none at all in the most recent 16**, and no
+relationship to citations (r = -0.08). Its schema rode in every Decide turn of
+every run regardless. `get_pathway_details` already carries per-gene profiles
+for the pathways under examination, which is where the agent answers the same
+question.
+
+Nine tools now, 2 349 characters of description. The test that asserted "ten
+tools" is replaced by one asserting every declared `@function_tool` is wired
+into TOOLBELT -- a count turns a deliberate removal into a failure, while the
+real invariant is that nothing is declared and left unregistered.

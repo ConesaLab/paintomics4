@@ -140,9 +140,32 @@ def test_every_tool_declares_a_failure_handler_naming_itself():
                             % ", ".join("%s -> %s" % m for m in mismatched))
 
 
-def test_all_ten_tools_are_covered():
-    """The AST check is only worth as much as the number of tools it saw."""
-    assert len(L.TOOLBELT) == 10, "toolbelt changed size: %d" % len(L.TOOLBELT)
+def test_every_declared_tool_is_in_the_toolbelt():
+    """The AST check above is worth exactly as many tools as it sees.
+
+    It used to assert a count of ten, which turned a deliberate removal into a
+    failure. What matters is that every @function_tool in the module is actually
+    wired into TOOLBELT -- a tool defined and not registered is dead code the
+    agent can never call, and one registered without a failure handler is the
+    hole this suite exists to close.
+    """
+    import ast
+    import inspect
+    src = inspect.getsource(L)
+    tree = ast.parse(src)
+    declared = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for dec in node.decorator_list:
+            func = dec.func if isinstance(dec, ast.Call) else dec
+            if getattr(func, "id", "") == "function_tool":
+                declared.add(node.name)
+    registered = {t.name for t in L.TOOLBELT}
+    assert declared == registered, (
+        "declared but not in TOOLBELT: %s; in TOOLBELT but not declared here: %s"
+        % (sorted(declared - registered), sorted(registered - declared)))
+
 
 
 def _check(name, fn):
@@ -160,7 +183,7 @@ def main():
               test_the_model_is_told_what_broke,
               test_a_failure_still_counts_as_a_tool_call,
               test_every_tool_declares_a_failure_handler_naming_itself,
-              test_all_ten_tools_are_covered):
+              test_every_declared_tool_is_in_the_toolbelt):
         _check(t.__name__, t)
     print("\nPassed: %d / %d" % (len(_PASSED), len(_PASSED) + len(_FAILED)))
     if _FAILED:

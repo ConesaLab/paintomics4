@@ -634,19 +634,6 @@ def get_pathway_details(ctx: RunContextWrapper[LoopContext],
     _trace(c, "get_pathway_details", pathway_names, matched_ids or "none", t0)
     return out
 
-
-@function_tool(failure_error_function=_tool_failure("compare_gene_profiles"))
-def compare_gene_profiles(ctx: RunContextWrapper[LoopContext],
-                          gene_symbols: list[str]) -> str:
-    """Measured values for one or several genes (max 10) across every omic layer, side by side. Instant and free -- pass every gene you are comparing in ONE call."""
-    c = ctx.context
-    t0 = time.time()
-    out = _spend(c, tools_mod.execute_tool(
-        "compare_genes", c.job_instance, {"gene_symbols": gene_symbols}))
-    _trace(c, "compare_gene_profiles", gene_symbols, out[:60], t0)
-    return out
-
-
 @function_tool(failure_error_function=_tool_failure("cluster_pathways"))
 def cluster_pathways(ctx: RunContextWrapper[LoopContext]) -> str:
     """Group the significant pathways by shared matched features (deterministic; no LLM). Returns clusters with their shared gene cores. Costs about half a second; worth calling once, early."""
@@ -1220,7 +1207,12 @@ def submit_report(ctx: RunContextWrapper[LoopContext], report_markdown: str) -> 
 # Ten. delegate_literature went uncalled in all 17 archived runs -- the Lead
 # writes its own queries and search_literature covers the same ground -- and a
 # declared tool is not free: its schema rides in every Decide turn of every run.
-TOOLBELT = [get_experiment_overview, get_pathway_details, compare_gene_profiles,
+# compare_gene_profiles removed on the evidence: 13 calls across 72 archived
+# runs, none at all in the most recent 16, and no relationship to citations
+# (r = -0.08). Its schema rode in every Decide turn of every run regardless.
+# get_pathway_details already carries per-gene profiles for the pathways the
+# agent is looking at, which is where the same question gets answered.
+TOOLBELT = [get_experiment_overview, get_pathway_details,
             cluster_pathways, search_literature, read_paper, notebook_write,
             check_my_citations, delegate_interpretation, submit_report]
 
