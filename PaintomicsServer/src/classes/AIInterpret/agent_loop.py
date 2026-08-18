@@ -429,6 +429,35 @@ def _ledger_note(ctx):
     return note + "]"
 
 
+def _quote_evidence_lines(cited, quotes, limit=12):
+    """The quotes themselves, for the agent to read against its own sentences.
+
+    check_my_citations answers "does a supporting sentence exist". The gate asks
+    "does THIS sentence support THAT claim", and measured across the archive its
+    verdicts run 79.5% supported, 20.1% claim drift, 0.4% fabrication -- so
+    roughly a fifth of the citations that pass the pre-submit check still lose
+    their sentence at the gate, and until now the agent never saw the evidence
+    it was being judged against. The quotes are already collected; withholding
+    them was free to nobody.
+
+    Only citations that will actually ship are listed -- the quote cache is
+    seeded from earlier delegation and carries papers this draft never cites.
+    """
+    shown = sorted(set(cited) & set(quotes))
+    if not shown:
+        return []
+    lines = ["The supporting quote found for each -- read it against YOUR "
+             "sentence. Where it does not state your claim, narrow the claim to "
+             "what it does say: the gate deletes the sentence, not just the "
+             "citation."]
+    for idx in shown[:limit]:
+        quote = " ".join(str(quotes[idx]).split())      # one citation, one line
+        lines.append('  [%d] "%s"' % (idx, quote[:180]))
+    if len(shown) > limit:
+        lines.append("  ...and %d more, same rule." % (len(shown) - limit))
+    return lines
+
+
 def _theme_conversion(searched_tags, cited_papers):
     """How many searched themes put a paper in the finished references.
 
@@ -857,7 +886,7 @@ def notebook_write(ctx: RunContextWrapper[LoopContext], note: str) -> str:
 
 @function_tool(failure_error_function=_tool_failure("check_my_citations"))
 def check_my_citations(ctx: RunContextWrapper[LoopContext], draft: str) -> str:
-    """Check a draft's [N] citations BEFORE submitting: which resolve to real papers, and which have no supporting quote and will therefore be dropped. Costs a few seconds. Run it on your draft, fix what it names, then run it AGAIN -- the second run is what turns a flagged citation into a grounded one."""
+    """Check a draft's [N] citations BEFORE submitting: which resolve to real papers, and which have no supporting quote and will therefore be dropped. Costs a few seconds. Shows the quote found for each surviving citation, so you can check it really states your claim. Run it on your draft, fix what it names, then run it AGAIN -- the second run is what turns a flagged citation into a grounded one."""
     c = ctx.context
     t0 = time.time()
     guard = _time_guard(c)
@@ -909,7 +938,17 @@ def check_my_citations(ctx: RunContextWrapper[LoopContext], draft: str) -> str:
                      "claim to what the paper does say, or read_paper first and "
                      "cite the sentence you find.")
     if not invalid and not unquotable:
-        lines.append("Every citation resolves and is quotable.")
+        lines.append("Every citation resolves and has a quote. That is NOT the "
+                     "same as the quote supporting your sentence -- the gate "
+                     "asks that next, and it is where most citations die.")
+    # Show the quote itself. This tool answers "does a supporting sentence
+    # exist"; the gate asks "does THIS sentence support THAT claim", and
+    # measured over the archive those verdicts run 79.5% supported, 20.1% claim
+    # drift, 0.4% fabrication -- so a fifth of the citations that pass this
+    # check still lose their sentence at the gate, and the agent never saw the
+    # evidence it was being judged against. The quotes are already collected
+    # above; withholding them was free to nobody.
+    lines.extend(_quote_evidence_lines(cited, quotes))
     # Remembered so submit_report can tell whether the agent acted on its own
     # check. Measured over 28 runs that called this tool: the 10 that re-checked
     # after a bad result improved every time (11/6 -> 7/0, 14/7 -> 8/0,
