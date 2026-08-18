@@ -189,6 +189,36 @@ _DEFAULT_DESIGN_EXPONENT = 0.29
 # them no way to find out it would have worked.
 SAFETY = 1.0
 
+# Host calibration. Every constant above was fitted on one developer machine
+# (an M4 Pro), and the estimate is only as good as that machine resembles the
+# one running the job. It often does not. Measured 2026-08-18 on
+# paintomics.uv.es -- 6 QEMU vCPUs -- against the same 957-target dataset:
+#
+#   | method | dev machine | paintomics.uv.es | ratio |
+#   | PLS1   |  ~1 s       |    3 s           |  ~3x  |
+#   | MLR    |   25 s      |  571 s           |  23x  |
+#
+# The asymmetry is the point. A merely slower box would slow both by the same
+# factor; MLR slowing 8x more than PLS1 is the port's allocation-heavy inner
+# loops meeting musl's allocator across rayon threads on few cores, which is a
+# property of the *build and host*, not of the model. No single fitted constant
+# can carry across that, so it is an operator setting rather than a guess.
+#
+# Set `PAINTOMICS_MORE_COST_SCALE` to (this host's seconds) / (the estimate) for
+# a job you have actually timed. Above 1 makes the guard more willing to refuse.
+# Leaving it at 1.0 reproduces the previous behaviour exactly.
+#
+# Getting this wrong low is the failure that matters: the job is accepted, runs
+# past MORE_JOB_TIMEOUT and is killed, and the user waits out the whole timeout
+# to learn nothing. Getting it wrong high refuses an analysis that would have
+# fitted -- worse than nothing, but visible and immediately fixable.
+try:
+    HOST_SCALE = float(os.getenv("PAINTOMICS_MORE_COST_SCALE", "1") or 1)
+except (TypeError, ValueError):
+    HOST_SCALE = 1.0
+if not (HOST_SCALE > 0):
+    HOST_SCALE = 1.0
+
 # An unknown (method, engine) must not silently become "free". Falls back to
 # the most expensive known combination, so a method added to runMORE.R without
 # being calibrated here is gated conservatively rather than waved through.
@@ -482,7 +512,7 @@ def estimateSeconds(shape, method, engine):
         _PER_GENE_SECONDS.get((method, "r"), _FALLBACK_PER_GENE))
 
     if (method, engine) == ("MLR", "rust"):
-        return SAFETY * perGene * shape.modelledGenes * _rustMlrShapeTerm(shape)
+        return SAFETY * HOST_SCALE * perGene * shape.modelledGenes * _rustMlrShapeTerm(shape)
 
     regTerm = 1.0
     if shape.regPerGene > 0:
@@ -494,7 +524,7 @@ def estimateSeconds(shape, method, engine):
         designTerm = ((shape.samples * shape.groups) / (N0 * G0)) ** (
             _DESIGN_EXPONENT.get(method, _DEFAULT_DESIGN_EXPONENT))
 
-    return SAFETY * perGene * shape.modelledGenes * regTerm * designTerm
+    return SAFETY * HOST_SCALE * perGene * shape.modelledGenes * regTerm * designTerm
 
 
 def _rustMlrShapeTerm(shape):

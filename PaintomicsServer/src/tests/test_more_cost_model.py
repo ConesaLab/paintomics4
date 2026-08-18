@@ -29,10 +29,13 @@ import os
 import shutil
 import sys
 import tempfile
+import importlib
 import unittest
+from unittest import mock
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
+from src.common import MORECostModel
 from src.common.MORECostModel import (
     MOREShape, checkBudget, estimateSeconds, probeShape)
 
@@ -462,6 +465,67 @@ class RustMlrShapeModel(unittest.TestCase):
         self.assertAlmostEqual(estimateSeconds(shape, "MLR", "r"), 1198.0, places=3)
         self.assertAlmostEqual(estimateSeconds(shape, "PLS1", "r"), 607.0, places=3)
 
+
+
+class HostScale(unittest.TestCase):
+    """The operator knob that carries the estimate to a machine it was not fitted on.
+
+    Measured on paintomics.uv.es (6 QEMU vCPUs) against the 957-target STATegra
+    dataset: PLS1 3 s where the dev machine takes ~1 s, MLR 571 s where the dev
+    machine takes 25 s. A uniformly slower box would move both by the same
+    factor; MLR moving 8x further is the port's allocation-heavy inner loops
+    meeting musl's allocator across rayon threads, which no fitted exponent
+    describes. Hence a setting, not a constant.
+    """
+
+    def shape(self, genes=1000, regPerGene=30.0, samples=36, groups=12):
+        return MOREShape(modelledGenes=genes, samples=samples, groups=groups,
+                         regPerGene=regPerGene)
+
+    def setUp(self):
+        self._scale = MORECostModel.HOST_SCALE
+
+    def tearDown(self):
+        MORECostModel.HOST_SCALE = self._scale
+
+    def test_default_is_one_so_behaviour_is_unchanged(self):
+        self.assertEqual(MORECostModel.HOST_SCALE, 1.0)
+
+    def test_it_scales_every_engine_and_method(self):
+        shape = self.shape()
+        before = {(m, e): estimateSeconds(shape, m, e)
+                  for m in ("PLS1", "MLR") for e in ("r", "rust")}
+        MORECostModel.HOST_SCALE = 10.0
+        for key, was in before.items():
+            self.assertAlmostEqual(estimateSeconds(shape, *key), was * 10.0, places=6,
+                                   msg="%s did not scale" % (key,))
+
+    def test_the_measured_uv_ratio_stops_a_job_that_would_hit_the_timeout(self):
+        """The concrete hazard: on UV, MLR runs ~9x the unscaled estimate.
+
+        6,000 genes at 3 regulators each is quoted well inside the 1800 s budget
+        unscaled, and would then be killed at the timeout. With the host scale
+        set it is refused up front instead, which is the whole point of the
+        module.
+        """
+        shape = self.shape(genes=6000, regPerGene=3.0)
+        self.assertIsNone(checkBudget(shape, "MLR", "rust", 1800),
+                          "unscaled, this job is accepted")
+        MORECostModel.HOST_SCALE = 10.0
+        self.assertIsNotNone(checkBudget(shape, "MLR", "rust", 1800),
+                             "with the measured host scale it must be refused")
+
+    def test_a_nonsense_setting_falls_back_to_one_rather_than_disabling_the_guard(self):
+        for bad in ("", "abc", "0", "-3", None):
+            with mock.patch.dict(os.environ,
+                                 {} if bad is None else {"PAINTOMICS_MORE_COST_SCALE": bad},
+                                 clear=False):
+                if bad is None:
+                    os.environ.pop("PAINTOMICS_MORE_COST_SCALE", None)
+                importlib.reload(MORECostModel)
+                self.assertEqual(MORECostModel.HOST_SCALE, 1.0,
+                                 "setting %r must not disable the guard" % (bad,))
+        importlib.reload(MORECostModel)
 
 
 if __name__ == "__main__":
