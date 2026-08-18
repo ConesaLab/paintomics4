@@ -961,3 +961,33 @@ a target drawn from a distribution with a standard deviation of 4.2.
 The cheapest fix is more replicates per round rather than a different comparator.
 At four replicates an arm the standard error halves, and a round costs about
 twenty minutes more.
+
+### Round 32 onward: four replicates an arm
+
+Base's citation count has a standard deviation of 4.2 across 14 runs, so two
+replicates give a standard error of about 3 on the round mean -- larger than
+most of the effects being chased. Four replicates halve it, and the runner
+already supports them: pass the job list twice.
+
+    ai_arm_bench round J1,J2,J1,J2 <dir> --label agent-v32
+
+Eight runs, still interleaved base/agent, each job used twice on each arm. About
+eighty minutes a round instead of forty. That is the cheapest honest fix; the
+alternative -- comparing against a pooled baseline of all 14 base runs -- would
+be statistically better AND would flatter the agent, which is exactly why it is
+not being adopted after the fact.
+
+**Round 32 carries two changes**, and they are not separable in this round:
+the merge now judges on grounded citations rather than raw markers, and the
+delegated writer is told to keep data claims apart from literature claims. Both
+target the same failure -- a report that is either broad and diluted or dense
+and narrow -- and round 31 showed the merge criterion alone produces the narrow
+half. Running them apart would cost two rounds to learn what one can show, and
+the fingerprint records the pair.
+
+**Prediction:** coverage recovers towards base (the merge stops discarding
+delegated breadth) while density stays above base (the writer stops padding).
+Citations at or above base with four replicates smoothing the draw.
+**Falsifier:** coverage recovers and density collapses back to ~0.3, meaning the
+density instruction does nothing once the stitch is accepted, and the two
+changes simply trade against each other.
