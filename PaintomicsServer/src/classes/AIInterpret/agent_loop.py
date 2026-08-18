@@ -128,11 +128,23 @@ DELEGATE_WORKERS = int(os.getenv("AI_AGENT_DELEGATE_WORKERS", "4"))
 DELEGATE_CHUNK = int(os.getenv("AI_AGENT_DELEGATE_CHUNK", "5"))
 """Pathways per sub-agent, i.e. how many writing units a delegation makes.
 
-This is the ratio that tracks the citation gap. The shipped arm writes
-fourteen batches, each citing its own papers, and converts 74% of retrieved
-papers into shipped citations; this arm writes about five units and converts
-8%. With DELEGATE_PAPERS at 10, three chunks can show a writer only 30 of 75
-retrieved papers -- the other 45 cannot become citations at all.
+This is the ratio that tracks the citation gap. This arm writes about five
+units and converts 8% of retrieved papers into shipped citations against the
+shipped arm's 58-74%. With DELEGATE_PAPERS at 10, three chunks can show a
+writer only 30 of 75 retrieved papers -- the other 45 cannot become citations
+at all.
+
+CAUTION, 2026-08-18: the note here used to say the shipped arm "writes fourteen
+batches, each citing its own papers", and that premise is now in doubt. With
+INFO logging finally reaching the round log, round 37's base replicate logged
+"3 batches, 0 citing, 0 distinct markers" -- three batches, and not one [N]
+marker among them -- while the run went on to ship 17-26 citations. So in that
+run the citations were born in the SYNTHESIS, not in the batches.
+batch_citations and batches_with_citations were set from the day they were
+written and archived by nothing, so there is no history to settle it with; they
+are archived from round 38. If the batches genuinely do not cite, then chunk
+COUNT is not what converts papers, and raising the unit count here would be
+tuning the wrong ratio.
 
 Left at 5 so it changes nothing until a round sets it deliberately:
 AI_AGENT_DELEGATE_CHUNK=3 gives five units for the same breadth, which the

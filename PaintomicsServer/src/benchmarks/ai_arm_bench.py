@@ -207,7 +207,16 @@ STAGE_COUNTS = ("verify_iterations", "batches_failed", "truncated_calls",
                 # from the abstract search already had, or from a full-text
                 # upgrade that read_paper and the fetch stage paid for?
                 "quotes_from_abstract", "quotes_from_full_text",
-                "quotes_unlocatable_here")
+                "quotes_unlocatable_here",
+                # Where base's citations are BORN. Its interpretation batches
+                # were logged emitting zero [N] markers while the run shipped
+                # 17-26 citations, so they arrive later -- and the code counts
+                # this exactly because "the batches never cited" and "the
+                # synthesis dropped what the batches supplied" look identical
+                # from outside. Set since the counter was written and archived
+                # by nothing, so there is no history to check it against.
+                "batches", "batches_with_citations", "batch_citations",
+                "synth_citations")
 
 # Itemised bills. A per-tool breakdown is the only form in which "which tool is
 # worth its place" can be asked of the archive rather than of one live run.
@@ -235,9 +244,6 @@ STAGE_NOTES = ("topup_disabled", "topup_failed", "topup_skipped", "merge_rejecte
 KNOWN_UNARCHIVED = frozenset(['agent_notebook',
      'agent_searches',
      'agent_tool_calls',
-     'batch_citations',
-     'batches',
-     'batches_with_citations',
      'cluster_further',
      'cluster_pathways',
      'cluster_standalone',
@@ -271,7 +277,6 @@ KNOWN_UNARCHIVED = frozenset(['agent_notebook',
      'refs_rendered',
      'rewrite_skipped_for_time',
      'stitch_truncated',
-     'synth_citations',
      'synth_drafts',
      'timed_out_at_stage',
      'tool_calls',
