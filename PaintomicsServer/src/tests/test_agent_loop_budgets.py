@@ -406,6 +406,31 @@ def test_the_fingerprint_moves_when_behaviour_moves():
 
 
 
+def test_the_grounding_sieve_asks_the_question_the_right_way_round():
+    """_fuzzy_contains(haystack, needle) -- is the QUOTE inside the PAPER.
+
+    They were reversed, asking whether a whole paper fits inside a one-sentence
+    quote, which is never true. Every quote was therefore judged unverifiable:
+    round 29 recorded quotes_unverifiable 11 of 11 and merge_grounded 0->0, so
+    the merge guard compared zero against zero and lost the only signal it had.
+    The bug was silent because "0 grounded" reads like a finding about the
+    report rather than a broken predicate.
+    """
+    class _Ctx:
+        paper_index = {1: {"sections": {"results":
+            "Polyamine depletion arrests these cells in G1 and blocks entry to S phase. "
+            * 30}},
+            2: {"sections": {"results": "An unrelated paper about bone density. " * 30}}}
+    kept = L._verified_quotes(_Ctx(), {
+        1: "Polyamine depletion arrests these cells in G1 and blocks entry to S phase.",
+        2: "A sentence that appears in no paper at all.",
+    })
+    assert 1 in kept, ("a quote that IS in its paper was rejected -- the "
+                       "arguments are reversed again")
+    assert 2 not in kept, "a quote absent from its paper was accepted"
+
+
+
 def main():
     for t in (test_tool_output_under_budget_is_returned_whole,
               test_tool_output_over_budget_is_cut_and_says_so,
@@ -436,7 +461,8 @@ def main():
               test_outcome_stamp_never_costs_the_report,
               test_every_test_in_this_file_actually_runs,
               test_the_code_fingerprint_is_real,
-              test_the_fingerprint_moves_when_behaviour_moves):
+              test_the_fingerprint_moves_when_behaviour_moves,
+              test_the_grounding_sieve_asks_the_question_the_right_way_round):
         _check(t.__name__, t)
     print("\nPassed: %d / %d" % (len(_PASSED), len(_PASSED) + len(_FAILED)))
     if _FAILED:

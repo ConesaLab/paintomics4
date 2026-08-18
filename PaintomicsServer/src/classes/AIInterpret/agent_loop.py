@@ -465,7 +465,13 @@ def _verified_quotes(ctx, quotes):
         paper = ctx.paper_index.get(ref) or {}
         text = " ".join((paper.get("sections") or {}).values()) or (
             paper.get("abstract") or "")
-        if quote and text and _fuzzy_contains(quote, text):
+        # _fuzzy_contains(haystack, needle): is the QUOTE inside the PAPER.
+        # These were reversed, asking whether a whole paper fits inside a
+        # one-sentence quote, which is never true -- so every quote was judged
+        # unverifiable, the merge saw 0 grounded on both sides, and the guard
+        # lost the only signal it had. Round 29 reported quotes_unverifiable 11
+        # of 11 with merge_grounded 0->0.
+        if quote and text and _fuzzy_contains(text, quote):
             out[ref] = quote
     return out
 

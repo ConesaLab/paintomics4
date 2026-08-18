@@ -753,3 +753,34 @@ That ratio, not pathway count, tracks the citation gap of 9 against 20. The
 experiment that follows is smaller chunks -- three pathways per sub-agent rather
 than five, giving five to seven writing units for the same breadth, still inside
 one or two parallel waves.
+
+## The merge guard has been blind since the outage
+
+Round 29's stats carried the answer to why grounded citations kept disappearing:
+
+    merge_citations      7->11
+    merge_grounded       0->0
+    quotes_unverifiable  11
+    quotes_reused        11
+
+Eleven quotes collected, eleven reused, **eleven judged unverifiable**, and the
+merge guard comparing zero grounded against zero grounded.
+
+`_verified_quotes` called `_fuzzy_contains(quote, text)`. The signature is
+`_fuzzy_contains(haystack, needle)` -- so it was asking whether an entire paper
+fits inside a one-sentence quote. That is never true. Every quote failed, always,
+and the guard that decides whether the stitched report is better grounded than
+the draft has been comparing 0 with 0 since the sieve was added during the
+gateway outage. Rounds 25 to 29 all ran with it.
+
+Replayed on round 29's own report: **6 of 6 quotes survive the corrected sieve**,
+where the run recorded 0 of 11.
+
+It stayed hidden because "0 grounded" reads like a finding about the report
+rather than a broken predicate -- I had even written it up as evidence that
+delegated citations were poorly grounded. A test now pins the argument order
+with a quote that is in its paper and one that is not.
+
+This is the fifth defect in this arm found by reading stats rather than scores,
+and the second where my own instrumentation reported a plausible number that
+meant something else entirely.
