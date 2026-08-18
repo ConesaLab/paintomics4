@@ -205,6 +205,7 @@ class LoopContext(AgentContext):
     delegated: list = field(default_factory=list)      # sub-agent interpretations
     trace: list = field(default_factory=list)           # toolTrace events
     searches_used: int = 0
+    searched_tags: set = field(default_factory=set)     # topic_tags with a search
     tool_chars: int = 0
     pmid_to_ref: dict = field(default_factory=dict)
     next_ref: int = 1
@@ -307,9 +308,21 @@ def _trace_gate(ctx, tool, args_summary, result, started):
 
 def _ledger_note(ctx):
     remaining = max(0, int(ctx.hard_deadline - time.time()))
-    return ("\n[budget: %d searches left · %d s left · %d/%d tool-output chars]"
+    note = ("\n[budget: %d searches left · %d s left · %d/%d tool-output chars"
             % (max(0, SEARCH_BUDGET - ctx.searches_used), remaining,
                ctx.tool_chars, TOOL_CHAR_BUDGET))
+    # Coverage, not just constraint. Measured: citations track searches at about
+    # 0.64 each, and two replicates of the same agent searched 28 and 16 times --
+    # so what limits grounding is how much of its own map the agent has looked
+    # for literature on. Budget tells it what it MAY spend; this tells it what is
+    # still unlit. It remains free to decide the answer is "nothing".
+    if ctx.partition is not None:
+        units = len(ctx.partition.get("clusters") or []) + len(
+            ctx.partition.get("standalone") or [])
+        if units:
+            note += (" · literature searched for %d of %d clusters"
+                     % (len(ctx.searched_tags), units))
+    return note + "]"
 
 
 def _spend(ctx, text):
@@ -527,6 +540,8 @@ async def search_literature(ctx: RunContextWrapper[LoopContext], query: str,
         _trace(c, "search_literature", query, "budget exhausted", t0)
         return out
     c.searches_used += 1
+    if topic_tag:
+        c.searched_tags.add(str(topic_tag).strip().lower())
     try:
         pmids = await asyncio.to_thread(c.pubmed.search, query, SEARCH_HITS)
         new = [p for p in pmids if str(p) not in c.pmid_to_ref]
