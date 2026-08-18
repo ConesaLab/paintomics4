@@ -115,6 +115,36 @@ def test_both_arms_actually_call_the_scorer():
             "%s prices the top-up before the verdict exists" % module.__name__)
 
 
+def test_the_topups_own_references_are_archived():
+    """Which references the top-up added, not just how many.
+
+    Base adds 1.5 citations a run and fails none; this arm adds 13 and fails 5.5.
+    So the marginal addition is the suspect, and identifying it needs the list.
+
+    The first hypothesis -- that failures concentrate in the papers admitted last,
+    where the top-up reaches after using the good ones -- is NOT supported: over
+    two replicates the failed positions ran 0.89-0.96 in one and 0.07-0.47 in the
+    other. Pool position is not the discriminator, so the question moves to
+    position within the TOP-UP's own sequence, which this records.
+    """
+    from src.benchmarks.ai_arm_bench import STAGE_NOTES, _stage_budget
+    assert "topup_refs" in STAGE_NOTES
+    row = _stage_budget({"topup_refs": "12,19,25"})
+    assert row["topup_refs"] == "12,19,25"
+
+
+def test_the_reference_list_and_its_string_stay_consistent():
+    """Two representations of one fact drift; the string is derived from the
+    list in the same statement that builds it."""
+    import inspect
+    from src.classes.AIInterpret import agent_loop
+    src = inspect.getsource(agent_loop)
+    i = src.index('stats["topup_added_refs"] = sorted')
+    window = src[i:i + 1000]
+    assert 'stats["topup_refs"] = ",".join(' in window
+    assert 'stats["topup_added_refs"]' in window.split('stats["topup_refs"]')[1][:200]
+
+
 def _check(name, fn):
     try:
         fn()
@@ -133,7 +163,9 @@ def main():
               test_a_verification_with_no_failures_is_handled,
               test_both_halves_of_the_bet_reach_the_archive,
               test_a_stage_that_declined_to_run_says_why,
-              test_both_arms_actually_call_the_scorer):
+              test_both_arms_actually_call_the_scorer,
+              test_the_topups_own_references_are_archived,
+              test_the_reference_list_and_its_string_stay_consistent):
         _check(t.__name__, t)
     print("\nPassed: %d / %d" % (len(_PASSED), len(_PASSED) + len(_FAILED)))
     if _FAILED:

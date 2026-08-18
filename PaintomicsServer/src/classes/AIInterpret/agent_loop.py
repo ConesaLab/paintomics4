@@ -2296,6 +2296,14 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
                 # is prose, which is how a stage can look free and not be.
                 stats["topup_added_refs"] = sorted(set(cited_after)
                                                    - set(cited_now))
+                # As a string too, because the archive keeps scalars and notes
+                # and this list is the only way to ask WHERE in the top-up's
+                # sequence its failures fall. Base adds 1.5 citations a run and
+                # fails none; this arm adds 13 and fails 5.5, so the marginal
+                # addition is the suspect and the marginal addition is exactly
+                # what a list of indices identifies.
+                stats["topup_refs"] = ",".join(
+                    str(r) for r in stats["topup_added_refs"])
                 # Give the newly cited papers the full text the upgrade could
                 # not have fetched for them.
                 #

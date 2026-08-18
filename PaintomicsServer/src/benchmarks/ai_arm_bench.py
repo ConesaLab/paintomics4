@@ -240,7 +240,8 @@ STAGE_MAPS = ("tool_chars_by_tool",)
 # Outcomes whose value is a sentence, not a number: a stage that skipped or
 # failed says WHY, and "absent from the archive" reads identically to "never
 # happened". Truncated because a traceback string is not a metric.
-STAGE_NOTES = ("failed_refs", "topup_fulltext_skipped", "topup_fulltext_failed",
+STAGE_NOTES = ("failed_refs", "topup_refs",
+               "topup_fulltext_skipped", "topup_fulltext_failed",
                "topup_disabled", "topup_failed", "topup_skipped", "merge_rejected",
                "merge_skipped", "merge_failed", "loop_backstop",
                "deterministic_fallback")
