@@ -1033,3 +1033,38 @@ Note what round 32 r1 IS: 14 citations, **zero** redactions, 19 pathways against
 base's 10, inside 458 s. Its only failing rules are citations (14 v 19) and
 length (2.16x). That is the best-shaped report this arm has produced; it is too
 long, and the way to fix length is a cap, not a request.
+
+## Round 32 final: 3 of 5 at four replicates
+
+| | base (4) | agent-v32 (4) |
+|---|---|---|
+| citations | 20.7 | 13.5 **FAIL** |
+| redactions | 9.0 | 7.5 **PASS** |
+| prose coverage | 12.3 | 17.2 **PASS** |
+| length | | 2.22x **FAIL** |
+| finished inside 600 s | 3 of 4 | **4 of 4  PASS** |
+
+The first verdict in this series with enough replicates to mean something, and
+two things in it are new.
+
+**All four agent replicates finished; one base run errored at the ceiling.** The
+arm that spent round 30 breaching the limit is now the more reliable of the two
+on the clock, after the top-up, correction rewrite and quote collection were
+each bounded by time remaining rather than by a per-call timeout.
+
+**Coverage is no longer close -- 17.2 against 12.3.** The agent interprets
+around 40% more of the experiment, consistently, across four runs.
+
+The two failures are citations (13.5 v 20.7) and length (2.22x), and both were
+addressed AFTER this round was launched: the stitch cap dropped from 56 000 to
+40 000, and the merge now requires the extra length to buy grounded citations or
+coverage rather than nothing.
+
+**Round 33 prediction:** length falls to roughly 1.4-1.6x, coverage holds near
+17, citations flat around 13-14, all replicates inside 600 s. That would be 4 of
+5 with only the citation count outstanding -- and that gap, 13.5 against a base
+mean of 20.7 drawn from a distribution spanning 10 to 26, is the one remaining
+question worth answering.
+
+**Falsifier:** length falls and coverage falls with it, meaning the cap simply
+truncates the delegated analyses and the arm buys brevity by dropping pathways.
