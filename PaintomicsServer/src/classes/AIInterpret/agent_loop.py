@@ -121,6 +121,20 @@ DELEGATE_PAPERS = int(os.getenv("AI_AGENT_DELEGATE_PAPERS", "10"))
 SEARCH_HITS = int(os.getenv("AI_AGENT_SEARCH_HITS", str(AI_PAPERS_PER_SEARCH_TASK)))
 # Parallel single-shot calls one delegate_* tool may run at once.
 DELEGATE_WORKERS = int(os.getenv("AI_AGENT_DELEGATE_WORKERS", "4"))
+DELEGATE_CHUNK = int(os.getenv("AI_AGENT_DELEGATE_CHUNK", "5"))
+"""Pathways per sub-agent, i.e. how many writing units a delegation makes.
+
+This is the ratio that tracks the citation gap. The shipped arm writes
+fourteen batches, each citing its own papers, and converts 74% of retrieved
+papers into shipped citations; this arm writes about five units and converts
+8%. With DELEGATE_PAPERS at 10, three chunks can show a writer only 30 of 75
+retrieved papers -- the other 45 cannot become citations at all.
+
+Left at 5 so it changes nothing until a round sets it deliberately:
+AI_AGENT_DELEGATE_CHUNK=3 gives five units for the same breadth, which the
+config stamp records, so the round is identified without a code edit.
+"""
+
 DELEGATE_MAX_PATHWAYS = int(os.getenv("AI_AGENT_DELEGATE_MAX_PATHWAYS", "20"))
 """Pathways one delegate call may cover, chunked five to a sub-agent.
 
@@ -978,7 +992,8 @@ async def delegate_interpretation(ctx: RunContextWrapper[LoopContext],
         model_settings=ModelSettings(temperature=AI_TEMPERATURE),
         tools=[],
     )
-    chunks = [chosen[i:i + 5] for i in range(0, len(chosen), 5)]
+    chunks = [chosen[i:i + DELEGATE_CHUNK]
+              for i in range(0, len(chosen), DELEGATE_CHUNK)]
     sem = asyncio.Semaphore(DELEGATE_WORKERS)
 
     def _papers_for(chunk):
@@ -1233,6 +1248,7 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
         "search_budget": SEARCH_BUDGET,
         "search_hits": SEARCH_HITS,
         "delegate_papers": DELEGATE_PAPERS,
+        "delegate_chunk": DELEGATE_CHUNK,
         "max_turns": AGENT_MAX_TURNS,
         "gate_reserve": GATE_RESERVE_SECONDS,
         "lead_prompt_chars": len(prompts_mod.SYSTEM_PROMPT_LEAD_AGENT),
