@@ -219,6 +219,18 @@ FULLTEXT_MAX_PAPERS = int(os.getenv("AI_AGENT_FULLTEXT_MAX", "24"))
 VERIFY_ITERATIONS = min(int(os.getenv("AI_AGENT_VERIFY_ITERATIONS", "2")),
                         AI_MAX_VERIFICATION_ITERATIONS)
 
+TOPUP_MIN_SECONDS = float(os.getenv("AI_AGENT_TOPUP_MIN", "200"))
+"""Clock a citation top-up needs before it is worth starting.
+
+The top-up rewrites the whole report to add citations, and it fires whenever
+the count is under MIN_CITATIONS -- which for this arm is always. Measured at
+114 s, spent at the point in the run with the least time left. Round 30's
+replicate was stopped at the 600 s ceiling with 327 s of untraced post-loop
+work behind it, and this is the largest single piece of it.
+
+A report that ships with fewer citations beats one that does not ship.
+"""
+
 NUDGE_MIN_SECONDS = float(os.getenv("AI_AGENT_NUDGE_MIN", "90"))
 """Don't ask the agent to redo work there is no time to redo.
 
@@ -1574,7 +1586,15 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
     valid_indices = {p["ref_index"] for p in unique_papers}
     cited_now = count_body_citations(str(report), valid_indices)
     uncited = [p for p in unique_papers if p["ref_index"] not in cited_now]
-    if uncited and len(cited_now) < MIN_CITATIONS:
+    topup_headroom = (ctx.started_at + AGENT_RUN_SECONDS) - time.time()
+    if uncited and len(cited_now) < MIN_CITATIONS and topup_headroom < TOPUP_MIN_SECONDS:
+        # Skipped, and said so: an unexplained absence in the stats is the same
+        # shape as a step that silently never ran.
+        stats["topup_skipped"] = "%.0f s left, needs %.0f" % (topup_headroom,
+                                                              TOPUP_MIN_SECONDS)
+        logger.info("[%s][loop] citation top-up skipped: %.0f s left",
+                    job_id, topup_headroom)
+    elif uncited and len(cited_now) < MIN_CITATIONS:
         listing = "\n".join(
             "[%d] %s — %s" % (p["ref_index"], (p.get("title") or "")[:110],
                               (p.get("abstract") or "")[:220])

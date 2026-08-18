@@ -970,3 +970,32 @@ Two levers follow, and they pull in opposite directions on cost:
 Lever 1 raises citations; lever 2 only saves time. Lever 1 is the experiment
 worth running, and it is the same "writing units" ratio that predicted the gap:
 base has fourteen, this arm has about five.
+
+## Where the 914 s went: untraced post-loop work
+
+Round 30's agent replicate was stopped at the ceiling. Its trace:
+
+    loop ends            222 s   (52 tool calls)
+    gate verification    549-552 s   (15 calls in 3 s -- parallel, healthy)
+    last event           552 s
+    killed               914 s
+
+The traced work is small and fast. **327 seconds sit between the loop ending and
+verification starting**, and none of it is traced. Round 29's stats name the
+pieces: `topup_s` 113.8, `verify_loop_s` 117.3, `merge_s` 15.9.
+
+The citation top-up is the largest. It rewrites the entire report to add
+citations, and it fires whenever the count is under `MIN_CITATIONS` (22) -- which
+for this arm is always, since it ships 6 to 17. It was bounded by a per-call
+timeout but not by the wall clock, so it ran at the point in the run with the
+least time left.
+
+It now requires 200 s of headroom and records `topup_skipped` with the numbers
+when it declines. A report that ships with fewer citations beats one that does
+not ship.
+
+**The general shape, third time in this arm:** an expensive step guarded on a
+quality threshold but not on the clock. The delegation nudge, the merge probes
+and now the top-up were all written that way. The pattern to check for is a
+`bounded(...)` call whose budget is a fixed per-call timeout rather than
+"whatever is left of the run".

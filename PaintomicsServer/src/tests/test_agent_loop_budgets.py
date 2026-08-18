@@ -431,6 +431,21 @@ def test_the_grounding_sieve_asks_the_question_the_right_way_round():
 
 
 
+def test_the_citation_top_up_checks_the_clock():
+    """It rewrites the whole report to add citations, fires whenever the count
+    is under MIN_CITATIONS -- always, for this arm -- and cost 114 s measured.
+    Round 30's replicate was stopped at the ceiling with 327 s of untraced
+    post-loop work behind it, and this was the largest piece."""
+    import inspect
+    src = inspect.getsource(L._run_loop_async)
+    assert "topup_headroom" in src, "the top-up does not look at the clock"
+    assert "TOPUP_MIN_SECONDS" in src
+    assert "topup_skipped" in src, (
+        "a skipped top-up leaves no trace, which reads exactly like a step that "
+        "never ran")
+
+
+
 def main():
     for t in (test_tool_output_under_budget_is_returned_whole,
               test_tool_output_over_budget_is_cut_and_says_so,
@@ -462,7 +477,8 @@ def main():
               test_every_test_in_this_file_actually_runs,
               test_the_code_fingerprint_is_real,
               test_the_fingerprint_moves_when_behaviour_moves,
-              test_the_grounding_sieve_asks_the_question_the_right_way_round):
+              test_the_grounding_sieve_asks_the_question_the_right_way_round,
+              test_the_citation_top_up_checks_the_clock):
         _check(t.__name__, t)
     print("\nPassed: %d / %d" % (len(_PASSED), len(_PASSED) + len(_FAILED)))
     if _FAILED:
