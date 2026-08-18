@@ -538,3 +538,67 @@ citation nudge**, because they are the newest and the least measured.
 Saying this before the numbers exist is the whole point of writing it down. The
 alternative -- quietly reporting the result against the old fingerprint -- would
 have been a measurement of something other than what the document claims.
+
+## Round 25 result: NOT better, 2 of 5 rules
+
+Fingerprint `e92a9a5737`, jobs 73I734364H and 1354co025T, interleaved, 2026-08-18.
+
+| | base | agent-v25 |
+|---|---|---|
+| wall_s | 362.4 | 333.6 |
+| citations_in_body | 17.0 | **5.5** |
+| redacted | 11.0 | **22.0** |
+| prose_pathways_covered | 13.0 | 12.0 |
+| report_chars | 33530 | 43978 |
+
+    1 every replicate done within 600s   PASS
+    2 citations >= base                  FAIL  (5.5 vs 17.0)
+    3 redactions <= base + 2             FAIL  (22.0 vs 11.0)
+    4 prose coverage >= base             FAIL  (12.0 vs 13.0)
+    5 length within [0.6x, 2.0x]         PASS
+    => NOT better - the incumbent stands. PR #38 stays a draft.
+
+**The mean hides the finding.** The two agent replicates could hardly differ more:
+
+| | agent-r1 | agent-r2 |
+|---|---|---|
+| papers retrieved | 11 | 102 |
+| citations surviving | 11 | **0** |
+| redactions | **0** | 44 |
+
+r1 is the best-behaved agent run yet measured: it called `check_my_citations`
+three times, drove unquotable citations 7 -> 2 -> 0, and shipped with **zero**
+redactions against base's ten. The tool work of this session did exactly what
+the traces predicted.
+
+r2 did the same thing and shipped nothing. It submitted a 7 726-character draft
+carrying 7 citations, every one of them checked and grounded. The gate then
+merged in 52 000 characters of delegated sub-agent text, which carried **44
+citations the agent had never checked**, and could not ground them in the
+remaining budget. All 44 were redacted; none of the agent's own 7 survived
+renumbering either.
+
+### The structural defect this exposes
+
+**`check_my_citations` validates the draft; the gate ships draft + merge.** The
+one tool measured to improve grounding is applied to a document that is not the
+one being verified. The agent spends its budget grounding seven citations and
+the gate then imports forty-four unchecked ones.
+
+That is not a tuning problem and no prompt wording fixes it. Candidate
+directions, none of them measured yet:
+
+1. ground delegated citations at delegation time, inside the sub-agent's own
+   budget, so the merge imports only citations that carry a quote;
+2. have the merge drop an unquotable citation marker rather than the sentence,
+   so delegated prose survives without a false citation;
+3. have `check_my_citations` check the merged document, which means the merge
+   has to happen before the agent's final check rather than after it.
+
+(1) is closest to the design's spirit -- the sub-agent that wrote the claim is
+the one that can find its quote -- and it is where the next round should go.
+
+The pre-registered bisect is not needed: the failure is not one of the nine
+changes, it is a seam between the loop and the gate that every version of this
+arm has had. The changes did what they were supposed to: r1's zero redactions
+are the evidence.
