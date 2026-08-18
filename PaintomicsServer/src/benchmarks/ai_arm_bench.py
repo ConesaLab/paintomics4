@@ -172,7 +172,18 @@ STAGE_TIMES = ("triage_s", "plan_s", "retrieval_s", "interpret_s", "gap_fill_s",
                "synth_s", "topup_s", "verify_loop_s", "verify_s",       # shipped arm
                "loop_s", "fulltext_s", "quotes_s", "merge_s")           # agent arm
 STAGE_COUNTS = ("verify_iterations", "batches_failed", "truncated_calls",
-                "forced_synthesis", "topup_added", "quotes_unverifiable")
+                "forced_synthesis", "topup_added", "quotes_unverifiable",
+                # The other half of the top-up's bet. Recording only
+                # topup_added archives its wins and drops its losses, and a
+                # stage measured on its wins alone can never be retired.
+                "topup_added_failed", "topup_rejected")
+
+# Outcomes whose value is a sentence, not a number: a stage that skipped or
+# failed says WHY, and "absent from the archive" reads identically to "never
+# happened". Truncated because a traceback string is not a metric.
+STAGE_NOTES = ("topup_failed", "topup_skipped", "merge_rejected",
+               "merge_skipped", "merge_failed", "loop_backstop",
+               "deterministic_fallback")
 
 
 def _stage_budget(stats):
@@ -182,6 +193,10 @@ def _stage_budget(stats):
         value = stats.get(key)
         if isinstance(value, (int, float)):
             out[key] = round(value, 1) if key.endswith("_s") else value
+    for key in STAGE_NOTES:
+        value = stats.get(key)
+        if value:
+            out[key] = str(value)[:120]
     return out
 
 

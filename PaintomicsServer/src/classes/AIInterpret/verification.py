@@ -477,6 +477,28 @@ def _redact_body(body, bad_patterns, bad_indices=None):
     return "\n".join(_drop_orphan_headings(lines)), removed
 
 
+def score_topup_survival(stats, verification):
+    """Price the top-up's bet: did the citations it added survive the gate?
+
+    The top-up adds [N] markers to sentences that were already written and
+    already stood on their own. That is a wager with asymmetric stakes: a
+    marker that verifies buys one citation, and a marker that fails costs the
+    ENTIRE sentence, because redact_unverified_v2 removes each claim along with
+    its bad citation.
+
+    stats["topup_added"] has only ever recorded the winning half. A stage that
+    destroys more prose than it grounds is indistinguishable, in the archive,
+    from one that grounds prose for free -- which is how 40 s of every run went
+    unpriced. Records nothing when the top-up did not run.
+    """
+    added = stats.get("topup_added_refs")
+    if not added:
+        return
+    failed = {fc.get("ref_index")
+              for fc in (verification.get("failed_citations") or [])}
+    stats["topup_added_failed"] = len(set(added) & failed)
+
+
 def redact_unverified_v2(report_text, failed_citations):
     """Remove sentences citing failed [N] indices and their References entries.
 

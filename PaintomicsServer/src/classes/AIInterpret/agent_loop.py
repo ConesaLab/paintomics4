@@ -69,7 +69,8 @@ from src.classes.AIInterpret.verification import (
     _fuzzy_contains,
     count_body_citations, normalize_citation_markers, parse_references_section,
     redact_unverified_v2, render_references_section, renumber_citations,
-    resolve_pmid_mentions, sort_references_section, verify_report_v2,
+    resolve_pmid_mentions, score_topup_survival, sort_references_section,
+    verify_report_v2,
 )
 
 logger = logging.getLogger(__name__)
@@ -1660,13 +1661,22 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
                 SDK_LONG_CALL_TIMEOUT, label="loop citation top-up")
             candidate = resolve_pmid_mentions(str(topped.final_output),
                                              ctx.paper_index)
-            added = len(count_body_citations(candidate, valid_indices))
+            cited_after = count_body_citations(candidate, valid_indices)
+            added = len(cited_after)
             # Same acceptance test as the workflow arm: a "top-up" that
             # shortens the report into a summary is a regression wearing a
             # bigger citation count.
             if len(candidate) > 0.6 * len(str(report)) and added > len(cited_now):
                 report = candidate
                 stats["topup_added"] = added - len(cited_now)
+                # WHICH references it added, so the gate can price the trade.
+                # Top-up marks sentences that already stood on their own; if
+                # one of its citations then fails, redact_unverified_v2 deletes
+                # that whole sentence along with it. Counting only the
+                # citations gained measures the upside of a bet whose downside
+                # is prose, which is how a stage can look free and not be.
+                stats["topup_added_refs"] = sorted(set(cited_after)
+                                                   - set(cited_now))
             else:
                 stats["topup_rejected"] = True
         except (Exception, asyncio.TimeoutError) as e:
@@ -1872,6 +1882,7 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
     # ---- Phase 6, verbatim: the programmatic net --------------------------
     t0 = time.time()
     final = verify_report_v2(report, gene_whitelist, unique_papers, job_instance)
+    score_topup_survival(stats, final)
     if final.get("failed_citations"):
         report, removed = redact_unverified_v2(report, final["failed_citations"])
         final["redacted_count"] = removed
