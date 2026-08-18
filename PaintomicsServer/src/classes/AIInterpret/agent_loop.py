@@ -216,6 +216,7 @@ class LoopContext(AgentContext):
     archived: list = field(default_factory=list)         # events already on disk
     hard_deadline: float = 0.0                          # loop must be done by
     delegation_cache: dict = field(default_factory=dict)  # resolved key -> report
+    flagged_citations: set = field(default_factory=set)   # unquotable at last check
 
 
 def _hb(ctx, status, percent, detail):
@@ -716,7 +717,7 @@ def notebook_write(ctx: RunContextWrapper[LoopContext], note: str) -> str:
 
 @function_tool(failure_error_function=_tool_failure("check_my_citations"))
 def check_my_citations(ctx: RunContextWrapper[LoopContext], draft: str) -> str:
-    """Check a draft's [N] citations BEFORE submitting: which resolve to real papers, and which have no supporting quote and will therefore be dropped. Costs a few seconds. Worth running once on your finished draft."""
+    """Check a draft's [N] citations BEFORE submitting: which resolve to real papers, and which have no supporting quote and will therefore be dropped. Costs a few seconds. Run it on your draft, fix what it names, then run it AGAIN -- the second run is what turns a flagged citation into a grounded one."""
     c = ctx.context
     t0 = time.time()
     guard = _time_guard(c)
@@ -755,6 +756,12 @@ def check_my_citations(ctx: RunContextWrapper[LoopContext], draft: str) -> str:
                      "cite the sentence you find.")
     if not invalid and not unquotable:
         lines.append("Every citation resolves and is quotable.")
+    # Remembered so submit_report can tell whether the agent acted on its own
+    # check. Measured over 28 runs that called this tool: the 10 that re-checked
+    # after a bad result improved every time (11/6 -> 7/0, 14/7 -> 8/0,
+    # 10/4 -> 10/0), and none got worse. The 18 that checked once sometimes
+    # submitted with citations this tool had already flagged.
+    c.flagged_citations = set(unquotable)
     out = _spend(c, "\n".join(lines))
     _trace(c, "check_my_citations", "%d chars" % len(draft),
            "%d cited, %d unquotable" % (len(cited), len(unquotable)), t0)
@@ -930,6 +937,31 @@ def submit_report(ctx: RunContextWrapper[LoopContext], report_markdown: str) -> 
                "Analysis, Suggested Follow-up Experiments, Limitations."
                % len(report_markdown.strip()))
         _trace(c, "submit_report", "%d chars" % len(report_markdown), "rejected", t0)
+        return out
+    # The same one-shot nudge, for the other thing the agent already knows is
+    # wrong. check_my_citations names the citations with no supporting quote and
+    # says what to do about them; when the agent re-checks it fixes them every
+    # time (10 of 10 runs improved, none got worse). When it submits anyway,
+    # those citations become redactions and take their sentences with them.
+    #
+    # Only ever one nudge per run, shared with the delegation nudge above: the
+    # first submit may be answered once, the second is always accepted. A tool
+    # that can refuse twice is a workflow step wearing a tool's clothes.
+    still_flagged = sorted(i for i in c.flagged_citations
+                           if ("[%d]" % i) in report_markdown)
+    if c.submit_attempts == 1 and still_flagged:
+        out = ("NOT SUBMITTED YET (this is the only time you will be asked). "
+               "Your own check_my_citations run found no supporting quote for "
+               "%s, and they are still in this draft -- the gate will delete "
+               "each one along with the sentence carrying it. Fix them the way "
+               "that tool suggested (cite another paper, soften the claim, or "
+               "read_paper and quote what you find), then submit. If you have a "
+               "considered reason to submit as it stands, call submit_report "
+               "again now and it will be accepted."
+               % ", ".join("[%d]" % i for i in still_flagged[:10]))
+        _trace(c, "submit_report", "%d chars, %d flagged citations"
+               % (len(report_markdown.strip()), len(still_flagged)),
+               "nudged once", t0)
         return out
     c.submitted_report = report_markdown
     _trace(c, "submit_report", "%d chars" % len(report_markdown), "accepted", t0)

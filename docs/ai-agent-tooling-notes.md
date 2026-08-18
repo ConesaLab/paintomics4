@@ -339,3 +339,37 @@ itself, so a copy-paste cannot file one tool's failures under another.
 
 Retained logs show no swallowed failures in the 60 archived runs, but those logs
 do not go back far enough to be evidence of absence. From here it is recorded.
+
+## check_my_citations is the most useful tool in the belt (2026-08-18)
+
+Adoption and cost said little about it: 41 calls across 28 of 53 runs, 1.3 s
+each. The traces say what those numbers cannot -- what happened next.
+
+| runs that called it | | |
+|---|---|---|
+| re-checked after a bad result | 10 | **all 10 improved, none got worse** |
+| checked once | 18 | some submitted with flagged citations still in place |
+
+The improvements are large and consistent: 11/6 -> 7/0, 14/7 -> 8/0,
+10/4 -> 10/0, 6/2 -> 4/0, 8/2 -> 7/0. Across every check, 51 of 219 citations
+(23%) had no supporting quote when first written; the tool finds them for 1.3 s
+where the gate finds them for a redaction that deletes the sentence too.
+
+It was never the last call in a run -- the agent always did something with the
+answer. So this is a tool that works, whose only failure mode is not being run
+twice.
+
+Two changes followed, both from the measurement:
+
+**Its own description discouraged the thing that works.** It said "worth running
+once on your finished draft". It now says to run it, fix what it names, and run
+it again, because the second run is where the grounding comes from. No number in
+the prompt -- numbers there have gone stale before.
+
+**submit_report asks once when the agent submits citations its own check
+flagged.** The check remembers what it flagged; if those markers are still in
+the draft at the first submit, the agent is asked once, by index, with the
+remedies the tool already suggests. The second submit is always accepted, and
+this shares the single nudge with the delegation one -- only one question per
+run, ever. A tool that can refuse twice is a workflow step wearing a tool's
+clothes.
