@@ -1685,3 +1685,47 @@ a different pipeline from the one that exists now.
 **Falsifier.** If citations fall or redactions rise, the round-6 result was about
 literature volume itself and not about screening, `SEARCH_HITS` goes back to 5
 permanently, and the pool must be raised through more searches instead.
+
+## Round 40 scored: the adaptive stance is refuted, and reverted
+
+3 of 5 rules. Rule 2 finally passes (18.5 vs 18.5) and rules 3 and 4 break --
+redactions 8.0 against base's 3.0, coverage 12.5 against 14.2.
+
+| | round 39 (constant bar) | round 40 (adaptive) | base-v40 |
+|---|---|---|---|
+| keep rate | 9-27% | **28-32%** | -- |
+| pool | 27 | 31 | 28 |
+| citations | 17.5 | 18.5 | 18.5 |
+| redacted | **1.2** | 8.0 | 3.0 |
+| coverage | **16.2** | 12.5 | 14.2 |
+| rules passed | **4/5** | 3/5 | -- |
+
+The change worked and cost more than it bought. It raised the keep rate to the
+highest recorded and the pool moved 27 -> 31, because the limit was candidate
+supply rather than the screener's willingness -- while the papers it admitted
+could not be quoted, so their citations failed and redaction took each sentence
+and its pathway mention along with them.
+
+**The design conclusion:** the bar is what makes a screened paper worth 0.91
+citations. "A thin paper beats an empty theme" is false -- a thin paper costs the
+sentence it lands on. Reverted to round 39's constant standard.
+
+## Round 41 pre-registration (written before the round ran)
+
+**Round 39's exact configuration plus AI_AGENT_SEARCH_HITS=10.** One change from
+a known 4/5 baseline: the bar stays where it was, and candidate supply doubles.
+
+**Prediction.**
+- candidates roughly double (155-190 -> ~300); keep rate holds at round 39's
+  9-27%, so the pool lands **>= 33** with no replicate below 24.
+- `citations_in_body` follows the fitted line, 0.91 x 33 - 7.2 = **>= 22**.
+- `redacted` returns to round 39's level, **<= base + 2**. This is the rule the
+  adaptive stance broke, and the claim being tested is that it broke it by
+  lowering the bar rather than by enlarging the pool.
+- coverage returns above base, as in rounds 38 and 39.
+- every replicate inside 600 s.
+
+**Falsifier.** If redactions stay high with a constant bar, then the damage came
+from pool SIZE rather than paper quality -- volume itself dilutes -- and
+SEARCH_HITS returns to 5 permanently, leaving round 39's configuration as the
+arm's best and final form.
