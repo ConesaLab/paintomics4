@@ -262,6 +262,34 @@ target, so the spread in citations IS the spread in searching. Another
 instruction will not fix that -- the replicate that searched 16 times had already
 read the one that exists.
 
+### Rounds 19-20 — showing the agent its own coverage made grounding reliable
+
+The ledger line that reported what the agent MAY still spend now also reports
+what it has covered: *literature searched for 7 of 20 clusters*. Budget is a
+constraint; coverage is a gap. Nothing instructs the agent to close it.
+
+| citations, four runs each | spread |
+|---|---|
+| without the coverage line | 18, 12, 15, 25 — **13** |
+| with it | **18, 18, 19, 18 — 1** |
+
+| mean (n=4) | base | candidate | with coverage line |
+|---|---|---|---|
+| citations | 21.0 | 17.5 | **18.2** |
+| redactions | 4.5 | 4.5 | 6.2 |
+| pathways named | 15.0 | 16.2 | 15.5 |
+| cited papers with full text | 13.5 | 9.8 | **12.2** |
+| wall clock | 331 s | 410 s | 460 s |
+
+Four of five rules, and -- the point -- grounding stopped depending on which day
+the run had. Every earlier configuration's mean was an average over runs that
+differed by a factor of two; this one's four runs differ by one citation.
+
+Two things to watch. Redactions carry a single outlier (0, 4, 6, **15**), so 6.2
+sits just under the 6.5 threshold on the strength of three good runs. And the
+mean report is 81 155 chars against an 82 586 ceiling -- a larger run would fail
+the size rule, so the stitch cap has less headroom than it looks.
+
 ### The result is a frontier, not a hill
 
 | mean of 2 | wall | prose | paths | cites | redactions |
