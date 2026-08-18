@@ -69,6 +69,31 @@ def test_the_ledger_line_reports_what_is_left():
     assert "s left" in note and "chars" in note, note
 
 
+# -- the merge guard must compare like with like ---------------------------
+
+def test_the_grounding_sieve_is_applied_to_both_sides():
+    """Filtering only the candidate compared a strict count against a lenient
+    one, so the guard could never accept: a run reported 15 unverifiable quotes,
+    rejected a stitch that was genuinely better, and shipped the thin draft. An
+    asymmetric test is not a strict test, it is a broken one."""
+    import inspect
+    src = inspect.getsource(L._run_loop_async)
+    assert src.count("_verified_quotes(ctx,") == 2, (
+        "the sieve is applied %d time(s); both the draft and the candidate must "
+        "go through it" % src.count("_verified_quotes(ctx,"))
+
+
+def test_the_sieve_keeps_only_findable_quotes():
+    ctx = _ctx()
+    ctx.paper_index = {
+        1: {"sections": {"results": "Ikaros represses Ccr2 in pre-B cells."}},
+        2: {"sections": {"results": "Unrelated text about something else."}},
+    }
+    kept = L._verified_quotes(ctx, {1: "Ikaros represses Ccr2 in pre-B cells.",
+                                    2: "A sentence that is nowhere in paper two."})
+    assert set(kept) == {1}, kept
+
+
 # -- the ledger reports coverage, not only budget ---------------------------
 
 def test_the_ledger_shows_cluster_coverage_once_there_is_a_map():
@@ -270,6 +295,8 @@ def main():
     for t in (test_tool_output_under_budget_is_returned_whole,
               test_tool_output_over_budget_is_cut_and_says_so,
               test_the_ledger_line_reports_what_is_left,
+              test_the_grounding_sieve_is_applied_to_both_sides,
+              test_the_sieve_keeps_only_findable_quotes,
               test_the_ledger_shows_cluster_coverage_once_there_is_a_map,
               test_a_search_records_its_topic_tag,
               test_the_time_guard_is_quiet_while_there_is_time,

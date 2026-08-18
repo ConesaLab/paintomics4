@@ -362,6 +362,25 @@ def _time_guard(ctx):
 # The toolbelt. Docstrings are the tool descriptions the model sees.
 # ---------------------------------------------------------------------------
 
+def _verified_quotes(ctx, quotes):
+    """Keep only quotes the gate's own matcher can find in their paper.
+
+    Used on BOTH sides of the merge comparison. Filtering only the candidate
+    compared a strict count against a lenient one, so the guard could not accept
+    anything: one run reported 15 unverifiable quotes, rejected a stitch that was
+    genuinely better, and shipped the thin draft instead. An asymmetric test is
+    not a strict test, it is a broken one.
+    """
+    out = {}
+    for ref, quote in (quotes or {}).items():
+        paper = ctx.paper_index.get(ref) or {}
+        text = " ".join((paper.get("sections") or {}).values()) or (
+            paper.get("abstract") or "")
+        if quote and text and _fuzzy_contains(quote, text):
+            out[ref] = quote
+    return out
+
+
 def _ctx_by_id(ctx):
     """id -> pathway context dict, for the cluster renderers."""
     return {p["id"]: p for p in ctx.pathways}
@@ -1112,23 +1131,15 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
         # the real question, and the quotes it collects are reused by the gate
         # rather than recomputed.
         quote_probe = LLMClient(AI_PROVIDERS[AI_LLM_PROVIDER])
-        grounded_before = len(_collect_cited_quotes(
+        # Both sides through the same sieve: a model reporting support is not the
+        # same fact as the support being there, and the gate checks the second.
+        before_quotes = _verified_quotes(ctx, _collect_cited_quotes(
             quote_probe, str(report), ctx.paper_index, job_id))
-        grounded_after_quotes = _collect_cited_quotes(
-            quote_probe, candidate, ctx.paper_index, job_id)
-        # Keep only the quotes that the gate's own matcher can find in the paper.
-        # A model reporting that it found support is not the same fact as the
-        # support being there, and the gate checks the second.
-        verified_quotes = {}
-        for ref, quote in grounded_after_quotes.items():
-            paper = ctx.paper_index.get(ref) or {}
-            text = " ".join((paper.get("sections") or {}).values()) or (
-                paper.get("abstract") or "")
-            if quote and text and _fuzzy_contains(quote, text):
-                verified_quotes[ref] = quote
-        stats["quotes_unverifiable"] = (len(grounded_after_quotes)
-                                        - len(verified_quotes))
-        grounded_after_quotes = verified_quotes
+        raw_after = _collect_cited_quotes(quote_probe, candidate,
+                                          ctx.paper_index, job_id)
+        grounded_after_quotes = _verified_quotes(ctx, raw_after)
+        stats["quotes_unverifiable"] = len(raw_after) - len(grounded_after_quotes)
+        grounded_before = len(before_quotes)
         grounded_after = len(grounded_after_quotes)
         if (len(candidate) > 1.2 * len(str(report))
                 and after >= before and grounded_after >= grounded_before):
