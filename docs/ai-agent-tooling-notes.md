@@ -516,3 +516,33 @@ reversed a conclusion -- the March reports that looked like a live redaction
 defect, the missing stats that looked like lost telemetry, and now this. The
 database holds several code eras at once, and a pooled average over it describes
 none of them.
+
+## Tool descriptions go stale, and they are re-sent every turn (2026-08-18)
+
+Every description in `TOOLBELT` rides in EVERY Decide turn of every run, which
+makes them the most-read documentation in the system and a standing token cost.
+All ten were audited against the archive.
+
+Every timing claim holds: `search_literature` "about 2 s" against a measured
+median of 2000 ms, `read_paper` "about 3 s" against 2532, `cluster_pathways`
+"half a second" against 418, `delegate_interpretation` "about 30 seconds"
+against 29841, and the tools that call themselves instant and free measure
+0-20 ms.
+
+One claim did not. `read_paper` said "an unread citation is the kind the
+verifier removes" -- and over 28 runs, citations to papers the agent had read
+passed verification at 73% against 84% for ones it had not. The description was
+telling the agent the opposite of the evidence, and it survived the earlier
+correction of the same claim in the system prompt because nothing looks at
+descriptions.
+
+It now says what reading is actually for: checking that a paper says what you
+mean to cite it for. Reading is for deciding, not for unlocking text -- a cited
+paper has its full text fetched anyway by the post-loop upgrade.
+
+Four tests now guard the class of defect rather than the instance: no
+description may promise an outcome the gate decides ("the verifier removes",
+"guarantees", "will survive"), every tool must have one, a free tool may not
+advertise a seconds figure, and the belt's descriptions must stay under 3500
+characters in total -- currently 2381, largest 422. Both guards were checked
+against the wording they are meant to catch.

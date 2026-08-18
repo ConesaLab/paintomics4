@@ -705,7 +705,7 @@ async def search_literature(ctx: RunContextWrapper[LoopContext], query: str,
 @function_tool(failure_error_function=_tool_failure("read_paper"))
 async def read_paper(ctx: RunContextWrapper[LoopContext], ref_index: int,
                      section: str) -> str:
-    """Read one section (abstract, introduction, results, discussion, other) of a retrieved paper [N]. Fetches full text on first use, about 3 s. Do this before citing a paper for a specific claim -- an unread citation is the kind the verifier removes."""
+    """Read one section (abstract, introduction, results, discussion, other) of a retrieved paper [N]. Fetches full text on first use, about 3 s. Use it to check a paper really says what you want to cite it for. Reading is for deciding, not for unlocking text: a paper you cite has its full text fetched anyway, and reading first does not by itself make a citation survive."""
     c = ctx.context
     t0 = time.time()
     guard = _time_guard(c)
