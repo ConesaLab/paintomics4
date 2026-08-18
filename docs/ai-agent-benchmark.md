@@ -1945,3 +1945,34 @@ configuration with nothing added.
 non-zero, then abstract-only was not why those citations failed, and the top-up
 is choosing papers that cannot support the claims regardless of how much text is
 fetched -- which would make removing the stage the only remaining option.
+
+### The notebook `subject` falsifier, answered
+
+When `subject` became a required argument on `notebook_write` I pre-registered:
+"a blank-subject rate above ~30% is the same verdict by another route -- the
+model declining the field is evidence the field is wrong". The metric was made
+recordable two iterations ago and reads **0 blank of 10 notes** on its first run.
+
+The field is used, unprompted, on every note. That does not make it USEFUL -- the
+reader that consumes it still has no measured effect -- but it clears the
+specific objection that the argument would be ignored or resented, and it is the
+one J-Space idea taken into this framework.
+
+### Round 44 configuration, smoke-tested before the round
+
+`AI_AGENT_TOPUP=0` with `AI_AGENT_SHOW_UNCITED=1`, on top of the screen and
+SEARCH_HITS=10:
+
+```
+status done | wall 310 s | pool 90 | cites 19 | cov 11
+failed 0 | redact 0 | topup_disabled True
+```
+
+Zero failures and zero redactions on the first run without the top-up, with
+citations holding at 19 against round 43's 20.0 mean WITH it. That is the
+predicted result, on one replicate, from the arm's most variable metric -- so it
+is a reason to run the round, not a result.
+
+Coverage at 11 is below round 43's 14.7 and is the number to watch: if the Lead
+spends its turns citing the uncited pool and covers fewer pathways for it, the
+trade moves from rule 3 to rule 4 and nothing is won.
