@@ -1099,20 +1099,48 @@ async def _screen_papers(ctx, papers, query, topic_tag):
         output_type=RelevantPMIDs,
         tools=[],
     )
-    prompt = ("Experiment: %s\nOrganism: %s\nTheme: %s\nQuery: %s\n\n"
+    # Strictness has to know the budget. Measured round 39: two replicates kept
+    # 24% of candidates, reached 13 of 13 themes and shipped 22-26 citations; a
+    # third kept 9%, reached 7 of 13 themes and shipped EIGHT. Same prompt, same
+    # code -- the screen simply ran strict on every search and starved the pool
+    # to 17 papers against a 30-40 writer window.
+    #
+    # A filter with no target size cannot tell "nothing here is good" from "I
+    # have already kept enough", and those need opposite answers. The tool knows
+    # both numbers; the screener did not.
+    pool, window = len(ctx.paper_index), _writer_window(ctx)
+    if pool >= window:
+        stance = ("You already hold %d papers and the writers can only read about "
+                  "%d, so keep ONLY what is clearly better than what is already "
+                  "there. An empty list is the right answer unless something here "
+                  "is excellent." % (pool, window))
+    elif pool < window // 2:
+        stance = ("You hold only %d papers and the writers have room for about "
+                  "%d. Keep anything with a plausibly quotable finding -- at this "
+                  "point a thin paper beats an empty theme, and a theme with no "
+                  "paper can never be cited at all." % (pool, window))
+    else:
+        stance = ("You hold %d papers with room for about %d. Keep the ones with "
+                  "a specific quotable finding." % (pool, window))
+    # Each piece is finished BEFORE it is joined. Writing this as
+    # `("...%s..." + stance + "...") % args` puts the formatting on the trailing
+    # literal instead of the whole expression, because % binds tighter than + --
+    # the same bug that killed every agent replicate of round 39's first launch,
+    # reproduced here within the hour by the same hand. Formatting first and
+    # concatenating after makes the mistake unavailable.
+    header = ("Experiment: %s\nOrganism: %s\nTheme: %s\nQuery: %s\n\n"
               "Candidate papers:\n%s\n\n"
-              "Return ONLY the PMIDs that could support a claim in a report about "
-              "this experiment. Be strict -- keep at most a handful. The test is "
-              "whether the paper holds a specific, quotable finding about the "
-              "MECHANISM these genes take part in. REJECT anything sharing only a "
-              "keyword -- above all a paper matched because a pathway is NAMED "
-              "after a disease -- reviews with nothing specific to quote, and "
-              "results running opposite to what is described. Precision beats "
-              "volume: a kept paper with no quotable finding COSTS a citation, "
-              "because the claim it gets attached to is removed with it. An empty "
-              "list is correct when nothing fits."
               % (ctx.experiment_design, ctx.organism_name, topic_tag or "-",
                  query, listing))
+    task = ("Return ONLY the PMIDs that could support a claim in a report about "
+            "this experiment. The test is whether the paper holds a specific, "
+            "quotable finding about the MECHANISM these genes take part in. "
+            "REJECT anything sharing only a keyword -- above all a paper matched "
+            "because a pathway is NAMED after a disease -- reviews with nothing "
+            "specific to quote, and results running opposite to what is "
+            "described. A kept paper with no quotable finding COSTS a citation, "
+            "because the claim it gets attached to is removed with it.")
+    prompt = header + stance + "\n\n" + task
     try:
         res = await bounded(Runner.run(screener, prompt, context=ctx, max_turns=2),
                             SDK_CALL_TIMEOUT, label="screen")

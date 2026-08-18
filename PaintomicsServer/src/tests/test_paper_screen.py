@@ -194,6 +194,58 @@ def test_the_two_empty_causes_cannot_collapse_back_together():
     assert init < used, "screened_here is used before it is set"
 
 
+def _prompt_for(pool_size, n_pathways=15):
+    """Build the screen's prompt against a real context of a given pool size."""
+    captured = {}
+    original = L.Runner
+
+    class _Runner:
+        @staticmethod
+        async def run(agent, prompt, context=None, max_turns=None):
+            captured["p"] = prompt
+            return _Res(["1"])
+    L.Runner = _Runner
+    ctx = L.LoopContext(job_instance=None, job_id="T", organism_name="mmu",
+                        experiment_design="d")
+    ctx.pathways = [{"id": "p%d" % i} for i in range(n_pathways)]
+    ctx.paper_index = {i: {"ref_index": i} for i in range(1, pool_size + 1)}
+    try:
+        asyncio.get_event_loop().run_until_complete(
+            L._screen_papers(ctx, PAPERS, "q", "theme"))
+    finally:
+        L.Runner = original
+    return captured["p"]
+
+
+def test_a_starved_pool_makes_the_screen_permissive():
+    """The failure this fixes. Round 39: two replicates kept 24% of candidates,
+    reached 13/13 themes and shipped 22-26 citations; a third kept 9%, reached
+    7/13 and shipped EIGHT -- same prompt, same code, pool starved to 17 papers
+    against a 30-paper window. A filter with no target size cannot tell "nothing
+    here is good" from "I have kept enough"."""
+    p = _prompt_for(4)          # window is 30 for 15 pathways
+    assert "thin paper beats an empty theme" in p, p
+    assert "keep ONLY what is clearly better" not in p
+
+
+def test_a_full_pool_makes_the_screen_strict():
+    p = _prompt_for(40)
+    assert "keep ONLY what is clearly better" in p, p
+    assert "thin paper beats an empty theme" not in p
+
+
+def test_a_half_full_pool_keeps_the_ordinary_standard():
+    p = _prompt_for(20)
+    assert "Keep the ones with a specific quotable finding" in p, p
+
+
+def test_the_stance_names_the_actual_numbers():
+    """A stance that says 'some' teaches the screener nothing; the point is that
+    the tool knows both numbers and the screener does not."""
+    p = _prompt_for(4)
+    assert "only 4 papers" in p and "about 30" in p, p
+
+
 def _check(name, fn):
     try:
         fn()
@@ -217,7 +269,11 @@ def main():
               test_an_all_rejected_search_does_not_tell_the_agent_to_broaden,
               test_the_original_empty_message_survives_for_a_real_no_hit,
               test_a_partly_screened_search_says_how_many_were_dropped,
-              test_the_two_empty_causes_cannot_collapse_back_together):
+              test_the_two_empty_causes_cannot_collapse_back_together,
+              test_a_starved_pool_makes_the_screen_permissive,
+              test_a_full_pool_makes_the_screen_strict,
+              test_a_half_full_pool_keeps_the_ordinary_standard,
+              test_the_stance_names_the_actual_numbers):
         _check(t.__name__, t)
     print("\nPassed: %d / %d" % (len(_PASSED), len(_PASSED) + len(_FAILED)))
     if _FAILED:
