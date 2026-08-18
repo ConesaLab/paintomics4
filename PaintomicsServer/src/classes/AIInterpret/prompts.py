@@ -838,19 +838,41 @@ def build_lead_kickoff_prompt(organism_name, experiment_design, pathways,
 def build_evidence_shelf_block(shelf):
     """The passages a delegated interpreter may cite, handed over before it writes.
 
-    Citations fail verification when a claim is written first and support is
-    looked for afterwards: the gate needs a verbatim sentence from the paper, and
-    a claim composed without one usually has none. Giving the writer the actual
-    passages first makes the citation true by construction -- which is exactly
-    why the workflow arm's citations survive, since it writes with the abstracts
-    in context.
+    Citations fail verification when a claim is written first and support looked
+    for afterwards: the gate needs a verbatim sentence from the paper, and a
+    claim composed without one usually has none. Giving the writer the actual
+    passages first makes the citation true by construction -- which is why the
+    workflow arm's citations survive, since it writes with the abstracts in
+    context.
+
+    The block also separates the two kinds of sentence. Measured on round 30,
+    this arm shipped 16 citations across 62 161 characters of prose (0.26 per
+    thousand) against the workflow arm's 24 across 26 599 (0.90). It grounds
+    what it cites, and then writes a great deal more that cites nothing --
+    literature-flavoured prose with no passage behind it, which inflates the
+    report past twice the length of the shipped arm's and dilutes the evidence
+    that is there.
     """
-    lines = ["\n\n## Evidence you may cite",
-             "These passages come from the papers above. Cite [N] ONLY where you "
-             "are using that paper's passage, and write the claim so the passage "
-             "actually supports it. If none of them supports a point you want to "
-             "make, make the point without a citation -- an uncited observation "
-             "is honest, an unsupported citation is deleted."]
+    lines = [
+        "\n\n## Evidence you may cite",
+        "These passages come from the papers above. Cite [N] ONLY where you are "
+        "using that paper's passage, and write the claim so the passage actually "
+        "supports it.",
+        "",
+        "Two kinds of sentence, and keep them apart:",
+        "  * What YOUR DATA shows -- values, timings, directions, p-values from "
+        "the tables above. No citation belongs on these; they are what the "
+        "experiment measured.",
+        "  * What the LITERATURE says -- mechanism, precedent, a claim about "
+        "biology beyond this experiment. Every one of these needs a passage "
+        "below standing behind it.",
+        "",
+        "A sentence that is neither -- mechanism you cannot point to a passage "
+        "for, written as though it were established -- is the one thing to leave "
+        "out. Say it as an inference from your data, or do not say it. Length is "
+        "not the goal: a paragraph carrying a measured value or a quoted passage "
+        "earns its place, and one carrying neither does not.",
+    ]
     for ref in sorted(shelf):
         lines.append('\n[%d] "%s"' % (ref, shelf[ref].replace("\n", " ")[:500]))
     return "\n".join(lines)

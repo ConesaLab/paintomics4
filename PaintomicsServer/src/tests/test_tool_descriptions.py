@@ -200,6 +200,26 @@ def test_no_new_orphan_definitions_in_the_ai_package():
 
 
 
+def test_the_evidence_block_separates_data_claims_from_literature_claims():
+    """Round 30 shipped 16 citations across 62 161 characters of prose (0.26 per
+    thousand) against the workflow arm's 24 across 26 599 (0.90). It grounds
+    what it cites and then writes a great deal more that cites nothing. The
+    block has to name the difference, or the writer keeps producing
+    literature-flavoured prose with no passage behind it."""
+    from src.classes.AIInterpret import prompts
+    block = prompts.build_evidence_shelf_block({1: "A passage from a paper."})
+    lowered = block.lower()
+    assert "your data" in lowered and "literature" in lowered, (
+        "the block does not distinguish the two kinds of sentence")
+    assert "no citation belongs on these" in lowered, (
+        "data claims are not excused from citation, so the writer will force one")
+    assert "do not say it" in lowered or "leave it out" in lowered, (
+        "unsupportable mechanism is not given an exit")
+    assert len(block) < 1500, (
+        "the block rides in every delegated prompt; %d chars is a tax" % len(block))
+
+
+
 def _check(name, fn):
     try:
         fn()
@@ -217,7 +237,8 @@ def main():
               test_a_timing_claim_belongs_only_to_a_tool_that_costs_time,
               test_the_lead_prompt_does_not_contradict_itself_about_checking_citations,
               test_no_new_orphan_prompts,
-              test_no_new_orphan_definitions_in_the_ai_package):
+              test_no_new_orphan_definitions_in_the_ai_package,
+              test_the_evidence_block_separates_data_claims_from_literature_claims):
         _check(t.__name__, t)
     print("\nPassed: %d / %d" % (len(_PASSED), len(_PASSED) + len(_FAILED)))
     if _FAILED:

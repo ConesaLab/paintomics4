@@ -872,3 +872,25 @@ against 24, which argues for more writing units; length is 2.13x, which argues
 for fewer or shorter ones. The measurement that separates them is citations per
 thousand characters of prose: base 0.90, this arm 0.26. The arm does not need
 more text, it needs the text it has to carry more evidence.
+
+## Round 32, pre-registered: make the prose carry its evidence
+
+Round 30 left two failures pulling against each other -- citations 16 against
+24, length 2.13x. The number that separates them is citations per thousand
+characters of prose: **base 0.90, this arm 0.26**. The arm does not need more
+text; it needs its text to carry more evidence.
+
+The change is one prompt block. The delegated writer is told to keep two kinds
+of sentence apart: what the DATA shows, which needs no citation and must not be
+given one, and what the LITERATURE says, which needs a passage from the shelf
+standing behind it. A sentence that is neither -- mechanism written as
+established fact with nothing to point at -- is the one thing to leave out.
+
+**Prediction:** prose down (that third category is where the excess length
+lives), citations flat or up, density up towards base. **Falsifier:** prose down
+AND citations down together, meaning the writer answered by saying less rather
+than by grounding more -- in which case the ceiling is the model's willingness
+to commit, not the prompt.
+
+Round 31 runs first with the clock guards alone, because an arm that cannot hold
+600 s cannot be judged on anything else.
