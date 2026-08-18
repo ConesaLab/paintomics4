@@ -965,6 +965,48 @@ def _build_agents():
 
 SENTENCE_REPAIR = os.getenv("AI_SENTENCE_REPAIR", "0") == "1"
 VERIFY_MEMO = os.getenv("AI_VERIFY_MEMO", "0") == "1"
+# Hand the verifier its evidence instead of making it hunt for it -- ported from
+# the agent arm, where it has been the default for many rounds on this measured
+# result: 29 of 29 calls returned a verdict at a median 2 464 ms, redactions fell
+# 12 -> 2, the verify loop 291 s -> 117 s, the run 485 s -> 338 s.
+#
+# The comment that shipped with it noted "the same warning appears in the
+# workflow arm's logs" and nobody acted on it. Counted since: 53 "Max turns (6)
+# exceeded" verifier failures across rounds 34-36, ALL of them in this arm and
+# NONE in the agent arm -- about five per base run. A verifier that raises counts
+# as a failure, so each one redacts a citation for a tooling reason rather than a
+# grounding one, which is most of why this arm redacts 10 sentences a run to the
+# agent arm's 5.75.
+#
+# Finding the quote is mechanical and tools.py does it in pure Python, so the
+# passage is extracted in code and pasted into the prompt. The model is left with
+# the one judgement only it can make. Off by default for one measuring round.
+VERIFY_PREFETCH = os.getenv("AI_VERIFY_PREFETCH", "0") == "1"
+
+
+def _prefetched_evidence_block(ctx, cit):
+    """The paper's own words, found in Python and pasted into the prompt.
+
+    This is the whole of the port: searching a paper for a quote is mechanical,
+    tools.py already does it, and making a six-turn agent do it with tool calls
+    is how a verifier spends its budget on round-trips and returns no verdict at
+    all. Failing to find the passage is not fatal -- the model is told so, and
+    the deterministic quote check in verify_report_v2 runs afterwards either way.
+    """
+    executor = tools_mod.build_verification_executor(ctx.context.paper_index)
+    try:
+        passage = executor("search_paper_text",
+                           {"ref_index": cit["ref_index"],
+                            "query": (cit.get("cited_text") or "")[:180]})
+        if not passage or passage.lower().startswith("error"):
+            passage = executor("fetch_paper_section",
+                               {"ref_index": cit["ref_index"],
+                                "section": "abstract"})
+    except Exception as e:
+        passage = "(the paper's text could not be searched: %s)" % e
+    return ("\n\n## What paper [%s] actually says, retrieved for you\n%s\n\n"
+            "Judge from the text above. Do not ask for more; if the quote is not "
+            "in it, say so." % (cit["ref_index"], (passage or "")[:6000]))
 
 
 def _verdict_key(cit):
@@ -1991,17 +2033,21 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats,
 
         async def _verify_one(cit):
             async with vsem:
+                prompt = prompts_mod.build_verification_prompt(
+                    cit["claim_sentence"], cit["cited_text"], cit["ref_index"])
+                turns = 6
+                if VERIFY_PREFETCH:
+                    prompt += _prefetched_evidence_block(ctx, cit)
+                    turns = 2       # no tools to call, so no turns to exhaust
                 try:
                     r = await run_hedged(
-                        agents["verify"],
-                        prompts_mod.build_verification_prompt(
-                            cit["claim_sentence"], cit["cited_text"], cit["ref_index"]),
-                        ctx, max_turns=6,
+                        agents["verify"], prompt, ctx, max_turns=turns,
                         label="verify[%s]" % cit["ref_index"])
                     return cit, str(r.final_output)
                 except Exception as e:  # a dead sub-agent must not pass as verified
                     logger.warning("[%s][sdk] verifier raised for [%s]: %s",
                                    job_id, cit["ref_index"], e)
+                    stats["verifier_raised"] = stats.get("verifier_raised", 0) + 1
                     return cit, ""
 
         # Bound the fan-out itself, not just the decision to start it. The

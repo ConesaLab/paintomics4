@@ -200,7 +200,9 @@ STAGE_COUNTS = ("verify_iterations", "batches_failed", "truncated_calls",
                 # silent. A measurement not in STAGE_* is a measurement that
                 # did not happen.
                 "sentences_repaired", "repairs_rejected", "repair_unlocatable",
-                "verify_citations_checked", "verify_memo_skipped")
+                "verify_citations_checked", "verify_memo_skipped",
+                # Verifier deaths. 53 across rounds 34-36, all in the base arm.
+                "verifier_raised")
 
 # Itemised bills. A per-tool breakdown is the only form in which "which tool is
 # worth its place" can be asked of the archive rather than of one live run.
