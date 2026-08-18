@@ -1293,3 +1293,37 @@ each chunk's interpretation can only carry the themes its own papers cover. If
 the ceiling is the chunking, no amount of extra searching lifts it, and
 `SEARCH_HITS` -- queued as the "find more" lever -- would be spending budget
 against a wall. That reorders the queue: test the ceiling first.
+
+## Round 36 pre-registration (written before the round ran)
+
+**AI_SENTENCE_REPAIR=1.** The verify loop stops regenerating the whole report to
+fix a few sentences and instead repairs each failed sentence independently, six
+at a time.
+
+**Base is the clean control.** Nothing else this round touches the shipped arm's
+behaviour, so base-v36 against base-v35/v34 isolates this change completely. The
+agent arm additionally carries the notebook `subject` argument, the
+set_run_deadline fix and the new counters, so its numbers are NOT the test.
+
+**Prediction (base arm).**
+- `verify_loop_s` falls sharply from 250 s. Three iterations at ~83 s are ~75 s
+  of full-report rewrite each; N independent short repairs should collapse that.
+- `wall_s` falls with it, from ~419 s.
+- `redacted` holds or falls. Repairs that cannot be placed exactly are skipped,
+  and the programmatic net still redacts what fails -- the worst case is the
+  behaviour we already have.
+- `citations_in_body` holds at ~22.8. Nothing here adds or removes citations.
+
+**Falsifier.** If `verify_loop_s` does not fall, the full-report rewrite was not
+the cost it was measured to be, and the 58% of base wall time sitting in the
+verify loop is somewhere else -- which would send me back to instrument inside
+the loop rather than around it.
+
+**Watch, do not predict.** `sentences_repaired`, `repairs_rejected` and
+`repair_unlocatable` first record here; a high unplaceable rate would mean the
+verifier's claim_sentence often does not match the report verbatim, which is a
+different bug. `gateway_retries` first records here too, so this is the first
+round that can say what weather it met rather than inferring it from a log.
+
+**Baseline, not test:** `themes_retrieved`/`themes_cited` on both arms,
+`delegate_matched`/`delegate_fallback`, and the notebook `subject` blank rate.
