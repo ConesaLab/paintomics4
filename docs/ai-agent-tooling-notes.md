@@ -999,3 +999,39 @@ quality threshold but not on the clock. The delegation nudge, the merge probes
 and now the top-up were all written that way. The pattern to check for is a
 `bounded(...)` call whose budget is a fixed per-call timeout rather than
 "whatever is left of the run".
+
+## One hung lookup cost 14% of a run, and took three attempts to bound
+
+The tool-usage table over 68 archived runs:
+
+| tool | calls | median ms | max ms |
+|---|---|---|---|
+| check_my_citations | 70 | 1 324 | **83 217** |
+| quote_shelf | 21 | **0** | 4 |
+| delegate_grounding | 14 | 1 581 | 3 409 |
+
+The shelf is free as designed and grounding is cheap. But one
+`check_my_citations` call took **83.2 seconds** against a median of 1.3 -- a
+single hung quote lookup, 14% of a ten-minute run spent on one citation, in a
+tool the agent calls up to three times.
+
+`_collect_cited_quotes` is now bounded as a whole. Getting there took three
+tries, and the two failures are the interesting part:
+
+1. **A deadline checked between results does nothing.** Four fast lookups
+   finished before the deadline could expire, so no check tripped, and
+   `as_completed` then blocked on the fifth for its full duration. Measured:
+   6.0 s elapsed against a 2 s deadline.
+2. **A `with` block joins its threads on exit.** Even after switching to
+   `shutdown(wait=False)`, the context manager's `__exit__` waited for the hung
+   thread anyway. Measured: 8.0 s against a 2 s deadline.
+
+What works is a timeout on the wait itself -- `as_completed(futures,
+timeout=budget)` -- with the executor shut down without waiting. Measured: 2.0 s
+against a 2 s deadline, 4 of 5 resolved, and the normal path unchanged at 5 of 5.
+
+A partial answer is strictly better than a late one here: the gate re-checks
+anything missing, so the only cost of stopping early is a quote collected twice.
+
+Each attempt LOOKED correct and logged its warning; only timing the call showed
+which one worked.
