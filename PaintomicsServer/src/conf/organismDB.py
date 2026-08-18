@@ -8,6 +8,15 @@ dicDatabases = {
         'sly'   :   [{'KEGG': 'entrezgene', 'MapMan': 'mapman_gene_id'}, {'KEGG': 'kegg_gene_symbol', 'MapMan': 'mapman_gene_id'}],
         'rno'   :   [{'KEGG': 'entrezgene', 'Reactome': 'reactome_gene_id'}, {'KEGG': 'refseq_gene_symbol', 'Reactome': 'reactome_gene_id'}],
         'sot'   :   [{'KEGG': 'kegg_id', 'MapMan': 'mapman_gene_id'}, {'KEGG': 'kegg_gene_symbol', 'MapMan': 'mapman_gene_id'}],
+        # Rice. The KEGG half repeats the default this species already got
+        # from getDatabasesByOrganismCode's fallback (kegg_id + kegg_gene_symbol,
+        # FeatureNamesToKeggIDsMapper.py:116), so adding the entry changes
+        # nothing about how osa's KEGG identifiers resolve -- it only makes the
+        # installed MapMan data reachable. Rice's other KEGG code, `dosa`, must
+        # NOT get MapMan: it is keyed on RAP-DB ids and KEGG answers HTTP 400
+        # for /conv/dosa/ncbi-geneid, so the gene-to-bin cross-link has nothing
+        # to join through.
+        'osa'   :   [{'KEGG': 'kegg_id', 'MapMan': 'mapman_gene_id'}, {'KEGG': 'kegg_gene_symbol', 'MapMan': 'mapman_gene_id'}],
         'ath'   :   [{'KEGG': 'kegg_id', 'MapMan': 'mapman_gene_id'}, {'KEGG': 'refseq_gene_symbol', 'MapMan': 'mapman_gene_id'}],
         'sce'   :   [{'KEGG': 'kegg_id', 'Reactome': 'reactome_gene_id'}, {'KEGG': 'kegg_gene_symbol', 'Reactome': 'reactome_gene_id'}],
         'bbb'   :   [{'KEGG': 'kegg_id'}, {'KEGG': 'kegg_gene_symbol'}],

@@ -3622,16 +3622,54 @@ def downloadMapManResource(resource, outputName, delay, maxTries, checkIfExists=
       decompress   -- gunzip the payload after download (GoMapMan ships .gz)
       skip_header  -- drop the first line (the metabolite export has one)
       expect       -- "tsv" or "targz"; shape check applied after decompression
+      local        -- absolute path to a file shipped in the source tree; used
+                      instead of url/file, with no network access
+
+    `local` exists because GoMapMan publishes gene-to-entrez for ath, sly and
+    stu only. Rice's KEGG cross-link is derived rather than published, so it
+    ships in osa_resources/ and is copied in here. The caller resolves it to
+    an absolute path (ROOT_DIR is known there, not here). Everything after
+    the fetch -- decompress, skip_header, validate, and removing a rejected
+    payload -- is deliberately shared with the download path so a local
+    resource cannot bypass the shape checks.
     """
     from urllib.parse import quote
 
-    # `file` is a raw name and may contain spaces or '|', so quote it here
-    # instead of expecting every caller to pre-encode its config entry.
-    url = resource.get("url") + quote(resource.get("file"))
+    localPath = resource.get("local")
 
     if checkIfExists and os.path.isfile(outputName) and os.stat(outputName).st_size > 0:
         stderr.write("SKIPPING (already present) " + outputName + "\n")
         return True
+
+    if localPath:
+        if not os.path.isfile(localPath):
+            raise Exception("Local MapMan resource not found: " + localPath)
+
+        stderr.write("COPYING " + localPath + "\n")
+        downloadName = outputName + (".gz" if resource.get("decompress") else "")
+
+        try:
+            shutil.copyfile(localPath, downloadName)
+
+            if resource.get("decompress"):
+                _decompressMapManResource(downloadName, outputName)
+
+            if resource.get("skip_header"):
+                _dropFirstLine(outputName)
+
+            _validateMapManResource(outputName, resource.get("expect"))
+            return True
+        except Exception:
+            for stale in (downloadName, outputName):
+                try:
+                    os.remove(stale)
+                except OSError:
+                    pass
+            raise
+
+    # `file` is a raw name and may contain spaces or '|', so quote it here
+    # instead of expecting every caller to pre-encode its config entry.
+    url = resource.get("url") + quote(resource.get("file"))
 
     stderr.write("DOWNLOADING " + url + "\n")
 
