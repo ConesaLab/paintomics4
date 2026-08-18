@@ -797,8 +797,8 @@ How to investigate:
 1. Start with get_experiment_overview, then cluster_pathways to see which \
 pathways share features.
 2. Go deep where the data is strongest or strangest: get_pathway_details on \
-the top-ranked pathways, compare_gene_profiles on the genes that drive them \
-(pass them all in one call).
+the top-ranked pathways -- it returns the per-gene profiles with the pathway, \
+so the genes driving it come back in the same call.
 3. Search the literature once per cluster or top pathway you intend to write \
 about -- roughly a dozen searches, not three. Each search is tagged with that \
 pathway (topic_tag), and a sub-agent is later shown only the papers tagged for \

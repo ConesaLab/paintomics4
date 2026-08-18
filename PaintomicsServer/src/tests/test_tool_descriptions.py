@@ -72,7 +72,7 @@ def test_a_timing_claim_belongs_only_to_a_tool_that_costs_time():
     """The free tools say "instant and free" and must not grow a seconds figure;
     the expensive ones carry one because the agent budgets with it."""
     free = {"get_experiment_overview", "get_pathway_details",
-            "compare_gene_profiles", "notebook_write", "submit_report"}
+            "notebook_write", "submit_report"}
     for tool in TOOLBELT:
         says_seconds = re.search(r"\b\d+\s*(?:s\b|seconds?)", tool.description or "")
         if tool.name in free:
@@ -108,6 +108,33 @@ def test_the_lead_prompt_does_not_contradict_itself_about_checking_citations():
 # referenced since. Left in place rather than deleted from a branch about the
 # agent arm -- named here so they are visible instead of merely unused.
 KNOWN_ORPHAN_PROMPTS = {"SYSTEM_PROMPT_INTERPRET_V2", "SYSTEM_PROMPT_SYNTHESIZE_V2"}
+
+
+def test_the_lead_prompt_only_names_tools_that_exist():
+    """A tool removed from TOOLBELT must also leave the standing orders.
+
+    compare_gene_profiles was dropped on measured evidence (13 calls in 72 runs,
+    none in the last 16) but stayed in step 2 of the Lead's standing orders for
+    a further round of benchmarks: the agent's own instructions told it to reach
+    for a tool the API would not let it call. The model cannot emit a call to an
+    undeclared tool, so this never raised -- it just spent the most expensive
+    prompt in the system telling the agent to plan around something absent.
+
+    Deleting a tool is exactly when this drifts, because the toolbelt and the
+    prose that documents it live in different files.
+    """
+    from src.classes.AIInterpret import prompts
+    known = {t.name for t in TOOLBELT}
+    # Every snake_case token in the prompt that looks like one of our tools:
+    # the vocabulary is closed, so match against what the package ever defined.
+    ever_defined = known | {"compare_gene_profiles", "get_gene_profile",
+                            "notebook_read", "delegate_literature"}
+    named = {w for w in re.findall(r"[a-z_][a-z_0-9]+", prompts.SYSTEM_PROMPT_LEAD_AGENT)
+             if w in ever_defined}
+    ghosts = sorted(named - known)
+    assert not ghosts, (
+        "the Lead's standing orders instruct tools that are not in TOOLBELT: %s. "
+        "Remove the instruction, or put the tool back." % ", ".join(ghosts))
 
 
 def test_no_new_orphan_prompts():
@@ -236,6 +263,7 @@ def main():
               test_descriptions_stay_affordable,
               test_a_timing_claim_belongs_only_to_a_tool_that_costs_time,
               test_the_lead_prompt_does_not_contradict_itself_about_checking_citations,
+              test_the_lead_prompt_only_names_tools_that_exist,
               test_no_new_orphan_prompts,
               test_no_new_orphan_definitions_in_the_ai_package,
               test_the_evidence_block_separates_data_claims_from_literature_claims):
