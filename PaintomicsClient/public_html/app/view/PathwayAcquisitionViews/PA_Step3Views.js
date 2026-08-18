@@ -504,11 +504,31 @@ function PA_Step3JobView() {
 
 		if(pos !== -1){
 			return colors[pos];
-		}else if(otherColors.length > 0){
+		}
+		if(otherColors && otherColors.length > 0){
 			return otherColors.shift();
-		}else{
+		}
+
+		/* The list above names only KEGG's and Reactome's classifications, and
+		   three callers inside generateNetwork pass no `otherColors` at all --
+		   they never needed to, because for those two sources the lookup always
+		   hit. Any other source fell straight through to `otherColors.length`
+		   and threw, which killed the network build with the "Building
+		   network..." spinner still on screen and no visible error. OmniPath's
+		   categories are the first to reach here.
+
+		   The fallback is derived from the name rather than taken from a shared
+		   palette because those three calls ask about the SAME node (its fill,
+		   its glyph text and its glyph stroke): shifting a palette would hand
+		   one node three different colours. */
+		if(!classificationID){
 			return "#333";
 		}
+		var hash = 0;
+		for(var c = 0; c < classificationID.length; c++){
+			hash = ((hash << 5) - hash + classificationID.charCodeAt(c)) | 0;
+		}
+		return colors[Math.abs(hash) % colors.length];
 	};
 
 	this.backButtonHandler = function() {
@@ -4811,13 +4831,32 @@ function PA_Step3PathwayTableView() {
 					return 'Find pathway in ' + store.getAt(rowIdx).get('source') + ' Database';
 				},
 				handler: function(grid, rowIndex, colIndex) {
-					var term = grid.getStore().getAt(rowIndex).get('pathwayID');
-					var db = grid.getStore().getAt(rowIndex).get('source');
+					var record = grid.getStore().getAt(rowIndex);
+					var term = record.get('pathwayID');
+					var db = record.get('source');
 					var db_link = {
 						"KEGG": "http://www.genome.jp/dbget-bin/www_bget?pathway+%term%",
 						"MapMan": "http://www.gomapman.org/search/gmm/%term%?entity=pathway",
-						"Reactome": "https://reactome.org/content/query?q=%term%"
+						"Reactome": "https://reactome.org/content/query?q=%term%",
+						"OmniPath": "https://omnipathdb.org/annotations?resources=%source%&format=json"
 					};
+
+					/* OmniPath pathway IDs are slugs this installer mints, not accessions
+					   any external site knows, so the pathway is looked up by its name. */
+					if (db === "OmniPath") {
+						var classification = String(record.get('classification') || '');
+						var resource = classification.indexOf('NetPath') !== -1 ? 'NetPath' : 'SIGNOR';
+						window.open("https://omnipathdb.org/annotations?resources=" + resource +
+							"&format=json", '_blank');
+						return;
+					}
+
+					/* A source with no entry here used to throw on the missing key and
+					   leave the button silently dead. */
+					if (!db_link[db]) {
+						console.warn("No external database link configured for source: " + db);
+						return;
+					}
 
 					window.open(db_link[db].replace("%term%", term), '_blank');
 				}

@@ -2077,6 +2077,44 @@ class PathwayAcquisitionJob(Job):
 
         return isValidPathway, pathwayInstance
 
+    #: Sources that ship no pathway diagram at all. OmniPath is a molecular
+    #: interaction network -- signed, directed edges with no canvas and no node
+    #: coordinates anywhere in the resource -- so its pathways are laid out as a
+    #: graph in the client instead of painted over a raster. Handing PIL a PNG
+    #: that was never downloaded raises FileNotFoundError and takes the whole
+    #: paint request down with it, so the lookup is skipped rather than caught.
+    DIAGRAMLESS_SOURCES = frozenset(["OmniPath"])
+
+    def getPathwayImageSize(self, keggInformationManager, source, pathwayID):
+        """Return the (width, height) of a pathway diagram, or (0, 0) if there is none.
+
+        A zero size is the client's signal to lay the pathway out itself rather
+        than to scale features onto a background image.
+        """
+        if source in self.DIAGRAMLESS_SOURCES:
+            # No PNG to measure: the installer laid the pathway out and stored
+            # the canvas it used, which is the coordinate space its gene boxes
+            # are already expressed in.
+            stored = keggInformationManager.getPathwayCanvasSizeByID(
+                self.getOrganism(), pathwayID)
+            if stored is not None:
+                return stored
+            logging.warning("STEP3 - %s PATHWAY %s HAS NO STORED CANVAS SIZE",
+                            source, pathwayID)
+            return (0, 0)
+
+        imagePath = (keggInformationManager.getDataDir(source) + 'png/'
+                     + pathwayID.replace(self.getOrganism(), "map") + ".png")
+        try:
+            return getImageSize(imagePath)
+        except (IOError, OSError) as ex:
+            # A partially installed source is a missing file, not a broken job.
+            # The features carry their own coordinates either way, so painting
+            # degrades to an unscaled layout instead of failing the request.
+            logging.warning("STEP3 - NO DIAGRAM FOR PATHWAY %s (source %s): %s",
+                            pathwayID, source, ex)
+            return (0, 0)
+
     def generateSelectedPathwaysInformation(self, selectedPathways, visibleOmics, toBSON=False):
         """
         This function...
@@ -2146,10 +2184,8 @@ class PathwayAcquisitionJob(Job):
 
             graphicalOptions = PathwayGraphicalData()
             graphicalOptions.setFeaturesGraphicalData(genesInPathway + compoundsInPathway)
-            # graphicalOptions.setImageSize(getImageSize(keggInformationManager.getKeggDataDir() + 'png/' + pathwayID.replace(self.getOrganism(), "map") + ".png"))
-            graphicalOptions.setImageSize(getImageSize(
-                keggInformationManager.getDataDir(pathwayInstance.getSource()) + 'png/' + pathwayID.replace(
-                    self.getOrganism(), "map") + ".png"))
+            graphicalOptions.setImageSize(self.getPathwayImageSize(
+                keggInformationManager, pathwayInstance.getSource(), pathwayID))
             graphicalOptions.setVisibleOmics(visibleOmics)
 
             # Set the graphical options for the pathway

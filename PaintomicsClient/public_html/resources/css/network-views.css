@@ -44,7 +44,8 @@
    each of them anyway. That was enough to push the last control onto a second
    row on a 660px panel. A zero-width item with margins costs zero. */
 .pa-net-toolbar,
-.more-net-toolbar {
+.more-net-toolbar,
+.omnipath-net-toolbar {
 	display: flex;
 	flex-wrap: wrap;
 	align-items: center;
@@ -309,7 +310,8 @@
 }
 
 .pa-net-canvas,
-.more-net-canvas {
+.more-net-canvas,
+.omnipath-net-canvas {
 	position: relative;
 	background: var(--pa-surface-sunken, #F5F4EF);
 }
@@ -348,4 +350,77 @@
 	.pa-net-toolbar-sep {
 		display: none;
 	}
+}
+
+
+/* ---- OmniPath pathway network ------------------------------------------- */
+/* The third graph surface, and the only one that IS a pathway rather than an
+   overview of pathways: OmniPath ships no diagram, so Step 4 renders its
+   pathways here instead of painting them onto a raster. It borrows the toolbar
+   band above and adds only what it genuinely needs -- a sign legend, since a
+   signed edge is the thing this source knows that a diagram does not. */
+
+.omnipath-net-toolbar {
+	justify-content: flex-start;
+	gap: 18px;
+	flex-wrap: wrap;
+}
+
+.omnipath-net-legend {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	font-size: 12px;
+	color: var(--pa-ink-label, #52525B);
+	white-space: nowrap;
+}
+
+.omnipath-key {
+	display: inline-block;
+	width: 16px;
+	height: 2px;
+	border-radius: 1px;
+	margin-left: 10px;
+	vertical-align: middle;
+}
+.omnipath-net-legend .omnipath-key:first-child { margin-left: 0; }
+
+.omnipath-net-status {
+	font-size: 12px;
+	color: var(--pa-ink-label, #52525B);
+	margin-left: auto;
+	text-align: right;
+}
+
+.omnipath-net-canvas {
+	width: 100%;
+	/* The panel body is sized by its container; the graph fills what is left
+	   under the toolbar rather than collapsing to zero height, which is what a
+	   Cytoscape container does without an explicit one. The height is then
+	   re-measured from the panel in JS once the browser has laid it out.
+
+	   The background comes from the shared .pa-net-canvas rule above, which
+	   resolves through --pa-surface-sunken. Declaring it here against a
+	   --pa-surface-canvas token that exists nowhere left the graph a bright
+	   white rectangle in the dark theme. */
+	height: calc(100% - 42px);
+	min-height: 420px;
+}
+
+.omnipath-net-field {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	font-size: 12px;
+	color: var(--pa-ink-label, #52525B);
+	white-space: nowrap;
+}
+
+.omnipath-net-field select {
+	font-size: 12px;
+	padding: 3px 6px;
+	color: var(--pa-ink, #27272A);
+	background: var(--pa-surface, #FFFFFF);
+	border: 1px solid var(--pa-border, #D4D4D8);
+	border-radius: 4px;
 }
