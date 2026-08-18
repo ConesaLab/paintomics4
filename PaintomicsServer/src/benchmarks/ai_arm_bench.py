@@ -191,7 +191,14 @@ STAGE_COUNTS = ("verify_iterations", "batches_failed", "truncated_calls",
                 "themes_retrieved", "themes_cited",
                 # Gateway weather. Round 34 saw 1 transport rate-limit retry
                 # across 8 replicates; round 35 saw 16.
-                "gateway_retries", "gateway_rate_limited")
+                "gateway_retries", "gateway_rate_limited",
+                # The sentence-repair outcome. Set in agent.py from the first
+                # commit and captured here from none of them, which is how a
+                # round got launched that could not answer its own question:
+                # the stage runs, the stats exist, and the archived row is
+                # silent. A measurement not in STAGE_* is a measurement that
+                # did not happen.
+                "sentences_repaired", "repairs_rejected", "repair_unlocatable")
 
 # Itemised bills. A per-tool breakdown is the only form in which "which tool is
 # worth its place" can be asked of the archive rather than of one live run.
@@ -203,6 +210,77 @@ STAGE_MAPS = ("tool_chars_by_tool",)
 STAGE_NOTES = ("topup_failed", "topup_skipped", "merge_rejected",
                "merge_skipped", "merge_failed", "loop_backstop",
                "deterministic_fallback")
+
+
+# Stats the two arms write that the archive deliberately does not keep, frozen
+# as of round 36. The point is the RATCHET, not the list: anything a stage
+# starts writing from now on shows up in `unarchived_stats` until somebody
+# either archives it or adds it here on purpose.
+#
+# This exists because round 36 was launched to measure sentence repair and could
+# not: agent.py had written sentences_repaired / repairs_rejected /
+# repair_unlocatable since the first commit, the bench captured none of them,
+# and the archived row was silent. The stage ran; the measurement did not. The
+# log could not stand in either -- it is configured at WARNING and the repair
+# line is INFO.
+KNOWN_UNARCHIVED = frozenset(['agent_notebook',
+     'agent_searches',
+     'agent_tool_calls',
+     'batch_citations',
+     'batches',
+     'batches_with_citations',
+     'cluster_further',
+     'cluster_pathways',
+     'cluster_standalone',
+     'cluster_units',
+     'clusters',
+     'correction_failed',
+     'correction_skipped',
+     'draft_scores',
+     'framing_failed',
+     'full_text_papers',
+     'fulltext_candidates',
+     'fulltext_failed',
+     'fulltext_skipped',
+     'fulltext_upgraded',
+     'gap_fill_applied',
+     'gaps_caveats',
+     'gaps_pathways',
+     'loop_final',
+     'merge_citations',
+     'merge_coverage',
+     'merge_gain_chars',
+     'merge_grounded',
+     'merge_mode',
+     'merge_probe_failed',
+     'papers',
+     'papers_retrieved',
+     'pmids_found',
+     'quotes_from_delegation',
+     'quotes_reused',
+     'quotes_supplied',
+     'refs_rendered',
+     'rewrite_skipped_for_time',
+     'stitch_truncated',
+     'synth_citations',
+     'synth_drafts',
+     'timed_out_at_stage',
+     'tool_calls',
+     'topup_added_refs',
+     'total_s',
+     'unquotable_markers_dropped',
+     'verification',
+     'verify_cut_short',
+     'verify_stopped_for_time',
+     'verify_unchecked'])
+
+
+def unarchived_stats(stats):
+    """Stats this run produced that nothing will keep. Empty is the good case."""
+    kept = (set(STAGE_TIMES) | set(STAGE_COUNTS) | set(STAGE_NOTES)
+            | set(STAGE_MAPS) | KNOWN_UNARCHIVED)
+    return sorted(k for k in (stats or {})
+                  if not k.startswith("_") and k not in kept)
 
 
 def _stage_budget(stats):
