@@ -1367,3 +1367,38 @@ all.
 **Also unchanged and now conspicuous:** the agent arm passes coverage again
 (16.25 vs 12.50) and fails citations. Coverage has held above base for two rounds
 running.
+
+## Round 37 pre-registration (written before the round ran)
+
+**AI_VERIFY_PREFETCH=1, sentence repair OFF.** Base's verifier stops hunting for
+the quote with tool calls and is handed the passage, extracted in Python by
+tools.py. Turn budget drops 6 -> 2, because there is nothing left to call.
+
+**Base is the clean control again.** Repair is off, so nothing else touches the
+shipped arm. The agent arm carries this round's get_pathway_details changes (per-
+layer profile summary, omics labels) and already has prefetch, so its numbers are
+not the test.
+
+**Prediction (base arm), from the agent arm's own measured result when it landed
+there** -- 29 of 29 calls returned a verdict at a median 2 464 ms, redactions
+12 -> 2, verify loop 291 s -> 117 s:
+- `verifier_raised` falls to near zero from ~5 a run. This is the direct claim:
+  53 "Max turns (6) exceeded" failures across rounds 34-36 were ALL in this arm.
+- `redacted` falls from 10.0. Each verifier death redacts a real citation for a
+  tooling reason, so removing the deaths should return those sentences.
+- `verify_loop_s` falls from 259.5 s.
+- `gateway_retries` falls from 10.0 a run: 6 turns x 25 citations x 3 iterations
+  is what was loading the gateway.
+- `citations_in_body` holds at ~22.8 or RISES. Nothing here changes what is
+  written; it changes whether a real citation survives being checked.
+
+**Falsifier.** If `redacted` does not fall while `verifier_raised` does, then the
+verifier deaths were not costing citations and something else redacts 10
+sentences a run -- which would move the target to the quote collector, since a
+citation with no quote is redacted before any verifier sees it.
+
+**Watch, do not predict.** The agent arm's context bill: `get_pathway_details`
+should fall from 56 kB a run towards ~34 kB after the per-layer summary, and
+`tool_chars` overall from ~168 kB. Coverage has beaten base for two rounds and
+this round's changes touch the data the agent reasons from, so a coverage move is
+possible in either direction and is not being predicted.
