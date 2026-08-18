@@ -56,7 +56,7 @@ from src.classes.AIInterpret import clusters as clusters_mod
 from src.classes.AIInterpret.agent import (
     AgentContext, _build_agents, bounded, configure_sdk, _model, run_hedged,
     SDK_LONG_CALL_TIMEOUT, SDK_VERIFY_CONCURRENCY, SDK_MIN_CITATIONS,
-    SDK_CALL_TIMEOUT, SENTENCE_REPAIR, _repair_sentences,
+    RelevantPMIDs, SDK_CALL_TIMEOUT, SENTENCE_REPAIR, _repair_sentences,
     reset_run_retries, run_retry_counts, set_run_deadline,
 )
 from src.classes.AIInterpret.context_builder import (
@@ -182,6 +182,25 @@ MERGE_DELEGATED = os.getenv("AI_AGENT_MERGE_DELEGATED", "1") == "1"
 # everything, which measured 4.5-11 citations because the writer saw the whole
 # reference list at once.
 MERGE_MODE = os.getenv("AI_AGENT_MERGE_MODE", "stitch")
+SCREEN_PAPERS = os.getenv("AI_AGENT_SCREEN_PAPERS", "0") == "1"
+"""Screen search hits for a quotable finding before they enter the pool.
+
+The one mechanism the shipped arm has that this arm has never had. Base runs a
+Paper Filter on every search -- "keep at most a handful", the test being whether
+the paper holds a specific quotable finding about the MECHANISM -- and this arm
+registers everything PubMed returns.
+
+Measured round 38, same jobs: base carried 27-31 papers and converted 13 of 14
+retrieved themes into cited papers; this arm carried 65 and converted 7 of 14.
+Per paper, base ships ~0.78 citations and this arm ~0.22. Retrieval VOLUME is not
+the cause -- across 72 archived runs corr(papers, citations) is only +0.16 -- so
+what differs is that base's pool is screened and this arm's is not.
+
+Deliberately inside the TOOL, not a new pipeline stage: the agent still decides
+what to search for, and the tool decides what is worth keeping. Costs one short
+call per search, which is exactly what base pays.
+"""
+
 FRAMING_MAY_CITE = os.getenv("AI_AGENT_FRAMING_MAY_CITE", "0") == "1"
 """Whether the framing call may cite papers the delegated analyses never used.
 
@@ -338,6 +357,7 @@ class LoopContext(AgentContext):
     # Did each delegated chunk get ITS OWN literature, or the fallback?
     delegate_attribution: dict = field(default_factory=dict)
     delegate_markers: int = 0                          # distinct [N] the sub-agents wrote
+    papers_screened_out: int = 0                       # hits the screen rejected
     # What each note is ABOUT, in the agent's own words -- parallel to notebook
     # so the two fallback paths keep rendering plain strings.
     note_subjects: list = field(default_factory=list)
@@ -474,7 +494,8 @@ def _code_fingerprint():
         # source alone left the exact hole this function exists to close:
         # AI_SENTENCE_REPAIR=1 and =0 run different pipelines and stamped the
         # same fingerprint. Anything that gates a stage belongs here.
-        parts.extend(["FRAMING_MAY_CITE=%s" % FRAMING_MAY_CITE,
+        parts.extend(["SCREEN_PAPERS=%s" % SCREEN_PAPERS,
+                      "FRAMING_MAY_CITE=%s" % FRAMING_MAY_CITE,
                       "TOPUP_ENABLED=%s" % TOPUP_ENABLED,
                       "SENTENCE_REPAIR=%s" % SENTENCE_REPAIR,
                       "SDK_STREAM=%s" % os.getenv("AI_SDK_STREAM", ""),
@@ -926,6 +947,58 @@ def cluster_pathways(ctx: RunContextWrapper[LoopContext]) -> str:
     return out
 
 
+async def _screen_papers(ctx, papers, query, topic_tag):
+    """Keep only the papers that could carry a quotable finding for this claim.
+
+    Base's Paper Filter, ported into this arm's search tool. Three outcomes and
+    only one of them is a judgement: a screener that ANSWERS keeps its picks, a
+    screener that fails keeps everything (a broken screen must not silently empty
+    the pool), and an explicit empty answer keeps nothing, because "nothing here
+    fits" is the most useful thing a strict filter can say.
+
+    Reuses SYSTEM_PROMPT_SEARCH_SUBAGENT and RelevantPMIDs so both arms screen to
+    the same standard -- if the standard is wrong, it is wrong in one place.
+    """
+    if not papers:
+        return papers, 0
+    listing = "\n".join(
+        "PMID %s: %s\n%s" % (p.get("pmid"), p.get("title", ""),
+                              (p.get("abstract") or "")[:600])
+        for p in papers)
+    screener = Agent[LoopContext](
+        name="Paper Screen",
+        model=_model(),
+        instructions=prompts_mod.SYSTEM_PROMPT_SEARCH_SUBAGENT,
+        model_settings=ModelSettings(temperature=0.1),
+        output_type=RelevantPMIDs,
+        tools=[],
+    )
+    prompt = ("Experiment: %s\nOrganism: %s\nTheme: %s\nQuery: %s\n\n"
+              "Candidate papers:\n%s\n\n"
+              "Return ONLY the PMIDs that could support a claim in a report about "
+              "this experiment. Be strict -- keep at most a handful. The test is "
+              "whether the paper holds a specific, quotable finding about the "
+              "MECHANISM these genes take part in. REJECT anything sharing only a "
+              "keyword -- above all a paper matched because a pathway is NAMED "
+              "after a disease -- reviews with nothing specific to quote, and "
+              "results running opposite to what is described. Precision beats "
+              "volume: a kept paper with no quotable finding COSTS a citation, "
+              "because the claim it gets attached to is removed with it. An empty "
+              "list is correct when nothing fits."
+              % (ctx.experiment_design, ctx.organism_name, topic_tag or "-",
+                 query, listing))
+    try:
+        res = await bounded(Runner.run(screener, prompt, context=ctx, max_turns=2),
+                            SDK_CALL_TIMEOUT, label="screen")
+        answered = {str(x).strip() for x in (res.final_output.pmids or [])}
+    except (Exception, asyncio.TimeoutError) as e:
+        logger.warning("[%s][loop] paper screen failed (%s); keeping all %d",
+                       ctx.job_id, e, len(papers))
+        return papers, 0
+    kept = [p for p in papers if str(p.get("pmid")) in answered]
+    return kept, len(papers) - len(kept)
+
+
 def _register_papers(c, papers, tag):
     """Give new papers a global ref_index and remember them; dedup by PMID."""
     listed = []
@@ -979,6 +1052,9 @@ async def search_literature(ctx: RunContextWrapper[LoopContext], query: str,
         new = [p for p in pmids if str(p) not in c.pmid_to_ref]
         papers = (await asyncio.to_thread(c.pubmed.fetch_abstracts, new)
                   if new else [])
+        if SCREEN_PAPERS and papers:
+            papers, dropped = await _screen_papers(c, papers, query, topic_tag)
+            c.papers_screened_out += dropped
     except Exception as e:
         out = "Search failed (%s). The budget was still spent." % e
         _trace(c, "search_literature", query, out, t0)
@@ -1584,6 +1660,7 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
         "sentence_repair": SENTENCE_REPAIR,
         "topup_enabled": TOPUP_ENABLED,
         "framing_may_cite": FRAMING_MAY_CITE,
+        "screen_papers": SCREEN_PAPERS,
         "max_turns": AGENT_MAX_TURNS,
         "gate_reserve": GATE_RESERVE_SECONDS,
         "lead_prompt_chars": len(prompts_mod.SYSTEM_PROMPT_LEAD_AGENT),
@@ -1624,6 +1701,8 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
         stats["delegate_fallback"] = ctx.delegate_attribution.get("fallback", 0)
         stats["delegate_papers_shown"] = ctx.delegate_attribution.get("papers_shown", 0)
     stats["delegate_markers"] = ctx.delegate_markers
+    if SCREEN_PAPERS:
+        stats["papers_screened_out"] = ctx.papers_screened_out
     # The context bill, itemised. TOOL_CHAR_BUDGET was enforced from the first
     # run and archived by none of them: the agent was shown its own spend on
     # every turn while the record kept no total, so no completed run could say
