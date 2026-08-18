@@ -140,6 +140,29 @@ def test_the_description_tells_the_agent_what_subject_is_for():
     assert len(tool.description) <= 700
 
 
+def test_the_blank_subject_rate_is_recorded():
+    """The falsifier I pre-registered and then made unmeasurable.
+
+    When `subject` was added to notebook_write I wrote: "a blank-subject rate
+    above ~30% is the same verdict by another route -- the model declining the
+    field is evidence the field is wrong". The argument then shipped for several
+    rounds with nothing recording how often it arrived empty, so that test could
+    never be run.
+
+    A falsifier whose metric nobody records is not a falsifier.
+    """
+    import inspect
+    from src.benchmarks.ai_arm_bench import STAGE_COUNTS
+    from src.classes.AIInterpret import agent_loop as loop
+    for key in ("note_subjects_blank", "note_subjects_total"):
+        assert key in STAGE_COUNTS, "%s is not archived" % key
+    src = inspect.getsource(loop)
+    assert 'stats["note_subjects_blank"]' in src
+    # counted only when notes exist, so absent stays distinct from "all filled"
+    i = src.index('stats["note_subjects_blank"]')
+    assert "if ctx.note_subjects:" in src[max(0, i - 400):i]
+
+
 def _check(name, fn):
     try:
         fn()
@@ -165,7 +188,8 @@ def main():
               test_a_note_with_no_subject_still_falls_back_to_the_old_reader,
               test_a_short_subjects_list_does_not_crash,
               test_the_tool_records_one_subject_per_note,
-              test_the_description_tells_the_agent_what_subject_is_for):
+              test_the_description_tells_the_agent_what_subject_is_for,
+              test_the_blank_subject_rate_is_recorded):
         _check(t.__name__, t)
     print("\nPassed: %d / %d" % (len(_PASSED), len(_PASSED) + len(_FAILED)))
     if _FAILED:

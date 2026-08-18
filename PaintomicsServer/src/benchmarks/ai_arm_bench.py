@@ -226,6 +226,10 @@ STAGE_COUNTS = ("verify_iterations", "batches_failed", "truncated_calls",
                 # Claims destroyed, as distinct from `redacted`, which counts
                 # markers removed plus dropped reference entries.
                 "sentences_dropped", "topup_fulltext_gained",
+                # Does the agent fill notebook_write's `subject`? The
+                # pre-registered falsifier for that argument was a blank rate
+                # above ~30%, and nothing recorded it.
+                "note_subjects_blank", "note_subjects_total",
                 # Turns spent re-reading an abstract already in the listing.
                 "abstract_rereads")
 

@@ -1926,6 +1926,16 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
     stats["agent_tool_calls"] = len(ctx.trace)
     stats["agent_searches"] = ctx.searches_used
     stats["agent_notebook"] = len(ctx.notebook)
+    # Whether the agent actually fills the `subject` argument, which is the
+    # falsifier I pre-registered for it and then made unmeasurable: "a blank
+    # rate above ~30% is the verdict by another route -- the model declining the
+    # field is evidence the field is wrong". The field has been required on
+    # notebook_write for several rounds and nothing recorded how often it
+    # arrived empty, so the test could never run.
+    if ctx.note_subjects:
+        blank = sum(1 for t in ctx.note_subjects if not str(t).strip())
+        stats["note_subjects_blank"] = blank
+        stats["note_subjects_total"] = len(ctx.note_subjects)
     if ctx.delegate_attribution:
         stats["delegate_matched"] = ctx.delegate_attribution.get("matched", 0)
         stats["delegate_fallback"] = ctx.delegate_attribution.get("fallback", 0)
