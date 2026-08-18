@@ -1141,3 +1141,43 @@ query takes only PubMed's top five hits, against a 40-search budget (200 papers
 theoretical maximum). Raising it is the most direct "find more" change
 available and the key makes it affordable, but landing it in the same round as
 the key would make both unattributable. It waits for round 36.
+
+## Round 34 scored against the prediction written before it ran
+
+| metric (mean of 4) | agent-v33 | agent-v34 | base-v33 | base-v34 |
+|---|---|---|---|---|
+| wall_s | 681 | **365** | 400 | 430 |
+| citations_in_body | 15.8 | 15.2 | 21.2 | 21.2 |
+| redacted | 23.8 | **4.0** | 4.2 | 4.0 |
+| prose_pathways_covered | 13.5 | 12.2 | 12.5 | 13.0 |
+
+**1. `failed_citations` falls — UNMEASURABLE, and that is my error.** The stat
+was added during this session, so round 33's archived rows have no value for it.
+They read 0.00 because the key is absent, not because nothing failed. I
+pre-registered a prediction against a baseline that does not exist. Same for
+`verify_loop_s` (prediction 3): no round-33 value, nothing to compare.
+A prediction is only falsifiable if the baseline recorded the metric.
+
+**2. `redacted` falls in both arms, further in the agent arm — HALF CONFIRMED.**
+The agent arm fell 23.8 -> 4.0, an 83% drop, and now MATCHES base (4.0 vs 4.0)
+on the rule that had been its worst. The base arm did not move (4.2 -> 4.0),
+against a prediction that it would fall. Base n=8 in v33 against n=4 here.
+
+**3. No replicate exceeds 600 s — CONFIRMED, 8/8**, max 466 s, and the agent
+arm's mean wall time fell 681 -> 365 s (-46%). The deadline-aware transport and
+the verify-loop budget did what they were built to do.
+
+**Falsifier NOT triggered.** It said: if `redacted` does not fall, the correction
+rewrite was never the binding constraint, and citation REUSE becomes the target.
+Redaction fell by 83% in the agent arm, so the rewrite WAS binding there.
+
+**The five pre-registered rules: still NOT better.** 3 of 5 pass. It fails
+citations (15.2 vs 21.2) and coverage (12.2 vs 13.0) -- the same two it failed in
+round 33 (15.8, 13.5). Read together with the drop in redactions, the reading is
+specific: this round fixed the DAMAGE the agent arm was doing to its own report
+and did not touch its OUTPUT. Ceiling and floor are separate problems.
+
+**What that leaves as the target.** The arm retrieves 119 papers to cite 15;
+base retrieves 34 to cite 21. Conversion, not retrieval, and not damage.
+`tags_searched` / `tags_with_a_cited_paper` land in round 35 to say whether the
+loss is themes it searches but never writes about.
