@@ -626,3 +626,32 @@ user and stops there. Dead code hides behind dead code.
 They are pinned in a test allowlist rather than deleted -- removing shipped code
 belongs in a change against master, not in a branch about the agent arm -- and
 the guard fails on any NEW orphan, verified by adding one.
+
+## References that nothing cites (2026-08-18)
+
+A citation-integrity sweep over every stored report, checking three things: body
+citations with no reference entry, reference entries never cited, and gaps in
+the numbering.
+
+Dangling citations: one report, from March, pre-fix. The redact/renumber chain
+is sound there.
+
+Uncited entries: **11 of 43 reports with a reference section**, all recent, both
+arms. `QEJ1240C1u` listed 21 references for 18 citations; the extra three were
+papers on non-small cell lung cancer, liver cancer and breast cancer -- real
+papers, retrieved for the run, cited by nothing in the report.
+
+The cause is one line in `renumber_citations`: it collects indices with
+`re.finditer` over the WHOLE document, so an entry whose citations all vanished
+-- redacted, or dropped when the report was rewritten -- still contributes its
+index, gets renumbered with the rest, and survives. Nothing ever removed it.
+
+This is not cosmetic. The reference list is the reader's measure of how much
+evidence stands behind the report, and three of those twenty-one stood behind
+nothing.
+
+Uncited entries are now pruned before renumbering, which also closes the
+numbering gaps they left. Conservative where it matters: a report whose
+citations were all removed keeps its section rather than being left with an
+empty heading. Five tests; over the stored corpus the change would have removed
+17 entries across 11 reports and touched nothing else.

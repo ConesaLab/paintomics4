@@ -204,6 +204,64 @@ def test_the_agent_loop_sorts_after_renumbering():
         "the agent loop's sort has to run after the renumbering")
 
 
+def test_an_uncited_reference_is_dropped():
+    """The list is the reader's measure of how much evidence stands behind the
+    report. Measured over the stored reports, 11 of 43 listed entries the body
+    never cited -- one listed 21 references for 18 citations, the extra three
+    being papers on unrelated cancers."""
+    report = ("A claim [1]. Another [2].\n\n### References\n\n"
+              "[1] Smith. Nature 2020.\n"
+              "[2] Jones. Cell 2021.\n"
+              "[9] Chen. Breast cancer review 2022.\n")
+    out, mapping = renumber_citations(report)
+    refs = out.split("### References", 1)[1]
+    assert "Chen" not in refs, "an uncited reference survived: %r" % refs
+    assert "Smith" in refs and "Jones" in refs
+    assert 9 not in mapping, "the dropped entry is still in the mapping: %s" % mapping
+
+
+def test_a_dropped_entry_takes_its_continuation_lines():
+    report = ("A claim [1].\n\n### References\n\n"
+              "[1] Smith. Nature 2020.\n"
+              "    **Cited Text:** the sentence that supports it.\n"
+              "[9] Chen. Unrelated 2022.\n"
+              "    **Cited Text:** a quote nobody cites.\n")
+    out, _ = renumber_citations(report)
+    refs = out.split("### References", 1)[1]
+    assert "a quote nobody cites" not in refs, (
+        "the dropped entry left its quote behind: %r" % refs)
+    assert "the sentence that supports it" in refs
+
+
+def test_pruning_closes_the_numbering_gaps():
+    report = ("Only this one [7].\n\n### References\n\n"
+              "[3] A. 2020.\n[7] B. 2021.\n[9] C. 2022.\n")
+    out, _ = renumber_citations(report)
+    body, refs = out.split("### References", 1)
+    listed = [int(n) for n in re.findall(r"^\s*\[(\d+)\]", refs, re.M)]
+    assert listed == [1], "expected a single renumbered entry, got %s" % listed
+    assert "[1]" in body and "B." in refs
+
+
+def test_a_report_with_no_surviving_citations_keeps_its_section():
+    """Conservative on purpose: pruning everything would leave an empty heading,
+    which reads as a rendering failure rather than an honest empty result."""
+    report = "Everything was redacted.\n\n### References\n\n[1] Smith. Nature 2020.\n"
+    out, _ = renumber_citations(report)
+    assert "Smith" in out, "the section was emptied instead of left alone"
+
+
+def test_a_cited_entry_is_never_dropped_by_pruning():
+    report = ("Claims [1] and [2] and [3].\n\n### References\n\n"
+              "[1] A. 2020.\n[2] B. 2021.\n[3] C. 2022.\n")
+    out, mapping = renumber_citations(report)
+    refs = out.split("### References", 1)[1]
+    for name in ("A.", "B.", "C."):
+        assert name in refs, "%s was dropped though it is cited" % name
+    assert len(mapping) == 3
+
+
+
 def main():
     for t in (test_renumbering_alone_leaves_the_section_scrambled,
               test_final_section_reads_in_order,
@@ -215,6 +273,11 @@ def main():
               test_single_entry_is_untouched,
               test_ten_sorts_after_nine_not_before_it,
               test_the_agent_workflow_sorts_after_renumbering,
+              test_an_uncited_reference_is_dropped,
+              test_a_dropped_entry_takes_its_continuation_lines,
+              test_pruning_closes_the_numbering_gaps,
+              test_a_report_with_no_surviving_citations_keeps_its_section,
+              test_a_cited_entry_is_never_dropped_by_pruning,
               test_the_agent_loop_sorts_after_renumbering):
         _check(t.__name__, t)
 

@@ -482,6 +482,48 @@ def redact_unverified_v2(report_text, failed_citations):
     return result, removed
 
 
+def _drop_uncited_references(report_text):
+    """Remove reference entries the body never cites.
+
+    Indices are collected from the whole document, so an entry whose citations
+    all disappeared -- redacted, or dropped when the report was rewritten --
+    kept its place in the list and was renumbered along with the rest. Measured
+    over the stored reports, 11 of 43 carried at least one: one report listed 21
+    references for 18 citations, the extra three being papers on unrelated
+    cancers.
+
+    That is not a cosmetic problem. The reference list is the reader's measure of
+    how much evidence stands behind the report, and three of those twenty-one
+    stood behind nothing.
+
+    Conservative by design: it prunes only when at least one citation survives in
+    the body, so a report whose citations were all removed keeps its section
+    rather than being left with an empty heading.
+    """
+    header = re.search(r'^### References\s*$', report_text, re.MULTILINE)
+    if not header:
+        return report_text
+    body, refs = report_text[:header.start()], report_text[header.start():]
+    cited = {int(n) for n in re.findall(r'\[(\d+)\]', body)}
+    if not cited:
+        return report_text
+
+    kept, dropping = [], False
+    for line in refs.split("\n"):
+        entry = re.match(r'\s*\[(\d+)\]', line)
+        if entry:
+            dropping = int(entry.group(1)) not in cited
+            if dropping:
+                continue
+        elif dropping:
+            # continuation lines of a dropped entry (indented, or its quote)
+            if line.startswith("    ") or line.strip().startswith("**Cited Text:**"):
+                continue
+            dropping = False
+        kept.append(line)
+    return body + "\n".join(kept)
+
+
 def renumber_citations(report_text):
     """Renumber [N] citations sequentially starting from [1].
 
@@ -491,6 +533,7 @@ def renumber_citations(report_text):
     Returns (renumbered_report, old_to_new_mapping).
     """
     report_text = normalize_citation_markers(report_text)
+    report_text = _drop_uncited_references(report_text)
     # 1. Collect all [N] indices used in the report (body + references), in order of first appearance
     all_indices = []
     seen = set()
