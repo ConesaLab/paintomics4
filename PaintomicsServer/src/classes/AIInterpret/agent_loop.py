@@ -602,6 +602,43 @@ def _unrepresented_notes(notebook, text, limit=5, subjects=None):
     return missing[:limit]
 
 
+async def _upgrade_new_citations(ctx, stats, refs):
+    """Fetch full text for papers a later stage decided to cite.
+
+    Bounded by the same clock reserve as every other optional step: what it does
+    not reach stays an abstract, and the gate redacts whatever cannot be quoted --
+    which is exactly the behaviour this exists to reduce, not to replace.
+    """
+    thin = [ctx.paper_index[r] for r in (refs or [])
+            if r in ctx.paper_index
+            and ctx.paper_index[r].get("fetch_tier") == "abstract_only"]
+    if not thin:
+        return
+    left = (ctx.started_at + AGENT_RUN_SECONDS) - time.time() - GATE_MIN_SECONDS
+    if left < 20:
+        stats["topup_fulltext_skipped"] = "%.0fs left" % left
+        return
+    t0 = time.time()
+    try:
+        upgraded = await bounded(
+            asyncio.to_thread(ctx.pubmed.fetch_papers,
+                              [p["pmid"] for p in thin[:FULLTEXT_MAX_PAPERS]]),
+            min(left, 60), label="top-up full text")
+        by_pmid = {str(p.get("pmid")): p for p in (upgraded or [])}
+        gained = 0
+        for paper in thin[:FULLTEXT_MAX_PAPERS]:
+            fresh = by_pmid.get(str(paper.get("pmid")))
+            if fresh and fresh.get("fetch_tier") != "abstract_only":
+                fresh["ref_index"] = paper["ref_index"]
+                fresh["pathways"] = paper.get("pathways", [])
+                ctx.paper_index[paper["ref_index"]] = fresh
+                gained += 1
+        stats["topup_fulltext_gained"] = gained
+    except (Exception, asyncio.TimeoutError) as e:
+        stats["topup_fulltext_failed"] = "%s: %s" % (type(e).__name__, e)
+    stats["topup_fulltext_s"] = round(time.time() - t0, 1)
+
+
 def _uncited_papers(paper_index, cited, limit=12):
     """Retrieved papers nothing in the draft cites, newest reference first.
 
@@ -2249,6 +2286,23 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
                 # is prose, which is how a stage can look free and not be.
                 stats["topup_added_refs"] = sorted(set(cited_after)
                                                    - set(cited_now))
+                # Give the newly cited papers the full text the upgrade could
+                # not have fetched for them.
+                #
+                # The upgrade earlier in this function selects `thin` = papers
+                # ALREADY cited that are abstract-only. The top-up then cites
+                # papers that were NOT cited -- by definition the ones the
+                # upgrade skipped -- so every citation it adds points at an
+                # abstract, and a specific mechanistic claim rarely has a
+                # quotable sentence in one.
+                #
+                # That is the whole of rule 3's failure. Measured across rounds
+                # 39-41, topup_added_failed EQUALS failed_citations in every
+                # replicate: each failed citation was one the top-up added. The
+                # shipped arm has no such problem because it batch-fetches full
+                # text for everything it retrieves, and its top-up fails 0.0.
+                await _upgrade_new_citations(ctx, stats,
+                                             stats["topup_added_refs"])
             else:
                 stats["topup_rejected"] = True
         except (Exception, asyncio.TimeoutError) as e:
