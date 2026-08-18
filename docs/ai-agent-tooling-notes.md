@@ -454,3 +454,30 @@ recorded as such.
 Nothing in the agent was changed on the strength of this. Eight changes already
 await round 25, and a ninth argued from correlation is how a bundle becomes
 unattributable.
+
+## Silent-degradation audit (2026-08-18)
+
+Two of my own helpers failed silently in one session -- the code fingerprint
+stamped "unknown" from a NameError, and the outcome stamp would have discarded a
+finished report -- so every exception handler on the AI path was audited by AST.
+
+Of 38 swallowing handlers, 21 are blanket (`except Exception`) and log nothing.
+The first pass flagged far more, but most turned out to be narrow, correct
+swallows: a `Retry-After` header that will not parse, a publication year that is
+not a number. Coarse greps overstate this; the type matters.
+
+**The audit's honest result is that most of these are fine.** The agent loop's
+failures record into `stats[...]` -- `merge_failed`, `framing_failed`,
+`fulltext_failed`, `correction_failed` -- which lands in the stored record and is
+readable afterwards. That is not silence. Two handlers in `run_ai_agent` swallow
+a failed error-status write and a failed connection close, both already beneath
+a `logger.exception`, and both defensible.
+
+**One was worth fixing.** `build_partition` applies a minimum-features filter by
+reading pathway totals from the installed network file. If that file is missing
+the loader returns `{}` by design and the filter is skipped -- so pathways the
+caller asked to exclude re-enter the universe, the clustering runs over a wider
+set than requested, and nothing anywhere says so. Failing soft is right here;
+failing silently is not. It now warns, naming the organism and the requested
+threshold, and four tests pin that the warning fires when the filter is skipped
+and stays quiet when none was asked for.
