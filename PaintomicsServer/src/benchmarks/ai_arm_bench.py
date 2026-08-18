@@ -165,6 +165,26 @@ def cmd_run(args):
     return 0 if metrics["status"] == "done" else 1
 
 
+# Where the ten minutes went. Archived per run so a round is diagnosable
+# afterwards: until now only wall_s survived, so a 602 s timeout and a 240 s
+# run were equally opaque about which stage ate the budget.
+STAGE_TIMES = ("triage_s", "plan_s", "retrieval_s", "interpret_s", "gap_fill_s",
+               "synth_s", "topup_s", "verify_loop_s", "verify_s",       # shipped arm
+               "loop_s", "fulltext_s", "quotes_s", "merge_s")           # agent arm
+STAGE_COUNTS = ("verify_iterations", "batches_failed", "truncated_calls",
+                "forced_synthesis", "topup_added", "quotes_unverifiable")
+
+
+def _stage_budget(stats):
+    """Timing and retry counters, kept flat so they land in the archived JSON."""
+    out = {}
+    for key in STAGE_TIMES + STAGE_COUNTS:
+        value = stats.get(key)
+        if isinstance(value, (int, float)):
+            out[key] = round(value, 1) if key.endswith("_s") else value
+    return out
+
+
 SALVAGE_MARK = "**Incomplete interpretation.**"
 _SALVAGE_STAGE = re.compile(r"last completed stage:\s*([^)]+)\)")
 
@@ -217,7 +237,8 @@ def _measure(record, arm, job_id, wall, response=None):
     # base-r2 timed out at "references rendered" and reported 30 citations with
     # 0 redactions, its best-looking numbers of the round, precisely because the
     # gate never ran. Counted as a run, flagged, and kept out of the means.
-    stage = (record.get("stats") or {}).get("timed_out_at_stage")
+    stats = record.get("stats") or {}
+    stage = stats.get("timed_out_at_stage")
     if not stage:
         # The salvage stamps its own header into the report. Read that too: the
         # stats dict is per-run and can be absent (an older metrics file, a
@@ -225,7 +246,7 @@ def _measure(record, arm, job_id, wall, response=None):
         # travels with the text the user actually sees.
         stage = _salvage_stage(report)
     partial = bool(stage)
-    return {
+    row = {
         "arm": arm,
         "jobID": job_id,
         "status": record.get("status"),
@@ -254,6 +275,8 @@ def _measure(record, arm, job_id, wall, response=None):
         "forced_synthesis": stats.get("forced_synthesis", False),
         "detail": record.get("detail"),
     }
+    row.update(_stage_budget(stats))
+    return row
 
 
 # -- score -----------------------------------------------------------------

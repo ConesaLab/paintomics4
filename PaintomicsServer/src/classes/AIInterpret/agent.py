@@ -155,6 +155,15 @@ SDK_LONG_CALL_TIMEOUT = float(os.getenv("AI_SDK_LONG_CALL_TIMEOUT", "600"))
 # has stalled somewhere the phase caps did not reach; better an error the user
 # can retry than a job that reads as running for the rest of the day.
 AI_MAX_RUN_SECONDS = float(os.getenv("AI_MAX_RUN_SECONDS", "2700"))
+# What the pipeline must keep in hand after the verify loop: quote collection
+# (capped at AI_QUOTE_DEADLINE, 45 s), reference rendering, the programmatic
+# redaction net and the save. Measured at 0.0-0.1 s for the net itself, so this
+# is dominated by the quote pass.
+VERIFY_TAIL_RESERVE = float(os.getenv("AI_VERIFY_TAIL_RESERVE", "60"))
+# One verification fan-out, before any has been measured in this run.
+VERIFY_ITER_RESERVE = float(os.getenv("AI_VERIFY_ITER_RESERVE", "90"))
+# A correction rewrite is a full-report synthesis echo (~70 s of a 347 s run).
+VERIFY_REWRITE_RESERVE = float(os.getenv("AI_VERIFY_REWRITE_RESERVE", "90"))
 
 _SYSTEM_STOPWORDS = frozenset("""
 a an the and or of in on at to for from with without by as is are was were be
@@ -885,6 +894,35 @@ def _build_agents():
 # Orchestration
 # ---------------------------------------------------------------------------
 
+def _budget_allows(left, measured_cost, default_cost,
+                   reserve=None):
+    """Is there room for one more unit of OPTIONAL work before the deadline?
+
+    Returns (allowed, needed). ``measured_cost`` is this run's own last
+    iteration when there has been one; the default is only used before any
+    measurement exists, because citation counts and gateway weather move the
+    real cost by 3x between runs. The 1.2 factor covers an iteration that runs
+    slower than the last one -- being wrong here costs the whole report.
+    """
+    if reserve is None:
+        reserve = VERIFY_TAIL_RESERVE
+    needed = (measured_cost * 1.2 if measured_cost else default_cost) + reserve
+    return left >= needed, needed
+
+
+def _seconds_left(run_start):
+    """Seconds until the deadline that kills the whole run.
+
+    The 10-minute cap is enforced by one asyncio.wait_for around the entire
+    pipeline, so until now no phase could see it coming: the verify loop would
+    start a 200 s iteration with 60 s left and the run died mid-rewrite. Every
+    phase that can decide NOT to do more work should consult this first --
+    stopping early leaves a complete, redacted report, where being killed
+    leaves a partial one carrying unverified citations.
+    """
+    return AI_MAX_RUN_SECONDS - (time.time() - run_start)
+
+
 async def _run_async(job_instance, job_id, experiment_design, budgets, stats,
                      hooks=None):
     def _hb(status, percent, detail):
@@ -897,6 +935,7 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats,
         if hooks and hooks.get("cancelled") and hooks["cancelled"]():
             raise InterruptedError("Cancelled")
 
+    run_start = time.time()
     configure_sdk()
     agents = _build_agents()
 
@@ -1727,7 +1766,26 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats,
     t0 = time.time()
     verify_iters = 0
     previous_failures = None
+    iteration_cost = None            # measured in this run, not guessed
     for _iteration in range(AI_MAX_VERIFICATION_ITERATIONS):
+        # An iteration that the deadline will kill is worse than no iteration:
+        # the run dies here and ships a partial report whose citations were
+        # never checked, where stopping now ships a complete one with the
+        # failures redacted. Cost is this run's own measured iteration once
+        # there is one -- citation counts and gateway weather vary too much for
+        # a fixed estimate.
+        left = _seconds_left(run_start)
+        affordable, need = _budget_allows(left, iteration_cost,
+                                          VERIFY_ITER_RESERVE)
+        if not affordable:
+            logger.info("[%s][sdk] stopping verification after %d iteration(s): "
+                        "%.0fs left, an iteration needs ~%.0fs. The remaining "
+                        "citations go to the programmatic net.",
+                        job_id, verify_iters, left, need)
+            stats["verify_stopped_for_time"] = "%.0fs left, %.0fs needed" % (
+                left, need)
+            break
+        iteration_started = time.time()
         citations = parse_references_section(report)
         to_verify = [c for c in citations if c.get("cited_text")]
         if not to_verify:
@@ -1783,6 +1841,7 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats,
                         len(failed))
             break
         previous_failures = len(failed)
+        iteration_cost = time.time() - iteration_started
         # On the final permitted iteration a correction is a rewrite nothing
         # will re-verify, and the programmatic net redacts whatever still fails
         # either way -- so it buys no accuracy and costs a full synthesis pass
@@ -1795,7 +1854,19 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats,
         # The rewrite is a full-report echo like the top-up, and it is
         # optional in the same way: the programmatic net (phase 6) redacts
         # whatever still fails. So a rewrite that times out or raises ends the
-        # loop with the report as it stands, rather than ending the run.
+        # loop with the report as it stands, rather than ending the run -- and
+        # for the same reason it is not worth starting inside the last minutes
+        # of the budget, where it can only turn a finished report into a killed
+        # one.
+        left = _seconds_left(run_start)
+        affordable, _ = _budget_allows(left, None, VERIFY_REWRITE_RESERVE)
+        if not affordable:
+            logger.info("[%s][sdk] skipping the correction rewrite: %.0fs left, "
+                        "it needs ~%.0fs; %d citation(s) will be redacted",
+                        job_id, left,
+                        VERIFY_REWRITE_RESERVE + VERIFY_TAIL_RESERVE, len(failed))
+            stats["rewrite_skipped_for_time"] = "%.0fs left" % left
+            break
         try:
             corr = await bounded(Runner.run(
                 agents["synth"],
