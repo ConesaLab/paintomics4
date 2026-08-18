@@ -40,6 +40,7 @@ import logging
 import os
 import re
 import time
+from collections import OrderedDict
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -670,6 +671,51 @@ def _ctx_by_id(ctx):
     return {p["id"]: p for p in ctx.pathways}
 
 
+def _profile_summary(profiles):
+    """One line per OMICS LAYER, not one per feature.
+
+    A tool should answer, not dump. Measured on a real job: 8 pathways showed 80
+    genes carrying 540 omic profiles -- 6.8 per gene -- and 355 of them were
+    miRNA-seq, because several miRNAs target one gene. Ccr2 alone showed SEVEN
+    profiles, five of them anonymous miRNA series: no identity is carried on a
+    profile, so the agent could not tell them apart, cite one, or act on the
+    difference. Five unnamed 56-character series is noise that costs context in
+    every later Decide turn.
+
+    A layer with one feature still shows its series -- that is the trustworthy,
+    identifiable form. A layer with several is summarised: how many, the
+    direction split, and the strongest feature's own series, which is the one an
+    interpretation would reach for. start_end_fc, peak_value and peak_timepoint
+    were already computed for every profile and used by nothing.
+    """
+    layers = OrderedDict()
+    for op in (profiles or []):
+        name = op.get("omic_name") or op.get("omic") or "omic?"
+        layers.setdefault(name, []).append(op)
+    out = []
+    for name, ops in layers.items():
+        if len(ops) == 1:
+            op = ops[0]
+            out.append("%s: %s (%s)"
+                       % (name, op.get("values", op.get("value_pairs", "")),
+                          op.get("pattern", "")))
+            continue
+
+        def _fc(op):
+            try:
+                return float(op.get("start_end_fc") or 0.0)
+            except (TypeError, ValueError):
+                return 0.0
+        up = sum(1 for op in ops if _fc(op) > 0)
+        strongest = max(ops, key=lambda op: abs(_fc(op)))
+        out.append("%s: %d features, %d up / %d down; strongest %+.2f "
+                   "start->end: %s (%s)"
+                   % (name, len(ops), up, len(ops) - up, _fc(strongest),
+                      strongest.get("values", strongest.get("value_pairs", "")),
+                      strongest.get("pattern", "")))
+    return "; ".join(out)
+
+
 def _pathway_block(p):
     lines = ["### %s (%s, %s)" % (p.get("name"), p.get("id"), p.get("source"))]
     lines.append("Combined p=%.3g · global p=%s · significant omic layers: %s"
@@ -685,11 +731,7 @@ def _pathway_block(p):
         # Found by measuring context cost: get_pathway_details is 33.7% of the
         # per-tool character bill, the largest single consumer, so it was the
         # first thing read closely.
-        profs = "; ".join(
-            "%s: %s (%s)" % (op.get("omic_name") or op.get("omic") or "omic?",
-                             op.get("values", op.get("value_pairs", "")),
-                             op.get("pattern", ""))
-            for op in (g.get("omic_profiles") or []))
+        profs = _profile_summary(g.get("omic_profiles"))
         lines.append("- %s%s [effect %.2f] %s"
                      % (g.get("symbol"), "*" if g.get("relevant") else "",
                         g.get("effect_size") or 0, profs))
