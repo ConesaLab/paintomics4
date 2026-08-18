@@ -28,6 +28,22 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../.
 from agents import RunContextWrapper                      # noqa: E402
 from src.classes.AIInterpret import agent_loop as L       # noqa: E402
 
+
+def _isolate_trace_archive():
+    """Keep test traces out of the real archive.
+
+    _archive_trace writes every run to CLIENT_TMP/ai_traces, which is the corpus
+    the tool-usage benchmark reads. Unit tests that drive real tools were writing
+    there too -- five files, and six simulated faults that the analyzer then
+    reported as a defect in get_experiment_overview.
+    """
+    import tempfile
+    L._archive_trace = lambda ctx: None
+    return tempfile.gettempdir()
+
+
+_isolate_trace_archive()
+
 _PASSED, _FAILED = [], []
 
 
