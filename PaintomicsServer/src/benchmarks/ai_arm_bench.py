@@ -168,7 +168,8 @@ def cmd_run(args):
 # Where the ten minutes went. Archived per run so a round is diagnosable
 # afterwards: until now only wall_s survived, so a 602 s timeout and a 240 s
 # run were equally opaque about which stage ate the budget.
-STAGE_TIMES = ("triage_s", "plan_s", "retrieval_s", "interpret_s", "gap_fill_s",
+STAGE_TIMES = ("verify_fanout_s", "verify_repair_s",   # the two halves of the loop
+               "triage_s", "plan_s", "retrieval_s", "interpret_s", "gap_fill_s",
                "synth_s", "topup_s", "verify_loop_s", "verify_s",       # shipped arm
                "loop_s", "fulltext_s", "quotes_s", "merge_s")           # agent arm
 STAGE_COUNTS = ("verify_iterations", "batches_failed", "truncated_calls",
@@ -198,7 +199,8 @@ STAGE_COUNTS = ("verify_iterations", "batches_failed", "truncated_calls",
                 # the stage runs, the stats exist, and the archived row is
                 # silent. A measurement not in STAGE_* is a measurement that
                 # did not happen.
-                "sentences_repaired", "repairs_rejected", "repair_unlocatable")
+                "sentences_repaired", "repairs_rejected", "repair_unlocatable",
+                "verify_citations_checked", "verify_memo_skipped")
 
 # Itemised bills. A per-tool breakdown is the only form in which "which tool is
 # worth its place" can be asked of the archive rather than of one live run.

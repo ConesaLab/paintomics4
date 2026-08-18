@@ -964,6 +964,24 @@ def _build_agents():
 # ---------------------------------------------------------------------------
 
 SENTENCE_REPAIR = os.getenv("AI_SENTENCE_REPAIR", "0") == "1"
+VERIFY_MEMO = os.getenv("AI_VERIFY_MEMO", "0") == "1"
+
+
+def _verdict_key(cit):
+    """What a verdict is actually a verdict ABOUT.
+
+    A citation is checked by asking whether one quote supports one sentence. If
+    neither the quote nor the sentence has changed, the answer cannot have
+    changed either -- so re-asking is redundant BY CONSTRUCTION, not by
+    assumption about the model.
+
+    The loop re-verifies every citation on every iteration. A base run carries
+    ~25 citations through 3 iterations, and a repair round that fixes one
+    sentence leaves 24 of them byte-identical; they are all asked again anyway,
+    each by a six-turn verifier agent.
+    """
+    return (cit.get("ref_index"), (cit.get("claim_sentence") or "").strip(),
+            (cit.get("cited_text") or "").strip())
 SENTENCE_REPAIR_WORKERS = int(os.getenv("AI_SENTENCE_REPAIR_WORKERS", "6"))
 
 
@@ -1925,6 +1943,7 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats,
     t0 = time.time()
     verify_iters = 0
     previous_failures = None
+    verified_before = set()          # verdict keys that came back supported
     iteration_cost = None            # measured in this run, not guessed
     for _iteration in range(AI_MAX_VERIFICATION_ITERATIONS):
         # An iteration that the deadline will kill is worse than no iteration:
@@ -1979,9 +1998,31 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats,
         # same: whatever does not finish in time counts as unverified, which is
         # exactly what phase 6 redacts deterministically in ~0.1 s. Stopping
         # early costs a redaction; overrunning costs the whole interpretation.
+        if VERIFY_MEMO and verified_before:
+            fresh = [c for c in to_verify if _verdict_key(c) not in verified_before]
+            stats["verify_memo_skipped"] = (stats.get("verify_memo_skipped", 0)
+                                            + len(to_verify) - len(fresh))
+            to_verify = fresh
+            if not to_verify:
+                logger.info("[%s][sdk] every citation is unchanged and already "
+                            "verified; nothing left to check", job_id)
+                break
         budget = max(20.0, _seconds_left(run_start) - VERIFY_TAIL_RESERVE)
+        # Split the loop's cost where the two halves actually divide. Round 36
+        # replaced the full-report rewrite with parallel per-sentence repairs and
+        # verify_loop_s did not move (230 s against 250 s) on a replicate that
+        # repaired ONE sentence -- so the rewrite was never what the loop spends
+        # its time on. What is left is this fan-out: each citation gets a
+        # SIX-TURN verifier agent, and with ~25 citations at concurrency 8 that
+        # is several batches of a tool loop, three times over. Timed rather than
+        # inferred, because inferring it is how the wrong half got optimised.
+        _t_fanout = time.time()
         tasks = [asyncio.ensure_future(_verify_one(c)) for c in to_verify]
         done, pending = await asyncio.wait(tasks, timeout=budget)
+        stats["verify_fanout_s"] = (stats.get("verify_fanout_s", 0.0)
+                                    + time.time() - _t_fanout)
+        stats["verify_citations_checked"] = (
+            stats.get("verify_citations_checked", 0) + len(to_verify))
         for task in pending:
             task.cancel()
         if pending:
@@ -1996,6 +2037,8 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats,
             v = _parse_json_verdict(text) if text else {
                 "text_match": False, "supports_claim": False,
                 "reasoning": "Verification error"}
+            if v.get("text_match") and v.get("supports_claim"):
+                verified_before.add(_verdict_key(cit))
             if not v.get("text_match") or not v.get("supports_claim"):
                 failed.append({"ref_index": cit["ref_index"],
                                "reason": v.get("reasoning", "Verification failed"),
@@ -2050,6 +2093,7 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats,
                         VERIFY_REWRITE_RESERVE + VERIFY_TAIL_RESERVE, len(failed))
             stats["rewrite_skipped_for_time"] = "%.0fs left" % left
             break
+        _t_repair = time.time()
         if SENTENCE_REPAIR:
             # Repair the failed sentences themselves, in parallel, instead of
             # regenerating the report around them. Only those sentences change,
@@ -2059,6 +2103,8 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats,
             report, fixed = await _repair_sentences(
                 agents["synth"], ctx, report, failed, job_id, stats,
                 SDK_CALL_TIMEOUT)
+            stats["verify_repair_s"] = (stats.get("verify_repair_s", 0.0)
+                                        + time.time() - _t_repair)
             if not fixed:
                 logger.info("[%s][sdk] no sentence could be repaired; leaving "
                             "%d citation(s) to the programmatic net",
@@ -2089,6 +2135,8 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats,
         quotes.update(_collect_cited_quotes(llm_for_quotes, report, ctx.paper_index,
                                             job_id, known=quotes))
         report, _ = render_references_section(report, ctx.paper_index, quotes)
+        stats["verify_repair_s"] = (stats.get("verify_repair_s", 0.0)
+                                    + time.time() - _t_repair)
     stats["verify_loop_s"] = time.time() - t0
     if partition is not None:
         # A correction rewrite re-authors the whole report and can drop the
