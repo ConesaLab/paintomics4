@@ -71,7 +71,12 @@ def test_the_frozen_list_still_matches_what_the_arms_write():
     the ratchet is protecting nothing. This fails loudly rather than rotting."""
     written = set()
     for path in ARMS:
-        written |= set(re.findall(r'stats\["([a-z_0-9]+)"\]\s*=',
+        # `+=` counts as writing. The first version of this scan matched only
+        # plain `=` and reported search_hits / search_kept -- both maintained
+        # with `+=` in agent.py -- as keys no arm writes, which would have had
+        # them deleted from the ratchet as stale. Counter-style stats are a
+        # whole class this pattern was blind to.
+        written |= set(re.findall(r'stats\["([a-z_0-9]+)"\]\s*\+?=',
                                   io.open(_root(path)).read()))
     archived = (set(B.STAGE_TIMES) | set(B.STAGE_COUNTS)
                 | set(B.STAGE_NOTES) | set(B.STAGE_MAPS))

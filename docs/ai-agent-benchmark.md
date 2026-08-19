@@ -3104,3 +3104,50 @@ so the lever to try first is the one that does not touch wording.
 
 Round 50 (revert `DELEGATE_CHUNK` to 5) still goes first: it is falsification
 follow-through on a measured 3.4-pathway coverage loss, and this is a hypothesis.
+
+### The ratchet had become the hole it was built to close
+
+Chasing the last round's hypothesis -- that full text arrives after everyone has
+finished writing -- the numbers to test it were not in the archive.
+`fulltext_candidates` is written on every run and kept by nothing.
+
+Auditing properly: `agent_loop.py` writes 82 stats, 58 were archived, and **24
+were silenced by `KNOWN_UNARCHIVED`** -- the list that exists so the ratchet does
+not nag about stats nobody wants. Among the 24:
+
+```
+the entire evidence-supply picture  fulltext_candidates / _upgraded / _skipped / _failed,
+                                    quotes_supplied, quotes_reused,
+                                    quotes_from_delegation, refs_rendered
+every failure signal in the gate    framing_failed, correction_failed,
+                                    correction_skipped, verify_cut_short,
+                                    verify_unchecked
+structural outcomes                 stitch_truncated, unquotable_markers_dropped
+```
+
+Three consecutive rounds of work converged on "how much evidence did each writer
+actually have", and the numbers that answer it were being dropped on purpose
+while `unarchived_stats` reported a clean archive. The merge stats had been found
+in the same list one round earlier; this is the same failure, one subsystem
+wider. `verify_cut_short` and `verify_unchecked` are worse than the rest: they
+record the gate running out of clock and leaving citations unchecked, which is
+silent degradation against the ten-minute brief, and nothing kept them.
+
+95 of 122 stats across both arms are archived now. The 27 that remain are
+redundant rather than uninteresting, and the list documents why each one is
+there -- `loop_final` is the report text and the .md file is the artifact,
+`verification` is a dict whose counts are archived flat, `total_s` duplicates
+`wall_s`, and so on.
+
+**Two mistakes of mine that the tests caught**, both worth recording because both
+would have quietly destroyed data:
+
+I pruned 16 entries as stale after scanning only `agent_loop.py`. They are
+written by `agent.py`, the shipped arm. `test_no_stage_measures_into_the_void`
+failed immediately and named all sixteen.
+
+Rebuilding from both arms then flagged `search_hits` and `search_kept` as stale.
+They are not -- they are maintained with `+=`, and the test's scan matched only
+plain `=`. Counter-style stats were a whole class it was blind to, and the fix
+belonged in the test, not the list. Had I trusted it, two live counters would
+have been deleted from the ratchet and started nagging on every round.

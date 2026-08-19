@@ -173,7 +173,7 @@ STAGE_TIMES = ("topup_fulltext_s", "topup_verify_s",
                "triage_s", "plan_s", "retrieval_s", "interpret_s", "gap_fill_s",
                "synth_s", "topup_s", "verify_loop_s", "verify_s",       # shipped arm
                "loop_s", "fulltext_s", "quotes_s", "merge_s")           # agent arm
-STAGE_COUNTS = ("topup_evidence_chars", "genes_shown", "genes_flat", "merge_gain_chars", "verify_iterations", "batches_failed", "truncated_calls",
+STAGE_COUNTS = ("quotes_supplied", "quotes_reused", "quotes_from_delegation", "refs_rendered", "verify_unchecked", "verify_cut_short", "unquotable_markers_dropped", "agent_tool_calls", "agent_searches", "agent_notebook", "stitch_truncated", "topup_evidence_chars", "genes_shown", "genes_flat", "merge_gain_chars", "verify_iterations", "batches_failed", "truncated_calls",
                 "forced_synthesis", "topup_added", "quotes_unverifiable",
                 # The other half of the top-up's bet. Recording only
                 # topup_added archives its wins and drops its losses, and a
@@ -242,7 +242,7 @@ STAGE_MAPS = ("tool_chars_by_tool", "tool_calls_by_tool")
 # Outcomes whose value is a sentence, not a number: a stage that skipped or
 # failed says WHY, and "absent from the archive" reads identically to "never
 # happened". Truncated because a traceback string is not a metric.
-STAGE_NOTES = ("framing_reused", "trace_file", "merge_citations", "merge_grounded",
+STAGE_NOTES = ("fulltext_candidates", "fulltext_upgraded", "fulltext_skipped", "fulltext_failed", "framing_failed", "correction_failed", "correction_skipped", "framing_reused", "trace_file", "merge_citations", "merge_grounded",
                "merge_coverage", "merge_mode", "merge_probe_failed",
                "failed_refs", "topup_refs", "topup_verify_failed",
                "topup_fulltext_skipped", "topup_fulltext_failed",
@@ -251,10 +251,32 @@ STAGE_NOTES = ("framing_reused", "trace_file", "merge_citations", "merge_grounde
                "deterministic_fallback")
 
 
-# Stats the two arms write that the archive deliberately does not keep, frozen
-# as of round 36. The point is the RATCHET, not the list: anything a stage
-# starts writing from now on shows up in `unarchived_stats` until somebody
-# either archives it or adds it here on purpose.
+# Stats the two arms write that the archive deliberately does not keep. The
+# point is the RATCHET, not the list: anything a stage starts writing from now
+# on shows up in `unarchived_stats` until somebody either archives it or adds it
+# here on purpose.
+#
+# The list itself became the hole it was meant to close. Audited at round 49 it
+# held 40 entries, 16 of them for stats no arm still writes, and it was silencing
+# 24 of the 82 stats agent_loop produces -- including the ENTIRE evidence-supply
+# picture (fulltext_candidates / _upgraded / _skipped, quotes_supplied,
+# quotes_reused, quotes_from_delegation, refs_rendered) and every failure signal
+# in the gate (framing_failed, correction_failed, correction_skipped,
+# verify_cut_short, verify_unchecked). Three consecutive rounds of work converged
+# on "how much evidence did each writer actually have", and the numbers that
+# answer it were being dropped on purpose, while `unarchived_stats` reported a
+# clean archive. The merge stats had already been found in here for the same
+# reason a round earlier.
+#
+# 76 of 82 are archived now. What remains is redundant rather than uninteresting,
+# and each entry has to earn its place:
+#
+#   loop_final       the final report text; the .report.md file is the artifact
+#   verification     the whole verification dict; its counts are archived flat
+#   papers_retrieved already a top-level row key, written from a better source
+#   tool_calls       duplicate of agent_tool_calls
+#   total_s          duplicate of wall_s
+#   topup_added_refs a list consumed inside the run by the gate-side pull-back
 #
 # This exists because round 36 was launched to measure sentence repair and could
 # not: agent.py had written sentences_repaired / repairs_rejected /
@@ -262,23 +284,17 @@ STAGE_NOTES = ("framing_reused", "trace_file", "merge_citations", "merge_grounde
 # and the archived row was silent. The stage ran; the measurement did not. The
 # log could not stand in either -- it is configured at WARNING and the repair
 # line is INFO.
-KNOWN_UNARCHIVED = frozenset(['agent_notebook',
-     'agent_searches',
-     'agent_tool_calls',
+KNOWN_UNARCHIVED = frozenset([
+     '_partial_papers',
+     '_partial_report',
+     '_partial_stage',
      'cluster_further',
      'cluster_pathways',
      'cluster_standalone',
      'cluster_units',
      'clusters',
-     'correction_failed',
-     'correction_skipped',
      'draft_scores',
-     'framing_failed',
      'full_text_papers',
-     'fulltext_candidates',
-     'fulltext_failed',
-     'fulltext_skipped',
-     'fulltext_upgraded',
      'gap_fill_applied',
      'gaps_caveats',
      'gaps_pathways',
@@ -286,22 +302,16 @@ KNOWN_UNARCHIVED = frozenset(['agent_notebook',
      'papers',
      'papers_retrieved',
      'pmids_found',
-     'quotes_from_delegation',
-     'quotes_reused',
-     'quotes_supplied',
-     'refs_rendered',
      'rewrite_skipped_for_time',
-     'stitch_truncated',
+     'search_hits',
+     'search_kept',
      'synth_drafts',
      'timed_out_at_stage',
      'tool_calls',
      'topup_added_refs',
      'total_s',
-     'unquotable_markers_dropped',
      'verification',
-     'verify_cut_short',
-     'verify_stopped_for_time',
-     'verify_unchecked'])
+     'verify_stopped_for_time'])
 
 
 def unarchived_stats(stats):
