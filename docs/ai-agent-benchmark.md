@@ -4822,3 +4822,81 @@ The runner exits non-zero only for failures this branch INTRODUCED, and reports
 any suite that skipped everything. It caught `test_lead_framing_is_reused` still
 asserting a flag default I had flipped -- which my own manual sweep of those same
 flips had missed.
+
+## Round 55 — where the ten minutes actually goes, and the one tool that dwells
+
+Pre-registered here BEFORE the experiment, on the discipline this document has
+followed throughout.
+
+### Standing requirement: met
+
+Across the 40 most recent archived runs, median span **314 s**, and **0 of 40**
+exceed the 600 s bar. The ten-minute requirement is currently satisfied in every
+recent run; it is not the thing to optimise.
+
+Where the median 314 s goes:
+
+```
+citation gate (verify + topup)   167 s   53%
+Lead toolbelt                     71 s   23%
+un-instrumented (Lead thinking)   76 s   24%
+```
+
+The majority of the clock buys the grounding. That is the right place for it.
+
+### Two optimisations killed before building
+
+**Search deduplication.** `search_literature` runs 14.15x/run and 13% of calls
+return 0 new papers. That looks like an obvious win until the queries are read:
+**0% of queries are repeated verbatim within a run**. The agent never re-issues
+a query it has already run; the zero-yield calls are semantically overlapping but
+textually distinct, so a "you already searched that" guard fires *never*. Total
+recoverable time: **2.85 s/run of ~314 s (0.5%)**. Not worth building.
+
+**A pre-call guard on topup.** Hypothesis: skip `citation_topup` when the report
+is already well-cited. Refuted -- mean citations before the call is **11.4 where
+topup added nothing** vs **12.3 where it added something**. Prior citation count
+carries no signal about yield. Offer size carries none either (the zero-yield
+calls were offered 4, 11, 15, 34, 38, 39, 40, 42 papers).
+
+### The finding: citation_topup has a productivity cliff
+
+`verify_citation_prefetched` is 1073 calls at p50 3.7 s, p99 11.5 s, and **0
+calls over 40 s** -- the hedge-timeout-and-retry problem recorded earlier in this
+document is gone, not merely reduced.
+
+`citation_topup` is the opposite. 23 calls, **1798 s**, p50 **92 s**, 98% of its
+time in calls over 40 s. It is the largest per-call cost in the framework, and
+it reports `failed 0` on every single call -- the zero-yield cases are not
+errors, they are the model declining to add anything after dwelling for a minute
+and a half.
+
+Splitting those 23 calls at 60 s inverts the expected relationship:
+
+| topup | n | total | citations added | s per citation | zero-yield |
+|-------|---|-------|-----------------|----------------|------------|
+| fast (<=60 s) |  8 |  345 s | 93 | **3.7 s** | 25% |
+| slow ( >60 s) | 15 | 1453 s | 85 | **17.1 s** | 40% |
+
+Slow calls are **4.6x less efficient per citation and fail more often**. If slow
+meant "doing more work", zero-yield would fall with duration. It rises. That is
+the signature of dwelling.
+
+### Pre-registration
+
+There is no deadline on the topup call today. `TOPUP_MIN_SECONDS=200` is a
+*headroom* guard -- whether to start -- not a bound on the call.
+
+Add `AI_AGENT_TOPUP_DEADLINE` (default 0 = off, i.e. current behaviour), which
+returns whatever topup has accumulated when the deadline passes.
+
+**Prediction, at deadline 60 s:** run span falls by **>=10 s/run** and citations
+per run fall by **<2.0**.
+
+**Falsifier:** if citations/run drop by 2.0 or more, the slow calls were earning
+their time and the cliff is an artifact of a post-hoc split at n=23. Revert, and
+record that duration does not distinguish dwelling from work.
+
+This is correlational, n=23, and split after the fact -- the weakest evidence
+class in this document. It is written down as a prediction precisely because
+three correlations recorded above evaporated on resampling.
