@@ -3151,3 +3151,50 @@ They are not -- they are maintained with `+=`, and the test's scan matched only
 plain `=`. Counter-style stats were a whole class it was blind to, and the fix
 belonged in the test, not the list. Had I trusted it, two live counters would
 have been deleted from the ratchet and started nagging on every round.
+
+### The 220-character window, priced on 1209 real abstracts
+
+The claim that the top-up's ~43% precision comes from `abstract[:220]` was a
+mechanism story. It is testable without spending a round: if the window is the
+cause, the findings a citation would rest on should sit past it. Searching 1209
+stored abstracts for the first finding statement -- a result verb ("we found",
+"results show"), a direction ("increased", "upregulated"), or a quantitative
+claim ("4.2-fold", "p < 0.01"):
+
+```
+first finding-language match, by position
+   within the first 220 chars :   83   ( 7%)
+   only AFTER char 220        :  723   (60%)
+   no finding language at all :  403   (33%)
+
+median position of the first finding statement: 649 chars, p75 971
+
+window    reaches the finding in
+   220               7%
+   600              31%
+  1000              52%
+  1400              62%
+```
+
+**The top-up can see a finding statement in 7% of the papers it is offered**, and
+is then asked whether each supports a specific claim. Its 43% precision is not a
+model failing to reason; it is a model reasoning about text it was not given.
+
+This also sets the value rather than guessing it. 220 -> 1000 takes
+finding-visibility from 7% to 52%, and 1400 buys only ten points more, so 1000 is
+the knee. `AI_AGENT_TOPUP_ABSTRACT=1000` costs 30 x 780 = ~23 kB in a single
+prompt, which is not re-sent per turn.
+
+Worth noting beside it: the paper SCREEN already gets 600 chars, reaching a
+finding in 31% of cases -- for "is this paper on topic" that is probably enough,
+and it is still nearly three times what the harder judgement gets.
+
+The 33% with no finding language by these markers are review and narrative
+abstracts; the figure is a floor on what a wider window can recover, not a claim
+that a third of papers report nothing.
+
+Round 51 pre-registration (after round 50's chunk revert): `TOPUP_ABSTRACT=1000`.
+Predicted: `topup_added_failed` falls as a share of `topup_added` -- precision up
+from ~43% -- with total citations flat or up and redactions still 0. Falsifier:
+if precision does not move, the cause is not the window but the instruction, and
+a model citing to please rather than to ground is a different fix.
