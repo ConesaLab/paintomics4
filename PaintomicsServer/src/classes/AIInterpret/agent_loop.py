@@ -1902,7 +1902,7 @@ def _quote_shelf(c, chunk, papers):
 @function_tool(failure_error_function=_tool_failure("delegate_interpretation"))
 async def delegate_interpretation(ctx: RunContextWrapper[LoopContext],
                                   pathway_names: list[str], focus: str) -> str:
-    """Delegate deep interpretation of up to ~20 named pathways to Cluster Interpreter sub-agents (parallel, single-shot). Returns their reports; their [N] citations use your reference numbers. EXPENSIVE: about 30 seconds per CALL regardless of how many pathways it covers -- the sub-agents run in parallel, four at a time -- so covering twenty pathways in one call costs what three would. It is where breadth comes from, and every pathway you delegate is somewhere a citation can be earned: make ONE call that covers everything, never one per pathway."""
+    """Delegate deep interpretation of the named pathways to Cluster Interpreter sub-agents (parallel, single-shot). Returns their reports; their [N] citations use your reference numbers. Name up to 60 pathways in ONE call. Cost is per WAVE, not per pathway: the sub-agents run four at a time, so twenty pathways cost the same as five, and sixty about three times that -- roughly 35 seconds a wave. It is where breadth comes from, and every pathway you delegate is somewhere a citation can be earned. Span the KINDS of pathway your data shows, not only the top of the p-value ranking: a metabolic or amino-acid pathway ranked thirtieth carries findings the signalling pathways above it cannot supply. Make ONE call, never one per pathway."""
     c = ctx.context
     t0 = time.time()
     guard = _time_guard(c)

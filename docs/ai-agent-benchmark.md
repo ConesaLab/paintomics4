@@ -4481,3 +4481,63 @@ metabolic and amino-acid pathways enter the discussed set. Falsifier, sharper th
 before: if coverage rises and B1/E1 stay missed, then class breadth is not what
 base is gaining either, and the remaining explanation is in cluster mode's prompt
 rather than its scope.
+
+### Round 53 scored, and round 54 fixes the tool rather than the constant
+
+```
+agent-v53:
+  1 every replicate within 600s   PASS  (4 replicates)
+  2 citations >= base             PASS  (23.5 vs 19.2 [margin  +4.2, se  1.2 -> RESOLVED])
+  3 redactions <= base + 2        PASS  ( 0.0 vs 16.0 [margin +18.0, se  5.2 -> RESOLVED])
+  4 prose coverage >= base        FAIL  (15.2 vs 74.0 [margin -58.8, se 10.2 -> RESOLVED])
+  5 length                        PASS  (0.98x)
+
+rubric_coverage                   agent 0.538   base 0.617
+citations_linked_to_data          agent  5.0    base  2.0
+citation_sentences_repeated       agent  3.8    base  1.8
+fabrication                       0 in both arms
+```
+
+Against base at its BEST configuration, three of the five rules now resolve, and
+they split: the agent wins citations (+4.2) and redactions (+18.0) decisively, and
+loses coverage (-58.8) decisively. Nothing is left in the noise band. Base is ahead
+on the ground-truth rubric, 0.617 to 0.538.
+
+Two of the metrics added after reading the reports pay off here. The agent links
+more of its citations to the experiment's own data (5.0 against 2.0) -- so the
+"decorative citation" pattern is worse in base, not the agent. And the agent
+repeats more citation sentences verbatim (3.8 against 1.8), which is a real defect
+of its templated per-pathway sections.
+
+**Round 54 changes the tool, not the constant.** The cap was never the limiter --
+the Lead names the pathways and asks for seventeen because the description said
+"up to ~20". So the description is rewritten to state the real capacity, price the
+real cost, and ask for the thing the rubric actually rewards:
+
+```
+before: "up to ~20 named pathways ... covering twenty pathways in one call costs
+         what three would"
+after:  "Name up to 60 pathways in ONE call. Cost is per WAVE, not per pathway:
+         the sub-agents run four at a time, so twenty pathways cost the same as
+         five, and sixty about three times that -- roughly 35 seconds a wave ...
+         Span the KINDS of pathway your data shows, not only the top of the
+         p-value ranking: a metabolic or amino-acid pathway ranked thirtieth
+         carries findings the signalling pathways above it cannot supply."
+```
+
+The class clause is there because the item-level scoring says so: base's entire
+gain is B1 (metabolic pathways down), E1 (amino-acid class early) and E4 (c-Myc /
+polyamine), and the agent's seventeen top-ranked pathways are signalling-heavy
+enough that it never discusses a metabolic pathway at all.
+
+**One bug worth recording.** My first attempt interpolated the cap into the
+docstring with `"""...""" % DELEGATE_MAX_PATHWAYS`. That is an expression
+statement, not a docstring: `__doc__` became None and `function_tool` captured an
+EMPTY description -- the tool silently lost its whole instruction. Same
+%-precedence family as the two earlier bugs in this file. Caught by printing the
+description rather than trusting the edit, and a test now asserts it is non-empty
+and that the number it states equals the constant.
+
+Predicted: coverage rises toward 40-60; B1 and E1 become reachable; wall rises by
+about two waves (~70 s) from 321 s and stays under 600. Falsifier: if coverage
+rises and B1/E1 stay missed, class breadth is not base's advantage either.
