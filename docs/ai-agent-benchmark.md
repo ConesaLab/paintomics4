@@ -5292,3 +5292,68 @@ logs, not the archive aggregate.
 
 The 62 files are quarantined in `CLIENT_TMP/ai_traces_stub_quarantine/`, not
 deleted.
+
+## Round 58b — the overshoot figure was never polluted
+
+The 37.8% overshoot rate is quoted in `VERIFY_ITERATIONS`'s comment and in PR
+#48, and it came from the archive that round 58 found was 26% test output. It
+was rechecked against the cleaned corpus.
+
+| | verify calls | quote real | overshoot |
+|---|---|---|---|
+| as published (last 40 runs) | 1 038 | 99.5% | 37.8% |
+| clean corpus (all 172 runs) | **4 699** | 99.3% | **35.2%** |
+
+The 62 quarantined stub runs contributed **zero** verify calls -- they stop long
+before the gate. The 37.8 / 35.2 difference is the measurement WINDOW (recent 40
+runs vs all 172), not contamination. The committed claim is accurate for the
+window it names, and the conclusion is unchanged: fabrication is negligible,
+overshoot is the whole grounding problem, and overshoot is what a correction
+wave repairs.
+
+## Round 59 pre-registration — the owed sentence-repair retest
+
+`AI_SENTENCE_REPAIR=1`, agent arm only, `VERIFY_ITERATIONS=3` (the new default).
+
+**Why now.** Round 57 showed the third wave pays (ungrounded 4.00 -> 1.20,
+paired) but that **2 of 8 corrections were cancelled mid-flight** -- those runs
+buy a wave and get no repair. The cause is that a correction REGENERATES THE
+WHOLE REPORT: measured at 117 s, and r3's rewrite took a report from 20 cited
+claims to 37 while cutting failures only 11 -> 9. Sentence repair fixes the
+failed sentences in parallel and cannot introduce a citation, so it cannot
+introduce that regression.
+
+It also resolves a budget conflict nothing currently arbitrates: top-up (median
+95.5 s) and the third wave compete for the same 600 s. Every round-57 run with a
+slow top-up got two waves; the run that reached ZERO ungrounded did both,
+because its top-up took 59 s.
+
+**The falsifier is inherited verbatim from round 36 and is not being softened:**
+
+> Repair gets exactly one retest with the fix; **if citations fall again, it is
+> dead.**
+
+Round 36 measured repair as FAIL -- citations -22% (base) / -34% (agent),
+redactions +38% / +187% -- and diagnosed the cause as repaired DRIFT sentences
+dropping their `[N]` marker. That guard is in the code now:
+
+```python
+marker = "[%d]" % fc.get("ref_index", 0)
+if fc.get("mode") != "text" and marker not in text:
+    rejected += 1          # a DRIFT repair must keep its citation
+```
+
+**Predictions**
+1. `citations_in_body` does **not** fall versus round 57's runs. (Round 36's
+   killing metric. This is the falsifier; a fall ends repair for good.)
+2. Corrections cancelled falls from **2/8** to **0**.
+3. Median span falls below round 57's **450 s** -- repair replaces a 117 s
+   whole-report rewrite with parallel per-sentence edits.
+4. Final ungrounded citations per run stays at or below round 57's **2.00**.
+
+**Unit note.** Predictions 2 and 4 are per run and n=8 is small; 1 and 3 are the
+load-bearing ones and both were large effects in round 36 (-34%, -23%). Round 56
+was withdrawn for pre-registering an effect the instrument could not resolve, so
+this is stated plainly: with n=8, only effects of round-36 magnitude are
+detectable here, and a null result on 2 or 4 will be reported as "not resolved",
+not as "no effect".
