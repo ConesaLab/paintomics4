@@ -195,6 +195,19 @@ STAGE_COUNTS = ("delegate_fulltext_gained", "quotes_supplied", "quotes_reused", 
                 "results_citations_kept", "results_attempts", "results_section",
                 # "short" is a ratio, so keep the ratio, not just the verdict.
                 "topup_candidate_ratio",
+                # The Results rewrite's conservation, which is the whole point
+                # of the stage: round 66 kept every citation and still lost 22%
+                # of the rubric's coverage, so citations alone cannot say
+                # whether the findings survived. Both sides of the ratio are
+                # kept -- "kept" without "before" cannot distinguish a rewrite
+                # that held 16 of 16 from one that held 16 of 40.
+                "results_pathways_kept", "results_pathways_before",
+                # How many calls the chunked rewrite took, how many pathways a
+                # per-chunk retry had to restore, and how many it could not.
+                # unfixed > 0 with the run still accepted would mean the guard
+                # is being satisfied by something other than the chunks.
+                "results_chunks", "results_retried_pathways",
+                "results_chunk_unfixed",
                 # Which searches reached the report. Retrieval novelty is
                 # ~99.9%; conversion to a citation is ~12%, so the useful
                 # question is per-theme, not per-call.

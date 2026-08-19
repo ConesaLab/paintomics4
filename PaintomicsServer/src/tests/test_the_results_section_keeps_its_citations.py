@@ -172,7 +172,91 @@ class ResultsSectionKeepsItsCitations(unittest.TestCase):
                       "a new writing stage ships off until it is measured")
 
 
+class ResultsSectionKeepsItsFindings(unittest.TestCase):
+    """Citations are not findings, and guarding one does not guard the other.
+
+    Round 66 shipped a Results stage that kept EVERY citation and still lost
+    22% of the rubric's coverage: 0.571 -> 0.446. Round 64 had already measured
+    citation count and rubric coverage as independent (r = 0.05), so a
+    citation-only guard could never have caught it. The rubric scores
+    `truth_pathways` -- a list of pathway NAMES -- which makes findings
+    checkable at runtime by the same trick.
+    """
+
+    def setUp(self):
+        with open(SRC) as fh:
+            self.src = fh.read()
+
+    def test_the_findings_guard_exists(self):
+        self.assertIn("_named_pathways", self.src)
+        self.assertIn("droppedpathways_", self.src,
+                      "losing a pathway must be a rejection reason, not a note")
+
+    def test_it_matches_on_the_name_not_the_accession(self):
+        """A section reorganised by finding has no reason to keep '(mmu04060)'
+        in a heading; requiring it would reject good prose. Losing the NAME is
+        what loses the finding."""
+        block = self.src.split("def _named_pathways")[1][:900]
+        self.assertIn(".lower()", block)
+        # The CODE, not the docstring: the comment explains the rule using
+        # "(mmu04060)" as its example, and asserting on prose is how a test
+        # fails on a correct implementation.
+        code = block.split('"""')[2] if block.count('"""') >= 2 else block
+        self.assertNotIn("mmu", code.lower())
+
+    def test_there_is_no_length_target(self):
+        """The first version carried one and used it as a target: 8 184 words
+        to 2 957, taking 22% of the coverage with them. Removing it was NOT the
+        fix -- with no target the model dropped 8 of 16 pathways -- but a length
+        knob on a stage whose job is to reorganise is an instruction to
+        discard."""
+        self.assertNotIn("RESULTS_MAX_WORDS", self.src)
+        self.assertNotIn("%(words)d", self.src)
+
+    def test_the_rewrite_is_chunked(self):
+        """One call cannot conserve the whole dossier. Measured twice: -22%
+        coverage with a word target, -50% of pathways without one. The fix is a
+        smaller question per call, not a better prompt."""
+        self.assertIn("_results_by_chunk", self.src)
+        self.assertIn("RESULTS_CHUNK", self.src)
+
+    def test_a_chunk_checks_the_pathways_it_owns(self):
+        """A single dropped name rejects the whole rewrite, and a chunk owns a
+        known handful -- so a miss is both detectable and cheap to fix there."""
+        block = self.src.split("async def _results_by_chunk")[1]
+        block = block.split("\nasync def ")[0].split("\ndef ")[0]
+        self.assertIn("gone = [n for n in owned", block)
+        self.assertIn("for attempt in (1, 2)", block)
+
+    def test_chunks_run_in_order_so_headings_differ(self):
+        """Run in parallel they cannot see each other and converge: five
+        sections opened with a variant of the same claim."""
+        block = self.src.split("async def _results_by_chunk")[1]
+        block = block.split("\nasync def ")[0].split("\ndef ")[0]
+        self.assertNotIn("asyncio.gather", block,
+                         "gathered chunks cannot see each other's headings")
+        self.assertIn("taken", block)
+
+    def test_a_failed_chunk_keeps_its_original_text(self):
+        """Losing a section to a timeout would be the very failure this guards."""
+        block = self.src.split("async def _results_by_chunk")[1]
+        self.assertIn("return chunk, owned", block)
+
+    def test_the_reference_list_is_carried_not_rewritten(self):
+        block = self.src.split("def _split_pathway_sections")[1][:1200]
+        self.assertIn('"### References"', block)
+
+    def test_caveats_close_the_section(self):
+        block = self.src.split("async def _results_by_chunk")[1]
+        self.assertIn("LAST = (", block)
+        self.assertIn("closing", block)
+
+
 if __name__ == "__main__":
+    # Load from the MODULE, not a named class. A second TestCase was added to
+    # this file and silently never ran -- the runner reported 13/13 green while
+    # the new guard was untested. Tenth time a hand-written list has rotted in
+    # this repo today.
     r = unittest.TextTestRunner(verbosity=2).run(
-        unittest.TestLoader().loadTestsFromTestCase(ResultsSectionKeepsItsCitations))
+        unittest.TestLoader().loadTestsFromModule(sys.modules[__name__]))
     sys.exit(0 if r.wasSuccessful() else 1)
