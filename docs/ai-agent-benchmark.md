@@ -2867,3 +2867,66 @@ be POOLED for n~8 per arm rather than read as two independent n=4 verdicts. That
 is a stronger result than either round alone, and it is the right way to read the
 two-consecutive-5/5 bar -- two passes at n=4 are not two independent confirmations
 if the second round's change did nothing.
+
+### Rounds 47 and 48 pooled: what is real and what was noise
+
+Round 48 scored 4/5, failing rule 4 at coverage 12.8 against base 14.8, on code
+byte-identical to round 47's 5/5. `LEAN_PROFILES` was a no-op in every replicate
+(`genes_flat` 0), so the two rounds are one experiment at n=8 and should be read
+that way -- two n=4 passes are not two confirmations when the second round's
+change did nothing.
+
+```
+2 citations >= base   PASS  (20.2 vs 15.6 [margin +4.6, se 1.9 -> RESOLVED])
+3 redactions          PASS  ( 0.0 vs  6.5 [margin +8.5, se 2.6 -> RESOLVED])
+4 prose coverage      FAIL  (13.4 vs 13.9 [margin -0.5, se 0.8 -> NOISE, n~90/arm])
+5 length              PASS  (58 616 vs 33 160 = 1.77x)
+```
+
+On the brief's own criterion the arm wins, and it wins resolvably: **+29%
+citations (20.2 vs 15.6) with ZERO redactions against base's 6.5.** Every one of
+the eight replicates finished inside 600 s.
+
+Coverage is a tie. Round 47's "+1.0, pass" and round 48's "-2.0, fail" are both
+noise around a true difference of roughly zero.
+
+That is a problem with rule 4 as written rather than with either arm. **A strict
+inequality on a metric whose true gap is zero is a coin flip in perpetuity** --
+and the two-consecutive-5/5 bar then requires winning it twice running, about a
+one-in-four shot, no matter how much the arm improves elsewhere. The rule is
+pre-registered and stays; but the bar it feeds cannot be cleared by making the
+agent better at citations, only by making the coverage gap real.
+
+### What delegation actually buys
+
+```
+merge REJECTED (Lead's own section)   n= 7   coverage 11.6   citations 19.4   28 693 chars
+merge accepted (delegated detail)     n=27   coverage 15.4   citations 19.2   65 391 chars
+rejection rate                        7/34 = 21%
+```
+
+Delegation buys **+3.8 pathways of coverage for +36 700 characters and zero extra
+distinct citations**. `citations_in_body` counts distinct references, so the
+delegated prose re-cites the same papers in more places rather than widening the
+evidence base -- which is consistent with the earlier per-character density
+finding, seen from the other side. That is about 9 600 characters per marginal
+pathway covered.
+
+So the arm's central mechanism is a COVERAGE device, not a grounding device. The
+grounding comes from the Lead and the top-up.
+
+### Round 49 pre-registration
+
+`AI_AGENT_FRAMING_REUSE_LEAD=1`, otherwise round 47/48's configuration.
+
+Predicted: merge rejections fall towards zero, so mean coverage moves from 13.4
+towards 15.4 (+1.5 on base's 13.9, right at the edge of resolvable at n=4), and
+the framing LLM call disappears, taking 13-20 s with it.
+
+Predicted COST, stated in advance because it is the likely failure: report length
+moves from 1.77x base towards **1.97x**, against rule 5's 2.0x ceiling. This
+round may buy rule 4 and lose rule 5. If it does, that is the real trade the arm
+faces and not a surprise to be explained afterwards.
+
+Falsifier: if citations or redactions move at all, the framing call was doing
+something the Lead's own sections do not, and the change goes back.
