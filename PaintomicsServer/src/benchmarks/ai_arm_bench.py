@@ -173,7 +173,7 @@ STAGE_TIMES = ("topup_fulltext_s", "topup_verify_s",
                "triage_s", "plan_s", "retrieval_s", "interpret_s", "gap_fill_s",
                "synth_s", "topup_s", "verify_loop_s", "verify_s",       # shipped arm
                "loop_s", "fulltext_s", "quotes_s", "merge_s")           # agent arm
-STAGE_COUNTS = ("merge_gain_chars", "verify_iterations", "batches_failed", "truncated_calls",
+STAGE_COUNTS = ("genes_shown", "genes_flat", "merge_gain_chars", "verify_iterations", "batches_failed", "truncated_calls",
                 "forced_synthesis", "topup_added", "quotes_unverifiable",
                 # The other half of the top-up's bet. Recording only
                 # topup_added archives its wins and drops its losses, and a

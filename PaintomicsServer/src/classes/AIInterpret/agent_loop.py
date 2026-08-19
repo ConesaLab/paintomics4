@@ -232,6 +232,26 @@ It waits for the round after the replication.
 """
 
 SCREEN_PAPERS = os.getenv("AI_AGENT_SCREEN_PAPERS", "0") == "1"
+
+# Render a temporal profile only for genes that are actually differential.
+#
+# get_pathway_details is the chattiest tool in the belt at 24 058 characters per
+# call and ZERO seconds, so its whole price is context -- and the Lead re-sends
+# its context on every Decide turn, which makes a result returned on turn 3 of 44
+# get re-sent about forty times. Per-call size is the multiplier; the per-run
+# total hid it.
+#
+# _get_top_genes already sorts (-relevant, -effect_size) and takes ten, so the
+# SELECTION is relevance-first. What it does not do is stop when the relevant
+# genes run out: a pathway with three differential genes fills the remaining
+# seven slots with flat ones, and each of those still renders its full per-layer
+# time course. A matched-but-flat gene has no differential signal by definition,
+# so its series is not evidence for anything, and it costs roughly 180 of the
+# ~250 characters on its line.
+#
+# The gene is still named and still carries its effect size, so nothing is
+# hidden from the agent -- only the series it could not draw a conclusion from.
+LEAN_PROFILES = os.getenv("AI_AGENT_LEAN_PROFILES", "0") == "1"
 """Screen search hits for a quotable finding before they enter the pool.
 
 The one mechanism the shipped arm has that this arm has never had. Base runs a
@@ -428,6 +448,8 @@ class LoopContext(AgentContext):
     # keeps choosing it. Counting calls beside characters makes cost-per-call
     # readable straight off the archive instead of by joining a trace file.
     tool_calls_by_tool: dict = field(default_factory=dict)
+    genes_shown: int = 0
+    genes_flat: int = 0
     # Which trace file this run wrote. 177 archived traces share two job IDs
     # -- a benchmark replicate reuses the job -- so a stats record could not
     # name its own trace, and every per-tool call count had to be recovered by
@@ -982,6 +1004,12 @@ def _pathway_block(p):
         # Found by measuring context cost: get_pathway_details is 33.7% of the
         # per-tool character bill, the largest single consumer, so it was the
         # first thing read closely.
+        if LEAN_PROFILES and not g.get("relevant"):
+            # Named, scored, and explicitly labelled -- so the agent can see the
+            # gene matched the pathway without paying for a flat time course.
+            lines.append("- %s [effect %.2f] (matched, not differential)"
+                         % (g.get("symbol"), g.get("effect_size") or 0))
+            continue
         profs = _profile_summary(g.get("omic_profiles"))
         lines.append("- %s%s [effect %.2f] %s"
                      % (g.get("symbol"), "*" if g.get("relevant") else "",
@@ -1063,6 +1091,13 @@ def get_pathway_details(ctx: RunContextWrapper[LoopContext],
     for p in c.pathways:
         keys = {str(p.get("name", "")).lower(), str(p.get("id", "")).lower()}
         if keys & wanted or any(w in k for k in keys for w in wanted):
+            # The flat-gene share is what decides whether LEAN_PROFILES can save
+            # anything at all. I predicted a 25% cut from it without ever having
+            # measured the fraction it depends on, so the prediction was a guess
+            # wearing a number. Counted here, where ctx is in scope.
+            shown = (p.get("top_genes") or [])[:10]
+            c.genes_shown += len(shown)
+            c.genes_flat += sum(1 for g in shown if not g.get("relevant"))
             blocks.append(_pathway_block(p))
             matched_ids.append(p.get("id"))
         if len(blocks) >= 8:
@@ -2006,6 +2041,9 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
     stats["tool_chars"] = ctx.tool_chars
     stats["tool_chars_by_tool"] = dict(ctx.tool_chars_by_tool)
     stats["tool_calls_by_tool"] = dict(ctx.tool_calls_by_tool)
+    if ctx.genes_shown:
+        stats["genes_shown"] = ctx.genes_shown
+        stats["genes_flat"] = ctx.genes_flat
     if ctx.trace_path:
         stats["trace_file"] = ctx.trace_path
 

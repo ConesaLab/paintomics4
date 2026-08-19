@@ -2624,3 +2624,49 @@ is a hypothesis, not a measurement, and handing delegates more papers is already
 known to backfire (base measured citations collapsing 15 -> 3 at 20+ abstracts).
 
 Both levers died before any code changed, which is the point of measuring first.
+
+### Round 47 scored: 5/5, and why that is not yet a result
+
+```
+1 every replicate done within 600s   PASS  (mean wall 380.8 s)
+2 citations >= base                  PASS  (21.0 vs 16.2)
+3 redactions <= base + 2             PASS  ( 0.0 vs  8.5)
+4 prose coverage >= base             PASS  (14.0 vs 13.0)
+5 length within [0.6x, 2.0x] of base PASS  (59 812 vs 31 060 = 1.93x)
+=> BETTER than base
+```
+
+The first clean sweep. Two things keep it from meaning what it looks like.
+
+**Rule 5 passed on a failure mode.** r3's merge was rejected, so it shipped
+31 224 characters instead of ~71 000. Drop r3 and the mean is 69 342, or 2.23x --
+a fail. The sweep depends on a stitch rejection landing in one of four
+replicates, which is not a design, it is a coin.
+
+**The round failed its own pre-registration.** DELEGATE_CHUNK=3 was predicted to
+take converted themes from 9.8 to about 13. It reached 10.75 -- a fifth of the
+predicted movement, barely outside the 9-10 falsifier band. The shipping rules
+and the experiment's own hypothesis are different questions and this round split
+them: the rules passed, the hypothesis did not.
+
+### Round 48: stop paying for flat genes (and measure the thing it depends on)
+
+Round 47's exact configuration plus `AI_AGENT_LEAN_PROFILES=1`, one change, so a
+second 5/5 would meet the two-consecutive bar without confounding it.
+
+`_pathway_block` now renders a temporal profile only for genes marked relevant.
+A flat gene keeps its name, its effect size, and gains an explicit "(matched, not
+differential)" so that absent data and uninteresting data do not look alike.
+
+I had pre-registered "chars per call falls at least 25%". That number was a guess
+wearing a decimal point: the saving is the flat-gene fraction times the share of
+a line that is series text, and **I had never measured the flat-gene fraction**.
+The unit test saves 13% on a synthetic block that is half flat genes with a short
+single-layer series; real series are multi-layer and longer, so the real figure
+could land either side of 25%. So the run now counts `genes_shown` and
+`genes_flat`, and the prediction is restated as a mechanism rather than a target:
+the saving should track the flat share, and if the flat share turns out to be
+small then there was never 25% on the table and the change is not worth its flag.
+
+Falsifier unchanged: if citations or coverage fall by more than 1, those profiles
+were load-bearing and this is reverted, not tuned.
