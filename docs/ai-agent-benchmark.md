@@ -2774,3 +2774,46 @@ uncited papers' titles and abstracts with no evidence at all. The delegates get 
 
 Queued after round 49: give the top-up the same evidence the other two writers
 get, and expect precision rather than volume to improve.
+
+### The top-up is asked to judge support from the first 15% of an abstract
+
+Three writers add citations in this pipeline, and they are not given the same
+evidence:
+
+```
+delegated interpreters   a _quote_shelf of real passages from their own papers
+the Lead                 real quotes, via check_my_citations / _quote_evidence_lines
+the paper screen         abstract[:600]  -- to decide "is this paper on topic"
+the citation top-up      abstract[:220]  -- to decide "does this support THIS claim"
+```
+
+The stage with the hardest judgement gets the least evidence, and it is the stage
+whose citations die: ~11-14 added per run for ~101 s, about 8 refuted and pulled
+back, ~6 surviving. Precision ~43%.
+
+220 characters is not "a short abstract". Measured over **899 stored abstracts**
+the median is 1 428 characters, so 220 is the first **15%** -- the background
+sentence, and nothing else:
+
+```
+"Cathelicidins have been reported to inhibit human papillomavirus infection in
+ vitro; however, nothing is known about their activity in vivo. In this study,
+ experimental skin infection with Mus musculus papillomavirus 1 r"
+```
+
+It stops at "In this study". The model never sees what the paper found, and is
+then asked whether the paper supports a specific claim. A citation that is
+topically plausible and factually unsupported is the expected output of that
+prompt, not a surprise -- and "topically plausible, unsupported" is exactly the
+20.1% claim-drift rate measured across the archive.
+
+`AI_AGENT_TOPUP_ABSTRACT` and `AI_AGENT_TOPUP_OFFER` make both adjustable,
+defaulting to the measured 220/30 so every prior round stays comparable.
+
+The candidate COUNT is deliberately left alone. Precision is the measured
+problem, not volume: at 14 attempts and 43% precision the stage nets ~6, and
+halving the offer while widening the window would improve each attempt and cut
+their number at the same time -- two changes whose net could easily be fewer
+surviving citations. One lever per round.
+
+Queue: round 49 framing reuse, round 50 top-up evidence at 1000 chars.

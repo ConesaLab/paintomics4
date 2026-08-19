@@ -273,6 +273,35 @@ LEAN_PROFILES = os.getenv("AI_AGENT_LEAN_PROFILES", "0") == "1"
 # and had already read every delegated analysis as a tool result before writing.
 # Re-deriving a conclusion from a subset of its inputs cannot improve it.
 FRAMING_REUSE_LEAD = os.getenv("AI_AGENT_FRAMING_REUSE_LEAD", "0") == "1"
+
+# How much of each offered paper the citation top-up gets to read.
+#
+# The top-up is the only writer in the pipeline with no evidence in hand. The
+# delegates get a `_quote_shelf` of real passages; the Lead gets real quotes
+# through `check_my_citations` and `_quote_evidence_lines`. The top-up got
+# `abstract[:220]`, and it is the stage whose citations die: measured over 23
+# archived runs it adds 11-14 citations for ~101 s, about 8 of them fail
+# verification and are pulled back, and ~6 survive -- a precision of roughly 43%.
+#
+# 220 characters is not a short abstract, it is the FIRST 15% of one. Measured
+# over 899 stored abstracts the median is 1 428 characters, and what 220 buys is
+# the background sentence:
+#
+#   "Cathelicidins have been reported to inhibit human papillomavirus infection
+#    in vitro; however, nothing is known about their activity in vivo. In this
+#    study, experimental skin infection with Mus musculus papillomavirus 1 r"
+#
+# It stops at "In this study". The model is asked whether a paper supports a
+# specific claim while being shown the setup and never the result, so a citation
+# that is topically plausible and factually unsupported is the expected output,
+# not a surprise.
+#
+# The candidate COUNT is deliberately not reduced alongside this. Precision is
+# the measured problem, not volume, and halving the offer would cut the number of
+# citations attempted at the same time as improving each one -- two changes, and
+# the net could easily be fewer survivors.
+TOPUP_ABSTRACT_CHARS = int(os.getenv("AI_AGENT_TOPUP_ABSTRACT", "220"))
+TOPUP_OFFER_PAPERS = int(os.getenv("AI_AGENT_TOPUP_OFFER", "30"))
 """Screen search hits for a quotable finding before they enter the pool.
 
 The one mechanism the shipped arm has that this arm has never had. Base runs a
@@ -2414,8 +2443,9 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
     elif uncited and len(cited_now) < MIN_CITATIONS:
         listing = "\n".join(
             "[%d] %s — %s" % (p["ref_index"], (p.get("title") or "")[:110],
-                              (p.get("abstract") or "")[:220])
-            for p in uncited[:30])
+                              (p.get("abstract") or "")[:TOPUP_ABSTRACT_CHARS])
+            for p in uncited[:TOPUP_OFFER_PAPERS])
+        stats["topup_evidence_chars"] = len(listing)
         t_top = time.time()
         try:
             topped = await bounded(Runner.run(
