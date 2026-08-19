@@ -4715,3 +4715,50 @@ This is a framework change rather than a pipeline one, and it is the second time
 the sealed rubric has paid off beyond its original purpose: first by scoring
 content that the five relative rules could not see, now by removing the need for a
 control on most of the remaining work.
+
+### The delegation description rewrite is a no-op on everything it aimed at
+
+Round 54 at n=3 agent. The pre-registered prediction was coverage 40-60 and
+B1/E1 becoming reachable.
+
+```
+coverage        9, 17, 17     mean 14.3   (round 53: 15.2)
+metabolic share 5%                        (round 53: 5%)
+pathway set     IDENTICAL to round 53 -- no pathway added, none dropped
+rubric          0.576, 0.554, 0.707  mean 0.612  (round 53: 0.538)
+margin +0.074, se 0.041 -> NOISE, needs n~4/arm
+```
+
+**The prediction failed on both halves.** Raising the stated capacity from ~20 to
+60 did not move the count, and adding "Span the KINDS of pathway your data shows,
+not only the top of the p-value ranking" did not move the composition: round 54
+discusses no pathway round 53 did not, drops none, and the metabolic share is 5%
+in both. The Lead selects the same fifteen pathways either way.
+
+r3's 0.707 is the highest of all 206 archived runs and it is tempting to read the
+rewrite as having improved quality without breadth. The arithmetic says otherwise:
+the margin is +0.074 at se 0.041, and the pathway set it was written about is
+byte-for-byte the same set. A single replicate two and a half standard deviations
+above the previous mean, with no mechanism that moved, is a draw and not a result.
+It would take about four more agent replicates to settle, and I am not spending
+them on a change whose mechanism has already been shown inert.
+
+So the delegation tool's description has now been rewritten twice -- once for
+capacity, once for class breadth -- with nothing measurable either time. Combined
+with the four constants that never bound, that leaves exactly one candidate lever
+standing for the coverage gap: `CLUSTER_SCOPE`, which rewrites the Lead's OWN
+instructions rather than a tool's. Every other explanation has been eliminated by
+measurement rather than by argument.
+
+**What this says about the tool-building question.** A tool description sets what
+the Lead *may* do; it does not set what the Lead *decides* to do. The capacity
+clause raised the ceiling and the Lead stayed where it was; the class clause
+suggested a different selection and the Lead selected identically. Both are
+information. The Lead's own instructions -- "top-ranked", five times -- are the
+thing that scopes it, which is AgentEvolve's "information without an instruction is
+a no-op" holding for a third time, now inside the tool layer itself.
+
+Round 54 is therefore best read as a clean negative and a replicate: it confirms
+the agent arm at 0 redactions and 272-393 s, and it retires the description as a
+lever. Next round runs `AI_AGENT_CLUSTER_SCOPE=1` with `--arms agent`, which the
+new option makes a 25-minute round rather than a 90-minute one.
