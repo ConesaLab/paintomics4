@@ -3741,3 +3741,43 @@ and the flag causes that directly rather than through the model, so it will be
 visible at n=4. Its DOWNSTREAM effect on citation survival is exactly the kind of
 one-to-two-citation change this table says a single round cannot settle, and I
 should not claim it from round 52 alone.
+
+### Round 52, first replicate: the supply defect is fixed
+
+The mechanical prediction lands:
+
+```
+                                    before          round 52 r1
+cited papers that are abstract-only  34 of 35 (97%)   7 of 20 (35%)
+delegate_fulltext_gained                     -        17
+wall clock                               353 s        381 s
+```
+
+The trace shows it working chunk by chunk, and cheaper than priced:
+
+```
+chunk_fulltext   1 thin  ->  0 upgraded   0.5 s
+chunk_fulltext   5 thin  ->  4 upgraded   3.7 s
+chunk_fulltext  10 thin  ->  8 upgraded   5.0 s
+total                                     9 s     (predicted ~16 s)
+```
+
+So the pipeline no longer fetches full text solely to check work done without it.
+For the first time the delegated interpreters write from the same text the
+verifier will judge them against, and it costs nine seconds of a 600-second
+budget.
+
+One observation worth recording because it is easy to misread: the quote shelf
+returns a SIMILAR NUMBER of passages either way -- 1/5/10 here against 8/3/4 in a
+run without the upgrade. The shelf caps what it keeps per paper, so the change is
+not more evidence but better-sourced evidence: a passage drawn from a Results
+section rather than from an abstract. Any metric counting shelf passages would
+report this change as doing nothing.
+
+**What this replicate does NOT show.** Coverage came in at 18, the highest single
+value in the archive, and citations at 19. Per the power table a round of four
+resolves coverage effects of 3.2 and citation effects of 6.1, so neither number
+means anything yet, and the downstream question this change exists to answer --
+do citations survive verification better when the writer saw the full text? -- is
+a one-to-two-citation effect that needs pooling across several rounds. I will
+report the thin share from this round and nothing else.
