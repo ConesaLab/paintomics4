@@ -106,6 +106,16 @@ def main(argv=None):
                    for p in glob.glob(os.path.join(_ROOT, "src/tests/test_*.py")))
     if args.only:
         names = [n for n in names if args.only in n]
+        # A filter that matches nothing used to print "0 suites | 0 pass |
+        # 0 INTRODUCED" and exit 0 -- a green result that ran no tests, which
+        # is the single failure this runner exists to prevent. It reads as
+        # success at a glance and as success to a shell. `--only` is a
+        # SUBSTRING, so a comma-separated list matches nothing and silently
+        # passes.
+        if not names:
+            print("--only %r matched no suite (it is a substring, not a list)"
+                  % args.only, file=sys.stderr)
+            return 2
 
     results = [run_one(n, args.timeout) for n in names]
     bad = [r for r in results if r["state"] != "PASS"]

@@ -341,19 +341,29 @@ def test_outcome_stamp_never_costs_the_report():
     import ast, inspect
     src = inspect.getsource(L)
     tree = ast.parse(src)
-    fn = next(n for n in ast.walk(tree)
-              if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
-              and "__outcome__" in (ast.get_source_segment(src, n) or ""))
+    # Every function that mentions the stamp, not `next(...)` on the first one.
+    # A COMMENT naming __outcome__ is enough to match, and _trace_gate now
+    # carries one explaining why the stamp is exempt from the 160-char cap --
+    # so the old `next()` inspected _trace_gate, found no try/except there, and
+    # failed while the guard it checks was present and correct in the real
+    # function. A structural test must not be decidable by prose.
+    fns = [n for n in ast.walk(tree)
+           if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+           and "__outcome__" in (ast.get_source_segment(src, n) or "")]
+    assert fns, "no function mentions the __outcome__ stamp at all"
     guarded = False
-    for node in ast.walk(fn):
-        if not isinstance(node, ast.Try):
-            continue
-        seg = ast.get_source_segment(src, node) or ""
-        if "__outcome__" not in seg:
-            continue
-        if any(h.type is None or getattr(h.type, "id", "") == "Exception"
-               for h in node.handlers):
-            guarded = True
+    for fn in fns:
+        for node in ast.walk(fn):
+            if not isinstance(node, ast.Try):
+                continue
+            seg = ast.get_source_segment(src, node) or ""
+            # The CALL, not a mention: a comment inside an unrelated try would
+            # otherwise satisfy this.
+            if '_trace_gate(ctx, "__outcome__"' not in seg:
+                continue
+            if any(h.type is None or getattr(h.type, "id", "") == "Exception"
+                   for h in node.handlers):
+                guarded = True
     assert guarded, "the __outcome__ stamp must sit inside try/except Exception"
 
 

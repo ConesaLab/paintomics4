@@ -35,13 +35,32 @@ Usage:
 import json
 import os
 import sys
+import tempfile
 import threading
 import unittest
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
+# Redirect the trace archive. `_archive_trace` writes one JSONL per run into
+# <CLIENT_TMP_DIR>/ai_traces, and this suite drives the REAL workflow entry
+# point rather than building a LoopContext by hand -- so every replicate it ran
+# landed in the LIVE measurement corpus. Measured: 61 of 234 archived traces
+# (26%) were this suite's, each stamped `"label": "stub-e2e"`,
+# `verify_iterations: 1`. That is the corpus every round in
+# docs/ai-agent-benchmark.md is scored from.
+#
+# Setting PAINTOMICS_CLIENT_TMP does NOT work and was tried first: serverconf
+# hardcodes CLIENT_TMP_DIR as an absolute path (it is generated at bootstrap,
+# so the variable matters when the file is WRITTEN, not when it is imported).
+# Rebinding the module attribute does work, because _archive_trace imports the
+# name INSIDE the function and therefore re-reads it on every call.
+_TRACE_TMP = tempfile.mkdtemp(prefix="stub_e2e_tmp_")
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
 from src.tests.test_ai_agent_endtoend import _instanceFor, _storedJobID
+
+import src.conf.serverconf as _serverconf          # noqa: E402
+_serverconf.CLIENT_TMP_DIR = _TRACE_TMP
 
 DRAFT = """## Key Findings
 - The submitted omic layers move together across the time course [1].

@@ -4900,3 +4900,460 @@ record that duration does not distinguish dwelling from work.
 This is correlational, n=23, and split after the fact -- the weakest evidence
 class in this document. It is written down as a prediction precisely because
 three correlations recorded above evaporated on resampling.
+
+## Round 56 — the round-55 experiment is withdrawn, and why the archive could not settle it
+
+### Withdrawing the pre-registration
+
+Round 55 pre-registered `AI_AGENT_TOPUP_DEADLINE` at 60 s, predicting run span
+would fall by >=10 s. That experiment is **withdrawn before running**, on two
+independent grounds.
+
+**It is unrunnable as specified.** Span across the 40 most recent runs has
+sd **168.8 s** on a mean of 235.3 s. Resolving a 10 s difference needs
+**n = 4,558 per arm** -- roughly a year of continuous gateway time per arm. The
+cap also does nothing at all in **25 of 40** runs, diluting a 92 s per-call
+saving into 13.8 s/run (sd 18.7). The prediction was written in a unit the
+instrument cannot see. This document already records the rule it broke:
+[[a prediction needs a baseline that recorded it]] -- and the unit is part of
+the baseline.
+
+**It is wrong on mechanism.** Reading the implementation rather than the
+telemetry: the top-up is a SINGLE LLM call that rewrites the whole report, and a
+guard then accepts or rejects the candidate wholesale --
+
+```python
+if (len(candidate) > 0.6 * len(str(report))
+        and added > len(cited_now) and not dropped):
+    report = candidate ...
+else:
+    stats["topup_rejected"] = True
+```
+
+A deadline cannot salvage a partial result from one call. Capping at 60 s
+returns *nothing* from a 92 s call, not its early citations. The fast/slow split
+does not mean "capping preserves yield" -- fast and slow are different
+situations, and accepted calls do EXTRA work afterwards
+(`_upgrade_new_citations`), so the causal story runs backwards from the one the
+correlation suggested.
+
+Reading 60 lines of source refuted in minutes what an unrunnable experiment
+would not have settled in a year.
+
+### Why the archive could not answer the follow-up
+
+The obvious next question -- of the 8 zero-yield top-ups, how many were
+`topup_rejected`, how many `topup_dropped_existing` -- cannot be asked:
+
+```
+trace archive   218 runs   stats dicts carried: 0
+Mongo           81 docs / 81 jobs (one interpretation PER JOB)
+                topup_s survives in 3, topup_added in 2, topup_rejected in 1
+```
+
+Every trace event carries `seq/t/gate/tool/args/result/ms` and nothing else. The
+diagnostics the code computes -- with paragraphs explaining that
+`topup_refs` is "the only way to ask WHERE in the top-up's sequence its failures
+fall" -- go only to Mongo, which keeps one interpretation per job and is
+overwritten by the next run on that job. Two jobs carried forty runs.
+
+So the framework can answer **which tool is useful** (calls, duration, yield --
+all in the archive) and cannot answer **how to make this tool better** (why a
+call failed). The second question is the one that decides what to build.
+
+### The fix, and the bug class it belongs to
+
+`__outcome__` hand-lists seven fields. `__config__` used to hand-list about
+fifteen flags, silently omitting the rest -- 35 existed, 12 had ever been
+archived -- and was fixed by deriving them from the module source. The outcome
+stamp never got that treatment.
+
+Added `__stats__`: every scalar the run recorded, **derived not hand-listed**,
+dicts and lists skipped so a trace file stays small.
+
+One latent bug found on the way. `_trace_gate` capped every result at 160 chars
+except `__config__`, exempted by name after the cap "cut its JSON mid-string and
+made every run unparseable by the analyzer that the stamp exists to feed".
+`__outcome__` dumps JSON too and is at **160 chars with seven fields** -- all 40
+archived stamps parse today, and the eighth field would have broken them
+silently. The exemption is now a set, `VERBATIM_TRACE_STAMPS`, not an equality
+test against one name.
+
+Verified at runtime, not by reading the diff: the stamp archives 193 chars
+whole, round-trips exactly, keeps `topup_rejected` and `topup_dropped_existing`,
+excludes the verification dict and the ref list, and non-exempt stamps are still
+capped at 160.
+
+### A false green in the runner
+
+`run_all --only <filter>` printed `0 suites | 0 pass | 0 INTRODUCED` and exited
+**0** when the filter matched nothing. `--only` is a substring, so a
+comma-separated list matches nothing and passes silently -- the exact failure the
+runner exists to prevent, inside the runner. Now exits 2 with a message.
+
+## Round 57 — the correction loop works, and it stops one wave early
+
+### What the verifier actually reports
+
+`verify_citation_prefetched` returns two booleans, and the archive has 1038 of
+them across 40 runs:
+
+| verdict | calls | share |
+|---------|-------|-------|
+| `match=True  supports=True`  | 641 | 61.8% |
+| `match=True  supports=False` | 392 | **37.8%** |
+| `match=False supports=False` |   5 |  0.5% |
+
+Fabrication is essentially nil -- the quote exists in 99.5% of calls. The
+grounding problem is entirely **overshoot**: a real quote attached to a claim it
+does not support. That is 37.8% of citations, about 10 per run, and the verifier
+already detects every one.
+
+### The correction loop is effective
+
+A `supports=False` with a real quote is tagged `mode: "claim"` -- "a real quote
+with an oversold sentence needs the SENTENCE changed, not the quote" -- and
+triggers a correction rewrite, then a re-verification. For the 305 citations
+that were re-verified:
+
+| outcome | n | share |
+|---------|---|-------|
+| FIXED     (fail -> pass) | 229 | **75%** |
+| still bad (fail -> fail) |  51 | 17% |
+| regressed (pass -> fail) |  25 |  8% |
+
+This is one of the few unambiguously good mechanisms measured in this document.
+
+### But it always stops at two waves
+
+Median waves per run **2.0, max 2, in 26 of 26 runs**. `VERIFY_ITERATIONS`
+defaults to 2, and the constant carries its reason in a comment:
+
+> 2 = one verification pass, one correction, one re-verification -- the 600 s
+> budget does not fit the workflow arm's 3
+
+That premise was true when it was written and is not true now. Round 55 measured
+median span **314 s with 0 of 40 runs over the 600 s bar**. A third wave costs
+one correction rewrite (measured at 117 s) plus its verification, projecting a
+median around **502 s** -- inside the bar.
+
+So the loop quits with a mean **4.50 ungrounded citations per run** still on the
+table, immediately after demonstrating a 75% fix rate on exactly that population.
+
+### Pre-registration
+
+`AI_AGENT_VERIFY_ITERATIONS=3`. **No code change** -- the knob exists and
+`AI_MAX_VERIFICATION_ITERATIONS` already permits 3.
+
+**Unit: the citation, not the run.** Round 56 was withdrawn for pre-registering
+in a unit the instrument cannot see; per-run ungrounded count has sd 3.51 on a
+mean of 4.50 and would need n=101 per arm. Per citation, the population is the
+~2 per run that survive wave 2, and each run is its own before/after -- no
+control arm is needed, because wave 3's input is wave 2's output.
+
+**Predictions**
+1. Wave 3 fixes **>=50%** of the citations wave 2 left failing.
+2. Net ungrounded per run **falls** -- fixes must exceed the regressions wave 3
+   introduces (waves 1->2 regressed 8%, so this is not free).
+3. Median span stays **under 600 s**.
+
+**Falsifier:** if fixes roughly equal regressions (net unchanged), the loop has
+converged at 2 and the remaining 4.5 are not reachable by rewriting -- revert,
+and record that the no-progress rule was already doing the right thing. If
+median span crosses 600 s, revert regardless of the grounding gain: the
+ten-minute bar is a requirement, not a preference.
+
+## Round 57b — auditing what the tools TELL the model
+
+The nine module-level `function_tool`s all carry real descriptions (109-531
+chars, none empty) -- the `"""...""" % X` failure that once produced an EMPTY
+description is not present anywhere else.
+
+But a description is not a label, it is **advice**, and advice can be wrong.
+
+### The advice that cannot be tested
+
+`search_literature` tells the Lead:
+
+> Keep queries BROAD: two or three gene symbols joined by OR, AND at most one
+> biological term ... Extra AND clauses return nothing and still cost budget.
+
+Across 558 recent queries: **545 use exactly one AND, 13 use none, and ZERO use
+two or more.** The claim "extra AND clauses return nothing" is obeyed perfectly
+and therefore **cannot be falsified from the archive** -- there are no
+counterexamples, because the description prevents the data that would test it.
+
+That is a general trap in tool-building worth stating plainly: *advice embedded
+in a tool description becomes unfalsifiable the moment the model follows it.*
+Obedience reads as evidence. Testing such a claim requires deliberately relaxing
+it in an arm, which is a different experiment from anything run so far.
+
+### The advice that IS wrong
+
+The same sentence says "AND **at most** one biological term", which sanctions
+zero. Measured over the full archive:
+
+| queries | n | mean new papers |
+|---------|---|-----------------|
+| 0 AND clauses (the broadest) |   169 | **2.36** |
+| 1+ AND clause                | 2 702 | **3.75** |
+
+Difference **1.39 new papers, 2*se = 0.34 -- RESOLVED.** A query of OR'd gene
+symbols with no biological term at all retrieves **37% fewer new papers** than
+one with a single term. The description pushes toward breadth, and at its own
+permitted extreme, breadth costs retrieval.
+
+**Queued, not applied:** "at most one" -> "exactly one". Worth roughly one extra
+new paper per run (169 of 2 871 queries use zero). Deliberately NOT changed
+while round 57's verify-wave round is in flight -- a tool description change
+mid-round confounds the arm being measured.
+
+## Round 57 interim — the third wave is not the expensive part
+
+Four replicates in (`AI_AGENT_VERIFY_ITERATIONS=3`, `sentence_repair=False`
+per the run's own config stamp), and the arm is **half confounded**:
+
+```
+r1 1354co025T  13 -> 3 -> 1     wave 3 fixed 2 of 3
+r2 73I734364H   7 -> 1          no wave 3 -- correction cancelled
+r3 4rofHV6613  11 -> 9          checked went 20 -> 37
+rewrites cancelled: 2 of 4      ("loop correction rewrite exceeded 46.3s")
+```
+
+Three things this shows that the pre-registration did not anticipate.
+
+**The correction is a whole-report regeneration, not a repair.** r3's wave 2
+took the report from 20 cited claims to **37** and cut failures only 11 -> 9. A
+rewrite introduces new citations, which arrive with new failures; that is the
+mechanism behind the 8% pass->fail regression measured across waves 1->2.
+
+**The 600 s budget binds by CANCELLATION, not by the iteration cap.** Earlier
+rounds recorded the verify deadline as never firing -- true at 2 waves. At 3 it
+fires in **half** the runs, and it fires *after* the wave has been paid for:
+`correction_budget` falls under the per-call timeout and the rewrite is
+cancelled mid-flight. The run spends the time and gets none of the repair. So
+the comment on `VERIFY_ITERATIONS` ("the 600 s budget does not fit 3") is
+correct about the outcome and silent about the cause: it is the **rewrite** that
+does not fit, not the wave.
+
+**The cheap correction already exists and is off.**
+`SENTENCE_REPAIR` (`AI_SENTENCE_REPAIR`, default "0", in `agent.py`, used by
+BOTH arms) repairs the failed sentences themselves, in parallel across 6
+workers, and leaves the rest of the report -- References, quotes, tables --
+untouched. It cannot introduce a citation, so it cannot introduce a regression.
+
+### An owed experiment
+
+Round 36 tested repair and scored it a FAIL: citations -22% (base) / -34%
+(agent), redactions +38% / +187%. But that round diagnosed its own cause and
+committed to a rerun:
+
+> The guardrails let a repaired sentence drop its `[N]` marker ... right for a
+> TEXT failure and wrong for DRIFT ... **Fixed AFTER this round launched, so the
+> round could not benefit. Repair gets exactly one retest with the fix; if
+> citations fall again, it is dead.**
+
+**That retest was never run.** The summary table still carries round 36's
+numbers and "flag left off". The fix is present in the code today:
+
+```python
+marker = "[%d]" % fc.get("ref_index", 0)
+if fc.get("mode") != "text" and marker not in text:
+    rejected += 1          # a DRIFT repair must keep its citation
+```
+
+The falsifier is already written and is inherited unchanged: **if citations fall
+again, repair is dead.** Round 36 also measured its upside -- `verify_loop_s`
+-92% and wall -23% in the agent arm -- which is the largest single time lever
+recorded anywhere in this document, and the one that would make a third wave
+affordable.
+
+Queued as the next round, after 57 completes.
+
+## Round 57 SCORED — all three predictions held; the default moves to 3
+
+`AI_AGENT_VERIFY_ITERATIONS=3`, 8 replicates, `sentence_repair=False`.
+
+```
+rep  job          failures per wave      w3 fix   final
+r1   1354co025T   13 -> 3 -> 1              67%       1
+r2   73I734364H    7 -> 1                cancelled    1
+r3   4rofHV6613   11 -> 9                cancelled    9
+r4   31qPRO6hF3   15 -> 4 -> 1              75%       1
+r5   1354co025T   21 -> 5 -> 0             100%       0
+r6   73I734364H   13 -> 5 -> 3              40%       3
+r7   4rofHV6613   11 -> 0                 not needed  0
+r8   31qPRO6hF3    8 -> 3 -> 1              67%       1
+```
+
+| prediction | result | verdict |
+|---|---|---|
+| wave 3 fixes >=50% of what wave 2 left | 67/75/100/40/67, mean **70%** | **HELD** |
+| net ungrounded per run falls | 4.50 -> **2.00**, median 1.0 | **HELD** |
+| median span under 600 s | **450 s**, max 470, **0/8 over** | **HELD** |
+
+**The evidence that carries this is paired and baseline-free.** Prediction 2
+compares against 26 archived runs of a different configuration and is the
+weakest leg. It is not needed: wave 3's input IS wave 2's output, so each run is
+its own control --
+
+| | before wave 3 | after wave 3 |
+|---|---|---|
+| ungrounded citations | 3, 4, 5, 5, 3 (mean **4.00**) | 1, 1, 0, 3, 1 (mean **1.20**) |
+
+**70% of remaining failures removed, and all 5 runs improved.** The within-round
+split of ran-vs-did-not (1.20 vs 3.33) is confounded -- r7 had nothing to fix and
+r3's correction was cancelled -- and is not relied on.
+
+**Cost.** `verify_loop_s` mean 192 s of a 450 s run (43%). Median span rose
+314 -> 450 s, still 150 s inside the bar, with the slowest run at 470 s.
+
+### What this does NOT fix
+
+**2 of 8 corrections were still cancelled mid-flight** ("loop correction rewrite
+exceeded 46.3s"). Those runs pay for a wave and get no repair -- r3 finished at
+**9** ungrounded, the worst in the round, and is the entire reason the mean is
+2.00 rather than ~1.2.
+
+**Top-up and the third wave compete for the same 600 s.** `topup_s` median
+95.5 s. Every run with a slow top-up got two waves; the run that reached zero
+ungrounded did both because its top-up took 59 s. The framework has no policy
+for this trade -- it simply spends on whichever comes first.
+
+Both point at the same place: the correction is a whole-report regeneration.
+The queued sentence-repair retest (round 36's owed rerun, falsifier inherited:
+*if citations fall again, it is dead*) would make the correction cheap enough
+that neither problem arises.
+
+**Default changed to 3.**
+
+## Round 58 — 26% of the measurement corpus was test output
+
+Found while reading round 57's stats: fifteen runs carried archived stats when
+only eight replicates had been launched. Seven files had appeared in the live
+archive **in the previous five minutes**, while the test suite was running.
+
+```
+archive                 234 files
+stub-e2e test runs       61   (26%)
+my own probe leak         1
+real benchmark/servlet  172
+```
+
+Every round in this document is scored from that directory.
+
+### Three failures, each one hiding the next
+
+**The suite that traced most was the one the guard skipped.** The guard began:
+
+```python
+if "LoopContext(" not in src:
+    continue
+```
+
+`test_ai_agent_loop_endtoend` drives the REAL workflow entry point against a
+stub HTTP gateway and never names `LoopContext`, so it was excluded by
+construction -- and it writes one trace per replicate, seven per suite run. The
+detector found the suites that build a context by hand and missed the only one
+that runs the actual pipeline. The suite itself had no `CLIENT_TMP_DIR`
+handling at all.
+
+**The new check could not match its own marker.** A stub stamps
+`"label": "stub-e2e"` into `__config__` -- but that stamp is a JSON *string
+inside* a JSON field, so it arrives escaped as `\"stub-e2e\"`. The first version
+of the corpus check searched for `'"stub-e2e"'`, matched nothing, and reported a
+clean corpus while 61 polluted files sat in it. `grep -l '"stub-e2e"'` returned
+0 for the same reason.
+
+**The new check never ran.** `main()` hand-lists its tests, so the new one was
+defined, correct, and silently skipped -- printing `Passed: 3 / 3`. This is the
+same hand-written-list failure as `__config__`'s flag dict and `__outcome__`'s
+field list, for the third time in this document. `main()` now collects
+`test_*` from `globals()`.
+
+The guard is now verified in BOTH directions: it fails with one stub file
+restored to the archive and passes once removed. A guard that has only been
+seen to pass has not been tested.
+
+### Did the pollution change any published result?
+
+Round 57b's finding was computed over the full archive, so it was rechecked:
+
+| | 0 AND | 1+ AND | diff | 2*se | verdict |
+|---|---|---|---|---|---|
+| with stubs (as published) | 2.28 (n=177) | 3.74 | 1.46 | 0.33 | RESOLVED |
+| **real runs only** | **1.66** (n=116) | 3.74 | **2.07** | 0.33 | RESOLVED |
+
+**It survives and is stronger.** Stub runs contributed only to the 0-AND group
+and diluted the effect; the published conclusion held and understated it.
+
+Round 57's own result is unaffected -- it reads the eight labelled replicate
+logs, not the archive aggregate.
+
+The 62 files are quarantined in `CLIENT_TMP/ai_traces_stub_quarantine/`, not
+deleted.
+
+## Round 58b — the overshoot figure was never polluted
+
+The 37.8% overshoot rate is quoted in `VERIFY_ITERATIONS`'s comment and in PR
+#48, and it came from the archive that round 58 found was 26% test output. It
+was rechecked against the cleaned corpus.
+
+| | verify calls | quote real | overshoot |
+|---|---|---|---|
+| as published (last 40 runs) | 1 038 | 99.5% | 37.8% |
+| clean corpus (all 172 runs) | **4 699** | 99.3% | **35.2%** |
+
+The 62 quarantined stub runs contributed **zero** verify calls -- they stop long
+before the gate. The 37.8 / 35.2 difference is the measurement WINDOW (recent 40
+runs vs all 172), not contamination. The committed claim is accurate for the
+window it names, and the conclusion is unchanged: fabrication is negligible,
+overshoot is the whole grounding problem, and overshoot is what a correction
+wave repairs.
+
+## Round 59 pre-registration — the owed sentence-repair retest
+
+`AI_SENTENCE_REPAIR=1`, agent arm only, `VERIFY_ITERATIONS=3` (the new default).
+
+**Why now.** Round 57 showed the third wave pays (ungrounded 4.00 -> 1.20,
+paired) but that **2 of 8 corrections were cancelled mid-flight** -- those runs
+buy a wave and get no repair. The cause is that a correction REGENERATES THE
+WHOLE REPORT: measured at 117 s, and r3's rewrite took a report from 20 cited
+claims to 37 while cutting failures only 11 -> 9. Sentence repair fixes the
+failed sentences in parallel and cannot introduce a citation, so it cannot
+introduce that regression.
+
+It also resolves a budget conflict nothing currently arbitrates: top-up (median
+95.5 s) and the third wave compete for the same 600 s. Every round-57 run with a
+slow top-up got two waves; the run that reached ZERO ungrounded did both,
+because its top-up took 59 s.
+
+**The falsifier is inherited verbatim from round 36 and is not being softened:**
+
+> Repair gets exactly one retest with the fix; **if citations fall again, it is
+> dead.**
+
+Round 36 measured repair as FAIL -- citations -22% (base) / -34% (agent),
+redactions +38% / +187% -- and diagnosed the cause as repaired DRIFT sentences
+dropping their `[N]` marker. That guard is in the code now:
+
+```python
+marker = "[%d]" % fc.get("ref_index", 0)
+if fc.get("mode") != "text" and marker not in text:
+    rejected += 1          # a DRIFT repair must keep its citation
+```
+
+**Predictions**
+1. `citations_in_body` does **not** fall versus round 57's runs. (Round 36's
+   killing metric. This is the falsifier; a fall ends repair for good.)
+2. Corrections cancelled falls from **2/8** to **0**.
+3. Median span falls below round 57's **450 s** -- repair replaces a 117 s
+   whole-report rewrite with parallel per-sentence edits.
+4. Final ungrounded citations per run stays at or below round 57's **2.00**.
+
+**Unit note.** Predictions 2 and 4 are per run and n=8 is small; 1 and 3 are the
+load-bearing ones and both were large effects in round 36 (-34%, -23%). Round 56
+was withdrawn for pre-registering an effect the instrument could not resolve, so
+this is stated plainly: with n=8, only effects of round-36 magnitude are
+detectable here, and a null result on 2 or 4 will be reported as "not resolved",
+not as "no effect".
