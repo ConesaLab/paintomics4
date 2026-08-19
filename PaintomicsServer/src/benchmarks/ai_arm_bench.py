@@ -455,7 +455,18 @@ def _measure(record, arm, job_id, wall, response=None):
 
 METRICS = ("wall_s", "prose_chars", "report_chars", "citations_in_body",
            "full_text_cited", "redacted", "prose_pathways_covered",
-           "papers_retrieved", "papers_in_references")
+           "papers_retrieved", "papers_in_references",
+           # Rule 3 compares REDACTIONS, and the two arms fail differently:
+           # base loses the sentence, this arm strips the marker and keeps it.
+           # Measured over rounds 46-49, the agent arm has 8.0 citations fail
+           # verification per run against base's 1.8, and reports 0.0 redacted
+           # because the gate-side pull-back removes them from failed_citations
+           # before it is counted. That is a better OUTCOME -- a stripped marker
+           # keeps the finding, a redaction deletes it -- but it is damage
+           # control, not grounding quality, and the redaction figure alone
+           # reads as the second. These two columns put the failure rate beside
+           # it in every score table, not only when a rule fails.
+           "topup_added", "topup_added_failed")
 
 
 REPORT_DERIVED = {"citations_in_body", "redacted", "prose_pathways_covered",

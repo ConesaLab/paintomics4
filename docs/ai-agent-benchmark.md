@@ -3198,3 +3198,52 @@ Predicted: `topup_added_failed` falls as a share of `topup_added` -- precision u
 from ~43% -- with total citations flat or up and redactions still 0. Falsifier:
 if precision does not move, the cause is not the window but the instruction, and
 a model citing to please rather than to ground is a different fix.
+
+### Rule 3 measures damage control, and my round-51 hypothesis is dead
+
+Auditing the claim I have repeated for several iterations -- "redactions 0.0
+against base's 6.5, resolved" -- against the failure counts underneath it:
+
+```
+                        agent (n=16)    base (n=16)
+failed_citations (gate)      0.0            1.8
+redacted                     0.0            4.3
+topup_added                 13.5            4.0
+topup_added_failed           8.0            0.6
+citations shipped           20.7           18.9
+```
+
+**The agent arm produces 4.4x more failed citations than base and cleans them up
+better.** The gate-side pull-back I added earlier this session strips those
+markers and removes them from `failed_citations`, so the metric reads 0. The
+outcome is genuinely better for a reader -- a stripped marker keeps the finding,
+a redaction deletes the sentence -- but it is damage control, not grounding
+quality, and I have been reporting it as the second. Both columns are in the
+score table now, so the failure rate sits beside the redaction count on every
+round rather than only when a rule fails.
+
+**And that killed the round-51 pre-registration.** Base's top-up runs at 92%
+precision against this arm's 41%. I checked what base shows its top-up: the
+identical prompt and the identical `abstract[:220]`. The window is the same in
+both arms, so it cannot explain the gap, and `TOPUP_ABSTRACT=1000` was about to
+be spent on a mechanism that is demonstrably not the differentiator.
+
+The 1209-abstract measurement stands -- 7% of abstracts show a finding inside 220
+characters, and a wider window would help both arms -- but it is no longer
+supported as the explanation for THIS arm's low precision.
+
+Pool size does not explain it either. Where the two arms' pools overlap at 26-36
+papers, base scores 100/100/100/80% and this arm scores 82/50/43/58%.
+
+What does differ, and is the standing hypothesis: **volume**. Both arms enter the
+top-up at about 15 citations against a target of 22. Base adds 4.0. This arm adds
+13.5 -- into a report 1.8x longer, with correspondingly more sentences to attach
+a marker to -- and precision falls as it reaches further down the same list.
+Under that reading the top-up is not badly built; it is being asked for three
+times as many citations as base asks of it, and the last ones are forced.
+
+Not pre-registered as a round yet, because "precision falls with volume" is a
+correlation across arms that differ in several ways at once, and the obvious test
+-- cap what the top-up may add -- would trade citations for precision without
+telling me which one the shipping rules prefer. Round 50 (chunk revert) finishes
+first.
