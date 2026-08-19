@@ -2525,3 +2525,55 @@ a sixth, `merge_probe_failed`, that I had missed by hand.
 
 **This does not yet say delegation dilutes grounding.** It says the question is
 answerable from round 48 onward, and was not before.
+
+### Delegated prose is half as densely cited as the Lead's own
+
+Last round I concluded this question was "answerable from round 48 onward". That
+was wrong -- not because the merge stats existed, but because the SHIPPED REPORTS
+were on disk the whole time and carry the answer directly. Twenty archived agent
+reports, splitting each at `## Detailed Pathway Analysis`:
+
+The tempting comparison is between runs whose stitch was accepted and runs whose
+stitch was rejected:
+
+```
+LEAD wrote the section (merge rejected, n=6)   6 192 chars   2.87 cites/1k   coverage 12
+DELEGATED (merge accepted, n=14)              39 883 chars   0.67 cites/1k   coverage 16
+```
+
+4.3x the density and 6.4x shorter. **That comparison is worthless**, for the same
+reason the rejection list was: the guard rejects precisely when the stitch would
+lower grounded citations, so the six lead-written cases are selected for being
+the ones where delegation was measured to be bad.
+
+The unconfounded test is PAIRED and within-run -- the Lead's own framing prose
+against the delegated prose in the SAME report, restricted to runs whose merge
+was accepted, so the guard has no say in which group a run lands in:
+
+```
+n = 14 paired runs
+the Lead's prose is more densely cited in 11 of them
+median 1.27 vs 0.67 citations per 1000 characters (1.9x)
+sign test, two-sided p ~ 0.057
+```
+
+Marginal at n=14, consistent in direction, and about half the effect the naive
+comparison advertised. Three of the fourteen had a Lead section carrying ZERO
+citations, and those are the only three where delegation came out ahead;
+excluding them makes it 11 of 11, which is why I am not excluding them.
+
+So `delegate_interpretation` -- the largest consumer of both context (53 937
+chars) and clock (34.9 s median) in the toolbelt -- produces 6.4x the text at
+roughly half the citation density. What it buys is real: coverage 16 against 12,
+and +2 citations on the whole report. What it costs is 33 700 characters.
+
+**This displaces the round 48 pre-registration.** The `_pathway_block` change
+saves tool context, which is worth having and touches neither of the two things
+under pressure. Instructing the delegate to write a shorter treatment per pathway
+targets the brief's primary criterion (citation grounding) and the one failing
+rule (length) with a single change, without giving up the coverage that
+delegation is there to buy. It goes first; `_pathway_block` follows.
+
+Round 47 also shows why the length rule is not yet safe: the arm's mean is 1.85x
+base ONLY because r3's merge was rejected and it shipped 31 224 characters
+instead of ~71 000. Rule 5 is being passed by a failure mode.
