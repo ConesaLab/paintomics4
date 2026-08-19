@@ -470,6 +470,43 @@ def _mean(rows, key):
     return statistics.mean(values) if values else None
 
 
+def resolvable(agent_rows, base_rows, key, margin):
+    """Is this round's margin bigger than the noise it was measured against?
+
+    The five rules compare two means and print PASS or FAIL. Neither says whether
+    the round had enough replicates to tell the difference from run-to-run
+    spread, and measured over rounds 46-48 (11 replicates per arm) the spread is
+    large:
+
+        coverage    agent 14.6 +- 2.3   base 13.3 +- 1.9   gap +1.36  needs n~19
+        citations   agent 21.5 +- 3.6   base 18.3 +- 3.9   gap +3.18  needs n~11
+        redactions  agent  0.0 +- 0.0   base  5.1 +- 6.8   gap -5.09  needs n~7
+
+    Base is FIXED code and still ranges 10-15 on coverage, 10-24 on citations and
+    0-25 on redactions. Rounds are run at n=4, so rule 4 in particular is decided
+    by noise -- rounds 47 and 48 ran effectively identical code and produced
+    coverage 14.0 vs 13.0 (pass) and 12.7 vs 15.0 (fail).
+
+    This does not touch a threshold. The rules stay exactly as pre-registered;
+    this only says how much to believe the verdict, which was previously printed
+    with no uncertainty at all.
+    """
+    a = [r.get(key) for r in agent_rows if isinstance(r.get(key), (int, float))]
+    b = [r.get(key) for r in base_rows if isinstance(r.get(key), (int, float))]
+    if len(a) < 2 or len(b) < 2:
+        return None
+    def _sd(v):
+        m = sum(v) / len(v)
+        return (sum((x - m) ** 2 for x in v) / len(v)) ** 0.5
+    se = ((_sd(a) ** 2) / len(a) + (_sd(b) ** 2) / len(b)) ** 0.5
+    if se == 0:
+        return ("resolved", se, 0)
+    # Replicates per arm that would put the margin two standard errors clear.
+    need = (2 * ((_sd(a) ** 2 + _sd(b) ** 2) / 2) ** 0.5 / abs(margin)) ** 2 * 2 \
+        if margin else float("inf")
+    return ("resolved" if abs(margin) >= 2 * se else "NOISE", se, need)
+
+
 def judge(agent_rows, base_rows):
     """The five pre-registered rules. Every one must hold.
 
@@ -501,7 +538,25 @@ def judge(agent_rows, base_rows):
          bool(chars_b) and 0.6 * chars_b <= chars_a <= 2.0 * chars_b,
          "%.0f vs base %.0f" % (chars_a, chars_b)),
     ]
-    return rules, all(passed for _, passed, _ in rules)
+    # Annotate each comparative rule with whether this round could tell the
+    # difference from noise. Thresholds untouched; only the confidence is new.
+    margins = {"2 citations >= base": ("citations_in_body", citations_a - citations_b),
+               "3 redactions <= base + 2": ("redacted", (redacted_b + 2) - redacted_a),
+               "4 prose coverage >= base": ("prose_pathways_covered",
+                                            coverage_a - coverage_b)}
+    annotated = []
+    for label, passed, detail in rules:
+        info = margins.get(label)
+        if info:
+            verdict = resolvable(agent_rows, base_rows, info[0], info[1])
+            if verdict:
+                state, se, need = verdict
+                detail = "%s [margin %+.1f, se %.1f -> %s%s]" % (
+                    detail, info[1], se, state,
+                    "" if state == "resolved" or need == float("inf")
+                    else ", needs n~%.0f/arm" % need)
+        annotated.append((label, passed, detail))
+    return annotated, all(passed for _, passed, _ in annotated)
 
 
 # Diagnostics printed beside every failing rule, chosen because each one has

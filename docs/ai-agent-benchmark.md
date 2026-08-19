@@ -2817,3 +2817,53 @@ their number at the same time -- two changes whose net could easily be fewer
 surviving citations. One lever per round.
 
 Queue: round 49 framing reuse, round 50 top-up evidence at 1000 chars.
+
+### The judge has been deciding rule 4 by coin flip
+
+Round 48 r1-r3 came back at coverage 12.7 against base 15.0 -- rule 4 failing --
+on code that is byte-identical to round 47, which scored 14.6 against 13.3 and
+passed. `LEAN_PROFILES` changed nothing (`genes_flat` is 0 in every replicate),
+so the two rounds are the same agent. Both arms moved by more than the gap
+between them.
+
+Measured over rounds 46-48, eleven replicates per arm:
+
+```
+                   agent          base          gap    replicates needed
+coverage       14.6 +- 2.3    13.3 +- 1.9    +1.36        ~19 per arm
+citations      21.5 +- 3.6    18.3 +- 3.9    +3.18        ~11 per arm
+redactions      0.0 +- 0.0     5.1 +- 6.8    -5.09         ~7 per arm
+```
+
+Base is FIXED code and still ranges 10-15 on coverage, 10-24 on citations and
+0-25 on redactions. **The incumbent's own replicate-to-replicate noise is larger
+than most of the effects chased over the last eight rounds.** Rounds run at n=4.
+
+So of the three comparative rules, only rule 3 is reliably decidable at the
+replicate count in use. Rule 2 needs about eleven per arm; rule 4 needs about
+nineteen and has been a coin flip throughout.
+
+`judge()` now annotates each comparative rule with the margin, the standard error
+of the difference, and how many replicates would settle it. Applied to round 47's
+"5/5, BETTER than base":
+
+```
+2 citations   PASS  (21.0 vs 16.2 [margin  +4.8, se 2.4 -> resolved])
+3 redactions  PASS  ( 0.0 vs  8.5 [margin +10.5, se 4.9 -> resolved])
+4 coverage    PASS  (14.0 vs 13.0 [margin  +1.0, se 1.2 -> NOISE, needs n~24/arm])
+```
+
+The honest reading of that sweep is three rules resolved, one decided by noise,
+and a length rule passed because a stitch rejection happened to land in one of
+four replicates.
+
+**No threshold was touched.** The rules are pre-registered and stay exactly as
+written; a test pins that the annotation cannot change a single pass or fail. All
+it adds is how much to believe the verdict, which was previously printed with no
+uncertainty at all.
+
+The immediate consequence: because rounds 47 and 48 ran the same agent, they can
+be POOLED for n~8 per arm rather than read as two independent n=4 verdicts. That
+is a stronger result than either round alone, and it is the right way to read the
+two-consecutive-5/5 bar -- two passes at n=4 are not two independent confirmations
+if the second round's change did nothing.
