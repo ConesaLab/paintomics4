@@ -3296,3 +3296,47 @@ not see.
 `TOPUP_ABSTRACT=1000` stays parked. The 1209-abstract measurement is sound and a
 wider window should help both arms, but it cannot explain THIS arm's gap and is
 not the first thing to spend a round on.
+
+### Every writer works from abstracts; only the verifier gets full text
+
+With `fulltext_candidates` finally archived, the evidence flow can be stated end
+to end. Round 50, 35 cited papers across two replicates:
+
+```
+cited papers          35
+abstract-only         34   (97%)
+fetch cost           0.5 s per paper
+budget at that point  276 s
+```
+
+The chain:
+
+```
+1  search retrieves papers            -> abstract-only for almost all of them
+2  _quote_shelf pulls passages         -> from those abstracts, since `sections`
+                                          holds only an abstract for a thin paper
+3  delegated interpreters write        -> citing shelf passages
+4  the Lead writes its framing         -> citing check_my_citations quotes
+5  the top-up bolts on more            -> from abstract[:220]
+6  the gate fetches FULL TEXT          -> for papers already cited
+7  the verifier judges the claim       -> against that full text
+```
+
+**Full text enters at step 6, after every writer has finished.** The pipeline
+pays to retrieve it and spends it entirely on checking work that was done without
+it. That is the same shape as the other three defects found this session -- a
+component judged on something it was never shown -- but at the level of the whole
+design rather than one stage.
+
+It is also affordable to fix. The fetch costs 0.5 s per paper and the gate has
+276 s of headroom when it runs; full text for a 30-paper pool before delegation
+is about 16 s, against runs finishing at 380 s of a 600 s ceiling. And it
+composes with round 51: halving `SEARCH_HITS` halves the pool, so the earlier
+fetch gets cheaper exactly as it becomes more useful.
+
+Recorded as the round 52 candidate, after round 51's `SEARCH_HITS` revert. Stated
+prediction if it runs: `_quote_shelf` passages come from Results sections rather
+than abstracts, so delegated citations survive verification at a higher rate and
+`fulltext_upgraded` at the gate falls towards zero because the text is already
+there. Falsifier: if survival does not move, the writers were not limited by the
+evidence in front of them and the whole supply story is wrong.
