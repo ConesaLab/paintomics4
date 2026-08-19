@@ -5555,6 +5555,54 @@ its mechanism is more appealing.
 **Power note:** cancellation is 2 events in 8 runs. Prediction 1 cannot be
 resolved at n=8 -- going 2/8 to 0/8 is consistent with chance. It will be
 reported as a direction, not a result, unless the round is enlarged.
+
+## Round 61 WITHDRAWN before running — the guard cannot separate the cases
+
+Round 60 pre-registered `AI_AGENT_TOPUP_MIN=320`. The guard is arithmetic, so
+the counterfactual was computed from round 57's archived traces rather than by
+spending a round on it.
+
+| run | headroom at the guard | topup_s | waves | cancelled | MIN=320 |
+|-----|----------------------|---------|-------|-----------|---------|
+| 73I734364H | 268 | **102** | 2 | **YES** | BLOCKS -- correct |
+| 4rofHV6613 | 298 | **108** | 2 | **YES** | BLOCKS -- correct |
+| 1354co025T | 261 | 59 | **3** | -- | **BLOCKS -- WRONG** |
+| 31qPRO6hF3 | 249 | 38 | **3** | -- | **BLOCKS -- WRONG** |
+| 73I734364H | 346 | 95 | 3 | -- | allows |
+
+It blocks both runs that needed it **and two that did not** -- runs that
+completed three waves AND ran top-up, getting both. Blocking those costs ~20
+citations each for no benefit, which trips the falsifier round 60 attached to
+it. Withdrawn.
+
+**Why no threshold on headroom can work.** The cancelled runs had MORE headroom
+(268, 298) than two successful ones (261, 249). What separates them is how long
+top-up turned out to take -- 102/108 s versus 38/59 s -- and that is not
+knowable when the guard runs. The guard is conditioning on the wrong variable.
+
+**The sharpest single fact in this round.** Of the two cancelled runs, the 102 s
+one was `topup_rejected: True`, having dropped 2 existing citations. It spent
+**102 seconds on a top-up that was thrown away, and lost its third verify wave
+paying for it.** That is the worst outcome the pipeline can produce, and it is
+invisible without the `__stats__` stamp added in round 56.
+
+**What this leaves.** Two candidate directions, neither pre-registered yet:
+
+1. **A deadline on top-up** -- round 55's idea, withdrawn then as unmeasurable
+   in span terms and mechanically wrong for salvaging partial output. The
+   justification here is different and does not depend on partial output: the
+   point is to bound what top-up can consume so the third wave survives. Its
+   cost is the whole top-up (all-or-nothing, established in round 56), so it
+   faces repair's falsifier directly.
+2. **Reordering** -- run the third verify wave before top-up, so grounding is
+   guaranteed and top-up spends what is left. Not a workflow, a reordering, and
+   it makes the trade explicit instead of leaving it to whichever stage reaches
+   the budget first.
+
+Direction 2 is the better candidate: it costs no citations in runs where both
+fit, and in tight runs it prefers grounding over addition, which is the standard
+this document is written to. It needs its own pre-registration and is not
+claimed here.
 ## Round 63 — a rejected top-up now says which condition rejected it
 
 Round 62 identified the only lever in this pipeline with no citation cost: a
