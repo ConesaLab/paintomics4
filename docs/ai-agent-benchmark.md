@@ -2361,3 +2361,51 @@ table from a run **28 hours old**. `loop_s` is one phase (130 s); the trace span
 is the whole run (410 s), so the criterion was wrong on its face and still
 returned a plausible-looking table. This is the third time in this project that a
 join by timing produced a confident wrong answer. `trace_file` removes the guess.
+
+### Round 48 pre-registration: stop paying for flat genes
+
+`get_pathway_details` costs 24 058 characters per call and zero seconds, so its
+whole price is context, re-sent on every later Decide turn. Reading it closely:
+
+`_get_top_genes` already sorts `(-relevant, -effect_size)` and takes 10, so the
+selection is relevance-first -- "only significant features" is, at the selection
+step, already done. What is not done is what happens when a pathway has fewer
+than ten relevant genes: the remaining slots fill with non-differential genes,
+and `_pathway_block` renders each of those with its full per-layer temporal
+profile. A gene that is matched but flat has no differential signal by
+definition; its time-course is not evidence for anything, and it costs roughly
+180 of the ~250 characters on its line.
+
+**Change:** `_pathway_block` renders omic profiles only for genes marked
+relevant. Non-relevant genes are still named, still carry their effect size, and
+still count toward the pathway's matched total -- only the profile is dropped.
+
+**Predictions:** `get_pathway_details` chars-per-call falls at least 25%; total
+`tool_chars` falls at least 15%; citations, coverage and redactions all move by
+less than 1, because nothing differential was removed.
+
+**Falsifier:** if citations or coverage fall by more than 1, those profiles were
+load-bearing -- the agent was reading something in them that the relevance flag
+does not capture -- and the change is reverted, not tuned.
+
+This is measurable from the archive alone now that `tool_calls_by_tool` exists;
+every previous per-call figure in this document was recovered by hand.
+
+### Rule 5: the length is real content, and I am not trimming it
+
+Round 47 at n=2 is 70 776 characters against base's 30 546 -- 2.32x, past the
+2.0x ceiling, with citations 19.0 (base 18.5), coverage 15.0 (base 11.0) and
+redactions 0 (base 2.5).
+
+The obvious remedy was to trim the 16 870-character Pathway Clusters table that
+base does not emit. I went looking for a dump to cap and found the opposite: the
+long column is cluster MEMBERSHIP, the shared-core gene list is already capped at
+ten, and the report's own reading note promises the reader that "the full
+membership of every cluster is in the Pathway Clusters table at the end". Cutting
+it would break a promise the report makes in order to pass a metric.
+
+So rule 5 fails on content the arm legitimately produces. The ratio on prose
+alone is 1.86x. The rule stands as pre-registered -- a rule edited after seeing
+the numbers is not a rule -- and the honest reading is that the agent arm writes
+a longer document than base, partly because it says more and partly because it
+ships a reference table base has no equivalent for.
