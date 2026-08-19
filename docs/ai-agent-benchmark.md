@@ -5485,3 +5485,75 @@ The whole-report rewrite stays the correction mechanism, and `VERIFY_ITERATIONS
 = 3` stays the default. The known cost of the rewrite -- 2 of 8 corrections
 cancelled mid-flight -- is real but is not fixed by repair, because repair's
 price is a third of the citations.
+
+## Round 65 — a Results section, and the citation guard that had to exist
+
+Requested directly: the interpretation is too long and does not read like a
+paper's Results. No bullet key-findings, subsections that tell different
+stories, clusters described rather than tabulated. And, added mid-implementation
+and decisively: **citations must be kept.**
+
+### What the arm produces today
+
+Measured on round 57's best replicate: **8 184 words over 497 lines**, opening
+with a "Key Findings" bullet block, then fifteen numbered pathway sections each
+carrying the same three sub-headings, then a 37-row table -- 50 bullets and 67
+bold run-ins in all. It also reads as stitched: a second H1 mid-document and
+"Cross-Pathway Synthesis" appearing twice, because it is the concatenation of
+delegated chunks.
+
+### The stage
+
+`_write_results_section`, behind `AI_AGENT_RESULTS_SECTION` (default off).
+
+**It runs before the exit gate, and the order is the safety property.** Its
+prose then goes through top-up, the Claim Verifier and the programmatic net, so
+it is grounded by the same machinery as any other draft. Running it after the
+gate would let a rewrite move a verified marker onto a claim nobody checked --
+reintroducing exactly the overshoot the gate exists to remove.
+
+### The guard was not paranoia
+
+First live attempt, prompt only: **it lost 5 of 22 citations.** The instruction
+"every marker must survive" was in the prompt and was not followed. Asking a
+model to reorganise 8 000 words and carry two dozen markers is two tasks, and
+the second fails quietly.
+
+So the rule is a guard, mirroring how merge and top-up already reject candidates:
+a rewrite that drops a marker, invents one, loses the References or truncates is
+**discarded and the dossier ships instead**. Then one retry that names the
+missing markers rather than repeating "be careful".
+
+One detail found by its own test: the guard first compared markers across the
+WHOLE document, and the reference list repeats every marker as its own line
+(`[2] Smith et al.`), so prose could drop a citation while its entry survived
+and the guard would see no change. That is marker-stripping -- the behaviour
+that makes `failed_citations` read 0.0 on a report whose prose lost its support.
+It now compares **body** markers only.
+
+### Result
+
+| | dossier | Results section |
+|---|---|---|
+| words | 8 184 | **2 957** (-64%) |
+| body citations | 22 | **22 -- all kept** |
+| bullets | 50 | **0** |
+| table rows | 37 | **0** |
+
+Section titles are findings, not accessions: "Chromatin Accessibility Remodeling
+Precedes Transcriptional Activation", "A Coordinated 12-Hour Checkpoint Marks
+the Differentiation Commitment Window". Numbers sit inside sentences with the
+measure named. The cluster table is suppressed when a section is written, since
+the section describes the clustering in prose; the enriched pathway summary
+stays, being data the job already holds rather than a model assertion.
+
+### Not yet measured, and the reason it matters
+
+**84 s** for the two attempts on this report. Median span is 450 s against a
+600 s bar, so this fits -- but with ~66 s of the remaining headroom, and round
+57 showed that a stage consuming budget before the gate is how corrections get
+cancelled. That is a pre-registration for the next round, not a claim here.
+
+n = 1 report, and it is round 57's BEST replicate. Whether the guard's rejection
+rate is 0% or 40% across a full round is unknown, and a stage that falls back to
+the dossier half the time is a different proposition from one that does not.

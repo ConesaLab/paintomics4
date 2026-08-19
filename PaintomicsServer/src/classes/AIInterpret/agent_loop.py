@@ -198,6 +198,20 @@ MERGE_DELEGATED = os.getenv("AI_AGENT_MERGE_DELEGATED", "1") == "1"
 # everything, which measured 4.5-11 citations because the writer saw the whole
 # reference list at once.
 MERGE_MODE = os.getenv("AI_AGENT_MERGE_MODE", "stitch")
+
+# Rewrite the finished dossier as a paper Results section.
+#
+# What the arm produces today is a DOSSIER, not a Results section: measured on a
+# real run, 8 184 words over 497 lines, opening with a "Key Findings" bullet
+# block, then fifteen numbered pathway sections each carrying the same three
+# sub-headings, then a 37-row table. It also reads as stitched -- a second H1
+# mid-document and "Cross-Pathway Synthesis" appearing twice -- because it is
+# the concatenation of delegated chunks.
+#
+# A Results section is continuous prose, organised by FINDING rather than by
+# pathway id, with the clusters described in a sentence rather than tabulated.
+RESULTS_SECTION = os.getenv("AI_AGENT_RESULTS_SECTION", "0") == "1"
+RESULTS_MAX_WORDS = int(os.getenv("AI_AGENT_RESULTS_WORDS", "1800"))
 SCREEN_TARGET_POOL = int(os.getenv("AI_AGENT_SCREEN_TARGET", "35"))
 """How many screened papers the pool should aim for.
 
@@ -2327,6 +2341,141 @@ TOOLBELT = [get_experiment_overview, get_pathway_details,
 # Orchestration: the loop, then the mandatory exit gate.
 # ---------------------------------------------------------------------------
 
+RESULTS_PROMPT = """Rewrite the interpretation below as the RESULTS section of a
+research paper. Not a summary of it -- the Results section itself.
+
+WHAT TO CHANGE
+- Continuous prose. No bullet lists anywhere. No "Key Findings" block: a Results
+  section states its findings in order, it does not preface itself.
+- Four to six subsections. Title each one by the FINDING it reports, as a paper
+  would ("Chromatin accessibility changes precede transcriptional response"),
+  never by a pathway name or accession ("Autophagy - Animal (mmu04140)").
+- Each subsection tells ONE story and draws on whichever pathways serve it.
+  Do not walk through pathways one at a time; that is the structure being
+  replaced.
+- Describe the pathway clusters in prose -- what groups with what, and what the
+  grouping means biologically. Do not reproduce the cluster table.
+- No tables of any kind.
+- Report numbers the way a paper does: inside the sentence, with the measure
+  named ("accessibility rose at 83 of 130 autophagy loci, p = 0.0029"), not as
+  a parenthetical dump.
+- Target %(words)d words. Shorter is better than padded.
+
+WHAT MUST NOT CHANGE
+- **These exact markers must all appear in your prose: %(markers)s**
+  Check them off before you answer; a rewrite missing any one is discarded and
+  the original is shipped instead, so the work is wasted.
+- **Every [N] citation marker must survive, on the sentence it supports.** The
+  citations were verified against the papers they point at; a marker moved to a
+  different claim is a false citation, and a marker dropped loses a verified
+  fact. Carry each one to whichever sentence now carries its claim. Do not
+  renumber, do not add new markers, do not cite anything not already cited.
+- Every numeric value, gene symbol, p-value and direction of change.
+- The "### References" section at the end, exactly as it stands.
+
+THE CLUSTERS (describe these in prose; do not tabulate):
+%(clusters)s
+
+THE INTERPRETATION TO REWRITE:
+%(report)s
+"""
+
+
+async def _write_results_section(agent, ctx, report, cluster_text, job_id,
+                                 stats, timeout):
+    """Rewrite the dossier as a Results section, or keep the dossier.
+
+    Runs BEFORE the exit gate on purpose. Everything it writes then goes
+    through top-up, the Claim Verifier and the programmatic net, so its prose is
+    grounded by the same machinery as any other draft. Placing it after the gate
+    would let a rewrite move a verified marker onto a claim nobody checked --
+    which is precisely the overshoot the gate exists to remove.
+
+    The citation guard is not advisory. Measured across this document, a stage
+    that silently costs citations is the failure mode that killed sentence
+    repair (-33%) and the top-up deadline (-21%), so this one is REJECTED
+    outright if a single marker goes missing, exactly as the merge and top-up
+    candidates are.
+    """
+    t0 = time.time()
+
+    def _body_markers(text):
+        """Markers in the PROSE, not in the reference list.
+
+        The reference list repeats every marker as its own line ("[2] Smith et
+        al..."), so counting the whole document hides the exact failure this
+        guard exists to catch: prose that drops a citation while the entry it
+        pointed at stays in the list. That is marker-stripping, and this arm
+        already does it -- redaction removes the marker and leaves the sentence,
+        which is why "failed citations" reads 0.0 while grounding is imperfect.
+        """
+        return set(re.findall(r"\[(\d+)\]", str(text).split("### References")[0]))
+
+    before = _body_markers(report)
+    prompt = RESULTS_PROMPT % {
+        "words": RESULTS_MAX_WORDS,
+        "markers": " ".join("[%s]" % m for m in sorted(before, key=int)) or "(none)",
+        "clusters": cluster_text or "(no clustering available)",
+        "report": report}
+
+    # One retry, naming what went missing.
+    #
+    # Measured on the first live attempt: the prompt alone lost 5 of 22
+    # citations while compressing 8 184 words to a Results section. Asking a
+    # model to reorganise prose and carry two dozen markers is two tasks, and
+    # the second is the one that silently fails -- so it gets told exactly which
+    # ones it dropped rather than being asked again to be careful.
+    candidate = ""
+    after = set()
+    for attempt in (1, 2):
+        try:
+            r = await bounded(Runner.run(agent, prompt, context=ctx, max_turns=2),
+                              timeout, label="results section")
+            candidate = str(r.final_output or "").strip()
+        except (Exception, asyncio.TimeoutError) as e:
+            stats["results_failed"] = "%s: %s" % (type(e).__name__, e)
+            return report, False
+        after = _body_markers(candidate)
+        missing = before - after
+        if not missing or attempt == 2:
+            stats["results_attempts"] = attempt
+            break
+        stats["results_retried"] = ",".join(sorted(missing, key=int))
+        prompt = (
+            "Your Results section dropped these citations: %s\n\n"
+            "Each one marks a claim that was verified against the paper it "
+            "points at, so a dropped marker loses a verified fact and the "
+            "rewrite is discarded. Return the SAME Results section with every "
+            "one of them restored on the sentence carrying its claim. Change "
+            "nothing else.\n\n%s"
+            % (" ".join("[%s]" % m for m in sorted(missing, key=int)), candidate))
+    lost = before - after
+    gained = after - before
+    reasons = []
+    if lost:
+        reasons.append("lost_%d" % len(lost))
+    if gained:
+        # A marker that was not there before points at a paper this text was
+        # never verified against.
+        reasons.append("invented_%d" % len(gained))
+    if "### References" in report and "### References" not in candidate:
+        reasons.append("no_references")
+    if len(candidate) < 0.2 * len(report):
+        reasons.append("truncated")
+    if reasons:
+        stats["results_rejected"] = ",".join(reasons)
+        stats["results_s"] = time.time() - t0
+        logger.info("[%s][loop] results section rejected (%s); keeping the "
+                    "dossier", job_id, ",".join(reasons))
+        return report, False
+
+    stats["results_words_before"] = len(report.split())
+    stats["results_words_after"] = len(candidate.split())
+    stats["results_citations_kept"] = len(after)
+    stats["results_s"] = time.time() - t0
+    return candidate, True
+
+
 async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
                           stats, hooks=None):
     hooks = hooks or {}
@@ -2748,19 +2897,43 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
         stats["merge_mode"] = MERGE_MODE
         stats["merge_s"] = time.time() - t_m
 
+    # ---- optional: rewrite the dossier as a paper Results section ---------
+    # Before the tables are appended and before the exit gate, so the rewritten
+    # prose is what gets top-up, verification and redaction. See
+    # _write_results_section for why the order is not negotiable.
+    results_written = False
+    if RESULTS_SECTION:
+        cluster_text = ""
+        if ctx.partition is not None:
+            cluster_text = clusters_mod.render_partition_table(
+                ctx.partition, _ctx_by_id(ctx)) or ""
+        report, results_written = await _write_results_section(
+            agents["synth"], ctx, report, cluster_text, job_id, stats,
+            min(SDK_LONG_CALL_TIMEOUT, 180))
+        stats["results_section"] = results_written
+
     # The deterministic tables ride below the prose, exactly as the workflow
     # arm ships them (its phase 5d): data the job already holds is appended,
     # never asked of the model.
+    #
+    # When a Results section was written, the CLUSTER table is suppressed --
+    # the section describes the clustering in prose, which is the whole point of
+    # asking for it, and a table restating it undoes that. The enriched pathway
+    # summary stays: it is the quantitative backbone, it is data the job already
+    # holds rather than anything the model asserted, and dropping it would lose
+    # numbers the reader may want to check.
     if "## Enriched Pathway Summary" not in report:
         report = report.rstrip() + "\n\n" + render_pathway_table(pathways)
     if ctx.partition is not None:
-        table = clusters_mod.render_partition_table(ctx.partition,
-                                                   _ctx_by_id(ctx))
-        if table and "## Pathway Clusters" not in report:
-            report = report.rstrip() + "\n\n" + table
+        if not results_written:
+            table = clusters_mod.render_partition_table(ctx.partition,
+                                                       _ctx_by_id(ctx))
+            if table and "## Pathway Clusters" not in report:
+                report = report.rstrip() + "\n\n" + table
         note = clusters_mod.render_reading_note(ctx.partition)
-        if note and note not in report:
-            report = note + "\n\n" + report
+        if note and note not in report and not results_written:
+            note = note + "\n\n" + report
+            report = note
 
     # ---- The mandatory exit gate ------------------------------------------
     # Identical sequence to agent.py's tail (phases 5a''''-6): marker hygiene,
