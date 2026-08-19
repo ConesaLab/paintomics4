@@ -3340,3 +3340,54 @@ than abstracts, so delegated citations survive verification at a higher rate and
 `fulltext_upgraded` at the gate falls towards zero because the text is already
 there. Falsifier: if survival does not move, the writers were not limited by the
 evidence in front of them and the whole supply story is wrong.
+
+### The arm's actual standing, at the largest sample available
+
+Reading single rounds has misled me twice, so here is every current-architecture
+round pooled -- 19 agent replicates against 20 base:
+
+```
+  citations      agent     21.0   base     19.0   [margin +2.0, se 1.3 -> NOISE]
+  redactions     agent      0.0   base      4.2   [margin +6.2, se 1.2 -> resolved]
+  coverage       agent     14.4   base     13.4   [margin +1.0, se 0.7 -> NOISE]
+  report chars   agent  58 829    base  35 789         1.64x
+  wall seconds   agent    371      base    336         both inside 600
+```
+
+**One of the three comparative rules is resolved.** Redactions: the agent arm
+ships 0.0 in every round measured, against a base that ranges 0 to 25. Per round,
+that result is resolved in **7 of 7**:
+
+```
+round      citations                 redactions            coverage
+r44(n=4)  16.5 v 22.5 resolved      0.0 v 4.0 resolved   14.8 v 13.0 NOISE
+r45(n=2)  13.0 v 20.0 NOISE         0.0 v 1.0 resolved   16.5 v 15.0 NOISE
+r46(n=4)  21.5 v 22.2 NOISE         0.0 v 1.0 resolved   16.8 v 12.2 resolved
+r47(n=4)  21.0 v 16.2 resolved      0.0 v 8.5 resolved   14.0 v 13.0 NOISE
+r48(n=4)  19.5 v 15.0 NOISE         0.0 v 4.5 resolved   12.8 v 14.8 resolved
+r49(n=4)  20.8 v 22.2 NOISE         0.0 v 3.2 resolved   13.8 v 13.2 NOISE
+r50(n=3)  22.7 v 19.0 NOISE         0.0 v 4.3 resolved   15.0 v 13.3 NOISE
+```
+
+Citations resolve in two rounds and in **opposite directions** -- r44 has the arm
+resolvably WORSE. Coverage resolves twice, also in opposite directions (r46
+chunk=5 better, r48 chunk=3 worse).
+
+**A correction.** Three iterations ago I read pooled rounds 47+48 (n=8) and
+reported "citations +4.6, se 1.9, resolved" as the arm winning the brief's own
+criterion. At n=19 that margin is +2.0 and NOISE. Rounds 47 and 48 paired a
+strong agent sample with a weak base sample (base 16.2 and 15.0 against its
+overall mean of 19.0); rounds 46, 49 and 50 have base at 22.2, 22.2 and 19.0, and
+the margin regresses. The confidence annotation built two iterations ago caught
+my own small-n claim failing to replicate, which is what it was for.
+
+So the honest position: **the agent arm produces reports with no redactions,
+reproducibly, and is nominally ahead on citations and coverage without either
+being established.** Citations would need about 32 replicates per arm to resolve
+at the current margin; coverage more.
+
+That also re-prices the shipping bar. Two consecutive 5/5 at n=4 was met once, on
+a metric picture that does not replicate at n=19. The bar is not wrong, but it is
+weaker than it sounds: at these variances a 5/5 is substantially a draw from base
+being having a bad day, and the durable claim is the one that held in every
+single round.
