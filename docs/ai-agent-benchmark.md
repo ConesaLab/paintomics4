@@ -5710,3 +5710,60 @@ enough to see that reasons are missing and not enough to know which dominates.
 Round 59's interim entry was withdrawn for exactly that -- generalising from
 2-3 replicates -- and the next round should accumulate reasons before anything
 is changed.
+
+## Round 64 — the falsifier and the rubric are independent axes
+
+Every falsifier in this document is written on `citations_in_body`. Repair was
+killed for a 33% fall in it. That metric was tested against the sealed rubric
+across all 16 scored reports from rounds 57 and 59.
+
+| vs rubric coverage | pearson r | |
+|---|---|---|
+| **citations_in_body** | **0.05** | **no relationship** |
+| full_text_cited | 0.15 | no relationship |
+| prose_pathways_covered | 0.38 | weak |
+
+**Citation count is statistically independent of rubric coverage.** Optimising
+one does not move the other. And on the rubric the two arms are equivalent:
+
+```
+rewrite (round 57)  mean coverage 0.570
+repair  (round 59)  mean coverage 0.558      difference 0.012
+```
+
+**Fabricated rubric items: 0 across all 16 reports.** The arm does not invent
+findings; that half of the rubric is saturated and cannot discriminate.
+
+### What this does and does not overturn
+
+It does **not** overturn round 59. The two metrics measure different things and
+both are legitimate:
+
+* `citations_in_body` -- does the report SUPPORT what it says? That is the
+  standing brief's criterion, in the user's words: "citation grounded".
+* rubric coverage -- does the report FIND the biology the published Results
+  found? That is AgentEvolve's criterion.
+
+Repair produces a report of **equal scientific coverage with a third less
+support**, faster. Killed on the first criterion, which is the stated one. The
+precise verdict is that repair was not killed for producing worse science -- it
+was killed for producing less-supported science, and the distinction was not
+drawn at the time.
+
+### What it changes going forward
+
+Rounds have been scored on one axis and read as if it were quality. Both should
+be reported, because a change that moves citations without moving coverage --
+which is every change measured so far -- is a change in grounding, not in
+findings. Round 60's conclusion survives this and is sharpened: the rewrite's
+extra citations are real support (full-text-backed, resolved) for the **same**
+biology, not extra biology.
+
+### An instrument error found here, again
+
+`rubric_score` returns `(coverage, fabricated_items)`. The first pass through
+this analysis treated the return as a dict, got `n = 0` scored reports, and only
+an obviously-null result made it visible. The ranking published before that
+printed `"(0.57608"` -- a truncated tuple repr read as a score -- so the
+fabrication count was silently discarded. It is zero everywhere, so nothing
+downstream was wrong, but the check that established it had not been run.
