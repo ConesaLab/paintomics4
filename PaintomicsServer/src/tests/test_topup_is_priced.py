@@ -145,6 +145,42 @@ def test_the_reference_list_and_its_string_stay_consistent():
     assert 'stats["topup_added_refs"]' in window.split('stats["topup_refs"]')[1][:200]
 
 
+def test_a_topup_that_DROPS_existing_citations_is_rejected():
+    """The behaviour that made the stage look worse than it is.
+
+    One replicate returned a net gain of +1 while introducing SIXTEEN new
+    references: it had dropped fifteen citations the report already carried and
+    swapped in its own. Eleven of those failed at the gate and took 42 markers
+    with them, leaving five citations in a report that started with twenty.
+
+    The acceptance test asked only whether the net count rose and the length
+    held, so a wholesale swap passed it -- while the stage's own prompt says
+    "Return the SAME report with citations added ... Change nothing else".
+    """
+    import inspect
+    from src.classes.AIInterpret import agent_loop as loop
+    src = inspect.getsource(loop)
+    i = src.index("dropped = set(cited_now) - set(cited_after)")
+    window = src[i:i + 900]
+    assert "and not dropped" in window, (
+        "a top-up that replaces existing citations is still accepted")
+    assert 'stats["topup_dropped_existing"]' in window, (
+        "a rejected swap leaves no trace, which is how this stayed invisible")
+
+
+def test_net_added_is_not_the_same_as_references_introduced():
+    """topup_added is a NET figure -- after minus before -- so a stage that
+    swaps ten citations for eleven records +1. The set is what identifies what
+    it actually did, and only the set can show a swap."""
+    cited_now = {1, 2, 3}
+    cited_after = {1, 9, 10, 11}
+    net = len(cited_after) - len(cited_now)
+    introduced = cited_after - cited_now
+    dropped = cited_now - cited_after
+    assert net == 1 and len(introduced) == 3 and len(dropped) == 2, (
+        net, introduced, dropped)
+
+
 def _check(name, fn):
     try:
         fn()
@@ -165,7 +201,9 @@ def main():
               test_a_stage_that_declined_to_run_says_why,
               test_both_arms_actually_call_the_scorer,
               test_the_topups_own_references_are_archived,
-              test_the_reference_list_and_its_string_stay_consistent):
+              test_the_reference_list_and_its_string_stay_consistent,
+              test_a_topup_that_DROPS_existing_citations_is_rejected,
+              test_net_added_is_not_the_same_as_references_introduced):
         _check(t.__name__, t)
     print("\nPassed: %d / %d" % (len(_PASSED), len(_PASSED) + len(_FAILED)))
     if _FAILED:

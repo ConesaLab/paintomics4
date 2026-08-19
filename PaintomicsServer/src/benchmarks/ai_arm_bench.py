@@ -227,6 +227,7 @@ STAGE_COUNTS = ("verify_iterations", "batches_failed", "truncated_calls",
                 # markers removed plus dropped reference entries.
                 "sentences_dropped", "topup_fulltext_gained",
                 "topup_pulled_back", "topup_markers_pulled",
+                "topup_dropped_existing",
                 # Does the agent fill notebook_write's `subject`? The
                 # pre-registered falsifier for that argument was a blank rate
                 # above ~30%, and nothing recorded it.

@@ -2318,7 +2318,21 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
             # Same acceptance test as the workflow arm: a "top-up" that
             # shortens the report into a summary is a regression wearing a
             # bigger citation count.
-            if len(candidate) > 0.6 * len(str(report)) and added > len(cited_now):
+            # A top-up must ADD. Measured: one replicate returned a net gain of
+            # +1 while introducing SIXTEEN new references -- it had dropped
+            # fifteen citations the report already had and swapped in its own.
+            # Eleven of those failed at the gate and took 42 markers with them,
+            # leaving five citations in a report that started with twenty.
+            #
+            # The old test asked only whether the net count rose and the length
+            # held, so a wholesale citation swap passed it. Its own prompt says
+            # "Return the SAME report with citations added ... Change nothing
+            # else"; this is the check that the instruction was followed.
+            dropped = set(cited_now) - set(cited_after)
+            if dropped:
+                stats["topup_dropped_existing"] = len(dropped)
+            if (len(candidate) > 0.6 * len(str(report))
+                    and added > len(cited_now) and not dropped):
                 report = candidate
                 stats["topup_added"] = added - len(cited_now)
                 # WHICH references it added, so the gate can price the trade.
