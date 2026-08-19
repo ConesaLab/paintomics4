@@ -5485,3 +5485,538 @@ The whole-report rewrite stays the correction mechanism, and `VERIFY_ITERATIONS
 = 3` stays the default. The known cost of the rewrite -- 2 of 8 corrections
 cancelled mid-flight -- is real but is not fixed by repair, because repair's
 price is a third of the citations.
+
+## Round 60 — the rewrite's extra citations are real, and the cancellations have one cause
+
+### Testing my own suspicion about round 59, and being wrong
+
+Round 59 killed repair because citations fell 33%. Before accepting that at face
+value it was worth asking whether the rewrite's extra citations are PADDING --
+it covers the same pathways (15.38 vs 15.50) with 7 more citations.
+
+| | rewrite | repair | |
+|---|---|---|---|
+| citations_in_body | 21.38 | 14.25 | RESOLVED |
+| **full_text_cited** | **12.88** | **9.12** | **RESOLVED** |
+| papers_retrieved | 56.62 | 58.50 | not resolved |
+| prose_pathways_covered | 15.38 | 15.50 | not resolved |
+
+**They are not padding.** 3.75 of the 7.12 extra citations are full-text-backed
+-- the higher-quality kind, since a specific mechanistic claim rarely has a
+quotable sentence in an abstract. Both arms retrieve the SAME literature
+(56.6 vs 58.5 papers); the rewrite converts more of it into grounded citations.
+Round 59's verdict stands and is better supported than when it was accepted.
+
+### The cancelled corrections have a single visible cause
+
+Round 57's eight runs, from the archived stats:
+
+| topup_s | waves | correction cancelled |
+|---------|-------|----------------------|
+| --      | 3 | -- |
+| **102** | **2** | **YES** |
+| **108** | **2** | **YES** |
+| --      | 3 | -- |
+| 59      | 3 | -- |
+| 95      | 3 | -- |
+| --      | 2 | -- |
+| 38      | 3 | -- |
+
+**Both cancelled runs are the two slowest top-ups.** Every run with a top-up at
+or under 95 s completed three waves; both runs over 100 s lost the third. They
+draw on one 600 s budget, so this is a mechanism rather than a coincidence --
+though with n=8 and two events, the separation is suggestive, not settled.
+
+`TOPUP_MIN_SECONDS = 200` decides whether top-up STARTS, from remaining
+headroom, and was calibrated when two waves were the default. A third wave costs
+~60-80 s of verification plus a ~117 s rewrite, about 200 s. So a run can clear
+the guard with 200 s, spend ~95 s on top-up, and leave the wave 105 s -- which
+is how a correction gets cancelled at 46 s.
+
+### Pre-registration (round 61, NOT yet run)
+
+`AI_AGENT_TOPUP_MIN=320` -- top-up starts only if the third wave can still
+afford to finish after it. No code change; the knob exists.
+
+**The trade this makes is exactly the one that killed repair, so it is guarded
+the same way.** Top-up adds ~20 citations when it runs. Raising the threshold
+skips it in tight runs, which costs citations in precisely those runs.
+
+**Predictions**
+1. Corrections cancelled falls from 2/8 to **0/8**.
+2. `citations_in_body` does **not** fall more than 5% versus round 57's 21.38.
+3. Median span stays under 600 s.
+
+**Falsifier:** if citations fall more than 5%, this is repair's trade in another
+costume -- buying grounding with citations -- and is reverted. Round 59 killed a
+change for a 33% citation loss; a change cannot be exempt from that bar because
+its mechanism is more appealing.
+
+**Power note:** cancellation is 2 events in 8 runs. Prediction 1 cannot be
+resolved at n=8 -- going 2/8 to 0/8 is consistent with chance. It will be
+reported as a direction, not a result, unless the round is enlarged.
+
+## Round 61 WITHDRAWN before running — the guard cannot separate the cases
+
+Round 60 pre-registered `AI_AGENT_TOPUP_MIN=320`. The guard is arithmetic, so
+the counterfactual was computed from round 57's archived traces rather than by
+spending a round on it.
+
+| run | headroom at the guard | topup_s | waves | cancelled | MIN=320 |
+|-----|----------------------|---------|-------|-----------|---------|
+| 73I734364H | 268 | **102** | 2 | **YES** | BLOCKS -- correct |
+| 4rofHV6613 | 298 | **108** | 2 | **YES** | BLOCKS -- correct |
+| 1354co025T | 261 | 59 | **3** | -- | **BLOCKS -- WRONG** |
+| 31qPRO6hF3 | 249 | 38 | **3** | -- | **BLOCKS -- WRONG** |
+| 73I734364H | 346 | 95 | 3 | -- | allows |
+
+It blocks both runs that needed it **and two that did not** -- runs that
+completed three waves AND ran top-up, getting both. Blocking those costs ~20
+citations each for no benefit, which trips the falsifier round 60 attached to
+it. Withdrawn.
+
+**Why no threshold on headroom can work.** The cancelled runs had MORE headroom
+(268, 298) than two successful ones (261, 249). What separates them is how long
+top-up turned out to take -- 102/108 s versus 38/59 s -- and that is not
+knowable when the guard runs. The guard is conditioning on the wrong variable.
+
+**The sharpest single fact in this round.** Of the two cancelled runs, the 102 s
+one was `topup_rejected: True`, having dropped 2 existing citations. It spent
+**102 seconds on a top-up that was thrown away, and lost its third verify wave
+paying for it.** That is the worst outcome the pipeline can produce, and it is
+invisible without the `__stats__` stamp added in round 56.
+
+**What this leaves.** Two candidate directions, neither pre-registered yet:
+
+1. **A deadline on top-up** -- round 55's idea, withdrawn then as unmeasurable
+   in span terms and mechanically wrong for salvaging partial output. The
+   justification here is different and does not depend on partial output: the
+   point is to bound what top-up can consume so the third wave survives. Its
+   cost is the whole top-up (all-or-nothing, established in round 56), so it
+   faces repair's falsifier directly.
+2. **Reordering** -- run the third verify wave before top-up, so grounding is
+   guaranteed and top-up spends what is left. Not a workflow, a reordering, and
+   it makes the trade explicit instead of leaving it to whichever stage reaches
+   the budget first.
+
+Direction 2 is the better candidate: it costs no citations in runs where both
+fit, and in tight runs it prefers grounding over addition, which is the standard
+this document is written to. It needs its own pre-registration and is not
+claimed here.
+
+## Round 62 — no budget-side fix exists, and top-up's real problem is compliance
+
+### Reordering is impossible
+
+Top-up is traced at line 2883; the verify loop starts at 2927. **Top-up already
+runs before ALL verification.** There is no third wave to move ahead of it. It
+consumes budget first and the waves get the remainder, which is exactly why a
+slow top-up starves them.
+
+### The deadline is dead too, priced without spending a round
+
+Thirteen runs across rounds 57 and 59 where top-up ran:
+
+| deadline | cut | worthless | citations lost | cancellations saved |
+|----------|-----|-----------|----------------|---------------------|
+| 90 s  | 9/13 | 2 | **7 runs: 22, 18, 12, 3, 2, 2, 1** | 2 |
+| 110 s | 3/13 | 0 | 3 runs: 18, 3, 2 | **0** |
+
+A deadline low enough to save both cancellations costs ~60 citations over 13
+runs -- **4.6 per run against a mean of 21.4, a 21% loss**, four times the 5%
+falsifier round 60 set. The least damaging deadline that cuts anything saves
+**zero** cancellations. Dead on the same grounds as repair.
+
+**So no budget-side intervention works.** Threshold and deadline both fail the
+citation bar. The cancellations are structural: a variable-cost ADDITION stage
+runs before a variable-cost GROUNDING stage inside a fixed budget, and the
+ten-minute requirement means the budget cannot be raised -- median span is
+already 450 s against a 600 s cap.
+
+The honest position is that the ~25% cancellation rate is the current price of
+that design, and it is not worth paying citations to remove.
+
+### The one lever with no citation cost
+
+Top-up is bimodal -- it adds 12-22 citations, or it adds 0-3 -- and **5 of 13
+runs (38%) were rejected outright**, contributing nothing for 32-130 s:
+
+```
+102 s  rejected      95 s  rejected      40 s  rejected
+ 38 s  rejected      32 s  rejected
+```
+
+A rejected top-up delivers zero **by definition**, so removing it costs no
+citations. At 38% x ~85 s that is ~32 s per run, free.
+
+The guard rejects a candidate that drops existing citations, is too short, or
+adds nothing. `topup_dropped_existing` is recorded for some. The top-up prompt
+already says "Return the SAME report with citations added ... Change nothing
+else" -- so this is a **prompt-compliance failure at 38%**, not a design flaw,
+and it is the first tool-building problem in this document whose fix cannot cost
+citations.
+
+Not pre-registered yet: the rejection reasons need counting across more runs
+before a prompt change is worth testing, and `topup_rejected` has only been
+archived since round 56.
+## Round 63 — a rejected top-up now says which condition rejected it
+
+Round 62 identified the only lever in this pipeline with no citation cost: a
+rejected top-up delivers zero **by definition**, so removing it cannot lose a
+citation -- unlike the deadline (21% citation loss, priced in round 62) and the
+headroom threshold (blocks runs that did not need it, priced in round 61).
+
+It could not be aimed at anything, because the reason was not recorded. Of 5
+rejected top-ups across 13 archived runs, only 2 said anything about why, and
+only because `topup_dropped_existing` happens to be set independently of the
+guard:
+
+```
+102 s  rejected   dropped_existing: 2
+ 95 s  rejected   (no reason recorded)
+ 40 s  rejected   dropped_existing: 3
+ 38 s  rejected   (no reason recorded)
+ 32 s  rejected   (no reason recorded)
+```
+
+The guard has three conditions and only one of them left a trace:
+
+```python
+if (len(candidate) > 0.6 * len(str(report))   # too short?
+        and added > len(cited_now)            # added nothing?
+        and not dropped):                     # dropped existing?  <- only this
+```
+
+Now records `topup_rejected_why` (`short` / `no_gain` / `dropped`, joined) and
+`topup_candidate_ratio`, because "short" is a ratio and the ratio is the datum.
+Each label is the exact negation of its condition, so a label cannot drift from
+what the guard actually tested.
+
+**The reasons are not equivalent, which is the point of separating them.** The
+prompt already says "Return the SAME report with citations added ... Change
+nothing else". So `short` means it truncated the report and `dropped` means it
+rewrote instead of appending -- both prompt-compliance failures worth fixing.
+But `no_gain` means it **complied and found nothing to add**, which is correct
+behaviour and must not be "fixed". Without the split, a prompt change aimed at
+the first two would be scored on runs exhibiting the third.
+
+Verified at runtime rather than by reading the diff: the three branches produce
+`short,no_gain` / `no_gain` / `dropped` / `short,no_gain,dropped`, all scalars
+under 120 chars, so the `__stats__` stamp archives them instead of computing and
+discarding them -- the failure round 56 fixed one level up.
+
+**Deliberately not pre-registering a prompt change yet.** Five rejections is
+enough to see that reasons are missing and not enough to know which dominates.
+Round 59's interim entry was withdrawn for exactly that -- generalising from
+2-3 replicates -- and the next round should accumulate reasons before anything
+is changed.
+
+## Round 64 — the falsifier and the rubric are independent axes
+
+Every falsifier in this document is written on `citations_in_body`. Repair was
+killed for a 33% fall in it. That metric was tested against the sealed rubric
+across all 16 scored reports from rounds 57 and 59.
+
+| vs rubric coverage | pearson r | |
+|---|---|---|
+| **citations_in_body** | **0.05** | **no relationship** |
+| full_text_cited | 0.15 | no relationship |
+| prose_pathways_covered | 0.38 | weak |
+
+**Citation count is statistically independent of rubric coverage.** Optimising
+one does not move the other. And on the rubric the two arms are equivalent:
+
+```
+rewrite (round 57)  mean coverage 0.570
+repair  (round 59)  mean coverage 0.558      difference 0.012
+```
+
+**Fabricated rubric items: 0 across all 16 reports.** The arm does not invent
+findings; that half of the rubric is saturated and cannot discriminate.
+
+### What this does and does not overturn
+
+It does **not** overturn round 59. The two metrics measure different things and
+both are legitimate:
+
+* `citations_in_body` -- does the report SUPPORT what it says? That is the
+  standing brief's criterion, in the user's words: "citation grounded".
+* rubric coverage -- does the report FIND the biology the published Results
+  found? That is AgentEvolve's criterion.
+
+Repair produces a report of **equal scientific coverage with a third less
+support**, faster. Killed on the first criterion, which is the stated one. The
+precise verdict is that repair was not killed for producing worse science -- it
+was killed for producing less-supported science, and the distinction was not
+drawn at the time.
+
+### What it changes going forward
+
+Rounds have been scored on one axis and read as if it were quality. Both should
+be reported, because a change that moves citations without moving coverage --
+which is every change measured so far -- is a change in grounding, not in
+findings. Round 60's conclusion survives this and is sharpened: the rewrite's
+extra citations are real support (full-text-backed, resolved) for the **same**
+biology, not extra biology.
+
+### An instrument error found here, again
+
+`rubric_score` returns `(coverage, fabricated_items)`. The first pass through
+this analysis treated the return as a dict, got `n = 0` scored reports, and only
+an obviously-null result made it visible. The ranking published before that
+printed `"(0.57608"` -- a truncated tuple repr read as a score -- so the
+fabrication count was silently discarded. It is zero everywhere, so nothing
+downstream was wrong, but the check that established it had not been run.
+## Round 65 — a Results section, and the citation guard that had to exist
+
+Requested directly: the interpretation is too long and does not read like a
+paper's Results. No bullet key-findings, subsections that tell different
+stories, clusters described rather than tabulated. And, added mid-implementation
+and decisively: **citations must be kept.**
+
+### What the arm produces today
+
+Measured on round 57's best replicate: **8 184 words over 497 lines**, opening
+with a "Key Findings" bullet block, then fifteen numbered pathway sections each
+carrying the same three sub-headings, then a 37-row table -- 50 bullets and 67
+bold run-ins in all. It also reads as stitched: a second H1 mid-document and
+"Cross-Pathway Synthesis" appearing twice, because it is the concatenation of
+delegated chunks.
+
+### The stage
+
+`_write_results_section`, behind `AI_AGENT_RESULTS_SECTION` (default off).
+
+**It runs before the exit gate, and the order is the safety property.** Its
+prose then goes through top-up, the Claim Verifier and the programmatic net, so
+it is grounded by the same machinery as any other draft. Running it after the
+gate would let a rewrite move a verified marker onto a claim nobody checked --
+reintroducing exactly the overshoot the gate exists to remove.
+
+### The guard was not paranoia
+
+First live attempt, prompt only: **it lost 5 of 22 citations.** The instruction
+"every marker must survive" was in the prompt and was not followed. Asking a
+model to reorganise 8 000 words and carry two dozen markers is two tasks, and
+the second fails quietly.
+
+So the rule is a guard, mirroring how merge and top-up already reject candidates:
+a rewrite that drops a marker, invents one, loses the References or truncates is
+**discarded and the dossier ships instead**. Then one retry that names the
+missing markers rather than repeating "be careful".
+
+One detail found by its own test: the guard first compared markers across the
+WHOLE document, and the reference list repeats every marker as its own line
+(`[2] Smith et al.`), so prose could drop a citation while its entry survived
+and the guard would see no change. That is marker-stripping -- the behaviour
+that makes `failed_citations` read 0.0 on a report whose prose lost its support.
+It now compares **body** markers only.
+
+### Result
+
+| | dossier | Results section |
+|---|---|---|
+| words | 8 184 | **2 957** (-64%) |
+| body citations | 22 | **22 -- all kept** |
+| bullets | 50 | **0** |
+| table rows | 37 | **0** |
+
+Section titles are findings, not accessions: "Chromatin Accessibility Remodeling
+Precedes Transcriptional Activation", "A Coordinated 12-Hour Checkpoint Marks
+the Differentiation Commitment Window". Numbers sit inside sentences with the
+measure named. The cluster table is suppressed when a section is written, since
+the section describes the clustering in prose; the enriched pathway summary
+stays, being data the job already holds rather than a model assertion.
+
+### Citation ORDER, which the set-based guard does not check
+
+Asked directly, and worth checking rather than assuming. The dossier arrives
+numbered [1,2,3...] because it was written in that order. Reorganising the
+material by finding scrambles first appearance, and the rewrite came out
+
+```
+[9, 5, 6, 14, 13, 15, 16, 8, 7, 1, 10, 11, 12, 2]
+```
+
+which no journal accepts. The guard compares the SET of markers and is blind to
+this by construction.
+
+It is nevertheless correct in the pipeline: `renumber_citations` followed by
+`sort_references_section` runs downstream of the writer, and applying them gives
+`[1..22]` sequential, 22 of 22 kept, 22 reference entries in order. The probe
+above looked wrong only because it called the writer in isolation.
+
+But that was **incidental, not guaranteed** -- nothing prevented the writer being
+moved below the remap, after which numbering would scramble silently. Now pinned
+by `test_the_rewrite_is_renumbered_afterwards`. The model is still told NOT to
+renumber, because `renumber_citations` returns the mapping the paper list is
+filtered by, and a model that renumbered first would break the link between a
+marker and the paper it was verified against.
+
+### Not yet measured, and the reason it matters
+
+**84 s** for the two attempts on this report. Median span is 450 s against a
+600 s bar, so this fits -- but with ~66 s of the remaining headroom, and round
+57 showed that a stage consuming budget before the gate is how corrections get
+cancelled. That is a pre-registration for the next round, not a claim here.
+
+n = 1 report, and it is round 57's BEST replicate. Whether the guard's rejection
+rate is 0% or 40% across a full round is unknown, and a stage that falls back to
+the dossier half the time is a different proposition from one that does not.
+
+## Round 66 pre-registration — measuring the Results section
+
+`AI_AGENT_RESULTS_SECTION=1`, agent arm, 8 replicates, against round 57's 8.
+
+### The falsifier is rubric coverage, not citations
+
+The citation guard makes the usual falsifier **structurally unfailable**: a
+rejected rewrite ships the dossier, which carries every citation. Citations
+cannot fall. Writing the falsifier on them would therefore be theatre.
+
+Round 64 measured citation count and rubric coverage as **independent**
+(r = 0.05). So a rewrite can keep all 22 markers and still lose findings --
+compressing 8 184 words to ~3 000 is exactly the operation that would do it, and
+**nothing in the stage guards against it.** That is the risk this round exists
+to price.
+
+### Predictions
+
+1. **Rubric coverage does not fall more than 0.05** against round 57's mean of
+   **0.570**. *(FALSIFIER. A larger fall means the compression is discarding
+   findings, and the stage is reverted regardless of how much better it reads.)*
+2. Accepted rather than rejected in **>= 6 of 8** runs. A stage that falls back
+   to the dossier half the time is a different proposition from one that works.
+3. Median span stays **under 600 s**. Measured cost is 84 s on one report against
+   a 450 s median, so this should hold with ~66 s to spare -- and round 57 showed
+   that a stage spending budget before the gate is how corrections get cancelled,
+   so `correction_failed` is watched too.
+4. Words fall **>= 40%**.
+
+### Power, stated before the fact
+
+n = 8. Round 57's coverage spread was 0.489-0.641, sd ~0.045, so a 0.05
+difference is right at the resolution limit and will be reported as a
+**direction** unless it is larger. Prediction 2 is a proportion on 8 trials and
+cannot resolve anything finer than "usually" versus "rarely". Only predictions 3
+and 4 are expected to resolve cleanly at this n.
+
+This is written before the round runs, as every pre-registration in this
+document is, and rounds 56, 59 and 61 record what happens when it is not.
+
+## Round 66 SCORED — the Results section loses findings; falsifier fired
+
+`AI_AGENT_RESULTS_SECTION=1`, 8 replicates, against round 57's 8.
+
+| metric | r57 dossier | r66 Results | delta | |
+|---|---|---|---|---|
+| **rubric coverage** | **0.571** | **0.446** | **-0.125** | **RESOLVED** |
+| words | 7 537 | 4 543 | -2 994 (-39.7%) | RESOLVED |
+| citations_in_body | 21.38 | 21.12 | -0.25 | not resolved |
+| wall_s | 422 | 373 | -49 | not resolved |
+| pathways covered | 15.4 | 17.0 | +1.6 | not resolved |
+
+| prediction | result | |
+|---|---|---|
+| coverage must not fall >0.05 | **-0.125** | **FAILED -- REVERT** |
+| accepted in >=6 of 8 | **7 of 8** | HELD |
+| median span < 600 s | **375 s**, 0/8 over | HELD |
+| words fall >=40% | -39.7% | marginally not held |
+
+**The stage works and the output is worse.** It is accepted 7 times in 8, runs
+*faster* than the dossier it replaces, keeps every citation (-0.25, not
+resolved), and reads like a paper. It also discards **22% of the rubric
+coverage**.
+
+**This is the exact failure round 64 predicted and no earlier falsifier could
+have caught.** Round 64 measured citation count and rubric coverage as
+independent (r = 0.05) and the falsifier was moved onto coverage for precisely
+this reason. Had it stayed on citations -- as every falsifier before it was --
+this stage would have passed cleanly at -0.25 citations and shipped a rewrite
+that throws away a fifth of the findings.
+
+**Kept, default off, following sentence repair's precedent.** The code stays
+behind `AI_AGENT_RESULTS_SECTION` with this result recorded next to it. It is not
+enabled and should not be without a rewrite that compresses *prose* rather than
+*content* -- the two are not the same operation, and this stage does the second
+while being asked for the first.
+
+### Two defects found in the stage itself, worth keeping
+
+**The retry is load-bearing, not a safety net.** Attempts=2 in most accepted
+runs: the first pass drops citations nearly every time, and one run dropped
+**nine** (6,18,19,27,31,32,34,44,45). Reorganise-and-preserve is two tasks in one
+call and the conservation half fails ~80% of the time. Any rewrite stage that
+must conserve something needs a computed guard, not an instruction -- the model's
+compliance on the conservation half is far below what the prompt suggests.
+
+**The word count was a target, not a ceiling.** One replicate took a 984-word
+interpretation to **1 408** (+43%): asked to "target 1800 words", the model padded
+a thin dossier upward. A compression stage must never exceed its input.
+
+### And the scorer misreported its own round
+
+Prediction 2 was first printed as "accepted 3, rejected 0" -- wrong in both
+numbers. The analysis script carried a stale epoch filter (`> 1787151000` for a
+round that began at `1787149061`), so it read one trace instead of eight. The
+same stale-filter error had already been caught once this session, in a different
+script, an hour earlier. The corrected count is 7 accepted, 1 rejected, and
+prediction 2 HELD.
+
+## Round 67 pre-registration — CLUSTER_SCOPE, and a correction
+
+### The correction first
+
+Reported earlier in this session: "switching production to the agent arm
+silently disabled cluster mode, because `AI_CLUSTER_MODE` has zero references in
+`agent_loop.py`". **That was wrong.** `CLUSTER_MODE` is read in `clusters.py`
+but `build_partition` never checks it; its only consumer is `agent.py:1206`, the
+workflow arm's own gate. The agent arm calls `build_partition` unconditionally
+from the `cluster_pathways` tool, which fires in **24 of 24** archived runs.
+Clustering has been on the entire time.
+
+### What the coverage gap actually is
+
+Measured across 24 runs:
+
+```
+significant pathways available (clustering widens to this)   90
+distinct pathways the agent looks up                          8
+pathways named in the prose                                  15.4
+delegate_interpretation calls per run                      1.00
+pathways sent per delegation                              ~15  (capacity 60)
+```
+
+**The agent has 90 pathways of territory and walks 17% of it.** Not because the
+universe is narrow -- clustering already widened it -- but because the Lead
+selects ~15. Cluster-mode base reaches 52-102 because the workflow arm
+mechanically batches every cluster; the agent chooses, and chooses narrowly.
+
+This is already diagnosed in the source: the Lead's prompt says "top-ranked"
+five times, and in a 102-pathway context that reads as the top fifteen. Every
+constant suspected of binding was measured NOT to: `DELEGATE_MAX_PATHWAYS` is 60
+and never reached, `SEARCH_BUDGET` is 40 with ~15 used. Rewriting the delegation
+tool's stated capacity to 60 was measured **inert** -- the pathway set came back
+identical.
+
+### The experiment
+
+`AI_AGENT_CLUSTER_SCOPE=1`. The flag exists, rewrites the five "top-ranked"
+instructions to "every cluster", and has never been measured.
+
+**Predictions**
+1. `prose_pathways_covered` rises from **15.4** toward cluster-base's 74.
+   Anything under 25 means the rewrite did not bind and the limiter is elsewhere
+   again.
+2. **Rubric coverage rises** above round 57's **0.571**. *(The point of the
+   change; AgentEvolve measured this shape at +0.210 for base.)*
+3. **FALSIFIER: median span stays under 600 s.** Twenty clusters instead of
+   fifteen pathways is more delegation, more searches and more prose. If it
+   crosses the bar it is reverted regardless of what it does to coverage --
+   the ten-minute requirement is not tradeable.
+4. Citations do not fall more than 10% from 21.4.
+
+**Power.** n = 8. Round 57's coverage sd was ~0.045, so prediction 2 resolves
+only if the gain is around 0.05 or more; a smaller rise is a direction. Span sd
+was ~69 s, so prediction 3 resolves cleanly. Prediction 1 is a large expected
+effect (15 -> 25+) and should resolve.

@@ -829,7 +829,35 @@ function PA_Step3JobView() {
 					schedule(AI_POLL_INTERVAL);
 				}
 			},
-			error: function() {
+			error: function(jqXHR) {
+				// Retrying is right for a TRANSPORT failure and wrong for a
+				// permanent one. Both used to back off and retry forever.
+				//
+				// Measured on the live server: after a restart invalidated one
+				// user's in-process session, their browser polled
+				// /ai_interpret_status every 31 s and got
+				// "400 CredentialException: User not valid ... please log-in
+				// again" for FOUR HOURS -- about 460 requests -- with nothing
+				// shown to them. A session that has expired cannot un-expire by
+				// being asked again.
+				//
+				// 401/403 are unambiguous. A 400 is only treated as permanent
+				// when the body says so, because the servlet also returns 400
+				// for ordinary handled errors that a retry may well clear.
+				var code = jqXHR && jqXHR.status;
+				var body = (jqXHR && jqXHR.responseText) || "";
+				var expired = code === 401 || code === 403 ||
+				              (code === 400 && /session|log-in|log in|not valid/i.test(body));
+				if (expired) {
+					if (me.aiWidget) {
+						me.aiWidget.updateProgress(
+							"error", 100,
+							"Your session expired, so progress can no longer be " +
+							"tracked. Your job is safe on the server \u2014 sign in " +
+							"again and reopen it from My Jobs.");
+					}
+					return;      // stop the chain: nothing here can recover it
+				}
 				me.aiPollFailures = (me.aiPollFailures || 0) + 1;
 				schedule(Math.min(AI_POLL_INTERVAL * Math.pow(2, me.aiPollFailures - 1),
 				                  BACKOFF_CEILING));
