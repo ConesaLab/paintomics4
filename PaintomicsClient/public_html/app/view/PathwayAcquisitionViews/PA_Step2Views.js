@@ -136,11 +136,20 @@ function PA_Step2JobView() {
 			xtype: 'box',
 			cls: "contentbox omicSummaryBox", minHeight: 240,
 			html: '<div id="about">' +
-			'  <h2 >Feature ID/name translation summary <span class="helpTip" title="For example, for Gene Expression data, the diagram indicated the percentage of the input genes (names or identifiers) which were successfully mapped to a Kegg Gene Identifier."></h2>' +
+			'  <h2 >Feature ID/name translation summary <span class="helpTip" title="The percentage of your input features (names or identifiers) that could be translated into the identifier each database is keyed on - for example an NCBI Gene ID for KEGG, or a UniProt accession for OmniPath. It does not say whether the feature belongs to any pathway."></h2>' +
 			'  <p>' +
 			'    Below you will find an overview of the results after matching the input files against the PaintOmics databases.<br>' +
 			'    As a general rule, the bigger the percentage of mapped features, the better the results obtained in later stages.<br>' +
-			'    If the mapping percentage was low, manually check your results and input data.<br><br>' +
+			'    If the mapping percentage was low, manually check your results and input data.<br>' +
+			// These percentages are pure identifier translation -- a feature counts
+			// here as soon as its name resolves into the database's identifier
+			// space, whether or not it belongs to any pathway there. Read as a
+			// league table they mislead: each database is keyed on a different
+			// identifier type (NCBI Gene for KEGG, UniProt for OmniPath), and the
+			// databases differ in scope by design, a whole-organism atlas against a
+			// curated signalling network. Saying so here is cheaper than the wrong
+			// conclusion it prevents.
+			'    <b>Comparing databases:</b> each percentage is identifier translation only &mdash; a feature counts as soon as its name resolves into that database\'s identifier space, even if it belongs to no pathway there. Databases are keyed on different identifier types and differ in scope by design, so these figures are not a ranking. Pathway coverage is what Step 3 reports.<br><br>' +
 			((Object.keys(dataDistribution).length > 0) ? '  <a href="javascript:void(0)" id="download_mapping_file"><i class="fa fa-download"></i> Download ID/Name mapping results.</a>' : "") +
 			'  </p>' +
 			'</div>'
