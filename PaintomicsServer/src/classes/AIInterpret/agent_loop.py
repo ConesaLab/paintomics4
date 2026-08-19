@@ -2496,6 +2496,18 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
             logger.warning("[%s][loop] citation top-up failed: %s: %s",
                            job_id, type(e).__name__, e)
         stats["topup_s"] = time.time() - t_top
+        # The top-up was the single largest untraced stage in the pipeline.
+        # Measured across the archive it costs a median 101 s -- 28% of a 380 s
+        # run, more than the whole verify fan-out -- and the gate trace showed
+        # nothing at all for it: bursts of verify events with a 65-120 s hole
+        # between them and "nothing traced in this window". An instrumentation
+        # that cannot see the second-biggest cost in the run is not tracking the
+        # pipeline, it is tracking the parts that were easy to reach.
+        _trace_gate(ctx, "citation_topup",
+                    "%d uncited papers offered" % len(uncited),
+                    "added %s, failed %s" % (stats.get("topup_added", 0),
+                                             stats.get("topup_added_failed", 0)),
+                    t_top)
 
     llm_for_quotes = LLMClient(AI_PROVIDERS[AI_LLM_PROVIDER])
     _hb(ctx, "verifying", 80, "Collecting supporting quotes...")
@@ -2515,6 +2527,8 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
         quotes.update(_collect_cited_quotes(llm_for_quotes, report,
                                             ctx.paper_index, job_id, known=quotes))
     stats["quotes_s"] = time.time() - t_q
+    _trace_gate(ctx, "collect_quotes", "%d citation(s)" % len(quotes),
+                "reused" if premade_quotes is not None else "collected", t_q)
     report, rendered = render_references_section(report, ctx.paper_index, quotes)
     stats["refs_rendered"] = len(rendered)
     stats["quotes_supplied"] = len(quotes)

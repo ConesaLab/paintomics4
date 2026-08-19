@@ -2717,3 +2717,60 @@ rejections fall, wall clock drops 13-20 s, and the run-to-run swing between a
 31 kB and a 71 kB report narrows. Falsifier: if citations or coverage fall, the
 framing call was adding something the Lead's own sections do not, and it goes
 back.
+
+### Where the ten minutes actually go, and one refuted diagnosis
+
+`LEAN_PROFILES` is dead on arrival. Round 48 r1 reports `genes_shown 47,
+genes_flat 0` -- **every gene the agent sees is differential**. The hypothesis
+(a pathway with three relevant genes filling seven slots with flat ones) is
+wrong for the pathways the agent actually reads: top-ranked enriched pathways
+have ten or more differential genes, so the relevance-first sort never runs out.
+Instrumenting the mechanism instead of trusting the predicted 25% killed it on
+the first replicate. With a 0% flat share the renderer is byte-identical, so
+round 48 is an exact replicate of round 47 -- which is what the two-consecutive
+bar needs anyway.
+
+**A diagnosis I got wrong.** Per-call verifier time is 3.6 s and the stage costs
+~127 s, so I computed "effective concurrency 1.3 against a semaphore of 8" and
+went looking for a blocking call in an async coroutine. There is one --
+`build_verification_executor` concatenates and lowercases a paper's whole text
+synchronously -- but it is not the problem. Reading the actual event times, 27
+verify calls all start at t=222.7 and finish within ~10 s, with durations rising
+1.6 -> 5.3 s exactly as semaphore queuing predicts. The fan-out is fine. My span
+was measured across the WHOLE run, which contains two verify bursts separated by
+another stage, so it was never a concurrency measurement at all.
+
+Splitting the bursts properly:
+
+```
+verify calls per run            median 40
+verify fan-out, actually verifying   12 s
+gap between the two bursts          110 s   <- "nothing traced in this window"
+```
+
+The stage budget, from stats:
+
+```
+loop (the agent's own investigation)   147 s
+top-up                                 108 s
+verify loop                            127 s   (fan-out is 12 s of it)
+merge                                   18 s
+full-text upgrade                       10 s
+```
+
+**The untraced 65-120 s gap is the citation top-up**, the second-largest cost in
+the pipeline, and the gate trace showed nothing for it. An instrumentation that
+cannot see the second-biggest cost is tracking the parts that were easy to reach,
+not the pipeline. `citation_topup` and `collect_quotes` are traced now.
+
+**The top-up is not waste, it is imprecise.** Over 23 archived runs it adds a
+median 11-14 citations for 101 s, of which about 8 fail verification and are
+pulled back, netting ~6 survivors -- roughly 30% of every report's citations. It
+earns its clock. But its precision is ~43%, and the reason is visible in the
+code: `_quote_evidence_lines` feeds `check_my_citations`, the LEAD's tool, so the
+Lead cites with quotes in hand while the top-up bolts citations on from a list of
+uncited papers' titles and abstracts with no evidence at all. The delegates get a
+`_quote_shelf`; the top-up gets nothing, and it is the stage whose citations die.
+
+Queued after round 49: give the top-up the same evidence the other two writers
+get, and expect precision rather than volume to improve.
