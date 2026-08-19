@@ -147,6 +147,38 @@ class StreamReassemblyTest(unittest.TestCase):
             asyncio.run(_stream_to_completion(_FakeStream([])))
 
 
+    def test_a_truncated_completion_is_counted_and_logged(self):
+        """finish_reason "length" means the model ran out of output budget and
+        the partial text ships as though it were finished.
+
+        A stored report ends on the bare heading "### 4." with no Limitations
+        section after it -- the last section is simply where the tokens ran out,
+        and nothing anywhere said so. Two of sixteen recent reports are missing a
+        required section for this reason.
+        """
+        from src.classes.AIInterpret.agent import _stream_to_completion, _TRUNCATIONS
+        before = len(_TRUNCATIONS)
+        stream = _FakeStream([
+            _chunk(delta={"role": "assistant", "content": "## Follow-up\n\n### 4."}),
+            _chunk(delta={}, finish_reason="length"),
+        ])
+        done = asyncio.run(_stream_to_completion(stream))
+        self.assertEqual(done.choices[0].finish_reason, "length")
+        self.assertEqual(len(_TRUNCATIONS), before + 1,
+                         "a truncated answer was not recorded")
+        self.assertEqual(_TRUNCATIONS[-1], len("## Follow-up\n\n### 4."))
+
+    def test_a_normal_completion_is_not_counted_as_truncated(self):
+        from src.classes.AIInterpret.agent import _stream_to_completion, _TRUNCATIONS
+        before = len(_TRUNCATIONS)
+        stream = _FakeStream([
+            _chunk(delta={"role": "assistant", "content": "All done."}),
+            _chunk(delta={}, finish_reason="stop"),
+        ])
+        asyncio.run(_stream_to_completion(stream))
+        self.assertEqual(len(_TRUNCATIONS), before,
+                         "a completed answer was logged as truncated")
+
 class ClientConfigurationTest(unittest.TestCase):
 
     def setUp(self):

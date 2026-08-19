@@ -274,6 +274,15 @@ def select_network_nodes(job_instance, params=None, always_include=None):
     matched = job_instance.getMatchedPathways() or {}
     organism = str(job_instance.getOrganism() or "")
     totals = _load_total_features(organism) if p["min_features"] > 0 else {}
+    # A requested filter that cannot run is not the same as no filter. When the
+    # network file is missing, min_features is silently ignored and pathways the
+    # caller asked to exclude come back in -- a difference between what was asked
+    # for and what happened, with nothing anywhere to say so. Say so.
+    if p["min_features"] > 0 and not totals:
+        logger.warning("[clusters] min_features=%s requested for organism %r but "
+                       "no pathway network totals were found; the filter was NOT "
+                       "applied and low-feature pathways remain in the universe",
+                       p["min_features"], organism)
     forced = {str(i) for i in (always_include or [])}
     rows = []
     for pid, pw in matched.items():

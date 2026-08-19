@@ -10,7 +10,9 @@ import json
 import logging
 import os
 import re
-from concurrent.futures import ThreadPoolExecutor
+import time
+from concurrent.futures import (ThreadPoolExecutor, as_completed,
+                                TimeoutError as FuturesTimeout)
 from difflib import SequenceMatcher
 
 from src.conf.serverconf import AI_VERIFICATION_WORKERS
@@ -280,10 +282,36 @@ def _collect_cited_quotes(llm, report, paper_index, job_id, known=None):
     # a pool of 4 costs five serial rounds for work that is fully independent.
     quotes = {}
     workers = int(os.getenv("AI_QUOTE_WORKERS", str(max(AI_VERIFICATION_WORKERS, 8))))
-    with ThreadPoolExecutor(max_workers=min(workers, max(1, len(cited)))) as executor:
-        for idx, text in executor.map(_one, cited):
-            if text:
-                quotes[idx] = text
+    # Bounded as a whole, not just per call. One hung quote lookup made a single
+    # check_my_citations take 83.2 s against a median of 1.3 s over 70 calls --
+    # 14% of a ten-minute run spent waiting on one citation. Whatever has come
+    # back by the deadline is returned; a partial answer is strictly better than
+    # a late one, because the gate re-checks anything missing.
+    #
+    # The deadline is a TIMEOUT on the wait, not a check between results. Two
+    # earlier versions of this failed the same way: four fast lookups finished
+    # before the deadline could expire, so nothing tripped the check, and
+    # as_completed then blocked on the fifth for its full duration. Nor is this
+    # a `with` block -- its __exit__ joins every running thread, which undid the
+    # timeout just as completely.
+    budget = float(os.getenv("AI_QUOTE_DEADLINE", "45"))
+    executor = ThreadPoolExecutor(max_workers=min(workers, max(1, len(cited))))
+    try:
+        futures = [executor.submit(_one, idx) for idx in cited]
+        try:
+            for future in as_completed(futures, timeout=budget):
+                idx, text = future.result()
+                if text:
+                    quotes[idx] = text
+        except FuturesTimeout:
+            logger.warning("[%s] quote collection stopped at its %.0fs deadline "
+                           "with %d of %d resolved", job_id, budget,
+                           len(quotes), len(cited))
+    finally:
+        try:
+            executor.shutdown(wait=False, cancel_futures=True)
+        except TypeError:                      # cancel_futures is 3.9+
+            executor.shutdown(wait=False)
     return quotes
 
 

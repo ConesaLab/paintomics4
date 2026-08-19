@@ -610,8 +610,62 @@ Respond with ONLY this JSON (no markdown fencing):
     "supports_claim": true/false,
     "reasoning": "brief explanation",
     "actual_text": "the closest matching text found in the paper, if any",
-    "suggested_fix": "suggested replacement cited text if text_match is false, or empty string"
-}}"""
+    "suggested_fix": "the repair, chosen by which check failed -- see below"
+}}
+
+## What suggested_fix must contain
+- If **text_match** is false: the correct cited text from the paper.
+- If **text_match** is true but **supports_claim** is false: a rewritten
+  **Claim** sentence that the Cited Text does support. This is the common case.
+  The quote is real; the sentence built on it goes further than it can carry.
+  Narrow the sentence to what the passage establishes -- keep it as informative
+  as the evidence allows, keep the [{ref_index}] marker, and do not add facts
+  from anywhere else. If nothing in the passage supports any version of the
+  claim, return an empty string.
+- If both checks pass: empty string."""
+
+
+def build_sentence_repair_prompt(fc):
+    """Repair ONE sentence, shown only that sentence and the quote under it.
+
+    The alternative -- and what the pipeline did for 35 rounds -- is to hand the
+    model the entire report and ask it to fix four sentences. That costs a full
+    long-form generation (~75 s of a base run's 83 s verify iteration), and it
+    is destructive in ways the code then has to undo: the rewrite re-authors the
+    References section, so every quote must be re-collected and the section
+    re-rendered, and it drops the appended data tables, which _reattach_blocks
+    exists to put back.
+
+    Repairing one sentence changes one sentence. Nothing else in the report can
+    move, so none of that repair-of-the-repair is needed, and the repairs are
+    independent of each other -- which is what makes them safe to run at once.
+    """
+    if fc.get("mode") == "text":
+        task = ("The quoted sentence is NOT in that paper. Rewrite the sentence "
+                "so it states only what you can support, or state the finding "
+                "without attributing it to this paper.")
+    else:
+        task = ("The quote is real, but the sentence claims more than the quote "
+                "supports. Rewrite the SENTENCE so the quote below fully "
+                "supports it. Narrowing the claim is the correct outcome -- "
+                "restating the same claim in different words is not.")
+    lines = [
+        "Repair one sentence from a scientific report.", "",
+        "SENTENCE: %s" % fc.get("claim_sentence", ""), "",
+        'QUOTE FROM THE CITED PAPER: "%s"' % fc.get("cited_text", ""), "",
+        "PROBLEM: %s" % fc.get("reason", ""), "",
+        task, "",
+        "Rules:",
+        "- Keep the [%d] citation marker exactly where it belongs."
+        % fc.get("ref_index", 0),
+        "- Add no facts from anywhere else; you may only narrow or restate.",
+        "- Keep any surrounding markdown (bold, italics, list markers) intact.",
+        "- Reply with the repaired sentence and NOTHING else: no preamble, no "
+        "quotation marks around it, no explanation.",
+    ]
+    if fc.get("suggested_fix"):
+        lines.append('- The verifier suggested: "%s"' % fc["suggested_fix"])
+    return "\n".join(lines)
 
 
 def build_correction_prompt(report, failed_citations):
@@ -621,22 +675,48 @@ def build_correction_prompt(report, failed_citations):
                  "Please correct them.")
     lines.append("")
 
+    # Two failure modes, and they need opposite repairs. Measured over 1006
+    # checked citations: 0.4% were quotes not in the paper, 20.1% were real
+    # quotes carrying a claim that goes further than they support. Telling the
+    # model to "correct the Cited Text to match the actual paper" fixes the
+    # rare one and is a no-op for the common one -- the cited text already
+    # matches. That is why the loop logs 10 failures, 10 failures, 10 failures
+    # and stops for lack of progress after burning a full rewrite each round.
+    drifted = [fc for fc in failed_citations if fc.get("mode") != "text"]
     for fc in failed_citations:
         lines.append(f"### [{fc['ref_index']}] Issue")
         lines.append(f"- **Problem:** {fc['reason']}")
+        if fc.get("mode") == "text":
+            lines.append("- **What is wrong:** the quoted text is not in the paper.")
+        else:
+            lines.append("- **What is wrong:** the quote is real, but your "
+                         "sentence claims more than it supports. Change the "
+                         "SENTENCE, not the quote.")
         lines.append(f"- **Your Cited Text:** \"{fc['cited_text']}\"")
+        if fc.get("claim_sentence"):
+            lines.append(f"- **Your sentence:** \"{fc['claim_sentence']}\"")
         if fc.get("actual_text"):
             lines.append(f"- **Actual text found:** \"{fc['actual_text']}\"")
         if fc.get("suggested_fix"):
-            lines.append(f"- **Suggested fix:** \"{fc['suggested_fix']}\"")
+            label = ("Suggested cited text" if fc.get("mode") == "text"
+                     else "Suggested sentence")
+            lines.append(f"- **{label}:** \"{fc['suggested_fix']}\"")
         lines.append("")
 
     lines.append("## Instructions")
-    lines.append("1. For each issue, either correct the **Cited Text** to match the actual paper, "
-                 "or remove the citation if no supporting evidence exists.")
-    lines.append("2. Do NOT change citations that were not flagged.")
-    lines.append("3. Preserve all [N] reference indices.")
-    lines.append("4. Output the COMPLETE corrected report.")
+    lines.append("1. Where the quoted text is not in the paper, correct the "
+                 "**Cited Text** or remove the citation.")
+    lines.append("2. Where the quote is real but oversold, rewrite **your "
+                 "sentence** so the quote supports it. Narrowing a claim is the "
+                 "correct outcome; do not restate the same claim in new words, "
+                 "and do not delete the sentence if a narrower true version "
+                 "exists.")
+    if drifted:
+        lines.append("   %d of the %d issues below are this kind."
+                     % (len(drifted), len(failed_citations)))
+    lines.append("3. Do NOT change citations that were not flagged.")
+    lines.append("4. Preserve all [N] reference indices.")
+    lines.append("5. Output the COMPLETE corrected report.")
 
     return "\n".join(lines)
 
@@ -742,4 +822,137 @@ def build_pathway_focus_prompt(pathway, papers, experiment_design, organism_name
     lines.append("\n## Task")
     lines.append("Write the focused interpretation of this pathway, following the output format.")
 
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# The full-agent loop (agent_loop.py). One Lead Interpreter drives the whole
+# investigation through its toolbelt; these are its standing orders and the
+# kickoff message. Design: docs/diagrams/paintomics-ai-agent-proposal.drawio.
+# ---------------------------------------------------------------------------
+
+SYSTEM_PROMPT_LEAD_AGENT = """You are the Lead Interpreter: an expert \
+bioinformatician investigating a multi-omics pathway-enrichment result. You \
+work in a loop: look at the data, decide the next most informative action, \
+call one tool, read the result, repeat. Keep each turn short.
+
+How to investigate:
+1. Start with get_experiment_overview, then cluster_pathways to see which \
+pathways share features.
+2. Go deep where the data is strongest or strangest: get_pathway_details on \
+the top-ranked pathways -- it returns the per-gene profiles with the pathway, \
+so the genes driving it come back in the same call.
+3. Search the literature once per cluster or top pathway you intend to write \
+about -- roughly a dozen searches, not three. Each search is tagged with that \
+pathway (topic_tag), and a sub-agent is later shown only the papers tagged for \
+its own pathways, so a pathway you never searched for gets an interpretation \
+with nothing to cite. BROAD queries: two or three gene symbols joined by OR \
+plus at most one biological term, e.g. "(Ikzf1 OR Ccnd2) AND B cell \
+differentiation". Three AND clauses returns nothing and still spends budget. \
+read_paper selectively, for a claim whose support you doubt -- reading does not \
+make a citation more likely to survive, so it earns its time only when it \
+changes your mind.
+4. Get breadth by DELEGATING rather than writing everything yourself: call \
+delegate_interpretation a few times, covering all the top-ranked pathways and \
+clusters between them, AFTER you have searched for them. Each call returns \
+written interpretations carrying your reference numbers, and your report is the \
+synthesis across those returns plus what you found first-hand. Skipping this is \
+why a report ends up covering six pathways instead of fifteen.
+5. After every substantive discovery, notebook_write one line. The notebook \
+is your memory and your evidence trail.
+6. Budgets are enforced by the tools and reported in every result; when one \
+is exhausted, write with what you have.
+
+Coverage checklist -- you are done when every top-ranked pathway is either \
+analysed (with data read and, where possible, literature) or explicitly \
+noted as not investigated, and your open questions are resolved or recorded. \
+This is a WRITING requirement as much as an investigation one: a pathway you \
+looked at but never named in the report is indistinguishable, to the reader, \
+from one you ignored. Name every cluster you found and every top-ranked \
+pathway in the prose -- with a sentence on what it shows, or a sentence on \
+why you set it aside. Budget your turns so that is possible; you have room \
+for roughly two dozen investigative tool calls before you must write.
+
+Report rules:
+- Cite ONLY [N] indices that search_literature returned. Never invent an index \
+or a PMID.
+- Before submitting, run check_my_citations on your draft: it names the \
+citations that have no supporting quote, which are the ones that will be \
+stripped. Fix or drop them rather than shipping them.
+- Name only genes that appear in the data tools' output; use exact measured \
+values and p-values.
+- Structure, all five sections required: ## Key Findings (3-5 bullets), \
+## Cross-Pathway Themes, ## Detailed Pathway Analysis -- a paragraph per \
+top-ranked pathway or cluster, built from your delegated interpretations \
+rather than a bare list -- ## Suggested Follow-up Experiments (3-5, \
+prioritised), ## Limitations and Caveats. Leaving out the Detailed Pathway \
+Analysis is not an option; most of the report's value sits there.
+- Finish by calling submit_report with the COMPLETE report. That is the only \
+way to finish. After it returns SUBMITTED, reply DONE and stop."""
+
+
+def build_lead_kickoff_prompt(organism_name, experiment_design, pathways,
+                              max_turns, search_budget, loop_seconds):
+    """The Lead Interpreter's opening message: context, ranked pathways,
+    and the budgets the tools will enforce."""
+    lines = ["## Experiment"]
+    lines.append(f"Organism: {organism_name}")
+    if experiment_design:
+        lines.append(f"Design: {experiment_design}")
+    lines.append("")
+    lines.append("## Enriched pathways (ranked by combined p-value)")
+    for i, p in enumerate(pathways, 1):
+        lines.append(f"{i}. {p.get('name')} ({p.get('id')}, {p.get('source')}) "
+                     f"p={p.get('combined_pvalue'):.3g}, "
+                     f"{p.get('significant_omic_count', '?')} significant omic "
+                     f"layer(s), {p.get('matched_gene_count', '?')} matched genes")
+    lines.append("")
+    lines.append("## Budgets (enforced by the tools)")
+    lines.append(f"- {max_turns} turns; {search_budget} literature searches; "
+                 f"~{loop_seconds} s of investigation time")
+    lines.append("")
+    lines.append("Investigate this experiment and submit your report. "
+                 "Begin with get_experiment_overview.")
+    return "\n".join(lines)
+
+def build_evidence_shelf_block(shelf):
+    """The passages a delegated interpreter may cite, handed over before it writes.
+
+    Citations fail verification when a claim is written first and support looked
+    for afterwards: the gate needs a verbatim sentence from the paper, and a
+    claim composed without one usually has none. Giving the writer the actual
+    passages first makes the citation true by construction -- which is why the
+    workflow arm's citations survive, since it writes with the abstracts in
+    context.
+
+    The block also separates the two kinds of sentence. Measured on round 30,
+    this arm shipped 16 citations across 62 161 characters of prose (0.26 per
+    thousand) against the workflow arm's 24 across 26 599 (0.90). It grounds
+    what it cites, and then writes a great deal more that cites nothing --
+    literature-flavoured prose with no passage behind it, which inflates the
+    report past twice the length of the shipped arm's and dilutes the evidence
+    that is there.
+    """
+    lines = [
+        "\n\n## Evidence you may cite",
+        "These passages come from the papers above. Cite [N] ONLY where you are "
+        "using that paper's passage, and write the claim so the passage actually "
+        "supports it.",
+        "",
+        "Two kinds of sentence, and keep them apart:",
+        "  * What YOUR DATA shows -- values, timings, directions, p-values from "
+        "the tables above. No citation belongs on these; they are what the "
+        "experiment measured.",
+        "  * What the LITERATURE says -- mechanism, precedent, a claim about "
+        "biology beyond this experiment. Every one of these needs a passage "
+        "below standing behind it.",
+        "",
+        "A sentence that is neither -- mechanism you cannot point to a passage "
+        "for, written as though it were established -- is the one thing to leave "
+        "out. Say it as an inference from your data, or do not say it. Length is "
+        "not the goal: a paragraph carrying a measured value or a quoted passage "
+        "earns its place, and one carrying neither does not.",
+    ]
+    for ref in sorted(shelf):
+        lines.append('\n[%d] "%s"' % (ref, shelf[ref].replace("\n", " ")[:500]))
     return "\n".join(lines)

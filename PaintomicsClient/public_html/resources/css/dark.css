@@ -759,6 +759,15 @@
 [data-theme="dark"] .ai-widget-fab { background: var(--pa-ai-blue); }
 [data-theme="dark"] .ai-progress-track { background: var(--pa-ai-progress-track); }
 [data-theme="dark"] .ai-progress-detail { color: var(--pa-ai-progress-ink); }
+/* The activity feed sits on the same progress surface, so it takes the same
+   ink; the muted columns step down from it rather than using the light values,
+   which fall to about 2:1 on the dark panel. */
+[data-theme="dark"] .ai-activity-row { color: var(--pa-ai-progress-ink); }
+[data-theme="dark"] .ai-activity-detail,
+[data-theme="dark"] .ai-activity-ms,
+[data-theme="dark"] .ai-activity-row.is-count { color: var(--pa-ink-muted); }
+[data-theme="dark"] .ai-activity-row.is-failed .ai-activity-tool,
+[data-theme="dark"] .ai-activity-row.is-failed .ai-activity-detail { color: #ff8a80; }
 [data-theme="dark"] .ai-pathway-link { color: var(--pa-ai-pathway-link); }
 [data-theme="dark"] .ai-pathway-link:hover { color: var(--pa-ai-pathway-link-hover); }
 [data-theme="dark"] .ai-citations-toggle { color: var(--pa-link); }

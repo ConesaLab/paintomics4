@@ -823,7 +823,8 @@ function PA_Step3JobView() {
 				// statement about the job, so keep watching.
 				if (!r || !r.success) { schedule(AI_POLL_INTERVAL); return; }
 				me.aiPollFailures = 0;
-				me.aiWidget.updateProgress(r.status, r.percent, r.detail);
+				me.aiWidget.updateProgress(r.status, r.percent, r.detail,
+				                           r.toolTrace, r.toolCalls);
 				if (r.status !== "done" && r.status !== "error" && r.status !== "cancelled") {
 					schedule(AI_POLL_INTERVAL);
 				}

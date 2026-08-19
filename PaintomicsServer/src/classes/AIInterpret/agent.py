@@ -20,6 +20,7 @@ entry points stay synchronous and own their own event loop:
     workflow, also used by the AgentEvolve replay harness (``--arm sdk``).
 """
 import asyncio
+import contextvars
 import json
 import logging
 import os
@@ -57,6 +58,8 @@ from src.classes.AIInterpret.verification import (
     sort_references_section,
     parse_references_section, render_references_section,
     normalize_citation_markers, resolve_pmid_mentions, count_body_citations,
+    score_topup_survival, theme_conversion, quote_provenance,
+    last_sentences_dropped,
 )
 # The shared verdict parser: the verifier agent keeps its tools (see the
 # DANGER note in _build_agents), so its verdict arrives as free text.
@@ -151,10 +154,68 @@ SDK_HTTP_READ_TIMEOUT = float(os.getenv("AI_SDK_HTTP_READ_TIMEOUT", "180"))
 # run_hedged's 45 s straggler cutoff -- but nor may they run unbounded: two
 # live runs sat 90+ minutes inside one top-up before this existed.
 SDK_LONG_CALL_TIMEOUT = float(os.getenv("AI_SDK_LONG_CALL_TIMEOUT", "600"))
+# The run's own deadline, visible to the transport. Every phase-level guard in
+# this file bounds the work it starts, but the retry shim underneath them had a
+# budget of its own -- 4 attempts x a 180 s read timeout, 8 when throttled --
+# and no idea when the run was due. A single Lead call spent 1604 s that way,
+# without issuing one tool call, and the run finished at 1722 s against a 600 s
+# ceiling. A ContextVar because it is per-run and inherited by every task the
+# run spawns, where a module global would leak between concurrent jobs.
+_RUN_DEADLINE = contextvars.ContextVar("ai_run_deadline", default=None)
+# Gateway weather, per run. Round 34 logged ONE transport rate-limit retry
+# across eight replicates; round 35 logged sixteen. That is a swing large
+# enough to move failure counts and wall times on its own, and it lived only in
+# the log -- so every archived comparison silently assumed the two rounds met
+# the same gateway. A ContextVar for the same reason the deadline is one: it is
+# inherited by child tasks, where a module global would bleed between
+# concurrent jobs.
+_RUN_RETRIES = contextvars.ContextVar("ai_run_retries", default=None)
+# Below this there is no point starting another attempt: it cannot return
+# anything the caller will still be alive to use.
+RETRY_MIN_ATTEMPT_SECONDS = float(os.getenv("AI_RETRY_MIN_ATTEMPT", "20"))
+
+
+def set_run_deadline(when):
+    """Arm the transport's deadline for this run. `when` is an epoch time."""
+    _RUN_DEADLINE.set(when)
+
+
+def reset_run_retries():
+    """Start a run's retry tally. Call once, where the deadline is set."""
+    _RUN_RETRIES.set({"transport": 0, "rate_limited": 0})
+
+
+def run_retry_counts():
+    """The tally, or an empty dict if nothing armed one."""
+    return dict(_RUN_RETRIES.get() or {})
+
+
+def _count_retry(exc):
+    tally = _RUN_RETRIES.get()
+    if tally is None:
+        return
+    tally["transport"] = tally.get("transport", 0) + 1
+    if "ratelimit" in type(exc).__name__.lower():
+        tally["rate_limited"] = tally.get("rate_limited", 0) + 1
+
+
+def _run_seconds_left():
+    """Seconds until the run is due, or None when no deadline is armed."""
+    when = _RUN_DEADLINE.get()
+    return None if when is None else when - time.time()
 # The whole interpretation, end to end. A run that is still going after this
 # has stalled somewhere the phase caps did not reach; better an error the user
 # can retry than a job that reads as running for the rest of the day.
 AI_MAX_RUN_SECONDS = float(os.getenv("AI_MAX_RUN_SECONDS", "2700"))
+# What the pipeline must keep in hand after the verify loop: quote collection
+# (capped at AI_QUOTE_DEADLINE, 45 s), reference rendering, the programmatic
+# redaction net and the save. Measured at 0.0-0.1 s for the net itself, so this
+# is dominated by the quote pass.
+VERIFY_TAIL_RESERVE = float(os.getenv("AI_VERIFY_TAIL_RESERVE", "60"))
+# One verification fan-out, before any has been measured in this run.
+VERIFY_ITER_RESERVE = float(os.getenv("AI_VERIFY_ITER_RESERVE", "90"))
+# A correction rewrite is a full-report synthesis echo (~70 s of a 347 s run).
+VERIFY_REWRITE_RESERVE = float(os.getenv("AI_VERIFY_REWRITE_RESERVE", "90"))
 
 _SYSTEM_STOPWORDS = frozenset("""
 a an the and or of in on at to for from with without by as is are was were be
@@ -196,6 +257,9 @@ _cancel_flags = {}
 _agent_semaphore = threading.Semaphore(AI_MAX_CONCURRENT_PIPELINES)
 
 _sdk_configured = False
+# The configured client, kept reachable so the retry shim can be driven in a
+# test: its worst case is longer than a whole run, so it needs one.
+_CLIENT = None
 _MODEL_OBJ = None
 
 
@@ -234,6 +298,12 @@ class _AsyncPacer:
 
 class _EmptyStream(Exception):
     """The gateway closed a completion stream without a single choice."""
+
+
+
+# Lengths of answers the model cut off at its token limit, this process.
+# Read by run_ai_agent to stamp `truncated_calls` on the stored record.
+_TRUNCATIONS = []
 
 
 async def _stream_to_completion(stream):
@@ -316,6 +386,16 @@ async def _stream_to_completion(stream):
         finish_reason = "tool_calls" if tool_calls else "stop"
         logger.warning("completion stream ended without finish_reason; assuming %s",
                        finish_reason)
+    elif finish_reason == "length":
+        # The model ran out of output budget mid-sentence and the partial text
+        # ships as if it were finished. That is how a stored report ends on the
+        # bare heading "### 4." with no Limitations section after it: the last
+        # section is simply where the tokens ran out, and nothing anywhere said
+        # so. Counted so a truncated interpretation can be told from a short one.
+        _TRUNCATIONS.append(len("".join(content)))
+        logger.warning("[AI] completion TRUNCATED at the token limit after %d "
+                       "characters; the tail of this answer is missing",
+                       len("".join(content)))
     payload = {
         "id": meta.get("id") or "chatcmpl-stream",
         "object": "chat.completion",
@@ -347,7 +427,7 @@ async def bounded(awaitable, timeout, label=""):
 
 def configure_sdk():
     """Point the SDK at our OpenAI-compatible gateway. Idempotent."""
-    global _sdk_configured, _MODEL_OBJ
+    global _sdk_configured, _MODEL_OBJ, _CLIENT
     if _sdk_configured:
         return
     provider = AI_PROVIDERS[AI_LLM_PROVIDER]
@@ -358,7 +438,7 @@ def configure_sdk():
     # The read timeout is per read: with streaming (SDK_STREAM) it bounds the
     # silence between tokens, and a stalled request surfaces as
     # APITimeoutError instead of holding the phase open.
-    client = AsyncOpenAI(
+    client = _CLIENT = AsyncOpenAI(
         base_url=provider["api_base"], api_key=provider["api_key"],
         max_retries=0,
         timeout=httpx.Timeout(connect=30.0, read=SDK_HTTP_READ_TIMEOUT,
@@ -433,6 +513,12 @@ def configure_sdk():
             await pacer.wait()
             try:
                 return await _issue(*args, **kwargs)
+            except asyncio.CancelledError:
+                # Never retry a cancellation. httpx maps some cancellations
+                # during a stream read onto its own error types, and the
+                # transient test below would answer True for those -- turning
+                # "the run is over" into "sleep, then try again".
+                raise
             except (_oai.APIError, httpx.HTTPError, _EmptyStream) as e:
                 if not _transient(e):
                     raise
@@ -449,6 +535,15 @@ def configure_sdk():
                     delay = _retry_after(e) or min(3.0 * 2 ** (attempt - 1), 30.0)
                 else:
                     delay = min(2 ** (attempt - 1) * 2, 15)
+                left = _run_seconds_left()
+                if left is not None and left < delay + RETRY_MIN_ATTEMPT_SECONDS:
+                    logger.warning("SDK transport stopping after %d attempt(s) "
+                                   "(%s%s): %.0fs left of the run, an attempt "
+                                   "needs %.0fs", attempt, type(e).__name__,
+                                   " %s" % status if status else "", left,
+                                   delay + RETRY_MIN_ATTEMPT_SECONDS)
+                    raise
+                _count_retry(e)
                 logger.warning("SDK transport retry %d/%d after %s%s (waiting %.0fs)",
                                attempt, limit - 1, type(e).__name__,
                                " %s" % status if status else "", delay)
@@ -860,14 +955,227 @@ def _build_agents():
         model_settings=strict,
         tools=VERIFY_TOOLS,
     )
+    # The prefetch path's verifier: same instructions, NO tools. Porting the
+    # prompt alone was not enough -- measured on a smoke run, prefetch with the
+    # tool-carrying verifier still produced "Max turns (2) exceeded" four times,
+    # because the model can still choose to call a tool and now has two turns to
+    # exhaust instead of six. It failed FASTER. The agent arm's version has
+    # tools=[] for this reason and says so: "No tools, one call, no turns to
+    # exhaust."
+    verifier_solo = Agent[AgentContext](
+        name="Claim Verifier (prefetched)",
+        model=_model(),
+        instructions=prompts_mod.SYSTEM_PROMPT_VERIFICATION,
+        model_settings=strict,
+        tools=[],
+    )
     return dict(triage=triage_agent, planner=search_planner, filter=paper_filter,
                 interpret=interpreter, interpret_light=interpreter_light,
-                synth=synthesizer, verify=verifier)
+                synth=synthesizer, verify=verifier, verify_solo=verifier_solo)
 
 
 # ---------------------------------------------------------------------------
 # Orchestration
 # ---------------------------------------------------------------------------
+
+SENTENCE_REPAIR = os.getenv("AI_SENTENCE_REPAIR", "0") == "1"
+VERIFY_MEMO = os.getenv("AI_VERIFY_MEMO", "0") == "1"
+# Hand the verifier its evidence instead of making it hunt for it -- ported from
+# the agent arm, where it has been the default for many rounds on this measured
+# result: 29 of 29 calls returned a verdict at a median 2 464 ms, redactions fell
+# 12 -> 2, the verify loop 291 s -> 117 s, the run 485 s -> 338 s.
+#
+# The comment that shipped with it noted "the same warning appears in the
+# workflow arm's logs" and nobody acted on it. Counted since: 53 "Max turns (6)
+# exceeded" verifier failures across rounds 34-36, ALL of them in this arm and
+# NONE in the agent arm -- about five per base run. A verifier that raises counts
+# as a failure, so each one redacts a citation for a tooling reason rather than a
+# grounding one, which is most of why this arm redacts 10 sentences a run to the
+# agent arm's 5.75.
+#
+# Finding the quote is mechanical and tools.py does it in pure Python, so the
+# passage is extracted in code and pasted into the prompt. The model is left with
+# the one judgement only it can make. Off by default for one measuring round.
+# DEFAULT ON as of round 37, on the measured result: over 4 replicates against
+# base-v35's rewrite path, verifier deaths went ~5/run -> 0, redactions 10.0 ->
+# 3.0, the verify loop 259.5 s -> 135.8 s, wall 418.7 s -> 298.4 s, and gateway
+# rate-limit retries 10.0/run -> 0.0. The verify loop also began CONVERGING --
+# 15 failed -> 2 -> 0 -- instead of exiting on no progress.
+# Citations came in at 20.25 against 22.8, so the one prediction that did not
+# hold was "citations hold or rise"; the drop sits inside this arm's own
+# round-to-round range (22.8, 17.8) and is recorded rather than explained away.
+# AI_VERIFY_PREFETCH=0 restores the tool-loop verifier for comparison.
+VERIFY_PREFETCH = (os.getenv("AI_VERIFY_PREFETCH") or "1").strip().lower() \
+    not in ("0", "false", "no")
+
+
+def _prefetched_evidence_block(paper_index, cit):
+    """The paper's own words, found in Python and pasted into the prompt.
+
+    Takes the paper index itself, not a context. The first version took `ctx` and
+    read `ctx.context.paper_index`, copied from a @function_tool where ctx IS a
+    RunContextWrapper -- but this arm's _verify_one is handed a bare
+    AgentContext, so every verification raised AttributeError and the round died
+    with status=error on its first replicate. The test passed because its stub
+    was hand-rolled to match the wrong assumption. An index has one shape.
+
+    This is the whole of the port: searching a paper for a quote is mechanical,
+    tools.py already does it, and making a six-turn agent do it with tool calls
+    is how a verifier spends its budget on round-trips and returns no verdict at
+    all. Failing to find the passage is not fatal -- the model is told so, and
+    the deterministic quote check in verify_report_v2 runs afterwards either way.
+    """
+    executor = tools_mod.build_verification_executor(paper_index)
+    try:
+        passage = executor("search_paper_text",
+                           {"ref_index": cit["ref_index"],
+                            "query": (cit.get("cited_text") or "")[:180]})
+        if not passage or passage.lower().startswith("error"):
+            passage = executor("fetch_paper_section",
+                               {"ref_index": cit["ref_index"],
+                                "section": "abstract"})
+    except Exception as e:
+        passage = "(the paper's text could not be searched: %s)" % e
+    return ("\n\n## What paper [%s] actually says, retrieved for you\n%s\n\n"
+            "Judge from the text above. Do not ask for more; if the quote is not "
+            "in it, say so." % (cit["ref_index"], (passage or "")[:6000]))
+
+
+def _verdict_key(cit):
+    """What a verdict is actually a verdict ABOUT.
+
+    A citation is checked by asking whether one quote supports one sentence. If
+    neither the quote nor the sentence has changed, the answer cannot have
+    changed either -- so re-asking is redundant BY CONSTRUCTION, not by
+    assumption about the model.
+
+    The loop re-verifies every citation on every iteration. A base run carries
+    ~25 citations through 3 iterations, and a repair round that fixes one
+    sentence leaves 24 of them byte-identical; they are all asked again anyway,
+    each by a six-turn verifier agent.
+    """
+    return (cit.get("ref_index"), (cit.get("claim_sentence") or "").strip(),
+            (cit.get("cited_text") or "").strip())
+SENTENCE_REPAIR_WORKERS = int(os.getenv("AI_SENTENCE_REPAIR_WORKERS", "6"))
+
+
+async def _repair_sentences(agent, ctx, report, failed, job_id, stats, timeout):
+    """Repair each failed citation's own sentence, independently and at once.
+
+    This is the fan-out the pipeline was missing. Fixing citation [7] does not
+    depend on fixing [12], so the repairs are genuinely independent work -- but
+    they were being done by handing one model the whole report and asking for a
+    corrected copy. Measured: a base verify iteration costs ~83 s, of which the
+    8-way verification fan-out is ~8 s and the full-report rewrite is the rest,
+    three times per run.
+
+    The rewrite is also destructive in ways the surrounding code then repairs:
+    it re-authors the References section (so every quote is re-collected and the
+    section re-rendered) and drops the appended data tables (which
+    _reattach_blocks puts back). Changing one sentence changes one sentence, so
+    none of that follows.
+
+    Returns (report, repaired_count). A repair that cannot be placed exactly is
+    skipped, not forced -- the programmatic net still redacts whatever fails,
+    so the worst case here is the behaviour we already had.
+    """
+    locatable = [fc for fc in failed
+                 if fc.get("claim_sentence")
+                 and report.count(fc["claim_sentence"]) == 1]
+    if len(locatable) < len(failed):
+        # A sentence the verifier quoted but that no longer appears verbatim
+        # (or appears twice) cannot be substituted safely.
+        stats["repair_unlocatable"] = len(failed) - len(locatable)
+    if not locatable:
+        return report, 0
+
+    sem = asyncio.Semaphore(SENTENCE_REPAIR_WORKERS)
+
+    async def _one(fc):
+        async with sem:
+            try:
+                result = await bounded(
+                    Runner.run(agent,
+                               prompts_mod.build_sentence_repair_prompt(fc),
+                               context=ctx, max_turns=2),
+                    timeout, label="repair [%s]" % fc.get("ref_index"))
+            except (Exception, asyncio.TimeoutError) as e:
+                logger.warning("[%s][sdk] sentence repair for [%s] failed: %s",
+                               job_id, fc.get("ref_index"), e)
+                return fc, None
+            # Kept RAW. A single sentence has no line breaks, and that is the
+            # sharpest signal that the model answered with something else --
+            # a preamble, an apology, the report echoed back. Collapsing
+            # whitespace first would destroy the evidence.
+            return fc, str(result.final_output).strip()
+
+    repaired = rejected = 0
+    for fc, text in await asyncio.gather(*[_one(fc) for fc in locatable]):
+        original = fc["claim_sentence"]
+        # A repair is accepted only if it still looks like ONE sentence taking
+        # the place of one sentence. An answer that runs away -- a preamble, an
+        # apology, the whole report echoed back -- would silently replace a
+        # paragraph, which is the failure mode that makes an unattended
+        # substitution dangerous.
+        if not text or "\n" in text or len(text) > 2 * len(original) + 120:
+            rejected += 1
+            continue
+        # A DRIFT repair must keep its citation. The quote is real -- that is
+        # what "drift" means -- so a sentence narrowed to what the quote does
+        # support is still a cited claim, and dropping the marker converts a
+        # fixable citation into a lost one. Round 36's first agent replicate
+        # repaired 8 sentences and shipped 11 citations against a 15.5 mean,
+        # losing 29 sentences to redaction.
+        #
+        # A TEXT repair is the opposite case: the quote is not in the paper, so
+        # the marker SHOULD be able to go, and requiring it would force the
+        # model to keep a citation it has just been told is unsupportable.
+        marker = "[%d]" % fc.get("ref_index", 0)
+        if fc.get("mode") != "text" and marker not in text:
+            rejected += 1
+            continue
+        text = " ".join(text.split())
+        if report.count(original) != 1:      # an earlier repair moved it
+            rejected += 1
+            continue
+        report = report.replace(original, text, 1)
+        repaired += 1
+    stats["sentences_repaired"] = repaired
+    if rejected:
+        stats["repairs_rejected"] = rejected
+    logger.info("[%s][sdk] sentence repair: %d fixed, %d rejected, %d unplaceable",
+                job_id, repaired, rejected, len(failed) - len(locatable))
+    return report, repaired
+
+
+def _budget_allows(left, measured_cost, default_cost,
+                   reserve=None):
+    """Is there room for one more unit of OPTIONAL work before the deadline?
+
+    Returns (allowed, needed). ``measured_cost`` is this run's own last
+    iteration when there has been one; the default is only used before any
+    measurement exists, because citation counts and gateway weather move the
+    real cost by 3x between runs. The 1.2 factor covers an iteration that runs
+    slower than the last one -- being wrong here costs the whole report.
+    """
+    if reserve is None:
+        reserve = VERIFY_TAIL_RESERVE
+    needed = (measured_cost * 1.2 if measured_cost else default_cost) + reserve
+    return left >= needed, needed
+
+
+def _seconds_left(run_start):
+    """Seconds until the deadline that kills the whole run.
+
+    The 10-minute cap is enforced by one asyncio.wait_for around the entire
+    pipeline, so until now no phase could see it coming: the verify loop would
+    start a 200 s iteration with 60 s left and the run died mid-rewrite. Every
+    phase that can decide NOT to do more work should consult this first --
+    stopping early leaves a complete, redacted report, where being killed
+    leaves a partial one carrying unverified citations.
+    """
+    return AI_MAX_RUN_SECONDS - (time.time() - run_start)
+
 
 async def _run_async(job_instance, job_id, experiment_design, budgets, stats,
                      hooks=None):
@@ -881,6 +1189,9 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats,
         if hooks and hooks.get("cancelled") and hooks["cancelled"]():
             raise InterruptedError("Cancelled")
 
+    run_start = time.time()
+    set_run_deadline(run_start + AI_MAX_RUN_SECONDS)
+    reset_run_retries()
     configure_sdk()
     agents = _build_agents()
 
@@ -1275,6 +1586,13 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats,
     ctx.paper_index = {p["ref_index"]: p for p in unique_papers}
     stats["retrieval_s"] = time.time() - t0
     stats["papers"] = len(unique_papers)
+    # `papers` here IS the retrieval pool: it is written once, at retrieval, from
+    # the unfiltered set, and unique_papers is not reassigned until the reference
+    # list is trimmed some 700 lines later. So the benchmark's fallback to it for
+    # papers_retrieved is correct for this arm, and papers_retrieved ==
+    # synth_citations in every archived base run because base cites EVERY paper
+    # it retrieves -- 52/52, 45/45, 28/28, 33/33. That is a real property of the
+    # arm, not a measurement artifact; I briefly concluded the opposite.
     stats["full_text_papers"] = sum(1 for p in unique_papers
                                     if p.get("full_text_available"))
     logger.info("[%s][sdk] %d unique papers (%d with full text)",
@@ -1529,6 +1847,7 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats,
     # map; done before the top-up gate so a draft that cited well by PMID is
     # not sent for a rewrite it does not need.
     report = resolve_pmid_mentions(report, {p["ref_index"]: p for p in unique_papers})
+    _keep_partial(stats, report, unique_papers, "synthesis")
     # Close the gaps the draft left, before anything else touches the report.
     # One targeted revision naming exactly what is missing, rather than another
     # sample of the same distribution.
@@ -1665,10 +1984,19 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats,
                 str(topped.final_output), {p["ref_index"]: p for p in unique_papers})
             # Guard against the "rewrite" degenerating into a summary: keep the
             # top-up only if it preserved the report and added BODY citations.
-            added = len(count_body_citations(candidate, valid_indices))
+            cited_after = count_body_citations(candidate, valid_indices)
+            added = len(cited_after)
             if len(candidate) > 0.6 * len(str(report)) and added > len(cited_now):
                 report = candidate
                 stats["topup_added"] = added - len(cited_now)
+                # WHICH references it added, so the gate can price the trade.
+                # Top-up marks sentences that already stood on their own; if
+                # one of its citations then fails, redact_unverified_v2 deletes
+                # that whole sentence along with it. Counting only the
+                # citations gained measures the upside of a bet whose downside
+                # is prose, which is how a stage can look free and not be.
+                stats["topup_added_refs"] = sorted(set(cited_after)
+                                                   - set(cited_now))
             else:
                 stats["topup_rejected"] = True
                 logger.warning("[%s][sdk] citation top-up discarded (len %d->%d, "
@@ -1695,9 +2023,11 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats,
     quotes = _collect_cited_quotes(llm_for_quotes, report, ctx.paper_index, job_id)
     report, rendered = render_references_section(report, ctx.paper_index, quotes)
     stats["refs_rendered"] = len(rendered)
+    _keep_partial(stats, report, unique_papers, "references rendered")
     stats["quotes_supplied"] = len(quotes)
     logger.info("[%s][sdk] references rebuilt: %d rendered, %d quotes",
                 job_id, len(rendered), len(quotes))
+    report = _note_if_ungrounded(report, rendered, ctx.paper_index, job_id)
 
     # -- Phase 5b: iterative verify -> correct, the SDK's turn at pipeline.py's
     _hb("verifying", 85, "Verifying citations...")
@@ -1708,7 +2038,27 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats,
     t0 = time.time()
     verify_iters = 0
     previous_failures = None
+    verified_before = set()          # verdict keys that came back supported
+    iteration_cost = None            # measured in this run, not guessed
     for _iteration in range(AI_MAX_VERIFICATION_ITERATIONS):
+        # An iteration that the deadline will kill is worse than no iteration:
+        # the run dies here and ships a partial report whose citations were
+        # never checked, where stopping now ships a complete one with the
+        # failures redacted. Cost is this run's own measured iteration once
+        # there is one -- citation counts and gateway weather vary too much for
+        # a fixed estimate.
+        left = _seconds_left(run_start)
+        affordable, need = _budget_allows(left, iteration_cost,
+                                          VERIFY_ITER_RESERVE)
+        if not affordable:
+            logger.info("[%s][sdk] stopping verification after %d iteration(s): "
+                        "%.0fs left, an iteration needs ~%.0fs. The remaining "
+                        "citations go to the programmatic net.",
+                        job_id, verify_iters, left, need)
+            stats["verify_stopped_for_time"] = "%.0fs left, %.0fs needed" % (
+                left, need)
+            break
+        iteration_started = time.time()
         citations = parse_references_section(report)
         to_verify = [c for c in citations if c.get("cited_text")]
         if not to_verify:
@@ -1722,35 +2072,89 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats,
 
         async def _verify_one(cit):
             async with vsem:
+                prompt = prompts_mod.build_verification_prompt(
+                    cit["claim_sentence"], cit["cited_text"], cit["ref_index"])
+                checker, turns = agents["verify"], 6
+                if VERIFY_PREFETCH:
+                    prompt += _prefetched_evidence_block(ctx.paper_index, cit)
+                    # The tools-free twin: with the passage in the prompt there
+                    # is nothing to call, so two turns is generous.
+                    checker, turns = agents["verify_solo"], 2
                 try:
                     r = await run_hedged(
-                        agents["verify"],
-                        prompts_mod.build_verification_prompt(
-                            cit["claim_sentence"], cit["cited_text"], cit["ref_index"]),
-                        ctx, max_turns=6,
+                        checker, prompt, ctx, max_turns=turns,
                         label="verify[%s]" % cit["ref_index"])
                     return cit, str(r.final_output)
                 except Exception as e:  # a dead sub-agent must not pass as verified
                     logger.warning("[%s][sdk] verifier raised for [%s]: %s",
                                    job_id, cit["ref_index"], e)
+                    stats["verifier_raised"] = stats.get("verifier_raised", 0) + 1
                     return cit, ""
 
-        verdicts = await asyncio.gather(*[_verify_one(c) for c in to_verify])
+        # Bound the fan-out itself, not just the decision to start it. The
+        # guard above uses this run's previous iteration as the estimate, and
+        # the FIRST iteration has none -- so a 486 s round (measured) sails past
+        # a 90 s default and the run dies holding a finished report it never
+        # shipped. The agent arm learned this the same way and the fix is the
+        # same: whatever does not finish in time counts as unverified, which is
+        # exactly what phase 6 redacts deterministically in ~0.1 s. Stopping
+        # early costs a redaction; overrunning costs the whole interpretation.
+        if VERIFY_MEMO and verified_before:
+            fresh = [c for c in to_verify if _verdict_key(c) not in verified_before]
+            stats["verify_memo_skipped"] = (stats.get("verify_memo_skipped", 0)
+                                            + len(to_verify) - len(fresh))
+            to_verify = fresh
+            if not to_verify:
+                logger.info("[%s][sdk] every citation is unchanged and already "
+                            "verified; nothing left to check", job_id)
+                break
+        budget = max(20.0, _seconds_left(run_start) - VERIFY_TAIL_RESERVE)
+        # Split the loop's cost where the two halves actually divide. Round 36
+        # replaced the full-report rewrite with parallel per-sentence repairs and
+        # verify_loop_s did not move (230 s against 250 s) on a replicate that
+        # repaired ONE sentence -- so the rewrite was never what the loop spends
+        # its time on. What is left is this fan-out: each citation gets a
+        # SIX-TURN verifier agent, and with ~25 citations at concurrency 8 that
+        # is several batches of a tool loop, three times over. Timed rather than
+        # inferred, because inferring it is how the wrong half got optimised.
+        _t_fanout = time.time()
+        tasks = [asyncio.ensure_future(_verify_one(c)) for c in to_verify]
+        done, pending = await asyncio.wait(tasks, timeout=budget)
+        stats["verify_fanout_s"] = (stats.get("verify_fanout_s", 0.0)
+                                    + time.time() - _t_fanout)
+        stats["verify_citations_checked"] = (
+            stats.get("verify_citations_checked", 0) + len(to_verify))
+        for task in pending:
+            task.cancel()
+        if pending:
+            stats["verify_unchecked"] = (stats.get("verify_unchecked", 0)
+                                         + len(pending))
+            logger.info("[%s][sdk] %d of %d citations unchecked when the clock "
+                        "ran out; the programmatic net takes them", job_id,
+                        len(pending), len(to_verify))
+        verdicts = [t.result() for t in done if not t.cancelled()]
         failed = []
         for cit, text in verdicts:
             v = _parse_json_verdict(text) if text else {
                 "text_match": False, "supports_claim": False,
                 "reasoning": "Verification error"}
+            if v.get("text_match") and v.get("supports_claim"):
+                verified_before.add(_verdict_key(cit))
             if not v.get("text_match") or not v.get("supports_claim"):
                 failed.append({"ref_index": cit["ref_index"],
                                "reason": v.get("reasoning", "Verification failed"),
                                "cited_text": cit["cited_text"],
                                "claim_sentence": cit["claim_sentence"],
                                "actual_text": v.get("actual_text", ""),
-                               "suggested_fix": v.get("suggested_fix", "")})
+                               "suggested_fix": v.get("suggested_fix", ""),
+                               # Which repair the correction prompt should ask
+                               # for: a real quote with an oversold sentence
+                               # needs the SENTENCE changed, not the quote.
+                               "mode": ("text" if not v.get("text_match")
+                                        else "claim")})
         failed.sort(key=lambda c: c["ref_index"])
         logger.info("[%s][sdk] VERIFY iter %d: %d checked, %d failed",
-                    job_id, _iteration + 1, len(to_verify), len(failed))
+                    job_id, _iteration + 1, len(verdicts), len(failed))
         if not failed:
             break
         # Stop when a round fixes nothing. Where the citation is simply wrong --
@@ -1764,6 +2168,7 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats,
                         len(failed))
             break
         previous_failures = len(failed)
+        iteration_cost = time.time() - iteration_started
         # On the final permitted iteration a correction is a rewrite nothing
         # will re-verify, and the programmatic net redacts whatever still fails
         # either way -- so it buys no accuracy and costs a full synthesis pass
@@ -1776,7 +2181,38 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats,
         # The rewrite is a full-report echo like the top-up, and it is
         # optional in the same way: the programmatic net (phase 6) redacts
         # whatever still fails. So a rewrite that times out or raises ends the
-        # loop with the report as it stands, rather than ending the run.
+        # loop with the report as it stands, rather than ending the run -- and
+        # for the same reason it is not worth starting inside the last minutes
+        # of the budget, where it can only turn a finished report into a killed
+        # one.
+        left = _seconds_left(run_start)
+        affordable, _ = _budget_allows(left, None, VERIFY_REWRITE_RESERVE)
+        if not affordable:
+            logger.info("[%s][sdk] skipping the correction rewrite: %.0fs left, "
+                        "it needs ~%.0fs; %d citation(s) will be redacted",
+                        job_id, left,
+                        VERIFY_REWRITE_RESERVE + VERIFY_TAIL_RESERVE, len(failed))
+            stats["rewrite_skipped_for_time"] = "%.0fs left" % left
+            break
+        _t_repair = time.time()
+        if SENTENCE_REPAIR:
+            # Repair the failed sentences themselves, in parallel, instead of
+            # regenerating the report around them. Only those sentences change,
+            # so the References section, the quotes behind it and the appended
+            # tables all stay valid -- none of the repair-of-the-repair below
+            # is needed.
+            report, fixed = await _repair_sentences(
+                agents["synth"], ctx, report, failed, job_id, stats,
+                SDK_CALL_TIMEOUT)
+            stats["verify_repair_s"] = (stats.get("verify_repair_s", 0.0)
+                                        + time.time() - _t_repair)
+            if not fixed:
+                logger.info("[%s][sdk] no sentence could be repaired; leaving "
+                            "%d citation(s) to the programmatic net",
+                            job_id, len(failed))
+                break
+            continue
+
         try:
             corr = await bounded(Runner.run(
                 agents["synth"],
@@ -1800,6 +2236,8 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats,
         quotes.update(_collect_cited_quotes(llm_for_quotes, report, ctx.paper_index,
                                             job_id, known=quotes))
         report, _ = render_references_section(report, ctx.paper_index, quotes)
+        stats["verify_repair_s"] = (stats.get("verify_repair_s", 0.0)
+                                    + time.time() - _t_repair)
     stats["verify_loop_s"] = time.time() - t0
     if partition is not None:
         # A correction rewrite re-authors the whole report and can drop the
@@ -1818,9 +2256,30 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats,
     # concluded, unverifiable citations are redacted here, deterministically.
     t0 = time.time()
     final = verify_report_v2(report, gene_whitelist, unique_papers, job_instance)
+    # WHICH references failed, not just how many. The count cannot answer the
+    # question round 40 raised -- are the failures concentrated in papers admitted
+    # while the screen was being permissive? -- because a paper's ref_index IS its
+    # admission order. stats["verification"] holds this and is a dict, so the
+    # bench drops it and every archived round kept only the total.
+    _failed = final.get("failed_citations") or []
+    if _failed:
+        stats["failed_refs"] = ",".join(
+            str(c.get("ref_index")) for c in _failed
+            if isinstance(c.get("ref_index"), int))
+    score_topup_survival(stats, final)
+    # Which retrieval machinery the surviving quotes actually came from. Placed
+    # here on purpose: renumber_citations rewrites every ref_index a few lines
+    # below, and the quotes dict is keyed on the OLD ones.
+    stats.update(quote_provenance(quotes, ctx.paper_index))
     if final.get("failed_citations"):
         report, removed = redact_unverified_v2(report, final["failed_citations"])
         final["redacted_count"] = removed
+        # Markers taken out vs claims destroyed. `redacted` has always counted
+        # the former -- bad markers plus dropped reference entries -- while this
+        # project's notes described it as sentences lost. A sentence that keeps
+        # another verified citation survives with the bad marker stripped, so the
+        # two numbers can differ by a factor of three.
+        stats["sentences_dropped"] = last_sentences_dropped()
     report, citation_mapping = renumber_citations(report)
     # ...and then put the entries back in the order of the labels they now
     # carry. Renumbering rewrites the markers where they stand, so a section
@@ -1831,6 +2290,7 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats,
     # pipeline.py (0616e2df) and was dropped when the SDK workflow replaced
     # that module, so every report shipped since has been scrambled.
     report = sort_references_section(report)
+    _keep_partial(stats, report, unique_papers, "verification")
     if citation_mapping:
         kept = []
         for p in unique_papers:
@@ -1841,6 +2301,18 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats,
         unique_papers = kept
     stats["verify_s"] = time.time() - t0
     stats["tool_calls"] = ctx.tool_calls
+    # Comparable across arms: themes that brought literature back, and themes
+    # whose literature survived into the references.
+    retrieved_all = list(ctx.paper_index.values()) if ctx.paper_index else []
+    themes, converted = theme_conversion(retrieved_all, unique_papers)
+    stats["themes_retrieved"] = themes
+    stats["themes_cited"] = converted
+    # What the gateway did to this run, so a round can be compared against one
+    # that met different weather instead of assuming it met the same.
+    _retries = run_retry_counts()
+    if _retries:
+        stats["gateway_retries"] = _retries.get("transport", 0)
+        stats["gateway_rate_limited"] = _retries.get("rate_limited", 0)
     stats["verification"] = final
     return report, unique_papers, ctx
 
@@ -1869,14 +2341,59 @@ def run_agent_workflow(job_instance, job_id, experiment_design, budgets=None,
                            stats, hooks=hooks),
                 timeout=AI_MAX_RUN_SECONDS)
         except asyncio.TimeoutError:
+            minutes = int(AI_MAX_RUN_SECONDS // 60)
+            salvaged = _partial_result(stats, minutes)
+            if salvaged:
+                report, papers = salvaged
+                logger.warning("[%s] timed out at %d minutes; shipping the "
+                               "partial report (%d chars, %d papers)",
+                               job_id, minutes, len(report), len(papers))
+                return report, papers, None
             raise RuntimeError(
                 "The interpretation exceeded its %d-minute limit and was "
-                "stopped. The literature gateway was slow to answer; please "
-                "try again later." % int(AI_MAX_RUN_SECONDS // 60))
+                "stopped before any report existed. The literature gateway was "
+                "slow to answer; please try again later." % minutes)
 
     report, papers, ctx = asyncio.run(_with_deadline())
     stats["total_s"] = time.time() - t0
     return {"report": report, "papers": papers, "stats": stats}
+
+
+def _keep_partial(stats, report, papers, stage):
+    """Stash the report as it stands, so a timeout has something to ship.
+
+    Measured over 14 base runs: median 399 s, and roughly one run in seven hits
+    the ten-minute ceiling. Today that run raises, every phase's work is
+    discarded, and the user who waited ten minutes is told to try again -- while
+    a synthesised report with rendered references existed in memory at the
+    moment the clock expired.
+
+    Called at the points where the report is coherent enough to read.
+    """
+    if report and str(report).strip():
+        stats["_partial_report"] = str(report)
+        stats["_partial_papers"] = list(papers or [])
+        stats["_partial_stage"] = stage
+
+
+def _partial_result(stats, minutes):
+    """Turn whatever survived into a report the reader can trust the shape of."""
+    report = stats.pop("_partial_report", "")
+    papers = stats.pop("_partial_papers", [])
+    stage = stats.pop("_partial_stage", "synthesis")
+    if not report:
+        return None
+    # Set here, not by the caller: the caller reads it AFTER this function has
+    # popped it, so it always saw "?" -- caught by testing the stat rather than
+    # the report.
+    stats["timed_out_at_stage"] = stage
+    header = (
+        "> **Incomplete interpretation.** The %d-minute limit was reached while "
+        "the pipeline was still working (last completed stage: %s), so this "
+        "report is what had been produced by then. Citations present here were "
+        "rendered but may not all have passed verification, and later sections "
+        "may be missing. Re-running usually completes.\n\n" % (minutes, stage))
+    return header + report, papers
 
 
 class _Heartbeat:
@@ -1923,6 +2440,33 @@ class _Heartbeat:
                     dao.closeConnection()
 
 
+def _note_if_ungrounded(report, rendered, paper_index, job_id=""):
+    """Say so, in the report, when not one citation could be grounded.
+
+    One stored run retrieved 56 papers, wrote 56 citations in synthesis, found
+    quotes for none of them, rendered no references, and shipped 49 752
+    characters of interpretation with status "done" and a cheerful "Ready" in
+    the progress line. Its own verification score was 0.07. Nothing in the text
+    told the reader that not a single claim was backed by a paper -- and the
+    text is what gets read, shared and exported, long after the progress line is
+    gone.
+
+    Only when papers were actually retrieved: a run that searched for nothing
+    has no literature claim to walk back.
+    """
+    if rendered or not paper_index:
+        return report
+    logger.warning("[%s] NO references could be grounded from %d papers; "
+                   "the report now says so", job_id, len(paper_index))
+    return report.rstrip() + (
+        "\n\n> **Note on evidence:** no citation in this report could be matched "
+        "to a verifiable sentence in the %d retrieved paper(s), so the "
+        "literature references were removed. What remains rests on the measured "
+        "data alone and has not been corroborated against published work.\n"
+        % len(paper_index))
+
+
+
 def run_ai_agent(job_id, experiment_design, RESPONSE):
     """Servlet entry point — drop-in replacement for pipeline.run_ai_agent.
 
@@ -1936,6 +2480,9 @@ def run_ai_agent(job_id, experiment_design, RESPONSE):
 
     dao = None
     acquired = False
+    # Where this run starts in the process-wide truncation log, so the count
+    # stamped below belongs to this job and not to whatever ran before it.
+    truncations_at_start = len(_TRUNCATIONS)
     heartbeat = _Heartbeat(job_id)
     try:
         dao = AIInterpretDAO()
@@ -1958,8 +2505,25 @@ def run_ai_agent(job_id, experiment_design, RESPONSE):
             "pathways": lambda pw: dao.save_pathway_index(job_id, pw),
             "partition": lambda part: dao.save_clusters(job_id, part),
         }
-        out = run_agent_workflow(job_instance, job_id, experiment_design,
-                               hooks=hooks)
+        # AI_FULL_AGENT=1 swaps the fixed six-phase workflow for the Lead
+        # Interpreter loop (agent_loop.py; design in docs/diagrams/
+        # paintomics-ai-agent-proposal.drawio). Same contract either way:
+        # {report, papers, stats}, the same DAO milestones, the same gate.
+        if os.getenv("AI_FULL_AGENT", "0") == "1":
+            from src.classes.AIInterpret.agent_loop import run_agent_loop_workflow
+            # A retry appends to the previous run's journal otherwise: the first
+            # live re-run left 27 dead events sitting above 34 live ones in one
+            # array, with nothing marking the boundary. The journal describes
+            # THIS run.
+            dao.save_progress(job_id, {"toolTrace": [], "notebook": []})
+            hooks["tool_event"] = lambda e: dao.append_tool_event(job_id, e)
+            hooks["notebook"] = lambda nb: dao.save_progress(
+                job_id, {"notebook": nb})
+            out = run_agent_loop_workflow(job_instance, job_id,
+                                          experiment_design, hooks=hooks)
+        else:
+            out = run_agent_workflow(job_instance, job_id, experiment_design,
+                                     hooks=hooks)
         report = out.get("report") or ""
         papers = out.get("papers") or []
         if papers:
@@ -1983,7 +2547,8 @@ def run_ai_agent(job_id, experiment_design, RESPONSE):
             # (references_section_found, citations_checked, failed_citations);
             # timings and counters live beside it, not inside it.
             "verification": stats.get("verification") or {},
-            "stats": {k: v for k, v in stats.items() if k != "verification"},
+            "stats": dict({k: v for k, v in stats.items() if k != "verification"},
+                          truncated_calls=len(_TRUNCATIONS) - truncations_at_start),
         })
         RESPONSE.setContent({"success": True, "jobID": job_id, "status": "done"})
 

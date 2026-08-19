@@ -316,10 +316,312 @@ def verify_report_v2(report_text, gene_whitelist, unique_papers, job_instance):
     }
 
 
+# -- structure-preserving redaction ---------------------------------------
+#
+# Redaction used to split the body on sentence boundaries and rejoin with " ".
+# The split pattern consumes the whitespace after a full stop, and in markdown
+# that whitespace is usually the newline before a heading or a bullet, so every
+# paragraph break that followed a sentence collapsed and any heading glued to a
+# removed sentence disappeared with it. A report with one failed citation came
+# back as a wall of text with its sections missing -- and since the frontend
+# renders this as markdown, the damage was visible to every reader.
+#
+# The rule now: only whole sentences that cite a failed index are removed, and
+# nothing else in the document moves.
+
+_HEADING_RE = re.compile(r'^\s{0,3}(#{1,6})\s')
+_FENCE_RE = re.compile(r'^\s*(```|~~~)')
+_TABLE_RE = re.compile(r'^\s*\|')
+
+
+def _is_structural(line):
+    """A line that carries layout rather than prose, and must survive verbatim."""
+    return (not line.strip()
+            or _HEADING_RE.match(line)
+            or _TABLE_RE.match(line)
+            or line.strip() in ("---", "***", "___"))
+
+
+# A run of citations written as one list: "[2]", "[2], [4]", "[2], [9] and [4]".
+_CITATION_RUN = re.compile(r'\[\d+\](?:\s*(?:,\s*and|,|and|&)\s*\[\d+\])*')
+
+
+def _prune_citation_run(run, bad_indices):
+    """Re-render a citation list with the failed indices dropped.
+
+    Editing the markers in place and patching the punctuation afterwards does
+    not work: "from [1] and [9] agrees" becomes "from [1] and agrees", and
+    "rose [9], [2]" becomes "rose, [2]". Treating the whole list as one token
+    and writing it out again from the survivors avoids inventing those.
+    """
+    indices = [int(n) for n in re.findall(r'\[(\d+)\]', run)]
+    seen, kept = set(), []
+    for i in indices:
+        if i not in bad_indices and i not in seen:
+            seen.add(i)
+            kept.append(i)
+    if not kept:
+        return ""
+    if len(kept) == 1:
+        return "[%d]" % kept[0]
+    return "%s and [%d]" % (", ".join("[%d]" % i for i in kept[:-1]), kept[-1])
+
+
+def _tidy_after_marker_removal(sentence, bad_indices):
+    """Drop the failed citations from every list in the sentence, then close up."""
+    sentence = _CITATION_RUN.sub(
+        lambda m: _prune_citation_run(m.group(0), bad_indices), sentence)
+    sentence = re.sub(r'\s+(?=[.!?,;:])', '', sentence)   # " ." -> "."
+    sentence = re.sub(r'\(\s*\)', '', sentence)            # "()" left behind
+    sentence = re.sub(r'\s{2,}', ' ', sentence)
+    return sentence
+
+
+def strip_markers(report_text, refs):
+    """Remove [N] markers for `refs` WITHOUT touching any sentence.
+
+    The difference from redact_unverified_v2 matters. Redaction removes the
+    sentence when its last citation goes, because a claim with no support left
+    should not ship. This does not: it is for markers that were ATTACHED to
+    prose which already stood on its own, where taking the marker back restores
+    the sentence exactly as it was.
+
+    That is the top-up's situation precisely. It bolts [N] onto finished
+    sentences, and 40-50% of those citations then fail -- so pulling an
+    unsupportable one back before the gate sees it costs nothing at all, while
+    letting it through costs the sentence.
+    """
+    refs = {int(r) for r in (refs or [])}
+    if not refs:
+        return report_text, 0
+    before = len(re.findall(r"\[(\d+)\]", report_text))
+    parts = re.split(r"((?<=[.!?])\s+)", report_text)
+    out = []
+    for i in range(0, len(parts), 2):
+        sentence = parts[i]
+        if any("[%d]" % r in sentence for r in refs):
+            sentence = _tidy_after_marker_removal(sentence, refs)
+        out.append(sentence)
+        if i + 1 < len(parts):
+            out.append(parts[i + 1])
+    cleaned = "".join(out)
+    return cleaned, before - len(re.findall(r"\[(\d+)\]", cleaned))
+
+
+def _redact_sentences(text, bad_patterns, bad_indices=None):
+    """Remove failed citations, and the sentence only when nothing is left.
+
+    Splitting with a capturing group keeps every separator, so the surviving
+    sentences are rejoined with exactly the whitespace that was between them --
+    newlines included. When a removed sentence was followed by a paragraph
+    break, that break is kept, otherwise the paragraphs either side would merge.
+
+    A sentence that ALSO cites something verified keeps its place, with only the
+    failed marker taken out. Deleting it outright destroys evidence that passed:
+    39% of citation-bearing sentences in the stored reports carry two or more
+    citations, and one carried ten -- so one bad index could take nine good ones
+    with it. Measured on a live run, an agent submitted 11 citations it had
+    checked and grounded and the gate returned 6.
+    """
+    parts = re.split(r'((?<=[.!?])\s+)', text)
+    kept, removed, dropped = [], 0, 0
+    for i in range(0, len(parts), 2):
+        sentence = parts[i]
+        separator = parts[i + 1] if i + 1 < len(parts) else ""
+        hits = [bp for bp in bad_patterns if bp in sentence]
+        if sentence.strip() and hits:
+            here = {int(n) for n in re.findall(r'\[(\d+)\]', sentence)}
+            survivors = here - set(bad_indices or [])
+            removed += len(hits)
+            if survivors:
+                # keep the claim; it still stands on a citation that verified
+                kept.append(_tidy_after_marker_removal(sentence,
+                                                       set(bad_indices or [])))
+                if separator:
+                    kept.append(separator)
+                continue
+            dropped += 1                     # the CLAIM went, not just a marker
+            if "\n" in separator and kept:
+                kept.append(separator)          # keep the block boundary
+        else:
+            kept.append(sentence)
+            if separator:
+                kept.append(separator)
+    return "".join(kept), removed, dropped
+
+
+def _drop_orphan_headings(lines):
+    """Remove a heading whose section lost all of its prose to redaction.
+
+    A heading left standing over nothing reads as a rendering failure. A heading
+    is orphaned only when everything down to the next heading of the same or a
+    higher level is blank -- a parent heading whose subsections still have text
+    is kept.
+    """
+    levels = [len(_HEADING_RE.match(l).group(1)) if _HEADING_RE.match(l) else None
+              for l in lines]
+    drop = set()
+    for i, level in enumerate(levels):
+        if level is None:
+            continue
+        has_content = False
+        for j in range(i + 1, len(lines)):
+            other = levels[j]
+            if other is not None and other <= level:
+                break
+            if other is None and lines[j].strip():
+                has_content = True
+                break
+        if not has_content:
+            drop.add(i)
+    return [l for i, l in enumerate(lines) if i not in drop]
+
+
+def _redact_body(body, bad_patterns, bad_indices=None):
+    """Sentence-level redaction that leaves headings, lists and tables in place."""
+    segments, prose, removed, dropped = [], [], 0, 0
+    in_fence = False
+
+    def flush():
+        nonlocal removed, dropped
+        if not prose:
+            return
+        cleaned, count, gone = _redact_sentences("\n".join(prose), bad_patterns,
+                                                 bad_indices)
+        removed += count
+        dropped += gone
+        if cleaned.strip():
+            segments.append(cleaned.rstrip())
+        prose.clear()
+
+    for line in body.split("\n"):
+        if _FENCE_RE.match(line):               # code fences pass through whole
+            flush()
+            in_fence = not in_fence
+            segments.append(line)
+        elif in_fence or _is_structural(line):
+            flush()
+            segments.append(line)
+        else:
+            prose.append(line)
+    flush()
+
+    lines = "\n".join(segments).split("\n")
+    return "\n".join(_drop_orphan_headings(lines)), removed, dropped
+
+
+def theme_conversion(retrieved_papers, cited_papers):
+    """Themes that produced a retrieved paper vs themes that produced a CITED one.
+
+    Both arms tag every paper with the pathway/theme its search was run for, so
+    this is the one retrieval measure that is directly comparable between them.
+    The agent arm's own `tags_searched` counts every search including the barren
+    ones, which is a different and arm-specific question -- for a comparison the
+    denominator has to be themes that actually brought literature back.
+
+    Why it matters: the agent arm retrieves ~3x more papers than base and cites
+    fewer, and until both arms report on the same denominator there is no way to
+    say whether that is a retrieval problem or a writing one.
+
+    Returns (themes_with_a_paper, themes_with_a_cited_paper).
+    """
+    def tags(papers):
+        return {str(t).strip().lower()
+                for paper in (papers or [])
+                for t in (paper.get("pathways") or []) if str(t).strip()}
+    retrieved, cited = tags(retrieved_papers), tags(cited_papers)
+    return len(retrieved), len(cited & retrieved)
+
+
+def quote_provenance(quotes, paper_index):
+    """Where the SURVIVING quotes actually came from: abstract, or full text.
+
+    Adoption and cost are answered for every tool now -- all nine at 100%, and
+    the character bill says what each spends. Neither says which tool's output
+    ends up cited, and that is the question that decides whether a tool earns
+    its place.
+
+    This answers it for the most expensive retrieval machinery in the pipeline.
+    A quote found in the abstract was free: search_literature already fetched it.
+    A quote found only deeper cost a full-text upgrade -- an NCBI/Europe PMC
+    round trip, and read_paper's ~11 kB a run of context. If the surviving quotes
+    are overwhelmingly abstract quotes, that machinery is being paid for and not
+    used; if they are not, it is load-bearing and the cost is the price of
+    grounding.
+
+    Returns {"quotes_from_abstract": n, "quotes_from_full_text": n,
+             "quotes_unlocatable": n}. Unlocatable is its own bucket rather than
+    being folded into either: a quote the deterministic matcher cannot find in
+    the paper at all is a different fact about the pipeline, and hiding it inside
+    "full text" would flatter the machinery this measures.
+    """
+    from_abstract = from_full = unlocatable = 0
+    for ref, quote in (quotes or {}).items():
+        text = (quote or "").strip()
+        if not text:
+            continue
+        paper = (paper_index or {}).get(ref) or {}
+        abstract = paper.get("abstract") or ""
+        sections = paper.get("sections") or {}
+        deeper = "\n".join(str(v) for k, v in sections.items()
+                            if k != "abstract" and v)
+        if abstract and _fuzzy_contains(abstract, text):
+            from_abstract += 1
+        elif deeper and _fuzzy_contains(deeper, text):
+            from_full += 1
+        else:
+            unlocatable += 1
+    return {"quotes_from_abstract": from_abstract,
+            "quotes_from_full_text": from_full,
+            "quotes_unlocatable_here": unlocatable}
+
+
+def score_topup_survival(stats, verification):
+    """Price the top-up's bet: did the citations it added survive the gate?
+
+    The top-up adds [N] markers to sentences that were already written and
+    already stood on their own. That is a wager with asymmetric stakes: a
+    marker that verifies buys one citation, and a marker that fails costs the
+    ENTIRE sentence, because redact_unverified_v2 removes each claim along with
+    its bad citation.
+
+    stats["topup_added"] has only ever recorded the winning half. A stage that
+    destroys more prose than it grounds is indistinguishable, in the archive,
+    from one that grounds prose for free -- which is how 40 s of every run went
+    unpriced. Records nothing when the top-up did not run.
+    """
+    added = stats.get("topup_added_refs")
+    if not added:
+        return
+    failed = {fc.get("ref_index")
+              for fc in (verification.get("failed_citations") or [])}
+    stats["topup_added_failed"] = len(set(added) & failed)
+
+
+# The claims a redaction actually destroyed, as opposed to the markers it took
+# out. Kept beside the function rather than added to its return type, because
+# every caller unpacks a 2-tuple and the count is a diagnostic, not a result.
+_LAST_REDACTION = {"sentences_dropped": 0}
+
+
+def last_sentences_dropped():
+    """Claims destroyed by the most recent redaction in this process."""
+    return _LAST_REDACTION.get("sentences_dropped", 0)
+
+
 def redact_unverified_v2(report_text, failed_citations):
     """Remove sentences citing failed [N] indices and their References entries.
 
-    Returns (cleaned_report, removed_count).
+    Returns (cleaned_report, removed_count) where removed_count is the number of
+    bad MARKERS taken out of the body plus the reference entries dropped -- not
+    the number of claims lost. A sentence citing a failed paper twice counts
+    twice; a sentence that keeps another verified citation counts too, although
+    the claim survives intact.
+
+    That distinction was blurred for a long time -- including in this project's
+    own notes, which described the count as "sentences lost" and once reported
+    "1 failed citation = 15 lost sentences" when it meant 15 markers. The number
+    of claims actually destroyed is recorded separately as `sentences_dropped`.
     """
     report_text = normalize_citation_markers(report_text)
     if not failed_citations:
@@ -338,18 +640,12 @@ def redact_unverified_v2(report_text, failed_citations):
         body = report_text
         refs_section = ""
 
-    # Remove body sentences that cite bad indices
-    sentences = re.split(r'(?<=[.!?])\s+', body)
-    clean_sentences = []
-    removed = 0
-    for s in sentences:
-        if any(bp in s for bp in bad_patterns):
-            removed += 1
-        else:
-            clean_sentences.append(s)
-    clean_body = " ".join(clean_sentences)
+    # Remove body sentences that cite bad indices, leaving structure intact
+    clean_body, removed, sentences_dropped = _redact_body(body, bad_patterns,
+                                                          bad_indices)
 
     # Remove bad reference entries from References section
+    _LAST_REDACTION["sentences_dropped"] = sentences_dropped
     if refs_section:
         ref_lines = refs_section.split("\n")
         clean_ref_lines = []
@@ -382,6 +678,48 @@ def redact_unverified_v2(report_text, failed_citations):
     return result, removed
 
 
+def _drop_uncited_references(report_text):
+    """Remove reference entries the body never cites.
+
+    Indices are collected from the whole document, so an entry whose citations
+    all disappeared -- redacted, or dropped when the report was rewritten --
+    kept its place in the list and was renumbered along with the rest. Measured
+    over the stored reports, 11 of 43 carried at least one: one report listed 21
+    references for 18 citations, the extra three being papers on unrelated
+    cancers.
+
+    That is not a cosmetic problem. The reference list is the reader's measure of
+    how much evidence stands behind the report, and three of those twenty-one
+    stood behind nothing.
+
+    Conservative by design: it prunes only when at least one citation survives in
+    the body, so a report whose citations were all removed keeps its section
+    rather than being left with an empty heading.
+    """
+    header = re.search(r'^### References\s*$', report_text, re.MULTILINE)
+    if not header:
+        return report_text
+    body, refs = report_text[:header.start()], report_text[header.start():]
+    cited = {int(n) for n in re.findall(r'\[(\d+)\]', body)}
+    if not cited:
+        return report_text
+
+    kept, dropping = [], False
+    for line in refs.split("\n"):
+        entry = re.match(r'\s*\[(\d+)\]', line)
+        if entry:
+            dropping = int(entry.group(1)) not in cited
+            if dropping:
+                continue
+        elif dropping:
+            # continuation lines of a dropped entry (indented, or its quote)
+            if line.startswith("    ") or line.strip().startswith("**Cited Text:**"):
+                continue
+            dropping = False
+        kept.append(line)
+    return body + "\n".join(kept)
+
+
 def renumber_citations(report_text):
     """Renumber [N] citations sequentially starting from [1].
 
@@ -391,6 +729,7 @@ def renumber_citations(report_text):
     Returns (renumbered_report, old_to_new_mapping).
     """
     report_text = normalize_citation_markers(report_text)
+    report_text = _drop_uncited_references(report_text)
     # 1. Collect all [N] indices used in the report (body + references), in order of first appearance
     all_indices = []
     seen = set()
