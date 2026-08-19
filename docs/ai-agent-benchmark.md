@@ -3582,3 +3582,72 @@ every cited paper as thin, delegated citations survive verification at a higher
 rate, and the gate's own `fulltext_upgraded` falls because the text is already
 there. Falsifier: if survival does not move, the writers were not limited by the
 evidence in front of them and the supply story is wrong.
+
+### Round 51 falsified, and so are the correlations I built it on
+
+Round 51 (`SEARCH_HITS` 10 -> 5) at n=3: citations **19, 14, 8 -- mean 13.7**
+against round 50's 22.8. The pre-registered falsifier was "if citations drop by
+more than 2, the marginal papers were load-bearing". They dropped by nine. The
+change is reverted, not tuned.
+
+The interesting part is why I expected otherwise. Three "independent" arguments
+were offered for it. None of them survives.
+
+**1. "Retrieval volume buys nothing" (tertile, n=40).** That compared MEDIANS of
+pool 31 against pool 71 and saw 19.0 against 19.0. Banding every agent run
+instead:
+
+```
+pool  0-24    n= 2   citations 11.0
+pool 25-34    n= 4   citations 17.0
+pool 35-49    n=11   citations 18.7
+pool 50-69    n=18   citations 20.1
+pool 70-199   n=10   citations 21.3
+```
+
+Citations rise monotonically across the whole range. A median on a 13-run tertile
+with sd about 4 cannot see a one-citation-per-band gradient, and I read its
+silence as absence.
+
+**2. "Pool size predicts top-up precision, r = -0.53" (n=29).** On all 45 runs it
+is **-0.00**. The -0.53 came from a subset filtered to runs where the top-up
+added at least one citation and precision was non-negative.
+
+**3. "Dead themes predict precision, r = -0.65" (n=29).** Same filtered subset.
+
+And the replacement claim is no better: r(pool, citations) over 45 runs is +0.28
+with se 0.15 -- t = 1.9, **not resolved**. The banded gradient is suggestive and
+that is all.
+
+**The methodological failure is mine and it is systematic.** I have computed
+dozens of correlations this session on samples of 25 to 45, across many candidate
+variables, and reported the ones that came out strong. That is the standard way
+to manufacture findings that do not replicate, and three of mine have now
+evaporated on resampling -- alongside the two effect sizes that shrank when
+replicates arrived (citations +4.6 -> +2.0; DELEGATE_CHUNK 3.4 -> 2.0).
+
+What has actually held up is a different kind of evidence:
+
+```
+CONTROLLED, one flag changed between rounds        held
+  SEARCH_HITS 10 -> 5 costs ~9 citations           yes (round 50 vs 51)
+  FRAMING_REUSE_LEAD removes merge rejections      yes (4/4, and merge_s 18 -> 7)
+  LEAN_PROFILES is a no-op                         yes (genes_flat 0 in every run)
+  chunk=3 did not deliver its predicted themes     yes (10.0 vs predicted 13)
+
+DETERMINISTIC facts, not comparisons               held
+  redactions 0.0 in 7 of 7 rounds                  yes
+  34 of 35 cited papers abstract-only at writing   yes
+  7% of abstracts show a finding in 220 chars      yes (n=1209)
+  no framework limit binds except the stitch cap   yes
+
+CORRELATIONS across runs                           mostly did not
+```
+
+The rule I should have been following, and will from here: **on this data a
+controlled comparison is evidence and a correlation is a hypothesis.** The
+archive is a convenience sample of runs that differ in many ways at once, and it
+is good for finding things to test and bad for concluding anything.
+
+Round 51's own result stands, because it is the first kind: one flag changed, and
+citations fell by nine.
