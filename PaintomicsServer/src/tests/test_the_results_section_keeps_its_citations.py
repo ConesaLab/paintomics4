@@ -252,6 +252,62 @@ class ResultsSectionKeepsItsFindings(unittest.TestCase):
         self.assertIn("closing", block)
 
 
+class ResultsSectionDropsTheDossierFurniture(unittest.TestCase):
+    """Found by running a LIVE job, not by testing one report.
+
+    Job Z2x664211R came back with prose AND a "# Key Findings" bullet block, a
+    17-row table, and "Limitations and Caveats" three times. Every one of these
+    passed on the report this stage was developed against, because that report
+    happened to use `## Key Findings` under an H1 title while the live one used
+    `# Key Findings` directly. One report is not a sample.
+    """
+
+    def setUp(self):
+        with open(SRC) as fh:
+            self.src = fh.read()
+
+    def test_the_splitter_sees_h1_headings_too(self):
+        """An H2-only split sweeps a "# Key Findings" section into the preamble,
+        which is carried verbatim -- so the one block the rewrite exists to
+        remove survives untouched."""
+        block = self.src.split("def _split_pathway_sections")[1][:1400]
+        self.assertIn("#{1,2}", block,
+                      "the section split must match H1 as well as H2")
+
+    def test_the_pathway_table_is_dropped_when_a_section_is_written(self):
+        """A Results section carries its numbers in sentences. A 17-row table
+        under it is exactly the dossier furniture being removed."""
+        block = self.src.split("The enriched-pathway table is appended only")[1][:500]
+        self.assertIn("not results_written", block)
+
+    def test_caveats_are_deduplicated_by_heading(self):
+        """A stitched dossier carries one caveats block per stitched part, and
+        the copies differ in wording -- so a body-text key keeps them all. One
+        live report ended with three."""
+        block = self.src.split("async def _results_by_chunk")[1]
+        block = block.split("\nasync def ")[0].split("\ndef ")[0]
+        self.assertIn("by_head", block)
+        self.assertNotIn('[:200]', block,
+                         "keying the dedup on body text is what let three "
+                         "differently-worded copies through")
+
+    def test_a_chunk_is_told_not_to_write_its_own_caveats(self):
+        """Two carried copies plus one the model wrote = three."""
+        prompt = " ".join(self.src.split("RESULTS_CHUNK_PROMPT")[1][:1600].lower().split())
+        self.assertIn("limitations", prompt)
+        self.assertIn("caveats", prompt)
+
+    def test_the_chunk_size_is_derived_not_fixed(self):
+        """A flat 4 gives a 4-section report exactly ONE subsection -- one wall
+        of text under one heading, which is not a Results section."""
+        block = self.src.split("async def _results_by_chunk")[1]
+        block = block.split("\nasync def ")[0].split("\ndef ")[0]
+        self.assertIn("RESULTS_TARGET_SECTIONS", block)
+        self.assertIn("max(2,", block,
+                      "a chunk of one cannot find a theme, only restate the "
+                      "pathway it was given")
+
+
 if __name__ == "__main__":
     # Load from the MODULE, not a named class. A second TestCase was added to
     # this file and silently never ran -- the runner reported 13/13 green while

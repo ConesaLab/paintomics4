@@ -80,7 +80,7 @@ INDEX_HTML = os.path.join(CLIENT_ROOT, "index.html")
 # year, and recording a digest for a 300KB minified bundle only creates churn.
 PUBLISHED = {
     "app/view/common/Util.js": (
-        "2.0", "284b8be3fd6f8e746730408b7bacc37c9385e4ce6e76743885c3a11dae6c3ecd"),
+        "2.1", "12359b8bf746394f63a7e0a15513a4f9ac82de1a25bbaa0e91e6b2fdd7e0050e"),
     "app/view/common/ExtJS_extensions.js": (
         "0.7", "f1e68f670cc56064fc15649d259004ccbd96f49181ced049cffbe62c29bf1d80"),
     "app/view/common/CookieConsent.js": (
@@ -118,7 +118,7 @@ PUBLISHED = {
     # upstream number is both the more informative marker and the one that
     # cannot drift from what is on disk.
     "js/libs/cytoscape/cytoscape.min.js": ("3.34.0", None),
-    "app.js": ("0.2", None),
+    "app.js": ("0.3", None),
 }
 
 _SRC = re.compile(r'src="([^"]+?)\?v=([0-9.]+)"')

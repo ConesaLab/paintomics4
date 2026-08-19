@@ -2410,7 +2410,11 @@ research paper's Results.
   do not add markers.
 - Report numbers inside the sentence with the measure named ("accessibility
   rose at 83 of 130 autophagy loci, p = 0.0029").
-- No preamble, no closing summary. Return only the section.
+- No preamble, no closing summary, and NO "Limitations" or "Caveats" section --
+  the report's own caveats are appended once after all sections, and one written
+  here becomes a duplicate.
+- No bullet lists. Any list in the source becomes prose.
+- Return only the section.
 
 HEADINGS ALREADY USED BY EARLIER SECTIONS -- yours must be clearly different,
 and must not restate the same claim in other words:
@@ -2435,13 +2439,19 @@ def _split_pathway_sections(report):
     """
     ref = report.split("### References")
     body, tail = ref[0], ("### References" + ref[1] if len(ref) > 1 else "")
-    parts = re.split(r"(?m)^(##\s+[^\n]+)$", body)
+    # Split on H1 as well as H2. Measured on a live job: that report opened
+    # with "# Key Findings" as an H1, so an H2-only split swept it into the
+    # preamble and carried the bullet block through verbatim -- the one thing
+    # the rewrite exists to remove.
+    parts = re.split(r"(?m)^(#{1,2}\s+[^\n]+)$", body)
     preamble = parts[0]
     secs = [(parts[i].strip(), parts[i + 1]) for i in range(1, len(parts) - 1, 2)]
     return preamble, secs, tail
 
 
 RESULTS_CHUNK = int(os.getenv("AI_AGENT_RESULTS_CHUNK", "4"))
+# How many subsections a Results section should aim for.
+RESULTS_TARGET_SECTIONS = int(os.getenv("AI_AGENT_RESULTS_SECTIONS", "5"))
 
 
 async def _results_by_chunk(agent, ctx, report, pw_names, job_id, stats, timeout):
@@ -2476,8 +2486,16 @@ async def _results_by_chunk(agent, ctx, report, pw_names, job_id, stats, timeout
             pathway_secs.append((h, b))
     if not pathway_secs:
         return None
-    groups = [pathway_secs[i:i + RESULTS_CHUNK]
-              for i in range(0, len(pathway_secs), RESULTS_CHUNK)]
+    # Chunk size is derived from the report, not fixed. A flat 4 gives a
+    # 4-section dossier exactly ONE subsection -- measured on a live job, whose
+    # Results section came back as a single wall under one heading. A Results
+    # section wants several subsections each telling a different story, so aim
+    # for about RESULTS_TARGET_SECTIONS of them and never fewer than two
+    # sections per chunk (a chunk of one cannot find a theme, only restate the
+    # pathway).
+    size = max(2, -(-len(pathway_secs) // RESULTS_TARGET_SECTIONS))
+    groups = [pathway_secs[i:i + size]
+              for i in range(0, len(pathway_secs), size)]
     async def one(group, taken):
         chunk = "\n\n".join(h + b for h, b in group)
         owned = [n for n in pw_names
@@ -2532,7 +2550,18 @@ async def _results_by_chunk(agent, ctx, report, pw_names, job_id, stats, timeout
     stats["results_chunks"] = len(groups)
     body = "\n\n".join(t for t, _ in out if t)
     if closing:
-        body = body.rstrip() + "\n\n" + "\n\n".join(c.strip() for c in closing)
+        # Deduplicated on the HEADING, keeping the longest body. A stitched
+        # dossier carries the caveats block once per stitched part, and those
+        # copies differ in wording -- so a body-text key keeps them all, which
+        # is how one live report ended with three "Limitations and Caveats".
+        by_head = {}
+        for c in closing:
+            m = re.match(r"\s*(#+\s*[^\n]+)", c)
+            key = " ".join((m.group(1) if m else c[:60]).lower().split())
+            if key not in by_head or len(c) > len(by_head[key]):
+                by_head[key] = c.strip()
+        uniq = list(by_head.values())
+        body = body.rstrip() + "\n\n" + "\n\n".join(uniq)
     return (preamble.rstrip() + "\n\n" + body + "\n\n" + tail).strip()
 
 
@@ -3154,7 +3183,11 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
     # summary stays: it is the quantitative backbone, it is data the job already
     # holds rather than anything the model asserted, and dropping it would lose
     # numbers the reader may want to check.
-    if "## Enriched Pathway Summary" not in report:
+    # The enriched-pathway table is appended only when the dossier ships. A
+    # Results section carries its numbers in the sentences, and a 17-row table
+    # under it is the dossier furniture the rewrite was asked to remove -- the
+    # first live job with the stage on came back with prose AND the table.
+    if not results_written and "## Enriched Pathway Summary" not in report:
         report = report.rstrip() + "\n\n" + render_pathway_table(pathways)
     if ctx.partition is not None:
         if not results_written:
