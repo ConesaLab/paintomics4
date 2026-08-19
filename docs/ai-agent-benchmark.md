@@ -4285,3 +4285,52 @@ clusters the full one". That was wrong -- I read `build_pathway_context(
 max_pathways=...)` at the loop's entry and concluded the universe was never
 rebuilt, without reading `cluster_pathways`, which rebuilds it. `pathways_indexed`
 is 102 in both arms and always was.
+
+### The agent's unused advantage is parallelism, and it is priced
+
+Round 53 at n=1 per arm holds: base in cluster mode 102 pathways at 813 s, the
+agent 17 at 360 s. Both index 102; the agent discusses 20 because
+`DELEGATE_MAX_PATHWAYS` says so.
+
+Measured from 30 archived traces, `delegate_interpretation` costs a median 36 s
+per WAVE, and waves are `ceil(ceil(pathways/DELEGATE_CHUNK)/DELEGATE_WORKERS)`
+with CHUNK=5 and WORKERS=4. So delegation cost is a step function, not linear:
+
+```
+  20 pathways ->  4 chunks -> 1 wave  -> projected wall ~357 s
+  40 pathways ->  8 chunks -> 2 waves -> projected wall ~393 s
+  60 pathways -> 12 chunks -> 3 waves -> projected wall ~428 s
+  80 pathways -> 16 chunks -> 4 waves -> projected wall ~464 s
+ 102 pathways -> 21 chunks -> 6 waves -> projected wall ~535 s
+```
+
+**base pays 813 s for the same 102 pathways because its batches are serial.**
+This is the agent architecture's one structural advantage over the workflow arm,
+and no round in this document has used it -- the cap has been 20 since before I
+started.
+
+The projection is optimistic in one known way and I should say so before running
+it: only the delegation stage scales by waves. The gate stages that follow scale
+with REPORT LENGTH -- the top-up is 108 s and the verify loop 127 s at today's
+report size -- so a report covering five times the pathways will drag those up
+too. 535 s is a floor, not an estimate.
+
+**Round 54 pre-registration** (after round 53 finishes; two rounds at once would
+confound both arms' timings on a shared gateway):
+
+`AI_AGENT_DELEGATE_MAX_PATHWAYS=60`, everything else at round 50's configuration.
+Sixty rather than 102 deliberately: it is three waves, the projection is 428 s
+with 172 s of headroom for gate growth, and measuring the real cost at 60 gives a
+slope to extrapolate from. Going straight to 102 risks spending the round
+discovering only that it broke rule 1.
+
+Predicted: `prose_pathways_covered` rises from ~15 toward 40-60 -- a change large
+enough for n=4 to resolve, per the power table, unlike almost everything else
+tried here. `rubric_coverage` rises toward cluster-base's 0.641 because the
+rubric's unreachable items are keyed on lower-ranked pathways. Wall clock rises
+to 430-550 s and stays under 600.
+
+Falsifiers, both sharp: if wall exceeds 600 s the parallel advantage is smaller
+than the wave model says and the cap comes back down. If coverage rises but
+`rubric_coverage` does not, then naming more pathways is not what earned base its
++0.235 and the mechanism is something else in cluster mode.
