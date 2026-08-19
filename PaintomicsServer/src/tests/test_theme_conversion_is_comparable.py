@@ -69,8 +69,8 @@ def test_empty_inputs_are_safe():
 
 def test_both_arms_compute_it():
     """A measure only one arm reports is the problem this replaces."""
-    from src.classes.AIInterpret import agent, agent_loop
-    for module in (agent, agent_loop):
+    from src.classes.AIInterpret import agent_loop
+    for module in (agent_loop,):
         src = inspect.getsource(module)
         assert "theme_conversion(retrieved_all, unique_papers)" in src, (
             "%s does not compute the shared theme measure" % module.__name__)

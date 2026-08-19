@@ -303,34 +303,18 @@ STAGE_NOTES = ("delegate_fulltext_failed", "fulltext_candidates", "fulltext_upgr
 # and the archived row was silent. The stage ran; the measurement did not. The
 # log could not stand in either -- it is configured at WARNING and the repair
 # line is INFO.
+# Twenty-one entries were pruned when the six-phase workflow arm was removed:
+# they were stats only that arm wrote (partial-report salvage, cluster batch
+# counts, draft scoring, gap-fill). The ratchet flags a stale entry as loudly
+# as a missing one, on purpose -- a list of keys nobody writes protects
+# nothing and teaches the next reader to ignore it.
 KNOWN_UNARCHIVED = frozenset([
-     '_partial_papers',
-     '_partial_report',
-     '_partial_stage',
-     'cluster_further',
-     'cluster_pathways',
-     'cluster_standalone',
-     'cluster_units',
-     'clusters',
-     'draft_scores',
-     'full_text_papers',
-     'gap_fill_applied',
-     'gaps_caveats',
-     'gaps_pathways',
      'loop_final',
-     'papers',
      'papers_retrieved',
-     'pmids_found',
-     'rewrite_skipped_for_time',
-     'search_hits',
-     'search_kept',
-     'synth_drafts',
-     'timed_out_at_stage',
      'tool_calls',
      'topup_added_refs',
      'total_s',
-     'verification',
-     'verify_stopped_for_time'])
+     'verification',])
 
 
 def unarchived_stats(stats):

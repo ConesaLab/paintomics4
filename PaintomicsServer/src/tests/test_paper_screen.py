@@ -132,12 +132,13 @@ def test_the_screen_is_on_by_default_and_stamped():
     assert '"screen_papers"' in stamp
 
 
-def test_both_arms_screen_to_the_same_standard():
-    """If the standard is wrong it should be wrong in one place, not two."""
+def test_the_screen_uses_the_shared_standard():
+    """The workflow arm that held the second copy was removed, so "one place,
+    not two" is now structural rather than something a test has to enforce.
+    What still matters is that the screen uses the SHARED prompt rather than
+    growing a private one."""
     src = inspect.getsource(L)
     assert "prompts_mod.SYSTEM_PROMPT_SEARCH_SUBAGENT" in src
-    from src.classes.AIInterpret import agent as A
-    assert "prompts_mod.SYSTEM_PROMPT_SEARCH_SUBAGENT" in inspect.getsource(A)
 
 
 def test_the_screen_cannot_shrink_the_metrics_denominator():
@@ -328,25 +329,11 @@ def _check(name, fn):
 
 
 def main():
-    for t in (test_it_keeps_only_what_the_screen_named,
-              test_an_explicit_empty_answer_keeps_nothing,
-              test_a_BROKEN_screen_keeps_everything,
-              test_a_pmid_the_screen_invented_is_ignored,
-              test_no_papers_in_means_no_call_out,
-              test_it_lives_inside_the_search_tool,
-              test_the_screen_is_on_by_default_and_stamped,
-              test_both_arms_screen_to_the_same_standard,
-              test_the_screen_cannot_shrink_the_metrics_denominator,
-              test_an_all_rejected_search_does_not_tell_the_agent_to_broaden,
-              test_the_original_empty_message_survives_for_a_real_no_hit,
-              test_a_partly_screened_search_says_how_many_were_dropped,
-              test_the_two_empty_causes_cannot_collapse_back_together,
-              test_the_standard_does_not_move_with_the_pool,
-              test_neither_a_floor_NOR_a_ceiling_moves_the_bar,
-              test_there_is_exactly_one_stance,
-              test_the_pool_size_is_still_reported,
-              test_the_target_is_not_the_delegation_window):
-        _check(t.__name__, t)
+    tests = [(n, o) for n, o in sorted(globals().items())
+             if n.startswith('test_') and callable(o)]
+    assert tests, 'no tests collected'
+    for name, t in tests:
+        _check(name, t)
     print("\nPassed: %d / %d" % (len(_PASSED), len(_PASSED) + len(_FAILED)))
     if _FAILED:
         for name, msg in _FAILED:

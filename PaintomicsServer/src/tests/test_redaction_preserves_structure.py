@@ -30,8 +30,6 @@ import traceback
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
 from src.classes.AIInterpret.verification import redact_unverified_v2  # noqa: E402
-from src.classes.AIInterpret.agent import (_note_if_ungrounded,  # noqa: E402
-                                           _keep_partial, _partial_result)
 
 _PASSED, _FAILED = [], []
 
@@ -194,26 +192,10 @@ def test_redaction_never_glues_a_structure_token_to_prose():
 
 
 
-def test_a_report_that_grounded_nothing_says_so():
-    """One stored run retrieved 56 papers, wrote 56 citations, found quotes for
-    none, rendered no references, and shipped 49 752 characters as "done" with
-    a verification score of 0.07. Nothing in the text said the interpretation
-    was uncorroborated, and the text outlives the progress line."""
-    out = _note_if_ungrounded("Findings without citations.", [], {1: {}, 2: {}})
-    assert "Note on evidence" in out, "an ungrounded report shipped silently"
-    assert "2 retrieved paper" in out, "the note does not say how many were tried"
-    assert "measured data alone" in out
 
 
-def test_a_grounded_report_gets_no_note():
-    out = _note_if_ungrounded("Findings [1].", [{"ref_index": 1}], {1: {}})
-    assert "Note on evidence" not in out, "a cited report was labelled ungrounded"
 
 
-def test_a_run_that_retrieved_nothing_makes_no_claim():
-    """No papers means no literature claim to walk back."""
-    out = _note_if_ungrounded("Data-only findings.", [], {})
-    assert "Note on evidence" not in out
 
 
 
@@ -268,30 +250,8 @@ def test_a_ten_citation_sentence_loses_only_the_bad_one():
 
 
 
-def test_a_timeout_ships_what_exists_rather_than_nothing():
-    """Roughly one base run in seven hits the ten-minute ceiling -- median 399 s,
-    max 602 over 14 archived runs. Today that run raises and every phase's work
-    is discarded, so a user who waited ten minutes is told to try again while a
-    synthesised report with rendered references sat in memory."""
-    stats = {}
-    _keep_partial(stats, "Glycolysis is repressed [1].", [{"ref_index": 1}],
-                  "references rendered")
-    salvaged = _partial_result(stats, 10)
-    assert salvaged is not None, "a report existed and was still discarded"
-    report, papers = salvaged
-    assert "Incomplete interpretation" in report, "the reader is not warned"
-    assert "references rendered" in report, "the reader cannot tell how far it got"
-    assert "Glycolysis is repressed [1]." in report, "the work itself was lost"
-    assert len(papers) == 1
-    assert stats.get("timed_out_at_stage") == "references rendered"
 
 
-def test_a_timeout_with_nothing_to_show_still_fails():
-    """Salvage must not manufacture a report out of an empty run."""
-    assert _partial_result({}, 10) is None
-    stats = {}
-    _keep_partial(stats, "   ", [], "synthesis")
-    assert _partial_result(stats, 10) is None, "whitespace was shipped as a report"
 
 
 
@@ -306,31 +266,15 @@ def _check(name, fn):
 
 
 def main():
-    for t in (test_headings_survive_a_redaction,
-              test_headings_stay_on_their_own_line,
-              test_bullets_stay_separate_lines,
-              test_only_offending_sentences_are_removed,
-              test_paragraph_structure_is_not_flattened,
-              test_reference_entry_is_still_removed,
-              test_nothing_changes_when_nothing_failed,
-              test_a_heading_left_over_nothing_is_dropped,
-              test_a_parent_heading_keeps_its_subsections,
-              test_table_rows_are_untouched,
-              test_code_fences_pass_through_whole,
-              test_a_sentence_spanning_two_lines_is_removed_whole,
-              test_removed_count_covers_body_and_references,
-              test_redaction_never_glues_a_structure_token_to_prose,
-              test_a_report_that_grounded_nothing_says_so,
-              test_a_grounded_report_gets_no_note,
-              test_a_run_that_retrieved_nothing_makes_no_claim,
-              test_a_timeout_ships_what_exists_rather_than_nothing,
-              test_a_timeout_with_nothing_to_show_still_fails,
-              test_a_sentence_keeps_its_place_when_another_citation_verified,
-              test_a_sentence_resting_only_on_a_failed_citation_still_goes,
-              test_the_surviving_citation_list_reads_correctly,
-              test_prose_commas_are_not_touched,
-              test_a_ten_citation_sentence_loses_only_the_bad_one):
-        _check(t.__name__, t)
+    # Collected, not hand-listed. Five tests were removed with the workflow
+    # arm they exercised and this tuple still named them, so the suite died on
+    # a NameError instead of running. That is the fourth hand-written list in
+    # this repo to rot the same way.
+    tests = [(n, o) for n, o in sorted(globals().items())
+             if n.startswith('test_') and callable(o)]
+    assert tests, 'no tests collected'
+    for name, t in tests:
+        _check(name, t)
     print("\nPassed: %d / %d" % (len(_PASSED), len(_PASSED) + len(_FAILED)))
     if _FAILED:
         for name, msg in _FAILED:

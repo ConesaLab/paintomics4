@@ -215,45 +215,8 @@ class UnitsAndRenderingTest(unittest.TestCase):
                                  "significant_omic_count": 1,
                                  "top_genes": [{"symbol": "Gene1", "relevant": True}]}
 
-    def test_units_and_packing_never_split_a_cluster(self):
-        units = C.build_units(self.part, self.ctx)
-        kinds = [u["kind"] for u in units]
-        self.assertIn("cluster", kinds)
-        self.assertIn("standalone", kinds)
-        self.assertEqual(kinds[-1], "further")
-        batches = C.pack_units(units, max_pathways=3)
-        for b in batches:
-            for u in b:
-                if u["kind"] == "cluster":
-                    # the whole cluster is present in that batch
-                    self.assertEqual(len(u["pathways"]), u["cluster"]["size"])
-            pws = C.batch_pathways(b)
-            ps = [pw["combined_pvalue"] for pw in pws]
-            self.assertEqual(ps, sorted(ps))  # rank order inside the batch
-        covered = sorted(pw["id"] for b in batches for pw in C.batch_pathways(b))
-        self.assertEqual(covered, sorted(self.part["nodes"]))
 
-    def test_rendered_blocks_carry_ranks_and_labels(self):
-        units = C.build_units(self.part, self.ctx)
-        batch = C.pack_units(units, max_pathways=8)[0]
-        block = C.render_units_block(batch, self.part)
-        self.assertIn("#1 Alpha signaling", block)
-        self.assertIn("Shared core", block)
-        synth = C.render_synthesis_block(self.part, self.ctx)
-        self.assertIn("Key Findings lead with the highest-RANKED", synth)
-        self.assertIn("Standalone", synth)
-        table = C.render_partition_table(self.part, self.ctx)
-        self.assertIn("| Cluster |", table)
-        self.assertIn("Zeta process", table)
 
-    def test_search_queries_cover_units(self):
-        qs = list(C.cluster_search_queries(self.part, self.ctx, "Mus musculus", ""))
-        keys = {k for _q, k, _n, _w in qs}
-        self.assertTrue(any(k.startswith("C0") for k in keys))
-        self.assertIn("Zeta process", keys)   # standalone by name
-        for q, _k, names, _w in qs:
-            self.assertIn("AND", q)
-            self.assertTrue(names)
 
 
 class FrozenContextTest(unittest.TestCase):

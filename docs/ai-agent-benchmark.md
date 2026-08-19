@@ -6020,3 +6020,84 @@ instructions to "every cluster", and has never been measured.
 only if the gain is around 0.05 or more; a smaller rise is a direction. Span sd
 was ~69 s, so prediction 3 resolves cleanly. Prediction 1 is a large expected
 effect (15 -> 25+) and should resolve.
+
+## Round 67 SCORED — cluster scope is free, and does not bind
+
+`AI_AGENT_CLUSTER_SCOPE=1`, 8 replicates, against round 57's 8.
+
+| metric | r57 rank-scoped | r67 cluster-scoped | delta | |
+|---|---|---|---|---|
+| prose_pathways_covered | 15.38 | 17.38 | +2.00 | not resolved |
+| rubric coverage | 0.571 | **0.611** | +0.041 | not resolved |
+| citations_in_body | 21.38 | 22.38 | +1.00 | not resolved |
+| wall_s | 422 | **420** | -2 | not resolved |
+
+| prediction | result | |
+|---|---|---|
+| pathways rise toward 74 (>=25 binds) | **17.4** | **DID NOT BIND** |
+| rubric coverage rises above 0.571 | 0.611 (+0.041) | held, unresolved |
+| FALSIFIER: median span < 600 s | **432 s**, max 472, 0/8 over | **HELD** |
+
+**Rewriting the Lead's five "top-ranked" instructions to "every cluster" did not
+make it walk its territory.** Coverage moved 15.4 -> 17.4 against a predicted 25+.
+The gain in rubric coverage is real in direction and free in time, but at n=8
+with sd 0.1 it is a direction, not a result.
+
+**Three candidate limiters are now eliminated**, each measured rather than
+argued:
+
+* the pathway universe -- clustering already widens it to ~90, and
+  `build_partition` runs unconditionally in 24 of 24 archived runs;
+* the delegation capacity -- `DELEGATE_MAX_PATHWAYS` is 60 and the Lead sends
+  ~15, and restating the capacity in the tool description was measured inert;
+* the Lead's rank language -- rewritten here, worth +2 pathways.
+
+So the limiter is none of the things that looked like it. What remains
+untested is the delegation SHAPE: one call carrying ~15 pathways in 3 chunks,
+every run, never twice. Whether the Lead can be made to delegate repeatedly is a
+different question from whether it is allowed to delegate more at once, and only
+the second has been asked.
+
+### A correction recorded earlier in this session
+
+"Switching production to the agent arm silently disabled cluster mode" was
+**wrong**. `CLUSTER_MODE` is read in `clusters.py` but `build_partition` never
+checks it; its only consumer was `agent.py`'s own gate, which has since been
+deleted with the workflow arm.
+
+## The six-phase workflow arm was removed
+
+`agent.py` 2 580 -> ~1 030 lines. Removed: 16 workflow-only functions
+(`_run_async` alone was 1 138), `run_agent_workflow`, five agents the loop never
+used, `DATA_TOOLS` and its three tools, four dataclasses, six cluster-batching
+helpers in `clusters.py`, three helpers in `shared.py`, and
+`SYSTEM_PROMPT_SEARCH_PLANNER`. `run_ai_agent` now dispatches unconditionally.
+
+**This removes the benchmark's control arm.** Base-vs-agent comparisons are no
+longer possible from this tree, so every base figure in this document is now
+historical and cannot be refreshed. That was weighed and accepted deliberately.
+
+**Three things the static scan got wrong, each caught by importing rather than
+trusting it:**
+
+* `_count_retry` and `_stream_to_completion` are called by `configure_sdk`, which
+  the surviving arm depends on. Kept.
+* the three data tools tripped a module-level `DATA_TOOLS` list no AST scan of
+  function definitions could see. Restored, then confirmed dead -- the loop
+  builds its own Delegated Interpreter with `tools=[]` -- and removed again.
+* `test_tool_descriptions` found twelve further orphans, then three more, then
+  one more, as each removal exposed the next layer.
+
+**A pollution path opened by the deletion itself.** `test_ai_agent_endtoend`
+drives `run_ai_agent`, which used to reach the workflow arm -- and that arm never
+archived a trace. With the workflow gone it reaches the interpreter loop, which
+writes one JSONL per run, and a stub run landed in the live corpus within one
+suite pass. Only `test_the_live_archive_holds_no_stub_runs` caught it.
+
+**And the hand-written list rotted three more times.** `main()` tuples in
+`test_redaction_preserves_structure`, `test_a_round_pins_its_code`,
+`test_reference_section_ordering` and `test_paper_screen` still named removed or
+renamed tests, so each suite died on a `NameError` *instead of running* -- a
+failure that reads as an error, not as a pass, but only because someone looks.
+All four now collect from `globals()`. That is the sixth through ninth
+occurrence recorded in this document.

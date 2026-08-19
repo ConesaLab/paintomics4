@@ -52,6 +52,24 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
+import tempfile  # noqa: E402
+
+# Redirect the trace archive before anything runs a job.
+#
+# This suite drives run_ai_agent, which used to dispatch to the six-phase
+# workflow arm -- and that arm never archived a trace, so this file had no
+# reason to redirect. Removing the workflow made run_ai_agent dispatch
+# unconditionally to the interpreter loop, which writes one JSONL per run into
+# <CLIENT_TMP_DIR>/ai_traces. A stub run promptly landed in the live
+# measurement corpus that every round in docs/ai-agent-benchmark.md is scored
+# from, and only test_the_live_archive_holds_no_stub_runs caught it.
+#
+# Setting PAINTOMICS_CLIENT_TMP does NOT work: serverconf hardcodes
+# CLIENT_TMP_DIR. _archive_trace imports the name inside the function, so
+# rebinding the module attribute is what takes effect.
+import src.conf.serverconf as _serverconf  # noqa: E402
+_serverconf.CLIENT_TMP_DIR = tempfile.mkdtemp(prefix="stub_e2e_base_")
+
 JOB_ID = os.environ.get("AI_E2E_JOB_ID")
 
 

@@ -49,12 +49,20 @@ def test_pinning_happens_before_any_command_runs():
     assert pinned < dispatch, "the arms are pinned after argument dispatch"
 
 
-def test_the_agent_arm_is_still_only_ENTERED_behind_the_flag():
-    """Pinning is an import, not a switch. If it changed which arm runs, every
-    archived comparison would be meaningless."""
+def test_pinning_never_changes_which_arm_runs():
+    """Pinning is an import, not a switch.
+
+    This used to assert the arm was entered behind AI_FULL_AGENT. The six-phase
+    workflow was removed, so there is no longer a second arm to choose between
+    and no flag to choose with -- but the property that matters is unchanged and
+    is now stronger: nothing pinning does may introduce a branch on which arm
+    runs, because every archived comparison assumes one.
+    """
     src = inspect.getsource(sys.modules["src.classes.AIInterpret.agent"])
-    assert 'os.getenv("AI_FULL_AGENT", "0") == "1"' in src, (
-        "the arm is no longer chosen by AI_FULL_AGENT")
+    assert "run_agent_loop_workflow(" in src, (
+        "run_ai_agent no longer dispatches to the interpreter loop")
+    assert "run_agent_workflow(" not in src, (
+        "a second arm reappeared; archived rounds assume exactly one")
 
 
 def test_pinning_is_idempotent():
@@ -88,12 +96,13 @@ def _check(name, fn):
 
 
 def main():
-    for t in (test_both_arms_are_importable_together,
-              test_pinning_happens_before_any_command_runs,
-              test_the_agent_arm_is_still_only_ENTERED_behind_the_flag,
-              test_pinning_is_idempotent,
-              test_the_shared_module_exports_what_both_arms_import):
-        _check(t.__name__, t)
+    # Collected, not hand-listed: a renamed or removed test used to leave a
+    # NameError here and the suite died instead of running.
+    tests = [(n, o) for n, o in sorted(globals().items())
+             if n.startswith('test_') and callable(o)]
+    assert tests, 'no tests collected'
+    for name, t in tests:
+        _check(name, t)
     print("\nPassed: %d / %d" % (len(_PASSED), len(_PASSED) + len(_FAILED)))
     if _FAILED:
         for name, msg in _FAILED:

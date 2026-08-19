@@ -173,14 +173,20 @@ def test_ten_sorts_after_nine_not_before_it():
 # production sequence, so this asserts against the real one.
 # ---------------------------------------------------------------------------
 
-def test_the_agent_workflow_sorts_after_renumbering():
-    import inspect
-    from src.classes.AIInterpret import agent
+def test_the_interpreter_loop_sorts_after_renumbering():
+    """Retargeted from agent._run_async, which went with the workflow arm.
 
-    source = inspect.getsource(agent._run_async)
+    The ordering property is unchanged and still load-bearing: renumbering
+    assigns labels by first mention, so sorting before it orders the OLD labels
+    and the References print out of step with the body.
+    """
+    import inspect
+    from src.classes.AIInterpret import agent_loop
+
+    source = inspect.getsource(agent_loop)
     assert "renumber_citations(" in source, "phase 6 no longer renumbers at all"
     assert "sort_references_section(" in source, (
-        "the agent workflow never calls sort_references_section, so every "
+        "the interpreter loop never calls sort_references_section, so every "
         "shipped report prints its References in render order while the body "
         "is numbered by first mention")
     assert (source.index("renumber_citations(")
@@ -263,23 +269,13 @@ def test_a_cited_entry_is_never_dropped_by_pruning():
 
 
 def main():
-    for t in (test_renumbering_alone_leaves_the_section_scrambled,
-              test_final_section_reads_in_order,
-              test_each_label_still_points_at_its_own_paper,
-              test_cited_text_travels_with_its_entry,
-              test_a_trailing_redaction_note_stays_last,
-              test_an_already_ordered_section_is_untouched,
-              test_report_without_references_is_untouched,
-              test_single_entry_is_untouched,
-              test_ten_sorts_after_nine_not_before_it,
-              test_the_agent_workflow_sorts_after_renumbering,
-              test_an_uncited_reference_is_dropped,
-              test_a_dropped_entry_takes_its_continuation_lines,
-              test_pruning_closes_the_numbering_gaps,
-              test_a_report_with_no_surviving_citations_keeps_its_section,
-              test_a_cited_entry_is_never_dropped_by_pruning,
-              test_the_agent_loop_sorts_after_renumbering):
-        _check(t.__name__, t)
+    # Collected, not hand-listed: a renamed or removed test used to leave a
+    # NameError here and the suite died instead of running.
+    tests = [(n, o) for n, o in sorted(globals().items())
+             if n.startswith('test_') and callable(o)]
+    assert tests, 'no tests collected'
+    for name, t in tests:
+        _check(name, t)
 
     print("\nPassed: %d / %d" % (len(_PASSED), len(_PASSED) + len(_FAILED)))
     if _FAILED:

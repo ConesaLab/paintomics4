@@ -62,8 +62,8 @@ def test_the_claim_count_reaches_the_archive():
 
 def test_both_arms_record_it():
     import inspect
-    from src.classes.AIInterpret import agent, agent_loop
-    for module in (agent, agent_loop):
+    from src.classes.AIInterpret import agent_loop
+    for module in (agent_loop,):
         src = inspect.getsource(module)
         assert 'stats["sentences_dropped"] = last_sentences_dropped()' in src, (
             module.__name__)
