@@ -2283,3 +2283,34 @@ Five to seven writing units instead of three or four.
 **Falsifier.** If converted themes stay at 9-10 with 5-7 units, the unit count is
 not the ceiling and the arithmetic that matched for eight rounds is coincidence --
 pointing instead at `DELEGATE_PAPERS`, the ten papers each unit is shown.
+
+### Rule 5's risk is tables, not prose
+
+Round 47's first agent replicate ran to 71 215 characters against base's 30 546 --
+2.33x, past the 2.0x ceiling. Broken down by section:
+
+```
+pathway analyses (stitched)   ~41 800   STITCH_MAX_CHARS is working (40 k + trim note)
+Pathway Clusters TABLE         16 870
+Enriched Pathway Summary        2 994
+prose only                     51 351   = 1.86x of base -- inside the ceiling
+```
+
+Base ships **zero** table characters. The agent arm ships 19 864, 28% of its
+report, because `partition is not None` appends the cluster and summary tables
+through `_reattach_blocks`. Neither arm was designed against the other on this
+point; it is an arm difference nobody chose.
+
+So rule 5 fails, when it fails, on a structural feature rather than on verbose
+writing. The rule stands as pre-registered -- tables are part of the report a
+reader receives, and a rule edited after seeing the numbers is not a rule -- but
+the DIAGNOSIS matters for what to do about it: capping `STITCH_MAX_CHARS` further
+would cut the pathway analyses that carry the citations, while the 20 k of tables
+is data the prose already summarises.
+
+I also nearly recorded this as a bug in the stitch cap. My first measurement took
+"everything after the Detailed Pathway Analysis heading" as the stitched detail,
+which swept in the references, the tables and the closing sections, and made a
+working 40 k cap look like it was emitting 65 k. Sectioning the report properly
+was the difference between "the cap is broken" and "the cap is fine and the
+tables are the weight".
