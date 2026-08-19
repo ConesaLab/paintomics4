@@ -2480,3 +2480,48 @@ direction agrees with the tertile result above, but n=9 does not establish it.
 
 Median wall clock 377 s; **0 of 39 runs exceeded 600 s**. Time is not currently
 the binding constraint on this arm -- grounding is.
+
+### The ratchet was silencing the arm's central question
+
+Round 47 r3 came back at 31 224 characters against r1/r2's ~71 000, with the
+HIGHEST citation count of the three. The reason is in one stat:
+
+```
+merge_rejected: len 9555->43945, cites 25->12, GROUNDED 21->12
+```
+
+The Lead's own draft was 9 555 characters carrying 25 citations, 21 of them
+grounded. Stitching the delegated pathway analyses in would have made it 43 945
+characters carrying 12. The guard declined, correctly, and the run shipped
+without a Detailed Pathway Analysis worth ~36 kB.
+
+Six such rejections are on record across rounds 40-47:
+
+```
+40-r2   9 227 -> 41 405   grounded 14 -> 7
+40-r4   9 769 -> 43 398   grounded 14 -> 13
+42-r3   9 889 -> 28 600   grounded  8 -> 7
+43-r3   8 542 -> 39 941   grounded 16 -> 14
+44-r4   9 298 -> 43 736   grounded 15 -> 11
+47-r3   9 555 -> 43 945   grounded 21 -> 12
+```
+
+Every one shows grounding falling, and that is worth NOTHING as evidence: the
+guard rejects precisely when grounded citations fall, so the surviving records
+are the definition of a biased sample. The accepted merges are the other half of
+the comparison, and `merge_citations`, `merge_grounded`, `merge_gain_chars`,
+`merge_coverage` and `merge_mode` were all in `KNOWN_UNARCHIVED` -- the list that
+exists to stop the ratchet complaining about stats nothing keeps.
+
+So the ratchet was reporting a clean archive while the numbers that decide
+whether delegation helps or hurts grounding were being dropped, and only the
+half that makes delegation look bad survived. `unarchived_stats` was built to
+catch "measured into the void"; `KNOWN_UNARCHIVED` is the hole in it, and a whole
+decision stage had fallen through.
+
+All five are archived now, and a test reads the merge keys out of the SOURCE and
+fails if any of them is unkept or hiding in the ratchet -- it immediately caught
+a sixth, `merge_probe_failed`, that I had missed by hand.
+
+**This does not yet say delegation dilutes grounding.** It says the question is
+answerable from round 48 onward, and was not before.

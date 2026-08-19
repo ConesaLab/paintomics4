@@ -173,7 +173,7 @@ STAGE_TIMES = ("topup_fulltext_s", "topup_verify_s",
                "triage_s", "plan_s", "retrieval_s", "interpret_s", "gap_fill_s",
                "synth_s", "topup_s", "verify_loop_s", "verify_s",       # shipped arm
                "loop_s", "fulltext_s", "quotes_s", "merge_s")           # agent arm
-STAGE_COUNTS = ("verify_iterations", "batches_failed", "truncated_calls",
+STAGE_COUNTS = ("merge_gain_chars", "verify_iterations", "batches_failed", "truncated_calls",
                 "forced_synthesis", "topup_added", "quotes_unverifiable",
                 # The other half of the top-up's bet. Recording only
                 # topup_added archives its wins and drops its losses, and a
@@ -242,7 +242,9 @@ STAGE_MAPS = ("tool_chars_by_tool", "tool_calls_by_tool")
 # Outcomes whose value is a sentence, not a number: a stage that skipped or
 # failed says WHY, and "absent from the archive" reads identically to "never
 # happened". Truncated because a traceback string is not a metric.
-STAGE_NOTES = ("trace_file", "failed_refs", "topup_refs", "topup_verify_failed",
+STAGE_NOTES = ("trace_file", "merge_citations", "merge_grounded",
+               "merge_coverage", "merge_mode", "merge_probe_failed",
+               "failed_refs", "topup_refs", "topup_verify_failed",
                "topup_fulltext_skipped", "topup_fulltext_failed",
                "topup_disabled", "topup_failed", "topup_skipped", "merge_rejected",
                "merge_skipped", "merge_failed", "loop_backstop",
@@ -281,12 +283,6 @@ KNOWN_UNARCHIVED = frozenset(['agent_notebook',
      'gaps_caveats',
      'gaps_pathways',
      'loop_final',
-     'merge_citations',
-     'merge_coverage',
-     'merge_gain_chars',
-     'merge_grounded',
-     'merge_mode',
-     'merge_probe_failed',
      'papers',
      'papers_retrieved',
      'pmids_found',
