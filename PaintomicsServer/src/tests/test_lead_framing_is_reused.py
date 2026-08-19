@@ -93,10 +93,15 @@ def test_headings_are_matched_case_and_depth_tolerantly():
     assert head and tail, "a real report was rejected over heading style"
 
 
-def test_the_flag_defaults_off():
-    """Every round measured so far ran the LLM framing; the default must not
-    silently change under them."""
-    assert L.FRAMING_REUSE_LEAD is False
+def test_the_flag_defaults_on():
+    """DEFAULT FLIPPED ON for the agent-v54-r3 ship.
+
+    Round 49 measured it: merge rejections went from 21% of runs to 0 of 4, and
+    merge_s from 18-20 s to 6-7 s. A rejected merge costs the run its entire
+    delegated section -- r3 of round 47 shipped 31 kB instead of 71 kB -- so this
+    is worth more than the LLM framing call it replaces.
+    """
+    assert L.FRAMING_REUSE_LEAD is True
 
 
 def test_the_splice_is_wired_to_the_flag():
@@ -129,7 +134,7 @@ def main():
               test_a_report_without_the_sections_falls_back,
               test_a_report_with_no_detail_section_still_splits,
               test_headings_are_matched_case_and_depth_tolerantly,
-              test_the_flag_defaults_off,
+              test_the_flag_defaults_on,
               test_the_splice_is_wired_to_the_flag):
         _check(t.__name__, t)
     print("\nPassed: %d / %d" % (len(_PASSED), len(_PASSED) + len(_FAILED)))
