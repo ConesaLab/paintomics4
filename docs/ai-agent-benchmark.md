@@ -5582,3 +5582,43 @@ cancelled. That is a pre-registration for the next round, not a claim here.
 n = 1 report, and it is round 57's BEST replicate. Whether the guard's rejection
 rate is 0% or 40% across a full round is unknown, and a stage that falls back to
 the dossier half the time is a different proposition from one that does not.
+
+## Round 66 pre-registration — measuring the Results section
+
+`AI_AGENT_RESULTS_SECTION=1`, agent arm, 8 replicates, against round 57's 8.
+
+### The falsifier is rubric coverage, not citations
+
+The citation guard makes the usual falsifier **structurally unfailable**: a
+rejected rewrite ships the dossier, which carries every citation. Citations
+cannot fall. Writing the falsifier on them would therefore be theatre.
+
+Round 64 measured citation count and rubric coverage as **independent**
+(r = 0.05). So a rewrite can keep all 22 markers and still lose findings --
+compressing 8 184 words to ~3 000 is exactly the operation that would do it, and
+**nothing in the stage guards against it.** That is the risk this round exists
+to price.
+
+### Predictions
+
+1. **Rubric coverage does not fall more than 0.05** against round 57's mean of
+   **0.570**. *(FALSIFIER. A larger fall means the compression is discarding
+   findings, and the stage is reverted regardless of how much better it reads.)*
+2. Accepted rather than rejected in **>= 6 of 8** runs. A stage that falls back
+   to the dossier half the time is a different proposition from one that works.
+3. Median span stays **under 600 s**. Measured cost is 84 s on one report against
+   a 450 s median, so this should hold with ~66 s to spare -- and round 57 showed
+   that a stage spending budget before the gate is how corrections get cancelled,
+   so `correction_failed` is watched too.
+4. Words fall **>= 40%**.
+
+### Power, stated before the fact
+
+n = 8. Round 57's coverage spread was 0.489-0.641, sd ~0.045, so a 0.05
+difference is right at the resolution limit and will be reported as a
+**direction** unless it is larger. Prediction 2 is a proportion on 8 trials and
+cannot resolve anything finer than "usually" versus "rarely". Only predictions 3
+and 4 are expected to resolve cleanly at this n.
+
+This is written before the round runs, as every pre-registration in this
+document is, and rounds 56, 59 and 61 record what happens when it is not.
