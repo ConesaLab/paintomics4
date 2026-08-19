@@ -72,7 +72,8 @@ from src.classes.AIInterpret.verification import (
     count_body_citations, normalize_citation_markers, parse_references_section,
     redact_unverified_v2, render_references_section, renumber_citations,
     resolve_pmid_mentions, score_topup_survival, sort_references_section,
-    last_sentences_dropped, quote_provenance, theme_conversion,
+    last_sentences_dropped, quote_provenance, strip_markers,
+    theme_conversion,
     verify_report_v2,
 )
 
@@ -199,6 +200,21 @@ killed the assumption that it bounds citations: delegate_markers is 0 on every r
 delegated analyses cite nothing at all. The Lead writes the citing draft and sees
 every paper through the search listings, so the delegation window has no say in
 how many citations a run can carry.
+"""
+
+VERIFY_TOPUP = os.getenv("AI_AGENT_VERIFY_TOPUP", "0") == "1"
+"""Check the top-up's own citations before the gate charges a sentence for them.
+
+The top-up bolts [N] onto sentences that already stood on their own, and 40-50%
+of those citations then fail -- in every replicate of rounds 39-43,
+`topup_added_failed` equalled `failed_citations` exactly, while base's equalled
+zero. Round 44 removed the stage and fixed rule 3 completely (0 redactions across
+replicates) at the cost of rule 2 (16.0 citations against base's 22.3).
+
+The asymmetry that makes a third option work: pulling a marker back BEFORE the
+gate costs nothing, because the sentence stood without it. Letting it through
+costs the sentence. So the top-up can keep the citations that hold and give back
+the ones that do not, which neither removing nor capping the stage can do.
 """
 
 SHOW_UNCITED = os.getenv("AI_AGENT_SHOW_UNCITED", "0") == "1"
@@ -528,7 +544,8 @@ def _code_fingerprint():
         # source alone left the exact hole this function exists to close:
         # AI_SENTENCE_REPAIR=1 and =0 run different pipelines and stamped the
         # same fingerprint. Anything that gates a stage belongs here.
-        parts.extend(["SHOW_UNCITED=%s" % SHOW_UNCITED,
+        parts.extend(["VERIFY_TOPUP=%s" % VERIFY_TOPUP,
+                      "SHOW_UNCITED=%s" % SHOW_UNCITED,
                       "SCREEN_PAPERS=%s" % SCREEN_PAPERS,
                       "FRAMING_MAY_CITE=%s" % FRAMING_MAY_CITE,
                       "TOPUP_ENABLED=%s" % TOPUP_ENABLED,
@@ -600,6 +617,39 @@ def _unrepresented_notes(notebook, text, limit=5, subjects=None):
                 continue
         missing.append(" ".join(note.split())[:110])
     return missing[:limit]
+
+
+async def _verify_topup_additions(ctx, stats, report, refs):
+    """Keep the top-up's citations that can be quoted; give back the rest.
+
+    Quotes are collected against a paper index restricted to the refs the top-up
+    just added, so this asks only about them rather than re-quoting the whole
+    report -- the full collection happens later anyway.
+
+    A ref with no quote has its marker stripped, not its sentence redacted:
+    strip_markers exists for exactly this case, where the prose predates the
+    citation and survives its removal unchanged.
+    """
+    refs = [int(r) for r in (refs or []) if int(r) in ctx.paper_index]
+    if not refs:
+        return report, 0
+    subset = {r: ctx.paper_index[r] for r in refs}
+    t0 = time.time()
+    try:
+        found = await asyncio.to_thread(
+            _collect_cited_quotes, LLMClient(AI_PROVIDERS[AI_LLM_PROVIDER]),
+            report, subset, ctx.job_id, dict(ctx.quotes))
+    except Exception as e:
+        stats["topup_verify_failed"] = "%s: %s" % (type(e).__name__, e)
+        return report, 0
+    ctx.quotes.update({k: v for k, v in (found or {}).items() if v})
+    unquotable = [r for r in refs if not (found or {}).get(r)]
+    if unquotable:
+        report, pulled = strip_markers(report, unquotable)
+        stats["topup_pulled_back"] = len(unquotable)
+        stats["topup_markers_pulled"] = pulled
+    stats["topup_verify_s"] = round(time.time() - t0, 1)
+    return report, len(unquotable)
 
 
 async def _upgrade_new_citations(ctx, stats, refs):
@@ -1906,6 +1956,7 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
         "framing_may_cite": FRAMING_MAY_CITE,
         "screen_papers": SCREEN_PAPERS,
         "show_uncited": SHOW_UNCITED,
+        "verify_topup": VERIFY_TOPUP,
         "max_turns": AGENT_MAX_TURNS,
         "gate_reserve": GATE_RESERVE_SECONDS,
         "lead_prompt_chars": len(prompts_mod.SYSTEM_PROMPT_LEAD_AGENT),
@@ -2336,6 +2387,9 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
                 # text for everything it retrieves, and its top-up fails 0.0.
                 await _upgrade_new_citations(ctx, stats,
                                              stats["topup_added_refs"])
+                if VERIFY_TOPUP:
+                    report, _pulled = await _verify_topup_additions(
+                        ctx, stats, report, stats["topup_added_refs"])
             else:
                 stats["topup_rejected"] = True
         except (Exception, asyncio.TimeoutError) as e:

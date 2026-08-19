@@ -377,6 +377,37 @@ def _tidy_after_marker_removal(sentence, bad_indices):
     return sentence
 
 
+def strip_markers(report_text, refs):
+    """Remove [N] markers for `refs` WITHOUT touching any sentence.
+
+    The difference from redact_unverified_v2 matters. Redaction removes the
+    sentence when its last citation goes, because a claim with no support left
+    should not ship. This does not: it is for markers that were ATTACHED to
+    prose which already stood on its own, where taking the marker back restores
+    the sentence exactly as it was.
+
+    That is the top-up's situation precisely. It bolts [N] onto finished
+    sentences, and 40-50% of those citations then fail -- so pulling an
+    unsupportable one back before the gate sees it costs nothing at all, while
+    letting it through costs the sentence.
+    """
+    refs = {int(r) for r in (refs or [])}
+    if not refs:
+        return report_text, 0
+    before = len(re.findall(r"\[(\d+)\]", report_text))
+    parts = re.split(r"((?<=[.!?])\s+)", report_text)
+    out = []
+    for i in range(0, len(parts), 2):
+        sentence = parts[i]
+        if any("[%d]" % r in sentence for r in refs):
+            sentence = _tidy_after_marker_removal(sentence, refs)
+        out.append(sentence)
+        if i + 1 < len(parts):
+            out.append(parts[i + 1])
+    cleaned = "".join(out)
+    return cleaned, before - len(re.findall(r"\[(\d+)\]", cleaned))
+
+
 def _redact_sentences(text, bad_patterns, bad_indices=None):
     """Remove failed citations, and the sentence only when nothing is left.
 

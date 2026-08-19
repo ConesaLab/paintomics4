@@ -168,7 +168,7 @@ def cmd_run(args):
 # Where the ten minutes went. Archived per run so a round is diagnosable
 # afterwards: until now only wall_s survived, so a 602 s timeout and a 240 s
 # run were equally opaque about which stage ate the budget.
-STAGE_TIMES = ("topup_fulltext_s",
+STAGE_TIMES = ("topup_fulltext_s", "topup_verify_s",
                "verify_fanout_s", "verify_repair_s",   # the two halves of the loop
                "triage_s", "plan_s", "retrieval_s", "interpret_s", "gap_fill_s",
                "synth_s", "topup_s", "verify_loop_s", "verify_s",       # shipped arm
@@ -226,6 +226,7 @@ STAGE_COUNTS = ("verify_iterations", "batches_failed", "truncated_calls",
                 # Claims destroyed, as distinct from `redacted`, which counts
                 # markers removed plus dropped reference entries.
                 "sentences_dropped", "topup_fulltext_gained",
+                "topup_pulled_back", "topup_markers_pulled",
                 # Does the agent fill notebook_write's `subject`? The
                 # pre-registered falsifier for that argument was a blank rate
                 # above ~30%, and nothing recorded it.
@@ -240,7 +241,7 @@ STAGE_MAPS = ("tool_chars_by_tool",)
 # Outcomes whose value is a sentence, not a number: a stage that skipped or
 # failed says WHY, and "absent from the archive" reads identically to "never
 # happened". Truncated because a traceback string is not a metric.
-STAGE_NOTES = ("failed_refs", "topup_refs",
+STAGE_NOTES = ("failed_refs", "topup_refs", "topup_verify_failed",
                "topup_fulltext_skipped", "topup_fulltext_failed",
                "topup_disabled", "topup_failed", "topup_skipped", "merge_rejected",
                "merge_skipped", "merge_failed", "loop_backstop",
