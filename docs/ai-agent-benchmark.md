@@ -3689,3 +3689,55 @@ with nothing controlled behind it.
 
 Round 52 is launched: round 50's configuration plus `AI_AGENT_DELEGATE_FULLTEXT=1`
 -- one flag, one comparison, against a round whose numbers are already in hand.
+
+### What a round of four can actually see
+
+Every pre-registration here named a predicted effect. None named the sample
+needed to detect it. `ai_arm_bench power` reads the archive's variances and says
+so up front:
+
+```
+variance from 40 archived replicates; a round of n=4 per arm
+
+metric                       sd   detectable   n for +1.0
+citations_in_body           4.3          6.1          147
+prose_pathways_covered      2.3          3.2           42
+redacted                    4.4          6.2          153
+report_chars            15 620       22 090            -
+wall_s                      50.7        71.6       20 533
+```
+
+Read against this session's own pre-registrations:
+
+```
+round   predicted effect                     detectable at n=4?
+47      converted themes 9.8 -> ~13  (+3.2)  no
+49      coverage +1.5                        no
+50      coverage +2.5                        no
+51      citations flat (observed -10.25)     yes
+```
+
+**Three of four rounds pre-registered effects their own design could not
+resolve**, and each came back NOISE exactly as the arithmetic would have told me
+beforehand. Round 51 is the one that resolved, and only because the effect turned
+out to be three times larger than the detection floor -- in the opposite
+direction to the prediction.
+
+The command is deliberately the judge's rule read backwards: `judge` calls a
+margin resolved at two standard errors, and `power` inverts that, with a test
+pinning the two together so a round can never be told it can see an effect the
+scorer would then call noise.
+
+Two consequences for how the remaining work should go:
+
+**Small effects need pooling, not rounds.** Detecting +1.0 citations needs about
+147 replicates; at four per round that is unreachable one round at a time, which
+is what `compare` exists for. A change predicted to buy a citation or two should
+be run three or four times and pooled before anyone reads a verdict.
+
+**Prefer changes with mechanical, near-deterministic outcomes.** Round 52's
+primary signal is `fulltext_candidates` -- the thin share, currently 34 of 35 --
+and the flag causes that directly rather than through the model, so it will be
+visible at n=4. Its DOWNSTREAM effect on citation survival is exactly the kind of
+one-to-two-citation change this table says a single round cannot settle, and I
+should not claim it from round 52 alone.

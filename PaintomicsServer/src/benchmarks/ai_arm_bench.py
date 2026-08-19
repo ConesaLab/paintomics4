@@ -623,6 +623,57 @@ def _diagnose(label, rows, base_rows):
     return out
 
 
+def cmd_power(args):
+    """How big must an effect be for this many replicates to see it?
+
+    Every pre-registration in this document names a predicted effect. None of
+    them named the sample needed to detect it, and the consequences ran through
+    the whole session: "converted themes 9.8 -> 13" was checked at n=4 against a
+    spread that needs far more; "citations +4.6, resolved" at n=8 became +2.0 and
+    unresolved at n=19; "chunk=3 cost 3.4 pathways, resolved" became +2.0 and
+    unresolved once a third round landed.
+
+    The variances are not a mystery -- they are in the archive, and base alone,
+    which is FIXED code, ranges 10-15 on coverage and 10-26 on citations. So a
+    round can be told in advance what it is capable of resolving, which is the
+    difference between a pre-registration and a wish.
+
+        ai_arm_bench power out/round46,out/round47,... --n 4
+    """
+    rows = []
+    for d in args.rounds.split(","):
+        for arm in ("agent", "base"):
+            for path in sorted(glob.glob(os.path.join(d.strip(), "%s*.json" % arm))):
+                try:
+                    rows.append((arm, json.load(open(path))))
+                except ValueError:
+                    continue
+    if not rows:
+        print("no rows in %s" % args.rounds)
+        return 1
+    print("variance from %d archived replicates; a round of n=%d per arm\n"
+          % (len(rows), args.n))
+    print("%-26s %8s %10s %14s" % ("metric", "sd", "detectable", "n for +1.0"))
+    for key in ("citations_in_body", "prose_pathways_covered", "redacted",
+                "report_chars", "wall_s"):
+        vals = [r.get(key) for _a, r in rows if isinstance(r.get(key), (int, float))]
+        if len(vals) < 4:
+            continue
+        mean = sum(vals) / len(vals)
+        sd = (sum((v - mean) ** 2 for v in vals) / len(vals)) ** 0.5
+        # Resolvable here means |margin| >= 2 * se(difference), matching judge().
+        detectable = 2 * sd * (2.0 / args.n) ** 0.5
+        need_one = (2 * sd * (2.0 ** 0.5) / 1.0) ** 2
+        print("%-26s %8.1f %10.1f %14.0f"
+              % (key, sd, detectable, need_one))
+    print("\nA round of n=%d resolves only effects at least as large as the"
+          % args.n)
+    print("'detectable' column. Anything smaller will read as NOISE however")
+    print("many rounds are run, unless they are POOLED -- which is what")
+    print("`compare` is for.")
+    return 0
+
+
 def cmd_compare(args):
     """Pool several round directories and compare two configurations.
 
@@ -869,6 +920,10 @@ def main(argv=None):
     score = sub.add_parser("score", help="apply the pre-registered rules")
     score.add_argument("outdir")
 
+    pw = sub.add_parser("power", help="what effect size can a round of n resolve?")
+    pw.add_argument("rounds", help="comma-separated round dirs to take variance from")
+    pw.add_argument("--n", type=int, default=4, help="replicates per arm per round")
+
     cmp_ = sub.add_parser("compare", help="pool round dirs and compare two configs")
     cmp_.add_argument("a", help="comma-separated round dirs for configuration A")
     cmp_.add_argument("b", help="comma-separated round dirs for configuration B")
@@ -886,7 +941,7 @@ def main(argv=None):
 
     args = parser.parse_args(argv)
     return {"ready": cmd_ready, "run": cmd_run, "score": cmd_score,
-            "compare": cmd_compare, "jobs": cmd_jobs,
+            "compare": cmd_compare, "power": cmd_power, "jobs": cmd_jobs,
             "round": cmd_round}[args.command](args)
 
 
