@@ -25,6 +25,13 @@ import traceback
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
+# `_trace` archives to CLIENT_TMP_DIR/ai_traces, the corpus every
+# tool-usefulness figure here is computed from -- servlet runs included.
+# Redirected BEFORE agent_loop is imported: serverconf is read at import time.
+import tempfile as _tempfile
+from src.conf import serverconf as _serverconf
+_serverconf.CLIENT_TMP_DIR = _tempfile.mkdtemp(prefix="tracetest-")
+
 from agents import RunContextWrapper                      # noqa: E402
 from src.classes.AIInterpret import agent_loop as L       # noqa: E402
 

@@ -22,6 +22,15 @@ import traceback
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
+# `_trace` archives every tool call to CLIENT_TMP_DIR/ai_traces, which is the
+# LIVE corpus every tool-usefulness figure in this project is computed from --
+# including runs that came through the servlet, not just the benchmark. A test
+# that writes there puts fabricated tool calls into that dataset, and the next
+# analysis counts them. Four suites were doing it.
+import tempfile as _tempfile
+from src.conf import serverconf as _serverconf
+_serverconf.CLIENT_TMP_DIR = _tempfile.mkdtemp(prefix="tracetest-")
+
 from src.benchmarks.ai_arm_bench import STAGE_COUNTS, STAGE_MAPS, _stage_budget  # noqa: E402
 from src.classes.AIInterpret import agent_loop as L  # noqa: E402
 
