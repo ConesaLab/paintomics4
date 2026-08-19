@@ -2967,3 +2967,36 @@ This is the third stage in a row where the defect was the same shape: a componen
 judged on something it was never shown. The top-up judges support from the first
 15% of an abstract. The framing agent rewrites a report it sees less of than the
 Lead did. The Lead writes to a citation bar nobody tells it about.
+
+### 23 of 35 knobs were invisible to the archive
+
+Auditing whether I am producing changes faster than I can measure them turned up
+something worse than a backlog. `agent_loop.py` declares **35** `AI_AGENT_*`
+flags. Only **12** have ever appeared in an archived config stamp.
+
+The gap is not age. Round 49 is running right now with `FRAMING_REUSE_LEAD=1` and
+**its own stamp does not record that** -- because the stamp is a hand-written
+dict of about fifteen keys, and every flag added since it was written is missing
+from it. So a trace cannot be asked, afterwards, which pipeline produced it. Four
+flags added over the last few iterations (`framing_reuse_lead`, `lean_profiles`,
+`topup_abstract`, `citation_target`) were all invisible.
+
+`_code_fingerprint` already refuses a hand-kept list for exactly this reason --
+its docstring says "without a hand-kept list that would drift out of date" -- and
+hashes the module instead. But a hash answers "are these runs the same code" and
+never "what differs". The stamp is what answers the second question, and it was
+the one being maintained by hand.
+
+`_flag_snapshot()` now derives the stamp from the module source: every
+`CONST = os.getenv("AI_AGENT_X", ...)` binding, paired with the value that
+constant holds THIS run. 34 flags recorded, up from 12. The hand-named keys stay
+beside the derived ones with their exact old spellings, so every previously
+archived stamp is still parseable by anything that reads them, and the whole
+thing is wrapped so telemetry can never be why an interpretation fails.
+
+This also caught a stale test rather than a stale stamp:
+`test_fingerprint_sees_behaviour_flags` sliced the source FORWARD from the
+`_trace_gate` call to look for `"sentence_repair"`, and the stamp is now built
+before that call rather than inside it. The key was still there; the test's
+heuristic had gone out of date. Updated to read the construction, which is what
+it was always asserting about.

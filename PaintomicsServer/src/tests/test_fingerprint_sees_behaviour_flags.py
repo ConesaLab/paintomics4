@@ -64,7 +64,12 @@ def test_the_mode_is_also_readable_in_plain_text():
     import inspect
     _, _, loop = _reload_with(AI_SENTENCE_REPAIR="1")
     src = inspect.getsource(loop)
-    stamp = src[src.index('_trace_gate(ctx, "__config__"'):][:1400]
+    # The stamp is now built into `_config_stamp` and emitted afterwards, so
+    # slicing FORWARD from the _trace_gate call finds an empty tail. Read the
+    # construction instead -- the assertion is about what the stamp contains,
+    # not about which line assembles it.
+    start = src.index("_config_stamp = dict(")
+    stamp = src[start:src.index('_trace_gate(ctx, "__config__"', start)]
     assert '"sentence_repair"' in stamp, (
         "the config stamp records the flag nowhere in readable form")
 

@@ -634,6 +634,42 @@ def _trace_gate(ctx, tool, args_summary, result, started):
     _archive_trace(ctx)
 
 
+def _flag_snapshot():
+    """Every AI_AGENT_* knob and the value it holds THIS run, read from source.
+
+    The config stamp was a hand-written dict of about fifteen keys, so a flag was
+    only recorded if someone remembered to add it there. Audited: 35 flags exist
+    in this module and 12 have ever appeared in an archived stamp. Round 49 ran
+    with FRAMING_REUSE_LEAD=1 and its own stamp does not say so -- which means a
+    trace cannot be asked, later, which pipeline produced it.
+
+    `_code_fingerprint` already refuses a hand-kept list for exactly this reason
+    ("without a hand-kept list that would drift out of date") and hashes the
+    module instead. It answers "are these runs the same code" and never "what
+    differs". This answers the second question, and stays correct when a flag is
+    added, because it is derived rather than maintained.
+    """
+    try:
+        import inspect
+        import sys as _sys
+        src = inspect.getsource(_sys.modules[__name__])
+        g = globals()
+        out = {}
+        for const, env in re.findall(
+                r'^([A-Z_][A-Z_0-9]*)\s*=\s*[^\n]*?os\.getenv\(\s*"(AI_AGENT_[A-Z_]+)"',
+                src, re.M):
+            if const not in g:
+                continue
+            value = g[const]
+            if isinstance(value, (str, int, float, bool)) or value is None:
+                out[env[len("AI_AGENT_"):].lower()] = value
+        return out
+    except Exception:
+        # Telemetry must never be the reason a run fails.
+        logger.debug("flag snapshot failed", exc_info=True)
+        return {}
+
+
 def _code_fingerprint():
     """A short hash of everything that decides how this agent behaves.
 
@@ -2073,7 +2109,11 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
     # them (the delegated-interpreter prompt) took three rounds to convict
     # because its effect was mixed with two other changes. A run that cannot say
     # what it was is a measurement waiting to be misattributed.
-    _trace_gate(ctx, "__config__", "run start", json.dumps({
+    # Derived flags first, hand-named keys second: the explicit ones below have
+    # been in the stamp for every round measured so far and keep their exact
+    # spelling, so old traces stay parseable by anything that reads them.
+    _config_stamp = dict(_flag_snapshot())
+    _config_stamp.update({
         # First, so it survives any truncation downstream: two runs share a
         # fingerprint exactly when they are the same agent.
         "code": _code_fingerprint(),
@@ -2101,7 +2141,8 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
         # budget, and two of those had already landed in the tool-adoption
         # tables as if a model had chosen those calls.
         "label": os.getenv("AI_AGENT_RUN_LABEL", "live"),
-    }), time.time())
+    })
+    _trace_gate(ctx, "__config__", "run start", json.dumps(_config_stamp), time.time())
 
     _hb(ctx, "extracting", 10, "Agent reading the enrichment results...")
     kickoff = prompts_mod.build_lead_kickoff_prompt(
