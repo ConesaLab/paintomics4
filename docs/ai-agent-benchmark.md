@@ -5962,3 +5962,61 @@ round that began at `1787149061`), so it read one trace instead of eight. The
 same stale-filter error had already been caught once this session, in a different
 script, an hour earlier. The corrected count is 7 accepted, 1 rejected, and
 prediction 2 HELD.
+
+## Round 67 pre-registration — CLUSTER_SCOPE, and a correction
+
+### The correction first
+
+Reported earlier in this session: "switching production to the agent arm
+silently disabled cluster mode, because `AI_CLUSTER_MODE` has zero references in
+`agent_loop.py`". **That was wrong.** `CLUSTER_MODE` is read in `clusters.py`
+but `build_partition` never checks it; its only consumer is `agent.py:1206`, the
+workflow arm's own gate. The agent arm calls `build_partition` unconditionally
+from the `cluster_pathways` tool, which fires in **24 of 24** archived runs.
+Clustering has been on the entire time.
+
+### What the coverage gap actually is
+
+Measured across 24 runs:
+
+```
+significant pathways available (clustering widens to this)   90
+distinct pathways the agent looks up                          8
+pathways named in the prose                                  15.4
+delegate_interpretation calls per run                      1.00
+pathways sent per delegation                              ~15  (capacity 60)
+```
+
+**The agent has 90 pathways of territory and walks 17% of it.** Not because the
+universe is narrow -- clustering already widened it -- but because the Lead
+selects ~15. Cluster-mode base reaches 52-102 because the workflow arm
+mechanically batches every cluster; the agent chooses, and chooses narrowly.
+
+This is already diagnosed in the source: the Lead's prompt says "top-ranked"
+five times, and in a 102-pathway context that reads as the top fifteen. Every
+constant suspected of binding was measured NOT to: `DELEGATE_MAX_PATHWAYS` is 60
+and never reached, `SEARCH_BUDGET` is 40 with ~15 used. Rewriting the delegation
+tool's stated capacity to 60 was measured **inert** -- the pathway set came back
+identical.
+
+### The experiment
+
+`AI_AGENT_CLUSTER_SCOPE=1`. The flag exists, rewrites the five "top-ranked"
+instructions to "every cluster", and has never been measured.
+
+**Predictions**
+1. `prose_pathways_covered` rises from **15.4** toward cluster-base's 74.
+   Anything under 25 means the rewrite did not bind and the limiter is elsewhere
+   again.
+2. **Rubric coverage rises** above round 57's **0.571**. *(The point of the
+   change; AgentEvolve measured this shape at +0.210 for base.)*
+3. **FALSIFIER: median span stays under 600 s.** Twenty clusters instead of
+   fifteen pathways is more delegation, more searches and more prose. If it
+   crosses the bar it is reverted regardless of what it does to coverage --
+   the ten-minute requirement is not tradeable.
+4. Citations do not fall more than 10% from 21.4.
+
+**Power.** n = 8. Round 57's coverage sd was ~0.045, so prediction 2 resolves
+only if the gain is around 0.05 or more; a smaller rise is a direction. Span sd
+was ~69 s, so prediction 3 resolves cleanly. Prediction 1 is a large expected
+effect (15 -> 25+) and should resolve.
