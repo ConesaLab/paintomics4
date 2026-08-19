@@ -5486,6 +5486,75 @@ The whole-report rewrite stays the correction mechanism, and `VERIFY_ITERATIONS
 cancelled mid-flight -- is real but is not fixed by repair, because repair's
 price is a third of the citations.
 
+## Round 60 — the rewrite's extra citations are real, and the cancellations have one cause
+
+### Testing my own suspicion about round 59, and being wrong
+
+Round 59 killed repair because citations fell 33%. Before accepting that at face
+value it was worth asking whether the rewrite's extra citations are PADDING --
+it covers the same pathways (15.38 vs 15.50) with 7 more citations.
+
+| | rewrite | repair | |
+|---|---|---|---|
+| citations_in_body | 21.38 | 14.25 | RESOLVED |
+| **full_text_cited** | **12.88** | **9.12** | **RESOLVED** |
+| papers_retrieved | 56.62 | 58.50 | not resolved |
+| prose_pathways_covered | 15.38 | 15.50 | not resolved |
+
+**They are not padding.** 3.75 of the 7.12 extra citations are full-text-backed
+-- the higher-quality kind, since a specific mechanistic claim rarely has a
+quotable sentence in an abstract. Both arms retrieve the SAME literature
+(56.6 vs 58.5 papers); the rewrite converts more of it into grounded citations.
+Round 59's verdict stands and is better supported than when it was accepted.
+
+### The cancelled corrections have a single visible cause
+
+Round 57's eight runs, from the archived stats:
+
+| topup_s | waves | correction cancelled |
+|---------|-------|----------------------|
+| --      | 3 | -- |
+| **102** | **2** | **YES** |
+| **108** | **2** | **YES** |
+| --      | 3 | -- |
+| 59      | 3 | -- |
+| 95      | 3 | -- |
+| --      | 2 | -- |
+| 38      | 3 | -- |
+
+**Both cancelled runs are the two slowest top-ups.** Every run with a top-up at
+or under 95 s completed three waves; both runs over 100 s lost the third. They
+draw on one 600 s budget, so this is a mechanism rather than a coincidence --
+though with n=8 and two events, the separation is suggestive, not settled.
+
+`TOPUP_MIN_SECONDS = 200` decides whether top-up STARTS, from remaining
+headroom, and was calibrated when two waves were the default. A third wave costs
+~60-80 s of verification plus a ~117 s rewrite, about 200 s. So a run can clear
+the guard with 200 s, spend ~95 s on top-up, and leave the wave 105 s -- which
+is how a correction gets cancelled at 46 s.
+
+### Pre-registration (round 61, NOT yet run)
+
+`AI_AGENT_TOPUP_MIN=320` -- top-up starts only if the third wave can still
+afford to finish after it. No code change; the knob exists.
+
+**The trade this makes is exactly the one that killed repair, so it is guarded
+the same way.** Top-up adds ~20 citations when it runs. Raising the threshold
+skips it in tight runs, which costs citations in precisely those runs.
+
+**Predictions**
+1. Corrections cancelled falls from 2/8 to **0/8**.
+2. `citations_in_body` does **not** fall more than 5% versus round 57's 21.38.
+3. Median span stays under 600 s.
+
+**Falsifier:** if citations fall more than 5%, this is repair's trade in another
+costume -- buying grounding with citations -- and is reverted. Round 59 killed a
+change for a 33% citation loss; a change cannot be exempt from that bar because
+its mechanism is more appealing.
+
+**Power note:** cancellation is 2 events in 8 runs. Prediction 1 cannot be
+resolved at n=8 -- going 2/8 to 0/8 is consistent with chance. It will be
+reported as a direction, not a result, unless the round is enlarged.
 ## Round 63 — a rejected top-up now says which condition rejected it
 
 Round 62 identified the only lever in this pipeline with no citation cost: a
