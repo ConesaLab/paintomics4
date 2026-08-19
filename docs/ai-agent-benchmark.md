@@ -3247,3 +3247,52 @@ correlation across arms that differ in several ways at once, and the obvious tes
 -- cap what the top-up may add -- would trade citations for precision without
 telling me which one the shipping rules prefer. Round 50 (chunk revert) finishes
 first.
+
+### The evidence-supply number, and a better-supported round 51
+
+The ratchet fix paid out on the first replicate of round 50, which archives
+`fulltext_candidates` for the first time:
+
+```
+15 cited, 14 thin, 276s budget
+```
+
+**14 of 15 cited papers were abstract-only when the report was written.** The
+full-text upgrade runs afterwards, for papers already cited, and its text reaches
+only the verifier. Three iterations asked "how much evidence did each writer
+have" and the answer is now on the record: almost none of it was full text.
+
+Correcting last round's hypothesis. I proposed that the top-up's low precision
+comes from VOLUME -- base adds 4.0 citations and this arm adds 13.5. Tested
+within the agent arm alone, where the two arms' many other differences cannot
+confound it (n=25):
+
+```
+r(added,      precision) = -0.14      the volume hypothesis: weak
+r(report len, precision) = -0.14
+r(pool size,  precision) = -0.50      the strongest predictor
+r(report len, added)     = +0.53
+```
+
+Volume is not it. **Pool size is**, and that is consistent with a result already
+on the record from a different direction: retrieving 2.3x as many papers buys ONE
+extra citation, measured by tertile over 40 runs. The extra papers are not inert
+-- they are offered to the top-up, cited, and then refuted.
+
+So `SEARCH_HITS` 10 -> 5 becomes round 51, and it is the best-supported change in
+the queue because three independent lines point at it:
+
+1. the original queued reason -- no extra converted themes, +18% context
+2. the tertile result -- 31 -> 71 papers retrieved buys +1 citation
+3. this within-arm correlation -- r(pool, top-up precision) = -0.50
+
+Predicted: `papers_retrieved` roughly halves, top-up precision rises from ~41%,
+`topup_added_failed` falls, citations shipped stay flat (the marginal papers were
+being cited and then removed anyway), context per run falls. Falsifier: if
+citations shipped drop by more than 2, the marginal papers were load-bearing
+after all and the retrieval width is buying something the tertile analysis could
+not see.
+
+`TOPUP_ABSTRACT=1000` stays parked. The 1209-abstract measurement is sound and a
+wider window should help both arms, but it cannot explain THIS arm's gap and is
+not the first thing to spend a round on.
