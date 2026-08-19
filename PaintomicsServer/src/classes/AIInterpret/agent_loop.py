@@ -124,7 +124,12 @@ DELEGATE_PAPERS = int(os.getenv("AI_AGENT_DELEGATE_PAPERS", "10"))
 # handed 20+ abstracts cites fewer of them, not more") reappearing at the merge
 # step, which hands the Report Writer the whole master reference list. More
 # literature in one prompt buys fewer citations, not more.
-SEARCH_HITS = int(os.getenv("AI_AGENT_SEARCH_HITS", str(AI_PAPERS_PER_SEARCH_TASK)))
+# DEFAULT 10 as of the agent-v54-r3 ship, pinned here rather than inherited from
+# AI_PAPERS_PER_SEARCH_TASK. Round 51 halved it to 5 and citations fell 22.8 ->
+# 12.5, a RESOLVED -10.25 at se 2.57 against round 50 where nothing else
+# differed. The wide pool is where the citations come from; the earlier reading
+# that retrieval volume buys nothing was a median hiding a gradient.
+SEARCH_HITS = int(os.getenv("AI_AGENT_SEARCH_HITS", "10"))
 # Parallel single-shot calls one delegate_* tool may run at once.
 DELEGATE_WORKERS = int(os.getenv("AI_AGENT_DELEGATE_WORKERS", "4"))
 DELEGATE_CHUNK = int(os.getenv("AI_AGENT_DELEGATE_CHUNK", "5"))
@@ -212,7 +217,11 @@ every paper through the search listings, so the delegation window has no say in
 how many citations a run can carry.
 """
 
-VERIFY_TOPUP = os.getenv("AI_AGENT_VERIFY_TOPUP", "0") == "1"
+# DEFAULT ON as of the agent-v54-r3 ship. The gate-side pull-back strips a
+# top-up marker that fails verification instead of letting redaction delete the
+# whole sentence. About 8 of the ~14 citations the top-up adds per run fail, and
+# without this every one of them costs the finding it was attached to.
+VERIFY_TOPUP = os.getenv("AI_AGENT_VERIFY_TOPUP", "1") == "1"
 """Check the top-up's own citations before the gate charges a sentence for them.
 
 The top-up bolts [N] onto sentences that already stood on their own, and 40-50%
@@ -241,7 +250,12 @@ of a run) and supplies 9 of 26 citations by bolting markers onto finished prose.
 It waits for the round after the replication.
 """
 
-SCREEN_PAPERS = os.getenv("AI_AGENT_SCREEN_PAPERS", "0") == "1"
+# DEFAULT ON as of the agent-v54-r3 ship. The screen is a selection step, and
+# selection is the clearest thing this arm has bought: base cites every paper it
+# retrieves (52/52, 45/45, 28/28 in every archived run) and pays 12-16
+# redactions for it in cluster mode, while this arm cites ~20 of ~67 and ships
+# 0.0 redactions, resolved in 7 of 7 rounds.
+SCREEN_PAPERS = os.getenv("AI_AGENT_SCREEN_PAPERS", "1") == "1"
 
 # Render a temporal profile only for genes that are actually differential.
 #
@@ -282,7 +296,11 @@ LEAN_PROFILES = os.getenv("AI_AGENT_LEAN_PROFILES", "0") == "1"
 # draft and a truncated detail block, while the Lead ran the whole investigation
 # and had already read every delegated analysis as a tool result before writing.
 # Re-deriving a conclusion from a subset of its inputs cannot improve it.
-FRAMING_REUSE_LEAD = os.getenv("AI_AGENT_FRAMING_REUSE_LEAD", "0") == "1"
+# DEFAULT ON as of the agent-v54-r3 ship. Measured in round 49: merge rejections
+# went from 21% of runs to 0 of 4, and merge_s from 18-20 s to 6-7 s, because the
+# splice reuses the Lead's own framing instead of paying an LLM to rewrite it and
+# lose its citations.
+FRAMING_REUSE_LEAD = os.getenv("AI_AGENT_FRAMING_REUSE_LEAD", "1") == "1"
 
 # How much of each offered paper the citation top-up gets to read.
 #
@@ -1968,7 +1986,7 @@ def _quote_shelf(c, chunk, papers):
 @function_tool(failure_error_function=_tool_failure("delegate_interpretation"))
 async def delegate_interpretation(ctx: RunContextWrapper[LoopContext],
                                   pathway_names: list[str], focus: str) -> str:
-    """Delegate deep interpretation of the named pathways to Cluster Interpreter sub-agents (parallel, single-shot). Returns their reports; their [N] citations use your reference numbers. Name up to 60 pathways in ONE call. Cost is per WAVE, not per pathway: the sub-agents run four at a time, so twenty pathways cost the same as five, and sixty about three times that -- roughly 35 seconds a wave. It is where breadth comes from, and every pathway you delegate is somewhere a citation can be earned. Span the KINDS of pathway your data shows, not only the top of the p-value ranking: a metabolic or amino-acid pathway ranked thirtieth carries findings the signalling pathways above it cannot supply. Make ONE call, never one per pathway."""
+    """Delegate deep interpretation of the named pathways to Cluster Interpreter sub-agents (parallel, single-shot). Returns their reports; their [N] citations use your reference numbers. Name up to 60 pathways in ONE call. Cost is per WAVE, not per pathway: the sub-agents run four at a time, so twenty pathways cost the same as five, and sixty about three times that -- roughly 35 seconds a wave. It is where breadth comes from, and every pathway you delegate is somewhere a citation can be earned. Make ONE call, never one per pathway."""
     c = ctx.context
     t0 = time.time()
     guard = _time_guard(c)

@@ -101,11 +101,22 @@ def test_it_reuses_the_gates_verdict_rather_than_asking_again():
         "the pull-back runs before the gate has produced a verdict")
 
 
-def test_it_is_off_by_default_and_stamped():
+def test_it_is_on_by_default_and_stamped():
+    """DEFAULT FLIPPED ON for the agent-v54-r3 ship.
+
+    About 8 of the ~14 citations the top-up adds per run fail verification.
+    Without the pull-back each one costs the whole sentence it was attached to;
+    with it the marker is stripped and the finding survives.
+    """
     from src.classes.AIInterpret import agent_loop as loop
-    assert loop.VERIFY_TOPUP is False
+    assert loop.VERIFY_TOPUP is True
     src = inspect.getsource(loop)
-    stamp = src[src.index('_trace_gate(ctx, "__config__"'):][:2200]
+    # The stamp is assembled into `_config_stamp` and emitted afterwards, so
+    # slicing FORWARD from the _trace_gate call reads an empty tail. Read the
+    # construction instead. Fifth suite of mine to need this same fix -- the
+    # heuristic was copied, so the staleness was copied with it.
+    _start = src.index("_config_stamp = dict(")
+    stamp = src[_start:src.index('_trace_gate(ctx, "__config__"', _start)]
     assert '"verify_topup"' in stamp
 
 
@@ -128,7 +139,7 @@ def main():
               test_a_failed_TOPUP_citation_loses_its_marker_not_its_sentence,
               test_writer_citations_are_still_redacted,
               test_it_reuses_the_gates_verdict_rather_than_asking_again,
-              test_it_is_off_by_default_and_stamped):
+              test_it_is_on_by_default_and_stamped):
         _check(t.__name__, t)
     print("\nPassed: %d / %d" % (len(_PASSED), len(_PASSED) + len(_FAILED)))
     if _FAILED:

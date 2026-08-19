@@ -112,7 +112,11 @@ def test_the_delegates_own_markers_are_protected():
 def test_the_flag_reaches_the_fingerprint_and_the_stamp():
     assert _load("0")._code_fingerprint() != _load("1")._code_fingerprint()
     src = inspect.getsource(_load("1"))
-    stamp = src[src.index('_trace_gate(ctx, "__config__"'):][:1800]
+    # The stamp is assembled into `_config_stamp` and emitted afterwards, so
+    # slicing FORWARD from the _trace_gate call reads an empty tail. Read the
+    # construction. Third test in this suite to need this fix.
+    _start = src.index("_config_stamp = dict(")
+    stamp = src[_start:src.index('_trace_gate(ctx, "__config__"', _start)]
     assert '"framing_may_cite"' in stamp
 
 

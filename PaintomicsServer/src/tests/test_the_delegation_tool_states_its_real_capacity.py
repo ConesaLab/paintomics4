@@ -63,13 +63,22 @@ def test_it_prices_the_cost_by_wave_not_by_pathway():
     assert "four at a time" in d, d
 
 
-def test_it_asks_for_class_breadth_not_just_more():
-    """Naming more of the same top-ranked signalling pathways is not what the
-    rubric rewards -- within cluster-mode base, r(coverage, rubric) is -0.68."""
+def test_the_class_breadth_clause_was_tried_and_removed():
+    """It was in this description for one round and measured as a no-op.
+
+    Round 54 added "Span the KINDS of pathway your data shows, not only the top
+    of the p-value ranking". Against round 53 the pathway set came back
+    IDENTICAL -- none added, none dropped -- and the metabolic share was 5% in
+    both. It also pushed the description to 731 characters against the 700-char
+    per-turn budget in test_tool_descriptions, so it cost a measurable amount and
+    bought nothing measurable.
+
+    Asserted absent rather than deleted, so the next person to reach for it finds
+    the result instead of the idea.
+    """
     d = _description()
-    assert "KINDS" in d or "kinds" in d, d
-    assert "metabolic" in d, d
-    assert "p-value ranking" in d, d
+    assert "KINDS" not in d, "the clause is back; round 54 measured it as inert"
+    assert "p-value ranking" not in d, d
 
 
 def test_it_still_forbids_one_call_per_pathway():
@@ -96,7 +105,7 @@ def main():
     for t in (test_the_description_is_not_empty,
               test_the_stated_capacity_matches_the_constant,
               test_it_prices_the_cost_by_wave_not_by_pathway,
-              test_it_asks_for_class_breadth_not_just_more,
+              test_the_class_breadth_clause_was_tried_and_removed,
               test_it_still_forbids_one_call_per_pathway,
               test_the_cap_is_configurable):
         _check(t.__name__, t)

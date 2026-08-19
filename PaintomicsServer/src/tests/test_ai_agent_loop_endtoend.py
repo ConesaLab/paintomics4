@@ -137,7 +137,12 @@ class _Handler(BaseHTTPRequestHandler):
         ("get_pathway_details", {"pathway_names": ["Apoptosis", "Autophagy - animal"]}),
         ("search_literature", {"query": "Ikaros B-cell precursor differentiation",
                                "topic_tag": "stub-pathway"}),
-        ("notebook_write", {"note": "Scripted finding: layers co-regulate."}),
+        # `subject` is REQUIRED on notebook_write -- it was added so the blank
+        # rate could be measured (the falsifier for the field was "a blank rate
+        # above ~30% means the field is wrong"). A scripted call missing it fails
+        # pydantic validation, the tool raises, and nothing reaches the notebook.
+        ("notebook_write", {"note": "Scripted finding: layers co-regulate.",
+                            "subject": "cross-omic coordination"}),
         # Submitted twice on purpose. A thin, undelegated first submit is nudged
         # exactly once (see agent_loop.submit_report), and the second is accepted
         # whatever it looks like -- so this scripts the contract rather than

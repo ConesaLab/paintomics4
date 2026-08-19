@@ -89,7 +89,11 @@ def test_the_config_stamp_says_which_ran_in_plain_text():
     import inspect
     loop = _load(AI_AGENT_TOPUP="0")
     src = inspect.getsource(loop)
-    stamp = src[src.index('_trace_gate(ctx, "__config__"'):][:1500]
+    # The stamp is assembled into `_config_stamp` and emitted afterwards, so
+    # slicing FORWARD from the _trace_gate call reads an empty tail. Read the
+    # construction. Third test in this suite to need this fix.
+    _start = src.index("_config_stamp = dict(")
+    stamp = src[_start:src.index('_trace_gate(ctx, "__config__"', _start)]
     assert '"topup_enabled"' in stamp
 
 

@@ -103,11 +103,23 @@ def test_it_lives_inside_the_search_tool():
     assert "_screen_papers(" in src[i:end], "the screen is not inside the tool"
 
 
-def test_the_screen_is_off_by_default_and_stamped():
-    assert L.SCREEN_PAPERS is False
+def test_the_screen_is_on_by_default_and_stamped():
+    """DEFAULT FLIPPED ON for the agent-v54-r3 ship.
+
+    The screen is a selection step, and selection is what this arm has bought:
+    base cites every paper it retrieves -- 52/52, 45/45, 28/28 across every
+    archived run -- and pays 12-16 redactions for it in cluster mode, while this
+    arm cites about 20 of 67 and ships 0.0 redactions, resolved in 7 of 7 rounds.
+    """
+    assert L.SCREEN_PAPERS is True
     assert "papers_screened_out" in STAGE_COUNTS
     src = inspect.getsource(L)
-    stamp = src[src.index('_trace_gate(ctx, "__config__"'):][:2000]
+    # The stamp is assembled into `_config_stamp` and emitted afterwards, so
+    # slicing FORWARD from the _trace_gate call reads an empty tail. Read the
+    # construction instead. Fifth suite of mine to need this same fix -- the
+    # heuristic was copied, so the staleness was copied with it.
+    _start = src.index("_config_stamp = dict(")
+    stamp = src[_start:src.index('_trace_gate(ctx, "__config__"', _start)]
     assert '"screen_papers"' in stamp
 
 
@@ -313,7 +325,7 @@ def main():
               test_a_pmid_the_screen_invented_is_ignored,
               test_no_papers_in_means_no_call_out,
               test_it_lives_inside_the_search_tool,
-              test_the_screen_is_off_by_default_and_stamped,
+              test_the_screen_is_on_by_default_and_stamped,
               test_both_arms_screen_to_the_same_standard,
               test_the_screen_cannot_shrink_the_metrics_denominator,
               test_an_all_rejected_search_does_not_tell_the_agent_to_broaden,
