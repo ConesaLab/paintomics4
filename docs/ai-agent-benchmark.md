@@ -5226,3 +5226,69 @@ The queued sentence-repair retest (round 36's owed rerun, falsifier inherited:
 that neither problem arises.
 
 **Default changed to 3.**
+
+## Round 58 — 26% of the measurement corpus was test output
+
+Found while reading round 57's stats: fifteen runs carried archived stats when
+only eight replicates had been launched. Seven files had appeared in the live
+archive **in the previous five minutes**, while the test suite was running.
+
+```
+archive                 234 files
+stub-e2e test runs       61   (26%)
+my own probe leak         1
+real benchmark/servlet  172
+```
+
+Every round in this document is scored from that directory.
+
+### Three failures, each one hiding the next
+
+**The suite that traced most was the one the guard skipped.** The guard began:
+
+```python
+if "LoopContext(" not in src:
+    continue
+```
+
+`test_ai_agent_loop_endtoend` drives the REAL workflow entry point against a
+stub HTTP gateway and never names `LoopContext`, so it was excluded by
+construction -- and it writes one trace per replicate, seven per suite run. The
+detector found the suites that build a context by hand and missed the only one
+that runs the actual pipeline. The suite itself had no `CLIENT_TMP_DIR`
+handling at all.
+
+**The new check could not match its own marker.** A stub stamps
+`"label": "stub-e2e"` into `__config__` -- but that stamp is a JSON *string
+inside* a JSON field, so it arrives escaped as `\"stub-e2e\"`. The first version
+of the corpus check searched for `'"stub-e2e"'`, matched nothing, and reported a
+clean corpus while 61 polluted files sat in it. `grep -l '"stub-e2e"'` returned
+0 for the same reason.
+
+**The new check never ran.** `main()` hand-lists its tests, so the new one was
+defined, correct, and silently skipped -- printing `Passed: 3 / 3`. This is the
+same hand-written-list failure as `__config__`'s flag dict and `__outcome__`'s
+field list, for the third time in this document. `main()` now collects
+`test_*` from `globals()`.
+
+The guard is now verified in BOTH directions: it fails with one stub file
+restored to the archive and passes once removed. A guard that has only been
+seen to pass has not been tested.
+
+### Did the pollution change any published result?
+
+Round 57b's finding was computed over the full archive, so it was rechecked:
+
+| | 0 AND | 1+ AND | diff | 2*se | verdict |
+|---|---|---|---|---|---|
+| with stubs (as published) | 2.28 (n=177) | 3.74 | 1.46 | 0.33 | RESOLVED |
+| **real runs only** | **1.66** (n=116) | 3.74 | **2.07** | 0.33 | RESOLVED |
+
+**It survives and is stronger.** Stub runs contributed only to the 0-AND group
+and diluted the effect; the published conclusion held and understated it.
+
+Round 57's own result is unaffected -- it reads the eight labelled replicate
+logs, not the archive aggregate.
+
+The 62 files are quarantined in `CLIENT_TMP/ai_traces_stub_quarantine/`, not
+deleted.

@@ -35,9 +35,22 @@ Usage:
 import json
 import os
 import sys
+import tempfile
 import threading
 import unittest
 from http.server import BaseHTTPRequestHandler, HTTPServer
+
+# Redirect the trace archive BEFORE any src import: serverconf reads
+# PAINTOMICS_CLIENT_TMP at import time, and _archive_trace writes one JSONL per
+# run into <CLIENT_TMP>/ai_traces.
+#
+# This suite drives the real workflow entry point rather than building a
+# LoopContext by hand, so every replicate it runs used to land in the LIVE
+# measurement corpus -- 7 files in a single suite run, each stamped
+# `"label": "stub-e2e"`, `verify_iterations: 1`, no top-up. Those are the
+# corpus every round in docs/ai-agent-benchmark.md is measured from, and a
+# short stub run pollutes exactly the aggregates that decide what ships.
+os.environ["PAINTOMICS_CLIENT_TMP"] = tempfile.mkdtemp(prefix="stub_e2e_tmp_")
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 

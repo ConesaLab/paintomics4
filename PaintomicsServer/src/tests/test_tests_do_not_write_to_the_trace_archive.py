@@ -43,7 +43,18 @@ def _suites_that_trace():
         if os.path.basename(path) == os.path.basename(__file__):
             continue
         src = open(path).read()
-        if "LoopContext(" not in src:
+        # A suite traces if it builds a LoopContext by hand OR drives a workflow
+        # entry point that builds one internally.
+        #
+        # This used to be `"LoopContext(" not in src: continue`, which detected
+        # the easy case and missed the important one:
+        # test_ai_agent_loop_endtoend runs the REAL entry point against a stub
+        # gateway and never names LoopContext, so it slipped the check and wrote
+        # SEVEN runs into the live corpus in a single suite pass. The detector
+        # was skipping precisely the suite most likely to trace.
+        if not ("LoopContext(" in src
+                or "run_agent_loop_workflow" in src
+                or "run_agent_workflow" in src):
             continue
         if not re.search(r"L\._trace|_trace\(|_pathway_block|_upgrade_chunk_papers"
                          r"|_screen_papers|read_paper|search_literature", src):
@@ -85,6 +96,44 @@ def test_the_redirect_reaches_the_writer():
                        "see it: %s" % ", ".join(wrong))
 
 
+def test_the_live_archive_holds_no_stub_runs():
+    """Source checks are fallible; the corpus itself is the evidence.
+
+    Every detector in this file infers from source text, and the one above
+    silently excluded the suite that mattered. This one asks the archive
+    directly: a stub run stamps `"label": "stub-e2e"` into its __config__
+    event, so a labelled run in the live corpus is proof a test wrote there --
+    whatever the source says.
+    """
+    # Read the live path the same way the writer does, rather than importing a
+    # name this module does not have.
+    from src.conf.serverconf import CLIENT_TMP_DIR as _live
+    arch = os.path.join(_live, "ai_traces")
+    if not os.path.isdir(arch):
+        return
+    bad = []
+    for f in glob.glob(os.path.join(arch, "*.jsonl")):
+        try:
+            with open(f) as fh:
+                for line in fh:
+                    # The config stamp is a JSON STRING inside a JSON field,
+                    # so its quotes arrive escaped: \"label\": \"stub-e2e\".
+                    # Matching '"stub-e2e"' finds nothing and the guard passes
+                    # on a polluted corpus -- which is how the first version of
+                    # this check reported 0 while 7 stub runs sat in the archive.
+                    if "stub-e2e" in line or "label\\\": \\\"test" in line:
+                        bad.append(os.path.basename(f))
+                        break
+                    if '"__config__"' in line:
+                        break          # config is event 1; stop after it
+        except OSError:
+            continue
+    assert not bad, (
+        "%d stub/test run(s) are in the live measurement corpus, which every "
+        "round in docs/ai-agent-benchmark.md is scored from: %s"
+        % (len(bad), ", ".join(sorted(bad)[:8])))
+
+
 def test_the_live_archive_holds_no_probe_runs():
     """The corpus itself, checked. Skips when it is not present."""
     try:
@@ -113,10 +162,15 @@ def _check(name, fn):
 
 
 def main():
-    for t in (test_every_tracing_suite_redirects_the_archive,
-              test_the_redirect_reaches_the_writer,
-              test_the_live_archive_holds_no_probe_runs):
-        _check(t.__name__, t)
+    # Collected, not hand-listed. A hand-written tuple runs exactly the tests
+    # someone remembered to add: test_the_live_archive_holds_no_stub_runs was
+    # defined, correct, and silently never executed -- reporting "Passed: 3 / 3"
+    # while 61 stub runs sat in the corpus it was written to detect.
+    tests = [(n, o) for n, o in sorted(globals().items())
+             if n.startswith("test_") and callable(o)]
+    assert tests, "no tests collected"
+    for name, t in tests:
+        _check(name, t)
     print("\nPassed: %d / %d" % (len(_PASSED), len(_PASSED) + len(_FAILED)))
     if _FAILED:
         for name, msg in _FAILED:
