@@ -2670,3 +2670,50 @@ small then there was never 25% on the table and the change is not worth its flag
 
 Falsifier unchanged: if citations or coverage fall by more than 1, those profiles
 were load-bearing and this is reverted, not tuned.
+
+### The stitch throws away the Lead's report and rewrites it
+
+Tracing why round 47 r3 lost its whole pathway section, I read what the stitch
+actually builds. It never uses the Lead's report:
+
+```
+framing  = LLM(the Lead's draft + 60 kB of delegated detail)
+head, tail = framing.split("## Suggested Follow-up Experiments")
+candidate  = head + "## Detailed Pathway Analysis" + detail + tail
+```
+
+The Lead's report is an INPUT to a framing call and appears nowhere in the
+output. The framing agent is asked for Key Findings, Cross-Pathway Themes,
+Follow-up Experiments and Limitations, and everything the Lead wrote is
+discarded and re-derived.
+
+Three measurements say that is a bad trade:
+
+**The Lead already writes those sections.** The six runs whose merge was
+rejected ship the Lead's own report untouched, so they are a clean sample of
+what it produces. All six have Cross-Pathway Themes, Suggested Follow-up and
+Limitations; five of six have Key Findings.
+
+**The rewrite is where grounding goes.** Round 47 r3's draft carried 25
+citations, 21 of them grounded; the candidate built from the framing carried 12.
+The guard correctly refused it, and the run shipped with no pathway analysis at
+all -- which is also the failure mode that let rule 5 pass this round.
+
+**The framing agent knows less than the Lead did.** It sees a draft and a
+truncated detail block. The Lead ran the whole investigation and had already read
+every delegated analysis as a tool result before writing -- `delegate_
+interpretation` returns its output to the Lead. Re-deriving a conclusion from a
+subset of the inputs that produced it cannot improve it, and costs 13-20 s of the
+ten-minute budget.
+
+`AI_AGENT_FRAMING_REUSE_LEAD=1` splices the delegated detail into the Lead's own
+framing: head up to its pathway section, tail from its follow-up heading, no LLM
+call. Strict by design -- a report missing either anchor falls back to the
+framing call, because splicing detail into a report that has no framing is worse
+than paying for one.
+
+Queued for round 49, after round 48 (lean profiles) is scored. Predicted: merge
+rejections fall, wall clock drops 13-20 s, and the run-to-run swing between a
+31 kB and a 71 kB report narrows. Falsifier: if citations or coverage fall, the
+framing call was adding something the Lead's own sections do not, and it goes
+back.

@@ -252,6 +252,27 @@ SCREEN_PAPERS = os.getenv("AI_AGENT_SCREEN_PAPERS", "0") == "1"
 # The gene is still named and still carries its effect size, so nothing is
 # hidden from the agent -- only the series it could not draw a conclusion from.
 LEAN_PROFILES = os.getenv("AI_AGENT_LEAN_PROFILES", "0") == "1"
+
+# Splice the delegated detail into the LEAD's own framing instead of an LLM's.
+#
+# The stitch does not use the Lead's report. It feeds the report and 60 kB of
+# delegated detail to a framing agent, asks it for Key Findings, Cross-Pathway
+# Themes, Follow-up Experiments and Limitations, and builds the candidate from
+# THAT -- so everything the Lead wrote is thrown away and rewritten.
+#
+# Two measurements say this is a bad trade. The Lead already writes all four of
+# those sections: across the six runs whose merge was rejected (which are pure
+# Lead output) all six have Cross-Pathway Themes, Follow-up and Limitations, and
+# five of six have Key Findings. And the rewrite is where grounding goes -- round
+# 47 r3's draft carried 25 citations, 21 of them grounded, and the candidate
+# built from the framing carried 12, which is why the guard threw the whole
+# stitch away and the run shipped without a pathway section at all.
+#
+# The framing agent also has strictly LESS context than the Lead did: it sees the
+# draft and a truncated detail block, while the Lead ran the whole investigation
+# and had already read every delegated analysis as a tool result before writing.
+# Re-deriving a conclusion from a subset of its inputs cannot improve it.
+FRAMING_REUSE_LEAD = os.getenv("AI_AGENT_FRAMING_REUSE_LEAD", "0") == "1"
 """Screen search hits for a quotable finding before they enter the pool.
 
 The one mechanism the shipped arm has that this arm has never had. Base runs a
@@ -883,6 +904,33 @@ def _verified_quotes(ctx, quotes):
 def _ctx_by_id(ctx):
     """id -> pathway context dict, for the cluster renderers."""
     return {p["id"]: p for p in ctx.pathways}
+
+
+_FOLLOWUP_RE = re.compile(r"^##+\s*Suggested Follow[- ]?up.*$", re.M | re.I)
+_DETAIL_RE = re.compile(r"^##+\s*Detailed Pathway Analysis.*$", re.M | re.I)
+_FINDINGS_RE = re.compile(r"^##+\s*Key Findings.*$", re.M | re.I)
+
+
+def _lead_framing(report):
+    """(head, tail) from the Lead's own report, or (None, None) if it did not
+    write the sections the splice needs.
+
+    Deliberately strict: a partial match would splice the detail into a report
+    missing the sections that frame it, which is worse than paying for the LLM
+    call. Falling back is cheap; shipping a malformed report is not.
+    """
+    text = str(report or "")
+    follow = _FOLLOWUP_RE.search(text)
+    if not follow or not _FINDINGS_RE.search(text):
+        return None, None
+    detail = _DETAIL_RE.search(text)
+    head_end = detail.start() if detail and detail.start() < follow.start() \
+        else follow.start()
+    head = text[:head_end].rstrip()
+    tail = text[follow.start():]
+    if not head.strip() or not tail.strip():
+        return None, None
+    return head, tail
 
 
 def _build_framing_prompt(ctx, report, detail):
@@ -2177,7 +2225,17 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
                         "below; their per-pathway analysis was trimmed to keep "
                         "this report readable.)*")
             stats["stitch_truncated"] = True
-        if MERGE_MODE == "stitch":
+        reused_head = reused_tail = None
+        if MERGE_MODE == "stitch" and FRAMING_REUSE_LEAD:
+            reused_head, reused_tail = _lead_framing(report)
+            stats["framing_reused"] = bool(reused_head)
+        if MERGE_MODE == "stitch" and reused_head:
+            # No LLM call at all: the Lead's own framing, its own citations, and
+            # the delegated detail spliced between them.
+            candidate = resolve_pmid_mentions(
+                "%s\n\n## Detailed Pathway Analysis\n\n%s\n\n%s"
+                % (reused_head, detail, reused_tail), ctx.paper_index)
+        elif MERGE_MODE == "stitch":
             framing_prompt = _build_framing_prompt(ctx, report, detail[:60000])
             try:
                 framed = await bounded(
