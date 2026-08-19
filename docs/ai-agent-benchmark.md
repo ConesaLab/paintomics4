@@ -3781,3 +3781,68 @@ means anything yet, and the downstream question this change exists to answer --
 do citations survive verification better when the writer saw the full text? -- is
 a one-to-two-citation effect that needs pooling across several rounds. I will
 report the thin share from this round and nothing else.
+
+### I never read a report. Reading one invalidates the citation metric
+
+Prompted to actually judge the output rather than count it, I read an agent
+report and a base report from the same job. The verdict is not the one the
+metrics gave.
+
+**Both arms cite decoratively.** Across 21 archived reports:
+
+```
+arm       reports  citation sentences  say something about THIS experiment  repeated
+agent          10                22.3                                  5%       1.4
+base           11                28.5                                 10%       4.2
+```
+
+Ninety to ninety-five percent of citation-bearing sentences name no gene value,
+no p-value, no pathway and no timepoint from the experiment. They are facts about
+papers, printed beside the data:
+
+```
+"Integrin beta3 acts as a threshold regulator of B cell activation [1],
+ reframing beta3 as a threshold regulator of B-cell activation."     (base)
+
+"NOB1 is a ribosome assembly factor that plays a crucial role in the
+ maturation of the 40S ribosomal small subunit [9]."                 (agent)
+
+"BCL6 is required for efficient CNS entry of encephalitogenic T cells in
+ EAE models [1], and while that study is in T cells, it demonstrates
+ the functional importance of transcriptional regulators..."         (agent)
+```
+
+The first restates its own source in the clause after the citation. The third
+admits the paper is about the wrong cell type and cites it anyway.
+
+**This is why redactions are zero.** The gate asks "does this quote support this
+sentence". A sentence that restates the paper's own finding is trivially
+supported by it, so it passes. Every citation metric in this document -- count,
+survival, redaction, precision -- scores these as successes. The measurement was
+rewarding the exact failure it was built to catch, and **no count could have
+found it**; it took reading the prose.
+
+**What reading also showed that the metrics got backwards.** Base organises by
+theme, groups pathways under each, and states the KEGG annotation problem
+crisply ("the Cholinergic synapse and Morphine addiction pathways are annotation
+artefacts"). The agent arm produces eighteen pathway sections on an identical
+four-heading template -- Biological significance / Key gene expression changes /
+Connection to published evidence / Unexpected patterns -- which reads as a
+catalogue rather than an interpretation. On coverage the agent wins 18 to 14; as
+something to read, base is better. No rule in the suite can see this.
+
+Both arms handle the data itself well: real values, real temporal patterns,
+mRNA-protein discordance flagged, annotation artefacts caught, causality
+disclaimed. The interpretation is good. The literature grounding is not.
+
+`citation_sentences`, `citations_grounded_in_data` and
+`citation_sentences_repeated` are now derived from every report and printed in
+every score table. The metric is deliberately crude -- it asks whether a
+sentence mentions the experiment at all, not whether the inference is sound, and
+a model could satisfy it by appending a gene name. A test records that
+explicitly. It is a floor, and at 5-10% neither arm is near it.
+
+This is the most important finding of the session and it came from being asked
+whether I had read the output. I had built eleven analysis tools, 219 commits and
+211 test files on top of a citation metric that could not tell grounding from
+decoration.

@@ -425,6 +425,13 @@ def _measure(record, arm, job_id, wall, response=None):
         "redacted": verification.get("redacted_count", 0),
         "pathways_indexed": len(pathway_index),
         "prose_pathways_covered": len(covered),
+        # Citations that say something about THIS experiment, not just about a
+        # paper. See citation_grounding: 90-95% of citation sentences in the
+        # archive are freestanding literature facts, and every existing citation
+        # metric scores them as successes.
+        "citation_sentences": citation_grounding(report)[0],
+        "citations_grounded_in_data": citation_grounding(report)[1],
+        "citation_sentences_repeated": repeated_citation_sentences(report),
         "prose_pathway_names": sorted(covered)[:40],
         "tool_calls": stats.get("tool_calls"),
         "forced_synthesis": stats.get("forced_synthesis", False),
@@ -466,10 +473,14 @@ METRICS = ("wall_s", "prose_chars", "report_chars", "citations_in_body",
            # control, not grounding quality, and the redaction figure alone
            # reads as the second. These two columns put the failure rate beside
            # it in every score table, not only when a rule fails.
-           "topup_added", "topup_added_failed")
+           "topup_added", "topup_added_failed",
+           "citation_sentences", "citations_grounded_in_data",
+           "citation_sentences_repeated")
 
 
 REPORT_DERIVED = {"citations_in_body", "redacted", "prose_pathways_covered",
+                  "citation_sentences", "citations_grounded_in_data",
+                  "citation_sentences_repeated",
                   "full_text_cited", "report_chars", "prose_chars",
                   "prose_citations", "papers_in_references"}
 
@@ -526,6 +537,64 @@ def resolvable(agent_rows, base_rows, key, margin):
     need = (2 * ((_sd(a) ** 2 + _sd(b) ** 2) / 2) ** 0.5 / abs(margin)) ** 2 * 2 \
         if margin else float("inf")
     return ("resolved" if abs(margin) >= 2 * se else "NOISE", se, need)
+
+
+# A citation sentence is GROUNDED when it also says something about this
+# experiment: a gene's value, a p-value, a pathway id, or a timepoint. Anything
+# else is a freestanding fact about a paper, printed next to the data.
+_EXPERIMENT_REF = re.compile(
+    r"\b(?:mmu\d{5}|R-[A-Z]{3}-\d+|p\s*=|peak|[-+]?\d+\.\d+|\d+\s*h)\b")
+
+
+def citation_grounding(report_text):
+    """(citation sentences, how many make a claim about THIS experiment).
+
+    Every citation metric in this file counts markers and asks whether a quote
+    supports the sentence carrying them. Both arms pass that test and neither is
+    grounded in the sense the brief means. Read across 21 archived reports, 90 to
+    95% of citation-bearing sentences are statements ABOUT A PAPER placed beside
+    the data rather than claims about the data supported by a paper:
+
+        "Integrin beta3 acts as a threshold regulator of B cell activation [1],
+         reframing beta3 as a threshold regulator of B-cell activation."
+        "NOB1 is a ribosome assembly factor that plays a crucial role in the
+         maturation of the 40S ribosomal small subunit [9]."
+        "BCL6 is required for efficient CNS entry of encephalitogenic T cells in
+         EAE models [1], and while that study is in T cells, it demonstrates..."
+
+    None of those says anything about the experiment, and all of them verify --
+    which is exactly why they survive. A sentence that restates its own source is
+    trivially supported by it, so the verification gate cannot see the problem
+    and `redacted` reads 0. The measurement rewarded exactly the failure it was
+    meant to catch.
+
+    Deliberately crude: it asks whether the sentence mentions the experiment at
+    all, not whether the inference is sound. A model could satisfy it by
+    appending a gene name. It is a floor, not a judgement, and it is one no
+    current report clears.
+    """
+    body = (report_text or "").split("## References")[0]
+    sentences = [x.strip() for x in re.split(r"(?<=[.!?])\s+", body)
+                 if re.search(r"\[\d+\]", x)]
+    grounded = [x for x in sentences if _EXPERIMENT_REF.search(x)]
+    return len(sentences), len(grounded)
+
+
+def repeated_citation_sentences(report_text):
+    """Citation sentences the report prints more than once.
+
+    Base averages 4.2 per report and the agent arm 1.4. A sentence repeated
+    verbatim in three pathway sections is padding that every length and citation
+    count rewards.
+    """
+    body = (report_text or "").split("## References")[0]
+    seen = {}
+    for x in re.split(r"(?<=[.!?])\s+", body):
+        if not re.search(r"\[\d+\]", x):
+            continue
+        key = re.sub(r"\[\d+\]", "", x).strip().lower()[:110]
+        seen[key] = seen.get(key, 0) + 1
+    return sum(v - 1 for v in seen.values() if v > 1)
 
 
 def judge(agent_rows, base_rows):
