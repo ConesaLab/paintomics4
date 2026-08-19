@@ -27,6 +27,7 @@ import csv
 #CPU MONITOR
 import psutil
 import subprocess
+from datetime import datetime
 
 from src.common.UserSessionManager import UserSessionManager
 from src.common.ServerErrorManager import handleException
@@ -34,7 +35,9 @@ from src.common.DAO.UserDAO import UserDAO
 from src.common.DAO.JobDAO import JobDAO
 from src.common.DAO.FileDAO import FileDAO
 from src.common.DAO.MessageDAO import MessageDAO
+from src.common.DAO.ReportDAO import ReportDAO
 from src.classes.Message import Message
+from src.classes.Report import Report
 
 from src.common.Util import sendEmail
 
@@ -733,20 +736,68 @@ def adminServletSendReport(request, response, ROOT_DIRECTORY):
         message += "<p>Problems? E-mail <a href='mailto:" + "paintomics4@gmail.com" + "'>" + "paintomics4@gmail.com" + "</a></p>"
         message += '</body></html>'
 
-        recipients = EMAIL_REPORT_RECIPIENTS or [smpt_sender]
-        for recipient in recipients:
-            sendEmail(
-                ROOT_DIRECTORY,
-                recipient,
-                smpt_sender_name,
-                subject,
-                message,
-                fromEmail=smpt_sender,
-                fromName=userName if userName else smpt_sender_name,
-                isHTML=True
-            )
+        #****************************************************************
+        # Step 2.PERSIST THE REPORT BEFORE ATTEMPTING DELIVERY
+        #****************************************************************
+        # Delivery depends on a third party and has failed in production for
+        # reasons the reporter cannot see or influence (SMTP_PASSWORD never
+        # reaching the process, an exhausted provider quota). Storing first
+        # means such an outage costs us the notification, not the report --
+        # organism requests arrive through this very handler.
+        reportInstance = Report(request_type or "other")
+        reportInstance.setUserEmail(userEmail)
+        reportInstance.setUserName(userName)
+        reportInstance.setMessage(_message)
+        reportInstance.setSubmittedAt(datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"))
 
-        response.setContent({"success": True})
+        reportID = None
+        try:
+            reportID = ReportDAO().insert(reportInstance)
+        except Exception as storeEx:
+            # Storage is the safety net, not the feature. If even Mongo is
+            # unreachable, log the report verbatim so it survives on disk.
+            logging.error("Could not store %s report from %s: %s. Report body: %s",
+                          request_type, userEmail, storeEx, _message)
+
+        #****************************************************************
+        # Step 3.ATTEMPT DELIVERY, TREATING FAILURE AS NON-FATAL
+        #****************************************************************
+        recipients = EMAIL_REPORT_RECIPIENTS or [smpt_sender]
+        delivered = 0
+        deliveryError = ""
+        for recipient in recipients:
+            try:
+                sendEmail(
+                    ROOT_DIRECTORY,
+                    recipient,
+                    smpt_sender_name,
+                    subject,
+                    message,
+                    fromEmail=smpt_sender,
+                    fromName=userName if userName else smpt_sender_name,
+                    isHTML=True
+                )
+                delivered += 1
+            except Exception as mailEx:
+                deliveryError = str(mailEx)
+                logging.error("Could not email %s report to %s: %s",
+                              request_type, recipient, mailEx)
+
+        if reportID is not None:
+            try:
+                ReportDAO().markDelivered(reportID, delivered > 0, deliveryError)
+            except Exception as markEx:
+                logging.error("Could not record delivery outcome for report %s: %s",
+                              reportID, markEx)
+
+        if delivered == 0 and deliveryError:
+            logging.error("Report from %s stored (id=%s) but delivered to none of %s: %s",
+                          userEmail, reportID, recipients, deliveryError)
+
+        # The report is recorded either way, so from the reporter's side the
+        # submission did succeed. "delivered" lets the client word the
+        # confirmation honestly without turning this into an error.
+        response.setContent({"success": True, "delivered": delivered > 0})
 
     except Exception as ex:
         handleException(response, ex, __file__ , "adminServletSendReport")
