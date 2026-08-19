@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import os
 import sys
+import tempfile
 import time
 import traceback
 
@@ -30,6 +31,14 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../.
 
 from src.classes.AIInterpret import agent_loop as L          # noqa: E402
 from src.benchmarks import ai_arm_bench as B                 # noqa: E402
+from src.conf import serverconf                              # noqa: E402
+
+# `_trace` archives to CLIENT_TMP_DIR/ai_traces, which is the LIVE corpus every
+# tool-usefulness figure in this project is computed from. The first version of
+# this file wrote three fake runs into it, and the very next analysis -- "which
+# tool is really useful" over 180 archived traces -- would have counted them.
+# A test that measures instrumentation must not appear in the measurements.
+serverconf.CLIENT_TMP_DIR = tempfile.mkdtemp(prefix="tracetest-")
 
 _PASSED, _FAILED = [], []
 

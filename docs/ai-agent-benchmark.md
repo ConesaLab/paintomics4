@@ -2409,3 +2409,74 @@ alone is 1.86x. The rule stands as pre-registered -- a rule edited after seeing
 the numbers is not a rule -- and the honest reading is that the agent arm writes
 a longer document than base, partly because it says more and partly because it
 ships a reference table base has no equivalent for.
+
+### Tool value over 40 archived runs, not one
+
+Every "which tool is worth its place" figure in this document until now came
+from a single run's trace -- whichever one was still on disk. `_archive_trace`
+has been keeping all of them, and each ends with an `__outcome__` stamp holding
+citations, redactions and wall clock in the SAME file as the trace, so there is
+nothing to join and none of the timing guesswork applies.
+`src/benchmarks/tool_value.py` now computes this on demand.
+
+Over the last 40 runs of the current architecture:
+
+```
+tool                     used in   med calls  failures
+get_experiment_overview    40/40           1         0
+get_pathway_details        40/40           1         0
+cluster_pathways           40/40           1         0
+search_literature          40/40          20         0
+notebook_write             40/40           6         0
+delegate_interpretation    40/40           1         0
+submit_report              40/40           1         0
+check_my_citations         38/40           2         0
+read_paper                 31/40           5         0
+```
+
+**Every registered tool is used in every run, and there were no tool failures in
+40 runs.** Four tools were removed on measured evidence in earlier rounds; the
+nine that remain all earn their schema. There is no dead weight left to cut, so
+"which tool is useless" is now a closed question and the open one is how well the
+useful ones are built.
+
+#### Retrieval is wide, shallow, and the width buys nothing
+
+```
+papers retrieved per run : median 50   (min 17, max 125)
+papers in the references : median 19
+share ever cited         : median 41%
+
+bottom third -> top third, by median citations:
+  search_literature calls   16 -> 19 cites | 32 -> 21 cites   (+2)
+  papers retrieved          31 -> 19 cites | 71 -> 20 cites   (+1)
+  read_paper calls           0 -> 19 cites |  9 -> 22 cites   (+3)
+```
+
+Retrieving 2.3x as many papers (31 -> 71) buys ONE citation. Doubling searches
+buys two. Reading nine papers instead of none buys three. Depth beats breadth,
+and retrieval volume is the weakest of the three levers -- which is the same
+conclusion the SEARCH_HITS 10 experiment reached on one round, now supported at
+n=40.
+
+Tertiles rather than correlations, deliberately: these are small samples with
+long tails, and one 125-paper run moves r without moving a median.
+
+#### Two results I am NOT claiming
+
+`r(full_text_papers, citations) = +0.67` looked like the headline until I checked
+where full text is fetched. It is fetched AT THE GATE, for papers already cited
+(`agent_loop.py` ~2084). More citations mechanically means more full-text
+upgrades, so the correlation runs backwards and cannot support "fetch more full
+text to get more citations".
+
+Runs that opened no paper showed median 3.0 redactions against 0.0 for runs that
+opened at least one, which reads like a strong case for `read_paper`. The means
+are 7.44 against 5.10 on n=9 versus n=31, and the distributions overlap heavily
+(no-read: 0,0,0,2,3,6,13,19,24; read runs reach 39). The median flattered it. The
+direction agrees with the tertile result above, but n=9 does not establish it.
+
+#### The ten-minute brief is met
+
+Median wall clock 377 s; **0 of 39 runs exceeded 600 s**. Time is not currently
+the binding constraint on this arm -- grounding is.
