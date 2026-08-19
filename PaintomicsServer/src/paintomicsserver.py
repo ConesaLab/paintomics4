@@ -604,6 +604,12 @@ class Application(object):
         #*******************************************************************************************
         # SAVE SHARING OPTIONS HANDLER
         #*******************************************************************************************
+        #*******************************************************************************************
+        # PATHWAY EVIDENCE OVERLAY HANDLER
+        #*******************************************************************************************
+        @self.app.route(SERVER_SUBDOMAIN + '/pa_pathway_evidence', methods=['OPTIONS', 'POST'])
+        def pathwayEvidenceHandler():
+            return pathwayAcquisitionPathwayEvidence(request, Response()).getResponse()
         @self.app.route(SERVER_SUBDOMAIN + '/pa_save_sharing_options', methods=['OPTIONS', 'POST'])
         def saveSharingOptionsHandler():
             return pathwayAcquisitionSaveSharingOptions(request, Response()).getResponse()

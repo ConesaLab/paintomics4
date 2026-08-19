@@ -45,6 +45,7 @@ SERVER_URL_PA_STEP2 = SERVER_URL + "pa_step2";
 SERVER_URL_PA_STEP3 = SERVER_URL + "pa_step3";
 SERVER_URL_PA_SAVE_IMAGE = SERVER_URL + "pa_save_image";
 SERVER_URL_PA_SAVE_VISUAL_OPTIONS = SERVER_URL + "pa_save_visual_options";
+SERVER_URL_PA_PATHWAY_EVIDENCE = SERVER_URL + "pa_pathway_evidence";
 SERVER_URL_PA_RECOVER_JOB = SERVER_URL + "pa_recover_job";
 SERVER_URL_PA_TOUCH_JOB = SERVER_URL + "pa_touch_job";
 SERVER_URL_PA_SAVE_SHARING_OPTIONS = SERVER_URL + "pa_save_sharing_options";

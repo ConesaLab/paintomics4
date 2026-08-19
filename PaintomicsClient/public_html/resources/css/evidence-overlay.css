@@ -1,0 +1,124 @@
+/* Evidence overlay -----------------------------------------------------------
+   The legend for the MORE evidence arcs drawn on a pathway diagram.
+
+   Deliberately a panel over the diagram rather than a strip beside it: the
+   diagram sizes itself to the viewport and the panel already scrolls, so a
+   sibling block would push the map out of view on exactly the wide maps the
+   overlay matters most on.
+
+   The KEGG/Reactome artwork underneath is raster with a white canvas baked in
+   and stays light in the dark build (see dark.css). The legend therefore keeps
+   its own light surface in both themes -- it sits ON the artwork, and a dark
+   card floating on white paper would read as a hole, not as chrome. Only the
+   text ink is re-tuned for dark. */
+
+.lateralOptionsPanel-body {
+	/* The legend is positioned against this box. Adding the containing block
+	   here rather than on a wrapper keeps the diagram's own coordinate system
+	   untouched -- svgPanZoom drives the SVG viewBox and never consults the DOM
+	   position of anything. */
+	position: relative;
+}
+
+.evidenceLegend {
+	/* Deliberately IN FLOW below the diagram, not floating on it.
+	   A floating card was tried first and it covered pathway artwork and one of
+	   the overlay's own arrowheads -- occluding the map to explain the thing
+	   drawn on the map is precisely the failure this whole feature is built to
+	   avoid. The panel already reserves imageHeight + 200 px, so the card costs
+	   no diagram space. */
+	margin: 14px 0 0;
+	max-width: 460px;
+	padding: 10px 12px 8px;
+	border: 1px solid rgba(91, 26, 139, 0.28);
+	border-left: 3px solid #5B1A8B;
+	border-radius: 4px;
+	background: rgba(255, 255, 255, 0.955);
+	box-shadow: 0 1px 6px rgba(0, 0, 0, 0.14);
+	font-size: 11px;
+	line-height: 1.45;
+	color: #3a3a3a;
+	pointer-events: auto;
+}
+
+.evidenceLegend-header {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	margin-bottom: 6px;
+}
+
+.evidenceLegend-title {
+	font-weight: 600;
+	font-size: 11.5px;
+	letter-spacing: 0.02em;
+	color: #5B1A8B;
+	text-transform: uppercase;
+}
+
+.evidenceLegend-toggle {
+	font-size: 10.5px;
+	color: #7a7a7a;
+	text-decoration: underline;
+}
+
+.evidenceLegend-toggle:hover { color: #5B1A8B; }
+
+.evidenceLegend-list {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.evidenceLegend-list li {
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	padding: 1.5px 0;
+}
+
+.evidenceLegend-list svg { flex: 0 0 34px; }
+
+.evidenceLegend-name {
+	flex: 1 1 auto;
+	/* The class names are long on purpose -- "Corroborated" alone does not say
+	   corroborated BY WHAT, and this legend is the only place the distinction
+	   is ever explained. */
+	font-size: 10.5px;
+}
+
+.evidenceLegend-count {
+	flex: 0 0 auto;
+	min-width: 22px;
+	font-variant-numeric: tabular-nums;
+	text-align: right;
+	font-weight: 600;
+	color: #222;
+}
+
+.evidenceLegend-note {
+	margin: 7px 0 0;
+	padding-top: 6px;
+	border-top: 1px solid rgba(0, 0, 0, 0.09);
+	font-size: 10px;
+	color: #6a6a6a;
+}
+
+.evidenceLegend-source {
+	margin: 5px 0 0;
+	font-size: 9.5px;
+	font-style: italic;
+	color: #8a8a8a;
+}
+
+/* The arcs themselves carry their stroke inline (svg.js writes attributes),
+   so their colour is not themeable from here by design -- they are drawn over
+   raster artwork whose palette does not change between themes either. */
+.evidenceOverlay { pointer-events: visiblePainted; }
+
+[data-theme="dark"] .evidenceLegend {
+	/* Still a light card: it floats on the diagram's white raster. Only the
+	   shadow is deepened so the card separates from the surrounding dark chrome
+	   where it overhangs the artwork. */
+	box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+}

@@ -1160,6 +1160,36 @@ function PA_Step4KeggDiagramView() {
 						});
 					}
 
+					/* EVIDENCE OVERLAY -- drawn AFTER the feature boxes so its arcs paint
+					   above the omics sprites (SVG stacking is document order). The
+					   box-occupancy map is built here rather than server-side because the
+					   x#y bucketing that collapses several genes into one drawn box is a
+					   CLIENT rule; the overlay needs it to decide whether an edge may
+					   claim an arrowhead or must settle for a badge. */
+					try {
+						var boxOccupancy = {};
+						for (var occupancyIdx in me.items) {
+							var occupancyModel = me.items[occupancyIdx].getModel();
+							boxOccupancy[occupancyModel.getX() + "#" + occupancyModel.getY()] =
+								(occupancyModel.getFeatures() || []).length;
+						}
+
+						me.evidenceOverlay = new PA_Step4EvidenceOverlay().render({
+							canvas: canvas,
+							panelEl: $(this.el.dom).find(".lateralOptionsPanel-body"),
+							jobID: me.getParent("PA_Step4JobView").getModel().getJobID(),
+							pathwayID: me.getModel().getID(),
+							graphicalOptions: graphicalOptions,
+							adjustFactor: adjustFactor,
+							boxOccupancy: boxOccupancy,
+							maxEdges: 8
+						});
+					} catch (overlayError) {
+						/* Additive by design: a job with no MORE analysis, or any failure
+						   inside the overlay, must never take the diagram down with it. */
+						console.warn("Evidence overlay unavailable:", overlayError);
+					}
+
 					//SOME EVENT HANDLERS
 					$("#hideDiagramPanelButton").click(function() {
 						me.getParent().hideDiagramPanel();
@@ -1195,6 +1225,13 @@ function PA_Step4KeggDiagramView() {
 					if (me.omniPathNetwork) {
 						me.omniPathNetwork.destroy();
 						me.omniPathNetwork = null;
+					}
+
+					if (me.evidenceOverlay) {
+						/* The overlay owns an SVG group and a legend node outside the
+						   Ext component's own markup; neither goes away on its own. */
+						me.evidenceOverlay.destroy();
+						me.evidenceOverlay = null;
 					}
 
 					//REMOVE ALL PA_Step4KeggDiagramFeatureSetView

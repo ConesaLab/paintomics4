@@ -37,6 +37,7 @@ from src.common.DesignFile import parse_design
 from src.common.DAO.PathwayAcquisitionJobDAO import PathwayAcquisitionJobDAO
 from src.common.DAO.FeatureDAO import FeatureDAO
 from src.classes.JobInstances.PathwayAcquisitionJob import PathwayAcquisitionJob
+from src.classes import PathwayEvidence
 
 from src.conf.serverconf import CLIENT_TMP_DIR, KEGG_DATA_DIR
 
@@ -1171,6 +1172,56 @@ def pathwayAcquisitionSaveVisualOptions(request, response):
         handleException(response, ex, __file__ , "pathwayAcquisitionSaveVisualOptions", userID=userID)
     finally:
         return response
+
+def pathwayAcquisitionPathwayEvidence(request, response):
+    """Evidence edges drawable on one open pathway diagram.
+
+    Answered per pathway rather than bundled into the Step 3 response: the
+    literature classification needs the organism's whole interaction graph,
+    and a job may select hundreds of pathways of which a user opens a few.
+    """
+    jobID  = ""
+    userID = ""
+
+    try:
+        userID = request.cookies.get('userID')
+        sessionToken = request.cookies.get('sessionToken')
+        UserSessionManager().isValidUser(userID, sessionToken)
+
+        # `or {}` -- request.get_json() is None when the request did not arrive
+        # as application/json, and .get() on that names neither field nor cause.
+        options = request.get_json() or {}
+        jobID = options.get("jobID")
+        pathwayID = options.get("pathwayID")
+
+        if not pathwayID:
+            raise UserWarning("Missing pathwayID parameter for pathway evidence.")
+
+        jobInstance = loadRequestedJob(jobID, "reading pathway evidence")
+
+        if jobInstance.getReadOnly() and str(jobInstance.getUserID()) != str(userID):
+            raise Exception("Invalid user for the job reading pathway evidence")
+
+        maxEdges = options.get("maxEdges", PathwayEvidence.DEFAULT_MAX_EDGES)
+        try:
+            maxEdges = max(0, min(int(maxEdges), 200))
+        except (TypeError, ValueError):
+            maxEdges = PathwayEvidence.DEFAULT_MAX_EDGES
+
+        evidence = PathwayEvidence.buildPathwayEvidence(
+            jobInstance, pathwayID,
+            condition=options.get("condition"),
+            maxEdges=maxEdges,
+            classes=options.get("classes"))
+
+        evidence["success"] = True
+        response.setContent(evidence)
+
+    except Exception as ex:
+        handleException(response, ex, __file__, "pathwayAcquisitionPathwayEvidence", userID=userID)
+    finally:
+        return response
+
 
 def pathwayAcquisitionSaveSharingOptions(request, response):
     #VARIABLE DECLARATION
