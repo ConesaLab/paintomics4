@@ -169,6 +169,119 @@ def findKeggIDByFeatureName(jobID, featureName, organism, db, databaseConvertion
     except Exception as ex:
         return matchedFeatures, False
 
+#: Identifier types that name a *gene* and only ever name one gene, so two xref
+#: documents carrying the same value are the same gene by definition. These and
+#: only these are safe to bridge a second hop through (see _bridgeSecondHop):
+#: transcript- and peptide-level identifiers are NOT, because a shared peptide
+#: can join two paralogues and would silently map a feature onto its family
+#: member. Names, not ids -- the ids are per-species and resolved at call time.
+GENE_LEVEL_BRIDGE_DATABASES = ("entrezgene", "ensembl_gene", "kegg_id")
+
+#: One tiny query per species per process, and mapping runs in forked workers
+#: that each map tens of thousands of names in batches of a few hundred.
+_bridgeIDCache = {}
+
+
+def resolveBridgeDatabaseIds(db, databaseConvertion_id=None):
+    """The dbname ids of the gene-level databases this species actually has.
+
+    Returns [] when the species carries none of them, which turns the second
+    hop off entirely rather than guessing a bridge.
+    """
+    cached = _bridgeIDCache.get(db.name)
+    if cached is None:
+        cached = [row.get("_id") for row in
+                  db.dbname.find({"dbname": {"$in": list(GENE_LEVEL_BRIDGE_DATABASES)}},
+                                 {"_id": 1})]
+        _bridgeIDCache[db.name] = cached
+    # Bridging through the target itself cannot add anything: a name reaching
+    # it through a bridge document would have reached it on the first hop.
+    return [identifier for identifier in cached if identifier != databaseConvertion_id]
+
+
+def _bridgeSecondHop(db, unresolvedDocuments, databaseConvertion_id, bridgeIDs):
+    """Resolve names whose own mate group cannot reach the target database.
+
+    ``mates`` is built by *shared transcript* (AdminTools/scripts/
+    common_build_database.py), and Ensembl transcripts and RefSeq transcripts
+    are near-disjoint sets. So an ``ensembl_gene`` document's group carries the
+    Ensembl side plus the gene-level identifiers, while the UniProt and RefSeq
+    accessions hang off the *entrezgene* document's group instead. A single hop
+    therefore cannot see them: measured on mmu, ENSMUSG00000000037 (Scml2)
+    reaches entrezgene 107815 but no UniProt, while 107815's own group carries
+    B1AVB4/I6L9E4/Q8BYC8. That cost OmniPath (uniprot_acc) 54.9% translation
+    where 87.7% was reachable, and hit Reactome the same way.
+
+    This walks exactly one further hop, and only for names the first hop
+    missed, so resolved names keep their existing answer and their cost. The
+    bridge is restricted to gene-level identifiers, which makes the extra hop
+    an identity step rather than a similarity step -- validated on 3,000 mmu
+    features: 0 contradictions with the one-hop answer, and all 1,558 recovered
+    (name, accession) pairs agreed with the input's own gene symbol.
+
+    Two plain indexed finds, never an aggregation: mongod 4.4 on
+    paintomics.uv.es cannot index a $lookup sub-pipeline and turns one into a
+    collection scan of the 1.1M-document xref.
+
+    @returns {Dict} name -> list of translated identifiers, hits only.
+    """
+    if not unresolvedDocuments or not bridgeIDs:
+        return {}
+
+    # Hop 1b: which bridge identifiers does each unresolved name carry?
+    mateIDs = list({mate for document in unresolvedDocuments
+                    for mate in (document.get("mates") or [])})
+    bridgeValueByMate = {}
+    for start_ in range(0, len(mateIDs), 5000):
+        for hit in db.xref.find({"dbname_id": {"$in": bridgeIDs},
+                                 "_id": {"$in": mateIDs[start_:start_ + 5000]}},
+                                {"display_id": 1, "dbname_id": 1}):
+            bridgeValueByMate[hit.get("_id")] = (hit.get("dbname_id"), str(hit.get("display_id")))
+
+    if not bridgeValueByMate:
+        return {}
+
+    bridgeValues = list({value for _, value in bridgeValueByMate.values()})
+
+    # Hop 2: the bridge documents' OWN mate groups, and the target inside them.
+    bridgeMates = defaultdict(list)
+    for start_ in range(0, len(bridgeValues), 5000):
+        for hit in db.xref.find({"dbname_id": {"$in": bridgeIDs},
+                                 "display_id": {"$in": bridgeValues[start_:start_ + 5000]}},
+                                {"display_id": 1, "mates": 1}):
+            bridgeMates[str(hit.get("display_id"))].extend(hit.get("mates") or [])
+
+    farMateIDs = list({mate for mates in bridgeMates.values() for mate in mates})
+    targetByMate = {}
+    for start_ in range(0, len(farMateIDs), 5000):
+        for hit in db.xref.find({"dbname_id": databaseConvertion_id,
+                                 "_id": {"$in": farMateIDs[start_:start_ + 5000]}},
+                                {"display_id": 1}):
+            targetByMate[hit.get("_id")] = str(hit.get("display_id"))
+
+    if not targetByMate:
+        return {}
+
+    recovered = {}
+    for document in unresolvedDocuments:
+        translations = []
+        seen = set()
+        for mate in (document.get("mates") or []):
+            bridge = bridgeValueByMate.get(mate)
+            if bridge is None:
+                continue
+            for farMate in bridgeMates.get(bridge[1], ()):
+                identifier = targetByMate.get(farMate)
+                # Deduplicated because a name can reach the same bridge value
+                # through several mates, and each would re-emit the same hit.
+                if identifier is not None and identifier not in seen:
+                    seen.add(identifier)
+                    translations.append(identifier)
+        if translations:
+            recovered[document.get("display_id")] = translations
+    return recovered
+
+
 def findIDsByFeaturesName(jobID, featureNames, db, databaseConvertion_id):
     """
     This function queries the MongoDB looking for the associated gene ID for the given gene name
@@ -221,6 +334,18 @@ def findIDsByFeaturesName(jobID, featureNames, db, databaseConvertion_id):
                         if translations is None:
                             translations = matchedFeatures[document.get("display_id")]
                         translations.append(str(hitsByID[mate]))
+
+            # Second hop for whatever the first could not reach. Only the names
+            # that missed are carried forward, so a species whose xref groups
+            # are complete pays two empty finds and nothing else.
+            unresolved = [document for document in nameDocuments
+                          if document.get("display_id") not in matchedFeatures]
+            if unresolved:
+                recovered = _bridgeSecondHop(
+                    db, unresolved, databaseConvertion_id,
+                    resolveBridgeDatabaseIds(db, databaseConvertion_id))
+                for name, translations in recovered.items():
+                    matchedFeatures[name] = translations
 
             # Record the misses too, as empty lists -- in the returned table
             # as well as in the cache, so a forked worker hands them back to

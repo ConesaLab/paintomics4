@@ -1,5 +1,6 @@
 {
   "defaultScenario": "stategra-multiomics",
+  "featureUniverseNote": "Scenarios with simulated=true draw every feature from KEGG's own gene universe, so KEGG coverage on them is ~100% by construction. Use the simulated=false (STATegra) scenarios to compare pathway databases against each other.",
   "generator": "src/AdminTools/scripts/exampledata",
   "keggVersion": "# DOWNLOAD DATE:\t20260813 1250",
   "scenarios": [

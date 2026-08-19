@@ -642,6 +642,26 @@ def install(code, mongo_host="localhost", mongo_port=27017, dry_run=False,
                 "install a pathway partition built on a guess" % taxid)
 
     annotations = {resource: fetch_annotations(resource) for resource in PARTITIONS}
+
+    # A partition that returns nothing must fail the install, not shrink it
+    # silently. omnipathdb.org answers a request for a resource it does not
+    # serve with HTTP 200 and a header-only TSV -- which passes every check in
+    # _fetch, because it *is* well-formed TSV. `KEGG` is exactly that case: it
+    # is advertised in annotations_summary with 192 pathway names, is absent
+    # from /resources, and returns 0 rows even with license=academic (KEGG is
+    # not redistributable; only the Pathway Commons mirror, `KEGG-PC`, is
+    # served). Without this, adding such a resource to PARTITIONS installs zero
+    # pathways from it and still reports success, because the aggregate guard
+    # below is satisfied by the partitions that did work. This repository has
+    # been bitten before by a well-formed but empty/wrong 200 reaching MongoDB.
+    empty = sorted(resource for resource, pathways in annotations.items() if not pathways)
+    if empty:
+        raise RuntimeError(
+            "OmniPath returned no pathway annotations for: %s. The service "
+            "advertises some resources it does not actually serve; check "
+            "https://omnipathdb.org/annotations?resources=<name>&format=tsv "
+            "returns rows before adding one to PARTITIONS." % ", ".join(empty))
+
     documents, networks = build_pathways(interactions, annotations, ortholog_map)
 
     if not documents:

@@ -219,6 +219,18 @@ def writeManifest(outputRoot, entries, seed, kegg):
         "seed": seed,
         "keggVersion": _readVersion(kegg),
         "defaultScenario": DEFAULT_SCENARIO,
+        # Stated in the published manifest because the constraint is invisible
+        # in the data files themselves and has already produced one wrong
+        # conclusion ("OmniPath maps far worse than KEGG"). Every `simulated`
+        # scenario draws its whole feature universe from context.kegg.allGenes(),
+        # so 100% of its features are KEGG pathway genes by construction and
+        # KEGG scores ~100% on them no matter what. They measure the pipeline,
+        # never the relative coverage of two pathway databases.
+        "featureUniverseNote": (
+            "Scenarios with simulated=true draw every feature from KEGG's own "
+            "gene universe, so KEGG coverage on them is ~100% by construction. "
+            "Use the simulated=false (STATegra) scenarios to compare pathway "
+            "databases against each other."),
         "scenarios": sorted(entries, key=lambda entry: (entry["order"],
                                                         entry["id"])),
     }
