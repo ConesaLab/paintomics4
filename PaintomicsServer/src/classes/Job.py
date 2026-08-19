@@ -537,8 +537,18 @@ class Job(Model):
                                                                                totalInputRegulators, [],
                                                                                [], [], enrichment)
                 if matchedName is not None and len(matchedName) > 0:
-                    # convert matchedName to a dictionary keyed by the raw input
-                    matchedNameDict = dict(map(lambda x: (x.omicsValues[0].inputName, x), matchedName))
+                    # Group by the raw input name, keeping EVERY match.
+                    #
+                    # This was dict(map(...)), which silently kept only the last
+                    # clone when one symbol resolved to several canonical IDs.
+                    # On the STATegra MORE example that is 180 of 387 regulators,
+                    # 14 of them genuine within-KEGG paralogue collisions
+                    # (Bach1 -> [12013, 237911], Elf1, Med1, Pml). While the ID
+                    # only fed a display line the cost was a wrong label; once a
+                    # regulator's ID chooses map COORDINATES it becomes an arrow
+                    # drawn at the wrong gene, with no visible symptom.
+                    for matched in matchedName:
+                        matchedNameDict.setdefault(matched.omicsValues[0].inputName, []).append(matched)
 
 
         #IF THE USER UPLOADED VALUES FOR GENE EXPRESSION
@@ -624,12 +634,23 @@ class Job(Model):
                                 # primary/secondary so the regulator is the row's
                                 # identifier and the target is context.
                                 omicValueAux.isRegulator = True
-                                if columnID[1] in matchedNameDict.keys():
-                                    matchedReg = matchedNameDict[columnID[1]]
+                                candidates = matchedNameDict.get(columnID[1])
+                                if candidates:
+                                    # Deterministic representative: sorted by canonical
+                                    # ID so the same input always yields the same choice
+                                    # across runs, processes and machines.
+                                    matchedReg = min(candidates, key=lambda match: str(match.ID))
                                     # Symbol resolved — display name becomes the symbol,
                                     # canonical ID is stashed for the details "(AGI)" line.
                                     omicValueAux.setOriginalName(matchedReg.name)
                                     omicValueAux.regulatorID = matchedReg.ID
+                                    if len(candidates) > 1:
+                                        # Several canonical IDs share this symbol. Anything
+                                        # that anchors to the chosen one must be able to say
+                                        # the choice was arbitrary rather than imply it was
+                                        # the only option.
+                                        omicValueAux.regulatorAmbiguousIDs = sorted(
+                                            str(match.ID) for match in candidates)
                                 else:
                                     # No symbol mapping (e.g. miRNA names) — keep the
                                     # raw regulator ID as the display name. regulatorID

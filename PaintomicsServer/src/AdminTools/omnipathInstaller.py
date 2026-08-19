@@ -63,6 +63,7 @@ Usage
 import argparse
 import collections
 import csv
+import hashlib
 import io
 import json
 import logging
@@ -186,7 +187,13 @@ def fetch_interactions(taxid):
     """
     body = _fetch("interactions", {
         "genesymbols": "1", "format": "tsv", "organisms": str(taxid),
-        "fields": "references", "datasets": DATASETS,
+        # `sources` and `curation_effort` ride along on the same request.
+        # references was already fetched but only ever used to vote on
+        # orthologs; it is now stored, so an interaction shown to a user can
+        # cite the papers it came from. curation_effort is the only per-edge
+        # ranking key OmniPath offers, and a literature layer needs one --
+        # the raw graph puts a median of 211 edges on a KEGG map.
+        "fields": "references,sources,curation_effort", "datasets": DATASETS,
     })
     interactions = []
     for row in _rows(body):
@@ -200,9 +207,19 @@ def fetch_interactions(taxid):
             "target_symbol": row.get("target_genesymbol") or target,
             "sign": _sign(row),
             "references": row.get("references") or "",
+            "sources": row.get("sources") or "",
+            "curation_effort": _int_or_zero(row.get("curation_effort")),
         })
     logger.info("taxid %s: %d interactions", taxid, len(interactions))
     return interactions
+
+
+def _int_or_zero(value):
+    """OmniPath renders a missing numeric cell as an empty string or 'nan'."""
+    try:
+        return int(float(value))
+    except (TypeError, ValueError):
+        return 0
 
 
 def _sign(row):
@@ -317,7 +334,15 @@ def build_pathways(interactions, annotations_by_resource, ortholog_map=None):
     adjacency = collections.defaultdict(dict)
     symbols = {}
     for interaction in interactions:
-        adjacency[interaction["source"]][interaction["target"]] = interaction["sign"]
+        # The stored value is the whole provenance triple, not just the sign.
+        # Storing [source, target, sign] alone meant an edge presented to a
+        # user as "reported in the literature" could cite nothing and could
+        # not be ranked.
+        adjacency[interaction["source"]][interaction["target"]] = (
+            interaction["sign"],
+            interaction.get("references", ""),
+            interaction.get("curation_effort", 0),
+        )
         symbols[interaction["source"]] = interaction["source_symbol"]
         symbols[interaction["target"]] = interaction["target_symbol"]
 
@@ -341,10 +366,13 @@ def build_pathways(interactions, annotations_by_resource, ortholog_map=None):
                 continue
 
             pathway_id = _pathway_id(resource, name)
+            # [source, target, sign, references, curation_effort]. Consumers
+            # written against the original three-element form keep working --
+            # PA_Step4OmniPathNetworkView reads only indices 0..2.
             edges = [
-                [source, target, sign]
+                [source, target, provenance[0], provenance[1], provenance[2]]
                 for source in sorted(members)
-                for target, sign in sorted(adjacency.get(source, {}).items())
+                for target, provenance in sorted(adjacency.get(source, {}).items())
                 if target in members
             ]
 
@@ -471,7 +499,7 @@ def layout(node_ids, edges, iterations=220, seed=20260818):
     positions = generator.rand(count, 2).astype(numpy.float64)
 
     adjacency = numpy.zeros((count, count), dtype=numpy.float64)
-    for source, target, _sign in edges:
+    for source, target, _sign, *_provenance in edges:
         i, j = index[source], index[target]
         adjacency[i, j] = adjacency[j, i] = 1.0
 
@@ -607,7 +635,13 @@ def _pathway_id(resource, name):
     silently rewritten into another pathway's.
     """
     slug = "".join(character if character.isalnum() else "" for character in name)
-    return "op%s%s" % (resource[:2].lower(), slug[:40] or str(abs(hash(name)) % 10 ** 8))
+    # md5, not hash(): CPython salts str hashing per process (PYTHONHASHSEED),
+    # so the built-in fallback produced a DIFFERENT id on every reinstall and
+    # orphaned every saved job that referenced the pathway. Only names with no
+    # alphanumeric characters at all reach this branch, but a silently moving
+    # identifier is not an acceptable failure mode for one.
+    digest = hashlib.md5(name.encode("utf-8")).hexdigest()[:8]
+    return "op%s%s" % (resource[:2].lower(), slug[:40] or digest)
 
 
 # ---------------------------------------------------------------------------

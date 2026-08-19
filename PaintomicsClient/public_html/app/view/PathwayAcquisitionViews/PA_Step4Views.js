@@ -978,6 +978,11 @@ function PA_Step4KeggDiagramView() {
 		for (var i in this.items) {
 			this.items[i].updateObserver();
 		}
+		/* This loop repaints items only. The evidence layer's satellites are
+		   regenerated glyphs that live outside items, so without this they
+		   keep the OLD colour scale after the user hits Apply -- stale data
+		   sitting next to freshly repainted boxes. */
+		if (this.evidenceOverlay) { this.evidenceOverlay.refresh(); }
 		return this;
 	};
 
@@ -1160,6 +1165,80 @@ function PA_Step4KeggDiagramView() {
 						});
 					}
 
+					/* EVIDENCE OVERLAY -- drawn AFTER the feature boxes so its arcs paint
+					   above the omics sprites (SVG stacking is document order). The
+					   box-occupancy map is built here rather than server-side because the
+					   x#y bucketing that collapses several genes into one drawn box is a
+					   CLIENT rule; the overlay needs it to decide whether an edge may
+					   claim an arrowhead or must settle for a badge. */
+					try {
+						var boxOccupancy = {}, itemsByFeatureID = {};
+						for (var occupancyIdx in me.items) {
+							var occupancyItem = me.items[occupancyIdx];
+							var occupancyModel = occupancyItem.getModel();
+							boxOccupancy[occupancyModel.getX() + "#" + occupancyModel.getY()] =
+								(occupancyModel.getFeatures() || []).length;
+							/* Index by the graphical ID the evidence payload speaks, not by
+							   feature name: the server returns canonical IDs. */
+							(occupancyModel.getFeatures() || []).forEach(function(setElem) {
+								try {
+									var gd = setElem.getFeatureGraphicalData();
+									if (gd && gd.getID()) { itemsByFeatureID[gd.getID()] = occupancyItem; }
+								} catch (indexError) { /* no graphical data: nothing to park */ }
+							});
+						}
+
+						var diagramPanelEl = $(this.el.dom);
+						me.evidenceOverlay = new PA_Step4EvidenceOverlay().render({
+							canvas: canvas,
+							/* A FUNCTION, resolved when the card is built: the
+							   Pathway information column is constructed after this
+							   panel, so it does not exist yet at this line. The card
+							   used to go into the diagram panel's own body, which is
+							   as tall as the map -- so it opened below the fold and
+							   its controls were never seen. */
+							panelEl: function() {
+								var column = $("#mainViewCenterPanel")
+									.find(".lateralOptionsPanel-body.findFeaturesContainer");
+								return column.length
+									? column
+									: diagramPanelEl.find(".lateralOptionsPanel-body");
+							},
+							jobID: me.getParent("PA_Step4JobView").getModel().getJobID(),
+							pathwayID: me.getModel().getID(),
+							graphicalOptions: graphicalOptions,
+							adjustFactor: adjustFactor,
+							boxOccupancy: boxOccupancy,
+							/* The placer needs the real geometry of every painted box to
+							   find free space, and the items themselves to regenerate a
+							   regulator's glyph with its gene symbol baked in. */
+							items: me.items,
+							itemsByID: itemsByFeatureID,
+							summaries: dataDistributionSummaries,
+							visualOptions: visualOptions,
+							/* Positions the user dragged, kept per pathway inside the
+							   job's own visualOptions -- the same store the colour
+							   scale and visible omics already live in, so a nudge
+							   survives closing the diagram and reopening it. */
+							placement: (visualOptions.evidencePlacement || {})[me.getModel().getID()] || {},
+							onPlacementChange: function(placement) {
+								var pathwayView = me.getParent();
+								var options = pathwayView.getVisualOptions();
+								if (!options.evidencePlacement) { options.evidencePlacement = {}; }
+								options.evidencePlacement[me.getModel().getID()] = placement;
+								pathwayView.setVisualOptions("evidencePlacement",
+															 options.evidencePlacement);
+								pathwayView.getParent().getController().updateStoredVisualOptions(
+									pathwayView.getParent().getModel().getJobID(), options);
+							},
+							maxEdges: 8
+						});
+					} catch (overlayError) {
+						/* Additive by design: a job with no MORE analysis, or any failure
+						   inside the overlay, must never take the diagram down with it. */
+						console.warn("Evidence overlay unavailable:", overlayError);
+					}
+
 					//SOME EVENT HANDLERS
 					$("#hideDiagramPanelButton").click(function() {
 						me.getParent().hideDiagramPanel();
@@ -1195,6 +1274,13 @@ function PA_Step4KeggDiagramView() {
 					if (me.omniPathNetwork) {
 						me.omniPathNetwork.destroy();
 						me.omniPathNetwork = null;
+					}
+
+					if (me.evidenceOverlay) {
+						/* The overlay owns an SVG group and a legend node outside the
+						   Ext component's own markup; neither goes away on its own. */
+						me.evidenceOverlay.destroy();
+						me.evidenceOverlay = null;
 					}
 
 					//REMOVE ALL PA_Step4KeggDiagramFeatureSetView

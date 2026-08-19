@@ -3284,11 +3284,91 @@ def runMongoImport(database, collection, filePath):
     check_call(command, shell=True)
 
 
+# Pathway sources this builder produces. Anything else found in the shared
+# `kegg` collection was put there by a separate installer and must survive a
+# rebuild -- see preserveForeignPathways().
+BUILDER_PATHWAY_SOURCES = ("KEGG", "Reactome", "MapMan")
+
+FOREIGN_PATHWAY_BACKUP = "/tmp/foreign_pathways.tmp"
+
+
+def preserveForeignPathways(database):
+    """Stream pathway documents this builder does NOT produce out to disk.
+
+    The `kegg` collection is shared by every pathway source, but only KEGG,
+    Reactome and MapMan are rebuilt here -- and runMongoImport passes --drop.
+    OmniPath scopes its own write to `source: OmniPath` precisely so it cannot
+    damage the others, yet the reverse was never true: a routine KEGG/Reactome
+    rebuild silently deleted all of its documents, and since nothing in the
+    tree calls omnipathInstaller, nothing put them back.
+
+    Documents are streamed through a file rather than held in a list so the
+    cost is bounded by the cursor batch, not by the size of the foreign source.
+    `_id` is preserved via bson.json_util so restored documents keep their
+    identity. Returns the number of documents written.
+    """
+    from bson import json_util
+
+    query = {"source": {"$nin": list(BUILDER_PATHWAY_SOURCES)}}
+    written = 0
+    with open(FOREIGN_PATHWAY_BACKUP, "w") as handle:
+        for document in database.kegg.find(query, no_cursor_timeout=False).batch_size(200):
+            handle.write(json_util.dumps(document))
+            handle.write("\n")
+            written += 1
+
+    stderr.write("  preserved " + str(written) + " non-builder pathway documents\n")
+    return written
+
+
+def restoreForeignPathways(database, expected):
+    """Re-insert the documents preserved by preserveForeignPathways().
+
+    Raises if the count does not match: losing a source silently is exactly the
+    failure this function exists to prevent, so a partial restore must be loud.
+    """
+    if expected == 0:
+        return
+
+    from bson import json_util
+
+    batch, restored = [], 0
+    with open(FOREIGN_PATHWAY_BACKUP, "r") as handle:
+        for line in handle:
+            line = line.strip()
+            if not line:
+                continue
+            batch.append(json_util.loads(line))
+            if len(batch) >= 200:
+                database.kegg.insert_many(batch)
+                restored += len(batch)
+                batch = []
+    if batch:
+        database.kegg.insert_many(batch)
+        restored += len(batch)
+
+    if restored != expected:
+        raise Exception("Restored %d of %d non-builder pathway documents; "
+                        "the shared 'kegg' collection is now incomplete."
+                        % (restored, expected))
+
+    stderr.write("  restored " + str(restored) + " non-builder pathway documents\n")
+
+
 def createDatabase():
     try:
         runMongoImport(SPECIE + "-paintomics", "xref", "/tmp/xref.tmp")
         runMongoImport(SPECIE + "-paintomics", "dbname", "/tmp/dbname.tmp")
+
+        from pymongo import MongoClient as _MongoClient
+        from conf.serverconf import MONGODB_HOST as _HOST, MONGODB_PORT as _PORT
+        _db = _MongoClient(_HOST, _PORT)[SPECIE + "-paintomics"]
+        foreignCount = preserveForeignPathways(_db)
+
         runMongoImport(SPECIE + "-paintomics", "kegg", "/tmp/pathways.tmp")
+
+        restoreForeignPathways(_db, foreignCount)
+
         runMongoImport(SPECIE + "-paintomics", "versions", "/tmp/versions.tmp")
 
         from pymongo import MongoClient, ASCENDING, TEXT

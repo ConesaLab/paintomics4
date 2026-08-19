@@ -1,0 +1,187 @@
+/* Evidence overlay -----------------------------------------------------------
+   The control section for the MORE evidence layer drawn on a pathway diagram.
+
+   It lives in the Pathway information column beside the map, NOT under the
+   diagram. Two earlier homes were wrong for measurable reasons: floating on the
+   artwork covered the map (and one of the overlay's own arrowheads) to explain
+   the thing drawn on the map, and hanging it under the diagram put it below the
+   fold -- the panel is as tall as the map, so 240 px of controls opened 18 px
+   from the bottom of a 907 px viewport and were never seen.
+
+   Living in that column means WEARING ITS CLOTHES. The column states a section
+   with an <h4> (13px/600), sub-labels with .pa-details-label (10px/600
+   uppercase) and renders pills as .pa-details-chip -- all flat, no borders, no
+   shadows, no tinted panels. This sheet therefore paints almost nothing: it
+   sizes the legend rows and the two buttons and otherwise inherits, so the
+   section reads as part of the panel and re-themes with it instead of holding
+   a light card against a dark chrome. Violet is kept ONLY where it carries
+   meaning -- the three stroke samples, which are the key to the marks on the
+   map -- and for the layer's own <b> emphasis in the drag hint. */
+
+.evidenceLegend {
+	margin: 4px 0 14px;
+	font-size: 11px;
+	line-height: 1.45;
+	color: #3f3f46;
+}
+
+.evidenceLegend h4 {
+	/* Left to the panel's own h4 rule (13px/600, #1a1a18, margin 16px 0 6px) so
+	   this section's title cannot drift from "Search in this pathway" above it. */
+	margin-bottom: 2px;
+}
+
+.evidenceLegend-list {
+	margin: 6px 0 0;
+	padding: 0;
+	list-style: none;
+}
+
+.evidenceLegend-list li {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 2px 0;
+}
+
+.evidenceLegend-list svg { flex: 0 0 34px; }
+
+.evidenceLegend-name {
+	flex: 1 1 auto;
+	/* The column is 300 px wide, so these wrap rather than pushing the count
+	   off the row. The class names are long on purpose -- "Corroborated" alone
+	   does not say corroborated BY WHAT, and this is the only place the
+	   distinction is ever explained. */
+	min-width: 0;
+	font-size: 11px;
+}
+
+.evidenceLegend-count {
+	flex: 0 0 auto;
+	min-width: 20px;
+	font-variant-numeric: tabular-nums;
+	text-align: right;
+	font-weight: 600;
+	color: #18181b;
+}
+
+.evidenceLegend-sources {
+	margin: 7px 0 0;
+	font-size: 10px;
+	color: #71717a;
+}
+
+.evidenceLegend-source-name {
+	/* Not .pa-details-label: that rule uppercases, and "OMNIPATH" / "REACTOME"
+	   are not how either database writes its own name. */
+	font-weight: 600;
+	color: #3f3f46;
+}
+
+.evidenceLegend-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin: 10px 0 0;
+}
+
+.evidenceLegend-button {
+	/* The chip surface the classification pills already use, at the
+	   twoOptionsButton type size and radius. Neither control is the panel's
+	   primary action, so neither takes the blue that .btn-info spends on
+	   Search. */
+	flex: 1 1 auto;
+	padding: 5px 9px;
+	border: 1px solid rgba(24, 24, 27, 0.1);
+	border-radius: 6px;
+	background: #f3f2ed;
+	font-size: 11px;
+	font-weight: 600;
+	line-height: 1.2;
+	text-align: center;
+	text-decoration: none;
+	color: #3f3f46;
+	white-space: nowrap;
+}
+
+.evidenceLegend-button:hover {
+	background: #e9e7df;
+	color: #18181b;
+	text-decoration: none;
+}
+
+.evidenceLegend-button i { margin-right: 4px; }
+
+.evidenceLegend-toggle.is-off {
+	/* The layer is hidden: say so on the control, so a blank map is explained
+	   by the button that caused it rather than looking like a failure. */
+	border-style: dashed;
+	background: transparent;
+}
+
+.evidenceLegend-reset.is-disabled {
+	/* Present but inert until something has been dragged. Hiding it instead
+	   would make the control appear only after the gesture that needs it is
+	   already finished, which is the wrong time to learn it exists. */
+	border-color: rgba(24, 24, 27, 0.07);
+	background: transparent;
+	color: #b6b6b6;
+	cursor: default;
+	pointer-events: none;
+}
+
+.evidenceLegend-note {
+	margin: 9px 0 0;
+	font-size: 10px;
+	line-height: 1.45;
+	color: #71717a;
+}
+
+.evidenceLegend-hint {
+	/* The one instruction that cannot be discovered by looking: nothing about a
+	   violet box says it can be picked up. Emphasis only -- a tinted panel here
+	   was the loudest thing in a column that has no panels in it. */
+	color: #52525b;
+}
+
+.evidenceLegend-hint b { color: #5B1A8B; }
+
+.evidenceLegend-source {
+	margin: 6px 0 0;
+	font-size: 9.5px;
+	font-style: italic;
+	color: #a1a1aa;
+}
+
+/* The arcs themselves carry their stroke inline (svg.js writes attributes),
+   so their colour is not themeable from here by design -- they are drawn over
+   raster artwork whose palette does not change between themes either. */
+/* The overlay group is appended AFTER every feature <image>, so it sits on
+   top of the real boxes in SVG's document-order stacking. Left hit-testable as
+   a whole it would silently swallow the hover and click of any feature box a
+   satellite overlaps -- a dead tooltip, with no visible defect to notice. The
+   group is therefore transparent to the pointer and each drawn shape opts back
+   in individually. */
+.evidenceOverlay { pointer-events: none; }
+.evidenceOverlay path,
+.evidenceOverlay rect,
+.evidenceOverlay polygon,
+.evidenceOverlay image { pointer-events: visiblePainted; }
+
+.evidenceSatellite {
+	/* Automatic placement is blind to the map's free text -- none of it is an
+	   entry in any file the application reads -- so the reader gets to move a
+	   box that lands badly. touch-action must be none or a touch drag scrolls
+	   the panel instead of moving the satellite. */
+	cursor: move;
+	touch-action: none;
+}
+
+.evidenceSatellite:hover rect[stroke] {
+	stroke-width: 1.8;
+}
+
+/* No dark override. The section now lives inside the Pathway information
+   column and paints no surface of its own, so it inherits whatever dark.css
+   does to that panel. The previous rule deepened a light card's shadow, which
+   only made sense while the card floated on the diagram's white raster. */
