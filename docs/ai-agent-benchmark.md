@@ -4633,3 +4633,57 @@ is not cleared for all of them.
 Round 54 needs its remaining replicates before the description change can be
 judged at all. If more of them reject, the round measures rejection rather than
 breadth, and the experiment will have to be re-run with attribution fixed first.
+
+### The limiter was the Lead's prompt all along
+
+Round 54 at n=2: r1 rejected its merge (2 of 3 chunks with the wrong literature)
+and shipped 9 pathways; r2 accepted and shipped 17. **Seventeen, with the tool
+description now offering sixty.** So the description rewrite did not move breadth
+either.
+
+Four candidate limiters, all eliminated:
+
+```
+DELEGATE_MAX_PATHWAYS   20    never reached -- coverage is 15-18
+the tool's stated cap   60    the Lead still named 15
+SEARCH_BUDGET           40    about 15 used
+search breadth                r(themes searched, coverage) = +0.19
+```
+
+The medians say where it comes from: 15.5 search themes issued, 16.0 pathways in
+the prose. Both track a single upstream decision, and that decision is in
+`SYSTEM_PROMPT_LEAD_AGENT`, which says "top-ranked" five times:
+
+```
+get_pathway_details on the TOP-RANKED pathways
+once per cluster or TOP pathway ... roughly a dozen searches
+covering all the TOP-RANKED pathways
+done when every TOP-RANKED pathway is either analysed or noted
+a paragraph per TOP-RANKED pathway or cluster
+```
+
+In a 102-pathway context "top-ranked" reasonably reads as the top fifteen, and
+"roughly a dozen searches" matches the observed 15.5 exactly. **The scope was set
+upstream of every knob I tried.** Cluster-mode base has no rank scoping at all,
+covers 74, and scores 0.617 against this arm's 0.538.
+
+`AI_AGENT_CLUSTER_SCOPE=1` rewrites those five clauses from rank-bounded to
+cluster-bounded, and raises "roughly a dozen searches" to "about twenty" in the
+same change -- a dozen searches cannot supply literature for twenty clusters, and
+raising one without the other would delegate pathways with nothing to cite. The
+structure requirements are deliberately untouched: five sections, ranks presented
+as ranks, because AgentEvolve's round 1 REVERTED a change that reordered the rank
+presentation (train -0.108) and their rule "cluster for context, never for order"
+is the one thing both harnesses agree on.
+
+Implemented as a rewrite of the loaded prompt rather than an edit to the constant,
+so the default stays byte-identical to every round measured so far, a missed
+rewrite logs a warning instead of silently leaving the prompt rank-scoped, and both
+the code fingerprint and the config stamp see the change.
+
+This is the sixth non-binding limit found in this document and by far the most
+expensive: four rounds' worth of pre-registrations aimed at constants while the
+scope was a sentence in a prompt. The pattern is consistent enough now to state as
+a rule -- **in this pipeline, behaviour is set by instructions and only bounded by
+constants**, which is AgentEvolve's "information without an instruction is a no-op"
+seen from the other side.

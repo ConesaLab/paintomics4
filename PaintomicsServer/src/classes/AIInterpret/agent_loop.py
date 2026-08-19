@@ -389,6 +389,63 @@ JOIN_DATA_AND_CITATION = os.getenv("AI_AGENT_JOIN_CITATIONS", "0") == "1"
 # findings the paper is FOR.
 SHOW_COMPOUNDS = os.getenv("AI_AGENT_SHOW_COMPOUNDS", "0") == "1"
 
+# Scope the Lead by CLUSTER instead of by rank.
+#
+# The agent covers a median 16 pathways out of the 102 it indexes, and every
+# constant I suspected turned out not to bind: DELEGATE_MAX_PATHWAYS is 20 and
+# never reached, the delegation tool's stated capacity is now 60 and the Lead
+# still names 15, SEARCH_BUDGET is 40 and about 15 are used. The limiter is the
+# Lead's own instructions, which say "top-ranked" five times:
+#
+#   get_pathway_details on the TOP-RANKED pathways
+#   once per cluster or TOP pathway ... roughly a dozen searches
+#   covering all the TOP-RANKED pathways
+#   done when every TOP-RANKED pathway is either analysed or noted
+#   a paragraph per TOP-RANKED pathway or cluster
+#
+# In a 102-pathway context "top-ranked" reasonably reads as the top fifteen or
+# twenty, and "roughly a dozen searches" matches the observed 15.5 exactly. So
+# the scope is set upstream of every knob, and cluster-mode base -- which has no
+# rank scoping at all and interprets every cluster member -- covers 74 and scores
+# 0.617 against this arm's 0.538 on the sealed rubric.
+#
+# The rewrite keeps the structure requirements untouched (five sections, ranks
+# presented as ranks) and changes only what defines "enough": every CLUSTER
+# rather than the top of the ranking. That is the shape AgentEvolve's round 6
+# measured as worth +0.210 to base, and the rule they derived from rounds 1 and 2
+# -- cluster for context, never for order -- is why the rank presentation stays.
+CLUSTER_SCOPE = os.getenv("AI_AGENT_CLUSTER_SCOPE", "0") == "1"
+
+_SCOPE_REWRITES = (
+    ("get_pathway_details on the top-ranked pathways",
+     "get_pathway_details on the highest-ranked member of each cluster"),
+    ("roughly a dozen searches, not three",
+     "one per cluster -- there are usually about twenty clusters, so about "
+     "twenty searches, not a dozen"),
+    ("covering all the top-ranked pathways and clusters between them",
+     "covering EVERY cluster, not only the highest-ranked ones -- a cluster you "
+     "never delegate is a finding you never had"),
+    ("you are done when every top-ranked pathway is either analysed",
+     "you are done when every CLUSTER is either analysed"),
+    ("a paragraph per top-ranked pathway or cluster",
+     "a paragraph per cluster"),
+)
+
+
+def _lead_instructions():
+    """The Lead's prompt, optionally rescoped from rank to cluster."""
+    text = prompts_mod.SYSTEM_PROMPT_LEAD_AGENT
+    if not CLUSTER_SCOPE:
+        return text
+    for old, new in _SCOPE_REWRITES:
+        if old not in text:
+            # A rewrite that silently matches nothing would leave the prompt at
+            # its rank-scoped default while the config stamp claimed otherwise.
+            logger.warning("[AGENT] cluster-scope rewrite missed: %r", old[:48])
+            continue
+        text = text.replace(old, new)
+    return text
+
 _JOIN_NOTE = (
     "\n\nOne more thing about the two kinds of sentence above. Where a passage "
     "bears on something you actually measured, write ONE sentence carrying both "
@@ -773,7 +830,7 @@ def _code_fingerprint():
         import inspect
         import sys as _sys
         parts = [inspect.getsource(_sys.modules[__name__]),
-                 prompts_mod.SYSTEM_PROMPT_LEAD_AGENT]
+                 _lead_instructions()]
         parts.extend(sorted(str(t.description or "") for t in TOOLBELT))
         # Flags decide behaviour without touching a byte of source, so hashing
         # source alone left the exact hole this function exists to close:
@@ -2254,7 +2311,7 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
     lead = Agent[LoopContext](
         name="Lead Interpreter",
         model=_model(),
-        instructions=prompts_mod.SYSTEM_PROMPT_LEAD_AGENT,
+        instructions=_lead_instructions(),
         model_settings=ModelSettings(temperature=AI_TEMPERATURE),
         # No output_type, ever: with tools it silences every tool call (the
         # rubber-stamp verifier, agent.py _build_agents). submit_report IS the
@@ -2292,7 +2349,7 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
         "verify_topup": VERIFY_TOPUP,
         "max_turns": AGENT_MAX_TURNS,
         "gate_reserve": GATE_RESERVE_SECONDS,
-        "lead_prompt_chars": len(prompts_mod.SYSTEM_PROMPT_LEAD_AGENT),
+        "lead_prompt_chars": len(_lead_instructions()),
         "tools": len(TOOLBELT),
         # Synthetic runs must be separable from real ones. The end-to-end test
         # drives a scripted agent against a stand-in gateway with a 2-search
