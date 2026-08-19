@@ -5485,3 +5485,55 @@ The whole-report rewrite stays the correction mechanism, and `VERIFY_ITERATIONS
 = 3` stays the default. The known cost of the rewrite -- 2 of 8 corrections
 cancelled mid-flight -- is real but is not fixed by repair, because repair's
 price is a third of the citations.
+
+## Round 63 — a rejected top-up now says which condition rejected it
+
+Round 62 identified the only lever in this pipeline with no citation cost: a
+rejected top-up delivers zero **by definition**, so removing it cannot lose a
+citation -- unlike the deadline (21% citation loss, priced in round 62) and the
+headroom threshold (blocks runs that did not need it, priced in round 61).
+
+It could not be aimed at anything, because the reason was not recorded. Of 5
+rejected top-ups across 13 archived runs, only 2 said anything about why, and
+only because `topup_dropped_existing` happens to be set independently of the
+guard:
+
+```
+102 s  rejected   dropped_existing: 2
+ 95 s  rejected   (no reason recorded)
+ 40 s  rejected   dropped_existing: 3
+ 38 s  rejected   (no reason recorded)
+ 32 s  rejected   (no reason recorded)
+```
+
+The guard has three conditions and only one of them left a trace:
+
+```python
+if (len(candidate) > 0.6 * len(str(report))   # too short?
+        and added > len(cited_now)            # added nothing?
+        and not dropped):                     # dropped existing?  <- only this
+```
+
+Now records `topup_rejected_why` (`short` / `no_gain` / `dropped`, joined) and
+`topup_candidate_ratio`, because "short" is a ratio and the ratio is the datum.
+Each label is the exact negation of its condition, so a label cannot drift from
+what the guard actually tested.
+
+**The reasons are not equivalent, which is the point of separating them.** The
+prompt already says "Return the SAME report with citations added ... Change
+nothing else". So `short` means it truncated the report and `dropped` means it
+rewrote instead of appending -- both prompt-compliance failures worth fixing.
+But `no_gain` means it **complied and found nothing to add**, which is correct
+behaviour and must not be "fixed". Without the split, a prompt change aimed at
+the first two would be scored on runs exhibiting the third.
+
+Verified at runtime rather than by reading the diff: the three branches produce
+`short,no_gain` / `no_gain` / `dropped` / `short,no_gain,dropped`, all scalars
+under 120 chars, so the `__stats__` stamp archives them instead of computing and
+discarding them -- the failure round 56 fixed one level up.
+
+**Deliberately not pre-registering a prompt change yet.** Five rejections is
+enough to see that reasons are missing and not enough to know which dominates.
+Round 59's interim entry was withdrawn for exactly that -- generalising from
+2-3 replicates -- and the next round should accumulate reasons before anything
+is changed.

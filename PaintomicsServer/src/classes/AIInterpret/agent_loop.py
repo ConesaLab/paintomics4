@@ -2868,6 +2868,32 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
                                              stats["topup_added_refs"])
             else:
                 stats["topup_rejected"] = True
+                # WHICH of the three conditions rejected it. Measured over 13
+                # archived runs: 5 top-ups (38%) were rejected, and only 2 of
+                # those recorded anything about why -- `topup_dropped_existing`
+                # happens to be set independently. The other 3 failed on
+                # "too short" or "added nothing" and are indistinguishable, so
+                # the one lever in this pipeline with no citation cost (a
+                # rejected top-up delivers zero BY DEFINITION, so removing it
+                # cannot lose a citation) cannot be aimed at anything.
+                #
+                # The prompt already says "Return the SAME report with citations
+                # added ... Change nothing else", so each condition implies a
+                # different failure: `short` means it truncated the report,
+                # `no_gain` means it complied and found nothing to add, and
+                # `dropped` means it rewrote instead of appending. Only the
+                # first and third are prompt-compliance failures worth fixing.
+                reasons = []
+                if len(candidate) <= 0.6 * len(str(report)):
+                    reasons.append("short")
+                if added <= len(cited_now):
+                    reasons.append("no_gain")
+                if dropped:
+                    reasons.append("dropped")
+                stats["topup_rejected_why"] = ",".join(reasons) or "unknown"
+                # The sizes too: "short" is a ratio and the ratio is the datum.
+                stats["topup_candidate_ratio"] = round(
+                    len(candidate) / max(len(str(report)), 1), 3)
         except (Exception, asyncio.TimeoutError) as e:
             stats["topup_failed"] = "%s: %s" % (type(e).__name__, e)
             logger.warning("[%s][loop] citation top-up failed: %s: %s",
