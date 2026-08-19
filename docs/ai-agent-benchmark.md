@@ -3000,3 +3000,53 @@ This also caught a stale test rather than a stale stamp:
 before that call rather than inside it. The key was still there; the test's
 heuristic had gone out of date. Updated to read the construction, which is what
 it was always asserting about.
+
+### Round 47's change was falsified, and it is why rule 4 became a tie
+
+Round 49's coverage prediction failed -- 13.0 against a predicted 15.4 -- so I
+went looking for the cause and found it upstream, in a change I had already
+scored as a success.
+
+`DELEGATE_CHUNK` went 5 to 3 at round 47. Round 46 is otherwise the same
+configuration, which makes this a clean isolation:
+
+```
+                        chunk=5 (round 46, n=4)   chunk=3 (rounds 47+48, n=8)
+prose coverage               16.8 +- 1.5                13.4 +- 1.6
+converted tags                9.8 +- 0.4                10.0 +- 2.4
+citations                    21.5 +- 4.2                20.2 +- 4.4
+redactions                    0.0                        0.0
+coverage margin over base          +4.50                      -0.50
+```
+
+**It cost 3.4 pathways of coverage and bought 0.2 converted tags.** The drop is
+3.6 standard errors -- resolved, not noise.
+
+Round 47's pre-registration read: "converted themes 9.8 -> ~13... Falsifier: if
+themes stay 9-10, the ceiling is DELEGATE_PAPERS not unit count." At n=8 they are
+**10.0**. The falsifier fired. I read 10.75 from round 47 alone and wrote "barely
+outside the 9-10 band"; pooled over both rounds of that configuration it is
+squarely inside it.
+
+So rule 4 has been failing since round 47 for a reason that was in the data the
+whole time: **the change that produced the first 5/5 is the change that made
+coverage a tie.** Round 47 passed its rules and failed its hypothesis, and I
+recorded both at the time without connecting the second to the arm's subsequent
+inability to clear rule 4.
+
+Two smaller results from the same pass:
+
+`STITCH_MAX_CHARS` has **never fired** -- 0 of 29 accepted merges truncated -- so
+it is not a binding constraint and never was. Two earlier iterations spent effort
+on it, once as a suspected bug and once as a length remedy.
+
+The round-49 coverage prediction was built on "accepted merges cover 15.4",
+averaged across rounds 40-48. That average mixes configurations: recent accepted
+merges cover 13.7. Predicting from a cross-configuration mean is the same mistake
+as pooling agent vintages, and I made it three iterations after documenting it.
+
+**Round 50: revert `DELEGATE_CHUNK` to 5**, keeping `FRAMING_REUSE_LEAD=1`. One
+change from round 49. Predicted: coverage returns to ~16-17 against a base near
+13, a margin large enough to resolve; converted tags unchanged near 10; citations
+unchanged or slightly up; length rises with the extra covered pathways, which is
+where rule 5 gets tested honestly rather than by a rejection landing at random.
