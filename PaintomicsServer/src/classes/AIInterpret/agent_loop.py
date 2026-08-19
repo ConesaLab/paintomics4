@@ -1670,8 +1670,23 @@ async def delegate_interpretation(ctx: RunContextWrapper[LoopContext],
     # citations are born in the synthesis. Without the same count here there is
     # no way to say whether this arm's writers cite and the merge loses it, or
     # they never cite either. Two different problems, identical from outside.
-    c.delegate_markers = len({m for r in reports if r
-                              for m in re.findall(r"\[(\d+)\]", r)})
+    # Count BOTH notations. The delegated interpreters are told to cite as
+    # "(PMID: XXXXXXXX)" -- SYSTEM_PROMPT_INTERPRET says so, and
+    # resolve_pmid_mentions converts those to [N] later in the pipeline. Counting
+    # only [N] therefore read 0 on every replicate, and I concluded from that,
+    # repeatedly, that delegation contributes no citations at all.
+    #
+    # It was measuring the wrong notation. Round 44's first replicate ran with
+    # the top-up DISABLED and still shipped 16 citations, every one of them
+    # inside the delegated section, with none in the Lead's own prose.
+    # int() on both halves: re.findall yields strings and pmid_to_ref yields
+    # ints, so an unconverted union counts a paper cited BOTH ways twice -- as
+    # "7" and as 7.
+    c.delegate_markers = len(
+        {int(m) for r in reports if r for m in re.findall(r"\[(\d+)\]", r)}
+        | {int(ctx_local.pmid_to_ref[p]) for r in reports if r
+           for p in re.findall(r"PMID:?\s*(\d{6,9})", r)
+           if p in ctx_local.pmid_to_ref})
     out = "\n\n---\n\n".join(r for r in reports if r) or "(delegation produced nothing)"
     # The sub-agents are told to write "(PMID: 12345)", not "[N]" -- that prompt
     # was reverted to the workflow arm's on evidence, and the markers are only
