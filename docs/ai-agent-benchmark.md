@@ -4762,3 +4762,63 @@ Round 54 is therefore best read as a clean negative and a replicate: it confirms
 the agent arm at 0 redactions and 272-393 s, and it retires the description as a
 lever. Next round runs `AI_AGENT_CLUSTER_SCOPE=1` with `--arms agent`, which the
 new option makes a 25-minute round rather than a 90-minute one.
+
+### Shipping agent-v54-r3
+
+The configuration measured as the best of 206 archived runs is now the arm's
+DEFAULT rather than a set of environment variables. `SCREEN_PAPERS`,
+`VERIFY_TOPUP` and `FRAMING_REUSE_LEAD` default on, `SEARCH_HITS` is 10, and each
+carries its measurement in the source. Env-only configuration was the wrong shape
+for this: UV's rsync protect list has dropped `PaintomicsServer/.env` before, and
+a setting that exists only in the environment is a setting that can silently
+revert to a value nobody measured.
+
+Unmeasured or refuted flags stay off -- `LEAN_PROFILES` (a measured no-op,
+`genes_flat` is 0 in every replicate), `JOIN_CITATIONS`, `SHOW_COMPOUNDS`,
+`CLUSTER_SCOPE`, `CITATION_TARGET`, `TOPUP_ABSTRACT`.
+
+**Verified end to end in Chrome, not in the harness.** The server that had been
+running on this machine was serving the MAIN repo, so nothing on this branch had
+ever executed through a servlet. Restarted from the branch, loaded the STATegra
+5-omic example through the UI, and drove AI Interpret from the toolbar: 887
+pathways, 102 significant, `mode=full_agent`, 18 citations checked, 0 failed,
+397 s, references rendered with PMIDs and cited text. The live tool trace
+rendered in the panel during the run, so the `toolTrace` path works client-side
+too.
+
+**What the live server actually runs.** Read directly rather than from its git
+checkout, which is stale to the point of meaninglessness (4779 files differ from
+its recorded HEAD):
+
+```
+agent_loop.py      absent      the agent arm is not deployed
+VERIFY_PREFETCH    0 hits      the prefetched verifier is not deployed
+AI_FULL_AGENT      0 hits      the arm dispatch is not deployed
+CLUSTER_MODE       2 hits      cluster mode IS deployed, via a systemd Environment line
+```
+
+So production is cluster-mode base without the prefetch verifier. A deploy of
+this branch changes exactly one live behaviour -- `VERIFY_PREFETCH` on, measured
+as verifier deaths ~5/run to 0, redactions 10 to 3, verify loop -48% -- and adds
+the arm as code that does nothing until `AI_FULL_AGENT=1`. The deploy set is 14
+runtime files, not the 282 in the PR.
+
+### A runner, and why the repo needed one
+
+`src/tests/run_all.py`. Every suite here is a standalone `__main__` script, so
+"run the tests" has meant a shell loop, and the first loop written for this branch
+reported **148 of 215 suites as not-passing** when almost all had exited 0 and
+simply not printed a line its regex recognised.
+
+The more expensive half is `BASELINE`. Several suites fail on master too, and
+establishing that cost most of an afternoon because the first master comparison
+reported `OK` while running **zero tests** -- the worktree had no `serverconf.py`,
+which is gitignored, so everything skipped. A green result that ran nothing is the
+worst possible answer to "did I break this", and it is the same failure this
+document has recorded three times in other forms: a measurement that cannot
+distinguish absence from success.
+
+The runner exits non-zero only for failures this branch INTRODUCED, and reports
+any suite that skipped everything. It caught `test_lead_framing_is_reused` still
+asserting a flag default I had flipped -- which my own manual sweep of those same
+flips had missed.
