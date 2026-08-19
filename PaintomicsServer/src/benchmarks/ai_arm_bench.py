@@ -430,7 +430,7 @@ def _measure(record, arm, job_id, wall, response=None):
         # archive are freestanding literature facts, and every existing citation
         # metric scores them as successes.
         "citation_sentences": citation_grounding(report)[0],
-        "citations_grounded_in_data": citation_grounding(report)[1],
+        "citations_linked_to_data": citation_grounding(report)[1],
         "citation_sentences_repeated": repeated_citation_sentences(report),
         "prose_pathway_names": sorted(covered)[:40],
         "tool_calls": stats.get("tool_calls"),
@@ -474,12 +474,12 @@ METRICS = ("wall_s", "prose_chars", "report_chars", "citations_in_body",
            # reads as the second. These two columns put the failure rate beside
            # it in every score table, not only when a rule fails.
            "topup_added", "topup_added_failed",
-           "citation_sentences", "citations_grounded_in_data",
+           "citation_sentences", "citations_linked_to_data",
            "citation_sentences_repeated")
 
 
 REPORT_DERIVED = {"citations_in_body", "redacted", "prose_pathways_covered",
-                  "citation_sentences", "citations_grounded_in_data",
+                  "citation_sentences", "citations_linked_to_data",
                   "citation_sentences_repeated",
                   "full_text_cited", "report_chars", "prose_chars",
                   "prose_citations", "papers_in_references"}
@@ -539,9 +539,25 @@ def resolvable(agent_rows, base_rows, key, margin):
     return ("resolved" if abs(margin) >= 2 * se else "NOISE", se, need)
 
 
-# A citation sentence is GROUNDED when it also says something about this
-# experiment: a gene's value, a p-value, a pathway id, or a timepoint. Anything
-# else is a freestanding fact about a paper, printed next to the data.
+# How many citation sentences ALSO say something about this experiment -- a gene
+# value, a p-value, a pathway id, a timepoint.
+#
+# Read the name carefully: this is NOT a quality score, and an earlier version of
+# this comment called it one. `build_evidence_shelf_block` instructs the writers
+# to keep the two kinds of sentence apart -- "What YOUR DATA shows... No citation
+# belongs on these" and "What the LITERATURE says... every one of these needs a
+# passage standing behind it" -- for a stated reason: a claim written first and
+# supported afterwards is the one that fails verification. So a low number here
+# is COMPLIANCE with the design, not a defect, and I reported it as a defect
+# before reading the prompt that produces it.
+#
+# It is still worth measuring, because it prices a real trade-off nothing else
+# can see. Separating the sentences makes every citation verifiable and leaves
+# the reader to connect the data to the literature themselves; joining them --
+# "Ccr2 falls 7.7-fold, consistent with the loss of chemokine responsiveness in
+# [2]" -- is what a scientist means by grounded, and is exactly the shape the
+# instruction forbids. Which side of that trade is right is a judgement about the
+# product, and this number is the evidence for having the argument.
 _EXPERIMENT_REF = re.compile(
     r"\b(?:mmu\d{5}|R-[A-Z]{3}-\d+|p\s*=|peak|[-+]?\d+\.\d+|\d+\s*h)\b")
 

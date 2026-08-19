@@ -1,5 +1,24 @@
 #!/usr/bin/env python3
-"""A citation must be about the experiment, not merely next to it.
+"""How many citations also make a claim about this experiment.
+
+CORRECTION, and it matters: an earlier version of this file called a low score a
+defect. `build_evidence_shelf_block` INSTRUCTS the writers to keep data sentences
+and literature sentences apart -- "What YOUR DATA shows... No citation belongs on
+these" -- because a claim written first and supported afterwards is the one that
+fails verification. A low number is compliance with that design.
+
+What reading the reports DID find, and these are real:
+  * "Integrin beta3 acts as a threshold regulator of B cell activation [1],
+     reframing beta3 as a threshold regulator of B-cell activation."  -- the
+    clause after the citation restates the citation.
+  * a paper about T cells in EAE cited for a claim about B-cell precursors, with
+    the mismatch acknowledged in the same sentence.
+  * base repeats 4.2 citation sentences per report verbatim.
+
+None of those is what this metric measures. It measures the trade-off: separating
+the sentences makes citations verifiable and leaves the reader to join the data to
+the literature; joining them is what a scientist means by grounded and is what the
+instruction forbids. This number is evidence for that argument, not a verdict.
 
 Every citation metric in this project counts markers and asks whether a quote
 supports the sentence carrying them. Both arms pass that test with zero

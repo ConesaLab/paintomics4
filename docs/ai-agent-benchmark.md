@@ -3846,3 +3846,61 @@ This is the most important finding of the session and it came from being asked
 whether I had read the output. I had built eleven analysis tools, 219 commits and
 211 test files on top of a citation metric that could not tell grounding from
 decoration.
+
+### Correction: the decorative citations are the design, not a defect
+
+Last entry claimed 90-95% of citations are decorative and that "the measurement
+was rewarding the exact failure it was built to catch". I had not read the prompt
+that produces them. `build_evidence_shelf_block` says:
+
+```
+Two kinds of sentence, and keep them apart:
+  * What YOUR DATA shows -- values, timings, directions, p-values from the
+    tables above. No citation belongs on these; they are what the experiment
+    measured.
+  * What the LITERATURE says -- mechanism, precedent, a claim about biology
+    beyond this experiment. Every one of these needs a passage standing
+    behind it.
+```
+
+The separation is deliberate, and the docstring gives the reason: a claim written
+first and supported afterwards is the one that fails verification. So a report
+where citations sit on literature sentences and not on data sentences is
+COMPLYING, and my new metric scored compliance as failure. It also explains why
+both arms score alike -- they share this instruction.
+
+The metric is renamed `citations_linked_to_data` and documented as what it is: a
+price on a real trade-off, not a verdict. Separating the sentences makes every
+citation verifiable and leaves the reader to connect data to literature. Joining
+them -- "Ccr2 falls 7.7-fold, consistent with the loss of chemokine
+responsiveness reported in [2]" -- is what a scientist means by grounded, and is
+the shape the instruction forbids. Which side is right is a product judgement,
+and this number is the evidence for having that argument rather than the answer
+to it.
+
+**What reading DID find stands, and none of it is design:**
+
+```
+"Integrin beta3 acts as a threshold regulator of B cell activation [1],
+ reframing beta3 as a threshold regulator of B-cell activation."      (base)
+```
+The clause after the citation restates the citation.
+
+```
+"BCL6 is required for efficient CNS entry of encephalitogenic T cells in EAE
+ models [1], and while that study is in T cells, it demonstrates the functional
+ importance of transcriptional regulators in lymphocyte migration."   (agent)
+```
+A paper acknowledged in the same breath to be about the wrong cell type.
+
+And base repeats 4.2 citation sentences per report verbatim, the agent 1.4.
+Repetition, tautology and acknowledged irrelevance are defects on any reading;
+`citation_sentences_repeated` catches the first, and the other two are visible
+only by reading.
+
+**The wider lesson, which is mine.** I read the reports, found a pattern, and
+diagnosed it as a bug in a single step -- without checking whether something in
+the pipeline was asking for it. That is the same error as the mtime join and the
+cross-configuration mean: a confident conclusion from the first evidence that fit.
+Reading the output was the right instinct and it did find real defects; reading
+the prompt as well was the step I skipped.
