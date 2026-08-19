@@ -31,6 +31,15 @@ from src.common import DatabaseAvailability
 
 from src.conf.serverconf import *
 
+# Defensive: serverconf.py is gitignored and installed once, so a deployment
+# upgraded in place still carries a config written before this setting existed.
+# The star import above leaves the name simply undefined there, which would
+# surface as a NameError at app construction rather than at import.
+try:
+    from src.conf.serverconf import SERVER_MAX_FORM_MEMORY_SIZE
+except ImportError:
+    SERVER_MAX_FORM_MEMORY_SIZE = SERVER_MAX_CONTENT_LENGTH
+
 from src.servlets.PathwayAcquisitionServlet import *
 from src.servlets.DataManagementServlet import *
 from src.servlets.UserManagementServlet import *
@@ -102,6 +111,25 @@ class Application(object):
         self.app = Flask(__name__)
 
         self.app.config['MAX_CONTENT_LENGTH'] =  SERVER_MAX_CONTENT_LENGTH
+        # Werkzeug 3.1 (pinned by the Flask upgrade in d6bcf643) gave
+        # max_form_memory_size a 500 kB default and started applying it to
+        # application/x-www-form-urlencoded bodies, not just multipart non-file
+        # fields. MAX_CONTENT_LENGTH never gets a say: FormDataParser
+        # ._parse_urlencoded compares Content-Length against this limit alone.
+        #
+        # /pa_save_image posts the whole pathway SVG -- background raster
+        # inlined as a base64 data: URI -- as one urlencoded form field, so
+        # every large map (map01100 urlencodes to 3.2 MB, map04820 to 1.1 MB,
+        # 22 of 1172 KEGG images bust 500 kB on the background alone) came back
+        # as "RequestEntityTooLarge ... 413" from request.form.get("jobID"),
+        # the first form access in the handler.
+        #
+        # Keeping the two limits equal restores the pre-upgrade behaviour and
+        # leaves one number in charge; nginx's client_max_body_size still caps
+        # the request ahead of Flask. File uploads were never affected -- the
+        # multipart parser sets field_size to None for File parts and skips the
+        # check. Pinned by src/tests/test_form_memory_limit.py.
+        self.app.config['MAX_FORM_MEMORY_SIZE'] = SERVER_MAX_FORM_MEMORY_SIZE
         configureJSONSerialisation(self.app)
 
         KeggInformationManager(KEGG_DATA_DIR) #INITIALIZE THE SINGLETON
