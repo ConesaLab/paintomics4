@@ -42,8 +42,8 @@ def test_a_clean_run_writes_nothing():
 
 
 def test_both_arms_record_it():
-    from src.classes.AIInterpret import agent, agent_loop
-    for module in (agent, agent_loop):
+    from src.classes.AIInterpret import agent_loop
+    for module in (agent_loop,):
         assert 'stats["failed_refs"]' in inspect.getsource(module), module.__name__
 
 
@@ -51,8 +51,8 @@ def test_it_is_captured_before_renumbering():
     """renumber_citations rewrites every ref_index a few lines later. Recording
     afterwards would give indices that no longer mean admission order -- the one
     property this is for."""
-    from src.classes.AIInterpret import agent, agent_loop
-    for module in (agent, agent_loop):
+    from src.classes.AIInterpret import agent_loop
+    for module in (agent_loop,):
         src = inspect.getsource(module)
         recorded = src.index('stats["failed_refs"]')
         renumbered = src.index("renumber_citations(report)")
@@ -61,8 +61,11 @@ def test_it_is_captured_before_renumbering():
 
 def test_non_integer_indices_are_dropped_not_crashed():
     """A malformed verdict must not take the whole record down with it."""
-    from src.classes.AIInterpret import agent
-    src = inspect.getsource(agent)
+    # Retargeted to agent_loop: the six-phase workflow arm that used to carry
+    # its own copy of this guard was removed, and the interpreter loop is the
+    # only arm left writing failed_refs.
+    from src.classes.AIInterpret import agent_loop
+    src = inspect.getsource(agent_loop)
     i = src.index('stats["failed_refs"]')
     assert "isinstance(c.get(\"ref_index\"), int)" in src[i:i + 320]
 

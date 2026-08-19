@@ -51,7 +51,7 @@ from scipy.cluster.hierarchy import fcluster, linkage
 from scipy.spatial.distance import squareform
 
 from .context_builder import (
-    _best_pval, _conditionPvaluesOf, _count_significant_omics, _numericValues,
+    _best_pval, _count_significant_omics, _numericValues,
 )
 
 logger = logging.getLogger(__name__)
@@ -533,81 +533,10 @@ def partition_summary(partition):
 # Units and batches for the interpreter
 # ---------------------------------------------------------------------------
 
-def build_units(partition, pathway_ctx_by_id):
-    """Interpretation units in rank order of their best member.
-
-    Each unit: {"kind": "cluster"|"standalone"|"further", "id", "label",
-    "pathways": [context dicts, rank order], "cluster": cluster dict or None}.
-    Pathways missing from the context (should not happen) are skipped; a
-    cluster left with < 2 pathways is demoted to standalone units.
-    """
-    units = []
-    for c in partition.get("clusters") or []:
-        pws = [pathway_ctx_by_id[pid] for pid in c["members"] + c["satellites"]
-               if pid in pathway_ctx_by_id]
-        if len(pws) >= 2:
-            units.append({"kind": "cluster", "id": c["id"], "label": c["label"],
-                          "pathways": pws, "cluster": c})
-        else:
-            for pw in pws:
-                units.append({"kind": "standalone", "id": pw["id"],
-                              "label": pw["name"], "pathways": [pw], "cluster": None})
-    for pid in partition.get("standalone") or []:
-        pw = pathway_ctx_by_id.get(pid)
-        if pw:
-            units.append({"kind": "standalone", "id": pid, "label": pw["name"],
-                          "pathways": [pw], "cluster": None})
-    further = [pathway_ctx_by_id[pid] for pid in partition.get("further") or []
-               if pid in pathway_ctx_by_id]
-    if further:
-        units.append({"kind": "further", "id": "further",
-                      "label": "Further significant pathways",
-                      "pathways": further, "cluster": None})
-    ranks = partition.get("ranks") or {}
-    units.sort(key=lambda u: (u["kind"] == "further",
-                              min(ranks.get(pw["id"], 10 ** 9) for pw in u["pathways"])))
-    return units
 
 
-def pack_units(units, max_pathways=8):
-    """Group units into interpretation batches without ever splitting a unit.
-
-    Greedy in unit order (rank of best member): a batch takes the next unit
-    while its pathway total stays within ``max_pathways``; a unit larger than
-    the limit travels alone. The "further" pool is chunked on its own.
-    """
-    batches, current, count = [], [], 0
-    for u in units:
-        if u["kind"] == "further":
-            if current:
-                batches.append(current)
-                current, count = [], 0
-            pws = u["pathways"]
-            for i in range(0, len(pws), max_pathways):
-                batches.append([dict(u, pathways=pws[i:i + max_pathways])])
-            continue
-        n = len(u["pathways"])
-        if current and count + n > max_pathways:
-            batches.append(current)
-            current, count = [], 0
-        current.append(u)
-        count += n
-    if current:
-        batches.append(current)
-    return batches
 
 
-def batch_pathways(batch):
-    """All pathway context dicts of a batch, in global rank order (by
-    combined p, the order build_pathway_context returns)."""
-    seen, out = set(), []
-    for u in batch:
-        for pw in u["pathways"]:
-            if pw["id"] not in seen:
-                seen.add(pw["id"])
-                out.append(pw)
-    out.sort(key=lambda pw: (pw.get("combined_pvalue") or 1.0, pw.get("id")))
-    return out
 
 
 # ---------------------------------------------------------------------------
@@ -615,136 +544,12 @@ def batch_pathways(batch):
 # recomputes any of it)
 # ---------------------------------------------------------------------------
 
-def _fmt_p(p):
-    try:
-        return "%.2e" % float(p)
-    except Exception:
-        return "n/a"
 
 
-def _member_line(pw, partition, mark=""):
-    ranks = partition.get("ranks") or {}
-    major = partition.get("major") or {}
-    return "- #%s %s (%s, %s; combined p=%s; significant omic layers: %s)%s" % (
-        ranks.get(pw["id"], "?"), pw["name"], pw["id"], pw.get("source", "?"),
-        _fmt_p(pw.get("combined_pvalue")), major.get(pw["id"], pw.get("significant_omic_count", "?")),
-        mark)
 
 
-def render_units_block(batch, partition, total_nodes=None):
-    """The cluster context prepended to an interpretation batch prompt.
-
-    Names each unit, its members with GLOBAL rank (#k of N), the shared core
-    (with member counts), hub-shared features separately, satellites, and how
-    to treat the unit. Ranks are the reader's anchor: the report's emphasis
-    must follow them, the clusters only say what belongs together.
-    """
-    n = total_nodes or len(partition.get("nodes") or [])
-    lines = ["## Pathway clusters in this batch (computed from shared matched features)",
-             "Rank #k is the pathway's position among the %d significant pathways of this "
-             "analysis by combined p-value (1 = most significant). Give the most attention "
-             "to the highest-ranked pathways wherever they sit." % n]
-    for u in batch:
-        if u["kind"] == "cluster":
-            c = u["cluster"]
-            lines.append("")
-            lines.append("### %s: %s -- %d pathways, %s" % (
-                c["id"], c["label"], c["size"], "/".join(c["sources"])))
-            sat_ids = set(c.get("satellites") or [])
-            for pw in u["pathways"]:
-                lines.append(_member_line(pw, partition,
-                                          "  [loosely connected]" if pw["id"] in sat_ids else ""))
-            core = c.get("core") or []
-            if core:
-                lines.append("Shared core (features matched in a majority of the members; "
-                             "count = members carrying it): " +
-                             ", ".join("%s(%d)" % (f["symbol"], f["count"]) for f in core) +
-                             (" ... +%d more" % (c["core_size"] - len(core))
-                              if c.get("core_size", 0) > len(core) else ""))
-            hub = c.get("hub_core") or []
-            if hub:
-                lines.append("Also shared, but common across the whole network (hub features, "
-                             "not specific to this cluster): " +
-                             ", ".join(f["symbol"] for f in hub[:8]))
-            if c.get("hub_driven"):
-                lines.append("NOTE: this cluster is held together only by hub features shared "
-                             "across the network -- treat it as overlap, not as one biological "
-                             "module, and say so.")
-            lines.append("Interpret this cluster as one unit: first what unites the members "
-                         "(shared core = coordinated biology, or hub-gene overlap = annotation "
-                         "artefact -- judge from the data), then each member briefly, "
-                         "highest-ranked first, naming every member.")
-        elif u["kind"] == "standalone":
-            pw = u["pathways"][0]
-            lines.append("")
-            lines.append("### Standalone pathway (no shared-feature cluster)")
-            lines.append(_member_line(pw, partition))
-            lines.append("Interpret it on its own; do not invent links to other pathways.")
-        else:
-            lines.append("")
-            lines.append("### Further significant pathways (no shared-feature cluster, "
-                         "single-layer evidence)")
-            for pw in u["pathways"]:
-                lines.append(_member_line(pw, partition))
-            lines.append("Give each one or two sentences on what its enrichment means for "
-                         "this experiment, naming the layer that carries it; do not group them.")
-    return "\n".join(lines)
 
 
-def render_synthesis_block(partition, pathway_ctx_by_id):
-    """Cluster map for the synthesis prompt: every cluster with rank-ordered
-    members, standalone and further pathways, and the writing rules that keep
-    the rank presentation intact."""
-    ranks = partition.get("ranks") or {}
-    n = len(partition.get("nodes") or [])
-    lines = ["## Pathway clusters (from the data)",
-             "The %d significant pathways were clustered by shared matched features "
-             "(Sorensen-Dice on genes and compounds). %s. Members are listed by global "
-             "rank (#k = k-th most significant)." % (n, partition_summary(partition))]
-    for c in partition.get("clusters") or []:
-        names = []
-        for pid in c["members"] + c["satellites"]:
-            pw = pathway_ctx_by_id.get(pid)
-            nm = pw["name"] if pw else pid
-            names.append("#%s %s%s" % (ranks.get(pid, "?"), nm,
-                                       " (loose)" if pid in c["satellites"] else ""))
-        core = ", ".join(f["symbol"] for f in (c.get("core") or [])[:8])
-        lines.append("- %s %s: %s%s%s" % (
-            c["id"], c["label"], "; ".join(names),
-            (" | shared core: " + core) if core else "",
-            " | HUB-DRIVEN (overlap, not a module)" if c.get("hub_driven") else ""))
-    if partition.get("standalone"):
-        lines.append("- Standalone: " + "; ".join(
-            "#%s %s" % (ranks.get(pid, "?"), (pathway_ctx_by_id.get(pid) or {}).get("name", pid))
-            for pid in partition["standalone"]))
-    if partition.get("further"):
-        lines.append("- Further significant pathways (single-layer, unclustered): " + "; ".join(
-            "#%s %s" % (ranks.get(pid, "?"), (pathway_ctx_by_id.get(pid) or {}).get("name", pid))
-            for pid in partition["further"]))
-    lines += [
-        "",
-        "Writing rules for the clusters:",
-        "- Key Findings lead with the highest-RANKED pathways and their clusters; rank, "
-        "not cluster size, decides emphasis.",
-        "- The ids C01, C02 ... are shorthand the reader does not know yet. NEVER refer to a "
-        "cluster by its bare id. The first time a cluster appears anywhere (Key Findings, a "
-        "theme, a bullet) name it by what it is and show two or three member pathways, e.g. "
-        "'the G-protein / second-messenger signalling cluster (C02: Cholinergic synapse, "
-        "Chemokine signaling, Apelin signaling ...)'; afterwards write 'the G-protein "
-        "signalling cluster (C02)'. A sentence like 'Clusters C02, C03, C04 are rewired' "
-        "with no names is not acceptable.",
-        "- Use the clusters as the themes of 'Cross-Pathway Themes' and group 'Detailed "
-        "Pathway Analysis' by cluster, in the order given (best-ranked member first). Head "
-        "each section '### Cxx -- <your short biological name for the cluster> "
-        "(<best-ranked member> +N related)' -- the short name is yours, the member name is "
-        "the database's -- and name every member (a member with little to add gets one "
-        "clause, not silence).",
-        "- Add a 'Standalone pathways' subsection for the standalone ones and a one-line "
-        "reading for each further pathway; nothing significant is dropped.",
-        "- A HUB-DRIVEN cluster is shared-gene overlap: say so; do not narrate it as one "
-        "coordinated module.",
-    ]
-    return "\n".join(lines)
 
 
 def render_reading_note(partition):
@@ -791,51 +596,3 @@ def render_partition_table(partition, pathway_ctx_by_id):
     return "\n".join(lines)
 
 
-def cluster_search_queries(partition, pathway_ctx_by_id, organism_name, system_angle=""):
-    """Gene-anchored PubMed queries per unit, replacing the per-pathway backfill.
-
-    Yields (query, attribution_key, member_names, rationale). One or two
-    queries per cluster from its specific core (or its best member's top genes
-    when the core is thin), one per standalone pathway, one per further
-    pathway. Attribution key is the cluster id (mapped to member names by the
-    caller) so retrieved papers reach every member's drill-down.
-    """
-    def _genes_of(pw):
-        return [g["symbol"] for g in (pw.get("top_genes") or []) if g.get("relevant")
-                and not _ugly(g.get("symbol"))]
-
-    for c in partition.get("clusters") or []:
-        members = [pathway_ctx_by_id[pid] for pid in c["members"] if pid in pathway_ctx_by_id]
-        if not members:
-            continue
-        names = [pw["name"] for pw in members] + [
-            pathway_ctx_by_id[pid]["name"] for pid in c["satellites"] if pid in pathway_ctx_by_id]
-        genes = [f["symbol"] for f in (c.get("core") or []) if not _ugly(f["symbol"])
-                 and not f["key"].startswith("C:")]
-        if len(genes) < 2:
-            genes = genes + [g for g in _genes_of(members[0]) if g not in genes]
-        genes = genes[:6]
-        if not genes:
-            continue
-        n_q = int((partition.get("params") or {}).get("queries_per_cluster", 1) or 1)
-        first = ("(%s) AND %s" % (" OR ".join(genes[:3]), system_angle) if system_angle
-                 else "(%s) AND (%s)" % (" OR ".join(genes[:3]), organism_name))
-        yield (first, c["id"], names, "cluster core genes")
-        if n_q >= 2:
-            if system_angle:
-                yield ("(%s) AND (%s)" % (" OR ".join(genes[:3]), organism_name), c["id"], names,
-                       "cluster core genes, organism")
-            elif len(genes) > 3:
-                yield ("(%s) AND (%s)" % (" OR ".join(genes[3:6]), organism_name), c["id"], names,
-                       "cluster core genes (second set)")
-    for kind in ("standalone", "further"):
-        for pid in partition.get(kind) or []:
-            pw = pathway_ctx_by_id.get(pid)
-            if not pw:
-                continue
-            genes = _genes_of(pw)[:3]
-            if genes:
-                q = "(%s) AND (%s)" % (" OR ".join(genes), system_angle or organism_name)
-            else:
-                q = '"%s"[Title/Abstract]' % pw["name"]
-            yield (q, pw["name"], [pw["name"]], "%s pathway" % kind)

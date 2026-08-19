@@ -13,7 +13,6 @@ Verification tools (Phase 5 sub-agent):
   - search_paper_text: keyword search within a paper's full text
   - fetch_paper_section: retrieve a specific section of a paper
 """
-import json
 import logging
 import re
 

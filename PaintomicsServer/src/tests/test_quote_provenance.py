@@ -101,8 +101,8 @@ def test_both_arms_compute_it_before_renumbering():
     on the OLD ones -- computing this after would score every quote against the
     wrong paper."""
     import inspect
-    from src.classes.AIInterpret import agent, agent_loop
-    for module in (agent, agent_loop):
+    from src.classes.AIInterpret import agent_loop
+    for module in (agent_loop,):
         src = inspect.getsource(module)
         assert "quote_provenance(quotes, ctx.paper_index)" in src, module.__name__
         called = src.index("quote_provenance(quotes, ctx.paper_index)")

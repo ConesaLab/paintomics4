@@ -38,7 +38,7 @@ _PASSED, _FAILED = [], []
 
 
 def test_both_arms_actually_call_set_run_deadline():
-    for module in (agent, agent_loop):
+    for module in (agent_loop,):
         src = inspect.getsource(module)
         calls = re.findall(r"(?<!def )set_run_deadline\(", src)
         assert calls, (
@@ -49,7 +49,7 @@ def test_both_arms_actually_call_set_run_deadline():
 def test_both_arms_arm_the_retry_tally():
     """Armed in the same place, or a run reports no gateway weather at all and
     an absent tally reads exactly like a calm gateway."""
-    for module in (agent, agent_loop):
+    for module in (agent_loop,):
         src = inspect.getsource(module)
         assert re.search(r"(?<!def )reset_run_retries\(\)", src), (
             "%s never starts the retry tally" % module.__name__)

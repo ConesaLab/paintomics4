@@ -10,7 +10,6 @@ import json
 import logging
 import os
 import re
-import time
 from concurrent.futures import (ThreadPoolExecutor, as_completed,
                                 TimeoutError as FuturesTimeout)
 from difflib import SequenceMatcher
@@ -148,51 +147,6 @@ def _claim_sentences_for(body, ref_index, limit=3):
 
     return sorted(matches, key=_numeric_density)[:limit]
 
-def _shared_gene_core(batch, job_instance, limit=8):
-    """Genes appearing in >=2 of this batch's pathways, most-shared first.
-
-    Returns a prompt block naming each shared gene and the batch pathways it
-    sits in, or "" when the batch shares nothing -- rank order is untouched;
-    this only tells the model what already connects the pathways it was
-    given. Any failure returns "" (the prompt is then exactly the baseline).
-    """
-    try:
-        matched = job_instance.getMatchedPathways()
-        try:
-            genes_data = job_instance.getInputGenesData() or {}
-        except Exception:
-            genes_data = {}
-
-        def _ugly(s):
-            return (not s) or s.isdigit() or s.upper().startswith("ENSMUSG") \
-                or s.upper().startswith("ENSG")
-
-        def _label(gene_id):
-            f = genes_data.get(gene_id)
-            name = getattr(f, "name", None) if f is not None else None
-            if not _ugly(gene_id):
-                return gene_id
-            return name if (name and not _ugly(name)) else gene_id
-
-        counts = {}
-        for pw in batch:
-            mp = matched.get(pw.get("id"))
-            for g in set(getattr(mp, "matchedGenes", None) or []):
-                counts.setdefault(g, []).append(pw.get("name", "?"))
-        shared = sorted(((g, names) for g, names in counts.items()
-                         if len(names) >= 2),
-                        key=lambda kv: (-len(kv[1]), kv[0]))[:limit]
-        if not shared:
-            return ""
-        lines = ["\n## Shared genes within this batch",
-                 "These genes are matched in more than one of the pathways "
-                 "above -- use them to discuss pathway crosstalk where the "
-                 "data supports it:"]
-        for g, names in shared:
-            lines.append(f"- {_label(g)}: {', '.join(sorted(set(names)))}")
-        return "\n".join(lines)
-    except Exception:
-        return ""
 
 
 def _collect_cited_quotes(llm, report, paper_index, job_id, known=None):
@@ -368,56 +322,11 @@ def _parse_json_verdict(text):
 # Phase 3 helpers: local batch indexing
 # =========================================================================
 
-def _build_local_paper_index(batch_papers):
-    """Create locally-numbered copies of batch papers (1, 2, 3, ...).
-
-    LLMs tend to renumber citations starting from 1 regardless of the
-    provided ref_index.  By giving each batch local indices, we work
-    *with* that tendency and remap back to global indices afterward.
-
-    Returns:
-        (local_papers, local_to_global): list of paper copies with local
-        ref_index, and a dict mapping local_idx -> global_idx.
-    """
-    local_papers = []
-    local_to_global = {}
-    for local_idx, p in enumerate(batch_papers, 1):
-        local_paper = dict(p)  # shallow copy — sections dict is shared (read-only)
-        local_paper["ref_index"] = local_idx
-        local_papers.append(local_paper)
-        local_to_global[local_idx] = p["ref_index"]
-    return local_papers, local_to_global
 
 
 _CITATION_GROUP_RE = re.compile(r'\[(\d+(?:\s*,\s*\d+)*)\]')
 
 
-def _remap_citation_indices(text, local_to_global):
-    """Remap [N] citation indices from local batch numbering to global numbering.
-
-    Handles grouped markers -- ``[1, 2]`` -- as well as single ones. The
-    previous implementation matched only the exact string ``[N]``, so a grouped
-    citation kept its LOCAL indices and silently came to mean two entirely
-    different papers once the surrounding report was globally numbered. Models
-    write grouped citations constantly, so this was mis-attributing evidence in
-    ordinary reports, not edge cases.
-
-    Rewriting each ``[...]`` exactly once also removes the need for the old
-    two-pass placeholder dance: with a single pass there is no way for
-    ``1 -> 3`` and ``3 -> 7`` to chain into ``1 -> 7``.
-
-    Indices with no mapping are left as they are: an unmapped number is more
-    likely a citation from another batch than a mistake to be guessed at.
-    """
-    if not local_to_global:
-        return text
-
-    def _replace(match):
-        parts = [p.strip() for p in match.group(1).split(",")]
-        return "[" + ", ".join(
-            str(local_to_global.get(int(p), int(p))) for p in parts) + "]"
-
-    return _CITATION_GROUP_RE.sub(_replace, text)
 
 
 # =========================================================================

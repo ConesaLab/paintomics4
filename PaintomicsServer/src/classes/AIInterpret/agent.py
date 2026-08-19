@@ -16,12 +16,11 @@ entry points stay synchronous and own their own event loop:
 
   * ``run_ai_agent(job_id, experiment_design, RESPONSE)`` -- servlet-facing
     adapter (DAO progress, persistence, cancellation, concurrency semaphore).
-  * ``run_agent_workflow(job_instance, job_id, experiment_design)`` -- the bare
-    workflow, also used by the AgentEvolve replay harness (``--arm sdk``).
+  * ``run_agent_loop_workflow`` (in ``agent_loop.py``) -- the bare interpreter,
+    and the only arm. The fixed six-phase workflow that lived here was removed.
 """
 import asyncio
 import contextvars
-import json
 import logging
 import os
 import re
@@ -43,7 +42,7 @@ from src.conf.serverconf import (
     AI_LLM_PROVIDER, AI_PROVIDERS, AI_MAX_PATHWAYS, AI_PATHWAYS_PER_BATCH,
     AI_TEMPERATURE, AI_MAX_SEARCH_TASKS, AI_PAPERS_PER_SEARCH_TASK,
     AI_PAPERS_KEPT_PER_TASK, AI_SEARCH_SUBAGENT_WORKERS,
-    AI_VERIFICATION_WORKERS, AI_MAX_VERIFICATION_ITERATIONS,
+    AI_MAX_VERIFICATION_ITERATIONS,
 )
 from src.classes.AIInterpret import tools as tools_mod
 from src.classes.AIInterpret import prompts as prompts_mod
@@ -65,7 +64,6 @@ from src.classes.AIInterpret.verification import (
 # DANGER note in _build_agents), so its verdict arrives as free text.
 from src.classes.AIInterpret.shared import (
     _parse_json_verdict, _collect_cited_quotes,
-    _build_local_paper_index, _remap_citation_indices, _shared_gene_core,
 )
 from src.classes.AIInterpret.llm_client import LLMClient
 # Cluster-first interpretation (AI_CLUSTER_MODE=1): the shared-feature
@@ -227,26 +225,6 @@ four three two one several multiple various different profile profiles
 """.split())
 
 
-def _system_terms(experiment_design, limit=3):
-    """Up to `limit` content words from the user's experiment description, for
-    a PubMed angle tied to the experimental system.
-
-    Free text such as "murine B-cell precursor differentiation time course,
-    five omics layers" yields ["murine", "B-cell", "precursor"]; generic words
-    (time, course, omics, layers ...) and short tokens are dropped, and an
-    empty or all-generic design yields [] so the caller adds no such angle.
-    """
-    if not experiment_design:
-        return []
-    terms = []
-    for tok in re.findall(r"[A-Za-z][A-Za-z0-9\-]{2,}", experiment_design):
-        low = tok.lower()
-        if low in _SYSTEM_STOPWORDS or low.isdigit() or low in terms:
-            continue
-        terms.append(low)
-        if len(terms) >= limit:
-            break
-    return terms
 
 
 # Servlet-facing state: the servlet flips
@@ -272,7 +250,7 @@ class _AsyncPacer:
     with a measured ceiling of 60/min, and its scores are not comparable to a
     paced live run (round 1p: same agent, pacing alone moved the gap +0.27).
 
-    The pace is one process-wide schedule: run_agent_workflow owns a fresh
+    The pace is one process-wide schedule: the interpreter owns a fresh
     event loop per job and up to AI_MAX_CONCURRENT_PIPELINES jobs run on
     separate threads, all against the same gateway. The reservation below has
     no await inside it, so a plain threading.Lock guards it correctly across
@@ -591,153 +569,10 @@ _CAVEAT_CUES = (
 )
 
 
-def _completeness_gaps(report, pathways):
-    """What the report omits that this job's data actually contains.
-
-    Coverage and candour were both being left to chance: the same settings
-    produce a report naming ten enriched pathways and one naming four, and the
-    caveats that fire vary run to run. Hoping both land together is a lottery,
-    and resampling until they do is not engineering. So: compute what is
-    missing and ask for exactly that.
-
-    Every gap is derived from the job. A caveat is only requested when the data
-    warrants it -- marginal p-values are only flagged if some layer really is
-    marginal, single-layer pathways only if some pathway really is carried by
-    one assay. Asking for a caveat the data does not support would be inviting
-    the model to invent one, which is the failure mode this whole workflow is
-    built to avoid.
-
-    Returns (missing_pathway_names, missing_caveat_instructions).
-    """
-    low = report.lower()
-    missing_pw = [p["name"] for p in pathways
-                  if p.get("name") and p["name"].lower() not in low]
-
-    gaps = []
-
-    def _pvals(pw):
-        out = []
-        for match in re.finditer(r"p=([0-9.eE+-]+)", str(pw.get("per_omic") or "")):
-            try:
-                out.append(float(match.group(1)))
-            except ValueError:
-                pass
-        return out
-
-    marginal = [p["name"] for p in pathways
-                if any(0.05 < v <= 0.15 for v in _pvals(p))]
-    if marginal and not re.search(r"did not reach|short of significance|"
-                                  r"non-?significant|marginal|\btrend\b", report, re.I):
-        gaps.append("Several pathways have layers with p-values between 0.05 "
-                    "and 0.15 (e.g. %s). Report these as trends WITH the number "
-                    "rather than as findings or silence."
-                    % ", ".join(marginal[:3]))
-
-    single = [p["name"] for p in pathways
-              if len([v for v in _pvals(p) if v <= 0.05]) == 1]
-    if single and not re.search(r"driven (?:almost )?(?:entirely|solely) by|"
-                                r"single (?:omic )?layer|only .{0,20}assay",
-                                report, re.I):
-        gaps.append("These pathways are significant in exactly ONE omic layer "
-                    "(%s). Name the lone assay carrying each -- it is a weaker "
-                    "result than multi-layer support and should read that way."
-                    % ", ".join(single[:3]))
-
-    DISEASE = ("virus", "infection", "cancer", "carcinoma", "leukemia",
-               "ataxia", "diabetic", "hepatitis", "melanoma", "papillomavirus")
-    named = [p["name"] for p in pathways
-             if any(d in p["name"].lower() for d in DISEASE)]
-    if named and not re.search(r"annotation artefact|annotation artifact|"
-                               r"named after|label reflects|despite (?:its|the) name",
-                               report, re.I):
-        gaps.append("These pathways are NAMED after diseases unrelated to this "
-                    "experiment (%s). The enrichment is real; the label is an "
-                    "artefact of database naming. Say so explicitly."
-                    % ", ".join(named[:3]))
-
-    # These two ask for the phrasing that makes the practice unambiguous, not
-    # merely for the topic. "hypothesis" appearing anywhere satisfied the loose
-    # check while the report never actually said what would test the idea --
-    # the detector reported no gap and the practice was still missing.
-    if not re.search(r"remains? to be (?:tested|confirmed|verified)|"
-                     r"would (?:be )?(?:required to )?test|to be tested",
-                     report, re.I):
-        gaps.append("Mark every mechanistic proposal explicitly as 'remains to "
-                    "be tested', and name the experiment that would test it.")
-
-    if not re.search(r"control point|rate-?limiting|bottleneck", report, re.I):
-        gaps.append("Where the data suggests one step gates a process, identify "
-                    "it as a control point -- and say where changes look like "
-                    "consequences rather than causes.")
-
-    if not re.search(r"discordan|mRNA .{0,30}(?:without|not).{0,30}protein|"
-                     r"protein .{0,30}(?:without|not).{0,30}mRNA", report, re.I):
-        gaps.append("Name at least one cross-layer discordance explicitly using "
-                    "the word 'discordant' -- mRNA moving without protein, "
-                    "chromatin opening without transcription, or a regulator "
-                    "whose targets do not follow.")
-
-    if not re.search(r"both up.{0,15}and down|mixed direction|"
-                     r"in opposite direction|move[sd]? in both", report, re.I):
-        gaps.append("Where a group of pathways moves in both directions, say so "
-                    "in those terms rather than describing them as uniformly up "
-                    "or down.")
-
-    return missing_pw, gaps
 
 
-def _reattach_blocks(report, blocks):
-    """Put deterministic blocks (the pathway and cluster tables) back if a
-    correction rewrite dropped them, keeping them ahead of the References
-    section. Blocks already present are left where they are."""
-    from src.classes.AIInterpret.verification import _REFERENCES_HEADING_RE
-    m = _REFERENCES_HEADING_RE.search(report)
-    body = report[:m.start()].rstrip() if m else report.rstrip()
-    refs = report[m.start():] if m else ""
-    for heading, text in blocks:
-        if text and heading not in body:
-            body += "\n\n" + text.rstrip()
-    return body + ("\n\n" + refs if refs else "\n")
 
 
-def _pick_best_draft(drafts, pathways, papers):
-    """Choose among synthesis drafts on evidence the DATA provides.
-
-    The synthesis is stochastic to a degree that dominates every other variable
-    measured here -- the same settings produce reports scoring 8.50 and 17.00 --
-    so a single draw is not the best this workflow can do. Generating several
-    and keeping the best is how the tellme loop handles the same narrator.
-
-    Selection deliberately never consults the evaluation rubric. It counts
-    things the job itself defines: how many of the enriched pathways the draft
-    actually discusses, how many retrieved papers it cites, and how many
-    distinct caveats it raises. Score the drafts against the rubric and the
-    workflow starts optimising for the marker list rather than for the reader,
-    which is the failure the rubric's ANTI markers exist to catch.
-
-    Returns (best_draft, [per-draft score breakdowns]).
-    """
-    valid_refs = {p["ref_index"] for p in papers}
-    names = [p.get("name", "") for p in pathways if p.get("name")]
-
-    ranked = []
-    for i, text in enumerate(drafts):
-        low = text.lower()
-        covered = sum(1 for n in names if n.lower() in low)
-        cited = len({int(n) for n in re.findall(r'\[(\d+)\]', text)} & valid_refs)
-        caveats = sum(1 for cue in _CAVEAT_CUES if re.search(cue, text, re.I))
-        # A draft that lost its structure is not a candidate however well it
-        # scores on the counts above.
-        truncated = len(text) < 4000 or not re.search(r'^#', text, re.M)
-        score = 0.0 if truncated else covered + 2.0 * cited + 3.0 * caveats
-        ranked.append({"draft": i, "covered": covered, "cited": cited,
-                       "caveats": caveats, "truncated": truncated,
-                       "score": round(score, 1)})
-
-    best = max(range(len(drafts)), key=lambda i: ranked[i]["score"])
-    logger.info("best-of-%d synthesis: picked draft %d (%s)",
-                len(drafts), best, ranked[best])
-    return drafts[best], ranked
 
 
 async def run_hedged(agent, prompt, ctx, max_turns=6, timeout=None, label=""):
@@ -787,24 +622,12 @@ class AgentContext:
     tool_calls: int = 0                                # instrumentation
 
 
-class TriagePick(BaseModel):
-    pathway_name: str
-    priority: int = Field(ge=1, le=5, description="1 = highest")
-    reason: str
 
 
-class TriageResult(BaseModel):
-    picks: list[TriagePick]
 
 
-class SearchTask(BaseModel):
-    query: str = Field(description="A PubMed query string")
-    pathway: str = Field(description="Pathway this query supports")
-    rationale: str
 
 
-class SearchPlan(BaseModel):
-    tasks: list[SearchTask]
 
 
 class RelevantPMIDs(BaseModel):
@@ -819,33 +642,10 @@ class Verdict(BaseModel):
     reason: str
 
 
-# ---------------------------------------------------------------------------
-# Tools -- thin SDK wrappers over the shared tool bodies in tools.py.
-# No behaviour is redefined here; only the calling convention changes.
-# ---------------------------------------------------------------------------
-
-@function_tool
-def get_gene_timecourse(ctx: RunContextWrapper[AgentContext], gene_symbol: str) -> str:
-    """Return all timepoint values for a gene across every omic layer."""
-    ctx.context.tool_calls += 1
-    return tools_mod.execute_tool("get_gene_timecourse", ctx.context.job_instance,
-                                  {"gene_symbol": gene_symbol})
 
 
-@function_tool
-def get_pathway_genes(ctx: RunContextWrapper[AgentContext], pathway_name: str) -> str:
-    """Return all matched genes in a pathway with their measured values."""
-    ctx.context.tool_calls += 1
-    return tools_mod.execute_tool("get_pathway_genes", ctx.context.job_instance,
-                                  {"pathway_name": pathway_name})
 
 
-@function_tool
-def compare_genes(ctx: RunContextWrapper[AgentContext], gene_symbols: list[str]) -> str:
-    """Side-by-side comparison of several genes across all omic layers."""
-    ctx.context.tool_calls += 1
-    return tools_mod.execute_tool("compare_genes", ctx.context.job_instance,
-                                  {"gene_symbols": gene_symbols})
 
 
 @function_tool
@@ -864,7 +664,10 @@ def fetch_paper_section(ctx: RunContextWrapper[AgentContext], ref_index: int, se
     return executor("fetch_paper_section", {"ref_index": ref_index, "section": section})
 
 
-DATA_TOOLS = [get_gene_timecourse, get_pathway_genes, compare_genes]
+
+
+
+
 VERIFY_TOOLS = [search_paper_text, fetch_paper_section]
 
 
@@ -876,56 +679,10 @@ def _build_agents():
     ms = ModelSettings(temperature=AI_TEMPERATURE)
     strict = ModelSettings(temperature=0.1)
 
-    triage_agent = Agent[AgentContext](
-        name="Triage Agent",
-        model=_model(),
-        instructions=(
-            "You are an expert bioinformatics pathway triage agent. Given enriched "
-            "pathways from a multi-omics experiment, select the most biologically "
-            "informative ones to investigate deeply. Prefer pathways with support "
-            "from multiple omic layers and strong statistical significance."
-        ),
-        model_settings=strict,
-        output_type=TriageResult,   # <-- SDK structured output, replaces hand parsing
-        tools=[],
-    )
 
-    search_planner = Agent[AgentContext](
-        name="Search Planner",
-        model=_model(),
-        instructions=prompts_mod.SYSTEM_PROMPT_SEARCH_PLANNER,
-        model_settings=ms,
-        output_type=SearchPlan,     # <-- replaces _parse_search_plan
-        tools=[],
-    )
 
-    paper_filter = Agent[AgentContext](
-        name="Paper Filter",
-        model=_model(),
-        instructions=prompts_mod.SYSTEM_PROMPT_SEARCH_SUBAGENT,
-        model_settings=strict,
-        output_type=RelevantPMIDs,  # <-- replaces _parse_pmid_list
-        tools=[],
-    )
 
-    interpreter = Agent[AgentContext](
-        name="Pathway Interpreter",
-        model=_model(),
-        instructions=prompts_mod.SYSTEM_PROMPT_INTERPRET,
-        model_settings=ms,
-        tools=DATA_TOOLS,           # SDK drives the tool loop
-    )
 
-    # Cluster mode's second tier: the same brief, no tools, one call. Used for
-    # units without a top-N or multi-omic pathway, where the data block in the
-    # prompt already carries what the tools would fetch.
-    interpreter_light = Agent[AgentContext](
-        name="Pathway Interpreter (single-shot)",
-        model=_model(),
-        instructions=prompts_mod.SYSTEM_PROMPT_INTERPRET,
-        model_settings=ms,
-        tools=[],
-    )
 
     synthesizer = Agent[AgentContext](
         name="Report Writer",
@@ -969,9 +726,9 @@ def _build_agents():
         model_settings=strict,
         tools=[],
     )
-    return dict(triage=triage_agent, planner=search_planner, filter=paper_filter,
-                interpret=interpreter, interpret_light=interpreter_light,
-                synth=synthesizer, verify=verifier, verify_solo=verifier_solo)
+    # Only the two the interpreter loop drives. The six built for the
+    # six-phase workflow went with it.
+    return dict(synth=synthesizer, verify=verifier, verify_solo=verifier_solo)
 
 
 # ---------------------------------------------------------------------------
@@ -1009,53 +766,8 @@ VERIFY_PREFETCH = (os.getenv("AI_VERIFY_PREFETCH") or "1").strip().lower() \
     not in ("0", "false", "no")
 
 
-def _prefetched_evidence_block(paper_index, cit):
-    """The paper's own words, found in Python and pasted into the prompt.
-
-    Takes the paper index itself, not a context. The first version took `ctx` and
-    read `ctx.context.paper_index`, copied from a @function_tool where ctx IS a
-    RunContextWrapper -- but this arm's _verify_one is handed a bare
-    AgentContext, so every verification raised AttributeError and the round died
-    with status=error on its first replicate. The test passed because its stub
-    was hand-rolled to match the wrong assumption. An index has one shape.
-
-    This is the whole of the port: searching a paper for a quote is mechanical,
-    tools.py already does it, and making a six-turn agent do it with tool calls
-    is how a verifier spends its budget on round-trips and returns no verdict at
-    all. Failing to find the passage is not fatal -- the model is told so, and
-    the deterministic quote check in verify_report_v2 runs afterwards either way.
-    """
-    executor = tools_mod.build_verification_executor(paper_index)
-    try:
-        passage = executor("search_paper_text",
-                           {"ref_index": cit["ref_index"],
-                            "query": (cit.get("cited_text") or "")[:180]})
-        if not passage or passage.lower().startswith("error"):
-            passage = executor("fetch_paper_section",
-                               {"ref_index": cit["ref_index"],
-                                "section": "abstract"})
-    except Exception as e:
-        passage = "(the paper's text could not be searched: %s)" % e
-    return ("\n\n## What paper [%s] actually says, retrieved for you\n%s\n\n"
-            "Judge from the text above. Do not ask for more; if the quote is not "
-            "in it, say so." % (cit["ref_index"], (passage or "")[:6000]))
 
 
-def _verdict_key(cit):
-    """What a verdict is actually a verdict ABOUT.
-
-    A citation is checked by asking whether one quote supports one sentence. If
-    neither the quote nor the sentence has changed, the answer cannot have
-    changed either -- so re-asking is redundant BY CONSTRUCTION, not by
-    assumption about the model.
-
-    The loop re-verifies every citation on every iteration. A base run carries
-    ~25 citations through 3 iterations, and a repair round that fixes one
-    sentence leaves 24 of them byte-identical; they are all asked again anyway,
-    each by a six-turn verifier agent.
-    """
-    return (cit.get("ref_index"), (cit.get("claim_sentence") or "").strip(),
-            (cit.get("cited_text") or "").strip())
 SENTENCE_REPAIR_WORKERS = int(os.getenv("AI_SENTENCE_REPAIR_WORKERS", "6"))
 
 
@@ -1148,1252 +860,16 @@ async def _repair_sentences(agent, ctx, report, failed, job_id, stats, timeout):
     return report, repaired
 
 
-def _budget_allows(left, measured_cost, default_cost,
-                   reserve=None):
-    """Is there room for one more unit of OPTIONAL work before the deadline?
-
-    Returns (allowed, needed). ``measured_cost`` is this run's own last
-    iteration when there has been one; the default is only used before any
-    measurement exists, because citation counts and gateway weather move the
-    real cost by 3x between runs. The 1.2 factor covers an iteration that runs
-    slower than the last one -- being wrong here costs the whole report.
-    """
-    if reserve is None:
-        reserve = VERIFY_TAIL_RESERVE
-    needed = (measured_cost * 1.2 if measured_cost else default_cost) + reserve
-    return left >= needed, needed
 
 
-def _seconds_left(run_start):
-    """Seconds until the deadline that kills the whole run.
-
-    The 10-minute cap is enforced by one asyncio.wait_for around the entire
-    pipeline, so until now no phase could see it coming: the verify loop would
-    start a 200 s iteration with 60 s left and the run died mid-rewrite. Every
-    phase that can decide NOT to do more work should consult this first --
-    stopping early leaves a complete, redacted report, where being killed
-    leaves a partial one carrying unverified citations.
-    """
-    return AI_MAX_RUN_SECONDS - (time.time() - run_start)
 
 
-async def _run_async(job_instance, job_id, experiment_design, budgets, stats,
-                     hooks=None):
-    def _hb(status, percent, detail):
-        """Report progress to the servlet layer and honour cancellation."""
-        if hooks and hooks.get("progress"):
-            try:
-                hooks["progress"](status, percent, detail)
-            except Exception:
-                logger.debug("progress hook failed", exc_info=True)
-        if hooks and hooks.get("cancelled") and hooks["cancelled"]():
-            raise InterruptedError("Cancelled")
-
-    run_start = time.time()
-    set_run_deadline(run_start + AI_MAX_RUN_SECONDS)
-    reset_run_retries()
-    configure_sdk()
-    agents = _build_agents()
-
-    organism = job_instance.getOrganism()
-    organism_name = get_organism_name(organism)
-    pathways = build_pathway_context(job_instance, max_pathways=budgets["max_pathways"])
-    # Cluster mode widens the pathway set from the top-N by p-value to every
-    # significant pathway the network draws, grouped by shared matched
-    # features. The list stays in global rank order -- clustering decides what
-    # is discussed together, never the order of emphasis (evolve round 1 vs 2).
-    partition = None
-    if clusters_mod.CLUSTER_MODE:
-        try:
-            # The top-N by p-value the plain path would have shown are pinned
-            # into the universe: a change that widens the context must never
-            # drop a pathway the narrower one presented.
-            candidate = clusters_mod.build_partition(
-                job_instance, always_include=[p["id"] for p in pathways])
-            member_ids = clusters_mod.partition_member_ids(candidate)
-            if candidate.get("clusters") and member_ids:
-                partition = candidate
-                pathways = build_pathway_context(job_instance, pathway_ids=member_ids)
-                logger.info("[%s][sdk] cluster mode: %s", job_id,
-                            clusters_mod.partition_summary(partition))
-            else:
-                logger.info("[%s][sdk] cluster mode found no clusters (%s); using the "
-                            "rank-ordered top-%d", job_id,
-                            clusters_mod.partition_summary(candidate), len(pathways))
-        except Exception as e:
-            logger.warning("[%s][sdk] cluster mode failed (%s); using the rank-ordered "
-                           "top-%d", job_id, e, len(pathways))
-            partition = None
-    ctx_by_id = {p["id"]: p for p in pathways}
-    if hooks and hooks.get("pathways"):
-        try:
-            hooks["pathways"](pathways)
-        except Exception:
-            logger.debug("pathway-index hook failed", exc_info=True)
-    if partition is not None and hooks and hooks.get("partition"):
-        try:
-            hooks["partition"](partition)
-        except Exception:
-            logger.debug("partition hook failed", exc_info=True)
-    if partition is not None:
-        stats["clusters"] = len(partition["clusters"])
-        stats["cluster_pathways"] = len(pathways)
-        stats["cluster_standalone"] = len(partition["standalone"])
-        stats["cluster_further"] = len(partition["further"])
-    gene_whitelist = build_gene_symbol_whitelist(job_instance)
-    # The planner and the cross-omic matrix keep the top-N view even in
-    # cluster mode: the wider set reaches literature through per-cluster
-    # queries below, and a 100-pathway planner prompt is not a better planner.
-    plan_pathways = pathways[:budgets["max_pathways"]] if partition is not None else pathways
-    major, minor = triage_pathways(plan_pathways)
-    matrix = build_cross_omic_matrix(major)
-
-    ctx = AgentContext(job_instance=job_instance, job_id=job_id,
-                          organism_name=organism_name,
-                          experiment_design=experiment_design or "")
-    # The quote collector is shared domain code and is synchronous; it gets a
-    # plain LLMClient rather than an Agent so both arms gather quotes the same
-    # way and the comparison stays about orchestration.
-    llm_for_quotes = LLMClient(AI_PROVIDERS[AI_LLM_PROVIDER])
-    try:
-        # 30, after testing 80. Widening it does not surface the genes the
-        # benchmark rewards (Ikzf1, Myc, Cdkn1b, Trp53): hundreds of features
-        # outrank them on layer count and effect size, so they sit far below any
-        # sane cut. Reaching them would mean ranking genes because a rubric
-        # names them, which is fitting the metric rather than reading the data --
-        # so the cut stays where the evidence puts it, and those tokens stay
-        # unreachable.
-        regulators_block = build_key_regulators_block(
-            job_instance, limit=int(os.getenv("AI_SDK_REGULATORS", "30")))
-    except Exception as e:
-        logger.warning("[%s][sdk] regulator block failed: %s", job_id, e)
-        regulators_block = ""
-
-    # -- Phase 1: triage -----------------------------------------------------
-    _hb("extracting", 10, "Reading the enrichment results...")
-    t0 = time.time()
-    # Keys must match build_pathway_context's current record shape: the old
-    # p.get("pvalue")/p.get("omics") read fields that no longer exist, so
-    # every triage line said "p=None, omics=0" and the agent picked on names.
-    if partition is None:
-        pathway_lines = "\n".join(
-            "- %s (combined p=%.3g, significant omics=%s)"
-            % (p.get("name"), p.get("combined_pvalue") or 1.0,
-               p.get("significant_omic_count", "?"))
-            for p in pathways)
-        triage_res = await Runner.run(
-            agents["triage"],
-            "Experiment: %s\nOrganism: %s\n\nEnriched pathways:\n%s\n\n"
-            "Select up to %d to investigate." % (experiment_design, organism_name,
-                                                 pathway_lines, budgets["max_pathways"]),
-            context=ctx, max_turns=3)
-        picks = triage_res.final_output.picks
-        logger.info("[%s][sdk] triage picked %d pathways", job_id, len(picks))
-    else:
-        # The partition already decided what is investigated (every
-        # significant pathway, in its cluster); the triage pick is not
-        # consumed downstream, so cluster mode skips the call.
-        picks = []
-    stats["triage_s"] = time.time() - t0
-
-    # -- Phase 2: search planning -------------------------------------------
-    _hb("searching_pubmed", 15, "Planning literature searches...")
-    t0 = time.time()
-    plan_prompt = prompts_mod.build_search_planner_prompt(
-        major, matrix, gene_whitelist, experiment_design, organism_name,
-        budgets["max_search_tasks"])
-    plan_res = await Runner.run(agents["planner"], plan_prompt, context=ctx, max_turns=3)
-    tasks = plan_res.final_output.tasks[:budgets["max_search_tasks"]]
-    stats["plan_s"] = time.time() - t0
-    logger.info("[%s][sdk] planner produced %d search tasks", job_id, len(tasks))
-
-    # -- Phase 3: literature retrieval (shared domain code, concurrent) ------
-    _hb("searching_pubmed", 25, "Retrieving literature...")
-    t0 = time.time()
-    pubmed = PubMedClient()
-
-    # Retrieval is split into search-all-then-fetch-once because PubMed, not the
-    # LLM, is the budget here. Per-task search+fetch costs 2N round trips at the
-    # unkeyed 3 req/s ceiling; EFetch accepts hundreds of PMIDs in one call, so
-    # batching the fetches costs N+1. That is what makes a wider search budget
-    # affordable inside 300s: 88 tasks previously blew past 600s.
-    _fetched = {}   # pmid -> paper, filled by the batched fetch below
-    # task.pathway is the attribution key. The planner and the per-pathway
-    # backfill use a pathway name; cluster-mode queries use the cluster id so
-    # one search feeds every member's drill-down. This maps a key back to the
-    # pathway names a paper should be attributed to.
-    attribution = {}
-
-    def _attributed(task):
-        return list(attribution.get(task.pathway) or [task.pathway])
-
-    def _task_display(task):
-        names = attribution.get(task.pathway)
-        return ", ".join(names[:4]) + (" ..." if names and len(names) > 4 else "") \
-            if names else task.pathway
-
-    async def _search_only(task):
-        try:
-            pmids = await asyncio.to_thread(
-                pubmed.search, task.query, AI_PAPERS_PER_SEARCH_TASK)
-        except Exception as e:
-            logger.warning("[%s][sdk] PubMed search failed for '%s': %s",
-                           job_id, task.query[:80], e)
-            return task, []
-        return task, list(dict.fromkeys(pmids or []))
-
-    async def _filter_task(task, pmids):
-        papers = [_fetched[p] for p in pmids if p in _fetched]
-        if not papers:
-            return []
-        listing = "\n".join(
-            "PMID %s: %s\n%s" % (p.get("pmid"), p.get("title", ""),
-                                 (p.get("abstract", "") or "")[:600])
-            for p in papers)
-        res = await Runner.run(
-            agents["filter"],
-            "Experiment: %s\nOrganism: %s\nPathway: %s\nQuery: %s\n\n"
-            "Candidate papers:\n%s\n\n"
-            "Return ONLY the PMIDs that could support a claim in a report about "
-            "this experiment. Be strict -- keep at most a handful.\n\n"
-            "The test is whether the paper contains a specific, quotable finding "
-            "about the MECHANISM these genes participate in: regulation, "
-            "interaction, direction of effect. Such findings do transfer across "
-            "systems -- a paper showing Myc drives polyamine-synthesis genes "
-            "supports that mechanistic claim here even if shown in another cell "
-            "type -- so judge the finding, not the model organism.\n\n"
-            "REJECT anything that merely shares a keyword, above all a paper "
-            "matched because a pathway is NAMED after a disease: a carcinoma or "
-            "hepatitis paper retrieved because the pathway is called 'Hepatitis "
-            "B' says nothing about this experiment, and once cited it usually "
-            "contradicts the claim it was attached to. Reject reviews with no "
-            "specific finding to quote, and papers whose result runs opposite to "
-            "what is described.\n\n"
-            "Precision beats volume: a kept paper with no quotable finding costs "
-            "a citation, since the claim it was attached to is then removed. An "
-            "empty list is correct when nothing fits."
-            % (experiment_design, organism_name, _task_display(task), task.query, listing),
-            context=ctx, max_turns=3)
-        answered = {str(x).strip() for x in (res.final_output.pmids or [])}
-        candidates = {str(p.get("pmid")) for p in papers}
-        keep = answered & candidates
-        # Three outcomes, only one of them a judgement. An explicit empty list
-        # is the screener saying nothing fits, and the prompt asks for exactly
-        # that when it is true -- honour it. A non-empty list that names no
-        # candidate is a malformed answer (invented or garbled PMIDs), not a
-        # verdict, and dropping the whole task on it silently starves the report
-        # of literature; keep the top hits instead, as PubMed ranked them.
-        if answered and not keep:
-            logger.warning("[%s][sdk] screener for '%s' returned %d PMID(s), none "
-                           "among the %d candidates; keeping the top %d hits",
-                           job_id, task.query[:60], len(answered), len(candidates),
-                           AI_PAPERS_KEPT_PER_TASK)
-            keep = {str(p.get("pmid")) for p in papers[:AI_PAPERS_KEPT_PER_TASK]}
-        out = []
-        for p in papers:
-            if str(p.get("pmid")) in keep:
-                # Copy: the fetch cache is shared between tasks, and assigning
-                # pathways in place would let the last task to keep a paper
-                # erase every other pathway it was found for. The dedup below
-                # merges these lists back together.
-                paper = dict(p)
-                paper["pathways"] = _attributed(task)
-                out.append(paper)
-        # Which stage is actually starving the citation count: PubMed returning
-        # little, or the filter rejecting most of what it returns? Without this
-        # the funnel is invisible and tuning is guesswork.
-        stats.setdefault("search_hits", 0)
-        stats.setdefault("search_kept", 0)
-        stats["search_hits"] += len(papers)
-        stats["search_kept"] += len(out)
-        logger.info("[%s][sdk] search '%s' -> %d hits, %d kept",
-                    job_id, task.query[:60], len(papers), len(out))
-        return out
-
-    if SDK_SEARCH_ALL_PATHWAYS:
-        # One extra search per pathway the planner did not cover. The planner
-        # optimises for cross-cutting themes and leaves whole pathways with no
-        # literature at all, which caps how many citations the report can carry.
-        # Several query angles per pathway, not one. References scale with the
-        # number of searches (26 tasks produced 22 references), but only ~30% of
-        # references yield a usable supporting quote -- so reaching ~20
-        # citations needs roughly 60+ references, which one query per pathway
-        # cannot supply. The planner's own task count is capped upstream by
-        # _adaptive_budgets at (pathways+1)//2, so raising AI_MAX_SEARCH_TASKS
-        # alone does nothing; the breadth has to be added here.
-        #
-        # Gene-anchored, never pathway-name-anchored: database entries are often
-        # named after a disease, and searching that label returns the disease's
-        # literature instead of this experiment's biology.
-        covered = {t.pathway for t in tasks}
-        # The system angle comes from the user's own experiment description,
-        # never from a fixed phrase: a hard-coded "B cell OR lymphocyte" here
-        # (a leftover from tuning on one dataset) would pull immunology papers
-        # into a plant or yeast report. Empty design -> no system angle at all.
-        system_terms = _system_terms(experiment_design)
-        system_angle = ("(%s)" % " OR ".join('"%s"' % t if " " in t else t
-                                             for t in system_terms)
-                        if system_terms else "")
-        budget = SDK_BACKFILL_MAX_TASKS
-        if partition is not None:
-            # One or two gene-anchored queries per cluster from its shared
-            # core (one per standalone / further pathway), in cluster rank
-            # order so the budget goes to the strongest clusters first.
-            # Attributed to every member, so a paper found for a cluster is
-            # available to each member's interpretation and drill-down.
-            seen_queries = {t.query for t in tasks}
-            n_before = len(tasks)
-            for query, key, names, why in clusters_mod.cluster_search_queries(
-                    partition, ctx_by_id, organism_name, system_angle):
-                if len(tasks) >= budget:
-                    logger.info("[%s][sdk] backfill budget of %d tasks reached; "
-                                "remaining clusters get no extra search", job_id, budget)
-                    break
-                if query in seen_queries:
-                    continue
-                seen_queries.add(query)
-                attribution[key] = names
-                tasks.append(SearchTask(query=query, pathway=key, rationale=why))
-            logger.info("[%s][sdk] %d cluster search tasks added (%d total, system "
-                        "angle: %s)", job_id, len(tasks) - n_before, len(tasks),
-                        system_angle or "none")
-        for pw in (pathways if partition is None else []):
-            if pw["name"] in covered:
-                continue
-            if len(tasks) >= budget:
-                logger.info("[%s][sdk] backfill budget of %d tasks reached; "
-                            "remaining uncovered pathways get no extra search",
-                            job_id, budget)
-                break
-            genes = [g["symbol"] for g in pw.get("top_genes", [])[:6]
-                     if g.get("relevant")]
-            variants = []
-            if genes:
-                variants.append("(%s) AND (%s)" % (" OR ".join(genes[:3]), organism_name))
-                if len(genes) > 3:
-                    variants.append("(%s) AND (%s)" % (" OR ".join(genes[3:6]), organism_name))
-                # One angle tied to the experimental system rather than the
-                # organism, which "Mus musculus" alone does not narrow.
-                if system_angle:
-                    variants.append("(%s) AND %s" % (" OR ".join(genes[:3]), system_angle))
-            else:
-                variants.append('"%s"[Title/Abstract]' % pw["name"])
-            for v in variants[:max(0, budget - len(tasks))]:
-                tasks.append(SearchTask(query=v, pathway=pw["name"],
-                                        rationale="per-pathway coverage backfill"))
-        logger.info("[%s][sdk] %d search tasks after per-pathway backfill "
-                    "(system angle: %s)", job_id, len(tasks), system_angle or "none")
-
-    # Bound the fan-out. A bare asyncio.gather over every task issues all the
-    # PubMed requests at once and earns a wall of HTTP 429s -- the threaded arm
-    # gets this for free from ThreadPoolExecutor(max_workers=N), whereas the
-    # async idiom is unbounded unless you remember to say otherwise.
-    sem = asyncio.Semaphore(SDK_SEARCH_CONCURRENCY)
-
-    async def _bounded_search(task):
-        async with sem:
-            return await _search_only(task)
-
-    # Step 1: every search, bounded.
-    search_results = await asyncio.gather(
-        *[_bounded_search(t) for t in tasks], return_exceptions=True)
-    task_pmids = []
-    for r in search_results:
-        if isinstance(r, Exception):
-            logger.warning("[%s][sdk] search task failed: %s", job_id, r)
-            continue
-        task_pmids.append(r)
-
-    # Step 2: ONE fetch for every PMID any search found, in EFetch-sized chunks.
-    # This is the whole point of the split -- N searches now cost N+ceil(M/200)
-    # round trips instead of 2N.
-    all_pmids = list(dict.fromkeys(p for _t, pmids in task_pmids for p in pmids))
-    stats["pmids_found"] = len(all_pmids)
-    CHUNK = 200
-    for start in range(0, len(all_pmids), CHUNK):
-        chunk = all_pmids[start:start + CHUNK]
-        try:
-            for paper in (await asyncio.to_thread(pubmed.fetch_abstracts, chunk)) or []:
-                _fetched[str(paper.get("pmid"))] = paper
-        except Exception as e:
-            logger.warning("[%s][sdk] batched abstract fetch failed: %s", job_id, e)
-    logger.info("[%s][sdk] %d searches -> %d PMIDs -> %d abstracts fetched",
-                job_id, len(tasks), len(all_pmids), len(_fetched))
-
-    # Step 3: relevance filtering. No PubMed in this loop any more, so it is
-    # bounded by the gateway rather than by NCBI's 3 req/s and gets its own,
-    # much wider semaphore.
-    fsem = asyncio.Semaphore(SDK_VERIFY_CONCURRENCY)
-
-    async def _bounded_filter(task, pmids):
-        async with fsem:
-            return await _filter_task(task, pmids)
-
-    filter_results = await asyncio.gather(
-        *[_bounded_filter(t, pmids) for t, pmids in task_pmids],
-        return_exceptions=True)
-    all_papers = []
-    for (task, pmids), r in zip(task_pmids, filter_results):
-        if isinstance(r, Exception):
-            # A dead screener is not a verdict either: fall back to the top
-            # hits so a gateway hiccup on one sub-agent costs precision on one
-            # task, not that task's entire literature.
-            fallback = [_fetched[p] for p in pmids if p in _fetched][:AI_PAPERS_KEPT_PER_TASK]
-            logger.warning("[%s][sdk] filter task failed for '%s' (%s); keeping "
-                           "the top %d hits", job_id, task.query[:60], r, len(fallback))
-            for p in fallback:
-                paper = dict(p)
-                paper["pathways"] = _attributed(task)
-                all_papers.append(paper)
-            continue
-        all_papers.extend(r)
-
-    seen, unique_papers, n = {}, [], 1
-    for p in all_papers:
-        pmid = p.get("pmid")
-        if pmid not in seen:
-            p["ref_index"] = n
-            n += 1
-            seen[pmid] = p
-            unique_papers.append(p)
-        else:
-            for pw in p.get("pathways", []):
-                if pw not in seen[pmid].setdefault("pathways", []):
-                    seen[pmid]["pathways"].append(pw)
-    # Upgrade to full text (PMC -> Europe PMC -> abstract), as the incumbent
-    # does. This arm was fetching abstracts only, which capped citations
-    # directly: a supporting sentence for a mechanistic claim usually sits in
-    # Results, while an abstract states conclusions. Quotes could only ever be
-    # drawn from the abstract, so most citations had no quote and were redacted.
-    if unique_papers:
-        pathways_by_pmid = {p["pmid"]: p.get("pathways", []) for p in unique_papers}
-        index_by_pmid = {p["pmid"]: p["ref_index"] for p in unique_papers}
-        try:
-            full = await asyncio.to_thread(pubmed.fetch_papers,
-                                           list(index_by_pmid.keys()))
-        except Exception as e:
-            logger.warning("[%s][sdk] full-text fetch failed (%s); keeping abstracts",
-                           job_id, e)
-            full = []
-        if full:
-            for p in full:
-                # Carry over what retrieval established; fetch_papers does not
-                # know about our numbering or pathway attribution.
-                p["ref_index"] = index_by_pmid.get(p["pmid"])
-                p["pathways"] = pathways_by_pmid.get(p["pmid"], [])
-            unique_papers = [p for p in full if p.get("ref_index") is not None]
-
-    ctx.paper_index = {p["ref_index"]: p for p in unique_papers}
-    stats["retrieval_s"] = time.time() - t0
-    stats["papers"] = len(unique_papers)
-    # `papers` here IS the retrieval pool: it is written once, at retrieval, from
-    # the unfiltered set, and unique_papers is not reassigned until the reference
-    # list is trimmed some 700 lines later. So the benchmark's fallback to it for
-    # papers_retrieved is correct for this arm, and papers_retrieved ==
-    # synth_citations in every archived base run because base cites EVERY paper
-    # it retrieves -- 52/52, 45/45, 28/28, 33/33. That is a real property of the
-    # arm, not a measurement artifact; I briefly concluded the opposite.
-    stats["full_text_papers"] = sum(1 for p in unique_papers
-                                    if p.get("full_text_available"))
-    logger.info("[%s][sdk] %d unique papers (%d with full text)",
-                job_id, len(unique_papers), stats["full_text_papers"])
-
-    # -- Phase 4: batched interpretation (SDK drives the tool loop) ----------
-    _hb("interpreting", 45, "Generating interpretation with evidence extraction...")
-    t0 = time.time()
-
-    async def _one_batch(batch, unit_batch=None):
-        names = {p["name"] for p in batch}
-        batch_papers = [p for p in unique_papers
-                        if names & set(p.get("pathways", []))]
-        # Cap what one batch is shown. Loosening the relevance filter raised the
-        # kept pool from ~30 to 106 papers and citations COLLAPSED 15 -> 3: a
-        # batch handed 20+ abstracts cites fewer of them, not more. The wider
-        # pool still exists for other batches and for quote lookup; this only
-        # bounds what any single prompt must reason over.
-        if len(batch_papers) > SDK_PAPERS_PER_BATCH:
-            # Prefer papers with full text, then the earliest-found (which are
-            # the planner's targeted queries rather than the backfill sweep).
-            batch_papers = sorted(
-                batch_papers,
-                key=lambda p: (not p.get("full_text_available"), p["ref_index"])
-            )[:SDK_PAPERS_PER_BATCH]
-        # Number this batch's papers [1..n] and remap afterwards, exactly as
-        # pipeline.py does. Handing a batch its GLOBAL indices -- [7], [12],
-        # [15] -- fights the model's habit of renumbering from 1: it either
-        # renumbers anyway (so the markers match no paper and get dropped) or
-        # stops citing altogether. That was this arm's 1-in-2 zero-citation
-        # rate, and its 9 "failed citations" back in the first comparison.
-        local_papers, local_to_global = _build_local_paper_index(batch_papers)
-        prompt = prompts_mod.build_batch_interpretation_prompt(
-            batch, local_papers, experiment_design, organism_name)
-        prompt += _shared_gene_core(batch, ctx.job_instance)
-        if unit_batch:
-            # Cluster context: what the members share, their global ranks,
-            # and the instruction to interpret each cluster as one unit.
-            prompt += "\n\n" + clusters_mod.render_units_block(unit_batch, partition)
-        # Features corroborated across independent assays. The pathway context
-        # reaches genes only through the top enriched pathways, so a gene with
-        # signal in two or three layers that sits outside those pathways is
-        # invisible to the writer no matter how strong its evidence.
-        if regulators_block:
-            prompt += "\n\n" + regulators_block
-        # Deliberately NOT hedged. Hedging suits calls whose median is seconds,
-        # where a minute-long response is unambiguously stuck. An interpretation
-        # batch legitimately runs ~60s, so a timeout tight enough to catch a
-        # straggler also cancels healthy work: at a 30s cutoff this fired 66
-        # times, and the rushed retries pulled off-lineage claims into the report
-        # (GATA3 presented as a B-cell regulator) and dropped the score to 5.00.
-        # Speed bought that way is not speed.
-        agent_key, turns = "interpret", SDK_INTERPRET_TURNS
-        if unit_batch:
-            # Heavy = the unit holds one of the top-N pathways by p-value, the
-            # set the top-N path interpreted with tools. "Or any multi-omic
-            # pathway" was tried first: on the STATegra fold that made every
-            # one of the 14 batches heavy (36 of 101 nodes are multi-omic), so
-            # it saved nothing.
-            core_ids = {p["id"] for p in pathways[:budgets["max_pathways"]]}
-            heavy = CLUSTER_TOOLS and any(p["id"] in core_ids for p in batch)
-            agent_key = "interpret" if heavy else "interpret_light"
-            turns = CLUSTER_INTERPRET_TURNS if heavy else 2
-            logger.info("[%s][sdk] cluster batch %s: %d pathways, %s",
-                        job_id, "/".join(u["id"] for u in unit_batch), len(batch),
-                        "full tool loop" if heavy else "single-shot")
-        try:
-            res = await Runner.run(agents[agent_key], prompt, context=ctx, max_turns=turns)
-        except Exception as e:
-            if not (unit_batch and agent_key == "interpret"):
-                raise
-            # A tool loop that runs out of turns (an 11-pathway cluster can
-            # ask for a timecourse per member) or dies on the gateway must not
-            # take its whole cluster out of the report: answer it in one call
-            # from the same brief instead. Measured: 4 of 14 batches were lost
-            # this way in one servlet run before this fallback existed.
-            logger.warning("[%s][sdk] cluster batch %s: tool loop failed (%s: %s); "
-                           "retrying single-shot", job_id,
-                           "/".join(u["id"] for u in unit_batch), type(e).__name__,
-                           str(e)[:120])
-            res = await Runner.run(agents["interpret_light"], prompt, context=ctx,
-                                   max_turns=2)
-        return _remap_citation_indices(str(res.final_output), local_to_global)
-
-    if partition is not None:
-        # One unit per cluster (never split), small units packed together,
-        # standalone pathways alone, the 'further' pool in chunks; the
-        # fan-out is bounded because there are ~5x more batches than the
-        # top-15 path ever ran.
-        units = clusters_mod.build_units(partition, ctx_by_id)
-        unit_batches = clusters_mod.pack_units(units, CLUSTER_BATCH_MAX)
-        bsem = asyncio.Semaphore(CLUSTER_CONCURRENCY)
-
-        async def _bounded_batch(ub):
-            async with bsem:
-                return await _one_batch(clusters_mod.batch_pathways(ub), ub)
-
-        stats["cluster_units"] = len(units)
-        batches = unit_batches
-        batch_reports = await asyncio.gather(*[_bounded_batch(ub) for ub in unit_batches],
-                                             return_exceptions=True)
-    else:
-        batches = [pathways[i:i + AI_PATHWAYS_PER_BATCH]
-                   for i in range(0, len(pathways), AI_PATHWAYS_PER_BATCH)]
-        batch_reports = await asyncio.gather(*[_one_batch(b) for b in batches],
-                                             return_exceptions=True)
-    failed_batches = 0
-    for i, b in enumerate(batch_reports):
-        if isinstance(b, Exception):
-            failed_batches += 1
-            label = ("/".join(u["id"] for u in batches[i]) if partition is not None
-                     else "batch %d" % (i + 1))
-            logger.warning("[%s][sdk] interpretation batch %s failed: %s: %s", job_id,
-                           label, type(b).__name__, str(b)[:160])
-    if failed_batches:
-        logger.warning("[%s][sdk] %d of %d interpretation batches failed", job_id,
-                       failed_batches, len(batch_reports))
-    stats["batches_failed"] = failed_batches
-    batch_reports = [b for b in batch_reports if not isinstance(b, Exception)]
-    stats["interpret_s"] = time.time() - t0
-    # Some runs finish with zero citations while others on identical settings
-    # reach 29. Counting markers at each stage says whether the batches never
-    # cited, or the synthesis dropped citations the batches had supplied --
-    # two different bugs that look the same from the outside.
-    import re as _re
-    stats["batch_citations"] = sum(
-        len(set(_re.findall(r'\[(\d+)\]', b or ""))) for b in batch_reports)
-    stats["batches_with_citations"] = sum(
-        1 for b in batch_reports if _re.search(r'\[\d+\]', b or ""))
-    stats["batches"] = len(batch_reports)
-    logger.info("[%s][sdk] %d batches, %d citing, %d distinct markers",
-                job_id, len(batch_reports), stats["batches_with_citations"],
-                stats["batch_citations"])
-
-    # -- Phase 5: synthesis --------------------------------------------------
-    _hb("synthesizing", 78, "Synthesizing report...")
-    t0 = time.time()
-    synth_prompt = prompts_mod.build_synthesis_prompt_v2(
-        batch_reports, experiment_design, organism_name, unique_papers)
-    # Round-3 KEEP (evolve loop): the synthesis must SEE the numbers, not
-    # merely know a table will be appended -- prompt-visibility measured
-    # claim +0.029 / rank +0.027 on the live arm.
-    try:
-        synth_prompt += ("\n\n## Pathway significance table (from the data)\n"
-                         + render_pathway_table(pathways))
-    except Exception:
-        pass
-    if partition is not None:
-        # The cluster map: which pathways belong together and why, with
-        # every member's global rank, plus the rules that keep the report's
-        # emphasis on rank while its themes follow the clusters.
-        try:
-            synth_prompt += "\n\n" + clusters_mod.render_synthesis_block(partition, ctx_by_id)
-        except Exception as e:
-            logger.warning("[%s][sdk] cluster synthesis block failed: %s", job_id, e)
-    # Pin the citable range. Measured: the synthesis emitted 82 distinct markers
-    # against 47 real papers -- it numbers citations past the end of the list it
-    # was given. render_references_section drops the invalid ones, so nothing
-    # fabricated ships, but each invented marker still costs a quote lookup and
-    # a verification slot, and the dropped claims lose their support for no
-    # reason.
-    # Breadth and candour, both of which the reports were short on. The
-    # analysis enriches ~25 pathways and the write-up was developing three or
-    # four themes, so most of what the run found never reached the reader; and
-    # the discordances the data plainly shows (mRNA against protein, chromatin
-    # against transcription) were being smoothed into a tidy narrative instead
-    # of reported. Neither instruction names a gene, pathway or finding -- the
-    # data decides what fills them.
-    synth_prompt += (
-        "\n\n## Cover what the analysis actually found\n"
-        "A complete pathway table is appended automatically, so do not rewrite "
-        "one -- but the table is a reference, not the analysis. **Every enriched "
-        "pathway above must be named somewhere in your prose**, grouped into "
-        "themes, with the genes driving it and what its direction means for this "
-        "experiment. A pathway that appears only as a table row has been listed, "
-        "not interpreted, and interpretation is the part only you can do.\n\n"
-        "Give the strongest findings full paragraphs; group the rest into "
-        "thematic sections (metabolic, immune/inflammatory, chromatin, cell "
-        "cycle, signalling, whatever the data suggests) and cover each theme's "
-        "pathways together by name. A run that enriches twenty-five pathways and "
-        "discusses four has hidden most of its own result from the reader.\n\n"
-        "## State the awkward parts\n"
-        "A caveat is a finding about the data's limits, not a weakness in the "
-        "writing. Specifically:\n"
-        "- **Disagreeing layers:** say so rather than resolving it in prose -- "
-        "mRNA moving without protein, chromatin opening without transcription, "
-        "a regulator whose targets do not follow.\n"
-        "- **Marginal results:** report them as trends WITH the number "
-        "(\"p=0.06, short of significance\"). A real trend stated honestly is "
-        "worth more than one promoted to a finding or dropped in silence. When "
-        "you discuss a pathway, state which of its omic layers reached "
-        "significance and which did not -- a metabolic pathway carried by gene "
-        "expression while proteomics sits at p=1.0 is a materially different "
-        "finding from one supported by both, and the reader cannot tell them "
-        "apart unless you say.\n"
-        "- **Annotation artefacts:** where a pathway's database name refers to "
-        "a disease unrelated to this experiment, say the enrichment is real but "
-        "the label is an artefact of how the database is named.\n"
-        "- **Single-layer pathways:** name which lone assay carries them.\n"
-        "- **Control points:** where the data suggests one step gates a "
-        "process, say which and why -- and equally, where several changes look "
-        "like consequences rather than causes.\n"
-        "- **Hypotheses:** mark every mechanistic proposal as remaining to be "
-        "tested, and say what experiment would test it.\n"
-        "- **Mixed directions:** if a group of pathways moves both ways, say so "
-        "rather than describing them as uniformly up or down.")
-
-    if unique_papers:
-        valid = sorted(p["ref_index"] for p in unique_papers)
-        synth_prompt += (
-            "\n\n## Citation index range (strict)\n"
-            "The ONLY valid citation numbers are [%d] through [%d]. Every one of "
-            "them refers to a specific paper listed above. Do not write a "
-            "citation number outside this range and do not invent new ones -- a "
-            "marker with no matching paper is deleted along with the claim it "
-            "supports, so inventing one loses you a finding."
-            % (valid[0], valid[-1]))
-    # Narrative and pathway table in parallel. Requiring one call to produce
-    # both put a per-pathway table on the critical path: synthesis ran 81s at 24
-    # pathways and 206s at 30, which is what pushed the highest-scoring
-    # configuration past the time budget. The two outputs share no state, so the
-    # cost of the table becomes max() instead of sum().
-    # Generated in ONE call, deliberately. Splitting the narrative from the
-    # pathway table did cut synthesis from 206s to 89s, but the score fell 17.00
-    # -> 10.00: written separately the table lost the biology, because the model
-    # was no longer interpreting each pathway in the context of the analysis it
-    # had just written. The coupling was doing real work, and buying 100s by
-    # discarding it was a bad trade.
-    # Each draft is bounded (SDK_LONG_CALL_TIMEOUT); a draft that never comes
-    # back is an exception here like any other, and only a run with no draft
-    # at all fails.
-    drafts = await asyncio.gather(
-        *[bounded(Runner.run(agents["synth"], synth_prompt, context=ctx, max_turns=3),
-                  SDK_LONG_CALL_TIMEOUT, label="synthesis draft %d" % i)
-          for i in range(SDK_SYNTH_DRAFTS)],
-        return_exceptions=True)
-    failures = [d for d in drafts if isinstance(d, BaseException)]
-    for f in failures:
-        logger.warning("[%s][sdk] synthesis draft failed: %s: %s",
-                       job_id, type(f).__name__, f)
-    drafts = [str(d.final_output) for d in drafts if not isinstance(d, BaseException)]
-    if not drafts:
-        raise RuntimeError("all synthesis drafts failed (%s)" % (
-            "; ".join("%s: %s" % (type(f).__name__, f) for f in failures) or "no drafts"))
-    report, draft_scores = _pick_best_draft(drafts, pathways, unique_papers)
-    stats["synth_drafts"] = len(drafts)
-    stats["draft_scores"] = draft_scores
-    # The model sometimes cites by identifier -- "(PMID 42565800)", 90 times
-    # in one live draft -- and keeps "[N]" for a bibliography of its own.
-    # Every downstream reader matches "[N]" in the body, so those citations
-    # are converted here, deterministically, from the exact PMID -> index
-    # map; done before the top-up gate so a draft that cited well by PMID is
-    # not sent for a rewrite it does not need.
-    report = resolve_pmid_mentions(report, {p["ref_index"]: p for p in unique_papers})
-    _keep_partial(stats, report, unique_papers, "synthesis")
-    # Close the gaps the draft left, before anything else touches the report.
-    # One targeted revision naming exactly what is missing, rather than another
-    # sample of the same distribution.
-    #
-    # Off by default. Measured cost/benefit: it filled 15 unmentioned pathways
-    # and 1 caveat, and the run went 325s -> 514s (99s of gap-fill plus a
-    # synthesis inflated to 308s by the longer prompt) while honesty markers
-    # FELL from 5 to 3. The gaps it names are real and the detection is sound,
-    # but asking for them mid-pipeline costs more than it returns. Worth
-    # enabling where wall-clock is not a constraint, or worth moving to a
-    # post-hoc report on what a run omitted rather than a revision pass.
-    missing_pw, gaps = ((), ())
-    if SDK_GAP_FILL:
-        missing_pw, gaps = _completeness_gaps(report, pathways)
-    stats["gaps_pathways"] = len(missing_pw)
-    stats["gaps_caveats"] = len(gaps)
-    if missing_pw or gaps:
-        t_gap = time.time()
-        request = ["Your report is below. Revise it to close these specific "
-                   "gaps, changing nothing else -- keep every existing finding, "
-                   "number and citation exactly as written.\n"]
-        if missing_pw:
-            request.append(
-                "NOT YET DISCUSSED -- these pathways were enriched by this "
-                "analysis but appear nowhere in your prose. Add each to the "
-                "relevant thematic section with the genes driving it and what "
-                "its direction means here:\n%s\n"
-                % "\n".join("  - %s" % n for n in missing_pw[:20]))
-        if gaps:
-            request.append("MISSING CAVEATS -- each is warranted by this "
-                           "dataset:\n%s\n" % "\n".join("  - %s" % g for g in gaps))
-        try:
-            revised = await bounded(Runner.run(
-                agents["synth"], "\n".join(request) + "\n\n## Report\n\n" + report,
-                context=ctx, max_turns=3), SDK_LONG_CALL_TIMEOUT, label="gap-fill")
-            candidate = str(revised.final_output)
-            # Only accept a revision that grew the report; a "revision" that
-            # summarises it away would trade real content for checklist items.
-            if len(candidate) >= 0.85 * len(report):
-                report = candidate
-                stats["gap_fill_applied"] = True
-            else:
-                logger.warning("[%s][sdk] gap-fill discarded (%d -> %d chars)",
-                               job_id, len(report), len(candidate))
-        except (Exception, asyncio.TimeoutError) as e:
-            logger.warning("[%s][sdk] gap-fill failed: %s: %s",
-                           job_id, type(e).__name__, e)
-        stats["gap_fill_s"] = time.time() - t_gap
-        logger.info("[%s][sdk] gap-fill: %d pathways, %d caveats requested",
-                    job_id, len(missing_pw), len(gaps))
-
-    # Append the enrichment table from the data. Placed after synthesis and
-    # before the references rebuild, so citation extraction sees the prose the
-    # model wrote rather than table rows -- a quote lookup pointed at a table
-    # cell has nothing to find.
-    # In cluster mode the report carries NO enrichment table: the full table
-    # stays in the synthesis prompt, where its grounding effect was measured,
-    # but at the end of a report a 100-row table is noise for a reader and
-    # nothing a paper would include -- the Pathway Clusters table below is the
-    # one deterministic block that earns its place there (it defines the
-    # cluster ids the prose uses). The plain path keeps its table as before.
-    table = "" if partition is not None else render_pathway_table(pathways)
-    if table:
-        report = report.rstrip() + "\n\n" + table + "\n"
-    cluster_table = ""
-    if partition is not None:
-        try:
-            cluster_table = clusters_mod.render_partition_table(partition, ctx_by_id)
-            report = report.rstrip() + "\n\n" + cluster_table + "\n"
-            # The reading note goes under the report's title (or at the very
-            # top): the ids must be explained before the reader meets them.
-            note = clusters_mod.render_reading_note(partition)
-            if note and note not in report:
-                lines = report.split("\n", 1)
-                if lines[0].lstrip().startswith("# ") and len(lines) > 1:
-                    report = lines[0] + "\n\n" + note + "\n" + lines[1]
-                else:
-                    report = note + "\n\n" + report
-        except Exception as e:
-            logger.warning("[%s][sdk] cluster table failed: %s", job_id, e)
-    stats["synth_s"] = time.time() - t0
-    stats["synth_citations"] = len(set(re.findall(r'\[(\d+)\]', str(report))))
-
-    # Whether synthesis cites 7 papers or 25 from the same pool is close to a
-    # coin flip -- that swing, not any ceiling, is what stops citations and
-    # runtime landing inside budget together. When it under-cites, ask once
-    # more, naming the papers it passed over.
-    #
-    # Safe to ask for more because nothing here decides what survives: each
-    # added citation still needs a verbatim supporting sentence from its own
-    # paper (_collect_cited_quotes) and still faces the verifier. A paper that
-    # does not support anything yields no quote and is redacted. So this raises
-    # the number of *attempts*, never the number of unsupported claims.
-    # Count only markers that resolve to a retrieved paper. Counting raw markers
-    # made this gate meaningless: the synthesis invents indices (79 markers
-    # against 11 real papers), so the threshold was always satisfied and the
-    # top-up never once fired on runs that badly needed it.
-    valid_indices = {p["ref_index"] for p in unique_papers}
-    # Count markers in the BODY only. A synthesis that lists its papers in a
-    # References section of its own but never cites them in the text (seen
-    # live: 25 entries, 0 in-text markers, 0 rendered) must trigger the
-    # top-up, and counting the bibliography's [N] hid exactly that case.
-    # The acceptance test below uses the same helper, so the two cannot
-    # disagree -- they did once, and a rewrite whose whole contribution was
-    # a bibliography was accepted as "56 citations added".
-    cited_now = count_body_citations(str(report), valid_indices)
-    uncited = [p for p in unique_papers if p["ref_index"] not in cited_now]
-    if uncited and len(cited_now) < SDK_MIN_CITATIONS:
-        listing = "\n".join(
-            "[%d] %s — %s" % (p["ref_index"], p.get("title", "")[:110],
-                              (p.get("abstract") or "")[:220])
-            for p in uncited[:30])
-        t_top = time.time()
-        # Optional pass, bounded: the report is already complete without it,
-        # so a top-up that outlives SDK_LONG_CALL_TIMEOUT is skipped, not
-        # waited on. (Two live runs sat 90+ min here before this bound existed:
-        # this call echoes the whole report, and on the CSIC gateway that
-        # answer outran the per-attempt budget until streaming was added.)
-        try:
-            topped = await bounded(Runner.run(
-                agents["synth"],
-                "Here is your report:\n\n%s\n\n"
-                "These retrieved papers are not cited anywhere in it:\n\n%s\n\n"
-                "Return the SAME report with citations added wherever one of "
-                "these papers genuinely supports a statement you already make. "
-                "Change nothing else: no new findings, no rewritten analysis, no "
-                "altered numbers. Add [N] only where that paper really does "
-                "support that sentence -- a citation that does not fit is "
-                "removed later along with the claim it sits on, so forcing one "
-                "in costs you the finding. Leaving a paper uncited is a fine "
-                "outcome." % (report, listing),
-                context=ctx, max_turns=3), SDK_LONG_CALL_TIMEOUT, label="citation top-up")
-            candidate = resolve_pmid_mentions(
-                str(topped.final_output), {p["ref_index"]: p for p in unique_papers})
-            # Guard against the "rewrite" degenerating into a summary: keep the
-            # top-up only if it preserved the report and added BODY citations.
-            cited_after = count_body_citations(candidate, valid_indices)
-            added = len(cited_after)
-            if len(candidate) > 0.6 * len(str(report)) and added > len(cited_now):
-                report = candidate
-                stats["topup_added"] = added - len(cited_now)
-                # WHICH references it added, so the gate can price the trade.
-                # Top-up marks sentences that already stood on their own; if
-                # one of its citations then fails, redact_unverified_v2 deletes
-                # that whole sentence along with it. Counting only the
-                # citations gained measures the upside of a bet whose downside
-                # is prose, which is how a stage can look free and not be.
-                stats["topup_added_refs"] = sorted(set(cited_after)
-                                                   - set(cited_now))
-            else:
-                stats["topup_rejected"] = True
-                logger.warning("[%s][sdk] citation top-up discarded (len %d->%d, "
-                               "citations %d->%d)", job_id, len(str(report)),
-                               len(candidate), len(cited_now), added)
-        except (Exception, asyncio.TimeoutError) as e:
-            stats["topup_failed"] = "%s: %s" % (type(e).__name__, e)
-            logger.warning("[%s][sdk] citation top-up failed: %s: %s",
-                           job_id, type(e).__name__, e)
-        stats["topup_s"] = time.time() - t_top
-    if stats.get("batch_citations") and not stats["synth_citations"]:
-        logger.warning("[%s][sdk] synthesis dropped ALL citations: batches "
-                       "supplied %d markers, report kept none",
-                       job_id, stats["batch_citations"])
-
-    # "[17, 18]" -> "[17], [18]" before anything reads a marker: quote
-    # collection, rendering, verification and renumbering all match single
-    # "[N]" markers, and an unsplit multi-citation is invisible to every one of
-    # them -- the shipped report then cites entries its References section does
-    # not carry.
-    report = normalize_citation_markers(report)
-    # Deterministic references rebuild from the paper index -- asking the model
-    # to hit the parser's format by instruction fails most of the time.
-    quotes = _collect_cited_quotes(llm_for_quotes, report, ctx.paper_index, job_id)
-    report, rendered = render_references_section(report, ctx.paper_index, quotes)
-    stats["refs_rendered"] = len(rendered)
-    _keep_partial(stats, report, unique_papers, "references rendered")
-    stats["quotes_supplied"] = len(quotes)
-    logger.info("[%s][sdk] references rebuilt: %d rendered, %d quotes",
-                job_id, len(rendered), len(quotes))
-    report = _note_if_ungrounded(report, rendered, ctx.paper_index, job_id)
-
-    # -- Phase 5b: iterative verify -> correct, the SDK's turn at pipeline.py's
-    _hb("verifying", 85, "Verifying citations...")
-    # Phase 4. Same budget (AI_MAX_VERIFICATION_ITERATIONS), same per-citation
-    # sub-agent shape, same correction prompt; Runner and asyncio replace
-    # complete_with_tools and ThreadPoolExecutor. Without this the SDK arm would
-    # be scored on an uncorrected report against a corrected one.
-    t0 = time.time()
-    verify_iters = 0
-    previous_failures = None
-    verified_before = set()          # verdict keys that came back supported
-    iteration_cost = None            # measured in this run, not guessed
-    for _iteration in range(AI_MAX_VERIFICATION_ITERATIONS):
-        # An iteration that the deadline will kill is worse than no iteration:
-        # the run dies here and ships a partial report whose citations were
-        # never checked, where stopping now ships a complete one with the
-        # failures redacted. Cost is this run's own measured iteration once
-        # there is one -- citation counts and gateway weather vary too much for
-        # a fixed estimate.
-        left = _seconds_left(run_start)
-        affordable, need = _budget_allows(left, iteration_cost,
-                                          VERIFY_ITER_RESERVE)
-        if not affordable:
-            logger.info("[%s][sdk] stopping verification after %d iteration(s): "
-                        "%.0fs left, an iteration needs ~%.0fs. The remaining "
-                        "citations go to the programmatic net.",
-                        job_id, verify_iters, left, need)
-            stats["verify_stopped_for_time"] = "%.0fs left, %.0fs needed" % (
-                left, need)
-            break
-        iteration_started = time.time()
-        citations = parse_references_section(report)
-        to_verify = [c for c in citations if c.get("cited_text")]
-        if not to_verify:
-            break
-        verify_iters += 1
-        # Verification is ~60% of wall-clock (138-216s of a 236-376s run), and
-        # it is embarrassingly parallel: each citation is checked independently.
-        # The gateway takes the fan-out and tokens are not a constraint here, so
-        # the cap exists only to avoid hammering a shared service.
-        vsem = asyncio.Semaphore(SDK_VERIFY_CONCURRENCY)
-
-        async def _verify_one(cit):
-            async with vsem:
-                prompt = prompts_mod.build_verification_prompt(
-                    cit["claim_sentence"], cit["cited_text"], cit["ref_index"])
-                checker, turns = agents["verify"], 6
-                if VERIFY_PREFETCH:
-                    prompt += _prefetched_evidence_block(ctx.paper_index, cit)
-                    # The tools-free twin: with the passage in the prompt there
-                    # is nothing to call, so two turns is generous.
-                    checker, turns = agents["verify_solo"], 2
-                try:
-                    r = await run_hedged(
-                        checker, prompt, ctx, max_turns=turns,
-                        label="verify[%s]" % cit["ref_index"])
-                    return cit, str(r.final_output)
-                except Exception as e:  # a dead sub-agent must not pass as verified
-                    logger.warning("[%s][sdk] verifier raised for [%s]: %s",
-                                   job_id, cit["ref_index"], e)
-                    stats["verifier_raised"] = stats.get("verifier_raised", 0) + 1
-                    return cit, ""
-
-        # Bound the fan-out itself, not just the decision to start it. The
-        # guard above uses this run's previous iteration as the estimate, and
-        # the FIRST iteration has none -- so a 486 s round (measured) sails past
-        # a 90 s default and the run dies holding a finished report it never
-        # shipped. The agent arm learned this the same way and the fix is the
-        # same: whatever does not finish in time counts as unverified, which is
-        # exactly what phase 6 redacts deterministically in ~0.1 s. Stopping
-        # early costs a redaction; overrunning costs the whole interpretation.
-        if VERIFY_MEMO and verified_before:
-            fresh = [c for c in to_verify if _verdict_key(c) not in verified_before]
-            stats["verify_memo_skipped"] = (stats.get("verify_memo_skipped", 0)
-                                            + len(to_verify) - len(fresh))
-            to_verify = fresh
-            if not to_verify:
-                logger.info("[%s][sdk] every citation is unchanged and already "
-                            "verified; nothing left to check", job_id)
-                break
-        budget = max(20.0, _seconds_left(run_start) - VERIFY_TAIL_RESERVE)
-        # Split the loop's cost where the two halves actually divide. Round 36
-        # replaced the full-report rewrite with parallel per-sentence repairs and
-        # verify_loop_s did not move (230 s against 250 s) on a replicate that
-        # repaired ONE sentence -- so the rewrite was never what the loop spends
-        # its time on. What is left is this fan-out: each citation gets a
-        # SIX-TURN verifier agent, and with ~25 citations at concurrency 8 that
-        # is several batches of a tool loop, three times over. Timed rather than
-        # inferred, because inferring it is how the wrong half got optimised.
-        _t_fanout = time.time()
-        tasks = [asyncio.ensure_future(_verify_one(c)) for c in to_verify]
-        done, pending = await asyncio.wait(tasks, timeout=budget)
-        stats["verify_fanout_s"] = (stats.get("verify_fanout_s", 0.0)
-                                    + time.time() - _t_fanout)
-        stats["verify_citations_checked"] = (
-            stats.get("verify_citations_checked", 0) + len(to_verify))
-        for task in pending:
-            task.cancel()
-        if pending:
-            stats["verify_unchecked"] = (stats.get("verify_unchecked", 0)
-                                         + len(pending))
-            logger.info("[%s][sdk] %d of %d citations unchecked when the clock "
-                        "ran out; the programmatic net takes them", job_id,
-                        len(pending), len(to_verify))
-        verdicts = [t.result() for t in done if not t.cancelled()]
-        failed = []
-        for cit, text in verdicts:
-            v = _parse_json_verdict(text) if text else {
-                "text_match": False, "supports_claim": False,
-                "reasoning": "Verification error"}
-            if v.get("text_match") and v.get("supports_claim"):
-                verified_before.add(_verdict_key(cit))
-            if not v.get("text_match") or not v.get("supports_claim"):
-                failed.append({"ref_index": cit["ref_index"],
-                               "reason": v.get("reasoning", "Verification failed"),
-                               "cited_text": cit["cited_text"],
-                               "claim_sentence": cit["claim_sentence"],
-                               "actual_text": v.get("actual_text", ""),
-                               "suggested_fix": v.get("suggested_fix", ""),
-                               # Which repair the correction prompt should ask
-                               # for: a real quote with an oversold sentence
-                               # needs the SENTENCE changed, not the quote.
-                               "mode": ("text" if not v.get("text_match")
-                                        else "claim")})
-        failed.sort(key=lambda c: c["ref_index"])
-        logger.info("[%s][sdk] VERIFY iter %d: %d checked, %d failed",
-                    job_id, _iteration + 1, len(verdicts), len(failed))
-        if not failed:
-            break
-        # Stop when a round fixes nothing. Where the citation is simply wrong --
-        # the paper does not say it -- rewriting cannot rescue it, so further
-        # rounds re-verify the same failures and the loop spends its whole
-        # budget standing still: 10 failed, 10 failed, 10 failed cost ~200s of a
-        # 384s run. The programmatic net still redacts whatever remains.
-        if previous_failures is not None and len(failed) >= previous_failures:
-            logger.info("[%s][sdk] verification made no progress (%d -> %d "
-                        "failures); stopping early", job_id, previous_failures,
-                        len(failed))
-            break
-        previous_failures = len(failed)
-        iteration_cost = time.time() - iteration_started
-        # On the final permitted iteration a correction is a rewrite nothing
-        # will re-verify, and the programmatic net redacts whatever still fails
-        # either way -- so it buys no accuracy and costs a full synthesis pass
-        # (~70s of a 347s run).
-        if _iteration == AI_MAX_VERIFICATION_ITERATIONS - 1:
-            logger.info("[%s][sdk] final iteration: skipping correction rewrite "
-                        "(%d citations will be redacted instead)", job_id, len(failed))
-            break
-
-        # The rewrite is a full-report echo like the top-up, and it is
-        # optional in the same way: the programmatic net (phase 6) redacts
-        # whatever still fails. So a rewrite that times out or raises ends the
-        # loop with the report as it stands, rather than ending the run -- and
-        # for the same reason it is not worth starting inside the last minutes
-        # of the budget, where it can only turn a finished report into a killed
-        # one.
-        left = _seconds_left(run_start)
-        affordable, _ = _budget_allows(left, None, VERIFY_REWRITE_RESERVE)
-        if not affordable:
-            logger.info("[%s][sdk] skipping the correction rewrite: %.0fs left, "
-                        "it needs ~%.0fs; %d citation(s) will be redacted",
-                        job_id, left,
-                        VERIFY_REWRITE_RESERVE + VERIFY_TAIL_RESERVE, len(failed))
-            stats["rewrite_skipped_for_time"] = "%.0fs left" % left
-            break
-        _t_repair = time.time()
-        if SENTENCE_REPAIR:
-            # Repair the failed sentences themselves, in parallel, instead of
-            # regenerating the report around them. Only those sentences change,
-            # so the References section, the quotes behind it and the appended
-            # tables all stay valid -- none of the repair-of-the-repair below
-            # is needed.
-            report, fixed = await _repair_sentences(
-                agents["synth"], ctx, report, failed, job_id, stats,
-                SDK_CALL_TIMEOUT)
-            stats["verify_repair_s"] = (stats.get("verify_repair_s", 0.0)
-                                        + time.time() - _t_repair)
-            if not fixed:
-                logger.info("[%s][sdk] no sentence could be repaired; leaving "
-                            "%d citation(s) to the programmatic net",
-                            job_id, len(failed))
-                break
-            continue
-
-        try:
-            corr = await bounded(Runner.run(
-                agents["synth"],
-                "Here is your report:\n\n%s\n\n%s"
-                % (report, prompts_mod.build_correction_prompt(report, failed)),
-                context=ctx, max_turns=3), SDK_LONG_CALL_TIMEOUT,
-                label="correction rewrite %d" % (_iteration + 1))
-        except (Exception, asyncio.TimeoutError) as e:
-            logger.warning("[%s][sdk] correction rewrite failed: %s: %s; keeping "
-                           "the report and leaving %d citation(s) to the "
-                           "programmatic net", job_id, type(e).__name__, e,
-                           len(failed))
-            stats["correction_failed"] = "%s: %s" % (type(e).__name__, e)
-            break
-        report = resolve_pmid_mentions(str(corr.final_output), ctx.paper_index)
-        # The rewrite re-authors the references, so re-render them from the
-        # paper index; without this the loop verifies on iteration 1 and then
-        # finishes with an unparseable section again. A rewrite also
-        # reintroduces "[17, 18]" markers, so they are re-split first.
-        report = normalize_citation_markers(report)
-        quotes.update(_collect_cited_quotes(llm_for_quotes, report, ctx.paper_index,
-                                            job_id, known=quotes))
-        report, _ = render_references_section(report, ctx.paper_index, quotes)
-        stats["verify_repair_s"] = (stats.get("verify_repair_s", 0.0)
-                                    + time.time() - _t_repair)
-    stats["verify_loop_s"] = time.time() - t0
-    if partition is not None:
-        # A correction rewrite re-authors the whole report and can drop the
-        # appended data tables; they are data, not prose, so put them back.
-        report = _reattach_blocks(report, [
-            ("## Enriched Pathway Summary", table),
-            ("## Pathway Clusters", cluster_table),
-        ])
-        note = clusters_mod.render_reading_note(partition)
-        if note and note not in report:
-            report = note + "\n\n" + report
-    stats["verify_iterations"] = verify_iters
-
-    # -- Phase 6: the programmatic safety net ---------------------------------
-    # verification.py is domain code, not orchestration: whatever the agents
-    # concluded, unverifiable citations are redacted here, deterministically.
-    t0 = time.time()
-    final = verify_report_v2(report, gene_whitelist, unique_papers, job_instance)
-    # WHICH references failed, not just how many. The count cannot answer the
-    # question round 40 raised -- are the failures concentrated in papers admitted
-    # while the screen was being permissive? -- because a paper's ref_index IS its
-    # admission order. stats["verification"] holds this and is a dict, so the
-    # bench drops it and every archived round kept only the total.
-    _failed = final.get("failed_citations") or []
-    if _failed:
-        stats["failed_refs"] = ",".join(
-            str(c.get("ref_index")) for c in _failed
-            if isinstance(c.get("ref_index"), int))
-    score_topup_survival(stats, final)
-    # Which retrieval machinery the surviving quotes actually came from. Placed
-    # here on purpose: renumber_citations rewrites every ref_index a few lines
-    # below, and the quotes dict is keyed on the OLD ones.
-    stats.update(quote_provenance(quotes, ctx.paper_index))
-    if final.get("failed_citations"):
-        report, removed = redact_unverified_v2(report, final["failed_citations"])
-        final["redacted_count"] = removed
-        # Markers taken out vs claims destroyed. `redacted` has always counted
-        # the former -- bad markers plus dropped reference entries -- while this
-        # project's notes described it as sentences lost. A sentence that keeps
-        # another verified citation survives with the bad marker stripped, so the
-        # two numbers can differ by a factor of three.
-        stats["sentences_dropped"] = last_sentences_dropped()
-    report, citation_mapping = renumber_citations(report)
-    # ...and then put the entries back in the order of the labels they now
-    # carry. Renumbering rewrites the markers where they stand, so a section
-    # rendered in ascending old index order ends up printed as [1], [5], [3],
-    # [2], [4] -- every entry pointing at the right paper, the list itself
-    # unreadable. Nothing downstream can catch it, because the citations are
-    # all still valid; only the reader sees it. This call existed in
-    # pipeline.py (0616e2df) and was dropped when the SDK workflow replaced
-    # that module, so every report shipped since has been scrambled.
-    report = sort_references_section(report)
-    _keep_partial(stats, report, unique_papers, "verification")
-    if citation_mapping:
-        kept = []
-        for p in unique_papers:
-            if p["ref_index"] in citation_mapping:
-                p["ref_index"] = citation_mapping[p["ref_index"]]
-                kept.append(p)
-        kept.sort(key=lambda p: p["ref_index"])
-        unique_papers = kept
-    stats["verify_s"] = time.time() - t0
-    stats["tool_calls"] = ctx.tool_calls
-    # Comparable across arms: themes that brought literature back, and themes
-    # whose literature survived into the references.
-    retrieved_all = list(ctx.paper_index.values()) if ctx.paper_index else []
-    themes, converted = theme_conversion(retrieved_all, unique_papers)
-    stats["themes_retrieved"] = themes
-    stats["themes_cited"] = converted
-    # What the gateway did to this run, so a round can be compared against one
-    # that met different weather instead of assuming it met the same.
-    _retries = run_retry_counts()
-    if _retries:
-        stats["gateway_retries"] = _retries.get("transport", 0)
-        stats["gateway_rate_limited"] = _retries.get("rate_limited", 0)
-    stats["verification"] = final
-    return report, unique_papers, ctx
 
 
-def run_agent_workflow(job_instance, job_id, experiment_design, budgets=None,
-                     hooks=None):
-    """Synchronous entry point.
-
-    PySiQ hands us a worker thread, so we own an event loop here rather than
-    assuming one. ``asyncio.run`` refuses to nest, which is exactly the
-    threaded/async friction this experiment is meant to measure.
-    """
-    budgets = budgets or {"max_pathways": AI_MAX_PATHWAYS,
-                          "max_search_tasks": AI_MAX_SEARCH_TASKS}
-    stats = {}
-    t0 = time.time()
-
-    async def _with_deadline():
-        # The last line of defence against "still running" as a permanent
-        # state. Every phase has its own cap; this one catches whatever they
-        # miss, and turns it into an error the UI can show and the user can
-        # retry, instead of a heartbeat that keeps a dead run looking alive.
-        try:
-            return await asyncio.wait_for(
-                _run_async(job_instance, job_id, experiment_design, budgets,
-                           stats, hooks=hooks),
-                timeout=AI_MAX_RUN_SECONDS)
-        except asyncio.TimeoutError:
-            minutes = int(AI_MAX_RUN_SECONDS // 60)
-            salvaged = _partial_result(stats, minutes)
-            if salvaged:
-                report, papers = salvaged
-                logger.warning("[%s] timed out at %d minutes; shipping the "
-                               "partial report (%d chars, %d papers)",
-                               job_id, minutes, len(report), len(papers))
-                return report, papers, None
-            raise RuntimeError(
-                "The interpretation exceeded its %d-minute limit and was "
-                "stopped before any report existed. The literature gateway was "
-                "slow to answer; please try again later." % minutes)
-
-    report, papers, ctx = asyncio.run(_with_deadline())
-    stats["total_s"] = time.time() - t0
-    return {"report": report, "papers": papers, "stats": stats}
 
 
-def _keep_partial(stats, report, papers, stage):
-    """Stash the report as it stands, so a timeout has something to ship.
-
-    Measured over 14 base runs: median 399 s, and roughly one run in seven hits
-    the ten-minute ceiling. Today that run raises, every phase's work is
-    discarded, and the user who waited ten minutes is told to try again -- while
-    a synthesised report with rendered references existed in memory at the
-    moment the clock expired.
-
-    Called at the points where the report is coherent enough to read.
-    """
-    if report and str(report).strip():
-        stats["_partial_report"] = str(report)
-        stats["_partial_papers"] = list(papers or [])
-        stats["_partial_stage"] = stage
 
 
-def _partial_result(stats, minutes):
-    """Turn whatever survived into a report the reader can trust the shape of."""
-    report = stats.pop("_partial_report", "")
-    papers = stats.pop("_partial_papers", [])
-    stage = stats.pop("_partial_stage", "synthesis")
-    if not report:
-        return None
-    # Set here, not by the caller: the caller reads it AFTER this function has
-    # popped it, so it always saw "?" -- caught by testing the stat rather than
-    # the report.
-    stats["timed_out_at_stage"] = stage
-    header = (
-        "> **Incomplete interpretation.** The %d-minute limit was reached while "
-        "the pipeline was still working (last completed stage: %s), so this "
-        "report is what had been produced by then. Citations present here were "
-        "rendered but may not all have passed verification, and later sections "
-        "may be missing. Re-running usually completes.\n\n" % (minutes, stage))
-    return header + report, papers
 
 
 class _Heartbeat:
@@ -2440,30 +916,6 @@ class _Heartbeat:
                     dao.closeConnection()
 
 
-def _note_if_ungrounded(report, rendered, paper_index, job_id=""):
-    """Say so, in the report, when not one citation could be grounded.
-
-    One stored run retrieved 56 papers, wrote 56 citations in synthesis, found
-    quotes for none of them, rendered no references, and shipped 49 752
-    characters of interpretation with status "done" and a cheerful "Ready" in
-    the progress line. Its own verification score was 0.07. Nothing in the text
-    told the reader that not a single claim was backed by a paper -- and the
-    text is what gets read, shared and exported, long after the progress line is
-    gone.
-
-    Only when papers were actually retrieved: a run that searched for nothing
-    has no literature claim to walk back.
-    """
-    if rendered or not paper_index:
-        return report
-    logger.warning("[%s] NO references could be grounded from %d papers; "
-                   "the report now says so", job_id, len(paper_index))
-    return report.rstrip() + (
-        "\n\n> **Note on evidence:** no citation in this report could be matched "
-        "to a verifiable sentence in the %d retrieved paper(s), so the "
-        "literature references were removed. What remains rests on the measured "
-        "data alone and has not been corroborated against published work.\n"
-        % len(paper_index))
 
 
 
@@ -2473,7 +925,7 @@ def run_ai_agent(job_id, experiment_design, RESPONSE):
     Same contract the servlet and PySiQ rely on: DAO progress milestones the
     UI polls, pathway-index and papers persistence, cancellation via
     _cancel_flags, the concurrency semaphore, and the same RESPONSE payloads.
-    The agent workflow (Runner-driven phases) happens inside run_agent_workflow.
+    The interpretation itself happens inside run_agent_loop_workflow.
     """
     from src.common.JobInformationManager import JobInformationManager
     from src.common.DAO.AIInterpretDAO import AIInterpretDAO
@@ -2505,25 +957,25 @@ def run_ai_agent(job_id, experiment_design, RESPONSE):
             "pathways": lambda pw: dao.save_pathway_index(job_id, pw),
             "partition": lambda part: dao.save_clusters(job_id, part),
         }
-        # AI_FULL_AGENT=1 swaps the fixed six-phase workflow for the Lead
-        # Interpreter loop (agent_loop.py; design in docs/diagrams/
-        # paintomics-ai-agent-proposal.drawio). Same contract either way:
-        # {report, papers, stats}, the same DAO milestones, the same gate.
-        if os.getenv("AI_FULL_AGENT", "0") == "1":
-            from src.classes.AIInterpret.agent_loop import run_agent_loop_workflow
-            # A retry appends to the previous run's journal otherwise: the first
-            # live re-run left 27 dead events sitting above 34 live ones in one
-            # array, with nothing marking the boundary. The journal describes
-            # THIS run.
-            dao.save_progress(job_id, {"toolTrace": [], "notebook": []})
-            hooks["tool_event"] = lambda e: dao.append_tool_event(job_id, e)
-            hooks["notebook"] = lambda nb: dao.save_progress(
-                job_id, {"notebook": nb})
-            out = run_agent_loop_workflow(job_instance, job_id,
-                                          experiment_design, hooks=hooks)
-        else:
-            out = run_agent_workflow(job_instance, job_id, experiment_design,
-                                     hooks=hooks)
+        # The Lead Interpreter loop (agent_loop.py; design in docs/diagrams/
+        # paintomics-ai-agent-proposal.drawio) is now the only arm. The fixed
+        # six-phase workflow that used to sit behind `AI_FULL_AGENT=0` was
+        # removed: 16 functions and 1 491 lines, ~60% of this module.
+        #
+        # It had been dead in production since the arm was enabled, and it was
+        # also the benchmark's control arm -- so base-vs-agent comparisons are
+        # no longer possible from this tree. That was weighed and accepted.
+        from src.classes.AIInterpret.agent_loop import run_agent_loop_workflow
+        # A retry appends to the previous run's journal otherwise: the first
+        # live re-run left 27 dead events sitting above 34 live ones in one
+        # array, with nothing marking the boundary. The journal describes
+        # THIS run.
+        dao.save_progress(job_id, {"toolTrace": [], "notebook": []})
+        hooks["tool_event"] = lambda e: dao.append_tool_event(job_id, e)
+        hooks["notebook"] = lambda nb: dao.save_progress(
+            job_id, {"notebook": nb})
+        out = run_agent_loop_workflow(job_instance, job_id,
+                                      experiment_design, hooks=hooks)
         report = out.get("report") or ""
         papers = out.get("papers") or []
         if papers:

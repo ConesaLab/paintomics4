@@ -104,8 +104,8 @@ def test_both_arms_actually_call_the_scorer():
     orphaned, and the tool the Lead prompt kept instructing after deletion).
     """
     import inspect
-    from src.classes.AIInterpret import agent, agent_loop
-    for module in (agent, agent_loop):
+    from src.classes.AIInterpret import agent_loop
+    for module in (agent_loop,):
         src = inspect.getsource(module)
         assert "score_topup_survival(stats, final)" in src, (
             "%s runs the top-up but never prices it" % module.__name__)
