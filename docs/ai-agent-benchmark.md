@@ -5357,3 +5357,61 @@ was withdrawn for pre-registering an effect the instrument could not resolve, so
 this is stated plainly: with n=8, only effects of round-36 magnitude are
 detectable here, and a null result on 2 or 4 will be reported as "not resolved",
 not as "no effect".
+
+## Round 59 interim — the verifier is not deterministic, and that qualifies round 57
+
+Sentence repair makes something visible that a whole-report rewrite conceals:
+repair edits a COUNTABLE set of sentences, so any verdict change beyond that set
+is the verifier changing its mind about text that did not change.
+
+Per-wave repair counts against failure changes (first 4 replicates):
+
+| run | wave 1->2 | wave 2->3 |
+|-----|-----------|-----------|
+| r1 | 5 repaired, failures **-5** | 1 repaired, failures **+2** |
+| r2 | 8 repaired, failures -9 | 2 repaired, failures **0** |
+| r3 | 7 repaired, failures **-13** | 1 repaired, -1 |
+| r4 | 7 repaired, failures -4 | 5 repaired, -2 |
+
+A repair that fails to fix explains `|dfail| < repaired`. **`dfail > repaired`
+cannot be explained by repair at all**: r3 removed 13 failures with 7 repairs, so
+at least 6 untouched citations flipped to pass. r1's third wave went the other
+way, +2 failures after a single repair.
+
+Measured directly over citations with three verdicts (5 runs, 87 citations):
+
+```
+verdicts DISAGREE across waves      50  (57%)
+majority vote != last verdict       10  (11%, 2.0 per run)
+```
+
+Repairs are 1-5 per wave, so most of those 87 were never edited -- most of that
+57% is the verifier disagreeing with itself about **identical text**.
+`verify_citation_prefetched` is the most-called tool in the framework at ~26
+calls a run, and on marginal cases it is close to a coin flip.
+
+### This qualifies round 57, which is already merged and deployed
+
+Round 57 attributed ungrounded 4.00 -> 1.20 to the third wave. Part of that
+movement is verifier noise, not repair. The DIRECTION still looks real -- all
+five runs improved, which is a 1-in-32 coincidence under random flips -- but the
+**magnitude is not trustworthy** and this document should not be read as if it
+were. The shipped default of 3 is not withdrawn: it is supported by the
+direction and by the 600 s headroom, and round 59's replicates reach 0-1
+failures repeatedly. But "70% of remaining failures removed" is an overstatement
+and is corrected here.
+
+### The improvement this points to, and why it is blocked
+
+The loop already produces up to THREE verdicts per citation and uses only the
+LAST one. For a sentence that was never repaired the text is identical across
+waves, so those verdicts are repeated samples of one question and a majority
+vote is strictly better than the final sample -- at **zero** extra gateway cost.
+
+It cannot be implemented yet: `_repair_sentences` records `sentences_repaired`
+as a COUNT, and by plain assignment, so it is also overwritten each wave. Which
+refs were touched is unrecoverable. `topup_added_refs` already records exactly
+the needed shape ("the only way to ask WHERE in the top-up's sequence its
+failures fall"), so the fix has a precedent in the same file.
+
+Next: record `repaired_refs`, then scope a majority vote to untouched citations.
