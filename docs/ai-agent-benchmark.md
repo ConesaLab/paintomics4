@@ -3651,3 +3651,41 @@ is good for finding things to test and bad for concluding anything.
 
 Round 51's own result stands, because it is the first kind: one flag changed, and
 citations fell by nine.
+
+### Round 51 scored: the cleanest controlled result of the session, and it is a reversal
+
+```
+agent-v51:
+  2 citations >= base   FAIL  (12.5 vs 21.8 [margin -9.2, se 3.4 -> resolved])
+  3 redactions          PASS  ( 0.0 vs  2.8 [margin +4.8, se 1.3 -> resolved])
+  4 prose coverage      PASS  (14.0 vs 13.8 [margin +0.2, se 1.3 -> NOISE])
+  5 length              PASS  (1.21x)
+```
+
+Compared directly against round 50, where `SEARCH_HITS` is the only difference:
+
+```
+citations_in_body   22.8   12.5   +10.25 [se 2.57 -> RESOLVED]
+prose coverage      14.2   14.0    +0.25 [NOISE]
+wall_s             352.9  334.5   +18.40 [NOISE]
+
+margin over each set's own base:
+   citations   SEARCH_HITS=10  +3.50     SEARCH_HITS=5  -9.25
+```
+
+**Halving the hits per search costs 10.25 citations, resolved.** `SEARCH_HITS=10`
+is restored.
+
+This is worth stating plainly: it is the exact opposite of what I predicted, and
+the prediction had three arguments behind it, all of which turned out to be
+artifacts of how I sliced the archive. The experiment cost one round and settled
+in one comparison what a dozen correlations had got wrong.
+
+It also revises the picture of retrieval. The wide pool is not waste feeding a
+low-precision stage; it is where the citations come from. The top-up's failures
+scale with it, but so do its successes, and the net is strongly positive. "Wide
+and shallow" was a description I applied disapprovingly for several iterations
+with nothing controlled behind it.
+
+Round 52 is launched: round 50's configuration plus `AI_AGENT_DELEGATE_FULLTEXT=1`
+-- one flag, one comparison, against a round whose numbers are already in hand.
