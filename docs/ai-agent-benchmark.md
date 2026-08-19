@@ -3449,3 +3449,67 @@ than comparing raw agent values across two different yardsticks.
 
 Round 51 is launched: `SEARCH_HITS` 10 -> 5, the change with three independent
 arguments behind it.
+
+### None of the framework's ten limits is binding
+
+Auditing the tool descriptions against measured cost turned up a real
+inconsistency: the belt describes cost **only in seconds**.
+
+```
+tool                      chars/call   its own claim              verdict
+delegate_interpretation       53 937   "EXPENSIVE: ~30 s/call"    accurate (34.9 s)
+notebook_write                     0   "Free"                     accurate
+check_my_citations             3 050   "Costs a few seconds"      accurate
+get_pathway_details           24 058   "Instant and free"         false on context
+read_paper                     3 309   "free and instant"         false on context
+get_experiment_overview        8 965   silent
+cluster_pathways               6 859   silent
+search_literature        1 395 x 20    silent
+```
+
+`get_pathway_details` is the largest per-call draw in the belt and calls itself
+free, while `_ledger_note` appends "N/M tool-output chars" to every result -- so
+the agent is told a tool is free and then watches 24 000 characters leave its
+budget. That is a genuine contradiction inside the tool's construction.
+
+**And it does not matter.** `TOOL_CHAR_BUDGET` is 400 000; the median run spends
+132 061 and the largest 185 982, so the budget is at 46% at its worst. Fixing the
+description would correct a cosmetic inconsistency with no measured harm behind
+it, and the change is not worth a round.
+
+That is the third plausible improvement this session killed by asking whether a
+constraint binds, so I checked all of them:
+
+```
+limit                       set to     observed              binds?
+TOOL_CHAR_BUDGET            400 000    max 185 982           never (46%)
+AGENT_MAX_TURNS                  40    0 backstops           never
+SEARCH_BUDGET                    40    max 36                never (90%)
+VERIFY_MAX_SECONDS              300    0 cut short           never
+run ceiling                     600    0 over                never
+TOPUP_MIN_SECONDS               200    0 skips               never
+DELEGATE_MAX_PATHWAYS            20    max coverage 19       never (95%)
+merge budget                     30    0 skips               never
+verify fanout deadline            -    0 unchecked           never
+STITCH_MAX_CHARS             40 000    3 of 42 runs          rarely (7%)
+```
+
+Only the stitch cap ever fires, in 7% of runs. Two others sit close to their
+ceiling -- `SEARCH_BUDGET` at 36 of 40 and `DELEGATE_MAX_PATHWAYS` at 19 of 20 --
+and could bind on a larger job.
+
+I should also correct an earlier entry: I wrote that `STITCH_MAX_CHARS` "has
+never fired -- 0 of 29". That measurement was restricted to ACCEPTED merges in
+rounds 40-48. Across all 42 agent runs it has fired three times.
+
+None of these should be removed. Each was added after a real incident the
+docstrings record -- a run killed at the 600 s ceiling with a finished report it
+never shipped, a top-up that sat for 90 minutes before it was bounded -- and a
+slack backstop is correct engineering, not dead code.
+
+The value of knowing they are slack is different: **they are not where the
+system's behaviour is decided, and reasoning about them is wasted effort.** I
+spent parts of three iterations treating the stitch cap, the turn cap and the
+character budget as active constraints. The things that actually determine this
+arm's output are evidence supply and measurement noise, and neither has a
+constant to tune.
