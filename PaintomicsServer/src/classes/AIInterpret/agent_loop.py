@@ -619,39 +619,6 @@ def _unrepresented_notes(notebook, text, limit=5, subjects=None):
     return missing[:limit]
 
 
-async def _verify_topup_additions(ctx, stats, report, refs):
-    """Keep the top-up's citations that can be quoted; give back the rest.
-
-    Quotes are collected against a paper index restricted to the refs the top-up
-    just added, so this asks only about them rather than re-quoting the whole
-    report -- the full collection happens later anyway.
-
-    A ref with no quote has its marker stripped, not its sentence redacted:
-    strip_markers exists for exactly this case, where the prose predates the
-    citation and survives its removal unchanged.
-    """
-    refs = [int(r) for r in (refs or []) if int(r) in ctx.paper_index]
-    if not refs:
-        return report, 0
-    subset = {r: ctx.paper_index[r] for r in refs}
-    t0 = time.time()
-    try:
-        found = await asyncio.to_thread(
-            _collect_cited_quotes, LLMClient(AI_PROVIDERS[AI_LLM_PROVIDER]),
-            report, subset, ctx.job_id, dict(ctx.quotes))
-    except Exception as e:
-        stats["topup_verify_failed"] = "%s: %s" % (type(e).__name__, e)
-        return report, 0
-    ctx.quotes.update({k: v for k, v in (found or {}).items() if v})
-    unquotable = [r for r in refs if not (found or {}).get(r)]
-    if unquotable:
-        report, pulled = strip_markers(report, unquotable)
-        stats["topup_pulled_back"] = len(unquotable)
-        stats["topup_markers_pulled"] = pulled
-    stats["topup_verify_s"] = round(time.time() - t0, 1)
-    return report, len(unquotable)
-
-
 async def _upgrade_new_citations(ctx, stats, refs):
     """Fetch full text for papers a later stage decided to cite.
 
@@ -2387,9 +2354,6 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
                 # text for everything it retrieves, and its top-up fails 0.0.
                 await _upgrade_new_citations(ctx, stats,
                                              stats["topup_added_refs"])
-                if VERIFY_TOPUP:
-                    report, _pulled = await _verify_topup_additions(
-                        ctx, stats, report, stats["topup_added_refs"])
             else:
                 stats["topup_rejected"] = True
         except (Exception, asyncio.TimeoutError) as e:
@@ -2626,6 +2590,26 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
     # here on purpose: renumber_citations rewrites every ref_index a few lines
     # below, and the quotes dict is keyed on the OLD ones.
     stats.update(quote_provenance(quotes, ctx.paper_index))
+    if final.get("failed_citations") and VERIFY_TOPUP:
+        # A failed citation the TOP-UP added is a marker bolted onto prose that
+        # already stood on its own, so pulling it back restores the sentence
+        # exactly. A failed citation the writer put there is a claim with no
+        # support left, and redaction is right for it.
+        #
+        # The gate has already decided which citations fail; this only decides
+        # what failing costs. An earlier attempt ran its own quote check before
+        # the gate and was wrong twice over -- it tested whether a quote EXISTS
+        # while the gate tests whether the quote SUPPORTS the claim, and it read
+        # `known` backwards, stripping markers off citations that were fine.
+        added = set(stats.get("topup_added_refs") or [])
+        bolted = [c for c in final["failed_citations"]
+                  if c.get("ref_index") in added]
+        if bolted:
+            report, pulled = strip_markers(report, [c["ref_index"] for c in bolted])
+            stats["topup_markers_pulled"] = pulled
+            stats["topup_pulled_back"] = len(bolted)
+            final["failed_citations"] = [c for c in final["failed_citations"]
+                                         if c.get("ref_index") not in added]
     if final.get("failed_citations"):
         report, removed = redact_unverified_v2(report, final["failed_citations"])
         final["redacted_count"] = removed

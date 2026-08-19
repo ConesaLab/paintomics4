@@ -60,29 +60,45 @@ def test_punctuation_is_closed_up_after_removal():
     assert " ." not in out, out
 
 
-def test_the_checker_asks_only_about_the_topups_own_refs():
-    """Re-quoting the whole report here would duplicate the collection that runs
-    later anyway; the index is restricted to what the top-up just added."""
+def test_a_failed_TOPUP_citation_loses_its_marker_not_its_sentence():
+    """The design, stated as behaviour.
+
+    A failed citation the top-up added is a marker bolted onto prose that stood
+    on its own; pulling it back restores the sentence. A failed citation the
+    writer put there is a claim with no support left, and redaction is right.
+    """
     from src.classes.AIInterpret import agent_loop as loop
-    src = inspect.getsource(loop._verify_topup_additions)
-    assert "subset = {r: ctx.paper_index[r] for r in refs}" in src
+    src = inspect.getsource(loop)
+    i = src.index('bolted = [c for c in final["failed_citations"]')
+    block = src[i:i + 700]
+    assert "strip_markers(report," in block
+    assert 'final["failed_citations"] = [c for c in final["failed_citations"]' in block, (
+        "the pulled citations are still handed to redaction")
 
 
-def test_an_unquotable_ref_is_stripped_not_redacted():
+def test_writer_citations_are_still_redacted():
+    """Only the top-up's own additions get the free pass."""
     from src.classes.AIInterpret import agent_loop as loop
-    src = inspect.getsource(loop._verify_topup_additions)
-    assert "strip_markers(report, unquotable)" in src
-    assert "redact_unverified_v2" not in src, (
-        "redaction would delete the sentence the top-up merely decorated")
+    src = inspect.getsource(loop)
+    i = src.index('bolted = [c for c in final["failed_citations"]')
+    assert "redact_unverified_v2(report, final[" in src[i:i + 1200], (
+        "redaction no longer runs for the citations the writer added"
+    )
 
 
-def test_a_failed_check_keeps_every_citation():
-    """A dead gateway must not strip the report's citations: the gate still
-    verifies everything afterwards."""
+def test_it_reuses_the_gates_verdict_rather_than_asking_again():
+    """An earlier version ran its own quote check BEFORE the gate and was wrong
+    twice: it tested whether a quote EXISTS while the gate tests whether the
+    quote SUPPORTS the claim, and it read _collect_cited_quotes' `known`
+    argument backwards -- that argument EXCLUDES already-quoted refs from the
+    result, so every ref with a quote looked unquotable and had its marker
+    stripped. The smoke run showed 6 pulled and 6 still failing."""
     from src.classes.AIInterpret import agent_loop as loop
-    src = inspect.getsource(loop._verify_topup_additions)
-    i = src.index("except Exception")
-    assert "return report, 0" in src[i:i + 200]
+    src = inspect.getsource(loop)
+    assert "_verify_topup_additions" not in src, "the pre-gate check is back"
+    i = src.index('bolted = [c for c in final["failed_citations"]')
+    assert src.index("verify_report_v2(report,") < i, (
+        "the pull-back runs before the gate has produced a verdict")
 
 
 def test_it_is_off_by_default_and_stamped():
@@ -109,9 +125,9 @@ def main():
               test_nothing_to_strip_changes_nothing,
               test_no_refs_is_a_no_op,
               test_punctuation_is_closed_up_after_removal,
-              test_the_checker_asks_only_about_the_topups_own_refs,
-              test_an_unquotable_ref_is_stripped_not_redacted,
-              test_a_failed_check_keeps_every_citation,
+              test_a_failed_TOPUP_citation_loses_its_marker_not_its_sentence,
+              test_writer_citations_are_still_redacted,
+              test_it_reuses_the_gates_verdict_rather_than_asking_again,
               test_it_is_off_by_default_and_stamped):
         _check(t.__name__, t)
     print("\nPassed: %d / %d" % (len(_PASSED), len(_PASSED) + len(_FAILED)))
