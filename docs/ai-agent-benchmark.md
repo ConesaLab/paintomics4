@@ -4384,3 +4384,43 @@ base, no cluster     0.406   336 s   yes             4.2
 The agent arm is the only configuration that is good, fast AND grounded. Base can
 beat it on rubric content, but only by spending twice the clock and shipping
 reports with ten to twenty-four redacted sentences.
+
+### Base cites every paper it retrieves; the agent cites a third
+
+Chasing why cluster mode costs base 10-24 redactions:
+
+```
+config          pool   synth cites   shipped   redacted   covered
+base CLUSTER      50          49.7      19.3       12.0        79
+base plain        30          29.5      21.2        0.5        14
+agent             67          20.3      20.3        0.0        16
+```
+
+`synth_citations` equals `papers_retrieved` in **every archived base run** --
+52/52, 45/45, 28/28, 33/33. That is not a coincidence and not an artifact: base
+cites every paper it retrieves. The agent cites 20 of 67, about 30%.
+
+That explains the redactions without needing anything else. Base's strategy has no
+selection step, so its citation count is set by retrieval. At a pool of 30 that
+holds -- 21 of 30 survive, 0.5 redactions. Cluster mode raises the pool to 50, base
+cites all 50, and 12 sentences get deleted. **Base is not choosing which papers
+support its claims; it is citing the pool and letting the gate decide.**
+
+The agent arm's screen (`SCREEN_PAPERS`) and its `check_my_citations` loop are
+exactly a selection step, and this is the clearest thing they have bought: 20
+citations, 20 shipped, 0 redacted, from a pool more than twice base's.
+
+**A methodological note on how nearly I got this backwards.** I saw
+`synth_citations == papers_retrieved`, recognised the bench's own warning that
+`papers_retrieved` falls back to the reference-list length, concluded I had divided
+a number by itself, wrote a "correction", and patched `agent.py` to record a
+separate pool stat. Then I checked: `stats["papers"]` is written once, at
+retrieval, from the unfiltered set, and `unique_papers` is not reassigned until
+700 lines later. The fallback is correct for this arm and the original reading was
+right. The patch is reverted and the comment now records which reading holds and
+why.
+
+The lesson is not "trust the first reading" -- the first reading has been wrong
+plenty of times here. It is that a suspicious coincidence deserves the same
+verification as a suspicious claim, and I spent one step on the coincidence and
+three on the correction.

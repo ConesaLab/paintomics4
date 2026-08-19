@@ -1586,6 +1586,13 @@ async def _run_async(job_instance, job_id, experiment_design, budgets, stats,
     ctx.paper_index = {p["ref_index"]: p for p in unique_papers}
     stats["retrieval_s"] = time.time() - t0
     stats["papers"] = len(unique_papers)
+    # `papers` here IS the retrieval pool: it is written once, at retrieval, from
+    # the unfiltered set, and unique_papers is not reassigned until the reference
+    # list is trimmed some 700 lines later. So the benchmark's fallback to it for
+    # papers_retrieved is correct for this arm, and papers_retrieved ==
+    # synth_citations in every archived base run because base cites EVERY paper
+    # it retrieves -- 52/52, 45/45, 28/28, 33/33. That is a real property of the
+    # arm, not a measurement artifact; I briefly concluded the opposite.
     stats["full_text_papers"] = sum(1 for p in unique_papers
                                     if p.get("full_text_available"))
     logger.info("[%s][sdk] %d unique papers (%d with full text)",
