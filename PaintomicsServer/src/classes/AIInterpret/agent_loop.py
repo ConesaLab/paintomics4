@@ -339,6 +339,48 @@ SHOW_CITATION_TARGET = os.getenv("AI_AGENT_CITATION_TARGET", "0") == "1"
 # of unused budget at that point, and runs finish at ~380 s of a 600 s ceiling.
 # Ten papers per chunk across four concurrent workers is a few seconds.
 DELEGATE_FULLTEXT = os.getenv("AI_AGENT_DELEGATE_FULLTEXT", "0") == "1"
+
+# Let a citation sit on a sentence that also states what the data did.
+#
+# `build_evidence_shelf_block` tells the writers to keep the two kinds of
+# sentence apart: "What YOUR DATA shows... No citation belongs on these". Its
+# stated reason is that a claim written first and supported afterwards is the one
+# that fails verification -- which is about ORDER, and the shelf already fixes
+# order by handing the passages over BEFORE the writer starts.
+#
+# The instruction over-corrects. Measured across the archive, 5-10% of citation
+# sentences join a data claim to a citation anyway, they all survived the gate,
+# and reading them they are the best citations in the corpus:
+#
+#   "surrogate light-chain genes Igll1 (peak -4.43) and Vpreb1b (peak -4.39) are
+#    strongly repressed, matching the known role of Ikaros/Aiolos as direct
+#    repressors of Igll1 and Vpreb1 in small pre-B cells [2]"
+#
+#   "Prkcb shows profound, sustained repression (-4.87 to -5.03) yet PKCb is
+#    described as promoting the germinal center reaction in B cells [6]"
+#
+# The second sets the data against the literature, which is interpretation rather
+# than recitation. So joined sentences verify fine and the rule suppressing them
+# is costing the arm its strongest output.
+#
+# Appended to the per-chunk prompt rather than edited into the shared block, so
+# the shipped arm stays the control.
+JOIN_DATA_AND_CITATION = os.getenv("AI_AGENT_JOIN_CITATIONS", "0") == "1"
+
+_JOIN_NOTE = (
+    "\n\nOne more thing about the two kinds of sentence above. Where a passage "
+    "bears on something you actually measured, write ONE sentence carrying both "
+    "-- the measured change and what the passage establishes -- instead of a data "
+    "sentence followed by a separate literature sentence. This shape:\n"
+    "  \"Igll1 falls to -4.43 by 24h, matching the known role of Ikaros as a "
+    "direct repressor of Igll1 in small pre-B cells [2].\"\n"
+    "and this one, where the two disagree:\n"
+    "  \"Prkcb is repressed throughout (-4.87 to -5.03), yet PKCb is described "
+    "as promoting the germinal centre reaction [6].\"\n"
+    "A tension stated plainly is worth more than either half alone. This is NOT "
+    "a licence to cite more: a passage that bears on nothing you measured still "
+    "goes uncited, and a measured value with no passage behind it still carries "
+    "no marker.")
 """Screen search hits for a quotable finding before they enter the pool.
 
 The one mechanism the shipped arm has that this arm has never had. Base runs a
@@ -1939,6 +1981,8 @@ async def delegate_interpretation(ctx: RunContextWrapper[LoopContext],
                 chunk, chunk_papers, c.experiment_design, c.organism_name)
             if shelf:
                 prompt += prompts_mod.build_evidence_shelf_block(shelf)
+            if shelf and JOIN_DATA_AND_CITATION:
+                prompt += _JOIN_NOTE
             if focus:
                 prompt += "\n\nFocus of this delegation: %s" % focus
             return await _single_shot(interpreter, prompt, c, 150,

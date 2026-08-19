@@ -3904,3 +3904,55 @@ the pipeline was asking for it. That is the same error as the mtime join and the
 cross-configuration mean: a confident conclusion from the first evidence that fit.
 Reading the output was the right instinct and it did find real defects; reading
 the prompt as well was the step I skipped.
+
+### The separation rule is over-corrected, and the evidence is in the arm's own output
+
+Last entry concluded the data/literature separation was deliberate design and
+stopped there. Following it one step further: is the constraint real?
+
+The verifier asks "does the paper content actually support the claim being made"
+-- the whole claim -- so a sentence carrying a measured value looks like it
+should fail. It does not. **5-10% of citation sentences join a data claim to a
+citation, every one of them shipped, and none was redacted.** Read side by side
+they are the best citations in the corpus:
+
+```
+"surrogate light-chain genes Igll1 (peak -4.43) and Vpreb1b (peak -4.39) are
+ strongly repressed, matching the known role of Ikaros/Aiolos as direct
+ repressors of Igll1 and Vpreb1 in small pre-B cells [2]"
+
+"Rcl1, a core SSU processome component essential for 18S rRNA processing [11],
+ shows progressive transcriptional repression (-0.28 to -1.90 by 24h)"
+
+"Prkcb shows profound, sustained repression (-4.87 to -5.03) yet PKCb is
+ described as promoting the germinal center reaction in B cells [6]"
+```
+
+The third sets the data AGAINST the literature. That is interpretation; the
+freestanding literature sentences are recitation.
+
+So the rule is over-corrected. Its stated reason -- "a claim written first and
+supported afterwards is the one that fails verification" -- is about ORDER, and
+the quote shelf already fixes order by handing the passages over before the
+writer begins. Having fixed the cause, the instruction still forbids the shape,
+and the shape verifies fine.
+
+`AI_AGENT_JOIN_CITATIONS=1` appends a note to the per-chunk prompt -- not to the
+shared block, so the shipped arm remains the control -- asking for one sentence
+carrying both halves where a passage bears on something measured. It uses the two
+archive sentences above as the example shapes, explicitly permits the disagreeing
+case, and says three times that it is not a licence to cite more, because
+inflation is what went wrong when this prompt was last touched (rounds 13-15:
+citations 7 -> 3).
+
+A test pins that the metric and the instruction agree -- both example sentences
+score as linked -- so a round cannot follow the note and come back indifferent.
+
+Queued behind round 52. Predicted: `citations_linked_to_data` rises from ~5% of
+citation sentences; total citations flat; redactions stay 0 because the shape
+already verifies. Falsifier: if redactions rise at all, joining is costing
+verifiability after all and the separation rule was right.
+
+Note on power: this is the first change whose primary metric is one I can move by
+a large multiple rather than by one or two units, so a single round of four can
+see it -- which is the property I said to prefer.
