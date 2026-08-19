@@ -4424,3 +4424,60 @@ The lesson is not "trust the first reading" -- the first reading has been wrong
 plenty of times here. It is that a suspicious coincidence deserves the same
 verification as a suspicious claim, and I spent one step on the coincidence and
 three on the correction.
+
+### What base's +0.24 actually buys, and why round 54's premise was wrong twice
+
+Round 53 at n=3 per arm: agent 17.0 pathways / 0.533 rubric / 321 s / 0 redactions;
+cluster-mode base 79.3 / 0.645 / 644 s / 12 redactions.
+
+**Within cluster-mode base, r(pathways covered, rubric) = -0.68.** Covering more
+is associated with scoring LOWER: 52 -> 0.696, 84 -> 0.598, 102 -> 0.641. So
+"more pathways raises the score" is not supported even inside the arm that
+covers most. n=3, so weak -- but it points the opposite way to the premise I had
+pre-registered.
+
+Scoring item by item instead of by total shows where the +0.11 in this round
+comes from, and it is three items:
+
+```
+item  w    agent   base   delta   claim
+B1    w3    0.33   1.00   +0.67   metabolic/genetic-info pathways DOWN in expression
+E1    w3    0.00   0.67   +0.67   amino-acid class activity higher at early timepoints
+E4    w3    0.00   0.67   +0.67   c-Myc repression via Ikaros drives polyamine genes down
+C4    w2    1.00   0.33   -0.67   KEGG and Reactome complementary   (the AGENT wins this)
+D3 D5 E2 E3                       both arms miss entirely
+```
+
+B1 and E1 are CLASS-level statements. B1 needs "metabolic" with a down direction;
+E1 needs amino-acid metabolism. The agent's seventeen pathways are the top of the
+p-value ranking and are signalling-heavy -- Cytokine-cytokine receptor, Cholinergic
+synapse, Morphine addiction, Rap1 -- so it never discusses a metabolic pathway at
+all. Base at 79 pathways reaches them. **The mechanism is which CLASSES get
+discussed, not how many pathways**, which is exactly why the count correlation is
+negative and the item deltas are large.
+
+**And the limiter is not the constant I was about to raise.** The agent delegates
+the pathways the LEAD NAMES -- `delegate_interpretation(pathway_names=...)` -- and
+`DELEGATE_MAX_PATHWAYS` only truncates that list. Coverage is 16-18 against a cap
+of 20, so **the cap has never bound.** The constraint is the tool's own
+description:
+
+> "Delegate deep interpretation of up to ~20 named pathways ... covering twenty
+> pathways in one call costs what three would."
+
+The Lead is told twenty and asks for seventeen. Raising the constant alone would
+have changed nothing, and round 54 as pre-registered would have measured nothing.
+That is the fourth limit in this document found not to bind, and the first one I
+was about to run an experiment against.
+
+So round 54 becomes: raise the cap AND the number in the description together,
+since the description is what the Lead acts on. That is one coherent change -- the
+tool's stated capacity -- and it is squarely a tool-building change rather than a
+tuning knob. The wave cost model still applies: 60 pathways is three waves,
+~+70 s on a 321 s run.
+
+Revised prediction: coverage rises toward 40-60 and B1/E1 become reachable because
+metabolic and amino-acid pathways enter the discussed set. Falsifier, sharper than
+before: if coverage rises and B1/E1 stay missed, then class breadth is not what
+base is gaining either, and the remaining explanation is in cluster mode's prompt
+rather than its scope.
