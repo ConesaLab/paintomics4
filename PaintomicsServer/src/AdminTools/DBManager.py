@@ -969,6 +969,13 @@ def replaceNewVersionData(origin, destination, dirname, backup_dir, isRestore=Fa
             "pathways_network_Reactome.json",
             "MAPMAN_VERSION", "MAPMAN_MAPPING", "gene2pathway_mapman.list",
             "pathways_network_MapMan.json",
+            # OmniPath is installed by its own tool (omnipathInstaller.py), not
+            # by the download/build pipeline, so a staged tree legitimately
+            # lacks these while the installed tree has them. Without the
+            # exemption every species that has ever had OmniPath installed --
+            # mmu here -- fails promotion with PromotionRefused and silently
+            # keeps stale data.
+            "gene2pathway_omnipath.list", "pathways_network_OmniPath.json",
             # Not generated, but never worth refusing a promotion over: an
             # INSTALLED tree is never legitimately mid-download, so a
             # DOWNLOADING flag inside one is cruft from a historically
