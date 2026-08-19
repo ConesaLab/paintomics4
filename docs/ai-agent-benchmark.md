@@ -5603,6 +5603,62 @@ Direction 2 is the better candidate: it costs no citations in runs where both
 fit, and in tight runs it prefers grounding over addition, which is the standard
 this document is written to. It needs its own pre-registration and is not
 claimed here.
+
+## Round 62 — no budget-side fix exists, and top-up's real problem is compliance
+
+### Reordering is impossible
+
+Top-up is traced at line 2883; the verify loop starts at 2927. **Top-up already
+runs before ALL verification.** There is no third wave to move ahead of it. It
+consumes budget first and the waves get the remainder, which is exactly why a
+slow top-up starves them.
+
+### The deadline is dead too, priced without spending a round
+
+Thirteen runs across rounds 57 and 59 where top-up ran:
+
+| deadline | cut | worthless | citations lost | cancellations saved |
+|----------|-----|-----------|----------------|---------------------|
+| 90 s  | 9/13 | 2 | **7 runs: 22, 18, 12, 3, 2, 2, 1** | 2 |
+| 110 s | 3/13 | 0 | 3 runs: 18, 3, 2 | **0** |
+
+A deadline low enough to save both cancellations costs ~60 citations over 13
+runs -- **4.6 per run against a mean of 21.4, a 21% loss**, four times the 5%
+falsifier round 60 set. The least damaging deadline that cuts anything saves
+**zero** cancellations. Dead on the same grounds as repair.
+
+**So no budget-side intervention works.** Threshold and deadline both fail the
+citation bar. The cancellations are structural: a variable-cost ADDITION stage
+runs before a variable-cost GROUNDING stage inside a fixed budget, and the
+ten-minute requirement means the budget cannot be raised -- median span is
+already 450 s against a 600 s cap.
+
+The honest position is that the ~25% cancellation rate is the current price of
+that design, and it is not worth paying citations to remove.
+
+### The one lever with no citation cost
+
+Top-up is bimodal -- it adds 12-22 citations, or it adds 0-3 -- and **5 of 13
+runs (38%) were rejected outright**, contributing nothing for 32-130 s:
+
+```
+102 s  rejected      95 s  rejected      40 s  rejected
+ 38 s  rejected      32 s  rejected
+```
+
+A rejected top-up delivers zero **by definition**, so removing it costs no
+citations. At 38% x ~85 s that is ~32 s per run, free.
+
+The guard rejects a candidate that drops existing citations, is too short, or
+adds nothing. `topup_dropped_existing` is recorded for some. The top-up prompt
+already says "Return the SAME report with citations added ... Change nothing
+else" -- so this is a **prompt-compliance failure at 38%**, not a design flaw,
+and it is the first tool-building problem in this document whose fix cannot cost
+citations.
+
+Not pre-registered yet: the rejection reasons need counting across more runs
+before a prompt change is worth testing, and `topup_rejected` has only been
+archived since round 56.
 ## Round 63 — a rejected top-up now says which condition rejected it
 
 Round 62 identified the only lever in this pipeline with no citation cost: a
