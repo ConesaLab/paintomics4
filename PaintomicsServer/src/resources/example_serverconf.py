@@ -75,6 +75,10 @@ SERVER_PORT_NUMBER        = int(os.getenv("SERVER_PORT_NUMBER", "8000"))
 SERVER_ALLOW_DEBUG        = os.getenv("SERVER_ALLOW_DEBUG", "false").lower() == "true"  # NEVER true in production
 SERVER_SUBDOMAIN          = os.getenv("SERVER_SUBDOMAIN", "")          # e.g. "paintomics" if served at myserver.com/paintomics
 SERVER_MAX_CONTENT_LENGTH = 100 * pow(1024, 2)                         # Must match nginx client_max_body_size
+# Werkzeug 3.1 defaults max_form_memory_size to 500 kB and applies it to
+# urlencoded bodies, which is below a large pathway SVG export. Keep it equal
+# to SERVER_MAX_CONTENT_LENGTH so one limit governs the request size.
+SERVER_MAX_FORM_MEMORY_SIZE = SERVER_MAX_CONTENT_LENGTH
 ADMIN_ACCOUNTS            = os.getenv("ADMIN_ACCOUNTS", "admin")
 
 # ========== FILES SETTINGS ==========
