@@ -4990,3 +4990,75 @@ capped at 160.
 **0** when the filter matched nothing. `--only` is a substring, so a
 comma-separated list matches nothing and passes silently -- the exact failure the
 runner exists to prevent, inside the runner. Now exits 2 with a message.
+
+## Round 57 — the correction loop works, and it stops one wave early
+
+### What the verifier actually reports
+
+`verify_citation_prefetched` returns two booleans, and the archive has 1038 of
+them across 40 runs:
+
+| verdict | calls | share |
+|---------|-------|-------|
+| `match=True  supports=True`  | 641 | 61.8% |
+| `match=True  supports=False` | 392 | **37.8%** |
+| `match=False supports=False` |   5 |  0.5% |
+
+Fabrication is essentially nil -- the quote exists in 99.5% of calls. The
+grounding problem is entirely **overshoot**: a real quote attached to a claim it
+does not support. That is 37.8% of citations, about 10 per run, and the verifier
+already detects every one.
+
+### The correction loop is effective
+
+A `supports=False` with a real quote is tagged `mode: "claim"` -- "a real quote
+with an oversold sentence needs the SENTENCE changed, not the quote" -- and
+triggers a correction rewrite, then a re-verification. For the 305 citations
+that were re-verified:
+
+| outcome | n | share |
+|---------|---|-------|
+| FIXED     (fail -> pass) | 229 | **75%** |
+| still bad (fail -> fail) |  51 | 17% |
+| regressed (pass -> fail) |  25 |  8% |
+
+This is one of the few unambiguously good mechanisms measured in this document.
+
+### But it always stops at two waves
+
+Median waves per run **2.0, max 2, in 26 of 26 runs**. `VERIFY_ITERATIONS`
+defaults to 2, and the constant carries its reason in a comment:
+
+> 2 = one verification pass, one correction, one re-verification -- the 600 s
+> budget does not fit the workflow arm's 3
+
+That premise was true when it was written and is not true now. Round 55 measured
+median span **314 s with 0 of 40 runs over the 600 s bar**. A third wave costs
+one correction rewrite (measured at 117 s) plus its verification, projecting a
+median around **502 s** -- inside the bar.
+
+So the loop quits with a mean **4.50 ungrounded citations per run** still on the
+table, immediately after demonstrating a 75% fix rate on exactly that population.
+
+### Pre-registration
+
+`AI_AGENT_VERIFY_ITERATIONS=3`. **No code change** -- the knob exists and
+`AI_MAX_VERIFICATION_ITERATIONS` already permits 3.
+
+**Unit: the citation, not the run.** Round 56 was withdrawn for pre-registering
+in a unit the instrument cannot see; per-run ungrounded count has sd 3.51 on a
+mean of 4.50 and would need n=101 per arm. Per citation, the population is the
+~2 per run that survive wave 2, and each run is its own before/after -- no
+control arm is needed, because wave 3's input is wave 2's output.
+
+**Predictions**
+1. Wave 3 fixes **>=50%** of the citations wave 2 left failing.
+2. Net ungrounded per run **falls** -- fixes must exceed the regressions wave 3
+   introduces (waves 1->2 regressed 8%, so this is not free).
+3. Median span stays **under 600 s**.
+
+**Falsifier:** if fixes roughly equal regressions (net unchanged), the loop has
+converged at 2 and the remaining 4.5 are not reachable by rewriting -- revert,
+and record that the no-progress rule was already doing the right thing. If
+median span crosses 600 s, revert regardless of the grounding gain: the
+ten-minute bar is a requirement, not a preference.
