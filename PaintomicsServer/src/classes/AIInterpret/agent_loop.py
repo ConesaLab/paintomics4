@@ -61,6 +61,7 @@ from src.classes.AIInterpret.agent import (
 )
 from src.classes.AIInterpret.context_builder import (
     build_pathway_context, build_gene_symbol_whitelist, get_organism_name,
+    build_differential_metabolites_block,
     build_cross_omic_matrix, build_key_regulators_block, render_pathway_table,
     triage_pathways,
 )
@@ -366,6 +367,27 @@ DELEGATE_FULLTEXT = os.getenv("AI_AGENT_DELEGATE_FULLTEXT", "0") == "1"
 # Appended to the per-chunk prompt rather than edited into the shared block, so
 # the shipped arm stays the control.
 JOIN_DATA_AND_CITATION = os.getenv("AI_AGENT_JOIN_CITATIONS", "0") == "1"
+
+# Show the metabolite layer to the writers.
+#
+# The job carries five omics layers; four are gene-based and Metabolomics is
+# compound-based. Nothing in AIInterpret read it -- "compound" appeared zero times
+# in context_builder.py, agent.py and agent_loop.py, and clusters.py used
+# matchedCompounds only for Sorensen-Dice similarity. So a five-omics experiment
+# was interpreted as four, in BOTH arms.
+#
+# The cost is measurable against the published paper. Rubric item E2 reads
+# "polyamines -- spermidine, putrescine, spermine -- decline toward pre-BII", and
+# the job holds exactly that, all three flagged differential:
+#
+#   Spermidine  0.18  -0.10  -0.07  -0.42  -0.46  -0.56
+#   Putrescine  0.26   0.12   0.12  -0.53  -0.96  -1.27
+#   Spermine    0.16   0.09   0.03  -0.30  -0.37  -0.34
+#
+# No report in either arm has ever named a metabolite. Section E is four items at
+# weight 3, about a fifth of the rubric, and the polyamine story is one of the two
+# findings the paper is FOR.
+SHOW_COMPOUNDS = os.getenv("AI_AGENT_SHOW_COMPOUNDS", "0") == "1"
 
 _JOIN_NOTE = (
     "\n\nOne more thing about the two kinds of sentence above. Where a passage "
@@ -1210,6 +1232,21 @@ def _pathway_block(p):
         lines.append("- %s%s [effect %.2f] %s"
                      % (g.get("symbol"), "*" if g.get("relevant") else "",
                         g.get("effect_size") or 0, profs))
+    if SHOW_COMPOUNDS:
+        compounds = p.get("top_compounds") or []
+        if compounds:
+            lines.append("Matched metabolites (%d of %d shown, Metabolomics layer):"
+                         % (len(compounds), p.get("matched_compound_count") or 0))
+            for c in compounds:
+                lines.append("- %s%s [effect %.2f] %s (%s)"
+                             % (c.get("name"), "*" if c.get("relevant") else "",
+                                c.get("effect_size") or 0, c.get("values"),
+                                c.get("pattern")))
+        elif p.get("matched_compound_count"):
+            # Absent and uninteresting must not look alike: the pathway matched
+            # compounds but none carried a usable series.
+            lines.append("Matched metabolites: %d matched, none with values."
+                         % p["matched_compound_count"])
     return "\n".join(lines)
 
 
@@ -1267,6 +1304,18 @@ def get_experiment_overview(ctx: RunContextWrapper[LoopContext]) -> str:
         parts.append(build_key_regulators_block(c.job_instance, limit=30))
     except Exception as e:
         logger.warning("[%s][loop] regulators block failed: %s", c.job_id, e)
+    if SHOW_COMPOUNDS:
+        # Genes get build_key_regulators_block; compounds had no equivalent, and
+        # the pathway table cannot stand in for one -- the polyamine pathway is
+        # rank #421 of 887 here while the polyamines themselves are the paper's
+        # finding. A metabolite that changes in an unenriched pathway is
+        # unreachable through pathway context by construction.
+        try:
+            block = build_differential_metabolites_block(c.job_instance, limit=20)
+            if block:
+                parts.append(block)
+        except Exception as e:
+            logger.warning("[%s][loop] metabolite block failed: %s", c.job_id, e)
     out = _spend(c, "\n\n".join(x for x in parts if x) + _ledger_note(c),
                  "get_experiment_overview")
     _trace(c, "get_experiment_overview", "", "%d chars" % len(out), t0)

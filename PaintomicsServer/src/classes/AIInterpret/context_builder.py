@@ -15,6 +15,14 @@ def build_pathway_context(job_instance, max_pathways=15, pathway_ids=None):
     """
     matched = job_instance.getMatchedPathways()
     input_genes = job_instance.getInputGenesData()
+    # The compound layer. Until now nothing in AIInterpret read it: "compound"
+    # appeared zero times in this module, in agent.py and in agent_loop.py, and
+    # clusters.py used matchedCompounds only to compute Sorensen-Dice similarity.
+    # A five-omics experiment was therefore interpreted as four, and the STATegra
+    # job's polyamine story -- Spermidine 0.18 -> -0.56, Putrescine 0.26 -> -1.27,
+    # Spermine 0.16 -> -0.34, all flagged differential, which is one of the two
+    # findings the published paper is FOR -- was never shown to any writer.
+    input_compounds = job_instance.getInputCompoundsData() or {}
     header_map = _build_omic_header_map(job_instance)
 
     # Sort by best combined p-value
@@ -43,6 +51,8 @@ def build_pathway_context(job_instance, max_pathways=15, pathway_ids=None):
             "global_pvalue": _globalPval(pw),
             "per_omic": _format_significance(pw),
             "top_genes": top_genes,
+            "top_compounds": _get_top_compounds(pw, input_compounds, header_map),
+            "matched_compound_count": len(getattr(pw, "matchedCompounds", None) or []),
             "matched_gene_count": len(pw.matchedGenes),
             "significant_omic_count": _count_significant_omics(pw),
         })
@@ -133,6 +143,51 @@ def _classify_temporal_pattern(values):
         return "biphasic"
 
     return "flat"
+
+
+def _get_top_compounds(pw, input_compounds, header_map, limit=8):
+    """Matched metabolites for one pathway, differential ones first.
+
+    Mirrors _get_top_genes: name, whether the layer flagged it relevant, the
+    effect size and the labelled series. 74 of this job's 100 compounds are
+    differential, so the layer is dense rather than incidental -- it was simply
+    never read.
+
+    Compound names are not unique in these files ("Putrescine" and "Putrescine "
+    both appear), so entries are de-duplicated on the stripped name; a repeated
+    metabolite would otherwise read as two independent observations.
+    """
+    out, seen = [], set()
+    for cid in (getattr(pw, "matchedCompounds", None) or []):
+        compound = input_compounds.get(str(cid))
+        if compound is None:
+            continue
+        # getName() returns a comma-joined synonym list, and the synonyms repeat:
+        # "Cholesterol, Cholesterol", "Methionine, L-Methionine". Printed raw it
+        # reads as two metabolites where there is one.
+        name = (compound.getName() or "").split(",")[0].strip()
+        if not name or name.lower() in seen:
+            continue
+        seen.add(name.lower())
+        best, relevant, series, pattern = 0.0, False, "", ""
+        for ov in (compound.getOmicsValues() or []):
+            values = ov.getValues()
+            if not values:
+                continue
+            relevant = relevant or ov.isRelevant()
+            labels = header_map.get(ov.getOmicName())
+            if not labels or len(labels) != len(values):
+                labels = _find_matching_labels(header_map, len(values))
+            peak = max(abs(v) for v in values)
+            if peak >= best:
+                best, series = peak, _format_value_pairs(values, labels)
+                pattern = _classify_temporal_pattern(values)
+        if series:
+            out.append({"name": name, "id": str(cid), "relevant": relevant,
+                        "effect_size": round(best, 2), "values": series,
+                        "pattern": pattern})
+    out.sort(key=lambda c: (-c["relevant"], -c["effect_size"]))
+    return out[:limit]
 
 
 def _get_top_genes(pw, input_genes, header_map, limit=10):
@@ -477,6 +532,73 @@ def render_pathway_table(pathways, max_genes=6):
             per_omic[:80] or "-",
             ", ".join(genes) or "none differential",
         ))
+    return "\n".join(lines)
+
+
+def build_differential_metabolites_block(job_instance, limit=20):
+    """The metabolites that changed, independent of pathway ranking.
+
+    Per-pathway compounds are not enough for this experiment, and the reason is
+    worth recording. The published finding is that the polyamines fall toward
+    pre-BII -- and the polyamine pathway is NOT enriched here: mmu00330
+    (Arginine and proline metabolism) ranks #421 of 887 by combined p, and the
+    best-ranked pathway carrying Spermidine or Spermine is #114. Only Putrescine
+    reaches a context window at all, through Efferocytosis at #12.
+
+    So the paper's metabolic story is a metabolite-level observation, not a
+    pathway-level one, and no amount of pathway context can surface it. Genes
+    already have this escape hatch in `build_key_regulators_block`; compounds had
+    none, which is why 74 differential metabolites were invisible.
+    """
+    compounds = job_instance.getInputCompoundsData() or {}
+    if not compounds:
+        return ""
+    header_map = _build_omic_header_map(job_instance)
+    rows, seen = [], set()
+    for cid, compound in compounds.items():
+        name = (compound.getName() or "").split(",")[0].strip()
+        if not name or name.lower() in seen:
+            continue
+        best, relevant, series, pattern = 0.0, False, "", ""
+        for ov in (compound.getOmicsValues() or []):
+            values = ov.getValues()
+            if not values:
+                continue
+            relevant = relevant or ov.isRelevant()
+            labels = header_map.get(ov.getOmicName())
+            if not labels or len(labels) != len(values):
+                labels = _find_matching_labels(header_map, len(values))
+            peak = max(abs(v) for v in values)
+            if peak >= best:
+                best, series = peak, _format_value_pairs(values, labels)
+                pattern = _classify_temporal_pattern(values)
+        if series and relevant:
+            # De-duplicate on the SERIES, not the name. One measurement is
+            # routinely mapped to several KEGG ids -- "Malic acid", "L-Malic
+            # acid" and "D-Malic acid" arrive as three compounds carrying
+            # identical values -- and three lines read as three independent
+            # observations. Keep the first and note the aliases.
+            if series in seen:
+                for i, row in enumerate(rows):
+                    if row[3] == series:
+                        rows[i] = (row[0], row[1], row[2] + ", " + str(cid),
+                                   row[3], row[4])
+                        break
+                continue
+            seen.add(series)
+            seen.add(name.lower())
+            rows.append((best, name, str(cid), series, pattern))
+    if not rows:
+        return ""
+    rows.sort(reverse=True)
+    lines = ["## Differential metabolites (Metabolomics layer, %d of %d compounds)"
+             % (len(rows), len(compounds)),
+             "Compound-based omic: these are NOT reachable through the pathway "
+             "table above, because a metabolite can change in a pathway that is "
+             "not enriched. Strongest first."]
+    for best, name, cid, series, pattern in rows[:limit]:
+        lines.append("- %s (%s) [effect %.2f] %s (%s)"
+                     % (name, cid, best, series, pattern))
     return "\n".join(lines)
 
 

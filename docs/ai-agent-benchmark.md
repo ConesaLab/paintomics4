@@ -4166,3 +4166,62 @@ absent, and an entire omics layer plus the paper's headline metabolic story were
 Reading for quality and reading for completeness are different acts. The rubric
 caught the omission because it knows the right answer; I could not have, from the
 prose alone, and neither could any count.
+
+### Fixing the metabolite blindness: the polyamines are in the data
+
+The gap found last entry, closed. Two changes, both behind
+`AI_AGENT_SHOW_COMPOUNDS`.
+
+**Per-pathway metabolites.** `build_pathway_context` now carries `top_compounds`
+per pathway, built the same way as `top_genes` -- name, differential flag, effect
+size, labelled series, temporal pattern -- and `_pathway_block` renders them under
+"Matched metabolites". 11 of the top 40 pathways carry some.
+
+**And a block that does not depend on pathway rank**, which is the part that
+matters. Per-pathway compounds alone do not reach the paper's finding:
+
+```
+Putrescine   best pathway  Efferocytosis                    rank  #12
+Spermidine   best pathway  Bile secretion                   rank #114
+Spermine     best pathway  Bile secretion                   rank #114
+the polyamine pathway itself, mmu00330                       rank #421 of 887
+```
+
+The polyamine pathway is not enriched in this job. The published finding is
+nonetheless real and sits in the compound data:
+
+```
+Putrescine (C00134) [effect 1.27] 0.26@0h, 0.12@2h, 0.12@6h, -0.53@12h, -0.96@18h, -1.27@24h
+Spermidine (C00315) [effect 0.56] 0.18@0h, -0.10@2h, -0.07@6h, -0.42@12h, -0.46@18h, -0.56@24h
+Spermine   (C00750) [effect 0.37] 0.16@0h,  0.09@2h,  0.03@6h, -0.30@12h, -0.37@18h, -0.34@24h
+```
+
+So the finding is metabolite-level, not pathway-level, and no pathway context can
+surface it. Genes already had this escape hatch in `build_key_regulators_block`;
+compounds had none. `build_differential_metabolites_block` lists the differential
+metabolites strongest-first, independent of enrichment, and says in the block why
+it exists -- a metabolite absent from the pathway table otherwise reads as a
+metabolite that did not change. All three polyamines appear in the first ten
+lines.
+
+**A data-hygiene fix that came with it.** One measurement is routinely mapped to
+several KEGG ids: "Malic acid", "L-Malic acid" and "D-Malic acid" arrive as three
+compounds with identical values, and `getName()` returns comma-joined synonym
+lists ("Cholesterol, Cholesterol"). Printed raw, one measurement reads as three
+independent observations -- wrong science with no visible symptom. De-duplication
+is on the SERIES, not the name, with the alias ids kept: "L-Malic acid (C00149,
+C00711, C00497)". That collapsed 69 name-unique rows to 36 real measurements.
+
+**Two mistakes while building it**, both caught by the tests. The block built an
+omic header map before checking whether the job had any compounds, so an empty job
+raised instead of returning nothing. And my test stub defined `getInputOmics`
+where the real object has `getGeneBasedInputOmics` -- six of eight tests failed on
+the same line, which is the good outcome: a stub that does not match the object it
+stands for tests nothing, and this project has shipped one of those before.
+
+Not yet measured. Round 53 (base at its best configuration) is running, and
+`SHOW_COMPOUNDS` is queued behind it. Prediction, stated against the rubric rather
+than my own rules: section E items E2 becomes reachable, A2 ("five omics layers")
+becomes reachable, and `rubric_coverage` rises. E3 and E4 need the biosynthesis
+genes and the Myc link, which are gene-level and were always reachable -- if they
+stay missed, the gap there is interpretation, not supply.
