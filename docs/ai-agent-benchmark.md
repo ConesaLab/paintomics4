@@ -3513,3 +3513,44 @@ spent parts of three iterations treating the stitch cap, the turn cap and the
 character budget as active constraints. The things that actually determine this
 arm's output are evidence supply and measurement noise, and neither has a
 constant to tune.
+
+### Why base's top-up is precise and this arm's is not
+
+Base runs the same top-up prompt with the same `abstract[:220]` window and gets
+92% precision against this arm's 41%. Window, pool size and volume each failed to
+explain it. This does, at n=29:
+
+```
+r(share of search themes that produced NO citation, top-up precision) = -0.65
+r(pool size,                                        top-up precision) = -0.53
+
+fewest dead themes   dead 26%   precision 65%   pool 48   ( 9 of 13 themes cited)
+most dead themes     dead 51%   precision 43%   pool 70   (10 of 20 themes cited)
+```
+
+Searching more themes does not find more citable papers: **13 themes yield 9
+cited, 20 themes yield 10.** The extra seven searches produce one more citable
+theme and a great many papers from themes that went nowhere -- and those papers
+are exactly what the top-up is handed as its "uncited" candidate list. The stage
+is being offered the residue the rest of the pipeline already declined to use,
+and asked to find support in it.
+
+That is the arm-level difference. Base plans pathway-targeted queries; this arm's
+Lead searches themes it chooses as it goes, half of which never produce a
+citation, and the leftovers become the top-up's shortlist.
+
+It also ties together three results that were separate until now: retrieval
+volume buys +1 citation for 2.3x the papers (tertile, n=40), pool size predicts
+top-up precision at -0.53, and dead themes predict it better at -0.65. They are
+one mechanism seen from three angles -- the marginal search does not add
+evidence, it adds candidates that will fail.
+
+Round 51 (`SEARCH_HITS` 10 -> 5, running) attacks the supply side of this: fewer
+papers per theme means a smaller residue from the themes that die. It does not
+reduce the NUMBER of dead themes, which is the Lead's own choice about where to
+look, and changing that is a prompt change -- the class of change that collapsed
+citations 7 -> 3 in rounds 13-15. Supply first.
+
+First replicate of round 51 is consistent: pool 74 -> 37, top-up precision 41% ->
+58%. One replicate, and the arm's own noise floor is wide, so it is not a result
+yet.
