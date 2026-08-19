@@ -211,7 +211,11 @@ MERGE_MODE = os.getenv("AI_AGENT_MERGE_MODE", "stitch")
 # A Results section is continuous prose, organised by FINDING rather than by
 # pathway id, with the clusters described in a sentence rather than tabulated.
 RESULTS_SECTION = os.getenv("AI_AGENT_RESULTS_SECTION", "0") == "1"
-RESULTS_MAX_WORDS = int(os.getenv("AI_AGENT_RESULTS_WORDS", "1800"))
+# No word ceiling. The first version of this stage carried one and used it as a
+# TARGET: it cut 8 184 words to 2 957 and took 22% of the rubric coverage with
+# them (round 66), while keeping every citation. A length knob on a stage whose
+# job is to reorganise is an instruction to discard, so there is no longer one
+# to set. What bounds the output now is the findings guard.
 SCREEN_TARGET_POOL = int(os.getenv("AI_AGENT_SCREEN_TARGET", "35"))
 """How many screened papers the pool should aim for.
 
@@ -2359,7 +2363,12 @@ WHAT TO CHANGE
 - Report numbers the way a paper does: inside the sentence, with the measure
   named ("accessibility rose at 83 of 130 autophagy loci, p = 0.0029"), not as
   a parenthetical dump.
-- Target %(words)d words. Shorter is better than padded.
+- There is NO length target. Do not summarise, condense, or decide something
+  is minor. This rewrite changes the SHAPE of the text, not how much of it
+  there is: the same findings, reorganised into prose that reads like a paper.
+  A Results section that is shorter because it dropped a finding is a failure,
+  not a success. Measured: a first version of this stage cut 8 184 words to
+  2 957 and lost 22%% of the findings with them.
 
 WHAT MUST NOT CHANGE
 - **These exact markers must all appear in your prose: %(markers)s**
@@ -2373,6 +2382,12 @@ WHAT MUST NOT CHANGE
 - Every numeric value, gene symbol, p-value and direction of change.
 - The "### References" section at the end, exactly as it stands.
 
+EVERY ONE OF THESE PATHWAYS MUST STILL BE DISCUSSED BY NAME:
+%(pathways)s
+Each is a finding. Reorganise them under whatever headings tell the story best
+-- several pathways may share one subsection -- but a pathway that vanishes is a
+result thrown away, and the rewrite is discarded if any is missing.
+
 THE CLUSTERS (describe these in prose; do not tabulate):
 %(clusters)s
 
@@ -2381,8 +2396,148 @@ THE INTERPRETATION TO REWRITE:
 """
 
 
-async def _write_results_section(agent, ctx, report, cluster_text, job_id,
-                                 stats, timeout):
+RESULTS_CHUNK_PROMPT = """Rewrite the pathway analyses below as ONE section of a
+research paper's Results.
+
+- Continuous prose. No bullet lists, no tables, no sub-headings inside it.
+- One `## ` heading, titled by the FINDING these pathways share, as a paper
+  would ("Chromatin accessibility changes precede transcriptional response"),
+  never by a pathway name or accession.
+- Every pathway below must still be discussed by name. They are findings, not
+  examples; you may not drop one for being minor.
+- Keep every [N] citation marker on the sentence it supports, every numeric
+  value, every gene symbol and every direction of change. Do not renumber and
+  do not add markers.
+- Report numbers inside the sentence with the measure named ("accessibility
+  rose at 83 of 130 autophagy loci, p = 0.0029").
+- No preamble, no closing summary. Return only the section.
+
+HEADINGS ALREADY USED BY EARLIER SECTIONS -- yours must be clearly different,
+and must not restate the same claim in other words:
+%(taken)s
+
+THE PATHWAYS THIS SECTION MUST COVER:
+%(names)s
+
+THE ANALYSES TO REWRITE:
+%(chunk)s
+"""
+
+
+def _split_pathway_sections(report):
+    """The dossier's per-pathway sections, in order.
+
+    A section runs from a `## ` heading naming a pathway to the next `## `.
+    Returns (preamble, [(heading, body), ...], tail) so the framing above the
+    first pathway and the References below the last are preserved verbatim
+    rather than being rewritten -- neither is a finding, and both are exactly
+    what a rewrite tends to drop.
+    """
+    ref = report.split("### References")
+    body, tail = ref[0], ("### References" + ref[1] if len(ref) > 1 else "")
+    parts = re.split(r"(?m)^(##\s+[^\n]+)$", body)
+    preamble = parts[0]
+    secs = [(parts[i].strip(), parts[i + 1]) for i in range(1, len(parts) - 1, 2)]
+    return preamble, secs, tail
+
+
+RESULTS_CHUNK = int(os.getenv("AI_AGENT_RESULTS_CHUNK", "4"))
+
+
+async def _results_by_chunk(agent, ctx, report, pw_names, job_id, stats, timeout):
+    """Rewrite the dossier section-group by section-group.
+
+    One call asked to reorganise the whole dossier by finding cannot conserve
+    it. Measured twice: with a word target it kept every citation and lost 22%%
+    of the rubric's coverage (round 66); with NO length target at all it dropped
+    8 of 16 pathways. The length instruction was never the cause. Reorganising
+    by finding means SELECTING, and selection discards -- so the fix cannot be a
+    better prompt, it has to be a smaller question.
+
+    Each call here sees ~4 pathway sections and is told which pathways it owns.
+    No call can drop a pathway another call was responsible for, because no call
+    ever holds them all. The preamble and the reference list are carried across
+    verbatim: neither is a finding, and both are what a rewrite loses first.
+    """
+    preamble, secs, tail = _split_pathway_sections(report)
+    # Sections that are framing rather than a pathway finding stay as they are.
+    SKIP = ("key findings", "cross-pathway", "detailed pathway analysis",
+            "pathway clusters", "enriched pathway summary", "summary of")
+    # Caveats close a Results section; they are not a finding to reorganise.
+    # Grouped with the pathways they landed third of six, which reads as the
+    # report giving up halfway through.
+    LAST = ("limitation", "caveat")
+    pathway_secs, closing = [], []
+    for h, b in secs:
+        low = h.lower()
+        if any(k in low for k in LAST):
+            closing.append(h + b)
+        elif not any(k in low for k in SKIP):
+            pathway_secs.append((h, b))
+    if not pathway_secs:
+        return None
+    groups = [pathway_secs[i:i + RESULTS_CHUNK]
+              for i in range(0, len(pathway_secs), RESULTS_CHUNK)]
+    async def one(group, taken):
+        chunk = "\n\n".join(h + b for h, b in group)
+        owned = [n for n in pw_names
+                 if any(n.lower() in (h + b).lower() for h, b in group)]
+        prompt = RESULTS_CHUNK_PROMPT % {
+            "names": "\n".join("  - %s" % n for n in owned) or "  (see below)",
+            "taken": ("\n".join("  - %s" % t for t in taken)
+                      if taken else "  (none yet -- this is the first section)"),
+            "chunk": chunk}
+        # Checked and retried per CHUNK, not once at the end. A chunk owns a
+        # known handful of pathways, so a miss is both detectable here and
+        # cheap to fix -- and a single dropped name at the end rejects the
+        # whole rewrite. Measured: one run kept 16/16, the next dropped one,
+        # from an identical input. The conservation is reliable; the wording
+        # is not, so it is checked rather than trusted.
+        text = None
+        for attempt in (1, 2):
+            try:
+                r = await bounded(Runner.run(agent, prompt, context=ctx,
+                                             max_turns=2), timeout,
+                                  label="results chunk")
+                text = str(r.final_output or "").strip()
+            except (Exception, asyncio.TimeoutError) as e:
+                logger.warning("[%s][loop] results chunk failed: %s", job_id, e)
+                return chunk, owned          # keep the ORIGINAL sections
+            gone = [n for n in owned if n.lower() not in text.lower()]
+            if not gone or attempt == 2:
+                if gone:
+                    stats["results_chunk_unfixed"] = (
+                        stats.get("results_chunk_unfixed", 0) + len(gone))
+                break
+            prompt = (
+                "Your section stopped discussing these pathways:\n%s\n\n"
+                "Each is a finding, not an optional detail. Return the SAME "
+                "section with them discussed by name, keeping everything else "
+                "exactly as you wrote it.\n\n%s"
+                % ("\n".join("  - %s" % n for n in gone), text))
+        return text, owned
+
+    # Sequential, not gathered. Run in parallel the chunks cannot see each
+    # other's headings and converge: five of them opened with a variant of
+    # "Chromatin accessibility ... precedes transcription", which reads as one
+    # argument made five times. Each call is a few seconds, so ordering them
+    # costs little and is what makes the section titles distinct.
+    out = []
+    taken = []
+    for g in groups:
+        text, owned = await one(g, taken)
+        out.append((text, owned))
+        for h in re.findall(r"(?m)^##\s+(.+)$", text):
+            taken.append(h.strip())
+    stats["results_chunks"] = len(groups)
+    body = "\n\n".join(t for t, _ in out if t)
+    if closing:
+        body = body.rstrip() + "\n\n" + "\n\n".join(c.strip() for c in closing)
+    return (preamble.rstrip() + "\n\n" + body + "\n\n" + tail).strip()
+
+
+async def _write_results_section(agent, ctx, report, cluster_text, pathways,
+                                 job_id, stats, timeout):
     """Rewrite the dossier as a Results section, or keep the dossier.
 
     Runs BEFORE the exit gate on purpose. Everything it writes then goes
@@ -2399,6 +2554,24 @@ async def _write_results_section(agent, ctx, report, cluster_text, job_id,
     """
     t0 = time.time()
 
+    def _named_pathways(text, names):
+        """Which of the report's pathways are still discussed by name.
+
+        This is the guard round 66 lacked. That version kept every citation and
+        still lost 22% of the rubric's coverage, because the rubric scores
+        findings -- it matches `truth_pathways`, a list of pathway NAMES from
+        the published Results -- and citations say nothing about which findings
+        survived. A rewrite can carry all 22 markers and quietly drop half the
+        biology.
+
+        Matched case-insensitively on the name, not on the accession: a Results
+        section reorganised by finding has no reason to keep "(mmu04060)" in a
+        heading, and requiring it would reject good prose. Losing the NAME is
+        what loses the finding.
+        """
+        low = str(text).lower()
+        return {n for n in names if n and n.lower() in low}
+
     def _body_markers(text):
         """Markers in the PROSE, not in the reference list.
 
@@ -2412,9 +2585,11 @@ async def _write_results_section(agent, ctx, report, cluster_text, job_id,
         return set(re.findall(r"\[(\d+)\]", str(text).split("### References")[0]))
 
     before = _body_markers(report)
+    pw_names = [p.get("name") for p in (pathways or []) if p.get("name")]
+    pw_before = _named_pathways(report, pw_names)
     prompt = RESULTS_PROMPT % {
-        "words": RESULTS_MAX_WORDS,
         "markers": " ".join("[%s]" % m for m in sorted(before, key=int)) or "(none)",
+        "pathways": "\n".join("  - %s" % n for n in sorted(pw_before)) or "  (none)",
         "clusters": cluster_text or "(no clustering available)",
         "report": report}
 
@@ -2425,9 +2600,40 @@ async def _write_results_section(agent, ctx, report, cluster_text, job_id,
     # model to reorganise prose and carry two dozen markers is two tasks, and
     # the second is the one that silently fails -- so it gets told exactly which
     # ones it dropped rather than being asked again to be careful.
+    # Chunked first: one call cannot conserve the whole dossier (see
+    # _results_by_chunk). The single-call path stays only as the fallback for a
+    # report with no per-pathway sections to split.
+    chunked = await _results_by_chunk(agent, ctx, report, pw_names, job_id,
+                                      stats, timeout)
+    if chunked:
+        cand_after = _body_markers(chunked)
+        cand_pw = _named_pathways(chunked, pw_names)
+        reasons = []
+        if before - cand_after:
+            reasons.append("lost_%d" % len(before - cand_after))
+        if cand_after - before:
+            reasons.append("invented_%d" % len(cand_after - before))
+        if pw_before - cand_pw:
+            reasons.append("droppedpathways_%d" % len(pw_before - cand_pw))
+        if "### References" in report and "### References" not in chunked:
+            reasons.append("no_references")
+        if reasons:
+            stats["results_rejected"] = ",".join(reasons)
+            stats["results_s"] = time.time() - t0
+            logger.info("[%s][loop] results section rejected (%s); keeping the "
+                        "dossier", job_id, ",".join(reasons))
+            return report, False
+        stats["results_words_before"] = len(report.split())
+        stats["results_words_after"] = len(chunked.split())
+        stats["results_citations_kept"] = len(cand_after)
+        stats["results_pathways_kept"] = len(pw_before & cand_pw)
+        stats["results_pathways_before"] = len(pw_before)
+        stats["results_s"] = time.time() - t0
+        return chunked, True
+
     candidate = ""
     after = set()
-    for attempt in (1, 2):
+    for attempt in (1, 2, 3):
         try:
             r = await bounded(Runner.run(agent, prompt, context=ctx, max_turns=2),
                               timeout, label="results section")
@@ -2436,24 +2642,48 @@ async def _write_results_section(agent, ctx, report, cluster_text, job_id,
             stats["results_failed"] = "%s: %s" % (type(e).__name__, e)
             return report, False
         after = _body_markers(candidate)
+        pw_after = _named_pathways(candidate, pw_names)
         missing = before - after
-        if not missing or attempt == 2:
+        pw_missing = pw_before - pw_after
+        if (not missing and not pw_missing) or attempt == 3:
             stats["results_attempts"] = attempt
             break
-        stats["results_retried"] = ",".join(sorted(missing, key=int))
+        stats["results_retried"] = ",".join(sorted(missing, key=int)) or "pathways"
+        if pw_missing:
+            stats["results_retried_pathways"] = len(pw_missing)
+        if pw_missing and not missing:
+            prompt = (
+                "Your Results section stopped discussing these pathways:\n%s\n\n"
+                "Each is a finding from the analysis, not an optional detail. "
+                "Put them back -- under whatever heading fits the story, and "
+                "several may share one subsection -- keeping everything else "
+                "exactly as you wrote it. End with the \"### References\" "
+                "section exactly as it appears below, every entry unchanged; a "
+                "reply that omits it is discarded.\n\n%s"
+                % ("\n".join("  - %s" % n for n in sorted(pw_missing)), candidate))
+            continue
         prompt = (
             "Your Results section dropped these citations: %s\n\n"
             "Each one marks a claim that was verified against the paper it "
             "points at, so a dropped marker loses a verified fact and the "
             "rewrite is discarded. Return the SAME Results section with every "
             "one of them restored on the sentence carrying its claim. Change "
-            "nothing else.\n\n%s"
+            "nothing else. "
+            "End with the \"### References\" section exactly as it appears in the "
+            "text below -- every entry, unchanged. A reply that omits it is "
+            "discarded.\n\n%s"
             % (" ".join("[%s]" % m for m in sorted(missing, key=int)), candidate))
     lost = before - after
     gained = after - before
+    pw_lost = pw_before - _named_pathways(candidate, pw_names)
     reasons = []
     if lost:
         reasons.append("lost_%d" % len(lost))
+    if pw_lost:
+        # The round-66 failure, now refusable. Coverage fell 0.571 -> 0.446
+        # there while every citation survived, because nothing checked that the
+        # FINDINGS did.
+        reasons.append("droppedpathways_%d" % len(pw_lost))
     if gained:
         # A marker that was not there before points at a paper this text was
         # never verified against.
@@ -2472,6 +2702,8 @@ async def _write_results_section(agent, ctx, report, cluster_text, job_id,
     stats["results_words_before"] = len(report.split())
     stats["results_words_after"] = len(candidate.split())
     stats["results_citations_kept"] = len(after)
+    stats["results_pathways_kept"] = len(pw_before & _named_pathways(candidate, pw_names))
+    stats["results_pathways_before"] = len(pw_before)
     stats["results_s"] = time.time() - t0
     return candidate, True
 
@@ -2908,7 +3140,7 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
             cluster_text = clusters_mod.render_partition_table(
                 ctx.partition, _ctx_by_id(ctx)) or ""
         report, results_written = await _write_results_section(
-            agents["synth"], ctx, report, cluster_text, job_id, stats,
+            agents["synth"], ctx, report, cluster_text, pathways, job_id, stats,
             min(SDK_LONG_CALL_TIMEOUT, 180))
         stats["results_section"] = results_written
 
