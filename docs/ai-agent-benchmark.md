@@ -2052,3 +2052,49 @@ citations sit in delegated sections rather than the Lead's own -- but it needs a
 mapping from sentence to source section that nothing currently records. Round 44
 sidesteps it: with the top-up off, the Lead cites its own sentences and the
 delegated text keeps citing nothing.
+
+## Round 44 scored: 4/5 with rule 3 at ZERO, and round 45 pre-registered
+
+```
+2 citations >= base  FAIL  (16.5 vs 22.5)
+3 redactions         PASS  (0.0 vs 4.0)
+4 coverage           PASS  (14.8 vs 13.0)
+```
+
+Removing the top-up produced literally zero redactions across every replicate --
+the cleanest rule-3 result in the series -- and cost six citations, exactly the
+predicted trade. Both halves of the dilemma are now measured on the same
+pipeline:
+
+| configuration | citations | redactions |
+|---|---|---|
+| top-up off (v44) | 16.5 | 0.0 |
+| top-up unchecked (v43) | 19.0 | 22.0 |
+| base | 22.5 | 4.0 |
+
+## Round 45: the top-up keeps what holds and gives back what does not
+
+`AI_AGENT_VERIFY_TOPUP=1` on round 43's configuration. The gate already decides
+which citations fail; this decides what failing costs. A failed citation the
+TOP-UP added loses its marker and keeps its sentence, because the sentence stood
+on its own before the marker arrived. A failed citation the WRITER put there is
+still redacted, because a claim with no support left should not ship.
+
+**Smoke-tested on the same job before the round**: 22 citations, 0 failures, 0
+redactions, the top-up keeping 4 of 6 additions and giving back 2 whose markers
+appeared 6 times.
+
+**Prediction.**
+- `redacted` <= base + 2. Rule 3 passes.
+- `citations_in_body` >= base. Rule 2 passes -- this is the rule the top-up was
+  carrying, and the pull-back keeps the citations that verify.
+- `topup_pulled_back` > 0 in most replicates; if it is 0 everywhere, the
+  mechanism never fired and the round says nothing about it.
+- Coverage stays above base, as in rounds 38-44.
+
+If both rules pass, this is the first 5/5 in the series, and the bar then asks
+for a second consecutive one before anything ships.
+
+**Falsifier.** If citations land near round 44's 16.5, the top-up's surviving
+additions were not what carried rule 2 either, and the citation gap is structural
+to how this arm writes rather than to any stage that can be repaired.
