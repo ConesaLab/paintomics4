@@ -5415,3 +5415,73 @@ the needed shape ("the only way to ask WHERE in the top-up's sequence its
 failures fall"), so the fix has a precedent in the same file.
 
 Next: record `repaired_refs`, then scope a majority vote to untouched citations.
+
+## Round 59 SCORED — repair is dead, and the interim non-determinism claim is withdrawn
+
+### The falsifier fired
+
+`AI_SENTENCE_REPAIR=1`, 8 replicates, against round 57's 8.
+
+| metric | r57 rewrite | r59 repair | delta | |
+|---|---|---|---|---|
+| **citations_in_body** | **21.38** | **14.25** | **-7.12 (-33.3%)** | RESOLVED |
+| citations_checked | 23.00 | 16.00 | -7.00 | RESOLVED |
+| wall_s | 422.45 | 279.60 | **-142.85** | RESOLVED |
+| prose_pathways_covered | 15.38 | 15.50 | +0.12 | not resolved |
+| failed_citations | 0.00 | 0.00 | 0 | not resolved |
+
+Round 36's falsifier was inherited verbatim and is not being softened now that
+it has fired:
+
+> Repair gets exactly one retest with the fix; **if citations fall again, it is
+> dead.**
+
+Citations fell **33.3%**, against round 36's **34%**. The marker guard did not
+save it. **Sentence repair is dead.** It will not be retested again.
+
+The time half held once more -- **-143 s, median 451 -> 277 s** -- exactly as in
+round 36 (-23%). Repair is genuinely cheaper and genuinely preserves coverage
+(15.38 -> 15.50 pathways). It buys that by writing a report with a third fewer
+citations, which is the one thing this arm exists to avoid.
+
+Predictions 3 and 4 held and do not rescue it: a faster, equally-grounded report
+with 33% fewer citations is a worse interpretation by the standard this whole
+document is written to.
+
+### Withdrawing the interim claim about verifier determinism
+
+The interim entry above claimed `verify_citation_prefetched` is substantially
+non-deterministic, on 2-3 replicates, and used that to qualify round 57's
+already-deployed result. **The full round does not support it.**
+
+Per-run excess (verdict changes beyond what repair can explain):
+
+```
++1, +1, -3, -1, 0, 0, -2      total positive excess 2 over 7 runs = 0.29/run
+```
+
+The striking run -- 1 repair, 2 changes, both breaking -- is an outlier, not the
+pattern. Most runs show changes <= repairs, which repair fully explains.
+
+Two errors, both mine:
+
+1. **Over-claimed from partial data.** Three replicates were enough to see a
+   suggestive case and not enough to see it was an outlier. The aggregate test I
+   first wrote (total changes vs total repairs) was also wrong in the other
+   direction -- summing across runs lets one run's deficit cancel another's
+   excess -- so the per-run figure above is the honest one.
+2. **Used it to undercut a sound result.** At 0.29 unexplained changes per run
+   against round 57's 2.8 fixes per run, round 57's 4.00 -> 1.20 is **not**
+   materially inflated. The qualification published in the interim entry is
+   withdrawn; "70% of remaining failures removed" stands as measured.
+
+The 57% figure quoted in the interim entry pooled repaired and unrepaired
+sentences, so it measured repair working plus noise, not noise. Excess is the
+only valid noise measure here and it is small.
+
+### What survives
+
+The whole-report rewrite stays the correction mechanism, and `VERIFY_ITERATIONS
+= 3` stays the default. The known cost of the rewrite -- 2 of 8 corrections
+cancelled mid-flight -- is real but is not fixed by repair, because repair's
+price is a third of the citations.
