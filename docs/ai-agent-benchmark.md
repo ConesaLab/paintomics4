@@ -4225,3 +4225,63 @@ than my own rules: section E items E2 becomes reachable, A2 ("five omics layers"
 becomes reachable, and `rubric_coverage` rises. E3 and E4 need the biosynthesis
 genes and the Myc link, which are gene-level and were always reachable -- if they
 stay missed, the gap there is interpretation, not supply.
+
+### Base at its best beats the agent on content and breaks the clock
+
+Round 53, base with `AI_CLUSTER_MODE=1` (its best measured configuration, live on
+UV), first replicate:
+
+```
+                      rubric   covered   redacted   wall
+base, no cluster       0.406      13.8        4.2   336 s   (n=8)
+base, CLUSTER MODE     0.641     102.0       10.0   814 s   (n=1)
+agent                  0.584      14.9        0.0   357 s   (n=8)
+
+cluster mode is worth +0.235 to base on ground truth
+the agent's margin over base: was +0.178, now -0.057
+```
+
+The +0.235 closely matches AgentEvolve's independently measured +0.210, from a
+different harness and a different scoring leg. **Every comparison in this document
+before now was against a handicapped incumbent**, and with base configured
+properly the agent arm is behind on content.
+
+**But cluster-mode base takes 814 seconds.** That is 13.6 minutes: it fails rule 1
+and it fails the standing brief -- "citation grounded without waiting more than 10
+mins" -- by a wide margin. AgentEvolve's own cluster runs came in at a 349 s
+median, so this is either job-dependent or gateway-dependent and needs the
+remaining replicates before it is called a property of the mode.
+
+Read against the brief rather than against my rules, the position is:
+
+```
+                       rubric   wall     inside 10 min?
+agent                   0.584   357 s    yes
+base, cluster mode      0.641   814 s    NO
+base, no cluster        0.406   336 s    yes
+```
+
+**The agent arm is the only configuration that is both good and fast.** It scores
+0.584 in 357 s; base can beat it on content only by spending 2.3x the clock and
+leaving the budget. That is a real result and it is the first time the ten-minute
+constraint has done any work in this document -- every previous round finished so
+far inside 600 s that rule 1 was free.
+
+**And the gap is now precisely located.** Both arms index all 102 pathways -- the
+agent's `cluster_pathways` already rebuilds its universe over the partition
+members, exactly as base does, with a comment saying so. The agent discusses 14.9
+of them because `DELEGATE_MAX_PATHWAYS` is 20 (agent_loop.py:1915). Base discusses
+all 102 and pays 814 s for it.
+
+So the question the next round should ask is not "should the agent cluster" -- it
+does -- but **how much of its clustered universe it can afford to discuss inside
+the budget.** That is a single constant against a measured time cost, which is the
+cleanest experiment available: raise `DELEGATE_MAX_PATHWAYS` and watch rubric
+coverage and wall clock together until one of them breaks.
+
+I also have to correct a statement I made two paragraphs into this
+investigation: I wrote that "the agent clusters a truncated universe; base
+clusters the full one". That was wrong -- I read `build_pathway_context(
+max_pathways=...)` at the loop's entry and concluded the universe was never
+rebuilt, without reading `cluster_pathways`, which rebuilds it. `pathways_indexed`
+is 102 in both arms and always was.
