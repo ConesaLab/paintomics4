@@ -3956,3 +3956,63 @@ verifiability after all and the separation rule was right.
 Note on power: this is the first change whose primary metric is one I can move by
 a large multiple rather than by one or two units, so a single round of four can
 see it -- which is the property I said to prefer.
+
+### AgentEvolve already had the scorer this benchmark was missing
+
+Asked whether I had compared against AgentEvolve, the sibling harness in
+`~/Desktop/github_dev/agentevolve`: I had not. It has what this document spent a
+session lacking -- a **ground-truth content rubric**, sealed and hashed, derived
+from the published PaintOmics 4 Results section (PMC9252773) for **this exact
+STATegra job**. Section weights follow the paper's own emphasis, `dir:` fields
+reject a report that names the right pathway with the wrong sign, and DIVERGENCE
+items name claims that are in the paper but NOT supportable from this job, so
+narrating one is fabrication and hard-fails the round.
+
+Running that sealed rubric over my rounds 50 and 52:
+
+```
+  agent  0.585 +- 0.046  (n=7)
+  base   0.406 +- 0.032  (n=8)
+  margin +0.179   se 0.021   -> RESOLVED
+  agent is 144% of base
+
+  fabrication: 0 in both arms, all 15 reports
+```
+
+**On a ground-truth measure written before this work, by another process, the
+agent arm is resolvably better -- 44% more of the published paper's conclusions
+recovered, with no fabrication in either arm.** My own five rules on the same
+rounds return NOISE for citations, NOISE for coverage, and RESOLVED only for
+redactions.
+
+So the arm is in better shape than my instrumentation could show, and the reason
+is the one the last two entries circled: every rule here compares the arm to the
+incumbent on counts. None of them asks whether the report reached the right
+conclusions, and no amount of replicates fixes that.
+
+**An independent corroboration, and it is exact.** AgentEvolve's latest commit is
+titled *"Round 2 diagnosis: information without an instruction is a no-op"* -- a
+class-direction block reached the synthesis prompt with real content, and no
+report used it, because nothing in the Task list asked for a per-class direction
+statement. That is precisely the mechanism found here one entry ago: the citation
+instruction says where to cite from and how to format, and nothing asks a citation
+to bear on the data, so the writers state facts about papers. Two investigations,
+different harnesses, same conclusion -- and it retroactively justifies this
+round's change being an INSTRUCTION (`_JOIN_NOTE`) rather than more information.
+
+**Their results also bear on things measured here.** Round 1b was a REVERT:
+theme-clustered batches, train -0.108, "rank leg collapsed". I tested batch
+composition as `DELEGATE_CHUNK` (unit count) and found nothing resolvable; they
+tested it as theme-clustering and got a decisive negative. Their round 6b keep --
+cluster-first, train +0.210 -- is the largest effect in their table and is already
+live on UV.
+
+**Correcting my own read of their table**: their `claim` column is one leg of a
+composite (train/heldout/claim/rank/fold) and I do not know that it equals the
+`coverage` figure I computed, so I am not comparing my 0.585 against their 0.348
+or 0.917. What is comparable is agent-vs-base under one scorer, run by me, on my
+own reports.
+
+The action is obvious and it is not another round: **this benchmark should score
+against the sealed rubric, not only against base.** A judge that cannot tell
+whether the report is right has been the limiting factor all session.
