@@ -4334,3 +4334,53 @@ Falsifiers, both sharp: if wall exceeds 600 s the parallel advantage is smaller
 than the wave model says and the cap comes back down. If coverage rises but
 `rubric_coverage` does not, then naming more pathways is not what earned base its
 +0.235 and the mechanism is something else in cluster mode.
+
+### Round 53 at n=2: cluster mode wins content, loses the clock and the citations
+
+```
+report        cov   wall  redact   rubric
+agent-r1       17    360       0    0.511
+agent-r2       16    320       0    0.576
+base-r1       102    813      10    0.641
+base-r2        52    536      24    0.696
+
+means      agent  16.5   340 s   0.0   0.544
+      cluster base  77   675 s  17.0   0.669
+```
+
+Three things, and the second is a correction to a hypothesis I have not yet run.
+
+**Cluster mode costs base its citations.** Redactions are 10 and 24 against the
+agent's 0 and 0. Base is naming many more pathways, citing more papers for them,
+and losing a great many of those citations at the gate -- 24 redacted sentences in
+one report. On the brief's own terms this matters: "citation grounded" is not
+served by a report that names 52 pathways and has two dozen sentences deleted out
+of it.
+
+**Coverage is not the mechanism, or not simply.** base-r2 covered 52 pathways and
+scored **higher** than base-r1's 102 (0.696 against 0.641). If rubric score does
+not track pathway count within the same arm and configuration, then raising the
+agent's `DELEGATE_MAX_PATHWAYS` may not move it either. AgentEvolve read their own
+round 6 as "mechanism is coverage, not cleverness -- items keyed on pathways ranked
+16-100 become reachable at all", which is a sound reading of their data; my two
+replicates do not reproduce the monotonic part of it. n=2 with a within-group
+spread of 0.04 cannot settle this, and I am not claiming it does -- but the
+round-54 falsifier I already wrote covers exactly this case: "if coverage rises but
+rubric_coverage does not, naming more pathways is not what earned base its +0.235".
+That falsifier is now the more likely outcome, and round 54 is still the right
+experiment because it tests the two apart.
+
+**The clock is now the deciding constraint.** Base's two runs are 813 s and 536 s
+-- one over the ceiling, one under, mean 675 s. The agent's are 360 s and 320 s.
+Against the standing brief the position is unchanged and sharper than before:
+
+```
+                    rubric   wall    inside 10 min   redactions
+agent                0.544   340 s   yes             0.0
+base, cluster        0.669   675 s   half the runs  17.0
+base, no cluster     0.406   336 s   yes             4.2
+```
+
+The agent arm is the only configuration that is good, fast AND grounded. Base can
+beat it on rubric content, but only by spending twice the clock and shipping
+reports with ten to twenty-four redacted sentences.
