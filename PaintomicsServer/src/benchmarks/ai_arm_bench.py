@@ -173,7 +173,8 @@ STAGE_TIMES = ("topup_fulltext_s", "topup_verify_s",
                "verify_fanout_s", "verify_repair_s",   # the two halves of the loop
                "triage_s", "plan_s", "retrieval_s", "interpret_s", "gap_fill_s",
                "synth_s", "topup_s", "verify_loop_s", "verify_s",       # shipped arm
-               "loop_s", "fulltext_s", "quotes_s", "merge_s")           # agent arm
+               "loop_s", "fulltext_s", "quotes_s", "merge_s",           # agent arm
+               "results_s")                                             # Results section
 STAGE_COUNTS = ("delegate_fulltext_gained", "quotes_supplied", "quotes_reused", "quotes_from_delegation", "refs_rendered", "verify_unchecked", "verify_cut_short", "unquotable_markers_dropped", "agent_tool_calls", "agent_searches", "agent_notebook", "stitch_truncated", "topup_evidence_chars", "genes_shown", "genes_flat", "merge_gain_chars", "verify_iterations", "batches_failed", "truncated_calls",
                 "forced_synthesis", "topup_added", "quotes_unverifiable",
                 # The other half of the top-up's bet. Recording only
@@ -183,6 +184,17 @@ STAGE_COUNTS = ("delegate_fulltext_gained", "quotes_supplied", "quotes_reused", 
                 # Seconds are half of what a tool costs; the other half is the
                 # context every later turn has to carry.
                 "tool_chars",
+                # The Results-section rewrite. Both word counts, because the
+                # stage exists to compress and the RATIO is the measurement --
+                # round 66 caught a 984-word interpretation coming back at 1408.
+                "results_words_before", "results_words_after",
+                # How many citations survived, and how many attempts it took.
+                # attempts>1 is the norm, not an anomaly: the first pass drops
+                # citations in most runs, so this is the number that says
+                # whether the guard is load-bearing.
+                "results_citations_kept", "results_attempts", "results_section",
+                # "short" is a ratio, so keep the ratio, not just the verdict.
+                "topup_candidate_ratio",
                 # Which searches reached the report. Retrieval novelty is
                 # ~99.9%; conversion to a citation is ~12%, so the useful
                 # question is per-theme, not per-call.
@@ -249,7 +261,13 @@ STAGE_NOTES = ("delegate_fulltext_failed", "fulltext_candidates", "fulltext_upgr
                "topup_fulltext_skipped", "topup_fulltext_failed",
                "topup_disabled", "topup_failed", "topup_skipped", "merge_rejected",
                "merge_skipped", "merge_failed", "loop_backstop",
-               "deterministic_fallback")
+               "deterministic_fallback",
+               # WHICH guard condition rejected a top-up (short / no_gain /
+               # dropped) and which rejected a Results section. A stage that
+               # only records THAT it failed cannot be aimed at: 3 of 5
+               # archived top-up rejections recorded no reason at all.
+               "topup_rejected_why", "results_rejected", "results_retried",
+               "results_failed")
 
 
 # Stats the two arms write that the archive deliberately does not keep. The
