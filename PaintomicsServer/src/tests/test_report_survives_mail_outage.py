@@ -24,6 +24,7 @@ Run:  PYTHONPATH=PaintomicsServer python3 PaintomicsServer/src/tests/test_report
 """
 import importlib.util
 import os
+import re
 import sys
 import unittest
 
@@ -325,25 +326,37 @@ class EmailTemplateTest(unittest.TestCase):
                             "PAINTOMICS_LOGO_PATH points at %s, which is not in "
                             "public_html" % PAINTOMICS_LOGO_PATH)
 
-    def test_the_contact_footer_is_not_a_hardcoded_address(self):
-        """It must follow config, or it drifts from the live mailbox."""
-        path = os.path.join(REPO, "PaintomicsServer", "src", "servlets",
-                            "AdminServlet.py")
-        with open(path, encoding="utf-8") as handle:
-            lines = handle.readlines()
+    def test_no_email_template_hardcodes_a_contact_address(self):
+        """Every mail footer must follow config, or it drifts from the mailbox.
+
+        Four templates hardcoded the same literal address -- the report mail,
+        both account mails, and the quota warning -- so moving the project
+        mailbox left all four naming the old one.
+        """
+        roots = [os.path.join(REPO, "PaintomicsServer", "src", "servlets"),
+                 os.path.join(REPO, "PaintomicsServer", "src", "AdminTools", "scripts")]
 
         offenders = []
-        for number, line in enumerate(lines, 1):
-            stripped = line.strip()
-            if stripped.startswith("#"):
-                continue                      # the licence header names a contact
-            if "message +=" in line and "@" in line and "mailto:" in line:
-                if '"' in line and "@gmail" in line:
-                    offenders.append("%d: %s" % (number, stripped[:90]))
+        for root in roots:
+            if not os.path.isdir(root):
+                continue
+            for name in sorted(os.listdir(root)):
+                if not name.endswith(".py"):
+                    continue
+                path = os.path.join(root, name)
+                with open(path, encoding="utf-8") as handle:
+                    lines = handle.readlines()
+                for number, line in enumerate(lines, 1):
+                    if line.strip().startswith("#"):
+                        continue              # licence header names a contact
+                    if "mailto:" in line and "@" in line and '"' in line:
+                        # a quoted literal address next to mailto: is the bug
+                        if re.search(r'"[^"]*@[^"]*\.[a-z]{2,}[^"]*"', line):
+                            offenders.append("%s:%d" % (name, number))
         self.assertEqual(
             offenders, [],
-            "the email footer hardcodes an address instead of using the "
-            "configured sender: " + "; ".join(offenders))
+            "these email templates hardcode a contact address instead of using "
+            "the configured sender: " + "; ".join(offenders))
 
 
 class UwsgiIniTest(unittest.TestCase):

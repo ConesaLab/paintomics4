@@ -132,7 +132,7 @@ function showBootFailureMessage(error) {
         message: "</br>Paintomics could not start with the analysis stored in this browser." +
             "</br><a href='#' onclick='resetPaintomicsSession(); return false;'>Discard the stored analysis and reload</a>" +
             " - your jobs are kept on the server, so you can reopen them from [b]My Jobs[/b]." +
-            "</br>If the error persists, please contact your web <a href='mailto:paintomics4@gmail.com' target='_blank'>administrator</a>.",
+            "</br>If the error persists, please contact your web <a href='mailto:paintomicsai@gmail.com' target='_blank'>administrator</a>.",
         showButton: true
     });
 }

@@ -4,7 +4,7 @@
 
 # Accepted input data
 
-For any question on Paintomics, users can send a mail to [paintomics4@gmail.com](mailto:paintomics4@gmail.com).
+For any question on Paintomics, users can send a mail to [paintomicsai@gmail.com](mailto:paintomicsai@gmail.com).
 
 As mentioned previously, the usage of multiple complementary genome-wide measurements is becoming a powerful tool for a better understanding the complexity of biological systems. Within this scenario, any new tool for System Biology cannot ignore this emerging trend and should be able to support multi-omic experiments. Following this idea, Paintomics 4.0 has been developed to accept data from diverse nature, including common techniques such as Transcriptomics, Metabolomics and Proteomics, but also emerging approaches such as DNase-seq, ChIP-seq or Methyl-seq. Resulting, the accepted inputs for Paintomics 4.0 can be broadly classified into 3 categories, depending on the nature of the input data.
 

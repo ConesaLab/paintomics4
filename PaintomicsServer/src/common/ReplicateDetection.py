@@ -7,7 +7,7 @@
 #  the License, or (at your option) any later version.
 #
 #  More info http://bioinfo.cipf.es/paintomics
-#  Technical contact paintomics4@gmail.com
+#  Technical contact paintomicsai@gmail.com
 #**************************************************************
 """
 ReplicateDetection

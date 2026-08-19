@@ -26,4 +26,4 @@ You should have received a copy of the GNU General Public License along with thi
 
 ** Ana Conesa, PhD. **, Head Genomics of Gene Expression Lab.
 
-For any question on Paintomics, users can send a mail to [paintomics4@gmail.com](mailto:paintomics4@gmail.com).
+For any question on Paintomics, users can send a mail to [paintomicsai@gmail.com](mailto:paintomicsai@gmail.com).
