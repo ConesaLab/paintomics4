@@ -1,0 +1,55 @@
+<div ng-controller="ReportListController as controller">
+	<div class=" admin-section-title-div">
+		<div class="panel-body">
+			<div style="margin: -9px;"><h1>PaintOmics 3 Administration</h1></div>
+		</div>
+	</div>
+	<div class="panel panel-default">
+		<div class="panel-body">
+			<h1>User requests</h1>
+			<h3>Organism requests and error reports submitted from the application</h3>
+
+			<div class="well" ng-show="undelivered > 0">
+				<h4><i class="fa fa-exclamation-triangle text-warning" aria-hidden="true"></i> {{undelivered}} of these were not emailed</h4>
+				<p>
+					Reports are saved here the moment they are submitted, before any email is
+					attempted, so nothing is lost when the mail provider is unavailable.
+					The ones marked <b>Not sent</b> below never reached an inbox &mdash; this
+					page is the only place they appear.
+				</p>
+				<p>
+					To restore email delivery, set a working <code>SMTP_PASSWORD</code> in
+					<code>/etc/paintomics/paintomics.env</code> and restart the service.
+				</p>
+			</div>
+
+			<a class="clickable btn btn-sm btn-info" ng-click="controller.refreshHandler();">
+				<i class="fa fa-refresh" aria-hidden="true"></i> Refresh
+			</a>
+
+			<h2 ng-show="isLoading === true">
+				<i class="fa fa-circle-o-notch fa-spin fa-fw"></i> Loading...
+			</h2>
+
+			<h4 ng-show="isLoading !== true && reports.length === 0">
+				No requests have been submitted yet.
+			</h4>
+
+			<table class="table" style="margin: auto; " ng-show="reports.length > 0">
+				<thead>
+					<tr style="text-align:center;">
+						<th>Date</th>
+						<th>Type</th>
+						<th>From</th>
+						<th>Request</th>
+						<th>Emailed</th>
+						<th>Options</th>
+					</tr>
+				</thead>
+				<tbody>
+					<tr report-row ng-repeat="report in reports" ></tr>
+				</tbody>
+			</table>
+		</div>
+	</div>
+</div>

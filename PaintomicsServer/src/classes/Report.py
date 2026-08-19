@@ -31,6 +31,7 @@ class Report (Model):
     # CONSTRUCTORS
     #******************************************************************************************************************
     def __init__(self, report_type=""):
+        self.report_id = ""
         self.report_type = report_type or "other"
         self.user_email = ""
         self.user_name = ""
@@ -42,6 +43,12 @@ class Report (Model):
     #******************************************************************************************************************
     # GETTERS AND SETTER
     #******************************************************************************************************************
+    def getReportID(self):
+        return self.report_id
+
+    def setReportID(self, report_id):
+        self.report_id = str(report_id or "")
+
     def getReportType(self):
         return self.report_type
 

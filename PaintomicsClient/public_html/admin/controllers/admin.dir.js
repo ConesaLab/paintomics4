@@ -47,6 +47,12 @@
 		};
 	});
 
+	app.directive("reportRow", function() {
+		return {
+			templateUrl: 'templates/report-row.tpl.html'
+		};
+	});
+
 	app.directive('fileModel', ['$parse', function ($parse) {
 		return {
 			restrict: 'A',
