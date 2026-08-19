@@ -1,0 +1,76 @@
+#***************************************************************
+#  This file is part of Paintomics v3
+#
+#  Paintomics is free software: you can redistribute it and/or
+#  modify it under the terms of the GNU General Public License as
+#  published by the Free Software Foundation, either version 3 of
+#  the License, or (at your option) any later version.
+#
+#  Paintomics is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License
+#  along with Paintomics.  If not, see <http://www.gnu.org/licenses/>.
+#
+#  More info http://bioinfo.cipf.es/paintomics
+#  Technical contact paintomics4@gmail.com
+#**************************************************************
+
+from .DAO import DAO
+from src.classes.Report import Report
+
+class ReportDAO(DAO):
+    """Durable storage for user-submitted reports.
+
+    The report is written here *before* the mail provider is contacted, so a
+    provider outage (bad credentials, exhausted quota, blocked egress) degrades
+    delivery only -- it never loses the user's message.
+    """
+    #******************************************************************************************************************
+    # CONSTRUCTORS
+    #******************************************************************************************************************
+    def __init__(self, *args, **kwargs):
+        super(ReportDAO, self).__init__(*args, **kwargs)
+        self.collectionName = "reportCollection"
+
+    #******************************************************************************************************************
+    # GETTERS AND SETTER
+    #******************************************************************************************************************
+    def findAll(self, otherParams=None):
+        queryParams = {}
+
+        if otherParams != None and otherParams.get("report_type") != None:
+            queryParams = {"report_type": otherParams.get("report_type")}
+
+        collection = self.dbManager.getCollection(self.collectionName)
+
+        matchedReports = []
+        for instance in collection.find(queryParams):
+            instance = self.adaptBSON(instance)
+            reportInstance = Report("")
+            reportInstance.parseBSON(instance)
+            matchedReports.append(reportInstance)
+        return matchedReports
+
+    def insert(self, instance, otherParams=None):
+        collection = self.dbManager.getCollection(self.collectionName)
+        instanceBSON = instance.toBSON()
+        # insert_one stamps the generated _id onto the dict it is handed, which
+        # is the instance's own __dict__ (Model.toBSON returns it, it does not
+        # copy). Insert a shallow copy so the caller's Report keeps the plain
+        # scalar fields it was built with and stays safe to serialise.
+        instanceBSON = dict(instanceBSON)
+        result = collection.insert_one(instanceBSON)
+        return str(result.inserted_id)
+
+    def markDelivered(self, reportID, delivered, deliveryError="", otherParams=None):
+        """Record the outcome of the delivery attempt for an already-stored report."""
+        from bson.objectid import ObjectId
+
+        collection = self.dbManager.getCollection(self.collectionName)
+        collection.update_one(
+            {"_id": ObjectId(reportID)},
+            {"$set": {"delivered": bool(delivered), "delivery_error": deliveryError or ""}})
+        return True
