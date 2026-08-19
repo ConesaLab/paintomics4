@@ -978,6 +978,11 @@ function PA_Step4KeggDiagramView() {
 		for (var i in this.items) {
 			this.items[i].updateObserver();
 		}
+		/* This loop repaints items only. The evidence layer's satellites are
+		   regenerated glyphs that live outside items, so without this they
+		   keep the OLD colour scale after the user hits Apply -- stale data
+		   sitting next to freshly repainted boxes. */
+		if (this.evidenceOverlay) { this.evidenceOverlay.refresh(); }
 		return this;
 	};
 
@@ -1167,11 +1172,20 @@ function PA_Step4KeggDiagramView() {
 					   CLIENT rule; the overlay needs it to decide whether an edge may
 					   claim an arrowhead or must settle for a badge. */
 					try {
-						var boxOccupancy = {};
+						var boxOccupancy = {}, itemsByFeatureID = {};
 						for (var occupancyIdx in me.items) {
-							var occupancyModel = me.items[occupancyIdx].getModel();
+							var occupancyItem = me.items[occupancyIdx];
+							var occupancyModel = occupancyItem.getModel();
 							boxOccupancy[occupancyModel.getX() + "#" + occupancyModel.getY()] =
 								(occupancyModel.getFeatures() || []).length;
+							/* Index by the graphical ID the evidence payload speaks, not by
+							   feature name: the server returns canonical IDs. */
+							(occupancyModel.getFeatures() || []).forEach(function(setElem) {
+								try {
+									var gd = setElem.getFeatureGraphicalData();
+									if (gd && gd.getID()) { itemsByFeatureID[gd.getID()] = occupancyItem; }
+								} catch (indexError) { /* no graphical data: nothing to park */ }
+							});
 						}
 
 						me.evidenceOverlay = new PA_Step4EvidenceOverlay().render({
@@ -1182,6 +1196,13 @@ function PA_Step4KeggDiagramView() {
 							graphicalOptions: graphicalOptions,
 							adjustFactor: adjustFactor,
 							boxOccupancy: boxOccupancy,
+							/* The placer needs the real geometry of every painted box to
+							   find free space, and the items themselves to regenerate a
+							   regulator's glyph with its gene symbol baked in. */
+							items: me.items,
+							itemsByID: itemsByFeatureID,
+							summaries: dataDistributionSummaries,
+							visualOptions: visualOptions,
 							maxEdges: 8
 						});
 					} catch (overlayError) {

@@ -114,7 +114,17 @@
 /* The arcs themselves carry their stroke inline (svg.js writes attributes),
    so their colour is not themeable from here by design -- they are drawn over
    raster artwork whose palette does not change between themes either. */
-.evidenceOverlay { pointer-events: visiblePainted; }
+/* The overlay group is appended AFTER every feature <image>, so it sits on
+   top of the real boxes in SVG's document-order stacking. Left hit-testable as
+   a whole it would silently swallow the hover and click of any feature box a
+   satellite overlaps -- a dead tooltip, with no visible defect to notice. The
+   group is therefore transparent to the pointer and each drawn shape opts back
+   in individually. */
+.evidenceOverlay { pointer-events: none; }
+.evidenceOverlay path,
+.evidenceOverlay rect,
+.evidenceOverlay polygon,
+.evidenceOverlay image { pointer-events: visiblePainted; }
 
 [data-theme="dark"] .evidenceLegend {
 	/* Still a light card: it floats on the diagram's white raster. Only the

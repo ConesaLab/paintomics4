@@ -271,6 +271,34 @@ class _RegulationTable(object):
             }
 
 
+def _printedObstacles(pathwayDocument):
+    """Large printed boxes the client draws nothing for but must not draw over.
+
+    A KEGG map's cross-pathway links -- the rounded boxes reading "Cell cycle",
+    "MAPK signaling pathway" -- are the biggest printed obstacles on the canvas
+    (21 of them on mmu05200) and the installer has always stored them with full
+    geometry. The client has simply never been sent them: nothing in
+    PaintomicsClient references relatedPathways at all. Anything placing new
+    marks in free space needs them, and they cost one field.
+
+    Coordinates are the box CENTRE, matching the gene entries, and arrive from
+    Mongo as strings because the KGML attributes were never cast.
+    """
+    obstacles = []
+    for related in (pathwayDocument.get("relatedPathways") or []):
+        try:
+            obstacles.append({
+                "x": float(related.get("x")),
+                "y": float(related.get("y")),
+                "width": float(related.get("width")),
+                "height": float(related.get("height")),
+            })
+        except (TypeError, ValueError):
+            # A related pathway without geometry is a link, not a drawn box.
+            continue
+    return obstacles
+
+
 def _drawnFeatureIDs(pathwayDocument):
     """IDs of the genes this pathway actually draws.
 
@@ -303,6 +331,7 @@ def buildPathwayEvidence(jobInstance, pathwayID, condition=None,
         resolveDatabaseIds, findIDsByFeaturesName)
 
     allowedClasses = set(classes) if classes else set(CLASS_PRIORITY)
+    obstacles = []
     organism = jobInstance.getOrganism()
 
     table = _RegulationTable(getattr(jobInstance, "regulationPerConditionData", None))
@@ -320,24 +349,25 @@ def buildPathwayEvidence(jobInstance, pathwayID, condition=None,
     }
 
     if not table.usable:
-        return {"pathwayID": pathwayID, "edges": [], "statistics": statistics}
+        return {"pathwayID": pathwayID, "edges": [], "obstacles": [], "statistics": statistics}
 
     client = MongoClient(MONGODB_HOST, MONGODB_PORT)
     try:
         database = client[organism + "-paintomics"]
         pathwayDocument = database["kegg"].find_one({"ID": pathwayID})
         if pathwayDocument is None:
-            return {"pathwayID": pathwayID, "edges": [], "statistics": statistics}
+            return {"pathwayID": pathwayID, "edges": [], "obstacles": [], "statistics": statistics}
 
         sourceName = pathwayDocument.get("source") or "KEGG"
+        obstacles = _printedObstacles(pathwayDocument)
         drawn = _drawnFeatureIDs(pathwayDocument)
         if not drawn:
-            return {"pathwayID": pathwayID, "edges": [], "statistics": statistics}
+            return {"pathwayID": pathwayID, "edges": [], "obstacles": [], "statistics": statistics}
 
         databaseConvertionIds, _symbolIds = resolveDatabaseIds(organism, [sourceName], database)
         targetDbnameId = databaseConvertionIds.get(sourceName)
         if targetDbnameId is None:
-            return {"pathwayID": pathwayID, "edges": [], "statistics": statistics}
+            return {"pathwayID": pathwayID, "edges": [], "obstacles": [], "statistics": statistics}
 
         relationships = list(table.relationships(condition))
 
@@ -435,4 +465,5 @@ def buildPathwayEvidence(jobInstance, pathwayID, condition=None,
         edges = edges[:maxEdges]
 
     statistics["shown"] = len(edges)
-    return {"pathwayID": pathwayID, "edges": edges, "statistics": statistics}
+    return {"pathwayID": pathwayID, "edges": edges,
+            "obstacles": obstacles, "statistics": statistics}
