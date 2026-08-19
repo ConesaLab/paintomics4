@@ -71,10 +71,14 @@ def classify(returncode, out):
 
 def run_one(name, timeout):
     env = dict(os.environ)
-    # serverconf reads this at import time; without it the AI suites skip and a
-    # skipped suite reports OK.
-    env.setdefault("PAINTOMICS_KEGG_DATA",
-                   os.path.expanduser("~/Desktop/github_dev/paintomics4_data"))
+    # serverconf reads these at import time. Without them a suite either skips
+    # everything -- and a skipped suite reports OK -- or refuses to start, which
+    # is what test_module_imports does, and it says so on stderr rather than
+    # failing silently. Both are needed; providing only the first made that suite
+    # look like a failure this branch had introduced.
+    data = os.path.expanduser("~/Desktop/github_dev/paintomics4_data")
+    env.setdefault("PAINTOMICS_KEGG_DATA", data)
+    env.setdefault("PAINTOMICS_CLIENT_TMP", os.path.join(data, "CLIENT_TMP"))
     started = time.time()
     try:
         proc = subprocess.run([sys.executable, "-m", "src.tests." + name],
