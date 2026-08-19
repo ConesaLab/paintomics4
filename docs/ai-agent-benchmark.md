@@ -4076,3 +4076,93 @@ same rounds NOT BETTER twice, on a citation count that swung on base's variance.
 **Nothing fabricates.** Zero DIVERGENCE items narrated across sixteen reports in
 two arms. That is the one thing I would most have wanted to know at the start and
 had no way to ask.
+
+### Two findings from checking the evolve history and reading against it
+
+#### 1. My base arm has been running without its best measured configuration
+
+AgentEvolve's full round history, and what it settled:
+
+```
+round 1   theme-clustered batches           REVERT  train -0.108, rank leg collapsed
+round 2   shared-gene-core lines            KEEP    +0.063
+round 3   synthesis pathway table           KEEP    +0.047
+round 4/5 confirmation, BABABA, pooled      KEEPS 2+3 CONFIRMED (+0.037)
+round 6   CLUSTER-FIRST (AI_CLUSTER_MODE=1) KEEP    train +0.210, claim +0.392  <- largest
+```
+
+Their derived rule is "cluster for context, never for order": clustering helps
+when it widens what the model sees (round 2, 6) and fails when it reorders the
+presentation (round 1). Round 6 shipped -- PR #26, live on paintomics.uv.es with
+`AI_CLUSTER_MODE=1` via a systemd drop-in.
+
+`CLUSTER_MODE` defaults to OFF, and **I never set it in any round of this
+session.** `agent_loop.py` mentions it zero times and builds its partition
+unconditionally; `agent.py` gates the whole cluster path behind it. So every
+comparison in this document has been a CLUSTERED agent against an UNCLUSTERED
+base -- with base's largest measured improvement, already in production, switched
+off. The ground-truth margin I reported last entry (agent 0.585 against base
+0.406) is confounded with exactly the thing AgentEvolve measured as worth +0.210
+to base.
+
+Round 53 is running the honest comparison: same agent configuration, base with
+`AI_CLUSTER_MODE=1`. The flag touches only base, so the isolation is clean.
+
+Best known configuration, as of now:
+```
+base    AI_CLUSTER_MODE=1, plus keeps 2 and 3 (in the code already)
+agent   round 50's: SCREEN_PAPERS=1 SEARCH_HITS=10 VERIFY_TOPUP=1
+        DELEGATE_CHUNK=5 FRAMING_REUSE_LEAD=1        (rubric 0.603)
+```
+
+#### 2. A fifth of the rubric is unreachable: no metabolite is ever shown
+
+Reading the item-level scores rather than the total, the misses are not scattered:
+
+```
+A2 w1 MISS   five omics layers, temporal
+D3 w3 MISS   DOK family down at the pre-BI to pre-BII transition
+D5 w3 MISS   mir-188-3p upregulated
+E2 w3 MISS   polyamines -- spermidine, putrescine, spermine -- decline toward pre-BII
+E3 w3 MISS   polyamine biosynthesis genes Srm, Sms, Amd1 downregulated
+E4 w3 MISS   c-Myc repression via Ikaros drives polyamine gene downregulation
+```
+
+The rubric header says "the RET vignette and the polyamine story are what the
+paper is *for*". The report gets RET (D1, D6 both HIT) and misses the polyamine
+story entirely. Checking the text rather than trusting the scorer: `polyamine`,
+`spermidine`, `putrescine`, `spermine`, `Amd1`, `Myc` all appear **zero times** in
+either arm, and no metabolite of any kind is named in either report.
+
+The job carries five omics layers -- Gene expression, Proteomics, miRNA-seq,
+DNase-seq as gene-based, and **Metabolomics as compound-based**. And:
+
+```
+context_builder.py   occurrences of "compound":  0
+agent_loop.py        occurrences of "compound":  0
+agent.py             occurrences of "compound":  0
+clusters.py          uses matchedCompounds -- for Sorensen-Dice similarity only
+```
+
+**No metabolite reaches any writer in either arm.** Compounds are used to decide
+which pathways cluster together and are never presented. base's own Limitations
+section reports the symptom correctly -- "The metabolomics layer contributed to no
+pathway in these batches, limiting metabolic interpretation to inferences from
+gene expression" -- which is a point in its favour: it noticed. The agent arm did
+not mention the layer at all.
+
+Section E is 4 items at weight 3, so roughly 10 of 46 rubric points -- **a fifth
+of the score** -- sit behind a layer the subsystem cannot show. That is a real
+product gap, it is shared by both arms, and it is worth more than any flag
+measured in this document.
+
+#### On reading, and what I got wrong about it
+
+Two entries ago I read the agent report and called the data interpretation "good
+-- real values, temporal patterns, mRNA-protein discordance flagged, annotation
+artefacts caught". All true of what the report DISCUSSED. I never asked what was
+absent, and an entire omics layer plus the paper's headline metabolic story were.
+
+Reading for quality and reading for completeness are different acts. The rubric
+caught the omission because it knows the right answer; I could not have, from the
+prose alone, and neither could any count.
