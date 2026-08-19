@@ -383,7 +383,7 @@ function MainView() {
 									return;
 								}
 								showInfoMessage("Welcome to PaintOmics AI!", {
-									message: "PaintOmics AI runs on <a href=\"https://aic.csic.es/supercomputador-drago/\" target=\"_blank\" rel=\"noopener\">Supercomputador Drago</a> (CSIC). For any inquiries, please contact us at <a href=\"mailto:paintomics4@gmail.com\">paintomics4@gmail.com</a>",
+									message: "PaintOmics AI runs on <a href=\"https://aic.csic.es/supercomputador-drago/\" target=\"_blank\" rel=\"noopener\">Supercomputador Drago</a> (CSIC). For any inquiries, please contact us at <a href=\"mailto:paintomicsai@gmail.com\">paintomicsai@gmail.com</a>",
 									showButton: true
 								})
 							},

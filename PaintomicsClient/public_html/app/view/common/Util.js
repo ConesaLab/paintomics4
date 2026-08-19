@@ -779,7 +779,7 @@ function ajaxErrorHandler(responseObj) {
     // where a stale cached model genuinely can be the cause.
     var serverSide = !!(err.extra && (err.extra.file_name || err.extra.exc_type));
     var adminLink = "If the error persists, please contact the " +
-        "<a href='mailto:paintomics4@gmail.com' target='_blank'> administrator</a>.";
+        "<a href='mailto:paintomicsai@gmail.com' target='_blank'> administrator</a>.";
 
     showErrorMessage("Oops..Internal error!", {
         message: err.message + "</br>" + (serverSide
@@ -812,7 +812,7 @@ function extJSErrorHandler(form, responseObj) {
     }
 
     showErrorMessage("Oops..Internal error!", {
-        message: err.message + "</br>Please try again later.</br>If the error persists, please contact your web <a href='mailto:paintomics4@gmail.com' target='_blank'> administrator</a>.",
+        message: err.message + "</br>Please try again later.</br>If the error persists, please contact your web <a href='mailto:paintomicsai@gmail.com' target='_blank'> administrator</a>.",
         showButton: true
     });
 }

@@ -4,4 +4,4 @@
 
 
 # Paintomics, integrative visualization of multiple *omic* data
-For any question on Paintomics, users can send a mail to [paintomics4@gmail.com](mailto:paintomics4@gmail.com).
+For any question on Paintomics, users can send a mail to [paintomicsai@gmail.com](mailto:paintomicsai@gmail.com).

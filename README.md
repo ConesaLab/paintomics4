@@ -249,7 +249,7 @@ application.
 
 ## Contact and contributing
 
-Questions, bug reports and organism requests: [paintomics4@gmail.com](mailto:paintomics4@gmail.com)
+Questions, bug reports and organism requests: [paintomicsai@gmail.com](mailto:paintomicsai@gmail.com)
 or an [issue](https://github.com/ConesaLab/paintomics4/issues) on this
 repository. Pull requests are welcome.
 

@@ -4,7 +4,7 @@
 
 **Integrative visualization of multiple *omic* data**
 
-For any question on PaintOmics, users can send a mail to paintomics4@gmail.com
+For any question on PaintOmics, users can send a mail to paintomicsai@gmail.com
 
 **Welcome to PaintOmics v4.0 documentation.**
 
@@ -20,4 +20,4 @@ PaintOmics  is easy to run because the application itself guides you through the
 * **Identifier and Name Matching and Metabolite assignment:** Paintomics requires Entrez IDs for working with KEGG pathways, so the tool will convert the names and identifiers from different sources and databases in user’s the input data. This screen give users information about the number of features successfully mapped to KEGG pathways. It also shows the data distribution that will be used for pathway colouring, which can be modified when visualizing a pathway. Additionally, the metabolite names assignments are displayed and users can choose their favourite option in case of ambiguity. Click NEXT STEP button when you are ready.
 * **Results:** Pathways summary, Pathways classification, Pathways network, Pathways enrichment, Pathways visualization (by clicking PAINT BUTTON for any of the displayed pathways in Pathways enrichment section). Read more about these analyses in our documentation.
 
-Please check the user guide for further information. For any question on Paintomics, you can send an e-mail to paintomics4@gmail.com.
+Please check the user guide for further information. For any question on Paintomics, you can send an e-mail to paintomicsai@gmail.com.

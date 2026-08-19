@@ -15,7 +15,7 @@
 #  along with Paintomics.  If not, see <http://www.gnu.org/licenses/>.
 #
 #  More info http://bioinfo.cipf.es/paintomics
-#  Technical contact paintomics4@gmail.com
+#  Technical contact paintomicsai@gmail.com
 #**************************************************************
 
 from .FeatureGraphicalData import FeatureGraphicalData

@@ -1404,7 +1404,7 @@ function PA_Step1JobView() {
 									'<a href="javascript:void(0)" id="poHeroExampleButton" class="po-btn-primary">Load an example</a>' +
 									'<a href="https://paintomics.readthedocs.io/en/latest/" target="_blank" class="po-btn-outline">Documentation</a>' +
 									'<a href="https://github.com/ConesaLab/paintomics4/" target="_blank" class="po-btn-quiet">GitHub</a>' +
-									'<a href="mailto:paintomics4@gmail.com" class="po-btn-quiet">Contact</a>' +
+									'<a href="mailto:paintomicsai@gmail.com" class="po-btn-quiet">Contact</a>' +
 									/* The abstract keeps its id and handler; it is a text link
 									   beside the other three actions rather than a picture. */
 								'</div>' +

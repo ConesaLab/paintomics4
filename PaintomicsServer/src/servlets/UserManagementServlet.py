@@ -15,13 +15,14 @@
 #  along with Paintomics.  If not, see <http://www.gnu.org/licenses/>.
 #
 #  More info http://bioinfo.cipf.es/paintomics
-#  Technical contact paintomics4@gmail.com
+#  Technical contact paintomicsai@gmail.com
 #**************************************************************
 import logging
 import logging.config
 
 from src.conf.serverconf import (
     CLIENT_TMP_DIR,
+    smpt_sender,
     PAINTOMICS_BASE_URL,
     PAINTOMICS_LOGO_URL,
     PAINTOMICS_LOGIN_URL,
@@ -200,7 +201,7 @@ def userManagementSignUp(request, response, ROOT_DIRECTORY):
             message += "<p><b>Username:</b> " + userInstance.getEmail() + "</p></br>"
             message += "<p>Login in to Paintomics 4 at </p><a href='" + PAINTOMICS_LOGIN_URL + "'>" + PAINTOMICS_LOGIN_URL + "</a>"
             message += "<div style='width:100%; height:10px; border-top: 1px dotted #333; margin-top:20px; margin-bottom:30px;'></div>"
-            message += "<p>Problems? E-mail <a href='mailto:" + "paintomics4@gmail.com" + "'>" + "paintomics4@gmail.com" + "</a></p>"
+            message += "<p>Problems? E-mail <a href='mailto:" + smpt_sender + "'>" + smpt_sender + "</a></p>"
             message += '</body></html>'
 
             sendEmail(ROOT_DIRECTORY, userInstance.getEmail(), userInstance.getUserName(), "Welcome to Paintomics 4", message, isHTML=True)
@@ -411,7 +412,7 @@ def userManagementResetPassword(request, response, ROOT_DIRECTORY):
                 message += "<p>After restore your account, please use follow password to login.</p>"
                 message += "<h4>PASSWORD: " + randomPassword + "</h4>"
                 message += "<div style='width:100%; height:10px; border-top: 1px dotted #333; margin-top:20px; margin-bottom:30px;'></div>"
-                message += "<p>Problems? E-mail <a href='mailto:" + "paintomics4@gmail.com" + "'>" + "paintomics4@gmail.com" + "</a></p>"
+                message += "<p>Problems? E-mail <a href='mailto:" + smpt_sender + "'>" + smpt_sender + "</a></p>"
                 message += '</body></html>'
 
                 sendEmail(ROOT_DIRECTORY, userEmail, userInstance.getUserName(), "Reset password for Paintomics 4 account", message, isHTML=True)
