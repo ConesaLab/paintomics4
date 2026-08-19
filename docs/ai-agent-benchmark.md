@@ -3391,3 +3391,61 @@ a metric picture that does not replicate at n=19. The bar is not wrong, but it i
 weaker than it sounds: at these variances a 5/5 is substantially a draw from base
 being having a bad day, and the durable claim is the one that held in every
 single round.
+
+### Round 50 scored, and my own falsification walked back
+
+Round 50 (chunk reverted to 5, framing reuse kept): **5/5, BETTER than base** --
+and, as in every round, only rule 3 is resolved.
+
+```
+2 citations   PASS  (22.8 vs 19.2 [margin +3.5, se 2.4 -> NOISE, needs n~7/arm])
+3 redactions  PASS  ( 0.0 vs  3.8 [margin +5.8, se 1.4 -> resolved])
+4 coverage    PASS  (14.2 vs 13.8 [margin +0.5, se 1.9 -> NOISE, needs n~238/arm])
+5 length      PASS  (1.29x)
+```
+
+Its own prediction failed: I expected coverage back at 16-17 and it came in at
+14.2, up 0.4 from round 49.
+
+Pooling both configurations properly -- chunk=5 across rounds 46 and 50 (n=8)
+against chunk=3 across 47, 48 and 49 (n=12):
+
+```
+prose_pathways_covered   15.5   13.5   +2.00 [se 1.19 -> NOISE, n~13]
+citations_in_body        22.1   20.4   +1.71 [se 1.80 -> NOISE, n~45]
+wall_s                  378.7  363.0  +15.68 [se 20.98 -> NOISE]
+
+margin over each set's own base:
+   coverage    chunk=5 +2.50    chunk=3 -0.17
+   citations   chunk=5 +1.38    chunk=3 +2.58
+```
+
+**Nothing about chunk size resolves.** Two iterations ago I wrote that
+`DELEGATE_CHUNK=3` "cost 3.4 pathways of coverage... 3.6 standard errors --
+resolved, not noise", from round 46 (n=4) against rounds 47+48 (n=8). With round
+50 added the effect is +2.00 at se 1.19 and does not resolve. That is the second
+time in three iterations a claim of mine shrank when more replicates arrived, and
+the second was made while explicitly warning about the first.
+
+What survives from that analysis is narrower and still stands: chunk=3's own
+pre-registered benefit -- converted themes 9.8 -> ~13 -- did not appear (10.0 at
+n=8), so its falsifier fired. Keeping chunk=5 is now a judgement call on a
+nominally better coverage margin rather than a measured 3.4-pathway repair, and
+the document should say which of those it is.
+
+### A command instead of a heredoc
+
+I have hand-written this pooled comparison six times in one session, and every
+analysis error entered there rather than in the pipeline: a trace joined on file
+mtime that matched a run 28 hours old, a `sorted(keys)[:40]` slice that hid the
+stat I was hunting, and twice a mean taken across configurations that no longer
+applied.
+
+`ai_arm_bench compare A B` pools any set of round directories per configuration,
+prints each metric with its margin, standard error, resolvability and the
+replicate count that would settle it, and -- because base drifts 10 to 15 on
+coverage with fixed code -- reports the margin over each set's OWN base rather
+than comparing raw agent values across two different yardsticks.
+
+Round 51 is launched: `SEARCH_HITS` 10 -> 5, the change with three independent
+arguments behind it.

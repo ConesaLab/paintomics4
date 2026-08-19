@@ -623,6 +623,66 @@ def _diagnose(label, rows, base_rows):
     return out
 
 
+def cmd_compare(args):
+    """Pool several round directories and compare two configurations.
+
+    Written because I have hand-rolled this analysis six times in a session and
+    the errors kept entering there, not in the pipeline: a join on file mtime
+    that matched a run 28 hours old, a `sorted(keys)[:40]` slice that hid the
+    stat I was looking for, and twice a mean taken across configurations that no
+    longer applied. Each produced a confident wrong answer.
+
+    It also exists because single rounds do not resolve these metrics. Two claims
+    made from n=4 and n=8 this session -- "citations +4.6, resolved" and
+    "DELEGATE_CHUNK=3 cost 3.4 pathways, resolved" -- both shrank and lost
+    resolution when more replicates arrived. Pooling by CONFIGURATION rather than
+    by round is the operation that answers the question, so it should be a
+    command rather than a heredoc.
+
+        ai_arm_bench compare out/round46,out/round50 out/round47,out/round48
+    """
+    def load(spec, arm):
+        rows = []
+        for d in spec.split(","):
+            for path in sorted(glob.glob(os.path.join(d.strip(), "%s*.json" % arm))):
+                try:
+                    rows.append(json.load(open(path)))
+                except ValueError:
+                    continue
+        return rows
+
+    a_ag, a_bs = load(args.a, "agent"), load(args.a, "base")
+    b_ag, b_bs = load(args.b, "agent"), load(args.b, "base")
+    if not a_ag or not b_ag:
+        print("no agent rows in one of the sets")
+        return 1
+    print("A: %s  (agent n=%d, base n=%d)" % (args.a, len(a_ag), len(a_bs)))
+    print("B: %s  (agent n=%d, base n=%d)\n" % (args.b, len(b_ag), len(b_bs)))
+    print("%-26s %10s %10s %26s" % ("metric", "A", "B", "A - B"))
+    for key in ("prose_pathways_covered", "citations_in_body", "redacted",
+                "report_chars", "wall_s", "topup_added", "topup_added_failed"):
+        ma, mb = _mean(a_ag, key), _mean(b_ag, key)
+        if ma is None or mb is None:
+            continue
+        verdict = resolvable(a_ag, b_ag, key, ma - mb)
+        note = ""
+        if verdict:
+            state, se, need = verdict
+            note = "%+9.2f [se %.2f -> %s%s]" % (
+                ma - mb, se, state,
+                "" if state == "resolved" or need == float("inf")
+                else ", n~%.0f" % need)
+        print("%-26s %10.1f %10.1f %26s" % (key, ma, mb, note))
+    # The number the rules actually compare is the margin over the base run
+    # PAIRED with each configuration, not the raw agent value: base drifts.
+    print("\nmargin over each set's own base:")
+    for key in ("prose_pathways_covered", "citations_in_body"):
+        for label, ag, bs in (("A", a_ag, a_bs), ("B", b_ag, b_bs)):
+            m = (_mean(ag, key) or 0) - (_mean(bs, key) or 0)
+            print("   %-24s %s %+6.2f" % (key, label, m))
+    return 0
+
+
 def cmd_score(args):
     runs = []
     for path in sorted(glob.glob(os.path.join(args.outdir, "*.json"))):
@@ -809,6 +869,10 @@ def main(argv=None):
     score = sub.add_parser("score", help="apply the pre-registered rules")
     score.add_argument("outdir")
 
+    cmp_ = sub.add_parser("compare", help="pool round dirs and compare two configs")
+    cmp_.add_argument("a", help="comma-separated round dirs for configuration A")
+    cmp_.add_argument("b", help="comma-separated round dirs for configuration B")
+
     jobs = sub.add_parser("jobs", help="create fresh STATegra jobs to measure on")
     jobs.add_argument("count", type=int, nargs="?", default=2)
     jobs.add_argument("--server", default="http://localhost:8000")
@@ -822,7 +886,8 @@ def main(argv=None):
 
     args = parser.parse_args(argv)
     return {"ready": cmd_ready, "run": cmd_run, "score": cmd_score,
-            "jobs": cmd_jobs, "round": cmd_round}[args.command](args)
+            "compare": cmd_compare, "jobs": cmd_jobs,
+            "round": cmd_round}[args.command](args)
 
 
 if __name__ == "__main__":
