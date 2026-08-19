@@ -5062,3 +5062,48 @@ converged at 2 and the remaining 4.5 are not reachable by rewriting -- revert,
 and record that the no-progress rule was already doing the right thing. If
 median span crosses 600 s, revert regardless of the grounding gain: the
 ten-minute bar is a requirement, not a preference.
+
+## Round 57b — auditing what the tools TELL the model
+
+The nine module-level `function_tool`s all carry real descriptions (109-531
+chars, none empty) -- the `"""...""" % X` failure that once produced an EMPTY
+description is not present anywhere else.
+
+But a description is not a label, it is **advice**, and advice can be wrong.
+
+### The advice that cannot be tested
+
+`search_literature` tells the Lead:
+
+> Keep queries BROAD: two or three gene symbols joined by OR, AND at most one
+> biological term ... Extra AND clauses return nothing and still cost budget.
+
+Across 558 recent queries: **545 use exactly one AND, 13 use none, and ZERO use
+two or more.** The claim "extra AND clauses return nothing" is obeyed perfectly
+and therefore **cannot be falsified from the archive** -- there are no
+counterexamples, because the description prevents the data that would test it.
+
+That is a general trap in tool-building worth stating plainly: *advice embedded
+in a tool description becomes unfalsifiable the moment the model follows it.*
+Obedience reads as evidence. Testing such a claim requires deliberately relaxing
+it in an arm, which is a different experiment from anything run so far.
+
+### The advice that IS wrong
+
+The same sentence says "AND **at most** one biological term", which sanctions
+zero. Measured over the full archive:
+
+| queries | n | mean new papers |
+|---------|---|-----------------|
+| 0 AND clauses (the broadest) |   169 | **2.36** |
+| 1+ AND clause                | 2 702 | **3.75** |
+
+Difference **1.39 new papers, 2*se = 0.34 -- RESOLVED.** A query of OR'd gene
+symbols with no biological term at all retrieves **37% fewer new papers** than
+one with a single term. The description pushes toward breadth, and at its own
+permitted extreme, breadth costs retrieval.
+
+**Queued, not applied:** "at most one" -> "exactly one". Worth roughly one extra
+new paper per run (169 of 2 871 queries use zero). Deliberately NOT changed
+while round 57's verify-wave round is in flight -- a tool description change
+mid-round confounds the arm being measured.
