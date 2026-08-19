@@ -5107,3 +5107,65 @@ permitted extreme, breadth costs retrieval.
 new paper per run (169 of 2 871 queries use zero). Deliberately NOT changed
 while round 57's verify-wave round is in flight -- a tool description change
 mid-round confounds the arm being measured.
+
+## Round 57 interim — the third wave is not the expensive part
+
+Four replicates in (`AI_AGENT_VERIFY_ITERATIONS=3`, `sentence_repair=False`
+per the run's own config stamp), and the arm is **half confounded**:
+
+```
+r1 1354co025T  13 -> 3 -> 1     wave 3 fixed 2 of 3
+r2 73I734364H   7 -> 1          no wave 3 -- correction cancelled
+r3 4rofHV6613  11 -> 9          checked went 20 -> 37
+rewrites cancelled: 2 of 4      ("loop correction rewrite exceeded 46.3s")
+```
+
+Three things this shows that the pre-registration did not anticipate.
+
+**The correction is a whole-report regeneration, not a repair.** r3's wave 2
+took the report from 20 cited claims to **37** and cut failures only 11 -> 9. A
+rewrite introduces new citations, which arrive with new failures; that is the
+mechanism behind the 8% pass->fail regression measured across waves 1->2.
+
+**The 600 s budget binds by CANCELLATION, not by the iteration cap.** Earlier
+rounds recorded the verify deadline as never firing -- true at 2 waves. At 3 it
+fires in **half** the runs, and it fires *after* the wave has been paid for:
+`correction_budget` falls under the per-call timeout and the rewrite is
+cancelled mid-flight. The run spends the time and gets none of the repair. So
+the comment on `VERIFY_ITERATIONS` ("the 600 s budget does not fit 3") is
+correct about the outcome and silent about the cause: it is the **rewrite** that
+does not fit, not the wave.
+
+**The cheap correction already exists and is off.**
+`SENTENCE_REPAIR` (`AI_SENTENCE_REPAIR`, default "0", in `agent.py`, used by
+BOTH arms) repairs the failed sentences themselves, in parallel across 6
+workers, and leaves the rest of the report -- References, quotes, tables --
+untouched. It cannot introduce a citation, so it cannot introduce a regression.
+
+### An owed experiment
+
+Round 36 tested repair and scored it a FAIL: citations -22% (base) / -34%
+(agent), redactions +38% / +187%. But that round diagnosed its own cause and
+committed to a rerun:
+
+> The guardrails let a repaired sentence drop its `[N]` marker ... right for a
+> TEXT failure and wrong for DRIFT ... **Fixed AFTER this round launched, so the
+> round could not benefit. Repair gets exactly one retest with the fix; if
+> citations fall again, it is dead.**
+
+**That retest was never run.** The summary table still carries round 36's
+numbers and "flag left off". The fix is present in the code today:
+
+```python
+marker = "[%d]" % fc.get("ref_index", 0)
+if fc.get("mode") != "text" and marker not in text:
+    rejected += 1          # a DRIFT repair must keep its citation
+```
+
+The falsifier is already written and is inherited unchanged: **if citations fall
+again, repair is dead.** Round 36 also measured its upside -- `verify_loop_s`
+-92% and wall -23% in the agent arm -- which is the largest single time lever
+recorded anywhere in this document, and the one that would make a third wave
+affordable.
+
+Queued as the next round, after 57 completes.
