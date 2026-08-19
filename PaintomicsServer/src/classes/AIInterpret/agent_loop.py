@@ -423,6 +423,16 @@ class LoopContext(AgentContext):
     # what it has left; the breakdown tells US which tool is eating the
     # context the investigation has to reason through.
     tool_chars_by_tool: dict = field(default_factory=dict)
+    # Chars alone cannot tell a chatty tool from a popular one, and those need
+    # opposite fixes: shrink the payload, or leave it alone because the agent
+    # keeps choosing it. Counting calls beside characters makes cost-per-call
+    # readable straight off the archive instead of by joining a trace file.
+    tool_calls_by_tool: dict = field(default_factory=dict)
+    # Which trace file this run wrote. 177 archived traces share two job IDs
+    # -- a benchmark replicate reuses the job -- so a stats record could not
+    # name its own trace, and every per-tool call count had to be recovered by
+    # guessing which file on disk belonged to which run.
+    trace_path: str = ""
     pmid_to_ref: dict = field(default_factory=dict)
     next_ref: int = 1
     submitted_report: str = ""
@@ -467,6 +477,7 @@ def _archive_trace(ctx):
             for event in ctx.trace[len(ctx.archived):]:
                 handle.write(json.dumps(event) + "\n")
         ctx.archived = list(ctx.trace)
+        ctx.trace_path = path
     except Exception:
         logger.debug("trace archive failed", exc_info=True)
 
@@ -488,6 +499,10 @@ def _trace(ctx, tool, args_summary, result, started):
     }
     ctx.trace.append(event)
     ctx.tool_calls += 1
+    # Failures are counted here too, deliberately: a call that raised still
+    # spent a turn and still went through the model, so hiding it would flatter
+    # exactly the tools that are hardest to use correctly.
+    ctx.tool_calls_by_tool[tool] = ctx.tool_calls_by_tool.get(tool, 0) + 1
     _archive_trace(ctx)
     hooks = ctx.hooks or {}
     if hooks.get("tool_event"):
@@ -1990,6 +2005,9 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
     # which tool ate the context the investigation had to reason through.
     stats["tool_chars"] = ctx.tool_chars
     stats["tool_chars_by_tool"] = dict(ctx.tool_chars_by_tool)
+    stats["tool_calls_by_tool"] = dict(ctx.tool_calls_by_tool)
+    if ctx.trace_path:
+        stats["trace_file"] = ctx.trace_path
 
     report = ctx.submitted_report
     if not report.strip():

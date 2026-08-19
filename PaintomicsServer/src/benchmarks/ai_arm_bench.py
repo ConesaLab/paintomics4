@@ -237,12 +237,12 @@ STAGE_COUNTS = ("verify_iterations", "batches_failed", "truncated_calls",
 
 # Itemised bills. A per-tool breakdown is the only form in which "which tool is
 # worth its place" can be asked of the archive rather than of one live run.
-STAGE_MAPS = ("tool_chars_by_tool",)
+STAGE_MAPS = ("tool_chars_by_tool", "tool_calls_by_tool")
 
 # Outcomes whose value is a sentence, not a number: a stage that skipped or
 # failed says WHY, and "absent from the archive" reads identically to "never
 # happened". Truncated because a traceback string is not a metric.
-STAGE_NOTES = ("failed_refs", "topup_refs", "topup_verify_failed",
+STAGE_NOTES = ("trace_file", "failed_refs", "topup_refs", "topup_verify_failed",
                "topup_fulltext_skipped", "topup_fulltext_failed",
                "topup_disabled", "topup_failed", "topup_skipped", "merge_rejected",
                "merge_skipped", "merge_failed", "loop_backstop",

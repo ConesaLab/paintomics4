@@ -2314,3 +2314,50 @@ which swept in the references, the tables and the closing sections, and made a
 working 40 k cap look like it was emitting 65 k. Sectioning the report properly
 was the difference between "the cap is broken" and "the cap is fine and the
 tables are the weight".
+
+### The context bill, per call
+
+`tool_chars_by_tool` has been archived for several rounds and answers the wrong
+question. It says `get_pathway_details` is 30% of the bill; it cannot say whether
+that is one chatty call or thirty cheap ones, and those need opposite fixes --
+shrink the payload, or leave it alone because the agent keeps choosing it.
+
+So the loop now counts calls beside characters (`tool_calls_by_tool`) and each
+run records `trace_file`, the trace it wrote. Round 47 r1, joined by hand for the
+last time:
+
+```
+tool                      calls  chars/call   sec
+get_pathway_details           2      24 058     0
+delegate_interpretation       1      53 937    35    <- the deliverable, not overhead
+search_literature            20       1 395    42
+get_experiment_overview       1       8 965     0
+cluster_pathways              1       6 859     0
+read_paper                    2       3 309     1
+check_my_citations            2       3 050     1
+notebook_write / quote_shelf 13           0     1    free
+gate: verify_citation_prefetched  37 calls, 137 s
+```
+
+Two things only the per-call view shows:
+
+**`get_pathway_details` costs 24 kB per call and zero seconds.** Its entire price
+is context. The Lead re-sends its whole context on every Decide turn, so a 24 kB
+result returned on turn 3 of 44 is re-sent about forty times -- per-call size is
+the multiplier, and total-per-run hid it. `_profile_summary` already cut this tool
+from 56 kB to 48 kB per run and the per-call figure barely moved, because the run
+total fell by making fewer calls, not smaller ones.
+
+**Twenty searches produced two `read_paper` calls.** Retrieval is wide and
+shallow. That is the same shape as the citation gap measured earlier, seen from
+the tool side rather than the report side.
+
+#### The join was unreliable, and it said so loudly
+
+Matching a stats record to its trace meant guessing, because 177 archived traces
+share two job IDs -- a benchmark replicate reuses the job. My first attempt
+matched on trace span versus `loop_s` and confidently produced a full per-call
+table from a run **28 hours old**. `loop_s` is one phase (130 s); the trace span
+is the whole run (410 s), so the criterion was wrong on its face and still
+returned a plausible-looking table. This is the third time in this project that a
+join by timing produced a confident wrong answer. `trace_file` removes the guess.
