@@ -153,7 +153,16 @@ AI_AGENT_DELEGATE_CHUNK=3 gives five units for the same breadth, which the
 config stamp records, so the round is identified without a code edit.
 """
 
-DELEGATE_MAX_PATHWAYS = int(os.getenv("AI_AGENT_DELEGATE_MAX_PATHWAYS", "20"))
+# Raised 20 -> 60 to match what the tool's description now promises. The test
+# test_the_delegation_tool_states_its_real_capacity caught the mismatch: a
+# description offering sixty against a cap of twenty would have the Lead name
+# pathways the code then silently truncated.
+#
+# Behaviourally inert on its own, which is why it is safe to change as a default:
+# the cap has never bound. Coverage is 15-18 across every archived run because the
+# LEAD names about fifteen, and it did so unchanged when the description offered
+# sixty. What actually scopes the Lead is CLUSTER_SCOPE below.
+DELEGATE_MAX_PATHWAYS = int(os.getenv("AI_AGENT_DELEGATE_MAX_PATHWAYS", "60"))
 """Pathways one delegate call may cover, chunked five to a sub-agent.
 
 Was 10, which is two chunks -- so two of the four worker slots never ran and
