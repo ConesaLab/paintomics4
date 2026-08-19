@@ -4900,3 +4900,93 @@ record that duration does not distinguish dwelling from work.
 This is correlational, n=23, and split after the fact -- the weakest evidence
 class in this document. It is written down as a prediction precisely because
 three correlations recorded above evaporated on resampling.
+
+## Round 56 — the round-55 experiment is withdrawn, and why the archive could not settle it
+
+### Withdrawing the pre-registration
+
+Round 55 pre-registered `AI_AGENT_TOPUP_DEADLINE` at 60 s, predicting run span
+would fall by >=10 s. That experiment is **withdrawn before running**, on two
+independent grounds.
+
+**It is unrunnable as specified.** Span across the 40 most recent runs has
+sd **168.8 s** on a mean of 235.3 s. Resolving a 10 s difference needs
+**n = 4,558 per arm** -- roughly a year of continuous gateway time per arm. The
+cap also does nothing at all in **25 of 40** runs, diluting a 92 s per-call
+saving into 13.8 s/run (sd 18.7). The prediction was written in a unit the
+instrument cannot see. This document already records the rule it broke:
+[[a prediction needs a baseline that recorded it]] -- and the unit is part of
+the baseline.
+
+**It is wrong on mechanism.** Reading the implementation rather than the
+telemetry: the top-up is a SINGLE LLM call that rewrites the whole report, and a
+guard then accepts or rejects the candidate wholesale --
+
+```python
+if (len(candidate) > 0.6 * len(str(report))
+        and added > len(cited_now) and not dropped):
+    report = candidate ...
+else:
+    stats["topup_rejected"] = True
+```
+
+A deadline cannot salvage a partial result from one call. Capping at 60 s
+returns *nothing* from a 92 s call, not its early citations. The fast/slow split
+does not mean "capping preserves yield" -- fast and slow are different
+situations, and accepted calls do EXTRA work afterwards
+(`_upgrade_new_citations`), so the causal story runs backwards from the one the
+correlation suggested.
+
+Reading 60 lines of source refuted in minutes what an unrunnable experiment
+would not have settled in a year.
+
+### Why the archive could not answer the follow-up
+
+The obvious next question -- of the 8 zero-yield top-ups, how many were
+`topup_rejected`, how many `topup_dropped_existing` -- cannot be asked:
+
+```
+trace archive   218 runs   stats dicts carried: 0
+Mongo           81 docs / 81 jobs (one interpretation PER JOB)
+                topup_s survives in 3, topup_added in 2, topup_rejected in 1
+```
+
+Every trace event carries `seq/t/gate/tool/args/result/ms` and nothing else. The
+diagnostics the code computes -- with paragraphs explaining that
+`topup_refs` is "the only way to ask WHERE in the top-up's sequence its failures
+fall" -- go only to Mongo, which keeps one interpretation per job and is
+overwritten by the next run on that job. Two jobs carried forty runs.
+
+So the framework can answer **which tool is useful** (calls, duration, yield --
+all in the archive) and cannot answer **how to make this tool better** (why a
+call failed). The second question is the one that decides what to build.
+
+### The fix, and the bug class it belongs to
+
+`__outcome__` hand-lists seven fields. `__config__` used to hand-list about
+fifteen flags, silently omitting the rest -- 35 existed, 12 had ever been
+archived -- and was fixed by deriving them from the module source. The outcome
+stamp never got that treatment.
+
+Added `__stats__`: every scalar the run recorded, **derived not hand-listed**,
+dicts and lists skipped so a trace file stays small.
+
+One latent bug found on the way. `_trace_gate` capped every result at 160 chars
+except `__config__`, exempted by name after the cap "cut its JSON mid-string and
+made every run unparseable by the analyzer that the stamp exists to feed".
+`__outcome__` dumps JSON too and is at **160 chars with seven fields** -- all 40
+archived stamps parse today, and the eighth field would have broken them
+silently. The exemption is now a set, `VERBATIM_TRACE_STAMPS`, not an equality
+test against one name.
+
+Verified at runtime, not by reading the diff: the stamp archives 193 chars
+whole, round-trips exactly, keeps `topup_rejected` and `topup_dropped_existing`,
+excludes the verification dict and the ref list, and non-exempt stamps are still
+capped at 160.
+
+### A false green in the runner
+
+`run_all --only <filter>` printed `0 suites | 0 pass | 0 INTRODUCED` and exited
+**0** when the filter matched nothing. `--only` is a substring, so a
+comma-separated list matches nothing and passes silently -- the exact failure the
+runner exists to prevent, inside the runner. Now exits 2 with a message.

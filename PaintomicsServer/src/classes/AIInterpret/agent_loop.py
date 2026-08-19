@@ -776,6 +776,10 @@ def _trace(ctx, tool, args_summary, result, started):
     _hb(ctx, "interpreting", percent, "Agent: %s" % tool)
 
 
+# Stamps whose result is archived whole. See the note inside _trace_gate.
+VERBATIM_TRACE_STAMPS = frozenset(("__config__", "__outcome__", "__stats__"))
+
+
 def _trace_gate(ctx, tool, args_summary, result, started):
     """Archive a GATE-side LLM call (verification, quotes) as its own event.
 
@@ -795,10 +799,17 @@ def _trace_gate(ctx, tool, args_summary, result, started):
         "gate": True,
         "tool": tool,
         "args": str(args_summary)[:120],
-        # The config stamp is the one event whose whole value IS its text; the
-        # 160-char cap cut its JSON mid-string and made every run unparseable by
-        # the analyzer that the stamp exists to feed.
-        "result": (str(result) if tool == "__config__" else str(result)[:160]),
+        # Some stamps are not a summary of an event -- their whole value IS the
+        # text, and half of a JSON object is not half as useful, it is
+        # unparseable. The 160-char cap once cut `__config__` mid-string and
+        # made every run unreadable to the analyzer that stamp exists to feed.
+        #
+        # Kept as a SET rather than `== "__config__"` because the next such
+        # stamp is the failure this comment describes, one exemption too late.
+        # `__outcome__` currently fits in 160 chars with seven fields and would
+        # break silently on the eighth.
+        "result": (str(result) if tool in VERBATIM_TRACE_STAMPS
+                   else str(result)[:160]),
         "ms": int((time.time() - started) * 1000),
     })
     _archive_trace(ctx)
@@ -3187,6 +3198,38 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
         # ref_index, a report that is not a string -- is worth discarding the
         # interpretation for. Log and hand back the report.
         logging.warning("[AGENT] outcome stamp failed: %s", exc)
+    # And stamp the stats dict itself, DERIVED rather than hand-listed.
+    #
+    # `__outcome__` above names seven fields by hand. Everything else this run
+    # measured -- why the top-up was rejected, what it dropped, which stage
+    # timed out -- goes only into Mongo, and Mongo keeps ONE interpretation per
+    # JOB. Measured: 218 runs in the archive, 81 interpretation documents for 81
+    # jobs, and of those, `topup_s` survives in 3 and `topup_rejected` in 1. So
+    # of 23 top-up calls the archive can price, the REASON each one added
+    # nothing survives for at most three, because every later run on the same
+    # job overwrote it.
+    #
+    # This is the same bug `__config__` had: a hand-written list that reports
+    # exactly the fields someone thought to add and silently omits the one a
+    # later question needs. That was fixed by deriving the config from the
+    # module source (12 hand-listed flags became 34). Derive here too -- take
+    # every scalar the run recorded, whatever it is called -- so the next
+    # question does not need this line edited before it can be asked.
+    try:
+        scalars = {}
+        for k, v in (stats or {}).items():
+            if isinstance(v, bool) or isinstance(v, (int, float)):
+                scalars[k] = v
+            elif isinstance(v, str) and len(v) <= 120:
+                scalars[k] = v
+            # dicts/lists (verification, pathwayIndex, topup_added_refs) are
+            # deliberately skipped: they are large, they are already elsewhere,
+            # and one of them is what makes a trace file worth megabytes.
+        if scalars:
+            _trace_gate(ctx, "__stats__", "%d scalars" % len(scalars),
+                        json.dumps(scalars, sort_keys=True), time.time())
+    except Exception as exc:                      # same contract as above
+        logging.warning("[AGENT] stats stamp failed: %s", exc)
     if hooks.get("notebook") and ctx.notebook:
         try:
             hooks["notebook"](list(ctx.notebook))
