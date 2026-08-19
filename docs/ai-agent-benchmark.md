@@ -4584,3 +4584,52 @@ experiment, against base's 5.0 of ~26. That is the same direction as the very
 first measurement of this (agent 5%, base 10%), and I should have noticed the
 reversal contradicted it. `AI_AGENT_JOIN_CITATIONS`, already built and queued,
 targets exactly this and is now better motivated than when I wrote it.
+
+### Round 54 r1: coverage 9, and it is not the description
+
+The first replicate came back at coverage 9 -- the lowest in the archive, against
+15.2 in round 53 and a predicted 40-60. The obvious reading is that the rewritten
+tool description backfired: it now prices cost per wave and says "sixty about three
+times that", so perhaps the Lead economised.
+
+The trace says otherwise. The Lead named **15 pathways / 3 chunks**, the same as
+before. What happened is downstream:
+
+```
+merge_rejected      len 7844->43885, cites 19->10, GROUNDED 16->8
+merge_coverage      8->15
+delegate_fallback   2   (of 3 chunks)
+stitch_truncated    True
+framing_reused      True
+```
+
+Two of three chunks were handed literature retrieved for OTHER pathways, so the
+delegated text was poorly grounded, grounded citations would have fallen 16 to 8,
+and the guard rejected the whole stitch. The run shipped the Lead's own 9-pathway
+draft. **Coverage 9 is the merge-rejection path, and the description change is
+untested by this replicate** -- delegation happened exactly as asked.
+
+Whether attribution failure is what causes rejections, across 55 archived runs:
+
+```
+share of chunks handed the WRONG literature
+   runs whose merge was REJECTED : 17%  (n=14)
+   runs whose merge was accepted :  9%  (n=41)
+```
+
+Roughly double, and r1's 67% is far outside both. That is a correlation on a
+convenience sample, so by the rule this document adopted after round 51 it is a
+hypothesis and not evidence -- but it is a well-motivated one, because the
+mechanism is not statistical: a sub-agent reasoning over someone else's papers
+cannot ground claims about its own pathways, and the guard measures exactly that.
+
+**A refinement rather than a contradiction.** Earlier I tested `delegate_fallback`
+against TOP-UP precision, found 8% and r = -0.11, and wrote it off as "no support
+for attribution being the leak". That conclusion stands for the question it
+answered. Merge rejection is a different question and fallback looks relevant to
+it -- 17% against 9% -- which is a reminder that a variable cleared for one outcome
+is not cleared for all of them.
+
+Round 54 needs its remaining replicates before the description change can be
+judged at all. If more of them reject, the round measures rejection rather than
+breadth, and the experiment will have to be re-run with attribution fixed first.
