@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import argparse
 import glob
+import hashlib
 import json
 import os
 import re
@@ -432,6 +433,11 @@ def _measure(record, arm, job_id, wall, response=None):
         "citation_sentences": citation_grounding(report)[0],
         "citations_linked_to_data": citation_grounding(report)[1],
         "citation_sentences_repeated": repeated_citation_sentences(report),
+        # Ground truth: did the report reach the published paper's conclusions,
+        # and did it narrate anything the paper says but this job cannot support?
+        "rubric_coverage": rubric_score(report)[0],
+        "rubric_fabricated": len(rubric_score(report)[1] or [])
+        if rubric_score(report)[0] is not None else None,
         "prose_pathway_names": sorted(covered)[:40],
         "tool_calls": stats.get("tool_calls"),
         "forced_synthesis": stats.get("forced_synthesis", False),
@@ -475,12 +481,14 @@ METRICS = ("wall_s", "prose_chars", "report_chars", "citations_in_body",
            # it in every score table, not only when a rule fails.
            "topup_added", "topup_added_failed",
            "citation_sentences", "citations_linked_to_data",
-           "citation_sentences_repeated")
+           "citation_sentences_repeated",
+           "rubric_coverage", "rubric_fabricated")
 
 
 REPORT_DERIVED = {"citations_in_body", "redacted", "prose_pathways_covered",
                   "citation_sentences", "citations_linked_to_data",
                   "citation_sentences_repeated",
+                  "rubric_coverage", "rubric_fabricated",
                   "full_text_cited", "report_chars", "prose_chars",
                   "prose_citations", "papers_in_references"}
 
@@ -611,6 +619,65 @@ def repeated_citation_sentences(report_text):
         key = re.sub(r"\[\d+\]", "", x).strip().lower()[:110]
         seen[key] = seen.get(key, 0) + 1
     return sum(v - 1 for v in seen.values() if v > 1)
+
+
+# The one scorer here that knows what the right answer IS.
+#
+# The five rules compare this arm to the incumbent on counts. None of them asks
+# whether the report reached the paper's conclusions, and no number of replicates
+# fixes that -- which is why the arm read as "nominally ahead, not resolved" for a
+# whole session while a ground-truth scorer put it 44% ahead and resolved.
+#
+# The rubric is AgentEvolve's, sealed and hashed, derived from the published
+# PaintOmics 4 Results section (PMC9252773) for this exact STATegra job. It is
+# NOT copied here as a fork: `stategra_rubric.json` carries the sha256 of the
+# original, this module verifies it against the sibling repo when that repo is
+# present, and a changed rubric is reported rather than silently scored against.
+#
+# Deliberately NOT a sixth rule. The five are pre-registered and a rule added
+# after seeing the numbers is not a rule. This is reported beside them, and the
+# honest reading is that it is the better measure and the five are the weaker one.
+_RUBRIC_SHA = "599d5817c955230100829eed371e3bafde13195d4c382ffd10eeeadc9e10664c"
+_RUBRIC_SRC = os.path.expanduser(
+    "~/Desktop/github_dev/agentevolve/evaluators/stategra-v4/rubric.yaml")
+_SCORER_DIR = os.path.expanduser("~/Desktop/github_dev/agentevolve")
+
+
+def _rubric():
+    """The sealed rubric, and whether it still matches the original."""
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                        "stategra_rubric.json")
+    try:
+        blob = json.load(open(path))
+    except Exception:
+        return None, "no local copy"
+    if os.path.exists(_RUBRIC_SRC):
+        live = hashlib.sha256(open(_RUBRIC_SRC, "rb").read()).hexdigest()
+        if live != blob.get("_sha256"):
+            return None, "rubric.yaml changed upstream (%s...)" % live[:12]
+    if blob.get("_sha256") != _RUBRIC_SHA:
+        return None, "local copy is not the sealed rubric"
+    return blob["rubric"], None
+
+
+def rubric_score(report_text):
+    """(coverage, fabricated_items) or (None, reason).
+
+    Best-effort: a scorer that cannot run must never take a round down with it,
+    and the five rules stand on their own.
+    """
+    rubric, why = _rubric()
+    if rubric is None:
+        return None, why
+    try:
+        if _SCORER_DIR not in sys.path:
+            sys.path.insert(0, _SCORER_DIR)
+        from score import score_rubric          # pure stdlib, no yaml needed
+        result = score_rubric.score(report_text or "", rubric)
+        data = result if isinstance(result, dict) else vars(result)
+        return data.get("coverage"), list(data.get("fabricated") or [])
+    except Exception as exc:
+        return None, "%s: %s" % (type(exc).__name__, exc)
 
 
 def judge(agent_rows, base_rows):

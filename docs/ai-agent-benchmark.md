@@ -4016,3 +4016,63 @@ own reports.
 The action is obvious and it is not another round: **this benchmark should score
 against the sealed rubric, not only against base.** A judge that cannot tell
 whether the report is right has been the limiting factor all session.
+
+### The bench now scores against ground truth
+
+`rubric_coverage` and `rubric_fabricated` are derived from every report. The
+rubric is AgentEvolve's sealed one, referenced rather than forked:
+`stategra_rubric.json` carries the original's sha256, the loader re-hashes
+`rubric.yaml` in the sibling repo when it is present, and an upstream edit is
+reported rather than silently scored against -- every round so far was measured
+against the sealed text and must stay comparable. The scorer itself is pure
+stdlib, so nothing new is installed; only the YAML load needed a dependency and
+that happens once, offline.
+
+**It is deliberately not a sixth rule.** The five are pre-registered and a rule
+added after seeing the numbers is not a rule. A test pins the count at five. The
+honest reading is that this is the better measure and the five are the weaker
+ones, and that is for the product owner to act on, not for me to slip in.
+
+### Round 52 scored, both ways
+
+```
+my five rules
+  2 citations >= base   FAIL  (18.5 vs 21.2 [margin -2.8, se 2.2 -> NOISE, n~11])
+  3 redactions          PASS  ( 0.0 vs  0.5 [margin +2.5, se 0.4 -> resolved])
+  4 prose coverage      PASS  (15.5 vs 14.2 [margin +1.2, se 1.4 -> NOISE, n~19])
+  5 length              PASS  (1.62x)
+  => NOT better
+
+ground truth
+  round50 agent 0.603   base 0.389
+  round52 agent 0.565   base 0.424
+  DELEGATE_FULLTEXT effect: -0.038, se 0.028 -> NOISE
+  fabrication across all 16 reports: 0
+```
+
+**`DELEGATE_FULLTEXT` did what it was built to do and changed nothing that
+matters.** Abstract-only cited papers fell from 97% to 35%, at nine seconds, and
+ground-truth coverage moved -0.038 with se 0.028 -- indistinguishable from zero,
+and if anything slightly down. The falsifier for round 52 was stated as "if
+survival does not move, the writers were not limited by the evidence in front of
+them and the supply story is wrong". Survival did not move; neither did anything
+else. **The supply story is wrong.**
+
+That is worth being blunt about, because it was the best-supported hypothesis I
+had: five iterations traced it, the mechanism was real, the fix worked
+mechanically, and the outcome is flat. The writers were not short of evidence.
+They were writing from abstracts because the abstract was enough for the sentences
+they were being asked to produce -- which is the same conclusion AgentEvolve
+reached from the other side: *information without an instruction is a no-op*.
+Handing the delegates full text is more information. `JOIN_CITATIONS`, queued
+next, is an instruction.
+
+Two smaller things the ground-truth view settles:
+
+**The arm's advantage is real and it is on content, not counts.** Pooled over
+rounds 50 and 52, agent 0.585 against base 0.406 -- resolved. My rules called the
+same rounds NOT BETTER twice, on a citation count that swung on base's variance.
+
+**Nothing fabricates.** Zero DIVERGENCE items narrated across sixteen reports in
+two arms. That is the one thing I would most have wanted to know at the start and
+had no way to ask.
