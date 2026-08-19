@@ -5622,3 +5622,62 @@ and 4 are expected to resolve cleanly at this n.
 
 This is written before the round runs, as every pre-registration in this
 document is, and rounds 56, 59 and 61 record what happens when it is not.
+
+## Round 66 SCORED — the Results section loses findings; falsifier fired
+
+`AI_AGENT_RESULTS_SECTION=1`, 8 replicates, against round 57's 8.
+
+| metric | r57 dossier | r66 Results | delta | |
+|---|---|---|---|---|
+| **rubric coverage** | **0.571** | **0.446** | **-0.125** | **RESOLVED** |
+| words | 7 537 | 4 543 | -2 994 (-39.7%) | RESOLVED |
+| citations_in_body | 21.38 | 21.12 | -0.25 | not resolved |
+| wall_s | 422 | 373 | -49 | not resolved |
+| pathways covered | 15.4 | 17.0 | +1.6 | not resolved |
+
+| prediction | result | |
+|---|---|---|
+| coverage must not fall >0.05 | **-0.125** | **FAILED -- REVERT** |
+| accepted in >=6 of 8 | **7 of 8** | HELD |
+| median span < 600 s | **375 s**, 0/8 over | HELD |
+| words fall >=40% | -39.7% | marginally not held |
+
+**The stage works and the output is worse.** It is accepted 7 times in 8, runs
+*faster* than the dossier it replaces, keeps every citation (-0.25, not
+resolved), and reads like a paper. It also discards **22% of the rubric
+coverage**.
+
+**This is the exact failure round 64 predicted and no earlier falsifier could
+have caught.** Round 64 measured citation count and rubric coverage as
+independent (r = 0.05) and the falsifier was moved onto coverage for precisely
+this reason. Had it stayed on citations -- as every falsifier before it was --
+this stage would have passed cleanly at -0.25 citations and shipped a rewrite
+that throws away a fifth of the findings.
+
+**Kept, default off, following sentence repair's precedent.** The code stays
+behind `AI_AGENT_RESULTS_SECTION` with this result recorded next to it. It is not
+enabled and should not be without a rewrite that compresses *prose* rather than
+*content* -- the two are not the same operation, and this stage does the second
+while being asked for the first.
+
+### Two defects found in the stage itself, worth keeping
+
+**The retry is load-bearing, not a safety net.** Attempts=2 in most accepted
+runs: the first pass drops citations nearly every time, and one run dropped
+**nine** (6,18,19,27,31,32,34,44,45). Reorganise-and-preserve is two tasks in one
+call and the conservation half fails ~80% of the time. Any rewrite stage that
+must conserve something needs a computed guard, not an instruction -- the model's
+compliance on the conservation half is far below what the prompt suggests.
+
+**The word count was a target, not a ceiling.** One replicate took a 984-word
+interpretation to **1 408** (+43%): asked to "target 1800 words", the model padded
+a thin dossier upward. A compression stage must never exceed its input.
+
+### And the scorer misreported its own round
+
+Prediction 2 was first printed as "accepted 3, rejected 0" -- wrong in both
+numbers. The analysis script carried a stale epoch filter (`> 1787151000` for a
+round that began at `1787149061`), so it read one trace instead of eight. The
+same stale-filter error had already been caught once this session, in a different
+script, an hour earlier. The corrected count is 7 accepted, 1 rejected, and
+prediction 2 HELD.
