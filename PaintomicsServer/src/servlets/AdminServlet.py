@@ -819,7 +819,11 @@ def adminServletSendReport(request, response, ROOT_DIRECTORY):
         message += "<p>Best regards,</p>"
         message += "<p>The Paintomics developers team.</p>"
         message += "<div style='width:100%; height:10px; border-top: 1px dotted #333; margin-top:20px; margin-bottom:30px;'></div>"
-        message += "<p>Problems? E-mail <a href='mailto:" + "paintomics4@gmail.com" + "'>" + "paintomics4@gmail.com" + "</a></p>"
+        # The contact address follows EMAIL_FROM_ADDRESS rather than being
+        # hardcoded, so changing the project mailbox in config changes it here
+        # too. Pinned to a literal in two places, this footer kept naming a
+        # mailbox the deployment no longer used.
+        message += "<p>Problems? E-mail <a href='mailto:" + smpt_sender + "'>" + smpt_sender + "</a></p>"
         message += '</body></html>'
 
         #****************************************************************
