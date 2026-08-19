@@ -2172,3 +2172,32 @@ removes the top-up's contribution entirely and the stage only ever "worked" by
 replacing citations it could not keep -- in which case the honest conclusion is
 that this arm's citation count cannot be repaired at the top-up and the deficit is
 in how the Lead and the delegates write.
+
+### Correction: the read_paper verification used the wrong split
+
+The change audit lists "read_paper serves the cached abstract + names the unseen
+sections" as verified, with "deeper reads 9% -> 23% of calls". That number came
+from splitting the trace files by **file mtime** around the commit -- a proxy for
+which code a run used, and a bad one, since a trace is appended throughout a run
+and a round launched before an edit keeps running after it.
+
+Re-split by each run's own `__config__` stamp:
+
+| configuration | runs | reads/run | deeper |
+|---|---|---|---|
+| search_hits=5 | 48 | 7.1 | **6%** |
+| search_hits=10 | 18 | 6.4 | **18%** |
+
+Same direction, different magnitude, and now honestly confounded: every
+search_hits=10 run is also post-nudge, so the two cannot be separated from this
+data. What can be said is that deeper reading tripled between the two
+configurations and that this explains `read_paper`'s context cost rising 2.1 k ->
+10.0 k a run -- a deep section is far larger than an abstract, and it is the tier
+that supplies 30% of surviving quotes.
+
+**The cost side of SEARCH_HITS=10, now measured:** total tool context 112 k ->
+133 k a run (+18%), of which search_literature is +9.3 k, read_paper +7.9 k and
+check_my_citations +2.5 k. Set against the earlier finding that cited themes stay
+flat at ~9 however large the pool, the queued revert to `SEARCH_HITS=5` has two
+independent arguments now: it buys no extra converted themes, and it costs 18% of
+the context budget.
