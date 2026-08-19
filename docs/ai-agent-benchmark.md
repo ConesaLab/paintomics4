@@ -5169,3 +5169,60 @@ recorded anywhere in this document, and the one that would make a third wave
 affordable.
 
 Queued as the next round, after 57 completes.
+
+## Round 57 SCORED — all three predictions held; the default moves to 3
+
+`AI_AGENT_VERIFY_ITERATIONS=3`, 8 replicates, `sentence_repair=False`.
+
+```
+rep  job          failures per wave      w3 fix   final
+r1   1354co025T   13 -> 3 -> 1              67%       1
+r2   73I734364H    7 -> 1                cancelled    1
+r3   4rofHV6613   11 -> 9                cancelled    9
+r4   31qPRO6hF3   15 -> 4 -> 1              75%       1
+r5   1354co025T   21 -> 5 -> 0             100%       0
+r6   73I734364H   13 -> 5 -> 3              40%       3
+r7   4rofHV6613   11 -> 0                 not needed  0
+r8   31qPRO6hF3    8 -> 3 -> 1              67%       1
+```
+
+| prediction | result | verdict |
+|---|---|---|
+| wave 3 fixes >=50% of what wave 2 left | 67/75/100/40/67, mean **70%** | **HELD** |
+| net ungrounded per run falls | 4.50 -> **2.00**, median 1.0 | **HELD** |
+| median span under 600 s | **450 s**, max 470, **0/8 over** | **HELD** |
+
+**The evidence that carries this is paired and baseline-free.** Prediction 2
+compares against 26 archived runs of a different configuration and is the
+weakest leg. It is not needed: wave 3's input IS wave 2's output, so each run is
+its own control --
+
+| | before wave 3 | after wave 3 |
+|---|---|---|
+| ungrounded citations | 3, 4, 5, 5, 3 (mean **4.00**) | 1, 1, 0, 3, 1 (mean **1.20**) |
+
+**70% of remaining failures removed, and all 5 runs improved.** The within-round
+split of ran-vs-did-not (1.20 vs 3.33) is confounded -- r7 had nothing to fix and
+r3's correction was cancelled -- and is not relied on.
+
+**Cost.** `verify_loop_s` mean 192 s of a 450 s run (43%). Median span rose
+314 -> 450 s, still 150 s inside the bar, with the slowest run at 470 s.
+
+### What this does NOT fix
+
+**2 of 8 corrections were still cancelled mid-flight** ("loop correction rewrite
+exceeded 46.3s"). Those runs pay for a wave and get no repair -- r3 finished at
+**9** ungrounded, the worst in the round, and is the entire reason the mean is
+2.00 rather than ~1.2.
+
+**Top-up and the third wave compete for the same 600 s.** `topup_s` median
+95.5 s. Every run with a slow top-up got two waves; the run that reached zero
+ungrounded did both because its top-up took 59 s. The framework has no policy
+for this trade -- it simply spends on whichever comes first.
+
+Both point at the same place: the correction is a whole-report regeneration.
+The queued sentence-repair retest (round 36's owed rerun, falsifier inherited:
+*if citations fall again, it is dead*) would make the correction cheap enough
+that neither problem arises.
+
+**Default changed to 3.**

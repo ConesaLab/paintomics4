@@ -590,10 +590,27 @@ VERIFY_PREFETCH = (os.getenv("AI_AGENT_VERIFY_PREFETCH") or "1").strip().lower()
 # contains the sentence a specific claim needs -- so the citation arrives
 # unquotable and the net strips it. That is most of the grounding gap.
 FULLTEXT_MAX_PAPERS = int(os.getenv("AI_AGENT_FULLTEXT_MAX", "24"))
-# Verify->correct rounds at the gate. 2 = one verification pass, one
-# correction, one re-verification -- the 600 s budget does not fit the
-# workflow arm's 3 (its own no-progress rule usually stops at 2 anyway).
-VERIFY_ITERATIONS = min(int(os.getenv("AI_AGENT_VERIFY_ITERATIONS", "2")),
+# Verify->correct rounds at the gate. 3 = two correction passes.
+#
+# This was 2, justified as "the 600 s budget does not fit the workflow arm's 3".
+# Round 57 measured that claim and it is false at current speeds: 8 replicates
+# at 3 gave a median span of 450 s with a maximum of 470 and none over the bar.
+#
+# The third wave is not marginal. Paired within each run -- wave 3's input is
+# wave 2's output, so no baseline is involved -- ungrounded citations fell
+# 4.00 -> 1.20, removing 70% of what wave 2 left, and all five runs that reached
+# a third wave improved. One finished with zero ungrounded citations out of 33.
+#
+# Grounding failure here is overshoot, not fabrication: across 1038 archived
+# verdicts the quote is real in 99.5% of cases and 37.8% are a real quote
+# attached to a claim it does not support. Overshoot is repairable by rewriting
+# the sentence, which is what a correction wave does, which is why more waves
+# keep paying.
+#
+# Two of the eight corrections were still cancelled mid-flight for want of
+# budget, and those runs pay for a wave and get no repair. That is a fault of
+# the whole-report rewrite, not of the wave; see the sentence-repair retest.
+VERIFY_ITERATIONS = min(int(os.getenv("AI_AGENT_VERIFY_ITERATIONS", "3")),
                         AI_MAX_VERIFICATION_ITERATIONS)
 
 TOPUP_ENABLED = (os.getenv("AI_AGENT_TOPUP") or "1").strip().lower() \
