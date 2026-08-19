@@ -321,6 +321,24 @@ TOPUP_OFFER_PAPERS = int(os.getenv("AI_AGENT_TOPUP_OFFER", "30"))
 # failure this is meant to prevent is a keen agent inventing markers to hit a
 # number.
 SHOW_CITATION_TARGET = os.getenv("AI_AGENT_CITATION_TARGET", "0") == "1"
+
+# Fetch full text for a chunk's papers BEFORE the sub-agent writes about them.
+#
+# Measured over round 50: of 35 cited papers, 34 were abstract-only at the moment
+# the report was written. Full text is fetched at the GATE, for papers already
+# cited, and its only consumer is the verifier. So the pipeline pays to retrieve
+# full text and spends all of it checking work that was done without it.
+#
+# `_quote_shelf` -- the delegates' entire evidence -- runs `search_paper_text`
+# over each paper's `sections`, and for an abstract-only paper that is just the
+# abstract. The delegated interpreters write ~40 kB of a ~65 kB report from
+# abstract snippets, and the gate then judges those claims against text nobody
+# writing had.
+#
+# Priced before building: the gate's upgrade runs at ~0.5 s per paper with 276 s
+# of unused budget at that point, and runs finish at ~380 s of a 600 s ceiling.
+# Ten papers per chunk across four concurrent workers is a few seconds.
+DELEGATE_FULLTEXT = os.getenv("AI_AGENT_DELEGATE_FULLTEXT", "0") == "1"
 """Screen search hits for a quotable finding before they enter the pool.
 
 The one mechanism the shipped arm has that this arm has never had. Base runs a
@@ -517,6 +535,10 @@ class LoopContext(AgentContext):
     # keeps choosing it. Counting calls beside characters makes cost-per-call
     # readable straight off the archive instead of by joining a trace file.
     tool_calls_by_tool: dict = field(default_factory=dict)
+    # Stats raised from inside the loop, where the `stats` dict is not in scope.
+    # `delegate_attribution` already does this by hand for three keys; this is
+    # the same idea without a bespoke field per counter.
+    extra_stats: dict = field(default_factory=dict)
     genes_shown: int = 0
     genes_flat: int = 0
     # Which trace file this run wrote. 177 archived traces share two job IDs
@@ -1704,6 +1726,47 @@ def _clean_passage(raw):
     return "  ".join(parts[:2])[:600]
 
 
+async def _upgrade_chunk_papers(c, papers):
+    """Full text for this chunk's abstract-only papers, before the shelf is built.
+
+    Best-effort and bounded: a delegation that cannot get full text must still
+    write from abstracts rather than fail or stall. The paper index is updated in
+    place so a later chunk citing the same paper, and the gate's own upgrade
+    step, both find the text already there.
+    """
+    thin = [p for p in papers
+            if p.get("fetch_tier") == "abstract_only" and p.get("pmid")]
+    if not thin:
+        return papers
+    t0 = time.time()
+    try:
+        fresh = await bounded(
+            asyncio.to_thread(c.pubmed.fetch_papers,
+                              [p["pmid"] for p in thin[:DELEGATE_PAPERS]]),
+            DELEGATE_QUOTE_SECONDS, label="chunk full-text")
+    except (Exception, asyncio.TimeoutError) as e:
+        c.extra_stats["delegate_fulltext_failed"] = "%s: %s" % (type(e).__name__, e)
+        return papers
+    by_pmid = {str(p.get("pmid")): p for p in (fresh or [])}
+    gained, out = 0, []
+    for paper in papers:
+        new = by_pmid.get(str(paper.get("pmid")))
+        if new and new.get("fetch_tier") != "abstract_only":
+            new["ref_index"] = paper.get("ref_index")
+            new["pathways"] = paper.get("pathways", [])
+            if paper.get("ref_index") is not None:
+                c.paper_index[paper["ref_index"]] = new
+            out.append(new)
+            gained += 1
+        else:
+            out.append(paper)
+    c.extra_stats["delegate_fulltext_gained"] = (
+        c.extra_stats.get("delegate_fulltext_gained", 0) + gained)
+    _trace(c, "chunk_fulltext", "%d thin" % len(thin),
+           "%d upgraded" % gained, t0)
+    return out
+
+
 def _quote_shelf(c, chunk, papers):
     """Candidate supporting sentences, pulled BEFORE the sub-agent writes.
 
@@ -1864,6 +1927,8 @@ async def delegate_interpretation(ctx: RunContextWrapper[LoopContext],
     async def _one(chunk):
         async with sem:
             chunk_papers = _papers_for(chunk)
+            if DELEGATE_FULLTEXT:
+                chunk_papers = await _upgrade_chunk_papers(c, chunk_papers)
             t_shelf = time.time()
             shelf = _quote_shelf(c, chunk, chunk_papers)
             # Traced because an untraced step cannot be told apart from a step
@@ -2182,6 +2247,8 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
         stats["delegate_matched"] = ctx.delegate_attribution.get("matched", 0)
         stats["delegate_fallback"] = ctx.delegate_attribution.get("fallback", 0)
         stats["delegate_papers_shown"] = ctx.delegate_attribution.get("papers_shown", 0)
+    for key, value in (ctx.extra_stats or {}).items():
+        stats.setdefault(key, value)
     stats["delegate_markers"] = ctx.delegate_markers
     stats["abstract_rereads"] = ctx.abstract_rereads
     if SCREEN_PAPERS:

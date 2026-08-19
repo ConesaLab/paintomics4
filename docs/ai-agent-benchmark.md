@@ -3554,3 +3554,31 @@ citations 7 -> 3 in rounds 13-15. Supply first.
 First replicate of round 51 is consistent: pool 74 -> 37, top-up precision 41% ->
 58%. One replicate, and the arm's own noise floor is wide, so it is not a result
 yet.
+
+### Round 52 built: give the delegates the text the verifier will use
+
+`AI_AGENT_DELEGATE_FULLTEXT=1` fetches full text for a chunk's abstract-only
+papers before `_quote_shelf` runs, so the evidence the sub-agent writes from is
+the same text the gate will later judge it against.
+
+Why here rather than at retrieval: the chunk is the smallest set that is
+guaranteed to be read. Fetching at search time would upgrade the whole pool,
+including the papers from dead themes that nothing ever cites -- and the previous
+finding is that those papers are the problem, not the solution.
+
+Priced before building: the gate's own upgrade runs at ~0.5 s per paper with
+276 s of unused budget where it sits, and runs finish at ~380 s of a 600 s
+ceiling. Ten papers per chunk across four concurrent workers is a few seconds.
+
+Fail-soft by construction, and tested that way: a paper with no full text
+available is kept as an abstract rather than dropped, a fetch failure leaves the
+delegation running and records `delegate_fulltext_failed`, and the shared paper
+index is updated in place so a later chunk citing the same paper -- and the
+gate's own upgrade -- find the text already there. One test pins that the upgrade
+runs BEFORE the shelf is built, since after it would change nothing at all.
+
+Queued behind round 51. Prediction: `fulltext_candidates` stops reporting nearly
+every cited paper as thin, delegated citations survive verification at a higher
+rate, and the gate's own `fulltext_upgraded` falls because the text is already
+there. Falsifier: if survival does not move, the writers were not limited by the
+evidence in front of them and the supply story is wrong.
