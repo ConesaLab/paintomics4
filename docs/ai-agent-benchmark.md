@@ -2242,3 +2242,44 @@ else held. That gives 5-7 writing units instead of 3-4.
 **Falsifier.** If converted themes stay at ~9-10 with 5-7 units, the ceiling is
 not the unit count and the arithmetic above is coincidence -- which would point
 at DELEGATE_PAPERS, the ten papers each unit is shown, as the real limit.
+
+## Round 46 scored: 4/5, and the closest the arm has come
+
+```
+1 within 600 s   PASS  (max 452 s)
+2 citations      FAIL  21.5 vs 22.2      <- 0.7 short
+3 redactions     PASS   0.0 vs  1.0      <- zero, all four replicates
+4 coverage       PASS  16.8 vs 12.2
+5 length         PASS  1.91x
+```
+
+The preservation check plus the pull-back gives an arm that loses no sentences at
+all, covers 4.6 more pathways than the incumbent, finishes inside the ceiling,
+and is short by two-thirds of one citation.
+
+Per replicate the guard behaved exactly as designed: one top-up rejected for
+trying to drop 18 existing citations (report kept its 19), one accepted cleanly
+for +18 (report reached 28 -- the highest single replicate in the series).
+Useful-or-inert, never destructive.
+
+`tags_with_a_cited_paper` came in at 9.8, inside the 8.8-10.5 band it has
+occupied for eight rounds. That is the ceiling round 47 targets.
+
+## Round 47 pre-registration (written before the round ran)
+
+`AI_AGENT_DELEGATE_CHUNK=3`, everything else held at round 46's configuration.
+Five to seven writing units instead of three or four.
+
+- Predict `tags_with_a_cited_paper` rises from 9.8 toward **13**, and
+  `citations_in_body` with it at roughly two citations per converted theme --
+  enough to clear the 0.7 gap several times over.
+- Predict wall clock roughly flat: units run four at a time under
+  `DELEGATE_WORKERS`, so more units cost queueing rather than serial time.
+- Predict redactions stay at zero. Nothing here touches the top-up.
+- **Watch rule 5.** Length is already 1.91x base against a 2.0x ceiling, and more
+  units means more stitched text. This is the rule most likely to break, and it
+  would be a poor way to lose after eight rounds of passing it comfortably.
+
+**Falsifier.** If converted themes stay at 9-10 with 5-7 units, the unit count is
+not the ceiling and the arithmetic that matched for eight rounds is coincidence --
+pointing instead at `DELEGATE_PAPERS`, the ten papers each unit is shown.
