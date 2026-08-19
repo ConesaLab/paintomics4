@@ -2577,3 +2577,50 @@ delegation is there to buy. It goes first; `_pathway_block` follows.
 Round 47 also shows why the length rule is not yet safe: the arm's mean is 1.85x
 base ONLY because r3's merge was rejected and it shipped 31 224 characters
 instead of ~71 000. Rule 5 is being passed by a failure mode.
+
+### Correcting the density finding, and two refuted levers
+
+The paired result above -- the Lead's prose at 1.27 citations per 1000
+characters against the delegated prose at 0.67 -- is numerically right and does
+not support the change I was about to build on it. Normalising by pathway
+instead of by character:
+
+```
+                              agent    base
+chars per covered pathway      2 459   2 511
+citations per covered pathway   1.29    1.50
+```
+
+The delegated section spends essentially the SAME number of characters per
+pathway as base's entire report. The agent arm's reports are longer because they
+cover more pathways (median 15 against 14, up to 19) and because they carry a
+Lead framing section and two data tables base has no equivalent for -- not
+because the prose is padded.
+
+So "instruct the delegate to write a shorter treatment per pathway" is refuted
+before it was built: per-pathway length already matches the incumbent, and
+cutting it would put this arm BELOW base on treatment depth to win a length
+metric. The Lead-versus-delegate density gap was a summary section compared
+against a detail section. A paragraph that summarises five pathways and cites
+five papers is denser than an 800-word analysis citing two, and neither is
+better written. Different jobs; the comparison cannot carry a decision.
+
+The fair unit is citations per pathway actually discussed, and there the arm is
+at **86% of base** (1.29 against 1.50). That is a real grounding deficit, and it
+is the number the brief cares about.
+
+**Second refuted lever.** `delegate_fallback` counts chunks handed literature
+retrieved for other pathways, and the code calls it "the leading explanation left
+standing" for the citation gap. Over 29 archived runs it is 7 fallbacks in 92
+chunks -- **8%**, not the 20% round 47 suggested -- and runs with MORE fallback
+show HIGHER citations per pathway (1.54 against 1.20, n=4 against n=25). Weak
+either way, but there is no support here for attribution being the leak.
+
+What is left is structural. Base's interpretation batches cite nothing and all
+its citations are born in a synthesis that sees the WHOLE paper pool at once; a
+delegated chunk can only cite the ~10 papers attributed to it. A global citation
+pass can reach for the best paper for any pathway, and a local one cannot. That
+is a hypothesis, not a measurement, and handing delegates more papers is already
+known to backfire (base measured citations collapsing 15 -> 3 at 20+ abstracts).
+
+Both levers died before any code changed, which is the point of measuring first.
