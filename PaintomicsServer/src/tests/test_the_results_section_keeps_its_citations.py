@@ -94,7 +94,11 @@ class ResultsSectionKeepsItsCitations(unittest.TestCase):
     # ---- the wiring -------------------------------------------------------
 
     def test_the_guard_is_in_the_source_not_only_in_the_prompt(self):
-        block = self.src.split("async def _write_results_section")[1][:4000]
+        # Not a fixed window: the function grew when the retry was added and a
+        # 4000-char slice stopped short of the guard it is checking. Take the
+        # whole function instead, bounded by the next top-level def.
+        block = self.src.split("async def _write_results_section")[1]
+        block = block.split("\nasync def ")[0].split("\ndef ")[0]
         self.assertIn('re.findall(', block,
                       "the marker set must be computed, not asked for")
         self.assertIn('split("### References")', block,
@@ -124,6 +128,44 @@ class ResultsSectionKeepsItsCitations(unittest.TestCase):
         """It is data the job already holds, not a model assertion."""
         block = self.src.split("The deterministic tables ride below")[1][:1200]
         self.assertIn("render_pathway_table(pathways)", block)
+
+    def test_the_rewrite_is_renumbered_afterwards(self):
+        """Reorganising prose scrambles first-appearance order.
+
+        The dossier arrives numbered [1,2,3...] because it was written in that
+        order. A Results section reorders the material by finding, so the same
+        markers now appear as [9,5,6,14,13,...] -- measured exactly that on the
+        first live rewrite. No journal accepts that; citations must be numbered
+        in order of first appearance.
+
+        The writer must NOT renumber itself: its markers still have to map to
+        the papers they were verified against. `renumber_citations` does the
+        remap across body AND references and returns the mapping the paper list
+        is then filtered by. So the ordering property depends entirely on the
+        writer running BEFORE it -- which is incidental unless pinned here.
+        """
+        writer = self.src.index("_write_results_section(\n")
+        renumber = self.src.index("report, citation_mapping = renumber_citations(report)")
+        self.assertLess(writer, renumber,
+                        "the Results rewrite must run BEFORE renumber_citations, "
+                        "or its citations ship out of first-appearance order")
+        sort_refs = self.src.index("report = sort_references_section(report)")
+        self.assertLess(renumber, sort_refs,
+                        "references are sorted after the remap, not before")
+
+    def test_the_writer_is_told_not_to_renumber(self):
+        """The downstream remap owns numbering, and needs the ORIGINAL indices.
+
+        renumber_citations returns a mapping the paper list is filtered by. If
+        the model renumbered first, its markers would no longer identify the
+        papers they were verified against.
+        """
+        # Whitespace-normalised: the instruction wraps as "do not\n  renumber",
+        # so a literal search finds nothing and the test fails on correct text.
+        prompt = " ".join(self.src.split("RESULTS_PROMPT")[1][:3000].lower().split())
+        self.assertIn("do not renumber", prompt,
+                      "the model must be told not to renumber; the pipeline "
+                      "does it afterwards and owns the mapping")
 
     def test_it_is_off_by_default(self):
         self.assertIn('os.getenv("AI_AGENT_RESULTS_SECTION", "0")', self.src,

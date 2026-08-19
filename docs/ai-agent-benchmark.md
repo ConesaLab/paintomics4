@@ -5547,6 +5547,31 @@ measure named. The cluster table is suppressed when a section is written, since
 the section describes the clustering in prose; the enriched pathway summary
 stays, being data the job already holds rather than a model assertion.
 
+### Citation ORDER, which the set-based guard does not check
+
+Asked directly, and worth checking rather than assuming. The dossier arrives
+numbered [1,2,3...] because it was written in that order. Reorganising the
+material by finding scrambles first appearance, and the rewrite came out
+
+```
+[9, 5, 6, 14, 13, 15, 16, 8, 7, 1, 10, 11, 12, 2]
+```
+
+which no journal accepts. The guard compares the SET of markers and is blind to
+this by construction.
+
+It is nevertheless correct in the pipeline: `renumber_citations` followed by
+`sort_references_section` runs downstream of the writer, and applying them gives
+`[1..22]` sequential, 22 of 22 kept, 22 reference entries in order. The probe
+above looked wrong only because it called the writer in isolation.
+
+But that was **incidental, not guaranteed** -- nothing prevented the writer being
+moved below the remap, after which numbering would scramble silently. Now pinned
+by `test_the_rewrite_is_renumbered_afterwards`. The model is still told NOT to
+renumber, because `renumber_citations` returns the mapping the paper list is
+filtered by, and a model that renumbered first would break the link between a
+marker and the paper it was verified against.
+
 ### Not yet measured, and the reason it matters
 
 **84 s** for the two attempts on this report. Median span is 450 s against a
