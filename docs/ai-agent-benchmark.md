@@ -2098,3 +2098,33 @@ for a second consecutive one before anything ships.
 **Falsifier.** If citations land near round 44's 16.5, the top-up's surviving
 additions were not what carried rule 2 either, and the citation gap is structural
 to how this arm writes rather than to any stage that can be repaired.
+
+### SEARCH_HITS=10 bought pool, not converted themes
+
+Theme conversion since the screen landed:
+
+| round | searched | cited | convert | pool | SEARCH_HITS |
+|---|---|---|---|---|---|
+| v39 | 14.0 | **10.5** | **75%** | 27 | 5 |
+| v40 | 15.0 | 9.2 | 62% | 31 | 5 |
+| v41 | 13.2 | 9.2 | 70% | 59 | 10 |
+| v42 | 13.8 | 9.2 | 67% | 63 | 10 |
+| v43 | 15.2 | 9.0 | 59% | 69 | 10 |
+| v44 | 17.0 | 8.8 | 51% | 59 | 10 |
+
+The count of themes that actually convert is FLAT at ~9 across every round, while
+searched themes grew to 17 and the pool more than doubled. Conversion falls
+because its denominator grows and its numerator does not.
+
+Round 39 -- the smallest pool of the six -- has both the best conversion and the
+most converted themes. That is the opposite of what raising SEARCH_HITS was meant
+to buy, and it was justified at the time by a regime-change argument: round 6's
+collapse was measured without a screen, so more candidates should now feed the
+screen rather than the writers. The screen does absorb them, and the pool did
+grow. It simply did not produce more cited themes.
+
+**Queued after round 45 (not changed mid-round):** revert `SEARCH_HITS` to 5 with
+everything else held, and predict cited themes hold near 9 while the pool halves,
+the wall clock drops, and conversion returns toward 75%. If cited themes fall
+with the pool, the extra candidates were doing something after all and the number
+stays at 10.
