@@ -286,6 +286,66 @@ class ReportRoutesTest(unittest.TestCase):
         self.assertIn("adminServletDeleteReport", source)
 
 
+class EmailTemplateTest(unittest.TestCase):
+    """The report email rendered a broken logo and named the wrong mailbox.
+
+    Both were config-shaped bugs that no test could see:
+      * PAINTOMICS_LOGO_PATH had no file extension, so the <img> URL 404'd and
+        every recipient saw a broken-image icon.
+      * The "Problems? E-mail ..." footer hardcoded one address in two places,
+        so it kept naming a mailbox the deployment had moved off.
+    """
+
+    def _templateLogoPath(self):
+        """The default in the tracked template, which is what fresh deploys get.
+
+        serverconf.py itself is gitignored and per-machine, so asserting on it
+        would pass or fail by accident of the local box.
+        """
+        path = os.path.join(HERE, "..", "resources", "example_serverconf.py")
+        with open(path, encoding="utf-8") as handle:
+            for line in handle:
+                if line.strip().startswith("PAINTOMICS_LOGO_PATH"):
+                    return line.split('"')[-2]
+        self.fail("example_serverconf.py defines no PAINTOMICS_LOGO_PATH")
+
+    def test_the_logo_path_names_a_file_that_exists(self):
+        PAINTOMICS_LOGO_PATH = self._templateLogoPath()
+
+        extension = os.path.splitext(PAINTOMICS_LOGO_PATH)[1].lower()
+        self.assertIn(extension, (".png", ".jpg", ".jpeg", ".gif", ".svg"),
+                      "PAINTOMICS_LOGO_PATH (%s) has no image file extension, so "
+                      "the email <img> URL 404s and renders as a broken image"
+                      % PAINTOMICS_LOGO_PATH)
+
+        served = os.path.join(REPO, "PaintomicsClient", "public_html",
+                              PAINTOMICS_LOGO_PATH.lstrip("/"))
+        if os.path.isdir(os.path.join(REPO, "PaintomicsClient", "public_html")):
+            self.assertTrue(os.path.isfile(served),
+                            "PAINTOMICS_LOGO_PATH points at %s, which is not in "
+                            "public_html" % PAINTOMICS_LOGO_PATH)
+
+    def test_the_contact_footer_is_not_a_hardcoded_address(self):
+        """It must follow config, or it drifts from the live mailbox."""
+        path = os.path.join(REPO, "PaintomicsServer", "src", "servlets",
+                            "AdminServlet.py")
+        with open(path, encoding="utf-8") as handle:
+            lines = handle.readlines()
+
+        offenders = []
+        for number, line in enumerate(lines, 1):
+            stripped = line.strip()
+            if stripped.startswith("#"):
+                continue                      # the licence header names a contact
+            if "message +=" in line and "@" in line and "mailto:" in line:
+                if '"' in line and "@gmail" in line:
+                    offenders.append("%d: %s" % (number, stripped[:90]))
+        self.assertEqual(
+            offenders, [],
+            "the email footer hardcodes an address instead of using the "
+            "configured sender: " + "; ".join(offenders))
+
+
 class UwsgiIniTest(unittest.TestCase):
     def test_ini_does_not_use_the_nonexistent_env_file_option(self):
         path = os.path.join(REPO, "paintomics4.ini")
