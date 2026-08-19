@@ -3050,3 +3050,57 @@ change from round 49. Predicted: coverage returns to ~16-17 against a base near
 13, a margin large enough to resolve; converted tags unchanged near 10; citations
 unchanged or slightly up; length rises with the extra covered pathways, which is
 where rule 5 gets tested honestly rather than by a rejection landing at random.
+
+### What the call ORDER says, including one idea it killed
+
+Adoption says which tools earn their schema; cost says what they charge. Neither
+says what shape the investigation has. Over the last 40 archived runs:
+
+```
+opening, 37 of 40 runs:  get_experiment_overview -> get_pathway_details -> cluster_pathways
+search_literature   ->   search_literature 91%
+read_paper          ->   read_paper        71%
+delegate_grounding  ->   delegate_interpretation 100%
+longest unbroken run of one tool: median 16, max 36
+```
+
+**A rejected idea.** The opening three calls look like a workflow the agent built
+for itself -- two of them (`get_experiment_overview`, `cluster_pathways`) take no
+arguments, are called exactly once in 40 of 40 runs, and return deterministic
+text. Folding them into the opening context would remove two tools from every
+Decide turn's schema. I checked whether the turns they cost are scarce: **they are
+not.** 29 of 40 runs make more than 40 tool calls against `AGENT_MAX_TURNS=40`,
+yet `loop_backstop` has never been recorded and `forced_synthesis` is 0 across 37
+runs -- the SDK's turn count is not the tool-call count, the cap has never bound,
+and every loop exits through `submit_report`. Their output enters context either
+way, so there is no context saving either. The stereotyped opening is the agent
+behaving sensibly, not a defect, and the change is not worth making.
+
+**The finding that matters.** Reading happens after the report's bulk is already
+written:
+
+```
+read_paper calls relative to the FIRST delegate_interpretation, 40 runs
+  before delegating : median 0   total   3
+  after  delegating : median 4   total 214
+  runs that read ANY paper before delegating: 1 of 40
+```
+
+The delegated interpreters write the per-pathway analyses -- about 40 kB of a
+65 kB report -- from abstracts and a `_quote_shelf`, and **no paper the Lead opens
+is ever available to them**, because it opens them afterwards. The Lead's reading
+can only reach its own framing section, roughly 9 kB.
+
+That matters because `read_paper` is the strongest citation lever measured here:
++3 citations going from 0 to 9 reads, against +1 for retrieving 2.3x as many
+papers. It is being spent on the smallest part of the deliverable.
+
+Recorded as the next hypothesis rather than built: full text the Lead retrieves
+before delegating would flow into `_quote_shelf` for the chunk that cites it, so
+the ordering is a supply question, not a prompt question. Prompt changes to these
+agents have backfired before -- rounds 13-15 rewrote the delegate instructions and
+citations collapsed 7 -> 3, "careful phrasing produced caution, not accuracy" --
+so the lever to try first is the one that does not touch wording.
+
+Round 50 (revert `DELEGATE_CHUNK` to 5) still goes first: it is falsification
+follow-through on a measured 3.4-pathway coverage loss, and this is a hypothesis.
