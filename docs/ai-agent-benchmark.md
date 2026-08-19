@@ -2930,3 +2930,40 @@ faces and not a surprise to be explained afterwards.
 
 Falsifier: if citations or redactions move at all, the framing call was doing
 something the Lead's own sections do not, and the change goes back.
+
+### The agent held to a number was never told the number
+
+`MIN_CITATIONS` is 22. This arm's median is ~20. So the citation top-up fires on
+EVERY run by construction -- the code says as much -- and costs 101 s, 28% of the
+clock, at ~43% precision, bolting markers onto sentences that were written
+without them. That is the claim-drift failure mode running as a pipeline stage.
+
+`check_my_citations` is the tool that should make it unnecessary. It is at 100%
+adoption, it runs while the draft can still change, and it has quotes in hand.
+Its headline reads:
+
+```
+17 citation(s) will ship (11 in this draft, the rest in the delegated analyses
+the gate merges in); 15 have a supporting quote.
+```
+
+Status, never target. The Lead has no way to know it is seven short of the number
+the pipeline will hold it to, so it submits a draft it has no reason to think is
+incomplete, and a stage with no quotes in hand makes up the difference badly.
+
+`AI_AGENT_CITATION_TARGET=1` adds the shortfall to that headline, counted in
+GROUNDED citations rather than markers -- a target measured in brackets would
+just be an instruction to add brackets, which is what the top-up already does
+badly. It names `read_paper` as the mechanism, because that is the lever
+measurement supports: +3 citations going from 0 to 9 reads, against +1 for
+retrieving 2.3x as many papers. And it repeats the cost of forcing one in,
+because the obvious failure of telling an agent to hit a number is that it
+invents markers to hit it.
+
+Tested including the failure mode: the shortfall must come from `len(quotes)` and
+not `len(cited)`, and the advice must not point at searching.
+
+This is the third stage in a row where the defect was the same shape: a component
+judged on something it was never shown. The top-up judges support from the first
+15% of an abstract. The framing agent rewrites a report it sees less of than the
+Lead did. The Lead writes to a citation bar nobody tells it about.

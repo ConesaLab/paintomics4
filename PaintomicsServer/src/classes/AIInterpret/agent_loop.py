@@ -302,6 +302,25 @@ FRAMING_REUSE_LEAD = os.getenv("AI_AGENT_FRAMING_REUSE_LEAD", "0") == "1"
 # the net could easily be fewer survivors.
 TOPUP_ABSTRACT_CHARS = int(os.getenv("AI_AGENT_TOPUP_ABSTRACT", "220"))
 TOPUP_OFFER_PAPERS = int(os.getenv("AI_AGENT_TOPUP_OFFER", "30"))
+
+# Tell the Lead the number it is being held to.
+#
+# MIN_CITATIONS is 22 and this arm's median is ~20, so the citation top-up fires
+# on EVERY run by construction -- 101 s, 28% of the clock, at ~43% precision,
+# bolting markers onto sentences that were written without them. That is the
+# claim-drift failure mode as a pipeline stage.
+#
+# Meanwhile check_my_citations, at 100% adoption and called while the draft can
+# still change, reports STATUS and never the TARGET: "17 citations will ship, 15
+# have a supporting quote". The Lead has no way to know it is five short, so it
+# submits, and a blind stage with no quotes in hand makes up the difference.
+#
+# The wording deliberately names the mechanism that measurement supports --
+# reading papers, worth +3 citations from 0 to 9 reads against +1 for retrieving
+# 2.3x as many papers -- and repeats the cost of forcing one in, because the
+# failure this is meant to prevent is a keen agent inventing markers to hit a
+# number.
+SHOW_CITATION_TARGET = os.getenv("AI_AGENT_CITATION_TARGET", "0") == "1"
 """Screen search hits for a quotable finding before they enter the pool.
 
 The one mechanism the shipped arm has that this arm has never had. Base runs a
@@ -1557,6 +1576,21 @@ def check_my_citations(ctx: RunContextWrapper[LoopContext], draft: str) -> str:
     lines = ["%d citation(s) will ship (%d in this draft, the rest in the "
              "delegated analyses the gate merges in); %d have a supporting quote."
              % (len(cited), len(cited_draft), len(quotes))]
+    if SHOW_CITATION_TARGET:
+        short = MIN_CITATIONS - len(quotes)
+        if short > 0:
+            lines.append(
+                "A finished report is expected to carry about %d GROUNDED "
+                "citations and you have %d, so you are %d short. The gap is "
+                "usually a paper you retrieved and never opened: read_paper, "
+                "then cite the sentence you actually find. Do NOT add a marker "
+                "you cannot quote to reach the number -- an unsupported "
+                "citation costs the whole sentence it sits on, and you lose the "
+                "finding as well as the marker."
+                % (MIN_CITATIONS, len(quotes), short))
+        else:
+            lines.append("That meets the ~%d grounded citations a finished "
+                         "report is expected to carry." % MIN_CITATIONS)
     if invalid:
         lines.append("INVALID, no such paper -- remove these: %s"
                      % ", ".join("[%d]" % i for i in invalid[:15]))
