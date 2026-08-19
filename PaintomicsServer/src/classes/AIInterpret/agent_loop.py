@@ -319,7 +319,14 @@ VERIFY_MAX_SECONDS = float(os.getenv("AI_AGENT_VERIFY_MAX_SECONDS", "300"))
 # median 2 464 ms, redactions fell 12 -> 2 (the survivors being the only two
 # genuine refutations), the verify loop 291 s -> 117 s and the run 485 s -> 338 s.
 # AI_AGENT_VERIFY_PREFETCH=0 restores the tool-loop verifier for comparison.
-VERIFY_PREFETCH = os.getenv("AI_AGENT_VERIFY_PREFETCH", "1") == "1"
+# NOTE the env var: this arm reads AI_AGENT_VERIFY_PREFETCH, while the shipped
+# arm reads AI_VERIFY_PREFETCH for a constant of the SAME NAME. Setting one does
+# not touch the other, so "AI_VERIFY_PREFETCH=0" disables prefetch in base only
+# and leaves this arm prefetching -- a comparison that would look like an arm
+# difference and is a flag difference. Both default ON; an exported-but-empty
+# value counts as unset here, as it does for the shipped arm.
+VERIFY_PREFETCH = (os.getenv("AI_AGENT_VERIFY_PREFETCH") or "1").strip().lower() \
+    not in ("0", "false", "no")
 # How many abstract-only papers may be upgraded to full text before quoting.
 # Measured: the workflow arm cites 13-14 full-text papers of ~21 (~65 %) because
 # it batch-fetches full text for everything it retrieves; this arm cited 2-4 of

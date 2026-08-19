@@ -167,6 +167,46 @@ def test_the_default_path_keeps_its_tools():
     assert "tools=VERIFY_TOOLS" in block
 
 
+def test_the_two_arms_read_DIFFERENT_prefetch_env_vars():
+    """A trap found by auditing the flag surface.
+
+    Both arms define a constant called VERIFY_PREFETCH, and they read different
+    environment variables: the shipped arm AI_VERIFY_PREFETCH, the agent arm
+    AI_AGENT_VERIFY_PREFETCH. Setting one does not touch the other, so
+    "AI_VERIFY_PREFETCH=0" disables prefetch in base alone and leaves the agent
+    arm prefetching -- producing what looks like an arm difference and is a flag
+    difference.
+
+    This pins the names so the trap is at least documented, and pins that both
+    default ON, since an unset flag is how every round has actually run.
+    """
+    import inspect
+    from src.classes.AIInterpret import agent, agent_loop
+    assert 'os.getenv("AI_VERIFY_PREFETCH")' in inspect.getsource(agent)
+    assert 'os.getenv("AI_AGENT_VERIFY_PREFETCH")' in inspect.getsource(agent_loop)
+    assert agent.VERIFY_PREFETCH is True and agent_loop.VERIFY_PREFETCH is True
+
+
+def test_an_empty_prefetch_flag_counts_as_unset_in_both_arms():
+    """The footgun the top-up switch already had: an exported-but-empty variable
+    silently disabling a default-ON stage."""
+    import os, sys
+    for var, module in (("AI_VERIFY_PREFETCH", "src.classes.AIInterpret.agent"),
+                        ("AI_AGENT_VERIFY_PREFETCH", "src.classes.AIInterpret.agent_loop")):
+        previous = os.environ.get(var)
+        os.environ[var] = ""
+        for name in [k for k in list(sys.modules) if "AIInterpret" in k]:
+            del sys.modules[name]
+        mod = __import__(module, fromlist=["VERIFY_PREFETCH"])
+        try:
+            assert mod.VERIFY_PREFETCH is True, "%s='' disabled prefetch" % var
+        finally:
+            if previous is None:
+                os.environ.pop(var, None)
+            else:
+                os.environ[var] = previous
+
+
 def _check(name, fn):
     try:
         fn()
@@ -188,6 +228,8 @@ def main():
               test_it_is_on_by_default_now,
               test_the_call_site_passes_something_that_exists,
               test_the_signature_takes_an_index_not_a_context,
+              test_the_two_arms_read_DIFFERENT_prefetch_env_vars,
+              test_an_empty_prefetch_flag_counts_as_unset_in_both_arms,
               test_the_prefetch_verifier_has_no_tools,
               test_prefetch_selects_the_toolless_verifier,
               test_the_default_path_keeps_its_tools):
