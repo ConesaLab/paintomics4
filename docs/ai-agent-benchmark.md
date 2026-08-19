@@ -2128,3 +2128,47 @@ everything else held, and predict cited themes hold near 9 while the pool halves
 the wall clock drops, and conversion returns toward 75%. If cited themes fall
 with the pool, the extra candidates were doing something after all and the number
 stays at 10.
+
+## Round 45 stopped at 4/8, superseded
+
+Its two agent replicates are a paired demonstration rather than a wasted round:
+
+```
+agent-v45-r1  cites  5 | cov 14 | failed 0 | redact 0 | topup +1  pulled 11  markers 42
+agent-v45-r2  cites 21 | cov 19 | failed 0 | redact 0 | topup +14 pulled  4  markers 14
+```
+
+Both have zero failures and zero redactions -- the pull-back does what it was
+built for. The difference is the swap: r1's top-up introduced 16 references while
+returning a net gain of +1, having dropped 15 the report already carried, and 11
+of the newcomers failed. r2's top-up added without dropping and shipped 21
+citations against base's 20 with coverage 19 against 15.
+
+So the pull-back works when the top-up adds, and cannot save a report when the
+top-up swaps. The preservation check now rejects the swap outright, which turns
+r1's case into a no-op rather than a collapse -- the report keeps the 20 citations
+it already had.
+
+Continuing the round would have re-measured a configuration already superseded,
+so it was stopped and its four replicates kept for the record.
+
+## Round 46 pre-registration (written before the round ran)
+
+Round 45's configuration plus the preservation check: a top-up candidate is
+rejected if any reference the report already cited disappears from it.
+
+**Prediction.**
+- No replicate collapses into single-digit citations. That failure mode was the
+  swap, and the swap is now rejected.
+- `citations_in_body` >= base, and `redacted` <= base + 2. Rules 2 and 3 pass
+  together for the first time.
+- `topup_dropped_existing` appears in some replicates -- that is the guard firing.
+  If it never appears AND `topup_rejected` never appears, the swap was rarer than
+  round 45 suggested and the guard is untested rather than vindicated.
+- Coverage stays above base.
+
+**Falsifier.** If citations fall toward round 44's 16.5, then rejecting swaps
+removes the top-up's contribution entirely and the stage only ever "worked" by
+replacing citations it could not keep -- in which case the honest conclusion is
+that this arm's citation count cannot be repaired at the top-up and the deficit is
+in how the Lead and the delegates write.
