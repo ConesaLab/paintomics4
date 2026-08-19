@@ -78,6 +78,76 @@
 	color: #3f3f46;
 }
 
+.evidenceLegend-controls {
+	/* The reader's dials. Plain rows in the column's own type, because the
+	   panel around them has no boxes -- a bordered control group here would
+	   read as a foreign widget for exactly the reason the card itself did. */
+	margin: 10px 0 0;
+	padding-top: 9px;
+	border-top: 1px solid rgba(24, 24, 27, 0.08);
+}
+
+.evidenceLegend-field,
+.evidenceLegend-check {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin: 0 0 6px;
+	font-size: 11px;
+	color: #3f3f46;
+	cursor: pointer;
+}
+
+.evidenceLegend-field > span { flex: 1 1 auto; min-width: 0; }
+.evidenceLegend-check > span { flex: 1 1 auto; min-width: 0; }
+
+.evidenceLegend-number {
+	flex: 0 0 52px;
+	width: 52px;
+	padding: 3px 6px;
+	border: 1px solid rgba(24, 24, 27, 0.14);
+	border-radius: 5px;
+	background: #ffffff;
+	font-size: 11px;
+	font-variant-numeric: tabular-nums;
+	text-align: right;
+	color: #18181b;
+}
+
+.evidenceLegend-number:focus {
+	outline: none;
+	border-color: #5B1A8B;
+	box-shadow: 0 0 0 2px rgba(91, 26, 139, 0.12);
+}
+
+.evidenceLegend-check input[type="checkbox"] {
+	flex: 0 0 auto;
+	margin: 0;
+	accent-color: #0F766E;
+}
+
+.evidenceLegend-sub {
+	/* NOT indented. An indent read well and put every control inside it off the
+	   column's text rail -- the alignment guides flagged all three. The
+	   subordinate controls are identified by dimming when the switch above is
+	   off, which is the state that actually matters, and by sitting directly
+	   under it. */
+	margin: 0 0 2px;
+}
+
+.evidenceLegend-sub.is-off {
+	opacity: 0.42;
+	pointer-events: none;
+}
+
+.evidenceLegend-total {
+	margin: 4px 0 0;
+	font-size: 10px;
+	color: #71717a;
+}
+
+.evidenceLegend-total b { color: #9a3412; }
+
 .evidenceLegend-actions {
 	display: flex;
 	flex-wrap: wrap;

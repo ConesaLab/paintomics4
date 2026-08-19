@@ -1208,11 +1208,25 @@ def pathwayAcquisitionPathwayEvidence(request, response):
         except (TypeError, ValueError):
             maxEdges = PathwayEvidence.DEFAULT_MAX_EDGES
 
+        maxCrossLinks = options.get("maxCrossLinks",
+                                    PathwayEvidence.DEFAULT_MAX_CROSS_LINKS)
+        try:
+            maxCrossLinks = max(0, min(int(maxCrossLinks), 200))
+        except (TypeError, ValueError):
+            maxCrossLinks = PathwayEvidence.DEFAULT_MAX_CROSS_LINKS
+
         evidence = PathwayEvidence.buildPathwayEvidence(
             jobInstance, pathwayID,
             condition=options.get("condition"),
             maxEdges=maxEdges,
-            classes=options.get("classes"))
+            classes=options.get("classes"),
+            # Opt-in. The default answer stays exactly what it was, so no map
+            # gains a mark because this shipped.
+            crossPathway=bool(options.get("crossPathway")),
+            # Default True: significance is what keeps the ranking off the
+            # signalling hubs. The reader can widen it from the panel.
+            crossRelevantOnly=bool(options.get("crossRelevantOnly", True)),
+            maxCrossLinks=maxCrossLinks)
 
         evidence["success"] = True
         response.setContent(evidence)

@@ -109,8 +109,10 @@ PUBLISHED = {
         "0.9", "320717bdad3a27746dcf2070b7d11654a2f0c75fccaf2d242c266214ce7c3ac3"),
     # The evidence layer itself: MORE relationships drawn on the diagram and
     # classified against KEGG, Reactome and OmniPath.
+    # v=2.0 adds the cross-pathway link layer (teal), its three controls and
+    # the flattened bow those links are drawn with.
     "app/view/PathwayAcquisitionViews/PA_Step4EvidenceOverlay.js": (
-        "1.6", "8d59f773c20e2b81e998c5512cba525e9d65003bd88b6c8a90086c3da1545f63"),
+        "2.2", "fb48398d3bf218939ecbe3b556bc7eab2bc20de6ec499afd8b7ed5287bf51bb6"),
     "js/libs/linkurious/sigma.min.js": ("0.1", None),
     "js/libs/linkurious/plugins.js": ("0.2", None),
     # Versioned by its release rather than by a counter. A vendored library is

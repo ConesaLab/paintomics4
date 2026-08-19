@@ -51,6 +51,25 @@ CLASS_PRIORITY = {CLASS_CORROBORATED: 0, CLASS_NOVEL: 1, CLASS_UNSUPPORTED: 2}
 #: Default cap. Deliberately at the top of the measured 5-8 readable band.
 DEFAULT_MAX_EDGES = 8
 
+#: Default slots for cross-pathway links. Deliberately small and SEPARATE from
+#: DEFAULT_MAX_EDGES rather than carved out of it: taking the remainder never
+#: frees a slot, because a real MORE job has 55 drawable relationships on a map
+#: like mmu05167 and fills any budget you give it. The reader sets both numbers
+#: and the panel prints their sum, so the total on the map is chosen, not
+#: inherited.
+DEFAULT_MAX_CROSS_LINKS = 3
+
+#: A cross-pathway link may not span more than this fraction of the map's
+#: diagonal. Both its endpoints are real boxes, so unlike a MORE regulator it
+#: cannot be parked next to its partner -- the only lever on occlusion is
+#: refusing to draw the long ones. Measured on mmu05167: candidate chords run to
+#: 924 px on a 1,894 px diagonal, and drawing the top six by effect size alone
+#: swept four arcs across the whole diagram. Restricting to 12% costs almost
+#: nothing in signal -- the strongest short link scores 17.38 against 17.46 for
+#: the strongest long one, a 0.5% difference -- and returns neighbours a reader
+#: can actually follow: Ccnd1-Jun at 23 px, Jun-Myc at 57 px.
+MAX_CROSS_CHORD_FRACTION = 0.12
+
 #: A single job may open many pathways; the literature graph is per organism
 #: and identical for all of them, so it is built once. Bounded because the
 #: process is long-lived and organisms are unbounded in principle.
@@ -702,16 +721,208 @@ def _drawnFeatureIDs(pathwayDocument):
     return drawn
 
 
+def _featureProfile(inputGenes, featureID):
+    """Whether the user's data marks this feature relevant, and how far it moved.
+
+    `relevant` is the star the diagram already prints: the relevance file said
+    this feature passed the user's own threshold. `peak` is the largest absolute
+    value across every omic and condition, used only to RANK.
+    """
+    gene = inputGenes.get(str(featureID))
+    if gene is None:
+        return None
+
+    relevant, peak = False, 0.0
+    for omicValue in (gene.getOmicsValues() or []):
+        if omicValue.isRelevant():
+            relevant = True
+        for value in (omicValue.getValues() or []):
+            try:
+                peak = max(peak, abs(float(value)))
+            except (TypeError, ValueError):
+                continue
+
+    return {"relevant": relevant, "peak": peak,
+            "symbol": gene.getName() or str(featureID)}
+
+
+def _featurePositions(pathwayDocument):
+    """{featureID: [(x, y), ...]} for every gene the map draws."""
+    positions = {}
+    for gene in (pathwayDocument.get("genes") or []):
+        # Converted BEFORE the key is created: setdefault first left an empty
+        # list behind for every coordinate-less entry, i.e. a key claiming a
+        # feature is on the map when it has no box at all.
+        try:
+            point = (float(gene["x"]), float(gene["y"]))
+        except (TypeError, ValueError, KeyError):
+            continue
+        positions.setdefault(str(gene.get("id")), []).append(point)
+    return positions
+
+
+def _shortestChord(positions, source, target):
+    """Closest approach between two features, either of which may be drawn twice."""
+    import math
+    here, there = positions.get(source) or [], positions.get(target) or []
+    if not here or not there:
+        return None
+    return min(math.hypot(x1 - x2, y1 - y2)
+               for x1, y1 in here for x2, y2 in there)
+
+
+def crossPathwayLinks(jobInstance, pathwayID, knowledge, drawnFeatureIDs,
+                      pathwayNames, limit, relevantOnly=True, positions=None):
+    """Curated interactions between the user's features that THIS map omits.
+
+    A pathway map is a drawing decision, not a statement that nothing else
+    connects. KEGG records Ctnnb1 -> Myc but draws it only on Human
+    cytomegalovirus infection; open the Kaposi sarcoma map with both genes lit
+    up by your data and the diagram says nothing about them. This finds those.
+
+    WHY IT IS RESTRICTED THE WAY IT IS -- every filter here is a measured
+    response to the candidate pool being far too large to draw:
+
+      * every pair of DRAWN genes that some other map connects is a median of
+        233 per map and a maximum of 4,791. Unusable;
+      * restricted to genes the user actually has data for: median 11, max 574;
+      * restricted again to pairs where BOTH endpoints are RELEVANT in that
+        data: median 1, and 225 of 340 mouse maps fall inside an 8-mark budget.
+
+    That last filter is also what makes the result interesting rather than
+    trivia. Ranking by curation topology does not work: "recorded in the most
+    other maps" returns Raf1-Mapk1 (65 maps) and "recorded in the fewest"
+    still returns Raf1 and Akt1, because signalling hubs appear in everything --
+    139 of mmu05167's 259 candidates involve one of those two. Ranking by the
+    WEAKER endpoint's effect size instead returns Ctnnb1-Myc, Ctnnb1-Tcf7l2,
+    Cdkn1a-Mapk3: a link scores only when BOTH genes moved in this experiment.
+
+    @param {set} drawnFeatureIDs, features with a box on this map
+    @param {int} limit, slots left over after the MORE edges took theirs
+    @param {bool} relevantOnly, restrict to features the user's own relevance
+                    file marked significant -- the star the diagram already
+                    prints. True is the default because it is what takes the
+                    median candidate count from 11 to 1 and what stops the
+                    ranking filling with hubs, but a reader looking for
+                    context rather than hits can widen it.
+    @returns {(list, dict)} the drawable links and their accounting
+    """
+    import math
+    statistics = {"candidates": 0, "hidden": 0, "relevantFeatures": 0,
+                  "tooFarApart": 0}
+    if limit <= 0:
+        return [], statistics
+
+    pathway = (jobInstance.getMatchedPathways() or {}).get(pathwayID)
+    if pathway is None:
+        return [], statistics
+
+    inputGenes = jobInstance.getInputGenesData() or {}
+    featureIDs = sorted({str(featureID)
+                         for featureID in (pathway.getMatchedGenes() or [])}
+                        & set(drawnFeatureIDs))
+
+    profiles = {}
+    for featureID in featureIDs:
+        profile = _featureProfile(inputGenes, featureID)
+        if profile is None:
+            continue
+        if relevantOnly and not profile["relevant"]:
+            continue
+        profiles[featureID] = profile
+    statistics["relevantFeatures"] = len(profiles)
+    statistics["relevantOnly"] = bool(relevantOnly)
+
+    # The readability limit, scaled to this map rather than a constant: KEGG
+    # canvases differ by more than 2x, so a fixed pixel budget would be
+    # permissive on a large map and punitive on a small one.
+    positions = positions or {}
+    spread = [point for points in positions.values() for point in points]
+    if spread:
+        width = max(x for x, _y in spread) - min(x for x, _y in spread)
+        height = max(y for _x, y in spread) - min(y for _x, y in spread)
+        maxChord = math.hypot(width, height) * MAX_CROSS_CHORD_FRACTION
+    else:
+        maxChord = None
+
+    relevantIDs = sorted(profiles)
+    links = []
+    for index, source in enumerate(relevantIDs):
+        for target in relevantIDs[index + 1:]:
+            hits = knowledge.interactions(source, target)
+            if not hits:
+                continue
+
+            evidence = _summariseEvidence(hits, pathwayID, pathwayNames)
+            # The map already draws it: that is not a missing link, it is the
+            # diagram working. OmniPath has no pathways at all, so it can never
+            # veto here -- only a pathway-scoped source can.
+            if any(entry["onThisPathway"] for entry in evidence):
+                continue
+
+            statistics["candidates"] += 1
+
+            # Both endpoints are real boxes, so a long link has nowhere to go
+            # but across the artwork. Rejected rather than ranked down: a
+            # 900 px arc is unreadable however strong the biology behind it.
+            chord = _shortestChord(positions, source, target)
+            if maxChord is not None and chord is not None and chord > maxChord:
+                statistics["tooFarApart"] += 1
+                continue
+
+            # The WEAKER endpoint decides the score, so one loud gene cannot
+            # drag a silent partner onto the map.
+            strength = min(profiles[source]["peak"], profiles[target]["peak"])
+            transcriptional = any("GErel" in (entry["detail"] or "")
+                                  for entry in evidence)
+            links.append({
+                "sourceID": source,
+                "targetID": target,
+                "sourceLabel": profiles[source]["symbol"],
+                "targetLabel": profiles[target]["symbol"],
+                "strength": round(strength, 4),
+                "chord": round(chord, 1) if chord is not None else None,
+                "transcriptional": transcriptional,
+                "evidenceSources": evidence,
+            })
+
+    # Strongest weakest-endpoint first, transcriptional claims ahead of
+    # protein-protein ones at equal strength: GErel is the closest thing the
+    # curated data has to the directed statement a reader takes from an arrow.
+    # Strongest first; among comparable strengths the shorter chord wins,
+    # because the effect sizes at the top of this list differ by under 1% while
+    # the chords differ by 20x.
+    links.sort(key=lambda link: (-link["strength"], 0 if link["transcriptional"] else 1,
+                                 link["chord"] if link["chord"] is not None else 1e9,
+                                 link["sourceLabel"], link["targetLabel"]))
+    statistics["hidden"] = max(0, len(links) - limit)
+    return links[:limit], statistics
+
+
 def buildPathwayEvidence(jobInstance, pathwayID, condition=None,
-                         maxEdges=DEFAULT_MAX_EDGES, classes=None):
+                         maxEdges=DEFAULT_MAX_EDGES, classes=None,
+                         crossPathway=False, crossRelevantOnly=True,
+                         maxCrossLinks=DEFAULT_MAX_CROSS_LINKS):
     """Evidence edges drawable on one pathway, ranked, capped and accounted for.
 
     @param {Job} jobInstance, a loaded PathwayAcquisitionJob
     @param {String} pathwayID, the pathway whose diagram is open
     @param {String} condition, restrict coefficients to this condition, or None
                     for the strongest condition per relationship
-    @param {int} maxEdges, hard cap on drawn edges
+    @param {int} maxEdges, cap on MORE edges. The readable ceiling measured on
+                    real mouse maps is 5-8 MARKS IN TOTAL, so this and
+                    maxCrossLinks add up to what the reader actually sees; the
+                    panel prints the sum for that reason. Both are the reader's
+                    to set -- past the ceiling the layer stops being legible,
+                    but that is a judgement about their map, not ours.
     @param {set} classes, which classes may be drawn (default: all three)
+    @param {bool} crossPathway, also report curated interactions between the
+                    user's features that this map does not draw
+    @param {bool} crossRelevantOnly, restrict those to significant features
+    @param {int} maxCrossLinks, slots for the cross-pathway links. Its OWN
+                    allowance, not the leftovers of maxEdges: MORE relationships
+                    outnumber the budget on any map worth opening, so a shared
+                    pool would silently starve this layer to zero forever.
     @returns {dict} the payload delivered to the Step 4 view
     """
     from pymongo import MongoClient
@@ -721,6 +932,10 @@ def buildPathwayEvidence(jobInstance, pathwayID, condition=None,
     allowedClasses = set(classes) if classes else set(CLASS_PRIORITY)
     obstacles = []
     organism = jobInstance.getOrganism()
+    # Bound here, not inside the try: the cross-pathway step runs after the
+    # `finally` and would raise NameError on any path that never reached the
+    # assignments below.
+    knowledge, drawn, pathwayNames, featurePositions = None, set(), {}, {}
 
     table = _RegulationTable(getattr(jobInstance, "regulationPerConditionData", None))
     statistics = {
@@ -740,17 +955,26 @@ def buildPathwayEvidence(jobInstance, pathwayID, condition=None,
         #: Corroborated by a pathway database that draws the interaction on a
         #: DIFFERENT map. This is the count that used to be lost entirely.
         "recordedElsewhere": 0,
+        #: Cross-pathway links: curated interactions between the user's relevant
+        #: features that this map does not draw. Zero unless asked for.
+        "crossPathway": {"candidates": 0, "hidden": 0, "relevantFeatures": 0,
+                         "tooFarApart": 0,
+                         "shown": 0, "requested": bool(crossPathway),
+                         "relevantOnly": bool(crossRelevantOnly),
+                         "budget": 0, "totalMarks": 0},
     }
 
-    if not table.usable:
-        return {"pathwayID": pathwayID, "edges": [], "obstacles": [], "statistics": statistics}
-
+    # NOTE: no early return when the job has no MORE analysis. "Even without
+    # MORE" is exactly the case the cross-pathway layer exists for, and
+    # returning here meant the one job that needed it most got an empty answer.
+    # The relationship loop below simply iterates nothing instead.
     client = MongoClient(MONGODB_HOST, MONGODB_PORT)
     try:
         database = client[organism + "-paintomics"]
         pathwayDocument = database["kegg"].find_one({"ID": pathwayID})
         if pathwayDocument is None:
-            return {"pathwayID": pathwayID, "edges": [], "obstacles": [], "statistics": statistics}
+            return {"pathwayID": pathwayID, "edges": [], "crossLinks": [],
+                "obstacles": [], "statistics": statistics}
 
         sourceName = pathwayDocument.get("source") or "KEGG"
         # One pass for every pathway name in the organism (1,008 documents on
@@ -760,15 +984,18 @@ def buildPathwayEvidence(jobInstance, pathwayID, condition=None,
                         for document in database["kegg"].find({}, {"ID": 1, "name": 1})}
         obstacles = _printedObstacles(pathwayDocument, organism, pathwayID)
         drawn = _drawnFeatureIDs(pathwayDocument)
+        featurePositions = _featurePositions(pathwayDocument)
         if not drawn:
-            return {"pathwayID": pathwayID, "edges": [], "obstacles": [], "statistics": statistics}
+            return {"pathwayID": pathwayID, "edges": [], "crossLinks": [],
+                "obstacles": [], "statistics": statistics}
 
         databaseConvertionIds, _symbolIds = resolveDatabaseIds(organism, [sourceName], database)
         targetDbnameId = databaseConvertionIds.get(sourceName)
         if targetDbnameId is None:
-            return {"pathwayID": pathwayID, "edges": [], "obstacles": [], "statistics": statistics}
+            return {"pathwayID": pathwayID, "edges": [], "crossLinks": [],
+                "obstacles": [], "statistics": statistics}
 
-        relationships = list(table.relationships(condition))
+        relationships = list(table.relationships(condition)) if table.usable else []
 
         # One batched translation for every endpoint name in the job, rather
         # than a query per relationship: findIDsByFeaturesName caches misses as
@@ -876,5 +1103,29 @@ def buildPathwayEvidence(jobInstance, pathwayID, condition=None,
         edges = edges[:maxEdges]
 
     statistics["shown"] = len(edges)
-    return {"pathwayID": pathwayID, "edges": edges,
+
+    # The links get their OWN allowance. Measured: giving them "whatever the
+    # MORE edges left" produced zero links on every map of a real MORE job at
+    # every budget from 8 to 20, because MORE always has more relationships than
+    # slots. The two numbers are separate and the panel prints their sum, so the
+    # reader can see and choose the total rather than discover it.
+    linkBudget = max(0, int(maxCrossLinks or 0))
+    statistics["crossPathway"]["budget"] = linkBudget
+    statistics["crossPathway"]["totalMarks"] = len(edges) + min(linkBudget, 200)
+
+    crossLinks = []
+    if crossPathway and knowledge is not None:
+        try:
+            crossLinks, crossStatistics = crossPathwayLinks(
+                jobInstance, pathwayID, knowledge, drawn, pathwayNames, linkBudget,
+                relevantOnly=crossRelevantOnly, positions=featurePositions)
+            statistics["crossPathway"].update(crossStatistics)
+        except Exception as crossError:
+            # Additive by design: this layer is an extra, and a failure in it
+            # must never cost the MORE edges the reader came for.
+            logging.warning("Cross-pathway links unavailable for %s: %s",
+                            pathwayID, crossError)
+    statistics["crossPathway"]["shown"] = len(crossLinks)
+
+    return {"pathwayID": pathwayID, "edges": edges, "crossLinks": crossLinks,
             "obstacles": obstacles, "statistics": statistics}

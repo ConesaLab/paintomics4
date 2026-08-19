@@ -70,6 +70,28 @@ function PA_Step4EvidenceOverlay() {
 	*/
 	this.NEAR_RADIUS = 70;
 
+	/**
+	* Everything the reader can turn. Held here rather than read from the DOM so
+	* a redraw after a drag or an Apply cannot pick up a different answer than
+	* the one the panel is showing.
+	*
+	* maxEdges and maxCrossLinks are SEPARATE allowances, not a pool. Measured:
+	* a real MORE job has 55 drawable relationships on mmu05167, so giving the
+	* links "whatever the edges left" yields zero at every budget from 8 to 20.
+	* The panel prints their sum, because the sum is what lands on the map and
+	* the readable ceiling measured here is 5-8 marks in total.
+	*/
+	this.DEFAULTS = {
+		maxEdges: 8,
+		crossPathway: false,
+		crossRelevantOnly: true,
+		maxCrossLinks: 3
+	};
+
+	/** Curated interactions this map does not draw. Its own hue: it is a
+	    different claim from "your data says these move together". */
+	this.CROSS_STYLE = {stroke: "#0F766E", width: 1.8, dash: "5,3", opacity: 0.9};
+
 	this.group = null;
 	this.legendEl = null;
 	this.payload = null;
@@ -103,6 +125,25 @@ function PA_Step4EvidenceOverlay() {
 		var me = this;
 		this.options = options;
 		this.placement = options.placement || {};
+		this.settings = $.extend({}, this.DEFAULTS, options.settings || {});
+		if (options.maxEdges) { this.settings.maxEdges = options.maxEdges; }
+
+		this.request();
+		return this;
+	};
+
+	/**
+	* (Re)ask the server with the current settings and redraw.
+	*
+	* A round trip rather than client-side filtering: the cross-pathway
+	* candidates are a median of 11 and a maximum of 574 per map BEFORE the
+	* significance filter, and shipping all of them so the client could pick
+	* three would move the cost to every diagram open, including the ones where
+	* the layer is switched off.
+	*/
+	this.request = function() {
+		var me = this;
+		var options = this.options;
 
 		$.ajax({
 			method: "POST",
@@ -110,7 +151,10 @@ function PA_Step4EvidenceOverlay() {
 			data: JSON.stringify({
 				jobID: options.jobID,
 				pathwayID: options.pathwayID,
-				maxEdges: options.maxEdges || 8
+				maxEdges: this.settings.maxEdges,
+				crossPathway: this.settings.crossPathway,
+				crossRelevantOnly: this.settings.crossRelevantOnly,
+				maxCrossLinks: this.settings.maxCrossLinks
 			}),
 			dataType: "json",
 			contentType: "application/json",
@@ -546,7 +590,7 @@ function PA_Step4EvidenceOverlay() {
 		var perTarget = {};
 
 		var counts = {drawn: 0, badged: 0, satellites: 0, fellBack: 0,
-					  linked: 0, selfLoops: 0, moved: 0};
+					  linked: 0, selfLoops: 0, moved: 0, crossLinks: 0};
 
 		edges.forEach(function(edge) {
 			var targetRaster = me.rasterBox(edge.targetID);
@@ -617,6 +661,12 @@ function PA_Step4EvidenceOverlay() {
 			counts.fellBack++;
 			counts.drawn++;
 			if (result.shared) { counts.badged++; }
+		});
+
+		/* After the MORE edges, so the violet layer keeps the foreground: these
+		   are context, not the reader's own result. */
+		((this.payload && this.payload.crossLinks) || []).forEach(function(link) {
+			if (me.drawCrossLink(link)) { counts.crossLinks++; }
 		});
 
 		this.renderLegend(counts);
@@ -925,6 +975,127 @@ function PA_Step4EvidenceOverlay() {
 		return handle;
 	};
 
+	/**
+	* One curated interaction the open map does not draw.
+	*
+	* A DIFFERENT CLAIM, SO A DIFFERENT MARK. The violet layer says "your data
+	* says these two move together". This says "a curator recorded these two as
+	* interacting, and this diagram is silent about it" -- no experiment of the
+	* user's is asserting anything. Sharing violet would blur the one thing the
+	* reader most needs to keep apart, so it gets its own teal and its own
+	* texture, and the legend names both.
+	*
+	* Undirected by default: most of these are PPrel or an OmniPath interaction,
+	* which assert an association, not a direction. Only a transcriptional
+	* record (GErel) earns an arrowhead, because only that says which one acts.
+	*/
+	this.drawCrossLink = function(link) {
+		/* THE NEAREST PAIR OF COPIES, not graphical[0].
+		   The server accepted this link because the CLOSEST boxes of the two
+		   features are within the readability limit, and it measures across
+		   every copy. boxGeometry takes the first one, so for a gene KEGG draws
+		   several times -- Jun has three boxes on mmu05167 -- the two ends
+		   disagreed and a 109 px link rendered as a ~490 px sweep across the
+		   diagram: the exact occlusion the distance rule exists to prevent,
+		   reintroduced at draw time. Two passes settle on a mutually nearest
+		   pair. */
+		var factor = this.options.adjustFactor;
+		var sourceRaster = this.rasterBox(link.sourceID);
+		var targetRaster = this.rasterBox(link.targetID, sourceRaster);
+		sourceRaster = this.rasterBox(link.sourceID, targetRaster) || sourceRaster;
+		if (!sourceRaster || !targetRaster) { return false; }
+
+		var toCanvas = function(box) {
+			return {
+				cx: box.cx * factor, cy: box.cy * factor,
+				halfWidth: (box.width * factor || 20) / 2,
+				halfHeight: (box.height * factor || 20) / 2,
+				key: box.key
+			};
+		};
+		var fromBox = toCanvas(sourceRaster);
+		var toBox = toCanvas(targetRaster);
+
+		var style = this.CROSS_STYLE;
+		var from = this.perimeterPoint(fromBox, toBox.cx, toBox.cy, 2);
+		var to = this.perimeterPoint(toBox, fromBox.cx, fromBox.cy,
+									 link.transcriptional ? 4 : 2);
+
+		/* A much flatter bow than the MORE arcs use. Those bow up to 70 canvas
+		   units to stay distinguishable from the map's own straight connectors;
+		   here the teal, the dash and the dotted ends already do that, so the
+		   only thing a deep bow adds is the sweep across neighbouring artwork
+		   that this layer's whole distance rule exists to prevent. */
+		var dx = to.x - from.x, dy = to.y - from.y;
+		var length = Math.sqrt(dx * dx + dy * dy) || 1;
+		var bow = Math.min(length * 0.10, 12);
+		var control = {
+			x: (from.x + to.x) / 2 - (dy / length) * bow,
+			y: (from.y + to.y) / 2 + (dx / length) * bow
+		};
+		var d = "M" + from.x + "," + from.y +
+				" Q" + control.x + "," + control.y + " " + to.x + "," + to.y;
+
+		/* White casing, same reason as the violet layer: the application cannot
+		   see the printed lines this crosses, so it cannot route around them. */
+		this.append("path", {
+			d: d, fill: "none", stroke: "#ffffff",
+			"stroke-width": style.width + 2.4,
+			"stroke-linecap": "round", opacity: 0.65
+		});
+		var path = this.append("path", {
+			d: d, fill: "none", stroke: style.stroke,
+			"stroke-width": style.width,
+			"stroke-linecap": "round",
+			"stroke-dasharray": style.dash,
+			opacity: style.opacity
+		});
+
+		var terminal;
+		if (link.transcriptional) {
+			terminal = this.terminal(to, control, style, false);
+		} else {
+			terminal = this.append("circle", {
+				cx: to.x, cy: to.y, r: 2.6,
+				fill: "#ffffff", stroke: style.stroke, "stroke-width": 1.4,
+				opacity: style.opacity
+			});
+		}
+		this.append("circle", {
+			cx: from.x, cy: from.y, r: 2.6,
+			fill: "#ffffff", stroke: style.stroke, "stroke-width": 1.4,
+			opacity: style.opacity
+		});
+
+		var lines = [
+			link.sourceLabel + "  \u2014  " + link.targetLabel,
+			"Curated interaction this map does not draw"
+		];
+		(link.evidenceSources || []).forEach(function(evidence) {
+			var line = evidence.source;
+			if (evidence.detail) { line += " (" + evidence.detail + ")"; }
+			if (evidence.pathways && evidence.pathways.length) {
+				line += " — recorded in " + evidence.pathways.map(function(pathway) {
+					return pathway.name || pathway.id;
+				}).join(", ");
+				if (evidence.morePathways) {
+					line += " and " + evidence.morePathways + " more";
+				}
+			} else if (evidence.source === "OmniPath") {
+				line += " — an interaction list, not a map";
+			}
+			lines.push(line);
+		});
+		lines.push("both features carry your data" +
+			(this.settings.crossRelevantOnly ? " and are marked significant" : "") +
+			"; ranked on the weaker one (" + link.strength + ")");
+
+		var tip = lines.join("\n");
+		this.tooltip(path, tip);
+		this.tooltip(terminal, tip);
+		return true;
+	};
+
 	/* ---------------------------------------------------------------------
 	   MOVING A SATELLITE BY HAND
 
@@ -1110,6 +1281,9 @@ function PA_Step4EvidenceOverlay() {
 		var host = this.legendHost();
 		if (!host) { return; }
 
+		var cross = statistics.crossPathway || {};
+		var totalMarks = counts.drawn + counts.crossLinks;
+
 		var rows = this.CLASS_ORDER.map(function(name) {
 			var style = me.CLASS_STYLE[name];
 			var dash = style.dash ? ' stroke-dasharray="' + style.dash + '"' : "";
@@ -1122,6 +1296,22 @@ function PA_Step4EvidenceOverlay() {
 				'<span class="evidenceLegend-count">' + (byClass[name] || 0) + '</span>' +
 				'</li>';
 		}).join("");
+
+		if (counts.crossLinks) {
+			/* The teal key only appears when something teal is on the map. A
+			   permanent row for a layer that is off by default would explain a
+			   mark the reader has never seen. */
+			rows += '<li>' +
+				'<svg width="34" height="10" aria-hidden="true">' +
+				'  <path d="M2,8 Q17,0 32,6" fill="none" stroke="' + me.CROSS_STYLE.stroke +
+				'" stroke-width="' + me.CROSS_STYLE.width +
+				'" stroke-dasharray="' + me.CROSS_STYLE.dash + '" stroke-linecap="round"/>' +
+				'</svg>' +
+				'<span class="evidenceLegend-name">Curated elsewhere &mdash; ' +
+				'this map does not draw it</span>' +
+				'<span class="evidenceLegend-count">' + counts.crossLinks + '</span>' +
+				'</li>';
+		}
 
 		/* Which databases actually corroborated anything here, strongest first.
 		   Naming them is not decoration: "corroborated" means a different thing
@@ -1162,6 +1352,30 @@ function PA_Step4EvidenceOverlay() {
 				? " edge ends on a box holding several genes"
 				: " edges end on a box holding several genes") +
 				" and cannot say which one (hollow terminal)");
+		}
+		if (cross.requested) {
+			if (counts.crossLinks) {
+				omissions.push(counts.crossLinks +
+					(counts.crossLinks === 1 ? " curated link is" : " curated links are") +
+					" drawn in <b>teal</b>: this map does not connect them, another does" +
+					(cross.hidden
+						? ", and " + cross.hidden.toLocaleString() + " more are past the limit"
+						: ""));
+				if (cross.tooFarApart) {
+					/* Named, because it is a drawing decision and not a claim
+					   about the biology: both boxes are real and fixed, so a
+					   link across the map has nowhere to go but over the
+					   artwork. */
+					omissions.push(cross.tooFarApart.toLocaleString() +
+						" further curated links join boxes too far apart to draw legibly");
+				}
+			} else if (cross.relevantFeatures < 2) {
+				omissions.push("no curated links to add: fewer than two features here " +
+					(cross.relevantOnly ? "are marked significant" : "carry your data"));
+			} else {
+				omissions.push("no curated links to add: every interaction between " +
+					"these features is already drawn on this map");
+			}
 		}
 		if (statistics.recordedElsewhere) {
 			/* The number that only exists because more than one database is
@@ -1226,6 +1440,47 @@ function PA_Step4EvidenceOverlay() {
 			   fall off a short viewport -- measured, the buttons sat 3 px from
 			   the bottom edge when they came last. What the reader can act on
 			   goes above what they can only read. */
+			/* THE DIALS. Both budgets are the reader's, and their sum is printed
+			   because the sum is what lands on the diagram -- the readable
+			   ceiling measured on these maps is 5-8 marks in total, whatever
+			   mix they come from. Stating it beats enforcing a number we
+			   picked for someone else's map. */
+			'  <div class="evidenceLegend-controls">' +
+			'    <label class="evidenceLegend-field">' +
+			'      <span>Relationships from your data</span>' +
+			'      <input type="number" min="0" max="60" step="1" ' +
+			'             class="evidenceLegend-number" data-setting="maxEdges" ' +
+			'             value="' + me.settings.maxEdges + '">' +
+			'    </label>' +
+			/* data-guides="ignore" on the checkbox rows only: the CONTROL sits on
+			   the column's rail, and it is the label that the box pushes ~21px
+			   right. Pulling the text back would separate it from the input it
+			   belongs to, which is a worse answer than exempting the row. */
+			'    <label class="evidenceLegend-check" data-guides="ignore">' +
+			'      <input type="checkbox" data-setting="crossPathway"' +
+			(me.settings.crossPathway ? ' checked' : '') + '>' +
+			'      <span>Also curated links this map omits</span>' +
+			'    </label>' +
+			'    <div class="evidenceLegend-sub' +
+			(me.settings.crossPathway ? '' : ' is-off') + '">' +
+			'      <label class="evidenceLegend-field">' +
+			'        <span>How many</span>' +
+			'        <input type="number" min="0" max="30" step="1" ' +
+			'               class="evidenceLegend-number" data-setting="maxCrossLinks" ' +
+			'               value="' + me.settings.maxCrossLinks + '">' +
+			'      </label>' +
+			'      <label class="evidenceLegend-check" data-guides="ignore">' +
+			'        <input type="checkbox" data-setting="crossRelevantOnly"' +
+			(me.settings.crossRelevantOnly ? ' checked' : '') + '>' +
+			'        <span>Significant features only</span>' +
+			'      </label>' +
+			'    </div>' +
+			'    <p class="evidenceLegend-total">' + totalMarks + ' mark' +
+			(totalMarks === 1 ? '' : 's') + ' on this map' +
+			(totalMarks > 8
+				? ' &mdash; <b>past the 5&ndash;8 that stays readable here</b>'
+				: '') + '</p>' +
+			'  </div>' +
 			'  <div class="evidenceLegend-actions">' +
 			'    <a href="javascript:void(0)" class="button evidenceLegend-button evidenceLegend-toggle" ' +
 			'       title="Show or hide the whole evidence layer">' +
@@ -1244,9 +1499,18 @@ function PA_Step4EvidenceOverlay() {
 			(omissions.length
 				? '<p class="evidenceLegend-note">' + omissions.join("<br>") + '</p>'
 				: "") +
-			'  <p class="evidenceLegend-source">from this job\'s MORE analysis, ' +
-			'classified against KEGG, Reactome and OmniPath &mdash; every ' +
-			'pathway of this organism, not just this one.</p>' +
+			'  <p class="evidenceLegend-source">' +
+			(counts.crossLinks
+				/* The teal links come from the databases alone -- no MORE
+				   relationship is behind them -- so crediting the whole layer
+				   to the MORE analysis would be false as soon as one is on. */
+				? 'violet from this job\'s MORE analysis, teal from the ' +
+				  'databases alone; both classified against KEGG, Reactome and ' +
+				  'OmniPath &mdash; every pathway of this organism, not just this one.'
+				: 'from this job\'s MORE analysis, classified against KEGG, ' +
+				  'Reactome and OmniPath &mdash; every pathway of this organism, ' +
+				  'not just this one.') +
+			'</p>' +
 			'</div>';
 
 		this.legendEl = $(html);
@@ -1255,6 +1519,21 @@ function PA_Step4EvidenceOverlay() {
 		   block is absent (a Reactome or MapMan diagram builds it differently). */
 		var details = host.find(".patwaysDetailsContainer");
 		if (details.length) { details.after(this.legendEl); } else { host.append(this.legendEl); }
+
+		/* One handler for every dial. `change` rather than `input` so a typed
+		   number does not fire a round trip per keystroke. */
+		this.legendEl.find("[data-setting]").on("change", function() {
+			var field = $(this);
+			var name = field.data("setting");
+			var value = field.is(":checkbox") ? field.is(":checked")
+											  : parseInt(field.val(), 10);
+			if (typeof value === "number" && (isNaN(value) || value < 0)) {
+				field.val(me.settings[name]);
+				return;
+			}
+			me.settings[name] = value;
+			me.request();
+		});
 
 		this.legendEl.find(".evidenceLegend-toggle").click(function() {
 			me.setVisible(!me.visible);
