@@ -2201,3 +2201,44 @@ check_my_citations +2.5 k. Set against the earlier finding that cited themes sta
 flat at ~9 however large the pool, the queued revert to `SEARCH_HITS=5` has two
 independent arguments now: it buys no extra converted themes, and it costs 18% of
 the context budget.
+
+## The chunk-count experiment was killed by a broken counter, and is now revived
+
+Converted themes have sat between 8.8 and 10.5 for eight rounds, through every
+change to screening, pool size, search volume and the top-up. The arithmetic
+behind that ceiling:
+
+```
+DELEGATE_CHUNK = 5, DELEGATE_MAX_PATHWAYS = 20
+  15 pathways -> 3 writing units x ~2.5 themes each ~= 8 converted themes
+  20 pathways -> 4 writing units x ~2.5 themes each ~= 10
+observed, rounds 39-46: 8.8 - 10.5
+```
+
+A theme converts when the writer holding its papers cites them, and the number of
+writers is `ceil(pathways / DELEGATE_CHUNK)`. That is the ceiling.
+
+**Why this was dropped.** Round 38 recorded `delegate_markers = 0` on every
+replicate and I concluded delegation contributes no citations, so chunk COUNT
+could not be what converts papers -- and dropped the experiment rather than
+running it. That counter was reading the wrong notation: the delegated
+interpreters are instructed to cite as `(PMID: XXXXXXXX)` and
+`resolve_pmid_mentions` converts those to `[N]` later, so a counter looking only
+for `[N]` in the raw delegated text was always going to read zero.
+
+The counter was fixed two iterations ago. The conclusion it produced was not
+revisited until now.
+
+**Round 47 (after round 46 is scored):** `AI_AGENT_DELEGATE_CHUNK=3`, everything
+else held. That gives 5-7 writing units instead of 3-4.
+
+- Predict `tags_with_a_cited_paper` rises from ~9.7 toward **13**, and
+  `citations_in_body` with it, since citations run ~2 per converted theme.
+- Predict wall clock roughly flat: the units run 4 at a time under
+  `DELEGATE_WORKERS`, so more units cost queueing, not serial time.
+- Watch `merge_s` and report length: more units means more stitched text, and
+  rule 5 is already at 1.88x of base.
+
+**Falsifier.** If converted themes stay at ~9-10 with 5-7 units, the ceiling is
+not the unit count and the arithmetic above is coincidence -- which would point
+at DELEGATE_PAPERS, the ten papers each unit is shown, as the real limit.
