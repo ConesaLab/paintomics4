@@ -1,0 +1,19 @@
+<tr>
+	<td width="160px;">{{ formatDate(report.submitted_at) }}</td>
+	<td width="140px;">{{ report.type_label }}</td>
+	<td width="200px;">{{ report.user_email }}</td>
+	<td style="white-space: pre-wrap; word-break: break-word;">{{ report.message_text }}</td>
+	<td width="130px;">
+		<span ng-show="report.delivered" class="text-success">
+			<i class="fa fa-check" aria-hidden="true"></i> Sent
+		</span>
+		<span ng-hide="report.delivered" class="text-danger" title="{{ report.delivery_error }}">
+			<i class="fa fa-times" aria-hidden="true"></i> Not sent
+		</span>
+	</td>
+	<td width="110px;">
+		<a class="clickable" style="margin-right: 10px;" ng-click="controller.deleteReportHandler(report)">
+			<i class="fa fa-trash text-danger"></i> Dismiss
+		</a>
+	</td>
+</tr>

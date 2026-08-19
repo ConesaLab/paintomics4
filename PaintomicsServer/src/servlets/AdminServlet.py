@@ -673,6 +673,92 @@ def adminServletSystemInformation(request, response):
     finally:
         return response
 
+def adminServletGetReports(request, response):
+    """
+    List the reports users have submitted (organism requests, error reports).
+
+    These are stored by adminServletSendReport before any delivery is attempted,
+    so they are the record of what users asked for even when outbound mail is
+    unavailable -- which it has been in production. Without this handler the
+    only way to read them is a Mongo shell on the server.
+
+    @param {Request} request, the request object
+    @param {Response} response, the response object
+    """
+    daoInstance = None
+    try:
+        #****************************************************************
+        # Step 0.CHECK IF VALID USER SESSION
+        #****************************************************************
+        logging.info("STEP0 - CHECK IF VALID USER....")
+        userID = request.cookies.get('userID')
+        sessionToken = request.cookies.get('sessionToken')
+        userName = request.cookies.get('userName')
+        UserSessionManager().isValidAdminUser(userID, userName, sessionToken)
+
+        #****************************************************************
+        # Step 1. GET THE LIST OF REPORTS
+        #****************************************************************
+        logging.info("STEP1 - GET THE LIST OF REPORTS...")
+        daoInstance = ReportDAO()
+        reportList = [reportInstance.toBSON() for reportInstance in daoInstance.findAll()]
+
+        # Surfaced so the panel can warn that mail is down rather than letting
+        # an operator assume these were also emailed to them.
+        undelivered = len([r for r in reportList if not r.get("delivered")])
+
+        response.setContent({
+            "success": True,
+            "reportList": reportList,
+            "undelivered": undelivered,
+        })
+
+    except Exception as ex:
+        handleException(response, ex, __file__, "adminServletGetReports")
+
+    finally:
+        if daoInstance is not None:
+            daoInstance.closeConnection()
+        return response
+
+
+def adminServletDeleteReport(request, response, reportID):
+    """
+    Dismiss one report once it has been acted on.
+
+    @param {Request} request, the request object
+    @param {Response} response, the response object
+    @param {String} reportID, the id of the report to remove
+    """
+    daoInstance = None
+    try:
+        #****************************************************************
+        # Step 0.CHECK IF VALID USER SESSION
+        #****************************************************************
+        logging.info("STEP0 - CHECK IF VALID USER....")
+        userID = request.cookies.get('userID')
+        sessionToken = request.cookies.get('sessionToken')
+        userName = request.cookies.get('userName')
+        UserSessionManager().isValidAdminUser(userID, userName, sessionToken)
+
+        #****************************************************************
+        # Step 1. REMOVE THE REPORT
+        #****************************************************************
+        logging.info("STEP1 - REMOVE THE REPORT...")
+        daoInstance = ReportDAO()
+        removed = daoInstance.remove(reportID)
+
+        response.setContent({"success": True, "removed": removed})
+
+    except Exception as ex:
+        handleException(response, ex, __file__, "adminServletDeleteReport")
+
+    finally:
+        if daoInstance is not None:
+            daoInstance.closeConnection()
+        return response
+
+
 def adminServletSendReport(request, response, ROOT_DIRECTORY):
     """
     This function...

@@ -848,6 +848,18 @@ class Application(object):
         def sendReportHandler():
             return adminServletSendReport(request, Response(), self.ROOT_DIRECTORY).getResponse()
         ##*******************************************************************************************
+        ##* RETRIEVE THE SUBMITTED REPORTS (organism requests, error reports)
+        ##*******************************************************************************************
+        @self.app.route(SERVER_SUBDOMAIN + '/api/admin/reports/', methods=['OPTIONS', 'GET'])
+        def getReports():
+            return adminServletGetReports(request, Response()).getResponse()
+        ##*******************************************************************************************
+        ##* DISMISS A REPORT
+        ##*******************************************************************************************
+        @self.app.route(SERVER_SUBDOMAIN + '/api/admin/reports/<path:reportID>', methods=['OPTIONS', 'DELETE'])
+        def deleteReport(reportID):
+            return adminServletDeleteReport(request, Response(), reportID).getResponse()
+        ##*******************************************************************************************
         ##* ADMIN SERVLETS HANDLERS - END
         #############################################################################################
         #############################################################################################

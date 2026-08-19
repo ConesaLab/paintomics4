@@ -46,11 +46,17 @@ class ReportDAO(DAO):
 
         collection = self.dbManager.getCollection(self.collectionName)
 
+        # Newest first: the admin panel reads this top-down, and a report only
+        # matters until it is acted on.
         matchedReports = []
-        for instance in collection.find(queryParams):
+        for instance in collection.find(queryParams).sort("_id", -1):
             instance = self.adaptBSON(instance)
+            # Model.parseBSON pops _id, but the panel needs it to dismiss a
+            # report, so keep it before it is discarded.
+            reportID = instance.get("_id", "")
             reportInstance = Report("")
             reportInstance.parseBSON(instance)
+            reportInstance.setReportID(reportID)
             matchedReports.append(reportInstance)
         return matchedReports
 
@@ -62,8 +68,19 @@ class ReportDAO(DAO):
         # copy). Insert a shallow copy so the caller's Report keeps the plain
         # scalar fields it was built with and stays safe to serialise.
         instanceBSON = dict(instanceBSON)
+        # report_id is a read-side convenience carrying Mongo's own _id back to
+        # the admin panel; storing an empty copy of it would be noise.
+        instanceBSON.pop("report_id", None)
         result = collection.insert_one(instanceBSON)
         return str(result.inserted_id)
+
+    def remove(self, reportID, otherParams=None):
+        """Dismiss one report once it has been acted on."""
+        from bson.objectid import ObjectId
+
+        collection = self.dbManager.getCollection(self.collectionName)
+        result = collection.delete_one({"_id": ObjectId(reportID)})
+        return result.deleted_count > 0
 
     def markDelivered(self, reportID, delivered, deliveryError="", otherParams=None):
         """Record the outcome of the delivery attempt for an already-stored report."""

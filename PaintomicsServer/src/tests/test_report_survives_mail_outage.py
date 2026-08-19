@@ -57,6 +57,7 @@ def _ensureServerConfig():
 _ensureServerConfig()
 
 import src.servlets.AdminServlet as AdminServlet
+from src.classes.Report import Report
 
 
 class _Cookies(object):
@@ -183,6 +184,106 @@ class MailOutageTest(unittest.TestCase):
             self.assertTrue(response.content.get("success"))
         finally:
             AdminServlet.ReportDAO, AdminServlet.sendEmail = originalDAO, originalMail
+
+
+class AdminReportsViewTest(unittest.TestCase):
+    """The panel that makes stored reports visible without a Mongo shell.
+
+    With outbound mail unavailable, this view is the ONLY place an organism
+    request appears, so 'it is stored' is only half the fix.
+    """
+
+    def _run(self, handler, calls, admin=True, extra=None):
+        class _StubSessionManager(object):
+            def isValidAdminUser(self, userID, userName, sessionToken):
+                calls.append(("adminCheck", userID))
+                if not admin:
+                    raise Exception("Invalid admin user")
+                return True
+
+        class _StubDAO(object):
+            def findAll(self, otherParams=None):
+                calls.append(("findAll",))
+                stored, undelivered = Report("specie_request"), Report("error")
+                stored.setMessage("Please add Fusarium oxysporum")
+                stored.setDelivered(True)
+                stored.setReportID("id-delivered")
+                undelivered.setMessage("boom")
+                undelivered.setDelivered(False)
+                undelivered.setReportID("id-undelivered")
+                return [stored, undelivered]
+
+            def remove(self, reportID, otherParams=None):
+                calls.append(("remove", reportID))
+                return True
+
+            def closeConnection(self):
+                calls.append(("close",))
+                return True
+
+        originalDAO = AdminServlet.ReportDAO
+        originalSession = AdminServlet.UserSessionManager
+        AdminServlet.ReportDAO = _StubDAO
+        AdminServlet.UserSessionManager = _StubSessionManager
+        try:
+            response = _Response()
+            if extra is None:
+                handler(_Request({}), response)
+            else:
+                handler(_Request({}), response, extra)
+            return response
+        finally:
+            AdminServlet.ReportDAO = originalDAO
+            AdminServlet.UserSessionManager = originalSession
+
+    def test_reports_are_listed_for_an_admin(self):
+        calls = []
+        response = self._run(AdminServlet.adminServletGetReports, calls)
+        self.assertTrue(response.content.get("success"), response.content)
+        reports = response.content.get("reportList")
+        self.assertEqual(len(reports), 2)
+        self.assertIn("Fusarium oxysporum", reports[0]["message"])
+
+    def test_the_undelivered_count_is_reported(self):
+        """So an operator is told these never reached an inbox."""
+        calls = []
+        response = self._run(AdminServlet.adminServletGetReports, calls)
+        self.assertEqual(response.content.get("undelivered"), 1)
+
+    def test_listing_requires_an_admin(self):
+        calls = []
+        response = self._run(AdminServlet.adminServletGetReports, calls, admin=False)
+        self.assertIn(("adminCheck", None), calls)
+        self.assertFalse((response.content or {}).get("success"),
+                         "a non-admin was served the report list: %r" % (response.content,))
+
+    def test_dismissing_requires_an_admin(self):
+        calls = []
+        self._run(AdminServlet.adminServletDeleteReport, calls, admin=False, extra="id-1")
+        self.assertNotIn(("remove", "id-1"), calls,
+                         "a non-admin deleted a report")
+
+    def test_an_admin_can_dismiss_a_report(self):
+        calls = []
+        response = self._run(AdminServlet.adminServletDeleteReport, calls, extra="id-1")
+        self.assertTrue(response.content.get("success"))
+        self.assertIn(("remove", "id-1"), calls)
+
+    def test_the_mongo_connection_is_closed(self):
+        """DBmanager builds a client per DAO; the panel polls this route."""
+        calls = []
+        self._run(AdminServlet.adminServletGetReports, calls)
+        self.assertIn(("close",), calls)
+
+
+class ReportRoutesTest(unittest.TestCase):
+    def test_the_admin_report_routes_are_registered(self):
+        path = os.path.join(REPO, "PaintomicsServer", "src", "paintomicsserver.py")
+        source = open(path, encoding="utf-8").read()
+        self.assertIn("'/api/admin/reports/'", source,
+                      "the reports listing route is not registered")
+        self.assertIn("adminServletGetReports", source)
+        self.assertIn("adminServletDeleteReport", source)
 
 
 class UwsgiIniTest(unittest.TestCase):
