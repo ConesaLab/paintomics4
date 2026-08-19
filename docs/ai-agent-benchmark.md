@@ -4687,3 +4687,31 @@ scope was a sentence in a prompt. The pattern is consistent enough now to state 
 a rule -- **in this pipeline, behaviour is set by instructions and only bounded by
 constants**, which is AgentEvolve's "information without an instruction is a no-op"
 seen from the other side.
+
+### Stop paying for the control on agent-versus-agent questions
+
+Round 54 at 5 of 8 confirms base in cluster mode is slow and erratic: 486, 1014
+and 607 s, so **two of three replicates miss the ten-minute bar**, against the
+agent's 272 and 393. It is also two thirds of every round's wall clock.
+
+That cost buys nothing on the questions that remain. `CLUSTER_SCOPE`,
+`JOIN_CITATIONS`, `SHOW_COMPOUNDS` -- all built and queued -- are agent-versus-agent
+comparisons, and the sealed rubric scores a report **absolutely**. Base's numbers
+for both configurations are already in the archive; re-measuring the control every
+round is spending an hour to reproduce a figure I have.
+
+`ai_arm_bench round ... --arms agent` skips it. The default still interleaves
+base/agent/base/agent, because gateway throughput drifts over tens of minutes and
+running one arm back to back would put that weather on one side of the comparison
+-- that property is worth keeping for the rounds that need it.
+
+The obvious way to misuse this is to read the five rules off a round with no
+control. Rules 2, 3, 4 and 5 are all relative to base, so `cmd_score` would report
+them against whatever base rows happened to be in the directory. The help text
+says so, a test asserts the help text says so, and the docstring on the planner
+says which numbers such a round is for: `rubric_coverage` and the agent columns.
+
+This is a framework change rather than a pipeline one, and it is the second time
+the sealed rubric has paid off beyond its original purpose: first by scoring
+content that the five relative rules could not see, now by removing the need for a
+control on most of the remaining work.

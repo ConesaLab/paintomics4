@@ -997,9 +997,24 @@ def cmd_round(args):
 
     jobs = args.jobs.split(",")
     plan = []
+    # `--arms agent` skips the control. It is the right shape for an
+    # agent-versus-agent question, which is most of them now that the sealed
+    # rubric gives an ABSOLUTE score: comparing two agent configurations needs
+    # neither arm of base, and base in cluster mode costs 486-1014 s a replicate
+    # -- two thirds of a round's wall clock spent re-measuring a control whose
+    # numbers are already in hand. Use `compare` across the two round
+    # directories afterwards.
+    #
+    # It is NOT the shape for a rule verdict: rules 2, 3, 4 and 5 are all
+    # relative to base, and cmd_score will report them against whatever base
+    # rows happen to be in the directory. A round run with --arms agent should be
+    # read on rubric_coverage and the agent columns, not on the five rules.
+    arms = [a.strip() for a in (getattr(args, "arms", None) or "base,agent").split(",")]
     for replicate, job in enumerate(jobs, start=1):
-        plan.append((job, "base", "base-r%d" % replicate))
-        plan.append((job, "agent", "%s-r%d" % (args.label, replicate)))
+        if "base" in arms:
+            plan.append((job, "base", "base-r%d" % replicate))
+        if "agent" in arms:
+            plan.append((job, "agent", "%s-r%d" % (args.label, replicate)))
 
     for job, arm, label in plan:
         print("\n=== %s  job=%s  %s" % (label, job, time.strftime("%H:%M:%S")),
@@ -1096,6 +1111,10 @@ def main(argv=None):
     rnd.add_argument("--label", default="agent",
                      help="agent-arm label, e.g. agent-v25")
     rnd.add_argument("--design", default=STATEGRA_DESIGN)
+    rnd.add_argument("--arms", default="base,agent",
+                     help="which arms to run; 'agent' alone skips the control "
+                          "for an agent-vs-agent question (read the rubric, not "
+                          "the five rules)")
 
     args = parser.parse_args(argv)
     return {"ready": cmd_ready, "run": cmd_run, "score": cmd_score,
