@@ -908,11 +908,17 @@ def cmd_score(args):
         groups.setdefault(key, []).append(row)
 
     order = ["base"] + sorted(k for k in groups if k != "base")
-    print("%-26s %s" % ("", "".join("%12s" % k[:12] for k in order)))
+    # Label every cell with its arm, not just the header row. Reading a bare
+    # column of numbers against a header printed twenty lines earlier is how I
+    # published two inverted claims off this table -- "the agent repeats more
+    # citation sentences" and "the agent links more citations to data" were both
+    # base's numbers. A header is not enough when the reader is scrolling.
+    print("%-26s %s" % ("", "".join("%18s" % k[:18] for k in order)))
     for metric in METRICS:
-        cells = "".join("%12s" % ("  n/a" if _mean(groups[k], metric) is None
-                                  else "%.1f" % _mean(groups[k], metric))
-                        for k in order)
+        cells = "".join(
+            "%18s" % ("%s=n/a" % k[:9] if _mean(groups[k], metric) is None
+                      else "%s=%.1f" % (k[:9], _mean(groups[k], metric)))
+            for k in order)
         print("%-26s %s" % (metric, cells))
     print("%-26s %s" % ("replicates",
                         "".join("%12d" % len(groups[k]) for k in order)))

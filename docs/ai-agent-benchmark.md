@@ -4541,3 +4541,46 @@ and that the number it states equals the constant.
 Predicted: coverage rises toward 40-60; B1 and E1 become reachable; wall rises by
 about two waves (~70 s) from 321 s and stays under 600. Falsifier: if coverage
 rises and B1/E1 stay missed, class breadth is not base's advantage either.
+
+### Correction: two claims from the last entry were inverted
+
+Last entry I wrote that the agent "links more of its citations to the experiment's
+own data (5.0 against 2.0)" and "repeats more citation sentences verbatim (3.8
+against 1.8)". **Both are base's numbers.** The score table prints base in the
+first column, and I read the pair in the order I expected rather than the order
+printed. The true figures:
+
+```
+                              agent    base
+citations_linked_to_data        2.0     5.0
+citation_sentences_repeated     1.8     3.8
+```
+
+So base links more of its citations to the data, and base repeats more sentences
+verbatim. The agent is the better arm on repetition and the worse one on
+data-linked citations -- the opposite of what I published, on both counts.
+
+I verified the underlying values rather than assuming the table was wrong: stored
+and recomputed match exactly on all eight reports (agent 0/0/0/7 repeats, base
+11/0/4/0; agent 6/0/1/1 linked, base 0/5/4/11). The numbers were always right; the
+reading was not.
+
+This is the second time this table has produced an inverted claim from me -- the
+first was `rubric_coverage`, caught the same way, by recomputing instead of
+re-reading. Twice is a property of the interface, not of the day, so the table now
+labels every cell with its arm:
+
+```
+citations_linked_to_data             base=5.0     agent-v53=2.0
+citation_sentences_repeated          base=3.8     agent-v53=1.8
+```
+
+A header twenty lines above a number is not enough when the reader is scrolling
+through a scored round.
+
+**What the corrected numbers mean.** The decorative-citation pattern is worse in
+the AGENT arm, not base: 2.0 of its ~28 citation sentences say anything about the
+experiment, against base's 5.0 of ~26. That is the same direction as the very
+first measurement of this (agent 5%, base 10%), and I should have noticed the
+reversal contradicted it. `AI_AGENT_JOIN_CITATIONS`, already built and queued,
+targets exactly this and is now better motivated than when I wrote it.
