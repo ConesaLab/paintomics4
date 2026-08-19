@@ -1188,9 +1188,22 @@ function PA_Step4KeggDiagramView() {
 							});
 						}
 
+						var diagramPanelEl = $(this.el.dom);
 						me.evidenceOverlay = new PA_Step4EvidenceOverlay().render({
 							canvas: canvas,
-							panelEl: $(this.el.dom).find(".lateralOptionsPanel-body"),
+							/* A FUNCTION, resolved when the card is built: the
+							   Pathway information column is constructed after this
+							   panel, so it does not exist yet at this line. The card
+							   used to go into the diagram panel's own body, which is
+							   as tall as the map -- so it opened below the fold and
+							   its controls were never seen. */
+							panelEl: function() {
+								var column = $("#mainViewCenterPanel")
+									.find(".lateralOptionsPanel-body.findFeaturesContainer");
+								return column.length
+									? column
+									: diagramPanelEl.find(".lateralOptionsPanel-body");
+							},
 							jobID: me.getParent("PA_Step4JobView").getModel().getJobID(),
 							pathwayID: me.getModel().getID(),
 							graphicalOptions: graphicalOptions,
@@ -1203,6 +1216,21 @@ function PA_Step4KeggDiagramView() {
 							itemsByID: itemsByFeatureID,
 							summaries: dataDistributionSummaries,
 							visualOptions: visualOptions,
+							/* Positions the user dragged, kept per pathway inside the
+							   job's own visualOptions -- the same store the colour
+							   scale and visible omics already live in, so a nudge
+							   survives closing the diagram and reopening it. */
+							placement: (visualOptions.evidencePlacement || {})[me.getModel().getID()] || {},
+							onPlacementChange: function(placement) {
+								var pathwayView = me.getParent();
+								var options = pathwayView.getVisualOptions();
+								if (!options.evidencePlacement) { options.evidencePlacement = {}; }
+								options.evidencePlacement[me.getModel().getID()] = placement;
+								pathwayView.setVisualOptions("evidencePlacement",
+															 options.evidencePlacement);
+								pathwayView.getParent().getController().updateStoredVisualOptions(
+									pathwayView.getParent().getModel().getJobID(), options);
+							},
 							maxEdges: 8
 						});
 					} catch (overlayError) {

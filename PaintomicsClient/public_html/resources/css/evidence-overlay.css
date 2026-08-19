@@ -1,71 +1,38 @@
 /* Evidence overlay -----------------------------------------------------------
-   The legend for the MORE evidence arcs drawn on a pathway diagram.
+   The control section for the MORE evidence layer drawn on a pathway diagram.
 
-   Deliberately a panel over the diagram rather than a strip beside it: the
-   diagram sizes itself to the viewport and the panel already scrolls, so a
-   sibling block would push the map out of view on exactly the wide maps the
-   overlay matters most on.
+   It lives in the Pathway information column beside the map, NOT under the
+   diagram. Two earlier homes were wrong for measurable reasons: floating on the
+   artwork covered the map (and one of the overlay's own arrowheads) to explain
+   the thing drawn on the map, and hanging it under the diagram put it below the
+   fold -- the panel is as tall as the map, so 240 px of controls opened 18 px
+   from the bottom of a 907 px viewport and were never seen.
 
-   The KEGG/Reactome artwork underneath is raster with a white canvas baked in
-   and stays light in the dark build (see dark.css). The legend therefore keeps
-   its own light surface in both themes -- it sits ON the artwork, and a dark
-   card floating on white paper would read as a hole, not as chrome. Only the
-   text ink is re-tuned for dark. */
-
-.lateralOptionsPanel-body {
-	/* The legend is positioned against this box. Adding the containing block
-	   here rather than on a wrapper keeps the diagram's own coordinate system
-	   untouched -- svgPanZoom drives the SVG viewBox and never consults the DOM
-	   position of anything. */
-	position: relative;
-}
+   Living in that column means WEARING ITS CLOTHES. The column states a section
+   with an <h4> (13px/600), sub-labels with .pa-details-label (10px/600
+   uppercase) and renders pills as .pa-details-chip -- all flat, no borders, no
+   shadows, no tinted panels. This sheet therefore paints almost nothing: it
+   sizes the legend rows and the two buttons and otherwise inherits, so the
+   section reads as part of the panel and re-themes with it instead of holding
+   a light card against a dark chrome. Violet is kept ONLY where it carries
+   meaning -- the three stroke samples, which are the key to the marks on the
+   map -- and for the layer's own <b> emphasis in the drag hint. */
 
 .evidenceLegend {
-	/* Deliberately IN FLOW below the diagram, not floating on it.
-	   A floating card was tried first and it covered pathway artwork and one of
-	   the overlay's own arrowheads -- occluding the map to explain the thing
-	   drawn on the map is precisely the failure this whole feature is built to
-	   avoid. The panel already reserves imageHeight + 200 px, so the card costs
-	   no diagram space. */
-	margin: 14px 0 0;
-	max-width: 460px;
-	padding: 10px 12px 8px;
-	border: 1px solid rgba(91, 26, 139, 0.28);
-	border-left: 3px solid #5B1A8B;
-	border-radius: 4px;
-	background: rgba(255, 255, 255, 0.955);
-	box-shadow: 0 1px 6px rgba(0, 0, 0, 0.14);
+	margin: 4px 0 14px;
 	font-size: 11px;
 	line-height: 1.45;
-	color: #3a3a3a;
-	pointer-events: auto;
+	color: #3f3f46;
 }
 
-.evidenceLegend-header {
-	display: flex;
-	align-items: baseline;
-	justify-content: space-between;
-	margin-bottom: 6px;
+.evidenceLegend h4 {
+	/* Left to the panel's own h4 rule (13px/600, #1a1a18, margin 16px 0 6px) so
+	   this section's title cannot drift from "Search in this pathway" above it. */
+	margin-bottom: 2px;
 }
-
-.evidenceLegend-title {
-	font-weight: 600;
-	font-size: 11.5px;
-	letter-spacing: 0.02em;
-	color: #5B1A8B;
-	text-transform: uppercase;
-}
-
-.evidenceLegend-toggle {
-	font-size: 10.5px;
-	color: #7a7a7a;
-	text-decoration: underline;
-}
-
-.evidenceLegend-toggle:hover { color: #5B1A8B; }
 
 .evidenceLegend-list {
-	margin: 0;
+	margin: 6px 0 0;
 	padding: 0;
 	list-style: none;
 }
@@ -73,42 +40,117 @@
 .evidenceLegend-list li {
 	display: flex;
 	align-items: center;
-	gap: 7px;
-	padding: 1.5px 0;
+	gap: 8px;
+	padding: 2px 0;
 }
 
 .evidenceLegend-list svg { flex: 0 0 34px; }
 
 .evidenceLegend-name {
 	flex: 1 1 auto;
-	/* The class names are long on purpose -- "Corroborated" alone does not say
-	   corroborated BY WHAT, and this legend is the only place the distinction
-	   is ever explained. */
-	font-size: 10.5px;
+	/* The column is 300 px wide, so these wrap rather than pushing the count
+	   off the row. The class names are long on purpose -- "Corroborated" alone
+	   does not say corroborated BY WHAT, and this is the only place the
+	   distinction is ever explained. */
+	min-width: 0;
+	font-size: 11px;
 }
 
 .evidenceLegend-count {
 	flex: 0 0 auto;
-	min-width: 22px;
+	min-width: 20px;
 	font-variant-numeric: tabular-nums;
 	text-align: right;
 	font-weight: 600;
-	color: #222;
+	color: #18181b;
+}
+
+.evidenceLegend-sources {
+	margin: 7px 0 0;
+	font-size: 10px;
+	color: #71717a;
+}
+
+.evidenceLegend-source-name {
+	/* Not .pa-details-label: that rule uppercases, and "OMNIPATH" / "REACTOME"
+	   are not how either database writes its own name. */
+	font-weight: 600;
+	color: #3f3f46;
+}
+
+.evidenceLegend-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin: 10px 0 0;
+}
+
+.evidenceLegend-button {
+	/* The chip surface the classification pills already use, at the
+	   twoOptionsButton type size and radius. Neither control is the panel's
+	   primary action, so neither takes the blue that .btn-info spends on
+	   Search. */
+	flex: 1 1 auto;
+	padding: 5px 9px;
+	border: 1px solid rgba(24, 24, 27, 0.1);
+	border-radius: 6px;
+	background: #f3f2ed;
+	font-size: 11px;
+	font-weight: 600;
+	line-height: 1.2;
+	text-align: center;
+	text-decoration: none;
+	color: #3f3f46;
+	white-space: nowrap;
+}
+
+.evidenceLegend-button:hover {
+	background: #e9e7df;
+	color: #18181b;
+	text-decoration: none;
+}
+
+.evidenceLegend-button i { margin-right: 4px; }
+
+.evidenceLegend-toggle.is-off {
+	/* The layer is hidden: say so on the control, so a blank map is explained
+	   by the button that caused it rather than looking like a failure. */
+	border-style: dashed;
+	background: transparent;
+}
+
+.evidenceLegend-reset.is-disabled {
+	/* Present but inert until something has been dragged. Hiding it instead
+	   would make the control appear only after the gesture that needs it is
+	   already finished, which is the wrong time to learn it exists. */
+	border-color: rgba(24, 24, 27, 0.07);
+	background: transparent;
+	color: #b6b6b6;
+	cursor: default;
+	pointer-events: none;
 }
 
 .evidenceLegend-note {
-	margin: 7px 0 0;
-	padding-top: 6px;
-	border-top: 1px solid rgba(0, 0, 0, 0.09);
+	margin: 9px 0 0;
 	font-size: 10px;
-	color: #6a6a6a;
+	line-height: 1.45;
+	color: #71717a;
 }
 
+.evidenceLegend-hint {
+	/* The one instruction that cannot be discovered by looking: nothing about a
+	   violet box says it can be picked up. Emphasis only -- a tinted panel here
+	   was the loudest thing in a column that has no panels in it. */
+	color: #52525b;
+}
+
+.evidenceLegend-hint b { color: #5B1A8B; }
+
 .evidenceLegend-source {
-	margin: 5px 0 0;
+	margin: 6px 0 0;
 	font-size: 9.5px;
 	font-style: italic;
-	color: #8a8a8a;
+	color: #a1a1aa;
 }
 
 /* The arcs themselves carry their stroke inline (svg.js writes attributes),
@@ -126,9 +168,20 @@
 .evidenceOverlay polygon,
 .evidenceOverlay image { pointer-events: visiblePainted; }
 
-[data-theme="dark"] .evidenceLegend {
-	/* Still a light card: it floats on the diagram's white raster. Only the
-	   shadow is deepened so the card separates from the surrounding dark chrome
-	   where it overhangs the artwork. */
-	box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+.evidenceSatellite {
+	/* Automatic placement is blind to the map's free text -- none of it is an
+	   entry in any file the application reads -- so the reader gets to move a
+	   box that lands badly. touch-action must be none or a touch drag scrolls
+	   the panel instead of moving the satellite. */
+	cursor: move;
+	touch-action: none;
 }
+
+.evidenceSatellite:hover rect[stroke] {
+	stroke-width: 1.8;
+}
+
+/* No dark override. The section now lives inside the Pathway information
+   column and paints no surface of its own, so it inherits whatever dark.css
+   does to that panel. The previous rule deepened a light card's shadow, which
+   only made sense while the card floated on the diagram's white raster. */

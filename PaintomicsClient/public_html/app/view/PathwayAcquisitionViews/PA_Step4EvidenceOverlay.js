@@ -44,32 +44,65 @@ function PA_Step4EvidenceOverlay() {
 	};
 
 	this.CLASS_LABEL = {
-		corroborated: "Corroborated &mdash; literature reports this interaction",
+		corroborated: "Corroborated &mdash; a curated database records this interaction",
 		novel:        "Novel &mdash; both proteins known, no reported interaction",
 		unsupported:  "Unsupported &mdash; no external evidence either way"
 	};
 
 	this.CLASS_ORDER = ["corroborated", "novel", "unsupported"];
 
+	/**
+	* How close a regulator's OWN box has to be to its target before parking a
+	* copy of it beside that target stops making sense.
+	*
+	* The satellite branch is only reachable for a regulator that HAS geometry
+	* on this map, so every satellite is by construction a second drawing of a
+	* box KEGG already placed. That is defensible when the original is half a
+	* map away and indefensible when it is touching. Measured on mmu05167, the
+	* three that read as absurd sit at 0, 6.0 and 26.0 raster px -- Fos and Jun
+	* SHARE one drawn box, and Jun is drawn directly above Ccnd1 -- while the
+	* five where a copy earns its place start at 289 px.
+	*
+	* 70 px is about one and a half KEGG gene boxes (46 x 17). It is a RASTER
+	* distance on purpose: a canvas-unit threshold means a different thing at
+	* every panel width, which is exactly the trap the arc layer's bow constant
+	* fell into.
+	*/
+	this.NEAR_RADIUS = 70;
+
 	this.group = null;
 	this.legendEl = null;
 	this.payload = null;
 	this.visible = true;
+	/** edgeKey -> {dx, dy}, RASTER px, from the user dragging a satellite. */
+	this.placement = {};
+	/** Live satellite handles, so a drag moves one without a full redraw. */
+	this.satellites = [];
 
 	/**
 	* @param {Object} options
 	*   canvas            {SVG.Doc}  the live svg.js canvas the diagram drew into
-	*   panelEl           {jQuery}   the .lateralOptionsPanel-body to hang the legend on
+	*   panelEl           {jQuery|Function} where to hang the control card, or a
+	*                                function returning it. A function because the
+	*                                card belongs in the Pathway information
+	*                                column, which is BUILT AFTER the diagram
+	*                                panel this overlay is created from
 	*   jobID             {String}
 	*   pathwayID         {String}
 	*   graphicalOptions  {PathwayGraphicalData}
 	*   adjustFactor      {Number}   raster scale already applied to every box
 	*   boxOccupancy      {Object}   "x#y" -> number of features sharing that box
+	*   placement         {Object}   edgeKey -> {dx, dy} in raster px, restored
+	*                                from visualOptions so a nudge survives a
+	*                                reopen and lands in the PNG/SVG export
+	*   onPlacementChange {Function} optional, called with the placement map
+	*                                after the user finishes a drag
 	*   onReady           {Function} optional, called with the payload
 	*/
 	this.render = function(options) {
 		var me = this;
 		this.options = options;
+		this.placement = options.placement || {};
 
 		$.ajax({
 			method: "POST",
@@ -252,15 +285,40 @@ function PA_Step4EvidenceOverlay() {
 				"  (fit of the target's whole model, not of this link)");
 		}
 
-		if (edge.references && edge.references.length) {
-			lines.push("cited by: " + edge.references.slice(0, 4).map(function(reference) {
-				return (reference.resource ? reference.resource + " " : "") +
-					(reference.pmid ? "PMID:" + reference.pmid : "");
-			}).join(", "));
-		} else if (edge.evidenceClass === "corroborated") {
-			lines.push("literature records this interaction; reinstall OmniPath " +
-				"to carry its PMIDs");
-		}
+		/* WHICH database, and WHERE. A relationship is routinely curated in a
+		   pathway OTHER than the one on screen -- measured on mmu05167, 32 of
+		   the 37 corroborated relationships are recorded on a different map --
+		   and saying only "corroborated" would keep the fact and lose the
+		   address the reader needs to go and check it. */
+		(edge.evidenceSources || []).forEach(function(evidence) {
+			var line = evidence.source;
+			if (evidence.detail) { line += " (" + evidence.detail + ")"; }
+
+			if (evidence.pathways && evidence.pathways.length) {
+				line += " — recorded in " + evidence.pathways.map(function(pathway) {
+					return pathway.name || pathway.id;
+				}).join(", ");
+				if (evidence.morePathways) {
+					line += " and " + evidence.morePathways + " more";
+				}
+			} else if (evidence.onThisPathway) {
+				line += " — drawn on this map";
+			}
+
+			if (evidence.references && evidence.references.length) {
+				line += " — " + evidence.references.slice(0, 3).map(function(reference) {
+					return (reference.resource ? reference.resource + " " : "") +
+						(reference.pmid ? "PMID:" + reference.pmid : "");
+				}).join(", ");
+			} else if (evidence.source === "OmniPath") {
+				/* The installed mmu OmniPath data predates the field, so the
+				   edge is real but its PMIDs are not stored yet. Say which,
+				   rather than letting a bare source name imply a citation. */
+				line += " — no PMIDs stored; reinstall OmniPath to carry them";
+			}
+
+			lines.push(line);
+		});
 
 		if (shared) {
 			lines.push("⚠ the target box holds several genes — this link " +
@@ -285,11 +343,30 @@ function PA_Step4EvidenceOverlay() {
 	   so the geometry silently changed meaning with panel width.
 	   --------------------------------------------------------------------- */
 
-	/** Raster-space box for a feature: centre plus half extents. */
-	this.rasterBox = function(featureID) {
+	/**
+	* Raster-space box for a feature: centre plus half extents.
+	*
+	* @param {Object} near optional; when a feature is drawn at SEVERAL places
+	*        on the map, return the box closest to this one. Taking [0] instead
+	*        makes the near/far decision below depend on KGML entry order: Jun
+	*        has three boxes on mmu05167 and only one of them is the 6 px
+	*        neighbour of Ccnd1 that the reader is looking at.
+	*/
+	this.rasterBox = function(featureID, near) {
 		var graphical = this.options.graphicalOptions.findFeatureGraphicalData(featureID);
 		if (!graphical || !graphical.length) { return null; }
+
 		var data = graphical[0];
+		if (near && graphical.length > 1) {
+			var best = Infinity;
+			for (var i = 0; i < graphical.length; i++) {
+				var dx = graphical[i].getX() - near.cx;
+				var dy = graphical[i].getY() - near.cy;
+				var distance = dx * dx + dy * dy;
+				if (distance < best) { best = distance; data = graphical[i]; }
+			}
+		}
+
 		return {
 			cx: data.getX(),
 			cy: data.getY(),
@@ -298,6 +375,22 @@ function PA_Step4EvidenceOverlay() {
 			key: data.getX() + "#" + data.getY(),
 			boxes: graphical.length
 		};
+	};
+
+	/**
+	* Shortest raster distance between the EDGES of two boxes, 0 when they touch
+	* or overlap. Centre-to-centre would call a wide box far from something
+	* resting against its side.
+	*/
+	this.boxGap = function(a, b) {
+		var dx = Math.max(0, Math.abs(a.cx - b.cx) - (a.width + b.width) / 2);
+		var dy = Math.max(0, Math.abs(a.cy - b.cy) - (a.height + b.height) / 2);
+		return Math.sqrt(dx * dx + dy * dy);
+	};
+
+	/** Stable identity for one drawn edge, so a dragged position can be found again. */
+	this.edgeKey = function(edge) {
+		return edge.regulatorID + ">" + edge.targetID;
 	};
 
 	/**
@@ -452,13 +545,38 @@ function PA_Step4EvidenceOverlay() {
 		var occupancyRects = this.buildOccupancy();
 		var perTarget = {};
 
-		var drawn = 0, badged = 0, satellites = 0, fellBack = 0;
+		var counts = {drawn: 0, badged: 0, satellites: 0, fellBack: 0,
+					  linked: 0, selfLoops: 0, moved: 0};
 
 		edges.forEach(function(edge) {
 			var targetRaster = me.rasterBox(edge.targetID);
-			var regulatorRaster = me.rasterBox(edge.regulatorID);
+			var regulatorRaster = me.rasterBox(edge.regulatorID, targetRaster);
 
 			if (targetRaster && regulatorRaster) {
+				/* THE REGULATOR IS ALREADY ON THIS MAP.
+				   Every satellite is a second drawing of a box KEGG already
+				   placed -- that is what the branch requires. Copying one the
+				   reader can see without moving their eyes is what made the
+				   layer look wrong, so inside NEAR_RADIUS we point at the
+				   original instead of stamping a duplicate next to it. */
+				if (regulatorRaster.key === targetRaster.key) {
+					/* Same drawn box: co-located genes bucket by the literal
+					   x#y string, so Fos and Jun ARE one rectangle. There is no
+					   "beside" to park in and no two points to join -- the only
+					   honest mark is a loop on the box itself. */
+					me.drawSelfMarker(edge, targetRaster, factor);
+					counts.selfLoops++;
+					counts.drawn++;
+					return;
+				}
+				if (me.boxGap(regulatorRaster, targetRaster) <= me.NEAR_RADIUS) {
+					if (me.drawLink(edge, regulatorRaster, targetRaster, true)) {
+						counts.linked++;
+						counts.drawn++;
+						return;
+					}
+				}
+
 				/* Cap satellites per target at 4. Measured max fan-in at the
 				   8-edge cap is 2 (3 on mmu04010), so this is headroom, not a
 				   constraint -- but a box ringed by duplicates reads worse than
@@ -471,15 +589,21 @@ function PA_Step4EvidenceOverlay() {
 					var slot = me.findSlot(targetRaster, satW, satH, gap, occupancyRects,
 										   imageWidth, imageHeight);
 					if (slot) {
-						me.drawSatellite(edge, targetRaster, slot, satW, satH, factor);
-						/* A placed satellite becomes an obstacle for the next. */
+						var handle = me.drawSatellite(edge, targetRaster, slot,
+													  satW, satH, factor);
+						/* A placed satellite becomes an obstacle for the next.
+						   Its AUTOMATIC slot, not the dragged one: a position
+						   the user chose is their business, and letting a
+						   hand-placed box push the next one around would make
+						   the layout depend on drag order. */
 						occupancyRects.push({
 							left: slot.cx - satW / 2, right: slot.cx + satW / 2,
 							top: slot.cy - satH / 2, bottom: slot.cy + satH / 2
 						});
 						perTarget[edge.targetID] = used + 1;
-						drawn++;
-						satellites++;
+						counts.drawn++;
+						counts.satellites++;
+						if (handle && (handle.dx || handle.dy)) { counts.moved++; }
 						return;
 					}
 				}
@@ -488,50 +612,211 @@ function PA_Step4EvidenceOverlay() {
 			/* FALLBACK: no free space beside the target, so fall back to the
 			   bowed arc. It is worse, and it is honest -- the alternative is
 			   dropping the edge, and the legend counts this. */
-			var fromBox = me.boxGeometry(edge.regulatorID);
-			var toBox = me.boxGeometry(edge.targetID);
-			if (!fromBox || !toBox) { return; }
-			fellBack++;
-
-			var from = me.perimeterPoint(fromBox, toBox.cx, toBox.cy, 2);
-			var to = me.perimeterPoint(toBox, fromBox.cx, fromBox.cy, 4);
-			var control = me.controlPoint(from, to);
-			var style = me.CLASS_STYLE[edge.evidenceClass] || me.CLASS_STYLE.unsupported;
-
-			var occupancy = (me.options.boxOccupancy || {})[toBox.key] || 1;
-			var shared = occupancy > 1;
-
-			/* A white casing drawn UNDER the arc keeps it legible where it
-			   crosses the map's own printed lines and labels -- which the
-			   application cannot see, so it cannot route around them. Thin
-			   enough to read as a halo rather than as an erasure. */
-			me.append("path", {
-				d: "M" + from.x + "," + from.y +
-				   " Q" + control.x + "," + control.y + " " + to.x + "," + to.y,
-				fill: "none", stroke: "#ffffff",
-				"stroke-width": style.width + 2.4,
-				"stroke-linecap": "round", opacity: 0.65
-			});
-
-			var path = me.append("path", {
-				d: "M" + from.x + "," + from.y +
-				   " Q" + control.x + "," + control.y + " " + to.x + "," + to.y,
-				fill: "none", stroke: style.stroke,
-				"stroke-width": style.width,
-				"stroke-linecap": "round",
-				"stroke-dasharray": style.dash,
-				opacity: style.opacity
-			});
-
-			var head = me.terminal(to, control, style, shared);
-			var tip = me.edgeTooltip(edge, shared);
-			me.tooltip(path, tip);
-			me.tooltip(head, tip);
-			drawn++;
-			if (shared) { badged++; }
+			var result = me.drawLink(edge, regulatorRaster, targetRaster, false);
+			if (!result) { return; }
+			counts.fellBack++;
+			counts.drawn++;
+			if (result.shared) { counts.badged++; }
 		});
 
-		this.renderLegend(drawn, badged, satellites, fellBack);
+		this.renderLegend(counts);
+	};
+
+	/**
+	* Frame a REAL box in the overlay's own dashed violet.
+	*
+	* Without this a short link is an anonymous violet tick between two red
+	* rectangles: it says something is happening, but not what, and not which of
+	* the two boxes it came FROM.
+	*
+	* SOLID, and deliberately not the satellite's dash. The legend states that
+	* dashed violet boxes are regulators this layer placed and NOT KEGG
+	* annotations; putting the same dash around a real KEGG box would make the
+	* legend false and leave a reader unable to tell Jun (real, ringed) from
+	* Rb1 (a copy) when the two sit side by side. So the layer has two marks
+	* with one hue: SOLID ring = a box KEGG drew, that this layer is pointing
+	* FROM; DASHED frame = a box this layer added.
+	*
+	* pointer-events is off: the ring sits directly over a real feature box and
+	* must not take its hover or its click.
+	*/
+	this.markSource = function(box, style) {
+		var pad = 1.8;
+		return this.append("rect", {
+			x: box.cx - box.halfWidth - pad,
+			y: box.cy - box.halfHeight - pad,
+			width: (box.halfWidth + pad) * 2,
+			height: (box.halfHeight + pad) * 2,
+			fill: "none",
+			stroke: style.stroke, "stroke-width": 1.6,
+			rx: 1.5, opacity: 0.95,
+			"pointer-events": "none"
+		});
+	};
+
+	/**
+	* A short caption in the overlay's hue, drawn twice: a white stroked copy
+	* underneath and the violet fill on top.
+	*
+	* paint-order would be one element instead of two, but CairoSVG (which
+	* renders /pa_save_image) does not implement it, so the export would lose
+	* the halo and the caption would disappear into the printed artwork.
+	*/
+	this.caption = function(x, y, text, style, size) {
+		var attributes = {
+			x: x, y: y, "text-anchor": "middle",
+			"font-family": "Helvetica, Arial, sans-serif",
+			"font-size": size, "pointer-events": "none"
+		};
+
+		var halo = this.append("text", Ext.apply({
+			fill: "none", stroke: "#ffffff", "stroke-width": 2.4,
+			"stroke-linejoin": "round", opacity: 0.85
+		}, attributes));
+		halo.textContent = text;
+
+		var ink = this.append("text", Ext.apply({
+			fill: style.stroke, "font-weight": 600
+		}, attributes));
+		ink.textContent = text;
+		return ink;
+	};
+
+	/**
+	* One edge drawn between the two REAL boxes, with no duplicate glyph.
+	*
+	* @param {Boolean} straight  true for a near pair. The bow is
+	*        max(14, min(length * 0.16, 70)) CANVAS units, so over the ~4 canvas
+	*        units separating Jun from Ccnd1 a curve is not a curve, it is a
+	*        loop swinging out over unrelated artwork. Near pairs get the chord.
+	* @returns {Object|null} {shared} once drawn, null when either endpoint has
+	*        no geometry on this map.
+	*/
+	this.drawLink = function(edge, regulatorRaster, targetRaster, straight) {
+		var fromBox = this.boxGeometry(edge.regulatorID);
+		var toBox = this.boxGeometry(edge.targetID);
+		if (!fromBox || !toBox) { return null; }
+
+		/* boxGeometry takes graphical[0]; when the regulator is drawn several
+		   times, the near/far decision was made about a SPECIFIC one of those
+		   boxes and the line has to leave that same box. */
+		if (regulatorRaster) {
+			var factor = this.options.adjustFactor;
+			fromBox = {
+				cx: regulatorRaster.cx * factor, cy: regulatorRaster.cy * factor,
+				halfWidth: (regulatorRaster.width * factor || 20) / 2,
+				halfHeight: (regulatorRaster.height * factor || 20) / 2,
+				key: regulatorRaster.key, boxes: regulatorRaster.boxes
+			};
+		}
+
+		var from = this.perimeterPoint(fromBox, toBox.cx, toBox.cy, 2);
+		var to = this.perimeterPoint(toBox, fromBox.cx, fromBox.cy, 4);
+		var control = straight
+			? {x: (from.x + to.x) / 2, y: (from.y + to.y) / 2}
+			: this.controlPoint(from, to);
+		var style = this.CLASS_STYLE[edge.evidenceClass] || this.CLASS_STYLE.unsupported;
+
+		var occupancy = (this.options.boxOccupancy || {})[toBox.key] || 1;
+		var shared = occupancy > 1;
+
+		var d = "M" + from.x + "," + from.y +
+				" Q" + control.x + "," + control.y + " " + to.x + "," + to.y;
+
+		/* A white casing drawn UNDER the line keeps it legible where it crosses
+		   the map's own printed lines and labels -- which the application cannot
+		   see, so it cannot route around them. Thin enough to read as a halo
+		   rather than as an erasure. */
+		this.append("path", {
+			d: d, fill: "none", stroke: "#ffffff",
+			"stroke-width": style.width + 2.4,
+			"stroke-linecap": "round", opacity: 0.65
+		});
+
+		var path = this.append("path", {
+			d: d, fill: "none", stroke: style.stroke,
+			"stroke-width": style.width,
+			"stroke-linecap": "round",
+			"stroke-dasharray": style.dash,
+			opacity: style.opacity
+		});
+
+		var head = this.terminal(to, control, style, shared);
+		if (straight) {
+			/* Only for the near case. Over a long bowed arc the reader can
+			   follow the curve back to its origin, so a ring there would be
+			   decoration; over a 4 px chord there is no curve to follow. */
+			this.markSource(fromBox, style);
+		}
+		var tip = this.edgeTooltip(edge, shared) + (straight
+			? "\n" + (edge.regulatorLabel || edge.regulator) +
+			  " is drawn on this map (framed in violet), so it is joined to " +
+			  (edge.targetLabel || edge.target) + " rather than copied beside it"
+			: "");
+		this.tooltip(path, tip);
+		this.tooltip(head, tip);
+
+		return {shared: shared};
+	};
+
+	/**
+	* Regulator and target are the SAME drawn box.
+	*
+	* Features bucket by the literal string x + "#" + y, so genes KEGG placed at
+	* one coordinate collapse into one rectangle -- Fos and Jun on mmu05167 are
+	* not neighbours, they are the same 46x17 px box. A line needs two points and
+	* a satellite needs a "beside"; neither exists here. A loop leaving the top
+	* edge and returning to it claims exactly what is true: a relationship
+	* between two things inside this box.
+	*/
+	this.drawSelfMarker = function(edge, box, factor) {
+		var style = this.CLASS_STYLE[edge.evidenceClass] || this.CLASS_STYLE.unsupported;
+		var cx = box.cx * factor;
+		var top = (box.cy - box.height / 2) * factor;
+		var halfWidth = Math.max(6, box.width * factor / 4);
+		var rise = Math.max(9, box.height * factor * 0.9);
+
+		var d = "M" + (cx - halfWidth) + "," + top +
+				" C" + (cx - halfWidth) + "," + (top - rise) +
+				" " + (cx + halfWidth) + "," + (top - rise) +
+				" " + (cx + halfWidth) + "," + top;
+
+		this.append("path", {
+			d: d, fill: "none", stroke: "#ffffff",
+			"stroke-width": style.width + 2.4,
+			"stroke-linecap": "round", opacity: 0.65
+		});
+		var loop = this.append("path", {
+			d: d, fill: "none", stroke: style.stroke,
+			"stroke-width": style.width,
+			"stroke-linecap": "round",
+			"stroke-dasharray": style.dash,
+			opacity: style.opacity
+		});
+		/* Pointing straight down into the box it came from. */
+		var head = this.terminal({x: cx + halfWidth, y: top},
+								 {x: cx + halfWidth, y: top - rise}, style, true);
+
+		this.markSource({
+			cx: cx, cy: box.cy * factor,
+			halfWidth: box.width * factor / 2,
+			halfHeight: box.height * factor / 2
+		}, style);
+
+		/* The one place a caption is not optional. A ring says "this box", and
+		   an arrow says "into this box" -- but the box holds SEVERAL genes and
+		   the claim is about two specific ones inside it. Neither shape can
+		   name them, and the printed label cannot either, because KEGG prints
+		   only the first gene of a co-located group. */
+		this.caption(cx, top - rise - Math.max(2, box.height * factor * 0.25),
+					 (edge.regulatorLabel || edge.regulator) + " → " +
+					 (edge.targetLabel || edge.target),
+					 style, Math.max(5.5, Math.min(box.height * factor * 0.8, 9)));
+
+		var tip = this.edgeTooltip(edge, true) +
+			"\nboth genes are drawn in this one box, so this link is shown on it";
+		this.tooltip(loop, tip);
+		this.tooltip(head, tip);
 	};
 
 	/**
@@ -548,41 +833,37 @@ function PA_Step4EvidenceOverlay() {
 	this.drawSatellite = function(edge, target, slot, satW, satH, factor) {
 		var style = this.CLASS_STYLE[edge.evidenceClass] || this.CLASS_STYLE.unsupported;
 		var glyph = this.satelliteGlyph(edge.regulatorID, satW);
+		var key = this.edgeKey(edge);
+		var saved = this.placement[key] || {};
 
-		var left = (slot.cx - satW / 2) * factor;
-		var top = (slot.cy - satH / 2) * factor;
 		var width = satW * factor;
 		var height = satH * factor;
+		var left = (slot.cx - satW / 2) * factor;
+		var top = (slot.cy - satH / 2) * factor;
 
-		/* Stub from the target's perimeter to the satellite's nearest edge.
-		   Straight, not bowed: over ~30 raster px a curve reads as a wobble. */
-		var targetPoint = this.perimeterPoint(
-			{cx: target.cx * factor, cy: target.cy * factor,
-			 halfWidth: target.width * factor / 2, halfHeight: target.height * factor / 2},
-			slot.cx * factor, slot.cy * factor, 0);
-		var satellitePoint = this.perimeterPoint(
-			{cx: slot.cx * factor, cy: slot.cy * factor,
-			 halfWidth: width / 2, halfHeight: height / 2},
-			target.cx * factor, target.cy * factor, 0);
-
-		this.append("path", {
-			d: "M" + targetPoint.x + "," + targetPoint.y +
-			   " L" + satellitePoint.x + "," + satellitePoint.y,
+		/* The stub stays a child of the overlay group, NOT of the draggable
+		   group: one of its ends is nailed to the target box and must not move
+		   with the hand. It is redrawn from the satellite's live centre instead. */
+		var casing = this.append("path", {
 			fill: "none", stroke: "#ffffff", "stroke-width": 3.2, opacity: 0.7
 		});
 		var stub = this.append("path", {
-			d: "M" + targetPoint.x + "," + targetPoint.y +
-			   " L" + satellitePoint.x + "," + satellitePoint.y,
 			fill: "none", stroke: style.stroke, "stroke-width": 1.5,
 			"stroke-dasharray": style.dash, opacity: style.opacity
 		});
 
+		/* Everything that MOVES lives in one <g>, so a drag is a single
+		   translate rather than five coordinate rewrites -- and so the export,
+		   which serialises the live DOM, carries the moved position. */
+		var node = this.svgEl("g", {"class": "evidenceSatellite"});
+		this.group.appendChild(node);
+
 		/* A white ground under the glyph: the sprite has transparent margins
 		   and the printed map shows through them otherwise. */
-		this.append("rect", {
+		node.appendChild(this.svgEl("rect", {
 			x: left, y: top, width: width, height: height,
 			fill: "#ffffff", opacity: 0.92, rx: 1
-		});
+		}));
 
 		if (glyph) {
 			var image = this.svgEl("image", {
@@ -591,10 +872,8 @@ function PA_Step4EvidenceOverlay() {
 			});
 			image.setAttributeNS("http://www.w3.org/1999/xlink", "xlink:href", glyph.src);
 			image.setAttribute("href", glyph.src);
-			this.group.appendChild(image);
-		}
-
-		if (!glyph) {
+			node.appendChild(image);
+		} else {
 			/* The regulator has coordinates on this map but is not a PAINTED
 			   feature -- the user's data never matched it -- so there is no
 			   sprite to reuse and no baked label. An unlabelled satellite is
@@ -603,36 +882,233 @@ function PA_Step4EvidenceOverlay() {
 			   external font, so the CairoSVG export can still resolve it.
 			   Measured on mmu04330: 2 of 6 satellites take this path. */
 			var fontSize = Math.max(5, Math.min(height * 0.68, 11));
-			this.append("text", {
+			var label = this.svgEl("text", {
 				x: left + width / 2, y: top + height / 2 + fontSize * 0.36,
 				"text-anchor": "middle",
 				"font-family": "Helvetica, Arial, sans-serif",
 				"font-size": fontSize,
 				fill: style.stroke
-			}).textContent = edge.regulatorLabel || edge.regulator;
+			});
+			label.textContent = edge.regulatorLabel || edge.regulator;
+			node.appendChild(label);
 		}
 
-		var frame = this.append("rect", {
+		var frame = this.svgEl("rect", {
 			x: left, y: top, width: width, height: height,
 			fill: "none",
 			stroke: style.stroke, "stroke-width": 1.2,
 			"stroke-dasharray": "3,2", rx: 1, opacity: 0.95
 		});
+		node.appendChild(frame);
 
 		var tip = this.edgeTooltip(edge, false) +
 			"\n(duplicate of " + edge.regulatorLabel +
-			", placed here by the evidence layer — not a KEGG annotation)";
+			", placed here by the evidence layer — not a KEGG annotation)" +
+			"\ndrag to move it; “reset positions” in the legend puts it back";
 		this.tooltip(frame, tip);
 		this.tooltip(stub, tip);
+
+		var handle = {
+			key: key, node: node, stub: stub, casing: casing,
+			slot: slot, width: width, height: height,
+			dx: saved.dx || 0, dy: saved.dy || 0,
+			target: {
+				cx: target.cx * factor, cy: target.cy * factor,
+				halfWidth: target.width * factor / 2,
+				halfHeight: target.height * factor / 2
+			}
+		};
+		this.satellites.push(handle);
+		this.applyPlacement(handle);
+		this.makeDraggable(handle);
+
+		return handle;
 	};
 
-	this.renderLegend = function(drawn, badged, satellites, fellBack) {
+	/* ---------------------------------------------------------------------
+	   MOVING A SATELLITE BY HAND
+
+	   Automatic placement is blind to free text -- "Cell proliferation",
+	   "Angiogenesis", the compartment labels -- because none of it is an entry
+	   in any file the application reads. It is not going to be right every
+	   time, so the reader gets to move it, and the move is kept.
+
+	   Offsets are stored in RASTER px. The panel's adjustFactor changes with
+	   its width, so a canvas-unit offset saved in a wide panel would move the
+	   box somewhere else entirely when reopened in a narrow one.
+	   --------------------------------------------------------------------- */
+
+	/** Position a satellite and re-anchor its stub to the target box. */
+	this.applyPlacement = function(handle) {
+		var factor = this.options.adjustFactor;
+
+		handle.node.setAttribute("transform", "translate(" +
+			(handle.dx * factor) + "," + (handle.dy * factor) + ")");
+
+		var cx = (handle.slot.cx + handle.dx) * factor;
+		var cy = (handle.slot.cy + handle.dy) * factor;
+
+		/* Straight, not bowed: over ~30 raster px a curve reads as a wobble. */
+		var targetPoint = this.perimeterPoint(handle.target, cx, cy, 0);
+		var satellitePoint = this.perimeterPoint(
+			{cx: cx, cy: cy,
+			 halfWidth: handle.width / 2, halfHeight: handle.height / 2},
+			handle.target.cx, handle.target.cy, 0);
+
+		var d = "M" + targetPoint.x + "," + targetPoint.y +
+				" L" + satellitePoint.x + "," + satellitePoint.y;
+		handle.stub.setAttribute("d", d);
+		handle.casing.setAttribute("d", d);
+	};
+
+	/**
+	* Pointer-drag one satellite.
+	*
+	* The diagram sits inside jquery-svg-pan-zoom, which pans on mousedown and
+	* touchstart at the root <svg>. Those are a SEPARATE event stream from
+	* pointer events: for a mouse pointer, cancelling pointerdown does NOT
+	* suppress the compatibility mousedown -- that guarantee only holds for
+	* touch. Measured before this was added: the satellite moved correctly AND
+	* the whole map panned under it by the same delta, so the box looked pinned
+	* while everything else slid. The gesture is therefore swallowed in both
+	* streams before the plugin can see it.
+	*/
+	this.makeDraggable = function(handle) {
+		var me = this;
+		var node = handle.node;
+
+		["mousedown", "touchstart"].forEach(function(name) {
+			node.addEventListener(name, function(event) {
+				event.preventDefault();
+				event.stopPropagation();
+			}, {passive: false});
+		});
+
+		node.addEventListener("pointerdown", function(event) {
+			var root = me.options.canvas.node;
+			var screenMatrix = root.getScreenCTM();
+			if (!screenMatrix) { return; }
+
+			event.preventDefault();
+			event.stopPropagation();
+
+			var inverse = screenMatrix.inverse();
+			var start = me.clientToCanvas(event.clientX, event.clientY, inverse);
+			var origin = {dx: handle.dx, dy: handle.dy};
+			var factor = me.options.adjustFactor;
+			try { node.setPointerCapture(event.pointerId); } catch (error) { /* no capture */ }
+
+			var imageWidth = me.options.graphicalOptions.getImageWidth();
+			var imageHeight = me.options.graphicalOptions.getImageHeight();
+
+			var move = function(moveEvent) {
+				var now = me.clientToCanvas(moveEvent.clientX, moveEvent.clientY, inverse);
+				handle.dx = origin.dx + (now.x - start.x) / factor;
+				handle.dy = origin.dy + (now.y - start.y) / factor;
+
+				/* Clamped to the artwork. A box dragged off the canvas is not
+				   hidden, it is LOST: the panel clips, so it cannot be grabbed
+				   again, and only "reset positions" would bring it back. */
+				var halfWidth = handle.width / factor / 2;
+				var halfHeight = handle.height / factor / 2;
+				var cx = Math.min(Math.max(handle.slot.cx + handle.dx, halfWidth),
+								  imageWidth - halfWidth);
+				var cy = Math.min(Math.max(handle.slot.cy + handle.dy, halfHeight),
+								  imageHeight - halfHeight);
+				handle.dx = cx - handle.slot.cx;
+				handle.dy = cy - handle.slot.cy;
+
+				me.applyPlacement(handle);
+			};
+			var release = function(releaseEvent) {
+				node.removeEventListener("pointermove", move);
+				node.removeEventListener("pointerup", release);
+				node.removeEventListener("pointercancel", release);
+				try { node.releasePointerCapture(releaseEvent.pointerId); }
+				catch (error) { /* already released */ }
+
+				if (handle.dx || handle.dy) {
+					me.placement[handle.key] = {dx: handle.dx, dy: handle.dy};
+				} else {
+					delete me.placement[handle.key];
+				}
+				me.savePlacement();
+			};
+
+			node.addEventListener("pointermove", move);
+			node.addEventListener("pointerup", release);
+			node.addEventListener("pointercancel", release);
+		});
+	};
+
+	/** Screen coordinates to the canvas units the overlay draws in. */
+	this.clientToCanvas = function(clientX, clientY, inverse) {
+		var point = this.options.canvas.node.createSVGPoint();
+		point.x = clientX;
+		point.y = clientY;
+		return point.matrixTransform(inverse);
+	};
+
+	/** "reset positions" is inert until there is something to reset. */
+	this.updateResetState = function() {
+		if (!this.legendEl) { return; }
+		this.legendEl.find(".evidenceLegend-reset")
+			.toggleClass("is-disabled", !Object.keys(this.placement || {}).length);
+	};
+
+	this.savePlacement = function() {
+		this.updateResetState();
+		if (typeof this.options.onPlacementChange !== "function") { return; }
+		try {
+			this.options.onPlacementChange(this.placement);
+		} catch (error) {
+			/* Additive by design: a diagram that cannot persist a nudge still
+			   shows the nudge for as long as it is open. */
+			console.warn("Evidence overlay: placement not saved", error);
+		}
+	};
+
+	/** Drop every hand-placed offset and lay the layer out automatically again. */
+	this.resetPlacement = function() {
+		this.placement = {};
+		this.savePlacement();
+		this.refresh();
+	};
+
+	/**
+	* Where the control card goes.
+	*
+	* NOT the diagram panel's own body, which is where it used to go. That panel
+	* is as tall as the map -- measured 865 px on mmu05167 against a 907 px
+	* viewport -- so a card underneath it began 18 px from the bottom of the
+	* screen and its 240 px of controls were entirely below the fold. Nobody
+	* scrolls past a pathway diagram looking for a legend, so in practice the
+	* layer had no controls at all.
+	*
+	* The Pathway information column beside the map is 300 px wide, always on
+	* screen, and already holds this pathway's classification and its regulation
+	* chart. Resolved through a function because that column is constructed
+	* after the diagram panel that creates this overlay.
+	*/
+	this.legendHost = function() {
+		var host = this.options.panelEl;
+		if (typeof host === "function") {
+			try { host = host(); } catch (error) { host = null; }
+		}
+		return (host && host.length) ? host : null;
+	};
+
+	this.renderLegend = function(counts) {
 		var statistics = (this.payload && this.payload.statistics) || {};
 		var byClass = statistics.byClass || {};
 		var me = this;
+		var drawn = counts.drawn, badged = counts.badged, fellBack = counts.fellBack;
 
 		if (this.legendEl) { this.legendEl.remove(); }
 		if (!statistics.totalRelationships) { return; }
+
+		var host = this.legendHost();
+		if (!host) { return; }
 
 		var rows = this.CLASS_ORDER.map(function(name) {
 			var style = me.CLASS_STYLE[name];
@@ -646,6 +1122,18 @@ function PA_Step4EvidenceOverlay() {
 				'<span class="evidenceLegend-count">' + (byClass[name] || 0) + '</span>' +
 				'</li>';
 		}).join("");
+
+		/* Which databases actually corroborated anything here, strongest first.
+		   Naming them is not decoration: "corroborated" means a different thing
+		   when it comes from KEGG's own relation graph than from OmniPath's
+		   literature list, and the reader cannot tell without being told. */
+		var bySource = statistics.bySource || {};
+		var sourceNames = Object.keys(bySource).sort(function(a, b) {
+			return bySource[b] - bySource[a];
+		}).map(function(name) {
+			return '<span class="evidenceLegend-source-name">' + name + '</span> ' +
+				bySource[name];
+		});
 
 		/* Everything the layer could NOT draw, stated on screen. A silently
 		   truncated overlay reads as "this is all there is". */
@@ -675,37 +1163,113 @@ function PA_Step4EvidenceOverlay() {
 				: " edges end on a box holding several genes") +
 				" and cannot say which one (hollow terminal)");
 		}
+		if (statistics.recordedElsewhere) {
+			/* The number that only exists because more than one database is
+			   consulted. Before this it was invisible: those relationships were
+			   labelled "no external evidence either way". */
+			omissions.push(statistics.recordedElsewhere +
+				(statistics.recordedElsewhere === 1
+					? " interaction is curated on a different pathway map"
+					: " interactions are curated on different pathway maps") +
+				", not this one");
+		}
 		if (statistics.multiBoxEndpoints) {
 			omissions.push(statistics.multiBoxEndpoints +
 				" had an endpoint drawn at several places on this map; one was chosen");
 		}
+		if (counts.linked || counts.selfLoops) {
+			/* Stated rather than silent: these are the edges that did NOT get a
+			   parked copy, and the reason is worth one line -- otherwise the
+			   layer looks inconsistent about when it duplicates a regulator. */
+			var near = [];
+			if (counts.linked) {
+				near.push(counts.linked + (counts.linked === 1 ? " regulator is" : " regulators are") +
+					" already drawn beside their target: ringed in <b>solid</b> violet " +
+					"and joined by an arrow, rather than copied");
+			}
+			if (counts.selfLoops) {
+				near.push(counts.selfLoops + (counts.selfLoops === 1 ? " pair shares" : " pairs share") +
+					" one drawn box and is marked with a loop on it");
+			}
+			omissions.push(near.join("<br>"));
+		}
 
 		var html =
-			/* No data-guides="ignore" here on purpose. The card sits in flow at
-			   the panel body's own content edge -- measured identical to the
-			   panel <h2>'s rail -- so it can be CHECKED by the alignment guides
-			   rather than exempted from them, and a future regression will show
-			   up in the HUD instead of hiding behind the opt-out. */
+			/* Built from the Pathway information column's OWN vocabulary, not
+			   from card chrome of its own. That column states a section with an
+			   <h4>, sub-labels it with .pa-details-label, and renders anything
+			   pill-shaped as .pa-details-chip -- flat, no borders, no shadows.
+			   A bordered violet card with its own left rail sat in the middle
+			   of that and read as a foreign widget pasted into the panel.
+			   Violet survives only where it carries meaning: the three stroke
+			   samples, which are the actual key to the marks on the map.
+
+			   No data-guides="ignore". The section sits in flow at the column's
+			   own content edge, so it can be CHECKED by the alignment guides
+			   rather than exempted from them. */
 			'<div class="evidenceLegend">' +
-			'  <div class="evidenceLegend-header">' +
-			'    <span class="evidenceLegend-title">Evidence overlay</span>' +
-			'    <a href="javascript:void(0)" class="evidenceLegend-toggle" ' +
-			'       title="Show or hide the evidence overlay">hide</a>' +
-			'  </div>' +
+			'  <h4>Evidence overlay</h4>' +
+			'  <span class="pa-details-label">' + drawn + ' relationship' +
+			(drawn === 1 ? '' : 's') + ' drawn</span>' +
 			'  <ul class="evidenceLegend-list">' + rows + '</ul>' +
+			/* Which databases corroborated ANYTHING on this map, strongest
+			   first. Its own line rather than beside the drawn count, because
+			   these tally the whole classified set and not the handful the cap
+			   let through -- putting the two numbers side by side invited them
+			   to be read as the same total. */
+			(sourceNames.length
+				? '  <p class="evidenceLegend-sources">corroborated by ' +
+				  sourceNames.join(' &middot; ') + '</p>'
+				: "") +
+			/* CONTROLS BEFORE PROSE. The section is the last thing in a column
+			   that already holds a chart, so its tail is the first thing to
+			   fall off a short viewport -- measured, the buttons sat 3 px from
+			   the bottom edge when they came last. What the reader can act on
+			   goes above what they can only read. */
+			'  <div class="evidenceLegend-actions">' +
+			'    <a href="javascript:void(0)" class="button evidenceLegend-button evidenceLegend-toggle" ' +
+			'       title="Show or hide the whole evidence layer">' +
+			'      <i class="fa fa-eye-slash"></i> Hide layer</a>' +
+			(counts.satellites
+				? '    <a href="javascript:void(0)" class="button evidenceLegend-button evidenceLegend-reset" ' +
+				  '       title="Put every dragged regulator back where the layer placed it">' +
+				  '      <i class="fa fa-undo"></i> Reset positions</a>'
+				: "") +
+			'  </div>' +
+			(counts.satellites
+				? '  <p class="evidenceLegend-note evidenceLegend-hint">Drag any ' +
+				  '<b>dashed</b> violet box on the map to move it. A <b>solid</b> ' +
+				  'violet ring marks a regulator KEGG itself drew.</p>'
+				: "") +
 			(omissions.length
 				? '<p class="evidenceLegend-note">' + omissions.join("<br>") + '</p>'
 				: "") +
 			'  <p class="evidenceLegend-source">from this job\'s MORE analysis, ' +
-			'classified against OmniPath. Dashed violet boxes are regulators ' +
-			'placed by this layer, not KEGG annotations.</p>' +
+			'classified against KEGG, Reactome and OmniPath &mdash; every ' +
+			'pathway of this organism, not just this one.</p>' +
 			'</div>';
 
 		this.legendEl = $(html);
-		this.options.panelEl.append(this.legendEl);
+		/* After the pathway details, not at the top: the column's first job is
+		   still to say which pathway this is. Appended to the body when that
+		   block is absent (a Reactome or MapMan diagram builds it differently). */
+		var details = host.find(".patwaysDetailsContainer");
+		if (details.length) { details.after(this.legendEl); } else { host.append(this.legendEl); }
+
 		this.legendEl.find(".evidenceLegend-toggle").click(function() {
 			me.setVisible(!me.visible);
-			$(this).text(me.visible ? "hide" : "show");
+			$(this).html(me.visible
+				? '<i class="fa fa-eye-slash"></i> Hide layer'
+				: '<i class="fa fa-eye"></i> Show layer');
+			$(this).toggleClass("is-off", !me.visible);
+		});
+		/* Disabled until something has actually been moved, so the control does
+		   not offer to undo nothing. */
+		var resetEl = this.legendEl.find(".evidenceLegend-reset");
+		this.updateResetState();
+		resetEl.click(function() {
+			if (!Object.keys(me.placement || {}).length) { return; }
+			me.resetPlacement();
 		});
 	};
 
