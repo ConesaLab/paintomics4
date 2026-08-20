@@ -61,8 +61,9 @@ STEP3_VIEWS = os.path.abspath(os.path.join(
 # object prove less than they appear to: nothing in the application ever builds
 # one by hand, and for two years getMinMax could not produce the very shape
 # those tests assert on. See SequentialRangeReachableTest.
-HELPERS = ("paColourRange", "getMinMax", "paMetageneLimits", "paRampPosition",
-           "getColor", "paValuesForHeader", "paTruncateTail", "paConditionAxis")
+HELPERS = ("paColourRange", "getMinMax", "paMetageneLimits", "paOutlierFraction",
+           "paChannel", "paRampPosition", "getColor", "paValuesForHeader",
+           "paTruncateTail", "paConditionAxis")
 
 
 def read_source():
@@ -534,6 +535,237 @@ class GenerateHeatmapUsesTheTrendScaleTest(unittest.TestCase):
         self.assertNotIn('getMinMax(dataDistributionSummaries[omicName], "p10p90")', block,
                          "the trend heatmap is still coloured with the raw "
                          "omic's distribution")
+
+
+# Three integers, each 0..255. `\d{1,3}` is not that: it accepts rgb(510, 0,0),
+# which is how the out-of-range-ABOVE case hid -- Chrome clamps it to 255 and
+# renders, so it never looked broken the way a negative channel did.
+VALID_RGB = re.compile(
+    r"^rgb\((25[0-5]|2[0-4]\d|1?\d?\d), (25[0-5]|2[0-4]\d|1?\d?\d),"
+    r"(25[0-5]|2[0-4]\d|1?\d?\d)\)$")
+
+# The same test, for the node side.
+JS_VALID = """
+function isColour(s) {
+  const m = /^rgb\\((-?\\d+), (-?\\d+),(-?\\d+)\\)$/.exec(s);
+  if (!m) return false;
+  for (let i = 1; i <= 3; i++) {
+    const n = Number(m[i]);
+    if (!Number.isInteger(n) || n < 0 || n > 255) return false;
+  }
+  return true;
+}
+"""
+
+
+class GetColorAlwaysReturnsAColourTest(unittest.TestCase):
+    """Whatever it is handed, what leaves getColor is a colour.
+
+    Channels were free to run out of range and did. Captured off
+    paintomics.uv.es: `rgb(255, 255,-402)` and `rgb(0, 0,-2744)`; and before
+    the ramp was clamped, `rgb(247, 247,-Infinity)`. Chrome clamps the first to
+    yellow and rejects the last outright, painting it black, so cells that
+    should have been pale showed as two loud, arbitrary colours.
+
+    The cause is upstream and there is more than one of it: any caller that
+    colours one quantity against another quantity's distribution can push a
+    value outside [absMin, absMax], which makes the outlier term exceed 1. Two
+    such sites were found -- the metagene trend heatmap, and this file's other
+    generateHeatmap, which takes omicsValues and was missed by the first fix.
+    Hence the invariant lives in getColor, the one place every colour comes
+    from, rather than being restated at each caller.
+    """
+
+    def test_no_combination_produces_an_invalid_colour(self):
+        """A sweep, because the failures came from inputs nobody predicted."""
+        result = run_in_node(JS_VALID + """
+            const summaries = [
+              [0,0, 0.79, 0.98, null,null,null, 1.04, 1.41],     // all positive
+              [0,0, -1.27, -1.03, null,null,null, 0.45, 0.56],   // crosses zero
+              [0,0, -12, -10, null,null,null, -6, -5],           // all negative
+              [0,0, 5, 5, null,null,null, 5, 5],                 // degenerate
+              [0,0, 0, 0, null,null,null, 0, 0]                  // all zero
+            ];
+            const values = [-2744, -9.4, -1, -0.02, 0, 0.02, 1, 9.4, 2744, NaN, Infinity, -Infinity];
+            const options = ["absoluteMinMax", "p10p90", "riMinMax"];
+            const scales = ["bwr", "bwr2", "rbg"];
+            const bad = [];
+            let n = 0;
+            for (const s of summaries) for (const o of options) {
+              const lim = getMinMax(s, o);
+              for (const v of values) for (const sc of scales) {
+                n++;
+                const out = getColor(lim, v, sc);
+                if (!isColour(out)) {
+                  if (bad.length < 8) bad.push({limits: lim, value: String(v), scale: sc, out: out});
+                }
+              }
+            }
+            process.stdout.write(JSON.stringify({checked: n, bad: bad}));
+        """)
+        self.assertEqual(result["bad"], [],
+                         "getColor produced something that is not a colour")
+        self.assertGreater(result["checked"], 400, "the sweep did not run")
+
+    def test_the_production_failures_are_colours_now(self):
+        """The exact numbers the live server was caught emitting."""
+        result = run_in_node("""
+            const a = getMinMax([0,0,0.789984901,0.9859346925,null,null,null,1.0419202442,1.414217124], "p10p90");
+            const b = getMinMax([0,0,-1.267366,-1.0271118,null,null,null,0.45,0.5599585], "p10p90");
+            process.stdout.write(JSON.stringify({
+              wasMinus402: getColor(a, -0.0200317, "bwr"),
+              wasMinus2744: getColor(b, -6.6558233, "bwr")
+            }));
+        """)
+        for key, colour in result.items():
+            self.assertRegex(colour, VALID_RGB,
+                             "%s is still not a colour: %s" % (key, colour))
+
+    def test_the_outlier_term_is_a_fraction(self):
+        """It is a proportion of the clip-to-extreme distance. It cannot exceed 1."""
+        result = run_in_node("""
+            const lim = getMinMax([0,0,-1.267366,-1.0271118,null,null,null,0.45,0.5599585], "p10p90");
+            process.stdout.write(JSON.stringify({
+              farBelow: paOutlierFraction(lim, -6.66),
+              farAbove: paOutlierFraction(lim, 9.40),
+              justOutside: paOutlierFraction(lim, -1.1),
+              inside: paOutlierFraction(lim, 0.0)
+            }));
+        """)
+        self.assertEqual(result["farBelow"], 1)
+        self.assertEqual(result["farAbove"], 1)
+        self.assertLessEqual(result["justOutside"], 1)
+        self.assertGreaterEqual(result["inside"], 0)
+
+    def test_an_unclipped_reference_has_no_outlier_distance(self):
+        """absoluteMinMax does not clip, so there is no "past the clip".
+
+        The denominator is zero there, and it used to divide by it.
+        """
+        result = run_in_node("""
+            const lim = getMinMax([0,0,1.93,8.5,null,null,null,14.7,20.93], "absoluteMinMax");
+            process.stdout.write(JSON.stringify({fraction: paOutlierFraction(lim, 20.93)}));
+        """)
+        self.assertEqual(result["fraction"], 0)
+
+
+# What the code produced BEFORE the clamp, for every case where its answer was
+# already a colour. Recorded rather than recomputed from git: the first version
+# of this compared against `git show HEAD:...`, which is the pre-change file
+# only until the change is committed -- after that it compares the new code
+# with itself, the lifted helpers no longer resolve, and it fails for a reason
+# that has nothing to do with colour. A recorded table is what the
+# versioned-asset guard already does in this repo, and it cannot rot that way.
+#
+# (summary index, colour reference, value, scale, colour)
+COLOURS_BEFORE_THE_CLAMP = [
+    (0, 'absoluteMinMax', 0.79, 'bwr', 'rgb(255, 255,255)'),
+    (0, 'absoluteMinMax', 0.79, 'bwr2', 'rgb(255, 255,255)'),
+    (0, 'absoluteMinMax', 0.79, 'rbg', 'rgb(0, 0,0)'),
+    (0, 'absoluteMinMax', 1.1, 'bwr', 'rgb(255, 127,127)'),
+    (0, 'absoluteMinMax', 1.1, 'bwr2', 'rgb(255, 127,127)'),
+    (0, 'absoluteMinMax', 1.1, 'rbg', 'rgb(128, 0,0)'),
+    (0, 'absoluteMinMax', 1.41, 'bwr', 'rgb(255, 0,0)'),
+    (0, 'absoluteMinMax', 1.41, 'bwr2', 'rgb(255, 0,0)'),
+    (0, 'absoluteMinMax', 1.41, 'rbg', 'rgb(255, 0,0)'),
+    (0, 'p10p90', 0.79, 'bwr', 'rgb(255, 255,255)'),
+    (0, 'p10p90', 0.79, 'bwr2', 'rgb(255, 86,255)'),
+    (0, 'p10p90', 0.79, 'rbg', 'rgb(0, 0,0)'),
+    (0, 'p10p90', 1.1, 'bwr', 'rgb(234, 0,0)'),
+    (0, 'p10p90', 1.1, 'bwr2', 'rgb(255, 21,0)'),
+    (0, 'p10p90', 1.41, 'bwr', 'rgb(127, 0,0)'),
+    (0, 'p10p90', 1.41, 'bwr2', 'rgb(255, 128,0)'),
+    (1, 'absoluteMinMax', -1.27, 'bwr', 'rgb(0, 0,255)'),
+    (1, 'absoluteMinMax', -1.27, 'bwr2', 'rgb(0, 0,255)'),
+    (1, 'absoluteMinMax', -1.27, 'rbg', 'rgb(0, 255,0)'),
+    (1, 'absoluteMinMax', -0.355, 'bwr', 'rgb(184, 184,255)'),
+    (1, 'absoluteMinMax', -0.355, 'bwr2', 'rgb(184, 184,255)'),
+    (1, 'absoluteMinMax', -0.355, 'rbg', 'rgb(0, 71,0)'),
+    (1, 'absoluteMinMax', 0.56, 'bwr', 'rgb(255, 143,143)'),
+    (1, 'absoluteMinMax', 0.56, 'bwr2', 'rgb(255, 143,143)'),
+    (1, 'absoluteMinMax', 0.56, 'rbg', 'rgb(112, 0,0)'),
+    (1, 'p10p90', -1.27, 'bwr', 'rgb(0, 0,127)'),
+    (1, 'p10p90', -1.27, 'bwr2', 'rgb(0, 128,255)'),
+    (1, 'p10p90', -0.355, 'bwr', 'rgb(167, 167,255)'),
+    (1, 'p10p90', -0.355, 'bwr2', 'rgb(167, 167,255)'),
+    (1, 'p10p90', -0.355, 'rbg', 'rgb(0, 88,0)'),
+    (1, 'p10p90', 0.56, 'bwr', 'rgb(255, 116,116)'),
+    (1, 'p10p90', 0.56, 'bwr2', 'rgb(255, 116,116)'),
+    (1, 'p10p90', 0.56, 'rbg', 'rgb(139, 0,0)'),
+    (2, 'absoluteMinMax', 1.93, 'bwr', 'rgb(255, 255,255)'),
+    (2, 'absoluteMinMax', 1.93, 'bwr2', 'rgb(255, 255,255)'),
+    (2, 'absoluteMinMax', 1.93, 'rbg', 'rgb(0, 0,0)'),
+    (2, 'absoluteMinMax', 11.43, 'bwr', 'rgb(255, 128,128)'),
+    (2, 'absoluteMinMax', 11.43, 'bwr2', 'rgb(255, 128,128)'),
+    (2, 'absoluteMinMax', 11.43, 'rbg', 'rgb(128, 0,0)'),
+    (2, 'absoluteMinMax', 20.93, 'bwr', 'rgb(255, 0,0)'),
+    (2, 'absoluteMinMax', 20.93, 'bwr2', 'rgb(255, 0,0)'),
+    (2, 'absoluteMinMax', 20.93, 'rbg', 'rgb(255, 0,0)'),
+    (2, 'p10p90', 1.93, 'bwr', 'rgb(255, 255,255)'),
+    (2, 'p10p90', 1.93, 'rbg', 'rgb(0, 0,0)'),
+    (2, 'p10p90', 11.43, 'bwr', 'rgb(255, 134,134)'),
+    (2, 'p10p90', 11.43, 'bwr2', 'rgb(255, 134,134)'),
+    (2, 'p10p90', 11.43, 'rbg', 'rgb(121, 0,0)'),
+    (2, 'p10p90', 20.93, 'bwr', 'rgb(127, 0,0)'),
+    (2, 'p10p90', 20.93, 'bwr2', 'rgb(255, 128,0)'),
+    (3, 'absoluteMinMax', -8, 'bwr', 'rgb(0, 0,255)'),
+    (3, 'absoluteMinMax', -8, 'bwr2', 'rgb(0, 0,255)'),
+    (3, 'absoluteMinMax', -8, 'rbg', 'rgb(0, 255,0)'),
+    (3, 'absoluteMinMax', 0, 'bwr', 'rgb(255, 255,255)'),
+    (3, 'absoluteMinMax', 0, 'bwr2', 'rgb(255, 255,255)'),
+    (3, 'absoluteMinMax', 0, 'rbg', 'rgb(0, 0,0)'),
+    (3, 'absoluteMinMax', 8, 'bwr', 'rgb(255, 0,0)'),
+    (3, 'absoluteMinMax', 8, 'bwr2', 'rgb(255, 0,0)'),
+    (3, 'absoluteMinMax', 8, 'rbg', 'rgb(255, 0,0)'),
+    (3, 'p10p90', -8, 'bwr', 'rgb(0, 0,127)'),
+    (3, 'p10p90', -8, 'bwr2', 'rgb(0, 128,255)'),
+    (3, 'p10p90', 0, 'bwr', 'rgb(255, 255,255)'),
+    (3, 'p10p90', 0, 'bwr2', 'rgb(255, 255,255)'),
+    (3, 'p10p90', 0, 'rbg', 'rgb(0, 0,0)'),
+    (3, 'p10p90', 8, 'bwr', 'rgb(127, 0,0)'),
+    (3, 'p10p90', 8, 'bwr2', 'rgb(255, 128,0)'),
+]
+
+SUMMARIES_BEFORE_THE_CLAMP = [
+    [0, 0, 0.79, 0.98, None, None, None, 1.04, 1.41],
+    [0, 0, -1.27, -1.03, None, None, None, 0.45, 0.56],
+    [0, 0, 1.93, 8.5, None, None, None, 14.7, 20.93],
+    [0, 0, -8, -5, None, None, None, 5, 8],
+]
+
+
+class LegitimateColoursAreUnchangedTest(unittest.TestCase):
+    """The half that must NOT move.
+
+    A clamp that quietly altered ordinary colours would repaint every diagram
+    in the application -- a far worse outcome than the defect it fixes. So
+    every colour the previous implementation produced, for the cases where it
+    produced a colour at all, is recorded above and required to still hold.
+
+    Cases where the old answer was NOT a colour are deliberately absent: those
+    are exactly what changed, on purpose.
+    """
+
+    def test_every_previously_valid_colour_is_unchanged(self):
+        script = (
+            "const summaries = " + json.dumps(SUMMARIES_BEFORE_THE_CLAMP) + ";\n"
+            "const want = " + json.dumps(COLOURS_BEFORE_THE_CLAMP) + ";\n"
+            "const diffs = [];\n"
+            "for (const row of want) {\n"
+            "  const lim = getMinMax(summaries[row[0]], row[1]);\n"
+            "  const got = getColor(lim, row[2], row[3]);\n"
+            "  if (got !== row[4]) diffs.push({summary: row[0], option: row[1],\n"
+            "      value: row[2], scale: row[3], expected: row[4], got: got});\n"
+            "}\n"
+            "process.stdout.write(JSON.stringify("
+            "{checked: want.length, diffs: diffs.slice(0, 8)}));"
+        )
+        result = run_in_node(script)
+
+        self.assertEqual(result["diffs"], [],
+                         "a colour that was already valid has changed")
+        self.assertEqual(result["checked"], len(COLOURS_BEFORE_THE_CLAMP))
+        self.assertGreater(result["checked"], 40, "the table is suspiciously small")
 
 
 if __name__ == "__main__":

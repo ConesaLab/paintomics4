@@ -7262,7 +7262,7 @@ var getColor = function (limits, value, colorScale) {
 				//BLUE-WHITE-RED
 				var percentage = Math.max(0, 1 - paRampPosition(limits, value));
 
-				var outlierPercentage = Math.max(0, Math.abs((value > 0) ? ((value - limits.max) / (limits.absMax - limits.max)) : ((value - limits.min) / (limits.absMin - limits.min))));
+				var outlierPercentage = paOutlierFraction(limits, value);
 				green = percentage * 255;
 				red = (value > 0) ? ((value > limits.max) ? 255 - (outlierPercentage * 128) : 255) : (percentage * 255);
 				blue = (value < 0) ? ((value < limits.min) ? 255 - (outlierPercentage * 128) : 255) : (percentage * 255);
@@ -7270,7 +7270,7 @@ var getColor = function (limits, value, colorScale) {
 			} else if (colorScale === "bwr2") {
 				//BLUE-WHITE-RED
 				var percentage = Math.max(0, 1 - paRampPosition(limits, value));
-				var outlierPercentage = Math.max(0, Math.abs((value > 0) ? ((value - limits.max) / (limits.absMax - limits.max)) : ((value - limits.min) / (limits.absMin - limits.min))));
+				var outlierPercentage = paOutlierFraction(limits, value);
 
 				green = (value > limits.max || value < limits.min) ? (outlierPercentage * 128) : (percentage * 255);
 				red = (value > 0) ? 255 : (percentage * 255);
@@ -7279,8 +7279,78 @@ var getColor = function (limits, value, colorScale) {
 				console.error("Color scale " + colorScale + "Not implemented!!");
 				debugger;
 			}
-			return "rgb(" + Math.round(red) + ", " + Math.round(green) + "," + Math.round(blue) + ")";
+			/* Whatever the arithmetic above decided, what leaves here is a
+			   colour. Channels were free to run out of range and did: measured
+			   on paintomics.uv.es, `rgb(255, 255,-402)` and `rgb(0, 0,-2744)`,
+			   and before the ramp was clamped, `rgb(247, 247,-Infinity)`.
+			   Neither is a colour. Chrome clamps the first to yellow and
+			   rejects the second outright, painting it black -- so cells that
+			   should have been pale showed as two loud, arbitrary colours.
+
+			   The cause is upstream and there is more than one of it: a value
+			   outside [absMin, absMax] makes the outlier term above exceed 1,
+			   and every caller that colours one quantity against another
+			   quantity's distribution can produce that. Two such call sites
+			   have been found and fixed so far -- the metagene trend heatmap,
+			   and this file's other generateHeatmap -- which is the reason for
+			   putting the guarantee HERE instead: getColor is the one place
+			   every colour in the application comes from, so this is the only
+			   place the invariant can be stated once and hold for all of them.
+
+			   Clamping is not a substitute for fixing a caller that is asking
+			   the wrong question -- it turns a broken colour into the nearest
+			   real one, which is honest for "off the end of the scale" and
+			   nothing like as wrong as black. */
+			return "rgb(" + paChannel(red) + ", " + paChannel(green) + "," + paChannel(blue) + ")";
 		};
+
+/**
+ * One RGB channel: a whole number in 0..255, whatever it was handed.
+ *
+ * NaN maps to 0 rather than propagating. A NaN channel makes the whole
+ * `rgb(...)` string invalid, and a single invalid stop voids an entire CSS
+ * gradient -- which is how the colour legend beside these heatmaps once
+ * rendered as an empty white box rather than a ramp.
+ */
+/**
+ * How far past the clipped range a value sits, as 0..1.
+ *
+ * Only meaningful when the colour reference clips (p10p90, riMinMax, custom):
+ * it is the distance from the clip to the value, over the distance from the
+ * clip to the real extreme, and getColor uses it to darken outliers.
+ *
+ * It is a FRACTION, so it cannot exceed 1 -- but nothing said so, and the
+ * arithmetic exceeds it freely whenever `value` falls outside
+ * [absMin, absMax]. Measured on production: 5.19 and 21.4, which multiplied by
+ * 128 and subtracted from 255 gave -410 and -2744. Callers that colour one
+ * quantity against another quantity's distribution produce exactly that, and
+ * there is more than one of them.
+ *
+ * A denominator of zero means the reference does not clip at all, so there is
+ * no "past the clip" to measure and the answer is 0 -- previously this was
+ * value/0, i.e. Infinity, and thence an -Infinity channel.
+ */
+var paOutlierFraction = function (limits, value) {
+	var clip = (value > 0) ? limits.max : limits.min;
+	var extreme = (value > 0) ? limits.absMax : limits.absMin;
+	var span = extreme - clip;
+
+	if (!span) { return 0; }
+
+	var fraction = Math.abs((value - clip) / span);
+
+	if (!isFinite(fraction)) { return 0; }
+
+	return (fraction > 1) ? 1 : fraction;
+};
+
+var paChannel = function (value) {
+	var rounded = Math.round(value);
+	if (isNaN(rounded)) { return 0; }
+	if (rounded < 0) { return 0; }
+	if (rounded > 255) { return 255; }
+	return rounded;          /* Infinity and -Infinity fall out of the two above */
+};
 
 /* =====================================================================
  * Shared heatmap / line-chart labelling helpers.
