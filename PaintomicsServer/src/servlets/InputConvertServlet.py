@@ -14,6 +14,7 @@ work is enqueued and the browser polls, exactly as aiInterpretInitiate does.
 """
 
 import logging
+import os
 import threading
 import time
 
@@ -22,6 +23,27 @@ from src.common.UserSessionManager import UserSessionManager
 
 
 logger = logging.getLogger(__name__)
+
+
+def _converter_enabled():
+    """Whether this deployment has opted in.
+
+    Read defensively. `src/conf/serverconf.py` is gitignored and PROTECTED from
+    the deploy rsync, so an already-installed server keeps a config that predates
+    this setting -- and a bare `from src.conf.serverconf import AI_INPUT_CONVERTER`
+    then raises ImportError at the use site rather than reporting the feature as
+    off. Measured on paintomics.uv.es straight after the first deploy: the route
+    answered with an ImportError instead of "not enabled on this server".
+
+    See the note on adding a serverconf setting: the value goes in the local
+    config, in example_serverconf.py for fresh installs, AND behind a fallback
+    here for every server already running.
+    """
+    try:
+        from src.conf.serverconf import AI_INPUT_CONVERTER
+        return bool(AI_INPUT_CONVERTER)
+    except ImportError:
+        return os.getenv("AI_INPUT_CONVERTER", "false").lower() == "true"
 
 # At most this many conversions may be in flight across the whole server. Each
 # holds a queue slot and a share of the gateway's rate limit, which is shared
@@ -84,8 +106,7 @@ def inputConvertTurn(REQUEST, RESPONSE, QUEUE_INSTANCE, JOB_ID):
         sessionToken = REQUEST.cookies.get("sessionToken")
         UserSessionManager().isValidUser(userID, sessionToken)
 
-        from src.conf.serverconf import AI_INPUT_CONVERTER
-        if not AI_INPUT_CONVERTER:
+        if not _converter_enabled():
             raise Exception("AI file conversion is not enabled on this server.")
 
         state = REQUEST.get_json(force=True, silent=True) or {}
