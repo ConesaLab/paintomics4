@@ -1,168 +1,182 @@
-# Input format checking and AI-assisted conversion
+# Input format checking and AI conversion
 
-Status: approved in conversation 2026-08-20, not yet implemented.
+Status: Layers 0 and 1 built and verified. Layer 2 redesigned 2026-08-20 after
+the requirement was restated; not yet implemented.
 
-## Goal
+## The requirement
 
-A user who has omics data in *some* tabular shape should be able to get it into
-PaintOmics without knowing what PaintOmics expects. Today a malformed file is
-accepted at upload and fails later with a wall of per-line errors, or — worse —
-succeeds and yields zero matched features.
+**If a file contains information PaintOmics can analyse, PaintOmics must be able
+to analyse it.** The user should not have to know what shape the tool expects.
 
-Three layers, escalating only as far as each file needs:
+That is a much stronger claim than "handle the common cases", and it is what
+rules out the design this document previously described. A converter built on a
+fixed vocabulary of operations — pick a sheet, drop these columns, skip that row
+— can only ever handle the transformations someone thought of in advance. The
+first user with a transposed matrix, a long-format table, per-sheet replicates
+that need averaging, or counts that need a log is stuck, and no amount of
+prompting fixes it because the operation cannot be expressed.
 
-- **Layer 0 — validate.** Every upload is checked client-side against the format
-  contract. Instant, offline, no LLM. Most users see a green tick and nothing else.
-- **Layer 1 — repair.** When the fault is mechanical and unambiguous, offer a
-  deterministic one-click fix with a visible diff. Still no LLM.
-- **Layer 2 — convert.** Only when 0 and 1 cannot resolve it: an agent writes
-  conversion code, runs it in a browser sandbox, and iterates against the
-  validator until it passes or it asks the user a question.
+So the agent writes real code. That decision drives everything below.
 
-Layer 0 is independently valuable and ships first.
+## Three layers
 
-## The format contract
+- **Layer 0 — validate** (BUILT). Every upload is checked client-side against
+  the format contract. Instant, offline, no LLM.
+- **Layer 1 — repair** (BUILT). Deterministic one-click fixes for mechanical
+  faults, with a visible diff.
+- **Layer 2 — convert** (THIS DOCUMENT). An agent writes pandas, runs it in a
+  browser sandbox, checks the result against Layer 0's validator, and iterates.
 
-Authoritative source is `PathwayAcquisitionJob.py:660-745` (values files) and
-`:606-660` (relevant files), not the example datasets. A **values file** must:
+Layer 2 is the last resort, not the first. A decimal comma is repaired by a
+regex in Layer 1 — routing it through the gateway would cost ~120 s and be less
+reliable than the regex it replaces.
 
-1. Be valid UTF-8 (`ensure_utf8`; a BOM is tolerated via `utf-8-sig`).
-2. Use tab or comma. `Job.detect_delimiter` (`Job.py:47`) returns `\t` if the
-   first non-empty line contains a tab, else `,`. **Comma files already work** —
-   do not build a delimiter repair. The one real trap is a comma-delimited file
-   whose header happens to contain a tab, which mis-detects as TSV.
-3. Have at least 2 columns.
-4. Have the *same* column count on every line — set from the first data line.
-5. Have every column from index 1 onward parse as `float`.
-6. Not exceed `MAX_NUMBER_FEATURES` (1,000,000 — not a practical limit).
+## Why the sandbox is in the browser
 
-Header detection is subtle and worth restating because it drives Layer 0's
-messages: line 0 is treated as a header **only if `float(line[1])` raises**.
-Detection keys on column *two*, not column one. A header whose second cell is
-numeric is silently parsed as data.
+The generated code has to run somewhere. It does not run on the server.
 
-Errors stop being collected after 10 lines, so today a structurally wrong file
-produces ten cryptic messages and no diagnosis. Layer 0 exists to replace that.
+`paintomics4.ini` is `processes = 1, threads = 4`: four threads serve every API
+request on paintomics.uv.es. A 100 MB conversion executing server-side would
+occupy a quarter of the site's capacity for as long as it ran, and an
+arbitrary-code executor on that host is a security surface nobody needs.
 
-**Relevant files** are one ID per line, no header. **Associations** are
-`Target<TAB>Regulator`. **Design** files are `Sample` plus 0/1 indicator columns
-(see `more-condition-columns-are-indicator-patterns`).
+The sandbox is an iframe with `sandbox="allow-scripts"` and **without**
+`allow-same-origin`, so it has an opaque origin: no cookies, no localStorage, no
+parent DOM, no network. It holds Pyodide, pandas/numpy/openpyxl, the user's file
+and the generated script — no PaintOmics code and no credentials. The worst a
+malicious or mistaken script can do is spoil the tab it runs in.
 
-## Architecture
+The LLM call happens on the server, outside the sandbox, so the sandbox never
+needs a network capability at all.
 
-The LLM and the sandbox sit on opposite sides of the wire.
+## What crosses the wire
+
+- **Browser → server**: column names, dtypes, row counts, summary statistics,
+  example identifier strings, tracebacks, validator output.
+- **Server → browser**: Python source, or a question for the user.
+- **Browser → server, only on accept**: the converted files, through the
+  existing upload endpoint.
+
+Raw measurement values never leave the user's machine until they accept the
+result. For unpublished omics data that is the difference between people using
+this and not, and it should be stated in the UI.
+
+## Develop on a sample, apply to the whole file
+
+The upload cap is **100 MB**, matching `SERVER_MAX_CONTENT_LENGTH`, which is
+already 100 MB — so no server or nginx change is needed.
+
+Two consequences follow, and neither is optional.
+
+**Quota.** `MAX_CLIENT_SPACE` is 200 MB per user. Only the CONVERTED file is
+stored server-side (the source stays in the browser unless the user uploads it
+separately), so one 100 MB conversion takes half a user's space. The drawer
+states the output size before the user accepts.
+
+**Memory.** 100 MB of CSV is roughly a million rows, and pandas holds several
+times the file size in RAM. Running every agent attempt over the whole thing
+would make each round slow and would put the largest inputs at risk of taking
+the tab down.
+
+So the loop iterates on the **first 5,000 data rows** and the accepted script
+runs once over the full file at the end. Iteration is fast regardless of input
+size, memory peaks once rather than five times, and the full pass is checked by
+the same validator before anything is offered.
+
+The full pass on a 100 MB input is the one genuinely risky operation in this
+design, so it is measured rather than assumed: peak heap is recorded for a
+100 MB fixture, and if a single `read_csv` will not hold, the executor reads in
+chunks and the agent is told to write a script that accepts a chunk iterator.
+The measured ceiling goes in the README, and a file above it gets an honest
+warning instead of a crashed tab.
+
+## The loop
 
 ```
-PARENT PAGE (your origin)      — agent loop (state machine), validator
-   |  profile / traceback              |  postMessage
-   v  code or question                 v  file bytes, result
-SERVER: stateless proxy          IFRAME (opaque origin)
-  auth, quota, key -> CSIC         Pyodide + pandas, the generated script
-                                   no network, no LLM, no credentials
+profile → agent writes python → run on sample → VALIDATE
+             ↑                                     │
+             └──── traceback + validator report ───┘   (max 5 rounds)
+                          │
+              ask the user when ambiguous
+                          │
+                  run on the full file → review → accept
 ```
 
-- The **sandbox** is an iframe with `sandbox="allow-scripts"` and *without*
-  `allow-same-origin`, so it has an opaque origin: no cookies, no localStorage,
-  no parent DOM, no network. Contents are Pyodide, pandas/numpy/openpyxl, the
-  user's file, and the generated script. Blast radius is the user's own tab.
-- The **validator runs in the parent, never in the sandbox.** If it ran inside,
-  generated code could stub it out and grade itself green.
-- The **agent loop** is ~200 lines of JS in the parent. The model returns one of
-  exactly two typed actions — write code, or ask the user. Not tool-calling:
-  there is no registry to reach past. Max 5 iterations.
-- The **server route is a stateless proxy**: one LLM call per request, holding
-  the CSIC key, enforcing auth, per-user quota and a concurrency cap.
+The exit condition is the **validator**, not the model's opinion. It is the same
+module Layer 0 uses, which a test pins to the server's own loop over every
+example file. An agent cannot declare success on a file the server would reject.
 
-Raw expression values never leave the user's machine. Only column names, dtypes,
-row counts, summary statistics, example ID strings, tracebacks and validator
-output are sent. This is a privacy property worth stating in the UI.
+The model returns one of exactly three typed actions — `code`, `question`,
+`done` — so there is no tool surface to reach past. Anything else is a parse
+failure and a retry.
 
-### The route must not block
+## What "any data issue" actually requires
 
-`paintomics4.ini` is `processes = 1`, `threads = 4` — four threads serve every
-API request (see `four-uwsgi-threads-serve-the-whole-site`). The CSIC gateway
-takes ~120 s per attempt. An inline route would hold a quarter of the site's
-capacity per conversion and take the site down at four concurrent users.
+The transformations a real corpus demands, all of which pandas expresses and a
+fixed vocabulary does not:
 
-Follow `aiInterpretInitiate` (`AIInterpretServlet.py:136`): enqueue into
-`QUEUE_INSTANCE`, return a ticket, let the browser poll. Cap in-flight
-conversions at 2 server-wide; beyond that, refuse with "busy, try again".
+transpose (samples as rows) · long → wide pivot · merge or concatenate sheets ·
+log/ratio computation · aggregate duplicate identifiers · split a combined
+identifier column · multi-row and merged-cell headers · per-condition replicate
+averaging · derive a relevant-features list from a p-value column · infer a
+design matrix from sample names.
 
-## Impact on users who never touch it
+## Honest success criteria
 
-- Parsing, pandas and all conversion memory are on the user's machine. Zero
-  server CPU or RAM.
-- Outputs land in `CLIENT_TMP_DIR` via the existing `registerFile`, so they
-  appear in the normal picker and download through `dataManagementDownloadFile`.
-  No new storage or download machinery. They count against that user's own
-  200 MB `MAX_CLIENT_SPACE`.
-- Conversions share the CSIC token bucket with AI report generation. The
-  concurrency cap of 2 is what keeps a conversion burst from degrading reports.
-- Pyodide (~20 MB) and the converter JS **must** lazy-load at drawer-open, or
-  every visitor pays for a feature they did not use.
-- The Step 1 entry point touches `PA_Step1Views.js` (224 KB, every job's path).
-  Keep the drawer in its own file; the Step 1 change is one button plus a
-  callback setting an existing field; ship behind a flag, inert by default, the
-  way `AI_FULL_AGENT` does.
+"Always works" cannot be promised, and claiming it would be dishonest. What can
+be done is to measure it.
 
-## Front end
+A corpus of deliberately awful inputs is built and the pass rate reported: the
+two SCI bPAC workbooks, a transposed matrix, a long-format table, a multi-row
+header, merged cells, raw counts needing a log, duplicated identifiers, a
+latin-1 export, a GEO series matrix, and a DESeq2 results table. The measured
+number goes in the README rather than a claim.
 
-`PA_AIInterpretView.js` contains zero `Ext.create` and zero `xtype:` — the AI
-surfaces already render plain DOM inside an Ext container. Follow that; do not
-fight ExtJS 4.2.1.
+When the agent cannot finish, it says so and hands back the best partial result
+**plus the code**, so a user who knows pandas can take it from there. That is
+better than a dead end, and it is the honest failure mode.
 
-Progressive disclosure under the file row: valid files show a one-line summary
-and nothing more. Layer 1 offers a fix with a diff. Layer 2 opens a drawer that
-overlays Step 1 without unmounting it, showing a live transcript (not a spinner
-— ~120 s per call is too long to fake), elapsed time, a working Cancel, the
-generated code behind a toggle, and a review diff with the validator checklist
-as the thing the user approves.
-
-## Acceptance test
+## Acceptance
 
 `Caudal SCI_bPAC_FINAL.xlsx` and `Rostral SCI_bPAC_FINAL.xlsx` — mouse spatial
-transcriptomics of spinal cord injury with bPAC. They exercise, in one artifact:
+transcriptomics of spinal cord injury with bPAC. Between them they carry:
 
 1. **Multi-sheet**: 7 and 6 sheets; only 4-5 hold data.
-2. **A banner row below the header**: row 1 of every per-region sheet is
-   `✓ GENI VALIDATI (n)` with the rest blank. Naive `read_excel` yields a
-   garbage first data row.
-3. **Annotation columns interleaved with measurements**: only 6 of 14-19 columns
-   are values (`SCI_vs_H_10d`, `SCI_vs_H_30d`, `bPAC_vs_SCI_10d`,
-   `bPAC_vs_SCI_30d`, `bPAC_vs_H_10d`, `bPAC_vs_H_30d`). `Valence_Source`,
-   `Functional_Category`, `Temporal_Logic`, `Flag_Detail` are free text — every
-   row fails rule 5 above.
+2. **A banner row under the header**: `✓ GENI VALIDATI (n)`, rest of the row blank.
+3. **Annotation interleaved with measurements**: 6 of 14-19 columns are values
+   (`SCI_vs_H_10d`, `SCI_vs_H_30d`, `bPAC_vs_SCI_10d`, `bPAC_vs_SCI_30d`,
+   `bPAC_vs_H_10d`, `bPAC_vs_H_30d`); `Valence_Source`, `Functional_Category`,
+   `Temporal_Logic`, `Flag_Detail` are free text.
 4. **Schema drift between the two files**: Caudal has `PriorityScore` plus
    `S_SCI`/`S_bSCI`/`S_bH`/`Bonus_Partial`; Rostral has `PriorityScore_v12` and
-   lacks the `S_*` columns.
+   no `S_*`. Same agent, different result — this is what proves nothing is
+   hardcoded to one file.
 5. **Long vs wide**: `Ranked_Global_Filtered` carries a `Region` column; the
-   per-region sheets encode region as the sheet name.
-6. **Mixed language**: `Geni_Flaggati`, `FALSO POSITIVO`, `bPAC opposto a healthy`.
-7. **A prose sheet**: `Methodology` is 2 columns of text.
-8. **Cross-sheet duplicate IDs**: `Mrpl43` appears in Caudal `MN spots` and in
-   `Geni_Flaggati`; concatenating sheets breaks per-row ID uniqueness.
-9. **Gene symbols, not Ensembl** (`Plaa`, `Cldn10`, `Etv4`). Correct as-is —
-   `findIDsByFeaturesName` resolves `display_id` at Step 2. The converter must
-   NOT translate IDs.
+   per-region sheets encode region in the sheet name.
+6. **Mixed language**: `Geni_Flaggati`, `FALSO POSITIVO`.
+7. **A prose sheet**: `Methodology`, two columns of text.
+8. **Cross-sheet duplicate identifiers**: `Mrpl43` is in `MN spots` and in
+   `Geni_Flaggati`.
+9. **Gene symbols, not Ensembl** — correct as-is. `findIDsByFeaturesName`
+   resolves `display_id` at Step 2, so the converter must NOT translate them.
 
-Two traps the validator cannot catch, which the agent must raise as questions:
+Two traps no validator can catch, which the agent must raise as **questions**
+rather than decide silently:
 
-- **`Geni_Flaggati` is a rejection list** — genes marked `FALSO POSITIVO`.
-  Concatenating every sheet silently imports known false positives.
-- **The data is already filtered** (~400 genes of a genome). PaintOmics
-  enrichment scores relevant features against a background of all measured
-  features; a pre-filtered upload with no full matrix produces optimistic
-  p-values. Compare `simulated-example-significance-calibration`. The agent must
-  say so rather than produce a confident wrong answer.
+- `Geni_Flaggati` lists genes marked `FALSO POSITIVO`. Concatenating every sheet
+  imports known false positives into the analysis.
+- Both workbooks are already filtered to ~400 genes. PaintOmics scores relevant
+  features against a background of all measured features, so a pre-filtered
+  upload with no full matrix yields optimistic p-values. Compare
+  `simulated-example-significance-calibration`.
 
-Acceptance: both workbooks convert to a values matrix PaintOmics parses without
-error, the flagged-gene and background questions are surfaced to the user, and a
-job run on the output reaches Step 3 with a non-zero matched-feature count.
+Passing means: both workbooks convert to files the validator accepts, both
+questions are surfaced, and a job run on the output reaches Step 3 with a
+non-zero matched-feature count.
 
 ## Out of scope
 
-- ID translation. `findIDsByFeaturesName` already does it; an LLM guessing
-  `ENSMUSG` numbers is pure hallucination surface.
-- `.h5ad` / Seurat objects. `anndata` is not in the Pyodide distribution.
-- Server-side code execution. Rejected: it needs a container runtime on a box
-  whose whole web tier is one process with four threads.
+- Identifier translation. `findIDsByFeaturesName` already does it; an LLM
+  guessing `ENSMUSG` numbers is pure hallucination surface.
+- `.h5ad` / Seurat. `anndata` is not in the Pyodide distribution.
+- Server-side execution, for the thread-budget and security reasons above.
