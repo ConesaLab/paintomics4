@@ -1,0 +1,106 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>PaintOmics conversion sandbox</title>
+<!--
+  This document runs the conversion code an AI agent writes.
+
+  It is loaded into an iframe with sandbox="allow-scripts" and WITHOUT
+  allow-same-origin, so it has an opaque origin: no cookies, no localStorage, no
+  access to the parent DOM. It holds Pyodide, pandas and the user's data, and
+  nothing else -- no PaintOmics code, no credentials, and no network capability.
+  The LLM is called by the server, on the other side of the postMessage bridge,
+  so this document never needs one.
+
+  Everything it loads comes from this server's own resources/pyodide directory.
+  Nothing is fetched from a CDN at runtime: a conversion must not depend on a
+  third party being reachable, and the user's data must not be able to leave
+  through an asset request.
+-->
+<script src="resources/pyodide/pyodide.js"></script>
+<script>
+(function () {
+    "use strict";
+
+    var pyodide = null;
+    // Order matters: openpyxl imports et_xmlfile at module load, so the
+    // dependency has to be present before openpyxl is loaded. Neither is in
+    // the Pyodide distribution -- both are vendored from PyPI, because the
+    // sandbox has no network and must not be given one.
+    var WHEELS = [
+        "resources/pyodide/et_xmlfile-2.0.0-py3-none-any.whl",
+        "resources/pyodide/openpyxl-3.1.5-py2.py3-none-any.whl"
+    ];
+
+    function reply(id, payload) {
+        payload.id = id;
+        parent.postMessage(payload, "*");
+    }
+
+    async function boot(id) {
+        pyodide = await loadPyodide({ indexURL: "resources/pyodide/" });
+        await pyodide.loadPackage(["pandas", "numpy"]);
+        for (var i = 0; i < WHEELS.length; i++) {
+            await pyodide.loadPackage(WHEELS[i]);
+        }
+        var probe = pyodide.runPython(
+            "import pandas, numpy, openpyxl\n" +
+            "f'{pandas.__version__}|{numpy.__version__}|{openpyxl.__version__}'"
+        );
+        reply(id, { ok: true, versions: probe });
+    }
+
+    async function run(id, code, files) {
+        pyodide.FS.analyzePath("/work").exists || pyodide.FS.mkdir("/work");
+        pyodide.FS.analyzePath("/out").exists   || pyodide.FS.mkdir("/out");
+        for (var name in (files || {})) {
+            pyodide.FS.writeFile("/work/" + name, files[name]);
+        }
+        var stdout = "";
+        pyodide.setStdout({ batched: function (s) { stdout += s + "\n"; } });
+        pyodide.setStderr({ batched: function (s) { stdout += s + "\n"; } });
+        await pyodide.runPythonAsync(code);
+        var outputs = {};
+        pyodide.FS.readdir("/out").forEach(function (name) {
+            if (name === "." || name === "..") return;
+            outputs[name] = pyodide.FS.readFile("/out/" + name);
+        });
+        reply(id, { ok: true, stdout: stdout, outputs: outputs });
+    }
+
+    addEventListener("message", async function (event) {
+        var msg = event.data || {};
+        try {
+            if (msg.type === "boot") { await boot(msg.id); return; }
+            if (msg.type === "run")  { await run(msg.id, msg.code, msg.files); return; }
+            if (msg.type === "isolation") { await isolationProbe(msg.id); return; }
+        } catch (err) {
+            reply(msg.id, { ok: false, traceback: String((err && err.message) || err) });
+        }
+    });
+
+    /* Proves the walls are real rather than assumed. Every probe must FAIL. */
+    async function isolationProbe(id) {
+        var results = {};
+        function attempt(name, fn) {
+            try { results[name] = "REACHED: " + String(fn()).slice(0, 50); }
+            catch (e) { results[name] = "blocked: " + (e.name || "") + " - " + String(e.message).slice(0, 70); }
+        }
+        attempt("cookie", function () { return document.cookie; });
+        attempt("parentDom", function () { return parent.document.title; });
+        attempt("localStorage", function () { return localStorage.length; });
+        attempt("parentLocation", function () { return parent.location.href; });
+        attempt("hostFilesystem", function () {
+            return pyodide.runPython("open('/etc/passwd').read()");
+        });
+        try {
+            var r = await fetch("/", { method: "GET" });
+            results.network = "REACHED: HTTP " + r.status;
+        } catch (e) {
+            results.network = "blocked: " + (e.name || "") + " - " + String(e.message).slice(0, 70);
+        }
+        reply(id, { ok: true, results: results });
+    }
+
+    parent.postMessage({ type: "loaded" }, "*");
+})();
+</script>

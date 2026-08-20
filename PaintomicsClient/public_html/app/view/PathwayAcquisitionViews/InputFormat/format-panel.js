@@ -336,21 +336,11 @@
         return body;
     }
 
-    function renderDiff(container, changes) {
-        var existing = container.querySelector(".pa-format-diff");
-        if (existing) { existing.remove(); return; }
-        var table = el("table", "pa-format-diff");
-        changes.forEach(function (change) {
-            var row = el("tr");
-            row.appendChild(el("td", "pa-format-line", "line " + (change.line + 1)));
-            row.appendChild(el("td", "pa-format-before", change.before));
-            row.appendChild(el("td", "pa-format-arrow", "→"));
-            row.appendChild(el("td", "pa-format-after",
-                change.after === null ? "(removed)" : change.after));
-            table.appendChild(row);
-        });
-        container.appendChild(table);
-    }
+    /*
+     * The change preview was removed along with its button: one message, one
+     * action. If it comes back, it belongs behind a disclosure on the review
+     * screen rather than as a second button competing with the fix.
+     */
 
     /* ------------------------------------------------------------------ *
      * Replacing the picked file with a repaired one
@@ -412,8 +402,8 @@
                 "Spreadsheets need converting first.",
                 "PaintOmics reads plain text tables. " + file.name +
                 " is a workbook, which may hold several sheets and columns that are not measurements.",
-                [{ label: "Convert it for me", primary: true, onClick: function () { requestAgent(input, file); } },
-                 { label: "I'll export it myself", onClick: function () { strip.remove(); } }]);
+                [{ label: "Convert it for me", primary: true,
+                   onClick: function () { requestAgent(input, file, fieldName); } }]);
             return;
         }
 
@@ -476,10 +466,7 @@
                           replaceFile(input, repaired.rows, file.name);
                           renderOk(hostFor(input), API.validateValues(repaired.rows).summary, false, input);
                       } },
-                     { label: "Show what changes", onClick: function () {
-                          renderDiff(body, repaired.changes);
-                          syncCardHeight(input);
-                      } }]);
+                    ]);
                 return;
             }
 
@@ -494,8 +481,7 @@
             renderProblem(strip, "err", describeProblems(result),
                 partial ? "Checked the first few megabytes of a large file." : "",
                 [{ label: "Convert it for me", primary: true,
-                   onClick: function () { requestAgent(input, file); } },
-                 { label: "I'll fix it myself", onClick: function () { strip.remove(); } }]);
+                   onClick: function () { requestAgent(input, file, fieldName); } }]);
         };
         reader.readAsArrayBuffer(slice);
     }
@@ -570,14 +556,16 @@
             bar.appendChild(fix);
         }
 
-        var convert = el("button", "pa-format-button", "Convert with AI");
-        convert.type = "button";
-        convert.addEventListener("click", function () {
-            var first = entries[0];
-            var picked = first.input.files && first.input.files[0];
-            if (picked) requestAgent(first.input, picked, first.fieldName);
-        });
-        bar.appendChild(convert);
+        if (fixable.length !== entries.length) {
+            var convert = el("button", "pa-format-button pa-format-primary", "Convert with AI");
+            convert.type = "button";
+            convert.addEventListener("click", function () {
+                var first = entries[0];
+                var picked = first.input.files && first.input.files[0];
+                if (picked) requestAgent(first.input, picked, first.fieldName);
+            });
+            bar.appendChild(convert);
+        }
 
         /*
          * An escape hatch, deliberately. The validator is pinned to the
