@@ -64,21 +64,29 @@ def extract_block(source, header):
 HARNESS = """
 const results = {};
 
-function drive(respond) {
+// `chain` false runs a single tick, which is all most of these need. `chain`
+// true keeps firing whatever the poll scheduled, up to a hard ceiling, which is
+// how "it eventually stops" can be asserted at all -- a stubbed setTimeout that
+// only records can never distinguish "stopped" from "scheduled once more".
+function drive(respond, chain) {
     const scheduled = [];
     const calls = [];
-    const setTimeout_ = function (fn, delay) { scheduled.push({delay: delay}); return scheduled.length; };
+    const shown = [];
+    const setTimeout_ = function (fn, delay) { scheduled.push({fn: fn, delay: delay}); return scheduled.length; };
     const AI_POLL_INTERVAL = 3000;
+    const AI_POLL_MAX_FAILURES = 5;
     const SERVER_URL_AI_INTERPRET_STATUS = "/ai_interpret_status";
 
     const $ = function () { return {}; };
     $.ajax = function (opts) {
         calls.push(opts.url);
-        respond(opts);
+        respond(opts, calls.length);
     };
 
     function View() {
-        this.aiWidget = {updateProgress: function () {}};
+        this.aiWidget = {updateProgress: function (status, percent, detail) {
+            shown.push({status: status, detail: String(detail || "")});
+        }};
         this.getModel = function () { return {getJobID: function () { return "JOB"; }}; };
         const setTimeout = setTimeout_;
         %(poll)s
@@ -86,8 +94,25 @@ function drive(respond) {
 
     const view = new View();
     view.pollAIStatus();
+
+    if (chain) {
+        // A runaway chain is the failure being tested for, so the ceiling is
+        // well above AI_POLL_MAX_FAILURES and reaching it counts as "never
+        // stopped".
+        let fired = 0;
+        while (scheduled.length && fired < 40) {
+            const next = scheduled.shift();
+            fired++;
+            next.fn();
+        }
+        return {polls: calls.length, stopped: scheduled.length === 0 && fired < 40,
+                shown: shown, lastDetail: shown.length ? shown[shown.length - 1].detail : null,
+                lastStatus: shown.length ? shown[shown.length - 1].status : null};
+    }
+
     return {polls: calls.length, scheduled: scheduled.length,
-            firstDelay: scheduled.length ? scheduled[0].delay : null};
+            firstDelay: scheduled.length ? scheduled[0].delay : null,
+            shown: shown};
 }
 
 // A request that never landed: jQuery calls `error`, or nothing at all when no
@@ -117,6 +142,53 @@ results.cancelled = drive(function (opts) {
 results.errored = drive(function (opts) {
     opts.success({success: true, status: "error", percent: 0, detail: "boom"});
 });
+
+// THE JOB IS GONE. A reopened job is drawn from the browser's own copy, so the
+// page shows it without asking the server; only the AI report asks. Once the
+// job has been removed the answer is a refusal, and asking again cannot change
+// it -- this is the "Starting..." for ever that was reported.
+// Captured verbatim from the running server, because the shape is the point:
+// handleException renders a UserWarning as HTTP 400 with the message in the
+// body, so jQuery routes it to `error`. Asserting against a success:false body
+// tests a path this case never takes -- which is how the first attempt at this
+// fix passed its tests and changed nothing in the browser.
+const JOB_GONE_BODY = JSON.stringify({
+    success: false,
+    message: "UserWarning: AT AIInterpretServlet.py: aiInterpretStatus. " +
+             "ERROR MESSAGE: Job r0l53602VQ was not found."
+});
+const JOB_REFUSED_BODY = JSON.stringify({
+    success: false,
+    message: "UserWarning: AT AIInterpretServlet.py: aiInterpretStatus. " +
+             "ERROR MESSAGE: Invalid Job ID (r0l53602VQ) for current user."
+});
+
+results.jobDeleted = drive(function (opts) {
+    opts.error({status: 400, responseText: JOB_GONE_BODY});
+}, true);
+
+results.jobRefused = drive(function (opts) {
+    opts.error({status: 400, responseText: JOB_REFUSED_BODY});
+}, true);
+
+// A 400 it cannot classify: worth retrying, but not for ever.
+results.persistentUnknownFailure = drive(function (opts) {
+    opts.error({status: 400, responseText: JSON.stringify(
+        {success: false, message: "some transient database problem"})});
+}, true);
+
+// The same failure, but it clears before the ceiling: the chain must recover
+// and go on to deliver the report rather than having burned its budget.
+results.recoversAfterTwoFailures = drive(function (opts, n) {
+    if (n <= 2) { opts.error({status: 500, responseText: "{}"}); }
+    else { opts.success({success: true, status: "done", percent: 100, detail: "Ready"}); }
+}, true);
+
+// A session that expired must keep its own message, not be relabelled.
+results.sessionExpired = drive(function (opts) {
+    opts.error({status: 400, responseText: JSON.stringify(
+        {success: false, message: "CredentialException: User not valid. please log-in again."})});
+}, true);
 
 console.log(JSON.stringify(results));
 """
@@ -177,6 +249,80 @@ class StatusPollChainTest(unittest.TestCase):
         delay = self.results["transportFailure"]["firstDelay"]
         self.assertIsNotNone(delay, "no retry was scheduled at all")
         self.assertGreaterEqual(delay, 3000, "retry is faster than AI_POLL_INTERVAL")
+
+    # ------------------------------------------------------------------
+    # A deleted job. The other half of the same bug: the chain surviving a
+    # refusal it can never recover from is not resilience, it is a hang.
+    # ------------------------------------------------------------------
+
+    def test_a_deleted_job_stops_the_chain(self):
+        """The reported bug: reopen an expired job, "Starting..." for ever.
+
+        The page is drawn from the copy the browser keeps in sessionStorage, so
+        it never asks the server whether the job still exists; only the AI
+        report does. Measured before this: four polls in twenty seconds, still
+        going, empty panel, no message.
+        """
+        outcome = self.results["jobDeleted"]
+        self.assertTrue(outcome["stopped"],
+                        "the poll kept going against a job that no longer "
+                        "exists; it can never succeed")
+        self.assertEqual(outcome["polls"], 1,
+                         "asked more than once about a job that is gone")
+
+    def test_a_deleted_job_says_so(self):
+        """Stopping silently would leave the same empty panel, just quieter."""
+        outcome = self.results["jobDeleted"]
+        self.assertIn("no longer stored on the server", outcome["lastDetail"])
+        self.assertEqual(
+            outcome["lastStatus"], "unavailable",
+            "reported as a plain error, which renders a Retry button -- and "
+            "retrying re-posts to /ai_interpret_initiate, which is refused for "
+            "the same reason. A button that cannot work reads as 'we could fix "
+            "this if you asked again'")
+        self.assertRegex(outcome["lastDetail"], r"7 days.*14 days",
+                         "the message should say what the retention actually "
+                         "is, since that is why the job is gone")
+
+    def test_a_refused_job_stops_the_chain(self):
+        """"Invalid Job ID ... for current user" is equally permanent."""
+        outcome = self.results["jobRefused"]
+        self.assertTrue(outcome["stopped"])
+        self.assertEqual(outcome["polls"], 1)
+
+    def test_an_unclassifiable_failure_gives_up_eventually(self):
+        outcome = self.results["persistentUnknownFailure"]
+        self.assertTrue(outcome["stopped"],
+                        "a server that has stopped answering is polled for "
+                        "ever, showing nothing")
+        self.assertLessEqual(outcome["polls"], 6,
+                             "gave up later than AI_POLL_MAX_FAILURES")
+        self.assertEqual(outcome["lastStatus"], "error")
+        self.assertIn("stopped answering", outcome["lastDetail"])
+
+    def test_an_expired_session_keeps_its_own_message(self):
+        """The two permanent cases must not be confused for one another.
+
+        "your session expired, sign in again" and "this job no longer exists"
+        call for different actions from the user, and the second regex must not
+        swallow the first.
+        """
+        outcome = self.results["sessionExpired"]
+        self.assertTrue(outcome["stopped"])
+        self.assertIn("session expired", outcome["lastDetail"])
+        self.assertNotIn("no longer stored", outcome["lastDetail"])
+
+    def test_a_failure_that_clears_does_not_consume_the_budget(self):
+        """Two blips then success must still deliver the report.
+
+        The counter has to reset on a good answer, or a long run with
+        occasional hiccups would exhaust its allowance and give up on a job
+        that was working.
+        """
+        outcome = self.results["recoversAfterTwoFailures"]
+        self.assertTrue(outcome["stopped"])
+        self.assertEqual(outcome["lastStatus"], "done",
+                         "the chain gave up instead of recovering")
 
 
 def main():

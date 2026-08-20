@@ -11,6 +11,9 @@ if (typeof marked !== "undefined" && marked.use) {
 }
 
 function PA_AIInterpretView() {
+
+    /** Transport retries for the report fetch before giving up with a button. */
+    this.REPORT_RETRIES = 2;
     this.$root = null;
     this.isExpanded = false;
     this.chatHistory = [];
@@ -264,6 +267,18 @@ function PA_AIInterpretView() {
             if (!this.reportLoaded) {
                 this.loadReport();
             }
+        } else if (status === "unavailable") {
+            // Failed, and retrying cannot help: the job it describes is no
+            // longer on the server. Same red treatment as an error, minus the
+            // Retry button, which would re-post to /ai_interpret_initiate and
+            // be refused for exactly the same reason. A button that cannot
+            // work is worse than no button -- it reads as "we could fix this
+            // if you asked again".
+            $progress.show().removeClass("is-done").addClass("is-error");
+            this.$root.find(".ai-progress-fill").css("width", "100%");
+            this.$root.find(".ai-progress-detail").text(detail || "Unavailable");
+            $fab.removeClass("is-processing");
+            $badge.css("background", "#ef5350").html("!").show();
         } else if (status === "error") {
             $progress.show().removeClass("is-done").addClass("is-error");
             this.$root.find(".ai-progress-fill").css("width", "100%");
@@ -295,8 +310,24 @@ function PA_AIInterpretView() {
         }
     };
 
-    this.loadReport = function() {
+    /**
+     * Fetch the finished report and show it.
+     *
+     * This is called ONCE, from the terminal "done" poll -- and "done" ends the
+     * polling chain, so if this single request failed there was nothing left to
+     * try again. The panel said "Failed to load the report. Please try again."
+     * and offered no way to do so; the only real recovery was reloading the
+     * page, or knowing that opening the panel happens to retry.
+     *
+     * A 57KB report on a single-process server is not a request that always
+     * succeeds, so it now retries by itself, and the message it falls back to
+     * carries a button that works.
+     *
+     * @param {Number} attempt  0 for the first try; used only by the retries.
+     */
+    this.loadReport = function(attempt) {
         var me = this;
+        attempt = attempt || 0;
         $.ajax({
             type: "POST",
             url: SERVER_URL_AI_INTERPRET_REPORT,
@@ -314,13 +345,41 @@ function PA_AIInterpretView() {
                 } else if (response.status === "error") {
                     me.addMessage("assistant",
                         "The AI interpretation failed: **" + (response.message || "Unknown error") + "**");
+                } else if (/not found|Invalid Job ID/i.test(String(response.message || ""))) {
+                    // The job itself is gone, so there is nothing to wait for.
+                    // Say which of the two it is rather than "still in progress",
+                    // which is what this used to claim for a deleted job.
+                    me.addMessage("assistant",
+                        "This job is no longer stored on the server, so its " +
+                        "interpretation cannot be loaded. Jobs are removed after " +
+                        "7 days for guests and 14 days for registered users.");
                 } else {
                     me.addMessage("assistant",
                         "The AI interpretation is still in progress. Please wait for it to complete.");
                 }
             },
             error: function() {
-                me.addMessage("assistant", "Failed to load the report. Please try again.");
+                if (attempt < me.REPORT_RETRIES) {
+                    // Back off and try again: this is a transport failure, and
+                    // the report is large enough that a busy server drops it.
+                    setTimeout(function() { me.loadReport(attempt + 1); },
+                               1000 * Math.pow(2, attempt));
+                    return;
+                }
+                // Passed as trusted HTML on purpose: it is a fixed string with
+                // nothing interpolated into it, and the assistant path would
+                // otherwise run it through marked and the sanitiser, which is
+                // for model output and would take the button's attributes with
+                // it.
+                me.addMessage("assistant",
+                    "Failed to load the report after " + (me.REPORT_RETRIES + 1) +
+                    " attempts. <button class=\"ai-reload-report-btn\">Try again</button>",
+                    true);
+                // Bound to the button rather than offered as advice: "please
+                // try again" with nothing to press is what this said before.
+                me.$root.find(".ai-reload-report-btn").last().off("click").on("click", function() {
+                    me.loadReport(0);
+                });
             }
         });
     };

@@ -61,8 +61,8 @@ STEP3_VIEWS = os.path.abspath(os.path.join(
 # object prove less than they appear to: nothing in the application ever builds
 # one by hand, and for two years getMinMax could not produce the very shape
 # those tests assert on. See SequentialRangeReachableTest.
-HELPERS = ("paColourRange", "getMinMax", "paRampPosition", "getColor",
-           "paValuesForHeader", "paTruncateTail", "paConditionAxis")
+HELPERS = ("paColourRange", "getMinMax", "paMetageneLimits", "paRampPosition",
+           "getColor", "paValuesForHeader", "paTruncateTail", "paConditionAxis")
 
 
 def read_source():
@@ -434,6 +434,106 @@ class ColumnSpaceTest(unittest.TestCase):
         self.assertEqual(result[:2], ["Condition 1", "Condition 2"])
         for name in ("Ctr_0H", "Ik_24H"):
             self.assertNotIn(name, result)
+
+
+class MetageneTrendsGetTheirOwnScaleTest(unittest.TestCase):
+    """A trend is not the omic it summarises, and must not borrow its scale.
+
+    `generateHeatmap` coloured `metagenes[i].values` with
+    `getMinMax(dataDistributionSummaries[omicName], "p10p90")` -- the raw
+    omic's distribution. A metagene is a component describing how a cluster
+    moves, centred on zero, on its own scale entirely. Measured on a real
+    production job the omic ran 0.79..1.41 while its metagenes reached +/-9.4:
+    eight times outside the scale in both directions.
+
+    getColor's outlier term then runs far past 1 and pushes channels out of
+    range. Captured from the live server:
+
+        rgb(0, 0,-2744)      rgb(255, 255,-410)
+
+    Chrome clamps the second to yellow and rejects the first outright, painting
+    it black, so the trend rows showed two arbitrary colours that meant nothing
+    about the data.
+    """
+
+    def _colours(self, metagenes, values):
+        return run_in_node("""
+            const limits = paMetageneLimits(%s);
+            process.stdout.write(JSON.stringify({
+              limits: limits,
+              colours: %s.map(v => getColor(limits, v, "bwr"))
+            }));
+        """ % (json.dumps(metagenes), json.dumps(values)))
+
+    def test_a_metagene_never_produces_an_impossible_colour(self):
+        """The regression, with the real numbers that produced it."""
+        metagenes = [{"values": [-6.655823, -7.692578, 7.549343, 9.402448, 0.1]}]
+        result = self._colours(metagenes, [-7.692578, -1.0, 0.0, 9.402448])
+        for colour in result["colours"]:
+            self.assertNotIn("-", colour, "channel out of range: %s" % colour)
+            self.assertNotIn("Infinity", colour)
+            self.assertNotIn("NaN", colour)
+
+    def test_the_scale_comes_from_the_trends_not_the_omic(self):
+        metagenes = [{"values": [-9.4, 9.4]}]
+        result = self._colours(metagenes, [0])
+        self.assertAlmostEqual(result["limits"]["max"], 9.4)
+        self.assertAlmostEqual(result["limits"]["min"], -9.4)
+
+    def test_a_trend_reads_as_a_diverging_scale(self):
+        """Blue for down, red for up, white for no change."""
+        metagenes = [{"values": [-4.0, 4.0]}]
+        result = self._colours(metagenes, [-4.0, 0.0, 4.0])
+        self.assertEqual(result["colours"][0], "rgb(0, 0,255)")
+        self.assertEqual(result["colours"][1], "rgb(255, 255,255)")
+        self.assertEqual(result["colours"][2], "rgb(255, 0,0)")
+
+    def test_the_range_is_symmetric_so_equal_moves_read_equally(self):
+        """An asymmetric trend range would say -2 and +2 differ. They do not."""
+        metagenes = [{"values": [-1.0, 8.0]}]
+        result = self._colours(metagenes, [-2.0, 2.0])
+        down = int(result["colours"][0].split(",")[2].rstrip(")"))
+        up = int(result["colours"][1].split(",")[0].split("(")[1])
+        self.assertEqual(down, up,
+                         "equal magnitudes either side of zero are drawn at "
+                         "different intensities")
+
+    def test_several_trends_share_one_scale(self):
+        """Rows of the same chart must be comparable with each other."""
+        metagenes = [{"values": [-1.0, 1.0]}, {"values": [-5.0, 5.0]}]
+        result = self._colours(metagenes, [5.0])
+        self.assertAlmostEqual(result["limits"]["max"], 5.0)
+        self.assertEqual(result["colours"][0], "rgb(255, 0,0)")
+
+    def test_unusable_values_do_not_poison_the_chart(self):
+        """One NaN must not take every colour on the chart with it.
+
+        Metagene values arrive as strings and a cluster with a gap yields NaN,
+        which would otherwise propagate through both ends of the range.
+        """
+        metagenes = [{"values": ["-2.0", "nonsense", "2.0", None]}]
+        result = self._colours(metagenes, [-2.0, 2.0])
+        self.assertAlmostEqual(result["limits"]["max"], 2.0)
+        for colour in result["colours"]:
+            self.assertNotIn("NaN", colour)
+
+    def test_no_values_at_all_is_a_valid_colour(self):
+        result = self._colours([], [0])
+        self.assertNotIn("NaN", result["colours"][0])
+        self.assertNotIn("-", result["colours"][0])
+
+
+class GenerateHeatmapUsesTheTrendScaleTest(unittest.TestCase):
+    """Wiring: the helper exists and generateHeatmap is what calls it."""
+
+    def test_generate_heatmap_no_longer_borrows_the_omic_distribution(self):
+        source = read_source()
+        start = source.index("this.generateHeatmap = function")
+        block = source[start:start + 2500]
+        self.assertIn("paMetageneLimits(metagenes)", block)
+        self.assertNotIn('getMinMax(dataDistributionSummaries[omicName], "p10p90")', block,
+                         "the trend heatmap is still coloured with the raw "
+                         "omic's distribution")
 
 
 if __name__ == "__main__":
