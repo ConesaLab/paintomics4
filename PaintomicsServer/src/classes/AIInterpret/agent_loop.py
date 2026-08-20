@@ -2485,7 +2485,12 @@ def get_gene_measurements(ctx: RunContextWrapper[LoopContext],
                 where.setdefault(str(g.get("symbol", "")).lower(), set()).add(p.get("name"))
         lines.append("### Measured values (%d gene(s))" % len(found))
         for g in found:
-            lines.append(_profile_line(g))
+            line = _profile_line(g)
+            if g.get("duplicates"):
+                line += " (+%d more row(s) share this symbol; this is the "
+                line += "strongest)"
+                line = line % g["duplicates"]
+            lines.append(line)
             homes = sorted(where.get(str(g.get("symbol", "")).lower(), []))[:3]
             if homes:
                 lines.append("  in: %s" % "; ".join(homes))

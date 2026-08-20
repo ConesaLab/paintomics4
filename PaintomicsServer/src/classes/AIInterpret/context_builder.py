@@ -804,7 +804,7 @@ def build_gene_index(job_instance):
     return index
 
 
-def gene_measurements(job_instance, symbols, header_map=None, limit_per_symbol=3):
+def gene_measurements(job_instance, symbols, header_map=None, limit_per_symbol=1):
     """Per-omic profiles for named genes, anywhere in the upload.
 
     Deliberately NOT scoped to a pathway. The polyamine genes sit in a pathway
@@ -824,14 +824,28 @@ def gene_measurements(job_instance, symbols, header_map=None, limit_per_symbol=3
         if not gids:
             missing.append(str(raw).strip())
             continue
-        for gid in gids[:limit_per_symbol]:
+        # One row per symbol, the strongest. The first live run asked for 13
+        # symbols and got 38 rows back -- this job carries about three ids per
+        # symbol -- which tripled the tool's context bill for information nobody
+        # asked for, and left the writer three near-identical measurements to
+        # choose a number from. `duplicates` says how many were collapsed, so
+        # the fact is reported rather than hidden.
+        rows = []
+        for gid in gids:
             gene = genes.get(gid)
             if gene is None:
                 continue
             entry = _gene_entry(gene, header_map)
             if entry:
                 entry["id"] = gid
-                found.append(entry)
+                rows.append(entry)
+        if not rows:
+            missing.append(str(raw).strip())
+            continue
+        rows.sort(key=lambda g: (-g["relevant"], -g["effect_size"], str(g["id"])))
+        keep = rows[:max(1, int(limit_per_symbol))]
+        keep[0]["duplicates"] = len(rows) - len(keep)
+        found.extend(keep)
     return found, missing
 
 

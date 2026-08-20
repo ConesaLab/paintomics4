@@ -163,14 +163,26 @@ def test_absent_and_unchanged_are_different_answers():
     assert "Srm" in out, "a bad symbol must not cost the good ones"
 
 
-def test_a_duplicated_symbol_returns_every_row():
-    """Symbols are not unique in an omics upload; keeping the first silently
-    would make the answer depend on dict order."""
+def test_a_duplicated_symbol_collapses_to_the_strongest_and_says_so():
+    """Symbols are not unique in an omics upload, and the first live run showed
+    why that matters: 13 symbols asked for came back as 38 rows, because this
+    data carries about three ids per symbol. That tripled the tool's context
+    bill for rows nobody asked for, and left the writer three near-identical
+    numbers to pick from -- which is how a report ends up quoting a value that
+    is real but not the one it means.
+
+    One row, the strongest, and the count of what was collapsed. Keeping the
+    first silently would make the answer depend on dict order; dropping the
+    others silently would hide that the ambiguity exists at all."""
     job, _pw, genes = _job()
     genes["srm_dup"] = _Gene("Srm", [0.0, 1.5], True)
     found, missing = CB.gene_measurements(job, ["Srm"])
-    assert len(found) == 2, [g["symbol"] for g in found]
+    assert len(found) == 1, [g["symbol"] for g in found]
+    assert found[0]["effect_size"] == 3.36, found[0]
+    assert found[0]["duplicates"] == 1, found[0]
     assert not missing
+    out = _call(L.get_gene_measurements, _ctx(job), gene_symbols=["Srm"])
+    assert "share this symbol" in out, out[:400]
 
 
 def test_the_gene_index_is_case_insensitive():
@@ -282,7 +294,7 @@ def main():
     for t in (test_the_pathway_view_still_hides_most_of_the_pathway,
               test_a_gene_outside_the_top_ten_is_reachable_by_name,
               test_absent_and_unchanged_are_different_answers,
-              test_a_duplicated_symbol_returns_every_row,
+              test_a_duplicated_symbol_collapses_to_the_strongest_and_says_so,
               test_the_gene_index_is_case_insensitive,
               test_every_differential_gene_is_listed_not_ten,
               test_unchanged_genes_are_hidden_but_counted,
