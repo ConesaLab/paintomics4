@@ -176,6 +176,10 @@ EMAIL_REPORT_RECIPIENTS = [
 # ========== AI INTERPRETATION ==========
 AI_INTERPRETATION_ENABLED = os.getenv("AI_INTERPRETATION_ENABLED", "true").lower() == "true"
 
+# AI-assisted conversion of uploaded files. Ships inert: it spends gateway
+# quota that is shared with AI report generation, so a deployment opts in.
+AI_INPUT_CONVERTER = os.getenv("AI_INPUT_CONVERTER", "false").lower() == "true"
+
 # Provider used by src/classes/AIInterpret/. "csic" is the deployment default:
 # a free OpenAI-compatible vLLM gateway run by IIIA-CSIC. Tokens are
 # self-service from https://console.llm.iiia.es (CSIC SSO).

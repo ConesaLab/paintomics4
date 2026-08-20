@@ -79,6 +79,26 @@ INDEX_HTML = os.path.join(CLIENT_ROOT, "index.html")
 # break each other. The vendor libraries carry None: they change perhaps once a
 # year, and recording a digest for a 300KB minified bundle only creates churn.
 PUBLISHED = {
+    # The upload format checker and the AI conversion agent. Recorded like any
+    # other shipped script: a returning browser holds the old copy until the
+    # marker changes, and a checker running against a stale validator would
+    # disagree with the server it is supposed to mirror.
+    "app/view/PathwayAcquisitionViews/InputFormat/format-reader.js": (
+        "0.1", "0e455d115c4fc2ffe478c941ab49a757e9270a170382fd07c6896f42e8e477f1"),
+    "app/view/PathwayAcquisitionViews/InputFormat/format-validator.js": (
+        "0.1", "1679535c50b3ae316f01ce4a908a45af1a445a61eae53c3cbf436b0ab0da81c9"),
+    "app/view/PathwayAcquisitionViews/InputFormat/format-repair.js": (
+        "0.1", "944c929f1496258aba56f026e7c30e4affb7052dcbc127b06982eaadff205cd2"),
+    "app/view/PathwayAcquisitionViews/InputFormat/format-panel.js": (
+        "1.5", "cfd1cce44c8cb5a02edec4dfc3550bf2e933763a9d467a86ef0f1f201bb79db7"),
+    "app/view/PathwayAcquisitionViews/InputFormat/format-roles.js": (
+        "0.2", "4c5afdf4f9c59d167756516db823cc1fa01179f3cd7b967d137c38a78c0508dd"),
+    "app/view/PathwayAcquisitionViews/InputFormat/convert-profiler.js": (
+        "0.2", "fed2b6162c5379ff8eeba9499629e9eca3926c12be0f381d16efd6422fd65fe6"),
+    "app/view/PathwayAcquisitionViews/InputFormat/convert-agent.js": (
+        "0.2", "4b37716c3d192352e85f08e519dba78ff596d21c5c28a13b58bb3047baa132a3"),
+    "app/view/PathwayAcquisitionViews/InputFormat/convert-drawer.js": (
+        "0.2", "a28a8fad393a36bf953e4d9b7b2f14940fffc586ba83ec0ed8047db47d05c102"),
     "app/view/common/Util.js": (
         "2.1", "12359b8bf746394f63a7e0a15513a4f9ac82de1a25bbaa0e91e6b2fdd7e0050e"),
     "app/view/common/ExtJS_extensions.js": (

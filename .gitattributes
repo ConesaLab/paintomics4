@@ -20,6 +20,14 @@
 *.gif binary
 *.ico binary
 *.zip binary
+# The conversion sandbox's WebAssembly runtime and its Python wheels. A wheel
+# is a zip and the wasm is a binary module; under `* text eol=lf` above git
+# rewrites CRLF byte pairs inside both and truncates them without failing --
+# the same way a gzipped mapping file came back at 62% and still looked like a
+# valid commit. Pyodide would then fail to instantiate with no clue why.
+*.wasm binary
+*.whl binary
+*.data binary
 *.pdf binary
 *.ttf binary
 *.otf binary

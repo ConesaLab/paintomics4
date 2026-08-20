@@ -99,6 +99,26 @@ def revalidateEntryDocument(response):
     return response
 
 
+def allowOpaqueOriginAssets(response):
+    """Let the conversion sandbox load its own runtime.
+
+    The sandbox that runs AI-written conversion code is an iframe with
+    sandbox="allow-scripts" and WITHOUT allow-same-origin, which is what denies
+    it cookies, localStorage and the parent DOM. The cost of that isolation is
+    an opaque origin: every subresource request it makes carries ``Origin:
+    null`` and is treated as cross-origin, so Pyodide's dynamic import of
+    pyodide.asm.js is refused by CORS and the sandbox never boots. Measured:
+    "Failed to fetch dynamically imported module ... pyodide.asm.js".
+
+    Only ``/resources/pyodide/`` gets the header. Those files are the public
+    WASM runtime and its wheels -- no credentials, no user data, nothing that
+    is not already served to anyone who loads the page -- so a wildcard costs
+    nothing. Widening it to the whole static tree would not.
+    """
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    return response
+
+
 class Application(object):
     #******************************************************************************************************************
     # CONSTRUCTORS
@@ -109,6 +129,14 @@ class Application(object):
         ##*******************************************************************************************
         self.readConfigurationFile()
         self.app = Flask(__name__)
+
+        # The conversion sandbox has an opaque origin by design; without this
+        # its own runtime is cross-origin to it and will not load.
+        @self.app.after_request
+        def _sandboxAssetHeaders(response):
+            if request.path.startswith(SERVER_SUBDOMAIN + "/resources/pyodide/"):
+                return allowOpaqueOriginAssets(response)
+            return response
 
         self.app.config['MAX_CONTENT_LENGTH'] =  SERVER_MAX_CONTENT_LENGTH
         # Werkzeug 3.1 (pinned by the Flask upgrade in d6bcf643) gave
@@ -158,6 +186,21 @@ class Application(object):
         ##*******************************************************************************************
         ##* GET THUMBNAILS, PATHWAY IMAGE, etc
         ##*******************************************************************************************
+        # ---- AI-assisted input conversion --------------------------------
+        # Enqueued, never inline: four request threads serve the whole site and
+        # a gateway turn takes about a minute.
+        @self.app.route(SERVER_SUBDOMAIN + '/input_convert/turn', methods=['POST'])
+        def inputConvertTurnRoute():
+            from servlets.InputConvertServlet import inputConvertTurn
+            import uuid
+            return inputConvertTurn(request, Response(), self.queue,
+                                    "convert_" + uuid.uuid4().hex).getResponse()
+
+        @self.app.route(SERVER_SUBDOMAIN + '/input_convert/turn/<path:ticket>')
+        def inputConvertResultRoute(ticket):
+            from servlets.InputConvertServlet import inputConvertResult
+            return inputConvertResult(request, Response(), self.queue, ticket).getResponse()
+
         @self.app.route(SERVER_SUBDOMAIN + '/kegg_data/<path:filename>')
         def get_kegg_data(filename):
             logging.info("filename is:" + str(filename))

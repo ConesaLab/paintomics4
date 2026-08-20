@@ -1,0 +1,5 @@
+# Regenerate with: python src/tests/build_conversion_corpus.py
+# The inputs are derived from the shipped example datasets, so committing them
+# would duplicate that data and go stale the moment an example changes.
+*
+!.gitignore
