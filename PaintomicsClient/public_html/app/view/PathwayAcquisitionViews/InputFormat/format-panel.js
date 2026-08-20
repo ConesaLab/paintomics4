@@ -41,6 +41,11 @@
     var blocked = {};
     var SPREADSHEET = /\.(xlsx|xlsm|xls|ods)$/i;
 
+    /* What the AI actually does, in the user's terms. People are right to
+       be wary of "AI will fix your data"; saying that it writes a script,
+       runs it locally, and shows both is what makes it trustworthy. */
+    var AI_EXPLAINER = "PaintOmics AI reads the file, writes a short conversion script, runs it here in your browser, and checks the result against the format PaintOmics needs. Your data never leaves this computer, and you see the script and the result before anything is used.";
+
     function el(tag, className, text) {
         var node = document.createElement(tag);
         if (className) node.className = className;
@@ -322,8 +327,20 @@
         if (detail) body.appendChild(el("div", "pa-format-detail", detail));
         var bar = el("div", "pa-format-actions");
         actions.forEach(function (action) {
-            var button = el("button", "pa-format-button" + (action.primary ? " pa-format-primary" : ""), action.label);
+            var button = el("button", "pa-format-button" + (action.primary ? " pa-format-primary" : ""));
             button.type = "button";                     // never submit the Step 1 form
+            /*
+             * The mark goes on the AI action and nowhere else. The
+             * deterministic repair is a find-and-replace on numeric cells, and
+             * badging it as AI would claim credit for something no model did --
+             * which also devalues the badge where it is true.
+             */
+            if (action.ai && typeof window.getAIMark === "function") {
+                button.innerHTML = window.getAIMark();
+                button.appendChild(document.createTextNode(" " + action.label));
+            } else {
+                button.textContent = action.label;
+            }
             button.addEventListener("click", action.onClick);
             bar.appendChild(button);
         });
@@ -399,10 +416,10 @@
             markBlocked(fieldName, { fieldName: fieldName, fileName: file.name,
                                      input: input, omic: strip.__omic, fixable: false });
             renderProblem(strip, "err",
-                "Spreadsheets need converting first.",
-                "PaintOmics reads plain text tables. " + file.name +
-                " is a workbook, which may hold several sheets and columns that are not measurements.",
-                [{ label: "Convert it for me", primary: true,
+                "This spreadsheet needs converting.",
+                file.name + " is a workbook — it may hold several sheets and " +
+                "columns that are not measurements. " + AI_EXPLAINER,
+                [{ label: "Convert it for me", primary: true, ai: true,
                    onClick: function () { requestAgent(input, file, fieldName); } }]);
             return;
         }
@@ -421,7 +438,8 @@
                 markBlocked(fieldName, { fieldName: fieldName, fileName: file.name,
                                          input: input, omic: strip.__omic, fixable: false });
                 renderProblem(strip, "err", "The file is not saved as UTF-8.",
-                    "Re-save it as UTF-8 (in Excel: Save As → CSV UTF-8) and pick it again.",
+                    "Re-save it as UTF-8 (in Excel: Save As → CSV UTF-8), or let " +
+                    "PaintOmics AI convert it. " + AI_EXPLAINER,
                     [{ label: "Convert it for me", primary: true,
                        onClick: function () { requestAgent(input, file); } }]);
                 return;
@@ -461,7 +479,8 @@
                     }
                 });
                 var body = renderProblem(strip, "warn", describeProblems(result),
-                    repairs.map(function (r) { return r.describe(); }).join(" "),
+                    repairs.map(function (r) { return r.describe(); }).join(" ") +
+                    " This is a direct find-and-replace, not an AI conversion.",
                     [{ label: "Fix automatically", primary: true, onClick: function () {
                           replaceFile(input, repaired.rows, file.name);
                           renderOk(hostFor(input), API.validateValues(repaired.rows).summary, false, input);
@@ -479,8 +498,8 @@
                 });
             }
             renderProblem(strip, "err", describeProblems(result),
-                partial ? "Checked the first few megabytes of a large file." : "",
-                [{ label: "Convert it for me", primary: true,
+                (partial ? "Checked the first few megabytes of a large file. " : "") + AI_EXPLAINER,
+                [{ label: "Convert it for me", primary: true, ai: true,
                    onClick: function () { requestAgent(input, file, fieldName); } }]);
         };
         reader.readAsArrayBuffer(slice);
@@ -557,8 +576,14 @@
         }
 
         if (fixable.length !== entries.length) {
-            var convert = el("button", "pa-format-button pa-format-primary", "Convert with AI");
+            var convert = el("button", "pa-format-button pa-format-primary");
             convert.type = "button";
+            if (typeof window.getAIMark === "function") {
+                convert.innerHTML = window.getAIMark();
+                convert.appendChild(document.createTextNode(" Convert with PaintOmics AI"));
+            } else {
+                convert.textContent = "Convert with PaintOmics AI";
+            }
             convert.addEventListener("click", function () {
                 var first = entries[0];
                 var picked = first.input.files && first.input.files[0];

@@ -211,3 +211,11 @@ input[type="text"].pa-field-err {
     background-color: #337533;
     border-color: #2A602A;
 }
+
+/* The AI mark inside an action button. getAIMark() sizes itself to 1em, so it
+   tracks the button's font rather than needing a size of its own; this only
+   handles the gap and keeps it optically centred against the label. */
+.pa-format-button .po-ai-mark {
+    margin-right: 2px;
+    vertical-align: -0.15em;
+}
