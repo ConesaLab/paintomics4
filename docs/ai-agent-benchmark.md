@@ -6226,3 +6226,42 @@ the actual UI produced the fourth. `results_section: true` on a report that
 still reads like a dossier is also the sharper warning: a stage that grades
 itself on conservation will pass whenever it conserves everything by changing
 nothing.
+
+### `results_section: true` is not a promise about the stored report
+
+The `###` fix was verified the same way -- re-run the reports, then run a job
+through the UI. Job `m4gs607z4Z` came back with the prose the stage exists to
+produce: two finding-titled subsections, continuous prose, no tables, 24
+citations in first-appearance order. **And a bulleted `# Key Findings` block
+sitting above them.**
+
+The archive again said success, and again it was telling the truth about what
+the stage produced: `results_section: true`, 9 of 9 pathways, 24 citations kept,
+2 chunks, 17 s. What it could not say is what happened *after*.
+
+The Results section is written BEFORE the exit gate, deliberately, so its prose
+is graded by the same machinery as any other draft. But two gate steps hand the
+**whole report** back to the synthesizer -- the top-up candidate and the
+citation-correction rewrite (`agent_loop.py`, `report = resolve_pmid_mentions(
+str(corr.final_output), ...)`) -- and the synthesizer's standing instructions
+say to include a "Key Findings" summary at the top (`prompts.py` lines 46 and
+91). This run's stitch was rejected (`merge_rejected: cites 24->20, GROUNDED
+22->19`) and a citation correction fired; the correction obeyed its system
+prompt and put the dossier's hat back on.
+
+`_strip_reintroduced_furniture` applies the same test one last time, after every
+step that can rewrite the report and before renumbering: a section goes only if
+every citation marker in it survives elsewhere and it names no pathway that
+would otherwise go unmentioned. Measured on the stored report: 24 markers in,
+24 out, bullets 10 -> 5 (the residue is the caveats list), references intact,
+idempotent. Across all **eleven** stored UV reports it removes 1-7 furniture
+sections each and loses no marker and no prose-named pathway in any of them.
+
+**The generalisable point, and the third time this document has recorded it in
+one day:** a stage that reports on its own output is reporting on its own
+output. `results_section: true` meant the rewrite was written and accepted --
+it never meant the user would see it. Three separate defects hid behind that
+flag: a classifier that discarded the evidence before the model ran, a splitter
+that handed the model a whole report and called it a chunk, and a later stage
+that undid the result. Only the last one was visible from the flag at all, and
+only because the *rendered page* was read rather than the metric.

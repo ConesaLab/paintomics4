@@ -2528,9 +2528,72 @@ def _split_on(head, body, hits, title_of):
     return out
 
 
+# Headings that USUALLY introduce framing rather than a pathway finding.
+# A name is a suspicion, not a verdict -- see _loses_nothing.
+RESULTS_FURNITURE = ("key findings", "cross-pathway", "detailed pathway analysis",
+                     "pathway clusters", "enriched pathway summary", "summary of")
+
 RESULTS_CHUNK = int(os.getenv("AI_AGENT_RESULTS_CHUNK", "4"))
 # How many subsections a Results section should aim for.
 RESULTS_TARGET_SECTIONS = int(os.getenv("AI_AGENT_RESULTS_SECTIONS", "5"))
+
+
+def _loses_nothing(head, body, surv_marks, surv_low, pw_names):
+    """Is this section safe to drop -- does everything in it survive elsewhere?
+
+    Markers count wherever they are: a citation is evidence even in a table
+    cell. Pathway NAMES count only in PROSE, because the enriched-pathway
+    summary and the cluster table are furniture by construction -- rows of data
+    the job already holds, appended deterministically below the report, naming
+    dozens of pathways the prose never discusses. Judge their cells as findings
+    and every one of those names reads as an orphan, the whole table is
+    readmitted as evidence, and the rewrite ships with exactly the 46-row table
+    it was asked to remove (measured on job 4j00f2377Y). A table row restates;
+    it does not find.
+    """
+    prose = _without_table_rows(body)
+    marks = set(re.findall(r"\[(\d+)\]", body))
+    if marks - surv_marks:
+        return False
+    return not any(n and n.lower() in (head + prose).lower()
+                   and n.lower() not in surv_low for n in pw_names)
+
+
+def _strip_reintroduced_furniture(report, pw_names, stats):
+    """Remove dossier furniture that a post-gate rewrite put back.
+
+    The Results section is written BEFORE the exit gate, on purpose -- its prose
+    then gets top-up, the Claim Verifier and the programmatic net like any other
+    draft. But two of those steps hand the WHOLE report back to the synthesizer
+    (the top-up candidate and the correction rewrite), and the synthesizer's
+    standing instructions say to include a "Key Findings" summary at the top.
+    So a run whose Results section was written, accepted and measured
+    (`results_section: true`) can still be stored with a bulleted Key Findings
+    block above it -- which is exactly what job `m4gs607z4Z` came back with when
+    a citation correction fired.
+
+    Rather than fight the system prompt, the same test that decided furniture in
+    the first place is applied once more at the end: a section goes only if
+    every citation marker in it survives elsewhere and it names no pathway that
+    would otherwise go unmentioned. Idempotent, and it cannot delete evidence.
+    """
+    preamble, secs, tail = _split_pathway_sections(report)
+    suspect = [i for i, (h, _) in enumerate(secs)
+               if any(k in h.lower() for k in RESULTS_FURNITURE)]
+    if not suspect:
+        return report
+    surviving = preamble + "\n".join(h + b for i, (h, b) in enumerate(secs)
+                                     if i not in set(suspect))
+    surv_marks = set(re.findall(r"\[(\d+)\]", surviving))
+    surv_low = _without_table_rows(surviving).lower()
+    drop = {i for i in suspect
+            if _loses_nothing(secs[i][0], secs[i][1], surv_marks, surv_low,
+                              pw_names)}
+    if not drop:
+        return report
+    stats["results_furniture_restripped"] = len(drop)
+    kept = "".join(h + b for i, (h, b) in enumerate(secs) if i not in drop)
+    return (preamble.rstrip() + "\n\n" + kept.strip() + "\n\n" + tail).strip()
 
 
 def _partition_sections(report, pw_names, stats):
@@ -2541,10 +2604,6 @@ def _partition_sections(report, pw_names, stats):
     which is how the four production rejections were reproduced.
     """
     preamble, secs, tail = _split_pathway_sections(report)
-    # Headings that USUALLY introduce framing rather than a pathway finding.
-    # A name is a suspicion, not a verdict -- see the evidence test below.
-    SKIP = ("key findings", "cross-pathway", "detailed pathway analysis",
-            "pathway clusters", "enriched pathway summary", "summary of")
     # Caveats close a Results section; they are not a finding to reorganise.
     # Grouped with the pathways they landed third of six, which reads as the
     # report giving up halfway through. Follow-up experiments belong with them:
@@ -2555,7 +2614,7 @@ def _partition_sections(report, pw_names, stats):
     for h, b in secs:
         low = h.lower()
         kinds.append(("last" if any(k in low for k in LAST)
-                      else "skip" if any(k in low for k in SKIP)
+                      else "skip" if any(k in low for k in RESULTS_FURNITURE)
                       else "path", h, b))
 
     # A SKIP-named section is dropped only if dropping it LOSES NOTHING.
@@ -2584,24 +2643,9 @@ def _partition_sections(report, pw_names, stats):
             # Findings` is on no name list and held all 12 pathways of job
             # Yj5oty03Uf under `###`.
             pathway_secs.extend(_explode_container(h, b, pw_names))
+        elif _loses_nothing(h, b, surv_marks, surv_low, pw_names):
+            continue                           # genuinely furniture
         else:
-            # Markers count wherever they are -- a citation is evidence even
-            # in a table cell. Pathway NAMES count only in PROSE, because the
-            # enriched-pathway summary and the cluster table are furniture by
-            # construction: rows of data the job already holds, appended
-            # deterministically below the report, naming dozens of pathways the
-            # prose never discusses. Judge their cells as findings and every
-            # one of those names reads as an orphan, the whole table is
-            # readmitted as evidence, and the rewrite ships with exactly the
-            # 46-row table it was asked to remove (measured on job 4j00f2377Y).
-            # A table row restates; it does not find.
-            prose = _without_table_rows(b)
-            marks = set(re.findall(r"\[(\d+)\]", b))
-            orphan_names = [n for n in pw_names
-                            if n and n.lower() in (h + prose).lower()
-                            and n.lower() not in surv_low]
-            if not (marks - surv_marks) and not orphan_names:
-                continue                       # genuinely furniture
             stats["results_furniture_kept"] = (
                 stats.get("results_furniture_kept", 0) + 1)
             pathway_secs.extend(_explode_container(h, b, pw_names))
@@ -3797,6 +3841,14 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
         # another verified citation survives with the bad marker stripped, so the
         # two numbers can differ by a factor of three.
         stats["sentences_dropped"] = last_sentences_dropped()
+    # Last, after every step that could hand the whole report back to the
+    # synthesizer: take the dossier furniture off again. See
+    # _strip_reintroduced_furniture -- `results_section: true` is not a promise
+    # that the stored report still looks like one.
+    if results_written:
+        report = _strip_reintroduced_furniture(
+            report, [p.get("name") for p in (pathways or []) if p.get("name")],
+            stats)
     report, citation_mapping = renumber_citations(report)
     report = sort_references_section(report)
     if citation_mapping:
