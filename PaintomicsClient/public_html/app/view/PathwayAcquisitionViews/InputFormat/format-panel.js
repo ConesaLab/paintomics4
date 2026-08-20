@@ -168,9 +168,21 @@
         region.style.marginLeft = Math.round(cardRect.left - parentRect.left) + "px";
         region.style.maxWidth = Math.round(cardRect.width) + "px";
 
+        /*
+         * Pull the region up into the space the omics row left unused, but
+         * never past the cards. The pull is clamped and then re-measured: if
+         * the messages are taller than the dead space the region must stay in
+         * flow and push the page down, because a region that overlaps the cards
+         * is worse than one sitting a little low.
+         */
         region.style.marginTop = "";
         var gap = region.getBoundingClientRect().top - cardRect.bottom;
-        if (gap > 12) region.style.marginTop = Math.round(-(gap - 10)) + "px";
+        if (gap > 12) {
+            region.style.marginTop = Math.round(-(gap - 10)) + "px";
+            var after = region.getBoundingClientRect().top -
+                        last.getBoundingClientRect().bottom;
+            if (after < 0) region.style.marginTop = "";      // it overlapped; undo
+        }
     }
 
     function stripFor(input, fieldName) {

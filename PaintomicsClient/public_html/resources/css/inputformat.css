@@ -167,8 +167,17 @@
 .omicbox.pa-state-warn,
 .omicbox.pa-state-err {
     background-color: #F7E9ED;
-    box-shadow: inset 0 0 0 1px #EC9292;
+    box-shadow: inset 0 0 0 2px #D43E3A;   /* .btn-danger red, so it reads as red */
     border-radius: 6px;
+}
+
+/* The card's title bar paints its own white and would otherwise sit as a clean
+   white strip on top of a tinted body -- the card would look half-flagged. */
+.omicbox.pa-state-warn .omicboxTitle,
+.omicbox.pa-state-err .omicboxTitle {
+    background-color: #F7E9ED !important;
+    border-top-left-radius: 6px;
+    border-top-right-radius: 6px;
 }
 
 /* The field itself, so the eye lands on the right row inside the card. Same
