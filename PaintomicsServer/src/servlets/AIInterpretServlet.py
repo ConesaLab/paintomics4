@@ -133,6 +133,55 @@ def _consented(jobID):
     return bool(jobInstance is not None and jobInstance.getAIConsent())
 
 
+def _requireJobAccess(jobID, userID):
+    """Load a job for this caller, or refuse.
+
+    Consent and access are different questions and both were needed. Consent
+    asks "may this job's contents be sent to the external service at all";
+    access asks "is this caller entitled to that job". Only the first was ever
+    asked here, so a job id was sufficient authorisation for every AI route --
+    and job ids travel, because the results page prints a shareable
+    `?jobID=...` URL for exactly that purpose.
+
+    Measured against a running server, no cookies at all, on a job owned by
+    another account with sharing off: `/pa_recover_job` refused it ("Invalid
+    Job ID for current user") while `/ai_interpret_report` returned the full
+    10,345-character report with its 28 papers, `/ai_interpret_status`
+    returned its progress, and `/ai_interpret_chat` answered a question about
+    the job's genes -- an LLM call billed to this deployment, against someone
+    else's expression values, for an anonymous caller.
+
+    The rule is copied from `pathwayAcquisitionRecoverJob` rather than
+    invented, so the AI routes admit and refuse exactly what the rest of the
+    application does:
+
+      * a job with no owner (the anonymous "nologin" mode) stays readable by
+        anyone -- those jobs belong to nobody by design, and narrowing that
+        here would break guest usage without protecting anything;
+      * a job whose owner ticked "allow sharing" stays readable by anyone;
+      * anything else is refused unless the caller IS the owner.
+
+    Returns the loaded job so callers do not pay for a second load.
+    """
+    jobInstance = JobInformationManager().loadJobInstance(jobID)
+
+    if jobInstance is None:
+        raise UserWarning("Job " + str(jobID) + " was not found.")
+
+    if (str(jobInstance.getUserID()) != 'None'
+            and str(jobInstance.getUserID()) != str(userID)
+            and not jobInstance.getAllowSharing()):
+        logging.info("AI_INTERPRET - JOB " + str(jobID) + " DOES NOT BELONG TO USER "
+                     + str(userID) + " JOB HAS USER " + str(jobInstance.getUserID()))
+        # Deliberately the same wording pa_recover_job uses for the same
+        # refusal. A distinct message here would tell a caller that the job
+        # exists and is someone else's, which is more than they asked and more
+        # than they should learn.
+        raise UserWarning("Invalid Job ID (" + str(jobID) + ") for current user.")
+
+    return jobInstance
+
+
 def aiInterpretInitiate(REQUEST, RESPONSE, QUEUE_INSTANCE):
     """Start or re-check the AI interpretation pipeline for a job."""
     userID = None
@@ -152,10 +201,11 @@ def aiInterpretInitiate(REQUEST, RESPONSE, QUEUE_INSTANCE):
         if not jobID:
             raise UserWarning("Missing jobID parameter.")
 
-        # Verify the job exists
-        jobInstance = JobInformationManager().loadJobInstance(jobID)
-        if jobInstance is None:
-            raise UserWarning("Job " + jobID + " was not found.")
+        # Verify the job exists AND that this caller may have it. Running the
+        # pipeline spends this deployment's LLM budget and sends the job's
+        # analysis summary outward, so the entitlement question comes before
+        # the consent question.
+        jobInstance = _requireJobAccess(jobID, userID)
 
         # The consent the upload page asks for was collected, stored and echoed
         # back in four responses, and never checked before the pipeline ran.
@@ -238,6 +288,11 @@ def aiInterpretStatus(REQUEST, RESPONSE):
         if not jobID:
             raise UserWarning("Missing jobID parameter.")
 
+        # Progress is thin, but it still confirms a job id is real and says
+        # whether someone is running an interpretation on it. The client polls
+        # this every 3s, so it is also the cheapest oracle for guessing ids.
+        _requireJobAccess(jobID, userID)
+
         dao = AIInterpretDAO()
         record = dao.find_by_job_id(jobID)
 
@@ -306,6 +361,10 @@ def aiInterpretReport(REQUEST, RESPONSE):
         if not jobID:
             raise UserWarning("Missing jobID parameter.")
 
+        # The report names the genes, the pathways and the direction of every
+        # effect in someone's experiment. This is the route that leaked it.
+        _requireJobAccess(jobID, userID)
+
         dao = AIInterpretDAO()
         record = dao.find_by_job_id(jobID)
 
@@ -364,6 +423,11 @@ def aiInterpretChat(REQUEST, RESPONSE):
             raise UserWarning("Missing jobID parameter.")
         if not userMessage.strip():
             raise UserWarning("Empty message.")
+
+        # The worst of the five. The chat tools read the job's own expression
+        # values to answer, and every turn is an LLM call this deployment pays
+        # for -- so an unguarded id was both a data leak and an open tab.
+        _requireJobAccess(jobID, userID)
 
         dao = AIInterpretDAO()
         record = dao.find_by_job_id(jobID)
@@ -724,6 +788,12 @@ def aiInterpretPathway(REQUEST, RESPONSE):
         if not jobID or not pathwayID:
             raise UserWarning("Missing jobID or pathwayID parameter.")
 
+        # Before the cache lookup, not after: the cached branch returns a
+        # stored pathway report and never reaches the load further down, so a
+        # gate placed with the other job checks would miss exactly the
+        # requests that cost nothing to make and hand back the most.
+        jobInstance = _requireJobAccess(jobID, userID)
+
         dao = AIInterpretDAO()
 
         if not regenerate:
@@ -748,10 +818,6 @@ def aiInterpretPathway(REQUEST, RESPONSE):
         if entry is None:
             raise UserWarning("Pathway " + pathwayID + " was not part of the AI analysis. "
                               "Only the pathways the report covers can be interpreted.")
-
-        jobInstance = JobInformationManager().loadJobInstance(jobID)
-        if jobInstance is None:
-            raise UserWarning("Job " + jobID + " was not found.")
 
         # See _consented: this route sends job context outward as well.
         if not jobInstance.getAIConsent():

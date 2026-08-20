@@ -30,6 +30,33 @@ class _Session:
         return True
 
 
+class _Job:
+    """The job `JOB` stands for, as far as the status route is concerned.
+
+    The fixture used to seed only an `aiInterpretationCollection` record and no
+    `jobInstanceCollection` document, which was fine while the route read the
+    progress record and nothing else. It now asks who owns the job first, and a
+    job that will not load is refused -- deliberately, and in the manner
+    `_consented()` already established: treating an unknown job as permission is
+    the wrong way round for a question about someone else's data.
+
+    So the loader is stubbed here exactly as the session is, and for the same
+    reason. This suite is about whether the tool trace reaches the client; it
+    should not also have to construct a real PathwayAcquisitionJob, and it must
+    not be the thing that notices if the ownership check is ever removed --
+    test_ai_routes_check_job_ownership owns that question.
+
+    An unowned job (userID None) is the right stand-in: those are the guest jobs
+    the application supports, and they are what an anonymous caller may read.
+    """
+
+    def getUserID(self):
+        return None
+
+    def getAllowSharing(self):
+        return False
+
+
 class _Request:
     cookies = {"userID": "u", "sessionToken": "t"}
     form = {"jobID": JOB}
@@ -62,15 +89,23 @@ def _cleanup():
         dao.closeConnection()
 
 
+class _Loader:
+    def loadJobInstance(self, jobID):
+        return _Job()
+
+
 def _status():
-    original = S.UserSessionManager
+    originalSession = S.UserSessionManager
+    originalJobs = S.JobInformationManager
     S.UserSessionManager = lambda: _Session()
+    S.JobInformationManager = lambda: _Loader()
     try:
         response = _Response()
         S.aiInterpretStatus(_Request(), response)
         return response.content or {}
     finally:
-        S.UserSessionManager = original
+        S.UserSessionManager = originalSession
+        S.JobInformationManager = originalJobs
 
 
 def test_the_trace_reaches_the_client():
