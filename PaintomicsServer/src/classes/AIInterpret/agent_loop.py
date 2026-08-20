@@ -158,24 +158,40 @@ AI_AGENT_DELEGATE_CHUNK=3 gives five units for the same breadth, which the
 config stamp records, so the round is identified without a code edit.
 """
 
-# Raised 20 -> 60 to match what the tool's description now promises. The test
-# test_the_delegation_tool_states_its_real_capacity caught the mismatch: a
-# description offering sixty against a cap of twenty would have the Lead name
-# pathways the code then silently truncated.
-#
-# Behaviourally inert on its own, which is why it is safe to change as a default:
-# the cap has never bound. Coverage is 15-18 across every archived run because the
-# LEAD names about fifteen, and it did so unchanged when the description offered
-# sixty. What actually scopes the Lead is CLUSTER_SCOPE below.
-DELEGATE_MAX_PATHWAYS = int(os.getenv("AI_AGENT_DELEGATE_MAX_PATHWAYS", "60"))
-"""Pathways one delegate call may cover, chunked five to a sub-agent.
+DELEGATE_MAX_PATHWAYS = int(os.getenv("AI_AGENT_DELEGATE_MAX_PATHWAYS", "0"))
+"""Hard ceiling on one delegate call. 0 -- the default -- means NO fixed ceiling.
 
-Was 10, which is two chunks -- so two of the four worker slots never ran and
-the arm had half the places a citation can be born. Base writes fourteen
-batches, each citing its own papers, and converts 58% of retrieved papers
-into shipped citations against this arm's 16%. Twenty pathways is four
-chunks, which fills DELEGATE_WORKERS exactly, so the extra breadth is free
-in wall clock: four sub-agents run in the time two did.
+The history is a lesson in fixed numbers. It was 10 (two chunks, so two of the
+four worker slots never ran), then 20, then 60 to match what the description
+promised. Every one of those was measured NOT to bind: coverage sat at 15-18
+throughout, because the LEAD names about fifteen, and it went on naming fifteen
+when the description offered sixty.
+
+So the ceiling never did the job it was there for, and it could do real harm in
+the one case it would bind -- a Lead that finally asks for eighty gets sixty and
+is never told about the twenty. What actually costs something is WALL CLOCK, and
+that is knowable exactly: see _delegation_capacity, which derives the number from
+the time left instead of guessing it in advance. Set this to a positive integer
+only to pin a ceiling for a benchmark round.
+"""
+
+DELEGATE_WAVE_SECONDS = float(os.getenv("AI_AGENT_DELEGATE_WAVE_SECONDS", "35"))
+"""Measured cost of one delegation wave: DELEGATE_WORKERS sub-agents in parallel.
+
+A wave is DELEGATE_CHUNK x DELEGATE_WORKERS = 20 pathways at the defaults, and
+takes about 35 s on this gateway whether it carries five pathways or twenty.
+This is what _delegation_capacity spends the remaining clock in units of.
+"""
+
+DETAIL_MAX_BLOCKS = int(os.getenv("AI_AGENT_DETAIL_BLOCKS", "20"))
+"""Pathway blocks one get_pathway_details call returns.
+
+This is a CONTEXT limit, never a limit on reach: the tool is instant and may be
+called again for whatever did not fit, and the result now says so by name. It
+was 8, applied by breaking out of a loop over the rank-ordered universe -- so a
+Lead that named twenty pathways got the eight best-ranked of them, in rank order
+rather than the order it asked, and no part of the answer mentioned the other
+twelve. It could not ask again for what it did not know it was missing.
 """
 
 DELEGATE_QUOTE_SECONDS = float(os.getenv("AI_AGENT_DELEGATE_QUOTE_SECONDS", "45"))
@@ -434,62 +450,31 @@ JOIN_DATA_AND_CITATION = os.getenv("AI_AGENT_JOIN_CITATIONS", "0") == "1"
 # findings the paper is FOR.
 SHOW_COMPOUNDS = os.getenv("AI_AGENT_SHOW_COMPOUNDS", "0") == "1"
 
-# Scope the Lead by CLUSTER instead of by rank.
+# Scope the Lead by SIGNIFICANCE, and let it choose within that.
 #
-# The agent covers a median 16 pathways out of the 102 it indexes, and every
-# constant I suspected turned out not to bind: DELEGATE_MAX_PATHWAYS is 20 and
-# never reached, the delegation tool's stated capacity is now 60 and the Lead
-# still names 15, SEARCH_BUDGET is 40 and about 15 are used. The limiter is the
-# Lead's own instructions, which say "top-ranked" five times:
+# History, because the shape of the mistake matters more than the fix. The Lead
+# covered a median 16 pathways out of the 102 it indexed, and every constant
+# suspected of causing it was measured NOT to bind: DELEGATE_MAX_PATHWAYS was
+# never reached at 20 or at 60, SEARCH_BUDGET is 40 with about 15 used. The
+# limiter was prose -- SYSTEM_PROMPT_LEAD_AGENT said "top-ranked" five times,
+# and in a 102-pathway context that reads as the top fifteen.
 #
-#   get_pathway_details on the TOP-RANKED pathways
-#   once per cluster or TOP pathway ... roughly a dozen searches
-#   covering all the TOP-RANKED pathways
-#   done when every TOP-RANKED pathway is either analysed or noted
-#   a paragraph per TOP-RANKED pathway or cluster
+# AI_AGENT_CLUSTER_SCOPE was the flag that rewrote those five clauses to "every
+# cluster". Round 67 measured it over 8 replicates: coverage 15.4 -> 17.4,
+# rubric coverage 0.571 -> 0.611, wall clock 422 s -> 420 s. Free, slightly
+# positive, and it did not bind either -- so the flag is now folded into the
+# prompt itself and deleted, rather than left as a knob nobody turns.
 #
-# In a 102-pathway context "top-ranked" reasonably reads as the top fifteen or
-# twenty, and "roughly a dozen searches" matches the observed 15.5 exactly. So
-# the scope is set upstream of every knob, and cluster-mode base -- which has no
-# rank scoping at all and interprets every cluster member -- covers 74 and scores
-# 0.617 against this arm's 0.538 on the sealed rubric.
-#
-# The rewrite keeps the structure requirements untouched (five sections, ranks
-# presented as ranks) and changes only what defines "enough": every CLUSTER
-# rather than the top of the ranking. That is the shape AgentEvolve's round 6
-# measured as worth +0.210 to base, and the rule they derived from rounds 1 and 2
-# -- cluster for context, never for order -- is why the rank presentation stays.
-CLUSTER_SCOPE = os.getenv("AI_AGENT_CLUSTER_SCOPE", "0") == "1"
-
-_SCOPE_REWRITES = (
-    ("get_pathway_details on the top-ranked pathways",
-     "get_pathway_details on the highest-ranked member of each cluster"),
-    ("roughly a dozen searches, not three",
-     "one per cluster -- there are usually about twenty clusters, so about "
-     "twenty searches, not a dozen"),
-    ("covering all the top-ranked pathways and clusters between them",
-     "covering EVERY cluster, not only the highest-ranked ones -- a cluster you "
-     "never delegate is a finding you never had"),
-    ("you are done when every top-ranked pathway is either analysed",
-     "you are done when every CLUSTER is either analysed"),
-    ("a paragraph per top-ranked pathway or cluster",
-     "a paragraph per cluster"),
-)
+# The rest of the answer is not a prompt at all: the agent was only ever HANDED
+# fifteen pathways, and widened to the significant set only if it happened to
+# call cluster_pathways. See _significant_universe -- an agent cannot choose
+# against pathways it was never shown, and no amount of instruction fixes that.
 
 
 def _lead_instructions():
-    """The Lead's prompt, optionally rescoped from rank to cluster."""
-    text = prompts_mod.SYSTEM_PROMPT_LEAD_AGENT
-    if not CLUSTER_SCOPE:
-        return text
-    for old, new in _SCOPE_REWRITES:
-        if old not in text:
-            # A rewrite that silently matches nothing would leave the prompt at
-            # its rank-scoped default while the config stamp claimed otherwise.
-            logger.warning("[AGENT] cluster-scope rewrite missed: %r", old[:48])
-            continue
-        text = text.replace(old, new)
-    return text
+    """The Lead's prompt. One source, no rewrites -- see the note above."""
+    return prompts_mod.SYSTEM_PROMPT_LEAD_AGENT
+
 
 _JOIN_NOTE = (
     "\n\nOne more thing about the two kinds of sentence above. Where a passage "
@@ -1455,34 +1440,72 @@ def get_experiment_overview(ctx: RunContextWrapper[LoopContext]) -> str:
 @function_tool(failure_error_function=_tool_failure("get_pathway_details"))
 def get_pathway_details(ctx: RunContextWrapper[LoopContext],
                         pathway_names: list[str]) -> str:
-    """Detailed data (p-values per layer, top genes with temporal profiles) for the named or ID'd pathways. Instant and free -- read the data before theorising about it, and ask for several pathways at once."""
+    """Detailed data (p-values per layer, top genes with temporal profiles) for the named or ID'd pathways. Instant and free -- read the data before theorising about it, and ask for several pathways at once. Name as many as you like: if more come back than fit in one answer, the rest are listed by name for you to ask for again."""
     c = ctx.context
     t0 = time.time()
     guard = _time_guard(c)
     if guard:
         return guard
-    wanted = {w.strip().lower() for w in pathway_names if w and w.strip()}
-    blocks, matched_ids = [], []
-    for p in c.pathways:
-        keys = {str(p.get("name", "")).lower(), str(p.get("id", "")).lower()}
-        if keys & wanted or any(w in k for k in keys for w in wanted):
-            # The flat-gene share is what decides whether LEAN_PROFILES can save
-            # anything at all. I predicted a 25% cut from it without ever having
-            # measured the fraction it depends on, so the prediction was a guess
-            # wearing a number. Counted here, where ctx is in scope.
-            shown = (p.get("top_genes") or [])[:10]
-            c.genes_shown += len(shown)
-            c.genes_flat += sum(1 for g in shown if not g.get("relevant"))
-            blocks.append(_pathway_block(p))
-            matched_ids.append(p.get("id"))
-        if len(blocks) >= 8:
-            break
+    # Resolve in the order the Lead ASKED, not in rank order. The old loop walked
+    # c.pathways and stopped at eight, so the eight it returned were the eight
+    # best-ranked of whatever matched -- the Lead's own ordering, which is the
+    # only place its judgement about this experiment was expressed, was discarded
+    # before the answer was built.
+    blocks, matched_ids, deferred, unresolved = [], [], [], []
+    seen = set()
+    for raw in [w.strip() for w in pathway_names if w and w.strip()]:
+        needle = raw.lower()
+        hit = None
+        for p in c.pathways:
+            keys = (str(p.get("name", "")).lower(), str(p.get("id", "")).lower())
+            if needle in keys or any(needle in k for k in keys):
+                hit = p
+                break
+        if hit is None:
+            unresolved.append(raw)
+            continue
+        pid = str(hit.get("id"))
+        if pid in seen:
+            continue
+        seen.add(pid)
+        if len(blocks) >= DETAIL_MAX_BLOCKS:
+            deferred.append(str(hit.get("name") or raw))
+            continue
+        # The flat-gene share is what decides whether LEAN_PROFILES can save
+        # anything at all. I predicted a 25% cut from it without ever having
+        # measured the fraction it depends on, so the prediction was a guess
+        # wearing a number. Counted here, where ctx is in scope.
+        shown = (hit.get("top_genes") or [])[:10]
+        c.genes_shown += len(shown)
+        c.genes_flat += sum(1 for g in shown if not g.get("relevant"))
+        blocks.append(_pathway_block(hit))
+        matched_ids.append(hit.get("id"))
+
+    notes = []
+    if deferred:
+        # Truncation the caller is told about is a pause; truncation it is not
+        # told about is a silent narrowing of the investigation.
+        c.extra_stats["detail_deferred"] = (
+            c.extra_stats.get("detail_deferred", 0) + len(deferred))
+        notes.append(
+            "You named %d pathways and this answer carries %d of them, in the "
+            "order you asked. STILL WAITING, ask again in another call: %s. "
+            "get_pathway_details is instant and unlimited in how often you may "
+            "call it -- nothing here is a decision that these pathways matter "
+            "less."
+            % (len(blocks) + len(deferred), len(blocks), ", ".join(deferred)))
+    if unresolved:
+        notes.append("No enriched pathway matches: %s." % ", ".join(unresolved))
     if not blocks:
-        out = ("No match among the enriched pathways for %s. Known: %s"
-               % (pathway_names,
+        out = ("No match among the %d significant pathways for %s. The first 30 "
+               "by rank are: %s"
+               % (len(c.pathways), pathway_names,
                   ", ".join(p.get("name", "?") for p in c.pathways[:30])))
     else:
-        out = "\n\n".join(blocks) + _ledger_note(c)
+        out = "\n\n".join(blocks)
+        if notes:
+            out += "\n\n" + "\n\n".join(notes)
+        out += _ledger_note(c)
     out = _spend(c, out, "get_pathway_details")
     _trace(c, "get_pathway_details", pathway_names, matched_ids or "none", t0)
     return out
@@ -1502,14 +1525,23 @@ def cluster_pathways(ctx: RunContextWrapper[LoopContext]) -> str:
             member_ids = clusters_mod.partition_member_ids(candidate)
             if candidate.get("clusters") and member_ids:
                 c.partition = candidate
-                # Clustering widens what the agent can reach, exactly as it does
-                # in the workflow arm: the partition covers every significant
-                # pathway, so rebuild the context over its members (still in
-                # global rank order) and let get_pathway_details see them all.
-                # Without this the cluster table names pathways the agent then
-                # cannot look up -- a map with no territory behind it.
-                c.pathways = build_pathway_context(c.job_instance,
-                                                   pathway_ids=member_ids)
+                # Clustering used to be what WIDENED the agent's reach: the
+                # context arrived as the top fifteen and the partition covers
+                # every significant pathway, so this rebuilt over its members
+                # and was the only path to the rest of the experiment. That made
+                # the agent's territory a side effect of calling a clustering
+                # tool -- see _significant_universe, which now hands over the
+                # significant set at turn zero.
+                #
+                # So this is normally a no-op and skipped: partition members and
+                # the universe are the same set. It stays for the case where the
+                # partition somehow names an id the context does not hold, which
+                # would otherwise put a pathway in the cluster table that
+                # get_pathway_details cannot look up -- a map with no territory
+                # behind it.
+                if set(member_ids) - {str(p.get("id")) for p in c.pathways}:
+                    c.pathways = build_pathway_context(c.job_instance,
+                                                       pathway_ids=member_ids)
                 if (c.hooks or {}).get("partition"):
                     try:
                         c.hooks["partition"](candidate)
@@ -2029,20 +2061,71 @@ def _quote_shelf(c, chunk, papers):
     return shelf
 
 
+def _delegation_capacity(ctx):
+    """How many pathways this delegation can still afford, read off the clock.
+
+    A fixed ceiling cannot know what time it is. Sixty pathways is twelve chunks,
+    three waves, about 105 s: comfortable at minute two of a ten-minute run and
+    impossible at minute eight, and the constant said sixty at both. So the one
+    number that was supposed to protect the run protected it exactly when it did
+    not need protecting.
+
+    The cost is knowable instead of guessable. A wave is DELEGATE_CHUNK x
+    DELEGATE_WORKERS pathways for about DELEGATE_WAVE_SECONDS, flat, because the
+    sub-agents run in parallel. Two things still have to be paid after the last
+    wave -- grounding the citations it produced, and writing the report -- so
+    both come off the top before the division. Whatever is left over buys waves.
+
+    Floored at one wave: a delegation tool that can return nothing is worse than
+    a slow one, and _time_guard has already refused the call outright if there
+    is genuinely no time. Ceiling only if someone pins DELEGATE_MAX_PATHWAYS for
+    a benchmark round.
+    """
+    per_wave = max(1, DELEGATE_CHUNK * DELEGATE_WORKERS)
+    if DELEGATE_MAX_PATHWAYS > 0:
+        return DELEGATE_MAX_PATHWAYS
+    left = (ctx.hard_deadline - WRITE_RESERVE_SECONDS
+            - DELEGATE_QUOTE_SECONDS - time.time())
+    waves = int(max(0.0, left) // max(1.0, DELEGATE_WAVE_SECONDS))
+    return max(per_wave, waves * per_wave)
+
+
 @function_tool(failure_error_function=_tool_failure("delegate_interpretation"))
 async def delegate_interpretation(ctx: RunContextWrapper[LoopContext],
                                   pathway_names: list[str], focus: str) -> str:
-    """Delegate deep interpretation of the named pathways to Cluster Interpreter sub-agents (parallel, single-shot). Returns their reports; their [N] citations use your reference numbers. Name up to 60 pathways in ONE call. Cost is per WAVE, not per pathway: the sub-agents run four at a time, so twenty pathways cost the same as five, and sixty about three times that -- roughly 35 seconds a wave. It is where breadth comes from, and every pathway you delegate is somewhere a citation can be earned. Make ONE call, never one per pathway."""
+    """Delegate deep interpretation of the named pathways to Cluster Interpreter sub-agents (parallel, single-shot). Returns their reports; their [N] citations use your reference numbers. Name as many pathways as the experiment justifies in ONE call -- there is no fixed quota; the tool works out how many it can still afford from the clock and names any it had to leave. Cost is per WAVE, not per pathway: the sub-agents run four at a time in chunks of five, so twenty pathways cost the same as five -- roughly 35 seconds a wave. It is where breadth comes from, and every pathway you delegate is somewhere a citation can be earned. Make ONE call, never one per pathway."""
     c = ctx.context
     t0 = time.time()
     guard = _time_guard(c)
     if guard:
         return guard
-    wanted = {w.strip().lower() for w in pathway_names if w and w.strip()}
-    chosen = [p for p in c.pathways
-              if {str(p.get("name", "")).lower(), str(p.get("id", "")).lower()} & wanted
-              or any(w in str(p.get("name", "")).lower() for w in wanted)
-              ][:DELEGATE_MAX_PATHWAYS]
+    # Resolved in the order NAMED, so a trim for time drops the Lead's last
+    # choices rather than the lowest-ranked. Walking c.pathways instead, as this
+    # did, silently re-sorted the request into p-value order before truncating
+    # it -- which is the ranking deciding the scope one more time, in the tool
+    # that exists to let the agent decide it.
+    chosen, seen, unresolved = [], set(), []
+    for raw in [w.strip() for w in pathway_names if w and w.strip()]:
+        needle = raw.lower()
+        hit = None
+        for p in c.pathways:
+            keys = (str(p.get("name", "")).lower(), str(p.get("id", "")).lower())
+            if needle in keys or any(needle in k for k in keys):
+                hit = p
+                break
+        if hit is None:
+            unresolved.append(raw)
+            continue
+        pid = str(hit.get("id"))
+        if pid not in seen:
+            seen.add(pid)
+            chosen.append(hit)
+    capacity = _delegation_capacity(c)
+    trimmed = [str(p.get("name") or p.get("id")) for p in chosen[capacity:]]
+    chosen = chosen[:capacity]
+    if trimmed:
+        c.extra_stats["delegate_trimmed_for_time"] = (
+            c.extra_stats.get("delegate_trimmed_for_time", 0) + len(trimmed))
     if not chosen:
         out = "No enriched pathway matches %s." % pathway_names
         _trace(c, "delegate_interpretation", pathway_names, "no match", t0)
@@ -2249,6 +2332,25 @@ async def delegate_interpretation(ctx: RunContextWrapper[LoopContext],
     # would both pad the merge toward STITCH_MAX_CHARS and let the same claim be
     # counted twice when the stitch is compared with the draft.
     c.delegation_cache[cache_key] = out
+    # What was asked for and did not happen, said out loud. Both of these used
+    # to be silent: an unmatched name produced nothing at all, and a list longer
+    # than the cap was truncated with no mention of the tail. An agent choosing
+    # its own scope has to be able to tell "I decided against that pathway" from
+    # "the tool dropped it".
+    if trimmed:
+        out += ("\n\n[scope] You named %d pathways and %d were delegated. The "
+                "other %d would not fit before the writing reserve -- a wave of "
+                "up to %d pathways costs about %d s and there was room for %d "
+                "pathway(s) of delegation when you called. Not delegated: %s. "
+                "Call again for them if the clock allows; if it does not, name "
+                "them in the report as significant but not investigated."
+                % (len(chosen) + len(trimmed), len(chosen), len(trimmed),
+                   DELEGATE_CHUNK * DELEGATE_WORKERS, int(DELEGATE_WAVE_SECONDS),
+                   capacity, ", ".join(trimmed[:20])))
+    if unresolved:
+        out += ("\n\n[scope] No significant pathway matches: %s. Nothing was "
+                "delegated for these; check the name against the pathway table."
+                % ", ".join(unresolved[:20]))
     out = _spend(c, out + _ledger_note(c), "delegate_interpretation")
     _trace(c, "delegate_interpretation",
            "%d pathways / %d chunks" % (len(chosen), len(chunks)),
@@ -2968,6 +3070,51 @@ async def _write_results_section(agent, ctx, report, cluster_text, pathways,
     return candidate, True
 
 
+def _significant_universe(job_instance, budgets, stats):
+    """Every SIGNIFICANT pathway, in rank order -- the agent's whole territory.
+
+    What this replaces: ``build_pathway_context(max_pathways=AI_MAX_PATHWAYS)``,
+    the top fifteen by combined p. The universe then widened to the significant
+    set only as a SIDE EFFECT of the cluster_pathways tool, which rebuilds the
+    context over the partition's members. So the agent's reach depended on
+    whether it happened to call a clustering tool, and a run that skipped it
+    never learned the other ninety pathways existed.
+
+    That is not a scope the agent chose. It could not have chosen otherwise: no
+    tool named the pathways outside the fifteen, so "should I look at this one?"
+    was a question it was never in a position to ask. Deciding what to
+    investigate is the whole job of this arm, and the input to that decision was
+    being made for it, upstream, by a p-value sort.
+
+    Significance is the membership rule, and it is the user's own: the same
+    filter the Step 3 network view draws with -- combined Fisher p <= 0.05 over
+    conditions, the organism-wide map dropped, capped at AI_CLUSTER_MAX_NODES
+    (150) so a pathological job cannot hand the Lead a thousand rows. Within
+    that, nothing is chosen for it.
+
+    Falls back to the old top-N when the significant set comes back empty, which
+    happens when a job has no pathway under 0.05 at all. An agent with fifteen
+    weak pathways can still write about weak evidence; an agent with none cannot
+    write anything.
+    """
+    fallback = int((budgets or {}).get("max_pathways") or AI_MAX_PATHWAYS)
+    ids = []
+    try:
+        ids = [pid for pid, _pw in clusters_mod.select_network_nodes(job_instance)]
+    except Exception as exc:
+        logger.warning("[loop] significant-pathway selection failed (%s); "
+                       "falling back to the top %d by p-value", exc, fallback)
+    if not ids:
+        ctx_pathways = build_pathway_context(job_instance, max_pathways=fallback)
+        stats["universe_source"] = "top_p_fallback"
+        stats["universe_pathways"] = len(ctx_pathways)
+        return ctx_pathways
+    ctx_pathways = build_pathway_context(job_instance, pathway_ids=ids)
+    stats["universe_source"] = "significant"
+    stats["universe_pathways"] = len(ctx_pathways)
+    return ctx_pathways
+
+
 async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
                           stats, hooks=None):
     hooks = hooks or {}
@@ -2976,8 +3123,7 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
 
     organism = job_instance.getOrganism()
     organism_name = get_organism_name(organism)
-    pathways = build_pathway_context(job_instance,
-                                     max_pathways=budgets["max_pathways"])
+    pathways = _significant_universe(job_instance, budgets, stats)
     gene_whitelist = build_gene_symbol_whitelist(job_instance)
     if hooks.get("pathways"):
         try:
