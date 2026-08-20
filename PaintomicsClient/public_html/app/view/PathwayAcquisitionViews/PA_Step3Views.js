@@ -6921,6 +6921,65 @@ PA_Step3RegulationView.prototype = new View();
 
 
 /**
+ * The colour range for one observed (low, high) pair.
+ *
+ * Every branch of getMinMax below used to do this inline, identically:
+ *
+ *     max = ((high < 0) ? 0 : Math.max(Math.abs(low), Math.abs(high)));
+ *     min = ((low  > 0) ? 0 : -max);
+ *
+ * i.e. force the range to be symmetric about zero, always. For data that
+ * crosses zero that is exactly right and is kept: bwr and rbg are DIVERGING
+ * scales whose whole meaning is a zero midpoint, and a range of -2..+8 drawn
+ * asymmetrically would paint -2 and +2 in different intensities and claim a
+ * difference the data does not contain.
+ *
+ * For data that never crosses zero it threw the range away. An omic measured
+ * 1.93..20.93 -- all positive, which is the normal shape for abundances,
+ * counts, intensities and MORE's regulator expression -- came back as 0..20.93,
+ * so:
+ *
+ *   * `value > 0` in getColor is true for every point, so red is pinned at 255
+ *     and the entire blue half of blue-white-red is unreachable;
+ *   * the 0..1.93 stretch at the pale end carries no data at all, and the
+ *     interquartile range (half the points, 10.99..13.73) was compressed into
+ *     rgb(255,121,121)..rgb(255,88,88) -- 33 of 255, 13% of the strip. Whole
+ *     diagrams came out one flat red.
+ *
+ * Neither could be worked around from the interface. The custom-range slider
+ * runs through the same clamp: dragging its low end to 5 sets
+ * dataDistributionSummaries[11] = 5, `(5 > 0)` is true, and min is 0 again --
+ * the control silently did nothing.
+ *
+ * And all-negative data was worse than compressed, it was broken: high < 0 made
+ * max 0, low < 0 made min -0, and getColor divided by (absMin - min) = 0 and
+ * returned the string "rgb(255, 255,-Infinity)" for every value.
+ *
+ * So: symmetric when the data crosses zero, the observed range when it does
+ * not.
+ *
+ * @param {Number} low
+ * @param {Number} high
+ * @returns {Object} {min, max}
+ */
+var paColourRange = function (low, high) {
+	/* An inverted pair is not impossible -- [11] and [12] come from a slider --
+	   and it would otherwise flow into a negative denominator downstream. */
+	if (low > high) {
+		var swap = low; low = high; high = swap;
+	}
+
+	if (low < 0 && high > 0) {
+		/* Diverging: keep the symmetry, so equal magnitudes read equally. */
+		var extent = Math.max(Math.abs(low), Math.abs(high));
+		return {min: -extent, max: extent};
+	}
+
+	/* Sequential: the data's own range is the ramp. */
+	return {min: low, max: high};
+};
+
+/**
 		* This function returns the MIN/MAX values that will be used as references
 		* for painting (i.e. min and max colors).
 		*
@@ -6935,46 +6994,44 @@ var getMinMax = function(dataDistributionSummaries, option) {
 	//
 	//   0        1       2    3    4    5     6,   7   8      9        10      11          12
 	//[MAPPED, UNMAPPED, MIN, P10, Q1, MEDIAN, Q3, P90, MAX, MIN_IR, Max_IR, MIN_CUSTOM, MAX_CUSTOM]]
-	var min, max, absMin, absMax;
+	var range, absRange;
 
-	absMax = ((dataDistributionSummaries[8] < 0) ? 0 : Math.max(Math.abs(dataDistributionSummaries[2]), Math.abs(dataDistributionSummaries[8])));
-	absMin = ((dataDistributionSummaries[2] > 0) ? 0 : -absMax);
+	// absMin/absMax are the FULL observed range and are only consulted when the
+	// selected reference clips (p10p90, riMinMax, custom): getColor measures how
+	// far past the clip an outlier sits against them. They therefore have to be
+	// derived the same way, or a clipped range could sit outside the range it is
+	// measured against.
+	absRange = paColourRange(dataDistributionSummaries[2], dataDistributionSummaries[8]);
 
 	if (option === "absoluteMinMax") { //IF USE MIN MAX FOR ORIGINAL DATA (INCLUDE OUTLIERS)
-		max = ((dataDistributionSummaries[8] < 0) ? 0 : Math.max(Math.abs(dataDistributionSummaries[2]), Math.abs(dataDistributionSummaries[8])));
-		min = ((dataDistributionSummaries[2] > 0) ? 0 : -max);
+		range = paColourRange(dataDistributionSummaries[2], dataDistributionSummaries[8]);
 	} else if (option === "riMinMax") { //IF USE MIN MAX FOR INTERQUARTIL RANGE (OMIT OUTLIERS)
-		max = ((dataDistributionSummaries[10] < 0) ? 0 : Math.max(Math.abs(dataDistributionSummaries[9]), Math.abs(dataDistributionSummaries[10])));
-		min = ((dataDistributionSummaries[9] > 0) ? 0 : -max);
+		range = paColourRange(dataDistributionSummaries[9], dataDistributionSummaries[10]);
 
 		//    } else if (option === "localMinMax") {//IF USE MIN MAX FOR INTERQUARTIL RANGE (OMIT OUTLIERS)
 		//        //TODO: IMPLEMENT
 	} else if (option === "p10p90") { //IF USE PERCENTILES 10 AND 90
-		max = ((dataDistributionSummaries[7] < 0) ? 0 : Math.max(Math.abs(dataDistributionSummaries[3]), Math.abs(dataDistributionSummaries[7])));
-		min = ((dataDistributionSummaries[3] > 0) ? 0 : -max);
-
-		absMax = ((dataDistributionSummaries[8] < 0) ? 0 : Math.max(Math.abs(dataDistributionSummaries[2]), Math.abs(dataDistributionSummaries[8])));
-		absMin = ((dataDistributionSummaries[2] > 0) ? 0 : -absMax);
+		range = paColourRange(dataDistributionSummaries[3], dataDistributionSummaries[7]);
+		absRange = paColourRange(dataDistributionSummaries[2], dataDistributionSummaries[8]);
 	} else if (option == "custom") { //USE SLIDER CUSTOM VALUES
 		if (dataDistributionSummaries.length < 12) {
 			console.error("No custom range provided: using absolute min/max");
 
-			max = absMax;
-			min = absMin;
+			range = absRange;
 		} else {
-			max = ((dataDistributionSummaries[12] < 0) ? 0 : Math.max(Math.abs(dataDistributionSummaries[11]), Math.abs(dataDistributionSummaries[12])));
-			min = ((dataDistributionSummaries[11] > 0) ? 0 : -max);
+			range = paColourRange(dataDistributionSummaries[11], dataDistributionSummaries[12]);
 		}
 	} else {
 		console.error("getMinMax:" + option + "Not implemented!!");
 		debugger;
+		range = absRange;
 	}
-	//KEEP RANGE SIMETRY
+
 	return {
-		min: min,
-		max: max,
-		absMin: absMin,
-		absMax: absMax
+		min: range.min,
+		max: range.max,
+		absMin: absRange.min,
+		absMax: absRange.max
 	};
 
 };
@@ -7019,9 +7076,21 @@ var paRampPosition = function (limits, value) {
 		lo = 0;
 		hi = (value > 0) ? limits.max : limits.min;
 	} else {
-		/* Sequential: the observed range is the ramp. */
-		lo = limits.min;
-		hi = limits.max;
+		/* Sequential: the observed range is the ramp, anchored at the end
+		 * NEARER ZERO. For all-positive data that is the minimum, which is
+		 * what "palest is the smallest value" means. For all-negative data it
+		 * is the maximum: -12..-5 anchored at the minimum would paint -12
+		 * palest and -5 the deepest blue, i.e. announce the least negative
+		 * point as the strongest downward effect. Saturation tracks distance
+		 * from zero in both directions, which is the one thing the diverging
+		 * scale is for. */
+		if (Math.abs(limits.min) <= Math.abs(limits.max)) {
+			lo = limits.min;
+			hi = limits.max;
+		} else {
+			lo = limits.max;
+			hi = limits.min;
+		}
 	}
 
 	if (hi === lo) {
@@ -7030,7 +7099,16 @@ var paRampPosition = function (limits, value) {
 		return 0;
 	}
 
-	return Math.abs((value - lo) / (hi - lo));
+	/* Clamped below, NOT Math.abs. The absolute value was safe only while `lo`
+	 * was always 0 and the ramp could not be entered from underneath. Now that
+	 * `lo` can be a real clip -- p10 = 8.5 on data reaching down to 1.93 --
+	 * a point below the clip gives a negative position, and abs() would fold
+	 * it back up the ramp and paint the SMALLEST value the most intense. It
+	 * belongs at the pale end. Positions above 1 are left alone: getColor
+	 * reads them to darken outliers past the clip. */
+	var position = (value - lo) / (hi - lo);
+
+	return (position < 0) ? 0 : position;
 };
 
 var getColor = function (limits, value, colorScale) {
