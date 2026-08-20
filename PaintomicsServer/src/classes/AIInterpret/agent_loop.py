@@ -63,8 +63,10 @@ from src.classes.AIInterpret.context_builder import (
     build_pathway_context, build_gene_symbol_whitelist, get_organism_name,
     build_differential_metabolites_block,
     build_cross_omic_matrix, build_key_regulators_block, render_pathway_table,
-    triage_pathways,
+    triage_pathways, build_gene_index, gene_measurements, pathway_gene_list,
+    _build_omic_header_map, _gene_entry,
 )
+from src.classes.AIInterpret import neighbours as neighbours_mod
 from src.classes.AIInterpret.llm_client import LLMClient
 from src.classes.AIInterpret.pubmed_client import PubMedClient
 from src.classes.AIInterpret.shared import _collect_cited_quotes, _parse_json_verdict
@@ -714,6 +716,8 @@ class LoopContext(AgentContext):
     # name its own trace, and every per-tool call count had to be recovered by
     # guessing which file on disk belonged to which run.
     trace_path: str = ""
+    # KGML adjacency, parsed once per run (364 files, ~1 s for mmu).
+    adjacency: Any = None
     pmid_to_ref: dict = field(default_factory=dict)
     next_ref: int = 1
     submitted_report: str = ""
@@ -1766,7 +1770,7 @@ async def search_literature(ctx: RunContextWrapper[LoopContext], query: str,
 @function_tool(failure_error_function=_tool_failure("read_paper"))
 async def read_paper(ctx: RunContextWrapper[LoopContext], ref_index: int,
                      section: str) -> str:
-    """Read one section (abstract, introduction, results, discussion, other) of a retrieved paper [N]. section="abstract" is free and instant -- the search already fetched it. Any other section fetches full text on first use, about 3 s. Use it to check a paper really says what you want to cite it for. Reading is for deciding, not for unlocking text: a paper you cite has its full text fetched anyway, and reading first does not by itself make a citation survive."""
+    """Read one section (abstract, introduction, results, discussion, other) of a retrieved paper [N]. section="abstract" is free and instant -- the search already fetched it. Any other section fetches full text on first use, about 3 s. Use it to check a paper really says what you want to cite it for. Reading is for deciding: a paper you cite has its full text fetched anyway, so reading first does not by itself make a citation survive."""
     c = ctx.context
     t0 = time.time()
     guard = _time_guard(c)
@@ -2093,7 +2097,7 @@ def _delegation_capacity(ctx):
 @function_tool(failure_error_function=_tool_failure("delegate_interpretation"))
 async def delegate_interpretation(ctx: RunContextWrapper[LoopContext],
                                   pathway_names: list[str], focus: str) -> str:
-    """Delegate deep interpretation of the named pathways to Cluster Interpreter sub-agents (parallel, single-shot). Returns their reports; their [N] citations use your reference numbers. Name as many pathways as the experiment justifies in ONE call -- there is no fixed quota; the tool works out how many it can still afford from the clock and names any it had to leave. Cost is per WAVE, not per pathway: the sub-agents run four at a time in chunks of five, so twenty pathways cost the same as five -- roughly 35 seconds a wave. It is where breadth comes from, and every pathway you delegate is somewhere a citation can be earned. Make ONE call, never one per pathway."""
+    """Delegate deep interpretation of the named pathways to sub-agents (parallel, single-shot). Returns their reports; their [N] citations use your reference numbers. Name as many pathways as the experiment justifies -- no fixed quota; the tool works out what it can afford from the clock and names any it left. Cost is per WAVE, not per pathway: four at a time in chunks of five, so twenty pathways cost what five do -- roughly 35 seconds a wave. It is where breadth comes from, and every pathway you delegate is somewhere a citation can be earned. Make ONE call, never one per pathway."""
     c = ctx.context
     t0 = time.time()
     guard = _time_guard(c)
@@ -2438,7 +2442,170 @@ def submit_report(ctx: RunContextWrapper[LoopContext], report_markdown: str) -> 
 # (r = -0.08). Its schema rode in every Decide turn of every run regardless.
 # get_pathway_details already carries per-gene profiles for the pathways the
 # agent is looking at, which is where the same question gets answered.
+GENE_LIST_LIMIT = int(os.getenv("AI_AGENT_GENE_LIST_LIMIT", "400"))
+"""Genes one list_pathway_genes call returns per pathway.
+
+Sized from the data, not guessed: on the frozen STATegra job the widest
+significant pathway matches 460 genes of which 287 are differential, the median
+pathway has 55, and a compact one-line-per-gene listing of the widest is ~8 kB
+against a 400 kB context budget. 400 clears every real pathway measured; the cap
+exists so a pathological organism cannot hand over a novel.
+"""
+
+NEIGHBOUR_CAP = int(os.getenv("AI_AGENT_NEIGHBOUR_CAP", "60"))
+
+
+def _profile_line(g):
+    """One gene with its per-omic time courses, rendered exactly as
+    _pathway_block renders it -- so a gene reached by name and the same gene
+    reached through a pathway do not read as two different measurements."""
+    return "- %s%s [effect %.2f] %s" % (
+        g.get("symbol"), "*" if g.get("relevant") else "",
+        g.get("effect_size") or 0, _profile_summary(g.get("omic_profiles")))
+
+
+@function_tool(failure_error_function=_tool_failure("get_gene_measurements"))
+def get_gene_measurements(ctx: RunContextWrapper[LoopContext],
+                          gene_symbols: list[str],
+                          neighbour_steps: int = 0) -> str:
+    """Measured values for genes you name, ANYWHERE in the upload -- not just the ten a pathway shows, and not only in enriched pathways. Instant and free. A gene you cannot quote a value for is one you must not write about. neighbour_steps=1 or 2 also returns what sits next to it in the KEGG relation graph, with the relation type. Symbols not in the upload are listed back: absent and unchanged are different facts."""
+    c = ctx.context
+    t0 = time.time()
+    guard = _time_guard(c)
+    if guard:
+        return guard
+    found, missing = gene_measurements(c.job_instance, gene_symbols)
+    lines = []
+    if found:
+        # Which significant pathways hold it, so a value never arrives without
+        # somewhere to put it.
+        where = {}
+        for p in c.pathways:
+            for g in (p.get("top_genes") or []):
+                where.setdefault(str(g.get("symbol", "")).lower(), set()).add(p.get("name"))
+        lines.append("### Measured values (%d gene(s))" % len(found))
+        for g in found:
+            lines.append(_profile_line(g))
+            homes = sorted(where.get(str(g.get("symbol", "")).lower(), []))[:3]
+            if homes:
+                lines.append("  in: %s" % "; ".join(homes))
+    if missing:
+        # A symbol absent from the UPLOAD is a different fact from a symbol the
+        # experiment measured and found flat, and neither may be written as the
+        # other.
+        lines.append("Not in this experiment's data (do not write about these): %s"
+                     % ", ".join(missing[:30]))
+    steps = max(0, min(int(neighbour_steps or 0), 2))
+    if steps and found:
+        lines.append(_neighbour_block(c, found, steps))
+    out = _spend(c, "\n".join(lines) + _ledger_note(c), "get_gene_measurements")
+    _trace(c, "get_gene_measurements", gene_symbols,
+           "%d found, %d missing" % (len(found), len(missing)), t0)
+    return out
+
+
+def _neighbour_block(ctx, found, steps):
+    """The KEGG neighbourhood of the genes just returned.
+
+    Cached on the context: parsing 364 KGML files is about a second, which is
+    nothing once and something on every call.
+    """
+    if ctx.adjacency is None:
+        try:
+            adj, read, _missing = neighbours_mod.load_relations(
+                ctx.job_instance.getOrganism())
+            ctx.adjacency = adj
+            ctx.extra_stats["kgml_files_read"] = read
+        except Exception as exc:
+            logger.warning("[loop] KGML load failed: %s", exc)
+            ctx.adjacency = {}
+    if not ctx.adjacency:
+        return ("No neighbour graph for this organism (KGML ships with a KEGG "
+                "install; Reactome and OmniPath pathways have none).")
+    index = build_gene_index(ctx.job_instance)
+    seeds = [gid for g in found
+             for gid in index.get(str(g.get("symbol", "")).lower(), [])]
+    hood, trimmed = neighbours_mod.expand(ctx.adjacency, seeds, steps=steps,
+                                          cap=NEIGHBOUR_CAP)
+    if not hood:
+        return ("No KEGG neighbours for these genes. That is not evidence of "
+                "isolation: only KEGG pathways carry a relation graph, so a gene "
+                "significant only in Reactome or OmniPath has none here.")
+    genes = ctx.job_instance.getInputGenesData() or {}
+    header_map = _build_omic_header_map(ctx.job_instance)
+    lines = ["### Neighbours in the KEGG graph (%d, up to %d step(s))"
+             % (len(hood), steps)]
+    for gid, step, edges in hood:
+        gene = genes.get(gid) or genes.get(str(gid))
+        kinds = sorted({e[1] for e in edges if e[1]})[:3]
+        if gene is None:
+            # In the graph but not in the upload. Named anyway, so the agent can
+            # see the edge exists without being tempted to report a value for a
+            # gene this experiment never measured.
+            lines.append("- (gene %s, not measured in this experiment) step %d via %s"
+                         % (gid, step, ", ".join(kinds)))
+            continue
+        entry = _gene_entry(gene, header_map)
+        if not entry:
+            continue
+        lines.append("%s  <- step %d via %s"
+                     % (_profile_line(entry), step, ", ".join(kinds)))
+    if trimmed:
+        lines.append("(more neighbours exist than the %d shown; name a specific "
+                     "gene to go further)" % NEIGHBOUR_CAP)
+    return "\n".join(lines)
+
+
+@function_tool(failure_error_function=_tool_failure("list_pathway_genes"))
+def list_pathway_genes(ctx: RunContextWrapper[LoopContext],
+                       pathway_names: list[str],
+                       include_unchanged: bool = False) -> str:
+    """EVERY matched gene in a pathway -- symbol, effect size, temporal pattern, no time courses. get_pathway_details shows ten in full; this shows all of them in brief, and answers "what else is in here". Differential only unless include_unchanged. Instant and free; follow with get_gene_measurements for values."""
+    c = ctx.context
+    t0 = time.time()
+    guard = _time_guard(c)
+    if guard:
+        return guard
+    try:
+        matched = c.job_instance.getMatchedPathways() or {}
+    except Exception as exc:
+        return "The pathway store is unavailable here (%s)." % exc
+    blocks, unresolved = [], []
+    for raw in [w.strip() for w in pathway_names if w and w.strip()]:
+        needle = raw.lower()
+        hit = None
+        for p in c.pathways:
+            keys = (str(p.get("name", "")).lower(), str(p.get("id", "")).lower())
+            if needle in keys or any(needle in k for k in keys):
+                hit = p
+                break
+        pw = matched.get(str(hit.get("id"))) if hit else None
+        if pw is None:
+            unresolved.append(raw)
+            continue
+        rows, total, flat = pathway_gene_list(
+            c.job_instance, pw, differential_only=not include_unchanged,
+            limit=GENE_LIST_LIMIT)
+        head = ("### %s (%s) -- %d of %d differential gene(s)%s"
+                % (hit.get("name"), hit.get("id"), len(rows), total,
+                   ", %d unchanged hidden" % flat if flat and not include_unchanged else ""))
+        body = ", ".join("%s%s[%.2f %s]" % (
+            g["symbol"], "*" if g["relevant"] else "", g["effect_size"],
+            (g["omic_profiles"][0]["pattern"] if g["omic_profiles"] else "?"))
+            for g in rows)
+        blocks.append(head + "\n" + body)
+        if len(rows) < total:
+            blocks.append("(%d more not listed; name them in get_gene_measurements "
+                          "to see their values)" % (total - len(rows)))
+    if unresolved:
+        blocks.append("No significant pathway matches: %s" % ", ".join(unresolved[:20]))
+    out = _spend(c, "\n\n".join(blocks) or "(nothing to list)", "list_pathway_genes")
+    _trace(c, "list_pathway_genes", pathway_names, "%d block(s)" % len(blocks), t0)
+    return out
+
+
 TOOLBELT = [get_experiment_overview, get_pathway_details,
+            list_pathway_genes, get_gene_measurements,
             cluster_pathways, search_literature, read_paper, notebook_write,
             check_my_citations, delegate_interpretation, submit_report]
 
