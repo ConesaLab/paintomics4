@@ -47,6 +47,7 @@
 						UserList.setAvailableSpace(response.data.availableSpace);
 						$scope.max_guest_days = response.data.max_guest_days;
 						$scope.max_jobs_days = response.data.max_jobs_days;
+						$scope.max_guest_job_days = response.data.max_guest_job_days;
 
 						if(callback_function !== undefined){
 							callback_caller[callback_function]();

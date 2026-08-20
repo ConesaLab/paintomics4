@@ -31,6 +31,7 @@ from datetime import datetime
 
 from src.common.UserSessionManager import UserSessionManager
 from src.common.ServerErrorManager import handleException
+import src.conf.serverconf as _serverconf
 from src.common.DAO.UserDAO import UserDAO
 from src.common.DAO.JobDAO import JobDAO
 from src.common.DAO.FileDAO import FileDAO
@@ -423,7 +424,7 @@ def adminServletGetAllUsers(request, response):
                 usedSpace = dir_total_size(CLIENT_TMP_DIR + str(userInstance.getUserId()))
             userSummaries.append(summarizeUserForAdmin(userInstance, usedSpace))
 
-        response.setContent({"success": True, "userList": userSummaries,  "availableSpace": MAX_CLIENT_SPACE, "max_jobs_days": MAX_JOB_DAYS, "max_guest_days" : MAX_GUEST_DAYS})
+        response.setContent({"success": True, "userList": userSummaries,  "availableSpace": MAX_CLIENT_SPACE, "max_jobs_days": MAX_JOB_DAYS, "max_guest_job_days": getattr(_serverconf, "MAX_GUEST_JOB_DAYS", 7), "max_guest_days" : MAX_GUEST_DAYS})
 
     except Exception as ex:
         handleException(response, ex, __file__ , "adminServletGetAllUsers")

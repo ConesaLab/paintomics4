@@ -185,4 +185,22 @@ class PathwayAcquisitionJobDAO(DAO):
         FeatureDAO().removeAll({"jobID": id})
         PathwayDAO(dbManager=self.dbManager).removeAll({"jobID": id})
 
+        # The cascade stopped at features and pathways, so deleting a job left
+        # three collections holding its data. aiInterpretationCollection is the
+        # one that matters: 88KB per record carrying the report, the cited
+        # papers and the user's conversation with the agent. On
+        # paintomics.uv.es 366 of 437 AI records belonged to jobs that had
+        # already been deleted -- and since this is the path a user takes when
+        # they press Delete in My Jobs, every one of those is someone who asked
+        # for their work to be removed and had the most revealing part of it
+        # kept.
+        #
+        # Done here rather than in the servlet so it is tied to the ownership
+        # check above: everything below this point only runs when a job
+        # belonging to this caller was actually deleted.
+        for collectionName in ("aiInterpretationCollection",
+                               "foundFeaturesCollection",
+                               "visualOptionsCollection"):
+            self.dbManager.getCollection(collectionName).delete_many({"jobID": id})
+
         return True

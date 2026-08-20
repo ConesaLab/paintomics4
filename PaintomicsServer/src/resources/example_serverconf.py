@@ -86,8 +86,29 @@ ROOT_DIRECTORY            = ""                                         # Blank =
 CLIENT_TMP_DIR            = os.getenv("PAINTOMICS_CLIENT_TMP", "/data/CLIENT_TMP") + "/"
 KEGG_DATA_DIR             = os.getenv("PAINTOMICS_KEGG_DATA", "/data/KEGG_DATA") + "/"
 MAX_CLIENT_SPACE          = 200 * pow(1024, 2)
+
+# How long a job survives after it was last OPENED, not after it was created:
+# the client POSTs /pa_touch_job every time a job is shown, which rewrites
+# accessDate and clears any reminder already sent. A job someone keeps coming
+# back to therefore never expires.
+#
+# These two numbers are the ones the interface promises. pa_recover_job tells
+# every user whose job has gone:
+#
+#     "jobs are automatically removed after 7 days for guests and 14 days for
+#      registered users"
+#
+# and until now the configuration said 90 and 365 while the anonymous jobs that
+# make up most of the server were never examined at all -- so the sentence was
+# wrong in both directions at once. If you change these, change that sentence
+# too; test_retention_matches_the_promise fails if they drift apart again.
+MAX_GUEST_JOB_DAYS        = 7      # anonymous jobs, and jobs of is_guest accounts
+MAX_JOB_DAYS              = 14     # jobs belonging to a registered account
+
+# Separate question, and deliberately not one of the two above: how long a
+# GUEST ACCOUNT itself survives without being logged into. Its jobs are already
+# gone long before this, under MAX_GUEST_JOB_DAYS.
 MAX_GUEST_DAYS            = 90
-MAX_JOB_DAYS              = 365
 MAX_NUMBER_FEATURES       = 1000000
 
 # ========== MONGO DB SETTINGS ==========
