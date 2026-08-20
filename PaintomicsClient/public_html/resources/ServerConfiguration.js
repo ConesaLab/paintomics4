@@ -72,6 +72,13 @@ SERVER_URL_AI_GENERATE_EXP_DESIGN = SERVER_URL + "ai_generate_exp_design";
    is a false statement. See getAIProviderInfo() in AIInterpretServlet.py. */
 SERVER_URL_AI_PROVIDER = SERVER_URL + "ai_provider";
 AI_POLL_INTERVAL = 3000;
+// How many consecutive unhandled refusals from /ai_interpret_status before the
+// widget gives up and says so. A refusal it recognises as permanent -- the job
+// no longer exists -- stops immediately and does not consume these; this is the
+// ceiling for everything else, so a server that has stopped answering produces
+// a message instead of a progress bar that says "Starting..." for as long as
+// the tab is open.
+AI_POLL_MAX_FAILURES = 5;
 CHAT_POLL_INTERVAL = 1500;
 
 /*********************************************************************

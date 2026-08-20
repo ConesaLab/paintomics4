@@ -113,8 +113,11 @@ PUBLISHED = {
     # copy exactly as it would for view code.
     "app/view/common/AlignmentGuides.js": (
         "4.2", "ce2ba85063e8059eb2cc4c8e1992744854a14ad0db6f866213b8df1136650a59"),
+    # v=1.3: the report fetch retries instead of dead-ending, and a job that no
+    # longer exists is named as such rather than reported as "still in
+    # progress".
     "app/view/PathwayAcquisitionViews/PA_AIInterpretView.js": (
-        "1.2", "ccc26e131bb8de5db31a3ca7b4d6d73da3986496ed329f3a35bd0fbf39a1a2ff"),
+        "1.3", "595b18822379aa51b7962357402663b19a7938ca6200bd78b8d77c3a3ea220a1"),
     "app/view/PathwayAcquisitionViews/PA_Step3RegTargetNetworkView.js": (
         "0.7", "b135712a9564f8ae0eac94daf9c567ef275c4c748dbc270fdbdeb7d25fc79e34"),
     # OmniPath ships no diagram, so its pathways render as an interactive graph
@@ -125,8 +128,11 @@ PUBLISHED = {
     # v=0.8 WITHOUT a bump, which this guard caught: a returning browser keeps
     # this file for up to 12 hours, so the evidence overlay would have POSTed
     # to `undefined` for everyone who had already loaded the site.
+    # v=1.0 adds AI_POLL_MAX_FAILURES. A browser keeping the old copy would
+    # read it as undefined, and `failures >= undefined` is false for ever --
+    # which is precisely the endless poll this release exists to stop.
     "resources/ServerConfiguration.js": (
-        "0.9", "320717bdad3a27746dcf2070b7d11654a2f0c75fccaf2d242c266214ce7c3ac3"),
+        "1.0", "6d9d416610b8384c78fb7e46b10aa4414aea0886d720a840499904aec0e9fe85"),
     # The evidence layer itself: MORE relationships drawn on the diagram and
     # classified against KEGG, Reactome and OmniPath.
     "app/view/PathwayAcquisitionViews/PA_Step4EvidenceOverlay.js": (

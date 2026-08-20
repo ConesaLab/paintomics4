@@ -819,9 +819,43 @@ function PA_Step3JobView() {
 			success: function(r) {
 				if (!me.aiWidget) { return; }
 				// success:false is what the servlet returns for any handled
-				// exception -- an expired session, a Mongo hiccup. It is not a
-				// statement about the job, so keep watching.
-				if (!r || !r.success) { schedule(AI_POLL_INTERVAL); return; }
+				// exception. Most are worth another look -- a Mongo hiccup, a
+				// momentary blip -- but two are not, and treating those as
+				// transient is what left the widget saying "Starting..." with
+				// an empty panel for as long as the tab stayed open.
+				//
+				// The job going missing is the one that bites. A reopened job
+				// is drawn from the copy the browser keeps in sessionStorage,
+				// so the page never asks the server whether the job is still
+				// there; the AI report is the only thing that does. Once the
+				// job has been removed -- 7 days for guests, 14 for registered
+				// users -- the report request is refused and no amount of
+				// asking again will change that. Measured before this change:
+				// four polls in twenty seconds, still going, nothing shown.
+				if (!r || !r.success) {
+					var why = String((r && r.message) || "");
+					if (/not found|Invalid Job ID/i.test(why)) {
+						me.aiWidget.updateProgress(
+							"unavailable", 100,
+							"This job is no longer stored on the server, so its " +
+							"AI interpretation cannot be loaded. Jobs are removed " +
+							"after 7 days for guests and 14 days for registered " +
+							"users.");
+						return;              // permanent: stop the chain
+					}
+					// Anything else may well clear. Keep trying, but not for
+					// ever, and say so rather than leaving the panel blank.
+					me.aiPollFailures = (me.aiPollFailures || 0) + 1;
+					if (me.aiPollFailures >= AI_POLL_MAX_FAILURES) {
+						me.aiWidget.updateProgress(
+							"error", 100,
+							"The server stopped answering while tracking this " +
+							"interpretation. Reload the page to try again.");
+						return;
+					}
+					schedule(AI_POLL_INTERVAL);
+					return;
+				}
 				me.aiPollFailures = 0;
 				me.aiWidget.updateProgress(r.status, r.percent, r.detail,
 				                           r.toolTrace, r.toolCalls);
@@ -858,7 +892,48 @@ function PA_Step3JobView() {
 					}
 					return;      // stop the chain: nothing here can recover it
 				}
+
+				// THE JOB IS GONE. This arrives HERE, not in the success
+				// handler, and that distinction is the whole bug: the servlet
+				// renders a UserWarning as HTTP 400, so jQuery routes it to
+				// `error`. A `success:false` body never carries this case at
+				// all, which is why guarding only that looked right and
+				// changed nothing.
+				//
+				// A reopened job is drawn from the copy the browser holds, so
+				// the page never asks whether the job still exists; the status
+				// poll is the only thing that does. Once the job has been
+				// removed -- 7 days for guests, 14 for registered users -- the
+				// answer is a refusal, and asking again cannot change it.
+				// Measured before this: four polls in twenty seconds, still
+				// going, "Starting..." and an empty panel.
+				var missing = (code === 400 || code === 404) &&
+				              /not found|Invalid Job ID/i.test(body);
+				if (missing) {
+					if (me.aiWidget) {
+						me.aiWidget.updateProgress(
+							"unavailable", 100,
+							"This job is no longer stored on the server, so its " +
+							"AI interpretation cannot be loaded. Jobs are removed " +
+							"after 7 days for guests and 14 days for registered " +
+							"users.");
+					}
+					return;      // permanent: stop the chain
+				}
+
 				me.aiPollFailures = (me.aiPollFailures || 0) + 1;
+				if (me.aiPollFailures >= AI_POLL_MAX_FAILURES) {
+					// A server that has stopped answering is not made to answer
+					// by asking a hundred more times, and the user should be
+					// told rather than watching a bar that never moves.
+					if (me.aiWidget) {
+						me.aiWidget.updateProgress(
+							"error", 100,
+							"The server stopped answering while tracking this " +
+							"interpretation. Reload the page to try again.");
+					}
+					return;
+				}
 				schedule(Math.min(AI_POLL_INTERVAL * Math.pow(2, me.aiPollFailures - 1),
 				                  BACKOFF_CEILING));
 			}
@@ -4146,7 +4221,28 @@ function PA_Step3PathwayDetailsView() {
 				//Add the name for the row (e.g. MagoHb or "miRNA my_mirnaid_1")
 				yAxisCat.push("Trend " + (i + 1) + "#Cluster " + metagenes[i].cluster);
 
-				var limits = getMinMax(dataDistributionSummaries[omicName], "p10p90");
+				/* Coloured against the METAGENES' own range, not the omic's.
+
+				   A metagene is a trend -- a component summarising how a
+				   cluster of features moves -- and it is centred on zero, so it
+				   goes negative whatever the omic did. Colouring it with the
+				   omic's distribution asks a scale built for one quantity to
+				   describe another: on a real job here the omic ran 0.79..1.41
+				   while its metagenes reached +/-9.4, eight times outside the
+				   scale in both directions.
+
+				   getColor's outlier term then runs far past 1 and drives
+				   channels out of range. Measured on the live server, this line
+				   produced "rgb(0, 0,-2744)" and "rgb(255, 255,-410)" -- not
+				   colours. Chrome clamped the second to yellow and rejected the
+				   first outright, painting it black, so the trend rows showed
+				   two arbitrary colours that meant nothing.
+
+				   Their own min/max crosses zero, so paColourRange returns a
+				   symmetric range and the diverging blue-white-red scale reads
+				   the way it is supposed to: blue for down, red for up, white
+				   for no change. */
+				var limits = paMetageneLimits(metagenes);
 
 
 				for (var j in featureValues) {
@@ -6977,6 +7073,49 @@ var paColourRange = function (low, high) {
 
 	/* Sequential: the data's own range is the ramp. */
 	return {min: low, max: high};
+};
+
+/**
+ * The colour range for a set of metagene trends, from the trends themselves.
+ *
+ * Every other caller colours a feature against the distribution of the omic
+ * that feature came from, which is right, because they are the same quantity.
+ * A metagene is not: it is a component describing how a whole cluster moves,
+ * centred on zero and on its own scale entirely. It needs its own range, and
+ * this is the only place that computes one.
+ *
+ * No clipping: absMin/absMax are the same as min/max, so getColor's outlier
+ * term is zero everywhere rather than being measured against a percentile the
+ * trends were never summarised at. There is no p10/p90 for a metagene.
+ *
+ * @param {Array} metagenes  [{values: [...]}, ...]
+ * @returns {Object} the {min, max, absMin, absMax} getColor expects
+ */
+var paMetageneLimits = function (metagenes) {
+	var low = null, high = null;
+
+	(metagenes || []).forEach(function (metagene) {
+		((metagene && metagene.values) || []).forEach(function (raw) {
+			var value = Number(raw);
+			/* Metagene values arrive as strings and a cluster with a gap in it
+			   yields NaN, which would poison both ends of the range and take
+			   every colour on the chart with it. */
+			if (!isFinite(value)) { return; }
+			if (low === null || value < low) { low = value; }
+			if (high === null || value > high) { high = value; }
+		});
+	});
+
+	if (low === null) {
+		/* Nothing usable. A degenerate range makes paRampPosition return 0 for
+		   everything, which is the pale end -- honest for "no data" and, unlike
+		   the alternative, a valid colour. */
+		return {min: 0, max: 0, absMin: 0, absMax: 0};
+	}
+
+	var range = paColourRange(low, high);
+	return {min: range.min, max: range.max,
+	        absMin: range.min, absMax: range.max};
 };
 
 /**
