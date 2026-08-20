@@ -1,0 +1,142 @@
+/*
+ * The upload format check strip in Step 1.
+ *
+ * Colours come from the tokens in main.css so this surface follows the theme
+ * rather than restating it. dark.css redefines the same tokens, so nothing here
+ * needs a dark-mode branch -- and nothing here may use an inline style, which
+ * dark.css cannot reach.
+ */
+
+.pa-format-strip-host { display: block; }
+
+.pa-format-strip {
+    margin: 6px 0 10px 0;
+    padding: 8px 10px;
+    border-radius: 4px;
+    border: 1px solid transparent;
+    font-family: var(--pa-font-sans);
+    font-size: 12px;
+    line-height: 1.45;
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    /* A flex row's max-content width is the sum of its items on ONE line, and
+       ExtJS's outerCt is a display:table with an auto-width cell, so without
+       this the strip widens the whole column. Must be in the stylesheet: Ext
+       has written an inline width before JS could change anything. */
+    contain: inline-size;
+    color: var(--pa-ink-control, #3F3F46);
+    background: var(--pa-surface-quiet, #F3F2ED);
+}
+
+.pa-format-busy {
+    color: var(--pa-ink-muted, #595959);
+}
+
+.pa-format-ok {
+    background: var(--pa-surface-subtle, #F9F8F4);
+    border-color: var(--pa-accent-green, #247B21);
+    color: var(--pa-ink-control, #3F3F46);
+}
+
+.pa-format-warn {
+    background: var(--pa-surface-quiet, #F3F2ED);
+    border-color: var(--pa-accent-orange, #AD5022);
+}
+
+.pa-format-err {
+    background: var(--pa-surface-quiet, #F3F2ED);
+    border-color: var(--pa-accent-orange, #AD5022);
+}
+
+.pa-format-icon {
+    flex: 0 0 auto;
+    font-weight: 700;
+    line-height: 1.45;
+}
+
+.pa-format-ok .pa-format-icon  { color: var(--pa-accent-green, #247B21); }
+.pa-format-warn .pa-format-icon,
+.pa-format-err .pa-format-icon { color: var(--pa-accent-orange, #AD5022); }
+
+.pa-format-body { flex: 1 1 auto; min-width: 0; }
+
+.pa-format-headline {
+    font-weight: 600;
+    color: var(--pa-ink, #18181B);
+}
+
+.pa-format-detail {
+    margin-top: 2px;
+    color: var(--pa-ink-muted, #595959);
+    max-width: var(--pa-measure-note, 78ch);
+}
+
+.pa-format-note { color: var(--pa-ink-muted, #595959); }
+
+.pa-format-actions {
+    margin-top: 7px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.pa-format-button {
+    font-family: inherit;
+    font-size: 12px;
+    padding: 4px 11px;
+    border-radius: 4px;
+    border: 1px solid var(--pa-ink-label, #52525B);
+    background: var(--pa-control-bg, #FFFFFF);
+    color: var(--pa-ink-control, #3F3F46);
+    cursor: pointer;
+}
+
+.pa-format-button:hover { border-color: var(--pa-accent-blue, #19589E); }
+
+.pa-format-button:focus-visible {
+    outline: 2px solid var(--pa-focus-ring, #0A84FF);
+    outline-offset: 1px;
+}
+
+.pa-format-primary {
+    border-color: var(--pa-accent-blue, #19589E);
+    color: var(--pa-accent-blue, #19589E);
+    font-weight: 600;
+}
+
+/* The change preview. Wide rows scroll inside the table rather than pushing
+   the Step 1 form sideways. */
+.pa-format-diff {
+    margin-top: 8px;
+    width: 100%;
+    display: block;
+    overflow-x: auto;
+    border-collapse: collapse;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11px;
+    white-space: nowrap;
+}
+
+.pa-format-diff td {
+    padding: 2px 8px 2px 0;
+    vertical-align: top;
+}
+
+.pa-format-line  { color: var(--pa-ink-muted, #595959); }
+.pa-format-before{ color: var(--pa-accent-orange, #AD5022); }
+.pa-format-arrow { color: var(--pa-ink-muted, #595959); }
+.pa-format-after { color: var(--pa-accent-green, #247B21); }
+
+/* All file-format messages collect here, at the end of the Step 1 form body.
+   See the comment in format-panel.js for why they cannot live in the omic
+   cards: those sit in a vbox that does not reposition siblings when a card
+   grows, so an in-card strip overlaps the omic beneath it. */
+.pa-format-region {
+    display: block;
+    margin: 4px 0 0 0;
+}
+
+.pa-format-omic {
+    font-weight: 700;
+}
