@@ -197,7 +197,14 @@ class HeatmapLabelHelperBehaviour(unittest.TestCase):
 
     # Free functions getColor() calls. Lifted verbatim, in this order, ahead of
     # getColor itself.
-    COLOUR_DEPENDENCIES = ("paRampPosition",)
+    #
+    # It happened again, exactly as described above: paOutlierFraction and
+    # paChannel were factored out of getColor -- the first to stop the outlier
+    # term exceeding 1, the second to keep every channel inside 0..255 -- and
+    # paColorLegend was again the only assertion that reached far enough to
+    # notice, dying on "paOutlierFraction is not defined". Anything getColor
+    # calls belongs here.
+    COLOUR_DEPENDENCIES = ("paRampPosition", "paOutlierFraction", "paChannel")
 
     @classmethod
     def setUpClass(cls):
