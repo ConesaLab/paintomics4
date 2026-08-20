@@ -21,6 +21,20 @@ from conf.serverconf import (
 
 from src.common.Util import sendEmail
 
+# serverconf.py is per-site and gitignored, so a deploy carries new code to a
+# configuration file that predates it. A hard `from conf.serverconf import
+# MAX_GUEST_JOB_DAYS` therefore does not fail here, it fails in AdminServlet at
+# import time and the server does not start at all -- verified by running the
+# clean export against a serverconf with the setting removed:
+#
+#     ImportError: cannot import name 'MAX_GUEST_JOB_DAYS' from 'conf.serverconf'
+#
+# A missing retention setting is not worth a site outage, so it falls back to
+# the number the interface promises. Sites that set it explicitly are
+# unaffected, and example_serverconf ships it so new installs always have it.
+import conf.serverconf as _serverconf
+MAX_GUEST_JOB_DAYS = getattr(_serverconf, "MAX_GUEST_JOB_DAYS", 7)
+
 # Directories directly under CLIENT_TMP that are NOT user directories.
 #
 # Everything else there is read as a "<userID>" directory, and STEP 7 rmtree's
@@ -30,6 +44,19 @@ from src.common.Util import sendEmail
 # will ever own it, so every cleanup run would have deleted the whole cache and
 # made the next regions-to-genes job re-parse its annotation from scratch.
 NON_USER_CLIENT_TMP_DIRS = ("nologin", "gtfcache")
+
+# Where an anonymous job's files live, and the userID its record carries.
+#
+# A job run without signing in is stored with userID None; JobInformationManager
+# writes its files under CLIENT_TMP/nologin/jobsData/<jobID>. BSON round-trips
+# have historically turned that None into the string "None" in places, so both
+# spellings count as anonymous rather than only the one this database happens to
+# hold today.
+ANONYMOUS_DIR = "nologin"
+ANONYMOUS_USER_IDS = (None, "None")
+
+# How long before a registered user's job expires they are warned about it.
+REMINDER_WINDOW_DAYS = 7
 
 # Every index the running server depends on, as (collection, create_index keys).
 # Shared with paintomicsserver so startup and the nightly cron cannot drift:
@@ -78,7 +105,8 @@ def cleanDatabases(force=False):
     jobs_to_remind = {}
     #In addition we have to clean all files from db and dir
 
-    # TODO: "nologin" user will not be present in the DB
+    # The "nologin" user is not in the database and never will be, so this loop
+    # cannot see anonymous jobs. STEP 3b below is where they are handled.
     for user in users_list:
         user_id = int(user["userID"])
         if str(user_id) in user_dirs:
@@ -89,8 +117,13 @@ def cleanDatabases(force=False):
             log("User " + str(user_id) + " marked to be fixed.")
             users_to_fix.append(user_id)
 
+        # A guest account's jobs are the "7 days for guests" the interface
+        # promises; a registered account's are the 14.
+        isGuest = bool(user.get("is_guest"))
+        maxJobDays = MAX_GUEST_JOB_DAYS if isGuest else MAX_JOB_DAYS
+
         force_remove = False
-        if "is_guest" in user and user["is_guest"] == True and checkRemoveGuestUser(user, user_id):
+        if isGuest and checkRemoveGuestUser(user, user_id):
             # If guest user, check if should be removed
             users_to_remove.append(user_id)
             force_remove = True
@@ -104,9 +137,22 @@ def cleanDatabases(force=False):
 
 
         # If check if user has jobs that should be removed
-        aux = checkRemoveJobsForUser(connection, user_id, force_remove)
+        aux = checkRemoveJobsForUser(connection, user_id, force_remove, maxJobDays)
         if len(aux) > 0:
             jobs_to_remove[user_id] = aux
+
+    # STEP 3b. ANONYMOUS JOBS.
+    #
+    # These were never examined. The loop above walks userCollection and asks
+    # for {"userID": str(user_id)}, and a job run without signing in stores
+    # userID None -- so it matches no user and no rule, and the original author
+    # left a "TODO: nologin user will not be present in the DB" against exactly
+    # this. On paintomics.uv.es that was 159 of 218 jobs: the majority of the
+    # server, retained forever, while the interface told those same users their
+    # work would be removed after seven days.
+    anonymous_to_remove = checkRemoveAnonymousJobs(connection)
+    if anonymous_to_remove:
+        jobs_to_remove[ANONYMOUS_DIR] = anonymous_to_remove
 
     log("Summary:")
     log("   - " + str(str(sum(len(x) for x in jobs_to_remove.values()))) + " jobs will be removed.")
@@ -160,17 +206,57 @@ def checkRemoveGuestUser(user, user_id):
         log("User " + str(user_id) + " marked to be removed.")
     return remove
 
-def checkRemoveJobsForUser(connection, user_id, force_remove=False):
+def jobAccessDate(job):
+    """The day a job was last opened, or None if it cannot be read.
+
+    accessDate is a "%Y%m%d%H%M" string rewritten by /pa_touch_job every time
+    the job is shown. A record that predates the field, or carries a malformed
+    one, must not be read as "infinitely old" -- that would delete it on the
+    next run. Returning None means "no opinion", and every caller keeps it.
+    """
+    raw = job.get("accessDate")
+    if not raw:
+        return None
+    try:
+        return datetime.datetime.strptime(str(raw)[0:8], "%Y%m%d").date()
+    except (ValueError, TypeError):
+        log("Job " + str(job.get("jobID")) + " has an unreadable accessDate " +
+            repr(raw) + "; leaving it alone.")
+        return None
+
+
+def checkRemoveJobsForUser(connection, user_id, force_remove=False,
+                           max_job_days=MAX_JOB_DAYS):
     #Get all jobs for user
     jobs_list = connection[MONGODB_DATABASE]['jobInstanceCollection'].find({"userID":str(user_id)})
-    max_date = datetime.date.today() - datetime.timedelta(days=MAX_JOB_DAYS)
+    max_date = datetime.date.today() - datetime.timedelta(days=max_job_days)
     jobs_remove = []
     # for each job
     for job in jobs_list:
         #Check if date OR if force_remove
-        date = datetime.datetime.strptime(job['accessDate'][0:8], "%Y%m%d").date()
+        date = jobAccessDate(job)
+        if date is None and not force_remove:
+            continue
         if force_remove or date < max_date:
             log("Job " + str(job["jobID"]) + " (user " + str(user_id) + ") marked to be removed.")
+            jobs_remove.append(job['jobID'])
+    return jobs_remove
+
+
+def checkRemoveAnonymousJobs(connection):
+    """Jobs run without signing in, older than MAX_GUEST_JOB_DAYS.
+
+    Selected on userID rather than by walking users, because that is the whole
+    point: these belong to no user, so no per-user pass can reach them.
+    """
+    jobs_list = connection[MONGODB_DATABASE]['jobInstanceCollection'].find(
+        {"userID": {"$in": list(ANONYMOUS_USER_IDS)}})
+    max_date = datetime.date.today() - datetime.timedelta(days=MAX_GUEST_JOB_DAYS)
+    jobs_remove = []
+    for job in jobs_list:
+        date = jobAccessDate(job)
+        if date is not None and date < max_date:
+            log("Job " + str(job["jobID"]) + " (anonymous) marked to be removed.")
             jobs_remove.append(job['jobID'])
     return jobs_remove
 
@@ -179,15 +265,28 @@ def checkRemindJobsForUser(connection, user_id):
     jobs_list = connection[MONGODB_DATABASE]['jobInstanceCollection'].find({"userID":str(user_id),
                                                                             "reminderSent": {"$exists": False}
                                                                             })
-    max_date = datetime.date.today() - datetime.timedelta(days=MAX_JOB_DAYS + 7)
-    min_date = datetime.date.today() - datetime.timedelta(days=MAX_JOB_DAYS)
+    # A warning has to arrive BEFORE the thing it warns about. This selected
+    # jobs whose accessDate was between MAX_JOB_DAYS and MAX_JOB_DAYS + 7 days
+    # old -- every one of which is also older than MAX_JOB_DAYS, so STEP 4 had
+    # already deleted it by the time STEP 8 mailed about it. The comment even
+    # says "avoid sending reminders of jobs that will be deleted today", which
+    # is what the window was meant to do and the opposite of what it did.
+    #
+    # The reminder now covers the last REMINDER_WINDOW_DAYS of a job's life:
+    # still present, deleted soon. With a 14-day retention that is a warning on
+    # day 7, and /pa_touch_job clears `reminderSent` so simply opening the job
+    # both saves it and re-arms the warning for next time.
+    warn_from = datetime.date.today() - datetime.timedelta(days=MAX_JOB_DAYS)
+    warn_until = datetime.date.today() - datetime.timedelta(
+        days=max(0, MAX_JOB_DAYS - REMINDER_WINDOW_DAYS))
     jobs_remind = []
     # for each job
     for job in jobs_list:
-        #Check if date OR if force_remove
-        date = datetime.datetime.strptime(job['accessDate'][0:8], "%Y%m%d").date()
-        # Avoid sending reminders of jobs that will be deleted today
-        if date >= max_date and date < min_date:
+        date = jobAccessDate(job)
+        if date is None:
+            continue
+        # Older than warn_from is already being deleted in this same run.
+        if warn_from < date <= warn_until:
             log("Job " + str(job["jobID"]) + " (user " + str(user_id) + ") marked to be reminded.")
             jobs_remind.append(job['jobID'])
     return jobs_remind
@@ -203,9 +302,18 @@ def removeJobByJobID(connection, user_id, job_id):
     connection[MONGODB_DATABASE]['pathwaysCollection'].delete_many({"jobID": job_id})
     #STEP 4. REMOVE ALL THE FOUND FEATURES ASSOCIATED TO JOB
     connection[MONGODB_DATABASE]['foundFeaturesCollection'].delete_many({"jobID": job_id})
-    #STEP 5. REMOVE THE JOB FROM DATABASE
+    #STEP 5. REMOVE THE AI INTERPRETATION OF THE JOB
+    #
+    # This collection was never in this list. Every expired or deleted job left
+    # its interpretation behind, and on paintomics.uv.es that had reached 366 of
+    # 437 records -- 84% of them belonging to jobs that no longer existed. They
+    # are not small: 88KB on average, and they hold the report text, the cited
+    # papers and the user's chat with the agent, which is to say the most
+    # sensitive part of the job outliving the job itself.
+    connection[MONGODB_DATABASE]['aiInterpretationCollection'].delete_many({"jobID": job_id})
+    #STEP 6. REMOVE THE JOB FROM DATABASE
     connection[MONGODB_DATABASE]['jobInstanceCollection'].delete_many({"jobID": job_id})
-    #STEP 6. REMOVE THE JOB DIRECTORY FROM USER DIR
+    #STEP 7. REMOVE THE JOB DIRECTORY FROM USER DIR
     removeDirectoryByUserID(user_id, job_id)
 
 
