@@ -52,6 +52,16 @@
     async function run(id, code, files) {
         pyodide.FS.analyzePath("/work").exists || pyodide.FS.mkdir("/work");
         pyodide.FS.analyzePath("/out").exists   || pyodide.FS.mkdir("/out");
+        // Both directories start empty on every run. The profiler takes the
+        // first file it finds in /work, so a leftover from a previous attempt
+        // would silently be described instead of the real input.
+        ["/work", "/out"].forEach(function (dir) {
+            pyodide.FS.readdir(dir).forEach(function (name) {
+                if (name !== "." && name !== "..") {
+                    try { pyodide.FS.unlink(dir + "/" + name); } catch (e) { /* dir entry */ }
+                }
+            });
+        });
         for (var name in (files || {})) {
             pyodide.FS.writeFile("/work/" + name, files[name]);
         }

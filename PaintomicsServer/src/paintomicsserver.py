@@ -186,6 +186,21 @@ class Application(object):
         ##*******************************************************************************************
         ##* GET THUMBNAILS, PATHWAY IMAGE, etc
         ##*******************************************************************************************
+        # ---- AI-assisted input conversion --------------------------------
+        # Enqueued, never inline: four request threads serve the whole site and
+        # a gateway turn takes about a minute.
+        @self.app.route(SERVER_SUBDOMAIN + '/input_convert/turn', methods=['POST'])
+        def inputConvertTurnRoute():
+            from servlets.InputConvertServlet import inputConvertTurn
+            import uuid
+            return inputConvertTurn(request, Response(), self.queue,
+                                    "convert_" + uuid.uuid4().hex).getResponse()
+
+        @self.app.route(SERVER_SUBDOMAIN + '/input_convert/turn/<path:ticket>')
+        def inputConvertResultRoute(ticket):
+            from servlets.InputConvertServlet import inputConvertResult
+            return inputConvertResult(request, Response(), self.queue, ticket).getResponse()
+
         @self.app.route(SERVER_SUBDOMAIN + '/kegg_data/<path:filename>')
         def get_kegg_data(filename):
             logging.info("filename is:" + str(filename))
