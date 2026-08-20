@@ -118,7 +118,7 @@ def next_action(state, client=None):
     ]
 
     try:
-        reply = client.complete(messages, max_tokens=3000, temperature=0.1)
+        reply = client.complete(messages, max_tokens=6000, temperature=0.1)
     except Exception as exc:
         logger.warning("input-convert turn failed: %s", exc)
         return None
