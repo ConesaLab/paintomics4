@@ -44,14 +44,20 @@ def test_the_description_is_not_empty():
         "the delegation tool has no description: %r" % _description()[:80])
 
 
-def test_the_stated_capacity_matches_the_constant():
-    """A description that promises more than the code honours would have the Lead
-    name pathways that are then silently truncated."""
-    stated = re.search(r"up to (\d+) pathways", _description())
-    assert stated, "the description no longer states a capacity: %s" % _description()[:120]
-    assert int(stated.group(1)) == L.DELEGATE_MAX_PATHWAYS, (
-        "description says %s, DELEGATE_MAX_PATHWAYS is %d"
-        % (stated.group(1), L.DELEGATE_MAX_PATHWAYS))
+def test_the_description_states_no_fixed_quota():
+    """The number went 10 -> 20 -> 60 and never bound once. Each time, the fix
+    was to pick a better constant and make the description agree with it; each
+    time the Lead went on naming fifteen. A stated ceiling is a suggestion the
+    agent reads as a target, and the honest answer -- how many fit in the time
+    that is left -- is not a constant at all.
+
+    So the description must promise NO number of pathways. It may still price a
+    wave, because that is a measured cost and not a limit."""
+    d = _description()
+    stated = re.search(r"up to (\d+) pathways", d)
+    assert not stated, (
+        "the description states a fixed capacity again: %r" % (stated.group(0),))
+    assert "no fixed quota" in d, d
 
 
 def test_it_prices_the_cost_by_wave_not_by_pathway():
@@ -87,8 +93,12 @@ def test_it_still_forbids_one_call_per_pathway():
     assert "ONE call" in _description()
 
 
-def test_the_cap_is_configurable():
+def test_the_cap_is_off_by_default_and_still_pinnable():
+    """0 means "ask the clock". A positive value pins a ceiling for a benchmark
+    round, which is the only use the constant ever had."""
     assert isinstance(L.DELEGATE_MAX_PATHWAYS, int)
+    assert L.DELEGATE_MAX_PATHWAYS == 0, (
+        "a fixed delegation ceiling is back at %d" % L.DELEGATE_MAX_PATHWAYS)
 
 
 def _check(name, fn):
@@ -103,11 +113,11 @@ def _check(name, fn):
 
 def main():
     for t in (test_the_description_is_not_empty,
-              test_the_stated_capacity_matches_the_constant,
+              test_the_description_states_no_fixed_quota,
               test_it_prices_the_cost_by_wave_not_by_pathway,
               test_the_class_breadth_clause_was_tried_and_removed,
               test_it_still_forbids_one_call_per_pathway,
-              test_the_cap_is_configurable):
+              test_the_cap_is_off_by_default_and_still_pinnable):
         _check(t.__name__, t)
     print("\nPassed: %d / %d" % (len(_PASSED), len(_PASSED) + len(_FAILED)))
     if _FAILED:

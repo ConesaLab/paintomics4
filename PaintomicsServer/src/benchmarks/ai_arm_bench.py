@@ -195,6 +195,13 @@ STAGE_COUNTS = ("delegate_fulltext_gained", "quotes_supplied", "quotes_reused", 
                 "results_citations_kept", "results_attempts", "results_section",
                 # "short" is a ratio, so keep the ratio, not just the verdict.
                 "topup_candidate_ratio",
+                # How big the agent's territory was, and how much of it a tool
+                # edited out of a request without saying so. Coverage means
+                # nothing without the denominator: 15 pathways of 15 and 15 of
+                # 114 are the same numerator and opposite results, and every
+                # round before this one recorded only the numerator.
+                "universe_pathways", "detail_deferred",
+                "delegate_trimmed_for_time",
                 # The Results rewrite's conservation, which is the whole point
                 # of the stage: round 66 kept every citation and still lost 22%
                 # of the rubric's coverage, so citations alone cannot say
@@ -289,7 +296,11 @@ STAGE_NOTES = ("results_chunk_revert_why", "delegate_fulltext_failed", "fulltext
                # only records THAT it failed cannot be aimed at: 3 of 5
                # archived top-up rejections recorded no reason at all.
                "topup_rejected_why", "results_rejected", "results_retried",
-               "results_failed")
+               "results_failed",
+               # "significant" or "top_p_fallback". A run that quietly fell back
+               # to the top fifteen would otherwise look like a run with only
+               # fifteen significant pathways.
+               "universe_source")
 
 
 # Stats the two arms write that the archive deliberately does not keep. The

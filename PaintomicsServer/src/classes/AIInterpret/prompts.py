@@ -688,11 +688,16 @@ call one tool, read the result, repeat. Keep each turn short.
 How to investigate:
 1. Start with get_experiment_overview, then cluster_pathways to see which \
 pathways share features.
-2. Go deep where the data is strongest or strangest: get_pathway_details on \
-the top-ranked pathways -- it returns the per-gene profiles with the pathway, \
-so the genes driving it come back in the same call.
-3. Search the literature once per cluster or top pathway you intend to write \
-about -- roughly a dozen searches, not three. Each search is tagged with that \
+2. Go deep where the data is strongest or strangest, and where the EXPERIMENT \
+DESIGN says the answer should be: get_pathway_details on whichever pathways \
+you judge most likely to carry it -- name a dozen at once, it is instant and \
+free, and it returns the per-gene profiles with the pathway, so the genes \
+driving it come back in the same call. Significance decides what is available \
+to you; the design and the data decide what deserves your time. A small \
+p-value is evidence a pathway moved, not evidence it is the story.
+3. Search the literature once per cluster or pathway you intend to write \
+about -- there are usually about twenty clusters, so roughly twenty searches, \
+not three. Each search is tagged with that \
 pathway (topic_tag), and a sub-agent is later shown only the papers tagged for \
 its own pathways, so a pathway you never searched for gets an interpretation \
 with nothing to cite. BROAD queries: two or three gene symbols joined by OR \
@@ -702,8 +707,11 @@ read_paper selectively, for a claim whose support you doubt -- reading does not 
 make a citation more likely to survive, so it earns its time only when it \
 changes your mind.
 4. Get breadth by DELEGATING rather than writing everything yourself: call \
-delegate_interpretation a few times, covering all the top-ranked pathways and \
-clusters between them, AFTER you have searched for them. Each call returns \
+delegate_interpretation, covering EVERY cluster you mean to discuss and not \
+only the highest-ranked ones -- a cluster you never delegate is a finding you \
+never had -- AFTER you have searched for them. Name them all in one call: \
+there is no quota, and the sub-agents run in parallel, so twenty pathways cost \
+what five do. Each call returns \
 written interpretations carrying your reference numbers, and your report is the \
 synthesis across those returns plus what you found first-hand. Skipping this is \
 why a report ends up covering six pathways instead of fifteen.
@@ -712,15 +720,19 @@ is your memory and your evidence trail.
 6. Budgets are enforced by the tools and reported in every result; when one \
 is exhausted, write with what you have.
 
-Coverage checklist -- you are done when every top-ranked pathway is either \
-analysed (with data read and, where possible, literature) or explicitly \
-noted as not investigated, and your open questions are resolved or recorded. \
-This is a WRITING requirement as much as an investigation one: a pathway you \
-looked at but never named in the report is indistinguishable, to the reader, \
-from one you ignored. Name every cluster you found and every top-ranked \
-pathway in the prose -- with a sentence on what it shows, or a sentence on \
-why you set it aside. Budget your turns so that is possible; you have room \
-for roughly two dozen investigative tool calls before you must write.
+Coverage checklist -- you are done when every CLUSTER is either analysed \
+(with data read and, where possible, literature) or explicitly noted as not \
+investigated, and your open questions are resolved or recorded. This is a \
+WRITING requirement as much as an investigation one: a pathway you looked at \
+but never named in the report is indistinguishable, to the reader, from one \
+you ignored. Name every cluster you found in the prose -- with a sentence on \
+what it shows, or a sentence on why you set it aside. "Set aside" is a real \
+and respectable answer: significant and unrelated to the design, or \
+significant and driven by the same handful of genes as a cluster you have \
+already covered, are both worth one honest sentence. What is not acceptable is \
+silence, because silence and oversight look identical to the reader. Budget \
+your turns so that is possible; you have room for roughly two dozen \
+investigative tool calls before you must write.
 
 Report rules:
 - Cite ONLY [N] indices that search_literature returned. Never invent an index \
@@ -732,8 +744,7 @@ stripped. Fix or drop them rather than shipping them.
 values and p-values.
 - Structure, all five sections required: ## Key Findings (3-5 bullets), \
 ## Cross-Pathway Themes, ## Detailed Pathway Analysis -- a paragraph per \
-top-ranked pathway or cluster, built from your delegated interpretations \
-rather than a bare list -- ## Suggested Follow-up Experiments (3-5, \
+cluster, built from your delegated interpretations rather than a bare list -- ## Suggested Follow-up Experiments (3-5, \
 prioritised), ## Limitations and Caveats. Leaving out the Detailed Pathway \
 Analysis is not an option; most of the report's value sits there.
 - Finish by calling submit_report with the COMPLETE report. That is the only \
@@ -742,19 +753,39 @@ way to finish. After it returns SUBMITTED, reply DONE and stop."""
 
 def build_lead_kickoff_prompt(organism_name, experiment_design, pathways,
                               max_turns, search_budget, loop_seconds):
-    """The Lead Interpreter's opening message: context, ranked pathways,
-    and the budgets the tools will enforce."""
+    """The Lead Interpreter's opening message: context, the size of its
+    territory, and the budgets the tools will enforce.
+
+    This used to print the ranked pathway list in full. Two reasons it no longer
+    does. The first is duplication: get_experiment_overview is the mandated
+    first call and renders the same pathways in a richer table, so the list was
+    paid for twice in a context every later turn re-sends. The second matters
+    more. When the list was the top fifteen by p-value, printing it numbered
+    1..15 under the heading "Enriched pathways" told the agent that fifteen was
+    the experiment -- and the coverage it produced, run after run, was fifteen.
+    The universe is now every SIGNIFICANT pathway, which is 100-150 on a real
+    multi-omics job, and a numbered list of 150 would teach the opposite error:
+    that the job is to march down a ranking. Naming the size and the rule, and
+    leaving the choosing to the agent, is the point of the arm.
+    """
     lines = ["## Experiment"]
     lines.append(f"Organism: {organism_name}")
     if experiment_design:
         lines.append(f"Design: {experiment_design}")
     lines.append("")
-    lines.append("## Enriched pathways (ranked by combined p-value)")
-    for i, p in enumerate(pathways, 1):
-        lines.append(f"{i}. {p.get('name')} ({p.get('id')}, {p.get('source')}) "
-                     f"p={p.get('combined_pvalue'):.3g}, "
-                     f"{p.get('significant_omic_count', '?')} significant omic "
-                     f"layer(s), {p.get('matched_gene_count', '?')} matched genes")
+    lines.append("## Your territory")
+    lines.append(
+        f"{len(pathways)} pathways reached significance in this experiment. "
+        f"Every one of them is in scope: get_experiment_overview lists them all "
+        f"with p-values, driving omic layers and differential genes, and "
+        f"get_pathway_details and delegate_interpretation both reach any of "
+        f"them by name. There is no quota on how many you may examine.")
+    lines.append(
+        "Significance decides what is available; you decide what is worth the "
+        "time you have. The ranking is information, not an instruction -- the "
+        "pathway that answers the design above may not be the one with the "
+        "smallest p-value, and a pathway that is significant and irrelevant to "
+        "the design is still yours to set aside, in one sentence, on the record.")
     lines.append("")
     lines.append("## Budgets (enforced by the tools)")
     lines.append(f"- {max_turns} turns; {search_budget} literature searches; "
