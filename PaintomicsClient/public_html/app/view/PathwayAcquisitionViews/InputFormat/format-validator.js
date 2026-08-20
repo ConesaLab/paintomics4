@@ -137,6 +137,20 @@
             dataLines++;
             if (summary.idSample.length < 5) summary.idSample.push(line[0]);
 
+            // An empty first cell is a feature with no identifier. It maps to
+            // nothing and pollutes the enrichment background, and it is the
+            // silent failure a two-column-header metabolomics MAF produces when
+            // the identifier column is coalesced wrong. The server ingested
+            // these as blank-named features; flag them so a conversion that
+            // leaves any behind cannot be accepted.
+            if (String(line[0]).trim() === "") {
+                problems.push({
+                    code: "EMPTY_IDENTIFIER", line: nLine,
+                    detail: "The first column (the feature identifier) is empty."
+                });
+                lineHasError = true;
+            }
+
             var rest = line.slice(1);
             var allNumeric = true;
             for (var c = 0; c < rest.length; c++) {

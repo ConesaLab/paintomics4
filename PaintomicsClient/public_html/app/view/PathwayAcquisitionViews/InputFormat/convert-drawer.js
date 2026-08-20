@@ -1,11 +1,25 @@
 /*
- * The conversion drawer: what the user watches while the agent works.
+ * The conversion drawer: what the user watches while the agent works, and
+ * where they review what it made and steer it.
  *
- * It is a transcript, not a spinner. A gateway call takes on the order of a
- * minute, and a progress bar with nothing behind it is a lie told for that
- * whole minute -- so every step the agent takes is named as it happens, the
- * generated code is available at each one, and the bar advances against the
- * attempt budget, which is a real quantity rather than a guess at completion.
+ * It is a transcript, not a spinner. Every step the agent takes is named as it
+ * happens, the generated code is available at each one, and the bar advances
+ * against the attempt budget, which is a real quantity rather than a guess at
+ * completion.
+ *
+ * When the agent finishes, the drawer does not simply hand back "a file". A
+ * real upload often holds several tables -- one per sheet, one per measurement
+ * family -- and a significance column that should become the relevant-features
+ * list. So the review shows every table the agent produced with a preview, the
+ * columns it kept and dropped, and lets the user choose which one goes into
+ * this omic box, attach the relevant list, add the others as separate omics,
+ * or download any of them. Nothing the file held is silently lost.
+ *
+ * And the user can talk back. A composer at the bottom sends an instruction
+ * ("keep the flagged genes", "the first column is a KEGG ID", "use the reads
+ * sheet, not TPM") and the agent revises the accepted script rather than
+ * starting over. The same composer answers a question in the user's own words
+ * when none of the offered options fit.
  *
  * Nothing here is decorative. Showing the code is what lets a bioinformatician
  * check the transformation; showing the validator's report is what stops the
@@ -34,9 +48,13 @@
         return n;
     }
 
+    function decode(bytes) {
+        return new TextDecoder("utf-8", { fatal: false }).decode(bytes);
+    }
+
     var PHASE_ICON = {
-        profiling: "◴", thinking: "✦", running: "▶", validating: "✓",
-        asking: "?", finalising: "◴", done: "✓", failed: "✕"
+        profiling: "◴", thinking: "✦", running: "▶", validating: "✓", finalising: "⇶",
+        asking: "?", done: "✓", failed: "✕", user: "✎"
     };
 
     /* ------------------------------------------------------------------ *
@@ -94,7 +112,7 @@
                 return send({ type: "boot" }, 240000);
             },
             run: function (code, files) {
-                return send({ type: "run", code: code, files: files }, 240000).then(function (r) {
+                return send({ type: "run", code: code, files: files }, 300000).then(function (r) {
                     return r.ok ? { ok: true, stdout: r.stdout, outputs: r.outputs }
                                 : { ok: false, traceback: r.traceback, stdout: r.stdout || "" };
                 });
@@ -138,6 +156,108 @@
     }
 
     /* ------------------------------------------------------------------ *
+     * Talking to the Step 1 form
+     * ------------------------------------------------------------------ */
+
+    function setFile(inputEl, bytes, name) {
+        var transfer = new DataTransfer();
+        transfer.items.add(new File([bytes], name, { type: "text/plain" }));
+        inputEl.files = transfer.files;
+        inputEl.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+
+    function download(bytes, name) {
+        var url = URL.createObjectURL(new Blob([bytes], { type: "text/tab-separated-values" }));
+        var a = document.createElement("a");
+        a.href = url; a.download = name;
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(function () { document.body.removeChild(a); URL.revokeObjectURL(url); }, 0);
+    }
+
+    function omicComponentOf(inputEl) {
+        var box = inputEl && inputEl.closest ? inputEl.closest(".omicbox") : null;
+        return (box && window.Ext && Ext.getCmp) ? Ext.getCmp(box.id) : null;
+    }
+
+    function fileInputIn(component, itemId) {
+        var selector = component && component.queryById ? component.queryById(itemId) : null;
+        var field = selector && selector.queryById ? selector.queryById("fileField") : null;
+        return field && field.fileInputEl ? field.fileInputEl.dom : null;
+    }
+
+    var PANEL_TYPE = {
+        "gene expression": "geneexpression", "proteomics": "proteomics",
+        "metabolomics": "metabolomics", "mirna-seq": "mirnaseq", "dnase-seq": "dnaseseq",
+        "transcription factor": "transcriptionfactor"
+    };
+
+    /*
+     * Adds a sibling omic box of the same type and puts a converted table in
+     * it. Returns false when the Step 1 view is not reachable, so the caller
+     * can fall back to a download rather than lose the table.
+     */
+    function addAsNewOmic(omicType, omicName, values, relevant) {
+        try {
+            var view = window.application && application.getMainView
+                ? application.getMainView().getSubView("PA_Step1JobView") : null;
+            if (!view || !view.addNewOmicSubmittingPanel) return false;
+            var panel = view.addNewOmicSubmittingPanel(
+                PANEL_TYPE[String(omicType).toLowerCase()] || "otheromic");
+            if (!panel || !panel.getComponent) return false;
+            var component = panel.getComponent();
+            var fill = function () {
+                var nameField = component.queryById("omicNameField");
+                if (nameField && nameField.setValue) nameField.setValue(omicName);
+                var main = fileInputIn(component, "mainFileSelector");
+                if (main) setFile(main, values.bytes, values.name);
+                var secondary = fileInputIn(component, "secondaryFileSelector");
+                if (relevant && secondary) setFile(secondary, relevant.bytes, relevant.name);
+            };
+            if (component.rendered) fill(); else component.on("afterrender", fill, null, { single: true });
+            return true;
+        } catch (e) {
+            if (window.console && console.warn) console.warn("[inputformat] add omic failed", e);
+            return false;
+        }
+    }
+
+    /* ------------------------------------------------------------------ *
+     * Reading the manifest
+     * ------------------------------------------------------------------ */
+
+    function describeOutputs(result) {
+        var manifest = result.manifest || api().parseManifest(result.outputs) || {};
+        var declared = {};
+        (manifest.files || []).forEach(function (f) { if (f && f.name) declared[f.name] = f; });
+        var files = Object.keys(result.outputs || {})
+            .filter(function (n) { return n !== "manifest.json"; })
+            .map(function (name) {
+                var info = declared[name] || {};
+                var report = (result.reports || {})[name] || {};
+                var bytes = result.outputs[name];
+                var text = decode(bytes);
+                var lines = text.split(/\r?\n/).filter(function (l) { return l.trim() !== ""; });
+                var rows = lines.slice(0, 7).map(function (l) { return l.split("\t"); });
+                var header = rows.length && !api().isPythonFloat(String(rows[0][1] || "")) ? rows[0] : null;
+                return {
+                    name: name, bytes: bytes, role: info.role || report.role || "values",
+                    label: info.label || name, source: info.source || "", note: info.note || "",
+                    kept: info.columns_kept || [], dropped: info.columns_dropped || [],
+                    rowsIn: info.rows_in, rowsOut: info.rows_out,
+                    recommended: !!info.recommended, relevantFor: info.relevant_for || null,
+                    nRows: (report.summary && report.summary.nRows) || (lines.length - (header ? 1 : 0)),
+                    nCols: (report.summary && report.summary.nCols) || (rows[0] ? rows[0].length : 0),
+                    preview: { header: header, rows: header ? rows.slice(1, 6) : rows.slice(0, 5) }
+                };
+            });
+        return { manifest: manifest, files: files,
+                 values: files.filter(function (f) { return f.role === "values"; }),
+                 lists: files.filter(function (f) { return f.role === "relevant"; }),
+                 others: files.filter(function (f) { return f.role !== "values" && f.role !== "relevant"; }) };
+    }
+
+    /* ------------------------------------------------------------------ *
      * The drawer
      * ------------------------------------------------------------------ */
 
@@ -175,13 +295,32 @@
         progressWrap.appendChild(bar);
         var progressText = el("div", "pa-convert-progress-text", "Starting…");
         progressWrap.appendChild(progressText);
+        var elapsed = el("span", "pa-convert-elapsed", "0s");
+        progressWrap.appendChild(elapsed);
         panel.appendChild(progressWrap);
 
-        // ---- transcript ---------------------------------------------------
+        // ---- transcript + review ------------------------------------------
         var body = el("div", "pa-convert-body");
         var steps = el("ol", "pa-convert-steps");
         body.appendChild(steps);
+        var reviewHost = el("div", "pa-convert-reviewhost");
+        body.appendChild(reviewHost);
         panel.appendChild(body);
+
+        // ---- composer -----------------------------------------------------
+        var composer = el("form", "pa-convert-composer");
+        var composerInput = el("textarea", "pa-convert-composer-input");
+        composerInput.rows = 1;
+        composerInput.placeholder = "Tell the AI what to change — e.g. “keep the flagged genes”, “use the reads sheet”, “column A is a KEGG ID”";
+        composerInput.setAttribute("aria-label", "Instruction for the AI");
+        var composerSend = el("button", "pa-convert-composer-send", "Revise");
+        composerSend.type = "submit";
+        composer.appendChild(composerInput);
+        composer.appendChild(composerSend);
+        var composerHint = el("div", "pa-convert-composer-hint",
+            "Your words go to the AI as an instruction; the script is revised and re-checked. Your data stays on this computer.");
+        panel.appendChild(composer);
+        panel.appendChild(composerHint);
 
         var footer = el("footer", "pa-convert-footer");
         panel.appendChild(footer);
@@ -195,10 +334,12 @@
             var s = Math.round((Date.now() - startedAt) / 1000);
             elapsed.textContent = s < 60 ? s + "s" : Math.floor(s / 60) + "m " + (s % 60) + "s";
         }, 1000);
-        var elapsed = el("span", "pa-convert-elapsed", "0s");
-        progressWrap.appendChild(elapsed);
 
         var currentStep = null;
+        var running = false;
+        var cancelled = false;
+        var last = null;                     // the latest agent result
+        var pendingAnswer = null;            // resolver while a question is open
 
         function addStep(event) {
             var li = el("li", "pa-convert-step pa-phase-" + event.phase);
@@ -240,29 +381,48 @@
             currentStep.querySelector(".pa-convert-step-body").appendChild(pre);
         }
 
+        function setComposerState(state) {
+            // "idle": revise the result; "asking": answer in your own words; "busy": wait.
+            composerInput.disabled = state === "busy";
+            composerSend.disabled = state === "busy";
+            composerSend.textContent = state === "asking" ? "Answer" : "Revise";
+            composerInput.placeholder = state === "asking"
+                ? "…or answer in your own words"
+                : "Tell the AI what to change — e.g. “keep the flagged genes”, “use the reads sheet”, “column A is a KEGG ID”";
+            composer.classList.toggle("pa-convert-composer-busy", state === "busy");
+        }
+
         function askUser(question) {
             return new Promise(function (resolve) {
                 var card = el("div", "pa-convert-question");
                 card.appendChild(el("p", "pa-convert-question-text", question.text));
                 var opts = el("div", "pa-convert-options");
+                var settle = function (answer) {
+                    card.querySelectorAll("button").forEach(function (x) { x.disabled = true; });
+                    card.appendChild(el("div", "pa-convert-answer", "You chose: " + answer));
+                    pendingAnswer = null;
+                    setComposerState("busy");
+                    resolve(answer);
+                };
                 (question.options && question.options.length
                     ? question.options : ["Use your best judgement"]).forEach(function (opt) {
                     var b = el("button", "pa-convert-option", opt);
                     b.type = "button";
                     b.addEventListener("click", function () {
-                        card.querySelectorAll("button").forEach(function (x) { x.disabled = true; });
                         b.classList.add("pa-convert-option-chosen");
-                        resolve(opt);
+                        settle(opt);
                     });
                     opts.appendChild(b);
                 });
                 card.appendChild(opts);
                 currentStep.querySelector(".pa-convert-step-body").appendChild(card);
                 body.scrollTop = body.scrollHeight;
+                pendingAnswer = settle;
+                setComposerState("asking");
+                composerInput.focus();
             });
         }
 
-        var cancelled = false;
         var sandbox = createSandbox(function (msg) { setProgress(0.03, msg); });
 
         function shutdown() {
@@ -276,101 +436,309 @@
 
         close.addEventListener("click", function () { cancelled = true; shutdown(); });
 
+        var bytes = null;
+        var fileKey = safeName(file.name) || "input";
+
+        function onEvent(event) {
+            if (cancelled) return;
+            if (event.type === "step") {
+                addStep(event);
+                setProgress(event.progress, event.title);
+            } else if (event.type === "code") {
+                attachCode(event.code);
+            }
+        }
+
+        async function runOnce(extra) {
+            running = true;
+            setComposerState("busy");
+            footer.innerHTML = "";
+            reviewHost.innerHTML = "";
+            var result = await api().runAgent(Object.assign({
+                api: api(),
+                sandbox: sandbox,
+                transport: serverTransport(),
+                files: (function () { var f = {}; f[fileKey] = bytes; return f; })(),
+                inputPath: "/work/" + fileKey,
+                fileName: file.name,
+                omicType: (context && context.omicType) || "unknown",
+                species: (context && context.species) || "unknown",
+                goal: "Convert this file into the format PaintOmics accepts, keeping every measurement it holds.",
+                ask: askUser,
+                onEvent: onEvent
+            }, extra || {}));
+            running = false;
+            if (cancelled) return result;
+            last = result;
+            renderReview(result);
+            setComposerState("idle");
+            return result;
+        }
+
+        async function revise(instruction) {
+            if (!last) return;
+            addStep({ phase: "user", title: "Your instruction", detail: instruction });
+            setProgress(0.1, "Revising");
+            var instructions = (last.instructions || []).concat([instruction]);
+            await runOnce({
+                profile: last.profile,
+                instructions: instructions,
+                answers: last.answers || {},
+                accepted: last.code ? { code: last.code, manifest: last.manifest } : null
+            });
+        }
+
+        composer.addEventListener("submit", function (event) {
+            event.preventDefault();
+            var text = composerInput.value.trim();
+            if (!text) return;
+            composerInput.value = "";
+            if (pendingAnswer) { pendingAnswer(text); return; }
+            if (running) return;
+            revise(text);
+        });
+        composerInput.addEventListener("keydown", function (event) {
+            if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
+                composer.requestSubmit ? composer.requestSubmit() : composer.dispatchEvent(new Event("submit"));
+            }
+        });
+
         return (async function () {
             try {
+                setComposerState("busy");
                 await sandbox.boot();
                 setProgress(0.05, "Reading your file");
-
-                var bytes = new Uint8Array(await file.arrayBuffer());
-                var result = await api().runAgent({
-                    api: api(),
-                    sandbox: sandbox,
-                    transport: serverTransport(),
-                    files: safeName(file.name) ? { [safeName(file.name)]: bytes } : { input: bytes },
-                    inputPath: "/work/" + (safeName(file.name) || "input"),
-                    fileName: file.name,
-                    omicType: (context && context.omicType) || "unknown",
-                    species: (context && context.species) || "unknown",
-                    goal: "Convert this file into the format PaintOmics accepts.",
-                    ask: askUser,
-                    onEvent: function (event) {
-                        if (cancelled) return;
-                        if (event.type === "step") {
-                            addStep(event);
-                            setProgress(event.progress, event.title);
-                        } else if (event.type === "code") {
-                            attachCode(event.code);
-                        }
-                    }
-                });
-
-                if (cancelled) return { accepted: false };
-                renderReview(result);
-                return result;
+                bytes = new Uint8Array(await file.arrayBuffer());
+                return await runOnce();
             } catch (err) {
                 if (!cancelled) {
                     addStep({ phase: "failed", title: "The conversion could not finish",
                               detail: String(err && err.message || err) });
                     setProgress(1, "Stopped");
+                    renderFailure(null);
+                    setComposerState(last ? "idle" : "busy");
                 }
                 return { ok: false };
             }
         })();
 
         /* ---- review ---------------------------------------------------- */
+
+        function previewTable(preview) {
+            var wrap = el("div", "pa-convert-preview");
+            var table = el("table");
+            var maxCols = 7;
+            var cols = preview.header ? preview.header.length : (preview.rows[0] || []).length;
+            var shown = Math.min(cols, maxCols);
+            if (preview.header) {
+                var tr = el("tr");
+                preview.header.slice(0, shown).forEach(function (h) { tr.appendChild(el("th", null, h)); });
+                if (cols > shown) tr.appendChild(el("th", "pa-convert-more", "+" + (cols - shown)));
+                table.appendChild(tr);
+            }
+            preview.rows.forEach(function (r) {
+                var tr = el("tr");
+                r.slice(0, shown).forEach(function (c, i) { tr.appendChild(el("td", i === 0 ? "pa-convert-id" : null, c)); });
+                if (cols > shown) tr.appendChild(el("td", "pa-convert-more", "…"));
+                table.appendChild(tr);
+            });
+            wrap.appendChild(table);
+            return wrap;
+        }
+
+        function chips(label, names, cls) {
+            if (!names || !names.length) return null;
+            var box = el("div", "pa-convert-chips " + (cls || ""));
+            box.appendChild(el("span", "pa-convert-chips-label", label));
+            names.slice(0, 12).forEach(function (n) { box.appendChild(el("span", "pa-convert-chip", n)); });
+            if (names.length > 12) box.appendChild(el("span", "pa-convert-chip pa-convert-chip-more", "+" + (names.length - 12) + " more"));
+            return box;
+        }
+
         function renderReview(result) {
             clearInterval(timer);
-            setProgress(1, result.ok ? "Ready to use" : "Could not finish");
+            if (!result.ok) { renderFailure(result); return; }
+            setProgress(1, "Ready to review");
 
-            var review = el("div", "pa-convert-review");
-            if (result.ok) {
-                review.appendChild(el("h3", null, "Converted"));
-                var list = el("ul", "pa-convert-files");
-                Object.keys(result.outputs).forEach(function (name) {
-                    if (name === "manifest.json") return;
-                    var report = result.reports[name] || {};
-                    var li = el("li");
-                    li.appendChild(el("span", "pa-convert-file", name));
-                    var s = report.summary || {};
-                    li.appendChild(el("span", "pa-convert-filestat",
-                        [s.nRows != null ? s.nRows.toLocaleString() + " rows" : null,
-                         s.nCols != null ? s.nCols + " columns" : null,
-                         report.role].filter(Boolean).join(" · ")));
-                    list.appendChild(li);
-                });
-                review.appendChild(list);
+            var out = describeOutputs(result);
+            var review = el("section", "pa-convert-review");
+            review.appendChild(el("h3", null, out.values.length > 1
+                ? out.values.length + " tables ready" : "Converted"));
+            if (out.manifest.summary) review.appendChild(el("p", "pa-convert-summary", out.manifest.summary));
 
-                var accept = el("button", "pa-convert-accept", "Use these files");
-                accept.type = "button";
-                accept.addEventListener("click", function () {
-                    applyOutputs(input, result.outputs);
-                    shutdown();
+            var chosen = out.values.filter(function (f) { return f.recommended; })[0] || out.values[0];
+            var addOthers = false;
+
+            out.values.forEach(function (f) {
+                var card = el("article", "pa-convert-card" + (f === chosen ? " pa-convert-card-chosen" : ""));
+                var head = el("header", "pa-convert-card-head");
+                var pick = el("label", "pa-convert-pick");
+                var radio = document.createElement("input");
+                radio.type = "radio"; radio.name = "pa-convert-choice"; radio.checked = f === chosen;
+                radio.addEventListener("change", function () {
+                    chosen = f;
+                    review.querySelectorAll(".pa-convert-card").forEach(function (c) { c.classList.remove("pa-convert-card-chosen"); });
+                    card.classList.add("pa-convert-card-chosen");
+                    syncFooter();
                 });
-                footer.appendChild(accept);
-            } else {
-                review.appendChild(el("h3", null, "Could not finish this one"));
-                review.appendChild(el("p", "pa-convert-step-detail",
-                    "The script is above — a colleague who knows pandas can take it from there, " +
-                    "or you can tell us what the file contains and we will try again."));
+                pick.appendChild(radio);
+                var labels = el("div", "pa-convert-card-titles");
+                labels.appendChild(el("div", "pa-convert-card-title", f.label));
+                var meta = [f.source, f.nRows != null ? f.nRows.toLocaleString() + " rows" : null,
+                            f.nCols ? (f.nCols - 1) + " conditions" : null].filter(Boolean).join(" · ");
+                labels.appendChild(el("div", "pa-convert-card-meta", meta));
+                pick.appendChild(labels);
+                head.appendChild(pick);
+                if (f.recommended) head.appendChild(el("span", "pa-convert-badge", "Recommended"));
+                var dl = el("button", "pa-convert-iconbtn", "⤓");
+                dl.type = "button"; dl.title = "Download " + f.name;
+                dl.addEventListener("click", function () { download(f.bytes, f.name); });
+                head.appendChild(dl);
+                card.appendChild(head);
+
+                card.appendChild(previewTable(f.preview));
+                var kept = chips("Kept", f.kept, "pa-convert-kept");
+                var dropped = chips("Left out", f.dropped, "pa-convert-dropped");
+                if (kept) card.appendChild(kept);
+                if (dropped) card.appendChild(dropped);
+                if (f.note) card.appendChild(el("p", "pa-convert-card-note", f.note));
+                var linked = out.lists.filter(function (l) { return l.relevantFor === f.name; });
+                linked.forEach(function (l) {
+                    var row = el("div", "pa-convert-linked");
+                    row.appendChild(el("span", "pa-convert-linked-icon", "≡"));
+                    row.appendChild(el("span", null, l.label + " — " + (l.nRows != null ? l.nRows.toLocaleString() : "?") +
+                                                      " identifiers, attached as the relevant-features list" +
+                                                      (l.note ? " (" + l.note + ")" : "")));
+                    var ldl = el("button", "pa-convert-iconbtn", "⤓");
+                    ldl.type = "button"; ldl.title = "Download " + l.name;
+                    ldl.addEventListener("click", function () { download(l.bytes, l.name); });
+                    row.appendChild(ldl);
+                    card.appendChild(row);
+                });
+                review.appendChild(card);
+            });
+
+            var unlinked = out.lists.filter(function (l) {
+                return !out.values.some(function (v) { return v.name === l.relevantFor; });
+            });
+            if (unlinked.length || out.others.length) {
+                var extras = el("div", "pa-convert-extras");
+                extras.appendChild(el("h4", null, out.values.length ? "Also produced" : "Produced"));
+                unlinked.concat(out.others).forEach(function (f) {
+                    var row = el("div", "pa-convert-linked");
+                    row.appendChild(el("span", "pa-convert-linked-icon", f.role === "relevant" ? "≡" : "▤"));
+                    row.appendChild(el("span", null, f.label + " — " + (f.nRows != null ? f.nRows.toLocaleString() + " rows" : "") +
+                                                      (f.note ? " (" + f.note + ")" : "")));
+                    var fdl = el("button", "pa-convert-iconbtn", "⤓");
+                    fdl.type = "button"; fdl.title = "Download " + f.name;
+                    fdl.addEventListener("click", function () { download(f.bytes, f.name); });
+                    row.appendChild(fdl);
+                    extras.appendChild(row);
+                });
+                review.appendChild(extras);
             }
-            var dismiss = el("button", "pa-convert-dismiss", result.ok ? "Cancel" : "Close");
+
+            if (out.manifest.skipped && out.manifest.skipped.length) {
+                var skipped = el("details", "pa-convert-skipped");
+                skipped.appendChild(el("summary", null, "Not converted (" + out.manifest.skipped.length + ")"));
+                out.manifest.skipped.forEach(function (s) {
+                    skipped.appendChild(el("div", "pa-convert-skipped-row",
+                        (s.source || "?") + " — " + (s.reason || "")));
+                });
+                review.appendChild(skipped);
+            }
+
+            if (out.values.length > 1) {
+                var addLabel = el("label", "pa-convert-addothers");
+                var addBox = document.createElement("input");
+                addBox.type = "checkbox";
+                addBox.addEventListener("change", function () { addOthers = addBox.checked; syncFooter(); });
+                addLabel.appendChild(addBox);
+                addLabel.appendChild(el("span", null, "Also add the other " + (out.values.length - 1) +
+                    " table" + (out.values.length > 2 ? "s" : "") + " as separate omics, named after their source"));
+                review.appendChild(addLabel);
+            }
+
+            reviewHost.innerHTML = "";
+            reviewHost.appendChild(review);
+
+            // ---- footer -------------------------------------------------
+            var accept = el("button", "pa-convert-accept", "Use this table");
+            accept.type = "button";
+            var downloadAll = el("button", "pa-convert-dismiss", "Download all");
+            downloadAll.type = "button";
+            downloadAll.addEventListener("click", function () {
+                out.files.forEach(function (f, i) { setTimeout(function () { download(f.bytes, f.name); }, i * 150); });
+            });
+            var dismiss = el("button", "pa-convert-dismiss", "Cancel");
+            dismiss.type = "button";
+            dismiss.addEventListener("click", function () { cancelled = true; shutdown(); });
+            footer.innerHTML = "";
+            if (out.values.length) footer.appendChild(accept);
+            footer.appendChild(downloadAll);
+            footer.appendChild(dismiss);
+
+            function syncFooter() {
+                accept.textContent = addOthers
+                    ? "Use this table + add " + (out.values.length - 1) + " more"
+                    : (out.values.length > 1 ? "Use this table" : "Use this file");
+            }
+            syncFooter();
+
+            accept.addEventListener("click", function () {
+                if (!chosen) return;
+                var omicType = (context && context.omicType) || "Gene expression";
+                var linkedList = out.lists.filter(function (l) { return l.relevantFor === chosen.name; })[0];
+                var component = omicComponentOf(input);
+
+                if (addOthers) {
+                    // Keep names unique across the job: the server keys omics by name.
+                    var nameField = component && component.queryById("omicNameField");
+                    if (nameField && nameField.setValue) nameField.setValue(omicType + " (" + chosen.label + ")");
+                    out.values.filter(function (v) { return v !== chosen; }).forEach(function (v) {
+                        var vList = out.lists.filter(function (l) { return l.relevantFor === v.name; })[0];
+                        var added = addAsNewOmic(omicType, omicType + " (" + v.label + ")", v, vList);
+                        if (!added) { download(v.bytes, v.name); if (vList) download(vList.bytes, vList.name); }
+                    });
+                }
+                setFile(input, chosen.bytes, chosen.name);
+                var secondary = fileInputIn(component, "secondaryFileSelector");
+                if (linkedList && secondary) setFile(secondary, linkedList.bytes, linkedList.name);
+                shutdown();
+            });
+            body.scrollTop = reviewHost.offsetTop - 8;
+        }
+
+        function renderFailure(result) {
+            setProgress(1, "Could not finish");
+            var review = el("section", "pa-convert-review pa-convert-review-failed");
+            review.appendChild(el("h3", null, "Could not finish this one"));
+            review.appendChild(el("p", "pa-convert-summary",
+                "Tell the AI what the file contains in the box below and it will try again — " +
+                "which sheet matters, what the columns are, what the identifiers are. " +
+                "The script it wrote is above; a colleague who knows pandas can take it from there."));
+            if (result && result.outputs) {
+                var out = describeOutputs(result);
+                if (out.files.length) {
+                    var p = el("p", "pa-convert-summary", "Its best attempt produced " + out.files.length + " file(s) that did not pass the check: ");
+                    out.files.forEach(function (f) {
+                        var b = el("button", "pa-convert-codetoggle", "⤓ " + f.name);
+                        b.type = "button";
+                        b.addEventListener("click", function () { download(f.bytes, f.name); });
+                        p.appendChild(b);
+                    });
+                    review.appendChild(p);
+                }
+            }
+            reviewHost.innerHTML = "";
+            reviewHost.appendChild(review);
+            footer.innerHTML = "";
+            var dismiss = el("button", "pa-convert-dismiss", "Close");
             dismiss.type = "button";
             dismiss.addEventListener("click", function () { cancelled = true; shutdown(); });
             footer.appendChild(dismiss);
-            body.appendChild(review);
             body.scrollTop = body.scrollHeight;
-        }
-
-        /* Put the converted values file back into the omic's file input. */
-        function applyOutputs(fileInput, outputs) {
-            var names = Object.keys(outputs).filter(function (n) { return n !== "manifest.json"; });
-            var primary = names.filter(function (n) { return /value|expression|region/i.test(n); })[0]
-                       || names[0];
-            if (!primary) return;
-            var transfer = new DataTransfer();
-            transfer.items.add(new File([outputs[primary]], primary, { type: "text/plain" }));
-            fileInput.files = transfer.files;
-            fileInput.dispatchEvent(new Event("change", { bubbles: true }));
         }
     }
 
@@ -394,5 +762,5 @@
     }
 
     return { openDrawer: openDrawer, openConvertDrawer: openConvertDrawer,
-             createSandbox: createSandbox };
+             createSandbox: createSandbox, describeOutputs: describeOutputs };
 });

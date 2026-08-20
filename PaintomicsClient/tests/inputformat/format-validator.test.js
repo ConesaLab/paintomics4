@@ -102,3 +102,37 @@ test("a column of mostly text is still text even with a few numbers", () => {
   for (let i = 0; i < 40; i++) rows.push(["G" + i, i < 4 ? "1.5" : "additive"]);
   assert.deepStrictEqual(validateValues(rows).summary.textColumns, [1]);
 });
+
+test("rejects a value row whose identifier cell is empty", () => {
+  // A mis-coalesced metabolomics identifier left 185 rows with a blank first
+  // cell; the server ingested them as blank-named features. An empty
+  // identifier maps to nothing and pollutes the enrichment background.
+  const rows = [["metabolite", "WT_1", "WT_2"],
+                ["CHEBI:123", "1.0", "2.0"],
+                ["", "3.0", "4.0"]];
+  const report = validateValues(rows);
+  assert.ok(!report.ok);
+  assert.ok(report.problems.some((p) => p.code === "EMPTY_IDENTIFIER" && p.line === 2));
+});
+
+test("a full column of clean identifiers raises no EMPTY_IDENTIFIER", () => {
+  const rows = [["geneID", "A", "B"], ["Plaa", "1", "2"], ["Cldn10", "3", "4"]];
+  assert.ok(validateValues(rows).problems.every((p) => p.code !== "EMPTY_IDENTIFIER"));
+});
+
+test("a region matrix with a repeated chromosome is not flagged as duplicate ids", () => {
+  // The dup-identifier gate keys a region feature on chr+start+end together;
+  // keying on the chromosome alone rejected a correct locus split five times.
+  const base = "../../public_html/app/view/PathwayAcquisitionViews/InputFormat/";
+  const { gradeOutputs } = require(base + "convert-agent.js");
+  const fullapi = Object.assign({}, require(base + "format-reader.js"),
+    require(base + "format-validator.js"), require(base + "format-roles.js"));
+  const enc = (rows) => new TextEncoder().encode(rows.map((r) => r.join("\t")).join("\n") + "\n");
+  const region = [["chromosome", "start", "end", "T0", "T1"]];
+  for (let i = 0; i < 40; i++) region.push(["1", String(1000 + i * 100), String(1400 + i * 100), "0.1", "0.2"]);
+  const outputs = {
+    "regions_values.tab": enc(region),
+    "manifest.json": new TextEncoder().encode(JSON.stringify({ files: [{ name: "regions_values.tab", role: "values" }] })),
+  };
+  assert.ok(gradeOutputs(outputs, fullapi, { answers: {}, instructions: [] }).ok);
+});
