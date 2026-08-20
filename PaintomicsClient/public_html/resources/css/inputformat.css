@@ -148,3 +148,57 @@
     border-left-width: 4px;
     margin-top: 8px;
 }
+
+/* ------------------------------------------------------------------------
+   The omic card carries the state.
+
+   This is where the signal lives, because the message itself cannot go inside
+   the card -- see the comment in format-panel.js. A tinted card is visible from
+   anywhere on the form; a notice at the bottom of one is not.
+
+   The colours are the application's OWN bad-data convention, not new ones:
+   .invalid-cell in main.css already flags a wrong value as #F7E9ED on #EC9292,
+   and the invalid-field rule already uses a red border plus a soft ring. Reusing
+   them means a bad file reads the same way here as a bad value does elsewhere.
+
+   Only problems are tinted. Tinting every valid card green would make an
+   ordinary correct form loud and leave nothing for a real fault to say.
+   ------------------------------------------------------------------------ */
+.omicbox.pa-state-warn,
+.omicbox.pa-state-err {
+    background-color: #F7E9ED;
+    box-shadow: inset 0 0 0 1px #EC9292;
+    border-radius: 6px;
+}
+
+/* The field itself, so the eye lands on the right row inside the card. Same
+   treatment the account forms give an invalid input. */
+input[type="text"].pa-field-warn,
+input[type="text"].pa-field-err {
+    border-color: #D22 !important;
+    box-shadow: 0 0 0 3px rgba(221, 34, 34, 0.14);
+}
+
+/* The region is pinned to the omic column by positionRegion(); these are the
+   properties it does not set. */
+.pa-format-region {
+    display: block;
+    margin: 4px 0 0 0;
+}
+
+/* The action button is the app's own success green -- the same fill as Run
+   PaintOmics -- because it is the thing we want pressed. An outlined button
+   next to a tinted warning reads as optional; a filled green one reads as the
+   way forward. */
+.pa-format-button.pa-format-primary {
+    color: #fff;
+    background-color: #3A843A;
+    border-color: #306C30;
+    font-weight: 600;
+}
+
+.pa-format-button.pa-format-primary:hover {
+    color: #fff;
+    background-color: #337533;
+    border-color: #2A602A;
+}

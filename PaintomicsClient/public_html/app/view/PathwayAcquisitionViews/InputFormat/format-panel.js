@@ -57,27 +57,81 @@
      * ------------------------------------------------------------------ */
 
     /*
-     * Where the strip lives, and why it is not next to the field.
+     * Where the message lives, and why the omic card carries the state.
      *
-     * The obvious home is the omic card. It does not work. The omic cards sit
-     * in an ExtJS vbox with align:stretch, and that layout positions its
-     * children from measurements it took once. Growing a card -- by raw DOM
-     * insertion OR by adding a real Ext.Component and calling updateLayout on
-     * the card, its container and the form -- leaves every sibling exactly
-     * where it was, so the card silently overlaps the omic beneath it.
-     * Measured three ways; the sibling moved 0px each time.
+     * The message cannot go INSIDE the omic card. The cards are `flex: 1` items
+     * in a vbox whose height is fixed at 314px by an hbox pinned at 400px, so
+     * the layout ASSIGNS each card its height out of a fixed budget rather than
+     * measuring its content. Nothing added to a card can make it taller; it can
+     * only overflow, and the row is overflow:hidden. Measured three ways -- raw
+     * DOM insertion, a real Ext.Component, and updateLayout on the card, its
+     * container and the form -- and the sibling omic moved 0px every time.
      *
-     * So the strips are collected in one region appended to the Step 1 form
-     * panel's body, which flows normally. Each message names its omic, which
-     * the field alone would not have made clear anyway once several omics are
-     * in play, and the first problem scrolls itself into view.
+     * So the message sits just below the omics row, but pinned to the same left
+     * edge and width as the cards and pulled up into the row's unused space, and
+     * the CARD is tinted to carry the state. The tint is what makes a problem
+     * impossible to miss; the message below it is what says how to fix it.
+     * Neither costs a single pixel of layout.
      */
+    // The omic's display name, so a message can say which card it is about.
     function omicNameFor(fieldName) {
         var prefix = fieldName.replace(/_file$/, "");
         if (!window.Ext || !Ext.ComponentQuery) return prefix;
         var field = Ext.ComponentQuery.query("[name=" + prefix + "_omic_name]")[0];
         var value = field && field.getValue && field.getValue();
         return value || prefix;
+    }
+
+    function cardFor(input) {
+        return input.closest(".omicbox");
+    }
+
+    // The visible filename box, which is a sibling of the hidden file input
+    // inside the custom selector widget.
+    function filenameBoxFor(input) {
+        var selector = input.closest("[id*=myFilesSelector]") || input.closest(".omicbox");
+        if (!selector) return null;
+        var boxes = selector.querySelectorAll("input[type=text]");
+        for (var i = 0; i < boxes.length; i++) {
+            if (boxes[i].getBoundingClientRect().width > 100) return boxes[i];
+        }
+        return null;
+    }
+
+    var CARD_STATES = ["pa-state-ok", "pa-state-warn", "pa-state-err"];
+
+    /*
+     * Set the card's state class through ExtJS, not through classList.
+     *
+     * A raw classList.add is silently undone: updateLayout() rewrites the
+     * component's class attribute from its own list, so the class survives
+     * exactly until the next layout pass -- which this module triggers itself,
+     * one line later. Measured: the class was added and gone within the same
+     * tick, and the card never changed colour. addCls/removeCls put the class
+     * in the list Ext rebuilds from, so it survives.
+     */
+    function toggleCls(element, state) {
+        if (!element) return;
+        var component = (window.Ext && Ext.getCmp && element.id) ? Ext.getCmp(element.id) : null;
+        if (component && component.addCls) {
+            CARD_STATES.forEach(function (cls) { component.removeCls(cls); });
+            if (state) component.addCls("pa-state-" + state);
+            return;
+        }
+        CARD_STATES.forEach(function (cls) { element.classList.remove(cls); });
+        if (state) element.classList.add("pa-state-" + state);
+    }
+
+    function setCardState(input, state) {
+        toggleCls(cardFor(input), state);
+
+        var box = filenameBoxFor(input);
+        if (!box) return;
+        // The <input> itself is not an Ext element; its field wrapper is, and
+        // that is what Ext re-classes. Mark the input directly and let the
+        // stylesheet target it.
+        box.classList.remove("pa-field-warn", "pa-field-err");
+        if (state === "warn" || state === "err") box.classList.add("pa-field-" + state);
     }
 
     function regionFor(input) {
@@ -92,6 +146,33 @@
         return region;
     }
 
+    /*
+     * Line the region up with the omic cards and reclaim the dead space under
+     * them.
+     *
+     * Both numbers are measured rather than written down: the column's offset
+     * depends on how many omics are open and on the viewport, and the gap is
+     * whatever the fixed-height row did not use (81px with two cards, less with
+     * three). A hardcoded value would be wrong the first time someone adds an
+     * omic.
+     */
+    function positionRegion(region) {
+        if (!region || !region.parentNode) return;
+        var cards = document.querySelectorAll(".omicbox");
+        if (!cards.length) return;
+        var last = cards[cards.length - 1];
+        var cardRect = last.getBoundingClientRect();
+        if (!cardRect.width) return;
+
+        var parentRect = region.parentNode.getBoundingClientRect();
+        region.style.marginLeft = Math.round(cardRect.left - parentRect.left) + "px";
+        region.style.maxWidth = Math.round(cardRect.width) + "px";
+
+        region.style.marginTop = "";
+        var gap = region.getBoundingClientRect().top - cardRect.bottom;
+        if (gap > 12) region.style.marginTop = Math.round(-(gap - 10)) + "px";
+    }
+
     function stripFor(input, fieldName) {
         var region = regionFor(input);
         if (!region) return null;
@@ -101,6 +182,7 @@
         var strip = el("div", "pa-format-strip");
         strip.id = key;
         region.appendChild(strip);
+        positionRegion(region);
         return strip;
     }
 
@@ -146,7 +228,7 @@
             strip.appendChild(el("span", "pa-format-note",
                 " (checked the first " + Math.round(PARTIAL_CHECK_BYTES / 1048576) + " MB)"));
         }
-        if (input) relayout(input);
+        if (input) { relayout(input); setCardState(input, null); }
     }
 
     function markBlocked(fieldName, entry) { blocked[fieldName] = entry; }
@@ -201,7 +283,11 @@
         });
         body.appendChild(bar);
         strip.appendChild(body);
-        if (strip.__input) relayout(strip.__input);
+        if (strip.__input) {
+            relayout(strip.__input);
+            setCardState(strip.__input, kind === "warn" ? "warn" : "err");
+        }
+        positionRegion(strip.parentNode);
         return body;
     }
 
@@ -568,6 +654,29 @@
             return result;
         };
     }
+
+    /*
+     * The column moves when an omic is added or removed and when the window is
+     * resized, and a region left at its old offset would sit under nothing.
+     * Reposition on both, throttled to an animation frame.
+     */
+    var repositionQueued = false;
+    function queueReposition() {
+        if (repositionQueued) return;
+        repositionQueued = true;
+        requestAnimationFrame(function () {
+            repositionQueued = false;
+            var region = document.querySelector(".pa-format-region");
+            if (region) positionRegion(region);
+        });
+    }
+    window.addEventListener("resize", queueReposition);
+    document.addEventListener("click", function (event) {
+        // omic add/remove buttons live in the same section; any click there can
+        // change the column, and repositioning is cheap enough to just do.
+        if (event.target && event.target.closest &&
+            event.target.closest(".po-step1-omics-row, .omicbox")) queueReposition();
+    }, true);
 
     // Capture phase: ExtJS re-dispatches and sometimes stops change events on
     // its own wrappers, and capture runs before any of that.
