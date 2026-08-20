@@ -2588,6 +2588,21 @@ function PA_Step4KeggDiagramFeatureSetSVGBox() {
 			return elem.indexOf(feature.getFeatureType().toLowerCase().replace("meta", "") + "based") > -1;
 		});
 
+		/* Whether this box is a metagene, read off the same featureType the
+		   filter above already strips "meta" from -- "metagene"/"metacompound"
+		   against "gene"/"compound".
+
+		   Deliberately NOT SimpleOmicValue.isMetagene(). That name is a boolean
+		   initialised to false, then overwritten by a method of the same name,
+		   which setMetagene() then overwrites again with a boolean. So it is a
+		   function on ordinary values -- and calling it returns the function
+		   itself, which is truthy -- and a boolean on the metagenes it is
+		   supposed to identify, where calling it throws. Nothing calls it today
+		   and this does not start. */
+		var isMetageneFeature = /^meta/i.test(feature.getFeatureType() || "");
+		var setForMetagenes = (isMetageneFeature && this.getModel().getParent)
+			? this.getModel().getParent() : null;
+
 		//   if (isRelevant === true) {
 		boxPadding = 18;
 		//   }
@@ -2633,7 +2648,43 @@ function PA_Step4KeggDiagramFeatureSetSVGBox() {
 				
 				var boxWidth = currentSegmentWidth;
 
-				var limits = getMinMax(dataDistributionSummaries[omicName], visualOptions.colorReferences[omicName]);
+				/* A metagene box is not measuring the omic, so it must not be
+				   coloured against the omic's distribution.
+
+				   A metagene is a trend -- a component summarising how a whole
+				   cluster of features moves -- and it is centred on zero, so it
+				   goes negative whatever the omic did. Measured on
+				   paintomics.uv.es: the Proteomics omic runs 0.79..1.41 while
+				   its metagenes sit at -0.02, -0.046, -0.0037. Against the
+				   omic's p10/p90 window (0.986..1.042) every one of those is
+				   off the bottom of the scale, and the box came out
+				   rgb(255, 255,127) -- a flat yellow that means nothing, on a
+				   value that is very close to no change at all.
+
+				   Their own range crosses zero, so paColourRange returns a
+				   symmetric one and blue/white/red reads the way it should.
+				   Taken across the metagenes of this feature set rather than
+				   this box alone, so sibling boxes stay comparable with each
+				   other and with the trend heatmap in the details panel, which
+				   scales the same way. */
+				var limits;
+				if (isMetageneFeature) {
+					limits = paMetageneLimits(
+						(setForMetagenes ? (setForMetagenes.getMetagenes() || []) : [])
+							.map(function (metageneElem) {
+								var metageneValues = metageneElem.getFeature().getOmicValues(omicName);
+								return {values: metageneValues
+									? metageneValues.getValues(replicateMode) : []};
+							}));
+					/* A set that reports no metagenes cannot produce a range;
+					   fall back to this box's own values rather than to the
+					   omic's, which is the thing being corrected. */
+					if (limits.min === limits.max) {
+						limits = paMetageneLimits([{values: values}]);
+					}
+				} else {
+					limits = getMinMax(dataDistributionSummaries[omicName], visualOptions.colorReferences[omicName]);
+				}
 
 				for (var j in values) {
 					context.beginPath();
