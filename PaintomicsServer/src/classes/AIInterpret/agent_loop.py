@@ -2465,31 +2465,64 @@ def _without_table_rows(text):
 _LEAD_IN = re.compile(r"(?m)^\*\*([^*\n]{4,160}?)\*\*\s*(?=[\u2014\u2013:-])")
 
 
-def _explode_container(head, body):
-    """Split a section whose pathways are bold lead-ins, not headings.
+# A `###` subsection: the other way a report nests several findings under one
+# `##`. Three is the threshold, not two -- a single pathway's own write-up can
+# reasonably carry a couple of subsections, but not a list of them.
+_SUBHEAD = re.compile(r"(?m)^#{3,4}\s+([^\n]+)$")
+CONTAINER_MIN_SUBHEADS = 3
 
-    Two production reports had their ENTIRE body under a single
-    `## Detailed Pathway Analysis`, with each pathway a `**Name (p=...)** --
-    prose` paragraph. The splitter looks for headings, found none inside, and
-    handed the chunker one chunk covering everything -- which is exactly the
-    one-call rewrite that chunking exists to replace, and it duly dropped 28 of
-    35 citations. Promoting each lead-in to a heading gives the chunker the
-    several small questions it needs.
 
-    Returns the section unchanged when there are fewer than two lead-ins: one
-    paragraph is not a container, and splitting on it would only relabel it.
+def _explode_container(head, body, pw_names=()):
+    """Split a section that holds several findings under one heading.
+
+    A container is not one finding, and handing the chunker one is handing it
+    the whole report again -- the single-call rewrite that chunking exists to
+    replace. Both nesting styles seen in production are handled:
+
+    * **`###` subsections.** Job `Yj5oty03Uf`, run through the UI: 12 pathways
+      under `## Pathway-Specific Findings`, 7 themes under `## Cross-Pathway
+      Themes`, 6 under `## Most Biologically Significant Findings`. The splitter
+      only descends to `##`, so each of those arrived as ONE section; the stage
+      accepted its own output and the user got the dossier back nearly verbatim,
+      because a chunk that IS a report has nothing to reorganise it into.
+    * **Bold lead-ins.** Two other production reports had their entire body
+      under `## Detailed Pathway Analysis` with each pathway a
+      `**Name (p=...)** -- prose` paragraph. That one chunk dropped 28 of 35
+      citations.
+
+    Children are promoted to `##` so the rewritten section keeps the one-heading
+    convention the chunk prompt asks for. Returns the section unchanged when it
+    is not a container: relabelling a single finding buys nothing.
+
+    **A section whose own heading names a pathway is never a container.** One
+    report writes `## 2. ATP-Dependent Chromatin Remodeling (mmu03082)` with
+    three `###` subsections inside it; splitting that fragments one finding into
+    three chunks that each own nothing, and it took a live report from 18
+    sections to 40 while dropping six pathway names. A container's heading is
+    generic precisely because it holds things that are not it.
     """
-    hits = list(_LEAD_IN.finditer(body))
-    if len(hits) < 2:
+    if any(n and n.lower() in head.lower() for n in pw_names):
         return [(head, body)]
+    subs = list(_SUBHEAD.finditer(body))
+    if len(subs) >= CONTAINER_MIN_SUBHEADS:
+        return _split_on(head, body, subs, lambda m: m.group(1))
+    hits = list(_LEAD_IN.finditer(body))
+    if len(hits) >= 2:
+        return _split_on(head, body, hits, lambda m: m.group(1))
+    return [(head, body)]
+
+
+def _split_on(head, body, hits, title_of):
+    """One section per match, with the framing above the first carried along."""
     out = []
     for i, m in enumerate(hits):
         end = hits[i + 1].start() if i + 1 < len(hits) else len(body)
-        out.append(("## " + m.group(1).strip(), "\n" + body[m.start():end].strip()))
-    # Whatever preceded the first lead-in is the container's own framing; it
-    # rides with the first pathway rather than being dropped, because it can
-    # carry a citation of its own.
-    lead = body[:hits[0].start()].strip()
+        out.append(("## " + title_of(m).strip(),
+                    "\n" + body[m.start():end].strip()))
+    # The container's own heading and whatever preceded the first match ride
+    # with the first child rather than being dropped -- either can carry a
+    # citation, and the heading can carry a pathway name.
+    lead = (head + "\n" + body[:hits[0].start()]).strip()
     if lead:
         out[0] = (out[0][0], "\n" + lead + "\n\n" + out[0][1].strip())
     return out
@@ -2547,7 +2580,10 @@ def _partition_sections(report, pw_names, stats):
         if kind == "last":
             closing.append(h + b)
         elif kind == "path":
-            pathway_secs.append((h, b))
+            # Exploded too, not only the furniture. `## Pathway-Specific
+            # Findings` is on no name list and held all 12 pathways of job
+            # Yj5oty03Uf under `###`.
+            pathway_secs.extend(_explode_container(h, b, pw_names))
         else:
             # Markers count wherever they are -- a citation is evidence even
             # in a table cell. Pathway NAMES count only in PROSE, because the
@@ -2568,7 +2604,7 @@ def _partition_sections(report, pw_names, stats):
                 continue                       # genuinely furniture
             stats["results_furniture_kept"] = (
                 stats.get("results_furniture_kept", 0) + 1)
-            pathway_secs.extend(_explode_container(h, b))
+            pathway_secs.extend(_explode_container(h, b, pw_names))
     return preamble, pathway_secs, closing, tail
 
 

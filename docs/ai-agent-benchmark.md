@@ -6187,3 +6187,42 @@ number. **The number that mattered was in the archive the whole time** --
 `results_rejected` was set on every live run, and reading four traces would have
 found this before any of it shipped. A stage that records why it refused itself
 is only useful if the refusals are read.
+
+### A fourth shape, found by running the fixed code through the UI
+
+The fix above was verified by re-running the four rejected reports. All four
+accepted, so I ran a real job through the browser -- `Yj5oty03Uf`, STATegra
+5-omics, mmu, KEGG + Reactome + OmniPath -- and the report came back looking
+like the dossier again, with `## Key Findings`, 55 bullets and a per-pathway
+catalogue.
+
+The archive said the stage had **succeeded**: `results_section: true`,
+`results_pathways_kept: 13` of 13, `results_citations_kept: 19`, 5 chunks, 62 s.
+It accepted its own output, and its own output was the dossier.
+
+That report nests one level deeper: 12 pathways as `###` under
+`## Pathway-Specific Findings`, 7 themes as `###` under `## Cross-Pathway
+Themes`, 6 more under `## Most Biologically Significant Findings`.
+`_split_pathway_sections` descends only to `##`, so each container arrived as
+ONE section -- and a chunk that IS a report has nothing to reorganise it into,
+so the model returned the structure it was handed. Same failure as the bold
+lead-in container, one heading level down.
+
+`_explode_container` now handles both nesting styles, with a veto: **a section
+whose own heading names a pathway is never a container.** Without it the `###`
+rule split `## 2. ATP-Dependent Chromatin Remodeling (mmu03082)` into its three
+subsections, took a live report from 18 sections to 40, and dropped six pathway
+names -- the parent heading was the only place they were written.
+
+Re-measured live: `Yj5oty03Uf` 26 sections / 5 chunks, accepted in 34 s,
+bullets **55 -> 7**, five finding-titled subsections and no `## Key Findings`.
+`y7gI3AVpSm` and `4j00f2377Y` still accept. Classification over all **ten**
+stored UV reports loses no marker and no prose-named pathway.
+
+**The lesson is the same one, one level down, and it is about the verification
+rather than the code.** Re-running the reports that had failed confirmed the
+failures were fixed; it could not find a shape none of them had. Only driving
+the actual UI produced the fourth. `results_section: true` on a report that
+still reads like a dossier is also the sharper warning: a stage that grades
+itself on conservation will pass whenever it conserves everything by changing
+nothing.

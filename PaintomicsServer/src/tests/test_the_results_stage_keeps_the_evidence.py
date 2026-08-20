@@ -109,6 +109,57 @@ Ribosome biogenesis rises early [1].
 Lysosome genes follow [2].
 """ + REFS
 
+# The fourth shape, found by running a job through the UI: findings nested one
+# level deeper, under `###`, inside generically-titled `##` containers.
+NESTED = """# Synthesis Report: Multi-Omic Analysis
+
+## Key Findings
+1. **Chromatin remodeling precedes transcription** across several pathways.
+
+## Cross-Pathway Themes and Shared Mechanisms
+
+### 1. Chromatin-First Regulation
+Accessibility leads mRNA by 6-12 h [1].
+
+### 2. Post-Translational Signaling
+Protein spikes precede transcript change [2].
+
+### 3. miRNA-Mediated Buffering
+Derepression follows [3].
+
+## Pathway-Specific Findings
+
+### Ribosome Biogenesis in Eukaryotes (mmu03008)
+Repressed throughout [4].
+
+### Lysosome Biogenesis (mmu04142)
+Induced hydrolases [5].
+
+### Basal Transcription Factors (mmu03022)
+Subunit exchange [6].
+
+## Limitations and Caveats
+Time points are sparse.
+""" + REFS
+
+# A pathway's OWN section, which happens to carry subsections. Not a container.
+PATHWAY_WITH_SUBSECTIONS = """# Report
+
+## 2. Basal Transcription Factors (mmu03022)
+
+### Gene-level observations
+Taf8 up, Taf12 down [1].
+
+### Chromatin context
+Accessibility rises early [2].
+
+### Timing
+The switch completes by 18 h [3].
+
+## Lysosome Biogenesis (mmu04142)
+Induced hydrolases [4].
+""" + REFS
+
 NAMES = ["Kaposi sarcoma-associated herpesvirus infection", "Cadherin signaling",
          "Thyroid cancer", "Ribosome Biogenesis in Eukaryotes",
          "Lysosome Biogenesis", "Basal Transcription Factors"]
@@ -189,6 +240,53 @@ class FurnitureIsDecidedByEvidence(unittest.TestCase):
         _, secs, _, _, kept, _ = self._partition(report)
         self.assertIn("basal transcription factors", kept.lower())
 
+    # ---- the fourth shape: findings nested under `###` ------------------
+    def test_a_generically_titled_section_of_subsections_is_split(self):
+        """Job `Yj5oty03Uf`, run through the UI after the first fix shipped.
+
+        12 pathways under `## Pathway-Specific Findings`, 7 themes under
+        `## Cross-Pathway Themes`. The splitter descends only to `##`, so each
+        arrived as ONE section -- the stage accepted its own output and handed
+        the user back the dossier, because a chunk that IS a report has nothing
+        to reorganise it into.
+        """
+        _, secs, _, _, _, _ = self._partition(NESTED)
+        heads = [h.lower() for h, _ in secs]
+        self.assertNotIn("## pathway-specific findings", heads)
+        self.assertTrue(any("ribosome biogenesis" in h for h in heads))
+        self.assertTrue(any("lysosome biogenesis" in h for h in heads))
+        self.assertTrue(any("chromatin-first" in h for h in heads))
+        self.assertGreaterEqual(len(secs), 6)
+
+    def test_a_section_whose_heading_names_a_pathway_is_never_split(self):
+        """The over-correction the `###` rule shipped with.
+
+        `## 2. ATP-Dependent Chromatin Remodeling (mmu03082)` with three
+        subsections is ONE finding. Splitting it took a live report from 18
+        sections to 40 and dropped six pathway names, because the parent
+        heading -- the only place the pathway was named -- went with it.
+        """
+        _, secs, _, _, kept, _ = self._partition(PATHWAY_WITH_SUBSECTIONS)
+        heads = " | ".join(h.lower() for h, _ in secs)
+        self.assertIn("basal transcription factors", heads)
+        self.assertNotIn("gene-level observations", heads)
+        self.assertIn("basal transcription factors", kept.lower())
+
+    def test_two_subsections_are_not_a_container(self):
+        """Three is the threshold: a single finding can reasonably carry a
+        couple of subsections, but not a list of them."""
+        out = al._explode_container(
+            "## Themes", "\n### One\na [1].\n\n### Two\nb [2].\n")
+        self.assertEqual(len(out), 1)
+
+    def test_the_container_heading_rides_with_the_first_child(self):
+        """It can carry a citation, and it can carry a pathway name."""
+        out = al._explode_container(
+            "## Themes [9]",
+            "\n### One\na [1].\n\n### Two\nb [2].\n\n### Three\nc [3].\n")
+        self.assertEqual(len(out), 3)
+        self.assertIn("9", _marks(out[0][1]))
+
     # ---- placement -------------------------------------------------------
     def test_follow_up_experiments_close_the_section_rather_than_open_one(self):
         """Rewritten as a finding it acquires a heading for work nobody did."""
@@ -235,7 +333,9 @@ class FurnitureIsDecidedByEvidence(unittest.TestCase):
         """The one assertion that would have caught every production failure
         before it shipped."""
         for name, report in (("flat", FLAT), ("sectioned", SECTIONED),
-                             ("furniture-only", FURNITURE_ONLY)):
+                             ("furniture-only", FURNITURE_ONLY),
+                             ("nested", NESTED),
+                             ("subsectioned", PATHWAY_WITH_SUBSECTIONS)):
             _, _, _, _, kept, _ = self._partition(report)
             self.assertEqual(_marks(report) - _marks(kept), set(),
                              "%s shape dropped a marker before the model ever "
@@ -248,7 +348,9 @@ class FurnitureIsDecidedByEvidence(unittest.TestCase):
         conserving markers says nothing about conserving findings.
         """
         for name, report in (("flat", FLAT), ("sectioned", SECTIONED),
-                             ("furniture-only", FURNITURE_ONLY)):
+                             ("furniture-only", FURNITURE_ONLY),
+                             ("nested", NESTED),
+                             ("subsectioned", PATHWAY_WITH_SUBSECTIONS)):
             _, _, _, _, kept, _ = self._partition(report)
             prose_before = al._without_table_rows(
                 report.split("### References")[0]).lower()
