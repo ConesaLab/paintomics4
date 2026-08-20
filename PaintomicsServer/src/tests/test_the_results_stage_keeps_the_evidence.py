@@ -378,6 +378,87 @@ class ALeadInIsOnlySplitWhenItIsAContainer(unittest.TestCase):
                       "the container's own framing can carry a citation")
 
 
+@unittest.skipUnless(IMPORTED, "agent_loop did not import")
+class FurnitureIsTakenOffAgainAfterTheGate(unittest.TestCase):
+    """`results_section: true` is not a promise about the STORED report.
+
+    The Results section is written before the exit gate on purpose, so its prose
+    is graded by the same machinery as any other draft. But two gate steps hand
+    the WHOLE report back to the synthesizer -- the top-up candidate and the
+    citation-correction rewrite -- and the synthesizer's standing instructions
+    say to include a "Key Findings" summary at the top. Job `m4gs607z4Z`, run
+    through the UI, recorded `results_section: true`, `results_pathways_kept: 9`
+    of 9, `results_citations_kept: 24` -- and was stored with a bulleted
+    `# Key Findings` block above the prose, because a correction fired.
+    """
+
+    REWRITTEN = """# Key Findings
+
+- **Chromatin remodeling precedes transcription**: accessibility leads mRNA.
+- **Coordinated inflammatory shutdown**: Ccr2 and Ccl2 fall together.
+
+---
+
+## Chromatin remodeling precedes a multi-layered inflammatory program
+
+Accessibility at 2-6 h preceded mRNA at 12-24 h [1], and Ccr2 fell to
+-7.69 at 24 h [2]. Lysosome Biogenesis followed [3].
+
+## Limitations and Caveats
+Time points are sparse.
+""" + REFS
+
+    def test_a_reintroduced_summary_is_taken_off_again(self):
+        stats = {}
+        out = al._strip_reintroduced_furniture(self.REWRITTEN, NAMES, stats)
+        self.assertNotIn("Key Findings", out)
+        self.assertEqual(stats.get("results_furniture_restripped"), 1)
+
+    def test_it_never_costs_a_citation(self):
+        """The same rule as everywhere else: a section goes only if everything
+        in it survives elsewhere."""
+        report = self.REWRITTEN.replace(
+            "- **Coordinated inflammatory shutdown**: Ccr2 and Ccl2 fall together.",
+            "- **Coordinated inflammatory shutdown**: Ccr2 and Ccl2 fall [7].")
+        out = al._strip_reintroduced_furniture(report, NAMES, {})
+        self.assertIn("7", _marks(out), "[7] lives only in the summary")
+        self.assertIn("Key Findings", out)
+
+    def test_it_keeps_the_reference_list(self):
+        out = al._strip_reintroduced_furniture(self.REWRITTEN, NAMES, {})
+        self.assertIn("### References", out)
+
+    def test_it_is_idempotent(self):
+        """It runs on a report the stage may already have cleaned."""
+        once = al._strip_reintroduced_furniture(self.REWRITTEN, NAMES, {})
+        self.assertEqual(al._strip_reintroduced_furniture(once, NAMES, {}), once)
+
+    def test_a_report_with_no_furniture_is_returned_untouched(self):
+        clean = ("## A finding\n\nProse [1].\n\n## Limitations\nSparse.\n"
+                 + REFS)
+        self.assertEqual(al._strip_reintroduced_furniture(clean, NAMES, {}),
+                         clean)
+
+    def test_it_runs_only_when_a_results_section_was_written(self):
+        """On a dossier run the Key Findings block is the report's own
+        structure, not a rewrite undoing itself."""
+        with open(SRC) as fh:
+            src = fh.read()
+        self.assertIn("if results_written:\n        report = "
+                      "_strip_reintroduced_furniture(", src)
+
+    def test_it_runs_after_every_step_that_can_rewrite_the_report(self):
+        """Before renumbering, but after top-up and correction -- otherwise the
+        very rewrites that reintroduce the block run afterwards."""
+        with open(SRC) as fh:
+            src = fh.read()
+        strip = src.index("_strip_reintroduced_furniture(\n            report,")
+        self.assertLess(src.index("stats[\"topup_added\"]"), strip)
+        self.assertLess(src.index("loop correction rewrite"), strip)
+        self.assertLess(strip, src.index("report, citation_mapping = "
+                                         "renumber_citations(report)"))
+
+
 class TheChunkKeepsItsSourceWhenItCannotConserveIt(unittest.TestCase):
     """Source-level: the second half of the production failure.
 

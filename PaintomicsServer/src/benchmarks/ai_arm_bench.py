@@ -211,6 +211,12 @@ STAGE_COUNTS = ("delegate_fulltext_gained", "quotes_supplied", "quotes_reused", 
                 # longer all-or-nothing, so this is where the loss shows up.
                 "results_chunks", "results_retried_pathways",
                 "results_furniture_kept", "results_chunk_reverted",
+                # How many furniture sections a post-gate rewrite put BACK and
+                # the final strip had to remove. Non-zero means the correction
+                # or top-up pass is undoing the Results section, which is
+                # invisible in `results_section` -- that flag reports what the
+                # stage produced, not what was stored.
+                "results_furniture_restripped",
                 # Which searches reached the report. Retrieval novelty is
                 # ~99.9%; conversion to a citation is ~12%, so the useful
                 # question is per-theme, not per-call.
