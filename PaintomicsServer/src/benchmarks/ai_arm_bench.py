@@ -203,11 +203,14 @@ STAGE_COUNTS = ("delegate_fulltext_gained", "quotes_supplied", "quotes_reused", 
                 # that held 16 of 16 from one that held 16 of 40.
                 "results_pathways_kept", "results_pathways_before",
                 # How many calls the chunked rewrite took, how many pathways a
-                # per-chunk retry had to restore, and how many it could not.
-                # unfixed > 0 with the run still accepted would mean the guard
-                # is being satisfied by something other than the chunks.
+                # per-chunk retry had to restore, how many sections a named-
+                # furniture heading turned out to be carrying, and how many
+                # chunks ended up keeping their ORIGINAL dossier text because
+                # three attempts would not conserve their markers or pathways.
+                # `reverted` is the stage's real cost now: a rewrite is no
+                # longer all-or-nothing, so this is where the loss shows up.
                 "results_chunks", "results_retried_pathways",
-                "results_chunk_unfixed",
+                "results_furniture_kept", "results_chunk_reverted",
                 # Which searches reached the report. Retrieval novelty is
                 # ~99.9%; conversion to a citation is ~12%, so the useful
                 # question is per-theme, not per-call.
@@ -268,7 +271,7 @@ STAGE_MAPS = ("tool_chars_by_tool", "tool_calls_by_tool")
 # Outcomes whose value is a sentence, not a number: a stage that skipped or
 # failed says WHY, and "absent from the archive" reads identically to "never
 # happened". Truncated because a traceback string is not a metric.
-STAGE_NOTES = ("delegate_fulltext_failed", "fulltext_candidates", "fulltext_upgraded", "fulltext_skipped", "fulltext_failed", "framing_failed", "correction_failed", "correction_skipped", "framing_reused", "trace_file", "merge_citations", "merge_grounded",
+STAGE_NOTES = ("results_chunk_revert_why", "delegate_fulltext_failed", "fulltext_candidates", "fulltext_upgraded", "fulltext_skipped", "fulltext_failed", "framing_failed", "correction_failed", "correction_skipped", "framing_reused", "trace_file", "merge_citations", "merge_grounded",
                "merge_coverage", "merge_mode", "merge_probe_failed",
                "failed_refs", "topup_refs", "topup_verify_failed",
                "topup_fulltext_skipped", "topup_fulltext_failed",

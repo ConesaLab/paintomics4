@@ -2449,9 +2449,127 @@ def _split_pathway_sections(report):
     return preamble, secs, tail
 
 
+def _without_table_rows(text):
+    """The section with its markdown table rows removed.
+
+    Used to decide whether a section carries evidence. A table is data the job
+    already holds rendered as rows; it asserts nothing the prose does not, and
+    treating its cells as findings readmits the exact furniture the rewrite
+    exists to strip.
+    """
+    return re.sub(r"(?m)^\s*\|.*$", "", str(text))
+
+
+# A pathway written as a bold lead-in rather than a heading:
+# `**Cadherin signaling (p=5.03e-06, 20/26)** -- converges on ...`
+_LEAD_IN = re.compile(r"(?m)^\*\*([^*\n]{4,160}?)\*\*\s*(?=[\u2014\u2013:-])")
+
+
+def _explode_container(head, body):
+    """Split a section whose pathways are bold lead-ins, not headings.
+
+    Two production reports had their ENTIRE body under a single
+    `## Detailed Pathway Analysis`, with each pathway a `**Name (p=...)** --
+    prose` paragraph. The splitter looks for headings, found none inside, and
+    handed the chunker one chunk covering everything -- which is exactly the
+    one-call rewrite that chunking exists to replace, and it duly dropped 28 of
+    35 citations. Promoting each lead-in to a heading gives the chunker the
+    several small questions it needs.
+
+    Returns the section unchanged when there are fewer than two lead-ins: one
+    paragraph is not a container, and splitting on it would only relabel it.
+    """
+    hits = list(_LEAD_IN.finditer(body))
+    if len(hits) < 2:
+        return [(head, body)]
+    out = []
+    for i, m in enumerate(hits):
+        end = hits[i + 1].start() if i + 1 < len(hits) else len(body)
+        out.append(("## " + m.group(1).strip(), "\n" + body[m.start():end].strip()))
+    # Whatever preceded the first lead-in is the container's own framing; it
+    # rides with the first pathway rather than being dropped, because it can
+    # carry a citation of its own.
+    lead = body[:hits[0].start()].strip()
+    if lead:
+        out[0] = (out[0][0], "\n" + lead + "\n\n" + out[0][1].strip())
+    return out
+
+
 RESULTS_CHUNK = int(os.getenv("AI_AGENT_RESULTS_CHUNK", "4"))
 # How many subsections a Results section should aim for.
 RESULTS_TARGET_SECTIONS = int(os.getenv("AI_AGENT_RESULTS_SECTIONS", "5"))
+
+
+def _partition_sections(report, pw_names, stats):
+    """Sort the dossier into (preamble, findings, closing, tail).
+
+    Pure and side-effect free apart from the stats counter, so the
+    classification can be replayed over real reports without a gateway --
+    which is how the four production rejections were reproduced.
+    """
+    preamble, secs, tail = _split_pathway_sections(report)
+    # Headings that USUALLY introduce framing rather than a pathway finding.
+    # A name is a suspicion, not a verdict -- see the evidence test below.
+    SKIP = ("key findings", "cross-pathway", "detailed pathway analysis",
+            "pathway clusters", "enriched pathway summary", "summary of")
+    # Caveats close a Results section; they are not a finding to reorganise.
+    # Grouped with the pathways they landed third of six, which reads as the
+    # report giving up halfway through. Follow-up experiments belong with them:
+    # a proposal is not a result, and rewritten as one it acquires a finding
+    # heading for work nobody did.
+    LAST = ("limitation", "caveat", "follow-up experiment", "follow up experiment")
+    kinds = []
+    for h, b in secs:
+        low = h.lower()
+        kinds.append(("last" if any(k in low for k in LAST)
+                      else "skip" if any(k in low for k in SKIP)
+                      else "path", h, b))
+
+    # A SKIP-named section is dropped only if dropping it LOSES NOTHING.
+    #
+    # The name list was a guess about shape, and on live reports the guess was
+    # wrong in the most expensive way: four consecutive production runs had the
+    # whole rewrite rejected, and every rejection traces here. In the flat
+    # report shape the entire body is one `## Detailed Pathway Analysis` whose
+    # pathways are bold lead-ins, so the name list threw away all 15 (and all
+    # 35) citations at once; in the sectioned shape `## Key Findings` carried
+    # one or two markers that appeared nowhere else, which cost `lost_1` and
+    # `lost_2`. Both are the same mistake -- deciding a section's role from its
+    # title instead of its content. So the test is now what it should always
+    # have been: a section is furniture when every citation marker in it is
+    # also somewhere that survives and it names no pathway that would otherwise
+    # go unmentioned. Anything else is evidence and is rewritten like the rest.
+    surviving = preamble + "\n".join(h + b for k, h, b in kinds if k != "skip")
+    surv_marks = set(re.findall(r"\[(\d+)\]", surviving))
+    surv_low = _without_table_rows(surviving).lower()
+    pathway_secs, closing = [], []
+    for kind, h, b in kinds:
+        if kind == "last":
+            closing.append(h + b)
+        elif kind == "path":
+            pathway_secs.append((h, b))
+        else:
+            # Markers count wherever they are -- a citation is evidence even
+            # in a table cell. Pathway NAMES count only in PROSE, because the
+            # enriched-pathway summary and the cluster table are furniture by
+            # construction: rows of data the job already holds, appended
+            # deterministically below the report, naming dozens of pathways the
+            # prose never discusses. Judge their cells as findings and every
+            # one of those names reads as an orphan, the whole table is
+            # readmitted as evidence, and the rewrite ships with exactly the
+            # 46-row table it was asked to remove (measured on job 4j00f2377Y).
+            # A table row restates; it does not find.
+            prose = _without_table_rows(b)
+            marks = set(re.findall(r"\[(\d+)\]", b))
+            orphan_names = [n for n in pw_names
+                            if n and n.lower() in (h + prose).lower()
+                            and n.lower() not in surv_low]
+            if not (marks - surv_marks) and not orphan_names:
+                continue                       # genuinely furniture
+            stats["results_furniture_kept"] = (
+                stats.get("results_furniture_kept", 0) + 1)
+            pathway_secs.extend(_explode_container(h, b))
+    return preamble, pathway_secs, closing, tail
 
 
 async def _results_by_chunk(agent, ctx, report, pw_names, job_id, stats, timeout):
@@ -2469,21 +2587,8 @@ async def _results_by_chunk(agent, ctx, report, pw_names, job_id, stats, timeout
     ever holds them all. The preamble and the reference list are carried across
     verbatim: neither is a finding, and both are what a rewrite loses first.
     """
-    preamble, secs, tail = _split_pathway_sections(report)
-    # Sections that are framing rather than a pathway finding stay as they are.
-    SKIP = ("key findings", "cross-pathway", "detailed pathway analysis",
-            "pathway clusters", "enriched pathway summary", "summary of")
-    # Caveats close a Results section; they are not a finding to reorganise.
-    # Grouped with the pathways they landed third of six, which reads as the
-    # report giving up halfway through.
-    LAST = ("limitation", "caveat")
-    pathway_secs, closing = [], []
-    for h, b in secs:
-        low = h.lower()
-        if any(k in low for k in LAST):
-            closing.append(h + b)
-        elif not any(k in low for k in SKIP):
-            pathway_secs.append((h, b))
+    preamble, pathway_secs, closing, tail = _partition_sections(
+        report, pw_names, stats)
     if not pathway_secs:
         return None
     # Chunk size is derived from the report, not fixed. A flat 4 gives a
@@ -2493,6 +2598,9 @@ async def _results_by_chunk(agent, ctx, report, pw_names, job_id, stats, timeout
     # for about RESULTS_TARGET_SECTIONS of them and never fewer than two
     # sections per chunk (a chunk of one cannot find a theme, only restate the
     # pathway).
+    # Every marker the report carries, so a chunk reusing a marker another
+    # chunk introduced is not mistaken for inventing one.
+    all_marks = set(re.findall(r"\[(\d+)\]", report.split("### References")[0]))
     size = max(2, -(-len(pathway_secs) // RESULTS_TARGET_SECTIONS))
     groups = [pathway_secs[i:i + size]
               for i in range(0, len(pathway_secs), size)]
@@ -2505,14 +2613,23 @@ async def _results_by_chunk(agent, ctx, report, pw_names, job_id, stats, timeout
             "taken": ("\n".join("  - %s" % t for t in taken)
                       if taken else "  (none yet -- this is the first section)"),
             "chunk": chunk}
-        # Checked and retried per CHUNK, not once at the end. A chunk owns a
-        # known handful of pathways, so a miss is both detectable here and
-        # cheap to fix -- and a single dropped name at the end rejects the
-        # whole rewrite. Measured: one run kept 16/16, the next dropped one,
-        # from an identical input. The conservation is reliable; the wording
-        # is not, so it is checked rather than trusted.
+        # Checked and retried per CHUNK, and on failure the chunk keeps its
+        # ORIGINAL text rather than costing the whole rewrite.
+        #
+        # This is the second half of the production failure. Citations were
+        # only ever counted once, over the finished report, and any loss threw
+        # everything away -- so two live runs that had reorganised the entire
+        # dossier correctly were discarded for `lost_1` and `lost_2`. A chunk
+        # owns a known handful of markers and pathways, so the loss is
+        # detectable exactly where it happens and cheap to name in a retry;
+        # and if the retry still will not conserve them, one section reading
+        # like the old dossier is a far smaller loss than no rewrite at all.
+        # Only invented markers are judged against the whole report: a chunk
+        # may legitimately reuse a marker another chunk introduced, and
+        # reverting for that would punish good prose.
+        own_marks = set(re.findall(r"\[(\d+)\]", chunk))
         text = None
-        for attempt in (1, 2):
+        for attempt in (1, 2, 3):
             try:
                 r = await bounded(Runner.run(agent, prompt, context=ctx,
                                              max_turns=2), timeout,
@@ -2520,19 +2637,47 @@ async def _results_by_chunk(agent, ctx, report, pw_names, job_id, stats, timeout
                 text = str(r.final_output or "").strip()
             except (Exception, asyncio.TimeoutError) as e:
                 logger.warning("[%s][loop] results chunk failed: %s", job_id, e)
+                stats["results_chunk_reverted"] = (
+                    stats.get("results_chunk_reverted", 0) + 1)
                 return chunk, owned          # keep the ORIGINAL sections
+            got = set(re.findall(r"\[(\d+)\]", text))
             gone = [n for n in owned if n.lower() not in text.lower()]
-            if not gone or attempt == 2:
-                if gone:
-                    stats["results_chunk_unfixed"] = (
-                        stats.get("results_chunk_unfixed", 0) + len(gone))
+            lost = own_marks - got
+            made_up = got - all_marks
+            if not gone and not lost and not made_up:
                 break
-            prompt = (
-                "Your section stopped discussing these pathways:\n%s\n\n"
-                "Each is a finding, not an optional detail. Return the SAME "
-                "section with them discussed by name, keeping everything else "
-                "exactly as you wrote it.\n\n%s"
-                % ("\n".join("  - %s" % n for n in gone), text))
+            if attempt == 3:
+                stats["results_chunk_reverted"] = (
+                    stats.get("results_chunk_reverted", 0) + 1)
+                stats["results_chunk_revert_why"] = ",".join(
+                    filter(None, ["names_%d" % len(gone) if gone else "",
+                                  "cites_%d" % len(lost) if lost else "",
+                                  "invented_%d" % len(made_up) if made_up else ""]))
+                logger.info("[%s][loop] results chunk kept verbatim (%s)",
+                            job_id, stats["results_chunk_revert_why"])
+                return chunk, owned          # keep the ORIGINAL sections
+            asks = []
+            if gone:
+                asks.append(
+                    "It stopped discussing these pathways, each of which is a "
+                    "finding and not an optional detail:\n%s"
+                    % "\n".join("  - %s" % n for n in gone))
+            if lost:
+                asks.append(
+                    "It dropped these citation markers: %s\nEach marks a claim "
+                    "that was checked against the paper it points at, so a "
+                    "dropped marker loses a verified fact. Put each one back on "
+                    "the sentence carrying its claim."
+                    % " ".join("[%s]" % m for m in sorted(lost, key=int)))
+            if made_up:
+                asks.append(
+                    "It used these markers, which do not exist in this report: "
+                    "%s\nRemove them; do not renumber the rest."
+                    % " ".join("[%s]" % m for m in sorted(made_up, key=int)))
+            prompt = ("Your section did not conserve its source.\n\n%s\n\n"
+                      "Return the SAME section with that fixed, keeping "
+                      "everything else exactly as you wrote it.\n\n%s"
+                      % ("\n\n".join(asks), text))
         return text, owned
 
     # Sequential, not gathered. Run in parallel the chunks cannot see each
@@ -2615,7 +2760,13 @@ async def _write_results_section(agent, ctx, report, cluster_text, pathways,
 
     before = _body_markers(report)
     pw_names = [p.get("name") for p in (pathways or []) if p.get("name")]
-    pw_before = _named_pathways(report, pw_names)
+    # Prose only, on both sides. The dossier's enriched-pathway table lists
+    # EVERY enriched pathway -- 46 rows on one live job -- while the prose
+    # discusses a handful. Counting table cells as findings makes the guard
+    # demand that a Results section name all of them, which no Results section
+    # does, and the rewrite is rejected for dropping a table it was asked to
+    # drop.
+    pw_before = _named_pathways(_without_table_rows(report), pw_names)
     prompt = RESULTS_PROMPT % {
         "markers": " ".join("[%s]" % m for m in sorted(before, key=int)) or "(none)",
         "pathways": "\n".join("  - %s" % n for n in sorted(pw_before)) or "  (none)",
@@ -2636,7 +2787,7 @@ async def _write_results_section(agent, ctx, report, cluster_text, pathways,
                                       stats, timeout)
     if chunked:
         cand_after = _body_markers(chunked)
-        cand_pw = _named_pathways(chunked, pw_names)
+        cand_pw = _named_pathways(_without_table_rows(chunked), pw_names)
         reasons = []
         if before - cand_after:
             reasons.append("lost_%d" % len(before - cand_after))
@@ -3177,16 +3328,17 @@ async def _run_loop_async(job_instance, job_id, experiment_design, budgets,
     # arm ships them (its phase 5d): data the job already holds is appended,
     # never asked of the model.
     #
-    # When a Results section was written, the CLUSTER table is suppressed --
-    # the section describes the clustering in prose, which is the whole point of
-    # asking for it, and a table restating it undoes that. The enriched pathway
-    # summary stays: it is the quantitative backbone, it is data the job already
-    # holds rather than anything the model asserted, and dropping it would lose
-    # numbers the reader may want to check.
-    # The enriched-pathway table is appended only when the dossier ships. A
-    # Results section carries its numbers in the sentences, and a 17-row table
-    # under it is the dossier furniture the rewrite was asked to remove -- the
-    # first live job with the stage on came back with prose AND the table.
+    # When a Results section was written, BOTH tables are suppressed. The
+    # section describes the clustering in prose, which is the whole point of
+    # asking for it, and a table restating it undoes that; the enriched-pathway
+    # table is the same trade, and a Results section carries its numbers in the
+    # sentences. The first live job with the stage on came back with prose AND
+    # a 17-row table under it -- the dossier furniture the rewrite exists to
+    # remove.
+    #
+    # (An earlier comment here claimed the enriched summary stays. It never
+    # did; the condition below has always suppressed it. The comment was the
+    # thing that was wrong.)
     if not results_written and "## Enriched Pathway Summary" not in report:
         report = report.rstrip() + "\n\n" + render_pathway_table(pathways)
     if ctx.partition is not None:

@@ -6101,3 +6101,89 @@ renamed tests, so each suite died on a `NameError` *instead of running* -- a
 failure that reads as an error, not as a pass, but only because someone looks.
 All four now collect from `globals()`. That is the sixth through ninth
 occurrence recorded in this document.
+
+## The Results stage was rejecting itself on every production run
+
+The stage shipped, was enabled on paintomics.uv.es, and **never once reached a
+user**. Four consecutive live runs, read out of `__stats__` in the trace archive:
+
+| job | `results_rejected` | shape |
+| --- | --- | --- |
+| `4j00f2377Y` | `lost_15,droppedpathways_12` | flat |
+| `7wkV30zivJ` | `lost_28,invented_1,droppedpathways_7` | flat |
+| `y7gI3AVpSm` | `lost_2` | sectioned |
+| `D3k1L35664` | `lost_1` | stitched |
+
+`results_section: false` in all four, so every user saw the dossier. The stage
+was on, running, costing 3-58 s a run, and throwing away everything it wrote.
+
+**This was invisible to the way it had been verified.** It was developed and
+hand-checked against one report, `Z2x664211R`, which is the one shape the bug
+does not touch -- its `## Key Findings` carries no citation, so nothing is lost
+when the block is dropped. Testing a second real report would have found it.
+One report is not a sample; that lesson is now recorded twice in this document.
+
+### Cause 1: a section's role was read off its title
+
+`SKIP` was a list of heading names. Reports come in more than one shape, and in
+the flat shape the entire body is a single `## Detailed Pathway Analysis` whose
+pathways are `**Name (p=...)** -- prose` lead-ins, not headings. That name was
+on the list, so all 15 (and all 35) citations went at once. In the sectioned
+shape `## Key Findings` happened to carry one or two markers appearing nowhere
+else -- hence `lost_1` and `lost_2`, near-misses that cost the whole rewrite.
+
+The rule is now computed, not named: **a section is furniture only when every
+citation marker in it survives elsewhere and it names no pathway that would
+otherwise go unmentioned.** Names are counted in PROSE only -- the
+enriched-pathway table lists every enriched pathway (46 rows on `4j00f2377Y`)
+while the prose discusses a handful, and judging its cells as findings readmits
+the whole table as evidence. Markers count wherever they are, table cells
+included. The report-level guard was moved onto the same basis; before, it
+selected on one basis and judged on another.
+
+### Cause 2: a container was one chunk
+
+Kept but unsplit is half a fix. A flat report gave the chunker `results_chunks:
+1`, which is the single-call rewrite chunking exists to replace -- and it duly
+dropped 28 of 35 citations. `_explode_container` promotes each bold lead-in to a
+heading: `4j00f2377Y` goes 1 -> 17 sections, `7wkV30zivJ` 1 -> 3.
+
+### Cause 3: the guard was all-or-nothing
+
+Citations were counted once, over the finished report. `lost_1` discarded a
+rewrite that had reorganised everything else correctly. Conservation is now
+checked **per chunk**, where the loss happens and where it is cheap to name in a
+retry (three attempts, the repair prompt listing the exact markers and pathway
+names). A chunk that still will not conserve its source keeps its ORIGINAL text.
+One section reading like the old dossier is a far smaller loss than no rewrite.
+Only invented markers are judged against the whole report -- a chunk may
+legitimately reuse a marker another chunk introduced.
+
+### Measured, on the deployed venv against the live gateway
+
+All four rejected reports now accept:
+
+| job | before | after | s | chunks | reverted | tables |
+| --- | --- | --- | --- | --- | --- | --- |
+| `4j00f2377Y` | `lost_15,droppedpathways_12` | **accepted** | 26 | 5 | 0 | 46 -> 0 |
+| `7wkV30zivJ` | `lost_28,invented_1,...` | **accepted** | 17 | 2 | 0 | 40 -> 0 |
+| `D3k1L35664` | `lost_1` | **accepted** | 69 | 5 | 0 | 54 -> 0 |
+| `y7gI3AVpSm` | `lost_2` | **accepted** | 48 | 5 | 1 `names_1` | 52 -> 0 |
+
+Bullets 45 -> 4, 41 -> 11, 10 -> 5, 5 -> 0; the residue is the caveats list,
+which is carried verbatim on purpose. Classification replayed offline over all
+nine stored UV reports loses **no citation marker and no prose-named pathway**
+in any of them.
+
+`y7gI3AVpSm` is the one that proves the third fix: one chunk reverted, the run
+still accepted. Under the old guard that single chunk was the whole rejection.
+
+### What this says about verifying a guard
+
+`results_pathways_before: 0` in an earlier hand-probe was reported as a caveat
+and chased down: the probe's own name extraction found nothing, while the real
+path passes 40 named pathways. That was the right instinct applied to the wrong
+number. **The number that mattered was in the archive the whole time** --
+`results_rejected` was set on every live run, and reading four traces would have
+found this before any of it shipped. A stage that records why it refused itself
+is only useful if the refusals are read.

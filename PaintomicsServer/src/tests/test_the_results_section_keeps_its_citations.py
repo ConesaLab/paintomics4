@@ -226,7 +226,11 @@ class ResultsSectionKeepsItsFindings(unittest.TestCase):
         block = self.src.split("async def _results_by_chunk")[1]
         block = block.split("\nasync def ")[0].split("\ndef ")[0]
         self.assertIn("gone = [n for n in owned", block)
-        self.assertIn("for attempt in (1, 2)", block)
+        # Three attempts, not two. The third exists because the fallback
+        # changed: a chunk that still will not conserve its source now keeps
+        # its ORIGINAL text instead of costing the whole rewrite, so one more
+        # try is cheaper than one more dossier-shaped section.
+        self.assertIn("for attempt in (1, 2, 3)", block)
 
     def test_chunks_run_in_order_so_headings_differ(self):
         """Run in parallel they cannot see each other and converge: five
@@ -247,7 +251,12 @@ class ResultsSectionKeepsItsFindings(unittest.TestCase):
         self.assertIn('"### References"', block)
 
     def test_caveats_close_the_section(self):
-        block = self.src.split("async def _results_by_chunk")[1]
+        # The classification lives in _partition_sections since it became
+        # evidence-based; it is pure so it can be replayed over real reports
+        # without a gateway, which is how four production rejections were
+        # reproduced offline.
+        block = self.src.split("def _partition_sections")[1]
+        block = block.split("\nasync def ")[0]
         self.assertIn("LAST = (", block)
         self.assertIn("closing", block)
 
@@ -276,9 +285,18 @@ class ResultsSectionDropsTheDossierFurniture(unittest.TestCase):
 
     def test_the_pathway_table_is_dropped_when_a_section_is_written(self):
         """A Results section carries its numbers in sentences. A 17-row table
-        under it is exactly the dossier furniture being removed."""
-        block = self.src.split("The enriched-pathway table is appended only")[1][:500]
-        self.assertIn("not results_written", block)
+        under it is exactly the dossier furniture being removed.
+
+        Anchored on the CONDITION, not on a sentence of the comment above it.
+        This test broke once because the comment was rewritten -- and the
+        comment was rewritten because it had been claiming the opposite of what
+        the code did for as long as both existed.
+        """
+        block = self.src.split("report = report.rstrip() + \"\\n\\n\" + "
+                               "render_pathway_table(pathways)")[0]
+        guard = block[block.rindex("\n    if "):]
+        self.assertIn("not results_written", guard)
+        self.assertIn("## Enriched Pathway Summary", guard)
 
     def test_caveats_are_deduplicated_by_heading(self):
         """A stitched dossier carries one caveats block per stitched part, and
