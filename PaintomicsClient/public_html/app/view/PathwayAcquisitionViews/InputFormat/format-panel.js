@@ -73,7 +73,8 @@
      * impossible to miss; the message below it is what says how to fix it.
      * Neither costs a single pixel of layout.
      */
-    // The omic's display name, so a message can say which card it is about.
+    // The omic's display name, used by the submit-time banner, which can be
+    // about several omics at once.
     function omicNameFor(fieldName) {
         var prefix = fieldName.replace(/_file$/, "");
         if (!window.Ext || !Ext.ComponentQuery) return prefix;
@@ -86,8 +87,14 @@
         return input.closest(".omicbox");
     }
 
-    // The visible filename box, which is a sibling of the hidden file input
-    // inside the custom selector widget.
+    function cardComponentFor(input) {
+        var card = cardFor(input);
+        if (!card || !card.id || !window.Ext || !Ext.getCmp) return null;
+        return Ext.getCmp(card.id) || null;
+    }
+
+    // The visible filename box, a sibling of the hidden file input inside the
+    // custom selector widget.
     function filenameBoxFor(input) {
         var selector = input.closest("[id*=myFilesSelector]") || input.closest(".omicbox");
         if (!selector) return null;
@@ -106,34 +113,100 @@
      * A raw classList.add is silently undone: updateLayout() rewrites the
      * component's class attribute from its own list, so the class survives
      * exactly until the next layout pass -- which this module triggers itself,
-     * one line later. Measured: the class was added and gone within the same
-     * tick, and the card never changed colour. addCls/removeCls put the class
-     * in the list Ext rebuilds from, so it survives.
+     * one line later. addCls/removeCls put the class in the list Ext rebuilds
+     * from, so it survives.
      */
-    function toggleCls(element, state) {
-        if (!element) return;
-        var component = (window.Ext && Ext.getCmp && element.id) ? Ext.getCmp(element.id) : null;
+    function setCardState(input, state) {
+        var component = cardComponentFor(input);
+        var card = cardFor(input);
         if (component && component.addCls) {
             CARD_STATES.forEach(function (cls) { component.removeCls(cls); });
             if (state) component.addCls("pa-state-" + state);
-            return;
+        } else if (card) {
+            CARD_STATES.forEach(function (cls) { card.classList.remove(cls); });
+            if (state) card.classList.add("pa-state-" + state);
         }
-        CARD_STATES.forEach(function (cls) { element.classList.remove(cls); });
-        if (state) element.classList.add("pa-state-" + state);
-    }
-
-    function setCardState(input, state) {
-        toggleCls(cardFor(input), state);
 
         var box = filenameBoxFor(input);
         if (!box) return;
-        // The <input> itself is not an Ext element; its field wrapper is, and
-        // that is what Ext re-classes. Mark the input directly and let the
-        // stylesheet target it.
         box.classList.remove("pa-field-warn", "pa-field-err");
         if (state === "warn" || state === "err") box.classList.add("pa-field-" + state);
     }
 
+    /* ------------------------------------------------------------------ *
+     * Putting the message inside its own omic card
+     * ------------------------------------------------------------------ */
+
+    /*
+     * The omic cards are `flex: 1` items in an ExtJS vbox, and the vbox lays
+     * them out as position:absolute elements carrying an inline `top`. That is
+     * the whole difficulty: growing a card's DOM does not move the card below
+     * it, because nothing rewrites that `top`.
+     *
+     * Ext rewrites it when a child's height changes IN THE LAYOUT MODEL. So the
+     * recipe is: drop `flex` so the card stops sharing a budget, then set an
+     * explicit height with setHeight(), inside suspendLayouts/resumeLayouts.
+     * Measured: growing a card by 90px moved the card beneath it down 95px and
+     * grew the column from 314 to 404.
+     *
+     * What does NOT work, all measured: raw DOM insertion; adding a real
+     * Ext.Component; dropping flex without setting a height; updateLayout() on
+     * the card, the column or the form; and suspendLayouts + resumeLayouts(true)
+     * around any of those. Each grew the card and left every sibling in place.
+     */
+    function hostFor(input) {
+        var component = cardComponentFor(input);
+        if (!component) return null;
+
+        var existing = component.down && component.down("[itemId=paFormatHost]");
+        if (existing) return existing.getEl().dom.firstChild;
+
+        // Remember what the card looked like before we touched it, so the
+        // original layout can be restored exactly when the file becomes valid.
+        if (component.__paBaseHeight === undefined) {
+            component.__paBaseHeight = component.getHeight();
+            component.__paBaseFlex = component.flex;
+        }
+
+        var host = null;
+        Ext.suspendLayouts();
+        host = component.add(Ext.create("Ext.Component", {
+            itemId: "paFormatHost",
+            cls: "pa-format-strip-host",
+            html: '<div class="pa-format-strip"></div>'
+        }));
+        Ext.resumeLayouts(true);
+        return host.getEl().dom.firstChild;
+    }
+
+    /*
+     * Resize the card to fit whatever the message currently is.
+     *
+     * Called after every render because the message changes height -- opening
+     * the change preview roughly doubles it -- and a card sized for the old
+     * message would clip the new one.
+     */
+    function syncCardHeight(input) {
+        var component = cardComponentFor(input);
+        if (!component || component.__paBaseHeight === undefined) return;
+        var host = component.down && component.down("[itemId=paFormatHost]");
+        if (!host || !host.getEl()) return;
+
+        var strip = host.getEl().dom.firstChild;
+        var needed = strip ? strip.getBoundingClientRect().height : 0;
+        if (!needed) return;
+
+        Ext.suspendLayouts();
+        component.flex = null;
+        component.setHeight(component.__paBaseHeight + Math.ceil(needed) + 12);
+        Ext.resumeLayouts(true);
+    }
+
+    /*
+     * The submit-time banner is the one message that is NOT about a single
+     * file -- it can name several omics at once -- so it keeps a region at the
+     * end of the form rather than living in any one card.
+     */
     function regionFor(input) {
         var panel = input.closest(".x-panel.paStep1Form") || input.closest(".x-panel");
         var body = panel && panel.querySelector(".x-panel-body");
@@ -146,56 +219,17 @@
         return region;
     }
 
-    /*
-     * Line the region up with the omic cards and reclaim the dead space under
-     * them.
-     *
-     * Both numbers are measured rather than written down: the column's offset
-     * depends on how many omics are open and on the viewport, and the gap is
-     * whatever the fixed-height row did not use (81px with two cards, less with
-     * three). A hardcoded value would be wrong the first time someone adds an
-     * omic.
-     */
-    function positionRegion(region) {
-        if (!region || !region.parentNode) return;
-        var cards = document.querySelectorAll(".omicbox");
-        if (!cards.length) return;
-        var last = cards[cards.length - 1];
-        var cardRect = last.getBoundingClientRect();
-        if (!cardRect.width) return;
-
-        var parentRect = region.parentNode.getBoundingClientRect();
-        region.style.marginLeft = Math.round(cardRect.left - parentRect.left) + "px";
-        region.style.maxWidth = Math.round(cardRect.width) + "px";
-
-        /*
-         * Pull the region up into the space the omics row left unused, but
-         * never past the cards. The pull is clamped and then re-measured: if
-         * the messages are taller than the dead space the region must stay in
-         * flow and push the page down, because a region that overlaps the cards
-         * is worse than one sitting a little low.
-         */
-        region.style.marginTop = "";
-        var gap = region.getBoundingClientRect().top - cardRect.bottom;
-        if (gap > 12) {
-            region.style.marginTop = Math.round(-(gap - 10)) + "px";
-            var after = region.getBoundingClientRect().top -
-                        last.getBoundingClientRect().bottom;
-            if (after < 0) region.style.marginTop = "";      // it overlapped; undo
-        }
-    }
-
-    function stripFor(input, fieldName) {
-        var region = regionFor(input);
-        if (!region) return null;
-        var key = "pa-strip-" + fieldName;
-        var existing = region.querySelector("#" + key);
-        if (existing) return existing;
-        var strip = el("div", "pa-format-strip");
-        strip.id = key;
-        region.appendChild(strip);
-        positionRegion(region);
-        return strip;
+    /* Give the card back exactly the layout it had before this module ran. */
+    function releaseCard(input) {
+        var component = cardComponentFor(input);
+        if (!component || component.__paBaseHeight === undefined) return;
+        var host = component.down && component.down("[itemId=paFormatHost]");
+        Ext.suspendLayouts();
+        if (host) component.remove(host, true);
+        component.setHeight(undefined);
+        component.flex = component.__paBaseFlex;
+        Ext.resumeLayouts(true);
+        component.__paBaseHeight = undefined;
     }
 
     /*
@@ -240,7 +274,7 @@
             strip.appendChild(el("span", "pa-format-note",
                 " (checked the first " + Math.round(PARTIAL_CHECK_BYTES / 1048576) + " MB)"));
         }
-        if (input) { relayout(input); setCardState(input, null); }
+        if (input) { setCardState(input, "ok"); syncCardHeight(input); }
     }
 
     function markBlocked(fieldName, entry) { blocked[fieldName] = entry; }
@@ -296,10 +330,9 @@
         body.appendChild(bar);
         strip.appendChild(body);
         if (strip.__input) {
-            relayout(strip.__input);
             setCardState(strip.__input, kind === "warn" ? "warn" : "err");
+            syncCardHeight(strip.__input);
         }
-        positionRegion(strip.parentNode);
         return body;
     }
 
@@ -365,7 +398,7 @@
      * press a second button would be two clicks for one intention.
      */
     function check(input, file, fieldName, autoApply) {
-        var strip = stripFor(input, fieldName);
+        var strip = hostFor(input);
         if (!strip) return;
         strip.__input = input;
         strip.__omic = omicNameFor(fieldName);
@@ -424,8 +457,7 @@
                 if (autoApply) {
                     replaceFile(input, repaired.rows, file.name);
                     clearBlocked(fieldName);
-                    renderOk(stripFor(input, fieldName),
-                             API.validateValues(repaired.rows).summary, false, input);
+                    renderOk(hostFor(input), API.validateValues(repaired.rows).summary, false, input);
                     return;
                 }
                 markBlocked(fieldName, {
@@ -434,7 +466,7 @@
                     apply: function () {
                         replaceFile(input, repaired.rows, file.name);
                         clearBlocked(fieldName);
-                        renderOk(stripFor(input, fieldName),
+                        renderOk(hostFor(input),
                                  API.validateValues(repaired.rows).summary, false, input);
                     }
                 });
@@ -442,11 +474,11 @@
                     repairs.map(function (r) { return r.describe(); }).join(" "),
                     [{ label: "Fix automatically", primary: true, onClick: function () {
                           replaceFile(input, repaired.rows, file.name);
-                          renderOk(stripFor(input, fieldName), API.validateValues(repaired.rows).summary, false, input);
+                          renderOk(hostFor(input), API.validateValues(repaired.rows).summary, false, input);
                       } },
                      { label: "Show what changes", onClick: function () {
                           renderDiff(body, repaired.changes);
-                          relayout(input);
+                          syncCardHeight(input);
                       } }]);
                 return;
             }
@@ -476,7 +508,7 @@
             window.PaintomicsInputFormat.openConvertDrawer(input, file, fieldName);
             return;
         }
-        var strip = stripFor(input, fieldName);
+        var strip = hostFor(input);
         if (!strip) return;
         renderProblem(strip, "err", "AI conversion is not enabled on this server.",
             "Ask an administrator to enable it, or export the file as a tab-separated " +
@@ -672,24 +704,6 @@
      * resized, and a region left at its old offset would sit under nothing.
      * Reposition on both, throttled to an animation frame.
      */
-    var repositionQueued = false;
-    function queueReposition() {
-        if (repositionQueued) return;
-        repositionQueued = true;
-        requestAnimationFrame(function () {
-            repositionQueued = false;
-            var region = document.querySelector(".pa-format-region");
-            if (region) positionRegion(region);
-        });
-    }
-    window.addEventListener("resize", queueReposition);
-    document.addEventListener("click", function (event) {
-        // omic add/remove buttons live in the same section; any click there can
-        // change the column, and repositioning is cheap enough to just do.
-        if (event.target && event.target.closest &&
-            event.target.closest(".po-step1-omics-row, .omicbox")) queueReposition();
-    }, true);
-
     // Capture phase: ExtJS re-dispatches and sometimes stops change events on
     // its own wrappers, and capture runs before any of that.
     document.addEventListener("change", function (event) {
