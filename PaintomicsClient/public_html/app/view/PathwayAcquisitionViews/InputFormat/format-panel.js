@@ -25,6 +25,20 @@
     var PARTIAL_CHECK_BYTES = 5 * 1024 * 1024;
 
     var VALUES_FIELD = /^omic\d+_file$/;
+
+    /*
+     * Files we KNOW the server will reject, keyed by field name.
+     *
+     * This exists because a warning is not enough. Observed on the very first
+     * run-through: the strip said the numbers used decimal commas, the form was
+     * submitted anyway, and the server answered with ten identical lines of
+     * "Perhaps you are using commas instead of dots as decimal mark?" -- the
+     * exact wall of noise this module was written to replace. Since the client
+     * validator is pinned to the server's own loop by a test over every example
+     * file, an invalid file here is a GUARANTEED server error, so submitting is
+     * blocked rather than merely annotated.
+     */
+    var blocked = {};
     var SPREADSHEET = /\.(xlsx|xlsm|xls|ods)$/i;
 
     function el(tag, className, text) {
@@ -135,6 +149,36 @@
         if (input) relayout(input);
     }
 
+    function markBlocked(fieldName, entry) { blocked[fieldName] = entry; }
+
+    function clearBlocked(fieldName) { delete blocked[fieldName]; }
+
+    /*
+     * Entries go stale when an omic card is deleted or a different file is
+     * picked, and a stale entry would block submission forever with a message
+     * about a file that is no longer there. So every entry is re-checked
+     * against the live form before it is allowed to stop anything.
+     */
+    function liveBlocked() {
+        var live = [];
+        if (!window.Ext || !Ext.ComponentQuery) return live;
+        var fields = Ext.ComponentQuery.query("filefield");
+        Object.keys(blocked).forEach(function (fieldName) {
+            var field = null;
+            for (var i = 0; i < fields.length; i++) {
+                if (fields[i].name === fieldName) { field = fields[i]; break; }
+            }
+            var dom = field && field.fileInputEl && field.fileInputEl.dom;
+            var current = dom && dom.files && dom.files[0];
+            if (!current || current.name !== blocked[fieldName].fileName) {
+                clearBlocked(fieldName);
+                return;
+            }
+            live.push(blocked[fieldName]);
+        });
+        return live;
+    }
+
     function renderProblem(strip, kind, headline, detail, actions) {
         strip.className = "pa-format-strip pa-format-" + kind;
         strip.innerHTML = "";
@@ -216,7 +260,13 @@
         return "The file does not match the format PaintOmics expects.";
     }
 
-    function check(input, file, fieldName) {
+    /*
+     * autoApply: apply a deterministic repair the moment it is found, instead
+     * of offering a button. Used by the error-dialog hook, where the user has
+     * already asked for the file to be fixed -- making them find the strip and
+     * press a second button would be two clicks for one intention.
+     */
+    function check(input, file, fieldName, autoApply) {
         var strip = stripFor(input, fieldName);
         if (!strip) return;
         strip.__input = input;
@@ -225,6 +275,8 @@
         strip.textContent = "Checking " + file.name + "…";
 
         if (SPREADSHEET.test(file.name)) {
+            markBlocked(fieldName, { fieldName: fieldName, fileName: file.name,
+                                     input: input, omic: strip.__omic, fixable: false });
             renderProblem(strip, "err",
                 "Spreadsheets need converting first.",
                 "PaintOmics reads plain text tables. " + file.name +
@@ -245,6 +297,8 @@
             var read = API.readDelimited(new Uint8Array(reader.result));
 
             if (read.decodeError) {
+                markBlocked(fieldName, { fieldName: fieldName, fileName: file.name,
+                                         input: input, omic: strip.__omic, fixable: false });
                 renderProblem(strip, "err", "The file is not saved as UTF-8.",
                     "Re-save it as UTF-8 (in Excel: Save As → CSV UTF-8) and pick it again.",
                     [{ label: "Convert it for me", primary: true,
@@ -258,13 +312,34 @@
             if (partial && read.rows.length > 1) read.rows.pop();
 
             var result = API.validateValues(read.rows);
-            if (result.ok) { renderOk(strip, result.summary, partial, input); return; }
+            if (result.ok) {
+                clearBlocked(fieldName);
+                renderOk(strip, result.summary, partial, input);
+                return;
+            }
 
             var repairs = API.proposeRepairs(read.rows, read.delimiter, result.problems);
             var repaired = repairs.length ? API.applyRepairs(read.rows, repairs) : null;
             var fixable = repaired && API.validateValues(repaired.rows).ok && !partial;
 
             if (fixable) {
+                if (autoApply) {
+                    replaceFile(input, repaired.rows, file.name);
+                    clearBlocked(fieldName);
+                    renderOk(stripFor(input, fieldName),
+                             API.validateValues(repaired.rows).summary, false, input);
+                    return;
+                }
+                markBlocked(fieldName, {
+                    fieldName: fieldName, fileName: file.name, input: input,
+                    omic: strip.__omic, fixable: true,
+                    apply: function () {
+                        replaceFile(input, repaired.rows, file.name);
+                        clearBlocked(fieldName);
+                        renderOk(stripFor(input, fieldName),
+                                 API.validateValues(repaired.rows).summary, false, input);
+                    }
+                });
                 var body = renderProblem(strip, "warn", describeProblems(result),
                     repairs.map(function (r) { return r.describe(); }).join(" "),
                     [{ label: "Fix automatically", primary: true, onClick: function () {
@@ -278,6 +353,14 @@
                 return;
             }
 
+            // A partial check saw only the first few megabytes, so it is not
+            // grounds for blocking -- only a full check is conclusive.
+            if (!partial) {
+                markBlocked(fieldName, {
+                    fieldName: fieldName, fileName: file.name, input: input,
+                    omic: strip.__omic, fixable: false
+                });
+            }
             renderProblem(strip, "err", describeProblems(result),
                 partial ? "Checked the first few megabytes of a large file." : "",
                 [{ label: "Convert it for me", primary: true,
@@ -315,6 +398,175 @@
             if (dom === input) return fields[i].name || null;
         }
         return null;
+    }
+
+    /* ------------------------------------------------------------------ *
+     * Stopping a submit that is certain to fail
+     * ------------------------------------------------------------------ */
+
+    function renderBlockBanner(entries) {
+        var input = entries[0].input;
+        var region = regionFor(input);
+        if (!region) return;
+
+        var existing = region.querySelector(".pa-format-block");
+        if (existing) existing.remove();
+
+        var banner = el("div", "pa-format-strip pa-format-err pa-format-block");
+        banner.appendChild(el("span", "pa-format-icon", "✗"));
+        var body = el("div", "pa-format-body");
+
+        var names = entries.map(function (e) { return e.omic || e.fieldName; });
+        body.appendChild(el("div", "pa-format-headline",
+            names.join(" and ") + ": the server will reject " +
+            (entries.length === 1 ? "this file" : "these files") + "."));
+        body.appendChild(el("div", "pa-format-detail",
+            "The same check that runs on the server has already read " +
+            (entries.length === 1 ? "it" : "them") +
+            ", so submitting now only produces the same error more slowly."));
+
+        var bar = el("div", "pa-format-actions");
+        var fixable = entries.filter(function (e) { return e.fixable; });
+
+        if (fixable.length === entries.length) {
+            var fix = el("button", "pa-format-button pa-format-primary",
+                         "Fix " + (entries.length === 1 ? "it" : "them") + " and run");
+            fix.type = "button";
+            fix.addEventListener("click", function () {
+                fixable.forEach(function (e) { e.apply(); });
+                banner.remove();
+                submitNow();
+            });
+            bar.appendChild(fix);
+        }
+
+        var convert = el("button", "pa-format-button", "Convert with AI");
+        convert.type = "button";
+        convert.addEventListener("click", function () {
+            var first = entries[0];
+            var picked = first.input.files && first.input.files[0];
+            if (picked) requestAgent(first.input, picked, first.fieldName);
+        });
+        bar.appendChild(convert);
+
+        /*
+         * An escape hatch, deliberately. The validator is pinned to the
+         * server's loop by a test over every example file, but "pinned by a
+         * test" is not "cannot be wrong", and a user must never be locked out
+         * of their own analysis by a bug in a convenience feature.
+         */
+        var anyway = el("button", "pa-format-button", "Submit anyway");
+        anyway.type = "button";
+        anyway.addEventListener("click", function () {
+            banner.remove();
+            submitNow();
+        });
+        bar.appendChild(anyway);
+
+        body.appendChild(bar);
+        banner.appendChild(body);
+        region.appendChild(banner);
+        relayout(input);
+        banner.scrollIntoView({ block: "center", behavior: "smooth" });
+    }
+
+    var bypassGuard = false;
+
+    function submitNow() {
+        var button = document.getElementById("submitButton");
+        if (!button) return;
+        bypassGuard = true;
+        button.click();
+        bypassGuard = false;
+    }
+
+    document.addEventListener("click", function (event) {
+        if (bypassGuard) return;
+        var target = event.target;
+        if (!target || !target.closest) return;
+        if (!target.closest("#submitButton")) return;
+
+        var entries = liveBlocked();
+        if (!entries.length) return;
+
+        // stopImmediatePropagation, not just preventDefault: the submit is
+        // wired as a jQuery/ExtJS click handler on the same element, and
+        // preventDefault alone would let it run.
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        renderBlockBanner(entries);
+    }, true);
+
+    /* ------------------------------------------------------------------ *
+     * The same offer, on the error the server sends back
+     * ------------------------------------------------------------------ */
+
+    /*
+     * Not every bad file passes through the checker. A file picked from server
+     * storage never reaches the browser at all, a large file is only checked in
+     * part, and the server knows about faults this module does not model. In
+     * all of those the user still lands on the error dialog, and that dialog is
+     * where the offer to fix belongs.
+     */
+    function pickedFileMatching(reportedName) {
+        if (!window.Ext || !Ext.ComponentQuery) return null;
+        var fields = Ext.ComponentQuery.query("filefield");
+        for (var i = 0; i < fields.length; i++) {
+            if (!VALUES_FIELD.test(fields[i].name || "")) continue;
+            var dom = fields[i].fileInputEl && fields[i].fileInputEl.dom;
+            var file = dom && dom.files && dom.files[0];
+            if (!file) continue;
+            // The server prefixes the stored copy with the job id, so the name
+            // it reports ENDS WITH the name the user picked.
+            if (reportedName === file.name ||
+                reportedName.slice(-file.name.length) === file.name) {
+                return { input: dom, file: file, fieldName: fields[i].name };
+            }
+        }
+        return null;
+    }
+
+    function attachDialogFix() {
+        var body = document.getElementById("messageDialogBody");
+        var closeButton = document.getElementById("messageDialogButton");
+        if (!body || !closeButton || !closeButton.parentNode) return;
+        if (document.getElementById("pa-format-dialog-fix")) return;
+
+        var text = body.textContent || "";
+        if (text.indexOf("Errors detected while processing") === -1) return;
+
+        var match = /Errors detected while processing ([^\s:]+)/.exec(text);
+        if (!match) return;
+        var picked = pickedFileMatching(match[1]);
+        if (!picked) return;
+
+        var button = el("a", "button btn-secondary btn-right", "Fix this file");
+        button.title = "Repairs the file in place, then you can run again.";
+        button.id = "pa-format-dialog-fix";
+        button.href = "#";
+        button.style.display = "inline-block";
+        button.addEventListener("click", function (event) {
+            event.preventDefault();
+            if (typeof closeButton.click === "function") closeButton.click();
+            check(picked.input, picked.file, picked.fieldName, true);
+        });
+        closeButton.parentNode.insertBefore(button, closeButton);
+    }
+
+    // The dialog is rendered by Util.js's showMessage, which several call sites
+    // reach through showErrorMessage. Wrapping that one function catches them
+    // all without editing Util.js, which every surface in the app depends on.
+    if (typeof window.showErrorMessage === "function") {
+        var originalShowErrorMessage = window.showErrorMessage;
+        window.showErrorMessage = function () {
+            var result = originalShowErrorMessage.apply(this, arguments);
+            // The window is laid out asynchronously; attach once it exists.
+            setTimeout(function () {
+                try { attachDialogFix(); }
+                catch (e) { if (window.console) console.warn("[inputformat] dialog hook", e); }
+            }, 60);
+            return result;
+        };
     }
 
     // Capture phase: ExtJS re-dispatches and sometimes stops change events on

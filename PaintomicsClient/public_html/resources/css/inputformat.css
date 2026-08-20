@@ -140,3 +140,11 @@
 .pa-format-omic {
     font-weight: 700;
 }
+
+/* The block banner shown when a submit is stopped. Same shape as a problem
+   strip, but it must not be mistaken for one of the per-file messages above
+   it, so it carries a heavier left edge. */
+.pa-format-block {
+    border-left-width: 4px;
+    margin-top: 8px;
+}
