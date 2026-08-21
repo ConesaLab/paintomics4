@@ -1591,10 +1591,21 @@
    style on the boxLabel; #F08A5D is 6.66:1 on the surface underneath, against
    the 3.29:1 the light-theme #C44500 was managing there. This is the sentence
    naming the recipient of the data, so it has to be read, not decoded. */
-[data-theme="dark"] .ai-consent-warn,
-[data-theme="dark"] .ai-gdpr-info-icon {
+[data-theme="dark"] .ai-consent-warn {
 	color: var(--pa-ai-consent-warn);
 }
+/* The consent switch's off track, and the privacy link, on the dark surface. */
+[data-theme="dark"] .po-ai-section-body .x-form-cb-wrap > .x-form-checkbox {
+	background-color: #3B4049;
+	box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+[data-theme="dark"] .po-ai-section-body .x-form-cb-checked .x-form-cb-wrap > .x-form-checkbox {
+	background-color: var(--pa-accent-blue);
+	box-shadow: none;
+}
+[data-theme="dark"] .po-ai-section-body .x-form-cb-wrap > .x-form-cb-label { color: var(--pa-ink-title); }
+[data-theme="dark"] .ai-gdpr-info-link { color: var(--pa-ink-muted); }
+[data-theme="dark"] .ai-gdpr-info-link:hover { color: var(--pa-accent-blue); }
 
 /* The account dialog. main.css states its surface literally (so that the
    framework's #f2f2f2 panel fill loses), which means it is restated here.

@@ -756,15 +756,8 @@ tr.ai-cluster-row-flash > td {
    colour as an inline `style` in PA_Step1Views.js, which no stylesheet can
    override, so the dark theme could not lighten them and the sentence sat at
    3.29:1. #C44500 is 5.00:1 on white; dark.css takes it from here. */
-.ai-consent-warn,
-.ai-gdpr-info-icon {
+.ai-consent-warn {
     color: #C44500;
-}
-.ai-gdpr-info-icon {
-    vertical-align: middle;
-    margin-left: 4px;
-    cursor: pointer;
-    font-size: var(--pa-ai-glyph);
 }
 .ai-gdpr-overlay {
     position: fixed;

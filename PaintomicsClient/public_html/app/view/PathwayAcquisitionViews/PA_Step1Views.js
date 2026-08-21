@@ -1685,70 +1685,6 @@ function PA_Step1JobView() {
 							xtype: "container", flex: 1, layout: "anchor",
 							items: [
 								{
-									xtype: "box",
-									/* This paragraph was written in the marketing register -- "revolutionary",
-									   "breathtaking computational power", "Next-Generation Agentic AI
-									   Swarm", "the world's most powerful Large Language Models". It sits
-									   directly above a consent checkbox, which is the one place in this
-									   application where the careful voice is not optional: someone
-									   deciding whether to send their data somewhere needs to know what
-									   happens to it, not how remarkable it is.
-
-									   It was also wrong. It described a fleet of agents dynamically
-									   selecting among frontier models; pipeline.py makes sequential
-									   calls to the one model the server is configured for, with a retry
-									   loop. #aiProviderInline is filled in from /ai_provider once that
-									   answers, so the recipient is named here rather than described as
-									   "external". */
-									/* "asks a large language model to explain" undersold what
-									   actually runs, and a consent notice is the wrong place to be
-									   vague about that. src/classes/AIInterpret/pipeline.py runs six
-									   phases - triage, search planning, literature retrieval,
-									   interpretation, synthesis, verification - and along the way it
-									   plans its own searches, calls tools against the job's own data
-									   (get_gene_timecourse, get_pathway_genes, compare_genes), and
-									   spawns sub-agents: one per search, and one per citation to
-									   check it. Someone deciding whether to send their data is
-									   entitled to know it is an agent doing that and not a single
-									   prompt. The wording below names the parts that exist in the
-									   code and nothing more. */
-									/* Size, colour, leading and margin were an inline `style` here,
-									   which no stylesheet can reach: the paragraph could not take the
-									   AI type scale, and dark.css had to chase its colour with an
-									   attribute selector. Now .ai-intro-copy in ai-interpret.css. */
-									/* Seven lines, then four, now two. This paragraph exists to
-									   introduce two controls; it had grown into the largest block
-									   of text on a page whose subject is the user's data.
-
-									   What went, in order. The AgentEvolve sentence: a
-									   benchmarking framework is a fact about how the feature was
-									   built, not one the reader needs to tick or leave the box.
-									   The enumeration of the agent's phases, compressed to the
-									   verbs that distinguish it from a single prompt. And now
-									   #aiProviderInline, which is the interesting one.
-
-									   That span printed "This server sends the data to a gateway
-									   operated by IIIA-CSIC (the Artificial Intelligence Research
-									   Institute of the Spanish National Research Council), on
-									   hardware in Spain" -- two of the four lines, and a
-									   restatement of the sentence in the checkbox directly below
-									   it, which already says the data goes "to IIIA-CSIC
-									   (llm.iiia.es)". The recipient is still named, on the
-									   control where the decision is actually made and where the
-									   design system requires it, and the (i) notice still gives
-									   the full operator, the country and every field that leaves
-									   the server. Saying it twice bought nothing and cost half
-									   the callout's height.
-
-									   fillAIProvenance guards each placeholder with `if (el)`,
-									   so it keeps working with this one absent. */
-									html: '<p class="ai-intro-copy">' +
-										'The <b>PaintOmics AI agent</b> drafts the write-up of your results: it triages your top-ranked ' +
-										'pathways, searches PubMed and Europe PMC, checks the patterns against your uploaded ' +
-										'values, and verifies every citation. Check its draft before you use it.' +
-										'</p>'
-								},
-								{
 									xtype: 'checkboxfield',
 									/* Both colours were written inline, which put them out of reach of
 									   dark.css -- an inline style beats a stylesheet -- so this
@@ -1765,10 +1701,12 @@ function PA_Step1JobView() {
 									   (2026-08-21): the gateway is operated by CSIC, as is the host,
 									   and the statement of what leaves and who receives it -- the
 									   recipient, the operator, the country, every field -- stays in
-									   the (i) notice this label links to, one click away. Keep the
-									   icon: it is the only remaining way to that notice from here. */
-									boxLabel: 'Enable AI pathway interpretation ' +
-										'<i class="fa fa-exclamation-circle ai-gdpr-info-icon" id="aiGdprInfoIcon" title="Data privacy &amp; compliance \u2014 click to learn what data is sent"></i>',
+									   the privacy notice, one click away. The red (!) icon that used
+									   to sit here is now the quiet "Data privacy" link at the end of
+									   the sentence below -- the way every other AI product links its
+									   notice -- and the row leads the panel as a switch: the decision
+									   first, the explanation under it. */
+									boxLabel: 'Enable AI pathway interpretation',
 									name: 'aiConsent', inputValue: 'true', uncheckedValue: 'false',
 									/* Off everywhere but a local instance -- a pre-ticked consent
 									   box is not consent. See LOCAL INSTANCE DEFAULTS in
@@ -1862,6 +1800,71 @@ function PA_Step1JobView() {
 											}, 200);
 										}
 									}
+								},
+								{
+									xtype: "box",
+									/* This paragraph was written in the marketing register -- "revolutionary",
+									   "breathtaking computational power", "Next-Generation Agentic AI
+									   Swarm", "the world's most powerful Large Language Models". It sits
+									   directly above a consent checkbox, which is the one place in this
+									   application where the careful voice is not optional: someone
+									   deciding whether to send their data somewhere needs to know what
+									   happens to it, not how remarkable it is.
+
+									   It was also wrong. It described a fleet of agents dynamically
+									   selecting among frontier models; pipeline.py makes sequential
+									   calls to the one model the server is configured for, with a retry
+									   loop. #aiProviderInline is filled in from /ai_provider once that
+									   answers, so the recipient is named here rather than described as
+									   "external". */
+									/* "asks a large language model to explain" undersold what
+									   actually runs, and a consent notice is the wrong place to be
+									   vague about that. src/classes/AIInterpret/pipeline.py runs six
+									   phases - triage, search planning, literature retrieval,
+									   interpretation, synthesis, verification - and along the way it
+									   plans its own searches, calls tools against the job's own data
+									   (get_gene_timecourse, get_pathway_genes, compare_genes), and
+									   spawns sub-agents: one per search, and one per citation to
+									   check it. Someone deciding whether to send their data is
+									   entitled to know it is an agent doing that and not a single
+									   prompt. The wording below names the parts that exist in the
+									   code and nothing more. */
+									/* Size, colour, leading and margin were an inline `style` here,
+									   which no stylesheet can reach: the paragraph could not take the
+									   AI type scale, and dark.css had to chase its colour with an
+									   attribute selector. Now .ai-intro-copy in ai-interpret.css. */
+									/* Seven lines, then four, now two. This paragraph exists to
+									   introduce two controls; it had grown into the largest block
+									   of text on a page whose subject is the user's data.
+
+									   What went, in order. The AgentEvolve sentence: a
+									   benchmarking framework is a fact about how the feature was
+									   built, not one the reader needs to tick or leave the box.
+									   The enumeration of the agent's phases, compressed to the
+									   verbs that distinguish it from a single prompt. And now
+									   #aiProviderInline, which is the interesting one.
+
+									   That span printed "This server sends the data to a gateway
+									   operated by IIIA-CSIC (the Artificial Intelligence Research
+									   Institute of the Spanish National Research Council), on
+									   hardware in Spain" -- two of the four lines, and a
+									   restatement of the sentence in the checkbox directly below
+									   it, which already says the data goes "to IIIA-CSIC
+									   (llm.iiia.es)". The recipient is still named, on the
+									   control where the decision is actually made and where the
+									   design system requires it, and the (i) notice still gives
+									   the full operator, the country and every field that leaves
+									   the server. Saying it twice bought nothing and cost half
+									   the callout's height.
+
+									   fillAIProvenance guards each placeholder with `if (el)`,
+									   so it keeps working with this one absent. */
+									html: '<p class="ai-intro-copy">' +
+										'The <b>PaintOmics AI agent</b> drafts the write-up of your results: it triages your top-ranked ' +
+										'pathways, searches PubMed and Europe PMC, checks the patterns against your uploaded ' +
+										'values, and verifies every citation. Check its draft before you use it. ' +
+										'<a href="javascript:void(0)" class="ai-gdpr-info-link" id="aiGdprInfoIcon" title="Data privacy &amp; compliance \u2014 what is sent, and where"><i class="fa fa-info-circle"></i> Data privacy</a>' +
+										'</p>'
 								}
 							]
 						}, {
@@ -1913,7 +1916,7 @@ function PA_Step1JobView() {
 									   Dragging it still works; growing sets a height, not a cap. */
 									xtype: "textarea", fieldLabel: "Experiment design (optional)",
 									name: 'experimentDesign',
-									labelAlign: 'top', anchor: '100%', height: 96,
+									labelAlign: 'top', anchor: '100%', height: 120,
 									cls: 'po-exp-design',
 									emptyText: 'e.g. RNA-seq of wildtype vs knockout mouse liver, 3 replicates per group, sampled at 24 h',
 									maxLength: 2000,
