@@ -98,7 +98,7 @@ PUBLISHED = {
     "app/view/PathwayAcquisitionViews/InputFormat/convert-agent.js": (
         "0.5", "aba9f81cf637615a055d7259d7568a000b83af65c2e20cd413050928b8260478"),
     "app/view/PathwayAcquisitionViews/InputFormat/convert-drawer.js": (
-        "0.3", "293ee4fe003cd9e388f8e246d5e76036cc38d631875894d240febfc6bf7827a4"),
+        "0.4", "b9d1aff2eb3830c5485f53443ed494847b168bf12372aab39b98b2c4faa75c3c"),
     "app/view/common/Util.js": (
         "2.1", "12359b8bf746394f63a7e0a15513a4f9ac82de1a25bbaa0e91e6b2fdd7e0050e"),
     "app/view/common/ExtJS_extensions.js": (
