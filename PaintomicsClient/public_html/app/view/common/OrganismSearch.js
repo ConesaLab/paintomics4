@@ -318,6 +318,10 @@
     function rank(query, organisms) {
         var tokens = tokenize(query), out = [], i, entry, scored, item;
         organisms = organisms || [];
+        /* "(" or "-" or a script the names are not written in: nothing can
+           match, and it must not fall through to the browse-everything branch
+           below -- in the request dialog that is 11,550 rows for a stray key. */
+        if (!tokens.length && /\S/.test(String(query == null ? "" : query))) return out;
         for (i = 0; i < organisms.length; i++) {
             item = organisms[i];
             if (!item || item.name == null) continue;
@@ -375,11 +379,17 @@
      * <mark>. The name is escaped, so a name is never markup.
      */
     function highlight(name, query, value) {
-        var entry = index({name: name, value: value == null ? "" : value}),
-            tokens = tokenize(query), scored;
-        if (!tokens.length) return escapeHtml(name == null ? "" : name);
+        var organism = name !== null && typeof name === "object" ? name : {name: name, value: value == null ? "" : value},
+            tokens, entry, scored;
+        if (organism.name == null) return "";
+        tokens = tokenize(query);
+        if (!tokens.length) return escapeHtml(organism.name);
+        /* The list template hands over the row's own data object, the one
+           rank() already indexed, so a full-list render does not re-index
+           every name; a bare string is indexed on the spot. */
+        entry = organism === name ? indexOf(organism) : index(organism);
         scored = scoreOrganism(tokens, entry);
-        if (!scored || !scored.ranges.length) return escapeHtml(name);
+        if (!scored || !scored.ranges.length) return escapeHtml(organism.name);
         return markRanges(entry.name, scored.ranges);
     }
 
@@ -417,7 +427,7 @@
                     var combo = Ext.getCmp(comboId), query = (combo && combo.lastQuery) || "",
                         code = values.value != null && values.value !== values.name ? String(values.value) : "";
                     return '<span class="po-organism-row"><span class="po-organism-name">' +
-                        highlight(values.name, query, values.value) + "</span>" +
+                        highlight(values, query) + "</span>" +
                         (code ? '<span class="po-organism-code">' + highlightCode(code, query) + "</span>" : "") +
                         "</span>";
                 }
@@ -490,6 +500,19 @@
 
             organismKey: function (data) {
                 return String(data.value) + "\u0001" + String(data.name);
+            },
+
+            /* The stock lookup searches the store's filtered rows only, so
+               setValue("mmu") fails while the user's last query is still
+               narrowing the list -- which is exactly when example mode sets
+               the organism programmatically. Every row is still in the
+               snapshot, so look there. */
+            findRecord: function (field, value) {
+                var items = (this.store.snapshot || this.store.data).items, i;
+                for (i = 0; i < items.length; i++) {
+                    if (items[i].get(field) === value) return items[i];
+                }
+                return false;
             }
         });
     }

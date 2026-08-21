@@ -51,6 +51,9 @@ INDEX_HTML = os.path.join(CLIENT_ROOT, "index.html")
 
 NODE = shutil.which("node")
 
+with io.open(FIXTURE, encoding="utf-8") as _handle:
+    FIXTURE_SIZE = len(json.load(_handle)["species"])
+
 
 def read(path):
     with io.open(path, encoding="utf-8") as handle:
@@ -191,11 +194,18 @@ class EmptyQueryAndOrder(unittest.TestCase):
     def test_empty_query_lists_every_organism_alphabetically(self):
         listed = codes("")
         names = node("S.rank('', L).map(r => r.name)")
-        self.assertEqual(133, len(listed))
+        self.assertEqual(FIXTURE_SIZE, len(listed))
         self.assertEqual(sorted(names, key=lambda n: n.lower()), names)
 
     def test_whitespace_only_is_empty(self):
-        self.assertEqual(133, len(codes("   ")))
+        self.assertEqual(FIXTURE_SIZE, len(codes("   ")))
+
+    def test_a_query_with_no_word_in_it_finds_nothing(self):
+        # "(" or "-" or a script the names are not written in has nothing to
+        # match; it must not fall through to the browse-everything branch
+        # (11,550 rows rendered for a stray character, in the request dialog).
+        for query in ["(", "-", "'", "小鼠", "мышь", " ( ) "]:
+            self.assertEqual([], codes(query), repr(query))
 
     def test_results_carry_name_value_and_score(self):
         top = node("S.rank('mouse', L)[0]")
@@ -240,6 +250,10 @@ class Highlighting(unittest.TestCase):
         self.assertEqual("Mus musculus (house mouse)",
                          self.highlight("Mus musculus (house mouse)", ""))
 
+    def test_a_missing_name_is_empty_not_the_word_null(self):
+        self.assertEqual("", node("S.highlight(null, 'x')"))
+        self.assertEqual("", node("S.highlight(null, '')"))
+
 
 @unittest.skipIf(NODE is None, "node is not available")
 class RequestDialogScale(unittest.TestCase):
@@ -271,6 +285,110 @@ class RequestDialogScale(unittest.TestCase):
     def test_fuzzy_query_over_the_full_list_finds_the_mouse(self):
         ranked = node("S.rank('mosue', L).map(r => r.value)", listPath=ALL_SPECIES)
         self.assertEqual("mmu", ranked[0])
+
+
+# A stand-in for the slice of ExtJS 4.2.1 the combo touches, just enough to run
+# doLocalQuery / renderItem / findRecord under node. The store mimics what was
+# checked in ext-all-debug.js: filter() re-filters from `snapshot` skipping
+# disabled filters, then re-sorts `data` with the current sorters.
+STUB_EXT = r"""
+const organisms = L.map(d => ({data: d, get: f => d[f]}));
+function collection(items) {
+  return {items: items.slice(), getRange() { return this.items.slice(); }, clear() { this.items = []; },
+          add(x) { this.items.push(x); }, addAll(xs) { this.items = this.items.concat(xs); }, get length() { return this.items.length; }};
+}
+const store = {
+  snapshot: null, data: {items: organisms.slice()}, filters: [],
+  sorters: collection([{property: 'name', sorterFn: (a, b) => a.data.name < b.data.name ? -1 : 1}]),
+  addFilter(f) { this.filters.push(f); },
+  filter() {
+    this.snapshot = this.snapshot || {items: organisms.slice()};
+    const live = this.filters.filter(f => !f.disabled);
+    this.data = {items: this.snapshot.items.filter(r => live.every(f => f.filterFn(r)))};
+    const sorter = this.sorters.items[0];
+    if (sorter) this.data.items.sort(sorter.sorterFn);
+  },
+  getCount() { return this.data.items.length; }
+};
+let body = null;
+const Ext = {
+  ClassManager: {get: () => undefined},
+  define: (name, b) => { body = b; },
+  apply: Object.assign,
+  Array: {map: (xs, fn) => xs.map(fn)},
+  util: {Filter: function (c) { Object.assign(this, c); this.disabled = false; },
+         Sorter: function (c) { Object.assign(this, c); }},
+  form: {field: {ComboBox: {prototype: {initComponent() { this.parentInit = true; }, findRecord() { return 'stock'; }}}}},
+  getCmp: id => combo
+};
+S.defineCombo(Ext);
+const combo = Object.assign(Object.create(body), {
+  id: 'c1', store, lastQuery: undefined, events: [],
+  expand() { this.events.push('expand'); }, collapse() { this.events.push('collapse'); },
+  afterQuery() { this.events.push('afterQuery'); }
+});
+combo.initComponent();
+function query(q) { combo.lastQuery = q; combo.events = []; combo.doLocalQuery({query: q, forceAll: q === ''}); }
+const rows = () => store.data.items.map(r => r.data.value);
+"""
+
+
+@unittest.skipIf(NODE is None, "node is not available")
+class ComboIntegration(unittest.TestCase):
+    """What xtype organismcombo does to its store, per query, under a stub Ext."""
+
+    def run_js(self, expression):
+        return node("(() => {" + STUB_EXT + "return " + expression + ";})()")
+
+    def test_a_query_keeps_and_orders_the_ranked_rows(self):
+        out = self.run_js("(query('mouse'), {rows: rows(), events: combo.events, "
+                          "filterOn: !combo.queryFilter.disabled})")
+        self.assertEqual("mmu", out["rows"][0])
+        self.assertTrue(out["filterOn"])
+        self.assertEqual(["expand", "afterQuery"], out["events"])
+
+    def test_a_typo_is_ranked_the_same_way_through_the_combo(self):
+        self.assertEqual("hsa", self.run_js("(query('humna'), rows())")[0])
+
+    def test_the_empty_query_restores_the_store_and_lists_everything(self):
+        out = self.run_js("(query('mouse'), query(''), {count: store.getCount(), "
+                          "sorter: store.sorters.items[0].property, filterOff: combo.queryFilter.disabled, "
+                          "first: rows()[0]})")
+        self.assertEqual(FIXTURE_SIZE, out["count"])
+        self.assertEqual("name", out["sorter"])
+        self.assertTrue(out["filterOff"])
+        self.assertEqual("naz", out["first"])
+
+    def test_a_query_with_no_word_collapses_an_empty_list(self):
+        out = self.run_js("(query('('), {count: store.getCount(), events: combo.events})")
+        self.assertEqual(0, out["count"])
+        self.assertEqual(["collapse", "afterQuery"], out["events"])
+
+    def test_narrowing_then_widening_brings_rows_back(self):
+        out = self.run_js("(query('mouse'), query('mo'), rows().length)")
+        self.assertGreater(out, 1)
+
+    def test_find_record_looks_past_the_active_filter(self):
+        # Example mode calls setValue('mmu') whatever the user typed before; the
+        # stock lookup searches only the filtered rows and fails to find it.
+        out = self.run_js("(query('human'), {found: combo.findRecord('value', 'mmu').data.value, "
+                          "missing: combo.findRecord('value', 'nope')})")
+        self.assertEqual("mmu", out["found"])
+        self.assertFalse(out["missing"])
+
+    def test_render_item_marks_the_hit_and_shows_the_code(self):
+        html = self.run_js("(query('mouse'), body.statics.renderItem({name: 'Mus musculus (house mouse)', value: 'mmu'}, 'c1'))")
+        self.assertIn("house <mark>mouse</mark>)", html)
+        self.assertIn('<span class="po-organism-code">mmu</span>', html)
+
+    def test_render_item_escapes_the_name_and_omits_a_code_equal_to_it(self):
+        html = self.run_js("(query('a'), body.statics.renderItem({name: 'a <b> & c', value: 'a <b> & c'}, 'c1'))")
+        self.assertIn("&lt;b&gt; &amp; c", html)
+        self.assertNotIn("<b>", html)
+        self.assertNotIn("po-organism-code", html)
+
+    def test_the_superclass_init_still_runs(self):
+        self.assertTrue(self.run_js("combo.parentInit"))
 
 
 class Wiring(unittest.TestCase):
