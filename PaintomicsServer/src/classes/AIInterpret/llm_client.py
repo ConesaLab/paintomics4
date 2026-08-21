@@ -174,13 +174,45 @@ class LLMClient:
             _SCHEMA_SUPPORT[self.api_base] = False
 
     def complete(self, messages, max_tokens=4096, temperature=0.3,
-                 response_format=None, timeout=None):
+                 response_format=None, timeout=None, stream=False,
+                 max_attempts=3, budget_seconds=None):
+        """One chat completion, returned as a string.
+
+        `stream=True` asks the gateway for server-sent events and folds the
+        deltas back into one string. On the CSIC gateway that is not an
+        optimisation but the difference between an answer and none: LiteLLM
+        gives a NON-streamed request about 120 s before it retries the backend
+        itself, so a long generation never completes that way, while a stream
+        is judged per read and runs for as long as tokens keep coming.
+
+        `budget_seconds` is a wall clock over the WHOLE call -- every attempt,
+        every backoff and the streamed body itself. A caller with someone
+        waiting on the other end (a browser polling a ticket) sets it so this
+        call gives up FIRST and says why; without it a stream that trickles a
+        token a minute holds a worker and a queue slot until the gateway
+        decides to stop. `max_attempts` bounds the retries the same way. Both
+        default to the behaviour every existing caller had.
+        """
         # Drop the schema up front on an endpoint already known to reject it,
         # so we pay the 400 once per process rather than once per call.
         if response_format is not None and not self.supports_schema():
             response_format = None
 
-        for attempt in range(3):  # 2 retries
+        attempts = max(1, int(max_attempts))
+        deadline = (time.monotonic() + budget_seconds) if budget_seconds else None
+
+        def _backoff(seconds, err):
+            # A retry that cannot finish inside the budget only delays an
+            # answer nobody will be there to read. Stop here instead.
+            if deadline is not None and time.monotonic() + seconds >= deadline:
+                raise err
+            time.sleep(seconds)
+
+        for attempt in range(attempts):
+            if deadline is not None and time.monotonic() >= deadline:
+                raise requests.exceptions.Timeout(
+                    "LLM call exceeded its %ss budget before attempt %d"
+                    % (budget_seconds, attempt + 1))
             try:
                 logger.info(f"LLM complete: model={self.model}, "
                             f"msgs={len(messages)}, max_tokens={max_tokens} "
@@ -189,6 +221,8 @@ class LLMClient:
                            "max_tokens": max_tokens, "temperature": temperature}
                 if response_format is not None:
                     payload["response_format"] = response_format
+                if stream:
+                    payload["stream"] = True
                 limiter = _limiter_for(self.api_base)
                 if limiter is not None:
                     limiter.acquire()
@@ -198,15 +232,19 @@ class LLMClient:
                              "Content-Type": "application/json"},
                     json=payload,
                     timeout=timeout or DEFAULT_TIMEOUT,
+                    stream=stream,
                 )
                 r.raise_for_status()
-                content = r.json()["choices"][0]["message"]["content"]
+                if stream:
+                    content = self._fold_stream(r, deadline)
+                else:
+                    content = r.json()["choices"][0]["message"]["content"]
                 logger.info(f"LLM complete: got {len(content)} chars")
                 return content
             except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as e:
-                logger.warning(f"LLM request failed (attempt {attempt + 1}/3): {e}")
-                if attempt < 2:
-                    time.sleep(5 * (attempt + 1))  # 5s, 10s backoff
+                logger.warning(f"LLM request failed (attempt {attempt + 1}/{attempts}): {e}")
+                if attempt < attempts - 1:
+                    _backoff(5 * (attempt + 1), e)  # 5s, 10s backoff
                     continue
                 raise
             except requests.exceptions.HTTPError as e:
@@ -225,7 +263,7 @@ class LLMClient:
                 # job at the last phase. Back off and retry, honouring
                 # Retry-After when the server sends one.
                 if e.response is not None and e.response.status_code == 429:
-                    if attempt < 2:
+                    if attempt < attempts - 1:
                         wait = 5 * (attempt + 1)
                         try:
                             wait = max(wait, int(e.response.headers.get("Retry-After", 0)))
@@ -238,20 +276,70 @@ class LLMClient:
                         # a Retry-After the server explicitly asked for.
                         wait += random.uniform(0, 0.5 * wait)
                         logger.warning("LLM rate limited (429), retrying in %ss "
-                                       "(attempt %d/3)", wait, attempt + 1)
-                        time.sleep(wait)
+                                       "(attempt %d/%d)", wait, attempt + 1, attempts)
+                        _backoff(wait, e)
                         continue
-                    logger.error("LLM rate limited (429) after 3 attempts")
+                    logger.error("LLM rate limited (429) after %d attempts", attempts)
                     raise
                 # Don't retry other 4xx errors (auth, bad request) — they won't self-heal
                 if e.response is not None and 400 <= e.response.status_code < 500:
                     logger.error(f"LLM HTTP {e.response.status_code}: {e.response.text[:500]}")
                     raise
-                logger.warning(f"LLM server error (attempt {attempt + 1}/3): {e}")
-                if attempt < 2:
-                    time.sleep(5 * (attempt + 1))
+                logger.warning(f"LLM server error (attempt {attempt + 1}/{attempts}): {e}")
+                if attempt < attempts - 1:
+                    _backoff(5 * (attempt + 1), e)
                     continue
                 raise
+
+    @staticmethod
+    def _fold_stream(response, deadline):
+        """Concatenate the content deltas of a streamed chat completion.
+
+        `deadline` is a time.monotonic() value or None. It is checked between
+        events because the per-read timeout cannot see a gateway under load
+        that keeps the stream alive at a token a minute. The response is
+        closed on every path: a finished stream returns its connection to the
+        pool, a cut one is dropped rather than left half-read.
+        """
+        parts = []
+        try:
+            for line in response.iter_lines():
+                if deadline is not None and time.monotonic() > deadline:
+                    raise requests.exceptions.Timeout(
+                        "streamed completion exceeded its budget after %d chars"
+                        % sum(len(p) for p in parts))
+                if not line:
+                    continue
+                if isinstance(line, bytes):
+                    line = line.decode("utf-8", "replace")
+                if not line.startswith("data:"):
+                    continue
+                data = line[5:].strip()
+                if data == "[DONE]":
+                    break
+                try:
+                    chunk = json.loads(data)
+                except json.JSONDecodeError:
+                    continue
+                if not isinstance(chunk, dict):
+                    continue
+                if chunk.get("error"):
+                    # LiteLLM reports a backend failure mid-stream as an event,
+                    # not a status code. It is as transient as a 503 would be.
+                    raise requests.exceptions.ConnectionError(
+                        "gateway error mid-stream: %s" % json.dumps(chunk["error"])[:300])
+                choices = chunk.get("choices") or []
+                if not choices:
+                    continue
+                delta = (choices[0].get("delta") or {}).get("content")
+                if delta:
+                    parts.append(delta)
+        finally:
+            try:
+                response.close()
+            except Exception:
+                pass
+        return "".join(parts)
 
     def complete_json(self, messages, schema_name, schema, fallback_parser,
                       max_tokens=4096, temperature=0.3, timeout=None):

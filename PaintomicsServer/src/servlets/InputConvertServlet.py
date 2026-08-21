@@ -8,16 +8,24 @@ up when a user closes the tab.
 
 It does NOT wait for the model inline. paintomics4.ini runs processes=1,
 threads=4, so four threads serve every request on the site; the CSIC gateway
-takes ~120 s per attempt. An inline call would hold a quarter of the site's
-capacity per conversion and take the site down at four concurrent users. The
-work is enqueued and the browser polls, exactly as aiInterpretInitiate does.
+can take a minute or more per answer. An inline call would hold a quarter of
+the site's capacity per conversion and take the site down at four concurrent
+users. The work is enqueued and the browser polls, exactly as
+aiInterpretInitiate does.
+
+Each turn is bounded (agent_turn.TURN_BUDGET_SECONDS) and a gateway that does
+not answer fails the ticket with the reason, which the browser shows. For a
+short cooldown after that, new turns are refused at once rather than each
+spending the budget to find the same thing out.
 """
 
 import logging
+import math
 import os
 import threading
 import time
 
+from src.classes.InputConvert import agent_turn
 from src.common.ServerErrorManager import handleException
 from src.common.UserSessionManager import UserSessionManager
 
@@ -57,6 +65,45 @@ _inflight = threading.BoundedSemaphore(MAX_CONCURRENT_CONVERSIONS)
 MAX_TURNS_PER_USER_PER_DAY = 120
 _usage = {}
 _usage_lock = threading.Lock()
+
+# ---------------------------------------------------------------------------
+# Gateway cooldown
+# ---------------------------------------------------------------------------
+# When a turn has just found the gateway not answering, the next click must not
+# spend another TURN_BUDGET_SECONDS finding the same thing out. For this long
+# after such a failure new turns are refused at once, quoting the reason the
+# failed turn recorded. Short on purpose: a recovered gateway is back in use
+# within a couple of minutes, and a refused click costs the user a retry, not
+# a wait. The first turn that succeeds clears it early.
+GATEWAY_COOLDOWN_SECONDS = 90
+_gateway_lock = threading.Lock()
+_gateway_down_until = 0.0
+_gateway_last_error = ""
+
+
+def _mark_gateway_down(failure):
+    global _gateway_down_until, _gateway_last_error
+    with _gateway_lock:
+        _gateway_down_until = time.monotonic() + GATEWAY_COOLDOWN_SECONDS
+        _gateway_last_error = getattr(failure, "fact", None) or str(failure)
+
+
+def _mark_gateway_up():
+    global _gateway_down_until, _gateway_last_error
+    with _gateway_lock:
+        _gateway_down_until = 0.0
+        _gateway_last_error = ""
+
+
+def _gateway_cooldown_left():
+    """Seconds of cooldown remaining, 0 when turns may go out."""
+    with _gateway_lock:
+        return max(0.0, _gateway_down_until - time.monotonic())
+
+
+def _reset_gateway_state():
+    """Forget any recorded gateway failure (tests)."""
+    _mark_gateway_up()
 
 
 def _spend_turn(user_id):
@@ -101,6 +148,12 @@ def _reject_if_carrying_data(state):
 
 def inputConvertTurn(REQUEST, RESPONSE, QUEUE_INSTANCE, JOB_ID):
     """POST /input_convert/turn -> {ticket}. The browser then polls for it."""
+    # Whether THIS request holds a conversion slot that nobody else will
+    # release. It is handed to the queued work on enqueue; until then an error
+    # here must give it back, and before acquire an error must not touch the
+    # semaphore at all -- releasing a slot another conversion holds lets that
+    # conversion's own release overflow the bound and fail its job.
+    acquired = False
     try:
         userID = REQUEST.cookies.get("userID")
         sessionToken = REQUEST.cookies.get("sessionToken")
@@ -117,39 +170,50 @@ def inputConvertTurn(REQUEST, RESPONSE, QUEUE_INSTANCE, JOB_ID):
                 "The conversion request carried a %r field that looks like raw data. "
                 "Only the file's structure is sent." % offending)
 
+        cooldown = _gateway_cooldown_left()
+        if cooldown:
+            raise Exception(
+                "%s a moment ago; conversions are paused for another %d seconds "
+                "while it recovers. Please try again then."
+                % (_gateway_last_error, math.ceil(cooldown)))
+
         if not _spend_turn(userID):
             raise Exception("Daily conversion limit reached for this account.")
 
         if not _inflight.acquire(blocking=False):
             raise Exception("The server is converting other files right now. "
                             "Please try again in a moment.")
+        acquired = True
 
         def work(payload):
+            # Runs on a queue worker, which now owns the slot: released here on
+            # every path. A gateway failure propagates so the ticket fails with
+            # its message, and starts the cooldown for the next click.
             try:
-                from src.classes.InputConvert.agent_turn import next_action
-                return next_action(payload)
+                action = agent_turn.next_action(payload)
+            except agent_turn.GatewayUnavailable as failure:
+                _mark_gateway_down(failure)
+                raise
             finally:
                 _inflight.release()
+            _mark_gateway_up()
+            return action
 
         # PySiQ takes (fn, args) -- the callable and a tuple, not a closure.
-        QUEUE_INSTANCE.enqueue(fn=work, args=(state,), job_id=JOB_ID, timeout=300)
+        QUEUE_INSTANCE.enqueue(fn=work, args=(state,), job_id=JOB_ID,
+                               timeout=agent_turn.TURN_BUDGET_SECONDS + 30)
+        acquired = False                      # the worker owns it from here
         RESPONSE.setContent({"success": True, "ticket": JOB_ID})
     except Exception as ex:
-        _release_quietly()
+        if acquired:
+            _inflight.release()
         handleException(RESPONSE, ex, __file__, "inputConvertTurn")
     finally:
         return RESPONSE
 
 
-def _release_quietly():
-    try:
-        _inflight.release()
-    except ValueError:
-        pass  # was never acquired on this path
-
-
 def inputConvertResult(REQUEST, RESPONSE, QUEUE_INSTANCE, ticket):
-    """GET /input_convert/turn/<ticket> -> {state, action}."""
+    """GET /input_convert/turn/<ticket> -> {state, action | message}."""
     try:
         userID = REQUEST.cookies.get("userID")
         sessionToken = REQUEST.cookies.get("sessionToken")
@@ -165,7 +229,13 @@ def inputConvertResult(REQUEST, RESPONSE, QUEUE_INSTANCE, ticket):
             action = QUEUE_INSTANCE.get_result(ticket, remove=True)
             RESPONSE.setContent({"success": True, "state": "done", "action": action})
         elif "FAILED" in status.upper():
-            RESPONSE.setContent({"success": True, "state": "error"})
+            # Carry the reason, and consume the entry like a finished one:
+            # PySiQ removes nothing by itself, so a failed ticket would
+            # otherwise sit in its table until the next restart.
+            message = (QUEUE_INSTANCE.get_error_message(ticket)
+                       or "The conversion service failed on that step.")
+            QUEUE_INSTANCE.get_result(ticket, remove=True)
+            RESPONSE.setContent({"success": True, "state": "error", "message": message})
         else:
             RESPONSE.setContent({"success": True, "state": "running"})
     except Exception as ex:
