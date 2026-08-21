@@ -1119,9 +1119,12 @@ function PA_Step1JobView() {
 					// "(not installed for this organism)" wrapped the label onto
 					// a second line, leaving the checkbox aligned with nothing.
 					// "for this organism" is already said by the note below.
+					/* A class, not `style="color:#8A8A8A"`: an inline colour is
+					   unreachable by dark.css, so on the dark form this greyed-out
+					   note stayed a light-theme grey on a dark surface. */
 					box.setBoxLabel(available
 						? database
-						: database + ' <span style="color:#8A8A8A;">(not installed)</span>');
+						: database + ' <span class="po-db-tag">not installed</span>');
 				}
 				if (available) { applied.push(database); }
 			});
@@ -1142,25 +1145,24 @@ function PA_Step1JobView() {
 		var note = this.getComponent().queryById("databasesAvailabilityNote");
 		if (!note || !note.update) { return; }
 
-		var reference = ' Please check <b><a href="https://paintomics.readthedocs.io/en/latest/1_4_id/"' +
-			' target="_blank">Supported ID and databases</a></b>.';
-		var message;
+		/* Silent in both of the ordinary cases. "Choose an organism to see which
+		   databases are available" and "KEGG + Reactome are installed for mmu"
+		   both said what the chips beside this line already show -- one chip per
+		   database, on when the organism has it -- so the note was a sentence
+		   restating a control that had not moved.
 
-		if (!organism) {
-			message = ' Choose an organism to see which pathway databases are available for it.';
-		} else if (installed === null) {
-			message = ' The list of installed databases could not be read from the server,' +
-				' so all of them are offered; any that this server cannot run for ' +
-				Ext.String.htmlEncode(organism) + ' will be left out of the analysis.';
-		} else {
-			message = ' <b>' + Ext.String.htmlEncode(applied.join(' + ')) + '</b> ' +
-				(applied.length > 1 ? 'are' : 'is') + ' installed for ' +
-				Ext.String.htmlEncode(organism) + ' and included by default.';
-			message += ' Untick a database to leave it out.';
+		   What the chips cannot show is that the answer is a guess: when
+		   /organism_databases could not be read, every box is offered and the
+		   server drops what it cannot run. That is the one case worth a line. */
+		if (installed !== null) {
+			note.update('');
+			return;
 		}
 
-		note.update('<span class="infoTip" style=" font-size: 12px; margin: 0 26px 10px 196px;">' +
-			message + reference + '</span>');
+		note.update('<p class="po-db-note">The list of installed databases could not be' +
+			' read from the server, so all of them are offered; any that this server' +
+			' cannot run for ' + Ext.String.htmlEncode(organism || 'this organism') +
+			' will be left out of the analysis.</p>');
 	};
 
 	/**
@@ -1525,136 +1527,208 @@ function PA_Step1JobView() {
 				defaults: {labelAlign: "right", border: false},
 				items: [
 					{xtype: "box", flex: 1, html:'<h2>Data uploading</h2><h3>1. Organism selection </h3>'},
-					{xtype: "container", flex: 1, layout: {type: "hbox"}, items: [
-						{
-							xtype: "container", layout: { type: "vbox", align: "stretch" }, flex: 0.4, items: [
-							{
-								xtype: 'organismcombo', fieldLabel: 'Organism', name: 'specie',
-								/* 26px is --pa-card-inset: this field sits directly under
-								   "1. Organism selection", so it has to start on the same
-								   left edge as that heading. */
-								style: "margin: 10px 10px 10px 26px;",
-								flex: 1,
-								maxWidth: 450,
-								itemId: "speciesCombobox",
-								allowBlank: false,
-								forceSelection: true,
-								emptyText: 'Please choose an organism',
-								displayField: 'name',
-								valueField: 'value',
-								queryMode: 'local',
-								labelWidth: 150,
-								/* The database checkboxes below are a function of this field.
-								   `change` rather than `select`: setValue() fires change and not
-								   select, and setExampleModeHandler sets the organism that way. */
-								listeners: {
-									change: function() { me.applyDatabaseAvailability(); }
-								},
-								store: Ext.create('Ext.data.ArrayStore', {
-									fields: ['name', 'value'],
-									autoLoad: true,
-									sortOnLoad: true,
-									remoteSort: false,
-									sorters: [{
-							        property: 'name',
-							        direction: 'ASC'
-							    }],
-									proxy: {
-										type: 'ajax',
-										url: SERVER_URL_GET_AVAILABLE_SPECIES,
-										reader: {
-											type: 'json',
-											root: 'species',
-											successProperty: 'success'
-										}
-									}
-								})
-							},
-							{
-								xtype: "box", flex: 1, html:
-								'<span class="infoTip" style=" font-size: 12px; margin-left: 196px; margin-bottom: 10px;">'+
-								' Not your organism? <a href="javascript:void(0)" id="newOrganismRequest" style="color: rgb(211, 21, 108);">Request a new organism</a>.' +
-								'</span>'
-							}]
-						},
-						{
-							xtype: "container", layout: { type: "vbox", align: "stretch" }, flex: 0.5, items: [
-							{
-								/* The job's name, which the server takes from this field
-								   (PathwayAcquisitionServlet: setName(jobDescription[:100])).
-								   It was a visible "Enter a job description" box beside the
-								   organism, one free-text field above another that asks for the
-								   same sentence -- the experiment design below. Now hidden and
-								   filled from that design's first line as it is typed, so the
-								   form asks once and the job list still gets a name. */
-								xtype: "hiddenfield",
-								name: 'jobDescription'
-							}
-							]
-						}
-						]
-					},
-					/* Databases is a row of its own, not the second item of the right-hand
-					   column. Stacked there it made that column about 110px taller than the
-					   left one, and an hbox column is only as tall as its own content - so
-					   everything under the organism combo, the whole left half of section 1,
-					   was a hole of that size. As a row it sits under both columns, starts on
-					   the same left edge as Organism, and the section now ends where its last
-					   field ends. */
+					/* Section 1: two controls, one row, on the same panel as the two
+					   sections under it.
+
+					   It used to be four bare form rows on the white card -- a 150px label
+					   column, a 450px field, and then nothing at all from x=940 to the
+					   card's right edge, while Section 2's decision column and Section 3's
+					   "Works with" aside both filled that space. The first section of the
+					   form was the only one with no surface under it and the only one that
+					   left half its own card empty.
+
+					   It carries no prose. A first draft explained what the organism
+					   decides, how to search the picker, and how many organisms were
+					   installed; the owner cut all of it. The section asks two questions
+					   and the answers are two controls, so what fills the panel is the
+					   controls themselves: the field takes the width it needs to show a
+					   full "Genus species (common name)", and the databases take the rest
+					   of the row as four equal chips. Nothing here is a paragraph.
+
+					   Three columns, the same three the omics row under Section 3 has
+					   always had: the control on the left, what you fill in in the
+					   middle, what it means on the right. The widths are that row's --
+					   250 for the control, 320 for the note -- so the whole form reads
+					   across on one set of rails instead of each section inventing its
+					   own. */
 					{
-						xtype: "container", layout: { type: "vbox", align: "stretch" }, items: [
-						{
-							xtype: 'checkboxgroup', fieldLabel: 'Databases',
-							// Named so lockFormForExample can find it: in example mode
-							// the databases are resolved on the server, not from here.
-							itemId: "databasesCheckboxGroup",
-							style: "margin: 4px 10px 10px 26px;",
-							maxWidth: 650,
-							allowBlank: false,
-							columns: 2,
-							disabled: false,
-							labelWidth: 148,
-							/* The boxes are fixed -- these are the three databases PaintOmics knows
-							   how to draw a pathway from -- but which of them can be TICKED is not,
-							   and is not knowable here: it depends on what this server installed for
-							   the organism chosen above. So every optional box starts unticked and
-							   disabled, and applyDatabaseAvailability turns on the ones that
-							   /organism_databases reports for the selected organism.
-							
-							   They used to be permanently selectable, and two of the three were a
-							   lie for nearly every organism: PathwayAcquisitionServlet has always
-							   intersected the submitted selection with the databases the organism
-							   actually has, so ticking MapMan for mouse or Reactome for tomato
-							   changed nothing at all and said nothing about it. */
+						xtype: "container", cls: "po-form-panel po-organism-panel",
+						layout: {type: 'hbox', align: 'stretch'},
+						items: [{
+							/* The control column. 250px, the width "Available omics" keeps
+							   under Section 3 -- the row this form now takes its shape from:
+							   what you pick from on the left, what you fill in in the middle,
+							   what it means on the right. */
+							/* 360, not 250. The field holds "Genus species (common name)"
+							   -- "Mus musculus (house mouse)" is 27 characters and the longer
+							   strain names run past 40 -- and at 250 the picker was truncating
+							   the answer it had just been given. */
+							xtype: "container", width: 360, layout: "anchor",
 							items: [
-									// Only for information, KEGG database is added always on server side
-									{ boxLabel: 'KEGG (required)', name: 'databases[]', inputValue: 'KEGG', checked: true, disabled: true },
-									/* itemId as well as id: queryById finds either, but two ids on one page
-									   is a global, and the region/miRNA/MORE flows can rebuild this form. */
-									{ boxLabel: 'MapMan', name: 'databases[]', inputValue: 'MapMan',
-									  checked: false, disabled: true,
-									  itemId: 'mapmanDB', id: 'mapmanDB'},
-									{ boxLabel: 'Reactome', name: 'databases[]', inputValue: 'Reactome',
-									  checked: false, disabled: true,
-									  itemId: 'reactomeDB', id: 'reactomeDB'},
-									/* OmniPath ships no pathway diagrams, so its pathways open as an
-									   interactive interaction network rather than a painted map. The
-									   web service serves human, mouse and rat only, so for every
-									   other organism this box stays disabled. */
-									{ boxLabel: 'OmniPath', name: 'databases[]', inputValue: 'OmniPath',
-									  checked: false, disabled: true,
-									  itemId: 'omnipathDB', id: 'omnipathDB'},
+								{
+									xtype: 'organismcombo', fieldLabel: 'Organism', name: 'specie',
+									/* Label on top, as "Experiment design (optional)" has it in
+									   the panel below. Beside the field it spent 150px of the row
+									   on one word, and every note under the field then carried a
+									   hand-matched `margin-left: 196px` to line up with the field
+									   rather than with the label. */
+									labelAlign: 'top',
+									anchor: '100%',
+									itemId: "speciesCombobox",
+									allowBlank: false,
+									forceSelection: true,
+									emptyText: 'Please choose an organism',
+									displayField: 'name',
+									valueField: 'value',
+									queryMode: 'local',
+									/* The database chips beside this field are a function of it.
+									   `change` rather than `select`: setValue() fires change and
+									   not select, and setExampleModeHandler sets the organism that
+									   way. */
+									listeners: {
+										change: function() { me.applyDatabaseAvailability(); }
+									},
+									store: Ext.create('Ext.data.ArrayStore', {
+										fields: ['name', 'value'],
+										autoLoad: true,
+										sortOnLoad: true,
+										remoteSort: false,
+										sorters: [{
+									        property: 'name',
+									        direction: 'ASC'
+									    }],
+										proxy: {
+											type: 'ajax',
+											url: SERVER_URL_GET_AVAILABLE_SPECIES,
+											reader: {
+												type: 'json',
+												root: 'species',
+												successProperty: 'success'
+											}
+										}
+									})
+								},
+								{
+									/* The request was a pink text link trailing an info tip:
+									   "Not your organism? Request a new organism." -- eleven words
+									   and a sentence of setup for a control, in a magenta used
+									   nowhere else and written inline, where dark.css could not
+									   reach it. It is an action, so it is shaped like one: the
+									   same shape as "Draft this for me" in the panel below, quiet
+									   until it is wanted. Keeps id="newOrganismRequest", which is
+									   what opens the dialog (see the boxready handler below).
+
+									   With a line beside it, as that button has: on its own under
+									   the field it was a control with nothing to say what pressing
+									   it does, and the owner read the difference between the two
+									   rows as an oversight. It is: this is the only other optional
+									   action on the form, and the two should read the same way.
+									   The line is the dialog's own first sentence, which is the
+									   fact that makes the button worth pressing -- the picker holds
+									   what this server installed, and KEGG holds far more. */
+									xtype: "box", cls: "po-organism-request",
+									html: '<a href="javascript:void(0)" id="newOrganismRequest" class="po-ghost-action">' +
+										'<i class="fa fa-plus"></i> Request an organism</a>' +
+										'<span class="po-organism-request-hint">Any organism in KEGG can be added.</span>'
+								},
+								{
+									/* The job's name, which the server takes from this field
+									   (PathwayAcquisitionServlet: setName(jobDescription[:100])).
+									   It was a visible "Enter a job description" box beside the
+									   organism, one free-text field above another that asks for the
+									   same sentence -- the experiment design below. Now hidden and
+									   filled from that design's first line as it is typed, so the
+									   form asks once and the job list still gets a name. */
+									xtype: "hiddenfield",
+									name: 'jobDescription'
+								}
 							]
-						},
-						{
-							// Rewritten by applyDatabaseAvailability once an organism is known, so
-							// this text is only ever seen before one is chosen.
-							xtype: "box", itemId: "databasesAvailabilityNote", html:
-							'<span class="infoTip" style=" font-size: 12px; margin: 0 26px 10px 196px;">'+
-							' Choose an organism to see which pathway databases are available for it. Please check <b><a href="https://paintomics.readthedocs.io/en/latest/1_4_id/" target="_blank">Supported ID and databases</a></b>.' +
-							'</span>'
-						}
-						]
+						}, {
+							xtype: "container", flex: 1, margin: '0 0 0 32', layout: "anchor",
+							items: [
+								{
+									xtype: "box",
+									/* <p>, not <div>: the alignment overlay measures where text
+									   starts, and its selector deliberately excludes generic
+									   containers -- so as a div this title was invisible to it and
+									   the column it heads had one measurable member, the row of
+									   checkbox labels. A lone member is reported as a stray, which
+									   is how a column that is exactly where it should be came back
+									   492px off the rail. */
+									html: '<p class="po-aside-title">Pathway databases</p>'
+								},
+								{
+									xtype: 'checkboxgroup',
+									// Named so lockFormForExample can find it: in example mode
+									// the databases are resolved on the server, not from here.
+									itemId: "databasesCheckboxGroup",
+									cls: "po-database-group",
+									anchor: '100%',
+									allowBlank: false,
+									/* Two across, in the column the form gives its inputs. It
+									   was four across a full-width row, which was right while the
+									   databases had the whole panel to themselves; with the
+									   information column beside them the row is ~550px, and four
+									   columns there cut "MapMan not installed" in half. */
+									/* One row. Four short names in two columns stacked into a
+									   2x2 block with a gap down the middle; across, they read as
+									   the one list they are, and Section 1 is a single row of
+									   controls -- organism, then the databases it has. */
+									columns: 4,
+									disabled: false,
+									/* The label is the title above the chips. */
+									hideLabel: true,
+									/* The boxes are fixed -- these are the four databases PaintOmics knows
+									   how to draw a pathway from -- but which of them can be TICKED is not,
+									   and is not knowable here: it depends on what this server installed for
+									   the organism chosen beside it. So every optional box starts unticked
+									   and disabled, and applyDatabaseAvailability turns on the ones that
+									   /organism_databases reports for the selected organism.
+
+									   They used to be permanently selectable, and two of the three were a
+									   lie for nearly every organism: PathwayAcquisitionServlet has always
+									   intersected the submitted selection with the databases the organism
+									   actually has, so ticking MapMan for mouse or Reactome for tomato
+									   changed nothing at all and said nothing about it. */
+									items: [
+											// Only for information, KEGG database is added always on server side
+											{ boxLabel: 'KEGG <span class="po-db-tag">required</span>',
+											  name: 'databases[]', inputValue: 'KEGG', checked: true, disabled: true },
+											/* itemId as well as id: queryById finds either, but two ids on one page
+											   is a global, and the region/miRNA/MORE flows can rebuild this form. */
+											{ boxLabel: 'MapMan', name: 'databases[]', inputValue: 'MapMan',
+											  checked: false, disabled: true,
+											  itemId: 'mapmanDB', id: 'mapmanDB'},
+											{ boxLabel: 'Reactome', name: 'databases[]', inputValue: 'Reactome',
+											  checked: false, disabled: true,
+											  itemId: 'reactomeDB', id: 'reactomeDB'},
+											/* OmniPath ships no pathway diagrams, so its pathways open as an
+											   interactive interaction network rather than a painted map. The
+											   web service serves human, mouse and rat only, so for every
+											   other organism this box stays disabled. */
+											{ boxLabel: 'OmniPath', name: 'databases[]', inputValue: 'OmniPath',
+											  checked: false, disabled: true,
+											  itemId: 'omnipathDB', id: 'omnipathDB'},
+									]
+								},
+								{
+									/* Empty in the ordinary case, and that is the point: which
+									   databases this organism has is on the chips above, so a
+									   sentence repeating it was one more line to read every time.
+									   describeDatabaseAvailability fills this only when something
+									   is wrong -- when the installed list could not be read at all
+									   -- which is the one state the chips cannot show. */
+									xtype: "box", itemId: "databasesAvailabilityNote", html: ''
+								}
+							]
+						}]
+						/* Section 1 has no margin note. It carried one for a while --
+						   "About this step", a sentence saying the organism decides which
+						   databases and identifiers are available -- and the owner cut it as
+						   useless, which it is: the databases beside the field already show
+						   exactly that, one box per database, ticked when this organism has
+						   it. A note that narrates the control next to it is a note nobody
+						   needs to read twice. */
 					},
 					/*{
 							xtype: "container",
@@ -1673,7 +1747,11 @@ function PA_Step1JobView() {
 					}*/,
 					{   // AI Interpretation section
 						xtype: "box", flex: 1,
-						html: '<h3>' + getAIMark() + ' 2. AI-powered pathway interpretation (optional)</h3>'
+						/* No "(optional)" any more: the interpretation is part of what this
+						   server does with a job, and the one optional thing in the section --
+						   the experiment design -- says so on its own label. The heading said
+						   optional when it titled a consent checkbox. */
+						html: '<h3>' + getAIMark() + ' 2. AI-powered pathway interpretation</h3>'
 					},
 					{
 						xtype: "container", layout: {type: 'hbox', align: 'stretch'}, cls: "po-ai-section-body",
@@ -1682,6 +1760,11 @@ function PA_Step1JobView() {
 						   half blank. Two columns give the explanation its measure and put the
 						   two controls in the space the prose cannot use. */
 						items: [{
+							/* The one thing this section asks you to write, on the panel's own
+							   left edge -- the same place Section 1 puts the organism field and
+							   Section 3 its opening sentence. Every section of this form starts
+							   with something you operate; the margin note to the right is what
+							   explains it. */
 							xtype: "container", flex: 1, layout: "anchor",
 							items: [
 								{
@@ -1722,7 +1805,12 @@ function PA_Step1JobView() {
 									   Dragging it still works; growing sets a height, not a cap. */
 									xtype: "textarea", fieldLabel: "Experiment design (optional)",
 									name: 'experimentDesign',
-									labelAlign: 'top', anchor: '100%', height: 120,
+									/* 96, which is the two-line placeholder plus a line -- the
+									   height the note above this config argues for and which the
+									   field had drifted off. It sets the height of the whole
+									   section while the form sits unfilled, and growExpDesignToFit
+									   raises it the moment there is something to fit. */
+									labelAlign: 'top', anchor: '100%', height: 96,
 									cls: 'po-exp-design',
 									emptyText: 'e.g. RNA-seq of wildtype vs knockout mouse liver, 3 replicates per group, sampled at 24 h',
 									maxLength: 2000,
@@ -1766,74 +1854,43 @@ function PA_Step1JobView() {
 								   of change means what." said the same thing in two sentences,
 								   and the placeholder in the field above already shows the
 								   shape of an answer. */
-								{
-									xtype: "box", cls: 'po-exp-design-draft',
-									html: '<button type="button" class="button btn-secondary btn-small po-exp-design-draft-btn" ' +
-									      'id="expDesignDraftBtn" disabled>' + getAIMark() + ' Draft this for me</button>' +
-									      '<span class="po-exp-design-hint">Names the job in your list and tells the interpretation which direction of change means what.</span>' +
-									      '<span class="po-exp-design-draft-note" id="expDesignDraftNote"></span>',
-									listeners: {
-										afterrender: function() {
-											var box = this;
-											/* The consent checkbox and the omic panels are built by
-											   other parts of this view, so the wiring waits a tick
-											   for the form to finish rendering rather than reaching
-											   up through a parent that may not exist yet. */
-											setTimeout(function() { initExpDesignDraft(box); }, 200);
-										}
-									}
-								}
-							]
-						}, {
-							/* The decision column. One right column for the whole form:
-							   400px here, the same 400px for the "Works with" column under
-							   Section 3, and the Help panel below starts on the same x (422
-							   wide, because it runs to the card edge where this column
-							   stops 22px short of it inside the panel's padding). Measured:
-							   all three start at 1185px on a 1867px viewport.
+								/* The consent, which is no longer a question this form asks.
 
-							   The columns swapped sides on 2026-08-21: the experiment
-							   design -- the thing the user does -- is the wide field on the
-							   left, and the switch, one line, three pills and the privacy
-							   link -- the thing the user decides -- sit here, where a
-							   settings control belongs. */
-							xtype: "container", width: 400, margin: '0 0 0 32', layout: "anchor",
-							items: [
+								   It was a checkbox, in four different places over as many passes
+								   (the right-hand column, the top-left of the panel, the far end of
+								   the section heading, and finally here, under the field and above
+								   the button it gated). The owner's call on 2026-08-21 was to stop
+								   asking: the interpretation runs on hardware this project operates
+								   -- an IIIA-CSIC gateway, in the EU, named on the panel beside this
+								   field -- so the transfer the box was asking permission for is to
+								   the same institution the data was uploaded to. What replaces it is
+								   not silence: "Where your data goes" is now a heading in that
+								   column, with an amber (!), the recipient printed under it, and the
+								   full notice -- what is sent, what is never sent, GDPR Articles 5
+								   and 9 -- one click away. Told rather than asked.
+
+								   The field stays, as a hidden 'true', because everything downstream
+								   is built on it and none of that should change: the servlet still
+								   reads consent off the form (PathwayAcquisitionServlet:
+								   setAIConsent), AIInterpretServlet still refuses a request whose
+								   stored record says False, and Step 3 still shows the AI Interpret
+								   button only for a job that carries it. Consent is still recorded
+								   per job and still enforced per request -- what changed is who
+								   decides it, not whether it is checked.
+
+								   DEFAULT_AI_CONSENT_ENABLED is left in ServerConfiguration.js,
+								   unread by this form. It is the switch to put the checkbox back. */
 								{
-									xtype: 'checkboxfield',
-									/* Both colours were written inline, which put them out of reach of
-									   dark.css -- an inline style beats a stylesheet -- so this
-									   sentence stayed #C44500 on the dark surface and measured 3.29:1
-									   at 13px, under the 4.5:1 AA asks of body text. It is the one
-									   line that says what leaves this server and who receives it,
-									   which makes it the worst line in the product to have to squint
-									   at. Stated as classes instead, so dark.css can restate them
-									   with --pa-ai-consent-warn -- a token it already declared for
-									   exactly this and had no way to apply. Same fix, same reason, as
-									   .formMessage. */
-									/* The label used to carry "(sends your results to IIIA-CSIC
-									   (llm.iiia.es))". Trimmed to the verb on the owner's call
-									   (2026-08-21): the gateway is operated by CSIC, as is the host,
-									   and the statement of what leaves and who receives it -- the
-									   recipient, the operator, the country, every field -- stays in
-									   the privacy notice, one click away. The red (!) icon that used
-									   to sit here is now the quiet "Data privacy" link under the
-									   pills. The control is the application's own checkbox -- a
-									   switch was tried on 2026-08-21 and the owner did not like it --
-									   with its label set as the column's title. */
-									boxLabel: 'Enable AI pathway interpretation',
-									name: 'aiConsent', inputValue: 'true', uncheckedValue: 'false',
-									/* Off everywhere but a local instance -- a pre-ticked consent
-									   box is not consent. See LOCAL INSTANCE DEFAULTS in
-									   ServerConfiguration.js for why localhost is the exception,
-									   and the guard note on the Reactome box above for the typeof. */
-									checked: typeof DEFAULT_AI_CONSENT_ENABLED !== "undefined" && DEFAULT_AI_CONSENT_ENABLED,
+									xtype: 'hiddenfield',
+									name: 'aiConsent',
+									value: 'true',
 									listeners: {
 										afterrender: function() {
-											/* Names the recipient in the consent label and in the callout
-											   above it. Both are on screen before anyone opens the notice,
-											   and the label is the surface the design system requires to
-											   carry the statement. */
+											/* Names the recipient under "Where your data goes" in the
+											   column beside this field, so it is on screen before anyone
+											   opens the notice. The wiring hangs off this field because
+											   it is the one component in the section that is guaranteed
+											   to render whatever else the form is doing. */
 											fillAIProvenance(document);
 											setTimeout(function() {
 												var icon = document.getElementById("aiGdprInfoIcon");
@@ -1851,13 +1908,13 @@ function PA_Step1JobView() {
 													disclaimer.className = "ai-gdpr-disclaimer";
 													disclaimer.innerHTML =
 														'<div class="ai-gdpr-disclaimer-header">' +
-														'  <strong>Data Privacy &amp; Compliance Notice</strong>' +
-														'  <button class="ai-gdpr-close">&times;</button>' +
+														'  <strong>Where your data goes</strong>' +
+														'  <button class="ai-gdpr-close" title="Close" aria-label="Close"><i class="fa fa-times"></i></button>' +
 														'</div>' +
 														'<div class="ai-gdpr-disclaimer-body">' +
 																'  <p><strong>What this feature does:</strong> it sends a summary of your analysis to a large ' +
 																'  language model, which returns a draft interpretation with citations. PaintOmics does not run ' +
-																'  the model itself.</p>' +
+																'  the model itself, so the summary leaves this server. Here is exactly what it is.</p>' +
 																'  <p id="aiGdprWhere" class="ai-gdpr-where"></p>' +
 																'  <div class="ai-gdpr-sent">' +
 																'    <strong class="ai-gdpr-sent-title">\u26A0 What leaves this server:</strong>' +
@@ -1880,24 +1937,36 @@ function PA_Step1JobView() {
 																'    </ul>' +
 																'  </div>' +
 																'  <hr>' +
-																'  <p><strong>Before you enable this, check your data</strong></p>' +
-																'  <p>Under <strong>GDPR Article 9</strong>, genetic and health data are a special category and ' +
-																'  may not be processed without an explicit lawful basis. Under <strong>Article 5(1)(c)</strong>, ' +
-																'  send only what the analysis needs.</p>' +
-																'  <p id="aiGdprTransfer" class="ai-gdpr-transfer"></p>' +
-																'  <p><strong style="color:#c62828;">\u26D4 Never submit:</strong></p>' +
+																/* The same facts, in a register the owner asked for on 2026-08-21:
+																   "be chill, it is hosted on the CSIC LLM service and we are good
+																   people". The list below is unchanged in substance -- it is what
+																   the GDPR says about genetic and health data, and leaving it out
+																   would not make it less true -- but it is written as advice about
+																   the data rather than as a prohibition on the reader. The red
+																   \u26D4, the inline #c62828 and the "you formally confirm"
+																   paragraph are gone: this notice is read by researchers deciding
+																   what to upload, and shouting at them is not what makes them
+																   careful. The same softening was applied to the AI section of
+																   conditions.html, which the fine print links to. */
+																'  <p><strong>What to leave out</strong></p>' +
+																'  <p>Please upload only data you are free to process this way. In practice ' +
+																'  that means leaving out:</p>' +
 																'  <ul class="ai-gdpr-unsafe">' +
-																'    <li>Patient names, clinical record identifiers, or any other PII</li>' +
-																'    <li>Protected Health Information (PHI) under HIPAA or the GDPR</li>' +
-																'    <li>Raw sequencing reads from identifiable human subjects</li>' +
-																'    <li>Rare genetic variants that could re-identify an individual</li>' +
-																'    <li>Unpublished clinical trial data linked to patients</li>' +
+																'    <li>patient names, clinical record identifiers and other personally identifiable information;</li>' +
+																'    <li>protected health information under HIPAA, the GDPR or an equivalent regulation;</li>' +
+																'    <li>raw sequencing reads from identifiable human subjects;</li>' +
+																'    <li>rare variants that could re-identify an individual;</li>' +
+																'    <li>unpublished clinical trial data linked to patients.</li>' +
 																'  </ul>' +
+																'  <p>Under the <strong>GDPR</strong>, genetic and health data are a special category: ' +
+																'  <strong>Article 9</strong> asks for an explicit lawful basis before they are processed, ' +
+																'  and <strong>Article 5(1)(c)</strong> asks that you send only what the analysis needs.</p>' +
+																'  <p id="aiGdprTransfer" class="ai-gdpr-transfer"></p>' +
 																'  <p class="ai-gdpr-fineprint">' +
-																'    By enabling this feature you confirm that the data you submit contains no personally ' +
-																'    identifiable or special-category data as defined by GDPR Article 9, or that you have a ' +
-																'    lawful basis for processing it. ' +
-																'    For full details, see our <a href="conditions.html" target="_blank">Terms &amp; Conditions</a>.</p>' +
+																'    You know your data and we do not, so what to upload is your decision. ' +
+																'    The interpretation is a draft: read it, and check its citations, before ' +
+																'    you rely on it. ' +
+																'    For the full terms, see our <a href="conditions.html" target="_blank">Terms &amp; Conditions</a>.</p>' +
 														'</div>';
 													overlay.appendChild(disclaimer);
 													document.body.appendChild(overlay);
@@ -1917,28 +1986,86 @@ function PA_Step1JobView() {
 									}
 								},
 								{
-									/* What the switch turns on, in one line and three tokens. The
-									   paragraph this replaces listed the agent's phases in prose; as
-									   pills they scan, and the full account -- what is sent, where,
-									   which fields -- is the Data privacy notice the link opens. */
-									xtype: "box",
-									html: '<p class="ai-intro-copy po-ai-oneliner">A cited draft of what your results mean, written by the <b>PaintOmics AI agent</b> for you to check.</p>' +
-										'<ul class="po-pill-list po-ai-facts"><li>PubMed &amp; Europe PMC</li><li>Every citation verified</li><li>Reads your uploaded values</li></ul>' +
-										'<p class="po-ai-privacy"><a href="javascript:void(0)" class="ai-gdpr-info-link" id="aiGdprInfoIcon" title="Data privacy &amp; compliance \u2014 what is sent, and where">Data privacy</a></p>'
+									xtype: "box", cls: 'po-exp-design-draft',
+									html: '<button type="button" class="button btn-secondary btn-small po-exp-design-draft-btn" ' +
+									      'id="expDesignDraftBtn" disabled>' + getAIMark() + ' Draft this for me</button>' +
+									      '<span class="po-exp-design-hint">Names the job in your list and tells the interpretation which direction of change means what.</span>' +
+									      '<span class="po-exp-design-draft-note" id="expDesignDraftNote"></span>',
+									listeners: {
+										afterrender: function() {
+											var box = this;
+											/* The consent checkbox and the omic panels are built by
+											   other parts of this view, so the wiring waits a tick
+											   for the form to finish rendering rather than reaching
+											   up through a parent that may not exist yet. */
+											setTimeout(function() { initExpDesignDraft(box); }, 200);
+										}
+									}
 								}
 							]
+						}, {
+							/* The information column, on the rail the Help panel under
+							   Section 3 keeps: what the feature does, what it reads, and the
+							   notice that says what leaves this server. It used to sit under
+							   the consent box in a single right-hand column; as its own
+							   column it is the same kind of thing as the Help note below and
+							   is drawn as one. */
+							/* The switch that turns the section on used to sit at the top of
+							   this column; it is in the section heading now -- see there. */
+							xtype: "container", cls: "po-note-col", width: 320, margin: '0 0 0 32', layout: "anchor",
+							items: [
+							{
+								/* Named so fillAIProvenance can find it: the recipient's name
+								   arrives from /ai_provider after this column has been measured,
+								   and an hbox measures once. Same trap, same fix, as setNote's
+								   updateLayout below -- see the note there. */
+								xtype: "box", itemId: "aiWhatYouGetNote",
+								html: '<div class="po-info-note">' +
+									'<h5><i class="fa fa-info-circle"></i> What you get</h5>' +
+									'<p class="ai-intro-copy po-ai-oneliner">A cited draft of what your results mean, written by the <b>PaintOmics AI agent</b> for you to check.</p>' +
+									/* The three assurances as a sentence, not as a list.
+									   They were <li>s in the .po-spec-list that Section 3 uses for
+									   its formats -- an inline run separated by middots, which is
+									   the right shape for nine short names on one wide line and the
+									   wrong one here: in a 302px column each item wrapped onto a
+									   line of its own, so the note ended in three unpunctuated
+									   fragments stacked under a paragraph, with no separators
+									   visible to say they were a list at all. The owner's read was
+									   that it is "not good", and a list that renders as three orphan
+									   lines is not a list. Prose is what this column is made of. */
+									'<p class="po-ai-method">It searches PubMed and Europe PMC, reads the values you uploaded, and verifies every citation it prints.</p>' +
+									/* Where the data goes, on the panel rather than only behind a
+									   link. It read "Data privacy" -- a label for a notice, which
+									   tells a reader the notice exists and nothing about their own
+									   data. The (!) and the heading say there is something here to
+									   read before enabling the feature, and #aiProviderInline (filled
+									   by fillAIProvenance from /ai_provider) names the actual
+									   recipient this server is configured to use, so the one fact
+									   that matters is on screen without a click. The full notice --
+									   what is sent, what is never sent, the GDPR articles -- is still
+									   one click away.
+
+									   Built as a second <h5> and its paragraph, the same pair as
+									   "What you get" above it, rather than as one line with the icon
+									   inline. Inline, the icon pushed the sentence 15.8px off the
+									   column's text rail and the alignment overlay was right to
+									   report it: the mark was on the rail and the words were not.
+									   As a heading the icon is a flex item, the note reads as two
+									   labelled blocks, and the amber tells the second from the
+									   first. */
+									'<h5 class="po-ai-privacy-head"><i class="fa fa-exclamation-circle"></i> ' +
+									'<a href="javascript:void(0)" id="aiGdprInfoIcon" title="What is sent, to whom, and where it runs">Where your data goes</a></h5>' +
+									'<p id="aiProviderInline" class="po-ai-provider-inline"></p>' +
+									'</div>'
+							}]
 						}]
 					},
 					{
 						xtype: "box",
-						// Served from the manifest rather than a checked-in zip, so
-						// this hands over the datasets "Load example" actually
-						// offers. The old static file was built in 2017 and shared
-						// no filename with any current scenario.
 						// The mark leads the heading exactly as it does on Section 2's,
 						// so main.css's `div.contentbox h3 > svg.po-ai-mark` rule sizes
 						// and places it, and the two AI headings on the form match.
-						html: '<h3>' + getAIMark() + ' 3. Choose the files to upload <a class="button btn-right btn-small" href="' + SERVER_URL_EXAMPLE_DATASETS_DOWNLOAD + '"><i class="fa fa-download"></i> Download example data</a></h3>'
+						html: '<h3>' + getAIMark() + ' 3. Choose the files to upload</h3>'
 					},
 					{
 						/* The standing offer, stated before any file is picked: the
@@ -1950,30 +2077,73 @@ function PA_Step1JobView() {
 						   checkbox): the two AI surfaces on the form share one surface.
 						   Conversion needs no box -- pressing Convert on a file is the
 						   act -- so this panel only says what happens, in the
-						   interpretation's own type (.ai-intro-copy), on the same two
-						   columns: sentence left, the formats it handles right (styles
-						   in inputformat.css). */
+						   interpretation's own type (.ai-intro-copy), over the one line
+						   of formats it handles (styles in inputformat.css). */
 						xtype: "box",
 						cls: "po-ai-section-body po-upload-ai",
-						html: '<div class="po-upload-ai-grid">' +
-							'<div class="po-upload-ai-text">' +
-								/* Two paragraphs, not one with a bold lead-in: a lone
-								   paragraph in this column is one measured row, and the
-								   alignment overlay dissolves a one-row column into its row
-								   and judges it against the other column's rail. The lead on
-								   its own line is also the head-plus-sentence shape the
-								   Section 2 hero uses. */
-								'<p class="ai-intro-copy po-upload-ai-lead"><b>Bring your files as they are.</b></p>' +
-								'<p class="ai-intro-copy">Each file is checked the moment you pick it; if it is not in PaintOmics’ format, the <b>PaintOmics AI agent</b> offers to convert it: it writes a short script, runs it in your browser and shows you the result before anything is used.</p>' +
-							'</div>' +
-							'<div class="po-upload-ai-aside">' +
-								'<div class="po-upload-ai-aside-title">Works with</div>' +
-								'<ul class="po-pill-list po-upload-ai-formats">' +
-									'<li>DESeq2</li><li>edgeR</li><li>limma</li><li>MaxQuant</li><li>Spectronaut</li><li>DIA-NN</li>' +
-									'<li>MetaboLights MAF</li><li>Excel workbooks</li><li>CSV / TSV</li>' +
-								'</ul>' +
-							'</div>' +
-						'</div>'
+						html:
+							/* The lead runs into its own sentence rather than standing over it.
+							   As two paragraphs in a 839px column this panel was 194px tall and
+							   three of its four rows were empty on the left: the copy stopped at
+							   y=712 and the panel ran to y=799, held open by a 320px column of
+							   format names beside it. The owner's read was that it is too big for
+							   what it says, and it was -- the panel is an aside, not a hero.
+
+							   So the two columns are gone: the sentence takes the full width of
+							   the panel and the formats sit under it as one line of specification.
+							   Cut to one line as well, on the owner's second pass: "each file is
+							   checked the moment you pick it" is the mechanism, and the sentence
+							   only has to make the offer. Two rows, 194px down to 90. */
+							'<p class="ai-intro-copy po-upload-ai-lead"><b>Bring your files as they are.</b> ' +
+							'If a file is not in PaintOmics’ format, the <b>PaintOmics AI agent</b> offers to ' +
+							'convert it in your browser and shows you the result.</p>' +
+							/* The specification line: what wrote the file, and what the file is.
+
+							   Two labelled rows in a 320px column, under an uppercase "Works with"
+							   title, cost five lines and 162px of panel height. On one line they
+							   cost 19px, and the two labels do the work the title was doing -- the
+							   names are already legible as answers to "what does it accept?".
+
+							   The file types are the ones the reader and the converter actually
+							   admit: format-panel.js treats /\.(xlsx|xlsm|xls|ods)$/ as a workbook
+							   to convert, and everything else is read as delimited text. */
+							'<div class="po-upload-ai-specs">' +
+								/* Each label and its names are wrapped together (a <div> inside a <dl> is
+								   what HTML5 has for exactly this), so that when the row is too narrow for
+								   both groups it breaks between them. Flat, the dl broke wherever it ran
+								   out of room -- which on a 1512px window was between "File types" and the
+								   file types. */
+								'<dl class="po-works-with">' +
+									'<div class="po-works-with-group">' +
+										'<dt>Software</dt>' +
+										'<dd><ul class="po-spec-list po-upload-ai-formats">' +
+											'<li>DESeq2</li><li>edgeR</li><li>limma</li><li>MaxQuant</li>' +
+											'<li>Spectronaut</li><li>DIA-NN</li><li>MetaboLights MAF</li>' +
+										'</ul></dd>' +
+									'</div>' +
+									'<div class="po-works-with-group">' +
+										'<dt>File types</dt>' +
+										'<dd><ul class="po-spec-list">' +
+											'<li>Excel (.xlsx, .xlsm, .xls)</li><li>OpenDocument (.ods)</li>' +
+											'<li>CSV</li><li>TSV</li><li>plain text</li>' +
+										'</ul></dd>' +
+									'</div>' +
+								'</dl>' +
+								/* The example dataset, at the end of the line that says which files
+								   this step takes -- because that is the question it answers: it is
+								   the file to bring when you have not got one yet. It was floated
+								   into the right edge of the section heading, a filled button
+								   hanging off a title, attached to nothing and the only control on
+								   the form outside a panel. Quiet, and shaped like the other
+								   optional action on this form ("Request an organism").
+
+								   Served from the manifest rather than a checked-in zip, so this
+								   hands over the datasets "Load example" actually offers. The old
+								   static file was built in 2017 and shared no filename with any
+								   current scenario. */
+								'<a class="po-ghost-action po-download-example" href="' + SERVER_URL_EXAMPLE_DATASETS_DOWNLOAD + '">' +
+									'<i class="fa fa-download"></i> Download example data</a>' +
+							'</div>'
 					},
 					{
 						xtype: "container",
@@ -2024,16 +2194,28 @@ function PA_Step1JobView() {
 							xtype: "container",
 							id: "additionalInfoContainer",
 							minHeight: 150,
-							/* 422, not a flex share: the page has one right column, and it
-							   starts where Section 2's experiment-design field and Section
-							   3's "Works with" column start (see the note on Section 2's
-							   right container). Those two stop 22px short of the card edge
-							   inside their panel padding; this panel runs to the edge, hence
-							   the extra 22. */
-							width: 422,
-							/* Left margin only - it is the gutter. The right side is the card
-							   inset, which the row already carries. */
-							margin: "10 0 10 10",
+							/* 302 wide and held 20px off the card edge, which is exactly
+							   where Section 2's "What you get" note lands: that column is
+							   320px inside a panel with 20px of padding, so its text runs
+							   1049 -> 1351 on a 1512px window. This row has no panel, so
+							   without the right margin it ran to the card edge and the two
+							   notes -- the same kind of thing, in the same column of the
+							   form, one directly under the other -- started and ended 20px
+							   apart. The owner spotted it; the numbers agree.
+
+							   It was 342 with no right margin, on the reasoning that the row
+							   takes back the padding its neighbours give up. That is the
+							   right rule for the drag columns, which are panels of their own
+							   and do run to the edge; it is the wrong one for a note, which
+							   is text and belongs on the text rail.
+
+							   Before that it was 422, the same arithmetic against a 400px
+							   right column, and the owner's read then was that the help was
+							   taking room the file fields needed -- so every pixel it gives
+							   up goes to the middle column, which is `flex: 2`. */
+							width: 302,
+							/* Left is the gutter, right is the panels' inner rail. */
+							margin: "10 20 10 10",
 							layout: {type: 'vbox',align: "stretch"},
 							items: [
 								{xtype: 'box',html: '<div class="content"><h5><i class="fa fa-info-circle"></i> Help</h5><p>Drag <i>omics</i> from <b>Available omics</b> to <b>Selected omics</b>, or click the <i class="fa fa-plus-circle"></i> button.</p><p>Remove any you do not need with <span class="po-nowrap"><i class="fa fa-trash"></i>.</span></p><p>Files are checked as you pick them; the <b>PaintOmics AI agent</b> converts any that are not in PaintOmics’ format.</p><p>When you are done, click <b>Run PaintOmics</b> in the top-right corner.</p></div>'}
@@ -4881,7 +5063,28 @@ function fillAIProvenance(root) {
 
 		var inline = root.querySelector("#aiProviderInline");
 		if (inline) {
-			inline.textContent = " This server sends the data to " + info.summary + ".";
+			/* The short form of info.summary, which is a full sentence naming the
+			   institute -- 173 characters, four lines in a 302px column, and this
+			   line sits on a panel the owner has already called too tall twice.
+			   The host is the checkable fact and the operator is who answers for
+			   it; the sentence-length version is in the notice this line links to,
+			   one click away, with the articles and the never-submit list. */
+			/* Parenthesised whole, on the owner's call: it is an aside to the
+			   heading above it, not a statement of its own. The operator takes a
+			   dash rather than its own brackets -- "(Sent to llm.iiia.es
+			   (IIIA-CSIC), in the EU)" nests two pairs in eight words. */
+			inline.textContent = "(Sent to " + info.host
+				+ (operatorIsHost ? "" : " \u2014 " + info.operator)
+				+ (info.inEU ? ", in the EU)" : ")");
+			/* The column was measured before this text existed, and an ExtJS hbox
+			   measures once: without this the sentence lays out below the panel's
+			   own bottom edge, in the DOM and nowhere on screen. Exactly the bug
+			   documented at setNote() in initExpDesignDraft, in the column beside
+			   this one. */
+			var noteBox = (typeof Ext !== "undefined")
+				? Ext.ComponentQuery.query("#aiWhatYouGetNote")[0]
+				: null;
+			if (noteBox && noteBox.updateLayout) { noteBox.updateLayout(); }
 		}
 
 		var where = root.querySelector("#aiGdprWhere");
@@ -5046,13 +5249,20 @@ function initExpDesignDraft(box) {
 	if (!consent || !designField) { return; }
 
 	/* The button says why it is off rather than just being off. An unexplained
-	   disabled control on a form this long reads as a broken build. */
+	   disabled control on a form this long reads as a broken build.
+
+	   `aiConsent` is a hidden field carrying the string 'true' now that the form
+	   no longer asks (see the note on it in the view), so both shapes are
+	   accepted: the checkbox answered with a boolean, and putting it back must
+	   not silently disable this button. In the shipped configuration this is
+	   always on -- the branch survives for a build that restores the box. */
 	function syncEnabled() {
-		var on = consent.getValue() === true;
+		var value = consent.getValue();
+		var on = (value === true || value === "true");
 		button.disabled = !on;
 		button.title = on
 			? "Reads the column names from the files you picked and asks the AI service to describe the design"
-			: "Tick “Enable AI pathway interpretation” above to use this";
+			: "Enable the AI pathway interpretation above to use this";
 	}
 	syncEnabled();
 	consent.on('change', syncEnabled);

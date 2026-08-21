@@ -97,37 +97,30 @@ with any part of the terms then you may not access the Service.</p>
 	
 	<p>Personal data included in the register may not be the subject of treatment, nor be used for different purposes of such publication.</p>
 
-	<h3 style="color: #c0392b; border-bottom: 2px solid #c0392b; padding-bottom: 5px;">AI Pathway Interpretation & STRICT Data Privacy Compliance</h3>
-	
-	<p>PaintOmics optionally offers AI-assisted pathway interpretation. When you enable it, PaintOmics sends a description of your highest-ranked pathways to a large language model and returns the draft interpretation it produces, with citations. What is sent is: pathway names, identifiers and enrichment statistics; the names of the genes, proteins and metabolites matched in each pathway; <strong>the measured values of those features</strong>, with their condition and timepoint labels; and your experiment design description, if you provided one. Pathway and feature names are also sent to NCBI PubMed and Europe PMC to retrieve the literature that the interpretation cites.</p>
+	<h3>AI pathway interpretation and your data</h3>
 
-	<p><strong>Where the model runs.</strong> PaintOmics does not run the model itself, so this data leaves the PaintOmics server. Which endpoint receives it is a configuration setting of the server you are using, and the interface tells you which one before you consent &mdash; open the <em>Data privacy &amp; compliance</em> notice next to the AI checkbox on the upload form. On the public PaintOmics deployment the endpoint is a gateway operated by <strong>IIIA-CSIC</strong>, the Artificial Intelligence Research Institute of the Spanish National Research Council, running an open-weights model on its own hardware in Spain; it is reached over the public internet and authenticated with a token. A differently configured installation may use a commercial LLM provider instead, in which case the notice on the upload form will say so.</p>
+	<p>PaintOmics can write a draft interpretation of your results. To do that it sends a description of your highest-ranked pathways to a large language model and returns the draft it produces, with citations. What is sent is: pathway names, identifiers and enrichment statistics; the names of the genes, proteins and metabolites matched in each pathway; <strong>the measured values of those features</strong>, with their condition and timepoint labels; and your experiment design description, if you provided one. Pathway and feature names are also sent to NCBI PubMed and Europe PMC to retrieve the literature the interpretation cites. The files you upload are not themselves sent, and neither are features that were not matched to one of the interpreted pathways.</p>
 
-	<p>PaintOmics has no control over how the operator of that endpoint retains or processes what it receives, and gives no warranty about it.</p>
-	
-	<h4>EU Regulatory Framework & GDPR MANDATES</h4>
-	<p><strong>FAILURE TO COMPLY WITH THESE MANDATES MAY RESULT IN SEVERE LEGAL PENALTIES FOR THE USER.</strong></p>
+	<p><strong>Where the model runs.</strong> PaintOmics does not run the model itself, so this data leaves the PaintOmics server. Which endpoint receives it is a setting of the server you are using, and the upload form tells you which one &mdash; see <em>Where your data goes</em> beside the experiment design field, which opens the full notice. On the public PaintOmics deployment the endpoint is a gateway operated by <strong>IIIA-CSIC</strong>, the Artificial Intelligence Research Institute of the Spanish National Research Council, running an open-weights model on its own hardware in Spain; it is reached over the public internet and authenticated with a token. A differently configured installation may use a commercial provider instead, in which case the notice on the upload form will say so.</p>
+
+	<p>We cannot control how the operator of that endpoint retains or processes what it receives, and we give no warranty about it.</p>
+
+	<h4>What to leave out of your uploads</h4>
+
+	<p>Please upload only data you are free to process this way. In practice that means leaving out:</p>
 	<ul>
-		<li><strong><a href="https://gdpr-info.eu/chapter-5/" target="_blank">GDPR (EU 2016/679) Articles 44–49</a>:</strong> where the configured endpoint is outside the EU, transferring identifiable personal data to it requires appropriate safeguards, such as Standard Contractual Clauses. The upload form's privacy notice states whether this applies to the installation you are using. You are responsible for ensuring that no restricted personal data is uploaded.</li>
-		<li><strong><a href="https://gdpr-info.eu/art-9-gdpr/" target="_blank">GDPR Article 9</a>:</strong> Processing of special categories of personal data, including genetic data and health data, is <strong>STRICTLY AND ABSOLUTELY PROHIBITED</strong>.</li>
-		<li><strong><a href="https://gdpr-info.eu/art-5-gdpr/" target="_blank">GDPR Article 5(1)(c)</a>:</strong> You must strictly adhere to the data minimisation principle.</li>
+		<li>patient names, clinical record identifiers and other personally identifiable information;</li>
+		<li>protected health information under <a href="https://www.hhs.gov/hipaa/for-professionals/privacy/index.html" target="_blank">HIPAA</a>, the GDPR or an equivalent regulation;</li>
+		<li>raw sequencing reads from identifiable human subjects;</li>
+		<li>rare variants that could re-identify an individual;</li>
+		<li>unpublished clinical trial data linked to patients.</li>
 	</ul>
 
-	<h4 style="color: #c0392b;">STRICTLY PROHIBITED DATA</h4>
-	<p>You must <strong>NEVER</strong> submit the following data types. Doing so is a direct violation of these terms:</p>
-	<ul>
-		<li>Patient names, clinical record identifiers, or ANY Personally Identifiable Information (PII)</li>
-		<li>Protected Health Information (PHI) under <a href="https://www.hhs.gov/hipaa/for-professionals/privacy/index.html" target="_blank">HIPAA</a>, GDPR, or ANY equivalent global health regulations</li>
-		<li>Raw sequencing reads from identifiable human subjects</li>
-		<li>Rare genetic variants that could potentially re-identify individuals</li>
-		<li>Unpublished clinical trial data with patient linkage</li>
-	</ul>
-	
-	<h3 style="color: #c0392b;">USER INDEMNIFICATION AND ZERO LIABILITY</h3>
-	<p style="border-left: 4px solid #c0392b; padding-left: 15px; font-weight: bold; background-color: #fceceb; padding: 10px;">
-		BY ENABLING THE AI PATHWAY INTERPRETATION FEATURE, YOU FORMALLY AND LEGALLY CONFIRM THAT THE DATA SUBMITTED CONTAINS NO PERSONALLY IDENTIFIABLE OR SENSITIVE PERSONAL DATA. <br><br>
-		YOU AGREE TO FULLY INDEMNIFY, DEFEND, AND HOLD HARMLESS PAINTOMICS, ITS CREATORS, THE CONSEJO SUPERIOR DE INVESTIGACIONES CIENTÍFICAS (CSIC), AND AFFILIATES FROM ANY AND ALL CLAIMS, FINES, PENALTIES, LAWSUITS, OR DAMAGES ARISING OUT OF YOUR SUBMISSION OF PROHIBITED DATA TO THE AI SERVICE. PAINTOMICS ACCEPTS ZERO LIABILITY FOR ANY DATA BREACH, REGULATORY VIOLATION, OR MISUSE OF DATA TRANSMITTED THROUGH THIS FEATURE.
-	</p>
+	<p>The reason is the law that applies to it rather than a rule of ours. Under the GDPR (EU 2016/679), genetic and health data are a special category: <a href="https://gdpr-info.eu/art-9-gdpr/" target="_blank">Article 9</a> asks for an explicit lawful basis before they are processed, and <a href="https://gdpr-info.eu/art-5-gdpr/" target="_blank">Article 5(1)(c)</a> asks that you send only what the analysis needs. Where the configured endpoint sits outside the EU, <a href="https://gdpr-info.eu/chapter-5/" target="_blank">Articles 44&ndash;49</a> also ask for appropriate safeguards, such as Standard Contractual Clauses, before identifiable personal data is transferred to it; the upload form's notice states whether that applies to the installation you are using. On the public deployment the endpoint is in Spain, so it does not.</p>
+
+	<p>You know your data and we do not, so what to upload is your decision. If you are unsure whether a dataset is in scope, ask us through the contact form on this site before you upload it.</p>
+
+	<p>The interpretation is a draft written by a language model: read it, and check its citations, before you rely on it. PaintOmics is a research tool provided without warranty, and we are not liable for how an interpretation is used or for what happens to data at an endpoint we do not operate.</p>
 
 	<h2>Service</h2>
 	

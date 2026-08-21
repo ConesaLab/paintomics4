@@ -265,30 +265,47 @@ this.submitForm = function (URL, form) {
 	}
 };
 
+/*
+ * The "Request an organism" dialog.
+ *
+ * It opened on a terracotta <h2> repeating the window's own title, then five
+ * lines of prose before the first control: what KEGG installs, what KEGG
+ * translates, what the Comments box is for, and a worked example in italics
+ * about Entrez Gene IDs. All of it was setup for two fields, and the "here"
+ * link that offered the list of installable species was written
+ * `href=''` -- which is the current page, so the one link in the paragraph
+ * reloaded the form the reader had just filled in.
+ *
+ * Two fields, one line above them, and the guidance that was worth keeping is
+ * now where it is needed: inside the Comments box, as its placeholder.
+ */
 this.requestNewSpecieHandler = function(){
 	var messageDialog = Ext.create('Ext.window.Window', {
-		title: "Request new organism",
-		height: 400, width: 600, modal: true,
-		bodyPadding:10,
+		title: "Request an organism",
+		/* No height: the window shrink-wraps its two fields. It was 400px for
+		   content that measures about 300, so it opened with a band of empty
+		   body under the Comments box. */
+		width: 560, modal: true,
+		bodyPadding: 22,
+		cls: "po-dialog",
+		layout: {type: "vbox", align: "stretch"},
 		defaults: {
-			labelAlign: "right",
+			/* On top, as on the form this dialog is opened from. Right-aligned
+			   labels put "Organism:" and "Comments:" in a 100px gutter and the
+			   fields in what was left. */
+			labelAlign: "top",
 			border: false
 		},
 		items: [
 			{
-				xtype:"box", html:
-				"<h2>Choose the Organism</h2>"+
-				"<div>"+
-				" Please choose the organism to install.<br>Note that, initially, all species at KEGG database are available for installation, " +
-				" check the complete list of available species <a href='' target='_blank'>here</a>.</br>" +
-				" Usually, KEGG provides information for the translation of  IDs/names between some third-party databases, such as NCBI GeneID, NCBI ProteinID or Uniprot, and KEGG identifiers.</br>" +
-				" Use the field <b>Comments</b> for any special request about identifiers or other issues.</br>"+
-				" <i>E.g. For Mouse, KEGG works by default with Entrez Gene IDs but other identifiers such as Ensembl Gene ID, Ensembl Transcript ID or UniProt Protein ACC were installed..</i>"+
-				"</div>"
+				xtype: "box", cls: "po-dialog-intro",
+				html: '<p>Any organism in KEGG can be installed &mdash; ' +
+					'<a href="https://www.genome.jp/kegg/catalog/org_list.html"' +
+					' target="_blank" rel="noopener">see the full list</a>.</p>'
 			},
 			{
 				xtype: 'organismcombo', fieldLabel: 'Organism', name: 'specie',
-				width: 500, itemId: "speciesCombobox",
+				itemId: "speciesCombobox",
 				allowBlank: false, forceSelection: false,
 				emptyText: 'Please choose an organism',
 				displayField: 'name',
@@ -309,11 +326,22 @@ this.requestNewSpecieHandler = function(){
 					}
 				})
 			},
-			{xtype: 'textareafield', name : 'comments', itemId : 'commentsTextArea', fieldLabel: 'Comments', width: 500, height:100}
+			{
+				xtype: 'textareafield', name: 'comments', itemId: 'commentsTextArea',
+				fieldLabel: 'Anything we should know? (optional)', height: 96,
+				/* The paragraph that used to be above the form, asked as a
+				   question in the place where it is answered. Curly quotes and no
+				   double quotes: ExtJS writes emptyText into a placeholder="..."
+				   attribute, and a straight double quote closes it early (the
+				   experiment-design field on Step 1 lost its example that way). */
+				emptyText: 'Which identifiers are in your files? KEGG maps Entrez Gene IDs by default; ' +
+					'say so if you need Ensembl, UniProt or others.'
+			}
 		],
 		buttons: [
 			{
 				text: 'Send request',
+				cls: 'po-dialog-primary',
 				handler : function() {
 					var type = "specie_request";
 					var message= "<p><b>Specie:</b> " + messageDialog.queryById('speciesCombobox').getValue()+ "</p><p><b>Comments:</b>" +  messageDialog.queryById('commentsTextArea').getValue() + "</p>";
@@ -321,7 +349,7 @@ this.requestNewSpecieHandler = function(){
 					sendReportMessage(type, message);
 				}
 			},
-			{text: 'Close', handler : function() {messageDialog.close();}}
+			{text: 'Cancel', handler : function() {messageDialog.close();}}
 		]
 	});
 
