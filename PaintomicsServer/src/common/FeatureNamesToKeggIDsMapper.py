@@ -166,6 +166,13 @@ def resolveBridgeDatabaseIds(db, databaseConvertion_id=None):
     return [identifier for identifier in cached if identifier != databaseConvertion_id]
 
 
+# Documents per cursor batch for the xref lookups. Every lookup here is
+# bounded -- at most 250 names or 5,000 mate ids per query -- so one batch of
+# this size always holds the whole result and no getMore follows. The server
+# caps a batch at 16 MB regardless; these documents are a few hundred bytes.
+XREF_BATCH_SIZE = 10000
+
+
 def _bridgeSecondHop(db, unresolvedDocuments, databaseConvertion_id, bridgeIDs):
     """Resolve names whose own mate group cannot reach the target database.
 
@@ -202,7 +209,7 @@ def _bridgeSecondHop(db, unresolvedDocuments, databaseConvertion_id, bridgeIDs):
     for start_ in range(0, len(mateIDs), 5000):
         for hit in db.xref.find({"dbname_id": {"$in": bridgeIDs},
                                  "_id": {"$in": mateIDs[start_:start_ + 5000]}},
-                                {"display_id": 1, "dbname_id": 1}):
+                                {"display_id": 1, "dbname_id": 1}, batch_size=XREF_BATCH_SIZE):
             bridgeValueByMate[hit.get("_id")] = (hit.get("dbname_id"), str(hit.get("display_id")))
 
     if not bridgeValueByMate:
@@ -215,7 +222,7 @@ def _bridgeSecondHop(db, unresolvedDocuments, databaseConvertion_id, bridgeIDs):
     for start_ in range(0, len(bridgeValues), 5000):
         for hit in db.xref.find({"dbname_id": {"$in": bridgeIDs},
                                  "display_id": {"$in": bridgeValues[start_:start_ + 5000]}},
-                                {"display_id": 1, "mates": 1}):
+                                {"display_id": 1, "mates": 1}, batch_size=XREF_BATCH_SIZE):
             bridgeMates[str(hit.get("display_id"))].extend(hit.get("mates") or [])
 
     farMateIDs = list({mate for mates in bridgeMates.values() for mate in mates})
@@ -223,7 +230,7 @@ def _bridgeSecondHop(db, unresolvedDocuments, databaseConvertion_id, bridgeIDs):
     for start_ in range(0, len(farMateIDs), 5000):
         for hit in db.xref.find({"dbname_id": databaseConvertion_id,
                                  "_id": {"$in": farMateIDs[start_:start_ + 5000]}},
-                                {"display_id": 1}):
+                                {"display_id": 1}, batch_size=XREF_BATCH_SIZE):
             targetByMate[hit.get("_id")] = str(hit.get("display_id"))
 
     if not targetByMate:
@@ -284,14 +291,22 @@ def findIDsByFeaturesName(jobID, featureNames, db, databaseConvertion_id):
 
     try:
         if len(notCachedIds):
+            # batch_size: without it a find hands back 101 documents and the
+            # rest come through a separate getMore round trip -- which every
+            # 250-name lookup (about 101-300 documents) paid, as did the mate
+            # lookups with more than 101 hits. Profiled on the whole-genome
+            # input: 1,257 getMore commands for 2,687 finds, a third of the
+            # mapper's time on MongoDB. One batch returns the same documents
+            # in the same order.
             nameDocuments = list(db.xref.find({"display_id": {"$in": list(notCachedIds)}},
-                                              {"display_id": 1, "mates": 1}))
+                                              {"display_id": 1, "mates": 1},
+                                              batch_size=XREF_BATCH_SIZE))
             allMates = list({mate for document in nameDocuments for mate in (document.get("mates") or [])})
             hitsByID = {}
             for start_ in range(0, len(allMates), 5000):
                 for hit in db.xref.find({"dbname_id": databaseConvertion_id,
                                          "_id": {"$in": allMates[start_:start_ + 5000]}},
-                                        {"display_id": 1}):
+                                        {"display_id": 1}, batch_size=XREF_BATCH_SIZE):
                     hitsByID[hit.get("_id")] = hit.get("display_id")
 
             for document in nameDocuments:
