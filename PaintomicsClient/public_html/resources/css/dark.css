@@ -1594,8 +1594,7 @@
 [data-theme="dark"] .ai-consent-warn {
 	color: var(--pa-ai-consent-warn);
 }
-/* The consent box's title label, and the privacy link, on the dark surface. */
-[data-theme="dark"] .po-ai-section-body .x-form-cb-wrap > .x-form-cb-label { color: var(--pa-ink-title); }
+/* The privacy link on the dark surface. */
 [data-theme="dark"] .ai-gdpr-info-link { color: var(--pa-ink-muted); }
 [data-theme="dark"] .ai-gdpr-info-link:hover { color: var(--pa-accent-blue); }
 
