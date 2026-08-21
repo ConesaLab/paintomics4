@@ -881,27 +881,6 @@
         primeCardsIn(document.body);
     }
 
-    /* The Section 3 callout names where the structure goes; the name comes
-       from the same endpoint the AI interpretation consent uses. */
-    function fillProviderName() {
-        var slot = document.getElementById("paUploadAiProvider");
-        if (!slot || slot.dataset.filled) return;
-        slot.dataset.filled = "1";
-        fetch("ai_provider", { credentials: "same-origin" })
-            .then(function (r) { return r.json(); })
-            .then(function (p) {
-                if (!p || !p.success || !p.operator) return;
-                slot.textContent = p.operator + (p.host ? " (" + p.host + ")" : "");
-            })
-            .catch(function () { /* the static text stands */ });
-    }
-    document.addEventListener("DOMContentLoaded", fillProviderName);
-    setTimeout(fillProviderName, 1500);
-    if (typeof MutationObserver === "function") {
-        new MutationObserver(function () { fillProviderName(); })
-            .observe(document.body || document.documentElement, { childList: true, subtree: true });
-    }
-
     document.addEventListener("change", function (event) {
         var input = event.target;
         if (!input || input.type !== "file" || !input.files || !input.files.length) return;

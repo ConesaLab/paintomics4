@@ -338,7 +338,6 @@ input[type="text"].pa-field-err {
 }
 .po-upload-ai-consent input:focus-visible { outline: 2px solid var(--pa-focus-ring, #0A84FF); outline-offset: 2px; }
 .po-upload-ai-consent > label { flex: 1 1 auto; cursor: pointer; font-weight: 400; }
-.po-upload-ai-consent .ai-consent-warn span { font-weight: 600; }
 
 /* The right column: a label on top like "Experiment design (optional):",
    then the formats as pills -- scannable where a sentence listing them was

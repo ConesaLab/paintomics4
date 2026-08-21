@@ -1580,15 +1580,15 @@ function PA_Step1JobView() {
 						{
 							xtype: "container", layout: { type: "vbox", align: "stretch" }, flex: 0.5, items: [
 							{
-								xtype: "textfield",
-								fieldLabel: "Enter a job description",
-								allowBlank: true,
-								name: 'jobDescription',
-								style: "margin: 10px 26px 10px 20px;",
-								labelWidth: 150,
-								width: 650,
-								flex: 0,
-								maxLength: 100
+								/* The job's name, which the server takes from this field
+								   (PathwayAcquisitionServlet: setName(jobDescription[:100])).
+								   It was a visible "Enter a job description" box beside the
+								   organism, one free-text field above another that asks for the
+								   same sentence -- the experiment design below. Now hidden and
+								   filled from that design's first line as it is typed, so the
+								   form asks once and the job list still gets a name. */
+								xtype: "hiddenfield",
+								name: 'jobDescription'
 							}
 							]
 						}
@@ -1760,12 +1760,14 @@ function PA_Step1JobView() {
 									   with --pa-ai-consent-warn -- a token it already declared for
 									   exactly this and had no way to apply. Same fix, same reason, as
 									   .formMessage. */
-									/* "sends your results to X", not "your pathway results and the
-									   values of the matched features to X": the long form wrapped the
-									   label to three lines and buried the recipient. The enumeration
-									   of exactly which fields leave the server belongs to - and stays
-									   in - the (i) notice this label links to. */
-									boxLabel: 'Enable AI pathway interpretation (<span class="ai-consent-warn">sends your results to <span id="aiProviderName">an external AI service</span></span>) ' +
+									/* The label used to carry "(sends your results to IIIA-CSIC
+									   (llm.iiia.es))". Trimmed to the verb on the owner's call
+									   (2026-08-21): the gateway is operated by CSIC, as is the host,
+									   and the statement of what leaves and who receives it -- the
+									   recipient, the operator, the country, every field -- stays in
+									   the (i) notice this label links to, one click away. Keep the
+									   icon: it is the only remaining way to that notice from here. */
+									boxLabel: 'Enable AI pathway interpretation ' +
 										'<i class="fa fa-exclamation-circle ai-gdpr-info-icon" id="aiGdprInfoIcon" title="Data privacy &amp; compliance \u2014 click to learn what data is sent"></i>',
 									name: 'aiConsent', inputValue: 'true', uncheckedValue: 'false',
 									/* Off everywhere but a local instance -- a pre-ticked consent
@@ -1906,7 +1908,22 @@ function PA_Step1JobView() {
 									labelAlign: 'top', anchor: '100%', height: 96,
 									cls: 'po-exp-design',
 									emptyText: 'e.g. RNA-seq of wildtype vs knockout mouse liver, 3 replicates per group, sampled at 24 h',
-									maxLength: 2000
+									maxLength: 2000,
+									listeners: {
+										/* The one free-text field on the form also names the job:
+										   its first line, cut to the 100 characters the server keeps,
+										   goes into the hidden jobDescription field. On change rather
+										   than on submit so whatever gathers the form's values -- the
+										   submit, a draft, an example load -- finds it already set. */
+										change: function(field, value) {
+											var hidden = Ext.ComponentQuery.query('hiddenfield[name=jobDescription]')[0];
+											if (!hidden) return;
+											var firstLine = String(value || '').split(/\r?\n/)
+												.map(function(l) { return l.trim(); })
+												.filter(Boolean)[0] || '';
+											hidden.setValue(firstLine.slice(0, 100));
+										}
+									}
 								},
 								/* A blank box asking a user to describe their own design in
 								   prose is the least-filled field on this form, and the design
@@ -1936,7 +1953,7 @@ function PA_Step1JobView() {
 									xtype: "box", cls: 'po-exp-design-draft',
 									html: '<button type="button" class="button btn-secondary btn-small po-exp-design-draft-btn" ' +
 									      'id="expDesignDraftBtn" disabled>' + getAIMark() + ' Draft this for me</button>' +
-									      '<span class="po-exp-design-hint">Tells the interpretation which direction of change means what.</span>' +
+									      '<span class="po-exp-design-hint">Names the job in your list and tells the interpretation which direction of change means what.</span>' +
 									      '<span class="po-exp-design-draft-note" id="expDesignDraftNote"></span>',
 									listeners: {
 										afterrender: function() {
@@ -1990,7 +2007,10 @@ function PA_Step1JobView() {
 								   this row on the rail Section 2's Ext checkbox row keeps. */
 								'<div class="po-upload-ai-consent">' +
 									'<input type="checkbox" id="paUploadAiOptIn" checked>' +
-									'<label for="paUploadAiOptIn">Convert with the PaintOmics AI agent when a file needs it (<span class="ai-consent-warn">sends only the file’s structure to <span id="paUploadAiProvider">an external AI service</span></span>)</label>' +
+									/* No recipient clause here either (see the Section 2 label):
+									   the sheet's "What the agent sees" card shows exactly what is
+									   sent, at the moment it is sent, which is the better place. */
+									'<label for="paUploadAiOptIn">Convert with the PaintOmics AI agent when a file needs it</label>' +
 								'</div>' +
 							'</div>' +
 							'<div class="po-upload-ai-aside">' +
