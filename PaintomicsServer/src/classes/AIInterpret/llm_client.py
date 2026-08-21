@@ -209,10 +209,19 @@ class LLMClient:
             time.sleep(seconds)
 
         for attempt in range(attempts):
-            if deadline is not None and time.monotonic() >= deadline:
-                raise requests.exceptions.Timeout(
-                    "LLM call exceeded its %ss budget before attempt %d"
-                    % (budget_seconds, attempt + 1))
+            attempt_timeout = timeout or DEFAULT_TIMEOUT
+            if deadline is not None:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise requests.exceptions.Timeout(
+                        "LLM call exceeded its %ss budget before attempt %d"
+                        % (budget_seconds, attempt + 1))
+                # A socket read that is blocked cannot see the deadline, so
+                # the last attempt must not be allowed a read longer than
+                # what is left -- or the budget is the budget plus one read
+                # timeout, and that attempt outlives the browser's patience.
+                connect, read = attempt_timeout
+                attempt_timeout = (min(connect, remaining), min(read, remaining))
             try:
                 logger.info(f"LLM complete: model={self.model}, "
                             f"msgs={len(messages)}, max_tokens={max_tokens} "
@@ -231,7 +240,7 @@ class LLMClient:
                     headers={"Authorization": f"Bearer {self.api_key}",
                              "Content-Type": "application/json"},
                     json=payload,
-                    timeout=timeout or DEFAULT_TIMEOUT,
+                    timeout=attempt_timeout,
                     stream=stream,
                 )
                 r.raise_for_status()

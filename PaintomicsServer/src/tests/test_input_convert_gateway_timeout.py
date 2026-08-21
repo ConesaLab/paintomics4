@@ -247,6 +247,25 @@ class StreamedCompletion(unittest.TestCase):
                         max_attempts=3, budget_seconds=150)
             self.assertEqual(len(p.calls), 1,
                              "past the deadline, the retry loop must stop")
+
+            # A retry that does fit gets only the budget that is left: a
+            # blocked read cannot see the deadline, so the read timeout is
+            # what bounds the final attempt.
+            fake_clock["now"] = 0.0
+
+            def eat_seventy(payload, stream):
+                fake_clock["now"] += 70.0
+                raise requests.exceptions.ReadTimeout("no token")
+
+            with _Patched(eat_seventy) as p:
+                with self.assertRaises(requests.exceptions.Timeout):
+                    lc.LLMClient(PROVIDER).complete(
+                        [{"role": "user", "content": "x"}], stream=True,
+                        timeout=(15, 60), max_attempts=3, budget_seconds=100)
+            self.assertEqual(p.calls[0]["timeout"], (15, 60))
+            self.assertEqual(p.calls[1]["timeout"], (15, 30),
+                             "the second attempt may only read for what is left")
+            self.assertEqual(len(p.calls), 2, "no third attempt fits the budget")
         finally:
             lc.time.monotonic = real
 
