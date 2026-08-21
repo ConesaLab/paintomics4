@@ -1,0 +1,47 @@
+{
+  "conditions": [
+    "T00h",
+    "T02h",
+    "T06h",
+    "T12h",
+    "T24h",
+    "T48h"
+  ],
+  "omics": [
+    {
+      "dataFile": "gene_expression_values.tab",
+      "enrichment": "genes",
+      "features": 20000,
+      "identifierSource": "ensembl_gene",
+      "identifiersAvailable": 28311,
+      "omicName": "Gene expression",
+      "omicType": "gene",
+      "relevant": 2000,
+      "relevantFile": "gene_expression_relevant.tab"
+    },
+    {
+      "dataFile": "proteomics_values.tab",
+      "enrichment": "features",
+      "features": 5000,
+      "identifierSource": "uniprot_acc",
+      "identifiersAvailable": 36761,
+      "omicName": "Proteomics",
+      "omicType": "gene",
+      "relevant": 500,
+      "relevantFile": "proteomics_relevant.tab"
+    },
+    {
+      "dataFile": "metabolomics_values.tab",
+      "enrichment": "features",
+      "features": 400,
+      "identifierSource": "kegg_compound",
+      "identifiersAvailable": 4783,
+      "omicName": "Metabolomics",
+      "omicType": "compound",
+      "relevant": 80,
+      "relevantFile": "metabolomics_relevant.tab"
+    }
+  ],
+  "organism": "mmu",
+  "seed": 20260822
+}
