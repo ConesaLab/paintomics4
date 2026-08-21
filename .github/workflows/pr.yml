@@ -53,7 +53,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-paintomics
       - name: Test suites
-        run: scripts/ci/run-unit-tests.sh --timeout 180
+        # 600 s per suite: the slowest (test_compound_name_table_matches_mongo)
+        # takes ~150 s on a laptop and ran past 180 s on the runner.
+        run: scripts/ci/run-unit-tests.sh --timeout 600
 
   fixtures:
     name: Example datasets, one per pipeline class

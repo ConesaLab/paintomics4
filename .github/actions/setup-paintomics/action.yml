@@ -26,6 +26,12 @@ runs:
         cache: pip
         cache-dependency-path: requirements.txt
 
+    # cairocffi (behind CairoSVG, which renders the pathway exports) dlopens
+    # libcairo at import time; the runner image does not ship it.
+    - name: cairo
+      shell: bash
+      run: brew list cairo >/dev/null 2>&1 || brew install --quiet cairo
+
     - name: Python requirements
       shell: bash
       run: python -m pip install --quiet -r requirements.txt
