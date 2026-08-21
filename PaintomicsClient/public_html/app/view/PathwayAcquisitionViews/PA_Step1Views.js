@@ -1945,16 +1945,16 @@ function PA_Step1JobView() {
 						   upload step accepts files as they come out of the tools
 						   people use, and the AI conversion is how.
 
-						   A plain row, not a second blue panel: the panel above is the
-						   one decision on this form (send results out, or not), and a
-						   second panel with a second box read as that decision asked
-						   twice. Conversion needs no box -- pressing Convert on a file
-						   is the act -- so this row only says what happens, in the
+						   On the same blue panel as the Section 2 callout (the owner
+						   asked for it back once the row no longer carried a second
+						   checkbox): the two AI surfaces on the form share one surface.
+						   Conversion needs no box -- pressing Convert on a file is the
+						   act -- so this panel only says what happens, in the
 						   interpretation's own type (.ai-intro-copy), on the same two
 						   columns: sentence left, the formats it handles right (styles
 						   in inputformat.css). */
 						xtype: "box",
-						cls: "po-upload-ai",
+						cls: "po-ai-section-body po-upload-ai",
 						html: '<div class="po-upload-ai-grid">' +
 							'<div class="po-upload-ai-text">' +
 								/* Two paragraphs, not one with a bold lead-in: a lone

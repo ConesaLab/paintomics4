@@ -283,19 +283,14 @@ input[type="text"].pa-field-err {
 .pa-format-linkbtn:focus-visible { outline: 2px solid var(--pa-focus-ring, #0A84FF); outline-offset: 2px; border-radius: 2px; }
 
 /* ------------------------------------------------------------------------
-   The Section 3 row: "Bring your files as they are".
+   The Section 3 panel: "Bring your files as they are".
 
-   A plain row on the same two columns as the Section 2 panel, not a second
-   panel: the blue panel is the form's one decision and a second one read as
-   that decision asked twice. It keeps the panel's inset so its sentence starts
-   on the same x as Section 2's (283px on a 1867px viewport), and its right
-   column is the page's one right column -- 400px wide, starting at 1185px,
-   where Section 2's experiment-design field and the Help panel start too.
+   The same .po-ai-section-body panel as Section 2 (it supplies the surface,
+   the border, the padding and the card inset), on the same two columns: the
+   sentence starts on the same x as Section 2's (283px on a 1867px viewport),
+   and the right column is the page's one right column -- 400px wide, starting
+   at 1185px, where the experiment-design field and the Help panel start too.
    ------------------------------------------------------------------------ */
-.po-upload-ai {
-    margin: 5px var(--pa-card-inset) 10px;
-    padding: 4px 22px 12px;
-}
 .po-upload-ai-grid {
     display: flex;
     align-items: flex-start;
