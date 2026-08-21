@@ -682,10 +682,17 @@ def mapFeatureIdentifiers(jobID, organism, databases, featureList,  matchedFeatu
         # MongoDB round trips and the per-feature loop below is ~2%. Measured on
         # Drago over disjoint cold slices: 2000 -> 3 anchors/5.99s, 500 -> 6
         # anchors/5.69s, 250 -> 12 anchors/5.94s (-0.9%), 100 -> 30 anchors/+2.1%.
-        # 250 buys 4x the resolution for no measurable time, and a bigger $in list
-        # is not cheaper. Rate measured over the first half of the anchors predicts
-        # the phase total to within ~5%.
-        featureNamesBatches = chunks(list(featureNames), 250)
+        # That measurement was network-bound; with every lookup now answered in
+        # one cursor batch and the first and second hops shared across the
+        # target databases, what a batch costs is a fixed set of round trips
+        # (names, mates, symbols, bridges) and the count of batches is what is
+        # left to cut: 1,000 names per batch is a quarter of the round trips of
+        # 250 for the same documents, and a worker's share of a whole-genome
+        # omic (5,000 names at four workers) still reports five times. The
+        # result does not depend on how the names are batched: every name is
+        # answered from its own documents, and the bridge groups a batch walks
+        # are the same groups whichever batch reaches them.
+        featureNamesBatches = chunks(list(featureNames), 1000)
         totalBatches = len(featureNamesBatches) * max(1, len(databases))
         doneBatches = 0
 
