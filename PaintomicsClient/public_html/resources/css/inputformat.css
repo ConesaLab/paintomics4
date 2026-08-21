@@ -318,9 +318,9 @@ input[type="text"].pa-field-err {
 /* The lead on its own line, the sentence 2px under it: one block to the eye,
    two rows to the overlay. */
 .po-upload-ai p.po-upload-ai-lead { margin: 0 0 4px; }
-/* The lead at the size of the switch's title above, so the two sections
-   open with the same voice. */
-.po-upload-ai p.po-upload-ai-lead b { font-size: 15px; font-weight: 600; }
+/* The lead at the size of the consent title in the panel above, one step
+   under the section heading, so the two panels open with the same voice. */
+.po-upload-ai p.po-upload-ai-lead b { font-size: 14px; font-weight: 600; }
 
 /* The right column: a label on top like "Experiment design (optional):",
    then the formats as pills -- scannable where a sentence listing them was

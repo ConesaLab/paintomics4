@@ -1644,10 +1644,26 @@ ul.menu li.loggedOption, ul.menu span.loggedOption {
    panel, named at title size. The box itself is the application's own
    checkbox (the shared .x-form-checkbox rule), as on the Databases row. */
 .po-ai-section-body .x-form-cb-wrap > .x-form-cb-label {
-	font-size: 15px;
+	/* 14px, one step under the 16px section heading above the panel; at 15px
+	   it out-sized the heading that owns it. */
+	font-size: 14px;
 	font-weight: 600;
 	line-height: 18px;
 	color: var(--pa-ink-title, #1A1A18);
+}
+
+/* The upload form's three section headings. div.contentbox h3 is 13.5px for
+   every card in the application; on this form the panels under the headings
+   carry 14px titles and 14px copy, so at 13.5px the headings were the smallest
+   type in their own sections. 16px is the design system's h3; the extra top
+   margin is the air each section needs to read as a block. Scoped to the
+   form so no other card moves. */
+.paStep1Form div.contentbox h3,
+div.contentbox .paStep1Form h3 {
+	font-size: 16px;
+	font-weight: 600;
+	color: var(--pa-ink-title, #1A1A18);
+	margin: 20px 0 6px;
 }
 /* The explanation, under the switch: a step larger than the 13px the AI
    widget uses for chat, because this is a panel on a form, not a bubble. */
