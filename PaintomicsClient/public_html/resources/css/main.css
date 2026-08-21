@@ -8218,3 +8218,38 @@ div.repDetectionCard h3 {
   .po-hero-viz .po-viz-agent-ring,
   .po-hero-viz .po-viz-pulse { opacity: 0; animation: none; }
 }
+
+/* ---------------------------------------------------------------------------
+   Organism picker rows (xtype organismcombo, app/view/common/OrganismSearch.js)
+   The list marks the parts of a name the query matched and shows the KEGG code
+   at the row's right edge. <mark> is bold rather than a highlighter fill: the
+   row already has hover and selection fills, and a third one under a few
+   letters read as a rendering fault. Colour is inherited, so the dark theme's
+   row ink (dark.css, .x-boundlist-item) carries through with nothing to restate.
+   --------------------------------------------------------------------------- */
+.po-organism-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75em;
+  min-width: 0;
+}
+.po-organism-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.po-organism-code {
+  flex: none;
+  font-family: "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  color: var(--pa-ink-muted);
+}
+.po-organism-name mark,
+.po-organism-code mark {
+  background: transparent;
+  color: inherit;
+  font-weight: 700;
+}

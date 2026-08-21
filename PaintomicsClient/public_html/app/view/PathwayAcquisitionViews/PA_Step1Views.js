@@ -1529,7 +1529,7 @@ function PA_Step1JobView() {
 						{
 							xtype: "container", layout: { type: "vbox", align: "stretch" }, flex: 0.4, items: [
 							{
-								xtype: 'combo',fieldLabel: 'Organism', name: 'specie',
+								xtype: 'organismcombo', fieldLabel: 'Organism', name: 'specie',
 								/* 26px is --pa-card-inset: this field sits directly under
 								   "1. Organism selection", so it has to start on the same
 								   left edge as that heading. */

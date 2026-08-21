@@ -287,7 +287,7 @@ this.requestNewSpecieHandler = function(){
 				"</div>"
 			},
 			{
-				xtype: 'combo',fieldLabel: 'Organism', name: 'specie',
+				xtype: 'organismcombo', fieldLabel: 'Organism', name: 'specie',
 				width: 500, itemId: "speciesCombobox",
 				allowBlank: false, forceSelection: false,
 				emptyText: 'Please choose an organism',
