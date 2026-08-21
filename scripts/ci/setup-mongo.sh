@@ -32,29 +32,48 @@ mkdir -p "$DIST" "$DBPATH"
 
 SERVER_TGZ="$DIST/mongodb-macos-arm64-$MONGODB_VERSION.tgz"
 TOOLS_ZIP="$DIST/mongodb-database-tools-macos-arm64-$MONGODB_TOOLS_VERSION.zip"
-if [ ! -s "$SERVER_TGZ" ]; then
-    echo "==> downloading MongoDB $MONGODB_VERSION"
-    curl -fsSL -o "$SERVER_TGZ" "https://fastdl.mongodb.org/osx/mongodb-macos-arm64-$MONGODB_VERSION.tgz"
-fi
-if [ ! -s "$TOOLS_ZIP" ]; then
-    echo "==> downloading MongoDB database tools $MONGODB_TOOLS_VERSION"
-    curl -fsSL -o "$TOOLS_ZIP" "https://fastdl.mongodb.org/tools/db/mongodb-database-tools-macos-arm64-$MONGODB_TOOLS_VERSION.zip"
-fi
+
+fetch() {
+    # -S so a failure says why even though -s keeps the progress meter quiet;
+    # --retry for the transient 5xx/connection resets a CDN hands out.
+    local url="$1" dest="$2"
+    echo "==> downloading $url"
+    if ! curl -fsSL --retry 3 --retry-all-errors --retry-delay 2 -o "$dest.part" "$url"; then
+        echo "setup-mongo: download failed: $url" >&2
+        rm -f "$dest.part"
+        exit 1
+    fi
+    mv "$dest.part" "$dest"
+    echo "    $(du -h "$dest" | cut -f1) $(basename "$dest")"
+}
+[ -s "$SERVER_TGZ" ] || fetch "https://fastdl.mongodb.org/osx/mongodb-macos-arm64-$MONGODB_VERSION.tgz" "$SERVER_TGZ"
+[ -s "$TOOLS_ZIP" ] || fetch "https://fastdl.mongodb.org/tools/db/mongodb-database-tools-macos-arm64-$MONGODB_TOOLS_VERSION.zip" "$TOOLS_ZIP"
 
 # The tarball's top-level directory is not the tarball's name (8.2.9 unpacks
 # as mongodb-macos-aarch64--8.2.9), so find mongod rather than guess the path.
-findServerDir() { ls -d "$DIST"/mongodb-macos-*"$MONGODB_VERSION" 2>/dev/null | head -1; }
+findServerDir() { ls -d "$DIST"/mongodb-macos-*"$MONGODB_VERSION" 2>/dev/null | head -1 || true; }
 SERVER_DIR="$(findServerDir)"
 if [ -z "$SERVER_DIR" ] || [ ! -x "$SERVER_DIR/bin/mongod" ]; then
-    tar -xzf "$SERVER_TGZ" -C "$DIST"
+    echo "==> unpacking $(basename "$SERVER_TGZ")"
+    tar -xzf "$SERVER_TGZ" -C "$DIST" || { echo "setup-mongo: tar failed on $SERVER_TGZ" >&2; exit 1; }
     SERVER_DIR="$(findServerDir)"
 fi
-[ -n "$SERVER_DIR" ] && [ -x "$SERVER_DIR/bin/mongod" ] || { echo "setup-mongo: mongod not found under $DIST after unpacking $SERVER_TGZ" >&2; ls -la "$DIST" >&2; exit 1; }
+if [ -z "$SERVER_DIR" ] || [ ! -x "$SERVER_DIR/bin/mongod" ]; then
+    echo "setup-mongo: mongod not found under $DIST after unpacking $SERVER_TGZ" >&2
+    ls -la "$DIST" >&2
+    exit 1
+fi
 TOOLS_DIR="$DIST/mongodb-database-tools-macos-arm64-$MONGODB_TOOLS_VERSION"
-[ -x "$TOOLS_DIR/bin/mongorestore" ] || unzip -q -o "$TOOLS_ZIP" -d "$DIST"
+if [ ! -x "$TOOLS_DIR/bin/mongorestore" ]; then
+    echo "==> unpacking $(basename "$TOOLS_ZIP")"
+    unzip -q -o "$TOOLS_ZIP" -d "$DIST" || { echo "setup-mongo: unzip failed on $TOOLS_ZIP" >&2; exit 1; }
+fi
+[ -x "$TOOLS_DIR/bin/mongorestore" ] || { echo "setup-mongo: mongorestore not found under $TOOLS_DIR" >&2; ls -la "$DIST" >&2; exit 1; }
 # macOS quarantines downloaded binaries; strip the attribute or Gatekeeper
 # refuses to exec them.
 xattr -dr com.apple.quarantine "$SERVER_DIR" "$TOOLS_DIR" 2>/dev/null || true
+echo "==> mongod: $SERVER_DIR/bin/mongod"
+echo "==> tools:  $TOOLS_DIR/bin"
 
 echo "==> starting mongod $MONGODB_VERSION on 127.0.0.1:$MONGODB_PORT"
 # --fork is refused on macOS ("incompatible with macOS" since 8.x), so the
