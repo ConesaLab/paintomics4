@@ -1,0 +1,46 @@
+# Profile the pipeline on tests/perf/large_input with py-spy, on demand.
+#
+# Same environment as the nightly (.github/actions/setup-paintomics). py-spy
+# needs root on macOS, which the runner grants without a password and a
+# laptop does not -- that is why the profile is taken here. The report
+# (profile.txt: top functions by cumulative time, wall clocks, medians) and
+# the raw recordings are uploaded as an artifact; the reports/ directory in
+# the repository is filled from it by hand.
+
+name: Profile
+
+on:
+  workflow_dispatch:
+    inputs:
+      runs:
+        description: runs per measurement (wall clock and profile each)
+        required: false
+        default: "3"
+      rate:
+        description: py-spy sampling rate (Hz)
+        required: false
+        default: "200"
+
+permissions:
+  contents: read
+
+jobs:
+  profile:
+    name: py-spy on tests/perf/large_input
+    runs-on: macos-26
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-paintomics
+      - name: py-spy
+        run: python -m pip install --quiet py-spy
+      - name: Profile and time
+        env:
+          PYTHONPATH: ${{ github.workspace }}/scripts/ci/no_network
+          AI_CSIC_API_BASE: http://127.0.0.1:1/v1
+        run: scripts/perf/profile.sh ${{ runner.temp }}/profile "${{ inputs.runs }}" "${{ inputs.rate }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: profile-${{ github.sha }}
+          path: ${{ runner.temp }}/profile
+          retention-days: 30
