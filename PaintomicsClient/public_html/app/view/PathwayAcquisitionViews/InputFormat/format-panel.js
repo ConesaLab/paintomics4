@@ -283,47 +283,21 @@
         icon.innerHTML = typeof window.getAIMark === "function" ? window.getAIMark() : "✦";
         strip.appendChild(icon);
         var text = el("span", "pa-format-text");
-        if (aiOptedIn()) {
-            text.appendChild(document.createTextNode("Any format works — the "));
-            text.appendChild(el("b", null, "PaintOmics AI agent"));
-            text.appendChild(document.createTextNode(" converts it here if needed."));
-        } else {
-            text.appendChild(document.createTextNode("AI conversion is off: tab-separated, identifier first, numbers after."));
-        }
+        text.appendChild(document.createTextNode("Any format works — the "));
+        text.appendChild(el("b", null, "PaintOmics AI agent"));
+        text.appendChild(document.createTextNode(" converts it here if needed."));
         strip.appendChild(text);
     }
 
-    /*
-     * The Section 3 consent box. Ticked by default because ticking it sends
-     * nothing -- a file goes to the model only when the user presses Convert
-     * on it -- and unticking it withdraws that offer from every card, so a
-     * user who does not want a third party to see even column names is not
-     * shown a button that would.
-     */
-    function aiOptedIn() {
-        var box = document.getElementById("paUploadAiOptIn");
-        return !box || box.checked;
-    }
-
+    /* The one AI action a problem strip offers. Pressing it is the consent:
+       nothing leaves this computer until the user does, so there is no box to
+       tick beforehand. */
     function aiActions(input, file, fieldName) {
-        if (!aiOptedIn()) return [];
         return [{ label: "Convert it for me", primary: true, ai: true,
                   onClick: function () { requestAgent(input, file, fieldName); } }];
     }
 
-    function aiExplainer() {
-        return aiOptedIn()
-            ? AI_EXPLAINER
-            : "AI conversion is switched off above; tick it to have the PaintOmics AI agent convert this file, " +
-              "or export a tab-separated table with the identifier first and numbers after.";
-    }
-
-    // Unticking or ticking the box repaints the standing offer on every card
-    // that has no file yet; cards with a verdict keep it until re-checked.
-    document.addEventListener("change", function (event) {
-        if (!event.target || event.target.id !== "paUploadAiOptIn") return;
-        document.querySelectorAll(".pa-format-strip.pa-format-idle").forEach(renderIdle);
-    }, true);
+    function aiExplainer() { return AI_EXPLAINER; }
 
     function renderOk(strip, summary, partial, input) {
         strip.className = "pa-format-strip pa-format-ok";
@@ -543,8 +517,7 @@
                 markBlocked(fieldName, { fieldName: fieldName, fileName: file.name,
                                          input: input, omic: strip.__omic, fixable: false });
                 renderProblem(strip, "err", "The file is not saved as UTF-8.",
-                    "Re-save it as UTF-8 (in Excel: Save As → CSV UTF-8)" +
-                    (aiOptedIn() ? ", or let the PaintOmics AI agent convert it. " + AI_EXPLAINER : "."),
+                    "Re-save it as UTF-8 (in Excel: Save As → CSV UTF-8), or let the PaintOmics AI agent convert it. " + AI_EXPLAINER,
                     aiActions(input, file, fieldName));
                 return;
             }
@@ -678,7 +651,7 @@
             bar.appendChild(fix);
         }
 
-        if (fixable.length !== entries.length && aiOptedIn()) {
+        if (fixable.length !== entries.length) {
             var convert = el("button", "pa-format-button pa-format-primary");
             convert.type = "button";
             if (typeof window.getAIMark === "function") {

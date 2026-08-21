@@ -1682,7 +1682,7 @@ function PA_Step1JobView() {
 						   half blank. Two columns give the explanation its measure and put the
 						   two controls in the space the prose cannot use. */
 						items: [{
-							xtype: "container", flex: 3, layout: "anchor",
+							xtype: "container", flex: 1, layout: "anchor",
 							items: [
 								{
 									xtype: "box",
@@ -1865,7 +1865,15 @@ function PA_Step1JobView() {
 								}
 							]
 						}, {
-							xtype: "container", flex: 2, margin: '0 0 0 32', layout: "anchor",
+							/* One right column for the whole form. 400px here, the same
+							   400px for the "Works with" column under Section 3, and the
+							   Help panel below starts on the same x (422 wide, because it
+							   runs to the card edge where this column stops 22px short of
+							   it inside the panel's padding). Measured: all three start at
+							   1185px on a 1867px viewport. A flex share put this one at
+							   1077 and the Help panel at 1267 -- three right edges for one
+							   page. */
+							xtype: "container", width: 400, margin: '0 0 0 32', layout: "anchor",
 							items: [
 								{
 									/* Three things were wrong here, and the first hid the other two.
@@ -1983,35 +1991,28 @@ function PA_Step1JobView() {
 					{
 						/* The standing offer, stated before any file is picked: the
 						   upload step accepts files as they come out of the tools
-						   people use, and the AI conversion is how. Same panel as
-						   the Section 2 callout so the two AI surfaces on this form
-						   read as one feature. The prose gets a reading measure; the
-						   aside states what leaves the machine, because a sentence
-						   about AI next to a file picker is where that has to be
-						   said (styles in inputformat.css). */
+						   people use, and the AI conversion is how.
+
+						   A plain row, not a second blue panel: the panel above is the
+						   one decision on this form (send results out, or not), and a
+						   second panel with a second box read as that decision asked
+						   twice. Conversion needs no box -- pressing Convert on a file
+						   is the act -- so this row only says what happens, in the
+						   interpretation's own type (.ai-intro-copy), on the same two
+						   columns: sentence left, the formats it handles right (styles
+						   in inputformat.css). */
 						xtype: "box",
-						cls: "po-ai-section-body po-upload-ai",
-						/* Same skeleton as Section 2, on purpose: one sentence in the
-						   interpretation's own type (.ai-intro-copy), then the consent
-						   control that names what leaves and to whom; the right column
-						   holds what the prose would otherwise have to list. The box is
-						   ticked by default because ticking it sends nothing -- a file
-						   only goes to the model when the user presses Convert on it;
-						   unticking removes that offer from every card. */
+						cls: "po-upload-ai",
 						html: '<div class="po-upload-ai-grid">' +
 							'<div class="po-upload-ai-text">' +
-								'<p class="ai-intro-copy"><b>Bring your files as they are.</b> Each file is checked the moment you pick it; if it is not in PaintOmics’ format, the <b>PaintOmics AI agent</b> writes a short script, runs it in your browser and shows you the result before anything is used.</p>' +
-								/* Input THEN label, as siblings: the alignment overlay judges a
-								   label led by a checkbox from the box's edge only in that
-								   shape (AlignmentGuides.js ~331), which is also what puts
-								   this row on the rail Section 2's Ext checkbox row keeps. */
-								'<div class="po-upload-ai-consent">' +
-									'<input type="checkbox" id="paUploadAiOptIn" checked>' +
-									/* No recipient clause here either (see the Section 2 label):
-									   the sheet's "What the agent sees" card shows exactly what is
-									   sent, at the moment it is sent, which is the better place. */
-									'<label for="paUploadAiOptIn">Convert with the PaintOmics AI agent when a file needs it</label>' +
-								'</div>' +
+								/* Two paragraphs, not one with a bold lead-in: a lone
+								   paragraph in this column is one measured row, and the
+								   alignment overlay dissolves a one-row column into its row
+								   and judges it against the other column's rail. The lead on
+								   its own line is also the head-plus-sentence shape the
+								   Section 2 hero uses. */
+								'<p class="ai-intro-copy po-upload-ai-lead"><b>Bring your files as they are.</b></p>' +
+								'<p class="ai-intro-copy">Each file is checked the moment you pick it; if it is not in PaintOmics’ format, the <b>PaintOmics AI agent</b> offers to convert it: it writes a short script, runs it in your browser and shows you the result before anything is used.</p>' +
 							'</div>' +
 							'<div class="po-upload-ai-aside">' +
 								'<div class="po-upload-ai-aside-title">Works with</div>' +
@@ -2071,12 +2072,16 @@ function PA_Step1JobView() {
 							xtype: "container",
 							id: "additionalInfoContainer",
 							minHeight: 150,
-							minWidth: 200,
-							maxWidth: 340,
+							/* 422, not a flex share: the page has one right column, and it
+							   starts where Section 2's experiment-design field and Section
+							   3's "Works with" column start (see the note on Section 2's
+							   right container). Those two stop 22px short of the card edge
+							   inside their panel padding; this panel runs to the edge, hence
+							   the extra 22. */
+							width: 422,
 							/* Left margin only - it is the gutter. The right side is the card
 							   inset, which the row already carries. */
 							margin: "10 0 10 10",
-							flex: 1,
 							layout: {type: 'vbox',align: "stretch"},
 							items: [
 								{xtype: 'box',html: '<div class="content"><h5><i class="fa fa-info-circle"></i> Help</h5><p>Drag <i>omics</i> from <b>Available omics</b> to <b>Selected omics</b>, or click the <i class="fa fa-plus-circle"></i> button.</p><p>Remove any you do not need with <span class="po-nowrap"><i class="fa fa-trash"></i>.</span></p><p>Files are checked as you pick them; the <b>PaintOmics AI agent</b> converts any that are not in PaintOmics’ format.</p><p>When you are done, click <b>Run PaintOmics</b> in the top-right corner.</p></div>'}

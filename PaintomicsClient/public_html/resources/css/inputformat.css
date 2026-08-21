@@ -283,61 +283,44 @@ input[type="text"].pa-field-err {
 .pa-format-linkbtn:focus-visible { outline: 2px solid var(--pa-focus-ring, #0A84FF); outline-offset: 2px; border-radius: 2px; }
 
 /* ------------------------------------------------------------------------
-   The Section 3 callout: "Bring your files as they are".
+   The Section 3 row: "Bring your files as they are".
 
-   Same panel and the same skeleton as the Section 2 callout so the two read as
-   one feature: the prose column is 3/5 and the right column 2/5 with a 32px
-   gutter (measured off Section 2's hbox: its textarea starts at 1077px on a
-   1867px viewport, and so does this right column); the head, the sentence and
-   the consent control sit on the same three lines as their Section 2
-   counterparts. No box around the right column -- Section 2 has none, and a
-   bordered card there was the heaviest thing on the form.
+   A plain row on the same two columns as the Section 2 panel, not a second
+   panel: the blue panel is the form's one decision and a second one read as
+   that decision asked twice. It keeps the panel's inset so its sentence starts
+   on the same x as Section 2's (283px on a 1867px viewport), and its right
+   column is the page's one right column -- 400px wide, starting at 1185px,
+   where Section 2's experiment-design field and the Help panel start too.
    ------------------------------------------------------------------------ */
+.po-upload-ai {
+    margin: 5px var(--pa-card-inset) 10px;
+    padding: 4px 22px 12px;
+}
 .po-upload-ai-grid {
     display: flex;
     align-items: flex-start;
 }
 .po-upload-ai-text {
-    flex: 3 1 0;
+    flex: 1 1 auto;
     min-width: 0;
 }
 .po-upload-ai-aside {
-    flex: 2 1 0;
+    flex: 0 0 400px;
     min-width: 0;
     margin-left: 32px;
 }
 /* `div.contentbox p` is (0,1,2) and adds the card inset to every paragraph
    inside a card; two classes outrank it. The type itself is .ai-intro-copy,
-   the Section 2 sentence's own class, and it runs the same measure, so the
-   two sentences sit on the same lines. The lead-in is the bold the Section 2
-   sentence gives its subject. */
-.po-ai-section-body.po-upload-ai p.ai-intro-copy {
+   the Section 2 sentence's own class, so the two sentences match; the lead-in
+   is the bold the Section 2 sentence gives its subject. */
+.po-upload-ai p.ai-intro-copy {
     margin: 0;
     padding: 0;
 }
-.po-ai-section-body.po-upload-ai p.ai-intro-copy b { font-weight: 700; color: var(--pa-accent-blue, #19589E); }
-
-/* The consent row, shaped like Section 2's checkbox row: 16px box, 8px gap,
-   label that wraps with a hanging indent. */
-.po-upload-ai-consent {
-    display: flex;
-    align-items: flex-start;
-    gap: 8px;
-    margin: 10px 0 0;   /* Section 2: sentence bottom 87, box top 97 */
-    font-size: 13px;
-    line-height: 1.45;
-    color: var(--pa-ink, #18181B);
-}
-.po-upload-ai-consent input {
-    flex: 0 0 auto;
-    width: 16px;
-    height: 16px;
-    margin: 1px 0 0;
-    accent-color: var(--pa-accent-blue, #19589E);
-    cursor: pointer;
-}
-.po-upload-ai-consent input:focus-visible { outline: 2px solid var(--pa-focus-ring, #0A84FF); outline-offset: 2px; }
-.po-upload-ai-consent > label { flex: 1 1 auto; cursor: pointer; font-weight: 400; }
+.po-upload-ai p.ai-intro-copy b { font-weight: 700; color: var(--pa-accent-blue, #19589E); }
+/* The lead on its own line, the sentence 2px under it: one block to the eye,
+   two rows to the overlay. */
+.po-upload-ai p.po-upload-ai-lead { margin: 0 0 2px; }
 
 /* The right column: a label on top like "Experiment design (optional):",
    then the formats as pills -- scannable where a sentence listing them was
@@ -356,7 +339,7 @@ input[type="text"].pa-field-err {
     flex-wrap: wrap;
     gap: 6px;
 }
-.po-ai-section-body.po-upload-ai .po-upload-ai-formats li {
+.po-upload-ai .po-upload-ai-formats li {
     padding: 3px 10px;
     border-radius: 99px;
     border: 1px solid #CFE0F0;
@@ -370,5 +353,5 @@ input[type="text"].pa-field-err {
 
 @media (max-width: 980px) {
     .po-upload-ai-grid { flex-direction: column; }
-    .po-upload-ai-aside { margin: 12px 0 0; }
+    .po-upload-ai-aside { margin: 12px 0 0; flex-basis: auto; }
 }

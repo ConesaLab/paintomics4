@@ -1841,4 +1841,3 @@
 [data-theme="dark"] .pa-convert-composer-send { background: var(--pa-accent-blue); border-color: var(--pa-accent-blue); color: #0F1A2B; }
 [data-theme="dark"] .pa-convert-composer-send:hover:not(:disabled) { background: #86B8F4; }
 [data-theme="dark"] .pa-convert-composer-input:focus { box-shadow: 0 0 0 3px rgba(107, 168, 240, 0.25); }
-[data-theme="dark"] .po-upload-ai-aside { background: var(--pa-surface); border-color: #2C3E55; }

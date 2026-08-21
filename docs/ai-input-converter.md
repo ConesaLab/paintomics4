@@ -88,16 +88,18 @@ On **Use this table** the omic card's strip records the provenance —
 attached)* — with a **Convert again** link that reopens the sheet on the
 original upload.
 
-Section 3 of the upload form states the offer before any file is picked, in
-the same skeleton as the Section 2 callout: one sentence ("Bring your files as
-they are…"), a consent checkbox — *Convert with the PaintOmics AI agent when a
-file needs it (sends only the file's structure to …)* — ticked by default
-because ticking it sends nothing (a file goes to the model only when the user
-presses Convert on it), and a "Works with" column of formats where Section 2
-keeps its experiment-design field. Unticking the box withdraws the Convert
-offer from every card. A standing one-line note in every omic card and a
-sentence in the Help panel complete it. The actor is named the same way on
-every surface: *the PaintOmics AI agent*.
+Section 3 of the upload form states the offer before any file is picked, as a
+plain row on the same two columns as the Section 2 panel: a bold lead ("Bring
+your files as they are.") and one sentence on the left, a "Works with" column
+of format pills on the right. There is deliberately no checkbox: pressing
+**Convert it for me** on a file is the consent, nothing leaves the browser
+before that, and a second box under the interpretation's consent box read as
+the same decision asked twice. The page keeps one right column — the
+experiment-design field, the "Works with" pills and the Help panel all start
+on the same x. A standing one-line note in every omic card and a sentence in
+the Help panel complete it. The actor is named the same way on every surface:
+*the PaintOmics AI agent*. The job's name is taken from the experiment
+design's first line; there is no separate description field.
 
 ## 3. Letting the user steer with a prompt, and review the result
 
