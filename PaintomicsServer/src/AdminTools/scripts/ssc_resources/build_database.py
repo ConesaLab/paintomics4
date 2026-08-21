@@ -1,6 +1,5 @@
 import imp
 import traceback
-import pymongo
 from sys import argv, stderr
 from subprocess import CalledProcessError
 

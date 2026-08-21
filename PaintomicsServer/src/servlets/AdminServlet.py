@@ -88,7 +88,6 @@ def adminServletGetInstalledOrganisms(request, response):
                 organisms_names[row[1]] = row[2]
         organisms_all.close()
 
-        installedSpecies = []
         from pymongo import MongoClient
 
         client = MongoClient(MONGODB_HOST, MONGODB_PORT)
@@ -312,7 +311,6 @@ def adminServletRestoreData(request, response):
         #****************************************************************
         # Step 1.GET THE SPECIE CODE AND THE UPDATE OPTION
         #****************************************************************
-        formFields = request.form
 
         from subprocess import check_output, CalledProcessError, STDOUT
 

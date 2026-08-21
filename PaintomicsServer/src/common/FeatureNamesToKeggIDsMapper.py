@@ -136,39 +136,6 @@ def getConnectionByOrganismCode(organism):
 #  \_____|______|_| \_|______|_____/
 #
 #*****************************************************************
-def findKeggIDByFeatureName(jobID, featureName, organism, db, databaseConvertion_id):
-    """
-    This function queries the MongoDB looking for the associated gene ID for the given gene name
-
-    @param {String} jobID, the identifier for the running job, necessary to for the temporal caches
-    @param {String} featureName, the name for the feature that we want to map
-    @param {String} organism, the organims code
-    @param  {pymongo.Database} db, the open connection with MongoDB database
-    @param {String} databaseConvertion_id, identifier for the database which contains the translated feature name (e.g. entrezgene for mmu)
-    @returns {List} matchedFeatures, a list of translated identifiers
-    @returns {Boolean} found, True if we found at least one translation
-    """
-    #Check if the id is ath the cache of translation
-    featureIDs = KeggInformationManager().findInTranslationCache(jobID, featureName, "id", databaseConvertion_id)
-    if(featureIDs != None):
-        return featureIDs, True
-
-    matchedFeatures=[]
-    try:
-        mates  = db.xref.find({"display_id": featureName}, {"item" :1, "mates":1, "qty":1})[0].get("mates") #Will fail if not matches
-        cursor = db.xref.find({"dbname_id" : databaseConvertion_id, "_id" : { "$in" : mates }}, {"display_id":1})
-
-        # No count() guard: Cursor.count() was removed in pymongo 4, and because
-        # this block swallows every exception the AttributeError would have been
-        # invisible -- every lookup would silently report "not found". Iterating
-        # an empty cursor is already a no-op, and this drops a server round-trip.
-        for item in cursor:
-            matchedFeatures.append(item.get("display_id"))
-        return matchedFeatures, len(matchedFeatures) > 0
-
-    except Exception as ex:
-        return matchedFeatures, False
-
 #: Identifier types that name a *gene* and only ever name one gene, so two xref
 #: documents carrying the same value are the same gene by definition. These and
 #: only these are safe to bridge a second hop through (see _bridgeSecondHop):
@@ -368,34 +335,6 @@ def findIDsByFeaturesName(jobID, featureNames, db, databaseConvertion_id):
         matchedFeatures.update(cachedFeatureIDs)
 
         return matchedFeatures
-
-def findGeneSymbolByFeatureID(jobID, featureID, organism, db, databaseConvertion_id, databaseGeneSymbol_id):
-    """
-    This function queries the MongoDB looking for the associated gene symbol for the given gene ID
-
-    @param {String} jobID, the identifier for the running job, necessary to for the temporal caches
-    @param {String} featureID, the ID for the feature that we want to map
-    @param {String} organism, the organims code
-    @param  {pymongo.Database} db, the open connection with MongoDB database
-    @param {String} databaseConvertion_id, identifier for the database which contains the translated feature name (e.g. entrezgene for mmu)
-    @param {String} databaseGeneSymbol_id, identifier for the database which contains the translated feature symbol (e.g. refseq_gene_symbol for mmu)
-    @returns {List} matchedFeature, a gene symbol for the translated identifier
-    @returns {Boolean} found, True if we found at least one translation
-    """
-    #Check if the id is ath the cache of translation
-    geneSymbol = KeggInformationManager().findInTranslationCache(jobID, featureID, "symbol", databaseConvertion_id)
-    if(geneSymbol != None):
-        return geneSymbol, True
-
-    try:
-        mates = db.xref.find({"display_id": featureID, "dbname_id" : databaseConvertion_id}, {"item" :1, "mates":1, "qty":1})[0].get("mates") #Will fail if not matches
-        matchedFeature=db.xref.find_one({"dbname_id" : databaseGeneSymbol_id, "_id" : { "$in" : mates }}, {"display_id":1})
-        if(matchedFeature != None):
-            return matchedFeature.get("display_id"), True
-        return None, False
-
-    except Exception as ex:
-        return None, False
 
 def resolveDatabaseIds(organism, databases, db=None):
     """

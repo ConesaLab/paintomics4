@@ -117,7 +117,7 @@ def unifyAndSort(seq, criteria=None):
     seq = sorted(seq, key=criteria)
     # order preserving
     if criteria is None:
-       def idfun(x): return x
+       pass
     seen = {}
     result = []
     for item in seq:

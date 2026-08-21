@@ -794,7 +794,6 @@ def checkTSS(start, end, exon):
     dhs_start = start
     dhs_end = end
 
-    pm = (start + end)/2
 
     # If exon is in the negative strand, we will change the sign in order to make this code invariant to the strand
     if exon.getStrand() == "-":
@@ -912,7 +911,6 @@ def checkTTS(start, end, exon):
     dhs_start = start
     dhs_end = end
 
-    pm = (start + end)/2
 
     # If exon is in the positive strand, we will change the sign in order to make this code invariant to the strand
     if exon.getStrand() == "+":
@@ -1394,7 +1392,6 @@ def run(gtf, dhs, outputfile, match_table, options=None, managed_queue=None):
         salida.write("#Region\tMidpoint\tGene\tTranscript\tExon/Intron\tArea\tDistance\tTSSDistance\tTTSDistance\tPercRegion\tPercArea" + (("\t" + "\t".join(myheader)) if len(myheader) > 0 else "") + "\n")
 
         last_index = None
-        old_chrom = ""
         gene_vector = None
 
         # Check if all chromosomes present in the regions file are also in the reference file

@@ -27,7 +27,7 @@ from time import strftime, sleep, time
 # or trimming that import would have broken subprocess calls here at runtime.
 from subprocess import check_call, check_output, CalledProcessError, DEVNULL, STDOUT
 
-from conf.serverconf import KEGG_DATA_DIR, CLIENT_TMP_DIR, DOWNLOAD_DELAY_1, DOWNLOAD_DELAY_2, MAX_TRIES_1, MAX_TRIES_2
+from conf.serverconf import KEGG_DATA_DIR, DOWNLOAD_DELAY_1, DOWNLOAD_DELAY_2, MAX_TRIES_1
 from scripts.downloadReactome import *
 
 VERSION = 0.12
@@ -1634,7 +1634,6 @@ def getCurrentInstalledSpecies():
         for row in reader:
             organisms_names[row[1]] = row[2]
 
-    installedSpecies = []
     from pymongo import MongoClient
 
     client = MongoClient(MONGODB_HOST, MONGODB_PORT)

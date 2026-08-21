@@ -39,37 +39,23 @@ from openai.types.chat import ChatCompletion
 from pydantic import BaseModel, Field
 
 from src.conf.serverconf import (
-    AI_LLM_PROVIDER, AI_PROVIDERS, AI_MAX_PATHWAYS, AI_PATHWAYS_PER_BATCH,
-    AI_TEMPERATURE, AI_MAX_SEARCH_TASKS, AI_PAPERS_PER_SEARCH_TASK,
-    AI_PAPERS_KEPT_PER_TASK, AI_SEARCH_SUBAGENT_WORKERS,
-    AI_MAX_VERIFICATION_ITERATIONS,
+    AI_LLM_PROVIDER,
+    AI_PROVIDERS,
+    AI_TEMPERATURE,
+    AI_SEARCH_SUBAGENT_WORKERS,
+    # Read through this module by the agent-loop end-to-end test
+    # (agent.AI_MAX_PATHWAYS etc.), not used here.
+    AI_MAX_PATHWAYS,
+    AI_MAX_SEARCH_TASKS,
+    AI_PAPERS_PER_SEARCH_TASK,
 )
 from src.classes.AIInterpret import tools as tools_mod
 from src.classes.AIInterpret import prompts as prompts_mod
-from src.classes.AIInterpret.context_builder import (
-    build_pathway_context, build_gene_symbol_whitelist, get_organism_name,
-    triage_pathways, build_cross_omic_matrix, build_key_regulators_block,
-    render_pathway_table,
-)
-from src.classes.AIInterpret.pubmed_client import PubMedClient
-from src.classes.AIInterpret.verification import (
-    verify_report_v2, redact_unverified_v2, renumber_citations,
-    sort_references_section,
-    parse_references_section, render_references_section,
-    normalize_citation_markers, resolve_pmid_mentions, count_body_citations,
-    score_topup_survival, theme_conversion, quote_provenance,
-    last_sentences_dropped,
-)
+from src.classes.AIInterpret.verification import verify_report_v2, quote_provenance
 # The shared verdict parser: the verifier agent keeps its tools (see the
 # DANGER note in _build_agents), so its verdict arrives as free text.
-from src.classes.AIInterpret.shared import (
-    _parse_json_verdict, _collect_cited_quotes,
-)
+from src.classes.AIInterpret.shared import _parse_json_verdict
 from src.classes.AIInterpret.llm_client import LLMClient
-# Cluster-first interpretation (AI_CLUSTER_MODE=1): the shared-feature
-# pathway network is partitioned and every significant pathway is interpreted
-# inside its cluster. Off by default so the base arm stays reproducible.
-from src.classes.AIInterpret import clusters as clusters_mod
 
 logger = logging.getLogger(__name__)
 

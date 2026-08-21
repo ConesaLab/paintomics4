@@ -2,8 +2,6 @@
 #  This file is part of Paintomics v4
 #**************************************************************
 
-import logging
-import os
 from src.classes.Job import Job
 
 class MOREJob(Job):

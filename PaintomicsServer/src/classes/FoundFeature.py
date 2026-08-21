@@ -18,9 +18,7 @@
 #  Technical contact paintomicsai@gmail.com
 #**************************************************************
 
-from src.common.Util import Model
 from src.classes.Feature import Feature
-from difflib import SequenceMatcher
 
 #**************************************************************
 # CLASS Feature
@@ -46,9 +44,6 @@ class FoundFeature(Feature):
 
     def addMainCompound(self, compound):
         self.mainCompounds.append(compound)
-    def addMainCompounds(self, compoundList):
-        for compound in compoundList:
-            self.mainCompounds.append(compound)
     def setMainCompounds(self, mainCompounds):
         self.mainCompounds = mainCompounds
     def getMainCompounds(self):
@@ -56,9 +51,6 @@ class FoundFeature(Feature):
 
     def addOtherCompound(self, compound):
         self.otherCompounds.append(compound)
-    def addOtherCompounds(self, compoundList):
-        for compound in compoundList:
-            self.otherCompounds.append(compound)
     def setOtherCompounds(self, mainCompounds):
         self.otherCompounds = mainCompounds
     def getOtherCompounds(self):

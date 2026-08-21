@@ -7,7 +7,7 @@ from src.common.ServerErrorManager import handleException
 from src.common.UserSessionManager import UserSessionManager
 from src.common.DAO.AIInterpretDAO import AIInterpretDAO
 from src.common.JobInformationManager import JobInformationManager
-from src.classes.AIInterpret.agent import run_ai_agent, _cancel_flags
+from src.classes.AIInterpret.agent import run_ai_agent
 from src.classes.AIInterpret.verification import normalize_citation_markers
 from src.common.PySiQ import JobStatus
 from src.classes.AIInterpret.llm_client import LLMClient, MissingAPIKeyError

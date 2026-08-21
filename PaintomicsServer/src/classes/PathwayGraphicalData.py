@@ -41,18 +41,6 @@ class PathwayGraphicalData(Model):
         return  self.visibleOmics
     def setVisibleOmics(self, visibleOmics):
         self.visibleOmics = visibleOmics
-    def addVisibleOmic(self, omicName):
-        if not omicName in self.visibleOmics:
-            self.visibleOmics.append(omicName)
-    def removeVisibleOmic(self, omicName):
-        if omicName in self.visibleOmics:
-            self.visibleOmics.remove(omicName)
-    def toogleVisibleOmic(self, omicName):
-        if omicName in self.visibleOmics:
-            self.visibleOmics.remove(omicName)
-        else:
-            self.visibleOmics.append(omicName)
-
     def getFeaturesGraphicalData(self):
         return  self.featuresGraphicalData
     def setFeaturesGraphicalData(self, featuresGraphicalData):

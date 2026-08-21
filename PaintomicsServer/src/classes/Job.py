@@ -28,7 +28,7 @@ from re import compile as re_compile
 from collections import defaultdict
 
 import numpy
-from numpy import percentile as numpy_percentile, min as numpy_min, max as numpy_max, asarray, float32, logical_or, invert, sum as numpy_sum
+from numpy import asarray, logical_or, invert, sum as numpy_sum
 # NaN-aware variants for omics that legitimately carry missing measurements
 # (e.g. CpG sites not measured in every methylation sample). Without these,
 # a single NaN in `allValues` poisons every percentile and the server emits a
@@ -330,8 +330,6 @@ class Job(Model):
     def getDatabases(self):
         return self.databases
 
-    def setReferenceInputs(self, referenceInputs):
-        self.referenceInputs = referenceInputs
     def getReferenceInputs(self):
         return self.referenceInputs
     def addReferenceInput(self, referenceInput):
@@ -379,8 +377,6 @@ class Job(Model):
         else:
             currentData.combineData(inputCompoundData)
 
-    def setInputGenesData(self, genes):
-        self.inputGenesData = genes
     def getInputGenesData(self):
         return self.inputGenesData
     def addInputGeneData(self, inputGeneData):
@@ -403,28 +399,6 @@ class Job(Model):
     #******************************************************************************************************************
     # OTHER FUNCTIONS
     #******************************************************************************************************************
-
-    def isSignificativeCompound(self, compoundID):
-        """
-        This function ...
-
-        @returns
-        """
-        compoundAux = self.getInputCompoundsData().get(compoundID, None)
-        if(compoundAux != None):
-            return compoundAux.isSignificative()
-        return False
-
-    def isSignificativeGene(self, geneID):
-        """
-        This function ...
-
-        @returns
-        """
-        geneAux = self.getInputGenesData().get(geneID, None)
-        if(geneAux != None):
-            return geneAux.isSignificative()
-        return False
 
     def initializeDirectories(self):
         """

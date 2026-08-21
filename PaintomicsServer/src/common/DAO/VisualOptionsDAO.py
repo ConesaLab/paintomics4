@@ -1,8 +1,5 @@
 from src.common.DAO.DAO import DAO
-from src.classes.Job import Job
 
-from src.common.DAO.Bed2GeneJobDAO import Bed2GeneJobDAO
-from src.common.DAO.PathwayAcquisitionJobDAO import PathwayAcquisitionJobDAO
 
 class VisualOptionsDAO(DAO):
     #******************************************************************************************************************
@@ -27,7 +24,6 @@ class VisualOptionsDAO(DAO):
         return None
 
     def insert(self, instance, otherParams=None):
-        fileInstance = instance
         if(otherParams == None or not "jobID" in otherParams):
             return False
 

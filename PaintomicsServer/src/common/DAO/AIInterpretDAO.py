@@ -60,17 +60,6 @@ class AIInterpretDAO(DAO):
                                          "timestamp": datetime.utcnow()}}}
         )
 
-    def get_paper_by_ref_index(self, job_id, ref_index):
-        """Retrieve a single paper by its ref_index using $elemMatch projection."""
-        collection = self.dbManager.getCollection(self.collectionName)
-        doc = collection.find_one(
-            {"jobID": job_id, "papers.ref_index": ref_index},
-            {"papers": {"$elemMatch": {"ref_index": ref_index}}}
-        )
-        if doc and doc.get("papers"):
-            return doc["papers"][0]
-        return None
-
     def save_pathway_index(self, job_id, pathways):
         """Store the pathways the report was written from.
 
@@ -125,11 +114,6 @@ class AIInterpretDAO(DAO):
             {"$set": {"clusters": doc, "updatedAt": datetime.utcnow()}},
             upsert=True
         )
-
-    def get_clusters(self, job_id):
-        collection = self.dbManager.getCollection(self.collectionName)
-        doc = collection.find_one({"jobID": job_id}, {"clusters": 1})
-        return (doc or {}).get("clusters") or None
 
     def get_pathway_report(self, job_id, pathway_id):
         """Return a cached per-pathway interpretation, or None.

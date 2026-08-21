@@ -3,9 +3,8 @@ import os, csv, json, shutil, re, itertools, glob, random
 from collections import defaultdict, Counter
 from operator import sub
 from time import sleep, strftime
-from sys import argv, stdout, stderr, path
+from sys import stdout, stderr, path
 from subprocess import check_call, check_output, CalledProcessError
-from urllib.request import urlopen
 import sys
 
 # Configure CSV field size limit to handle large fields in mapping data
@@ -33,10 +32,6 @@ class XREF_Entry (object):
         self._id = _id
     def getID(self):
         return self._id
-    def setDisplayID(self, display_id):
-        self.display_id = display_id
-    def getDisplayID(self):
-        return self.display_id
     def __str__(self):
         return "{_id : " + self._id + "display_id : " + self.display_id + "dbname_id : " + self.dbname_id + "description : " + self.description + "}"
     def __repr__(self):
@@ -504,9 +499,7 @@ def processRefSeqData():
 
                 entrez_gi = row[1]
                 rna_acc   = row[3]
-                rna_gi    = row[4]
                 prot_acc  = row[5]
-                prot_gi   = row[6]
 
                 if rna_acc == "-":
                     raise Exception("Empty REFSEQ transcript value.")
@@ -1277,7 +1270,6 @@ def processMapMan2CompoundSymbolMappingData(file_name):
     with open(file_name, "r") as csvfile:
         rows = csv.reader(csvfile, delimiter='\t')
         i =0
-        prev=-1
         errorMessage=""
 
         for row in rows:
@@ -1315,7 +1307,6 @@ def processKEGG2CompoundSymbolMappingData(file_name):
     with open(file_name, "r") as csvfile:
         rows = csv.reader(csvfile, delimiter='\t')
         i =0
-        prev=-1
         errorMessage=""
 
         for row in rows:
@@ -1548,7 +1539,6 @@ def processMapManPathwaysData():
             pathwayInfoXML = XMLParser.parse(file_name)
             # Image element
             root = pathwayInfoXML.getroot()
-            already_added = {}
             # FOR EACH NODE IN THE XML FILE (DataArea)
             for child in root:
                 try:
@@ -2039,10 +2029,8 @@ def processReactomePathwaysData():
     dbname = 'global'
 
     # Cache variables
-    event_cache = {}
     reactome_id_2_refseq_tid = {}  # We use a different one
 
-    reuseDownloadedFiles = True
 
 
 
@@ -3074,7 +3062,6 @@ def generatePathwaysNetwork(ALL_PATHWAYS):
         rows = csv.reader(csvfile, delimiter='\t')
         for row in rows:
             path_id = normaliseKeggPathwayId(row[0], SPECIE)
-            gene_id = row[1]
             if path_id != previous_pathway and previous_pathway!= "":
                 try:
                     NODES[previous_pathway]["data"]["total_features"] += nGenes
@@ -3464,21 +3451,6 @@ def _curlToTemp(curlArgs, outputName, description):
     finally:
         if os.path.exists(tmpName):
             os.remove(tmpName)
-
-
-def queryBiomart(URL, fileName, outputName, delay, maxTries):
-    stderr.write("DOWNLOADING FROM " + URL + "\n")
-    lastError = None
-    for _ in range(maxTries):
-        try:
-            wait(delay)
-            return _curlToTemp(
-                ["curl", "-sfSL", "--connect-timeout", "300", "--max-time", "900",
-                 "--data-urlencode", 'query@' + fileName, URL],
-                outputName, "BioMart query " + fileName)
-        except Exception as e:
-            lastError = e
-    raise Exception('Unable to retrieve ' + fileName + " from " + URL + ": " + str(lastError) + "\n")
 
 
 def _sharedCachePath(URL, fileName):

@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-import shutil
 import traceback
 from sys import argv, stderr
 import imp

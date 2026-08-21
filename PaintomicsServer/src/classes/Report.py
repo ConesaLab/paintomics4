@@ -43,20 +43,8 @@ class Report (Model):
     #******************************************************************************************************************
     # GETTERS AND SETTER
     #******************************************************************************************************************
-    def getReportID(self):
-        return self.report_id
-
     def setReportID(self, report_id):
         self.report_id = str(report_id or "")
-
-    def getReportType(self):
-        return self.report_type
-
-    def setReportType(self, report_type):
-        self.report_type = report_type
-
-    def getUserEmail(self):
-        return self.user_email
 
     def setUserEmail(self, user_email):
         self.user_email = user_email or ""
@@ -73,20 +61,9 @@ class Report (Model):
     def setMessage(self, message):
         self.message = message or ""
 
-    def getSubmittedAt(self):
-        return self.submitted_at
-
     def setSubmittedAt(self, submitted_at):
         self.submitted_at = submitted_at or ""
-
-    def isDelivered(self):
-        return self.delivered
 
     def setDelivered(self, delivered):
         self.delivered = bool(delivered)
 
-    def getDeliveryError(self):
-        return self.delivery_error
-
-    def setDeliveryError(self, delivery_error):
-        self.delivery_error = delivery_error or ""

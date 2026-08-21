@@ -2,7 +2,7 @@ import imp
 import traceback
 
 from sys import argv, stderr
-from subprocess import CalledProcessError, check_call
+from subprocess import CalledProcessError
 
 #DATA_DIR = '/home/tian/database/KEGG_DATA/current/dme/'
 #SPECIE = 'dme'

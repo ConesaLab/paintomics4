@@ -15,18 +15,6 @@ without anyone being asked.
 
 # The three actions the model may return. Anything else is a parse failure and
 # a retry -- there is deliberately no tool registry to reach past.
-ACTION_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "type": {"type": "string", "enum": ["code", "question", "done"]},
-        "summary": {"type": "string"},
-        "python": {"type": "string"},
-        "text": {"type": "string"},
-        "field": {"type": "string"},
-        "options": {"type": "array", "items": {"type": "string"}},
-    },
-    "required": ["type"],
-}
 
 SYSTEM_PROMPT = """You convert a user's omics file into the exact format PaintOmics accepts, keeping
 every piece of information PaintOmics can use and dropping only what it cannot.

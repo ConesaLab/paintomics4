@@ -1056,9 +1056,6 @@ class Response(object):
     def setContentType(self, content_type):
         self.content_type=content_type
         return self
-    def getContentType(self):
-        return self.content_type
-
     def getResponse(self):
         response = jsonify(self.content)
 

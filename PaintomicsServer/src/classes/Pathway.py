@@ -18,7 +18,6 @@
 #  Technical contact paintomicsai@gmail.com
 #**************************************************************
 
-from .PathwayGraphicalData import PathwayGraphicalData
 from src.common.Util import Model
 from collections import defaultdict
 
@@ -101,13 +100,6 @@ class Pathway(Model):
     def resetMetagenes(self, omicName):
         self.metagenes[omicName] = []
 
-    def setMasterRegulators(self, omic, masterRegulators):
-        self.masterRegulators[omic] = masterRegulators
-    def getMasterRegulators(self):
-        return self.masterRegulators
-    def addMasterRegulator(self, omic, masterRegulator):
-        self.masterRegulators[omic].add(masterRegulator)
-
     #OmicName -> [[totalFeatures, totalRelevantFeatures, pValue], ...] (one per condition)
     def setSignificanceValues(self, significanceValues):
         self.significanceValues = significanceValues
@@ -157,8 +149,6 @@ class Pathway(Model):
     def getTotalGlobalPvalues(self):
         return self.totalGlobalPvalues
 
-    def setSignificancePvalues(self, adjustedSignificanceValues):
-        self.adjustedSignificanceValues = adjustedSignificanceValues
     def getAdjustedSignificanceValues(self):
         return self.adjustedSignificanceValues
     def setOmicAdjustedSignificanceValues(self, omic, adjustedSignificanceValues):

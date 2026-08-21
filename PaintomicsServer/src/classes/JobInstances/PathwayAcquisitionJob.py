@@ -24,7 +24,7 @@ import os
 import re
 from chardet import detect # get the encoding of a file
 
-from os import path as os_path, system as os_system, makedirs as os_makedirs
+from os import path as os_path, makedirs as os_makedirs
 from csv import reader as csv_reader
 from zipfile import ZipFile as zipFile
 
@@ -58,7 +58,7 @@ from src.conf.serverconf import KEGG_DATA_DIR, MAX_THREADS, MAX_WAIT_THREADS, MA
 # bare open() this was written to protect. Imported here rather than moved
 # out of reach, so the three call sites below and the existing test that
 # imports it from this module are unaffected.
-from src.common.Util import ensure_utf8, _decodes_as_utf8, _ENCODING_SNIFF_BYTES
+from src.common.Util import ensure_utf8, _ENCODING_SNIFF_BYTES
 
 
 # Small dict fields safe to persist in the main MongoDB document
@@ -330,15 +330,6 @@ class PathwayAcquisitionJob(Job):
     # ******************************************************************************************************************
     # GETTERS AND SETTER
     # ******************************************************************************************************************
-    def setCombinedTest(self, combinedTest):
-        self.combinedTest = combinedTest
-
-    def getCombinedTest(self):
-        return self.combinedTest
-
-    def setTest(self, test):
-        self.test = test
-
     def getTest(self):
         return self.test
 

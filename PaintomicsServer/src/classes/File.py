@@ -60,9 +60,6 @@ class File (Model):
     def setSize(self, size):
         self.size = size
 
-    def getSubmissionDate(self):
-        return self.submissionDate
-
     def setSubmissionDate(self, submissionDate):
         self.submissionDate = submissionDate
 
