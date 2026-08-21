@@ -1,0 +1,17 @@
+{
+  "dataset": "06-regulatory-more",
+  "parts": {
+    "more": {
+      "bytes": 353790,
+      "headline": {
+        "outputFiles": 2,
+        "response": 17,
+        "responseKeys": 17,
+        "success": true
+      },
+      "sha256": "74ef057d16d39c00c28ac6f304504487fd96391e5077a3c4257d46896c9bb920"
+    }
+  },
+  "pipeline": "more",
+  "scenario": "regulatory-more"
+}

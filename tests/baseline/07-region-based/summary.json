@@ -1,0 +1,15 @@
+{
+  "dataset": "07-region-based",
+  "parts": {
+    "conversion": {
+      "bytes": 976938,
+      "headline": {
+        "inputDirCopies": 2,
+        "zipMembers": 5
+      },
+      "sha256": "58d6d1cff4e1f8ef507c475cf797072e9df756708b48dafe784eebd47aa9e07a"
+    }
+  },
+  "pipeline": "regions2genes",
+  "scenario": "region-based"
+}

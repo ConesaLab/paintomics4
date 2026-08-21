@@ -1,0 +1,17 @@
+{
+  "dataset": "11-stategra-more",
+  "parts": {
+    "more": {
+      "bytes": 1531261,
+      "headline": {
+        "outputFiles": 2,
+        "response": 12,
+        "responseKeys": 12,
+        "success": true
+      },
+      "sha256": "5b539b9b7648989b835119c6eb149cf7fc618d8943927336c609f34415d8ae72"
+    }
+  },
+  "pipeline": "more",
+  "scenario": "stategra-more"
+}
