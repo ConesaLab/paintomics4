@@ -1,0 +1,128 @@
+{
+  "dataset": "08-stategra-multiomics",
+  "parts": {
+    "step1": {
+      "bytes": 30924648,
+      "headline": {
+        "compoundBasedInputOmics": 1,
+        "databases": 3,
+        "geneBasedInputOmics": 4,
+        "mappingFiles": 10,
+        "matchedMetabolites": 52,
+        "organism": 3
+      },
+      "sha256": "ffa7114c246dfe71a5b9b3a62713212a6d9a258ceeca04151753efcb0947a27e"
+    },
+    "step2": {
+      "bytes": 18273800,
+      "headline": {
+        "adjustPvalue": 1,
+        "classInfo": 28,
+        "classificationDict": 8,
+        "compoundRegulateFeatures": 57,
+        "conditionNames": 6,
+        "exprssionMetabolites": 100,
+        "featureSummary": 2,
+        "globalExpressionData": 2,
+        "hubAnalysisResult": 156,
+        "mappingComp": 100,
+        "omicsValuesID": 48898,
+        "pValueInDict": 1,
+        "pathwaysInfo": 1007,
+        "regulationPerConditionData": null,
+        "selectedCompounds": 100,
+        "summary": [
+          1008,
+          1007,
+          48798,
+          100,
+          {
+            "KEGG": {
+              "DNase-seq": 6610,
+              "Gene expression": 4871,
+              "Metabolomics": 50,
+              "Proteomics": 1475,
+              "miRNA-seq": 3822
+            },
+            "OmniPath": {
+              "DNase-seq": 1433,
+              "Gene expression": 1160,
+              "Proteomics": 386,
+              "miRNA-seq": 964
+            },
+            "Reactome": {
+              "DNase-seq": 7363,
+              "Gene expression": 5784,
+              "Metabolomics": 19,
+              "Proteomics": 1676,
+              "miRNA-seq": 4589
+            }
+          },
+          {
+            "KEGG": {
+              "DNase-seq": [
+                1230
+              ],
+              "Gene expression": [
+                1309
+              ],
+              "Metabolomics": [
+                35
+              ],
+              "Proteomics": [
+                85
+              ],
+              "miRNA-seq": [
+                2728
+              ]
+            },
+            "OmniPath": {
+              "DNase-seq": [
+                321
+              ],
+              "Gene expression": [
+                319
+              ],
+              "Proteomics": [
+                29
+              ],
+              "miRNA-seq": [
+                726
+              ]
+            },
+            "Reactome": {
+              "DNase-seq": [
+                1298
+              ],
+              "Gene expression": [
+                1449
+              ],
+              "Metabolomics": [
+                13
+              ],
+              "Proteomics": [
+                101
+              ],
+              "miRNA-seq": [
+                3271
+              ]
+            }
+          }
+        ],
+        "totalRelevantFeaturesInCategory": 1
+      },
+      "sha256": "a46adc75d4d182e63f356f696594cc53d4ba2f7f47a39358e6186a8eeb2878c3"
+    },
+    "step3": {
+      "bytes": 45107061,
+      "headline": {
+        "graphicalOptionsInstances": 1007,
+        "omicsValues": 16905,
+        "selectedPathways": 1007
+      },
+      "sha256": "8141f3aa7bc07142dc797de386f93327c5035f8511db2b06f5ebb108c510772a"
+    }
+  },
+  "pipeline": "pathway-acquisition",
+  "scenario": "stategra-multiomics"
+}

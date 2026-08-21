@@ -1,0 +1,98 @@
+# CD: build the deployable artifact and deploy it to staging. Nothing here
+# touches the live server; there is no step, host or credential for it.
+#
+#   build           deploy/build-image.sh packs deploy/app.tar and builds the
+#                   container image exactly as a real deployment does; the
+#                   image and the archive are uploaded as a workflow artifact
+#                   that any host can `docker load`.
+#   deploy-staging  an ephemeral staging stack on the runner: the built image,
+#                   MongoDB and nginx brought up with deploy/compose.yaml under
+#                   a staging environment file, then checked with
+#                   deploy/smoke-test.sh. The GitHub "staging" environment
+#                   gates this job; it needs no secrets (the staging
+#                   configuration disables mail and AI interpretation).
+
+name: CD
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cd-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build the deployable artifact
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    outputs:
+      image: ${{ steps.meta.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Image name
+        id: meta
+        run: echo "image=paintomics-app:${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
+      - name: Pack app.tar and build the image
+        run: |
+          deploy/build-image.sh
+          docker tag paintomics-app:latest "${{ steps.meta.outputs.image }}"
+          docker image ls paintomics-app
+      - name: Save the image
+        run: |
+          mkdir -p dist-cd
+          docker save "${{ steps.meta.outputs.image }}" | gzip -1 > dist-cd/paintomics-app-image.tar.gz
+          cp deploy/app.tar dist-cd/app.tar
+          echo "${{ steps.meta.outputs.image }}" > dist-cd/IMAGE
+          ls -la dist-cd
+      - uses: actions/upload-artifact@v4
+        with:
+          name: paintomics-deployable-${{ github.sha }}
+          path: dist-cd
+          retention-days: 14
+          compression-level: 0
+
+  deploy-staging:
+    name: Deploy to staging (ephemeral stack on the runner)
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: paintomics-deployable-${{ github.sha }}
+          path: dist-cd
+      - name: Load the image
+        run: |
+          docker load < dist-cd/paintomics-app-image.tar.gz
+          docker tag "$(cat dist-cd/IMAGE)" paintomics-app:latest
+      - name: Staging configuration
+        run: |
+          deploy/make-cert.sh 127.0.0.1 || deploy/make-cert.sh
+          cat > deploy/.env <<'EOF'
+          PAINTOMICS_BASE_URL=https://127.0.0.1
+          AI_INTERPRETATION_ENABLED=false
+          EOF
+      - name: Bring the stack up
+        run: |
+          docker compose -f deploy/compose.yaml up -d --no-build
+          for _ in $(seq 1 30); do
+            docker compose -f deploy/compose.yaml ps --format '{{.Service}} {{.State}}' | grep -q '^app running' && break
+            sleep 5
+          done
+          docker compose -f deploy/compose.yaml ps
+      - name: Smoke test
+        run: deploy/smoke-test.sh deploy/compose.yaml
+      - name: Logs
+        if: always()
+        run: docker compose -f deploy/compose.yaml logs --tail 100 app nginx
+      - name: Tear down
+        if: always()
+        run: docker compose -f deploy/compose.yaml down -v

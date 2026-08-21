@@ -1,0 +1,15 @@
+{
+  "dataset": "09-stategra-regions",
+  "parts": {
+    "conversion": {
+      "bytes": 20346074,
+      "headline": {
+        "inputDirCopies": 2,
+        "zipMembers": 5
+      },
+      "sha256": "db4a76f1182d6135af744e26d39b20ff51fea300fdf531a57b93250d77bc9447"
+    }
+  },
+  "pipeline": "regions2genes",
+  "scenario": "stategra-regions"
+}

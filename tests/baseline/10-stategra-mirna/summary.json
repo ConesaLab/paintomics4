@@ -1,0 +1,15 @@
+{
+  "dataset": "10-stategra-mirna",
+  "parts": {
+    "conversion": {
+      "bytes": 132713143,
+      "headline": {
+        "inputDirCopies": 4,
+        "zipMembers": 6
+      },
+      "sha256": "8bf84ec14ec2b357f1bf008d0985c40f878e8641e31635cf100d5ae7604c23ea"
+    }
+  },
+  "pipeline": "mirna2genes",
+  "scenario": "stategra-mirna"
+}

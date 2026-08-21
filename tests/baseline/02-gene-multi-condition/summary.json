@@ -1,0 +1,76 @@
+{
+  "dataset": "02-gene-multi-condition",
+  "parts": {
+    "step1": {
+      "bytes": 2982176,
+      "headline": {
+        "compoundBasedInputOmics": 0,
+        "databases": 3,
+        "geneBasedInputOmics": 1,
+        "mappingFiles": 2,
+        "matchedMetabolites": 0,
+        "organism": 3
+      },
+      "sha256": "a2d276a9ffb40d290dbfd8f65a4be1bbed0481e7edea0b4a80bdc3a473e5dc1c"
+    },
+    "step2": {
+      "bytes": 8346049,
+      "headline": {
+        "classInfo": 28,
+        "conditionNames": 6,
+        "globalExpressionData": 2,
+        "hubAnalysisResult": null,
+        "omicsValuesID": 28930,
+        "pathwaysInfo": 998,
+        "regulationPerConditionData": null,
+        "selectedCompounds": 0,
+        "summary": [
+          1008,
+          998,
+          28930,
+          0,
+          {
+            "KEGG": {
+              "Gene expression": 10415
+            },
+            "OmniPath": {
+              "Gene expression": 1335
+            },
+            "Reactome": {
+              "Gene expression": 5986
+            }
+          },
+          {
+            "KEGG": {
+              "Gene expression": [
+                891
+              ]
+            },
+            "OmniPath": {
+              "Gene expression": [
+                75
+              ]
+            },
+            "Reactome": {
+              "Gene expression": [
+                545
+              ]
+            }
+          }
+        ]
+      },
+      "sha256": "32146356d9e0650a115dfafed9f0766f619d3317b4c0556a6cb6e8ae68a130c7"
+    },
+    "step3": {
+      "bytes": 25165938,
+      "headline": {
+        "graphicalOptionsInstances": 998,
+        "omicsValues": 18510,
+        "selectedPathways": 998
+      },
+      "sha256": "2c841e803058baf40defc9e4062772014e556e4af43c3cde67ede6c380081e36"
+    }
+  },
+  "pipeline": "pathway-acquisition",
+  "scenario": "gene-multi-condition"
+}

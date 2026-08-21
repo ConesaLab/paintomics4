@@ -1,0 +1,128 @@
+{
+  "dataset": "04-multiomics-integration",
+  "parts": {
+    "step1": {
+      "bytes": 7127020,
+      "headline": {
+        "compoundBasedInputOmics": 1,
+        "databases": 3,
+        "geneBasedInputOmics": 4,
+        "mappingFiles": 10,
+        "matchedMetabolites": 4667,
+        "organism": 3
+      },
+      "sha256": "ff4d9145f36ed6fac680a3b1ff48a2211aeb9b189b97a7c2b74b2bc9683a8731"
+    },
+    "step2": {
+      "bytes": 43388465,
+      "headline": {
+        "adjustPvalue": 1,
+        "classInfo": 28,
+        "classificationDict": 34,
+        "compoundRegulateFeatures": 1624,
+        "conditionNames": 6,
+        "exprssionMetabolites": 4667,
+        "featureSummary": 2,
+        "globalExpressionData": 2,
+        "hubAnalysisResult": 872,
+        "mappingComp": 4667,
+        "omicsValuesID": 33597,
+        "pValueInDict": 1,
+        "pathwaysInfo": 1006,
+        "regulationPerConditionData": null,
+        "selectedCompounds": 4667,
+        "summary": [
+          1008,
+          1006,
+          28930,
+          4667,
+          {
+            "KEGG": {
+              "Gene expression": 10415,
+              "Metabolomics": 4611,
+              "Proteomics": 3000,
+              "Transcription factor": 1200,
+              "miRNA-seq": 900
+            },
+            "OmniPath": {
+              "Gene expression": 1335,
+              "Proteomics": 390,
+              "Transcription factor": 164,
+              "miRNA-seq": 118
+            },
+            "Reactome": {
+              "Gene expression": 5986,
+              "Metabolomics": 499,
+              "Proteomics": 1732,
+              "Transcription factor": 707,
+              "miRNA-seq": 512
+            }
+          },
+          {
+            "KEGG": {
+              "Gene expression": [
+                829
+              ],
+              "Metabolomics": [
+                493
+              ],
+              "Proteomics": [
+                244
+              ],
+              "Transcription factor": [
+                85
+              ],
+              "miRNA-seq": [
+                79
+              ]
+            },
+            "OmniPath": {
+              "Gene expression": [
+                69
+              ],
+              "Proteomics": [
+                13
+              ],
+              "Transcription factor": [
+                6
+              ],
+              "miRNA-seq": [
+                5
+              ]
+            },
+            "Reactome": {
+              "Gene expression": [
+                508
+              ],
+              "Metabolomics": [
+                86
+              ],
+              "Proteomics": [
+                141
+              ],
+              "Transcription factor": [
+                55
+              ],
+              "miRNA-seq": [
+                43
+              ]
+            }
+          }
+        ],
+        "totalRelevantFeaturesInCategory": 1
+      },
+      "sha256": "bece9af31c30515007c8e8e36602d505cc164dfc650c5762bd38da2e8a3cb62d"
+    },
+    "step3": {
+      "bytes": 29707684,
+      "headline": {
+        "graphicalOptionsInstances": 1006,
+        "omicsValues": 23121,
+        "selectedPathways": 1006
+      },
+      "sha256": "9ad2f381ebd466fb9fe0893a4c7eebf7d082c9f194bbc92cea9259c06df878ed"
+    }
+  },
+  "pipeline": "pathway-acquisition",
+  "scenario": "multiomics-integration"
+}

@@ -1,0 +1,91 @@
+{
+  "dataset": "03-gene-multi-condition-relevance",
+  "parts": {
+    "step1": {
+      "bytes": 2982547,
+      "headline": {
+        "compoundBasedInputOmics": 0,
+        "databases": 3,
+        "geneBasedInputOmics": 1,
+        "mappingFiles": 2,
+        "matchedMetabolites": 0,
+        "organism": 3
+      },
+      "sha256": "5912968bd92b116021e07537fbae64c2ac3474202546248c4978439ff682edd9"
+    },
+    "step2": {
+      "bytes": 8807436,
+      "headline": {
+        "classInfo": 28,
+        "conditionNames": 6,
+        "globalExpressionData": 2,
+        "hubAnalysisResult": null,
+        "omicsValuesID": 28930,
+        "pathwaysInfo": 998,
+        "regulationPerConditionData": null,
+        "selectedCompounds": 0,
+        "summary": [
+          1008,
+          998,
+          28930,
+          0,
+          {
+            "KEGG": {
+              "Gene expression": 10415
+            },
+            "OmniPath": {
+              "Gene expression": 1335
+            },
+            "Reactome": {
+              "Gene expression": 5986
+            }
+          },
+          {
+            "KEGG": {
+              "Gene expression": [
+                268,
+                394,
+                519,
+                644,
+                770,
+                895
+              ]
+            },
+            "OmniPath": {
+              "Gene expression": [
+                25,
+                36,
+                54,
+                62,
+                71,
+                81
+              ]
+            },
+            "Reactome": {
+              "Gene expression": [
+                162,
+                231,
+                316,
+                391,
+                466,
+                538
+              ]
+            }
+          }
+        ]
+      },
+      "sha256": "6c5e8308e61fd697fe237528f11bd225194570f4fa7a15083676b807df8df340"
+    },
+    "step3": {
+      "bytes": 25209633,
+      "headline": {
+        "graphicalOptionsInstances": 998,
+        "omicsValues": 18510,
+        "selectedPathways": 998
+      },
+      "sha256": "1213c4d725c31110e561e089ae397bd3b23e3333242bbebdfe01cf7da1930ae0"
+    }
+  },
+  "pipeline": "pathway-acquisition",
+  "scenario": "gene-multi-condition-relevance"
+}

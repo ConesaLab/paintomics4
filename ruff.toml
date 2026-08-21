@@ -1,0 +1,29 @@
+# Lint gate run by .github/workflows/pr.yml (ruff check .).
+#
+# The rule set is the one that catches code which cannot run -- syntax errors,
+# invalid escapes and comparisons, broken control flow, undefined names --
+# rather than style. It is green on the tree as it stands; tightening it is a
+# matter of widening `select` once the findings it would raise are fixed.
+#
+# The two per-file ignores are documented debt, not policy:
+#   * AdminTools/scripts/cache.py is a pasted fragment (undefined `stderr`,
+#     `json`, `downloadJSONFile`, ...), not an importable module.
+#   * AdminServlet.py references ROOT_DIRECTORY without importing it (a
+#     NameError on the path that uses it).
+# Both are on the dead-code/refactor list; the ignores go when they do.
+
+target-version = "py311"
+line-length = 120
+extend-exclude = [
+    "PaintomicsClient",
+    "dist",
+    "docs",
+    "runs",
+]
+
+[lint]
+select = ["E9", "F63", "F7", "F82"]
+
+[lint.per-file-ignores]
+"PaintomicsServer/src/AdminTools/scripts/cache.py" = ["F821"]
+"PaintomicsServer/src/servlets/AdminServlet.py" = ["F821"]

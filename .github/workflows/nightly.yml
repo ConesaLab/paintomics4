@@ -1,0 +1,39 @@
+# Nightly: every example dataset through the regression harness against
+# tests/baseline/. No time limit beyond the runner's own ceiling.
+#
+# Same environment as the PR gate (.github/actions/setup-paintomics), same
+# offline rule, no secrets. Run it by hand from the Actions tab
+# (workflow_dispatch) after changing anything the harness depends on.
+
+name: Nightly regression
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  regression:
+    name: All example datasets against tests/baseline
+    runs-on: macos-26
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-paintomics
+      - name: scripts/regression.sh
+        env:
+          PYTHONPATH: ${{ github.workspace }}/scripts/ci/no_network
+          AI_CSIC_API_BASE: http://127.0.0.1:1/v1
+          REGRESSION_WORK: ${{ runner.temp }}/regression
+        run: scripts/regression.sh
+      - name: Keep the differing outputs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: regression-nightly-${{ github.run_id }}
+          path: ${{ runner.temp }}/regression
+          retention-days: 14
+          if-no-files-found: ignore

@@ -1,0 +1,15 @@
+{
+  "dataset": "05-regulatory-mirna",
+  "parts": {
+    "conversion": {
+      "bytes": 1308847,
+      "headline": {
+        "inputDirCopies": 4,
+        "zipMembers": 6
+      },
+      "sha256": "7b394e5d0a2f1e1755d44f6a44302b4a1b2d968d400648fda60c040a50458921"
+    }
+  },
+  "pipeline": "mirna2genes",
+  "scenario": "regulatory-mirna"
+}
