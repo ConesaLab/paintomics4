@@ -776,7 +776,7 @@
     display: grid;
     place-items: center;
     border: 1px solid var(--cv-line-strong);
-    border-radius: var(--pa-radius-sm, 6px);
+    border-radius: var(--pa-radius-btn, 8px);
     background: var(--pa-control-bg, #FFFFFF);
     color: var(--pa-ink-control, #3F3F46);
     cursor: pointer;

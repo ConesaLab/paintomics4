@@ -106,7 +106,7 @@
 	appearance: none;
 	margin: 0;
 	padding: 8px 18px;
-	border-radius: var(--pa-radius-sm, 6px);
+	border-radius: var(--pa-radius-btn, 8px);
 	font-family: inherit;
 	font-size: 14px;
 	font-weight: 600;

@@ -5,6 +5,15 @@
    consent notice on step 1. On :root because the notice and the GDPR dialog are
    appended to document.body, outside .ai-widget. */
 :root {
+    /* Colour note: this file used to write #4a90d9 in fourteen places -- the
+       launcher, the panel header, the send button, every link and citation in a
+       reply. That is a blue nothing else in the application uses, and it made
+       the one surface that IS the AI feature the one surface not wearing the AI
+       colour; on white it also measured 3.0:1, under AA for the links and
+       citations set in it. They read var(--pa-ai-blue) now, which main.css
+       declares as the accent (#19589E, 7.17:1) and dark.css declares as
+       #4A90D9 -- so the dark theme, where that blue was always the right one
+       against a dark ground, is unchanged. */
     --pa-ai-fs: 13px;      /* body    -- bubbles, chat input, consent notice   */
     --pa-ai-fs-xs: 11px;   /* caption -- speaker label, provenance, ref meta   */
     --pa-ai-fs-sm: 12px;   /* second  -- progress, citations, code, tables     */
@@ -51,7 +60,7 @@
     width: 56px;
     height: 56px;
     border-radius: 50%;
-    background: #4a90d9;
+    background: var(--pa-ai-blue, #4A90D9);
     color: #fff;
     border: none;
     /* Styles no text: the children are getAIMark()'s SVG, which carries its own
@@ -86,7 +95,7 @@
     inset: -6px;
     border-radius: 50%;
     border: 3px solid rgba(74, 144, 217, 0.25);
-    border-top-color: #4a90d9;
+    border-top-color: var(--pa-ai-blue, #4A90D9);
     animation: fabSpin 0.9s linear infinite;
 }
 .ai-widget-fab-badge {
@@ -162,7 +171,7 @@
 
 /* ── Header ── */
 .ai-widget-header {
-    background: #4a90d9;
+    background: var(--pa-ai-blue, #4A90D9);
     color: #fff;
     padding: 10px 12px 10px 16px;
     display: flex;
@@ -269,7 +278,7 @@
 }
 .ai-progress-fill {
     height: 100%;
-    background: linear-gradient(90deg, #4a90d9, #67b8f7);
+    background: linear-gradient(90deg, var(--pa-ai-blue, #4A90D9), #67b8f7);
     border-radius: 3px;
     transition: width 0.5s ease;
     position: relative;
@@ -352,7 +361,7 @@
     color: #1a1a2e;
     margin: 16px 0 8px 0;
     padding-bottom: 4px;
-    border-bottom: 2px solid #4a90d9;
+    border-bottom: 2px solid var(--pa-ai-blue, #4A90D9);
 }
 .ai-msg-assistant .ai-msg-bubble h1:first-child {
     margin-top: 0;
@@ -409,7 +418,7 @@
    italicising a whole block makes the callout read as if every word in it were
    one. The left rule and the tint already mark it. */
 .ai-msg-assistant .ai-msg-bubble blockquote {
-    border-left: 3px solid #4a90d9;
+    border-left: 3px solid var(--pa-ai-blue, #4A90D9);
     background: #f0f7ff;
     padding: 8px 12px;
     margin: 8px 0;
@@ -460,7 +469,7 @@
     color: inherit;
 }
 .ai-msg-assistant .ai-msg-bubble a {
-    color: #4a90d9;
+    color: var(--pa-ai-blue, #4A90D9);
     text-decoration: none;
 }
 .ai-msg-assistant .ai-msg-bubble a:hover {
@@ -521,7 +530,7 @@
 /* ── Citations ── */
 .ai-citations-toggle {
     display: inline-block;
-    color: #4a90d9;
+    color: var(--pa-ai-blue, #4A90D9);
     cursor: pointer;
     font-size: var(--pa-ai-fs-sm);
     margin-top: 8px;
@@ -545,7 +554,7 @@
 }
 /* No size of its own: it sits inside .ai-citation-title and was restating it. */
 .ai-citation-ref {
-    color: #4a90d9;
+    color: var(--pa-ai-blue, #4A90D9);
     font-weight: var(--pa-ai-bold);
     margin-right: 2px;
 }
@@ -562,14 +571,14 @@
     font-size: var(--pa-ai-fs-xs);
 }
 .ai-citation-pmid {
-    color: #4a90d9;
+    color: var(--pa-ai-blue, #4A90D9);
     font-size: var(--pa-ai-fs-xs);
     font-weight: var(--pa-ai-bold);
 }
 
 /* ── Inline Citation Links ── */
 .ai-citation-link {
-    color: #4a90d9;
+    color: var(--pa-ai-blue, #4A90D9);
     text-decoration: none;
     font-weight: var(--pa-ai-bold);
     cursor: pointer;
@@ -648,14 +657,14 @@ tr.ai-cluster-row-flash > td {
     line-height: 1.4;
 }
 .ai-widget-input-area textarea:focus {
-    border-color: #4a90d9;
+    border-color: var(--pa-ai-blue, #4A90D9);
     box-shadow: 0 0 0 2px rgba(74, 144, 217, 0.15);
 }
 .ai-send-btn {
     width: 36px;
     height: 36px;
     border-radius: 50%;
-    background: #4a90d9;
+    background: var(--pa-ai-blue, #4A90D9);
     color: #fff;
     border: none;
     cursor: pointer;
@@ -697,10 +706,10 @@ tr.ai-cluster-row-flash > td {
 .ai-loading-dots span:nth-child(2) { animation-delay: 0.2s; }
 .ai-loading-dots span:nth-child(3) { animation-delay: 0.4s; }
 .ai-retry-btn {
-    background: #4a90d9;
+    background: var(--pa-ai-blue, #4A90D9);
     color: #fff;
     border: none;
-    border-radius: 6px;
+    border-radius: var(--pa-radius-btn, 8px);
     padding: 6px 16px;
     font-size: var(--pa-ai-fs-sm);
     cursor: pointer;
@@ -771,6 +780,14 @@ tr.ai-cluster-row-flash > td {
     align-items: center;
     justify-content: center;
 }
+/* A column: title bar on top, and the notice scrolling under it.
+
+   The whole card used to be the scroller (`overflow-y: auto` here, nothing on
+   the body), so the title and its close control scrolled away with the text --
+   on a notice this long, three flicks in there was no way to shut it without
+   scrolling back up. The header is a flex item that does not shrink and the
+   body is the one that scrolls; `overflow: hidden` on the card keeps the
+   scrolling body inside the 8px corners. */
 .ai-gdpr-disclaimer {
     position: relative;
     z-index: 20001;
@@ -781,7 +798,9 @@ tr.ai-cluster-row-flash > td {
     width: 520px;
     max-width: 90vw;
     max-height: 80vh;
-    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
     font-family: var(--pa-font-sans);
     font-size: var(--pa-ai-fs);
     line-height: 1.5;
@@ -791,6 +810,7 @@ tr.ai-cluster-row-flash > td {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    flex: 0 0 auto;
     padding: 12px 16px;
     background: #f5f8fc;
     border-bottom: 1px solid #e0e0e0;
@@ -802,20 +822,46 @@ tr.ai-cluster-row-flash > td {
     font-weight: var(--pa-ai-bold);
     color: #333;
 }
+/* The close control, on the same rail as the title opposite it.
+
+   `padding: 0 4px` on a 20px glyph made an 18px box whose ink sits ~4px inside
+   each edge, so against the header's 16px padding the x landed ~20px from the
+   right while the title started 16px from the left -- a 4px asymmetry across
+   518px, which is exactly the kind of thing that reads as "not aligned" without
+   being nameable. A square hit area, centred, pulled back by half the slack:
+   the ink now ends where the title begins, mirrored. */
 .ai-gdpr-close {
     background: none;
     border: none;
-    font-size: var(--pa-ai-glyph-lg);
+    /* fa-times, which is what every other close control in the application is
+       drawn with (Step 3's rail, Step 4's six panels, the upload abort). This
+       one was the character &times; at 20px -- a different shape, a different
+       weight and a different optical size from all of them. */
+    font-size: var(--pa-ai-fs);
     cursor: pointer;
-    /* Was #999, 2.85:1. It is the only way to dismiss the consent panel. */
+    /* Was #999, 2.85:1. It is the only way to dismiss the panel. */
     color: var(--pa-ink-muted, #595959);
-    padding: 0 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    /* -8, measured: the box sits 8px from the header's edge and the glyph is
+       centred in its 26px, which puts the ink on 16px -- the title's own inset,
+       mirrored. */
+    margin-right: -8px;
+    border-radius: var(--pa-radius-sm, 6px);
     line-height: 1;
+    transition: background var(--pa-transition), color var(--pa-transition);
 }
 .ai-gdpr-close:hover {
+    background: rgba(24, 24, 27, 0.06);
     color: #333;
 }
 .ai-gdpr-disclaimer-body {
+    flex: 1 1 auto;
+    overflow-y: auto;
     padding: 12px 16px;
 }
 .ai-gdpr-disclaimer-body p {
@@ -851,8 +897,11 @@ tr.ai-cluster-row-flash > td {
 .ai-gdpr-safe li::marker {
     color: #2e7d32;
 }
+/* The markers were #c62828 -- a red bullet per line, on a list that is now
+   advice about which data to leave out rather than a prohibition. Same list,
+   ordinary markers. */
 .ai-gdpr-unsafe li::marker {
-    color: #c62828;
+    color: var(--pa-ink-muted, #595959);
 }
 
 /* Provenance: who receives the data. Both of these are filled from

@@ -989,13 +989,18 @@
 }
 
 /* Step 1's omic selection.
-   Deliberately NOT .availableOmicsBox: that is the coloured drag chip, and its
-   fill is the same type-coding used in the pathway diagrams. Repainting it dark
-   - which an earlier version of this rule did - left six unlabelled grey slabs,
-   because their near-black ink is chosen against the colour, not against the
-   page. The chips carry their own contrast and stay as they are.
+   .availableOmicsBox is in scope, and the note that used to be here said it was
+   not. That note was written when the chip was a flat block of --pa-omic-color:
+   repainting one of those dark left an unlabelled grey slab, because its ink is
+   chosen against the colour rather than against the page. The chip is a tint
+   now, and a tint has a base -- so the answer is not to leave it alone but to
+   re-base it. Mixed toward #FFFFFF it stayed a near-white slab on a dark page,
+   four of them down the left edge; mixed toward this theme's surface at 24% it
+   is the same hue at the same job, and the ink follows the theme like any other
+   text. The saturated value itself is untouched: it is type-coding shared with
+   the pathway diagrams and the legends.
 
-   .omicboxTitle is now in scope, and was not before, because it is no longer a
+   .omicboxTitle is in scope, and was not before, because it is no longer a
    colour: main.css turned the card's header into a white band with the omic's
    hue as a 5px bar down its edge. The bar is a box-shadow reading
    --pa-omic-color and needs nothing here; the band is a surface like any other
@@ -1006,6 +1011,16 @@
 	background: var(--pa-surface);
 	border-color: var(--pa-border);
 	color: var(--pa-ink-body);
+}
+[data-theme="dark"] .availableOmicsBox {
+	--pa-omic-tint: 24%;
+	--pa-omic-tint-base: var(--pa-surface);
+}
+/* main.css sets both to #1A1A1A, chosen against a pastel body that this theme
+   no longer paints. */
+[data-theme="dark"] div.availableOmicsBox h4,
+[data-theme="dark"] .availableOmicsBox a {
+	color: var(--pa-ink);
 }
 [data-theme="dark"] .omicbox {
 	background: var(--pa-surface);
@@ -1076,6 +1091,84 @@
 [data-theme="dark"] .po-ai-section-body {
 	background: var(--pa-ai-section-bg);
 	border-color: var(--pa-ai-section-border);
+}
+
+/* Section 1's panel is the same shape in neutral. Being built out of tokens this
+   file already moves is not enough for it, because two blanket rules above reach
+   it first and both are right where they were written:
+
+     [data-theme="dark"] .x-container  repaints every ExtJS container with
+     --pa-surface, which flattens this panel into the white card it sits on -
+     measured, both were rgb(30,31,35) and the section lost its edges entirely;
+
+     [data-theme="dark"] #mainViewCenterPanel .paStep1Form p  gives every
+     paragraph on the upload form --pa-ink-body, which un-mutes the two captions
+     under the organism field and the note under the databases - three lines that
+     are quiet by design in light and were shouting here.
+
+   So the fill, the border and the muted ink are all restated, at the weight it
+   takes to win. Same lesson as .po-ai-section-body directly above. */
+/* A well, not a plate. --pa-surface-sunken is #232429 and the card under it is
+   #1E1F23, so on this theme the "sunken" panel was the lighter of the two and
+   sat on the card rather than in it -- and its border, --pa-border at #33353B,
+   was lighter than both, which drew a bright ring around all four sides. Read
+   together at a rounded corner that is a glow, and the owner read it as a weird
+   outer shadow. It is: the light theme's elevation kit (raised fill, hairline,
+   soft drop shadow) says "recessed" only when the fill is the darkest thing in
+   the stack, which on white it is and here it was not.
+
+   So the panel takes the page's own ground, one clear step below the card, and
+   drops both the ring and the 4%-black blur that could not be seen on this
+   ground anyway. Nothing is left to draw the edge except the change in value,
+   which is what a well is. */
+[data-theme="dark"] .po-form-panel {
+	background: var(--pa-surface-page);
+	border-color: transparent;
+	box-shadow: none;
+}
+/* The same 4%-black blur, on the two AI panels. It is 1/25th of an already
+   black shadow over a near-black card: it cannot be seen, and it costs a
+   composited layer on every repaint. */
+[data-theme="dark"] .po-ai-section-body {
+	box-shadow: none;
+}
+/* And the columns inside all three panels, which were painting over them.
+
+   `[data-theme="dark"] .x-container` (0,2,0) fills every ExtJS container with
+   --pa-surface. Each of these panels holds two of them -- the control column
+   and the note column -- plus the .x-box-inner the hbox wraps them in, so a
+   #1E1F23 rectangle was drawn over the panel's own fill, inset by its padding
+   and stopping short of its bottom edge. On Section 1 that reads as a lighter
+   block floating inside the well (the owner called it an inner shadow, which is
+   exactly what a lighter inset rectangle with a hard edge looks like); on
+   Sections 2 and 3 it was quietly painting out the blue that makes them the AI
+   surfaces. The panel owns its ground; the containers inside it own none. */
+[data-theme="dark"] .po-form-panel .x-container,
+[data-theme="dark"] .po-form-panel .x-box-inner,
+[data-theme="dark"] .po-ai-section-body .x-container,
+[data-theme="dark"] .po-ai-section-body .x-box-inner {
+	background-color: transparent;
+}
+[data-theme="dark"] #mainViewCenterPanel .paStep1Form p.po-db-note {
+	color: var(--pa-ink-muted);
+}
+/* The request pill is a white-on-white surface in light; here the ground is
+   dark, so it takes the panel's own surface and the theme's line. The database
+   checkboxes need nothing: they are boxes and labels, and both are themed
+   already. */
+/* `div.contentbox a.po-ghost-action` in main.css is (0,2,2), so a plain
+   `[data-theme="dark"] a.po-ghost-action` at (0,2,1) lost to it and the button
+   kept a border stated as an alpha of black -- invisible on this ground.
+   Transparent rather than a fill: on the dark panel an outline is what an
+   optional action looks like. */
+[data-theme="dark"] div.contentbox a.po-ghost-action,
+[data-theme="dark"] a.po-ghost-action {
+	background: transparent;
+	border-color: var(--pa-border);
+}
+[data-theme="dark"] a.po-ghost-action:hover {
+	border-color: var(--pa-accent-blue);
+	color: var(--pa-accent-blue);
 }
 
 /* ---------------------------------------------------------------------------
@@ -1433,12 +1526,11 @@
    could reach, so a near-white hairline survived into dark mode. */
 [data-theme="dark"] .signInColumnDivider { border-left-color: var(--pa-border); }
 
-/* Step 1's two white pill buttons - the "Browse..." split buttons on every omic
-   card, and "Download example data" above them. main.css claims both at (0,3,1)
-   and (0,4,1) respectively, so the generic button rules in section 3 lost to
-   them and these were the last white surfaces left on Step 1. The selectors
-   below mirror main.css's exactly and add the theme attribute, which is the
-   smallest change that wins.
+/* Step 1's white pill buttons - the "Browse..." split buttons on every omic
+   card. main.css claims them at (0,3,1), so the generic button rules in section
+   3 lost to it and these were among the last white surfaces left on Step 1. The
+   selectors below mirror main.css's exactly and add the theme attribute, which
+   is the smallest change that wins.
 
    The split arrow is drawn as a CSS triangle rather than taken from the Neptune
    sprite (see main.css), so it does not follow the button fill and has to be
@@ -1455,17 +1547,6 @@
 [data-theme="dark"] .omicbox a.x-btn .x-btn-inner { color: var(--pa-btn-default-ink); }
 [data-theme="dark"] .omicbox a.x-btn .x-btn-wrap::after { border-top-color: var(--pa-ink-label); }
 [data-theme="dark"] .omicbox a.x-btn .x-btn-wrap::before { border-left-color: var(--pa-border-control); }
-
-[data-theme="dark"] .paStep1Form a.button.btn-right.btn-small {
-	background-color: var(--pa-btn-default-bg);
-	border-color: var(--pa-border-control);
-	color: var(--pa-btn-default-ink);
-}
-[data-theme="dark"] .paStep1Form a.button.btn-right.btn-small:hover {
-	background-color: var(--pa-btn-default-bg-hover);
-	border-color: var(--pa-border-control-hover);
-	color: var(--pa-ink-strong);
-}
 [data-theme="dark"] .fieldBox,
 [data-theme="dark"] .container { background-color: var(--pa-surface); }
 [data-theme="dark"] .dragHerePanel {
@@ -1785,11 +1866,20 @@
 }
 
 /* Step 1's help note and the omic column titles. */
-[data-theme="dark"] #additionalInfoContainer div.content {
-	background: var(--pa-surface-quiet);
-	border-color: var(--pa-border);
+/* The information note, in all three places it is now drawn: the Help panel at
+   the bottom of the form and the two column notes in Sections 1 and 2. The
+   surface and the border are tokens, but the label is not -- main.css states it
+   as #27272A, chosen against that panel's near-white fill, and on this ground it
+   measured 1.1:1 against the note behind it. Invisible, not merely dim. */
+/* The note is a hairline and its prose now, not a filled card (see main.css),
+   so only the line needs the theme's own colour -- an alpha of black would be a
+   shadow on this ground rather than a rule. */
+[data-theme="dark"] #additionalInfoContainer div.content,
+[data-theme="dark"] .po-info-note {
+	background: none;
 }
-[data-theme="dark"] #additionalInfoContainer div.content h5 { color: var(--pa-ink-title); }
+[data-theme="dark"] #additionalInfoContainer div.content h5,
+[data-theme="dark"] .po-info-note h5 { color: var(--pa-ink-title); }
 
 /* The example picker. All new markup, so none of it was reachable before. */
 [data-theme="dark"] .po-example {

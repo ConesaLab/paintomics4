@@ -175,31 +175,44 @@ def exampleLoaderBody(source):
 
 
 class ExampleModeConsentTest(unittest.TestCase):
-    """Loading an example turns AI interpretation on. Uploads still default off.
+    """Every job carries AI consent, and the user is told where the data goes.
 
-    This guard is the reverse of the one it replaces, and the reversal was
-    deliberate, so the reasoning is worth keeping rather than quietly dropping.
+    This class has now guarded three different policies, and the reasoning is
+    kept rather than quietly rewritten each time, because the third one is the
+    one a reader will want explained.
 
-    The original guard forbade the example loader from touching the checkbox at
-    all: the box reads "sends your pathway results and the values of the matched
-    features" to a third party, the server takes it straight off the form on the
-    example branch too (PathwayAcquisitionServlet:
-    setAIConsent(formFields.get("aiConsent", "false"))), and clicking "Load
-    example" is not an answer to the question the box asks.
+    1. The original guard forbade the example loader from touching the consent
+       checkbox at all: the box said the run "sends your pathway results and the
+       values of the matched features" onward, the server takes consent straight
+       off the form on the example branch too (PathwayAcquisitionServlet:
+       setAIConsent(formFields.get("aiConsent", "false"))), and clicking "Load
+       example" is not an answer to the question the box asked.
 
-    That argument was about *the user's* data, and it still governs uploads --
-    the checkbox's own `checked:` stays bound to DEFAULT_AI_CONSENT_ENABLED, off
-    everywhere but a local instance. It does not govern the examples: they are
-    published STATegra measurements and generated simulations, they carry
-    nothing of the person clicking, and the scenarios that ship an
-    interpretation name "AI interpretation" among the things they exist to
-    exercise. With the box left clear the flagship demonstration of the feature
-    rendered "Not started", which reads as a broken build rather than as a
-    permission withheld on purpose.
+    2. That was inverted for examples only: they are published STATegra
+       measurements and generated simulations, they carry nothing of the person
+       clicking, and the scenarios that ship an interpretation exist to exercise
+       it. With the box left clear the flagship demonstration rendered "Not
+       started", which reads as a broken build rather than as a permission
+       withheld on purpose. Uploads kept the unticked box.
 
-    So the assertion is inverted, not deleted: example mode must reach for the
-    checkbox and set it, and if that line is ever removed this fails and asks
-    why -- the same service the old guard performed, pointed the other way.
+    3. The box is gone (owner's call, 2026-08-21). The interpretation runs on an
+       IIIA-CSIC gateway inside the EU -- hardware this project operates -- so
+       the transfer the box asked permission for is to the same institution the
+       data was uploaded to, and the form states the recipient instead of asking
+       about it: "Where your data goes" is a heading in the panel's right-hand
+       column, with an amber (!), the host and operator printed under it, and
+       the full notice one click away. The field stays as a hidden 'true'.
+
+    What did NOT change is everything downstream: consent is still recorded per
+    job, AIInterpretServlet still refuses a request whose stored record says
+    False (test_ai_consent_enforced.py), and Step 3 still shows the AI Interpret
+    button only for a job that carries it. Nothing runs on its own -- the button
+    is offered, and a person still presses it.
+
+    So the assertions below check the new invariant: the form always submits
+    consent, and the page that stops asking says where the data goes instead.
+    DEFAULT_AI_CONSENT_ENABLED survives in ServerConfiguration.js, unread by the
+    form, as the switch that puts the checkbox back.
     """
 
     def test_the_example_loader_enables_ai_interpretation(self):
@@ -207,22 +220,42 @@ class ExampleModeConsentTest(unittest.TestCase):
         self.assertIn(
             "[name=aiConsent]", body,
             "setExampleModeHandler no longer reaches for the AI consent "
-            "checkbox, so example runs will render 'Not started' instead of an "
+            "field, so example runs will render 'Not started' instead of an "
             "interpretation")
         self.assertIn(
             "aiConsent.setValue(true)", body.replace(" ", ""),
-            "the example loader finds the AI consent checkbox but does not tick "
+            "the example loader finds the AI consent field but does not set "
             "it; loading an example is meant to demonstrate the interpretation")
 
-    def test_uploads_still_default_to_no_consent(self):
-        """The reversal is scoped to the example branch, not to the checkbox."""
+    def test_the_form_always_submits_consent(self):
+        """The field is gone from the UI, not from the request."""
         source = read(STEP1_VIEWS)
         self.assertIn(
-            "checked: typeof DEFAULT_AI_CONSENT_ENABLED !== \"undefined\" && "
-            "DEFAULT_AI_CONSENT_ENABLED", source,
-            "the checkbox's own default no longer follows "
-            "DEFAULT_AI_CONSENT_ENABLED, so an upload page may now arrive "
-            "pre-consented")
+            "name: 'aiConsent',", source,
+            "the upload form no longer carries an aiConsent field at all, so "
+            "PathwayAcquisitionServlet will default it to \"false\" and every "
+            "job will arrive without consent")
+        field = source[source.index("name: 'aiConsent',"):]
+        self.assertIn(
+            "value: 'true',", field[:200],
+            "the aiConsent field no longer submits 'true'; the form stopped "
+            "asking the question, so it has to answer it")
+
+    def test_the_page_says_where_the_data_goes(self):
+        """Told rather than asked -- but only if it is actually told."""
+        source = read(STEP1_VIEWS)
+        self.assertIn(
+            "Where your data goes", source,
+            "the consent checkbox was removed on the grounds that the panel "
+            "states the recipient instead; that statement is now missing")
+        self.assertIn(
+            "aiProviderInline", source,
+            "the recipient is named by fillAIProvenance writing into "
+            "#aiProviderInline, and no element carries that id any more")
+        self.assertIn(
+            "aiGdprInfoIcon", source,
+            "the full privacy notice is unreachable: nothing on the form "
+            "opens it")
 
     def test_the_experiment_design_prefill_is_kept(self):
         """The other prefill is a visible, editable text field -- not a permission."""

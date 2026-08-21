@@ -140,7 +140,7 @@
 	color: var(--pa-ink-control, #3F3F46);
 	background-color: transparent;
 	border: 1px solid transparent;
-	border-radius: var(--pa-radius-sm, 6px);
+	border-radius: var(--pa-radius-btn, 8px);
 	cursor: pointer;
 	text-decoration: none;
 	appearance: none;
