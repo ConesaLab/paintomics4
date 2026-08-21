@@ -66,7 +66,7 @@ checkable on screen:
   agent's own state machine reaches each stage. A retry visibly drops back to
   Plan; a failure marks the stage it failed in. The attempt count and the clock
   sit beside it.
-- **What the AI sees** — the profile exactly as the model receives it: the
+- **What the agent sees** — the profile exactly as the model receives it: the
   container (workbook / delimited text), every sheet with rows × columns, each
   column as a chip kind-coded *identifier candidate / numeric / text*, repeated
   identifiers flagged on the chip, column families, the example rows behind a
@@ -88,11 +88,16 @@ On **Use this table** the omic card's strip records the provenance —
 attached)* — with a **Convert again** link that reopens the sheet on the
 original upload.
 
-Section 3 of the upload form states the offer before any file is picked: an
-AI callout under the heading ("Bring your files as they are", with an aside
-naming what leaves the machine), a standing one-line note in every omic card,
-and a sentence in the Help panel. The conversion is therefore presented as how
-the upload step works, not as a fallback after a failed check.
+Section 3 of the upload form states the offer before any file is picked, in
+the same skeleton as the Section 2 callout: one sentence ("Bring your files as
+they are…"), a consent checkbox — *Convert with the PaintOmics AI agent when a
+file needs it (sends only the file's structure to …)* — ticked by default
+because ticking it sends nothing (a file goes to the model only when the user
+presses Convert on it), and a "Works with" column of formats where Section 2
+keeps its experiment-design field. Unticking the box withdraws the Convert
+offer from every card. A standing one-line note in every omic card and a
+sentence in the Help panel complete it. The actor is named the same way on
+every surface: *the PaintOmics AI agent*.
 
 ## 3. Letting the user steer with a prompt, and review the result
 

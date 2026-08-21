@@ -389,9 +389,9 @@
      */
     function renderAnatomy(profile, fileName, who) {
         var card = el("section", "pa-convert-anatomy");
-        card.setAttribute("aria-label", "What the AI sees");
+        card.setAttribute("aria-label", "What the agent sees");
         var head = el("div", "pa-convert-anatomy-head");
-        head.appendChild(el("p", "pa-convert-eyebrow", "What the AI sees"));
+        head.appendChild(el("p", "pa-convert-eyebrow", "What the agent sees"));
         var meta = el("div", "pa-convert-anatomy-meta");
         var chars = profile.description_chars ? fmtInt(profile.description_chars) + " characters" : "structure only";
         meta.textContent = chars + (who ? " · sent to " + who : "");
@@ -405,8 +405,8 @@
             : (profile.separator ? profile.separator + "-separated text" : "a text table") +
               (profile.encoding ? ", " + String(profile.encoding).toUpperCase() : "") +
               (profile.preamble_lines ? ", " + plural(profile.preamble_lines, "preamble line") + " skipped" : "");
-        lead.innerHTML = "<b></b> is " + container + ". Only the names, kinds and counts below, plus a few example rows, " +
-                         "describe it to the model; the measurements stay in this browser.";
+        lead.innerHTML = "<b></b> · " + container + ". Only what is listed here goes to the model; " +
+                         "the measurements stay in this browser.";
         lead.querySelector("b").textContent = fileName;
         card.appendChild(lead);
 
@@ -508,7 +508,7 @@
         var panel = el("section", "pa-convert-panel");
         panel.setAttribute("role", "dialog");
         panel.setAttribute("aria-modal", "true");
-        panel.setAttribute("aria-label", "Convert " + file.name + " with PaintOmics AI");
+        panel.setAttribute("aria-label", "Convert " + file.name + " with the PaintOmics AI agent");
         panel.tabIndex = -1;
 
         // The destination omic's hue, so the sheet and its chosen result wear
@@ -527,7 +527,7 @@
         mark.innerHTML = typeof window.getAIMark === "function" ? window.getAIMark() : svg("thinking");
         header.appendChild(mark);
         var titles = el("div", "pa-convert-titles");
-        titles.appendChild(el("h2", "pa-convert-title", "Convert with PaintOmics AI"));
+        titles.appendChild(el("h2", "pa-convert-title", "Convert with the PaintOmics AI agent"));
         var subject = el("p", "pa-convert-subject");
         subject.appendChild(el("span", "pa-convert-filename", file.name));
         if (omicLabel) subject.appendChild(el("span", "pa-convert-omic", omicLabel));
@@ -567,7 +567,7 @@
         var anatomyHost = el("div", "pa-convert-anatomyhost");
         body.appendChild(anatomyHost);
         var timeline = el("ol", "pa-convert-timeline");
-        timeline.setAttribute("aria-label", "What the AI did");
+        timeline.setAttribute("aria-label", "What the agent did");
         body.appendChild(timeline);
         var reviewHost = el("div", "pa-convert-reviewhost");
         body.appendChild(reviewHost);
@@ -578,15 +578,15 @@
         var composer = el("form", "pa-convert-composer");
         var composerInput = el("textarea", "pa-convert-composer-input");
         composerInput.rows = 2;
-        composerInput.setAttribute("aria-label", "Instruction for the AI");
+        composerInput.setAttribute("aria-label", "Instruction for the agent");
         var composerSend = el("button", "pa-convert-composer-send", "Revise");
         composerSend.type = "submit";
         composer.appendChild(composerInput);
         composer.appendChild(composerSend);
         dock.appendChild(composer);
         var composerHint = el("p", "pa-convert-composer-hint");
-        composerHint.innerHTML = "Your words go to the AI as an instruction; the script is revised and re-checked. " +
-                                 "Your data stays on this computer. <kbd>Enter</kbd> sends · <kbd>Shift</kbd>+<kbd>Enter</kbd> new line.";
+        composerHint.innerHTML = "Revises the script and re-checks it; your data stays here. " +
+                                 "<kbd>Enter</kbd> sends · <kbd>Shift</kbd>+<kbd>Enter</kbd> new line.";
         dock.appendChild(composerHint);
         var actions = el("footer", "pa-convert-actions");
         dock.appendChild(actions);
@@ -761,8 +761,8 @@
             composerInput.placeholder = state === "asking"
                 ? "…or answer in your own words"
                 : state === "busy"
-                    ? "The AI is working — you can steer it once it has something to show."
-                    : "Tell the AI what to change — “keep the flagged genes”, “use the reads sheet, not TPM”, “column A is a KEGG ID”";
+                    ? "The agent is working — you can steer it once it has something to show."
+                    : "Tell the agent what to change — “keep the flagged genes”, “use the reads sheet, not TPM”, “column A is a KEGG ID”";
             composer.classList.toggle("pa-convert-composer-busy", state === "busy");
         }
 
@@ -919,8 +919,7 @@
                 // The boot is a real step that takes a few seconds; a blank
                 // timeline for that long reads as nothing happening.
                 addStep({ phase: "profiling", title: "Starting the Python sandbox",
-                          detail: "A Pyodide interpreter in an isolated frame: no access to this page, " +
-                                  "your cookies or the network. The conversion script will run there." });
+                          detail: "An isolated interpreter with no access to this page or the network." });
                 await sandbox.boot();
                 setNow("Reading your file");
                 bytes = new Uint8Array(await file.arrayBuffer());
@@ -1146,7 +1145,7 @@
             if (result && result.attempts) head.appendChild(el("span", "pa-convert-review-count", plural(result.attempts, "attempt") + " used"));
             review.appendChild(head);
             review.appendChild(el("p", "pa-convert-summary",
-                "Tell the AI what the file contains in the box below and it will try again — " +
+                "Tell the agent what the file contains in the box below and it will try again — " +
                 "which sheet matters, what the columns are, what the identifiers are. " +
                 "The script it wrote is in the timeline above; a colleague who knows pandas can take it from there."));
             if (result && result.outputs) {

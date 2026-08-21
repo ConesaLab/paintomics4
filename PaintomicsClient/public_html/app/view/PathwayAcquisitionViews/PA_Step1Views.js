@@ -1382,7 +1382,7 @@ function PA_Step1JobView() {
 								   worth less without it. */
 								'<div class="po-hero-ai-highlight">' +
 									'<div class="po-hero-ai-head"><span class="po-ai-icon">' + getAIMark() + '</span><strong>AI-powered pathway interpretation</strong></div>' +
-									'<p>An <b>agent</b> writes an interpretation of your ranked pathways &mdash; a draft, for you to check.</p>' +
+									'<p>The <b>PaintOmics AI agent</b> writes an interpretation of your ranked pathways &mdash; a draft, for you to check.</p>' +
 									'<ul class="po-hero-ai-does">' +
 										'<li>queries your values</li>' +
 										'<li>runs its own literature searches</li>' +
@@ -1743,7 +1743,7 @@ function PA_Step1JobView() {
 									   fillAIProvenance guards each placeholder with `if (el)`,
 									   so it keeps working with this one absent. */
 									html: '<p class="ai-intro-copy">' +
-										'An <b>agent</b> drafts the write-up of your results: it triages your top-ranked ' +
+										'The <b>PaintOmics AI agent</b> drafts the write-up of your results: it triages your top-ranked ' +
 										'pathways, searches PubMed and Europe PMC, checks the patterns against your uploaded ' +
 										'values, and verifies every citation. Check its draft before you use it.' +
 										'</p>'
@@ -1974,21 +1974,32 @@ function PA_Step1JobView() {
 						   said (styles in inputformat.css). */
 						xtype: "box",
 						cls: "po-ai-section-body po-upload-ai",
+						/* Same skeleton as Section 2, on purpose: one sentence in the
+						   interpretation's own type (.ai-intro-copy), then the consent
+						   control that names what leaves and to whom; the right column
+						   holds what the prose would otherwise have to list. The box is
+						   ticked by default because ticking it sends nothing -- a file
+						   only goes to the model when the user presses Convert on it;
+						   unticking removes that offer from every card. */
 						html: '<div class="po-upload-ai-grid">' +
 							'<div class="po-upload-ai-text">' +
-								'<div class="po-hero-ai-head"><span class="po-upload-ai-icon">' + getAIMark() + '</span><strong>Bring your files as they are</strong></div>' +
-								'<p>A DESeq2 or edgeR table, a MaxQuant or Spectronaut export, a MetaboLights MAF, a workbook with several sheets: pick it and PaintOmics checks it on the spot. If it is not in PaintOmics’ format, <b>PaintOmics AI</b> converts it here, in your browser.</p>' +
-								'<ul class="po-upload-ai-does">' +
-									'<li>reads the file’s structure</li>' +
-									'<li>writes a short script and runs it in your browser</li>' +
-									'<li>checks the result against PaintOmics’ exact format</li>' +
-									'<li>shows you the script, the tables and what it left out before anything is used</li>' +
+								'<p class="ai-intro-copy"><b>Bring your files as they are.</b> Each file is checked the moment you pick it; if it is not in PaintOmics’ format, the <b>PaintOmics AI agent</b> writes a short script, runs it in your browser and shows you the result before anything is used.</p>' +
+								/* Input THEN label, as siblings: the alignment overlay judges a
+								   label led by a checkbox from the box's edge only in that
+								   shape (AlignmentGuides.js ~331), which is also what puts
+								   this row on the rail Section 2's Ext checkbox row keeps. */
+								'<div class="po-upload-ai-consent">' +
+									'<input type="checkbox" id="paUploadAiOptIn" checked>' +
+									'<label for="paUploadAiOptIn">Convert with the PaintOmics AI agent when a file needs it (<span class="ai-consent-warn">sends only the file’s structure to <span id="paUploadAiProvider">an external AI service</span></span>)</label>' +
+								'</div>' +
+							'</div>' +
+							'<div class="po-upload-ai-aside">' +
+								'<div class="po-upload-ai-aside-title">Works with</div>' +
+								'<ul class="po-upload-ai-formats">' +
+									'<li>DESeq2</li><li>edgeR</li><li>limma</li><li>MaxQuant</li><li>Spectronaut</li><li>DIA-NN</li>' +
+									'<li>MetaboLights MAF</li><li>Excel workbooks</li><li>CSV / TSV</li>' +
 								'</ul>' +
 							'</div>' +
-							'<aside class="po-upload-ai-aside">' +
-								'<div class="po-upload-ai-aside-title">What leaves your computer</div>' +
-								'<p>Only the file’s structure: column names, counts and a few example rows, sent to <span id="paUploadAiProvider">the AI gateway</span>. The measurements never leave this browser.</p>' +
-							'</aside>' +
 						'</div>'
 					},
 					{
@@ -2048,7 +2059,7 @@ function PA_Step1JobView() {
 							flex: 1,
 							layout: {type: 'vbox',align: "stretch"},
 							items: [
-								{xtype: 'box',html: '<div class="content"><h5><i class="fa fa-info-circle"></i> Help</h5><p>Drag <i>omics</i> from <b>Available omics</b> to <b>Selected omics</b>, or click the <i class="fa fa-plus-circle"></i> button.</p><p>Remove any you do not need with <span class="po-nowrap"><i class="fa fa-trash"></i>.</span></p><p>Pick your files as they are: each one is checked the moment you choose it, and if it is not in PaintOmics’ format, <b>PaintOmics AI</b> converts it in your browser.</p><p>When you are done, click <b>Run PaintOmics</b> in the top-right corner.</p></div>'}
+								{xtype: 'box',html: '<div class="content"><h5><i class="fa fa-info-circle"></i> Help</h5><p>Drag <i>omics</i> from <b>Available omics</b> to <b>Selected omics</b>, or click the <i class="fa fa-plus-circle"></i> button.</p><p>Remove any you do not need with <span class="po-nowrap"><i class="fa fa-trash"></i>.</span></p><p>Files are checked as you pick them; the <b>PaintOmics AI agent</b> converts any that are not in PaintOmics’ format.</p><p>When you are done, click <b>Run PaintOmics</b> in the top-right corner.</p></div>'}
 							]
 						}]
 					}					

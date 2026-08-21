@@ -44,7 +44,7 @@
     /* What the AI actually does, in the user's terms. People are right to
        be wary of "AI will fix your data"; saying that it writes a script,
        runs it locally, and shows both is what makes it trustworthy. */
-    var AI_EXPLAINER = "PaintOmics AI can convert it here in your browser: it reads the file's structure, writes a short script, runs it locally and checks the result. You see the script, the tables and what it left out before anything is used.";
+    var AI_EXPLAINER = "The PaintOmics AI agent can convert it here in your browser: it reads the file's structure, writes a short script, runs it locally and checks the result. You see the script, the tables and what it left out before anything is used.";
 
     function el(tag, className, text) {
         var node = document.createElement(tag);
@@ -283,11 +283,47 @@
         icon.innerHTML = typeof window.getAIMark === "function" ? window.getAIMark() : "✦";
         strip.appendChild(icon);
         var text = el("span", "pa-format-text");
-        text.appendChild(document.createTextNode("Any spreadsheet or export works. If it is not already in PaintOmics’ format, "));
-        text.appendChild(el("b", null, "PaintOmics AI"));
-        text.appendChild(document.createTextNode(" converts it here, in your browser."));
+        if (aiOptedIn()) {
+            text.appendChild(document.createTextNode("Any format works — the "));
+            text.appendChild(el("b", null, "PaintOmics AI agent"));
+            text.appendChild(document.createTextNode(" converts it here if needed."));
+        } else {
+            text.appendChild(document.createTextNode("AI conversion is off: tab-separated, identifier first, numbers after."));
+        }
         strip.appendChild(text);
     }
+
+    /*
+     * The Section 3 consent box. Ticked by default because ticking it sends
+     * nothing -- a file goes to the model only when the user presses Convert
+     * on it -- and unticking it withdraws that offer from every card, so a
+     * user who does not want a third party to see even column names is not
+     * shown a button that would.
+     */
+    function aiOptedIn() {
+        var box = document.getElementById("paUploadAiOptIn");
+        return !box || box.checked;
+    }
+
+    function aiActions(input, file, fieldName) {
+        if (!aiOptedIn()) return [];
+        return [{ label: "Convert it for me", primary: true, ai: true,
+                  onClick: function () { requestAgent(input, file, fieldName); } }];
+    }
+
+    function aiExplainer() {
+        return aiOptedIn()
+            ? AI_EXPLAINER
+            : "AI conversion is switched off above; tick it to have the PaintOmics AI agent convert this file, " +
+              "or export a tab-separated table with the identifier first and numbers after.";
+    }
+
+    // Unticking or ticking the box repaints the standing offer on every card
+    // that has no file yet; cards with a verdict keep it until re-checked.
+    document.addEventListener("change", function (event) {
+        if (!event.target || event.target.id !== "paUploadAiOptIn") return;
+        document.querySelectorAll(".pa-format-strip.pa-format-idle").forEach(renderIdle);
+    }, true);
 
     function renderOk(strip, summary, partial, input) {
         strip.className = "pa-format-strip pa-format-ok";
@@ -321,7 +357,7 @@
             mark.innerHTML = typeof window.getAIMark === "function" ? window.getAIMark() : "✦";
             prov.appendChild(mark);
             var what = el("span", "pa-format-provenance-text");
-            what.appendChild(document.createTextNode("Converted by PaintOmics AI from "));
+            what.appendChild(document.createTextNode("Converted by the PaintOmics AI agent from "));
             what.appendChild(el("b", null, converted.from));
             var extras = [];
             if (converted.label) extras.push("table “" + converted.label + "”");
@@ -488,9 +524,8 @@
             renderProblem(strip, "err",
                 "This spreadsheet needs converting.",
                 file.name + " is a workbook — it may hold several sheets and " +
-                "columns that are not measurements. " + AI_EXPLAINER,
-                [{ label: "Convert it for me", primary: true, ai: true,
-                   onClick: function () { requestAgent(input, file, fieldName); } }]);
+                "columns that are not measurements. " + aiExplainer(),
+                aiActions(input, file, fieldName));
             return;
         }
 
@@ -508,10 +543,9 @@
                 markBlocked(fieldName, { fieldName: fieldName, fileName: file.name,
                                          input: input, omic: strip.__omic, fixable: false });
                 renderProblem(strip, "err", "The file is not saved as UTF-8.",
-                    "Re-save it as UTF-8 (in Excel: Save As → CSV UTF-8), or let " +
-                    "PaintOmics AI convert it. " + AI_EXPLAINER,
-                    [{ label: "Convert it for me", primary: true,
-                       onClick: function () { requestAgent(input, file); } }]);
+                    "Re-save it as UTF-8 (in Excel: Save As → CSV UTF-8)" +
+                    (aiOptedIn() ? ", or let the PaintOmics AI agent convert it. " + AI_EXPLAINER : "."),
+                    aiActions(input, file, fieldName));
                 return;
             }
 
@@ -568,9 +602,8 @@
                 });
             }
             renderProblem(strip, "err", describeProblems(result),
-                (partial ? "Checked the first few megabytes of a large file. " : "") + AI_EXPLAINER,
-                [{ label: "Convert it for me", primary: true, ai: true,
-                   onClick: function () { requestAgent(input, file, fieldName); } }]);
+                (partial ? "Checked the first few megabytes of a large file. " : "") + aiExplainer(),
+                aiActions(input, file, fieldName));
         };
         reader.readAsArrayBuffer(slice);
     }
@@ -645,14 +678,14 @@
             bar.appendChild(fix);
         }
 
-        if (fixable.length !== entries.length) {
+        if (fixable.length !== entries.length && aiOptedIn()) {
             var convert = el("button", "pa-format-button pa-format-primary");
             convert.type = "button";
             if (typeof window.getAIMark === "function") {
                 convert.innerHTML = window.getAIMark();
-                convert.appendChild(document.createTextNode(" Convert with PaintOmics AI"));
+                convert.appendChild(document.createTextNode(" Convert with the PaintOmics AI agent"));
             } else {
-                convert.textContent = "Convert with PaintOmics AI";
+                convert.textContent = "Convert with the PaintOmics AI agent";
             }
             convert.addEventListener("click", function () {
                 var first = entries[0];
