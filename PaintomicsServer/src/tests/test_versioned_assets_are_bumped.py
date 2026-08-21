@@ -98,7 +98,7 @@ PUBLISHED = {
     "app/view/PathwayAcquisitionViews/InputFormat/convert-agent.js": (
         "0.6", "d884a0d8344fccf966aab1219c9c70f9e29ca93a4a42e7ddf8f0852189f5ecdd"),
     "app/view/PathwayAcquisitionViews/InputFormat/convert-drawer.js": (
-        "0.6", "4ecdf2432832aba369df3d73483bdd5fd89969c9b2c86e597d030b15ff7e3844"),
+        "0.7", "241e9a48b99f6ca40f3f9d3b5dd29f27513ca38c181fb902075a0149af9ca4b3"),
     "app/view/common/Util.js": (
         "2.1", "12359b8bf746394f63a7e0a15513a4f9ac82de1a25bbaa0e91e6b2fdd7e0050e"),
     "app/view/common/OrganismSearch.js": (
