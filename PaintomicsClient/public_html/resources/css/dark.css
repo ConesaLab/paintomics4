@@ -1594,15 +1594,7 @@
 [data-theme="dark"] .ai-consent-warn {
 	color: var(--pa-ai-consent-warn);
 }
-/* The consent switch's off track, and the privacy link, on the dark surface. */
-[data-theme="dark"] .po-ai-section-body .x-form-cb-wrap > .x-form-checkbox {
-	background-color: #3B4049;
-	box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
-}
-[data-theme="dark"] .po-ai-section-body .x-form-cb-checked .x-form-cb-wrap > .x-form-checkbox {
-	background-color: var(--pa-accent-blue);
-	box-shadow: none;
-}
+/* The consent box's title label, and the privacy link, on the dark surface. */
 [data-theme="dark"] .po-ai-section-body .x-form-cb-wrap > .x-form-cb-label { color: var(--pa-ink-title); }
 [data-theme="dark"] .ai-gdpr-info-link { color: var(--pa-ink-muted); }
 [data-theme="dark"] .ai-gdpr-info-link:hover { color: var(--pa-accent-blue); }

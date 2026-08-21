@@ -1801,9 +1801,6 @@ function PA_Step1JobView() {
 							items: [
 								{
 									xtype: 'checkboxfield',
-									/* Label first, switch at the row's end: the settings-row shape,
-									   where the eye reads the name and finds the control at the edge. */
-									boxLabelAlign: 'before',
 									/* Both colours were written inline, which put them out of reach of
 									   dark.css -- an inline style beats a stylesheet -- so this
 									   sentence stayed #C44500 on the dark surface and measured 3.29:1
@@ -1820,10 +1817,10 @@ function PA_Step1JobView() {
 									   and the statement of what leaves and who receives it -- the
 									   recipient, the operator, the country, every field -- stays in
 									   the privacy notice, one click away. The red (!) icon that used
-									   to sit here is now the quiet "Data privacy" link at the end of
-									   the sentence below -- the way every other AI product links its
-									   notice -- and the row leads the panel as a switch: the decision
-									   first, the explanation under it. */
+									   to sit here is now the quiet "Data privacy" link under the
+									   pills. The control is the application's own checkbox -- a
+									   switch was tried on 2026-08-21 and the owner did not like it --
+									   with its label set as the column's title. */
 									boxLabel: 'Enable AI pathway interpretation',
 									name: 'aiConsent', inputValue: 'true', uncheckedValue: 'false',
 									/* Off everywhere but a local instance -- a pre-ticked consent

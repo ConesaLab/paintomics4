@@ -1640,56 +1640,13 @@ ul.menu li.loggedOption, ul.menu span.loggedOption {
 	margin-top: 1px;
 }
 
-/* The consent control as a switch, leading the panel.
-
-   A 16px box under a paragraph read as fine print; the decision this panel
-   exists for deserves to be the first thing in it and to look like the on/off
-   control every other AI product uses for the same question. Still the Ext
-   checkboxfield underneath -- same name, same value, same listeners -- only
-   drawn differently: a 36x20 track whose knob is a background image, because
-   the control is an <input type=button> and cannot carry a pseudo-element.
-   `background-position` is what moves the knob, and it animates. */
-.po-ai-section-body .x-form-cb-wrap > .x-form-checkbox {
-	width: 36px;
-	height: 20px;
-	margin-top: 0;
-	border: 0;
-	border-radius: 10px;
-	background-color: #C4C8CF;
-	background-image: radial-gradient(circle at center, #FFFFFF 0 6.5px, transparent 7px);
-	background-size: 16px 16px;
-	background-repeat: no-repeat;
-	background-position: 2px 2px;
-	box-shadow: inset 0 0 0 1px rgba(24, 24, 27, 0.06);
-	transition: background-color var(--pa-transition), background-position var(--pa-transition);
-	cursor: pointer;
-}
-.po-ai-section-body .x-form-cb-wrap > .x-form-checkbox:hover {
-	background-color: #B3B8C0;
-}
-.po-ai-section-body .x-form-cb-checked .x-form-cb-wrap > .x-form-checkbox,
-.po-ai-section-body .x-form-cb-checked .x-form-cb-wrap > .x-form-checkbox:hover {
-	background-color: var(--pa-accent-blue);
-	background-image: radial-gradient(circle at center, #FFFFFF 0 6.5px, transparent 7px);
-	background-position: 18px 2px;
-	box-shadow: none;
-}
-.po-ai-section-body .x-form-cb-wrap > .x-form-checkbox:focus-visible {
-	outline: 2px solid var(--pa-focus-ring);
-	outline-offset: 2px;
-}
-/* The field is a content-sized table (277px measured), so the label's
-   flex: 1 had nothing to grow into and the switch sat beside the words.
-   Full width puts the switch at the row's end, where a settings row keeps
-   it. */
-.po-ai-section-body table.x-form-type-checkbox {
-	width: 100%;
-}
-/* The switch's label is the panel's title now. */
+/* The consent box's label is the column's title: the one control on the
+   panel, named at title size. The box itself is the application's own
+   checkbox (the shared .x-form-checkbox rule), as on the Databases row. */
 .po-ai-section-body .x-form-cb-wrap > .x-form-cb-label {
 	font-size: 15px;
 	font-weight: 600;
-	line-height: 20px;
+	line-height: 18px;
 	color: var(--pa-ink-title, #1A1A18);
 }
 /* The explanation, under the switch: a step larger than the 13px the AI
