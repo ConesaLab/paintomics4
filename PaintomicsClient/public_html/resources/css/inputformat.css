@@ -219,3 +219,159 @@ input[type="text"].pa-field-err {
     margin-right: 2px;
     vertical-align: -0.15em;
 }
+
+/* ------------------------------------------------------------------------
+   The standing offer.
+
+   Before a file is picked the strip carries the AI's one sentence -- any file
+   will do -- with no tint and no border, because a promise is not a verdict.
+   It turns into the checking / ok / convert states the moment a file lands.
+   ------------------------------------------------------------------------ */
+.pa-format-idle {
+    background: transparent;
+    border-color: transparent;
+    padding: 6px 14px 8px;
+    color: var(--pa-ink-muted, #595959);
+    font-size: 12px;
+    align-items: center;
+}
+.pa-format-idle .pa-format-icon-ai {
+    display: inline-flex;
+    color: var(--pa-ai-blue, #4A90D9);
+    font-size: 15px;
+    line-height: 1;
+}
+.pa-format-idle b {
+    font-weight: 600;
+    color: var(--pa-accent-blue, #19589E);
+}
+
+/* After the AI's table is accepted, the ok strip names where it came from
+   and offers the conversion again. */
+.pa-format-provenance {
+    display: flex;
+    align-items: flex-start;
+    gap: 7px;
+    margin-top: 6px;
+    color: var(--pa-ink-muted, #595959);
+}
+.pa-format-provenance-text { flex: 1 1 auto; min-width: 0; }
+.pa-format-provenance .pa-format-linkbtn { margin-left: 4px; }
+.pa-format-provenance-mark {
+    display: inline-flex;
+    color: var(--pa-ai-blue, #4A90D9);
+    font-size: 14px;
+    line-height: 1;
+}
+.pa-format-provenance b { font-weight: 600; color: var(--pa-ink-control, #3F3F46); }
+.pa-format-linkbtn {
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    color: var(--pa-link, #0060BA);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    cursor: pointer;
+}
+.pa-format-linkbtn:hover { color: var(--pa-link-hover, #24785D); }
+.pa-format-linkbtn:focus-visible { outline: 2px solid var(--pa-focus-ring, #0A84FF); outline-offset: 2px; border-radius: 2px; }
+
+/* ------------------------------------------------------------------------
+   The Section 3 callout: "Bring your files as they are".
+
+   It borrows .po-ai-section-body from the Section 2 callout for its panel,
+   and lays out the same way: the explanation gets a reading measure, the
+   aside takes the space the prose cannot use and says what leaves the
+   machine. The AI mark on the heading is what Section 2's heading wears.
+   ------------------------------------------------------------------------ */
+.po-upload-ai-grid {
+    display: flex;
+    gap: 18px 32px;
+    align-items: flex-start;
+}
+.po-upload-ai-text {
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: var(--pa-measure-note, 78ch);
+}
+/* Pinned to the panel's right edge, where Section 2 keeps its controls, so
+   the two callouts' right columns stand on the same line. */
+.po-upload-ai-aside {
+    flex: 0 1 400px;
+    margin-left: auto;
+    min-width: 220px;
+    padding: 10px 14px 11px;
+    border-radius: var(--pa-radius-sm, 6px);
+    background: var(--pa-surface, #FFFFFF);
+    border: 1px solid #CFE0F0;
+}
+.po-upload-ai-icon {
+    display: inline-flex;
+    color: var(--pa-ai-blue, #4A90D9);
+    flex-shrink: 0;
+}
+/* Not the #4A90D9 the mark uses: bold body text needs 4.5:1, so the darker
+   accent blue, exactly as the Section 2 head does it. */
+.po-upload-ai .po-hero-ai-head strong {
+    color: var(--pa-accent-blue, #19589E);
+    font-size: 14.5px;
+    font-weight: 700;
+}
+/* `div.contentbox p` is (0,1,2) and adds the card inset to every paragraph
+   inside a card; two classes outrank it, the same trap the hero notes. */
+.po-ai-section-body.po-upload-ai p {
+    margin: 6px 0 0;
+    padding: 0;
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--pa-ink-body, #555);
+    max-width: none;
+}
+.po-ai-section-body.po-upload-ai p b { font-weight: 700; color: var(--pa-accent-blue, #19589E); }
+.po-upload-ai-does {
+    list-style: none;
+    margin: 8px 0 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 16px;
+}
+.po-ai-section-body.po-upload-ai .po-upload-ai-does li {
+    position: relative;
+    padding: 0 0 0 13px;
+    font-size: 12.5px;
+    line-height: 1.5;
+    color: var(--pa-ink-muted, #595959);
+    max-width: none;
+}
+.po-upload-ai-does li::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0.55em;
+    width: 5px;
+    height: 5px;
+    border-radius: 1px;
+    background: var(--pa-ai-blue, #4A90D9);
+}
+.po-upload-ai-aside-title {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--pa-accent-blue, #19589E);
+}
+.po-ai-section-body.po-upload-ai .po-upload-ai-aside p {
+    margin: 5px 0 0;
+    font-size: 12.5px;
+    line-height: 1.5;
+    color: var(--pa-ink-muted, #595959);
+}
+.po-upload-ai-aside p span { color: var(--pa-ink-control, #3F3F46); font-weight: 600; }
+
+
+@media (max-width: 980px) {
+    .po-upload-ai-grid { flex-direction: column; }
+    .po-upload-ai-aside { max-width: none; }
+}

@@ -1958,7 +1958,38 @@ function PA_Step1JobView() {
 						// this hands over the datasets "Load example" actually
 						// offers. The old static file was built in 2017 and shared
 						// no filename with any current scenario.
-						html: '<h3>3. Choose the files to upload <a class="button btn-right btn-small" href="' + SERVER_URL_EXAMPLE_DATASETS_DOWNLOAD + '"><i class="fa fa-download"></i> Download example data</a></h3>'
+						// The mark leads the heading exactly as it does on Section 2's,
+						// so main.css's `div.contentbox h3 > svg.po-ai-mark` rule sizes
+						// and places it, and the two AI headings on the form match.
+						html: '<h3>' + getAIMark() + ' 3. Choose the files to upload <a class="button btn-right btn-small" href="' + SERVER_URL_EXAMPLE_DATASETS_DOWNLOAD + '"><i class="fa fa-download"></i> Download example data</a></h3>'
+					},
+					{
+						/* The standing offer, stated before any file is picked: the
+						   upload step accepts files as they come out of the tools
+						   people use, and the AI conversion is how. Same panel as
+						   the Section 2 callout so the two AI surfaces on this form
+						   read as one feature. The prose gets a reading measure; the
+						   aside states what leaves the machine, because a sentence
+						   about AI next to a file picker is where that has to be
+						   said (styles in inputformat.css). */
+						xtype: "box",
+						cls: "po-ai-section-body po-upload-ai",
+						html: '<div class="po-upload-ai-grid">' +
+							'<div class="po-upload-ai-text">' +
+								'<div class="po-hero-ai-head"><span class="po-upload-ai-icon">' + getAIMark() + '</span><strong>Bring your files as they are</strong></div>' +
+								'<p>A DESeq2 or edgeR table, a MaxQuant or Spectronaut export, a MetaboLights MAF, a workbook with several sheets: pick it and PaintOmics checks it on the spot. If it is not in PaintOmics’ format, <b>PaintOmics AI</b> converts it here, in your browser.</p>' +
+								'<ul class="po-upload-ai-does">' +
+									'<li>reads the file’s structure</li>' +
+									'<li>writes a short script and runs it in your browser</li>' +
+									'<li>checks the result against PaintOmics’ exact format</li>' +
+									'<li>shows you the script, the tables and what it left out before anything is used</li>' +
+								'</ul>' +
+							'</div>' +
+							'<aside class="po-upload-ai-aside">' +
+								'<div class="po-upload-ai-aside-title">What leaves your computer</div>' +
+								'<p>Only the file’s structure: column names, counts and a few example rows, sent to <span id="paUploadAiProvider">the AI gateway</span>. The measurements never leave this browser.</p>' +
+							'</aside>' +
+						'</div>'
 					},
 					{
 						xtype: "container",
@@ -2017,7 +2048,7 @@ function PA_Step1JobView() {
 							flex: 1,
 							layout: {type: 'vbox',align: "stretch"},
 							items: [
-								{xtype: 'box',html: '<div class="content"><h5><i class="fa fa-info-circle"></i> Help</h5><p>Drag <i>omics</i> from <b>Available omics</b> to <b>Selected omics</b>, or click the <i class="fa fa-plus-circle"></i> button.</p><p>Remove any you do not need with <span class="po-nowrap"><i class="fa fa-trash"></i>.</span></p><p>When you are done, click <b>Run PaintOmics</b> in the top-right corner.</p></div>'}
+								{xtype: 'box',html: '<div class="content"><h5><i class="fa fa-info-circle"></i> Help</h5><p>Drag <i>omics</i> from <b>Available omics</b> to <b>Selected omics</b>, or click the <i class="fa fa-plus-circle"></i> button.</p><p>Remove any you do not need with <span class="po-nowrap"><i class="fa fa-trash"></i>.</span></p><p>Pick your files as they are: each one is checked the moment you choose it, and if it is not in PaintOmics’ format, <b>PaintOmics AI</b> converts it in your browser.</p><p>When you are done, click <b>Run PaintOmics</b> in the top-right corner.</p></div>'}
 							]
 						}]
 					}					

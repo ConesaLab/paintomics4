@@ -1,14 +1,70 @@
 /*
- * The conversion drawer.
+ * The conversion sheet.
  *
  * A right-hand sheet rather than a modal: the Step 1 form stays visible and
- * intact behind it, so the user can see the omic this belongs to and nothing is
- * unmounted while a conversion runs.
+ * intact behind it, so the user can see the omic box this belongs to and
+ * nothing is unmounted while a conversion runs.
  *
- * Colours come from the tokens in main.css, which dark.css redefines, so this
- * needs no dark-mode branch and must contain no inline styles -- dark.css
- * cannot reach those.
+ * It is laid out as a notebook of the run, top to bottom:
+ *
+ *   header   -- what is being converted, for which omic, and a way out
+ *   status   -- the stage rail (Read > Plan > Run > Check > Apply > Review),
+ *               lit as the agent's own state machine reaches each stage, with
+ *               the attempt count and the clock beside it
+ *   body     -- "What the AI sees" (the structure that actually left this
+ *               computer), then the timeline of every step with its cost in
+ *               seconds, the script, the validator's verdicts, the questions;
+ *               and when it is done, the tables it produced
+ *   dock     -- the composer to steer it, then the decision row
+ *
+ * Two rails hold the whole sheet together. Every box -- header, stage rail,
+ * anatomy card, result cards, composer -- starts at --cv-inset; every line of
+ * timeline type starts one node plus one gap further in, at --cv-rail. Nothing
+ * else is allowed to invent a third left edge.
+ *
+ * Colours come from the tokens in main.css, which dark.css redefines, so the
+ * sheet follows the theme. The few literal tints it needs (the AI callout
+ * blue, the green/orange/red verdict washes) are declared once here as
+ * --cv-* custom properties so dark.css can restate them in one block. No
+ * inline colours anywhere: dark.css cannot reach those.
  */
+
+.pa-convert-panel {
+    --cv-inset: 24px;
+    --cv-node: 28px;
+    --cv-gap: 12px;
+    --cv-rail: calc(var(--cv-node) + var(--cv-gap));
+    --cv-line: rgba(24, 24, 27, 0.09);
+    --cv-line-strong: rgba(24, 24, 27, 0.16);
+    --cv-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+    /* The AI blue every AI surface in the application uses (the mark, the
+       hero panel's bar) and its darker ink for small type, which needs 4.5:1
+       where the mark only needs 3:1. */
+    --cv-ai: var(--pa-ai-blue, #4A90D9);
+    --cv-ai-ink: var(--pa-accent-blue, #19589E);
+    --cv-ai-bg: #F4F8FC;
+    --cv-ai-line: #CFE0F0;
+    --cv-ai-tint: #E8EFF7;
+
+    --cv-ok: var(--pa-accent-green, #247B21);
+    --cv-ok-bg: #F4F9F3;
+    --cv-ok-line: rgba(36, 123, 33, 0.30);
+    --cv-warn: var(--pa-accent-orange, #AD5022);
+    --cv-warn-bg: #FBF7F2;
+    --cv-warn-line: rgba(173, 80, 34, 0.30);
+    --cv-bad: #B3261E;
+    --cv-bad-ink: #7A1C16;
+    --cv-bad-bg: #F7E9ED;
+    --cv-bad-line: rgba(179, 38, 30, 0.28);
+
+    /* The destination omic's hue, written onto the panel by the drawer from
+       the card it was opened from; the chosen result carries it as a bar, the
+       same bar the omic card wears on Step 1. */
+    --cv-omic: var(--pa-accent-blue, #19589E);
+}
+
+/* ---- the sheet ---------------------------------------------------------- */
 
 .pa-convert-overlay {
     position: fixed;
@@ -19,11 +75,10 @@
     justify-content: flex-end;
     transition: background 180ms ease;
 }
-
 .pa-convert-overlay.pa-convert-open { background: rgba(24, 24, 27, 0.42); }
 
 .pa-convert-panel {
-    width: min(620px, 100%);
+    width: min(680px, 100%);
     height: 100%;
     display: flex;
     flex-direction: column;
@@ -32,406 +87,923 @@
     transform: translateX(100%);
     transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
     font-family: var(--pa-font-sans);
+    font-size: 13px;
     color: var(--pa-ink, #18181B);
+    outline: none;
 }
-
 .pa-convert-open .pa-convert-panel { transform: translateX(0); }
 
 @media (prefers-reduced-motion: reduce) {
     .pa-convert-panel, .pa-convert-overlay { transition: none; }
+    .pa-convert-event { animation: none; }
+    .pa-convert-event.is-current .pa-convert-node::after,
+    .pa-convert-stage[data-state="current"]::before { animation: none; }
 }
 
-/* ---- header ------------------------------------------------------------ */
+/* ---- header ------------------------------------------------------------- */
 
 .pa-convert-header {
-    display: flex;
-    align-items: flex-start;
-    gap: 12px;
-    padding: 20px 20px 14px;
-    border-bottom: 1px solid rgba(24, 24, 27, 0.08);
+    display: grid;
+    grid-template-columns: var(--cv-node) 1fr auto;
+    column-gap: var(--cv-gap);
+    align-items: start;
+    padding: 18px var(--cv-inset) 14px;
+    border-bottom: 1px solid var(--cv-line);
 }
 
-.pa-convert-title { display: flex; gap: 11px; align-items: flex-start; flex: 1 1 auto; min-width: 0; }
-.pa-convert-mark { font-size: 22px; line-height: 1; color: var(--pa-accent-blue, #19589E); }
-.pa-convert-titles h2 { margin: 0; font-size: 17px; font-weight: 650; letter-spacing: -0.01em; }
+.pa-convert-mark {
+    width: var(--cv-node);
+    height: var(--cv-node);
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    background: var(--cv-ai-bg);
+    border: 1px solid var(--cv-ai-line);
+    color: var(--cv-ai);
+    font-size: 17px;
+    line-height: 1;
+}
 
-.pa-convert-filename {
-    margin: 3px 0 0;
+.pa-convert-titles { min-width: 0; }
+
+/* The global h2 is 23px terracotta; this one names a sheet, not a page. */
+.pa-convert-panel h2.pa-convert-title {
+    margin: 2px 0 0;
+    font-size: 17px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    line-height: 1.3;
+    color: var(--pa-ink, #18181B);
+}
+
+.pa-convert-subject {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 10px;
+    margin: 4px 0 0;
     font-size: 12.5px;
     color: var(--pa-ink-muted, #595959);
+}
+.pa-convert-filename {
+    font-weight: 600;
+    color: var(--pa-ink-control, #3F3F46);
     overflow-wrap: anywhere;
+}
+.pa-convert-omic {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+}
+.pa-convert-omic::before {
+    content: "";
+    width: 9px;
+    height: 9px;
+    border-radius: 2px;
+    background: var(--cv-omic);
 }
 
 .pa-convert-close {
-    flex: 0 0 auto;
-    width: 30px; height: 30px;
-    border: 0; border-radius: 8px;
+    width: 30px;
+    height: 30px;
+    margin-top: -2px;
+    border: 0;
+    border-radius: var(--pa-radius-sm, 6px);
     background: transparent;
     color: var(--pa-ink-muted, #595959);
-    font-size: 14px; cursor: pointer;
+    font-size: 15px;
+    line-height: 1;
+    cursor: pointer;
 }
-.pa-convert-close:hover { background: var(--pa-surface-quiet, #F3F2ED); }
+.pa-convert-close:hover { background: var(--pa-surface-quiet, #F3F2ED); color: var(--pa-ink, #18181B); }
+.pa-convert-close:focus-visible,
+.pa-convert-option:focus-visible,
+.pa-convert-disclose:focus-visible,
+.pa-convert-iconbtn:focus-visible,
+.pa-convert-accept:focus-visible,
+.pa-convert-dismiss:focus-visible,
+.pa-convert-composer-send:focus-visible {
+    outline: 2px solid var(--pa-focus-ring, #0A84FF);
+    outline-offset: 2px;
+}
 
-/* ---- progress ---------------------------------------------------------- */
+/* ---- status band: the stage rail ---------------------------------------- */
 
-.pa-convert-progress {
+.pa-convert-status {
+    padding: 12px var(--cv-inset) 11px;
+    border-bottom: 1px solid var(--cv-line);
+    background: var(--pa-surface-subtle, #F9F8F4);
+}
+
+.pa-convert-stages {
+    list-style: none;
+    margin: 0;
+    padding: 0;
     display: grid;
-    grid-template-columns: 1fr auto;
-    grid-template-areas: "bar bar" "text elapsed";
-    gap: 7px 10px;
-    padding: 14px 20px 12px;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 6px;
 }
 
-.pa-convert-bar {
-    grid-area: bar;
-    height: 5px;
+.pa-convert-stage {
+    position: relative;
+    padding-top: 10px;
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--pa-ink-muted, #595959);
+    white-space: nowrap;
+    overflow: hidden;
+}
+/* The bar. A 4px track per stage, filled as the agent reaches it; the one in
+   flight carries a moving sheen so a minute-long wait on the gateway reads as
+   alive rather than hung -- the same device the AI widget's bar uses. */
+.pa-convert-stage::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    height: 4px;
     border-radius: 99px;
+    background: var(--pa-surface-sunken, #F5F4EF);
+    box-shadow: inset 0 0 0 1px var(--cv-line);
+    transition: background-color 420ms ease;
+}
+.pa-convert-stage[data-state="done"]::before { background: var(--cv-ai); box-shadow: none; }
+.pa-convert-stage[data-state="done"] { color: var(--pa-ink-control, #3F3F46); }
+.pa-convert-stage[data-state="current"] { color: var(--cv-ai-ink); }
+.pa-convert-stage[data-state="current"]::before {
+    background: linear-gradient(90deg, var(--cv-ai) 0%, var(--cv-ai) 45%, var(--cv-ai-tint) 45%, var(--cv-ai-tint) 100%);
+    background-size: 200% 100%;
+    box-shadow: none;
+    animation: pa-convert-sheen 1.4s linear infinite;
+}
+.pa-convert-stage[data-state="failed"] { color: var(--cv-bad); }
+.pa-convert-stage[data-state="failed"]::before { background: var(--cv-bad); box-shadow: none; }
+.pa-convert-stage[data-state="ready"] { color: var(--cv-ok); }
+.pa-convert-stage[data-state="ready"]::before { background: var(--cv-ok); box-shadow: none; }
+
+@keyframes pa-convert-sheen {
+    from { background-position: 100% 0; }
+    to   { background-position: -100% 0; }
+}
+
+.pa-convert-now {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    margin-top: 9px;
+}
+.pa-convert-now-text {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--pa-ink-control, #3F3F46);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.pa-convert-now-meta {
+    flex: 0 0 auto;
+    font-size: 11.5px;
+    font-variant-numeric: tabular-nums;
+    color: var(--pa-ink-muted, #595959);
+}
+.pa-convert-now-meta b { font-weight: 600; color: var(--pa-ink-control, #3F3F46); }
+
+/* ---- body --------------------------------------------------------------- */
+
+.pa-convert-body {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    padding: 4px var(--cv-inset) 20px;
+}
+
+/* ---- "What the AI sees" ------------------------------------------------- */
+
+.pa-convert-anatomy {
+    margin: 14px 0 4px;
+    padding: 12px 14px 12px 15px;
+    border-radius: var(--pa-radius, 8px);
+    border: 1px solid var(--cv-ai-line);
+    border-left: 3px solid var(--cv-ai);
+    background: var(--cv-ai-bg);
+}
+.pa-convert-anatomy-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+}
+.pa-convert-eyebrow {
+    margin: 0;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--cv-ai-ink);
+}
+.pa-convert-anatomy-meta {
+    font-size: 11.5px;
+    color: var(--pa-ink-muted, #595959);
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+.pa-convert-anatomy-lead {
+    margin: 6px 0 0;
+    font-size: 12.5px;
+    line-height: 1.5;
+    color: var(--pa-ink-control, #3F3F46);
+    max-width: var(--pa-measure-note, 78ch);
+}
+.pa-convert-anatomy-lead b { font-weight: 600; }
+
+.pa-convert-table { margin-top: 10px; }
+.pa-convert-table + .pa-convert-table { padding-top: 10px; border-top: 1px dashed var(--cv-ai-line); }
+.pa-convert-table-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 10px;
+    font-size: 12.5px;
+}
+.pa-convert-table-name { font-weight: 650; color: var(--pa-ink, #18181B); overflow-wrap: anywhere; }
+.pa-convert-table-dims { color: var(--pa-ink-muted, #595959); font-variant-numeric: tabular-nums; }
+.pa-convert-table-note { color: var(--pa-ink-muted, #595959); font-style: italic; }
+
+.pa-convert-colstrip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 6px;
+}
+.pa-convert-col {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    max-width: 190px;
+    padding: 2px 7px;
+    border-radius: 5px;
+    border: 1px solid var(--cv-line-strong);
+    background: var(--pa-surface, #FFFFFF);
+    font-family: var(--cv-mono);
+    font-size: 10.5px;
+    line-height: 1.6;
+    color: var(--pa-ink-control, #3F3F46);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.pa-convert-col-numeric {
+    background: var(--cv-ai-tint);
+    border-color: transparent;
+    color: #2F4A6B;
+}
+.pa-convert-col-id {
+    border-color: var(--cv-ai-ink);
+    color: var(--cv-ai-ink);
+    font-weight: 700;
+}
+.pa-convert-col-id::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+    flex: 0 0 auto;
+}
+.pa-convert-col-dup {
+    margin-left: 2px;
+    font-family: var(--pa-font-sans);
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--cv-warn);
+}
+.pa-convert-col-more {
+    background: transparent;
+    border-style: dashed;
+    color: var(--pa-ink-muted, #595959);
+}
+.pa-convert-families {
+    margin: 6px 0 0;
+    font-size: 11.5px;
+    line-height: 1.5;
+    color: var(--pa-ink-muted, #595959);
+}
+.pa-convert-families code { font-family: var(--cv-mono); font-size: 10.5px; color: var(--pa-ink-control, #3F3F46); }
+
+.pa-convert-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 14px;
+    margin-top: 10px;
+    font-size: 11px;
+    color: var(--pa-ink-muted, #595959);
+}
+.pa-convert-legend span { display: inline-flex; align-items: center; gap: 5px; }
+/* Swatches shaped like the chips they explain -- a wide pill, not a square,
+   which at this size reads as a checkbox. */
+.pa-convert-legend i {
+    width: 16px;
+    height: 9px;
+    border-radius: 3px;
+    border: 1px solid var(--cv-line-strong);
+    background: var(--pa-surface, #FFFFFF);
+}
+.pa-convert-legend i.is-numeric { background: var(--cv-ai-tint); border-color: transparent; }
+.pa-convert-legend i.is-id {
+    border-color: var(--cv-ai-ink);
+    background: radial-gradient(circle at 5px 50%, var(--cv-ai-ink) 0 1.6px, transparent 2px) var(--pa-surface, #FFFFFF);
+}
+
+/* The raw rows it was shown, behind a disclosure: they are part of what left
+   the machine, so they are inspectable, but they are noise until asked for. */
+.pa-convert-rows { margin-top: 8px; font-size: 11.5px; color: var(--pa-ink-muted, #595959); }
+.pa-convert-rows summary { cursor: pointer; font-weight: 600; }
+.pa-convert-rows summary:hover { color: var(--cv-ai-ink); }
+.pa-convert-rows .pa-convert-preview { margin: 6px 0 0; background: var(--pa-surface, #FFFFFF); }
+
+/* ---- the timeline ------------------------------------------------------- */
+
+.pa-convert-timeline {
+    list-style: none;
+    margin: 10px 0 0;
+    padding: 0;
+    position: relative;
+}
+/* The rail down the node column. Drawn once behind every node rather than as
+   a border on each row, so it never breaks at a row boundary. */
+.pa-convert-timeline::before {
+    content: "";
+    position: absolute;
+    left: calc(var(--cv-node) / 2 - 0.5px);
+    top: 16px;
+    bottom: 16px;
+    width: 1px;
+    background: var(--cv-line);
+}
+
+.pa-convert-event {
+    display: grid;
+    grid-template-columns: var(--cv-node) 1fr;
+    column-gap: var(--cv-gap);
+    padding: 7px 0;
+    position: relative;
+    animation: pa-convert-in 220ms ease both;
+}
+@keyframes pa-convert-in {
+    from { opacity: 0; transform: translateY(4px); }
+    to   { opacity: 1; transform: none; }
+}
+
+.pa-convert-node {
+    position: relative;
+    z-index: 1;
+    width: var(--cv-node);
+    height: var(--cv-node);
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    background: var(--pa-surface, #FFFFFF);
+    border: 1px solid var(--cv-line-strong);
+    color: var(--pa-ink-muted, #595959);
+}
+.pa-convert-node svg { width: 14px; height: 14px; display: block; }
+
+.pa-convert-event[data-phase="thinking"]   .pa-convert-node,
+.pa-convert-event[data-phase="running"]    .pa-convert-node,
+.pa-convert-event[data-phase="finalising"] .pa-convert-node,
+.pa-convert-event[data-phase="output"]     .pa-convert-node {
+    color: var(--cv-ai-ink);
+    background: var(--cv-ai-bg);
+    border-color: var(--cv-ai-line);
+}
+.pa-convert-event[data-phase="thinking"] .pa-convert-node svg { width: 17px; height: 17px; }
+.pa-convert-event[data-phase="validating"] .pa-convert-node,
+.pa-convert-event[data-phase="done"]       .pa-convert-node {
+    color: var(--cv-ok);
+    background: var(--cv-ok-bg);
+    border-color: var(--cv-ok-line);
+}
+.pa-convert-event[data-phase="asking"] .pa-convert-node {
+    color: var(--cv-warn);
+    background: var(--cv-warn-bg);
+    border-color: var(--cv-warn-line);
+}
+.pa-convert-event[data-phase="failed"] .pa-convert-node,
+.pa-convert-event.is-rejected          .pa-convert-node {
+    color: var(--cv-bad);
+    background: var(--cv-bad-bg);
+    border-color: var(--cv-bad-line);
+}
+.pa-convert-event[data-phase="user"] .pa-convert-node {
+    color: var(--pa-ink, #18181B);
+    background: var(--pa-surface-quiet, #F3F2ED);
+}
+
+/* The step in flight: a ring that breathes, so the eye finds "now" in a long
+   transcript without reading it. */
+.pa-convert-event.is-current .pa-convert-node::after {
+    content: "";
+    position: absolute;
+    inset: -5px;
+    border-radius: 50%;
+    border: 2px solid currentColor;
+    opacity: 0.3;
+    animation: pa-convert-pulse 1.6s ease-out infinite;
+}
+@keyframes pa-convert-pulse {
+    0%   { transform: scale(0.85); opacity: 0.45; }
+    100% { transform: scale(1.25); opacity: 0; }
+}
+
+.pa-convert-event-body { min-width: 0; padding-top: 5px; }
+.pa-convert-event-head {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    min-width: 0;
+}
+.pa-convert-event-title {
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 18px;
+    color: var(--pa-ink, #18181B);
+}
+.pa-convert-event.is-rejected .pa-convert-event-title,
+.pa-convert-event[data-phase="failed"] .pa-convert-event-title { color: var(--cv-bad-ink); }
+.pa-convert-event-time {
+    margin-left: auto;
+    flex: 0 0 auto;
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    color: var(--pa-ink-muted, #595959);
+    white-space: nowrap;
+}
+.pa-convert-event.is-current .pa-convert-event-time { color: var(--cv-ai-ink); }
+.pa-convert-attempt {
+    flex: 0 0 auto;
+    padding: 1px 7px;
+    border-radius: 99px;
+    background: var(--pa-surface-sunken, #F5F4EF);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    font-variant-numeric: tabular-nums;
+    color: var(--pa-ink-muted, #595959);
+}
+.pa-convert-event-detail {
+    margin: 3px 0 0;
+    font-size: 12.5px;
+    line-height: 1.5;
+    color: var(--pa-ink-muted, #595959);
+    overflow-wrap: anywhere;
+    max-width: var(--pa-measure-note, 78ch);
+}
+.pa-convert-event[data-phase="user"] .pa-convert-event-detail {
+    color: var(--pa-ink, #18181B);
+    font-style: italic;
+}
+
+/* The validator's verdict, as a list: one failure per line is what lets a
+   bioinformatician see exactly which file and which rule. */
+.pa-convert-verdict {
+    margin: 7px 0 0;
+    padding: 8px 11px;
+    border-radius: var(--pa-radius-sm, 6px);
+    border: 1px solid var(--cv-bad-line);
+    background: var(--cv-bad-bg);
+    color: var(--cv-bad-ink);
+    font-size: 12px;
+    line-height: 1.5;
+}
+.pa-convert-verdict ul { margin: 0; padding: 0 0 0 16px; }
+.pa-convert-verdict li + li { margin-top: 3px; }
+.pa-convert-verdict code { font-family: var(--cv-mono); font-size: 11px; }
+
+/* ---- disclosures: the script and its output ----------------------------- */
+
+.pa-convert-disclosures { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
+.pa-convert-disclose {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 9px 3px 7px;
+    border-radius: 99px;
+    border: 1px solid var(--cv-line-strong);
+    background: var(--pa-control-bg, #FFFFFF);
+    font: inherit;
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--pa-ink-control, #3F3F46);
+    cursor: pointer;
+}
+.pa-convert-disclose::before {
+    content: "";
+    width: 0;
+    height: 0;
+    border-left: 4px solid currentColor;
+    border-top: 3.5px solid transparent;
+    border-bottom: 3.5px solid transparent;
+    transition: transform 150ms ease;
+}
+.pa-convert-disclose[aria-expanded="true"]::before { transform: rotate(90deg); }
+.pa-convert-disclose:hover { border-color: var(--cv-ai-ink); color: var(--cv-ai-ink); }
+.pa-convert-disclose small { font-weight: 500; color: var(--pa-ink-muted, #595959); }
+
+.pa-convert-codebox {
+    margin: 7px 0 0;
+    border-radius: var(--pa-radius-sm, 6px);
+    border: 1px solid var(--cv-line);
     background: var(--pa-surface-sunken, #F5F4EF);
     overflow: hidden;
 }
-
-.pa-convert-fill {
-    height: 100%;
-    width: 2%;
-    border-radius: 99px;
-    background: var(--pa-accent-blue, #19589E);
-    /* Eased and slow: the bar tracks a budget of attempts, and snapping it
-       between steps would suggest a precision the estimate does not have. */
-    transition: width 420ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.pa-convert-progress-text {
-    grid-area: text;
-    font-size: 12.5px; font-weight: 600;
-    color: var(--pa-ink-control, #3F3F46);
-}
-
-.pa-convert-elapsed {
-    grid-area: elapsed;
-    font-size: 12px;
-    font-variant-numeric: tabular-nums;
-    color: var(--pa-ink-muted, #595959);
-}
-
-/* ---- transcript -------------------------------------------------------- */
-
-.pa-convert-body { flex: 1 1 auto; overflow-y: auto; padding: 4px 20px 20px; }
-
-.pa-convert-steps { list-style: none; margin: 0; padding: 0; }
-
-.pa-convert-step {
-    display: grid;
-    grid-template-columns: 22px 1fr auto;
+.pa-convert-codebox[hidden] { display: none; }
+.pa-convert-codebox-head {
+    display: flex;
+    align-items: center;
     gap: 10px;
-    padding: 9px 0;
-    border-bottom: 1px solid rgba(24, 24, 27, 0.05);
-    animation: pa-convert-in 220ms ease both;
-}
-
-@keyframes pa-convert-in {
-    from { opacity: 0; transform: translateY(4px); }
-    to { opacity: 1; transform: none; }
-}
-
-.pa-convert-icon {
-    width: 22px; height: 22px;
-    display: grid; place-items: center;
-    border-radius: 50%;
+    padding: 5px 8px 5px 11px;
+    border-bottom: 1px solid var(--cv-line);
     font-size: 11px;
-    background: var(--pa-surface-sunken, #F5F4EF);
     color: var(--pa-ink-muted, #595959);
 }
-
-.pa-phase-running .pa-convert-icon   { background: #E8EFF7; color: var(--pa-accent-blue, #19589E); }
-.pa-phase-validating .pa-convert-icon,
-.pa-phase-done .pa-convert-icon      { background: #E9F3E8; color: var(--pa-accent-green, #247B21); }
-.pa-phase-asking .pa-convert-icon    { background: #FBF0E6; color: var(--pa-accent-orange, #AD5022); }
-.pa-phase-failed .pa-convert-icon    { background: #F7E9ED; color: #B3261E; }
-
-/* The step in flight, so the eye knows where "now" is in a long transcript. */
-.pa-convert-current .pa-convert-icon { box-shadow: 0 0 0 3px rgba(25, 88, 158, 0.12); }
-
-.pa-convert-step-title { font-size: 13px; font-weight: 600; }
-.pa-convert-step-detail {
-    margin-top: 2px;
-    font-size: 12.5px; line-height: 1.5;
-    color: var(--pa-ink-muted, #595959);
-    overflow-wrap: anywhere;
-}
-
-.pa-convert-attempt {
+.pa-convert-codebox-head b { font-weight: 600; color: var(--pa-ink-control, #3F3F46); }
+.pa-convert-copy {
+    margin-left: auto;
+    padding: 2px 8px;
+    border-radius: 4px;
+    border: 1px solid transparent;
+    background: transparent;
+    font: inherit;
     font-size: 11px;
-    font-variant-numeric: tabular-nums;
-    color: var(--pa-ink-muted, #595959);
-    align-self: start;
-}
-
-/* ---- generated code ---------------------------------------------------- */
-
-.pa-convert-codetoggle {
-    margin-top: 7px;
-    padding: 0;
-    border: 0; background: none;
-    font: inherit; font-size: 12px;
     color: var(--pa-link, #0060BA);
     cursor: pointer;
 }
-.pa-convert-codetoggle:hover { text-decoration: underline; }
-
+.pa-convert-copy:hover { border-color: var(--cv-line-strong); background: var(--pa-control-bg, #FFFFFF); }
 .pa-convert-code {
-    margin: 7px 0 0;
-    padding: 11px 12px;
-    border-radius: 8px;
-    background: var(--pa-surface-sunken, #F5F4EF);
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 11.5px; line-height: 1.55;
-    overflow-x: auto;          /* long lines scroll here, never the drawer */
+    margin: 0;
+    padding: 10px 12px;
+    font-family: var(--cv-mono);
+    font-size: 11.5px;
+    line-height: 1.55;
+    color: var(--pa-ink, #18181B);
+    overflow-x: auto;          /* long lines scroll here, never the sheet */
     white-space: pre;
+    tab-size: 4;
+    max-height: 420px;
+    overflow-y: auto;
 }
 
-/* ---- questions --------------------------------------------------------- */
+/* ---- questions ---------------------------------------------------------- */
 
 .pa-convert-question {
-    margin-top: 9px;
-    padding: 12px;
-    border-radius: 10px;
-    background: #FBF7F2;
-    border: 1px solid rgba(173, 80, 34, 0.28);
+    margin: 8px 0 0;
+    padding: 12px 13px;
+    border-radius: var(--pa-radius, 8px);
+    background: var(--cv-warn-bg);
+    border: 1px solid var(--cv-warn-line);
 }
-
-.pa-convert-question-text { margin: 0 0 9px; font-size: 12.5px; line-height: 1.5; }
+.pa-convert-question-text {
+    margin: 0 0 10px;
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.45;
+    color: var(--pa-ink, #18181B);
+}
 .pa-convert-options { display: flex; flex-wrap: wrap; gap: 8px; }
-
 .pa-convert-option {
-    min-height: 30px;
+    min-height: 32px;
     padding: 6px 12px;
-    border-radius: 7px;
+    border-radius: var(--pa-radius-sm, 6px);
     border: 1px solid var(--pa-ink-label, #52525B);
     background: var(--pa-control-bg, #FFFFFF);
-    font: inherit; font-size: 12px;
+    color: var(--pa-ink-control, #3F3F46);
+    font: inherit;
+    font-size: 12.5px;
     cursor: pointer;
 }
-.pa-convert-option:hover:not(:disabled) { border-color: var(--pa-accent-blue, #19589E); }
+.pa-convert-option:hover:not(:disabled) { border-color: var(--cv-ai-ink); color: var(--cv-ai-ink); }
 .pa-convert-option:disabled { opacity: 0.45; cursor: default; }
-.pa-convert-option-chosen {
-    border-color: var(--pa-accent-green, #247B21);
-    color: var(--pa-accent-green, #247B21);
+.pa-convert-option-chosen,
+.pa-convert-option-chosen:disabled {
+    border-color: var(--cv-ok);
+    background: var(--cv-ok-bg);
+    color: var(--cv-ok);
     font-weight: 600;
     opacity: 1;
 }
+.pa-convert-question-hint { margin: 9px 0 0; font-size: 11.5px; color: var(--pa-ink-muted, #595959); }
+.pa-convert-answer { margin: 9px 0 0; font-size: 12px; font-weight: 600; color: var(--cv-ok); }
 
-/* ---- review ------------------------------------------------------------ */
+/* ---- the review --------------------------------------------------------- */
 
-.pa-convert-review { margin-top: 16px; }
-.pa-convert-review h3 { margin: 0 0 9px; font-size: 14px; font-weight: 650; }
-
-.pa-convert-files { list-style: none; margin: 0; padding: 0; }
-.pa-convert-files li {
-    display: flex; flex-direction: column; gap: 2px;
-    padding: 10px 12px; margin-bottom: 7px;
-    border-radius: 9px;
-    background: #F4F9F3;
-    border: 1px solid rgba(36, 123, 33, 0.25);
+.pa-convert-review {
+    margin-top: 18px;
+    padding-top: 14px;
+    border-top: 1px solid var(--cv-line);
 }
-.pa-convert-file { font-size: 12.5px; font-weight: 600; overflow-wrap: anywhere; }
-.pa-convert-filestat { font-size: 12px; color: var(--pa-ink-muted, #595959); }
+.pa-convert-review-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.pa-convert-panel h3.pa-convert-review-title {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--pa-ink, #18181B);
+}
+.pa-convert-review-failed h3.pa-convert-review-title { color: var(--cv-bad-ink); }
+.pa-convert-review-count { font-size: 11.5px; color: var(--pa-ink-muted, #595959); font-variant-numeric: tabular-nums; }
+.pa-convert-summary {
+    margin: 6px 0 12px;
+    font-size: 12.5px;
+    line-height: 1.55;
+    color: var(--pa-ink-control, #3F3F46);
+    max-width: var(--pa-measure-note, 78ch);
+}
 
-/* ---- footer ------------------------------------------------------------ */
+.pa-convert-result {
+    position: relative;
+    margin-bottom: 10px;
+    /* 16px on the left: border 1 + bar 4 + 11 of air puts the radio's label
+       on the 64px type rail the timeline uses (measured, not chosen). */
+    padding: 12px 14px 12px 16px;
+    border-radius: var(--pa-radius, 8px);
+    border: 1px solid var(--cv-line-strong);
+    background: var(--pa-surface, #FFFFFF);
+    box-shadow: inset 4px 0 0 var(--cv-line), var(--pa-shadow, 0 1px 3px rgba(24, 24, 27, 0.08));
+    transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+.pa-convert-result-chosen {
+    border-color: var(--cv-omic);
+    box-shadow: inset 4px 0 0 var(--cv-omic), var(--pa-shadow, 0 1px 3px rgba(24, 24, 27, 0.08));
+}
 
-.pa-convert-footer {
-    display: flex; gap: 10px; justify-content: flex-end;
-    padding: 14px 20px;
-    border-top: 1px solid rgba(24, 24, 27, 0.08);
+.pa-convert-result-head { display: flex; align-items: flex-start; gap: 10px; }
+.pa-convert-pick {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    flex: 1 1 auto;
+    min-width: 0;
+    cursor: pointer;
+}
+.pa-convert-pick input { margin: 3px 0 0; flex: 0 0 auto; accent-color: var(--cv-omic); }
+.pa-convert-result-titles { min-width: 0; }
+.pa-convert-result-title { font-size: 13.5px; font-weight: 650; overflow-wrap: anywhere; color: var(--pa-ink, #18181B); }
+.pa-convert-result-meta { margin-top: 2px; font-size: 11.5px; color: var(--pa-ink-muted, #595959); font-variant-numeric: tabular-nums; }
+
+.pa-convert-badge {
+    flex: 0 0 auto;
+    align-self: center;
+    padding: 2px 8px;
+    border-radius: 99px;
+    background: var(--cv-ok-bg);
+    border: 1px solid var(--cv-ok-line);
+    color: var(--cv-ok);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+
+.pa-convert-iconbtn {
+    flex: 0 0 auto;
+    width: 28px;
+    height: 28px;
+    display: grid;
+    place-items: center;
+    border: 1px solid var(--cv-line-strong);
+    border-radius: var(--pa-radius-sm, 6px);
+    background: var(--pa-control-bg, #FFFFFF);
+    color: var(--pa-ink-control, #3F3F46);
+    cursor: pointer;
+}
+.pa-convert-iconbtn svg { width: 14px; height: 14px; display: block; }
+.pa-convert-iconbtn:hover { border-color: var(--cv-ai-ink); color: var(--cv-ai-ink); }
+
+.pa-convert-preview {
+    margin: 10px 0 0;
+    border-radius: var(--pa-radius-sm, 6px);
+    border: 1px solid var(--cv-line);
+    background: var(--pa-surface-sunken, #F5F4EF);
+    overflow-x: auto;         /* wide previews scroll here, never the sheet */
+}
+.pa-convert-preview table { border-collapse: collapse; font-family: var(--cv-mono); font-size: 11px; }
+.pa-convert-preview th, .pa-convert-preview td {
+    padding: 4px 9px;
+    border-bottom: 1px solid var(--cv-line);
+    white-space: nowrap;
+    text-align: left;
+    max-width: 170px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.pa-convert-preview tr:last-child td { border-bottom: 0; }
+.pa-convert-preview th { font-weight: 650; color: var(--pa-ink-control, #3F3F46); background: rgba(24, 24, 27, 0.035); }
+.pa-convert-preview td { font-variant-numeric: tabular-nums; color: var(--pa-ink, #18181B); }
+.pa-convert-preview .pa-convert-id { font-weight: 600; }
+.pa-convert-preview .pa-convert-more { color: var(--pa-ink-muted, #595959); font-weight: 500; }
+
+/* Kept / left out. The label column has a fixed width so the two chip rows
+   start on the same line. */
+.pa-convert-columns { margin-top: 9px; display: grid; grid-template-columns: 58px 1fr; row-gap: 5px; column-gap: 6px; align-items: start; }
+.pa-convert-columns-label {
+    padding-top: 2px;
+    font-size: 11px;
+    font-weight: 650;
+    letter-spacing: 0.02em;
+    color: var(--pa-ink-muted, #595959);
+}
+.pa-convert-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.pa-convert-chip {
+    padding: 1px 7px;
+    border-radius: 99px;
+    font-family: var(--cv-mono);
+    font-size: 10.5px;
+    line-height: 1.6;
+    background: var(--pa-surface-quiet, #F3F2ED);
+    color: var(--pa-ink-control, #3F3F46);
+    max-width: 220px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.pa-convert-kept .pa-convert-chip { background: var(--cv-ok-bg); color: #1F5E1D; }
+.pa-convert-dropped .pa-convert-chip { text-decoration: line-through; opacity: 0.75; }
+.pa-convert-chip-more { text-decoration: none !important; opacity: 1 !important; font-family: var(--pa-font-sans); }
+
+.pa-convert-result-note {
+    margin: 9px 0 0;
+    font-size: 11.5px;
+    line-height: 1.5;
+    color: var(--pa-ink-muted, #595959);
+}
+
+.pa-convert-linked {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 9px;
+    padding: 7px 9px;
+    border-radius: var(--pa-radius-sm, 6px);
+    background: var(--cv-ok-bg);
+    border: 1px solid var(--cv-ok-line);
+    font-size: 11.5px;
+    line-height: 1.45;
+    color: var(--pa-ink-control, #3F3F46);
+}
+.pa-convert-linked > span:nth-child(2) { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.pa-convert-linked-icon { color: var(--cv-ok); display: grid; place-items: center; }
+.pa-convert-linked-icon svg { width: 14px; height: 14px; }
+.pa-convert-linked b { font-weight: 600; }
+
+.pa-convert-extras { margin-top: 12px; }
+.pa-convert-panel h4.pa-convert-extras-title {
+    margin: 0 0 4px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--pa-ink-muted, #595959);
+}
+.pa-convert-extras .pa-convert-linked { background: var(--pa-surface-quiet, #F3F2ED); border-color: var(--cv-line); }
+.pa-convert-extras .pa-convert-linked-icon { color: var(--pa-ink-muted, #595959); }
+
+.pa-convert-skipped { margin-top: 10px; font-size: 11.5px; color: var(--pa-ink-muted, #595959); }
+.pa-convert-skipped summary { cursor: pointer; font-weight: 600; }
+.pa-convert-skipped-row { padding: 3px 0 0 14px; }
+.pa-convert-skipped-row b { font-weight: 600; color: var(--pa-ink-control, #3F3F46); }
+
+.pa-convert-addothers {
+    display: flex;
+    gap: 9px;
+    align-items: flex-start;
+    margin-top: 12px;
+    padding: 10px 12px;
+    border-radius: var(--pa-radius, 8px);
+    border: 1px dashed var(--cv-ai-line);
+    background: var(--cv-ai-bg);
+    font-size: 12.5px;
+    line-height: 1.45;
+    color: var(--pa-ink-control, #3F3F46);
+    cursor: pointer;
+}
+.pa-convert-addothers input { margin-top: 3px; accent-color: var(--cv-ai-ink); }
+
+.pa-convert-failed-files { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+
+/* ---- the dock: composer, then the decision ------------------------------ */
+
+.pa-convert-dock {
+    flex: 0 0 auto;
+    padding: 12px var(--cv-inset) 14px;
+    border-top: 1px solid var(--cv-line);
     background: var(--pa-surface-toolbar, #F6F5F0);
 }
+
+.pa-convert-composer {
+    display: flex;
+    gap: 8px;
+    align-items: flex-end;
+}
+/* Two lines tall at rest and growing with what is typed. A one-row box
+   clipped its own placeholder mid-sentence. */
+.pa-convert-composer-input {
+    flex: 1 1 auto;
+    min-height: 66px;
+    max-height: 200px;
+    padding: 10px 12px;
+    border-radius: var(--pa-radius, 8px);
+    border: 1px solid var(--cv-line-strong);
+    background: var(--pa-control-bg, #FFFFFF);
+    color: var(--pa-ink, #18181B);
+    font: inherit;
+    font-size: 13px;
+    line-height: 1.45;
+    resize: none;
+    box-shadow: var(--pa-shadow-inset, inset 0 1px 2px rgba(24, 24, 27, 0.06));
+}
+.pa-convert-composer-input::placeholder { color: var(--pa-ink-muted, #595959); opacity: 0.85; }
+.pa-convert-composer-input:focus {
+    outline: none;
+    border-color: var(--cv-ai-ink);
+    box-shadow: 0 0 0 3px rgba(25, 88, 158, 0.14);
+}
+.pa-convert-composer-input:disabled { opacity: 0.55; }
+.pa-convert-composer-send {
+    flex: 0 0 auto;
+    min-height: 38px;
+    padding: 0 16px;
+    border-radius: var(--pa-radius-sm, 6px);
+    border: 1px solid var(--cv-ai-ink);
+    background: var(--cv-ai-ink);
+    color: #fff;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 650;
+    cursor: pointer;
+    transition: background-color var(--pa-transition, 150ms), opacity var(--pa-transition, 150ms);
+}
+.pa-convert-composer-send:hover:not(:disabled) { background: #134A86; }
+.pa-convert-composer-send:disabled { opacity: 0.45; cursor: default; }
+.pa-convert-composer-hint {
+    margin: 6px 0 0;
+    font-size: 11px;
+    line-height: 1.4;
+    color: var(--pa-ink-muted, #595959);
+}
+.pa-convert-composer-hint kbd {
+    font-family: inherit;
+    font-size: 10px;
+    padding: 0 4px;
+    border: 1px solid var(--cv-line-strong);
+    border-bottom-width: 2px;
+    border-radius: 3px;
+    background: var(--pa-control-bg, #FFFFFF);
+}
+
+.pa-convert-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--cv-line);
+}
+.pa-convert-actions:empty { display: none; }
 
 .pa-convert-accept, .pa-convert-dismiss {
     min-height: 34px;
     padding: 8px 16px;
-    border-radius: 8px;
-    font: inherit; font-size: 13px; font-weight: 600;
+    border-radius: var(--pa-radius-sm, 6px);
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
     cursor: pointer;
+    transition: background-color var(--pa-transition, 150ms), border-color var(--pa-transition, 150ms);
 }
-
-.pa-convert-accept {
-    border: 1px solid #306C30;
-    background: #3A843A;
-    color: #fff;
-}
+/* The accept is the app's own success green -- the same fill as Run
+   PaintOmics -- because it is the thing we want pressed. */
+.pa-convert-accept { border: 1px solid #306C30; background: #3A843A; color: #fff; }
 .pa-convert-accept:hover { background: #337533; }
-
 .pa-convert-dismiss {
     border: 1px solid var(--pa-ink-label, #52525B);
     background: var(--pa-control-bg, #FFFFFF);
     color: var(--pa-ink-control, #3F3F46);
     font-weight: 500;
 }
+.pa-convert-dismiss:hover { border-color: var(--cv-ai-ink); color: var(--cv-ai-ink); }
+.pa-convert-dismiss.is-quiet { border-color: transparent; background: transparent; }
 
 /* The sandbox does the work but shows nothing; it must not take layout. */
 .pa-convert-sandbox {
     position: absolute;
-    width: 1px; height: 1px;
-    left: -9999px; top: 0;
+    width: 1px;
+    height: 1px;
+    left: -9999px;
+    top: 0;
     border: 0;
-}
-
-/* ---- review: tables, previews, chips ------------------------------------ */
-
-.pa-convert-reviewhost { margin-top: 10px; }
-.pa-convert-summary {
-    margin: 0 0 12px;
-    font-size: 12.5px; line-height: 1.55;
-    color: var(--pa-ink-control, #3F3F46);
-}
-
-.pa-convert-card {
-    margin-bottom: 10px;
-    padding: 12px 12px 10px;
-    border-radius: 12px;
-    border: 1px solid rgba(24, 24, 27, 0.10);
-    background: var(--pa-surface, #FFFFFF);
-    transition: border-color 160ms ease, box-shadow 160ms ease;
-}
-.pa-convert-card-chosen {
-    border-color: var(--pa-accent-green, #247B21);
-    box-shadow: 0 0 0 3px rgba(36, 123, 33, 0.10);
-}
-
-.pa-convert-card-head { display: flex; align-items: flex-start; gap: 10px; }
-.pa-convert-pick { display: flex; gap: 10px; align-items: flex-start; flex: 1 1 auto; min-width: 0; cursor: pointer; }
-.pa-convert-pick input { margin: 3px 0 0; accent-color: var(--pa-accent-green, #247B21); }
-.pa-convert-card-titles { min-width: 0; }
-.pa-convert-card-title { font-size: 13px; font-weight: 650; overflow-wrap: anywhere; }
-.pa-convert-card-meta { margin-top: 2px; font-size: 11.5px; color: var(--pa-ink-muted, #595959); }
-
-.pa-convert-badge {
-    flex: 0 0 auto;
-    padding: 2px 8px;
-    border-radius: 99px;
-    background: #E9F3E8;
-    color: var(--pa-accent-green, #247B21);
-    font-size: 10.5px; font-weight: 700; letter-spacing: 0.02em; text-transform: uppercase;
-    align-self: center;
-}
-
-.pa-convert-iconbtn {
-    flex: 0 0 auto;
-    width: 28px; height: 28px;
-    border: 1px solid rgba(24, 24, 27, 0.12); border-radius: 7px;
-    background: var(--pa-control-bg, #FFFFFF);
-    color: var(--pa-ink-control, #3F3F46);
-    font-size: 14px; line-height: 1; cursor: pointer;
-}
-.pa-convert-iconbtn:hover { border-color: var(--pa-accent-blue, #19589E); color: var(--pa-accent-blue, #19589E); }
-
-.pa-convert-preview {
-    margin: 10px 0 8px;
-    border-radius: 8px;
-    border: 1px solid rgba(24, 24, 27, 0.08);
-    background: var(--pa-surface-sunken, #F5F4EF);
-    overflow-x: auto;         /* wide previews scroll here, never the drawer */
-}
-.pa-convert-preview table { border-collapse: collapse; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; }
-.pa-convert-preview th, .pa-convert-preview td {
-    padding: 4px 9px;
-    border-bottom: 1px solid rgba(24, 24, 27, 0.06);
-    white-space: nowrap; text-align: left;
-    max-width: 160px; overflow: hidden; text-overflow: ellipsis;
-}
-.pa-convert-preview th { font-weight: 650; color: var(--pa-ink-control, #3F3F46); background: rgba(24, 24, 27, 0.03); }
-.pa-convert-preview td { font-variant-numeric: tabular-nums; color: var(--pa-ink, #18181B); }
-.pa-convert-preview .pa-convert-id { font-weight: 600; }
-.pa-convert-preview .pa-convert-more { color: var(--pa-ink-muted, #595959); font-weight: 500; }
-
-.pa-convert-chips { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin-top: 6px; }
-.pa-convert-chips-label { font-size: 11px; font-weight: 650; color: var(--pa-ink-muted, #595959); margin-right: 2px; }
-.pa-convert-chip {
-    padding: 1px 7px; border-radius: 99px;
-    font-size: 10.5px; line-height: 1.6;
-    background: var(--pa-surface-quiet, #F3F2ED);
-    color: var(--pa-ink-control, #3F3F46);
-    max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.pa-convert-kept .pa-convert-chip { background: #E9F3E8; color: #1F5E1D; }
-.pa-convert-dropped .pa-convert-chip { text-decoration: line-through; opacity: 0.8; }
-.pa-convert-chip-more { text-decoration: none !important; opacity: 1 !important; }
-
-.pa-convert-card-note {
-    margin: 8px 0 0;
-    font-size: 11.5px; line-height: 1.5;
-    color: var(--pa-ink-muted, #595959);
-}
-
-.pa-convert-linked {
-    display: flex; align-items: center; gap: 8px;
-    margin-top: 8px; padding: 7px 9px;
-    border-radius: 8px;
-    background: #F4F9F3;
-    font-size: 11.5px; line-height: 1.45;
-    color: var(--pa-ink-control, #3F3F46);
-}
-.pa-convert-linked > span:nth-child(2) { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
-.pa-convert-linked-icon { color: var(--pa-accent-green, #247B21); font-weight: 700; }
-
-.pa-convert-extras { margin-top: 12px; }
-.pa-convert-extras h4 { margin: 0 0 4px; font-size: 12px; font-weight: 650; color: var(--pa-ink-muted, #595959); }
-.pa-convert-extras .pa-convert-linked { background: var(--pa-surface-quiet, #F3F2ED); }
-
-.pa-convert-skipped { margin-top: 10px; font-size: 11.5px; color: var(--pa-ink-muted, #595959); }
-.pa-convert-skipped summary { cursor: pointer; font-weight: 600; }
-.pa-convert-skipped-row { padding: 3px 0 0 14px; }
-
-.pa-convert-addothers {
-    display: flex; gap: 9px; align-items: flex-start;
-    margin-top: 12px; padding: 10px 12px;
-    border-radius: 10px;
-    border: 1px dashed rgba(25, 88, 158, 0.45);
-    font-size: 12.5px; line-height: 1.45; cursor: pointer;
-}
-.pa-convert-addothers input { margin-top: 3px; accent-color: var(--pa-accent-blue, #19589E); }
-
-.pa-convert-review-failed h3 { color: #B3261E; }
-.pa-convert-answer { margin-top: 8px; font-size: 11.5px; color: var(--pa-accent-green, #247B21); font-weight: 600; }
-
-.pa-phase-user .pa-convert-icon { background: #E8EFF7; color: var(--pa-accent-blue, #19589E); }
-.pa-phase-finalising .pa-convert-icon { background: #E8EFF7; color: var(--pa-accent-blue, #19589E); }
-.pa-phase-user .pa-convert-step-detail { color: var(--pa-ink, #18181B); font-style: italic; }
-
-/* ---- composer ------------------------------------------------------------ */
-
-.pa-convert-composer {
-    display: flex; gap: 8px; align-items: flex-end;
-    padding: 10px 20px 0;
-    border-top: 1px solid rgba(24, 24, 27, 0.08);
-    background: var(--pa-surface, #FFFFFF);
-}
-.pa-convert-composer-input {
-    flex: 1 1 auto;
-    min-height: 38px; max-height: 120px;
-    padding: 9px 12px;
-    border-radius: 10px;
-    border: 1px solid rgba(24, 24, 27, 0.18);
-    background: var(--pa-control-bg, #FFFFFF);
-    color: var(--pa-ink, #18181B);
-    font: inherit; font-size: 12.5px; line-height: 1.4;
-    resize: vertical;
-}
-.pa-convert-composer-input:focus { outline: none; border-color: var(--pa-accent-blue, #19589E); box-shadow: 0 0 0 3px rgba(25, 88, 158, 0.12); }
-.pa-convert-composer-input:disabled { opacity: 0.55; }
-.pa-convert-composer-send {
-    flex: 0 0 auto;
-    min-height: 38px; padding: 0 14px;
-    border-radius: 10px;
-    border: 1px solid var(--pa-accent-blue, #19589E);
-    background: var(--pa-accent-blue, #19589E);
-    color: #fff;
-    font: inherit; font-size: 12.5px; font-weight: 650;
-    cursor: pointer;
-}
-.pa-convert-composer-send:disabled { opacity: 0.45; cursor: default; }
-.pa-convert-composer-hint {
-    padding: 5px 20px 8px;
-    font-size: 10.5px; line-height: 1.4;
-    color: var(--pa-ink-muted, #595959);
-    background: var(--pa-surface, #FFFFFF);
 }
