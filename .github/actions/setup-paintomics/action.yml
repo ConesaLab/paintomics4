@@ -35,17 +35,18 @@ runs:
       with:
         r-version: ${{ inputs.r-version }}
 
-    - name: R packages for the metagene and hub scripts
-      uses: r-lib/actions/setup-r-dependencies@v2
+    # Not r-lib/actions/setup-r-dependencies: it installed these same
+    # packages in 20 s and then sat for eight minutes in its "check whether
+    # quarto is needed" step, which was the entire PR budget.
+    - name: R package library (cache)
+      uses: actions/cache@v4
       with:
-        packages: |
-          any::mclust
-          any::cluster
-          any::amap
-          any::factoextra
-          any::purrr
-          any::optparse
-        cache-version: 1
+        path: ~/paintomics-ci/Rlib
+        key: r-packages-${{ inputs.r-version }}-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/ci/setup-r-packages.sh') }}
+
+    - name: R packages for the metagene and hub scripts
+      shell: bash
+      run: scripts/ci/setup-r-packages.sh
 
     - name: MongoDB distribution (cache)
       uses: actions/cache@v4
