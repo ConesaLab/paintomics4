@@ -351,6 +351,106 @@ def findIDsByFeaturesName(jobID, featureNames, db, databaseConvertion_id):
 
         return matchedFeatures
 
+def _bridgeSecondHopForDatabases(db, unresolvedByTarget, bridgeIDsByTarget):
+    """_bridgeSecondHop for several target databases at once.
+
+    Of its three lookups, the first (which bridge identifiers the unresolved
+    names' mates are) and the third (which of the bridge groups' far mates
+    are in the target) filter a set of ids by dbname_id, so one query over
+    the union of the targets' ids, split by dbname_id afterwards, returns
+    every target exactly the hits its own query did. The second lookup
+    (the bridge documents' own mate groups, by display_id) stays per target:
+    its result is a LIST whose order is the query's, and a name's translations
+    follow that order.
+
+    Each target's bridge set excludes the target itself (resolveBridgeDatabase
+    Ids), so the shared first lookup asks for the union of the bridge sets and
+    each target keeps only the hits in its own.
+
+    @returns {Dict} target -> {name: [translated identifiers]}, hits only.
+    """
+    targets = [target for target, documents in unresolvedByTarget.items()
+               if documents and bridgeIDsByTarget.get(target)]
+    recoveredByTarget = {target: {} for target in unresolvedByTarget}
+    if not targets:
+        return recoveredByTarget
+
+    # Hop 1b, shared: which bridge identifiers does each unresolved name carry?
+    allBridgeIDs = list({bridge for target in targets for bridge in bridgeIDsByTarget[target]})
+    mateIDs = list({mate for target in targets for document in unresolvedByTarget[target]
+                    for mate in (document.get("mates") or [])})
+    bridgeValueByMateAll = {}
+    for start_ in range(0, len(mateIDs), 5000):
+        for hit in db.xref.find({"dbname_id": {"$in": allBridgeIDs},
+                                 "_id": {"$in": mateIDs[start_:start_ + 5000]}},
+                                {"display_id": 1, "dbname_id": 1}, batch_size=XREF_BATCH_SIZE):
+            bridgeValueByMateAll[hit.get("_id")] = (hit.get("dbname_id"), str(hit.get("display_id")))
+
+    # Hop 2, per target: the bridge documents' OWN mate groups.
+    bridgeValueByMate = {}
+    bridgeMates = {}
+    farMateIDs = {}
+    for target in targets:
+        bridges = set(bridgeIDsByTarget[target])
+        mine = {}
+        for document in unresolvedByTarget[target]:
+            for mate in (document.get("mates") or []):
+                hit = bridgeValueByMateAll.get(mate)
+                if hit is not None and hit[0] in bridges:
+                    mine[mate] = hit
+        bridgeValueByMate[target] = mine
+        if not mine:
+            continue
+        bridgeValues = list({value for _, value in mine.values()})
+        mates = defaultdict(list)
+        for start_ in range(0, len(bridgeValues), 5000):
+            for hit in db.xref.find({"dbname_id": {"$in": bridgeIDsByTarget[target]},
+                                     "display_id": {"$in": bridgeValues[start_:start_ + 5000]}},
+                                    {"display_id": 1, "mates": 1}, batch_size=XREF_BATCH_SIZE):
+                mates[str(hit.get("display_id"))].extend(hit.get("mates") or [])
+        bridgeMates[target] = mates
+        farMateIDs[target] = list({mate for group in mates.values() for mate in group})
+
+    # Hop 3, shared: the target inside the bridge groups.
+    allFarMates = list({mate for target in farMateIDs for mate in farMateIDs[target]})
+    targetByMateAll = {}
+    for start_ in range(0, len(allFarMates), 5000):
+        for hit in db.xref.find({"dbname_id": {"$in": list(farMateIDs)},
+                                 "_id": {"$in": allFarMates[start_:start_ + 5000]}},
+                                {"display_id": 1, "dbname_id": 1}, batch_size=XREF_BATCH_SIZE):
+            targetByMateAll[hit.get("_id")] = (hit.get("dbname_id"), str(hit.get("display_id")))
+
+    for target in targets:
+        if target not in bridgeMates:
+            continue
+        targetByMate = {}
+        for mate in farMateIDs[target]:
+            hit = targetByMateAll.get(mate)
+            if hit is not None and hit[0] == target:
+                targetByMate[mate] = hit[1]
+        if not targetByMate:
+            continue
+        recovered = {}
+        mine = bridgeValueByMate[target]
+        mates = bridgeMates[target]
+        for document in unresolvedByTarget[target]:
+            translations = []
+            seen = set()
+            for mate in (document.get("mates") or []):
+                bridge = mine.get(mate)
+                if bridge is None:
+                    continue
+                for farMate in mates.get(bridge[1], ()):
+                    identifier = targetByMate.get(farMate)
+                    if identifier is not None and identifier not in seen:
+                        seen.add(identifier)
+                        translations.append(identifier)
+            if translations:
+                recovered[document.get("display_id")] = translations
+        recoveredByTarget[target] = recovered
+    return recoveredByTarget
+
+
 def findIDsByFeaturesNameForDatabases(jobID, featureNames, db, databaseConvertion_ids):
     """findIDsByFeaturesName for several target databases at once, sharing the
     part of the work that does not depend on the target.
@@ -405,6 +505,7 @@ def findIDsByFeaturesNameForDatabases(jobID, featureNames, db, databaseConvertio
                                         {"display_id": 1, "dbname_id": 1}, batch_size=XREF_BATCH_SIZE):
                     hitsByID[hit.get("_id")] = (hit.get("dbname_id"), hit.get("display_id"))
 
+            unresolvedByTarget = {}
             for target in databaseConvertion_ids:
                 matchedFeatures = matchedByTarget[target]
                 for document in nameDocuments:
@@ -415,14 +516,19 @@ def findIDsByFeaturesNameForDatabases(jobID, featureNames, db, databaseConvertio
                             if translations is None:
                                 translations = matchedFeatures[document.get("display_id")]
                             translations.append(str(hit[1]))
+                unresolvedByTarget[target] = [document for document in nameDocuments
+                                              if document.get("display_id") not in matchedFeatures]
 
-                unresolved = [document for document in nameDocuments
-                              if document.get("display_id") not in matchedFeatures]
-                if unresolved:
-                    recovered = _bridgeSecondHop(
-                        db, unresolved, target, resolveBridgeDatabaseIds(db, target))
-                    for name, translations in recovered.items():
-                        matchedFeatures[name] = translations
+            # Second hop for whatever the first could not reach, all targets at
+            # once (see _bridgeSecondHopForDatabases).
+            recoveredByTarget = _bridgeSecondHopForDatabases(
+                db, unresolvedByTarget,
+                {target: resolveBridgeDatabaseIds(db, target) for target in databaseConvertion_ids})
+
+            for target in databaseConvertion_ids:
+                matchedFeatures = matchedByTarget[target]
+                for name, translations in recoveredByTarget[target].items():
+                    matchedFeatures[name] = translations
 
                 for name in notCachedIds:
                     if name not in matchedFeatures:
