@@ -117,7 +117,10 @@ def unifyAndSort(seq, criteria=None):
     seq = sorted(seq, key=criteria)
     # order preserving
     if criteria is None:
-       pass
+       # The original recipe defined a local identity function here and
+       # never bound it, so a call without `criteria` sorted fine and then
+       # failed on `criteria(item)` below. Bind the identity instead.
+       criteria = lambda item: item  # noqa: E731
     seen = {}
     result = []
     for item in seq:

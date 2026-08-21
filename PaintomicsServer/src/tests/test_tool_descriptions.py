@@ -104,10 +104,10 @@ def test_the_lead_prompt_does_not_contradict_itself_about_checking_citations():
 
 
 
-# Unused since the March 2026 feature commit that introduced them, and never
-# referenced since. Left in place rather than deleted from a branch about the
-# agent arm -- named here so they are visible instead of merely unused.
-KNOWN_ORPHAN_PROMPTS = {"SYSTEM_PROMPT_INTERPRET_V2", "SYSTEM_PROMPT_SYNTHESIZE_V2"}
+# Prompts that are defined but used nowhere. The two V2 prompts that sat here
+# since March 2026 were deleted in the dead-code pass (reports/deadcode.md);
+# a new orphan goes in here only with a reason it is being kept.
+KNOWN_ORPHAN_PROMPTS = set()
 
 
 def test_the_lead_prompt_only_names_tools_that_exist():

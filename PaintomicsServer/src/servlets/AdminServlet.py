@@ -291,7 +291,10 @@ def adminServletInstallOrganism(request, response, organism_code, ROOT_DIRECTORY
     finally:
         return response
 
-def adminServletRestoreData(request, response):
+def adminServletRestoreData(request, response, ROOT_DIRECTORY):
+    # ROOT_DIRECTORY is an argument, as in adminServletInstallOrganism: the
+    # body built the DBManager path from a name that was never defined here,
+    # so any call would have died with NameError before running anything.
     """
     This function...
 
