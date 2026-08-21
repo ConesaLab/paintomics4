@@ -39,6 +39,10 @@ jobs:
         id: meta
         run: echo "image=paintomics-app:${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
       - name: Pack app.tar and build the image
+        env:
+          # compose.yaml refuses to interpolate without it, even for `build`;
+          # the value is not baked into the image (it is read at run time).
+          PAINTOMICS_BASE_URL: https://127.0.0.1
         run: |
           deploy/build-image.sh
           docker tag paintomics-app:latest "${{ steps.meta.outputs.image }}"
