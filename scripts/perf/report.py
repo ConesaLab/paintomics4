@@ -25,9 +25,13 @@ sys.path.insert(0, HERE)
 import topfuncs  # noqa: E402
 
 
+ROOT = "run (perf_run.py)"
+
+
 def read_profile(path):
-    """{key: cumulative samples}, {key: self samples}, total, {key: is_src}"""
-    cumulative, self_time, in_src, total = defaultdict(int), defaultdict(int), {}, 0
+    """{key: cumulative samples}, {key: self samples}, samples on the
+    pipeline path, {key: is_src}, samples in total (every thread)"""
+    cumulative, self_time, in_src, total, kept = defaultdict(int), defaultdict(int), {}, 0, 0
     with open(path, encoding="utf-8", errors="replace") as handle:
         for line in handle:
             stack, _, count = line.rstrip("\n").rpartition(" ")
@@ -42,26 +46,32 @@ def read_profile(path):
                     key, is_src = topfuncs.frame_key(raw)
                     frames.append(key)
                     in_src[key] = is_src
+            # Only the pipeline and the workers forked from it: py-spy also
+            # samples pymongo's monitor and heartbeat threads, which sit in
+            # select() for the whole run and would otherwise top the table.
+            if not topfuncs.on_path(frames, ROOT):
+                continue
+            kept += count
             for key in set(frames):
                 cumulative[key] += count
             if frames:
                 self_time[frames[-1]] += count
-    return cumulative, self_time, total, in_src
+    return cumulative, self_time, kept, in_src, total
 
 
 def median_table(profiles, rate, only_src, top):
     keys = set()
-    for cumulative, _, _, _ in profiles:
+    for cumulative, _, _, _, _ in profiles:
         keys |= set(cumulative)
     in_src = {}
-    for _, _, _, flags in profiles:
+    for _, _, _, flags, _ in profiles:
         in_src.update(flags)
     rows = []
     for key in keys:
         if only_src and not in_src.get(key):
             continue
-        cums = [c.get(key, 0) / rate for c, _, _, _ in profiles]
-        selfs = [s.get(key, 0) / rate for _, s, _, _ in profiles]
+        cums = [c.get(key, 0) / rate for c, _, _, _, _ in profiles]
+        selfs = [s.get(key, 0) / rate for _, s, _, _, _ in profiles]
         rows.append((statistics.median(cums), statistics.median(selfs), cums, key))
     rows.sort(key=lambda r: -r[0])
     return rows[:top]
@@ -94,8 +104,9 @@ def main(argv=None):
     for key in phase_keys:
         print("    %-48s %8.2f" % (key, statistics.median(p.get(key, 0) for p in phases)))
     print()
-    totals = [t for _, _, t, _ in profiles]
-    print("Samples per profiled run: " + ", ".join(str(t) for t in totals))
+    print("Samples per profiled run on the pipeline path (main thread + forked mapper workers): "
+          + ", ".join("%d of %d" % (kept, total) for _, _, kept, _, total in profiles)
+          + "; the rest are pymongo monitor/heartbeat threads in select()")
     print()
     print("Top %d functions of PaintomicsServer/src by cumulative time (median over %d recordings; seconds = samples / %d Hz)" % (args.top, args.runs, args.rate))
     print("%4s %9s %9s  %-24s %s" % ("#", "cumul s", "self s", "per run (s)", "function (file)"))
