@@ -202,6 +202,10 @@ STAGE_COUNTS = ("delegate_fulltext_gained", "quotes_supplied", "quotes_reused", 
                 # round before this one recorded only the numerator.
                 "universe_pathways", "detail_deferred",
                 "delegate_trimmed_for_time",
+                # Gene-level access. Whether the agent USES the way out of the
+                # top-ten cut is the whole question the tools were added to
+                # answer, and it is unanswerable from the report alone.
+                "kgml_files_read",
                 # The Results rewrite's conservation, which is the whole point
                 # of the stage: round 66 kept every citation and still lost 22%
                 # of the rubric's coverage, so citations alone cannot say

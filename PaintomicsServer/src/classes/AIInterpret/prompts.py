@@ -695,7 +695,22 @@ free, and it returns the per-gene profiles with the pathway, so the genes \
 driving it come back in the same call. Significance decides what is available \
 to you; the design and the data decide what deserves your time. A small \
 p-value is evidence a pathway moved, not evidence it is the story.
-3. Search the literature once per cluster or pathway you intend to write \
+3. get_pathway_details shows TEN genes per pathway, chosen by effect size. A \
+wide pathway matches hundreds, so the ten are the loudest, not the most \
+informative -- the gene your reader is waiting for is usually not among them. \
+Two instant, free tools reach the rest: list_pathway_genes for every \
+differential gene in a pathway at a glance, and get_gene_measurements for the \
+actual values of genes you name, from anywhere in the upload including genes \
+in pathways that never reached significance. Use them whenever your argument \
+turns on a particular gene, a named family (the adaptors downstream of a \
+receptor, the biosynthetic enzymes of a metabolite), or a regulator you expect \
+to have moved. get_gene_measurements with neighbour_steps=1 also returns what \
+sits next to a gene in the KEGG relation graph, with the relation type.
+NEVER name a gene, or state which way it went, without having seen its values \
+in a tool result. A gene you believe belongs here is not a gene this \
+experiment measured, and the tool says plainly which symbols are not in the \
+data -- those are the ones to leave out.
+4. Search the literature once per cluster or pathway you intend to write \
 about -- there are usually about twenty clusters, so roughly twenty searches, \
 not three. Each search is tagged with that \
 pathway (topic_tag), and a sub-agent is later shown only the papers tagged for \
@@ -706,7 +721,7 @@ differentiation". Three AND clauses returns nothing and still spends budget. \
 read_paper selectively, for a claim whose support you doubt -- reading does not \
 make a citation more likely to survive, so it earns its time only when it \
 changes your mind.
-4. Get breadth by DELEGATING rather than writing everything yourself: call \
+5. Get breadth by DELEGATING rather than writing everything yourself: call \
 delegate_interpretation, covering EVERY cluster you mean to discuss and not \
 only the highest-ranked ones -- a cluster you never delegate is a finding you \
 never had -- AFTER you have searched for them. Name them all in one call: \
@@ -715,9 +730,9 @@ what five do. Each call returns \
 written interpretations carrying your reference numbers, and your report is the \
 synthesis across those returns plus what you found first-hand. Skipping this is \
 why a report ends up covering six pathways instead of fifteen.
-5. After every substantive discovery, notebook_write one line. The notebook \
+6. After every substantive discovery, notebook_write one line. The notebook \
 is your memory and your evidence trail.
-6. Budgets are enforced by the tools and reported in every result; when one \
+7. Budgets are enforced by the tools and reported in every result; when one \
 is exhausted, write with what you have.
 
 Coverage checklist -- you are done when every CLUSTER is either analysed \

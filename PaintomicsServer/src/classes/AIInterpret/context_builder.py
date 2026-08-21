@@ -762,3 +762,159 @@ def _direction_arrow(peak_value):
     elif peak_value < -0.3:
         return "↓"
     return "→"
+
+
+# ---------------------------------------------------------------------------
+# Gene-level access
+#
+# Measured on the frozen STATegra job (102 significant pathways): the agent was
+# shown 1,010 of 10,583 matched genes -- 9.5%. "Pathways in cancer" matches 460
+# and showed 10. The cut is by effect size, so what survives is the loudest
+# genes, and the ones a biologist asks for by name usually do not.
+#
+# Checked against the sealed rubric for this exact job, which names eleven genes:
+#
+#   Srm Sms Amd1 Odc1 Dok1 Dok2 Dok3 Myc Igll1 Ikzf1   in the job, INVISIBLE
+#   Ret                                                 visible
+#
+# Ten of eleven, including Ikzf1 -- the transcription factor the experiment is
+# ABOUT. Three rubric items (DOK down, polyamine genes down, Myc repression) were
+# therefore unreachable by any prompt: the writer could not have named those
+# genes without inventing them, and inventing them is what the verifier exists to
+# catch. No amount of instruction fixes a gene that is not in the context.
+# ---------------------------------------------------------------------------
+
+def build_gene_index(job_instance):
+    """symbol (lowercase) -> [gene ids]. Built once, O(n) over the input genes.
+
+    A list rather than a single id: symbols are not unique in an omics upload
+    (isoform rows, duplicate probes, and the '#' suffix forms this project has
+    been bitten by before), and silently keeping the first would make the answer
+    depend on dict order.
+    """
+    index = {}
+    for gid, gene in (job_instance.getInputGenesData() or {}).items():
+        try:
+            symbol = gene.getName()
+        except Exception:
+            continue
+        if not symbol:
+            continue
+        index.setdefault(str(symbol).strip().lower(), []).append(gid)
+    return index
+
+
+def gene_measurements(job_instance, symbols, header_map=None, limit_per_symbol=1):
+    """Per-omic profiles for named genes, anywhere in the upload.
+
+    Deliberately NOT scoped to a pathway. The polyamine genes sit in a pathway
+    ranked #421 of 887 on this job while the polyamines themselves are the
+    paper's finding -- a gene that matters in an unenriched pathway is
+    unreachable through pathway context by construction.
+    """
+    index = build_gene_index(job_instance)
+    genes = job_instance.getInputGenesData() or {}
+    header_map = header_map if header_map is not None else _build_omic_header_map(job_instance)
+    found, missing = [], []
+    for raw in symbols or []:
+        key = str(raw).strip().lower()
+        if not key:
+            continue
+        gids = index.get(key)
+        if not gids:
+            missing.append(str(raw).strip())
+            continue
+        # One row per symbol, the strongest. The first live run asked for 13
+        # symbols and got 38 rows back -- this job carries about three ids per
+        # symbol -- which tripled the tool's context bill for information nobody
+        # asked for, and left the writer three near-identical measurements to
+        # choose a number from. `duplicates` says how many were collapsed, so
+        # the fact is reported rather than hidden.
+        rows = []
+        for gid in gids:
+            gene = genes.get(gid)
+            if gene is None:
+                continue
+            entry = _gene_entry(gene, header_map)
+            if entry:
+                entry["id"] = gid
+                rows.append(entry)
+        if not rows:
+            missing.append(str(raw).strip())
+            continue
+        rows.sort(key=lambda g: (-g["relevant"], -g["effect_size"], str(g["id"])))
+        keep = rows[:max(1, int(limit_per_symbol))]
+        keep[0]["duplicates"] = len(rows) - len(keep)
+        found.extend(keep)
+    return found, missing
+
+
+def pathway_gene_list(job_instance, pathway, differential_only=True, limit=400):
+    """Every matched gene in one pathway, compactly -- symbol, effect, pattern.
+
+    The counterpart to get_pathway_details, which shows ten genes with their full
+    time courses. This shows all of them with no time course, which is the shape
+    that answers "what else is in here" instead of "what do these ten do".
+    """
+    genes = job_instance.getInputGenesData() or {}
+    header_map = _build_omic_header_map(job_instance)
+    rows = []
+    flat = 0
+    for gid in (getattr(pathway, "matchedGenes", None) or []):
+        gene = genes.get(gid)
+        if gene is None:
+            continue
+        entry = _gene_entry(gene, header_map)
+        if not entry:
+            continue
+        if not entry["relevant"]:
+            flat += 1
+            if differential_only:
+                continue
+        rows.append(entry)
+    rows.sort(key=lambda g: (-g["relevant"], -g["effect_size"], g["symbol"]))
+    return rows[:limit], len(rows), flat
+
+
+def _gene_entry(gene, header_map):
+    """One gene's profile, in the shape _get_top_genes produces.
+
+    Shared so a gene looked up by name and the same gene reached through a
+    pathway render identically -- two spellings of the same measurement in one
+    report is the kind of thing a reader reasonably reads as two findings.
+    """
+    try:
+        symbol = gene.getName()
+    except Exception:
+        return None
+    if not symbol:
+        return None
+    omics = gene.getOmicsValues() or []
+    if not omics:
+        return {"symbol": symbol, "relevant": False, "effect_size": 0,
+                "omic_profiles": []}
+    profiles, max_effect = [], 0.0
+    for ov in omics:
+        values = ov.getValues()
+        if not values:
+            continue
+        omic_name = ov.getOmicName()
+        labels = header_map.get(omic_name)
+        if not labels or len(labels) != len(values):
+            labels = _find_matching_labels(header_map, len(values))
+        abs_vals = [abs(v) for v in values]
+        peak_idx = max(range(len(abs_vals)), key=lambda i: abs_vals[i])
+        profiles.append({
+            "omic_name": omic_name,
+            "values": _format_value_pairs(values, labels),
+            "peak_value": round(values[peak_idx], 3),
+            "peak_timepoint": labels[peak_idx],
+            "start_end_fc": round(values[-1] - values[0], 3),
+            "pattern": _classify_temporal_pattern(values),
+        })
+        if abs_vals[peak_idx] > max_effect:
+            max_effect = abs_vals[peak_idx]
+    return {"symbol": symbol,
+            "relevant": any(ov.isRelevant() for ov in omics),
+            "effect_size": round(max_effect, 2),
+            "omic_profiles": profiles}
