@@ -1591,10 +1591,12 @@
    style on the boxLabel; #F08A5D is 6.66:1 on the surface underneath, against
    the 3.29:1 the light-theme #C44500 was managing there. This is the sentence
    naming the recipient of the data, so it has to be read, not decoded. */
-[data-theme="dark"] .ai-consent-warn,
-[data-theme="dark"] .ai-gdpr-info-icon {
+[data-theme="dark"] .ai-consent-warn {
 	color: var(--pa-ai-consent-warn);
 }
+/* The privacy link on the dark surface. */
+[data-theme="dark"] .ai-gdpr-info-link { color: var(--pa-ink-muted); }
+[data-theme="dark"] .ai-gdpr-info-link:hover { color: var(--pa-accent-blue); }
 
 /* The account dialog. main.css states its surface literally (so that the
    framework's #f2f2f2 panel fill loses), which means it is restated here.
@@ -1812,3 +1814,32 @@
 	background: var(--pa-surface-quiet);
 	color: var(--pa-ink-muted);
 }
+
+/* The AI conversion sheet and the Step 1 upload strips. The sheet declares
+   its own tints as --cv-* custom properties (inputconvert.css), so one block
+   restates them; everything else in it already reads the tokens above. */
+[data-theme="dark"] .pa-convert-panel {
+  --cv-line: rgba(255, 255, 255, 0.09);
+  --cv-line-strong: rgba(255, 255, 255, 0.17);
+  --cv-ai-bg: #1B2431;
+  --cv-ai-line: #2C3E55;
+  --cv-ai-tint: #243247;
+  --cv-ok-bg: #182619;
+  --cv-ok-line: rgba(107, 196, 106, 0.35);
+  --cv-warn-bg: #2A2118;
+  --cv-warn-line: rgba(227, 138, 90, 0.35);
+  --cv-bad: #F28B82;
+  --cv-bad-ink: #F6B1AB;
+  --cv-bad-bg: #2E1B1B;
+  --cv-bad-line: rgba(242, 139, 130, 0.35);
+  box-shadow: -24px 0 60px -20px rgba(0, 0, 0, 0.7);
+}
+[data-theme="dark"] .pa-convert-overlay.pa-convert-open { background: rgba(0, 0, 0, 0.62); }
+[data-theme="dark"] .pa-convert-col-numeric { color: #B9CCE6; }
+[data-theme="dark"] .pa-convert-kept .pa-convert-chip { color: #A8DDA6; }
+[data-theme="dark"] .pa-convert-preview th { background: rgba(255, 255, 255, 0.05); }
+[data-theme="dark"] .pa-convert-accept { background: #2F7A2F; border-color: #3E9A3E; }
+[data-theme="dark"] .pa-convert-accept:hover { background: #358A35; }
+[data-theme="dark"] .pa-convert-composer-send { background: var(--pa-accent-blue); border-color: var(--pa-accent-blue); color: #0F1A2B; }
+[data-theme="dark"] .pa-convert-composer-send:hover:not(:disabled) { background: #86B8F4; }
+[data-theme="dark"] .pa-convert-composer-input:focus { box-shadow: 0 0 0 3px rgba(107, 168, 240, 0.25); }

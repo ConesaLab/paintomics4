@@ -1,29 +1,34 @@
 /*
- * The conversion drawer: what the user watches while the agent works, and
+ * The conversion sheet: what the user watches while the agent works, and
  * where they review what it made and steer it.
  *
- * It is a transcript, not a spinner. Every step the agent takes is named as it
- * happens, the generated code is available at each one, and the bar advances
- * against the attempt budget, which is a real quantity rather than a guess at
- * completion.
+ * It is a notebook of the run, not a spinner. The stage rail across the top
+ * follows the agent's own state machine -- read, plan, run, check, apply,
+ * review -- so the bar can only say things that are true. Below it, "What the
+ * AI sees" is the description of the file that actually left this computer:
+ * sheet names, column names and kinds, counts, a few example rows, and never a
+ * measurement. Then every step the agent takes is named as it happens with the
+ * seconds it cost, the generated script is one click away at the step that ran
+ * it, and the validator's verdict is quoted rather than summarised.
  *
- * When the agent finishes, the drawer does not simply hand back "a file". A
+ * When the agent finishes, the sheet does not simply hand back "a file". A
  * real upload often holds several tables -- one per sheet, one per measurement
  * family -- and a significance column that should become the relevant-features
- * list. So the review shows every table the agent produced with a preview, the
- * columns it kept and dropped, and lets the user choose which one goes into
- * this omic box, attach the relevant list, add the others as separate omics,
- * or download any of them. Nothing the file held is silently lost.
+ * list. So the review shows every table with a preview, the columns it kept
+ * and dropped, and lets the user choose which one goes into this omic box,
+ * attach the relevant list, add the others as separate omics, or download any
+ * of them. Nothing the file held is silently lost.
  *
- * And the user can talk back. A composer at the bottom sends an instruction
+ * And the user can talk back. The composer at the bottom sends an instruction
  * ("keep the flagged genes", "the first column is a KEGG ID", "use the reads
- * sheet, not TPM") and the agent revises the accepted script rather than
- * starting over. The same composer answers a question in the user's own words
- * when none of the offered options fit.
+ * sheet") and the agent revises the accepted script rather than starting over.
+ * The same composer answers a question in the user's own words when none of
+ * the offered options fit.
  *
  * Nothing here is decorative. Showing the code is what lets a bioinformatician
  * check the transformation; showing the validator's report is what stops the
- * model grading its own work.
+ * model grading its own work; showing the profile is what makes the privacy
+ * claim checkable instead of asserted.
  */
 (function (root, factory) {
     if (typeof module === "object" && module.exports) module.exports = factory();
@@ -52,9 +57,69 @@
         return new TextDecoder("utf-8", { fatal: false }).decode(bytes);
     }
 
-    var PHASE_ICON = {
-        profiling: "◴", thinking: "✦", running: "▶", validating: "✓", finalising: "⇶",
-        asking: "?", done: "✓", failed: "✕", user: "✎"
+    function fmtInt(n) { return Number(n).toLocaleString(); }
+
+    function fmtSeconds(ms) {
+        var s = ms / 1000;
+        if (s < 10) return s.toFixed(1) + " s";
+        if (s < 60) return Math.round(s) + " s";
+        return Math.floor(s / 60) + " min " + Math.round(s % 60) + " s";
+    }
+
+    function plural(n, word) { return fmtInt(n) + " " + word + (n === 1 ? "" : "s"); }
+
+    /* ------------------------------------------------------------------ *
+     * Glyphs
+     *
+     * Drawn, not typed. A unicode glyph is a different picture in every
+     * system font; these are one picture everywhere, in currentColor so the
+     * node's own colour paints them. The planning node uses the AI mark's
+     * own geometry, so "the model is thinking" wears the mark.
+     * ------------------------------------------------------------------ */
+
+    var STROKE = 'fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"';
+
+    var GLYPH = {
+        profiling:  '<rect x="4" y="5" width="16" height="14" rx="2" ' + STROKE + '/><path d="M4 10h16M9 10v9" ' + STROKE + '/>',
+        running:    '<path d="M8.5 5.5 L18 12 L8.5 18.5 Z" fill="currentColor"/>',
+        validating: '<path d="M5 12.5 L10 17.5 L19 7.5" ' + STROKE + '/>',
+        done:       '<path d="M5 12.5 L10 17.5 L19 7.5" ' + STROKE + '/>',
+        finalising: '<path d="M6 6 L12 12 L6 18 M12.5 6 L18.5 12 L12.5 18" ' + STROKE + '/>',
+        asking:     '<path d="M9.3 9.6a2.8 2.8 0 1 1 4.2 2.4c-1 .6-1.5 1.2-1.5 2.5" ' + STROKE + '/><circle cx="12" cy="17.6" r="1.1" fill="currentColor"/>',
+        failed:     '<path d="M7.5 7.5 L16.5 16.5 M16.5 7.5 L7.5 16.5" ' + STROKE + '/>',
+        user:       '<path d="M4.5 19.5 L8.5 18.5 L19 8 L16 5 L5.5 15.5 Z" ' + STROKE + '/>',
+        output:     '<path d="M6 8 L10 12 L6 16 M12 16 H18" ' + STROKE + '/>',
+        download:   '<path d="M12 4.5v10M7.5 10.5 12 15l4.5-4.5M5 18.5h14" ' + STROKE + '/>',
+        list:       '<path d="M5 7h14M5 12h14M5 17h9" ' + STROKE + '/>',
+        table:      '<rect x="4" y="5" width="16" height="14" rx="2" ' + STROKE + '/><path d="M4 10h16M10 10v9" ' + STROKE + '/>'
+    };
+
+    function svg(name) {
+        var paths = name === "thinking" && typeof window.getAIMarkPaths === "function"
+            ? window.getAIMarkPaths() : (GLYPH[name] || GLYPH.profiling);
+        return '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">' + paths + '</svg>';
+    }
+
+    /* ------------------------------------------------------------------ *
+     * The stage rail
+     *
+     * Six stages, in the order the loop visits them. A phase from the agent
+     * maps onto one of them; reaching a stage lights every stage before it
+     * and clears every stage after it, so a retry visibly goes back to Plan
+     * rather than pretending to be further along than it is.
+     * ------------------------------------------------------------------ */
+
+    var STAGES = [
+        { key: "read",   label: "Read" },
+        { key: "plan",   label: "Plan" },
+        { key: "run",    label: "Run" },
+        { key: "check",  label: "Check" },
+        { key: "apply",  label: "Apply" },
+        { key: "review", label: "Review" }
+    ];
+    var PHASE_STAGE = {
+        profiling: "read", thinking: "plan", asking: "plan", user: "plan",
+        running: "run", output: "run", validating: "check", finalising: "apply", done: "review"
     };
 
     /* ------------------------------------------------------------------ *
@@ -108,7 +173,7 @@
         return {
             async boot() {
                 await ready();
-                if (onProgress) onProgress("Starting the Python sandbox…");
+                if (onProgress) onProgress("Starting the Python sandbox");
                 return send({ type: "boot" }, 240000);
             },
             run: function (code, files) {
@@ -162,6 +227,19 @@
         };
     }
 
+    /* Who is on the other end of the transport. The same gateway the AI
+       interpretation uses, so the same endpoint answers; shown in the
+       anatomy card because "your data goes to a model" should name which. */
+    var providerPromise = null;
+    function provider() {
+        if (!providerPromise) {
+            providerPromise = fetch("ai_provider", { credentials: "same-origin" })
+                .then(function (r) { return r.json(); })
+                .catch(function () { return null; });
+        }
+        return providerPromise;
+    }
+
     /* ------------------------------------------------------------------ *
      * Talking to the Step 1 form
      * ------------------------------------------------------------------ */
@@ -182,8 +260,12 @@
         setTimeout(function () { document.body.removeChild(a); URL.revokeObjectURL(url); }, 0);
     }
 
+    function omicCardOf(inputEl) {
+        return inputEl && inputEl.closest ? inputEl.closest(".omicbox") : null;
+    }
+
     function omicComponentOf(inputEl) {
-        var box = inputEl && inputEl.closest ? inputEl.closest(".omicbox") : null;
+        var box = omicCardOf(inputEl);
         return (box && window.Ext && Ext.getCmp) ? Ext.getCmp(box.id) : null;
     }
 
@@ -265,127 +347,410 @@
     }
 
     /* ------------------------------------------------------------------ *
-     * The drawer
+     * Shared fragments
+     * ------------------------------------------------------------------ */
+
+    function previewTable(preview, maxCols) {
+        var wrap = el("div", "pa-convert-preview");
+        var table = el("table");
+        var limit = maxCols || 7;
+        var cols = preview.header ? preview.header.length : (preview.rows[0] || []).length;
+        var shown = Math.min(cols, limit);
+        if (preview.header) {
+            var tr = el("tr");
+            preview.header.slice(0, shown).forEach(function (h) { tr.appendChild(el("th", null, h)); });
+            if (cols > shown) tr.appendChild(el("th", "pa-convert-more", "+" + (cols - shown)));
+            table.appendChild(tr);
+        }
+        preview.rows.forEach(function (r) {
+            var tr = el("tr");
+            r.slice(0, shown).forEach(function (c, i) { tr.appendChild(el("td", i === 0 ? "pa-convert-id" : null, c)); });
+            if (cols > shown) tr.appendChild(el("td", "pa-convert-more", "…"));
+            table.appendChild(tr);
+        });
+        wrap.appendChild(table);
+        return wrap;
+    }
+
+    function iconButton(glyph, title, onClick) {
+        var b = el("button", "pa-convert-iconbtn");
+        b.type = "button";
+        b.title = title;
+        b.setAttribute("aria-label", title);
+        b.innerHTML = svg(glyph);
+        b.addEventListener("click", onClick);
+        return b;
+    }
+
+    /*
+     * "What the AI sees": the profile, rendered. This is the literal payload
+     * that describes the file to the model -- names, kinds, counts, example
+     * rows -- so a user who wants to check the privacy claim can.
+     */
+    function renderAnatomy(profile, fileName, who) {
+        var card = el("section", "pa-convert-anatomy");
+        card.setAttribute("aria-label", "What the agent sees");
+        var head = el("div", "pa-convert-anatomy-head");
+        head.appendChild(el("p", "pa-convert-eyebrow", "What the agent sees"));
+        var meta = el("div", "pa-convert-anatomy-meta");
+        var chars = profile.description_chars ? fmtInt(profile.description_chars) + " characters" : "structure only";
+        meta.textContent = chars + (who ? " · sent to " + who : "");
+        head.appendChild(meta);
+        card.appendChild(head);
+
+        var tables = profile.tables || [];
+        var lead = el("p", "pa-convert-anatomy-lead");
+        var container = profile.container === "workbook"
+            ? "a workbook with " + plural(tables.length, "sheet")
+            : (profile.separator ? profile.separator + "-separated text" : "a text table") +
+              (profile.encoding ? ", " + String(profile.encoding).toUpperCase() : "") +
+              (profile.preamble_lines ? ", " + plural(profile.preamble_lines, "preamble line") + " skipped" : "");
+        lead.innerHTML = "<b></b> · " + container + ". Only what is listed here goes to the model; " +
+                         "the measurements stay in this browser.";
+        lead.querySelector("b").textContent = fileName;
+        card.appendChild(lead);
+
+        if (profile.parse_error) {
+            var err = el("p", "pa-convert-anatomy-lead");
+            err.textContent = "It could not be parsed as a table yet: " + profile.parse_error;
+            card.appendChild(err);
+        }
+
+        var MAX_TABLES = 6, MAX_COLS = 28;
+        tables.slice(0, MAX_TABLES).forEach(function (t) {
+            var block = el("div", "pa-convert-table");
+            var th = el("div", "pa-convert-table-head");
+            th.appendChild(el("span", "pa-convert-table-name",
+                t.name === "(single table)" ? "The table" : t.name));
+            if (t.empty) {
+                th.appendChild(el("span", "pa-convert-table-note", "empty"));
+                block.appendChild(th);
+                card.appendChild(block);
+                return;
+            }
+            var rows = t.exact ? t.exact.data_rows : t.sampled_rows;
+            th.appendChild(el("span", "pa-convert-table-dims",
+                fmtInt(rows) + " rows × " + fmtInt(t.n_columns) + " columns" +
+                (t.exact ? "" : " (sampled)")));
+            if (t.header_row !== null && t.header_row !== undefined && t.header_row > 0) {
+                th.appendChild(el("span", "pa-convert-table-note", "header on row " + (t.header_row + 1)));
+            } else if (t.header_row === null || t.header_row === undefined) {
+                th.appendChild(el("span", "pa-convert-table-note", "no header row"));
+            }
+            block.appendChild(th);
+
+            var idIndex = {};
+            ((t.exact && t.exact.id_candidates) || []).forEach(function (c) { idIndex[c.index] = c; });
+            var strip = el("div", "pa-convert-colstrip");
+            var cols = t.columns || [];
+            cols.slice(0, MAX_COLS).forEach(function (c) {
+                var cand = idIndex[c.index];
+                var chip = el("span", "pa-convert-col " +
+                    (cand ? "pa-convert-col-id" : (c.kind === "numeric" ? "pa-convert-col-numeric" : "pa-convert-col-text")));
+                chip.appendChild(document.createTextNode(c.name));
+                var title = c.name + " — " + (cand ? "identifier candidate" : c.kind);
+                if (c.kind === "numeric" && c.min !== undefined) title += ", " + c.min + " to " + c.max;
+                if (c.kind === "text" && c.distinct !== undefined) title += ", " + fmtInt(c.distinct) + " distinct";
+                if (cand && cand.duplicates > 0) {
+                    chip.appendChild(el("span", "pa-convert-col-dup", "×" + fmtInt(cand.duplicates) + " dup"));
+                    title += ", " + fmtInt(cand.duplicates) + " repeated";
+                }
+                chip.title = title;
+                strip.appendChild(chip);
+            });
+            var hidden = (t.n_columns || cols.length) - Math.min(cols.length, MAX_COLS);
+            if (hidden > 0) strip.appendChild(el("span", "pa-convert-col pa-convert-col-more", "+" + fmtInt(hidden) + " more"));
+            block.appendChild(strip);
+
+            if (t.column_families && t.column_families.length) {
+                var fam = el("p", "pa-convert-families");
+                fam.innerHTML = t.column_families.slice(0, 3).map(function (f) {
+                    return fmtInt(f.count) + " columns share <code></code>";
+                }).join(" · ");
+                var codes = fam.querySelectorAll("code");
+                t.column_families.slice(0, 3).forEach(function (f, i) { codes[i].textContent = f.family; });
+                block.appendChild(fam);
+            }
+            card.appendChild(block);
+        });
+        if (tables.length > MAX_TABLES) {
+            card.appendChild(el("p", "pa-convert-families", "+" + (tables.length - MAX_TABLES) + " more sheets described the same way."));
+        }
+
+        if (tables.some(function (t) { return !t.empty; })) {
+            var legend = el("div", "pa-convert-legend");
+            [["is-id", "identifier candidate"], ["is-numeric", "numeric"], ["", "text"]].forEach(function (pair) {
+                var s = el("span");
+                s.appendChild(el("i", pair[0] || null));
+                s.appendChild(document.createTextNode(pair[1]));
+                legend.appendChild(s);
+            });
+            card.appendChild(legend);
+
+            var first = tables.filter(function (t) { return t.first_rows && t.first_rows.length; })[0];
+            if (first) {
+                var rowsBox = el("details", "pa-convert-rows");
+                rowsBox.appendChild(el("summary", null, "Example rows it was shown (" + first.first_rows.length +
+                    (tables.length > 1 ? ", from " + first.name : "") + ")"));
+                rowsBox.appendChild(previewTable({ header: null, rows: first.first_rows.slice(0, 6) }, 8));
+                card.appendChild(rowsBox);
+            }
+        }
+        return card;
+    }
+
+    /* ------------------------------------------------------------------ *
+     * The sheet
      * ------------------------------------------------------------------ */
 
     function openDrawer(input, file, fieldName, context) {
         var overlay = el("div", "pa-convert-overlay");
         var panel = el("section", "pa-convert-panel");
         panel.setAttribute("role", "dialog");
-        panel.setAttribute("aria-label", "Convert " + file.name);
+        panel.setAttribute("aria-modal", "true");
+        panel.setAttribute("aria-label", "Convert " + file.name + " with the PaintOmics AI agent");
+        panel.tabIndex = -1;
+
+        // The destination omic's hue, so the sheet and its chosen result wear
+        // the same bar the omic card does.
+        var card = omicCardOf(input);
+        var titleBar = card && card.querySelector(".omicboxTitle");
+        var hue = titleBar ? getComputedStyle(titleBar).getPropertyValue("--pa-omic-color").trim() : "";
+        if (hue) panel.style.setProperty("--cv-omic", hue);
+
+        var omicLabel = (context && context.omicType && context.omicType !== "unknown") ? context.omicType : "";
+        var speciesLabel = (context && context.species && context.species !== "unknown") ? context.species : "";
 
         // ---- header -------------------------------------------------------
         var header = el("header", "pa-convert-header");
-        var title = el("div", "pa-convert-title");
-        if (typeof window.getAIMark === "function") {
-            var mark = el("span", "pa-convert-mark");
-            mark.innerHTML = window.getAIMark();
-            title.appendChild(mark);
-        }
+        var mark = el("span", "pa-convert-mark");
+        mark.innerHTML = typeof window.getAIMark === "function" ? window.getAIMark() : svg("thinking");
+        header.appendChild(mark);
         var titles = el("div", "pa-convert-titles");
-        titles.appendChild(el("h2", null, "Converting your file"));
-        titles.appendChild(el("p", "pa-convert-filename", file.name));
-        title.appendChild(titles);
-        header.appendChild(title);
-
+        titles.appendChild(el("h2", "pa-convert-title", "Convert with the PaintOmics AI agent"));
+        var subject = el("p", "pa-convert-subject");
+        subject.appendChild(el("span", "pa-convert-filename", file.name));
+        if (omicLabel) subject.appendChild(el("span", "pa-convert-omic", omicLabel));
+        if (speciesLabel) subject.appendChild(el("span", "pa-convert-species", speciesLabel));
+        titles.appendChild(subject);
+        header.appendChild(titles);
         var close = el("button", "pa-convert-close", "✕");
         close.type = "button";
-        close.setAttribute("aria-label", "Cancel conversion");
+        close.setAttribute("aria-label", "Close and cancel the conversion");
         header.appendChild(close);
         panel.appendChild(header);
 
-        // ---- progress -----------------------------------------------------
-        var progressWrap = el("div", "pa-convert-progress");
-        var bar = el("div", "pa-convert-bar");
-        var fill = el("div", "pa-convert-fill");
-        bar.appendChild(fill);
-        progressWrap.appendChild(bar);
-        var progressText = el("div", "pa-convert-progress-text", "Starting…");
-        progressWrap.appendChild(progressText);
-        var elapsed = el("span", "pa-convert-elapsed", "0s");
-        progressWrap.appendChild(elapsed);
-        panel.appendChild(progressWrap);
+        // ---- status band --------------------------------------------------
+        var status = el("div", "pa-convert-status");
+        var stages = el("ol", "pa-convert-stages");
+        stages.setAttribute("aria-label", "Stages");
+        var stageEls = {};
+        STAGES.forEach(function (s) {
+            var li = el("li", "pa-convert-stage", s.label);
+            li.dataset.state = "todo";
+            stageEls[s.key] = li;
+            stages.appendChild(li);
+        });
+        status.appendChild(stages);
+        var now = el("div", "pa-convert-now");
+        var nowText = el("div", "pa-convert-now-text", "Starting the Python sandbox");
+        nowText.setAttribute("role", "status");
+        nowText.setAttribute("aria-live", "polite");
+        var nowMeta = el("div", "pa-convert-now-meta");
+        now.appendChild(nowText);
+        now.appendChild(nowMeta);
+        status.appendChild(now);
+        panel.appendChild(status);
 
-        // ---- transcript + review ------------------------------------------
+        // ---- body ---------------------------------------------------------
         var body = el("div", "pa-convert-body");
-        var steps = el("ol", "pa-convert-steps");
-        body.appendChild(steps);
+        var anatomyHost = el("div", "pa-convert-anatomyhost");
+        body.appendChild(anatomyHost);
+        var timeline = el("ol", "pa-convert-timeline");
+        timeline.setAttribute("aria-label", "What the agent did");
+        body.appendChild(timeline);
         var reviewHost = el("div", "pa-convert-reviewhost");
         body.appendChild(reviewHost);
         panel.appendChild(body);
 
-        // ---- composer -----------------------------------------------------
+        // ---- dock: composer, then the decision ----------------------------
+        var dock = el("div", "pa-convert-dock");
         var composer = el("form", "pa-convert-composer");
         var composerInput = el("textarea", "pa-convert-composer-input");
-        composerInput.rows = 1;
-        composerInput.placeholder = "Tell the AI what to change — e.g. “keep the flagged genes”, “use the reads sheet”, “column A is a KEGG ID”";
-        composerInput.setAttribute("aria-label", "Instruction for the AI");
+        composerInput.rows = 2;
+        composerInput.setAttribute("aria-label", "Instruction for the agent");
         var composerSend = el("button", "pa-convert-composer-send", "Revise");
         composerSend.type = "submit";
         composer.appendChild(composerInput);
         composer.appendChild(composerSend);
-        var composerHint = el("div", "pa-convert-composer-hint",
-            "Your words go to the AI as an instruction; the script is revised and re-checked. Your data stays on this computer.");
-        panel.appendChild(composer);
-        panel.appendChild(composerHint);
-
-        var footer = el("footer", "pa-convert-footer");
-        panel.appendChild(footer);
+        dock.appendChild(composer);
+        var composerHint = el("p", "pa-convert-composer-hint");
+        composerHint.innerHTML = "Revises the script and re-checks it; your data stays here. " +
+                                 "<kbd>Enter</kbd> sends · <kbd>Shift</kbd>+<kbd>Enter</kbd> new line.";
+        dock.appendChild(composerHint);
+        var actions = el("footer", "pa-convert-actions");
+        dock.appendChild(actions);
+        panel.appendChild(dock);
 
         overlay.appendChild(panel);
         document.body.appendChild(overlay);
-        requestAnimationFrame(function () { overlay.classList.add("pa-convert-open"); });
+        requestAnimationFrame(function () { overlay.classList.add("pa-convert-open"); panel.focus(); });
 
+        // The textarea grows with what is typed, up to the stylesheet's cap.
+        composerInput.addEventListener("input", function () {
+            composerInput.style.height = "auto";
+            composerInput.style.height = Math.min(200, composerInput.scrollHeight) + "px";
+        });
+
+        // ---- state --------------------------------------------------------
         var startedAt = Date.now();
-        var timer = setInterval(function () {
-            var s = Math.round((Date.now() - startedAt) / 1000);
-            elapsed.textContent = s < 60 ? s + "s" : Math.floor(s / 60) + "m " + (s % 60) + "s";
-        }, 1000);
-
         var currentStep = null;
         var running = false;
         var cancelled = false;
+        var finished = false;
         var last = null;                     // the latest agent result
         var pendingAnswer = null;            // resolver while a question is open
+        var pendingCode = null;              // code arrives before the step that runs it
+        var attemptNow = 1, attemptMax = 0;
+        var providerName = "";
+        var profileShown = null;
+
+        function syncMeta() {
+            var bits = [];
+            if (attemptMax > 1 && (attemptNow > 1 || running)) bits.push("<b>attempt " + attemptNow + "</b> of " + attemptMax);
+            bits.push(fmtSeconds(Date.now() - startedAt));
+            nowMeta.innerHTML = bits.join(" · ");
+        }
+
+        var timer = setInterval(function () {
+            if (finished) return;
+            syncMeta();
+            if (currentStep && currentStep.__time && !currentStep.__frozen) {
+                currentStep.__time.textContent = fmtSeconds(Date.now() - currentStep.__t0);
+            }
+        }, 1000);
+
+        function setStage(key, state) {
+            var reached = false;
+            STAGES.forEach(function (s) {
+                var li = stageEls[s.key];
+                if (s.key === key) {
+                    li.dataset.state = state || "current";
+                    reached = true;
+                } else if (!reached) {
+                    li.dataset.state = "done";
+                } else {
+                    li.dataset.state = "todo";
+                }
+            });
+        }
+
+        function setNow(text) { nowText.textContent = text; syncMeta(); }
+
+        function freezeCurrent() {
+            if (!currentStep) return;
+            currentStep.classList.remove("is-current");
+            if (currentStep.__time && !currentStep.__frozen) {
+                var spent = Date.now() - currentStep.__t0;
+                currentStep.__time.textContent = spent >= 400 ? fmtSeconds(spent) : "";
+                currentStep.__frozen = true;
+            }
+        }
 
         function addStep(event) {
-            var li = el("li", "pa-convert-step pa-phase-" + event.phase);
-            var icon = el("span", "pa-convert-icon", PHASE_ICON[event.phase] || "•");
-            li.appendChild(icon);
-            var content = el("div", "pa-convert-step-body");
-            content.appendChild(el("div", "pa-convert-step-title", event.title));
-            if (event.detail) content.appendChild(el("div", "pa-convert-step-detail", event.detail));
-            li.appendChild(content);
-            if (event.attempt > 1) {
-                li.appendChild(el("span", "pa-convert-attempt",
-                                  "try " + event.attempt + "/" + event.maxAttempts));
+            freezeCurrent();
+            var li = el("li", "pa-convert-event is-current");
+            li.dataset.phase = event.phase;
+            var node = el("span", "pa-convert-node");
+            node.innerHTML = svg(event.phase);
+            li.appendChild(node);
+            var content = el("div", "pa-convert-event-body");
+            var head = el("div", "pa-convert-event-head");
+            head.appendChild(el("span", "pa-convert-event-title", event.title));
+            if (event.attempt > 1 && event.phase !== "user") {
+                head.appendChild(el("span", "pa-convert-attempt", "attempt " + event.attempt + "/" + event.maxAttempts));
             }
-            if (currentStep) currentStep.classList.remove("pa-convert-current");
-            li.classList.add("pa-convert-current");
+            var time = el("span", "pa-convert-event-time", "");
+            head.appendChild(time);
+            content.appendChild(head);
+            if (event.detail) {
+                // The validator's report is one failure per line; keep them.
+                var lines = String(event.detail).split("\n").filter(function (l) { return l.trim(); });
+                if (event.phase === "validating" && lines.length && /Not accepted/i.test(event.title)) {
+                    var verdict = el("div", "pa-convert-verdict");
+                    var ul = el("ul");
+                    lines.forEach(function (l) { ul.appendChild(el("li", null, l)); });
+                    verdict.appendChild(ul);
+                    content.appendChild(verdict);
+                    li.classList.add("is-rejected");
+                } else {
+                    content.appendChild(el("p", "pa-convert-event-detail", event.detail));
+                }
+            }
+            if (/failed/i.test(event.title) && event.phase === "running") li.classList.add("is-rejected");
+            li.appendChild(content);
+            li.__t0 = Date.now();
+            li.__time = time;
+            li.__body = content;
             currentStep = li;
-            steps.appendChild(li);
+            timeline.appendChild(li);
+            if (pendingCode && event.phase === "running") { attachCode(pendingCode); pendingCode = null; }
             body.scrollTop = body.scrollHeight;
             return li;
         }
 
-        function setProgress(fraction, label) {
-            fill.style.width = Math.round(Math.max(0.02, Math.min(1, fraction)) * 100) + "%";
-            if (label) progressText.textContent = label;
+        function disclosureRow(step) {
+            var row = step.__body.querySelector(".pa-convert-disclosures");
+            if (!row) { row = el("div", "pa-convert-disclosures"); step.__body.appendChild(row); }
+            return row;
+        }
+
+        function addDisclosure(step, label, small, kind, text) {
+            var row = disclosureRow(step);
+            var toggle = el("button", "pa-convert-disclose");
+            toggle.type = "button";
+            toggle.setAttribute("aria-expanded", "false");
+            toggle.appendChild(document.createTextNode(label));
+            if (small) { toggle.appendChild(document.createTextNode(" ")); toggle.appendChild(el("small", null, small)); }
+            var box = el("div", "pa-convert-codebox");
+            box.hidden = true;
+            var head = el("div", "pa-convert-codebox-head");
+            var kindLabel = el("span"); kindLabel.innerHTML = "<b>" + kind + "</b>";
+            head.appendChild(kindLabel);
+            var copy = el("button", "pa-convert-copy", "Copy");
+            copy.type = "button";
+            copy.addEventListener("click", function () {
+                if (!navigator.clipboard) return;
+                navigator.clipboard.writeText(text).then(function () {
+                    copy.textContent = "Copied";
+                    setTimeout(function () { copy.textContent = "Copy"; }, 1400);
+                });
+            });
+            head.appendChild(copy);
+            box.appendChild(head);
+            var pre = el("pre", "pa-convert-code");
+            pre.appendChild(el("code", null, text));
+            box.appendChild(pre);
+            toggle.addEventListener("click", function () {
+                box.hidden = !box.hidden;
+                toggle.setAttribute("aria-expanded", String(!box.hidden));
+            });
+            row.appendChild(toggle);
+            // The box goes after the row so every disclosure's content stacks
+            // below the buttons rather than between them.
+            step.__body.appendChild(box);
         }
 
         function attachCode(code) {
-            if (!currentStep) return;
-            var toggle = el("button", "pa-convert-codetoggle", "▸ show the code");
-            toggle.type = "button";
-            var pre = el("pre", "pa-convert-code");
-            pre.appendChild(el("code", null, code));
-            pre.hidden = true;
-            toggle.addEventListener("click", function () {
-                pre.hidden = !pre.hidden;
-                toggle.textContent = (pre.hidden ? "▸ show" : "▾ hide") + " the code";
-            });
-            currentStep.querySelector(".pa-convert-step-body").appendChild(toggle);
-            currentStep.querySelector(".pa-convert-step-body").appendChild(pre);
+            if (!currentStep) { pendingCode = code; return; }
+            var lines = String(code).split("\n").length;
+            addDisclosure(currentStep, "Script", lines + " lines", "python · runs in your browser", code);
+        }
+
+        function attachOutput(stdout) {
+            if (!currentStep || !stdout || !String(stdout).trim()) return;
+            var text = String(stdout).trim();
+            addDisclosure(currentStep, "Output", text.split("\n").length + " lines", "what the script printed", text);
         }
 
         function setComposerState(state) {
@@ -395,20 +760,23 @@
             composerSend.textContent = state === "asking" ? "Answer" : "Revise";
             composerInput.placeholder = state === "asking"
                 ? "…or answer in your own words"
-                : "Tell the AI what to change — e.g. “keep the flagged genes”, “use the reads sheet”, “column A is a KEGG ID”";
+                : state === "busy"
+                    ? "The agent is working — you can steer it once it has something to show."
+                    : "Tell the agent what to change — “keep the flagged genes”, “use the reads sheet, not TPM”, “column A is a KEGG ID”";
             composer.classList.toggle("pa-convert-composer-busy", state === "busy");
         }
 
         function askUser(question) {
             return new Promise(function (resolve) {
-                var card = el("div", "pa-convert-question");
-                card.appendChild(el("p", "pa-convert-question-text", question.text));
+                var qcard = el("div", "pa-convert-question");
+                qcard.appendChild(el("p", "pa-convert-question-text", question.text));
                 var opts = el("div", "pa-convert-options");
                 var settle = function (answer) {
-                    card.querySelectorAll("button").forEach(function (x) { x.disabled = true; });
-                    card.appendChild(el("div", "pa-convert-answer", "You chose: " + answer));
+                    qcard.querySelectorAll("button").forEach(function (x) { x.disabled = true; });
+                    qcard.appendChild(el("div", "pa-convert-answer", "You chose: " + answer));
                     pendingAnswer = null;
                     setComposerState("busy");
+                    setNow("Thanks — continuing");
                     resolve(answer);
                 };
                 (question.options && question.options.length
@@ -421,16 +789,18 @@
                     });
                     opts.appendChild(b);
                 });
-                card.appendChild(opts);
-                currentStep.querySelector(".pa-convert-step-body").appendChild(card);
+                qcard.appendChild(opts);
+                qcard.appendChild(el("p", "pa-convert-question-hint", "Or answer in your own words in the box below."));
+                currentStep.__body.appendChild(qcard);
                 body.scrollTop = body.scrollHeight;
                 pendingAnswer = settle;
                 setComposerState("asking");
+                setNow("Waiting for your answer");
                 composerInput.focus();
             });
         }
 
-        var sandbox = createSandbox(function (msg) { setProgress(0.03, msg); });
+        var sandbox = createSandbox(function (msg) { setNow(msg); });
 
         function shutdown() {
             clearInterval(timer);
@@ -441,7 +811,13 @@
             }, 200);
         }
 
-        close.addEventListener("click", function () { cancelled = true; shutdown(); });
+        function cancel() { cancelled = true; shutdown(); }
+        close.addEventListener("click", cancel);
+        // Escape closes once there is nothing in flight; mid-run it would throw
+        // away a minute of work on a reflex.
+        panel.addEventListener("keydown", function (event) {
+            if (event.key === "Escape" && !running && !pendingAnswer) cancel();
+        });
 
         var bytes = null;
         var fileKey = safeName(file.name) || "input";
@@ -449,17 +825,39 @@
         function onEvent(event) {
             if (cancelled) return;
             if (event.type === "step") {
+                attemptNow = event.attempt || attemptNow;
+                attemptMax = event.maxAttempts || attemptMax;
                 addStep(event);
-                setProgress(event.progress, event.title);
+                setStage(PHASE_STAGE[event.phase] || "plan", event.phase === "done" ? "ready" : "current");
+                setNow(event.title);
             } else if (event.type === "code") {
-                attachCode(event.code);
+                pendingCode = event.code;
+            } else if (event.type === "output") {
+                attachOutput(event.stdout);
+            } else if (event.type === "profile" && event.profile && !profileShown) {
+                profileShown = event.profile;
+                anatomyHost.innerHTML = "";
+                anatomyHost.appendChild(renderAnatomy(event.profile, file.name, providerName));
+            } else if (event.type === "failed") {
+                setStage(PHASE_STAGE.profiling, "failed");
             }
         }
 
+        provider().then(function (p) {
+            if (!p || !p.success) return;
+            providerName = (p.operator || p.provider || "") + (p.host ? " (" + p.host + ")" : "");
+            var meta = anatomyHost.querySelector(".pa-convert-anatomy-meta");
+            if (meta && profileShown) {
+                var chars = profileShown.description_chars ? fmtInt(profileShown.description_chars) + " characters" : "structure only";
+                meta.textContent = chars + " · sent to " + providerName;
+            }
+        });
+
         async function runOnce(extra) {
             running = true;
+            finished = false;
             setComposerState("busy");
-            footer.innerHTML = "";
+            actions.innerHTML = "";
             reviewHost.innerHTML = "";
             var result = await api().runAgent(Object.assign({
                 api: api(),
@@ -477,6 +875,7 @@
             running = false;
             if (cancelled) return result;
             last = result;
+            if (result.profile && !profileShown) onEvent({ type: "profile", profile: result.profile });
             renderReview(result);
             setComposerState("idle");
             return result;
@@ -485,7 +884,8 @@
         async function revise(instruction) {
             if (!last) return;
             addStep({ phase: "user", title: "Your instruction", detail: instruction });
-            setProgress(0.1, "Revising");
+            setStage("plan", "current");
+            setNow("Revising with your instruction");
             var instructions = (last.instructions || []).concat([instruction]);
             await runOnce({
                 profile: last.profile,
@@ -500,6 +900,7 @@
             var text = composerInput.value.trim();
             if (!text) return;
             composerInput.value = "";
+            composerInput.style.height = "";
             if (pendingAnswer) { pendingAnswer(text); return; }
             if (running) return;
             revise(text);
@@ -507,22 +908,29 @@
         composerInput.addEventListener("keydown", function (event) {
             if (event.key === "Enter" && !event.shiftKey) {
                 event.preventDefault();
-                composer.requestSubmit ? composer.requestSubmit() : composer.dispatchEvent(new Event("submit"));
+                if (composer.requestSubmit) composer.requestSubmit(); else composer.dispatchEvent(new Event("submit"));
             }
         });
 
         return (async function () {
             try {
                 setComposerState("busy");
+                setStage("read", "current");
+                // The boot is a real step that takes a few seconds; a blank
+                // timeline for that long reads as nothing happening.
+                addStep({ phase: "profiling", title: "Starting the Python sandbox",
+                          detail: "An isolated interpreter with no access to this page or the network." });
                 await sandbox.boot();
-                setProgress(0.05, "Reading your file");
+                setNow("Reading your file");
                 bytes = new Uint8Array(await file.arrayBuffer());
                 return await runOnce();
             } catch (err) {
                 if (!cancelled) {
                     addStep({ phase: "failed", title: "The conversion could not finish",
                               detail: String(err && err.message || err) });
-                    setProgress(1, "Stopped");
+                    var lit = STAGES.filter(function (s) { return stageEls[s.key].dataset.state === "current"; })[0];
+                    setStage(lit ? lit.key : "plan", "failed");
+                    setNow("Stopped");
                     renderFailure(null);
                     setComposerState(last ? "idle" : "busy");
                 }
@@ -532,98 +940,103 @@
 
         /* ---- review ---------------------------------------------------- */
 
-        function previewTable(preview) {
-            var wrap = el("div", "pa-convert-preview");
-            var table = el("table");
-            var maxCols = 7;
-            var cols = preview.header ? preview.header.length : (preview.rows[0] || []).length;
-            var shown = Math.min(cols, maxCols);
-            if (preview.header) {
-                var tr = el("tr");
-                preview.header.slice(0, shown).forEach(function (h) { tr.appendChild(el("th", null, h)); });
-                if (cols > shown) tr.appendChild(el("th", "pa-convert-more", "+" + (cols - shown)));
-                table.appendChild(tr);
-            }
-            preview.rows.forEach(function (r) {
-                var tr = el("tr");
-                r.slice(0, shown).forEach(function (c, i) { tr.appendChild(el("td", i === 0 ? "pa-convert-id" : null, c)); });
-                if (cols > shown) tr.appendChild(el("td", "pa-convert-more", "…"));
-                table.appendChild(tr);
-            });
-            wrap.appendChild(table);
-            return wrap;
-        }
-
         function chips(label, names, cls) {
             if (!names || !names.length) return null;
+            var frag = document.createDocumentFragment();
+            frag.appendChild(el("span", "pa-convert-columns-label", label + " " + names.length));
             var box = el("div", "pa-convert-chips " + (cls || ""));
-            box.appendChild(el("span", "pa-convert-chips-label", label));
             names.slice(0, 12).forEach(function (n) { box.appendChild(el("span", "pa-convert-chip", n)); });
             if (names.length > 12) box.appendChild(el("span", "pa-convert-chip pa-convert-chip-more", "+" + (names.length - 12) + " more"));
-            return box;
+            frag.appendChild(box);
+            return frag;
+        }
+
+        function linkedRow(glyph, html, bytesToDownload, name) {
+            var row = el("div", "pa-convert-linked");
+            var icon = el("span", "pa-convert-linked-icon");
+            icon.innerHTML = svg(glyph);
+            row.appendChild(icon);
+            var text = el("span");
+            text.innerHTML = html;
+            row.appendChild(text);
+            row.appendChild(iconButton("download", "Download " + name, function () { download(bytesToDownload, name); }));
+            return row;
+        }
+
+        function escapeHtml(s) {
+            return String(s).replace(/[&<>"]/g, function (c) {
+                return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];
+            });
         }
 
         function renderReview(result) {
-            clearInterval(timer);
+            finished = true;
+            freezeCurrent();
             if (!result.ok) { renderFailure(result); return; }
-            setProgress(1, "Ready to review");
+            setStage("review", "ready");
+            setNow("Ready to review");
 
             var out = describeOutputs(result);
             var review = el("section", "pa-convert-review");
-            review.appendChild(el("h3", null, out.values.length > 1
+            review.setAttribute("aria-label", "Review the result");
+            var head = el("div", "pa-convert-review-head");
+            head.appendChild(el("h3", "pa-convert-review-title", out.values.length > 1
                 ? out.values.length + " tables ready" : "Converted"));
+            var attemptsUsed = result.attempts || 1;
+            head.appendChild(el("span", "pa-convert-review-count",
+                plural(out.files.length, "file") + " · " + plural(attemptsUsed, "attempt") + " · " + fmtSeconds(Date.now() - startedAt)));
+            review.appendChild(head);
             if (out.manifest.summary) review.appendChild(el("p", "pa-convert-summary", out.manifest.summary));
 
             var chosen = out.values.filter(function (f) { return f.recommended; })[0] || out.values[0];
             var addOthers = false;
 
             out.values.forEach(function (f) {
-                var card = el("article", "pa-convert-card" + (f === chosen ? " pa-convert-card-chosen" : ""));
-                var head = el("header", "pa-convert-card-head");
+                var rcard = el("article", "pa-convert-result" + (f === chosen ? " pa-convert-result-chosen" : ""));
+                var rhead = el("header", "pa-convert-result-head");
                 var pick = el("label", "pa-convert-pick");
                 var radio = document.createElement("input");
                 radio.type = "radio"; radio.name = "pa-convert-choice"; radio.checked = f === chosen;
+                radio.setAttribute("aria-label", "Use " + f.label + " for this omic");
                 radio.addEventListener("change", function () {
                     chosen = f;
-                    review.querySelectorAll(".pa-convert-card").forEach(function (c) { c.classList.remove("pa-convert-card-chosen"); });
-                    card.classList.add("pa-convert-card-chosen");
-                    syncFooter();
+                    review.querySelectorAll(".pa-convert-result").forEach(function (c) { c.classList.remove("pa-convert-result-chosen"); });
+                    rcard.classList.add("pa-convert-result-chosen");
+                    syncActions();
                 });
                 pick.appendChild(radio);
-                var labels = el("div", "pa-convert-card-titles");
-                labels.appendChild(el("div", "pa-convert-card-title", f.label));
-                var meta = [f.source, f.nRows != null ? f.nRows.toLocaleString() + " rows" : null,
-                            f.nCols ? (f.nCols - 1) + " conditions" : null].filter(Boolean).join(" · ");
-                labels.appendChild(el("div", "pa-convert-card-meta", meta));
+                var labels = el("div", "pa-convert-result-titles");
+                labels.appendChild(el("div", "pa-convert-result-title", f.label));
+                var meta = [f.source ? "from " + f.source : null,
+                            f.nRows != null ? plural(f.nRows, "row") : null,
+                            f.nCols ? plural(f.nCols - 1, "condition") : null,
+                            (f.rowsIn != null && f.rowsOut != null && f.rowsIn !== f.rowsOut)
+                                ? fmtInt(f.rowsIn - f.rowsOut) + " rows left out" : null]
+                           .filter(Boolean).join(" · ");
+                labels.appendChild(el("div", "pa-convert-result-meta", meta));
                 pick.appendChild(labels);
-                head.appendChild(pick);
-                if (f.recommended) head.appendChild(el("span", "pa-convert-badge", "Recommended"));
-                var dl = el("button", "pa-convert-iconbtn", "⤓");
-                dl.type = "button"; dl.title = "Download " + f.name;
-                dl.addEventListener("click", function () { download(f.bytes, f.name); });
-                head.appendChild(dl);
-                card.appendChild(head);
+                rhead.appendChild(pick);
+                if (f.recommended) rhead.appendChild(el("span", "pa-convert-badge", "Recommended"));
+                rhead.appendChild(iconButton("download", "Download " + f.name, function () { download(f.bytes, f.name); }));
+                rcard.appendChild(rhead);
 
-                card.appendChild(previewTable(f.preview));
+                rcard.appendChild(previewTable(f.preview));
                 var kept = chips("Kept", f.kept, "pa-convert-kept");
                 var dropped = chips("Left out", f.dropped, "pa-convert-dropped");
-                if (kept) card.appendChild(kept);
-                if (dropped) card.appendChild(dropped);
-                if (f.note) card.appendChild(el("p", "pa-convert-card-note", f.note));
-                var linked = out.lists.filter(function (l) { return l.relevantFor === f.name; });
-                linked.forEach(function (l) {
-                    var row = el("div", "pa-convert-linked");
-                    row.appendChild(el("span", "pa-convert-linked-icon", "≡"));
-                    row.appendChild(el("span", null, l.label + " — " + (l.nRows != null ? l.nRows.toLocaleString() : "?") +
-                                                      " identifiers, attached as the relevant-features list" +
-                                                      (l.note ? " (" + l.note + ")" : "")));
-                    var ldl = el("button", "pa-convert-iconbtn", "⤓");
-                    ldl.type = "button"; ldl.title = "Download " + l.name;
-                    ldl.addEventListener("click", function () { download(l.bytes, l.name); });
-                    row.appendChild(ldl);
-                    card.appendChild(row);
+                if (kept || dropped) {
+                    var cols = el("div", "pa-convert-columns");
+                    if (kept) cols.appendChild(kept);
+                    if (dropped) cols.appendChild(dropped);
+                    rcard.appendChild(cols);
+                }
+                if (f.note) rcard.appendChild(el("p", "pa-convert-result-note", f.note));
+                out.lists.filter(function (l) { return l.relevantFor === f.name; }).forEach(function (l) {
+                    rcard.appendChild(linkedRow("list",
+                        "<b>" + escapeHtml(l.label) + "</b> — " + (l.nRows != null ? fmtInt(l.nRows) : "?") +
+                        " identifiers, attached as the relevant-features list" +
+                        (l.note ? " (" + escapeHtml(l.note) + ")" : ""), l.bytes, l.name));
                 });
-                review.appendChild(card);
+                review.appendChild(rcard);
             });
 
             var unlinked = out.lists.filter(function (l) {
@@ -631,17 +1044,11 @@
             });
             if (unlinked.length || out.others.length) {
                 var extras = el("div", "pa-convert-extras");
-                extras.appendChild(el("h4", null, out.values.length ? "Also produced" : "Produced"));
+                extras.appendChild(el("h4", "pa-convert-extras-title", out.values.length ? "Also produced" : "Produced"));
                 unlinked.concat(out.others).forEach(function (f) {
-                    var row = el("div", "pa-convert-linked");
-                    row.appendChild(el("span", "pa-convert-linked-icon", f.role === "relevant" ? "≡" : "▤"));
-                    row.appendChild(el("span", null, f.label + " — " + (f.nRows != null ? f.nRows.toLocaleString() + " rows" : "") +
-                                                      (f.note ? " (" + f.note + ")" : "")));
-                    var fdl = el("button", "pa-convert-iconbtn", "⤓");
-                    fdl.type = "button"; fdl.title = "Download " + f.name;
-                    fdl.addEventListener("click", function () { download(f.bytes, f.name); });
-                    row.appendChild(fdl);
-                    extras.appendChild(row);
+                    extras.appendChild(linkedRow(f.role === "relevant" ? "list" : "table",
+                        "<b>" + escapeHtml(f.label) + "</b>" + (f.nRows != null ? " — " + plural(f.nRows, "row") : "") +
+                        (f.note ? " (" + escapeHtml(f.note) + ")" : ""), f.bytes, f.name));
                 });
                 review.appendChild(extras);
             }
@@ -650,8 +1057,9 @@
                 var skipped = el("details", "pa-convert-skipped");
                 skipped.appendChild(el("summary", null, "Not converted (" + out.manifest.skipped.length + ")"));
                 out.manifest.skipped.forEach(function (s) {
-                    skipped.appendChild(el("div", "pa-convert-skipped-row",
-                        (s.source || "?") + " — " + (s.reason || "")));
+                    var row = el("div", "pa-convert-skipped-row");
+                    row.innerHTML = "<b>" + escapeHtml(s.source || "?") + "</b> — " + escapeHtml(s.reason || "");
+                    skipped.appendChild(row);
                 });
                 review.appendChild(skipped);
             }
@@ -660,7 +1068,7 @@
                 var addLabel = el("label", "pa-convert-addothers");
                 var addBox = document.createElement("input");
                 addBox.type = "checkbox";
-                addBox.addEventListener("change", function () { addOthers = addBox.checked; syncFooter(); });
+                addBox.addEventListener("change", function () { addOthers = addBox.checked; syncActions(); });
                 addLabel.appendChild(addBox);
                 addLabel.appendChild(el("span", null, "Also add the other " + (out.values.length - 1) +
                     " table" + (out.values.length > 2 ? "s" : "") + " as separate omics, named after their source"));
@@ -670,7 +1078,7 @@
             reviewHost.innerHTML = "";
             reviewHost.appendChild(review);
 
-            // ---- footer -------------------------------------------------
+            // ---- the decision -------------------------------------------
             var accept = el("button", "pa-convert-accept", "Use this table");
             accept.type = "button";
             var downloadAll = el("button", "pa-convert-dismiss", "Download all");
@@ -678,20 +1086,20 @@
             downloadAll.addEventListener("click", function () {
                 out.files.forEach(function (f, i) { setTimeout(function () { download(f.bytes, f.name); }, i * 150); });
             });
-            var dismiss = el("button", "pa-convert-dismiss", "Cancel");
+            var dismiss = el("button", "pa-convert-dismiss is-quiet", "Cancel");
             dismiss.type = "button";
-            dismiss.addEventListener("click", function () { cancelled = true; shutdown(); });
-            footer.innerHTML = "";
-            if (out.values.length) footer.appendChild(accept);
-            footer.appendChild(downloadAll);
-            footer.appendChild(dismiss);
+            dismiss.addEventListener("click", cancel);
+            actions.innerHTML = "";
+            actions.appendChild(dismiss);
+            actions.appendChild(downloadAll);
+            if (out.values.length) actions.appendChild(accept);
 
-            function syncFooter() {
+            function syncActions() {
                 accept.textContent = addOthers
                     ? "Use this table + add " + (out.values.length - 1) + " more"
                     : (out.values.length > 1 ? "Use this table" : "Use this file");
             }
-            syncFooter();
+            syncActions();
 
             accept.addEventListener("click", function () {
                 if (!chosen) return;
@@ -709,42 +1117,59 @@
                         if (!added) { download(v.bytes, v.name); if (vList) download(vList.bytes, vList.name); }
                     });
                 }
+                // Provenance for the strip in the omic card: which file this
+                // table came from, so the card can say so and offer a redo.
+                input.__paConverted = { from: file.name, original: file, fieldName: fieldName,
+                                        label: chosen.label, attempts: result.attempts || 1,
+                                        relevant: !!linkedList };
                 setFile(input, chosen.bytes, chosen.name);
                 var secondary = fileInputIn(component, "secondaryFileSelector");
                 if (linkedList && secondary) setFile(secondary, linkedList.bytes, linkedList.name);
                 shutdown();
             });
-            body.scrollTop = reviewHost.offsetTop - 8;
+            // Bring the review's own heading to the top of the scroll area.
+            // offsetTop is measured from the sheet, not from the scrolling
+            // body, so it has to be taken relative to the body's rect.
+            body.scrollTop = review.getBoundingClientRect().top - body.getBoundingClientRect().top + body.scrollTop - 10;
         }
 
         function renderFailure(result) {
-            setProgress(1, "Could not finish");
+            finished = true;
+            freezeCurrent();
+            var lit = STAGES.filter(function (s) { return stageEls[s.key].dataset.state === "current"; })[0];
+            setStage(lit ? lit.key : "check", "failed");
+            setNow("Could not finish");
             var review = el("section", "pa-convert-review pa-convert-review-failed");
-            review.appendChild(el("h3", null, "Could not finish this one"));
+            var head = el("div", "pa-convert-review-head");
+            head.appendChild(el("h3", "pa-convert-review-title", "Could not finish this one"));
+            if (result && result.attempts) head.appendChild(el("span", "pa-convert-review-count", plural(result.attempts, "attempt") + " used"));
+            review.appendChild(head);
             review.appendChild(el("p", "pa-convert-summary",
-                "Tell the AI what the file contains in the box below and it will try again — " +
+                "Tell the agent what the file contains in the box below and it will try again — " +
                 "which sheet matters, what the columns are, what the identifiers are. " +
-                "The script it wrote is above; a colleague who knows pandas can take it from there."));
+                "The script it wrote is in the timeline above; a colleague who knows pandas can take it from there."));
             if (result && result.outputs) {
                 var out = describeOutputs(result);
                 if (out.files.length) {
-                    var p = el("p", "pa-convert-summary", "Its best attempt produced " + out.files.length + " file(s) that did not pass the check: ");
+                    review.appendChild(el("p", "pa-convert-summary",
+                        "Its best attempt produced " + plural(out.files.length, "file") + " that did not pass the check:"));
+                    var row = el("div", "pa-convert-failed-files");
                     out.files.forEach(function (f) {
-                        var b = el("button", "pa-convert-codetoggle", "⤓ " + f.name);
+                        var b = el("button", "pa-convert-disclose", "⤓ " + f.name);
                         b.type = "button";
                         b.addEventListener("click", function () { download(f.bytes, f.name); });
-                        p.appendChild(b);
+                        row.appendChild(b);
                     });
-                    review.appendChild(p);
+                    review.appendChild(row);
                 }
             }
             reviewHost.innerHTML = "";
             reviewHost.appendChild(review);
-            footer.innerHTML = "";
+            actions.innerHTML = "";
             var dismiss = el("button", "pa-convert-dismiss", "Close");
             dismiss.type = "button";
-            dismiss.addEventListener("click", function () { cancelled = true; shutdown(); });
-            footer.appendChild(dismiss);
+            dismiss.addEventListener("click", cancel);
+            actions.appendChild(dismiss);
             body.scrollTop = body.scrollHeight;
         }
     }
@@ -769,5 +1194,6 @@
     }
 
     return { openDrawer: openDrawer, openConvertDrawer: openConvertDrawer,
-             createSandbox: createSandbox, describeOutputs: describeOutputs };
+             createSandbox: createSandbox, describeOutputs: describeOutputs,
+             renderAnatomy: renderAnatomy };
 });

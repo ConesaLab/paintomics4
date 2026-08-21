@@ -1640,6 +1640,74 @@ ul.menu li.loggedOption, ul.menu span.loggedOption {
 	margin-top: 1px;
 }
 
+/* The consent box's label keeps the application's checkbox-label type --
+   13px regular, the same as "KEGG (required)" on the Databases row above --
+   so the one control on this panel reads as a control, not a heading. A
+   title-sized label (15px, then 14px) was tried and read as too big. */
+
+/* The upload form's three section headings. div.contentbox h3 is 13.5px for
+   every card in the application; on this form the panels under the headings
+   carry 14px titles and 14px copy, so at 13.5px the headings were the smallest
+   type in their own sections. 16px is the design system's h3; the extra top
+   margin is the air each section needs to read as a block. Scoped to the
+   form so no other card moves. */
+.paStep1Form div.contentbox h3,
+div.contentbox .paStep1Form h3 {
+	font-size: 16px;
+	font-weight: 600;
+	color: var(--pa-ink-title, #1A1A18);
+	margin: 20px 0 6px;
+}
+/* The explanation, under the switch: a step larger than the 13px the AI
+   widget uses for chat, because this is a panel on a form, not a bubble. */
+.po-ai-section-body p.ai-intro-copy {
+	font-size: 14px;
+	line-height: 1.55;
+	margin: 10px 0 0;
+	max-width: var(--pa-measure-note, 78ch);
+}
+/* Pills: short tokens where a sentence would list things -- the formats the
+   converter handles under Section 3, the three facts about the interpretation
+   beside its switch. One rule for both so they are one shape. */
+.po-pill-list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+}
+div.contentbox .po-pill-list li,
+.po-pill-list li {
+	padding: 3px 10px;
+	border-radius: 99px;
+	border: 1px solid #CFE0F0;
+	background: var(--pa-surface, #FFFFFF);
+	font-size: 12px;
+	line-height: 1.4;
+	color: var(--pa-ink-control, #3F3F46);
+	max-width: none;
+	white-space: nowrap;
+}
+/* The decision column's stack: switch row, one line, pills, privacy link. */
+.po-ai-section-body p.po-ai-oneliner { margin: 12px 0 0; }
+.po-ai-section-body .po-ai-facts { margin: 10px 0 0; }
+.po-ai-section-body p.po-ai-privacy { margin: 10px 0 0; padding: 0; line-height: 1.4; }
+
+/* The privacy notice's link: quiet, at the end of the stack, the way every
+   AI product links its data notice -- not a red (!) beside the consent. */
+.ai-gdpr-info-link {
+	color: var(--pa-ink-muted);
+	font-size: 12.5px;
+	white-space: nowrap;
+	text-decoration: none;
+}
+.ai-gdpr-info-link:hover {
+	color: var(--pa-accent-blue);
+	text-decoration: underline;
+}
+
+
 /* The experiment-design field on step 1 ---------------------------------------
    Free text describing an experiment, so it is sized to be written in rather
    than filled in: the label sits on top (see the note in PA_Step1Views.js) and
@@ -6942,7 +7010,10 @@ div.po-step-card p,
      because three of them read as unfinished. This is a panel, so it takes the
      surface radius like every other panel. */
   border-radius: var(--pa-radius);
-  padding: 18px 22px;
+  /* 22px of air above and below, not 18: the panel reads as a card now, with
+     a switch for a title, and the tighter padding made it look packed. The
+     sides stay 22 so the prose keeps its rail. */
+  padding: 22px 22px 20px;
   /* --pa-card-inset, not 20px: this callout sits directly under the
      "AI-Powered Pathway Interpretation" heading, so a 6px difference between
      the two left edges is visible as a step. ExtJS's box layout reads this

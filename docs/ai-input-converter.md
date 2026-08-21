@@ -56,6 +56,51 @@ building a matrix out of q-values is treated as an error.
 matrices **plus** an `FDR < 0.05` relevant list, with `logFC`, `logCPM`,
 `PValue` dropped from the matrices.
 
+## The conversion sheet — what the user watches
+
+The sheet that opens from **Convert it for me** is laid out as a notebook of
+the run rather than a spinner, so that every claim the feature makes is
+checkable on screen:
+
+- **Stage rail** — Read → Plan → Run → Check → Apply → Review, lit as the
+  agent's own state machine reaches each stage. A retry visibly drops back to
+  Plan; a failure marks the stage it failed in. The attempt count and the clock
+  sit beside it.
+- **What the agent sees** — the profile exactly as the model receives it: the
+  container (workbook / delimited text), every sheet with rows × columns, each
+  column as a chip kind-coded *identifier candidate / numeric / text*, repeated
+  identifiers flagged on the chip, column families, the example rows behind a
+  disclosure, the payload size in characters and the gateway it is sent to
+  (from `/ai_provider`). This is what makes "only the structure leaves your
+  computer" a statement the user can verify rather than trust.
+- **Timeline** — every step with the seconds it cost (the model turns are the
+  visible cost), attempt badges, the generated script and its printed output
+  one click away at the step that ran them (with Copy), the validator's verdict
+  quoted one failure per line, and the agent's questions as answer cards.
+- **Result tickets** — one per table: preview, kept / left-out columns, the
+  attached relevant list, a download; the chosen one wears the destination
+  omic's hue bar.
+- **Dock** — the composer (two lines tall, grows as you type; Enter sends) to
+  steer or answer in your own words, then the decision row.
+
+On **Use this table** the omic card's strip records the provenance —
+*Converted by PaintOmics AI from `<file>` (table "…", relevant-features list
+attached)* — with a **Convert again** link that reopens the sheet on the
+original upload.
+
+Section 3 of the upload form states the offer before any file is picked, as a
+plain row on the same two columns as the Section 2 panel: a bold lead ("Bring
+your files as they are.") and one sentence on the left, a "Works with" column
+of format pills on the right. There is deliberately no checkbox: pressing
+**Convert it for me** on a file is the consent, nothing leaves the browser
+before that, and a second box under the interpretation's consent box read as
+the same decision asked twice. The page keeps one right column — the
+experiment-design field, the "Works with" pills and the Help panel all start
+on the same x. A standing one-line note in every omic card and a sentence in
+the Help panel complete it. The actor is named the same way on every surface:
+*the PaintOmics AI agent*. The job's name is taken from the experiment
+design's first line; there is no separate description field.
+
 ## 3. Letting the user steer with a prompt, and review the result
 
 **Yes — the drawer is a conversation, not a one-shot.**

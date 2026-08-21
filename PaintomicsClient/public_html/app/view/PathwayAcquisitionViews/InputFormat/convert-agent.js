@@ -319,6 +319,10 @@
                 return { ok: false, stage: "profile", traceback: profileRun.stdout, history: history };
             }
 
+            // The description as the model will receive it, for the UI to show:
+            // "what the AI sees" is only checkable if the user can see it too.
+            emit(onEvent, { type: "profile", profile: profile });
+
             var tableNote = (profile.tables || []).map(function (t) {
                 if (t.empty) return t.name + ": empty";
                 var rows = t.exact ? t.exact.data_rows : t.sampled_rows;
@@ -418,6 +422,11 @@
                                traceback: run.traceback });
                 state.history = history;
                 continue;
+            }
+
+            // Whatever the script printed, beside the script that printed it.
+            if (run.stdout && String(run.stdout).trim()) {
+                emit(onEvent, { type: "output", stdout: run.stdout, attempt: attempt });
             }
 
             step(onEvent, "validating", "Checking the result",

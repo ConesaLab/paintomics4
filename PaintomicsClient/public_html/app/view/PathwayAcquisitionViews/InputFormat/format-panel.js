@@ -44,7 +44,7 @@
     /* What the AI actually does, in the user's terms. People are right to
        be wary of "AI will fix your data"; saying that it writes a script,
        runs it locally, and shows both is what makes it trustworthy. */
-    var AI_EXPLAINER = "PaintOmics AI reads the file, writes a short conversion script, runs it here in your browser, and checks the result against the format PaintOmics needs. Your data never leaves this computer, and you see the script and the result before anything is used.";
+    var AI_EXPLAINER = "The PaintOmics AI agent can convert it here in your browser: it reads the file's structure, writes a short script, runs it locally and checks the result. You see the script, the tables and what it left out before anything is used.";
 
     function el(tag, className, text) {
         var node = document.createElement(tag);
@@ -160,7 +160,10 @@
      * around any of those. Each grew the card and left every sibling in place.
      */
     function hostFor(input) {
-        var component = cardComponentFor(input);
+        return hostForComponent(cardComponentFor(input));
+    }
+
+    function hostForComponent(component) {
         if (!component) return null;
 
         var existing = component.down && component.down("[itemId=paFormatHost]");
@@ -192,7 +195,10 @@
      * message would clip the new one.
      */
     function syncCardHeight(input) {
-        var component = cardComponentFor(input);
+        syncCardHeightFor(cardComponentFor(input));
+    }
+
+    function syncCardHeightFor(component) {
         if (!component || component.__paBaseHeight === undefined) return;
         var host = component.down && component.down("[itemId=paFormatHost]");
         if (!host || !host.getEl()) return;
@@ -264,6 +270,35 @@
      * Rendering
      * ------------------------------------------------------------------ */
 
+    /*
+     * The resting state of a card that has no file yet. It is the first thing
+     * the AI says on this form, so it says the one thing that matters -- any
+     * file will do -- and nothing else. No tint, no border: a promise is not a
+     * verdict.
+     */
+    function renderIdle(strip) {
+        strip.className = "pa-format-strip pa-format-idle";
+        strip.innerHTML = "";
+        var icon = el("span", "pa-format-icon pa-format-icon-ai");
+        icon.innerHTML = typeof window.getAIMark === "function" ? window.getAIMark() : "✦";
+        strip.appendChild(icon);
+        var text = el("span", "pa-format-text");
+        text.appendChild(document.createTextNode("Any format works — the "));
+        text.appendChild(el("b", null, "PaintOmics AI agent"));
+        text.appendChild(document.createTextNode(" converts it here if needed."));
+        strip.appendChild(text);
+    }
+
+    /* The one AI action a problem strip offers. Pressing it is the consent:
+       nothing leaves this computer until the user does, so there is no box to
+       tick beforehand. */
+    function aiActions(input, file, fieldName) {
+        return [{ label: "Convert it for me", primary: true, ai: true,
+                  onClick: function () { requestAgent(input, file, fieldName); } }];
+    }
+
+    function aiExplainer() { return AI_EXPLAINER; }
+
     function renderOk(strip, summary, partial, input) {
         strip.className = "pa-format-strip pa-format-ok";
         strip.innerHTML = "";
@@ -273,12 +308,51 @@
             bits.push("IDs like " + summary.idSample.slice(0, 3).join(", "));
         }
         strip.appendChild(el("span", "pa-format-icon", "✓"));
-        strip.appendChild(el("span", "pa-format-text",
-            (strip.__omic ? strip.__omic + ": " : "") + bits.join(" · ")));
+        var body = el("div", "pa-format-body");
+        var line = el("div", "pa-format-text",
+            (strip.__omic ? strip.__omic + ": " : "") + bits.join(" · "));
         if (partial) {
-            strip.appendChild(el("span", "pa-format-note",
+            line.appendChild(el("span", "pa-format-note",
                 " (checked the first " + Math.round(PARTIAL_CHECK_BYTES / 1048576) + " MB)"));
         }
+        body.appendChild(line);
+
+        /*
+         * Provenance. A file the AI produced looks exactly like one the user
+         * made, and the card would otherwise forget that within a second of
+         * the sheet closing. Saying which table came from which upload is what
+         * lets the user -- and a reviewer reading their methods -- know.
+         */
+        var converted = strip.__converted;
+        if (converted) {
+            strip.classList.add("pa-format-converted");
+            var prov = el("div", "pa-format-provenance");
+            var mark = el("span", "pa-format-provenance-mark");
+            mark.innerHTML = typeof window.getAIMark === "function" ? window.getAIMark() : "✦";
+            prov.appendChild(mark);
+            var what = el("span", "pa-format-provenance-text");
+            what.appendChild(document.createTextNode("Converted by the PaintOmics AI agent from "));
+            what.appendChild(el("b", null, converted.from));
+            var extras = [];
+            if (converted.label) extras.push("table “" + converted.label + "”");
+            if (converted.relevant) extras.push("relevant-features list attached");
+            if (extras.length) what.appendChild(document.createTextNode(" (" + extras.join(", ") + ")"));
+            what.appendChild(document.createTextNode("."));
+            if (converted.original) {
+                // Inline, at the end of the sentence: a control on its own line
+                // under a one-line note reads as a second message.
+                var again = el("button", "pa-format-linkbtn", "Convert again");
+                again.type = "button";
+                again.title = "Reopen the AI conversion for " + converted.from;
+                again.addEventListener("click", function () {
+                    requestAgent(input, converted.original, converted.fieldName || strip.__field);
+                });
+                what.appendChild(again);
+            }
+            prov.appendChild(what);
+            body.appendChild(prov);
+        }
+        strip.appendChild(body);
         if (input) { setCardState(input, "ok"); syncCardHeight(input); }
     }
 
@@ -408,7 +482,13 @@
         var strip = hostFor(input);
         if (!strip) return;
         strip.__input = input;
+        strip.__field = fieldName;
         strip.__omic = omicNameFor(fieldName);
+        // Set by the conversion sheet just before it hands the table over;
+        // consumed here so a file the user picks by hand afterwards carries no
+        // stale provenance.
+        strip.__converted = input.__paConverted || null;
+        input.__paConverted = null;
         strip.className = "pa-format-strip pa-format-busy";
         strip.textContent = "Checking " + file.name + "…";
 
@@ -418,9 +498,8 @@
             renderProblem(strip, "err",
                 "This spreadsheet needs converting.",
                 file.name + " is a workbook — it may hold several sheets and " +
-                "columns that are not measurements. " + AI_EXPLAINER,
-                [{ label: "Convert it for me", primary: true, ai: true,
-                   onClick: function () { requestAgent(input, file, fieldName); } }]);
+                "columns that are not measurements. " + aiExplainer(),
+                aiActions(input, file, fieldName));
             return;
         }
 
@@ -438,10 +517,8 @@
                 markBlocked(fieldName, { fieldName: fieldName, fileName: file.name,
                                          input: input, omic: strip.__omic, fixable: false });
                 renderProblem(strip, "err", "The file is not saved as UTF-8.",
-                    "Re-save it as UTF-8 (in Excel: Save As → CSV UTF-8), or let " +
-                    "PaintOmics AI convert it. " + AI_EXPLAINER,
-                    [{ label: "Convert it for me", primary: true,
-                       onClick: function () { requestAgent(input, file); } }]);
+                    "Re-save it as UTF-8 (in Excel: Save As → CSV UTF-8), or let the PaintOmics AI agent convert it. " + AI_EXPLAINER,
+                    aiActions(input, file, fieldName));
                 return;
             }
 
@@ -498,9 +575,8 @@
                 });
             }
             renderProblem(strip, "err", describeProblems(result),
-                (partial ? "Checked the first few megabytes of a large file. " : "") + AI_EXPLAINER,
-                [{ label: "Convert it for me", primary: true, ai: true,
-                   onClick: function () { requestAgent(input, file, fieldName); } }]);
+                (partial ? "Checked the first few megabytes of a large file. " : "") + aiExplainer(),
+                aiActions(input, file, fieldName));
         };
         reader.readAsArrayBuffer(slice);
     }
@@ -580,9 +656,9 @@
             convert.type = "button";
             if (typeof window.getAIMark === "function") {
                 convert.innerHTML = window.getAIMark();
-                convert.appendChild(document.createTextNode(" Convert with PaintOmics AI"));
+                convert.appendChild(document.createTextNode(" Convert with the PaintOmics AI agent"));
             } else {
-                convert.textContent = "Convert with PaintOmics AI";
+                convert.textContent = "Convert with the PaintOmics AI agent";
             }
             convert.addEventListener("click", function () {
                 var first = entries[0];
@@ -719,6 +795,65 @@
      */
     // Capture phase: ExtJS re-dispatches and sometimes stops change events on
     // its own wrappers, and capture runs before any of that.
+    /*
+     * Every omic card starts with the AI's standing offer in its strip, so the
+     * upload step reads as "bring any file" before a file is picked rather
+     * than only after one fails. Cards are created by ExtJS on drag or on the
+     * plus button, so they are found by watching the DOM; the strip is added
+     * only once the card has been laid out, because hostFor records the
+     * card's height as the base to grow from and a card measured before its
+     * first layout is 0px tall.
+     */
+    function primeCard(cardEl) {
+        if (!cardEl || cardEl.__paPrimed || !window.Ext || !Ext.getCmp) return;
+        var component = Ext.getCmp(cardEl.id);
+        if (!component || !component.query) return;
+        var hasValuesField = component.query("filefield").some(function (f) {
+            return VALUES_FIELD.test(f.name || "");
+        });
+        if (!hasValuesField) return;
+        cardEl.__paPrimed = true;
+        var prime = function () {
+            if (component.isDestroyed || component.down("[itemId=paFormatHost]")) return;
+            var strip = hostForComponent(component);
+            if (!strip) return;
+            renderIdle(strip);
+            syncCardHeightFor(component);
+        };
+        if (component.rendered && component.getHeight() > 100) prime();
+        else component.on("afterlayout", prime, null, { single: true, delay: 30 });
+    }
+
+    function primeCardsIn(root) {
+        if (!root || root.nodeType !== 1) return;
+        if (root.matches && root.matches(".omicbox")) primeCard(root);
+        if (root.querySelectorAll) {
+            root.querySelectorAll(".omicbox").forEach(primeCard);
+        }
+    }
+
+    if (typeof MutationObserver === "function") {
+        var observer = new MutationObserver(function (records) {
+            var found = [];
+            records.forEach(function (r) {
+                r.addedNodes.forEach(function (n) {
+                    if (n.nodeType !== 1) return;
+                    if (n.matches && n.matches(".omicbox")) found.push(n);
+                    if (n.querySelectorAll) n.querySelectorAll(".omicbox").forEach(function (c) { found.push(c); });
+                });
+            });
+            if (!found.length) return;
+            requestAnimationFrame(function () {
+                found.forEach(function (c) {
+                    try { primeCard(c); }
+                    catch (e) { if (window.console && console.warn) console.warn("[inputformat] prime failed", e); }
+                });
+            });
+        });
+        observer.observe(document.body || document.documentElement, { childList: true, subtree: true });
+        primeCardsIn(document.body);
+    }
+
     document.addEventListener("change", function (event) {
         var input = event.target;
         if (!input || input.type !== "file" || !input.files || !input.files.length) return;

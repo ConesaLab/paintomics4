@@ -18,7 +18,9 @@
    setHeight() rather than by letting the DOM grow. */
 .pa-format-strip {
     margin: 0 10px 10px 10px;
-    padding: 12px 14px;
+    /* 10px of side padding plus the 10px margin puts the icon on the 20px
+       rail the card's own title text keeps (.omicboxTitle padding-left). */
+    padding: 12px 10px;
     border-radius: 4px;
     border: 1px solid transparent;
     font-family: var(--pa-font-sans);
@@ -218,4 +220,121 @@ input[type="text"].pa-field-err {
 .pa-format-button .po-ai-mark {
     margin-right: 2px;
     vertical-align: -0.15em;
+}
+
+/* ------------------------------------------------------------------------
+   The standing offer.
+
+   Before a file is picked the strip carries the AI's one sentence -- any file
+   will do -- with no tint and no border, because a promise is not a verdict.
+   It turns into the checking / ok / convert states the moment a file lands.
+   ------------------------------------------------------------------------ */
+.pa-format-idle {
+    background: transparent;
+    border-color: transparent;
+    padding: 4px 10px 8px;
+    color: var(--pa-ink-muted, #595959);
+    font-size: 12px;
+    align-items: center;
+}
+.pa-format-idle .pa-format-icon-ai {
+    display: inline-flex;
+    color: var(--pa-ai-blue, #4A90D9);
+    font-size: 15px;
+    line-height: 1;
+    /* The mark's hexagon is drawn ~15% inside its viewBox, so at 15px its
+       ink starts 2px right of the box; the card title's ink does not. */
+    margin-left: -2px;
+}
+.pa-format-idle b {
+    font-weight: 600;
+    color: var(--pa-accent-blue, #19589E);
+}
+
+/* After the AI's table is accepted, the ok strip names where it came from
+   and offers the conversion again. */
+.pa-format-provenance {
+    display: flex;
+    align-items: flex-start;
+    gap: 7px;
+    margin-top: 6px;
+    color: var(--pa-ink-muted, #595959);
+}
+.pa-format-provenance-text { flex: 1 1 auto; min-width: 0; }
+.pa-format-provenance .pa-format-linkbtn { margin-left: 4px; }
+.pa-format-provenance-mark {
+    display: inline-flex;
+    color: var(--pa-ai-blue, #4A90D9);
+    font-size: 14px;
+    line-height: 1;
+}
+.pa-format-provenance b { font-weight: 600; color: var(--pa-ink-control, #3F3F46); }
+.pa-format-linkbtn {
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    color: var(--pa-link, #0060BA);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    cursor: pointer;
+}
+.pa-format-linkbtn:hover { color: var(--pa-link-hover, #24785D); }
+.pa-format-linkbtn:focus-visible { outline: 2px solid var(--pa-focus-ring, #0A84FF); outline-offset: 2px; border-radius: 2px; }
+
+/* ------------------------------------------------------------------------
+   The Section 3 panel: "Bring your files as they are".
+
+   The same .po-ai-section-body panel as Section 2 (it supplies the surface,
+   the border, the padding and the card inset), on the same two columns: the
+   sentence starts on the same x as Section 2's (283px on a 1867px viewport),
+   and the right column is the page's one right column -- 400px wide, starting
+   at 1185px, where the experiment-design field and the Help panel start too.
+   ------------------------------------------------------------------------ */
+.po-upload-ai-grid {
+    display: flex;
+    align-items: flex-start;
+}
+.po-upload-ai-text {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+.po-upload-ai-aside {
+    flex: 0 0 400px;
+    min-width: 0;
+    margin-left: 32px;
+}
+/* `div.contentbox p` is (0,1,2) and adds the card inset to every paragraph
+   inside a card; two classes outrank it. The type itself is .ai-intro-copy,
+   the Section 2 sentence's own class, so the two sentences match; the lead-in
+   is the bold the Section 2 sentence gives its subject. */
+.po-upload-ai p.ai-intro-copy {
+    margin: 0;
+    padding: 0;
+    font-size: 14px;
+    line-height: 1.55;
+}
+.po-upload-ai p.ai-intro-copy b { font-weight: 700; color: var(--pa-accent-blue, #19589E); }
+/* The lead on its own line, the sentence 2px under it: one block to the eye,
+   two rows to the overlay. */
+.po-upload-ai p.po-upload-ai-lead { margin: 0 0 4px; }
+/* The lead at the size of the consent title in the panel above, one step
+   under the section heading, so the two panels open with the same voice. */
+.po-upload-ai p.po-upload-ai-lead b { font-size: 14px; font-weight: 600; }
+
+/* The right column: a label on top like "Experiment design (optional):",
+   then the formats as pills -- scannable where a sentence listing them was
+   not. */
+.po-upload-ai-aside-title {
+    font-size: 13px;
+    color: var(--pa-ink, #18181B);
+    margin: 0 0 8px;
+    line-height: 18px;
+}
+/* The pills themselves are .po-pill-list in main.css, shared with the
+   interpretation panel's facts. */
+
+@media (max-width: 980px) {
+    .po-upload-ai-grid { flex-direction: column; }
+    .po-upload-ai-aside { margin: 12px 0 0; flex-basis: auto; }
 }

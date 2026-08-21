@@ -1382,7 +1382,7 @@ function PA_Step1JobView() {
 								   worth less without it. */
 								'<div class="po-hero-ai-highlight">' +
 									'<div class="po-hero-ai-head"><span class="po-ai-icon">' + getAIMark() + '</span><strong>AI-powered pathway interpretation</strong></div>' +
-									'<p>An <b>agent</b> writes an interpretation of your ranked pathways &mdash; a draft, for you to check.</p>' +
+									'<p>The <b>PaintOmics AI agent</b> writes an interpretation of your ranked pathways &mdash; a draft, for you to check.</p>' +
 									'<ul class="po-hero-ai-does">' +
 										'<li>queries your values</li>' +
 										'<li>runs its own literature searches</li>' +
@@ -1580,15 +1580,15 @@ function PA_Step1JobView() {
 						{
 							xtype: "container", layout: { type: "vbox", align: "stretch" }, flex: 0.5, items: [
 							{
-								xtype: "textfield",
-								fieldLabel: "Enter a job description",
-								allowBlank: true,
-								name: 'jobDescription',
-								style: "margin: 10px 26px 10px 20px;",
-								labelWidth: 150,
-								width: 650,
-								flex: 0,
-								maxLength: 100
+								/* The job's name, which the server takes from this field
+								   (PathwayAcquisitionServlet: setName(jobDescription[:100])).
+								   It was a visible "Enter a job description" box beside the
+								   organism, one free-text field above another that asks for the
+								   same sentence -- the experiment design below. Now hidden and
+								   filled from that design's first line as it is typed, so the
+								   form asks once and the job list still gets a name. */
+								xtype: "hiddenfield",
+								name: 'jobDescription'
 							}
 							]
 						}
@@ -1682,72 +1682,123 @@ function PA_Step1JobView() {
 						   half blank. Two columns give the explanation its measure and put the
 						   two controls in the space the prose cannot use. */
 						items: [{
-							xtype: "container", flex: 3, layout: "anchor",
+							xtype: "container", flex: 1, layout: "anchor",
 							items: [
 								{
-									xtype: "box",
-									/* This paragraph was written in the marketing register -- "revolutionary",
-									   "breathtaking computational power", "Next-Generation Agentic AI
-									   Swarm", "the world's most powerful Large Language Models". It sits
-									   directly above a consent checkbox, which is the one place in this
-									   application where the careful voice is not optional: someone
-									   deciding whether to send their data somewhere needs to know what
-									   happens to it, not how remarkable it is.
+									/* Three things were wrong here, and the first hid the other two.
+									
+									   The placeholder read: e.g., "RNA-seq wildtype vs knockout mouse
+									   liver, n=3 per group". ExtJS writes emptyText into a
+									   placeholder="..." attribute, so the first embedded double quote
+									   closed the attribute and everything after it was parsed as stray
+									   markup -- on screen the hint was "e.g.," and nothing more. The
+									   example is the useful half of a placeholder and nobody had ever
+									   seen it. Curly quotes carry the same meaning through intact.
+									
+									   Then the label: labelWidth 150, right-aligned, inside a column
+									   already narrowed by the callout beside it -- which left roughly
+									   250px to compose prose in. It goes on top now and the input takes
+									   the full column.
+									
+									   And 90px is three lines for free text describing an experiment.
+									   It opens taller, and .po-exp-design lets it be dragged further.
 
-									   It was also wrong. It described a fleet of agents dynamically
-									   selecting among frontier models; pipeline.py makes sequential
-									   calls to the one model the server is configured for, with a retry
-									   loop. #aiProviderInline is filled in from /ai_provider once that
-									   answers, so the recipient is named here rather than described as
-									   "external". */
-									/* "asks a large language model to explain" undersold what
-									   actually runs, and a consent notice is the wrong place to be
-									   vague about that. src/classes/AIInterpret/pipeline.py runs six
-									   phases - triage, search planning, literature retrieval,
-									   interpretation, synthesis, verification - and along the way it
-									   plans its own searches, calls tools against the job's own data
-									   (get_gene_timecourse, get_pathway_genes, compare_genes), and
-									   spawns sub-agents: one per search, and one per citation to
-									   check it. Someone deciding whether to send their data is
-									   entitled to know it is an agent doing that and not a single
-									   prompt. The wording below names the parts that exist in the
-									   code and nothing more. */
-									/* Size, colour, leading and margin were an inline `style` here,
-									   which no stylesheet can reach: the paragraph could not take the
-									   AI type scale, and dark.css had to chase its colour with an
-									   attribute selector. Now .ai-intro-copy in ai-interpret.css. */
-									/* Seven lines, then four, now two. This paragraph exists to
-									   introduce two controls; it had grown into the largest block
-									   of text on a page whose subject is the user's data.
+									   96 now, not 132, plus growExpDesignToFit below. This field
+									   is the tallest thing in the callout, so it alone sets the
+									   section's height -- the left column runs out of content well
+									   above it -- and for the whole time the form sits unfilled it
+									   is 132px of empty box.
 
-									   What went, in order. The AgentEvolve sentence: a
-									   benchmarking framework is a fact about how the feature was
-									   built, not one the reader needs to tick or leave the box.
-									   The enumeration of the agent's phases, compressed to the
-									   verbs that distinguish it from a single prompt. And now
-									   #aiProviderInline, which is the interesting one.
+									   Sizing it to hold a draft was the obvious alternative and it
+									   does not work: measured, a real draft off the STATegra
+									   headers was 510 characters and wanted 153px, so 132 was
+									   already too short for the case it was tall for. Picking a
+									   height that fits the longest plausible draft would make the
+									   idle form taller still, to no benefit.
 
-									   That span printed "This server sends the data to a gateway
-									   operated by IIIA-CSIC (the Artificial Intelligence Research
-									   Institute of the Spanish National Research Council), on
-									   hardware in Spain" -- two of the four lines, and a
-									   restatement of the sentence in the checkbox directly below
-									   it, which already says the data goes "to IIIA-CSIC
-									   (llm.iiia.es)". The recipient is still named, on the
-									   control where the decision is actually made and where the
-									   design system requires it, and the (i) notice still gives
-									   the full operator, the country and every field that leaves
-									   the server. Saying it twice bought nothing and cost half
-									   the callout's height.
-
-									   fillAIProvenance guards each placeholder with `if (el)`,
-									   so it keeps working with this one absent. */
-									html: '<p class="ai-intro-copy">' +
-										'An <b>agent</b> drafts the write-up of your results: it triages your top-ranked ' +
-										'pathways, searches PubMed and Europe PMC, checks the patterns against your uploaded ' +
-										'values, and verifies every citation. Check its draft before you use it.' +
-										'</p>'
+									   So: short while empty -- 96 is the two-line placeholder plus
+									   a line -- and grown to fit the moment there is something to
+									   fit, which is the only moment the height is worth paying.
+									   Dragging it still works; growing sets a height, not a cap. */
+									xtype: "textarea", fieldLabel: "Experiment design (optional)",
+									name: 'experimentDesign',
+									labelAlign: 'top', anchor: '100%', height: 120,
+									cls: 'po-exp-design',
+									emptyText: 'e.g. RNA-seq of wildtype vs knockout mouse liver, 3 replicates per group, sampled at 24 h',
+									maxLength: 2000,
+									listeners: {
+										/* The one free-text field on the form also names the job:
+										   its first line, cut to the 100 characters the server keeps,
+										   goes into the hidden jobDescription field. On change rather
+										   than on submit so whatever gathers the form's values -- the
+										   submit, a draft, an example load -- finds it already set. */
+										change: function(field, value) {
+											var hidden = Ext.ComponentQuery.query('hiddenfield[name=jobDescription]')[0];
+											if (!hidden) return;
+											var firstLine = String(value || '').split(/\r?\n/)
+												.map(function(l) { return l.trim(); })
+												.filter(Boolean)[0] || '';
+											hidden.setValue(firstLine.slice(0, 100));
+										}
+									}
 								},
+								/* A blank box asking a user to describe their own design in
+								   prose is the least-filled field on this form, and the design
+								   is already written down in the header row of the file they
+								   are about to upload. This reads those headers in the browser
+								   and asks the model to turn them into the sentence.
+
+								   Gated twice on purpose. The button is disabled until the
+								   consent box is ticked, because pressing it sends the column
+								   names outward -- earlier than Run, which is the moment the
+								   rest of the form treats as the boundary -- and the request
+								   carries an explicit consent flag that the servlet checks, so
+								   the guarantee does not rest on a disabled attribute.
+
+								   The hint moved in here, from its own box above. It was two
+								   full-width lines followed by a button on a third row, under a
+								   field whose left column had already run out of content -- the
+								   three tallest rows in the callout were the three carrying the
+								   least. Beside the button it is one row, and it reads as a
+								   caption for the control rather than a second paragraph.
+								   Shortened to match: "Describe the comparison your data
+								   represents. The interpretation uses it to say which direction
+								   of change means what." said the same thing in two sentences,
+								   and the placeholder in the field above already shows the
+								   shape of an answer. */
+								{
+									xtype: "box", cls: 'po-exp-design-draft',
+									html: '<button type="button" class="button btn-secondary btn-small po-exp-design-draft-btn" ' +
+									      'id="expDesignDraftBtn" disabled>' + getAIMark() + ' Draft this for me</button>' +
+									      '<span class="po-exp-design-hint">Names the job in your list and tells the interpretation which direction of change means what.</span>' +
+									      '<span class="po-exp-design-draft-note" id="expDesignDraftNote"></span>',
+									listeners: {
+										afterrender: function() {
+											var box = this;
+											/* The consent checkbox and the omic panels are built by
+											   other parts of this view, so the wiring waits a tick
+											   for the form to finish rendering rather than reaching
+											   up through a parent that may not exist yet. */
+											setTimeout(function() { initExpDesignDraft(box); }, 200);
+										}
+									}
+								}
+							]
+						}, {
+							/* The decision column. One right column for the whole form:
+							   400px here, the same 400px for the "Works with" column under
+							   Section 3, and the Help panel below starts on the same x (422
+							   wide, because it runs to the card edge where this column
+							   stops 22px short of it inside the panel's padding). Measured:
+							   all three start at 1185px on a 1867px viewport.
+
+							   The columns swapped sides on 2026-08-21: the experiment
+							   design -- the thing the user does -- is the wide field on the
+							   left, and the switch, one line, three pills and the privacy
+							   link -- the thing the user decides -- sit here, where a
+							   settings control belongs. */
+							xtype: "container", width: 400, margin: '0 0 0 32', layout: "anchor",
+							items: [
 								{
 									xtype: 'checkboxfield',
 									/* Both colours were written inline, which put them out of reach of
@@ -1760,13 +1811,17 @@ function PA_Step1JobView() {
 									   with --pa-ai-consent-warn -- a token it already declared for
 									   exactly this and had no way to apply. Same fix, same reason, as
 									   .formMessage. */
-									/* "sends your results to X", not "your pathway results and the
-									   values of the matched features to X": the long form wrapped the
-									   label to three lines and buried the recipient. The enumeration
-									   of exactly which fields leave the server belongs to - and stays
-									   in - the (i) notice this label links to. */
-									boxLabel: 'Enable AI pathway interpretation (<span class="ai-consent-warn">sends your results to <span id="aiProviderName">an external AI service</span></span>) ' +
-										'<i class="fa fa-exclamation-circle ai-gdpr-info-icon" id="aiGdprInfoIcon" title="Data privacy &amp; compliance \u2014 click to learn what data is sent"></i>',
+									/* The label used to carry "(sends your results to IIIA-CSIC
+									   (llm.iiia.es))". Trimmed to the verb on the owner's call
+									   (2026-08-21): the gateway is operated by CSIC, as is the host,
+									   and the statement of what leaves and who receives it -- the
+									   recipient, the operator, the country, every field -- stays in
+									   the privacy notice, one click away. The red (!) icon that used
+									   to sit here is now the quiet "Data privacy" link under the
+									   pills. The control is the application's own checkbox -- a
+									   switch was tried on 2026-08-21 and the owner did not like it --
+									   with its label set as the column's title. */
+									boxLabel: 'Enable AI pathway interpretation',
 									name: 'aiConsent', inputValue: 'true', uncheckedValue: 'false',
 									/* Off everywhere but a local instance -- a pre-ticked consent
 									   box is not consent. See LOCAL INSTANCE DEFAULTS in
@@ -1860,94 +1915,16 @@ function PA_Step1JobView() {
 											}, 200);
 										}
 									}
-								}
-							]
-						}, {
-							xtype: "container", flex: 2, margin: '0 0 0 32', layout: "anchor",
-							items: [
-								{
-									/* Three things were wrong here, and the first hid the other two.
-									
-									   The placeholder read: e.g., "RNA-seq wildtype vs knockout mouse
-									   liver, n=3 per group". ExtJS writes emptyText into a
-									   placeholder="..." attribute, so the first embedded double quote
-									   closed the attribute and everything after it was parsed as stray
-									   markup -- on screen the hint was "e.g.," and nothing more. The
-									   example is the useful half of a placeholder and nobody had ever
-									   seen it. Curly quotes carry the same meaning through intact.
-									
-									   Then the label: labelWidth 150, right-aligned, inside a column
-									   already narrowed by the callout beside it -- which left roughly
-									   250px to compose prose in. It goes on top now and the input takes
-									   the full column.
-									
-									   And 90px is three lines for free text describing an experiment.
-									   It opens taller, and .po-exp-design lets it be dragged further.
-
-									   96 now, not 132, plus growExpDesignToFit below. This field
-									   is the tallest thing in the callout, so it alone sets the
-									   section's height -- the left column runs out of content well
-									   above it -- and for the whole time the form sits unfilled it
-									   is 132px of empty box.
-
-									   Sizing it to hold a draft was the obvious alternative and it
-									   does not work: measured, a real draft off the STATegra
-									   headers was 510 characters and wanted 153px, so 132 was
-									   already too short for the case it was tall for. Picking a
-									   height that fits the longest plausible draft would make the
-									   idle form taller still, to no benefit.
-
-									   So: short while empty -- 96 is the two-line placeholder plus
-									   a line -- and grown to fit the moment there is something to
-									   fit, which is the only moment the height is worth paying.
-									   Dragging it still works; growing sets a height, not a cap. */
-									xtype: "textarea", fieldLabel: "Experiment design (optional)",
-									name: 'experimentDesign',
-									labelAlign: 'top', anchor: '100%', height: 96,
-									cls: 'po-exp-design',
-									emptyText: 'e.g. RNA-seq of wildtype vs knockout mouse liver, 3 replicates per group, sampled at 24 h',
-									maxLength: 2000
 								},
-								/* A blank box asking a user to describe their own design in
-								   prose is the least-filled field on this form, and the design
-								   is already written down in the header row of the file they
-								   are about to upload. This reads those headers in the browser
-								   and asks the model to turn them into the sentence.
-
-								   Gated twice on purpose. The button is disabled until the
-								   consent box is ticked, because pressing it sends the column
-								   names outward -- earlier than Run, which is the moment the
-								   rest of the form treats as the boundary -- and the request
-								   carries an explicit consent flag that the servlet checks, so
-								   the guarantee does not rest on a disabled attribute.
-
-								   The hint moved in here, from its own box above. It was two
-								   full-width lines followed by a button on a third row, under a
-								   field whose left column had already run out of content -- the
-								   three tallest rows in the callout were the three carrying the
-								   least. Beside the button it is one row, and it reads as a
-								   caption for the control rather than a second paragraph.
-								   Shortened to match: "Describe the comparison your data
-								   represents. The interpretation uses it to say which direction
-								   of change means what." said the same thing in two sentences,
-								   and the placeholder in the field above already shows the
-								   shape of an answer. */
 								{
-									xtype: "box", cls: 'po-exp-design-draft',
-									html: '<button type="button" class="button btn-secondary btn-small po-exp-design-draft-btn" ' +
-									      'id="expDesignDraftBtn" disabled>' + getAIMark() + ' Draft this for me</button>' +
-									      '<span class="po-exp-design-hint">Tells the interpretation which direction of change means what.</span>' +
-									      '<span class="po-exp-design-draft-note" id="expDesignDraftNote"></span>',
-									listeners: {
-										afterrender: function() {
-											var box = this;
-											/* The consent checkbox and the omic panels are built by
-											   other parts of this view, so the wiring waits a tick
-											   for the form to finish rendering rather than reaching
-											   up through a parent that may not exist yet. */
-											setTimeout(function() { initExpDesignDraft(box); }, 200);
-										}
-									}
+									/* What the switch turns on, in one line and three tokens. The
+									   paragraph this replaces listed the agent's phases in prose; as
+									   pills they scan, and the full account -- what is sent, where,
+									   which fields -- is the Data privacy notice the link opens. */
+									xtype: "box",
+									html: '<p class="ai-intro-copy po-ai-oneliner">A cited draft of what your results mean, written by the <b>PaintOmics AI agent</b> for you to check.</p>' +
+										'<ul class="po-pill-list po-ai-facts"><li>PubMed &amp; Europe PMC</li><li>Every citation verified</li><li>Reads your uploaded values</li></ul>' +
+										'<p class="po-ai-privacy"><a href="javascript:void(0)" class="ai-gdpr-info-link" id="aiGdprInfoIcon" title="Data privacy &amp; compliance \u2014 what is sent, and where">Data privacy</a></p>'
 								}
 							]
 						}]
@@ -1958,7 +1935,45 @@ function PA_Step1JobView() {
 						// this hands over the datasets "Load example" actually
 						// offers. The old static file was built in 2017 and shared
 						// no filename with any current scenario.
-						html: '<h3>3. Choose the files to upload <a class="button btn-right btn-small" href="' + SERVER_URL_EXAMPLE_DATASETS_DOWNLOAD + '"><i class="fa fa-download"></i> Download example data</a></h3>'
+						// The mark leads the heading exactly as it does on Section 2's,
+						// so main.css's `div.contentbox h3 > svg.po-ai-mark` rule sizes
+						// and places it, and the two AI headings on the form match.
+						html: '<h3>' + getAIMark() + ' 3. Choose the files to upload <a class="button btn-right btn-small" href="' + SERVER_URL_EXAMPLE_DATASETS_DOWNLOAD + '"><i class="fa fa-download"></i> Download example data</a></h3>'
+					},
+					{
+						/* The standing offer, stated before any file is picked: the
+						   upload step accepts files as they come out of the tools
+						   people use, and the AI conversion is how.
+
+						   On the same blue panel as the Section 2 callout (the owner
+						   asked for it back once the row no longer carried a second
+						   checkbox): the two AI surfaces on the form share one surface.
+						   Conversion needs no box -- pressing Convert on a file is the
+						   act -- so this panel only says what happens, in the
+						   interpretation's own type (.ai-intro-copy), on the same two
+						   columns: sentence left, the formats it handles right (styles
+						   in inputformat.css). */
+						xtype: "box",
+						cls: "po-ai-section-body po-upload-ai",
+						html: '<div class="po-upload-ai-grid">' +
+							'<div class="po-upload-ai-text">' +
+								/* Two paragraphs, not one with a bold lead-in: a lone
+								   paragraph in this column is one measured row, and the
+								   alignment overlay dissolves a one-row column into its row
+								   and judges it against the other column's rail. The lead on
+								   its own line is also the head-plus-sentence shape the
+								   Section 2 hero uses. */
+								'<p class="ai-intro-copy po-upload-ai-lead"><b>Bring your files as they are.</b></p>' +
+								'<p class="ai-intro-copy">Each file is checked the moment you pick it; if it is not in PaintOmics’ format, the <b>PaintOmics AI agent</b> offers to convert it: it writes a short script, runs it in your browser and shows you the result before anything is used.</p>' +
+							'</div>' +
+							'<div class="po-upload-ai-aside">' +
+								'<div class="po-upload-ai-aside-title">Works with</div>' +
+								'<ul class="po-pill-list po-upload-ai-formats">' +
+									'<li>DESeq2</li><li>edgeR</li><li>limma</li><li>MaxQuant</li><li>Spectronaut</li><li>DIA-NN</li>' +
+									'<li>MetaboLights MAF</li><li>Excel workbooks</li><li>CSV / TSV</li>' +
+								'</ul>' +
+							'</div>' +
+						'</div>'
 					},
 					{
 						xtype: "container",
@@ -2009,15 +2024,19 @@ function PA_Step1JobView() {
 							xtype: "container",
 							id: "additionalInfoContainer",
 							minHeight: 150,
-							minWidth: 200,
-							maxWidth: 340,
+							/* 422, not a flex share: the page has one right column, and it
+							   starts where Section 2's experiment-design field and Section
+							   3's "Works with" column start (see the note on Section 2's
+							   right container). Those two stop 22px short of the card edge
+							   inside their panel padding; this panel runs to the edge, hence
+							   the extra 22. */
+							width: 422,
 							/* Left margin only - it is the gutter. The right side is the card
 							   inset, which the row already carries. */
 							margin: "10 0 10 10",
-							flex: 1,
 							layout: {type: 'vbox',align: "stretch"},
 							items: [
-								{xtype: 'box',html: '<div class="content"><h5><i class="fa fa-info-circle"></i> Help</h5><p>Drag <i>omics</i> from <b>Available omics</b> to <b>Selected omics</b>, or click the <i class="fa fa-plus-circle"></i> button.</p><p>Remove any you do not need with <span class="po-nowrap"><i class="fa fa-trash"></i>.</span></p><p>When you are done, click <b>Run PaintOmics</b> in the top-right corner.</p></div>'}
+								{xtype: 'box',html: '<div class="content"><h5><i class="fa fa-info-circle"></i> Help</h5><p>Drag <i>omics</i> from <b>Available omics</b> to <b>Selected omics</b>, or click the <i class="fa fa-plus-circle"></i> button.</p><p>Remove any you do not need with <span class="po-nowrap"><i class="fa fa-trash"></i>.</span></p><p>Files are checked as you pick them; the <b>PaintOmics AI agent</b> converts any that are not in PaintOmics’ format.</p><p>When you are done, click <b>Run PaintOmics</b> in the top-right corner.</p></div>'}
 							]
 						}]
 					}					
