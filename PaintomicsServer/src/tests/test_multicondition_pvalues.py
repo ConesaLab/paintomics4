@@ -9,6 +9,7 @@ Usage:
     python -m src.tests.test_multicondition_pvalues
 """
 import csv
+import os
 import sys
 from collections import defaultdict
 from itertools import chain
@@ -239,6 +240,16 @@ def main():
     print("=" * 80)
     print("MULTI-CONDITION P-VALUE VALIDATION")
     print("=" * 80)
+
+    # The inputs are two files in the author's Downloads folder, not in the
+    # repository. Anywhere else this validation cannot run; say so in the
+    # vocabulary the suite runner recognises as a skip rather than fail or,
+    # worse, exit 0 in silence.
+    missing = [path for path in (RF_FILE, QF_FILE) if not os.path.exists(path)]
+    if missing:
+        print("\nOK (skipped=1): the validation inputs are not on this machine: %s"
+              % ", ".join(missing))
+        return 0
 
     # Step 1: Parse RF
     print("\n--- Step 1: Parse RF file ---")

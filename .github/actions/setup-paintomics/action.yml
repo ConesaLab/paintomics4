@@ -30,7 +30,12 @@ runs:
     # libcairo at import time; the runner image does not ship it.
     - name: cairo
       shell: bash
-      run: brew list cairo >/dev/null 2>&1 || brew install --quiet cairo
+      run: |
+        brew list cairo >/dev/null 2>&1 || brew install --quiet cairo
+        # Homebrew's lib dir is not on dyld's default search path on Apple
+        # silicon, so cairocffi's dlopen("libcairo.2.dylib") still failed
+        # after the install; the fallback path is what ctypes consults.
+        echo "DYLD_FALLBACK_LIBRARY_PATH=$(brew --prefix)/lib:${DYLD_FALLBACK_LIBRARY_PATH:-}" >> "$GITHUB_ENV"
 
     - name: Python requirements
       shell: bash
