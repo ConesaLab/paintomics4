@@ -1,0 +1,83 @@
+# Pull-request gate: lint, the unit-test sweep, and the fastest example
+# dataset of each pipeline class through the regression harness.
+#
+# Budget: under 10 minutes wall clock. The three jobs run in parallel, so the
+# wall clock is the slowest of them; each has a hard timeout below it.
+#
+# No secrets. The pipeline jobs restore the species-data snapshot from the
+# Actions cache (seeded by data-cache.yml) and run with outbound networking
+# refused (scripts/ci/no_network), so every external API -- KEGG, Reactome,
+# PubMed, the LLM gateway behind AI interpretation -- is either stubbed by
+# the test or fails loudly.
+
+name: PR
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: ruff
+        run: |
+          python -m pip install --quiet ruff==0.14.13
+          ruff check --output-format concise .
+      - name: Shell syntax
+        run: |
+          for script in scripts/*.sh scripts/ci/*.sh deploy/*.sh; do
+            bash -n "$script" || exit 1
+          done
+      - name: Byte-compile the server
+        run: python -m compileall -q PaintomicsServer/src scripts
+
+  unit-tests:
+    name: Unit tests (offline)
+    runs-on: macos-26
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-paintomics
+      - name: Test suites
+        run: scripts/ci/run-unit-tests.sh --timeout 180
+
+  fixtures:
+    name: Example datasets, one per pipeline class
+    runs-on: macos-26
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-paintomics
+      - name: Regression against tests/baseline
+        env:
+          PYTHONPATH: ${{ github.workspace }}/scripts/ci/no_network
+          AI_CSIC_API_BASE: http://127.0.0.1:1/v1
+          REGRESSION_WORK: ${{ runner.temp }}/regression
+        run: >-
+          scripts/regression.sh
+          01-gene-single-condition
+          05-regulatory-mirna
+          06-regulatory-more
+          07-region-based
+      - name: Keep the differing outputs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: regression-pr-${{ github.run_id }}
+          path: ${{ runner.temp }}/regression
+          retention-days: 7
+          if-no-files-found: ignore
