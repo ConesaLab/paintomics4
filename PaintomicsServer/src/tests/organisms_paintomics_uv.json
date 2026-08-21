@@ -1,0 +1,538 @@
+{
+ "_comment": "GET https://paintomics.uv.es/kegg_data/species.json as served on 2026-08-21: the organisms installed on the production server, the list the Step 1 organism picker searches. A fixture for test_organism_search; refresh it from the same URL, not by hand.",
+ "success": true,
+ "species": [
+  {
+   "name": "'Nostoc azollae' 0708",
+   "value": "naz"
+  },
+  {
+   "name": "Abrus precatorius (Indian licorice)",
+   "value": "aprc"
+  },
+  {
+   "name": "Abyssalbus ytuae",
+   "value": "fbm"
+  },
+  {
+   "name": "Acanthopagrus latus (yellowfin seabream)",
+   "value": "alat"
+  },
+  {
+   "name": "Acinonyx jubatus (cheetah)",
+   "value": "aju"
+  },
+  {
+   "name": "Acropora digitifera (stony coral)",
+   "value": "adf"
+  },
+  {
+   "name": "Aeromicrobium erythreum",
+   "value": "aer"
+  },
+  {
+   "name": "Aeromonas hydrophila ML09-119",
+   "value": "ahy"
+  },
+  {
+   "name": "Amphimedon queenslandica (sponge)",
+   "value": "aqu"
+  },
+  {
+   "name": "Anopheles gambiae (malaria mosquito)",
+   "value": "aga"
+  },
+  {
+   "name": "Apis mellifera (honey bee)",
+   "value": "ame"
+  },
+  {
+   "name": "Arabidopsis thaliana (thale cress)",
+   "value": "ath"
+  },
+  {
+   "name": "Arachis hypogaea (peanut)",
+   "value": "ahf"
+  },
+  {
+   "name": "Aspergillus flavus",
+   "value": "afv"
+  },
+  {
+   "name": "Aspergillus fumigatus",
+   "value": "afm"
+  },
+  {
+   "name": "Aspergillus niger (black aspergilli)",
+   "value": "ang"
+  },
+  {
+   "name": "Aspergillus oryzae",
+   "value": "aor"
+  },
+  {
+   "name": "Azospirillum brasilense Sp 7",
+   "value": "abf"
+  },
+  {
+   "name": "Bacillus cereus ATCC 14579",
+   "value": "bce"
+  },
+  {
+   "name": "Bacillus subtilis subsp. subtilis 168",
+   "value": "bsu"
+  },
+  {
+   "name": "Bacillus tropicus",
+   "value": "btro"
+  },
+  {
+   "name": "Bacillus zhangzhouensis",
+   "value": "bzh"
+  },
+  {
+   "name": "Bifidobacterium animalis subsp. lactis BB-12",
+   "value": "bbb"
+  },
+  {
+   "name": "Bombyx mori (domestic silkworm)",
+   "value": "bmor"
+  },
+  {
+   "name": "Bos taurus (cow)",
+   "value": "bta"
+  },
+  {
+   "name": "Brassica oleracea (wild cabbage)",
+   "value": "boe"
+  },
+  {
+   "name": "Bufo bufo (common toad)",
+   "value": "bbuf"
+  },
+  {
+   "name": "Caenorhabditis elegans (nematode)",
+   "value": "cel"
+  },
+  {
+   "name": "Candida albicans",
+   "value": "cal"
+  },
+  {
+   "name": "Canis lupus familiaris (dog)",
+   "value": "cfa"
+  },
+  {
+   "name": "Capilliphycus salinus",
+   "value": "csau"
+  },
+  {
+   "name": "Carica papaya (papaya)",
+   "value": "cpap"
+  },
+  {
+   "name": "Chelonia mydas (green sea turtle)",
+   "value": "cmy"
+  },
+  {
+   "name": "Chlamydomonas reinhardtii",
+   "value": "cre"
+  },
+  {
+   "name": "Citrus sinensis (Valencia orange)",
+   "value": "cit"
+  },
+  {
+   "name": "Citrus x clementina (clementine)",
+   "value": "cic"
+  },
+  {
+   "name": "Clostridium butyricum",
+   "value": "cbut"
+  },
+  {
+   "name": "Coprinopsis cinerea (gray shag)",
+   "value": "cci"
+  },
+  {
+   "name": "Cricetulus griseus (Chinese hamster)",
+   "value": "cge"
+  },
+  {
+   "name": "Crocodylus porosus (Australian saltwater crocodile)",
+   "value": "cpoo"
+  },
+  {
+   "name": "Cryptococcus deneoformans B-3501A",
+   "value": "cnb"
+  },
+  {
+   "name": "Cryptococcus deneoformans JEC21",
+   "value": "cne"
+  },
+  {
+   "name": "Cryptococcus gattii",
+   "value": "cgi"
+  },
+  {
+   "name": "Cyclopterus lumpus (lumpfish)",
+   "value": "clum"
+  },
+  {
+   "name": "Danio rerio (zebrafish)",
+   "value": "dre"
+  },
+  {
+   "name": "Dichomitus squalens",
+   "value": "dsq"
+  },
+  {
+   "name": "Dictyostelium discoideum (cellular slime mold)",
+   "value": "ddi"
+  },
+  {
+   "name": "Drosophila melanogaster (fruit fly)",
+   "value": "dme"
+  },
+  {
+   "name": "Enterobacter cloacae subsp. cloacae ATCC 13047",
+   "value": "enc"
+  },
+  {
+   "name": "Equus caballus (horse)",
+   "value": "ecb"
+  },
+  {
+   "name": "Escherichia coli K-12 MG1655",
+   "value": "eco"
+  },
+  {
+   "name": "Faecalibacterium duncaniae A2165",
+   "value": "fpra"
+  },
+  {
+   "name": "Fomitiporia mediterranea",
+   "value": "fme"
+  },
+  {
+   "name": "Fragaria vesca (woodland strawberry)",
+   "value": "fve"
+  },
+  {
+   "name": "Fusarium graminearum",
+   "value": "fgr"
+  },
+  {
+   "name": "Fusarium oxysporum",
+   "value": "fox"
+  },
+  {
+   "name": "Gallus gallus (chicken)",
+   "value": "gga"
+  },
+  {
+   "name": "Gloeophyllum trabeum",
+   "value": "gtr"
+  },
+  {
+   "name": "Glycine max (soybean)",
+   "value": "gmx"
+  },
+  {
+   "name": "Haemophilus parainfluenzae",
+   "value": "hpr"
+  },
+  {
+   "name": "Heterobasidion irregulare",
+   "value": "hir"
+  },
+  {
+   "name": "Homo sapiens (human)",
+   "value": "hsa"
+  },
+  {
+   "name": "Hydra vulgaris (swiftwater hydra)",
+   "value": "hmg"
+  },
+  {
+   "name": "Klebsiella pneumoniae subsp. pneumoniae HS11286",
+   "value": "kpm"
+  },
+  {
+   "name": "Laccaria bicolor",
+   "value": "lbc"
+  },
+  {
+   "name": "Lactuca sativa (garden lettuce)",
+   "value": "lsv"
+  },
+  {
+   "name": "Leishmania major",
+   "value": "lma"
+  },
+  {
+   "name": "Magallana gigas (Pacific oyster)",
+   "value": "crg"
+  },
+  {
+   "name": "Manihot esculenta (cassava)",
+   "value": "mesc"
+  },
+  {
+   "name": "Manis javanica (Malayan pangolin)",
+   "value": "mjv"
+  },
+  {
+   "name": "Mus musculus (house mouse)",
+   "value": "mmu"
+  },
+  {
+   "name": "Mycobacterium tuberculosis H37Rv",
+   "value": "mtu"
+  },
+  {
+   "name": "Neofusicoccum parvum",
+   "value": "npa"
+  },
+  {
+   "name": "Neurospora crassa",
+   "value": "ncr"
+  },
+  {
+   "name": "Nicotiana benthamiana",
+   "value": "nben"
+  },
+  {
+   "name": "Nostoc cf. commune",
+   "value": "ncf"
+  },
+  {
+   "name": "Oryctolagus cuniculus (rabbit)",
+   "value": "ocu"
+  },
+  {
+   "name": "Oryza glaberrima (African rice)",
+   "value": "ogl"
+  },
+  {
+   "name": "Oryza sativa japonica (Japanese rice)",
+   "value": "osa"
+  },
+  {
+   "name": "Oryza sativa japonica (Japanese rice) (RAPDB)",
+   "value": "dosa"
+  },
+  {
+   "name": "Ovis aries (sheep)",
+   "value": "oas"
+  },
+  {
+   "name": "Pan troglodytes (chimpanzee)",
+   "value": "ptr"
+  },
+  {
+   "name": "Paracoccus denitrificans",
+   "value": "pde"
+  },
+  {
+   "name": "Parasteatoda tepidariorum (common house spider)",
+   "value": "ptep"
+  },
+  {
+   "name": "Penicillium rubens",
+   "value": "pcs"
+  },
+  {
+   "name": "Phanerochaete carnosa",
+   "value": "pco"
+  },
+  {
+   "name": "Phocaeicola vulgatus",
+   "value": "bvu"
+  },
+  {
+   "name": "Photobacterium profundum",
+   "value": "ppr"
+  },
+  {
+   "name": "Physcomitrium patens (spreading earthmoss)",
+   "value": "ppp"
+  },
+  {
+   "name": "Plasmodium falciparum 3D7",
+   "value": "pfa"
+  },
+  {
+   "name": "Populus trichocarpa (black cottonwood)",
+   "value": "pop"
+  },
+  {
+   "name": "Prevotella melaninogenica",
+   "value": "pmz"
+  },
+  {
+   "name": "Prunus dulcis (almond)",
+   "value": "pdul"
+  },
+  {
+   "name": "Prunus mume (Japanese apricot)",
+   "value": "pmum"
+  },
+  {
+   "name": "Prunus persica (peach)",
+   "value": "pper"
+  },
+  {
+   "name": "Pseudomonas aeruginosa PAO1",
+   "value": "pae"
+  },
+  {
+   "name": "Pseudomonas putida KT2440",
+   "value": "ppu"
+  },
+  {
+   "name": "Pseudomonas syringae pv. tomato DC3000",
+   "value": "pst"
+  },
+  {
+   "name": "Punctularia strigosozonata",
+   "value": "psq"
+  },
+  {
+   "name": "Raphanus sativus (radish)",
+   "value": "rsz"
+  },
+  {
+   "name": "Rattus norvegicus (rat)",
+   "value": "rno"
+  },
+  {
+   "name": "Rhodanobacter denitrificans",
+   "value": "rhd"
+  },
+  {
+   "name": "Saccharomyces cerevisiae (budding yeast)",
+   "value": "sce"
+  },
+  {
+   "name": "Salmonella enterica subsp. enterica serovar Typhimurium SL1344",
+   "value": "sey"
+  },
+  {
+   "name": "Schaalia odontolytica",
+   "value": "soo"
+  },
+  {
+   "name": "Schizophyllum commune",
+   "value": "scm"
+  },
+  {
+   "name": "Schizosaccharomyces pombe (fission yeast)",
+   "value": "spo"
+  },
+  {
+   "name": "Sclerotinia sclerotiorum",
+   "value": "ssl"
+  },
+  {
+   "name": "Shewanella algae",
+   "value": "salg"
+  },
+  {
+   "name": "Sneathia vaginalis",
+   "value": "sns"
+  },
+  {
+   "name": "Solanum lycopersicum (tomato)",
+   "value": "sly"
+  },
+  {
+   "name": "Solanum tuberosum (potato)",
+   "value": "sot"
+  },
+  {
+   "name": "Sorghum bicolor (sorghum)",
+   "value": "sbi"
+  },
+  {
+   "name": "Staphylococcus aureus subsp. aureus MRSA252 (MRSA)",
+   "value": "sar"
+  },
+  {
+   "name": "Staphylococcus aureus subsp. aureus USA300_FPR3757 (CA-MRSA)",
+   "value": "saa"
+  },
+  {
+   "name": "Stereum hirsutum",
+   "value": "shs"
+  },
+  {
+   "name": "Streptococcus gordonii",
+   "value": "sgo"
+  },
+  {
+   "name": "Streptococcus mutans UA159 (serotype c)",
+   "value": "smu"
+  },
+  {
+   "name": "Streptomyces lividans",
+   "value": "slv"
+  },
+  {
+   "name": "Sus scrofa (pig)",
+   "value": "ssc"
+  },
+  {
+   "name": "Taeniopygia guttata (zebra finch)",
+   "value": "tgu"
+  },
+  {
+   "name": "Trametes versicolor",
+   "value": "tvs"
+  },
+  {
+   "name": "Tremella mesenterica",
+   "value": "tms"
+  },
+  {
+   "name": "Trichoderma reesei QM6a",
+   "value": "tre"
+  },
+  {
+   "name": "Triticum aestivum (bread wheat)",
+   "value": "taes"
+  },
+  {
+   "name": "Varroa destructor (honeybee mite)",
+   "value": "vde"
+  },
+  {
+   "name": "Vibrio cholerae O1 El Tor N16961",
+   "value": "vch"
+  },
+  {
+   "name": "Vigna radiata (mung bean)",
+   "value": "vra"
+  },
+  {
+   "name": "Vitis vinifera (wine grape)",
+   "value": "vvi"
+  },
+  {
+   "name": "Xenopus tropicalis (tropical clawed frog)",
+   "value": "xtr"
+  },
+  {
+   "name": "Yarrowia lipolytica",
+   "value": "yli"
+  },
+  {
+   "name": "Zea mays (maize)",
+   "value": "zma"
+  },
+  {
+   "name": "Zygosaccharomyces rouxii",
+   "value": "zro"
+  }
+ ]
+}
