@@ -1685,7 +1685,125 @@ function PA_Step1JobView() {
 							xtype: "container", flex: 1, layout: "anchor",
 							items: [
 								{
+									/* Three things were wrong here, and the first hid the other two.
+									
+									   The placeholder read: e.g., "RNA-seq wildtype vs knockout mouse
+									   liver, n=3 per group". ExtJS writes emptyText into a
+									   placeholder="..." attribute, so the first embedded double quote
+									   closed the attribute and everything after it was parsed as stray
+									   markup -- on screen the hint was "e.g.," and nothing more. The
+									   example is the useful half of a placeholder and nobody had ever
+									   seen it. Curly quotes carry the same meaning through intact.
+									
+									   Then the label: labelWidth 150, right-aligned, inside a column
+									   already narrowed by the callout beside it -- which left roughly
+									   250px to compose prose in. It goes on top now and the input takes
+									   the full column.
+									
+									   And 90px is three lines for free text describing an experiment.
+									   It opens taller, and .po-exp-design lets it be dragged further.
+
+									   96 now, not 132, plus growExpDesignToFit below. This field
+									   is the tallest thing in the callout, so it alone sets the
+									   section's height -- the left column runs out of content well
+									   above it -- and for the whole time the form sits unfilled it
+									   is 132px of empty box.
+
+									   Sizing it to hold a draft was the obvious alternative and it
+									   does not work: measured, a real draft off the STATegra
+									   headers was 510 characters and wanted 153px, so 132 was
+									   already too short for the case it was tall for. Picking a
+									   height that fits the longest plausible draft would make the
+									   idle form taller still, to no benefit.
+
+									   So: short while empty -- 96 is the two-line placeholder plus
+									   a line -- and grown to fit the moment there is something to
+									   fit, which is the only moment the height is worth paying.
+									   Dragging it still works; growing sets a height, not a cap. */
+									xtype: "textarea", fieldLabel: "Experiment design (optional)",
+									name: 'experimentDesign',
+									labelAlign: 'top', anchor: '100%', height: 120,
+									cls: 'po-exp-design',
+									emptyText: 'e.g. RNA-seq of wildtype vs knockout mouse liver, 3 replicates per group, sampled at 24 h',
+									maxLength: 2000,
+									listeners: {
+										/* The one free-text field on the form also names the job:
+										   its first line, cut to the 100 characters the server keeps,
+										   goes into the hidden jobDescription field. On change rather
+										   than on submit so whatever gathers the form's values -- the
+										   submit, a draft, an example load -- finds it already set. */
+										change: function(field, value) {
+											var hidden = Ext.ComponentQuery.query('hiddenfield[name=jobDescription]')[0];
+											if (!hidden) return;
+											var firstLine = String(value || '').split(/\r?\n/)
+												.map(function(l) { return l.trim(); })
+												.filter(Boolean)[0] || '';
+											hidden.setValue(firstLine.slice(0, 100));
+										}
+									}
+								},
+								/* A blank box asking a user to describe their own design in
+								   prose is the least-filled field on this form, and the design
+								   is already written down in the header row of the file they
+								   are about to upload. This reads those headers in the browser
+								   and asks the model to turn them into the sentence.
+
+								   Gated twice on purpose. The button is disabled until the
+								   consent box is ticked, because pressing it sends the column
+								   names outward -- earlier than Run, which is the moment the
+								   rest of the form treats as the boundary -- and the request
+								   carries an explicit consent flag that the servlet checks, so
+								   the guarantee does not rest on a disabled attribute.
+
+								   The hint moved in here, from its own box above. It was two
+								   full-width lines followed by a button on a third row, under a
+								   field whose left column had already run out of content -- the
+								   three tallest rows in the callout were the three carrying the
+								   least. Beside the button it is one row, and it reads as a
+								   caption for the control rather than a second paragraph.
+								   Shortened to match: "Describe the comparison your data
+								   represents. The interpretation uses it to say which direction
+								   of change means what." said the same thing in two sentences,
+								   and the placeholder in the field above already shows the
+								   shape of an answer. */
+								{
+									xtype: "box", cls: 'po-exp-design-draft',
+									html: '<button type="button" class="button btn-secondary btn-small po-exp-design-draft-btn" ' +
+									      'id="expDesignDraftBtn" disabled>' + getAIMark() + ' Draft this for me</button>' +
+									      '<span class="po-exp-design-hint">Names the job in your list and tells the interpretation which direction of change means what.</span>' +
+									      '<span class="po-exp-design-draft-note" id="expDesignDraftNote"></span>',
+									listeners: {
+										afterrender: function() {
+											var box = this;
+											/* The consent checkbox and the omic panels are built by
+											   other parts of this view, so the wiring waits a tick
+											   for the form to finish rendering rather than reaching
+											   up through a parent that may not exist yet. */
+											setTimeout(function() { initExpDesignDraft(box); }, 200);
+										}
+									}
+								}
+							]
+						}, {
+							/* The decision column. One right column for the whole form:
+							   400px here, the same 400px for the "Works with" column under
+							   Section 3, and the Help panel below starts on the same x (422
+							   wide, because it runs to the card edge where this column
+							   stops 22px short of it inside the panel's padding). Measured:
+							   all three start at 1185px on a 1867px viewport.
+
+							   The columns swapped sides on 2026-08-21: the experiment
+							   design -- the thing the user does -- is the wide field on the
+							   left, and the switch, one line, three pills and the privacy
+							   link -- the thing the user decides -- sit here, where a
+							   settings control belongs. */
+							xtype: "container", width: 400, margin: '0 0 0 32', layout: "anchor",
+							items: [
+								{
 									xtype: 'checkboxfield',
+									/* Label first, switch at the row's end: the settings-row shape,
+									   where the eye reads the name and finds the control at the edge. */
+									boxLabelAlign: 'before',
 									/* Both colours were written inline, which put them out of reach of
 									   dark.css -- an inline style beats a stylesheet -- so this
 									   sentence stayed #C44500 on the dark surface and measured 3.29:1
@@ -1802,180 +1920,14 @@ function PA_Step1JobView() {
 									}
 								},
 								{
+									/* What the switch turns on, in one line and three tokens. The
+									   paragraph this replaces listed the agent's phases in prose; as
+									   pills they scan, and the full account -- what is sent, where,
+									   which fields -- is the Data privacy notice the link opens. */
 									xtype: "box",
-									/* This paragraph was written in the marketing register -- "revolutionary",
-									   "breathtaking computational power", "Next-Generation Agentic AI
-									   Swarm", "the world's most powerful Large Language Models". It sits
-									   directly above a consent checkbox, which is the one place in this
-									   application where the careful voice is not optional: someone
-									   deciding whether to send their data somewhere needs to know what
-									   happens to it, not how remarkable it is.
-
-									   It was also wrong. It described a fleet of agents dynamically
-									   selecting among frontier models; pipeline.py makes sequential
-									   calls to the one model the server is configured for, with a retry
-									   loop. #aiProviderInline is filled in from /ai_provider once that
-									   answers, so the recipient is named here rather than described as
-									   "external". */
-									/* "asks a large language model to explain" undersold what
-									   actually runs, and a consent notice is the wrong place to be
-									   vague about that. src/classes/AIInterpret/pipeline.py runs six
-									   phases - triage, search planning, literature retrieval,
-									   interpretation, synthesis, verification - and along the way it
-									   plans its own searches, calls tools against the job's own data
-									   (get_gene_timecourse, get_pathway_genes, compare_genes), and
-									   spawns sub-agents: one per search, and one per citation to
-									   check it. Someone deciding whether to send their data is
-									   entitled to know it is an agent doing that and not a single
-									   prompt. The wording below names the parts that exist in the
-									   code and nothing more. */
-									/* Size, colour, leading and margin were an inline `style` here,
-									   which no stylesheet can reach: the paragraph could not take the
-									   AI type scale, and dark.css had to chase its colour with an
-									   attribute selector. Now .ai-intro-copy in ai-interpret.css. */
-									/* Seven lines, then four, now two. This paragraph exists to
-									   introduce two controls; it had grown into the largest block
-									   of text on a page whose subject is the user's data.
-
-									   What went, in order. The AgentEvolve sentence: a
-									   benchmarking framework is a fact about how the feature was
-									   built, not one the reader needs to tick or leave the box.
-									   The enumeration of the agent's phases, compressed to the
-									   verbs that distinguish it from a single prompt. And now
-									   #aiProviderInline, which is the interesting one.
-
-									   That span printed "This server sends the data to a gateway
-									   operated by IIIA-CSIC (the Artificial Intelligence Research
-									   Institute of the Spanish National Research Council), on
-									   hardware in Spain" -- two of the four lines, and a
-									   restatement of the sentence in the checkbox directly below
-									   it, which already says the data goes "to IIIA-CSIC
-									   (llm.iiia.es)". The recipient is still named, on the
-									   control where the decision is actually made and where the
-									   design system requires it, and the (i) notice still gives
-									   the full operator, the country and every field that leaves
-									   the server. Saying it twice bought nothing and cost half
-									   the callout's height.
-
-									   fillAIProvenance guards each placeholder with `if (el)`,
-									   so it keeps working with this one absent. */
-									html: '<p class="ai-intro-copy">' +
-										'The <b>PaintOmics AI agent</b> drafts the write-up of your results: it triages your top-ranked ' +
-										'pathways, searches PubMed and Europe PMC, checks the patterns against your uploaded ' +
-										'values, and verifies every citation. Check its draft before you use it. ' +
-										'<a href="javascript:void(0)" class="ai-gdpr-info-link" id="aiGdprInfoIcon" title="Data privacy &amp; compliance \u2014 what is sent, and where"><i class="fa fa-info-circle"></i> Data privacy</a>' +
-										'</p>'
-								}
-							]
-						}, {
-							/* One right column for the whole form. 400px here, the same
-							   400px for the "Works with" column under Section 3, and the
-							   Help panel below starts on the same x (422 wide, because it
-							   runs to the card edge where this column stops 22px short of
-							   it inside the panel's padding). Measured: all three start at
-							   1185px on a 1867px viewport. A flex share put this one at
-							   1077 and the Help panel at 1267 -- three right edges for one
-							   page. */
-							xtype: "container", width: 400, margin: '0 0 0 32', layout: "anchor",
-							items: [
-								{
-									/* Three things were wrong here, and the first hid the other two.
-									
-									   The placeholder read: e.g., "RNA-seq wildtype vs knockout mouse
-									   liver, n=3 per group". ExtJS writes emptyText into a
-									   placeholder="..." attribute, so the first embedded double quote
-									   closed the attribute and everything after it was parsed as stray
-									   markup -- on screen the hint was "e.g.," and nothing more. The
-									   example is the useful half of a placeholder and nobody had ever
-									   seen it. Curly quotes carry the same meaning through intact.
-									
-									   Then the label: labelWidth 150, right-aligned, inside a column
-									   already narrowed by the callout beside it -- which left roughly
-									   250px to compose prose in. It goes on top now and the input takes
-									   the full column.
-									
-									   And 90px is three lines for free text describing an experiment.
-									   It opens taller, and .po-exp-design lets it be dragged further.
-
-									   96 now, not 132, plus growExpDesignToFit below. This field
-									   is the tallest thing in the callout, so it alone sets the
-									   section's height -- the left column runs out of content well
-									   above it -- and for the whole time the form sits unfilled it
-									   is 132px of empty box.
-
-									   Sizing it to hold a draft was the obvious alternative and it
-									   does not work: measured, a real draft off the STATegra
-									   headers was 510 characters and wanted 153px, so 132 was
-									   already too short for the case it was tall for. Picking a
-									   height that fits the longest plausible draft would make the
-									   idle form taller still, to no benefit.
-
-									   So: short while empty -- 96 is the two-line placeholder plus
-									   a line -- and grown to fit the moment there is something to
-									   fit, which is the only moment the height is worth paying.
-									   Dragging it still works; growing sets a height, not a cap. */
-									xtype: "textarea", fieldLabel: "Experiment design (optional)",
-									name: 'experimentDesign',
-									labelAlign: 'top', anchor: '100%', height: 120,
-									cls: 'po-exp-design',
-									emptyText: 'e.g. RNA-seq of wildtype vs knockout mouse liver, 3 replicates per group, sampled at 24 h',
-									maxLength: 2000,
-									listeners: {
-										/* The one free-text field on the form also names the job:
-										   its first line, cut to the 100 characters the server keeps,
-										   goes into the hidden jobDescription field. On change rather
-										   than on submit so whatever gathers the form's values -- the
-										   submit, a draft, an example load -- finds it already set. */
-										change: function(field, value) {
-											var hidden = Ext.ComponentQuery.query('hiddenfield[name=jobDescription]')[0];
-											if (!hidden) return;
-											var firstLine = String(value || '').split(/\r?\n/)
-												.map(function(l) { return l.trim(); })
-												.filter(Boolean)[0] || '';
-											hidden.setValue(firstLine.slice(0, 100));
-										}
-									}
-								},
-								/* A blank box asking a user to describe their own design in
-								   prose is the least-filled field on this form, and the design
-								   is already written down in the header row of the file they
-								   are about to upload. This reads those headers in the browser
-								   and asks the model to turn them into the sentence.
-
-								   Gated twice on purpose. The button is disabled until the
-								   consent box is ticked, because pressing it sends the column
-								   names outward -- earlier than Run, which is the moment the
-								   rest of the form treats as the boundary -- and the request
-								   carries an explicit consent flag that the servlet checks, so
-								   the guarantee does not rest on a disabled attribute.
-
-								   The hint moved in here, from its own box above. It was two
-								   full-width lines followed by a button on a third row, under a
-								   field whose left column had already run out of content -- the
-								   three tallest rows in the callout were the three carrying the
-								   least. Beside the button it is one row, and it reads as a
-								   caption for the control rather than a second paragraph.
-								   Shortened to match: "Describe the comparison your data
-								   represents. The interpretation uses it to say which direction
-								   of change means what." said the same thing in two sentences,
-								   and the placeholder in the field above already shows the
-								   shape of an answer. */
-								{
-									xtype: "box", cls: 'po-exp-design-draft',
-									html: '<button type="button" class="button btn-secondary btn-small po-exp-design-draft-btn" ' +
-									      'id="expDesignDraftBtn" disabled>' + getAIMark() + ' Draft this for me</button>' +
-									      '<span class="po-exp-design-hint">Names the job in your list and tells the interpretation which direction of change means what.</span>' +
-									      '<span class="po-exp-design-draft-note" id="expDesignDraftNote"></span>',
-									listeners: {
-										afterrender: function() {
-											var box = this;
-											/* The consent checkbox and the omic panels are built by
-											   other parts of this view, so the wiring waits a tick
-											   for the form to finish rendering rather than reaching
-											   up through a parent that may not exist yet. */
-											setTimeout(function() { initExpDesignDraft(box); }, 200);
-										}
-									}
+									html: '<p class="ai-intro-copy po-ai-oneliner">A cited draft of what your results mean, written by the <b>PaintOmics AI agent</b> for you to check.</p>' +
+										'<ul class="po-pill-list po-ai-facts"><li>PubMed &amp; Europe PMC</li><li>Every citation verified</li><li>Reads your uploaded values</li></ul>' +
+										'<p class="po-ai-privacy"><a href="javascript:void(0)" class="ai-gdpr-info-link" id="aiGdprInfoIcon" title="Data privacy &amp; compliance \u2014 what is sent, and where">Data privacy</a></p>'
 								}
 							]
 						}]
@@ -2019,7 +1971,7 @@ function PA_Step1JobView() {
 							'</div>' +
 							'<div class="po-upload-ai-aside">' +
 								'<div class="po-upload-ai-aside-title">Works with</div>' +
-								'<ul class="po-upload-ai-formats">' +
+								'<ul class="po-pill-list po-upload-ai-formats">' +
 									'<li>DESeq2</li><li>edgeR</li><li>limma</li><li>MaxQuant</li><li>Spectronaut</li><li>DIA-NN</li>' +
 									'<li>MetaboLights MAF</li><li>Excel workbooks</li><li>CSV / TSV</li>' +
 								'</ul>' +

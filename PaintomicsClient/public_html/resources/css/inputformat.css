@@ -336,25 +336,8 @@ input[type="text"].pa-field-err {
     margin: 0 0 8px;
     line-height: 18px;
 }
-.po-upload-ai-formats {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-}
-.po-upload-ai .po-upload-ai-formats li {
-    padding: 3px 10px;
-    border-radius: 99px;
-    border: 1px solid #CFE0F0;
-    background: var(--pa-surface, #FFFFFF);
-    font-size: 12px;
-    line-height: 1.4;
-    color: var(--pa-ink-control, #3F3F46);
-    max-width: none;
-    white-space: nowrap;
-}
+/* The pills themselves are .po-pill-list in main.css, shared with the
+   interpretation panel's facts. */
 
 @media (max-width: 980px) {
     .po-upload-ai-grid { flex-direction: column; }
