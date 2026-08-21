@@ -351,6 +351,92 @@ def findIDsByFeaturesName(jobID, featureNames, db, databaseConvertion_id):
 
         return matchedFeatures
 
+def findIDsByFeaturesNameForDatabases(jobID, featureNames, db, databaseConvertion_ids):
+    """findIDsByFeaturesName for several target databases at once, sharing the
+    part of the work that does not depend on the target.
+
+    The first hop asks MongoDB two questions per batch: the names' xref
+    documents, and which of their mates belong to the target database. Only
+    the second depends on the target, and only through a filter on dbname_id.
+    Called once per database, as it was, a batch of 250 names therefore fetched
+    its documents three times and sent the same ~5,000 mate ids three times,
+    once per database (KEGG, Reactome, OmniPath on mmu) -- profiled on the
+    whole-genome input at 296 document finds and 341 mate finds of 5,000 ids
+    each, the heaviest queries of the mapping.
+
+    Here the documents are fetched once and the mates looked up once with
+    `dbname_id: {$in: targets}`, and the hits are split by target afterwards.
+    Per target the answer is identical: a document has one dbname_id, so the
+    hits filtered to one target are exactly the hits its own query returned;
+    the documents come from the same query in the same order, so each name's
+    translations keep their mate-array order; the second hop, the misses and
+    the translation-cache update still run per target, unchanged.
+
+    Sharing is only done when every target asks for the same names -- i.e.
+    when the translation cache holds the same names for all of them, which is
+    every batch of a job's first omic and most batches after. When the
+    not-cached sets differ the targets fall back to the per-database call,
+    whose query is then exactly what it always was.
+
+    @returns {Dict} databaseConvertion_id -> {name: [translated identifiers]}
+    """
+    cachedByTarget = {
+        target: KeggInformationManager().findBatchInTranslationCache(jobID, featureNames, "id", target)
+        for target in databaseConvertion_ids}
+    notCachedByTarget = {
+        target: set(featureNames).difference(set(cachedByTarget[target].keys()))
+        for target in databaseConvertion_ids}
+    if len({frozenset(names) for names in notCachedByTarget.values()}) != 1:
+        return {target: findIDsByFeaturesName(jobID, featureNames, db, target)
+                for target in databaseConvertion_ids}
+
+    notCachedIds = notCachedByTarget[databaseConvertion_ids[0]]
+    matchedByTarget = {target: defaultdict(list) for target in databaseConvertion_ids}
+    try:
+        if len(notCachedIds):
+            nameDocuments = list(db.xref.find({"display_id": {"$in": list(notCachedIds)}},
+                                              {"display_id": 1, "mates": 1},
+                                              batch_size=XREF_BATCH_SIZE))
+            allMates = list({mate for document in nameDocuments for mate in (document.get("mates") or [])})
+            hitsByID = {}
+            for start_ in range(0, len(allMates), 5000):
+                for hit in db.xref.find({"dbname_id": {"$in": list(databaseConvertion_ids)},
+                                         "_id": {"$in": allMates[start_:start_ + 5000]}},
+                                        {"display_id": 1, "dbname_id": 1}, batch_size=XREF_BATCH_SIZE):
+                    hitsByID[hit.get("_id")] = (hit.get("dbname_id"), hit.get("display_id"))
+
+            for target in databaseConvertion_ids:
+                matchedFeatures = matchedByTarget[target]
+                for document in nameDocuments:
+                    translations = None
+                    for mate in (document.get("mates") or []):
+                        hit = hitsByID.get(mate)
+                        if hit is not None and hit[0] == target:
+                            if translations is None:
+                                translations = matchedFeatures[document.get("display_id")]
+                            translations.append(str(hit[1]))
+
+                unresolved = [document for document in nameDocuments
+                              if document.get("display_id") not in matchedFeatures]
+                if unresolved:
+                    recovered = _bridgeSecondHop(
+                        db, unresolved, target, resolveBridgeDatabaseIds(db, target))
+                    for name, translations in recovered.items():
+                        matchedFeatures[name] = translations
+
+                for name in notCachedIds:
+                    if name not in matchedFeatures:
+                        matchedFeatures[name] = []
+                KeggInformationManager().updateTranslationCache(jobID, matchedFeatures, "id", target)
+    except Exception as ex:
+        logging.error("EXCEPTION %s", ex)
+    finally:
+        for target in databaseConvertion_ids:
+            matchedByTarget[target].update(cachedByTarget[target])
+
+    return matchedByTarget
+
+
 def resolveDatabaseIds(organism, databases, db=None):
     """
     The MongoDB `dbname` ids for the ID and gene-symbol databases of each user
@@ -505,26 +591,39 @@ def mapFeatureIdentifiers(jobID, organism, databases, featureList,  matchedFeatu
         # clone.
         nameKeyedSymbolDatabases = set()
 
+        # One feature-ID table and one symbol table per database, filled batch
+        # by batch. The batch loop is the outer one so that the ID pass can be
+        # made for every database at once: the names' xref documents and the
+        # mate lookup do not depend on the target database, and asking
+        # MongoDB once per batch instead of once per batch per database is
+        # the single largest saving in this function (see
+        # findIDsByFeaturesNameForDatabases). The symbol pass below is per
+        # database, as before; which database's tables a batch fills first
+        # changes nothing they contain.
         for databaseConvertion_name in databases:
-            # Reset the cache per database
-            # TODO: cache para distintas omicas
-            cacheFeatureIDS = {}
-            cacheSymbolsIDS = {}
+            allCacheFeatureIDS[databaseConvertion_name] = {}
+            allCacheSymbolsIDS[databaseConvertion_name] = {}
+        targetIDs = [databaseConvertion_ids.get(name) for name in databases]
 
-            databaseConvertion_id = databaseConvertion_ids.get(databaseConvertion_name)
-            databaseGeneSymbol_id = databaseGeneSymbol_ids.get(databaseConvertion_name)
+        for featureNameBatch in featureNamesBatches:
+            newFeatureIDsByTarget = findIDsByFeaturesNameForDatabases(
+                jobID, featureNameBatch, db, targetIDs)
+            for databaseConvertion_name in databases:
+                cacheFeatureIDS = allCacheFeatureIDS[databaseConvertion_name]
+                cacheSymbolsIDS = allCacheSymbolsIDS[databaseConvertion_name]
 
-            # Skip the symbol pass only when it would query the ID database
-            # itself (an identity translation). Compared on the RESOLVED ids:
-            # resolveDatabaseIds redirects databases configured as their own
-            # symbol database (Reactome, some MapMan) to the organism's real
-            # symbol table, and those must run the second query or matched
-            # clones keep the raw input identifier as their display name.
-            sameDatabase = (databaseConvertion_id == databaseGeneSymbol_id)
+                databaseConvertion_id = databaseConvertion_ids.get(databaseConvertion_name)
+                databaseGeneSymbol_id = databaseGeneSymbol_ids.get(databaseConvertion_name)
 
-            # Populate the feature and symbol cache
-            for featureNameBatch in featureNamesBatches:
-                newFeatureIDs = findIDsByFeaturesName(jobID, featureNameBatch, db, databaseConvertion_id)
+                # Skip the symbol pass only when it would query the ID database
+                # itself (an identity translation). Compared on the RESOLVED ids:
+                # resolveDatabaseIds redirects databases configured as their own
+                # symbol database (Reactome, some MapMan) to the organism's real
+                # symbol table, and those must run the second query or matched
+                # clones keep the raw input identifier as their display name.
+                sameDatabase = (databaseConvertion_id == databaseGeneSymbol_id)
+
+                newFeatureIDs = newFeatureIDsByTarget[databaseConvertion_id]
                 cacheFeatureIDS.update(newFeatureIDs)
 
                 # Only query for symbols if the database is different from the ID database
@@ -575,9 +674,6 @@ def mapFeatureIdentifiers(jobID, organism, databases, featureList,  matchedFeatu
                         progressArray[progressSlot] = min(100, int(100 * doneBatches / totalBatches))
                     except Exception:
                         pass  # progress must never be able to fail a mapping
-
-            allCacheFeatureIDS[databaseConvertion_name] = cacheFeatureIDS
-            allCacheSymbolsIDS[databaseConvertion_name] = cacheSymbolsIDS
 
         # Now process all features once, checking all databases for each feature
         # Use a set to track which features matched in any database (O(1) lookups)
