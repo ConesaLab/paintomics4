@@ -214,14 +214,28 @@
                 throw new Error(reason || "The conversion service refused the request.");
             }
             // Poll rather than hold a request open: the site has four request
-            // threads and the gateway takes about a minute.
+            // threads and the gateway takes about a minute. The server bounds
+            // its own turn (agent_turn.TURN_BUDGET_SECONDS, 150 s by default)
+            // well inside these 240 polls, so a gateway that does not answer
+            // comes back as `error` WITH its reason long before this loop
+            // gives up -- the bare "timed out" below is for a server that
+            // stopped answering the poll itself.
             for (var i = 0; i < 240; i++) {
                 await new Promise(function (r) { setTimeout(r, 1000); });
                 var poll = await fetch("input_convert/turn/" + encodeURIComponent(body.ticket),
                                        { credentials: "same-origin" });
                 var p = await poll.json();
                 if (p.state === "done") return p.action;
-                if (p.state === "error") throw new Error("The conversion service failed on that step.");
+                if (p.state === "error") {
+                    throw new Error(p.message || "The conversion service failed on that step.");
+                }
+                if (p.state === "unknown") {
+                    // The ticket is gone before it was answered: the server
+                    // restarted under it. Polling on would wait four minutes
+                    // for nothing.
+                    throw new Error("The server lost track of this conversion " +
+                                    "(it may have restarted). Please try again.");
+                }
             }
             throw new Error("The conversion timed out.");
         };

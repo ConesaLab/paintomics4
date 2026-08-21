@@ -147,6 +147,32 @@ The acceptance gate is always PaintOmics' own validator — the agent never grad
 its own work — extended to reject a values matrix that silently repeats an
 identifier or leaves an identifier cell empty.
 
+## When the AI service does not answer
+
+The gateway behind the converter is shared and can stall: on 2026-08-21 it
+accepted connections for about an hour without returning a byte. What the user
+sees then is decided here, not by the gateway:
+
+- **Every turn is bounded.** `agent_turn.next_action` streams the completion
+  (the only call shape this gateway finishes for long answers) under a wall
+  clock of `AI_CONVERT_TURN_SECONDS` (150 s, retries included) with a per-read
+  timeout of `AI_CONVERT_READ_TIMEOUT` (60 s). The browser polls a ticket for
+  about four minutes, so the server always gives up first, with a reason.
+- **A gateway failure is not a model failure.** The turn raises
+  `GatewayUnavailable`, the ticket fails with that message, and the sheet shows
+  it ("The AI service did not answer within 150 seconds. It may be busy or
+  down; please try again in a few minutes."). A `null` action — the model
+  answered but not with an action — is still retried, because that one can
+  succeed on the next try.
+- **A short cooldown.** For 90 s after such a failure, new turns are refused at
+  once with the recorded reason instead of each spending the budget to learn
+  the same thing. The first turn that succeeds clears it.
+- **Slots are returned.** The two concurrency slots are released by the worker
+  that ran the turn, and an error before a slot was taken never releases one
+  that another conversion holds.
+
+`src/tests/test_input_convert_gateway_timeout.py` pins all four.
+
 ## Privacy and isolation (unchanged)
 
 The generated Python runs in an opaque-origin Pyodide sandbox
