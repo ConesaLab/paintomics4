@@ -139,7 +139,14 @@
             });
             var body = await res.json();
             if (!body || !body.ticket) {
-                throw new Error((body && body.errorMessage) || "The conversion service refused the request.");
+                // ServerErrorManager answers with `message`, prefixed by the
+                // file and function it was raised in; the readable half is
+                // after "ERROR MESSAGE:". Same split PA_Step1Views already does,
+                // so a disabled server says so plainly instead of "refused".
+                var raw = (body && (body.errorMessage || body.message)) || "";
+                var half = raw.split("ERROR MESSAGE:");
+                var reason = (half.length > 1 ? half[1] : raw).trim();
+                throw new Error(reason || "The conversion service refused the request.");
             }
             // Poll rather than hold a request open: the site has four request
             // threads and the gateway takes about a minute.
