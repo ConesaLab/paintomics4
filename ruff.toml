@@ -1,9 +1,10 @@
 # Lint gate run by .github/workflows/pr.yml (ruff check .).
 #
-# The rule set is the one that catches code which cannot run -- syntax errors,
-# invalid escapes and comparisons, broken control flow, undefined names --
-# rather than style. It is green on the tree as it stands; tightening it is a
-# matter of widening `select` once the findings it would raise are fixed.
+# The rule set: E9 (code that cannot parse) plus the whole F family --
+# undefined names, unused imports and locals, star imports, broken f-strings.
+# The tree is at zero findings (quality campaign, 2026-08); every deliberate
+# exception carries a `# noqa: F401 -- <reason>` on its own line, so a bare
+# noqa or a new finding fails this gate.
 #
 # No per-file ignores: the two the gate started with (a pasted fragment in
 # AdminTools/scripts/cache.py, an undefined ROOT_DIRECTORY in AdminServlet.py)
@@ -19,4 +20,4 @@ extend-exclude = [
 ]
 
 [lint]
-select = ["E9", "F63", "F7", "F82"]
+select = ["E9", "F"]
