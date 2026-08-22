@@ -27,7 +27,6 @@ from csv import reader as csv_reader
 from re import compile as re_compile
 from collections import defaultdict
 
-import numpy
 from numpy import asarray, logical_or, invert, sum as numpy_sum
 # NaN-aware variants for omics that legitimately carry missing measurements
 # (e.g. CpG sites not measured in every methylation sample). Without these,
@@ -1202,10 +1201,10 @@ class Job(Model):
                     for file in files:
                         zipf.write(os_path.join(root, file), os_path.basename(os_path.join(root, file)))
                 zipf.close()
-            except Exception as e:
+            except Exception:
                 try:
                     shutil_make_archive(output, "zip", target)
-                except Exception as e:
+                except Exception:
                     raise Exception("Failed while compressing directory")
         else:
             raise Exception("Failed while compressing directory. Format not supported" )
