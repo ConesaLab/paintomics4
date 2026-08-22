@@ -17,6 +17,9 @@ extend-exclude = [
     "dist",
     "docs",
     "runs",
+    # vulture INPUT, not runnable code: its bare names mark symbols as used
+    # for the dead-code gate, which ruff would read as undefined names.
+    "scripts/ci/vulture_whitelist.py",
 ]
 
 [lint]
