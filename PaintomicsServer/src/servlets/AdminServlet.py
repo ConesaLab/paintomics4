@@ -657,7 +657,7 @@ def adminServletSystemInformation(request, response):
             for line in output:
                 line = line.decode("utf-8")
                 disk_use.append(line.split())
-        except Exception as e:
+        except Exception:
             pass
 
         return response.setContent({
