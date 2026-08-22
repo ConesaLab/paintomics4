@@ -32,9 +32,6 @@ class KeggInformationManager(metaclass=Singleton):
     def getCompoundNameByID(self, compoundID):
         raise NotImplementedError("Not implemented")
 
-    def getSubCompoundsByCompoundName(self, compoundName, prefix):
-        raise NotImplementedError("Not implemented")
-
     def createTranslationCache(self, jobID):
         """
         This function...
@@ -152,12 +149,6 @@ class KeggInformationManager(metaclass=Singleton):
     #*************************************************************************************
     def getAllPathwaysByOrganism(self, organism):
         return self.getKeggData(organism).get("pathways")
-
-    def getPathwayInformation(self, organism, pathwayID):
-        raise NotImplementedError("Not implemented")
-
-    def getPathwayImagePath(self, organism, pathwayID):
-        raise NotImplementedError("Not implemented")
 
     def getPathwayNameByID(self, organism, pathwayID):
         """

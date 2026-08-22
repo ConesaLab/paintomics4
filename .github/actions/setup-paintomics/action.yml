@@ -26,6 +26,17 @@ runs:
         cache: pip
         cache-dependency-path: requirements.txt
 
+    # cairocffi (behind CairoSVG, which renders the pathway exports) dlopens
+    # libcairo at import time; the runner image does not ship it.
+    - name: cairo
+      shell: bash
+      run: |
+        brew list cairo >/dev/null 2>&1 || brew install --quiet cairo
+        # Homebrew's lib dir is not on dyld's default search path on Apple
+        # silicon, so cairocffi's dlopen("libcairo.2.dylib") still failed
+        # after the install; the fallback path is what ctypes consults.
+        echo "DYLD_FALLBACK_LIBRARY_PATH=$(brew --prefix)/lib:${DYLD_FALLBACK_LIBRARY_PATH:-}" >> "$GITHUB_ENV"
+
     - name: Python requirements
       shell: bash
       run: python -m pip install --quiet -r requirements.txt
@@ -35,17 +46,18 @@ runs:
       with:
         r-version: ${{ inputs.r-version }}
 
-    - name: R packages for the metagene and hub scripts
-      uses: r-lib/actions/setup-r-dependencies@v2
+    # Not r-lib/actions/setup-r-dependencies: it installed these same
+    # packages in 20 s and then sat for eight minutes in its "check whether
+    # quarto is needed" step, which was the entire PR budget.
+    - name: R package library (cache)
+      uses: actions/cache@v4
       with:
-        packages: |
-          any::mclust
-          any::cluster
-          any::amap
-          any::factoextra
-          any::purrr
-          any::optparse
-        cache-version: 1
+        path: ~/paintomics-ci/Rlib
+        key: r-packages-${{ inputs.r-version }}-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/ci/setup-r-packages.sh') }}
+
+    - name: R packages for the metagene and hub scripts
+      shell: bash
+      run: scripts/ci/setup-r-packages.sh
 
     - name: MongoDB distribution (cache)
       uses: actions/cache@v4

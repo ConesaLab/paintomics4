@@ -31,8 +31,7 @@ from src.common.JobInformationManager import JobInformationManager
 from src.common import JobProgress
 from src.common import ExampleDatasets
 from src.common import DatabaseAvailability
-from src.common.Statistics import calculateSignificance, calculateCombinedSignificancePvalues, adjustPvalues, calculateStoufferCombinedPvalue
-from src.common.ReplicateDetection import detect_replicates, aggregate_replicates
+from src.common.Statistics import adjustPvalues, calculateStoufferCombinedPvalue
 from src.common.DesignFile import parse_design
 from src.common.DAO.PathwayAcquisitionJobDAO import PathwayAcquisitionJobDAO
 from src.common.DAO.FeatureDAO import FeatureDAO
@@ -843,9 +842,6 @@ def pathwayAcquisitionRecoverJob(request, response, QUEUE_INSTANCE):
         def _as_dict(value):
             return value if isinstance(value, dict) else {}
 
-        def _as_list(value):
-            return value if isinstance(value, list) else []
-
         def _as_dict_or_list(value):
             return value if isinstance(value, (dict, list)) else {}
 
@@ -1125,7 +1121,6 @@ def pathwayAcquisitionSaveImage(request, response):
 
 def pathwayAcquisitionSaveVisualOptions(request, response):
     #VARIABLE DECLARATION
-    visualOptionsInstance = None
     jobID  = ""
     userID = ""
 
@@ -1423,7 +1418,6 @@ def pathwayAcquisitionMetagenes_PART1(REQUEST, RESPONSE, QUEUE_INSTANCE, JOB_ID,
         #                 Contains all the information for the current job.
         #  - userID: the ID for the user
         # ****************************************************************
-        jobInstance = None
         userID = None
 
         try:

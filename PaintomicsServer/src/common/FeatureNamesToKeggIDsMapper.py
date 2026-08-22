@@ -136,39 +136,6 @@ def getConnectionByOrganismCode(organism):
 #  \_____|______|_| \_|______|_____/
 #
 #*****************************************************************
-def findKeggIDByFeatureName(jobID, featureName, organism, db, databaseConvertion_id):
-    """
-    This function queries the MongoDB looking for the associated gene ID for the given gene name
-
-    @param {String} jobID, the identifier for the running job, necessary to for the temporal caches
-    @param {String} featureName, the name for the feature that we want to map
-    @param {String} organism, the organims code
-    @param  {pymongo.Database} db, the open connection with MongoDB database
-    @param {String} databaseConvertion_id, identifier for the database which contains the translated feature name (e.g. entrezgene for mmu)
-    @returns {List} matchedFeatures, a list of translated identifiers
-    @returns {Boolean} found, True if we found at least one translation
-    """
-    #Check if the id is ath the cache of translation
-    featureIDs = KeggInformationManager().findInTranslationCache(jobID, featureName, "id", databaseConvertion_id)
-    if(featureIDs != None):
-        return featureIDs, True
-
-    matchedFeatures=[]
-    try:
-        mates  = db.xref.find({"display_id": featureName}, {"item" :1, "mates":1, "qty":1})[0].get("mates") #Will fail if not matches
-        cursor = db.xref.find({"dbname_id" : databaseConvertion_id, "_id" : { "$in" : mates }}, {"display_id":1})
-
-        # No count() guard: Cursor.count() was removed in pymongo 4, and because
-        # this block swallows every exception the AttributeError would have been
-        # invisible -- every lookup would silently report "not found". Iterating
-        # an empty cursor is already a no-op, and this drops a server round-trip.
-        for item in cursor:
-            matchedFeatures.append(item.get("display_id"))
-        return matchedFeatures, len(matchedFeatures) > 0
-
-    except Exception as ex:
-        return matchedFeatures, False
-
 #: Identifier types that name a *gene* and only ever name one gene, so two xref
 #: documents carrying the same value are the same gene by definition. These and
 #: only these are safe to bridge a second hop through (see _bridgeSecondHop):
@@ -197,6 +164,13 @@ def resolveBridgeDatabaseIds(db, databaseConvertion_id=None):
     # Bridging through the target itself cannot add anything: a name reaching
     # it through a bridge document would have reached it on the first hop.
     return [identifier for identifier in cached if identifier != databaseConvertion_id]
+
+
+# Documents per cursor batch for the xref lookups. Every lookup here is
+# bounded -- at most 250 names or 5,000 mate ids per query -- so one batch of
+# this size always holds the whole result and no getMore follows. The server
+# caps a batch at 16 MB regardless; these documents are a few hundred bytes.
+XREF_BATCH_SIZE = 10000
 
 
 def _bridgeSecondHop(db, unresolvedDocuments, databaseConvertion_id, bridgeIDs):
@@ -235,7 +209,7 @@ def _bridgeSecondHop(db, unresolvedDocuments, databaseConvertion_id, bridgeIDs):
     for start_ in range(0, len(mateIDs), 5000):
         for hit in db.xref.find({"dbname_id": {"$in": bridgeIDs},
                                  "_id": {"$in": mateIDs[start_:start_ + 5000]}},
-                                {"display_id": 1, "dbname_id": 1}):
+                                {"display_id": 1, "dbname_id": 1}, batch_size=XREF_BATCH_SIZE):
             bridgeValueByMate[hit.get("_id")] = (hit.get("dbname_id"), str(hit.get("display_id")))
 
     if not bridgeValueByMate:
@@ -248,7 +222,7 @@ def _bridgeSecondHop(db, unresolvedDocuments, databaseConvertion_id, bridgeIDs):
     for start_ in range(0, len(bridgeValues), 5000):
         for hit in db.xref.find({"dbname_id": {"$in": bridgeIDs},
                                  "display_id": {"$in": bridgeValues[start_:start_ + 5000]}},
-                                {"display_id": 1, "mates": 1}):
+                                {"display_id": 1, "mates": 1}, batch_size=XREF_BATCH_SIZE):
             bridgeMates[str(hit.get("display_id"))].extend(hit.get("mates") or [])
 
     farMateIDs = list({mate for mates in bridgeMates.values() for mate in mates})
@@ -256,7 +230,7 @@ def _bridgeSecondHop(db, unresolvedDocuments, databaseConvertion_id, bridgeIDs):
     for start_ in range(0, len(farMateIDs), 5000):
         for hit in db.xref.find({"dbname_id": databaseConvertion_id,
                                  "_id": {"$in": farMateIDs[start_:start_ + 5000]}},
-                                {"display_id": 1}):
+                                {"display_id": 1}, batch_size=XREF_BATCH_SIZE):
             targetByMate[hit.get("_id")] = str(hit.get("display_id"))
 
     if not targetByMate:
@@ -317,14 +291,22 @@ def findIDsByFeaturesName(jobID, featureNames, db, databaseConvertion_id):
 
     try:
         if len(notCachedIds):
+            # batch_size: without it a find hands back 101 documents and the
+            # rest come through a separate getMore round trip -- which every
+            # 250-name lookup (about 101-300 documents) paid, as did the mate
+            # lookups with more than 101 hits. Profiled on the whole-genome
+            # input: 1,257 getMore commands for 2,687 finds, a third of the
+            # mapper's time on MongoDB. One batch returns the same documents
+            # in the same order.
             nameDocuments = list(db.xref.find({"display_id": {"$in": list(notCachedIds)}},
-                                              {"display_id": 1, "mates": 1}))
+                                              {"display_id": 1, "mates": 1},
+                                              batch_size=XREF_BATCH_SIZE))
             allMates = list({mate for document in nameDocuments for mate in (document.get("mates") or [])})
             hitsByID = {}
             for start_ in range(0, len(allMates), 5000):
                 for hit in db.xref.find({"dbname_id": databaseConvertion_id,
                                          "_id": {"$in": allMates[start_:start_ + 5000]}},
-                                        {"display_id": 1}):
+                                        {"display_id": 1}, batch_size=XREF_BATCH_SIZE):
                     hitsByID[hit.get("_id")] = hit.get("display_id")
 
             for document in nameDocuments:
@@ -369,33 +351,197 @@ def findIDsByFeaturesName(jobID, featureNames, db, databaseConvertion_id):
 
         return matchedFeatures
 
-def findGeneSymbolByFeatureID(jobID, featureID, organism, db, databaseConvertion_id, databaseGeneSymbol_id):
-    """
-    This function queries the MongoDB looking for the associated gene symbol for the given gene ID
+def _bridgeSecondHopForDatabases(db, unresolvedByTarget, bridgeIDsByTarget):
+    """_bridgeSecondHop for several target databases at once.
 
-    @param {String} jobID, the identifier for the running job, necessary to for the temporal caches
-    @param {String} featureID, the ID for the feature that we want to map
-    @param {String} organism, the organims code
-    @param  {pymongo.Database} db, the open connection with MongoDB database
-    @param {String} databaseConvertion_id, identifier for the database which contains the translated feature name (e.g. entrezgene for mmu)
-    @param {String} databaseGeneSymbol_id, identifier for the database which contains the translated feature symbol (e.g. refseq_gene_symbol for mmu)
-    @returns {List} matchedFeature, a gene symbol for the translated identifier
-    @returns {Boolean} found, True if we found at least one translation
-    """
-    #Check if the id is ath the cache of translation
-    geneSymbol = KeggInformationManager().findInTranslationCache(jobID, featureID, "symbol", databaseConvertion_id)
-    if(geneSymbol != None):
-        return geneSymbol, True
+    Of its three lookups, the first (which bridge identifiers the unresolved
+    names' mates are) and the third (which of the bridge groups' far mates
+    are in the target) filter a set of ids by dbname_id, so one query over
+    the union of the targets' ids, split by dbname_id afterwards, returns
+    every target exactly the hits its own query did. The second lookup
+    (the bridge documents' own mate groups, by display_id) stays per target:
+    its result is a LIST whose order is the query's, and a name's translations
+    follow that order.
 
+    Each target's bridge set excludes the target itself (resolveBridgeDatabase
+    Ids), so the shared first lookup asks for the union of the bridge sets and
+    each target keeps only the hits in its own.
+
+    @returns {Dict} target -> {name: [translated identifiers]}, hits only.
+    """
+    targets = [target for target, documents in unresolvedByTarget.items()
+               if documents and bridgeIDsByTarget.get(target)]
+    recoveredByTarget = {target: {} for target in unresolvedByTarget}
+    if not targets:
+        return recoveredByTarget
+
+    # Hop 1b, shared: which bridge identifiers does each unresolved name carry?
+    allBridgeIDs = list({bridge for target in targets for bridge in bridgeIDsByTarget[target]})
+    mateIDs = list({mate for target in targets for document in unresolvedByTarget[target]
+                    for mate in (document.get("mates") or [])})
+    bridgeValueByMateAll = {}
+    for start_ in range(0, len(mateIDs), 5000):
+        for hit in db.xref.find({"dbname_id": {"$in": allBridgeIDs},
+                                 "_id": {"$in": mateIDs[start_:start_ + 5000]}},
+                                {"display_id": 1, "dbname_id": 1}, batch_size=XREF_BATCH_SIZE):
+            bridgeValueByMateAll[hit.get("_id")] = (hit.get("dbname_id"), str(hit.get("display_id")))
+
+    # Hop 2, per target: the bridge documents' OWN mate groups.
+    bridgeValueByMate = {}
+    bridgeMates = {}
+    farMateIDs = {}
+    for target in targets:
+        bridges = set(bridgeIDsByTarget[target])
+        mine = {}
+        for document in unresolvedByTarget[target]:
+            for mate in (document.get("mates") or []):
+                hit = bridgeValueByMateAll.get(mate)
+                if hit is not None and hit[0] in bridges:
+                    mine[mate] = hit
+        bridgeValueByMate[target] = mine
+        if not mine:
+            continue
+        bridgeValues = list({value for _, value in mine.values()})
+        mates = defaultdict(list)
+        for start_ in range(0, len(bridgeValues), 5000):
+            for hit in db.xref.find({"dbname_id": {"$in": bridgeIDsByTarget[target]},
+                                     "display_id": {"$in": bridgeValues[start_:start_ + 5000]}},
+                                    {"display_id": 1, "mates": 1}, batch_size=XREF_BATCH_SIZE):
+                mates[str(hit.get("display_id"))].extend(hit.get("mates") or [])
+        bridgeMates[target] = mates
+        farMateIDs[target] = list({mate for group in mates.values() for mate in group})
+
+    # Hop 3, shared: the target inside the bridge groups.
+    allFarMates = list({mate for target in farMateIDs for mate in farMateIDs[target]})
+    targetByMateAll = {}
+    for start_ in range(0, len(allFarMates), 5000):
+        for hit in db.xref.find({"dbname_id": {"$in": list(farMateIDs)},
+                                 "_id": {"$in": allFarMates[start_:start_ + 5000]}},
+                                {"display_id": 1, "dbname_id": 1}, batch_size=XREF_BATCH_SIZE):
+            targetByMateAll[hit.get("_id")] = (hit.get("dbname_id"), str(hit.get("display_id")))
+
+    for target in targets:
+        if target not in bridgeMates:
+            continue
+        targetByMate = {}
+        for mate in farMateIDs[target]:
+            hit = targetByMateAll.get(mate)
+            if hit is not None and hit[0] == target:
+                targetByMate[mate] = hit[1]
+        if not targetByMate:
+            continue
+        recovered = {}
+        mine = bridgeValueByMate[target]
+        mates = bridgeMates[target]
+        for document in unresolvedByTarget[target]:
+            translations = []
+            seen = set()
+            for mate in (document.get("mates") or []):
+                bridge = mine.get(mate)
+                if bridge is None:
+                    continue
+                for farMate in mates.get(bridge[1], ()):
+                    identifier = targetByMate.get(farMate)
+                    if identifier is not None and identifier not in seen:
+                        seen.add(identifier)
+                        translations.append(identifier)
+            if translations:
+                recovered[document.get("display_id")] = translations
+        recoveredByTarget[target] = recovered
+    return recoveredByTarget
+
+
+def findIDsByFeaturesNameForDatabases(jobID, featureNames, db, databaseConvertion_ids):
+    """findIDsByFeaturesName for several target databases at once, sharing the
+    part of the work that does not depend on the target.
+
+    The first hop asks MongoDB two questions per batch: the names' xref
+    documents, and which of their mates belong to the target database. Only
+    the second depends on the target, and only through a filter on dbname_id.
+    Called once per database, as it was, a batch of 250 names therefore fetched
+    its documents three times and sent the same ~5,000 mate ids three times,
+    once per database (KEGG, Reactome, OmniPath on mmu) -- profiled on the
+    whole-genome input at 296 document finds and 341 mate finds of 5,000 ids
+    each, the heaviest queries of the mapping.
+
+    Here the documents are fetched once and the mates looked up once with
+    `dbname_id: {$in: targets}`, and the hits are split by target afterwards.
+    Per target the answer is identical: a document has one dbname_id, so the
+    hits filtered to one target are exactly the hits its own query returned;
+    the documents come from the same query in the same order, so each name's
+    translations keep their mate-array order; the second hop, the misses and
+    the translation-cache update still run per target, unchanged.
+
+    Sharing is only done when every target asks for the same names -- i.e.
+    when the translation cache holds the same names for all of them, which is
+    every batch of a job's first omic and most batches after. When the
+    not-cached sets differ the targets fall back to the per-database call,
+    whose query is then exactly what it always was.
+
+    @returns {Dict} databaseConvertion_id -> {name: [translated identifiers]}
+    """
+    cachedByTarget = {
+        target: KeggInformationManager().findBatchInTranslationCache(jobID, featureNames, "id", target)
+        for target in databaseConvertion_ids}
+    notCachedByTarget = {
+        target: set(featureNames).difference(set(cachedByTarget[target].keys()))
+        for target in databaseConvertion_ids}
+    if len({frozenset(names) for names in notCachedByTarget.values()}) != 1:
+        return {target: findIDsByFeaturesName(jobID, featureNames, db, target)
+                for target in databaseConvertion_ids}
+
+    notCachedIds = notCachedByTarget[databaseConvertion_ids[0]]
+    matchedByTarget = {target: defaultdict(list) for target in databaseConvertion_ids}
     try:
-        mates = db.xref.find({"display_id": featureID, "dbname_id" : databaseConvertion_id}, {"item" :1, "mates":1, "qty":1})[0].get("mates") #Will fail if not matches
-        matchedFeature=db.xref.find_one({"dbname_id" : databaseGeneSymbol_id, "_id" : { "$in" : mates }}, {"display_id":1})
-        if(matchedFeature != None):
-            return matchedFeature.get("display_id"), True
-        return None, False
+        if len(notCachedIds):
+            nameDocuments = list(db.xref.find({"display_id": {"$in": list(notCachedIds)}},
+                                              {"display_id": 1, "mates": 1},
+                                              batch_size=XREF_BATCH_SIZE))
+            allMates = list({mate for document in nameDocuments for mate in (document.get("mates") or [])})
+            hitsByID = {}
+            for start_ in range(0, len(allMates), 5000):
+                for hit in db.xref.find({"dbname_id": {"$in": list(databaseConvertion_ids)},
+                                         "_id": {"$in": allMates[start_:start_ + 5000]}},
+                                        {"display_id": 1, "dbname_id": 1}, batch_size=XREF_BATCH_SIZE):
+                    hitsByID[hit.get("_id")] = (hit.get("dbname_id"), hit.get("display_id"))
 
+            unresolvedByTarget = {}
+            for target in databaseConvertion_ids:
+                matchedFeatures = matchedByTarget[target]
+                for document in nameDocuments:
+                    translations = None
+                    for mate in (document.get("mates") or []):
+                        hit = hitsByID.get(mate)
+                        if hit is not None and hit[0] == target:
+                            if translations is None:
+                                translations = matchedFeatures[document.get("display_id")]
+                            translations.append(str(hit[1]))
+                unresolvedByTarget[target] = [document for document in nameDocuments
+                                              if document.get("display_id") not in matchedFeatures]
+
+            # Second hop for whatever the first could not reach, all targets at
+            # once (see _bridgeSecondHopForDatabases).
+            recoveredByTarget = _bridgeSecondHopForDatabases(
+                db, unresolvedByTarget,
+                {target: resolveBridgeDatabaseIds(db, target) for target in databaseConvertion_ids})
+
+            for target in databaseConvertion_ids:
+                matchedFeatures = matchedByTarget[target]
+                for name, translations in recoveredByTarget[target].items():
+                    matchedFeatures[name] = translations
+
+                for name in notCachedIds:
+                    if name not in matchedFeatures:
+                        matchedFeatures[name] = []
+                KeggInformationManager().updateTranslationCache(jobID, matchedFeatures, "id", target)
     except Exception as ex:
-        return None, False
+        logging.error("EXCEPTION %s", ex)
+    finally:
+        for target in databaseConvertion_ids:
+            matchedByTarget[target].update(cachedByTarget[target])
+
+    return matchedByTarget
+
 
 def resolveDatabaseIds(organism, databases, db=None):
     """
@@ -536,10 +682,17 @@ def mapFeatureIdentifiers(jobID, organism, databases, featureList,  matchedFeatu
         # MongoDB round trips and the per-feature loop below is ~2%. Measured on
         # Drago over disjoint cold slices: 2000 -> 3 anchors/5.99s, 500 -> 6
         # anchors/5.69s, 250 -> 12 anchors/5.94s (-0.9%), 100 -> 30 anchors/+2.1%.
-        # 250 buys 4x the resolution for no measurable time, and a bigger $in list
-        # is not cheaper. Rate measured over the first half of the anchors predicts
-        # the phase total to within ~5%.
-        featureNamesBatches = chunks(list(featureNames), 250)
+        # That measurement was network-bound; with every lookup now answered in
+        # one cursor batch and the first and second hops shared across the
+        # target databases, what a batch costs is a fixed set of round trips
+        # (names, mates, symbols, bridges) and the count of batches is what is
+        # left to cut: 1,000 names per batch is a quarter of the round trips of
+        # 250 for the same documents, and a worker's share of a whole-genome
+        # omic (5,000 names at four workers) still reports five times. The
+        # result does not depend on how the names are batched: every name is
+        # answered from its own documents, and the bridge groups a batch walks
+        # are the same groups whichever batch reaches them.
+        featureNamesBatches = chunks(list(featureNames), 1000)
         totalBatches = len(featureNamesBatches) * max(1, len(databases))
         doneBatches = 0
 
@@ -551,26 +704,39 @@ def mapFeatureIdentifiers(jobID, organism, databases, featureList,  matchedFeatu
         # clone.
         nameKeyedSymbolDatabases = set()
 
+        # One feature-ID table and one symbol table per database, filled batch
+        # by batch. The batch loop is the outer one so that the ID pass can be
+        # made for every database at once: the names' xref documents and the
+        # mate lookup do not depend on the target database, and asking
+        # MongoDB once per batch instead of once per batch per database is
+        # the single largest saving in this function (see
+        # findIDsByFeaturesNameForDatabases). The symbol pass below is per
+        # database, as before; which database's tables a batch fills first
+        # changes nothing they contain.
         for databaseConvertion_name in databases:
-            # Reset the cache per database
-            # TODO: cache para distintas omicas
-            cacheFeatureIDS = {}
-            cacheSymbolsIDS = {}
+            allCacheFeatureIDS[databaseConvertion_name] = {}
+            allCacheSymbolsIDS[databaseConvertion_name] = {}
+        targetIDs = [databaseConvertion_ids.get(name) for name in databases]
 
-            databaseConvertion_id = databaseConvertion_ids.get(databaseConvertion_name)
-            databaseGeneSymbol_id = databaseGeneSymbol_ids.get(databaseConvertion_name)
+        for featureNameBatch in featureNamesBatches:
+            newFeatureIDsByTarget = findIDsByFeaturesNameForDatabases(
+                jobID, featureNameBatch, db, targetIDs)
+            for databaseConvertion_name in databases:
+                cacheFeatureIDS = allCacheFeatureIDS[databaseConvertion_name]
+                cacheSymbolsIDS = allCacheSymbolsIDS[databaseConvertion_name]
 
-            # Skip the symbol pass only when it would query the ID database
-            # itself (an identity translation). Compared on the RESOLVED ids:
-            # resolveDatabaseIds redirects databases configured as their own
-            # symbol database (Reactome, some MapMan) to the organism's real
-            # symbol table, and those must run the second query or matched
-            # clones keep the raw input identifier as their display name.
-            sameDatabase = (databaseConvertion_id == databaseGeneSymbol_id)
+                databaseConvertion_id = databaseConvertion_ids.get(databaseConvertion_name)
+                databaseGeneSymbol_id = databaseGeneSymbol_ids.get(databaseConvertion_name)
 
-            # Populate the feature and symbol cache
-            for featureNameBatch in featureNamesBatches:
-                newFeatureIDs = findIDsByFeaturesName(jobID, featureNameBatch, db, databaseConvertion_id)
+                # Skip the symbol pass only when it would query the ID database
+                # itself (an identity translation). Compared on the RESOLVED ids:
+                # resolveDatabaseIds redirects databases configured as their own
+                # symbol database (Reactome, some MapMan) to the organism's real
+                # symbol table, and those must run the second query or matched
+                # clones keep the raw input identifier as their display name.
+                sameDatabase = (databaseConvertion_id == databaseGeneSymbol_id)
+
+                newFeatureIDs = newFeatureIDsByTarget[databaseConvertion_id]
                 cacheFeatureIDS.update(newFeatureIDs)
 
                 # Only query for symbols if the database is different from the ID database
@@ -621,9 +787,6 @@ def mapFeatureIdentifiers(jobID, organism, databases, featureList,  matchedFeatu
                         progressArray[progressSlot] = min(100, int(100 * doneBatches / totalBatches))
                     except Exception:
                         pass  # progress must never be able to fail a mapping
-
-            allCacheFeatureIDS[databaseConvertion_name] = cacheFeatureIDS
-            allCacheSymbolsIDS[databaseConvertion_name] = cacheSymbolsIDS
 
         # Now process all features once, checking all databases for each feature
         # Use a set to track which features matched in any database (O(1) lookups)

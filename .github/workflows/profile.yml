@@ -20,6 +20,14 @@ on:
         description: py-spy sampling rate (Hz)
         required: false
         default: "200"
+      baseline-ref:
+        description: >-
+          If set, an A/B run: this ref is checked out beside the dispatched one
+          and both are measured on the same runner, interleaved
+          (scripts/perf/ab.sh). Two separate runs land on VMs that differ by
+          30% in every phase, so a before/after claim needs this.
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -28,19 +36,31 @@ jobs:
   profile:
     name: py-spy on tests/perf/large_input
     runs-on: macos-26
-    timeout-minutes: 90
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: ./.github/actions/setup-paintomics
       - name: py-spy
         run: python -m pip install --quiet py-spy
       - name: Profile and time
+        if: inputs.baseline-ref == ''
         env:
           PYTHONPATH: ${{ github.workspace }}/scripts/ci/no_network
           AI_CSIC_API_BASE: http://127.0.0.1:1/v1
         run: scripts/perf/profile.sh ${{ runner.temp }}/profile "${{ inputs.runs }}" "${{ inputs.rate }}"
+      - name: A/B against the baseline ref, same runner, interleaved
+        if: inputs.baseline-ref != ''
+        env:
+          PYTHONPATH: ${{ github.workspace }}/scripts/ci/no_network
+          AI_CSIC_API_BASE: http://127.0.0.1:1/v1
+        run: |
+          git worktree add "${{ runner.temp }}/before" "${{ inputs.baseline-ref }}"
+          scripts/perf/ab.sh "${{ runner.temp }}/before" "${{ github.workspace }}" \
+            "${{ runner.temp }}/profile" "${{ inputs.runs }}" "${{ inputs.rate }}"
       - uses: actions/upload-artifact@v4
         with:
-          name: profile-${{ github.sha }}
+          name: profile-${{ github.sha }}${{ inputs.baseline-ref != '' && '-ab' || '' }}
           path: ${{ runner.temp }}/profile
           retention-days: 30

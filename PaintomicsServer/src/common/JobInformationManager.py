@@ -328,7 +328,6 @@ class JobInformationManager(metaclass=Singleton):
         return location is not None and str(location).strip() != ""
 
     def saveFiles(self, uploadedFiles, formFields, userID, jobInstance, CLIENT_TMP_DIR, EXAMPLE_FILES_DIR=""):
-        nOthers = 1
         uploadedDataFile = None
         uploadedRelevantFile = None
         dataFileName = ""

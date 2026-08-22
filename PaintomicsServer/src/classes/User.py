@@ -44,12 +44,6 @@ class User (Model):
     def getUserId(self):
         return self.userID
 
-    def setUserId(self, userID):
-        self.userID = userID
-
-    def getSessionToken(self):
-        return self.sessionToken
-
     def setSessionToken(self, sessionToken):
         self.sessionToken = sessionToken
 
@@ -80,9 +74,6 @@ class User (Model):
         # a future caller does.
         self.email = email.lower() if isinstance(email, str) else email
 
-    def getPassword(self):
-        return self.password
-
     def setPassword(self, password):
         self.password = password
 
@@ -95,17 +86,8 @@ class User (Model):
     def isActivated(self):
         return self.activated
 
-    def setActivated(self, activated):
-        self.activated = activated
-
-    def getCreationDate(self):
-        return self.creation_date
-
     def setCreationDate(self, creation_date):
         self.creation_date= creation_date
-
-    def getLastLogin(self):
-        return self.last_login
 
     def setLastLogin(self, last_login):
         self.last_login= last_login

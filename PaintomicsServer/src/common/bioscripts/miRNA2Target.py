@@ -29,7 +29,6 @@ import os.path
 import numpy as np
 import scipy.stats
 from csv import reader as csv_reader
-from collections import defaultdict
 
 def main():
     try:

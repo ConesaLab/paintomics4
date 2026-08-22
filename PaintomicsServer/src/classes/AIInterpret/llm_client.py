@@ -517,23 +517,3 @@ class LLMClient:
         logger.warning("Tool loop reached max_iterations, making final call without tools")
         return self.complete(messages, max_tokens=max_tokens, temperature=temperature)
 
-    def complete_streaming(self, messages, max_tokens=4096, temperature=0.3):
-        """Yields text chunks. Used for MongoDB text-buffer approach."""
-        r = requests.post(
-            f"{self.api_base}/chat/completions",
-            headers={"Authorization": f"Bearer {self.api_key}",
-                     "Content-Type": "application/json"},
-            json={"model": self.model, "messages": messages,
-                  "max_tokens": max_tokens, "temperature": temperature, "stream": True},
-            timeout=DEFAULT_TIMEOUT, stream=True,
-        )
-        r.raise_for_status()
-        for line in r.iter_lines():
-            if line and line.startswith(b"data: ") and line != b"data: [DONE]":
-                try:
-                    chunk = json.loads(line[6:])
-                    delta = chunk.get("choices", [{}])[0].get("delta", {}).get("content", "")
-                    if delta:
-                        yield delta
-                except json.JSONDecodeError:
-                    continue

@@ -18,7 +18,10 @@ list -- exactly run_all's rule. Suites that skipped every test are listed
 import argparse
 import glob
 import os
+import re
+import subprocess
 import sys
+import time
 from concurrent.futures import ThreadPoolExecutor
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -26,6 +29,30 @@ SERVER = os.path.abspath(os.path.join(HERE, "..", "..", "PaintomicsServer"))
 sys.path.insert(0, SERVER)
 
 from src.tests import run_all  # noqa: E402
+
+TAIL_LINES = 25
+
+
+def run_suite(name, timeout):
+    """run_all.run_one, keeping the suite's output so a failure in CI can be
+    read without re-running it by hand."""
+    env = dict(os.environ)
+    started = time.time()
+    try:
+        proc = subprocess.run([sys.executable, "-m", "src.tests." + name],
+                              capture_output=True, text=True, timeout=timeout,
+                              cwd=SERVER, env=env)
+        out = proc.stdout + proc.stderr
+        state = run_all.classify(proc.returncode, out)
+        skipped = bool(re.search(r"Ran 0 tests|OK \(skipped", out))
+    except subprocess.TimeoutExpired as exc:
+        out = ((exc.stdout or b"").decode("utf-8", "replace") if isinstance(exc.stdout, bytes) else (exc.stdout or "")) \
+            + ((exc.stderr or b"").decode("utf-8", "replace") if isinstance(exc.stderr, bytes) else (exc.stderr or ""))
+        state, skipped = "TIMEOUT", False
+    return {"suite": name, "state": state, "skipped": skipped,
+            "secs": round(time.time() - started, 1),
+            "failing": re.findall(r"^FAIL[: ]+(\S+)", out, re.M),
+            "tail": "\n".join(out.strip().splitlines()[-TAIL_LINES:])}
 
 
 def main(argv=None):
@@ -35,18 +62,25 @@ def main(argv=None):
     parser.add_argument("--only", default="")
     parser.add_argument("--slowest", type=int, default=15,
                         help="how many of the slowest suites to list")
+    parser.add_argument("--shard", default="",
+                        help="I/N: run only every N-th suite starting at I (1-based), "
+                             "so the sweep can be spread over N runners")
     args = parser.parse_args(argv)
 
     names = sorted(os.path.basename(path)[:-3]
                    for path in glob.glob(os.path.join(SERVER, "src/tests/test_*.py")))
     if args.only:
         names = [name for name in names if args.only in name]
+    if args.shard:
+        index, count = (int(part) for part in args.shard.split("/"))
+        names = [name for position, name in enumerate(names) if position % count == index - 1]
+        print("shard %d/%d: %d suites" % (index, count, len(names)))
     if not names:
         print("no suite matched", file=sys.stderr)
         return 2
 
     with ThreadPoolExecutor(max_workers=args.jobs) as pool:
-        results = list(pool.map(lambda name: run_all.run_one(name, args.timeout), names))
+        results = list(pool.map(lambda name: run_suite(name, args.timeout), names))
 
     bad = [r for r in results if r["state"] != "PASS"]
     inherited = [r for r in bad if r["suite"] in run_all.BASELINE]
@@ -73,6 +107,13 @@ def main(argv=None):
         print("\nFAILED (not in BASELINE):")
         for r in introduced:
             print("   %-50s %s %s" % (r["suite"], r["state"], ", ".join(r["failing"])[:80]))
+        for r in introduced:
+            print("\n----- %s (%s): last %d lines -----" % (r["suite"], r["state"], TAIL_LINES))
+            print(r["tail"])
+    for r in skipped:
+        if r not in introduced:
+            print("\n----- %s (skipped everything): last %d lines -----" % (r["suite"], TAIL_LINES))
+            print(r["tail"])
     return 1 if introduced else 0
 
 

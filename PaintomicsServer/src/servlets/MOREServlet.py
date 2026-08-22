@@ -16,7 +16,7 @@ from src.common.Util import ensure_utf8
 from src.common.ServerErrorManager import handleException
 from src.common import ExampleDatasets
 from src.common import MORECostModel
-from src.conf.serverconf import CLIENT_TMP_DIR, ROOT_DIRECTORY
+from src.conf.serverconf import CLIENT_TMP_DIR
 
 # serverconf.py is gitignored and installed from example_serverconf.py by
 # deploy/entrypoint.sh -- but only when the file is absent, so a container

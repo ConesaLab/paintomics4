@@ -33,7 +33,6 @@ from src.common.Util import resolveWithin
 
 def dataManagementUploadFile(request, response, DESTINATION_DIR, isReference=False):
     #VARIABLE DECLARATION
-    fileInstance = None
     daoInstance = None
     try:
         #****************************************************************
@@ -91,8 +90,6 @@ def dataManagementUploadFile(request, response, DESTINATION_DIR, isReference=Fal
 
 def dataManagementGetMyFiles(request, response, DESTINATION_DIR, MAX_CLIENT_SPACE, isReference=False):
     #VARIABLE DECLARATION
-    fileInstance = None
-    fileInstances = []
     daoInstance = None
     try:
         #****************************************************************
@@ -224,8 +221,6 @@ def dataManagementDeleteFile(request, response, DESTINATION_DIR, MAX_CLIENT_SPAC
 
 def dataManagementGetMyJobs(request, response):
     #VARIABLE DECLARATION
-    jobInstance = None
-    jobInstances = []
     daoInstance = None
     try:
         #****************************************************************

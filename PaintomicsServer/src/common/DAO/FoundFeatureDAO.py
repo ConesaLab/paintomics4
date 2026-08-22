@@ -1,6 +1,5 @@
 from .DAO import DAO
 from .FeatureDAO import FeatureDAO
-from src.classes.Feature import Feature
 
 class FoundFeatureDAO(FeatureDAO):
     #******************************************************************************************************************

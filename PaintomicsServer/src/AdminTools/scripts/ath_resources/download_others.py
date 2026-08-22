@@ -3,7 +3,6 @@
 import traceback
 from sys import argv, stderr
 import imp
-import shutil
 #**************************************************************************
 #STEP 1. READ CONFIGURATION AND PARSE INPUT FILES
 #

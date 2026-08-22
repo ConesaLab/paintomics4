@@ -287,37 +287,6 @@ def execute_tool(tool_name, job_instance, arguments):
 # Interpretation tools — Phase 3 sub-agent evidence extraction
 # ===========================================================================
 
-INTERPRETATION_TOOLS = [
-    {
-        "type": "function",
-        "function": {
-            "name": "extract_evidence",
-            "description": (
-                "Extract specific evidence from a paper to support a claim about a pathway. "
-                "This reads the paper's full text (Results and Discussion) and returns a "
-                "concise finding with an exact quote. Use this after reviewing a paper's "
-                "abstract and deciding it is relevant to the pathway analysis."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "ref_index": {
-                        "type": "integer",
-                        "description": "The reference index [N] of the paper.",
-                    },
-                    "question": {
-                        "type": "string",
-                        "description": (
-                            "What specific evidence are you looking for? "
-                            "E.g., 'What does this paper say about MAPK pathway upregulation in immune response?'"
-                        ),
-                    },
-                },
-                "required": ["ref_index", "question"],
-            },
-        },
-    }
-]
 
 
 def build_interpretation_executor(paper_index, llm):
@@ -400,57 +369,6 @@ def _exec_extract_evidence(paper_index, llm, args):
 # Verification tools — Phase 5 citation verification sub-agents
 # ===========================================================================
 
-VERIFICATION_TOOLS = [
-    {
-        "type": "function",
-        "function": {
-            "name": "search_paper_text",
-            "description": (
-                "Search within a paper's full text for passages matching a query. "
-                "Returns up to 3 matching passages with surrounding context."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "ref_index": {
-                        "type": "integer",
-                        "description": "The reference index [N] of the paper to search.",
-                    },
-                    "query": {
-                        "type": "string",
-                        "description": "Keywords or phrase to search for in the paper text.",
-                    },
-                },
-                "required": ["ref_index", "query"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "fetch_paper_section",
-            "description": (
-                "Retrieve a specific section (abstract, introduction, results, or discussion) "
-                "from a paper."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "ref_index": {
-                        "type": "integer",
-                        "description": "The reference index [N] of the paper.",
-                    },
-                    "section": {
-                        "type": "string",
-                        "enum": ["abstract", "introduction", "results", "discussion", "other"],
-                        "description": "Which section to retrieve.",
-                    },
-                },
-                "required": ["ref_index", "section"],
-            },
-        },
-    },
-]
 
 
 def build_verification_executor(paper_index):

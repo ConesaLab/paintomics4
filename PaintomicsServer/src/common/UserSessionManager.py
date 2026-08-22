@@ -97,14 +97,6 @@ class UserSessionManager(object):
             if _user is None or _user.userName != user_name or not (user_name in ADMIN_ACCOUNTS.split(",")):
                 raise Exception("User not allowed")
 
-        def getLoggedUsersCount(self):
-            return len(self.logged_users)
-
-        def isLoggedUser(self, user_id):
-            if (user_id == None):
-                return False
-            return self.logged_users.get(str(user_id), None) != None
-
     # storage for the instance reference
     __instance = None
 

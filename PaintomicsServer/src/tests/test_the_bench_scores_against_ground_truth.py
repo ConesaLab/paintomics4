@@ -47,6 +47,12 @@ def test_the_rubric_loads_and_has_its_sections():
 
 
 def test_a_report_that_says_nothing_scores_nothing():
+    # The scorer is AgentEvolve's score.py, a sibling checkout on the
+    # developer's machine (B._SCORER_DIR); a runner without it cannot score
+    # anything, which test_a_missing_scorer_never_takes_a_round_down covers.
+    if not os.path.isfile(os.path.join(B._SCORER_DIR, "score.py")):
+        print("      (the AgentEvolve scorer is not beside this checkout; skipped)")
+        return
     coverage, fabricated = B.rubric_score("A report with no findings at all.")
     assert coverage is not None, fabricated
     assert coverage < 0.2, coverage

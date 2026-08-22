@@ -61,7 +61,9 @@ class _FakeCollection(object):
         self._documents = documents
         self.queries = []
 
-    def find(self, query, projection=None):
+    def find(self, query, projection=None, **cursorOptions):
+        # pymongo's find takes cursor options too (the mapper passes
+        # batch_size); they change how a result is delivered, not what it is.
         self.queries.append(query)
         for document in self._documents:
             if self._matches(document, query):

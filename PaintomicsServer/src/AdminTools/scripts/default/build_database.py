@@ -1,8 +1,7 @@
 import imp
 import traceback
-import os
 from sys import argv, stderr
-from subprocess import CalledProcessError, check_call
+from subprocess import CalledProcessError
 #**************************************************************************
 #STEP 1. READ CONFIGURATION AND PARSE INPUT FILES
 #

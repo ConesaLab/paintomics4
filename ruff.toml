@@ -5,12 +5,9 @@
 # rather than style. It is green on the tree as it stands; tightening it is a
 # matter of widening `select` once the findings it would raise are fixed.
 #
-# The two per-file ignores are documented debt, not policy:
-#   * AdminTools/scripts/cache.py is a pasted fragment (undefined `stderr`,
-#     `json`, `downloadJSONFile`, ...), not an importable module.
-#   * AdminServlet.py references ROOT_DIRECTORY without importing it (a
-#     NameError on the path that uses it).
-# Both are on the dead-code/refactor list; the ignores go when they do.
+# No per-file ignores: the two the gate started with (a pasted fragment in
+# AdminTools/scripts/cache.py, an undefined ROOT_DIRECTORY in AdminServlet.py)
+# were removed and fixed in the dead-code/refactor phase.
 
 target-version = "py311"
 line-length = 120
@@ -23,7 +20,3 @@ extend-exclude = [
 
 [lint]
 select = ["E9", "F63", "F7", "F82"]
-
-[lint.per-file-ignores]
-"PaintomicsServer/src/AdminTools/scripts/cache.py" = ["F821"]
-"PaintomicsServer/src/servlets/AdminServlet.py" = ["F821"]

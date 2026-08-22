@@ -118,7 +118,6 @@ def userManagementSignIn(request, response):
         return response
 
 def userManagementSignOut(request, response):
-    userInstance = None
     daoInstance = None
 
     try :
