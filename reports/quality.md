@@ -53,3 +53,39 @@ Paired A/B on one macOS runner, medians of 3: `processFilesContent`
 `mapFeatureNamesToKeggIDs` 96.7 → 63.1 s of cumulative worker time (−34 %
 each); cold wall clock 54.0 → 46.6 s (−13.7 %, the remainder is R).
 MongoDB commands per run 3,944 → 973.
+
+## Quality campaign: quality/zero-findings (2026-08-22, PR #81)
+
+Baseline is master at `227c721b` (PR #79 merged); tools as above plus
+vulture 2.16 behind `scripts/ci/vulture_gate.sh`.
+
+| metric | campaign baseline | after | enforced by |
+|---|---:|---:|---|
+| pyflakes, all `F` rules | 266 (48 modules) | **0** | `ruff.toml` select widened to `E9,F`; pr.yml lint |
+| `F401` / `F841` / `F821` | 58 / 39 / 0 | **0 / 0 / 0** | same gate |
+| star imports (`F403`/`F405`) | 9 / 156 | **0 / 0** | same gate |
+| noqa without a written reason | — | **0** (4 F401 keeps, each states its side effect or contract) | review rule |
+| vulture ≥80 % | 16 | **0 unexplained** (13-row whitelist, every row a parameter with its contract named) | vulture_gate hard-zero |
+| vulture ≥60 % | 373 | 358 committed baseline, no new candidates allowed | vulture_gate ratchet |
+| radon rank D-or-worse blocks | 70 (40 D / 12 E / 18 F) | **67** (40 D / 11 E / 16 F) | three capped splits, below |
+| src diff | | 51 files, +418 / −391 | |
+
+The three Phase-4 splits, each verbatim block extraction, each 11/11 on
+the exact-float regression: `testPathwaySignificance` F(60) → below D
+(its duplicated 45-line gene/compound loop became one helper),
+`parseGeneBasedFiles` E(32) → C(20), `_bridgeSecondHopForDatabases`
+F(45) → B(9) with hop helpers ≤ C(14).
+
+Behaviour guards, all green: regression 11/11 after every code-touching
+turn (exact floats, `tests/baseline/` untouched); PR #81 CI green (lint
++ vulture gates, 233 unit suites, example datasets); nightly on the
+branch green including the new **installer smoke** job (run
+32569004972: mge from live KEGG into a scratch mongod — 59 pathways,
+1,220 xrefs, mapper resolves `ftsH → MG_457`; identical counts locally).
+The smoke found and the branch fixes two real fresh-tree installer
+crashes (missing `log/`, missing `organisms_all.list`), plus a latent
+circular import that the old star import silently tolerated.
+
+Coverage was not re-measured this round: the campaign deleted dead code
+and moved blocks verbatim, which cannot lower it; 52.7 % stands as the
+floor.
