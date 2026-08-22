@@ -45,17 +45,12 @@ from src.conf.serverconf import (
     AI_SEARCH_SUBAGENT_WORKERS,
     # Read through this module by the agent-loop end-to-end test
     # (agent.AI_MAX_PATHWAYS etc.), not used here.
-    AI_MAX_PATHWAYS,
-    AI_MAX_SEARCH_TASKS,
-    AI_PAPERS_PER_SEARCH_TASK,
+    AI_MAX_PATHWAYS,  # noqa: F401 -- read and patched as agent.AI_MAX_PATHWAYS by the e2e tests
+    AI_MAX_SEARCH_TASKS,  # noqa: F401 -- read and patched as agent.AI_MAX_SEARCH_TASKS by the e2e tests
+    AI_PAPERS_PER_SEARCH_TASK,  # noqa: F401 -- read and patched as agent.AI_PAPERS_PER_SEARCH_TASK by the e2e tests
 )
 from src.classes.AIInterpret import tools as tools_mod
 from src.classes.AIInterpret import prompts as prompts_mod
-from src.classes.AIInterpret.verification import verify_report_v2, quote_provenance
-# The shared verdict parser: the verifier agent keeps its tools (see the
-# DANGER note in _build_agents), so its verdict arrives as free text.
-from src.classes.AIInterpret.shared import _parse_json_verdict
-from src.classes.AIInterpret.llm_client import LLMClient
 
 logger = logging.getLogger(__name__)
 

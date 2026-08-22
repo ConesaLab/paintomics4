@@ -36,8 +36,8 @@ def processEnsemblData():
     ensembl_transcript_db_id = COMMON_BUILD_DB_TOOLS.insertDatabase(COMMON_BUILD_DB_TOOLS.DBNAME_Entry("ensembl_transcript", "Ensembl transcript", "Identifier"))
     ensembl_gene_db_id = COMMON_BUILD_DB_TOOLS.insertDatabase(COMMON_BUILD_DB_TOOLS.DBNAME_Entry("ensembl_gene", "Ensembl gene", "Identifier"))
     ensembl_peptide_db_id = COMMON_BUILD_DB_TOOLS.insertDatabase(COMMON_BUILD_DB_TOOLS.DBNAME_Entry("ensembl_peptide", "Ensembl protein", "Identifier"))
-    msu_locus_db_id = COMMON_BUILD_DB_TOOLS.insertDatabase(COMMON_BUILD_DB_TOOLS.DBNAME_Entry("msu_locus", "MSU/TIGR locus", "Identifier"))
-    msu_geneid_db_id = COMMON_BUILD_DB_TOOLS.insertDatabase(COMMON_BUILD_DB_TOOLS.DBNAME_Entry("msu_geneid", "MSU/TIGR Gene ID", "Identifier"))
+    COMMON_BUILD_DB_TOOLS.insertDatabase(COMMON_BUILD_DB_TOOLS.DBNAME_Entry("msu_locus", "MSU/TIGR locus", "Identifier"))
+    COMMON_BUILD_DB_TOOLS.insertDatabase(COMMON_BUILD_DB_TOOLS.DBNAME_Entry("msu_geneid", "MSU/TIGR Gene ID", "Identifier"))
 
     #Process files
     stderr.write("PROCESSING ENSEMBL MAPPING FILE...\n")

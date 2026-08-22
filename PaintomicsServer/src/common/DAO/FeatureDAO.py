@@ -70,5 +70,5 @@ class FeatureDAO(DAO):
         if("featureType" in otherParams):
             queryParams["featureType"] = otherParams["featureType"]
         collection = self.dbManager.getCollection(self.collectionName)
-        match = collection.delete_many(queryParams)
+        collection.delete_many(queryParams)
         return True

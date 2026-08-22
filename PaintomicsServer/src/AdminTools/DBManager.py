@@ -22,13 +22,9 @@ from io import BytesIO
 from PIL import Image
 from textwrap import wrap
 from time import strftime, sleep, time
-# STDOUT was previously reaching this module only through the wildcard
-# `from scripts.downloadReactome import *` below, which is fragile -- reordering
-# or trimming that import would have broken subprocess calls here at runtime.
-from subprocess import check_call, check_output, CalledProcessError, DEVNULL, STDOUT
+from subprocess import check_call, check_output, CalledProcessError, STDOUT
 
 from conf.serverconf import KEGG_DATA_DIR, DOWNLOAD_DELAY_1, DOWNLOAD_DELAY_2, MAX_TRIES_1
-from scripts.downloadReactome import *
 
 VERSION = 0.12
 
@@ -263,6 +259,12 @@ def download_command(inputfile=None, specie=None, kegg=0, mapping=0, common=0, r
             if reactome:
                 log("STEP " + str(currentStep) + " Extra. DOWNLOADING REACTOME Files...")
                 try:
+                    # Imported here, not at module level: downloadReactome.py
+                    # imports wait/generateThumbnail/log back from this module,
+                    # and a top-level named import dies on that cycle (the old
+                    # wildcard import only survived it by silently accepting a
+                    # partially initialised module).
+                    from scripts.downloadReactome import downloadReactome
                     downloadReactome(specie)
                 except Exception as reactomeError:
                     # Coverage is a fact about Reactome's current release, not an
@@ -1403,7 +1405,7 @@ def getSpecieKeggData(specie, downloadLog, dirName, step):
                 downloadKEGGFile("                     - " + pathway + " [" + str(i) + "/" + str(total) + "]",
                                  downloadLog, "https://rest.kegg.jp/get/" + pathway + "/kgml", dirName + "kgml/",
                                  pathway + ".kgml", DOWNLOAD_DELAY_2, MAX_TRIES_1)
-            except Exception as e:
+            except Exception:
                 error_tolerance -= 1;
                 kegg_errors += " " + pathway
                 if error_tolerance == 0:
@@ -1627,12 +1629,20 @@ def getCurrentInstalledSpecies():
         # If the file does not exist in the current directory, use the file in the download directory
         file_path = download_file_path
 
-    # Open the file and read its contents
-    with open(file_path) as organisms_all:
-        reader = csv.reader(organisms_all, delimiter='\t')
-        organisms_names = {}
-        for row in reader:
-            organisms_names[row[1]] = row[2]
+    # Open the file and read its contents. The list only supplies display
+    # names; on a KEGG_DATA tree that has never had a common download
+    # (--common=1) it does not exist yet, and an install must not die over
+    # missing display names -- the installer-smoke test runs exactly that
+    # fresh-tree case.
+    organisms_names = {}
+    if os.path.isfile(file_path):
+        with open(file_path) as organisms_all:
+            reader = csv.reader(organisms_all, delimiter='\t')
+            for row in reader:
+                organisms_names[row[1]] = row[2]
+    else:
+        log("            NOTE: no organisms_all.list yet (no common download); "
+            "species names will show as their codes")
 
     from pymongo import MongoClient
 
@@ -1643,7 +1653,6 @@ def getCurrentInstalledSpecies():
     # Step 2.FOR EACH INSTALLED DATABASE GET THE INFORMATION
     # ****************************************************************
     databaseList = []
-    common_info_date = ""
 
     for database in databases:
         if not "-paintomics" in database:
@@ -1662,9 +1671,6 @@ def getCurrentInstalledSpecies():
             if commonVersion is None:
                 log("            WARNING: no COMMON version in global-paintomics; "
                     "run an install with --common=1 to populate it")
-                common_info_date = ""
-            else:
-                common_info_date = commonVersion.get("date", "")
         else:
             # Step 2.1 GET THE SPECIE CODE
             organism_code = database.replace("-paintomics", "")
@@ -1679,7 +1685,7 @@ def getCurrentInstalledSpecies():
             try:
                 acceptedIDsDoc = db.versions.find_one({"name": "ACCEPTED_IDS"})
                 acceptedIDs = acceptedIDsDoc.get("ids") if acceptedIDsDoc else ""
-            except Exception as ex:
+            except Exception:
                 acceptedIDs = ""
 
             # Step 2.4 Check if the organism has non installed data available
@@ -1774,7 +1780,7 @@ def generateAvailableSpeciesFile(VALID_SPECIES, species_file, installed_species_
                 # continue
                 errorlog("Error while writting specie files" + specieCode)
                 raise Exception()
-    except Exception as ex:
+    except Exception:
         errorlog(traceback.extract_stack())
         raise Exception("Error while writting specie " + specieCode)
 
@@ -1810,6 +1816,10 @@ def readConfigurationFile():
     global ROOT_DIRECTORY
     ROOT_DIRECTORY = os.path.abspath(os.path.dirname(os.path.realpath(__file__)) + "/../") + "/"
     # PREPARE LOGGING
+    # The handler in conf/logging.cfg writes log/application.log relative to
+    # the working directory; on a fresh checkout that directory does not exist
+    # and fileConfig dies with a FileNotFoundError that never names it.
+    os.makedirs("log", exist_ok=True)
     from src.common.LoggingSetup import configureLogging
     configureLogging(ROOT_DIRECTORY + 'conf/logging.cfg')
 

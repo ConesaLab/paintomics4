@@ -17,7 +17,7 @@ from src.classes.AIInterpret.context_builder import (build_pathway_context,
     get_organism_name)
 from src.classes.AIInterpret.tools import CHAT_TOOLS, execute_tool
 from src.conf.serverconf import (AI_INTERPRETATION_ENABLED, AI_PROVIDERS,
-    AI_LLM_PROVIDER, AI_TEMPERATURE, AI_MAX_PATHWAYS)
+    AI_LLM_PROVIDER, AI_TEMPERATURE)
 
 # Jobs stuck longer than this are considered dead (e.g. killed by server reload)
 AI_STALE_JOB_TIMEOUT = timedelta(minutes=10)

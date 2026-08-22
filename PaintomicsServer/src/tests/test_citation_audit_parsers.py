@@ -12,7 +12,6 @@ the parsers against reports whose answers are known.
 from __future__ import annotations
 
 import os
-import re
 import sys
 import traceback
 

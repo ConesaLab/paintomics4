@@ -11,8 +11,6 @@ Usage:
 import csv
 import os
 import sys
-from collections import defaultdict
-from itertools import chain
 
 from pymongo import MongoClient
 from scipy.stats import hypergeom

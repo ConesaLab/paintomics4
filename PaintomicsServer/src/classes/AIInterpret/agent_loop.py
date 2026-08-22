@@ -48,7 +48,7 @@ from agents import Agent, ModelSettings, RunContextWrapper, Runner, function_too
 
 from src.conf.serverconf import (
     AI_LLM_PROVIDER, AI_PROVIDERS, AI_MAX_PATHWAYS, AI_TEMPERATURE,
-    AI_PAPERS_PER_SEARCH_TASK, AI_MAX_VERIFICATION_ITERATIONS,
+    AI_MAX_VERIFICATION_ITERATIONS,
 )
 from src.classes.AIInterpret import tools as tools_mod
 from src.classes.AIInterpret import prompts as prompts_mod

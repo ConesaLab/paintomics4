@@ -41,7 +41,7 @@ DATE = "202601011200"
 
 def hasPandas():
     try:
-        import pandas  # noqa: F401
+        import pandas  # noqa: F401 -- availability probe: present means run the test, ImportError means skip
         return True
     except ImportError:
         return False

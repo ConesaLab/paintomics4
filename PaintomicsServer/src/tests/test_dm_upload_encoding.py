@@ -151,7 +151,7 @@ class MOREUploadEncodingTest(unittest.TestCase):
     """
 
     def test_the_servlet_normalises_before_calling_r(self):
-        import ast, io, tokenize
+        import io, tokenize
 
         path = os.path.join(os.path.dirname(__file__), "../servlets/MOREServlet.py")
         with open(path, "r", encoding="utf-8", errors="replace") as handle:

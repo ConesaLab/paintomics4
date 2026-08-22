@@ -124,7 +124,7 @@ def build_subagent_filter_prompt(task, papers_with_abstracts, experiment_design,
         if abstract_trunc:
             lines.append(f"Abstract: {abstract_trunc}")
 
-    lines.append(f"\n## Task")
+    lines.append("\n## Task")
     lines.append(f"Select the top {max_keep} most relevant papers for the biological "
                  f"question above.")
     lines.append("Return ONLY a JSON array of PMID strings — no markdown fencing.")
@@ -224,7 +224,7 @@ def build_two_pass_interpretation_prompt(pathways, papers, experiment_design, or
 def build_batch_interpretation_prompt(pathways, papers, experiment_design, organism_name):
     """Build prompt for interpreting a batch of pathways."""
     lines = []
-    lines.append(f"## Experiment Context")
+    lines.append("## Experiment Context")
     lines.append(f"Organism: {organism_name}")
     if experiment_design:
         lines.append(f"Design: {experiment_design}")
@@ -297,7 +297,7 @@ def build_batch_interpretation_prompt(pathways, papers, experiment_design, organ
 def build_synthesis_prompt(batch_reports, experiment_design, organism_name):
     """Build prompt for synthesizing batch reports into final report."""
     lines = []
-    lines.append(f"## Experiment Context")
+    lines.append("## Experiment Context")
     lines.append(f"Organism: {organism_name}")
     if experiment_design:
         lines.append(f"Design: {experiment_design}")

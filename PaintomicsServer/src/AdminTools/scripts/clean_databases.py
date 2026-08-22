@@ -323,7 +323,6 @@ def remindJobByJobID(connection, user_id, job_id, ROOT_DIRECTORY):
     ROOT_DIRECTORY_CORRECTED = os.path.abspath(ROOT_DIRECTORY + '/../../../PaintomicsClient/') + '/'
 
     try:
-        job_data = connection[MONGODB_DATABASE]['jobInstanceCollection'].find_one({"jobID": job_id})
         user_data = connection[MONGODB_DATABASE]['userCollection'].find_one({"userID": user_id})
 
         message = '<html><body>'
@@ -344,7 +343,7 @@ def remindJobByJobID(connection, user_id, job_id, ROOT_DIRECTORY):
 
         sendEmail(ROOT_DIRECTORY_CORRECTED, user_data["email"], user_data["userName"], "PaintOmics 4: one job is going to expire soon",
                   message, isHTML=True)
-    except Exception as e:
+    except Exception:
         logging.error("Failed to send the email.")
 
     #STEP 3.REMOVE THE JOB FROM DATABASE

@@ -2,7 +2,7 @@ from pymongo import MongoClient
 import logging, itertools
 import os, sys, signal, time
 import re
-from multiprocessing import Process, cpu_count, Manager, RawArray
+from multiprocessing import Process, Manager, RawArray
 from math import ceil
 from bisect import bisect_right
 from re import compile as compile_re, IGNORECASE as IGNORECASE_re
@@ -375,7 +375,26 @@ def _bridgeSecondHopForDatabases(db, unresolvedByTarget, bridgeIDsByTarget):
     if not targets:
         return recoveredByTarget
 
-    # Hop 1b, shared: which bridge identifiers does each unresolved name carry?
+    bridgeValueByMateAll = _bridgeHop1bShared(db, targets, unresolvedByTarget, bridgeIDsByTarget)
+    bridgeValueByMate, bridgeMates, farMateIDs = _bridgeHop2PerTarget(
+        db, targets, unresolvedByTarget, bridgeIDsByTarget, bridgeValueByMateAll)
+    targetByMateAll = _bridgeHop3Shared(db, farMateIDs)
+
+    for target in targets:
+        if target not in bridgeMates:
+            continue
+        recovered = _bridgeAssembleTarget(target, unresolvedByTarget[target],
+                                          bridgeValueByMate[target], bridgeMates[target],
+                                          farMateIDs[target], targetByMateAll)
+        if recovered is not None:
+            recoveredByTarget[target] = recovered
+    return recoveredByTarget
+
+
+def _bridgeHop1bShared(db, targets, unresolvedByTarget, bridgeIDsByTarget):
+    """Hop 1b, shared: which bridge identifiers does each unresolved name
+    carry? One query over the union of the targets' bridge sets; each target
+    keeps only the hits in its own set (hop 2)."""
     allBridgeIDs = list({bridge for target in targets for bridge in bridgeIDsByTarget[target]})
     mateIDs = list({mate for target in targets for document in unresolvedByTarget[target]
                     for mate in (document.get("mates") or [])})
@@ -385,8 +404,13 @@ def _bridgeSecondHopForDatabases(db, unresolvedByTarget, bridgeIDsByTarget):
                                  "_id": {"$in": mateIDs[start_:start_ + 5000]}},
                                 {"display_id": 1, "dbname_id": 1}, batch_size=XREF_BATCH_SIZE):
             bridgeValueByMateAll[hit.get("_id")] = (hit.get("dbname_id"), str(hit.get("display_id")))
+    return bridgeValueByMateAll
 
-    # Hop 2, per target: the bridge documents' OWN mate groups.
+
+def _bridgeHop2PerTarget(db, targets, unresolvedByTarget, bridgeIDsByTarget, bridgeValueByMateAll):
+    """Hop 2, per target: the bridge documents' OWN mate groups. Must stay
+    per target -- the result is a LIST whose order is the query's, and a
+    name's translations follow that order."""
     bridgeValueByMate = {}
     bridgeMates = {}
     farMateIDs = {}
@@ -410,8 +434,12 @@ def _bridgeSecondHopForDatabases(db, unresolvedByTarget, bridgeIDsByTarget):
                 mates[str(hit.get("display_id"))].extend(hit.get("mates") or [])
         bridgeMates[target] = mates
         farMateIDs[target] = list({mate for group in mates.values() for mate in group})
+    return bridgeValueByMate, bridgeMates, farMateIDs
 
-    # Hop 3, shared: the target inside the bridge groups.
+
+def _bridgeHop3Shared(db, farMateIDs):
+    """Hop 3, shared: the target inside the bridge groups -- one query over
+    every target's far mates, split by dbname_id at assembly."""
     allFarMates = list({mate for target in farMateIDs for mate in farMateIDs[target]})
     targetByMateAll = {}
     for start_ in range(0, len(allFarMates), 5000):
@@ -419,36 +447,37 @@ def _bridgeSecondHopForDatabases(db, unresolvedByTarget, bridgeIDsByTarget):
                                  "_id": {"$in": allFarMates[start_:start_ + 5000]}},
                                 {"display_id": 1, "dbname_id": 1}, batch_size=XREF_BATCH_SIZE):
             targetByMateAll[hit.get("_id")] = (hit.get("dbname_id"), str(hit.get("display_id")))
+    return targetByMateAll
 
-    for target in targets:
-        if target not in bridgeMates:
-            continue
-        targetByMate = {}
-        for mate in farMateIDs[target]:
-            hit = targetByMateAll.get(mate)
-            if hit is not None and hit[0] == target:
-                targetByMate[mate] = hit[1]
-        if not targetByMate:
-            continue
-        recovered = {}
-        mine = bridgeValueByMate[target]
-        mates = bridgeMates[target]
-        for document in unresolvedByTarget[target]:
-            translations = []
-            seen = set()
-            for mate in (document.get("mates") or []):
-                bridge = mine.get(mate)
-                if bridge is None:
-                    continue
-                for farMate in mates.get(bridge[1], ()):
-                    identifier = targetByMate.get(farMate)
-                    if identifier is not None and identifier not in seen:
-                        seen.add(identifier)
-                        translations.append(identifier)
-            if translations:
-                recovered[document.get("display_id")] = translations
-        recoveredByTarget[target] = recovered
-    return recoveredByTarget
+
+def _bridgeAssembleTarget(target, unresolvedDocuments, mine, mates, targetFarMateIDs, targetByMateAll):
+    """Assemble one target's recoveries: walk each unresolved document's
+    mates in order, follow its bridges, and keep the first appearance of
+    every translated identifier. Returns None when nothing in the bridge
+    groups belongs to the target (the caller keeps its empty dict)."""
+    targetByMate = {}
+    for mate in targetFarMateIDs:
+        hit = targetByMateAll.get(mate)
+        if hit is not None and hit[0] == target:
+            targetByMate[mate] = hit[1]
+    if not targetByMate:
+        return None
+    recovered = {}
+    for document in unresolvedDocuments:
+        translations = []
+        seen = set()
+        for mate in (document.get("mates") or []):
+            bridge = mine.get(mate)
+            if bridge is None:
+                continue
+            for farMate in mates.get(bridge[1], ()):
+                identifier = targetByMate.get(farMate)
+                if identifier is not None and identifier not in seen:
+                    seen.add(identifier)
+                    translations.append(identifier)
+        if translations:
+            recovered[document.get("display_id")] = translations
+    return recovered
 
 
 def findIDsByFeaturesNameForDatabases(jobID, featureNames, db, databaseConvertion_ids):
@@ -1268,7 +1297,7 @@ def findCompoundIDByFeatureName(jobID, featureName, db):
                             name, MAX_COMPOUND_MATCHES, len(matchedFeatures), jobID)
 
         return matchedFeatures, len(matchedFeatures) > 0
-    except Exception as ex:
+    except Exception:
         return matchedFeatures, False
 
 def mapCompoundsIdentifiers(jobID, featureList, matchedFeatures, notMatchedFeatures, foundFeatures, resultSlot=None):

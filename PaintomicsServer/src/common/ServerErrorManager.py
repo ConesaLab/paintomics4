@@ -45,7 +45,7 @@ def handleException(responseInstance, exceptionInstance, filename, function, res
         import sys, os
         exc_type, exc_obj, exc_tb = sys.exc_info()
         file_name = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-    except Exception as ex:
+    except Exception:
         if exc_type == None:
             exc_type = "Unable to get the exception type"
         if exc_tb == None:

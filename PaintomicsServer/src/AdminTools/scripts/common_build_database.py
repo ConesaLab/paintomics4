@@ -1,9 +1,8 @@
 #!/usr/bin/env python
 import os, csv, json, shutil, re, itertools, glob, random
 from collections import defaultdict, Counter
-from operator import sub
 from time import sleep, strftime
-from sys import stdout, stderr, path
+from sys import stderr, path
 from subprocess import check_call, check_output, CalledProcessError
 import sys
 
@@ -1270,7 +1269,6 @@ def processMapMan2CompoundSymbolMappingData(file_name):
     with open(file_name, "r") as csvfile:
         rows = csv.reader(csvfile, delimiter='\t')
         i =0
-        errorMessage=""
 
         for row in rows:
             i+=1
@@ -1282,8 +1280,10 @@ def processMapMan2CompoundSymbolMappingData(file_name):
                 for compound_symbol in compound_symbols:
                     # KEGG_COMPOUNDS.append({"id" : kegg_id, "name" : compound_symbol.lstrip()})
                     MAPMAN_COMPOUNDS[compound_symbol.lstrip()] = mapman_id
-            except Exception as ex:
-                errorMessage = "FAILED WHILE PROCESSING Mapman 2 Compound MAPPING FILE [line " + str(i) + "]: "+ str(ex)
+            except Exception:
+                # A bad row is tolerated and skipped, same as it always was --
+                # nothing ever read the message that used to be built here.
+                pass
     csvfile.close()
 
     #STEP 2. DUMP THE TABLE INTO A FILE
@@ -1307,7 +1307,6 @@ def processKEGG2CompoundSymbolMappingData(file_name):
     with open(file_name, "r") as csvfile:
         rows = csv.reader(csvfile, delimiter='\t')
         i =0
-        errorMessage=""
 
         for row in rows:
             i+=1
@@ -1333,8 +1332,10 @@ def processKEGG2CompoundSymbolMappingData(file_name):
                     # (FeatureNamesToKeggIDsMapper.py:589-629), so nothing downstream
                     # has to change.
                     KEGG_COMPOUNDS.setdefault(compound_symbol, set()).add(kegg_id)
-            except Exception as ex:
-                errorMessage = "FAILED WHILE PROCESSING KEGG 2 Compound MAPPING FILE [line " + str(i) + "]: "+ str(ex)
+            except Exception:
+                # A bad row is tolerated and skipped, same as it always was --
+                # nothing ever read the message that used to be built here.
+                pass
     csvfile.close()
 
     # STEP 1.5. Load CHEBI to KEGG mapping
@@ -1501,7 +1502,7 @@ def processMapManPathwaysData():
         png_file = MAPMAN_DIR + "/png/" + xml_file.replace(".xml", ".png")
         try:
             generateThumbnail(png_file)
-        except Exception as e:
+        except Exception:
             print(png_file)
 
         # Classification (network) data
@@ -2245,7 +2246,7 @@ def processReactomePathwaysData():
                 top_pathway=json.load(top_pathways)
             with open(secondary_pathway_details_filename) as secondary_pathways:
                 secondary_pathway=json.load(secondary_pathways)
-        except Exception as ex:
+        except Exception:
             continue
 
         mainClassification = top_pathway.get("displayName")
@@ -2302,20 +2303,18 @@ def processReactomePathwaysData():
         # Build a hierarchy relationship for nodes class as complex
         nodesHighList = list()  # high level
         nodesLowList = list()  # low level
-        nodesLastSet = set()  # lowest level
         for item in graphData.get('nodes'):
             #if item['schemaClass'] == 'Complex' | item['schemaClass'] == 'DefinedSet' | item['schemaClass'] == 'CandidateSet' | item['schemaClass'] == 'Polymer':
             try:
                 for children in item['children']:
                     nodesHighList.append(item['dbId'])
                     nodesLowList.append(children)
-            except Exception as ex:
+            except Exception:
                 continue
         nodesHighSet = set(nodesHighList)
         nodesLowSet = set(nodesLowList)
 
         nodesMiddleSet = nodesHighSet.intersection(nodesLowSet)
-        nodesLastSet = nodesLowSet.difference(nodesHighSet)
         nodesTopSet = nodesHighSet.difference(nodesLowSet)
 
 
@@ -2331,7 +2330,7 @@ def processReactomePathwaysData():
                         continue
                     nodesList.pop( nodesList.index( subNode ) )
                     nodesList = nodesList + tempList
-                except Exception as ex:
+                except Exception:
                     continue
 
             hasSubList = False
@@ -2342,7 +2341,7 @@ def processReactomePathwaysData():
                         children = next( item for item in nodesInf if item["dbId"] == subNode )['children']
                         if children:  # Only count non-empty children lists
                             hasSubList = True
-                    except Exception as ex:
+                    except Exception:
                         continue
                 if hasSubList:
                     return findLastLevelNodes( nodesList )
@@ -2375,7 +2374,7 @@ def processReactomePathwaysData():
 
             try:
                  entity_reactome = next( item for item in nodesInf if item["dbId"] == entity_id )
-            except Exception as ex:
+            except Exception:
                 continue
 
             #graphic_id = reactome_entity.get("id")
@@ -2741,7 +2740,7 @@ def processReactomePathwaysData():
     for path_id, gene_ids in total_feature.items():
         try:
             NODES[path_id]["data"]["total_features"] = len(gene_ids)
-        except Exception as e:
+        except Exception:
             print(path_id)
             continue
 
@@ -3147,7 +3146,7 @@ def printResults():
             stderr.write("\nERRONEOUS " + str(key) + " LINES : " + str(len(value)) + " of " + str(TOTAL_FEATURES[key]) + " [" + str(int(len(value)/float(TOTAL_FEATURES.get(key, 0.1))*100)) +"%]")
         stderr.write("\n\n")
 
-    except Exception as e:
+    except Exception:
         stderr.write("\nERRONEOUS in print result: " + str(key) )
 
 def dumpDatabase():
@@ -3358,7 +3357,7 @@ def createDatabase():
 
         runMongoImport(SPECIE + "-paintomics", "versions", "/tmp/versions.tmp")
 
-        from pymongo import MongoClient, ASCENDING, TEXT
+        from pymongo import MongoClient, ASCENDING
         from conf.serverconf import MONGODB_HOST, MONGODB_PORT
         client = MongoClient(MONGODB_HOST, MONGODB_PORT)
 
@@ -3387,7 +3386,7 @@ def createCompoundsCollection():
     try:
         runMongoImport("global-paintomics", "kegg_compounds", "/tmp/compounds.tmp")
 
-        from pymongo import MongoClient, ASCENDING, TEXT
+        from pymongo import MongoClient, TEXT
         from conf.serverconf import MONGODB_HOST, MONGODB_PORT
         client = MongoClient(MONGODB_HOST, MONGODB_PORT)
         db = client["global-paintomics"]

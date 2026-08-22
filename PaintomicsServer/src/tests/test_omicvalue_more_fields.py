@@ -115,7 +115,6 @@ class StringifiedBooleanTest(unittest.TestCase):
     test on "False" is True -- which would invert a significance flag."""
 
     def test_stringified_sample_relevant_is_coerced(self):
-        ov = OmicValue("G1")
         restored = OmicValue("").parseBSON({"sampleRelevant": ["True", "False"]})
         self.assertEqual(restored.sampleRelevant, [True, False])
 

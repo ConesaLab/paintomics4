@@ -1085,8 +1085,8 @@ def pin_both_arms():
     Importing both here makes the round's code a snapshot taken at launch, which
     is what the config fingerprint has always claimed it was.
     """
-    import src.classes.AIInterpret.agent            # noqa: F401
-    import src.classes.AIInterpret.agent_loop       # noqa: F401
+    import src.classes.AIInterpret.agent            # noqa: F401 -- imported for the side effect: snapshots the module at launch (see docstring)
+    import src.classes.AIInterpret.agent_loop       # noqa: F401 -- imported for the side effect: snapshots the module at launch (see docstring)
 
 
 def enable_stage_logging():

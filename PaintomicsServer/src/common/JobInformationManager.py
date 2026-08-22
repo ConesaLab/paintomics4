@@ -140,7 +140,7 @@ class JobInformationManager(metaclass=Singleton):
             else:
                 raise NotImplementedError
             return True
-        except Exception as ex:
+        except Exception:
             raise
         finally:
             if daoInstance is not None:
@@ -197,7 +197,7 @@ class JobInformationManager(metaclass=Singleton):
                     self.jobLoadLock.release()
 
             return jobInstance
-        except Exception as ex:
+        except Exception:
             raise
         finally:
             if jobInstanceDAO is not None:
@@ -243,7 +243,7 @@ class JobInformationManager(metaclass=Singleton):
                 if jobInstanceAux.getJobID() == jobID:
                     logging.info("JOB "  + jobID + " IS IN CACHE...")
                     return jobInstanceAux
-        except Exception as ex:
+        except Exception:
             logging.info("JOB "  + jobID + " IS NOT IN CACHE...")
             return None
         finally:

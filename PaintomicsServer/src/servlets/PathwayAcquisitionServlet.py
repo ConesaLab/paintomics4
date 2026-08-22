@@ -38,7 +38,7 @@ from src.common.DAO.FeatureDAO import FeatureDAO
 from src.classes.JobInstances.PathwayAcquisitionJob import PathwayAcquisitionJob
 from src.classes import PathwayEvidence
 
-from src.conf.serverconf import CLIENT_TMP_DIR, KEGG_DATA_DIR
+from src.conf.serverconf import CLIENT_TMP_DIR
 
 
 def loadRequestedJob(jobID, action):
@@ -1102,7 +1102,7 @@ def pathwayAcquisitionSaveImage(request, response):
             try:
                 logging.info("TRYING...")
                 renderSvgToPng(svgData, path + fileName + "." + fileFormat)
-            except Exception as ex:
+            except Exception:
                 logging.info("TRYING again...")
                 renderSvgToPng(svgData, path + fileName + "." + fileFormat)
 

@@ -22,15 +22,13 @@ import logging
 import math
 import os
 import re
-from chardet import detect # get the encoding of a file
 
 from os import path as os_path, makedirs as os_makedirs
 from csv import reader as csv_reader
 from zipfile import ZipFile as zipFile
 
-from subprocess import check_call, check_output, call, STDOUT, CalledProcessError
+from subprocess import check_call, STDOUT, CalledProcessError
 
-from src.classes.FoundFeature import FoundFeature
 from src.common.Util import unifyAndSort
 
 from collections import defaultdict, Counter
@@ -58,7 +56,7 @@ from src.conf.serverconf import KEGG_DATA_DIR, MAX_THREADS, MAX_WAIT_THREADS, MA
 # bare open() this was written to protect. Imported here rather than moved
 # out of reach, so the three call sites below and the existing test that
 # imports it from this module are unaffected.
-from src.common.Util import ensure_utf8, _ENCODING_SNIFF_BYTES
+from src.common.Util import ensure_utf8
 
 
 # Small dict fields safe to persist in the main MongoDB document
@@ -1385,7 +1383,7 @@ class PathwayAcquisitionJob(Job):
         @param {type}
         @returns
         """
-        from multiprocessing import Process, cpu_count, Manager
+        from multiprocessing import Process, Manager
         from math import ceil
         from time import time as _now
 
@@ -1691,8 +1689,6 @@ class PathwayAcquisitionJob(Job):
         totalFeaturesIDSig = set()
         totalFeaturesByOmic = defaultdict(Counter)
         totalRelevantFeaturesByOmic = defaultdict(Counter)
-        totalAssociationsByOmic = defaultdict(Counter)
-        totalRelevantAssociationsByOmic = defaultdict(Counter)
 
         # Three enrichment methods available: gene, feature and association enrichment.
         # By default use gene enrichment unless specified otherwise.
@@ -1851,6 +1847,143 @@ class PathwayAcquisitionJob(Job):
 
         return totalFeaturesByOmic, totalRelevantFeaturesByOmic
 
+    def _setCrossOmicSignificance(self, pathwayInstance, mappedRatiosByOmic, has_multi_cond):
+        """Cross-omic integration for one pathway: combined p-values per
+        condition, then the total global p-value over the omics' globals,
+        both weighted by each omic's mapped ratio."""
+        omicSignificanceValues = pathwayInstance.getSignificanceValues()
+        keyOrder = list(omicSignificanceValues.keys())
+
+        if keyOrder:
+            nConditions = len(omicSignificanceValues[keyOrder[0]])
+            combined_pvalues_per_condition = defaultdict(list)
+
+            # Integration optimization
+            if not has_multi_cond:
+                omicPvalues_cond = [omicSignificanceValues[omicName][0][2] for omicName in keyOrder]
+                weights_cond = [mappedRatiosByOmic.get(omicName, 0) for omicName in keyOrder]
+                integratedP_dict = calculateCombinedSignificancePvalues(omicPvalues_cond, weights_cond)
+                for method, val in integratedP_dict.items():
+                    combined_pvalues_per_condition[method] = [val]
+            else:
+                for i in range(nConditions):
+                    omicPvalues_cond = []
+                    weights_cond = []
+                    for omicName in keyOrder:
+                        if i < len(omicSignificanceValues[omicName]):
+                            omicPvalues_cond.append(omicSignificanceValues[omicName][i][2])
+                        else:
+                            omicPvalues_cond.append(1.0)
+                        weights_cond.append(mappedRatiosByOmic.get(omicName, 0))
+
+                    integratedP_dict = calculateCombinedSignificancePvalues(omicPvalues_cond, weights_cond)
+                    for method, val in integratedP_dict.items():
+                        combined_pvalues_per_condition[method].append(val)
+
+            pathwayInstance.setCombinedSignificancePvalues(combined_pvalues_per_condition)
+
+            # Step 4.1: Total Global P-value (Combine global p-values of each omic)
+            globalOmicPvalues = pathwayInstance.getGlobalOmicPvalues()
+            if globalOmicPvalues:
+                globalKeyOrder = list(globalOmicPvalues.keys())
+                globalWeights = [mappedRatiosByOmic.get(omicName, 0) for omicName in globalKeyOrder]
+                globalPvalues = [globalOmicPvalues[omicName] for omicName in globalKeyOrder]
+
+                totalGlobalP_dict = calculateCombinedSignificancePvalues(globalPvalues, globalWeights)
+                pathwayInstance.setTotalGlobalPvalues(totalGlobalP_dict)
+
+    def _setPerOmicSignificance(self, pathwayInstance, totalFeaturesByOmic,
+                                totalRelevantFeaturesByOmic, has_multi_cond):
+        """Per-omic p-values for one pathway: significance per condition, then
+        the omic's global p-value (Fisher over the conditions)."""
+        # significanceValues format: OmicName -> [[totalMatched, totalRelevant, pValue], ...] (one per condition)
+        for omicName, conditionValues in pathwayInstance.getSignificanceValues().items():
+            pvalues_per_condition = []
+            total_features = totalFeaturesByOmic.get(omicName, 0)
+            total_relevant_list = totalRelevantFeaturesByOmic.get(omicName, [])
+
+            # Optimization: if single condition, just do one calculation
+            if not has_multi_cond:
+                total_relevant_cond = total_relevant_list[0] if total_relevant_list else 0
+                val = conditionValues[0]
+                pValue = calculateSignificance(self.getTest(), total_features, total_relevant_cond, val[0], val[1])
+                pvalues_per_condition = [pValue]
+            else:
+                for i, values in enumerate(conditionValues):
+                    total_relevant_cond = total_relevant_list[i] if i < len(total_relevant_list) else 0
+
+                    pValue = calculateSignificance(self.getTest(),
+                                                   total_features,
+                                                   total_relevant_cond,
+                                                   values[0], # totalMatched in pathway
+                                                   values[1]) # totalRelevant in pathway for this condition
+                    pvalues_per_condition.append(pValue)
+
+            pathwayInstance.setSignificancePvalue(omicName, pvalues_per_condition)
+
+            # Global Omic P-value: combine p-values from all conditions
+            if pvalues_per_condition:
+                if not has_multi_cond:
+                    pathwayInstance.setGlobalOmicPvalue(omicName, pvalues_per_condition[0])
+                else:
+                    # We use uniform weights for conditions
+                    weights_cond = [1] * len(pvalues_per_condition)
+                    globalP_dict = calculateCombinedSignificancePvalues(pvalues_per_condition, weights_cond)
+                    pathwayInstance.setGlobalOmicPvalue(omicName, globalP_dict.get("Fisher", 1.0))
+
+    def _accumulatePathwayMatches(self, featureIDsInPathway, inputFeaturesDict, addMatchedID,
+                                  counterNames, enrichmentByOmic, enrichments, max_conditions,
+                                  has_multi_cond, sourceDB):
+        """One half of testPathwaySignificance: walk the pathway's feature IDs
+        (genes or compounds -- the loop was duplicated verbatim for both),
+        record every input feature that matches under sourceDB, and fold its
+        per-condition relevance into counterNames. Returns True if anything
+        matched."""
+        matched = False
+        featureIDsInPathway = set([x.lower() for x in featureIDsInPathway])
+
+        for featureID in featureIDsInPathway:
+            feature = inputFeaturesDict.get(featureID)
+            if feature:
+                matchingDB = feature.getMatchingDB()
+                db_matches = sourceDB in matchingDB if isinstance(matchingDB, list) else matchingDB == sourceDB
+                if db_matches:
+                    matched = True
+                    addMatchedID(feature.getID())
+                    for omicValue in feature.getOmicsValues():
+                        enrichmentType = enrichmentByOmic[omicValue.getOmicName()]
+                        enrichmentProperty = enrichments.get(enrichmentType)(omicValue).lower()
+
+                        # relevantValue is now a list [True, False, ...]
+                        relevantValue = [omicValue.isRelevantAssociation()] if enrichmentType == 'associations' else omicValue.relevant
+                        if not isinstance(relevantValue, list):
+                            relevantValue = [relevantValue]
+                        elif len(relevantValue) == 0:
+                            relevantValue = [False] * max_conditions
+
+                        if not has_multi_cond:
+                            # Scalar fast-path
+                            is_rel = relevantValue[0]
+                            old_val = counterNames[omicValue.getOmicName()].get(enrichmentProperty)
+                            if old_val is None:
+                                counterNames[omicValue.getOmicName()][enrichmentProperty] = is_rel
+                            else:
+                                counterNames[omicValue.getOmicName()][enrichmentProperty] = old_val or is_rel
+                        else:
+                            # List-based multi-condition path
+                            old_val = counterNames[omicValue.getOmicName()].get(enrichmentProperty)
+                            if not old_val:
+                                counterNames[omicValue.getOmicName()][enrichmentProperty] = list(relevantValue)
+                            else:
+                                nCond = max(len(old_val), len(relevantValue))
+                                combined = [False] * nCond
+                                for i in range(nCond):
+                                    v1 = old_val[i] if i < len(old_val) else False
+                                    v2 = relevantValue[i] if i < len(relevantValue) else False
+                                    combined[i] = v1 or v2
+                                counterNames[omicValue.getOmicName()][enrichmentProperty] = combined
+        return matched
+
     def testPathwaySignificance(self, genesInPathway, compoundsInPathway, inputGenesDict, inputCompoundsDict,
                                 totalFeaturesByOmic, totalRelevantFeaturesByOmic, mappedRatiosByOmic, enrichmentByOmic,
                                 sourceDB, has_multi_cond):
@@ -1889,179 +2022,27 @@ class PathwayAcquisitionJob(Job):
             'associations': lambda x: ':::'.join([x.getInputName(), x.getOriginalName()])
         }
 
+        # The gene and compound halves are the same accumulation; only the
+        # input dictionary and which matched-ID list gets the hit differ.
         # TODO: RETURN AS A SET IN KEGG INFORMATION MANAGER
-        genesInPathway = set([x.lower() for x in genesInPathway])
-        
-        # Iterate over genes in pathway instead of all input genes
-        for geneID in genesInPathway:
-            gene = inputGenesDict.get(geneID)
-            if gene:
-                matchingDB = gene.getMatchingDB()
-                db_matches = sourceDB in matchingDB if isinstance(matchingDB, list) else matchingDB == sourceDB
-                if db_matches:
-                    isValidPathway = True
-                    pathwayInstance.addMatchedGeneID(gene.getID())
-                    for omicValue in gene.getOmicsValues():
-                        enrichmentType = enrichmentByOmic[omicValue.getOmicName()]
-                        enrichmentProperty = enrichments.get(enrichmentType)(omicValue).lower()
-
-                        # relevantValue is now a list [True, False, ...]
-                        relevantValue = [omicValue.isRelevantAssociation()] if enrichmentType == 'associations' else omicValue.relevant
-                        if not isinstance(relevantValue, list):
-                            relevantValue = [relevantValue]
-                        elif len(relevantValue) == 0:
-                            relevantValue = [False] * max_conditions
-
-                        if not has_multi_cond:
-                            # Scalar fast-path
-                            is_rel = relevantValue[0]
-                            old_val = counterNames[omicValue.getOmicName()].get(enrichmentProperty)
-                            if old_val is None:
-                                counterNames[omicValue.getOmicName()][enrichmentProperty] = is_rel
-                            else:
-                                counterNames[omicValue.getOmicName()][enrichmentProperty] = old_val or is_rel
-                        else:
-                            # List-based multi-condition path
-                            old_val = counterNames[omicValue.getOmicName()].get(enrichmentProperty)
-                            if not old_val:
-                                counterNames[omicValue.getOmicName()][enrichmentProperty] = list(relevantValue)
-                            else:
-                                nCond = max(len(old_val), len(relevantValue))
-                                combined = [False] * nCond
-                                for i in range(nCond):
-                                    v1 = old_val[i] if i < len(old_val) else False
-                                    v2 = relevantValue[i] if i < len(relevantValue) else False
-                                    combined[i] = v1 or v2
-                                counterNames[omicValue.getOmicName()][enrichmentProperty] = combined
-
-        # First we get the list of IDs for the compounds that participate in the pathway
-        compoundsInPathway = set([x.lower() for x in compoundsInPathway])
-
-        for compoundID in compoundsInPathway:
-            compound = inputCompoundsDict.get(compoundID)
-            if compound:
-                # Check if the compound participates in the pathway safely (using list support)
-                matchingDB = compound.getMatchingDB()
-                db_matches = sourceDB in matchingDB if isinstance(matchingDB, list) else matchingDB == sourceDB
-                
-                if db_matches:
-                    isValidPathway = True
-                    pathwayInstance.addMatchedCompoundID(compound.getID())
-
-                    for omicValue in compound.getOmicsValues():
-                        enrichmentType = enrichmentByOmic[omicValue.getOmicName()]
-                        enrichmentProperty = enrichments.get(enrichmentType)(omicValue).lower()
-
-                        relevantValue = [omicValue.isRelevantAssociation()] if enrichmentType == 'associations' else omicValue.relevant
-                        if not isinstance(relevantValue, list):
-                            relevantValue = [relevantValue]
-                        elif len(relevantValue) == 0:
-                            relevantValue = [False] * max_conditions
-
-                        if not has_multi_cond:
-                            # Scalar fast-path
-                            is_rel = relevantValue[0]
-                            old_val = counterNames[omicValue.getOmicName()].get(enrichmentProperty)
-                            if old_val is None:
-                                counterNames[omicValue.getOmicName()][enrichmentProperty] = is_rel
-                            else:
-                                counterNames[omicValue.getOmicName()][enrichmentProperty] = old_val or is_rel
-                        else:
-                            # List-based multi-condition path
-                            old_val = counterNames[omicValue.getOmicName()].get(enrichmentProperty)
-                            if not old_val:
-                                counterNames[omicValue.getOmicName()][enrichmentProperty] = list(relevantValue)
-                            else:
-                                nCond = max(len(old_val), len(relevantValue))
-                                combined = [False] * nCond
-                                for i in range(nCond):
-                                    v1 = old_val[i] if i < len(old_val) else False
-                                    v2 = relevantValue[i] if i < len(relevantValue) else False
-                                    combined[i] = v1 or v2
-                                counterNames[omicValue.getOmicName()][enrichmentProperty] = combined
+        matchedGenes = self._accumulatePathwayMatches(
+            genesInPathway, inputGenesDict, pathwayInstance.addMatchedGeneID,
+            counterNames, enrichmentByOmic, enrichments, max_conditions,
+            has_multi_cond, sourceDB)
+        matchedCompounds = self._accumulatePathwayMatches(
+            compoundsInPathway, inputCompoundsDict, pathwayInstance.addMatchedCompoundID,
+            counterNames, enrichmentByOmic, enrichments, max_conditions,
+            has_multi_cond, sourceDB)
+        isValidPathway = matchedGenes or matchedCompounds
 
         for omicName, featureNames in counterNames.items():
             for rel_val in featureNames.values():
                 pathwayInstance.addSignificanceValues(omicName, rel_val)
 
         if isValidPathway:
-            # print(f"DEBUG: Pathway {pathwayInstance.getID()} sig values: {pathwayInstance.getSignificanceValues()}")
-            # significanceValues format: OmicName -> [[totalMatched, totalRelevant, pValue], ...] (one per condition)
-            for omicName, conditionValues in pathwayInstance.getSignificanceValues().items():
-                pvalues_per_condition = []
-                total_features = totalFeaturesByOmic.get(omicName, 0)
-                total_relevant_list = totalRelevantFeaturesByOmic.get(omicName, [])
-
-                # Optimization: if single condition, just do one calculation
-                if not has_multi_cond:
-                    total_relevant_cond = total_relevant_list[0] if total_relevant_list else 0
-                    val = conditionValues[0]
-                    pValue = calculateSignificance(self.getTest(), total_features, total_relevant_cond, val[0], val[1])
-                    pvalues_per_condition = [pValue]
-                else:
-                    for i, values in enumerate(conditionValues):
-                        total_relevant_cond = total_relevant_list[i] if i < len(total_relevant_list) else 0
-                        
-                        pValue = calculateSignificance(self.getTest(),
-                                                       total_features,
-                                                       total_relevant_cond,
-                                                       values[0], # totalMatched in pathway
-                                                       values[1]) # totalRelevant in pathway for this condition
-                        pvalues_per_condition.append(pValue)
-
-                pathwayInstance.setSignificancePvalue(omicName, pvalues_per_condition)
-                
-                # Global Omic P-value: combine p-values from all conditions
-                if pvalues_per_condition:
-                    if not has_multi_cond:
-                        pathwayInstance.setGlobalOmicPvalue(omicName, pvalues_per_condition[0])
-                    else:
-                        # We use uniform weights for conditions
-                        weights_cond = [1] * len(pvalues_per_condition)
-                        globalP_dict = calculateCombinedSignificancePvalues(pvalues_per_condition, weights_cond)
-                        pathwayInstance.setGlobalOmicPvalue(omicName, globalP_dict.get("Fisher", 1.0))
-
-            # Cross-Omic Integration PER CONDITION
-            omicSignificanceValues = pathwayInstance.getSignificanceValues()
-            keyOrder = list(omicSignificanceValues.keys())
-            
-            if keyOrder:
-                nConditions = len(omicSignificanceValues[keyOrder[0]])
-                combined_pvalues_per_condition = defaultdict(list)
-                
-                # Integration optimization
-                if not has_multi_cond:
-                    omicPvalues_cond = [omicSignificanceValues[omicName][0][2] for omicName in keyOrder]
-                    weights_cond = [mappedRatiosByOmic.get(omicName, 0) for omicName in keyOrder]
-                    integratedP_dict = calculateCombinedSignificancePvalues(omicPvalues_cond, weights_cond)
-                    for method, val in integratedP_dict.items():
-                        combined_pvalues_per_condition[method] = [val]
-                else:
-                    for i in range(nConditions):
-                        omicPvalues_cond = []
-                        weights_cond = []
-                        for omicName in keyOrder:
-                            if i < len(omicSignificanceValues[omicName]):
-                                omicPvalues_cond.append(omicSignificanceValues[omicName][i][2])
-                            else:
-                                omicPvalues_cond.append(1.0)
-                            weights_cond.append(mappedRatiosByOmic.get(omicName, 0))
-                        
-                        integratedP_dict = calculateCombinedSignificancePvalues(omicPvalues_cond, weights_cond)
-                        for method, val in integratedP_dict.items():
-                            combined_pvalues_per_condition[method].append(val)
-                
-                pathwayInstance.setCombinedSignificancePvalues(combined_pvalues_per_condition)
-
-                # Step 4.1: Total Global P-value (Combine global p-values of each omic)
-                globalOmicPvalues = pathwayInstance.getGlobalOmicPvalues()
-                if globalOmicPvalues:
-                    globalKeyOrder = list(globalOmicPvalues.keys())
-                    globalWeights = [mappedRatiosByOmic.get(omicName, 0) for omicName in globalKeyOrder]
-                    globalPvalues = [globalOmicPvalues[omicName] for omicName in globalKeyOrder]
-                    
-                    totalGlobalP_dict = calculateCombinedSignificancePvalues(globalPvalues, globalWeights)
-                    pathwayInstance.setTotalGlobalPvalues(totalGlobalP_dict)
+            self._setPerOmicSignificance(pathwayInstance, totalFeaturesByOmic,
+                                         totalRelevantFeaturesByOmic, has_multi_cond)
+            self._setCrossOmicSignificance(pathwayInstance, mappedRatiosByOmic, has_multi_cond)
 
         else:
             pathwayInstance = None
@@ -2363,7 +2344,7 @@ class PathwayAcquisitionJob(Job):
                     else:
                         logging.warning(f"Metagenes file {metagenesFileName} not found. This is expected if no matches were found for db {dbname}.")
 
-                except IOError as ex:
+                except IOError:
                     logging.error("STEP2 - File not found or read error for metagenes " + inputOmic.get("omicName") + " db: " + str(dbname))
 
                 # Counted here rather than on the success path: an omic/database
@@ -2410,7 +2391,6 @@ class PathwayAcquisitionJob(Job):
             if attr == "foundCompounds":
                 self.foundCompounds[:] = []
                 for foundCompoundID in value:
-                    foundFeatureInstance = FoundFeature("")
                     self.addFoundCompound({
                         'mainCompounds': [Compound(compoundData["ID"]).parseBSON(compoundData) for compoundData in
                                           value.getMainCompounds()],
@@ -2598,7 +2578,7 @@ class PathwayAcquisitionJob(Job):
                         totalRelevantFeaturesInCategory_cond[c].get(key, 0),
                         n=totalFeaturesInCategory.get(key),
                         p=p_param, alternative='greater').pvalue
-                except Exception as e:
+                except Exception:
                     pValueInDict_cond[c][key] = 1.0
 
         featureSummary = [totalFeatures, totalRelevantFeatures_cond]

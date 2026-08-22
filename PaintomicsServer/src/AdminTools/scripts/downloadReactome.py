@@ -1,8 +1,7 @@
 import os
 import json
 from collections import defaultdict
-from subprocess import check_call, STDOUT, DEVNULL
-from sys import stderr
+from subprocess import check_call, DEVNULL
 import requests
 from requests.exceptions import RequestException
 from src.AdminTools.DBManager import wait, generateThumbnail, log

@@ -17,7 +17,6 @@ plausible and factually unsupported is the expected output of that prompt.
 from __future__ import annotations
 
 import os
-import re
 import sys
 import traceback
 

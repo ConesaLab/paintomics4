@@ -43,7 +43,7 @@ def _ensureServerConfig():
     the real module name gives this test the same names the app would see.
     """
     try:
-        import src.conf.serverconf                       # noqa: F401
+        import src.conf.serverconf                       # noqa: F401 -- availability probe: importable conf means nothing to stub
         return
     except ImportError:
         pass

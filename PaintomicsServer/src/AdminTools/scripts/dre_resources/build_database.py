@@ -1,6 +1,6 @@
 import imp
 import traceback
-from sys import argv, stderr
+from sys import stderr
 from subprocess import CalledProcessError
 
 #SPECIE      = argv[1]

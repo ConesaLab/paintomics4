@@ -4,6 +4,11 @@
 # Same environment as the PR gate (.github/actions/setup-paintomics), same
 # offline rule, no secrets. Run it by hand from the Actions tab
 # (workflow_dispatch) after changing anything the harness depends on.
+#
+# The installer-smoke job is the one deliberate exception to the offline
+# rule: it downloads one small species (mge, ~59 pathways, 2 s between
+# requests) from the live KEGG API, because the download path IS what it
+# tests. It owns a scratch mongod on 27777 and a scratch KEGG_DATA tree.
 
 name: Nightly regression
 
@@ -35,5 +40,26 @@ jobs:
         with:
           name: regression-nightly-${{ github.run_id }}
           path: ${{ runner.temp }}/regression
+          retention-days: 14
+          if-no-files-found: ignore
+
+  installer-smoke:
+    name: Species installer end to end (scratch mongod, live KEGG, mge)
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-paintomics
+      - name: scripts/ci/installer_smoke.py
+        run: >-
+          python scripts/ci/installer_smoke.py
+          --scratch "${{ runner.temp }}/installer-smoke"
+          --seed-common "$PAINTOMICS_KEGG_DATA"
+      - name: Keep the logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-smoke-${{ github.run_id }}
+          path: ${{ runner.temp }}/installer-smoke/mongod.log
           retention-days: 14
           if-no-files-found: ignore
