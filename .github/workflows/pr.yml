@@ -50,16 +50,23 @@ jobs:
         run: python -m compileall -q PaintomicsServer/src scripts
 
   unit-tests:
+    # Two shards: the single job crept from 7 to 10 minutes as suites were
+    # added and load varied, and timed out at 8068bbba. Each shard carries
+    # half the suites and the same per-suite timeout.
     name: Unit tests (offline)
     runs-on: macos-26
     timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ["1/2", "2/2"]
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-paintomics
-      - name: Test suites
+      - name: Test suites (shard ${{ matrix.shard }})
         # 600 s per suite: the slowest (test_compound_name_table_matches_mongo)
         # takes ~150 s on a laptop and ran past 180 s on the runner.
-        run: scripts/ci/run-unit-tests.sh --timeout 600
+        run: scripts/ci/run-unit-tests.sh --timeout 600 --shard "${{ matrix.shard }}"
 
   fixtures:
     name: Example datasets, one per pipeline class
