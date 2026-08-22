@@ -1629,12 +1629,20 @@ def getCurrentInstalledSpecies():
         # If the file does not exist in the current directory, use the file in the download directory
         file_path = download_file_path
 
-    # Open the file and read its contents
-    with open(file_path) as organisms_all:
-        reader = csv.reader(organisms_all, delimiter='\t')
-        organisms_names = {}
-        for row in reader:
-            organisms_names[row[1]] = row[2]
+    # Open the file and read its contents. The list only supplies display
+    # names; on a KEGG_DATA tree that has never had a common download
+    # (--common=1) it does not exist yet, and an install must not die over
+    # missing display names -- the installer-smoke test runs exactly that
+    # fresh-tree case.
+    organisms_names = {}
+    if os.path.isfile(file_path):
+        with open(file_path) as organisms_all:
+            reader = csv.reader(organisms_all, delimiter='\t')
+            for row in reader:
+                organisms_names[row[1]] = row[2]
+    else:
+        log("            NOTE: no organisms_all.list yet (no common download); "
+            "species names will show as their codes")
 
     from pymongo import MongoClient
 
@@ -1808,6 +1816,10 @@ def readConfigurationFile():
     global ROOT_DIRECTORY
     ROOT_DIRECTORY = os.path.abspath(os.path.dirname(os.path.realpath(__file__)) + "/../") + "/"
     # PREPARE LOGGING
+    # The handler in conf/logging.cfg writes log/application.log relative to
+    # the working directory; on a fresh checkout that directory does not exist
+    # and fileConfig dies with a FileNotFoundError that never names it.
+    os.makedirs("log", exist_ok=True)
     from src.common.LoggingSetup import configureLogging
     configureLogging(ROOT_DIRECTORY + 'conf/logging.cfg')
 
