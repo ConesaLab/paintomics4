@@ -2,7 +2,7 @@ from pymongo import MongoClient
 import logging, itertools
 import os, sys, signal, time
 import re
-from multiprocessing import Process, cpu_count, Manager, RawArray
+from multiprocessing import Process, Manager, RawArray
 from math import ceil
 from bisect import bisect_right
 from re import compile as compile_re, IGNORECASE as IGNORECASE_re
@@ -1268,7 +1268,7 @@ def findCompoundIDByFeatureName(jobID, featureName, db):
                             name, MAX_COMPOUND_MATCHES, len(matchedFeatures), jobID)
 
         return matchedFeatures, len(matchedFeatures) > 0
-    except Exception as ex:
+    except Exception:
         return matchedFeatures, False
 
 def mapCompoundsIdentifiers(jobID, featureList, matchedFeatures, notMatchedFeatures, foundFeatures, resultSlot=None):
