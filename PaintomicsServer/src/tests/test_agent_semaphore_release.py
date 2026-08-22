@@ -160,7 +160,13 @@ class HeartbeatTest(unittest.TestCase):
         try:
             hb = agent._Heartbeat("job-x", interval=0.05)
             hb.start()
-            time.sleep(0.3)
+            # Wait for the third touch with a deadline instead of sleeping a
+            # fixed 0.3 s: on a loaded CI runner (four suites beside mongod)
+            # the thread was starved to two touches inside that window and
+            # the assertion below failed although the heartbeat was fine.
+            deadline = time.monotonic() + 5.0
+            while len(touches) < 3 and time.monotonic() < deadline:
+                time.sleep(0.01)
             hb.stop()
             seen = len(touches)
             time.sleep(0.2)
