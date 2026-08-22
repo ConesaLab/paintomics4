@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 import traceback
-from sys import argv, stderr
+from sys import stderr
 import imp
 
 #**************************************************************************
