@@ -36,7 +36,6 @@ from csv import reader as csv_reader
 from random import randint
 
 import shutil
-import time
 
 class Bed2GeneJob(Job):
     #******************************************************************************************************************
@@ -499,7 +498,7 @@ class Bed2GeneJob(Job):
         logging.info("PROCESSING DHS_exon_association OUTPUT...")
         if os_path.isfile(tmpFile):
              with open(tmpFile, 'r') as inputDataFile:
-                regionID = geneID = geneRegion = feature = None
+                regionID = geneID = geneRegion = None
                 #TODO: (OPTIONAL) if result ordered by gene id -> reduce processing time
                 csvReader = csv_reader(inputDataFile, delimiter="\t")
                 #IGNORE THE HEADER
