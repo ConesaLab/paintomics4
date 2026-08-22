@@ -2,7 +2,7 @@ import logging
 from math import log, isfinite
 import numpy as np
 from scipy import special as _special
-from scipy.stats import chi2, fisher_exact, combine_pvalues, hypergeom
+from scipy.stats import hypergeom
 from statsmodels.sandbox.stats.multicomp import multipletests
 
 # Distinct out-of-domain argument tuples already reported by calculateFisher.
