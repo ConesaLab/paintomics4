@@ -430,6 +430,106 @@ class Job(Model):
     def processFilesContent(self):
         raise NotImplementedError()
 
+    def _resolveRegulatorSymbols(self, associationFeatures, enrichment):
+        """Map every regulator ID in the associations file to its gene
+        symbol(s), so Step 4 can display the symbol instead of the raw ID.
+        Returns {rawInputName: [every matched clone]} -- empty when there are
+        no associations or nothing resolves, and the caller falls back to the
+        raw regulator ID."""
+        matchedNameDict = {}
+        if associationFeatures:
+            totalInputRegulators = []
+
+            def process_omic_value_regulate_feature(geneName, omicValueVar):
+                geneAux = Gene("")
+                geneAux.setName(geneName)
+                geneAux.addOmicValue(omicValueVar)
+                totalInputRegulators.append(geneAux)
+
+            for regName in associationFeatures.keys():
+                omicValueAux = OmicValue(regName)
+                process_omic_value_regulate_feature(regName, omicValueAux)
+
+            if len(totalInputRegulators) > 0:
+                matchedName, notMatchedName, foundName = mapFeatureIdentifiers(self.getJobID(),
+                                                                               self.getOrganism(),
+                                                                               self.getDatabases(),
+                                                                               totalInputRegulators, [],
+                                                                               [], [], enrichment)
+                if matchedName is not None and len(matchedName) > 0:
+                    # Group by the raw input name, keeping EVERY match.
+                    #
+                    # This was dict(map(...)), which silently kept only the last
+                    # clone when one symbol resolved to several canonical IDs.
+                    # On the STATegra MORE example that is 180 of 387 regulators,
+                    # 14 of them genuine within-KEGG paralogue collisions
+                    # (Bach1 -> [12013, 237911], Elf1, Med1, Pml). While the ID
+                    # only fed a display line the cost was a wrong label; once a
+                    # regulator's ID chooses map COORDINATES it becomes an arrow
+                    # drawn at the wrong gene, with no visible symptom.
+                    for matched in matchedName:
+                        matchedNameDict.setdefault(matched.omicsValues[0].inputName, []).append(matched)
+        return matchedNameDict
+
+    def _omicValueForGeneRow(self, line, numericValues, omicName, relevantFeatures,
+                             relevantAssociationFeatures, hasAssociations, matchedNameDict):
+        """Build the OmicValue for one data row of a gene-based file.
+        Returns (columnID, omicValue); columnID[0] is the gene name the
+        caller registers the value under."""
+        # If there exists an appropriate association list, use that to retrieve the gene
+        # name as the previous process of matching regions or regulators to genes (rgmatch, etc)
+        # shouldn't have been done, thus leaving the original unmapped features.
+        #
+        # Otherwise split the ID column as it might contain associated_gene:::original_name
+        columnID = line[0].split(":::")
+        omicValueAux = OmicValue(columnID[0])
+        omicValueAux.setOmicName(omicName)
+        # Get multi-condition relevance list
+        relList = relevantFeatures.get(line[0].lower(), [])
+        omicValueAux.setRelevant(relList)
+        omicValueAux.setRelevantAssociation(line[0].lower() in relevantAssociationFeatures)
+        omicValueAux.setValues(numericValues)
+
+        if hasAssociations:
+            # The transcription factor (miRNA) name is the first column (change to gene symbol when processing transcription factors).
+            # When the values file uses the legacy "geneID:::TFname" format (output of MiRNA2GeneJob),
+            # columnID[1] holds the regulator name. For files where line[0] is a single column
+            # (e.g., user uploads TFExpression.txt directly with just `TF<TAB>values`), there is no
+            # ":::" suffix -- leave originalName at its constructor default (= columnID[0]).
+            if len(columnID) > 1:
+                # `:::` format signals a regulator-style row -- the
+                # Step 4 client uses this flag to flip the visual
+                # primary/secondary so the regulator is the row's
+                # identifier and the target is context.
+                omicValueAux.isRegulator = True
+                candidates = matchedNameDict.get(columnID[1])
+                if candidates:
+                    # Deterministic representative: sorted by canonical
+                    # ID so the same input always yields the same choice
+                    # across runs, processes and machines.
+                    matchedReg = min(candidates, key=lambda match: str(match.ID))
+                    # Symbol resolved -- display name becomes the symbol,
+                    # canonical ID is stashed for the details "(AGI)" line.
+                    omicValueAux.setOriginalName(matchedReg.name)
+                    omicValueAux.regulatorID = matchedReg.ID
+                    if len(candidates) > 1:
+                        # Several canonical IDs share this symbol. Anything
+                        # that anchors to the chosen one must be able to say
+                        # the choice was arbitrary rather than imply it was
+                        # the only option.
+                        omicValueAux.regulatorAmbiguousIDs = sorted(
+                            str(match.ID) for match in candidates)
+                else:
+                    # No symbol mapping (e.g. miRNA names) -- keep the
+                    # raw regulator ID as the display name. regulatorID
+                    # stays empty so the details panel skips the
+                    # canonical-ID line.
+                    omicValueAux.setOriginalName(columnID[1])
+        elif len(columnID) > 1:
+            omicValueAux.setOriginalName(columnID[1])
+
+        return columnID, omicValueAux
+
     def  parseGeneBasedFiles(self, inputOmic):
         """
         This function...
@@ -489,39 +589,7 @@ class Job(Model):
         # lookup misses (e.g. miRNA names like miR156 aren't in the
         # gene_symbol DBs), the parsing loop below falls back to the raw
         # regulator ID, preserving previous behavior.
-        matchedNameDict = {}
-        if associationFeatures:
-            totalInputRegulators = []
-
-            def process_omic_value_regulate_feature(geneName, omicValueVar):
-                geneAux = Gene("")
-                geneAux.setName(geneName)
-                geneAux.addOmicValue(omicValueVar)
-                totalInputRegulators.append(geneAux)
-
-            for regName in associationFeatures.keys():
-                omicValueAux = OmicValue(regName)
-                process_omic_value_regulate_feature(regName, omicValueAux)
-
-            if len(totalInputRegulators) > 0:
-                matchedName, notMatchedName, foundName = mapFeatureIdentifiers(self.getJobID(),
-                                                                               self.getOrganism(),
-                                                                               self.getDatabases(),
-                                                                               totalInputRegulators, [],
-                                                                               [], [], enrichment)
-                if matchedName is not None and len(matchedName) > 0:
-                    # Group by the raw input name, keeping EVERY match.
-                    #
-                    # This was dict(map(...)), which silently kept only the last
-                    # clone when one symbol resolved to several canonical IDs.
-                    # On the STATegra MORE example that is 180 of 387 regulators,
-                    # 14 of them genuine within-KEGG paralogue collisions
-                    # (Bach1 -> [12013, 237911], Elf1, Med1, Pml). While the ID
-                    # only fed a display line the cost was a wrong label; once a
-                    # regulator's ID chooses map COORDINATES it becomes an arrow
-                    # drawn at the wrong gene, with no visible symptom.
-                    for matched in matchedName:
-                        matchedNameDict.setdefault(matched.omicsValues[0].inputName, []).append(matched)
+        matchedNameDict = self._resolveRegulatorSymbols(associationFeatures, enrichment)
 
 
         #IF THE USER UPLOADED VALUES FOR GENE EXPRESSION
@@ -581,72 +649,11 @@ class Job(Model):
                         # header with the conditions it names.
                         nValueColumns = max(nValueColumns, len(numericValues))
 
-                        # If there exists an appropriate association list, use that to retrieve the gene
-                        # name as the previous process of matching regions or regulators to genes (rgmatch, etc)
-                        # shouldn't have been done, thus leaving the original unmapped features.
-                        #
-                        # Otherwise split the ID column as it might contain associated_gene:::original_name
-                        if associationFeatures:
-                            columnID = line[0].split(":::")
-                            # The gene name is the zero element of the association list
-                            omicValueAux = OmicValue(columnID[0])
-                            omicValueAux.setOmicName(omicName)
-                            # Get multi-condition relevance list
-                            relList = relevantFeatures.get(line[0].lower(), [])
-                            omicValueAux.setRelevant(relList)
-                            omicValueAux.setRelevantAssociation(line[0].lower() in relevantAssociationFeatures)
-                            omicValueAux.setValues(numericValues)
-                            # The transcription factor (miRNA) name is the first column (change to gene symbol when processing transcription factors).
-                            # When the values file uses the legacy "geneID:::TFname" format (output of MiRNA2GeneJob),
-                            # columnID[1] holds the regulator name. For files where line[0] is a single column
-                            # (e.g., user uploads TFExpression.txt directly with just `TF<TAB>values`), there is no
-                            # ":::" suffix — leave originalName at its constructor default (= columnID[0]).
-                            if len(columnID) > 1:
-                                # `:::` format signals a regulator-style row — the
-                                # Step 4 client uses this flag to flip the visual
-                                # primary/secondary so the regulator is the row's
-                                # identifier and the target is context.
-                                omicValueAux.isRegulator = True
-                                candidates = matchedNameDict.get(columnID[1])
-                                if candidates:
-                                    # Deterministic representative: sorted by canonical
-                                    # ID so the same input always yields the same choice
-                                    # across runs, processes and machines.
-                                    matchedReg = min(candidates, key=lambda match: str(match.ID))
-                                    # Symbol resolved — display name becomes the symbol,
-                                    # canonical ID is stashed for the details "(AGI)" line.
-                                    omicValueAux.setOriginalName(matchedReg.name)
-                                    omicValueAux.regulatorID = matchedReg.ID
-                                    if len(candidates) > 1:
-                                        # Several canonical IDs share this symbol. Anything
-                                        # that anchors to the chosen one must be able to say
-                                        # the choice was arbitrary rather than imply it was
-                                        # the only option.
-                                        omicValueAux.regulatorAmbiguousIDs = sorted(
-                                            str(match.ID) for match in candidates)
-                                else:
-                                    # No symbol mapping (e.g. miRNA names) — keep the
-                                    # raw regulator ID as the display name. regulatorID
-                                    # stays empty so the details panel skips the
-                                    # canonical-ID line.
-                                    omicValueAux.setOriginalName(columnID[1])
-                            process_omic_value(columnID[0], omicValueAux)
-
-                        else:
-                            columnID = line[0].split(":::")
-
-                            omicValueAux = OmicValue(columnID[0])
-                            omicValueAux.setOmicName(omicName)
-                            # Get multi-condition relevance list
-                            relList = relevantFeatures.get(line[0].lower(), [])
-                            omicValueAux.setRelevant(relList)
-                            omicValueAux.setRelevantAssociation(line[0].lower() in relevantAssociationFeatures)
-                            omicValueAux.setValues(numericValues)
-
-                            if len(columnID) > 1:
-                                omicValueAux.setOriginalName(columnID[1])
-
-                            process_omic_value(columnID[0], omicValueAux)
+                        columnID, omicValueAux = self._omicValueForGeneRow(
+                            line, numericValues, omicName, relevantFeatures,
+                            relevantAssociationFeatures, bool(associationFeatures),
+                            matchedNameDict)
+                        process_omic_value(columnID[0], omicValueAux)
 
                 totalInputFeatures = len(totalInputFeatures)
                 logging.info("PARSING USER USER GENE BASED FILE (" + omicName + ")... FINISHED. " + str(totalInputFeatures) + " FEATURES PROCESSED.")
