@@ -11,9 +11,7 @@ Of those 5, only 2 recorded anything about why, and only because
 `topup_dropped_existing` is set independently of the guard. The other 3 failed
 on "too short" or "added nothing" and were indistinguishable.
 """
-import ast
 import os
-import re
 import sys
 import unittest
 

@@ -33,7 +33,6 @@ Usage:
     cd PaintomicsServer
     python -m src.tests.test_metagene_boxes_use_the_trend_scale
 """
-import io
 import json
 import os
 import re
@@ -41,7 +40,6 @@ import shutil
 import subprocess
 import sys
 import tempfile
-import tokenize
 import unittest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))

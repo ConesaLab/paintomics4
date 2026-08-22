@@ -204,7 +204,6 @@ def main():
     print(f"Pipeline summary: total={summary[0]} matched={summary[1]} genes={summary[2]} compounds={summary[3]}", flush=True)
 
     # Debug: dump per-omic totals
-    from collections import Counter
     enrichmentByOmic = {}
     for omic in job.getGeneBasedInputOmics():
         enrichmentByOmic[omic["omicName"]] = omic.get("enrichment", "genes")

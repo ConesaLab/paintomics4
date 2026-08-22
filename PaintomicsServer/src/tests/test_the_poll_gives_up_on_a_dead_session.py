@@ -11,7 +11,6 @@ FOUR HOURS, about 460 requests, each answered
 shown to them. Retrying cannot un-expire a session.
 """
 import os
-import re
 import sys
 import unittest
 

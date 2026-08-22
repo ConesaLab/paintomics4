@@ -146,7 +146,6 @@ def test_no_new_orphan_prompts():
     actually used. The next person to tune delegation would have edited it and
     measured nothing.
     """
-    import re
     from src.classes.AIInterpret import prompts
 
     root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
@@ -221,7 +220,6 @@ def test_no_new_orphan_definitions_in_the_ai_package():
     a separate change against master -- but it must not grow.
     """
     import ast
-    import re
 
     root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
     package = os.path.join(root, "src", "classes", "AIInterpret")

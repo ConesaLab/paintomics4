@@ -18,7 +18,6 @@ Usage:
     cd PaintomicsServer
     python -m src.tests.test_pubmed_pmcid_conversion
 """
-import json
 import os
 import sys
 import unittest

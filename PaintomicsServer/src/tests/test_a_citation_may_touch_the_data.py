@@ -46,7 +46,7 @@ def test_the_note_is_appended_only_when_there_is_a_shelf():
     """With no passages there is nothing to join a measurement to, and the note
     would be an instruction to cite something the writer has not been given."""
     src = open(L.__file__.replace(".pyc", ".py")).read()
-    i = src.index("_JOIN_NOTE")
+    src.index("_JOIN_NOTE")
     call = src[src.index("if shelf and JOIN_DATA_AND_CITATION"):][:120]
     assert "shelf and" in call, call
 

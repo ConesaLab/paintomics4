@@ -58,7 +58,7 @@ from unittest import mock
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
-from src.common.Statistics import (adjustPvalues, calculateCombinedFisher,
+from src.common.Statistics import (calculateCombinedFisher,
                                    calculateFisher,
                                    calculateStoufferCombinedPvalue)
 
