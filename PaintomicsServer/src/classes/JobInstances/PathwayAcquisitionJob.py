@@ -22,15 +22,13 @@ import logging
 import math
 import os
 import re
-from chardet import detect # get the encoding of a file
 
 from os import path as os_path, makedirs as os_makedirs
 from csv import reader as csv_reader
 from zipfile import ZipFile as zipFile
 
-from subprocess import check_call, check_output, call, STDOUT, CalledProcessError
+from subprocess import check_call, STDOUT, CalledProcessError
 
-from src.classes.FoundFeature import FoundFeature
 from src.common.Util import unifyAndSort
 
 from collections import defaultdict, Counter
@@ -58,7 +56,7 @@ from src.conf.serverconf import KEGG_DATA_DIR, MAX_THREADS, MAX_WAIT_THREADS, MA
 # bare open() this was written to protect. Imported here rather than moved
 # out of reach, so the three call sites below and the existing test that
 # imports it from this module are unaffected.
-from src.common.Util import ensure_utf8, _ENCODING_SNIFF_BYTES
+from src.common.Util import ensure_utf8
 
 
 # Small dict fields safe to persist in the main MongoDB document
@@ -1385,7 +1383,7 @@ class PathwayAcquisitionJob(Job):
         @param {type}
         @returns
         """
-        from multiprocessing import Process, cpu_count, Manager
+        from multiprocessing import Process, Manager
         from math import ceil
         from time import time as _now
 
@@ -1691,8 +1689,6 @@ class PathwayAcquisitionJob(Job):
         totalFeaturesIDSig = set()
         totalFeaturesByOmic = defaultdict(Counter)
         totalRelevantFeaturesByOmic = defaultdict(Counter)
-        totalAssociationsByOmic = defaultdict(Counter)
-        totalRelevantAssociationsByOmic = defaultdict(Counter)
 
         # Three enrichment methods available: gene, feature and association enrichment.
         # By default use gene enrichment unless specified otherwise.
@@ -2363,7 +2359,7 @@ class PathwayAcquisitionJob(Job):
                     else:
                         logging.warning(f"Metagenes file {metagenesFileName} not found. This is expected if no matches were found for db {dbname}.")
 
-                except IOError as ex:
+                except IOError:
                     logging.error("STEP2 - File not found or read error for metagenes " + inputOmic.get("omicName") + " db: " + str(dbname))
 
                 # Counted here rather than on the success path: an omic/database
@@ -2410,7 +2406,6 @@ class PathwayAcquisitionJob(Job):
             if attr == "foundCompounds":
                 self.foundCompounds[:] = []
                 for foundCompoundID in value:
-                    foundFeatureInstance = FoundFeature("")
                     self.addFoundCompound({
                         'mainCompounds': [Compound(compoundData["ID"]).parseBSON(compoundData) for compoundData in
                                           value.getMainCompounds()],
@@ -2598,7 +2593,7 @@ class PathwayAcquisitionJob(Job):
                         totalRelevantFeaturesInCategory_cond[c].get(key, 0),
                         n=totalFeaturesInCategory.get(key),
                         p=p_param, alternative='greater').pvalue
-                except Exception as e:
+                except Exception:
                     pValueInDict_cond[c][key] = 1.0
 
         featureSummary = [totalFeatures, totalRelevantFeatures_cond]
