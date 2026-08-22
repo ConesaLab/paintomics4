@@ -1,4 +1,3 @@
-from .DAO import DAO
 from .FeatureDAO import FeatureDAO
 
 class FoundFeatureDAO(FeatureDAO):

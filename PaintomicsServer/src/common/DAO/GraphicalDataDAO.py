@@ -47,5 +47,5 @@ class GraphicalDataDAO(DAO):
         if("jobID" in otherParams):
             queryParams["jobID"] = otherParams["jobID"]
         collection = self.dbManager.getCollection(self.collectionName)
-        match = collection.delete_many(queryParams)
+        collection.delete_many(queryParams)
         return True
