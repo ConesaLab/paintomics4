@@ -29,7 +29,18 @@ from src.common import ExampleDatasets
 from src.common import ExampleBundle
 from src.common import DatabaseAvailability
 
-from src.conf.serverconf import *
+from src.conf.serverconf import (
+    CLIENT_TMP_DIR,
+    KEGG_DATA_DIR,
+    MAX_CLIENT_SPACE,
+    N_WORKERS,
+    ROOT_DIRECTORY,
+    SERVER_ALLOW_DEBUG,
+    SERVER_HOST_NAME,
+    SERVER_MAX_CONTENT_LENGTH,
+    SERVER_PORT_NUMBER,
+    SERVER_SUBDOMAIN,
+)
 
 # Defensive: serverconf.py is gitignored and installed once, so a deployment
 # upgraded in place still carries a config written before this setting existed.
@@ -40,19 +51,70 @@ try:
 except ImportError:
     SERVER_MAX_FORM_MEMORY_SIZE = SERVER_MAX_CONTENT_LENGTH
 
-from src.servlets.PathwayAcquisitionServlet import *
-from src.servlets.DataManagementServlet import *
-from src.servlets.UserManagementServlet import *
-from src.servlets.Bed2GenesServlet import *
-from src.servlets.MiRNA2GenesServlet import *
+from src.servlets.PathwayAcquisitionServlet import (
+    pathwayAcquisitionAdjustPvalues,
+    pathwayAcquisitionApplyReplicateMapping,
+    pathwayAcquisitionMetagenes_PART1,
+    pathwayAcquisitionPathwayEvidence,
+    pathwayAcquisitionRecoverJob,
+    pathwayAcquisitionSaveImage,
+    pathwayAcquisitionSaveSharingOptions,
+    pathwayAcquisitionSaveVisualOptions,
+    pathwayAcquisitionStep1_PART1,
+    pathwayAcquisitionStep2_PART1,
+    pathwayAcquisitionStep3,
+    pathwayAcquisitionTouchJob,
+)
+from src.servlets.DataManagementServlet import (
+    dataManagementDeleteFile,
+    dataManagementDeleteJob,
+    dataManagementDownloadFile,
+    dataManagementGetMyFiles,
+    dataManagementGetMyJobs,
+    dataManagementUploadFile,
+)
+from src.servlets.UserManagementServlet import (
+    userManagementChangePassword,
+    userManagementNewGuestSession,
+    userManagementNewNoLoginSession,
+    userManagementResetPassword,
+    userManagementSignIn,
+    userManagementSignOut,
+    userManagementSignUp,
+)
+from src.servlets.Bed2GenesServlet import fromBEDtoGenes_STEP1
+from src.servlets.MiRNA2GenesServlet import fromMiRNAtoGenes_STEP1
 from src.servlets.MOREServlet import fromMOREtoGenes_STEP1, describeMOREBackends
-from src.servlets.AdminServlet import *
-from src.servlets.AIInterpretServlet import *
+from src.servlets.AdminServlet import (
+    adminCleanDatabases,
+    adminServletDeleteMessage,
+    adminServletDeleteReport,
+    adminServletDeleteUser,
+    adminServletGetAllUsers,
+    adminServletGetAvailableOrganisms,
+    adminServletGetInstalledOrganisms,
+    adminServletGetMessage,
+    adminServletGetReports,
+    adminServletInstallOrganism,
+    adminServletSaveMessage,
+    adminServletSendReport,
+    adminServletSystemInformation,
+    clearFailedData,
+)
+from src.servlets.AIInterpretServlet import (
+    aiGenerateExpDesign,
+    aiInterpretChat,
+    aiInterpretInitiate,
+    aiInterpretPathway,
+    aiInterpretReport,
+    aiInterpretStatus,
+    getAIProviderInfo,
+)
+from src.common.UserSessionManager import UserSessionManager
 from src.common.LoggingSetup import configureLogging
 from src.common.KeggInformationManager import KeggInformationManager
 from src.common.JobInformationManager import JobInformationManager
 
-import os.path
 
 
 def revalidateEntryDocument(response):
@@ -790,7 +852,7 @@ class Application(object):
                 userName = request.cookies.get('userName')
                 UserSessionManager().isValidAdminUser(userID, userName, sessionToken)
                 return send_from_directory(self.ROOT_DIRECTORY + 'public_html/admin', "index.html")
-            except Exception as ex:
+            except Exception:
                 return send_from_directory(self.ROOT_DIRECTORY + 'public_html/admin', "404.html")
         ##*******************************************************************************************
         ##* GET LIST OF INSTALLED SPECIES
