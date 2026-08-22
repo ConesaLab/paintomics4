@@ -47,7 +47,6 @@ not offered and not shipped, and a single member too large to be worth sending
 is skipped and *named in the document* rather than silently dropped.
 """
 import hashlib
-import json
 import logging
 import os
 import tempfile
