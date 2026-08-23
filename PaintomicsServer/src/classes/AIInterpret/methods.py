@@ -14,8 +14,8 @@ import time
 
 def _more_parameters(job_instance):
     table = getattr(job_instance, "regulationPerConditionData", None)
-    if not table or not (table.get("rows") or []):
-        return None
+    if not isinstance(table, dict) or not (table.get("rows") or []):
+        return None                    # adaptBSON stores None as "None"
     columns = table.get("columns") or []
     conditions = [c[len("Group_"):] for c in columns
                   if str(c).startswith("Group_")]

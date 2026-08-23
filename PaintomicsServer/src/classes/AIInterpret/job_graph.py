@@ -203,8 +203,12 @@ class JobGraph(object):
 def _regulation_rows(job_instance):
     """The MORE table as build() rows, with per-condition coefficients."""
     from src.classes.PathwayEvidence import _RegulationTable
-    table = _RegulationTable(getattr(job_instance,
-                                     "regulationPerConditionData", None))
+    stored = getattr(job_instance, "regulationPerConditionData", None)
+    if not isinstance(stored, dict):
+        # adaptBSON turns None into the STRING "None" on some stored jobs;
+        # a string reaches .get() and takes the whole build down.
+        stored = None
+    table = _RegulationTable(stored)
     if not table.usable:
         return [], [], {}
     conditions = list(table.conditionNames or [])

@@ -64,6 +64,9 @@ SERVER_URL_AI_INTERPRET_STATUS = SERVER_URL + "ai_interpret_status";
 SERVER_URL_AI_INTERPRET_REPORT = SERVER_URL + "ai_interpret_report";
 SERVER_URL_AI_INTERPRET_CHAT = SERVER_URL + "ai_interpret_chat";
 SERVER_URL_AI_INTERPRET_PATHWAY = SERVER_URL + "ai_interpret_pathway";
+SERVER_URL_PAPER_INITIATE = SERVER_URL + "paper_initiate";
+SERVER_URL_PAPER_STATUS = SERVER_URL + "paper_status";
+SERVER_URL_PAPER_REPORT = SERVER_URL + "paper_report";
 SERVER_URL_AI_GENERATE_EXP_DESIGN = SERVER_URL + "ai_generate_exp_design";
 /* Who the analysis summaries are actually sent to. The provider, its host and
    the model are all chosen server-side by AI_LLM_PROVIDER and are all

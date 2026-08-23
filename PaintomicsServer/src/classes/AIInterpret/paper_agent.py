@@ -60,6 +60,9 @@ class AnalysisNote:
 
     def to_dict(self):
         return {"specialist": self.specialist, "findings": self.findings,
+                # The evidence IS the contract's receipt: actual tool results,
+                # not schema echoes -- truncated per line, never dropped.
+                "evidence": [e[:600] for e in self.evidence],
                 "figures": self.figures,
                 "tables": [{"title": t["title"]} for t in self.tables],
                 "caveats": self.caveats,
@@ -768,6 +771,15 @@ def assemble_paper(ctx, llm, hooks=None):
 
     draft = ground_citations(ctx, draft, verification, llm)
 
+    # The narrate prompt teaches "(Figure: <id>)"; the Lead sometimes points
+    # that syntax at things that are not figures ("(Figure: mmu04060)").
+    # A pointer at a real figure becomes its callout; anything else goes.
+    real_ids = {f["id"] for f in ctx.figures}
+    def _figure_pointer(match):
+        fig_id = match.group(1)
+        return ("![Fig](figure:%s)" % fig_id) if fig_id in real_ids else ""
+    draft = re.sub(r"\s*\(Figure:\s*([\w.-]+)\s*\)", _figure_pointer, draft)
+
     # Every figure reaches the reader: the same store-time guarantee the
     # interpreter has. Missing callouts are appended under Results.
     called = set(re.findall(r"figure:([\w.-]+)", draft))
@@ -865,6 +877,31 @@ def run_paper_agent(job_id, experiment_design, RESPONSE):
                                     for f in ctx.figures])
         # figure: URLs resolve through the same /ai_figure route.
         progress("storing", 95, "Storing the manuscript...")
+        # The canonical store: one document per job in paperCollection, the
+        # DAO keys beside it are what the UI polls. Replaced wholesale on a
+        # re-run -- a manuscript is not an append-only log.
+        try:
+            from pymongo import MongoClient
+            from src.conf.serverconf import (MONGODB_DATABASE, MONGODB_HOST,
+                                             MONGODB_PORT)
+            client = MongoClient(MONGODB_HOST, MONGODB_PORT)
+            try:
+                client[MONGODB_DATABASE]["paperCollection"].replace_one(
+                    {"jobID": job_id},
+                    {"jobID": job_id, "markdown": markdown,
+                     "figures": figures,
+                     "verification": {k: (v if not isinstance(v, list)
+                                          else v[:20])
+                                      for k, v in verification.items()},
+                     "notes": {n: note.to_dict()
+                               for n, note in ctx.notes.items()},
+                     "facts_tsv": ctx.ledger.to_tsv(),
+                     "generated": time.time()},
+                    upsert=True)
+            finally:
+                client.close()
+        except Exception as exc:
+            logger.warning("[paper] paperCollection store failed: %s", exc)
         dao.save_progress(job_id, {
             "paper": markdown,
             "paper_figures": figures,

@@ -37,3 +37,30 @@ Verified in Chrome against job 1lqj2HS2zt on the worktree server (port 8024):
 - Metabolites tab: verified ABSENT on a compound-less job; no local job has
   compounds + completed Step 3, so presence-rendering rides the same
   activate hooks and is exercised by the item-5 smoke.
+
+## Items 5 + 7: Paper agent smoke + PA_PaperView (2026-08-24)
+
+Two live runs through the real gateway, stored in `paperCollection` (and the
+DAO's paper_* keys the UI polls):
+
+- **stategra-multiomics** (5 omics + metabolites, job 15525y735k):
+  `smoke-paper-stategra-multiomics.md`. 31 s. 45 facts substituted; the gate
+  killed 3 sentences for unledgered numbers; figures QA-clean; specialist
+  contracts receipted in stored notes (evidence = tool results). Rubric
+  (stategra-v4, deterministic prescreen only — a lower bound; no LLM judge):
+  **16.5–17.0 / 46 (~0.36)** across two runs, **zero fabricated claims**
+  (both divergence tripwires untouched), beside the interpreter's recorded
+  **20.7 / 46** (six tuned rounds, full scoring with judge).
+- **stategra-more** (TF + MORE, job 1lqj2HS2zt = the 11-stategra-more data):
+  `smoke-paper-stategra-more.md`. 22 s. 63 facts; REGULATES evidence split
+  narrated from the graph; network figure QA-clean.
+
+PA_PaperView, all states Chrome-verified on the dev server (restarted, ?v
+bumped): `paper-tab-consent.jpg` (consent text + Write the paper; clicking
+without job consent is refused server-side), `paper-tab-progress-lanes.jpg`
+(queue-driven run through /paper_initiate: lanes tick done/active/pending),
+`paper-tab-done-queuerun.jpg` + `paper-tab-manuscript.jpg` (manuscript with
+the verification gate line), and the Markdown export button saved
+`~/Downloads/paintomics-paper-22447i0A5S.md` (6.8 kB, verified on disk).
+`metabolites-tab.jpg`: the Metabolites tab rendering class activity + hub
+analysis on a compound-carrying job, 0 off-rail — closing the item-6 caveat.

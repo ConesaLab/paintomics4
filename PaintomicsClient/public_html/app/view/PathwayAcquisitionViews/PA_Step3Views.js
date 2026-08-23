@@ -1362,9 +1362,26 @@ function PA_Step3JobView() {
 							title: 'Paper', itemId: 'mainTabPaper',
 							items: [{
 								xtype: 'box', cls: 'contentbox',
-								itemId: 'paperPlaceholder',
+								itemId: 'paperMount',
 								html: '<h2 id="paperAgentSection">Paper</h2>' +
-								      '<p class="infoTip">The Paper agent runs every analysis on this job — QC, enrichment, regulation, comparisons — and drafts a manuscript with publication-grade figures. Its view lands here.</p>'
+								      '<div class="pa-paper-root"></div>',
+								listeners: {
+									/* The view drives itself from here: one
+									   fetch decides consent / progress /
+									   manuscript, and polling stops with the
+									   tab's component. */
+									afterrender: function(box) {
+										if (window.PA_PaperView) {
+											box.paPaperView = new PA_PaperView();
+											box.paPaperView.load(
+												me.getModel().getJobID(),
+												box.getEl().down('.pa-paper-root').dom);
+										}
+									},
+									beforedestroy: function(box) {
+										if (box.paPaperView) { box.paPaperView.destroy(); }
+									}
+								}
 							}]
 						}
 					].filter(function(tab) { return tab !== null; }),
