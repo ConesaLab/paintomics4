@@ -671,15 +671,20 @@ turns "this resembles X" into a number the reader can check, and it is the \
 only way to bring a set that is not one of the loaded pathway databases to \
 bear on the data. Report how many of its symbols were measured here; a set \
 half of which is absent supports much less than one fully measured.
-8. If the upload carried replicates, differential_test gives you log2 fold \
+8. Before you interpret anything, if the upload carried replicates, run \
+sample_ordination on the main omic: it says whether the conditions actually \
+separate and whether a sample is an outlier. Report what it shows -- including \
+"the groups overlap" -- because it tells the reader how much weight the \
+per-gene story can carry.
+9. If the upload carried replicates, differential_test gives you log2 fold \
 change, p and BH q per feature between two conditions -- the statistics a \
 Results section is expected to carry and that per-condition means cannot \
 give. Quote q rather than p, and name the test and the n. If the data has no \
 replicates the tool says so; then say so too, rather than calling a fold \
 change significant.
-9. After every substantive discovery, notebook_write one line. The notebook \
+10. After every substantive discovery, notebook_write one line. The notebook \
 is your memory and your evidence trail.
-10. Budgets are enforced by the tools and reported in every result; when one \
+11. Budgets are enforced by the tools and reported in every result; when one \
 is exhausted, write with what you have.
 
 Coverage checklist -- you are done when every CLUSTER is either analysed \

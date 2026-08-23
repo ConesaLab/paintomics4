@@ -2843,9 +2843,51 @@ def differential_test(ctx: RunContextWrapper[LoopContext], omic: str,
     return _spend(c, out, "differential_test")
 
 
+@function_tool(failure_error_function=_tool_failure("sample_ordination"))
+def sample_ordination(ctx: RunContextWrapper[LoopContext], omic: str) -> str:
+    """Project the SAMPLES of one omic on their first two principal components, and say whether the conditions separate. This is the question a Results section opens with -- do the groups actually differ, and is any sample an outlier -- and it is the check that tells you how much weight a per-gene story can carry. Needs an upload with replicates; it says so if there are none. Report what it shows BEFORE interpreting pathways, including when the groups overlap."""
+    c = ctx.context
+    t0 = time.time()
+    from . import ordination as ord_mod
+    try:
+        header = _replicate_header(c.job_instance, omic)
+        res = ord_mod.ordinate(c.job_instance, omic, header)
+        out = ord_mod.format_result(res, ord_mod.separation(res))
+    except Exception as exc:                       # noqa: BLE001
+        logger.warning("[%s][loop] sample_ordination failed: %s", c.job_id, exc,
+                       exc_info=True)
+        _trace(c, "sample_ordination", omic, "error", t0)
+        return _spend(c, "The ordination could not be run (%s)." % exc,
+                      "sample_ordination")
+    _trace(c, "sample_ordination", omic,
+           ("PC1 %.0f%%" % res["pc1_percent"]) if "pc1_percent" in res else "refused", t0)
+    return _spend(c, out, "sample_ordination")
+
+
+def _replicate_header(job_instance, omic_name):
+    """The per-omic sample names PaintOmics derived from the upload header."""
+    for bucket in ("geneBasedInputOmics", "compoundBasedInputOmics"):
+        for omic in (getattr(job_instance, bucket, None) or []):
+            if (omic.get("omicName") or "").strip() != (omic_name or "").strip():
+                continue
+            header = list(omic.get("sampleHeader") or [])
+            mapping = omic.get("replicateMapping") or []
+            if header and mapping and all(isinstance(m, int) for m in mapping):
+                counts = {}
+                names = []
+                for sample in mapping:
+                    if not (0 <= sample < len(header)):
+                        names.append("unassigned")
+                        continue
+                    counts[sample] = counts.get(sample, 0) + 1
+                    names.append("%s_rep%d" % (header[sample], counts[sample]))
+                return names
+    return None
+
+
 TOOLBELT = [get_experiment_overview, get_pathway_details,
             list_pathway_genes, get_gene_measurements, make_figure,
-            test_gene_set, differential_test,
+            test_gene_set, differential_test, sample_ordination,
             cluster_pathways, search_literature, read_paper, notebook_write,
             check_my_citations, delegate_interpretation, submit_report]
 
