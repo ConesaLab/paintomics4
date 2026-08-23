@@ -2820,9 +2820,32 @@ def test_gene_set(ctx: RunContextWrapper[LoopContext], set_name: str,
     return _spend(c, out, "test_gene_set")
 
 
+@function_tool(failure_error_function=_tool_failure("differential_test"))
+def differential_test(ctx: RunContextWrapper[LoopContext], omic: str,
+                      condition_a: str, condition_b: str) -> str:
+    """Run a per-feature statistical test between two conditions, using the REPLICATES the user uploaded. Gives log2 fold change, p and BH q per feature, plus how many are significant and in which direction -- the numbers a Results section needs and that per-condition means cannot give. Only works when the upload carried replicate columns; it tells you if it did not, and lists the conditions you can name. Quote q, and say the test and the n."""
+    c = ctx.context
+    t0 = time.time()
+    from . import differential as diff_mod
+    try:
+        res = diff_mod.differential_test(c.job_instance, omic, condition_a,
+                                         condition_b)
+    except Exception as exc:                       # noqa: BLE001
+        logger.warning("[%s][loop] differential_test failed: %s", c.job_id, exc,
+                       exc_info=True)
+        _trace(c, "differential_test", omic, "error", t0)
+        return _spend(c, "The differential test could not be run (%s)." % exc,
+                      "differential_test")
+    out = diff_mod.format_result(res)
+    _trace(c, "differential_test", "%s/%s-vs-%s" % (omic, condition_a, condition_b),
+           ("%d sig" % res["significant"]) if "significant" in res else "refused",
+           t0)
+    return _spend(c, out, "differential_test")
+
+
 TOOLBELT = [get_experiment_overview, get_pathway_details,
             list_pathway_genes, get_gene_measurements, make_figure,
-            test_gene_set,
+            test_gene_set, differential_test,
             cluster_pathways, search_literature, read_paper, notebook_write,
             check_my_citations, delegate_interpretation, submit_report]
 
