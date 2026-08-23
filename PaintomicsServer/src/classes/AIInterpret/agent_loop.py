@@ -66,6 +66,8 @@ from src.classes.AIInterpret.context_builder import (
     triage_pathways, build_gene_index, gene_measurements, pathway_gene_list,
     _build_omic_header_map, _gene_entry,
 )
+from src.classes.AIInterpret import figure_style
+from src.classes.AIInterpret import figures as figures_mod
 from src.classes.AIInterpret import neighbours as neighbours_mod
 from src.classes.AIInterpret.llm_client import LLMClient
 from src.classes.AIInterpret.pubmed_client import PubMedClient
@@ -726,6 +728,8 @@ class LoopContext(AgentContext):
     archived: list = field(default_factory=list)         # events already on disk
     hard_deadline: float = 0.0                          # loop must be done by
     delegation_cache: dict = field(default_factory=dict)  # resolved key -> report
+    figures: list = field(default_factory=list)          # stored figure bundles
+    figure_palette: dict = field(default_factory=dict)  # condition -> colour, ONE per run
     quotes: dict = field(default_factory=dict)          # ref_index -> verbatim quote
     flagged_citations: set = field(default_factory=set)   # unquotable at last check
 
@@ -2561,6 +2565,99 @@ def _neighbour_block(ctx, found, steps):
     return "\n".join(lines)
 
 
+@function_tool(failure_error_function=_tool_failure("make_figure"))
+def make_figure(ctx: RunContextWrapper[LoopContext], archetype: str,
+                conclusion: str, genes: list[str] = [], pathway_id: str = "",
+                title: str = "", width: str = "single") -> str:
+    """Draw a publication-grade figure from data you already hold, and get back a callout to paste. archetype: timecourse | heatmap | enrichment | scatter. conclusion is the ONE sentence the figure proves -- it becomes the legend's first line, so write the claim, not the topic. Name EITHER genes (symbols; timecourse/heatmap/scatter) OR pathway_id (its matched genes); enrichment needs neither and uses the significant pathways. You never supply numbers -- the values are read from the job, so a figure cannot disagree with your text. Costs a render (seconds); eight per report."""
+    c = ctx.context
+    t0 = time.time()
+    guard = _time_guard(c)
+    if guard:
+        return guard
+    archetype = (archetype or "").strip().lower()
+    if archetype not in figures_mod.ARCHETYPES:
+        out = "archetype must be one of %s" % ", ".join(figures_mod.ARCHETYPES)
+        _trace(c, "make_figure", archetype, out, t0)
+        return _spend(c, out, "make_figure")
+    if not (conclusion or "").strip():
+        out = ("A figure needs its conclusion sentence: it is what the legend "
+               "opens with and what the QA check looks for.")
+        _trace(c, "make_figure", archetype, out, t0)
+        return _spend(c, out, "make_figure")
+    if len(c.figures) >= figures_mod.FIGURE_CAP:
+        out = ("Figure cap reached (%d per report). The %d already made are the "
+               "ones this report can show." % (figures_mod.FIGURE_CAP, len(c.figures)))
+        _trace(c, "make_figure", archetype, "cap", t0)
+        return _spend(c, out, "make_figure")
+
+    conditions = figures_mod._conditions(c.job_instance)
+    if not c.figure_palette:
+        # Assigned ONCE per run: the same condition must be the same colour in
+        # every panel, and a per-figure assignment is how panel b ends up
+        # disagreeing with panel a.
+        c.figure_palette = figure_style.condition_colours(conditions)
+
+    note, missing = "", []
+    if archetype == "enrichment":
+        rows = figures_mod.resolve_enrichment(c)
+        if not rows:
+            out = "No pathway clears p<0.05, so an enrichment figure would be empty."
+            _trace(c, "make_figure", archetype, out, t0)
+            return _spend(c, out, "make_figure")
+        data_slice = {"pathways": rows, "conditions": conditions,
+                      "features": [], "colours": dict(c.figure_palette)}
+    else:
+        if pathway_id:
+            pathway = figures_mod.resolve_pathway(c, pathway_id)
+            if pathway is None:
+                out = "Pathway %s is not in this job's ranked list." % pathway_id
+                _trace(c, "make_figure", archetype, out, t0)
+                return _spend(c, out, "make_figure")
+            rows = figures_mod.resolve_pathway_genes(c.job_instance, pathway)
+        else:
+            rows, missing = figures_mod.resolve_genes(c.job_instance, genes)
+        if not rows:
+            out = ("None of those features carry values in this job%s -- nothing "
+                   "to draw." % (": %s" % ", ".join(missing[:8]) if missing else ""))
+            _trace(c, "make_figure", archetype, out, t0)
+            return _spend(c, out, "make_figure")
+        if missing:
+            # Named and returned, never silently dropped: a figure of six of the
+            # ten features asked for, unremarked, is a misleading figure.
+            note = ("not in this job, so not drawn: %s"
+                    % ", ".join(sorted(set(missing))[:8]))
+        data_slice = {"conditions": conditions, "features": rows,
+                      "colours": dict(c.figure_palette), "pathways": []}
+
+    has_negative = any(v < 0 for row in data_slice["features"]
+                       for v in row.get("values") or [])
+    spec = {"archetype": archetype, "conclusion": conclusion.strip(),
+            "title": (title or "").strip(), "width": width or "single",
+            "has_negative": has_negative, "centre_zero": None,
+            "n": len(data_slice["features"]) or len(data_slice["pathways"]),
+            "test": None}
+    fig_id = "fig%d-%s" % (len(c.figures) + 1, figures_mod._slug(conclusion))
+    try:
+        bundle, (passed, lines), result = figures_mod.build_bundle(
+            c.job_instance, fig_id, archetype, data_slice, spec)
+    except Exception as exc:                      # a failed figure is data
+        logger.warning("[%s][loop] make_figure failed: %s", c.job_id, exc,
+                       exc_info=True)
+        out = "The figure could not be built (%s: %s)." % (type(exc).__name__, exc)
+        _trace(c, "make_figure", archetype, "error", t0)
+        return _spend(c, out, "make_figure")
+
+    c.figures.append({"id": fig_id, "archetype": archetype, "bundle": bundle,
+                      "conclusion": conclusion.strip(), "qa_passed": bool(passed),
+                      "qa": lines, "rendered": bool(getattr(result, "ok", False))})
+    out = figures_mod.figure_block(fig_id, len(c.figures), spec, passed, lines,
+                                   result, note)
+    _trace(c, "make_figure", "%s/%s" % (archetype, fig_id),
+           "qa %s" % ("pass" if passed else "fail"), t0)
+    return _spend(c, out, "make_figure")
+
+
 @function_tool(failure_error_function=_tool_failure("list_pathway_genes"))
 def list_pathway_genes(ctx: RunContextWrapper[LoopContext],
                        pathway_names: list[str],
@@ -2610,7 +2707,7 @@ def list_pathway_genes(ctx: RunContextWrapper[LoopContext],
 
 
 TOOLBELT = [get_experiment_overview, get_pathway_details,
-            list_pathway_genes, get_gene_measurements,
+            list_pathway_genes, get_gene_measurements, make_figure,
             cluster_pathways, search_literature, read_paper, notebook_write,
             check_my_citations, delegate_interpretation, submit_report]
 

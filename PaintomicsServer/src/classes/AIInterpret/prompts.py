@@ -651,9 +651,21 @@ what five do. Each call returns \
 written interpretations carrying your reference numbers, and your report is the \
 synthesis across those returns plus what you found first-hand. Skipping this is \
 why a report ends up covering six pathways instead of fifteen.
-6. After every substantive discovery, notebook_write one line. The notebook \
+6. A Results section carries FIGURES. make_figure draws one from data you \
+already hold -- you name an archetype and either the genes or the pathway, \
+never the numbers, so the figure cannot disagree with your text. Make one for \
+a finding your reader has to SEE: a trend across conditions (timecourse), a \
+contrast over many features at once (heatmap), what the enrichment actually \
+found (enrichment), or two layers against each other (scatter). The \
+conclusion sentence you pass is the claim the figure proves, and it becomes \
+the legend's first line -- write "cholesterol biosynthesis genes rise \
+together in G12V", not "cholesterol genes". Paste the callout it returns into \
+the report where the finding is discussed. If the tool reports that a figure \
+FAILED its quality checks, say so in the text rather than citing it as if it \
+had passed.
+7. After every substantive discovery, notebook_write one line. The notebook \
 is your memory and your evidence trail.
-7. Budgets are enforced by the tools and reported in every result; when one \
+8. Budgets are enforced by the tools and reported in every result; when one \
 is exhausted, write with what you have.
 
 Coverage checklist -- you are done when every CLUSTER is either analysed \
