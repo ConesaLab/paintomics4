@@ -2885,9 +2885,33 @@ def _replicate_header(job_instance, omic_name):
     return None
 
 
+@function_tool(failure_error_function=_tool_failure("compare_sets"))
+def compare_sets(ctx: RunContextWrapper[LoopContext], names: list[str],
+                 lists: list[str], omic: str = "") -> str:
+    """Overlap two or more feature lists WITH a statistic: how many they share, how many they would share by chance in this experiment, Jaccard, and a hypergeometric p. Use it for the Venn a paper would draw -- two contrasts, two layers, your list against a published one. lists: one comma-separated string of symbols per name. The background is what THIS experiment measured, never the genome, and the reply says what that was."""
+    c = ctx.context
+    t0 = time.time()
+    from . import set_overlap as overlap_mod
+    pairs = []
+    for i, nm in enumerate(names or []):
+        if i < len(lists or []):
+            pairs.append((nm, [s for s in re.split(r"[,;\s]+", lists[i] or "") if s]))
+    try:
+        res = overlap_mod.compare(c.job_instance, pairs, omic or None)
+        out = overlap_mod.format_result(res)
+    except Exception as exc:                       # noqa: BLE001
+        logger.warning("[%s][loop] compare_sets failed: %s", c.job_id, exc,
+                       exc_info=True)
+        _trace(c, "compare_sets", ",".join(names or [])[:40], "error", t0)
+        return _spend(c, "The overlap could not be computed (%s)." % exc, "compare_sets")
+    _trace(c, "compare_sets", ",".join(names or [])[:40],
+           ("%d pair(s)" % len(res.get("pairs", []))) if "pairs" in res else "refused", t0)
+    return _spend(c, out, "compare_sets")
+
+
 TOOLBELT = [get_experiment_overview, get_pathway_details,
             list_pathway_genes, get_gene_measurements, make_figure,
-            test_gene_set, differential_test, sample_ordination,
+            test_gene_set, differential_test, sample_ordination, compare_sets,
             cluster_pathways, search_literature, read_paper, notebook_write,
             check_my_citations, delegate_interpretation, submit_report]
 
