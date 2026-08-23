@@ -86,7 +86,14 @@ MPLCONFIG_DIRNAME = ".mplconfig"
 
 # Ceilings. Module-level so a test can lower one and exercise the real code path
 # without writing 50 MB to prove a guard works.
-RLIMIT_AS_BYTES = 1 * 1024 * 1024 * 1024          # 1 GB of address space
+# Address space, not resident memory. 1 GB was the design's number and it kills
+# every render: numpy's OpenBLAS RESERVES a large virtual arena at import (per
+# thread), so `import numpy` alone dies with "cannot allocate memory" and the
+# child is killed -- measured on Garnatxa, four archetypes, rc=-9 after 30 s.
+# 4 GB of *address space* still bounds a runaway allocation while leaving the
+# scientific stack room to start; the threads that made the reservation large
+# are pinned to one in _child_env below.
+RLIMIT_AS_BYTES = 4 * 1024 * 1024 * 1024          # 4 GB of address space
 RLIMIT_CPU_SECONDS = 60                           # design §4.3
 RLIMIT_FSIZE_BYTES = 50 * 1024 * 1024             # 50 MB per file
 
@@ -174,6 +181,13 @@ def _child_env(bundle_dir):
         # account's locale, which is how a "." became a "," in a data.tsv once.
         "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
         "LANG": os.environ.get("LANG", "C.UTF-8"),
+        # One thread each: a figure is not a compute job, and the BLAS thread
+        # pools are what make numpy's address-space reservation enormous. It
+        # also makes a render deterministic, which the bundle promises.
+        "OMP_NUM_THREADS": "1",
+        "OPENBLAS_NUM_THREADS": "1",
+        "MKL_NUM_THREADS": "1",
+        "NUMEXPR_NUM_THREADS": "1",
     }
 
 

@@ -190,18 +190,23 @@ def build_bundle(job_instance, fig_id, archetype, data_slice, spec):
                "heatmap": figure_templates.build_heatmap,
                "enrichment": figure_templates.build_enrichment,
                "scatter": figure_templates.build_scatter}[archetype]
-    data_tsv, script = builder(data_slice, spec)
+    data_tsv, script, legend = builder(data_slice, spec)
 
     bundle = _bundle_dir(job_instance, fig_id)
     with open(os.path.join(bundle, "data.tsv"), "w") as fh:
         fh.write(data_tsv)
     with open(os.path.join(bundle, "figure.py"), "w") as fh:
         fh.write(script)
+    # Written here rather than by the script: the legend must exist even when
+    # the render dies, so a failed figure still says what it was going to show.
+    with open(os.path.join(bundle, "legend.md"), "w") as fh:
+        fh.write(legend)
 
     result = figure_sandbox.render(bundle, timeout=RENDER_TIMEOUT)
-    values = {row["id"]: dict(zip(data_slice.get("conditions") or [],
-                                  row.get("values") or []))
-              for row in (data_slice.get("features") or [])}
+    # From the SLICE, by a different code path than the writer -- so the check
+    # "every value in data.tsv is the job's" compares two derivations instead
+    # of comparing the file with itself.
+    values = figure_templates.values_for(archetype, data_slice)
     passed, lines = figure_qa.check(bundle, spec, values)
     with open(os.path.join(bundle, "qa.json"), "w") as fh:
         json.dump({"passed": passed, "checks": lines,

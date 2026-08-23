@@ -71,6 +71,21 @@ MAX_REPORTED_MISMATCHES = 3             # a wall of diffs is not a reason
 _FONT_SIZE_RE = re.compile(
     r"font-size\s*[:=]\s*[\"']?\s*([0-9]*\.?[0-9]+)\s*(px|pt|em|rem|%)?",
     re.I)
+# matplotlib does not write `font-size`. With svg.fonttype='none' it writes the
+# CSS SHORTHAND -- `style="font: 6px 'Helvetica', 'Arial', sans-serif"` -- and a
+# checker that only knows the longhand finds nothing and reports "the floor
+# could not be checked" on a perfectly good figure. Measured on all four
+# archetypes rendered by matplotlib 3.9.4. The shorthand's size is the token
+# before the family list, optionally after style/variant/weight keywords.
+_FONT_SHORTHAND_RE = re.compile(
+    r"(?<![-\w])font\s*:\s*(?:(?:normal|italic|oblique|small-caps|bold|bolder"
+    r"|lighter|[1-9]00)\s+)*([0-9]*\.?[0-9]+)\s*(px|pt|em|rem|%)?",
+    re.I)
+
+
+def _font_sizes(text):
+    """[(size string, unit)] from both the longhand and the shorthand."""
+    return _FONT_SIZE_RE.findall(text) + _FONT_SHORTHAND_RE.findall(text)
 _COLOUR_RE = re.compile(
     r"\b(fill|stroke)\s*[:=]\s*[\"']?\s*"
     r"(#[0-9a-fA-F]{3}(?![0-9a-fA-F])|#[0-9a-fA-F]{6}|[a-zA-Z]+)",
@@ -181,14 +196,30 @@ def _check_svg_text_is_text(bundle_dir, _spec, _values):
         return name, False, err
     n_image = len(re.findall(r"<\s*image\b", svg, re.I))
     n_text = len(re.findall(r"<\s*text\b", svg, re.I))
-    if n_image:
-        return (name, False,
-                "svg embeds %d <image> element(s) -- a raster in a vector file "
-                "is not 'text as text'" % n_image)
     if n_text == 0:
+        # Name the raster too when there is one: "no text" and "it is really a
+        # PNG in an svg wrapper" are different repairs, and the reader of this
+        # line is deciding which.
+        raster = ("; the file embeds %d <image> element(s), so it is a raster "
+                  "in a vector wrapper" % n_image) if n_image else ""
         return (name, False,
                 "svg has no <text> elements -- labels were drawn as paths "
-                "(set svg.fonttype='none')")
+                "(set svg.fonttype='none')%s" % raster)
+    # The standard is "text as text", and that is what the count above proves.
+    # A heatmap's CELLS are an image by construction (imshow rasterises the
+    # grid, as every published heatmap does); refusing that would fail a
+    # correct figure, so the raster is allowed exactly where the archetype
+    # draws a data grid and is reported everywhere else.
+    archetype = str((_spec or {}).get("archetype") or "").lower()
+    if n_image and archetype != "heatmap":
+        return (name, False,
+                "svg embeds %d <image> element(s) in a %s, which draws no data "
+                "grid -- a raster here means something was flattened"
+                % (n_image, archetype or "figure"))
+    if n_image:
+        return (name, True,
+                "%d <text> elements; %d raster data grid(s), which is what a "
+                "heatmap is" % (n_text, n_image))
     return name, True, "%d <text> elements, no embedded raster" % n_text
 
 
@@ -198,7 +229,7 @@ def _check_font_size_floor(bundle_dir, _spec, _values):
     if err:
         return name, False, err
     sizes, unresolvable = [], 0
-    for raw, unit in _FONT_SIZE_RE.findall(svg):
+    for raw, unit in _font_sizes(svg):
         unit = (unit or "px").lower()
         if unit in ("em", "rem", "%"):
             unresolvable += 1          # needs the cascade; not a silent pass
@@ -404,15 +435,24 @@ def _text_boxes(svg_text):
         if not label:
             continue
         transform = attrib.get("transform", "")
-        if "rotate" in transform or "matrix" in transform:
+        # matplotlib stamps `transform="rotate(-0 x y)"` on EVERY text element,
+        # rotated or not, so "contains rotate" skipped every label in the file
+        # and the check reported "no placeable <text> elements" on a figure
+        # whose labels were all axis-aligned. Read the ANGLE: a zero rotation
+        # is no rotation. A real rotation (tick labels at 45 degrees) still
+        # skips, because the box model here cannot place a rotated label, and a
+        # matrix transform is opaque.
+        angle_match = re.search(r"rotate\s*\(\s*(-?[0-9]*\.?[0-9]+)", transform)
+        rotated = bool(angle_match) and abs(float(angle_match.group(1))) >= 0.5
+        if rotated or "matrix" in transform:
             skipped += 1
             continue
         style = attrib.get("style", "")
-        match = _FONT_SIZE_RE.search(style) or _FONT_SIZE_RE.search(
+        found = _font_sizes(style) or _font_sizes(
             "font-size=%s" % attrib.get("font-size", ""))
         try:
-            size = float(match.group(1)) if match else 0.0
-        except (TypeError, ValueError):
+            size = float(found[0][0]) if found else 0.0
+        except (TypeError, ValueError, IndexError):
             size = 0.0
         if size <= 0:
             skipped += 1               # no resolvable size: cannot place it
