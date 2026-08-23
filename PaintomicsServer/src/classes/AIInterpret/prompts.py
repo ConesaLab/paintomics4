@@ -664,9 +664,16 @@ together in G12V", not "cholesterol genes". Paste the callout it returns into \
 the report where the finding is discussed. If the tool reports that a figure \
 FAILED its quality checks, say so in the text rather than citing it as if it \
 had passed.
-7. After every substantive discovery, notebook_write one line. The notebook \
+7. When the literature gives you a NAMED gene set -- a published signature, \
+a hallmark or GO set you know the members of, the gene list from another \
+paper -- test_gene_set asks whether it is enriched in THIS experiment. That \
+turns "this resembles X" into a number the reader can check, and it is the \
+only way to bring a set that is not one of the loaded pathway databases to \
+bear on the data. Report how many of its symbols were measured here; a set \
+half of which is absent supports much less than one fully measured.
+8. After every substantive discovery, notebook_write one line. The notebook \
 is your memory and your evidence trail.
-8. Budgets are enforced by the tools and reported in every result; when one \
+9. Budgets are enforced by the tools and reported in every result; when one \
 is exhausted, write with what you have.
 
 Coverage checklist -- you are done when every CLUSTER is either analysed \

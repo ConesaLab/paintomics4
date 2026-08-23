@@ -2798,8 +2798,31 @@ def list_pathway_genes(ctx: RunContextWrapper[LoopContext],
     return out
 
 
+@function_tool(failure_error_function=_tool_failure("test_gene_set"))
+def test_gene_set(ctx: RunContextWrapper[LoopContext], set_name: str,
+                  genes: list[str], omic: str = "") -> str:
+    """Test whether a gene set YOU name is enriched among this job's significant features. Use it for a published signature, a hallmark/GO/Reactome set you know by name, or the overlap list from another paper -- anything that is not one of the pathway databases already loaded. genes: the symbols in that set. omic: restrict to one layer (e.g. Proteomics) to ask whether the set moves in one layer and not another. Returns a hypergeometric p-value against THIS experiment's measured genes, how many of your symbols were measured at all, and the up/down split of the significant members."""
+    c = ctx.context
+    t0 = time.time()
+    name = (set_name or "").strip() or "unnamed set"
+    from . import gene_sets as gene_sets_mod
+    try:
+        res = gene_sets_mod.test_gene_set(c.job_instance, genes or [], omic or None)
+    except Exception as exc:                       # noqa: BLE001
+        logger.warning("[%s][loop] test_gene_set failed: %s", c.job_id, exc,
+                       exc_info=True)
+        _trace(c, "test_gene_set", name, "error", t0)
+        return _spend(c, "The gene set could not be tested (%s)." % exc,
+                      "test_gene_set")
+    out = gene_sets_mod.format_result(name, res)
+    _trace(c, "test_gene_set", "%s/%d" % (name, res.get("measured") or 0),
+           "p=%s" % (("%.3g" % res["p_value"]) if "p_value" in res else "n/a"), t0)
+    return _spend(c, out, "test_gene_set")
+
+
 TOOLBELT = [get_experiment_overview, get_pathway_details,
             list_pathway_genes, get_gene_measurements, make_figure,
+            test_gene_set,
             cluster_pathways, search_literature, read_paper, notebook_write,
             check_my_citations, delegate_interpretation, submit_report]
 
