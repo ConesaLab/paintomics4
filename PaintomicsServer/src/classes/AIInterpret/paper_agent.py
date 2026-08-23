@@ -608,6 +608,64 @@ def enrichment_analyst(ctx, llm):
             note.tables.append({"title": "GO_BP enrichment (%s)" % omic,
                                 "tsv": "\n".join(tsv) + "\n"})
 
+    # Pre-ranked GSEA over the same collection: threshold-free, signed, and
+    # the analysis three round-1 studies asked for by name. One layer (the
+    # largest gene layer) keeps the cost to one permutation sweep.
+    if collection is not None:
+        gene_layers = [ctx.matrix.get(o) for o in ctx.matrix.omics()
+                       if ctx.matrix.get(o).kind == "gene"]
+        gene_layers.sort(key=lambda l: -l.n_features)
+        if gene_layers:
+            layer = gene_layers[0].deduplicated()
+            genes, scores = [], []
+            for i, label in enumerate(layer.labels):
+                finite = [v for v in layer.values[i] if not math.isnan(v)]
+                if finite:
+                    genes.append(label)
+                    scores.append(max(finite, key=abs))
+            from .enrichment import GeneSetCollection, run_gsea
+            # GSEA cost is sets x permutations x list length: 10,903 GO_BP
+            # sets over a 30k list ran past ten minutes (measured). The
+            # ranked list is the same for every set, so test the sets ORA
+            # already found interesting -- the top 60 by p from the same
+            # collection -- and say so in the method line.
+            candidate_ids = [r["id"] for r in (res.get("results") or [])[:60]] \
+                if isinstance(res, dict) else []
+            subset = {k: {"name": v["name"], "genes": sorted(v["genes"])}
+                      for k, v in collection.sets.items()
+                      if k in set(candidate_ids)} or None
+            gsea_collection = (GeneSetCollection(collection.source + " (top ORA sets)",
+                                                 subset)
+                               if subset else None)
+            gres = (run_gsea(genes, scores, gsea_collection,
+                             n_permutations=200, seed=1, ledger=ctx.ledger,
+                             max_results=8)
+                    if gsea_collection is not None
+                    else {"error": "no ORA result to rank sets from"})
+            if "error" in gres:
+                note.unused_occasions.append(
+                    {"occasion": "GSEA on %s" % layer.omic,
+                     "reason": gres["error"]})
+            else:
+                head = "; ".join(
+                    "%s NES %.2f %s (q %.3g %s)"
+                    % (r["name"], r["nes"], r.get("nes_fact", ""), r["q"],
+                       r.get("q_fact", ""))
+                    for r in gres["results"][:5])
+                note.evidence.append(
+                    "pre-ranked GSEA over %s (%s): %s"
+                    % (layer.omic, gres["method"], head or "no set tested"))
+                top = gres["results"][0] if gres["results"] else None
+                if top is not None:
+                    fig_id, _err = _make_figure(
+                        ctx, "nes_dotplot",
+                        {"results": gres["results"], "conditions": [],
+                         "features": [1], "colours": {}, "pathways": []},
+                        "Gene sets ranked by normalised enrichment score.",
+                        "gsea-nes")
+                    if fig_id:
+                        note.figures.append(fig_id)
+
     for a, b in (ctx.inventory.get("pairs") or [])[:4]:
         set_a, note_a = resolve_descriptor(ctx.matrix, a)
         set_b, note_b = resolve_descriptor(ctx.matrix, b)
