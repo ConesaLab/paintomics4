@@ -149,6 +149,9 @@ the evidence carry ids like [f17].
 Write your findings as %d-%d complete sentences, one per line, no bullets,
 no headings. HARD RULES:
 - Never write a number. Where a number belongs, write its token: {{f17}}.
+- A token stands ONLY for the number it appears beside in the evidence.
+  Never reuse a token for a different quantity; if a number has no token,
+  leave that quantity out of your sentence.
 - Only claim what the evidence shows; name features and conditions as the
   evidence names them.
 - To point at a figure write exactly (Figure: <figure-id>).
@@ -182,15 +185,28 @@ def design_qc_analyst(ctx, llm):
     note = AnalysisNote("design_qc")
     limits = qc.data_limits(ctx.matrix)
     for entry in limits:
-        n_tag = ctx.ledger.tag("count", entry["n_features"],
-                               {"omic": entry["omic"]}, "data_limits")
+        # EVERY number in an evidence line carries its own token: the first
+        # live run tagged only n_features, and the model, told never to
+        # write a number, reused that one token for the column count and
+        # the NaN fraction -- "5531 conditions" reached the draft.
+        scope = {"omic": entry["omic"]}
+        n_tag = ctx.ledger.tag("count", entry["n_features"], scope,
+                               "data_limits")
+        col_tag = ctx.ledger.tag("count", entry["n_columns"],
+                                 dict(scope, what="columns"), "data_limits")
+        cond_tag = ctx.ledger.tag("count", entry["n_conditions"],
+                                  dict(scope, what="conditions"),
+                                  "data_limits")
+        nan_tag = ctx.ledger.tag("value", entry["nan_fraction"],
+                                 dict(scope, what="nan_fraction"),
+                                 "data_limits")
         note.evidence.append(
-            "%s (%s): %d %s features x %d columns (%d condition(s)%s), "
-            "NaN fraction %s"
+            "%s (%s): %d %s features x %d %s columns (%d %s condition(s)%s), "
+            "NaN fraction %s %s"
             % (entry["omic"], entry["kind"], entry["n_features"], n_tag,
-               entry["n_columns"], entry["n_conditions"],
+               entry["n_columns"], col_tag, entry["n_conditions"], cond_tag,
                ", replicates" if entry["replicates"] else ", NO replicates",
-               entry["nan_fraction"]))
+               entry["nan_fraction"], nan_tag))
         for limit in entry["limits"]:
             note.caveats.append("%s: %s" % (entry["omic"], limit))
 
@@ -227,14 +243,22 @@ def design_qc_analyst(ctx, llm):
             floor_tag = ctx.ledger.tag("pvalue", perm["min_attainable_p"],
                                        {"omic": omic, "stat": "floor"},
                                        "permanova")
+            if perm["exact"]:
+                n_tag = ctx.ledger.tag("count", perm["n_relabellings"],
+                                       {"omic": omic,
+                                        "what": "relabellings"}, "permanova")
+                how = ("exact enumeration of %d %s relabellings"
+                       % (perm["n_relabellings"], n_tag))
+            else:
+                n_tag = ctx.ledger.tag("count", perm["n_permutations"],
+                                       {"omic": omic,
+                                        "what": "permutations"}, "permanova")
+                how = "%d %s permutations" % (perm["n_permutations"], n_tag)
             note.evidence.append(
                 "%s PERMANOVA: p = %s %s (minimum attainable for this design "
                 "%s %s; %s)"
                 % (omic, perm["p"], p_tag, perm["min_attainable_p"],
-                   floor_tag,
-                   "exact enumeration of %d relabellings"
-                   % perm["n_relabellings"] if perm["exact"]
-                   else "%d permutations" % perm["n_permutations"]))
+                   floor_tag, how))
         corr = qc.sample_correlation(layer)
         if "error" not in corr:
             if corr["outliers"]:
@@ -298,10 +322,16 @@ def pathway_analyst(ctx, llm):
                              "pathway_enrichment")
         genes = ", ".join(g.get("symbol") for g in
                           (pw.get("top_genes") or [])[:5] if g.get("symbol"))
+        matched = int(pw.get("matched_gene_count") or 0)
+        m_tag = ctx.ledger.tag("count", matched,
+                               {"pathway": str(pw.get("id")),
+                                "what": "matched_genes"},
+                               "pathway_enrichment")
         note.evidence.append(
-            "%s (%s, %s): combined p = %s %s; matched genes %s; top genes: %s"
+            "%s (%s, %s): combined p = %s %s; matched genes %d %s; "
+            "top genes: %s"
             % (pw.get("name"), pw.get("id"), pw.get("source"), p, tag,
-               pw.get("matched_gene_count"), genes or "-"))
+               matched, m_tag, genes or "-"))
     fig_id, err = _make_figure(
         ctx, "enrichment",
         {"pathways": [{"name": pw.get("name"), "p": p,
@@ -349,14 +379,28 @@ def enrichment_analyst(ctx, llm):
                      "reason": res["error"]})
                 continue
             head = res["results"][:6]
+            uni_tag = ctx.ledger.tag("count", res["universe"],
+                                     {"omic": omic, "what": "universe"},
+                                     "enrich_collection")
+            hits_tag = ctx.ledger.tag("count", res["hits_in_universe"],
+                                      {"omic": omic, "what": "hits"},
+                                      "enrich_collection")
+            terms = []
+            for r in head:
+                k_tag = ctx.ledger.tag("count", r["k"],
+                                       {"set": r["id"], "what": "k"},
+                                       "enrich_collection")
+                K_tag = ctx.ledger.tag("count", r["K"],
+                                       {"set": r["id"], "what": "K"},
+                                       "enrich_collection")
+                terms.append("%s (%s) k=%d %s of %d %s, q=%.3g [%s]"
+                             % (r["name"], r["id"], r["k"], k_tag, r["K"],
+                                K_tag, r["q"], r.get("q_fact")))
             note.evidence.append(
-                "GO_BP over %s (%s; universe %d, hits %d): %s"
-                % (omic, res["method"], res["universe"],
-                   res["hits_in_universe"],
-                   "; ".join("%s (%s) k=%d/%d q=%.3g [%s]"
-                             % (r["name"], r["id"], r["k"], r["K"], r["q"],
-                                r.get("q_fact")) for r in head)
-                   or "no term at q<=0.05"))
+                "GO_BP over %s (%s; universe %d %s, hits %d %s): %s"
+                % (omic, res["method"], res["universe"], uni_tag,
+                   res["hits_in_universe"], hits_tag,
+                   "; ".join(terms) or "no term at q<=0.05"))
             tsv = ["go_id\tterm\tk\tK\tp\tq"]
             for r in res["results"]:
                 tsv.append("%s\t%s\t%d\t%d\t%r\t%r"
@@ -389,12 +433,20 @@ def enrichment_analyst(ctx, llm):
         k_tag = ctx.ledger.tag("count", res["intersection"],
                                {"comparison": "%s|%s" % (a, b)},
                                "multiset_test")
+        sizes = " and ".join(
+            "%d %s" % (entry["n"],
+                       ctx.ledger.tag("count", entry["n"],
+                                      {"set": entry["name"]},
+                                      "multiset_test"))
+            for entry in res["sets"])
+        exp_tag = ctx.ledger.tag("value", res["expected"],
+                                 {"comparison": "%s|%s" % (a, b),
+                                  "what": "expected"}, "multiset_test")
         note.evidence.append(
-            "overlap of [%s] and [%s]: %d %s shared of %s (universe %d), "
-            "expected %s, p = %s %s (%s)"
-            % (a, b, res["intersection"], k_tag,
-               "/".join(str(s["n"]) for s in res["sets"]), res["universe"],
-               res["expected"], res["p"], p_tag, res["method"]))
+            "overlap of [%s] and [%s]: %d %s shared (set sizes %s; "
+            "universe %d), expected %s %s, p = %s %s (%s)"
+            % (a, b, res["intersection"], k_tag, sizes, res["universe"],
+               res["expected"], exp_tag, res["p"], p_tag, res["method"]))
         if len(set_a) <= 400 and len(set_b) <= 400:
             fig_id, _err = _make_figure(
                 ctx, "venn",
