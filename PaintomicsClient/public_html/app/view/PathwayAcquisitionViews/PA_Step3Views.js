@@ -30,6 +30,45 @@
 *
 */
 
+/* The expanded row of the enrichment table: the pathway's per-omic evidence
+   read from the record itself -- matched features, relevant features, p-value
+   per omic, then each combined method's value. Kept as a plain function so
+   the XTemplate above stays one line and this is testable in a console. */
+function paRenderPathwayRowDetail(values) {
+	var esc = Ext.htmlEncode;
+	var rows = [];
+	Object.keys(values).forEach(function(key) {
+		var m = key.match(/^pValue(.+)$/);
+		if (!m || m[1].indexOf("_c") === 0) { return; }
+		/* The field suffix is the slugged omic name ("-transcription-factor");
+		   print it back as words. */
+		var omic = m[1].replace(/^[-_]+/, "").replace(/[-_]+/g, " ");
+		omic = omic.charAt(0).toUpperCase() + omic.slice(1);
+		var p = parseFloat(values[key]);
+		rows.push('<tr><td>' + esc(omic) + '</td>' +
+			'<td>' + (values["totalMatched" + omic] != null ? values["totalMatched" + omic] : "&mdash;") + '</td>' +
+			'<td>' + (values["totalRelevantMatched" + omic] != null ? values["totalRelevantMatched" + omic] : "&mdash;") + '</td>' +
+			'<td' + (p <= 0.05 ? ' style="font-weight:bold"' : '') + '>' +
+			(isNaN(p) ? "&mdash;" : p.toExponential(2)) + '</td></tr>');
+	});
+	var combined = [];
+	Object.keys(values).forEach(function(key) {
+		var m = key.match(/^combinedSignificancePvalue([A-Za-z]+)$/);
+		if (!m) { return; }
+		var p = parseFloat(values[key]);
+		combined.push(esc(m[1]) + ' ' + (isNaN(p) ? "&mdash;" : p.toExponential(2)));
+	});
+	return '<div class="pa-row-detail" style="padding:6px 12px 10px 46px;">' +
+		'<table class="pa-row-detail-table" style="border-collapse:collapse;">' +
+		'<thead><tr><th style="text-align:left;padding-right:16px;">Omic</th>' +
+		'<th style="padding-right:16px;">Matched</th>' +
+		'<th style="padding-right:16px;">Relevant</th>' +
+		'<th>p-value</th></tr></thead><tbody>' +
+		rows.join('') + '</tbody></table>' +
+		(combined.length ? '<p style="margin:6px 0 0;color:#555;">Combined: ' + combined.join(' &middot; ') + '</p>' : '') +
+		'</div>';
+}
+
 function PA_Step3JobView() {
 	/**
 	* About this view: this view (PA_Step3JobView) is used to visualize an instance for a Pathway acquisition
@@ -1073,11 +1112,37 @@ function PA_Step3JobView() {
 					   without it silently stops toggling. */
 					'<a href="javascript:void(0)" class="button btn-danger btn-right" id="resetButton"><i class="fa fa-refresh"></i> Reset</a>' +
 					//'<a href="javascript:void(0)" class="button btn-default btn-right backButton"><i class="fa fa-arrow-left"></i> Go back</a>'
-					'<a href="javascript:void(0)" class="button btn-default btn-right mappingButton"><i class="fa fa-database"></i> Hide mapping</a>' +
+					'<a href="javascript:void(0)" class="button btn-default btn-right mappingButton"><i class="fa fa-database"></i> Mapping</a>' +
 					'<a href="javascript:void(0)" class="button btn-default btn-right" id="sharingButton"><i class="fa fa-share-alt"></i> Share</a>' +
 					'<a href="javascript:void(0)" class="button btn-info btn-right" id="aiInterpretButton" style="display:none;">' + getAIMark() + ' AI Interpret</a>' +
 					'<div id="warningMessage" style="display: none;"></div>'
-				},{ //THE SUMMARY BAND
+				},/* THE MAIN TABS.
+
+				   Seven stacked cards used to follow here -- summary, mapping
+				   stats, the explorer, metabolite hubs, class activity, MORE
+				   regulation, and the enrichment table -- roughly five screens
+				   of scrolling in which the two metabolite cards alone took a
+				   third. They are five tabs now, grouped by question:
+				   Pathways (summary, enrichment, explorer), Regulation (MORE),
+				   Metabolites (class activity, hubs), Data & mapping, and
+				   Paper. A tab whose data the job does not carry is not
+				   rendered at all -- absent, not greyed.
+
+				   deferredRender stays true: sigma canvases and Highcharts
+				   size to a display:none container as zero-width, so a hidden
+				   tab's charts must first draw when the tab is activated; the
+				   activate/tabchange listeners below updateLayout the fresh
+				   card and reflow every Highcharts instance once. */
+				{
+					xtype: 'tabpanel', id: 'step3MainTabs', plain: true,
+					deferredRender: true, border: false,
+					style: "max-width:1900px; margin: 5px 10px; margin-top:50px;",
+					tabBar: { defaults: { height: 40, margin: '0 4 0 0' }, height: 36 },
+					items: [
+						{
+							title: 'Pathways', itemId: 'mainTabPathways',
+							items: [
+								{ //THE SUMMARY BAND
 					/* One band, not three cards.
 
 					   This region used to be two side-by-side cards ("Pathways
@@ -1146,8 +1211,8 @@ function PA_Step3JobView() {
 					'  </div>') +
 					'</div>'
 				},
-				me.statsView.getComponent(),
-				{
+								me.pathwayTableView.getComponent(),
+								{
 						xtype: 'tabpanel', id: 'tabcontainer_network', plain: true,
 						deferredRender: false, items: tabContent, border: false,
 						cls: ((me.getModel().getDatabases().length < 2) ? 'onedatabase' : ''),
@@ -1268,19 +1333,76 @@ function PA_Step3JobView() {
 								}, 0.3);
 							}
 						}
-				},
-				// See hasMetaboliteData: gated on the resolved compounds these
-				// panels draw, not on the candidate list that step 2 consumes.
-				(!this.hasMetaboliteData()?null:me.hubAnalysisView.getComponent()),
-				(!this.metaboliteView?null:me.metaboliteView.getComponent()),
-				// MORE Regulation panel — independent of metabolomics presence.
-				// The view returns a hidden container when no rpc data; safe to
-				// always include here.
-				me.regulationView.getComponent(),
-				// MORE Regulator–Target Network — also self-suppresses; mounted
-				// directly under the table for thematic grouping.
-				me.regTargetNetworkView.getComponent(),
-				me.pathwayTableView.getComponent() //THE TABLE PANEL
+				}
+							]
+						},
+						/* MORE regulation: only when the job ran MORE. */
+						(!(me.getModel().getRegulationPerConditionData && me.getModel().getRegulationPerConditionData()) ? null : {
+							title: 'Regulation', itemId: 'mainTabRegulation',
+							items: [
+								me.regulationView.getComponent(),
+								me.regTargetNetworkView.getComponent()
+							]
+						}),
+						/* See hasMetaboliteData: gated on the resolved compounds
+						   these panels draw, not on the candidate list step 2
+						   consumes. */
+						(!this.hasMetaboliteData() ? null : {
+							title: 'Metabolites', itemId: 'mainTabMetabolites',
+							items: [
+								(!this.metaboliteView ? null : me.metaboliteView.getComponent()),
+								me.hubAnalysisView.getComponent()
+							].filter(function(x) { return x !== null; })
+						}),
+						{
+							title: 'Data & mapping', itemId: 'mainTabData',
+							items: [ me.statsView.getComponent() ]
+						},
+						{
+							title: 'Paper', itemId: 'mainTabPaper',
+							items: [{
+								xtype: 'box', cls: 'contentbox',
+								itemId: 'paperPlaceholder',
+								html: '<h2 id="paperAgentSection">Paper</h2>' +
+								      '<p class="infoTip">The Paper agent runs every analysis on this job — QC, enrichment, regulation, comparisons — and drafts a manuscript with publication-grade figures. Its view lands here.</p>'
+							}]
+						}
+					].filter(function(tab) { return tab !== null; }),
+					listeners: {
+						tabchange: function(tabPanel, newCard) {
+							/* A card first rendered by this activation has never
+							   been measured; lay it out, then reflow every
+							   Highcharts instance once -- charts drawn into a
+							   display:none ancestor kept a default width. */
+							setTimeout(function() {
+								if (newCard && !newCard.isDestroyed) {
+									newCard.updateLayout();
+								}
+								if (window.Highcharts && Highcharts.charts) {
+									Highcharts.charts.forEach(function(chart) {
+										if (chart) { try { chart.reflow(); } catch (e) {} }
+									});
+								}
+								/* The MORE regulator-target network draws into a
+								   cytoscape canvas; born in a hidden tab it is
+								   0x0 (measured) until told to re-measure. */
+								if (newCard && newCard.getItemId() === 'mainTabRegulation'
+										&& me.regTargetNetworkView && me.regTargetNetworkView.cy) {
+									try {
+										me.regTargetNetworkView.cy.resize();
+										me.regTargetNetworkView.cy.fit();
+									} catch (e) {}
+								}
+							}, 60);
+							/* The contents rail lists the headings of the tab on
+							   screen; rebuilt with the same delay the database
+							   tabs use, for the same reason. */
+							$.wait(function () {
+								buildAnalysisTOC('#mainViewCenterPanel');
+							}, 0.3);
+						}
+					}
+				}
 			],
 			listeners: {
 				boxready: function() {
@@ -1288,16 +1410,17 @@ function PA_Step3JobView() {
 //					$(".backButton").click(function() {
 //						me.backButtonHandler();
 //					});
+					/* The mapping card lives on its own tab now, so the
+					   button's job is navigation, not folding: no Hide/Show
+					   label dance, no boxready trigger('click') that used to
+					   start the page with the card hidden. */
 					$(".mappingButton").click(function() {
-						var cmp = Ext.getCmp('statsViewContainer');
-						cmp.getEl().toggle();
-
-						var buttonHTML = $(this).html();
-
-						$(this).html(buttonHTML.includes('Hide') ? buttonHTML.replace(/Hide/g, 'Show') : buttonHTML.replace(/Show/g, 'Hide'));
-
-						$('#mainViewCenterPanel').scrollTop(cmp.getEl().dom.offsetTop - 60);
-					}).trigger('click');
+						var tabs = Ext.getCmp('step3MainTabs');
+						var dataTab = tabs && tabs.child('[itemId=mainTabData]');
+						if (tabs && dataTab) {
+							tabs.setActiveTab(dataTab);
+						}
+					});
 
 					$("#resetButton").click(function() {
 						me.resetViewHandler();
@@ -1314,6 +1437,13 @@ function PA_Step3JobView() {
 					   scrollTo on that element is silently swallowed - see
 					   paTocJumpTo in Util.js). */
 					$("#paint_link").click(function() {
+						/* The enrichment table sits on the Pathways tab; make
+						   sure that tab is the one on screen before jumping. */
+						var tabs = Ext.getCmp('step3MainTabs');
+						var pathwaysTab = tabs && tabs.child('[itemId=mainTabPathways]');
+						if (tabs && pathwaysTab && tabs.getActiveTab() !== pathwaysTab) {
+							tabs.setActiveTab(pathwaysTab);
+						}
 						if (typeof paTocJumpTo === "function") {
 							paTocJumpTo("Pathway enrichment");
 						} else {
@@ -4496,6 +4626,15 @@ function PA_Step3PathwayTableView() {
 	***********************************************************************/
 	this.name = "PA_Step3PathwayTableView";
 	this.tableData = null;
+	/* The fold. 888 pathways as one table was most of the page; the top 20
+	   by the selected combined method answer the question the table is opened
+	   for, and the rest are one click away. `searchUnfolded` lifts the fold
+	   while a live search is typed -- a search that could only find matches
+	   inside the visible 20 would silently lie -- and puts it back when the
+	   box clears. */
+	this.foldTo = 20;
+	this.folded = true;
+	this.searchUnfolded = false;
 
 	/***********************************************************************
 	* GETTER AND SETTERS
@@ -5009,6 +5148,30 @@ function PA_Step3PathwayTableView() {
 		gridPanel.initialConfig.columns = columns;
 		gridPanel.reconfigure(tableStore, columns);
 
+		/* A live search over a folded table would only find matches inside
+		   the visible 20 and read as "no results" for everything else. The
+		   search handler is wrapped once: typing lifts the fold, clearing
+		   the box restores it. */
+		if (!gridPanel.paFoldWrapped && gridPanel.textField) {
+			gridPanel.paFoldWrapped = true;
+			/* Listen on the FIELD, not by replacing onTextFieldChange: the
+			   field's change listener captured the original function
+			   reference at init, so a replaced method never fires. Buffered
+			   longer than the search's own 100 ms so the livesearch filter
+			   is already applied when the fold reacts. */
+			gridPanel.textField.on('change', function(field) {
+				var query = field.getValue();
+				var unfolded = (query !== null && query !== "");
+				if (unfolded !== me.searchUnfolded) {
+					me.searchUnfolded = unfolded;
+					me.updateVisiblePathways();
+				} else if (me.searchUnfolded) {
+					/* Query changed while unfolded: refresh the footer count. */
+					me.updateFoldFooter(gridPanel.getStore().getCount());
+				}
+			}, null, { buffer: 160 });
+		}
+
 		// Multi-condition column expansion handler
 		gridPanel.el.on('click', function(e, t) {
 			var el = Ext.get(t);
@@ -5060,6 +5223,38 @@ function PA_Step3PathwayTableView() {
 		return(associatedPathways);
 	};
 
+	/* The one line under the table that says what the fold is doing, and
+	   the click that changes it. A silent cap reads as "this is everything",
+	   which is the exact defect the figure pipeline's caps were cured of. */
+	this.updateFoldFooter = function(fullCount) {
+		var me = this;
+		this._lastFoldCount = fullCount;
+		var footer = this.getComponent().queryById("foldFooter");
+		/* The first updateVisiblePathways runs while the grid is being
+		   reconfigured, before this box has an element; the box's own
+		   afterrender replays the last count. */
+		if (!footer || !footer.getEl()) { return; }
+		var html;
+		if (this.searchUnfolded) {
+			var matches = this.getComponent().queryById("pathwaysGridPanel").getStore().getCount();
+			html = 'Search active — ' + matches + ' match(es) across all ' + fullCount + ' pathways; clear the search to refold.';
+		} else if (this.folded && fullCount > this.foldTo) {
+			html = 'Showing the <b>' + this.foldTo + '</b> most significant of <b>' + fullCount +
+			       '</b> pathways by the selected combined method. ' +
+			       '<a href="javascript:void(0)" class="pa-fold-toggle">Show all ' + fullCount + '</a>';
+		} else if (!this.folded && fullCount > this.foldTo) {
+			html = 'Showing all <b>' + fullCount + '</b> pathways. ' +
+			       '<a href="javascript:void(0)" class="pa-fold-toggle">Show top ' + this.foldTo + ' only</a>';
+		} else {
+			html = fullCount + ' pathway(s).';
+		}
+		footer.update('<div class="pa-fold-footer" style="padding:8px 12px; color:#555;">' + html + '</div>');
+		footer.getEl().select("a.pa-fold-toggle").on("click", function() {
+			me.folded = !me.folded;
+			me.updateVisiblePathways();
+		});
+	};
+
 	//TODO: DOCUMENTAR
 	this.updateVisiblePathways = function(loadRemote=false){
 		var store = this.getComponent().queryById("pathwaysGridPanel").getStore();
@@ -5072,7 +5267,46 @@ function PA_Step3PathwayTableView() {
 			return indexedPathways[elem.get("pathwayID")].isVisible();
 		};
 
-		store.filterBy(filterBy);
+		/* The fold composes with visibility INSIDE one filter function: the
+		   store's filterBy is also what the database checkboxes run through,
+		   and a second independent filter layer would fight it. The top N are
+		   chosen by the same field the table sorts by -- the selected
+		   combined method (or the single omic's p-value column). */
+		/* store.filterBy replaces the whole filter set, which silently
+		   dropped the live search's named filter: typing "insulin" showed
+		   all 774 rows. Capture it and put it back after the fold filter. */
+		var liveFilter = store.filters && store.filters.getByKey
+			&& store.filters.getByKey("livesearch");
+
+		var foldActive = this.folded && !this.searchUnfolded && this.foldTo;
+		if (foldActive) {
+			var sorters = store.sorters && store.sorters.items || [];
+			var foldField = sorters.length ? sorters[0].property
+				: ("combinedSignificancePvalue" + visualOptions.selectedCombinedMethod);
+			var everyRecord = (store.snapshot || store.data).items.slice();
+			var visibleRecords = everyRecord.filter(filterBy);
+			visibleRecords.sort(function(a, b) {
+				var av = parseFloat(a.get(foldField)); if (isNaN(av)) { av = 1; }
+				var bv = parseFloat(b.get(foldField)); if (isNaN(bv)) { bv = 1; }
+				return av - bv;
+			});
+			var keep = {};
+			visibleRecords.slice(0, this.foldTo).forEach(function(record) {
+				keep[record.get("pathwayID")] = true;
+			});
+			var fullCount = visibleRecords.length;
+			store.filterBy(function(elem) {
+				return filterBy(elem) && keep[elem.get("pathwayID")] === true;
+			});
+			if (liveFilter) { store.addFilter(liveFilter); }
+			this.updateFoldFooter(fullCount);
+		} else {
+			var everyRec = (store.snapshot || store.data).items.slice();
+			var unfoldedCount = everyRec.filter(filterBy).length;
+			store.filterBy(filterBy);
+			if (liveFilter) { store.addFilter(liveFilter); }
+			this.updateFoldFooter(unfoldedCount);
+		}
 
 		// First load: update the grid contained p-values
 		this.updatePvaluesFromStore();
@@ -5519,11 +5753,25 @@ function PA_Step3PathwayTableView() {
 			   the enrichment card - the last thing on the page - hung 10px
 			   outside the rail the four cards above it share, and its heading
 			   started 10px left of theirs. */
-			xtype: 'container', cls: "contentbox", style: "max-width:1900px; margin: 5px 10px;", items: [
+			xtype: 'container', cls: "contentbox", style: "max-width:1900px; margin: 5px 10px;", paOwnerView: me, items: [
 				{xtype: 'box', flex: 1, html: '<h2 id="pathwayEnrichmentSection">Pathway enrichment</h2>'},
 				{
 					xtype: "livesearchgrid", itemId: 'pathwaysGridPanel',
 					searchFor: "title",
+					/* Row expansion: the pathway's per-omic detail without
+					   leaving the table. The template defers to a plain
+					   function because the omics a job carries are only known
+					   per record, not when this config is written. */
+					plugins: [{
+						ptype: 'rowexpander',
+						pluginId: 'paRowExpander',
+						expandOnDblClick: false,
+						rowBodyTpl: new Ext.XTemplate(
+							'{[this.renderDetail(values)]}',
+							{ renderDetail: function(values) {
+								return paRenderPathwayRowDetail(values);
+							} })
+					}],
 					defaults: {border: false}, columnLines: true, stripeRows:false,
 					download: {
 						title: 'Paintomics pathways ' + me.getModel().getJobID(),
@@ -5691,6 +5939,15 @@ function PA_Step3PathwayTableView() {
 						me.tipComponent.showBy(iconLink, "tl-bl?", [0, 6]);
 						}
 					}
+				},
+				{xtype: 'box', itemId: 'foldFooter', html: '',
+					listeners: { afterrender: function(box) {
+						var holder = box.up('[paOwnerView]');
+						var view = holder && holder.paOwnerView;
+						if (view && view._lastFoldCount !== undefined) {
+							view.updateFoldFooter(view._lastFoldCount);
+						}
+					} }
 				}]
 			}
 		);
