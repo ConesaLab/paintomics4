@@ -84,6 +84,12 @@ patsy==1.0.2
 # pinned Python 3.11 / numpy 1.26.4 stack.
 matplotlib==3.11.1
 
+# networkx holds the per-job evidence graph the Paper Agent's network tools
+# read (src/classes/AIInterpret/job_graph.py): MORE regulator->target edges,
+# pathway membership, KGML/OmniPath support, pathway similarity. Pure Python,
+# built in-process at run start -- no daemon, nothing new in the deploy image.
+networkx==3.4.2
+
 # --- Image and SVG rendering ---
 # pycairo is deliberately absent: nothing imports it, it is not installed in the
 # working environment, and it needs cairo headers to build. cairosvg renders via

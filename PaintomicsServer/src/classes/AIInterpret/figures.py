@@ -323,6 +323,8 @@ def _register_builtins():
                           ("scatter", t.build_scatter)):
         register_archetype(name, builder,
                            functools.partial(t.values_for, name))
+    from . import figure_network as n
+    register_archetype("network", n.build_network, n.values_for_network)
 
 
 _register_builtins()
