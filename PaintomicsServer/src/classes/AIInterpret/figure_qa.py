@@ -190,7 +190,8 @@ def _check_bundle_complete(bundle_dir, _spec, _values):
 
 
 #: Archetypes whose data cells are a raster grid by construction.
-GRID_ARCHETYPES = ("heatmap", "samplecorr")
+GRID_ARCHETYPES = ("heatmap", "samplecorr", "pathway_diagram")
+# pathway_diagram: the base KEGG map IS a raster by construction.
 
 
 def _check_svg_text_is_text(bundle_dir, _spec, _values):

@@ -124,7 +124,7 @@ PUBLISHED = {
     # v=0.1: the Paper agent's tab -- consent, one progress lane per
     # specialist, the manuscript with the gate's verdict, Markdown export.
     "app/view/PathwayAcquisitionViews/PA_PaperView.js": (
-        "0.1", "04764bc90e491df7b843ad296d85c90497ccc78d894500e51c0c2994290f91c3"),
+        "0.2", "c6f009e3130a4fd52a00910221e29b6b5d40cdb2121d3e22d7dde7c4561d2071"),
     "app/view/PathwayAcquisitionViews/PA_AIInterpretView.js": (
         "1.5", "42b823a635ee930a9ad6aa4f6685c2c8dd0281a546e88ea896341065c74abcf7"),
     "app/view/PathwayAcquisitionViews/PA_Step3RegTargetNetworkView.js": (

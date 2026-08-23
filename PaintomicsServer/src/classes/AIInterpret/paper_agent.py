@@ -35,8 +35,8 @@ from typing import Dict, List, Optional
 logger = logging.getLogger(__name__)
 
 FIGURE_PREFIX = "paperfig"
-MAX_LEAD_TOKENS = 6000
-MAX_NARRATE_TOKENS = 1200
+MAX_LEAD_TOKENS = 9000
+MAX_NARRATE_TOKENS = 1800
 SPECIALIST_ORDER = ("design_qc", "pathway", "enrichment", "network",
                     "metabolite", "literature")
 SECTION_TITLES = {
@@ -305,6 +305,82 @@ def design_qc_analyst(ctx, llm):
     return note
 
 
+def _pathway_diagram_slice(ctx, pw, max_boxes=60, focus_top=8):
+    """Painted-diagram slice for one KEGG pathway: the installed document's
+    box geometry + the job's own values, cropped to the strongest genes."""
+    import math as _math
+    import os
+    if (pw.get("source") or "KEGG") != "KEGG":
+        return None, "only KEGG pathways ship a diagram with box geometry"
+    from pymongo import MongoClient
+    from src.conf.serverconf import (KEGG_DATA_DIR, MONGODB_HOST,
+                                     MONGODB_PORT)
+    organism = ctx.job_instance.getOrganism()
+    pid = str(pw.get("id"))
+    png = os.path.join(KEGG_DATA_DIR, "current", "common", "png",
+                       "map%s.png" % "".join(c for c in pid if c.isdigit()))
+    if not os.path.isfile(png):
+        return None, "no diagram PNG installed for %s" % pid
+    client = MongoClient(MONGODB_HOST, MONGODB_PORT)
+    try:
+        doc = client[organism + "-paintomics"]["kegg"].find_one({"ID": pid})
+    finally:
+        client.close()
+    if not doc:
+        return None, "no pathway document for %s" % pid
+
+    features = ctx.job_instance.getInputGenesData() or {}
+    boxes = []
+    for gene in (doc.get("genes") or []):
+        if gene.get("x") is None or gene.get("y") is None:
+            continue
+        feature = features.get(str(gene.get("id")))
+        if feature is None:
+            continue
+        best = None
+        for ov in (feature.getOmicsValues() or []):
+            for v in (ov.getValues() or []):
+                if isinstance(v, (int, float)) and _math.isfinite(v):
+                    if best is None or abs(v) > abs(best):
+                        best = float(v)
+        if best is None:
+            continue
+        boxes.append({"label": feature.getName() or str(gene.get("id")),
+                      "x": float(gene.get("x")), "y": float(gene.get("y")),
+                      "w": float(gene.get("width") or 46),
+                      "h": float(gene.get("height") or 17),
+                      "value": best})
+    if not boxes:
+        return None, "no matched gene on %s carries a drawable value" % pid
+    boxes.sort(key=lambda b: -abs(b["value"]))
+    boxes = boxes[:max_boxes]
+
+    # Crop to the strongest genes' neighbourhood -- "the local region you
+    # want to explain" -- unless they span most of the map anyway.
+    focus = boxes[:focus_top]
+    from PIL import Image
+    with Image.open(png) as im:
+        width, height = im.size
+    x0 = max(0, min(b["x"] - b["w"] for b in focus) - 60)
+    y0 = max(0, min(b["y"] - b["h"] for b in focus) - 60)
+    x1 = min(width, max(b["x"] + b["w"] for b in focus) + 60)
+    y1 = min(height, max(b["y"] + b["h"] for b in focus) + 60)
+    crop = None
+    if (x1 - x0) * (y1 - y0) < 0.7 * width * height:
+        crop = [round(x0), round(y0), round(x1), round(y1)]
+        boxes = [b for b in boxes
+                 if x0 <= b["x"] <= x1 and y0 <= b["y"] <= y1]
+
+    for b in boxes:
+        ctx.ledger.add("value", round(b["value"], 4),
+                       {"pathway": pid, "feature": b["label"]},
+                       "pathway_diagram")
+    return {"pathway": {"id": pid, "name": pw.get("name")},
+            "png_path": png, "boxes": boxes, "crop": crop,
+            "conditions": [], "features": [1], "colours": {},
+            "pathways": []}, None
+
+
 def pathway_analyst(ctx, llm):
     note = AnalysisNote("pathway")
     ranked = []
@@ -347,13 +423,68 @@ def pathway_analyst(ctx, llm):
         "enrichment-top")
     if fig_id:
         note.figures.append(fig_id)
+
+    # The reader's ask, verbatim: when the text explains a pathway, PAINT that
+    # pathway and show the local region. Top two KEGG pathways get their
+    # diagram painted with the job's values, cropped to the strongest genes.
+    painted = 0
+    for p, pw in top:
+        if painted >= 2:
+            break
+        diagram_slice, why = _pathway_diagram_slice(ctx, pw)
+        if diagram_slice is None:
+            continue
+        fig_id, err = _make_figure(
+            ctx, "pathway_diagram", diagram_slice,
+            "The %s diagram painted with this job's strongest values."
+            % pw.get("name"),
+            "diagram-%s" % pw.get("id"), width="double")
+        if fig_id:
+            note.figures.append(fig_id)
+            painted += 1
+            note.evidence.append(
+                "painted diagram of %s (%s): %d matched gene boxes coloured "
+                "by each gene's strongest value%s"
+                % (pw.get("name"), pw.get("id"),
+                   len(diagram_slice["boxes"]),
+                   "; cropped to the region of the strongest genes"
+                   if diagram_slice["crop"] else ""))
+    # Per-gene depth for the three strongest pathways: the values a richer
+    # narrative rests on, every number ledgered.
+    for p, pw in top[:3]:
+        for gene in (pw.get("top_genes") or [])[:4]:
+            symbol = gene.get("symbol")
+            if not symbol:
+                continue
+            for omic in ctx.matrix.omics():
+                layer = ctx.matrix.get(omic).deduplicated()
+                try:
+                    idx = [l.upper() for l in layer.labels].index(
+                        str(symbol).upper())
+                except ValueError:
+                    continue
+                values = layer.values[idx]
+                finite = [v for v in values if not math.isnan(v)]
+                if not finite:
+                    continue
+                peak = max(finite, key=abs)
+                tag = ctx.ledger.tag("value", round(peak, 4),
+                                     {"feature": symbol, "omic": omic},
+                                     "gene_measurements")
+                cond = layer.columns[values.index(peak)]                     if peak in values else "?"
+                note.evidence.append(
+                    "%s in %s (%s): strongest value %s %s at %s"
+                    % (symbol, pw.get("name"), omic, round(peak, 3), tag,
+                       cond))
+                break
+
     tsv = ["pathway_id\tname\tsource\tcombined_p"]
     for p, pw in ranked[:40]:
         tsv.append("%s\t%s\t%s\t%r" % (pw.get("id"), pw.get("name"),
                                        pw.get("source"), p))
     note.tables.append({"title": "Pathway enrichment (top 40)",
                         "tsv": "\n".join(tsv) + "\n"})
-    note.findings = _narrate(llm, "pathway", note.evidence)
+    note.findings = _narrate(llm, "pathway", note.evidence, n_max=8)
     return note
 
 
@@ -460,7 +591,7 @@ def enrichment_analyst(ctx, llm):
                 "Overlap of %s and %s." % (a, b), "venn")
             if fig_id:
                 note.figures.append(fig_id)
-    note.findings = _narrate(llm, "enrichment", note.evidence)
+    note.findings = _narrate(llm, "enrichment", note.evidence, n_max=7)
     return note
 
 
@@ -537,7 +668,7 @@ def metabolite_analyst(ctx, llm):
     return note
 
 
-def literature_analyst(ctx, top_n=3, per_query=3):
+def literature_analyst(ctx, top_n=8, per_query=4):
     """A quote shelf, no prose: papers for the top pathways, with abstracts."""
     from . import pubmed_client
     note = AnalysisNote("literature")
@@ -572,6 +703,41 @@ def literature_analyst(ctx, top_n=3, per_query=3):
                 "authors": paper.get("first_author") or "",
                 "tag": pw.get("name"),
             })
+    # Gene-level queries too: the strongest movers are what a Discussion
+    # actually argues about. Two queries, capped, same shelf rules.
+    try:
+        from . import qc as _qc
+        movers = []
+        for omic in ctx.matrix.omics():
+            layer = ctx.matrix.get(omic)
+            if layer.kind == "gene":
+                movers.extend(m["feature"] for m in
+                              _qc.top_movers(layer.deduplicated(), k=3))
+        for symbol in movers[:2]:
+            query = "%s %s" % (symbol, "mouse" if organism == "mmu"
+                               else organism)
+            try:
+                client = pubmed_client.PubMedClient()
+                found = client.fetch_abstracts(
+                    client.search(query, max_results=per_query))
+            except Exception:
+                continue
+            for paper in found or []:
+                pmid = str(paper.get("pmid") or "")
+                if not pmid or pmid in seen or not paper.get("abstract"):
+                    continue
+                seen.add(pmid)
+                ctx.papers.append({
+                    "ref_index": len(ctx.papers) + 1, "pmid": pmid,
+                    "title": paper.get("title") or "",
+                    "abstract": paper.get("abstract") or "",
+                    "year": paper.get("year") or "",
+                    "journal": paper.get("journal") or "",
+                    "authors": paper.get("first_author") or "",
+                    "tag": symbol})
+    except Exception as exc:
+        logger.warning("[paper] gene-level literature failed: %s", exc)
+
     note.evidence = ["[%d] %s (%s) — %s" % (p["ref_index"], p["title"],
                                             p["year"], p["tag"])
                      for p in ctx.papers]
@@ -603,8 +769,11 @@ HARD RULES
 - Call out a figure by pasting its callout line exactly where it belongs:
   ![Fig](figure:<figure-id>)  -- each figure at most once, in the most
   relevant subsection.
-- Claim only what the notes say. Do not invent mechanisms; the Discussion
-  interprets the findings against the cited abstracts, at most 3 paragraphs.
+- Claim only what the notes say. Do not invent mechanisms. The Discussion
+  interprets the findings against the cited abstracts in 3-5 substantial
+  paragraphs: engage every reference you cite (what it showed, how this
+  dataset agrees or differs), and cite widely across the shelf rather than
+  reusing one reference.
 - No bullet lists in Results; continuous prose."""
 
 
@@ -620,7 +789,7 @@ def _lead_prompt(ctx):
             lines.append("findings:")
             lines += ["  " + f for f in note.findings]
         lines.append("evidence (numbers carry [fN] ids -- write {{fN}}):")
-        lines += ["  " + e.replace("\n", "\n  ") for e in note.evidence[:12]]
+        lines += ["  " + e.replace("\n", "\n  ") for e in note.evidence[:24]]
         if note.caveats:
             lines.append("caveats: " + "; ".join(note.caveats))
         for fig in note.figures:

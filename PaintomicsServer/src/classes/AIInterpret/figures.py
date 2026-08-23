@@ -257,7 +257,15 @@ def build_bundle(job_instance, fig_id, archetype, data_slice, spec):
     from . import figure_qa, figure_sandbox
 
     builder, _values_for = _archetype(archetype)
-    data_tsv, script, legend = builder(data_slice, spec)
+    built = builder(data_slice, spec)
+    # A builder may return a fourth element: a source file to copy into the
+    # bundle (the pathway diagram's base PNG). The bundle stays reproducible
+    # offline -- figure.py reads only its own directory.
+    extra_file = None
+    if len(built) == 4:
+        data_tsv, script, legend, extra_file = built
+    else:
+        data_tsv, script, legend = built
 
     # An empty panel is worse than no panel: the store-time guarantee shows
     # every figure to the reader, so a bundle with a header and no rows is
@@ -269,6 +277,9 @@ def build_bundle(job_instance, fig_id, archetype, data_slice, spec):
         raise EmptyFigure(_empty_reason(archetype, data_slice))
 
     bundle = _bundle_dir(job_instance, fig_id)
+    if extra_file:
+        import shutil
+        shutil.copy(extra_file, os.path.join(bundle, "map.png"))
     with open(os.path.join(bundle, "data.tsv"), "w") as fh:
         fh.write(data_tsv)
     with open(os.path.join(bundle, "figure.py"), "w") as fh:
@@ -339,6 +350,9 @@ def _register_builtins():
                        g.values_for_nes_dotplot)
     register_archetype("gsea_running", g.build_gsea_running,
                        g.values_for_gsea_running)
+    from . import figure_pathway as pd
+    register_archetype("pathway_diagram", pd.build_pathway_diagram,
+                       pd.values_for_pathway_diagram)
 
 
 _register_builtins()
