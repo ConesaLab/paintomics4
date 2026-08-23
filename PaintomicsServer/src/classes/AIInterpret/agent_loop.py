@@ -66,6 +66,8 @@ from src.classes.AIInterpret.context_builder import (
     triage_pathways, build_gene_index, gene_measurements, pathway_gene_list,
     _build_omic_header_map, _gene_entry,
 )
+from src.classes.AIInterpret import figure_style
+from src.classes.AIInterpret import figures as figures_mod
 from src.classes.AIInterpret import neighbours as neighbours_mod
 from src.classes.AIInterpret.llm_client import LLMClient
 from src.classes.AIInterpret.pubmed_client import PubMedClient
@@ -726,6 +728,8 @@ class LoopContext(AgentContext):
     archived: list = field(default_factory=list)         # events already on disk
     hard_deadline: float = 0.0                          # loop must be done by
     delegation_cache: dict = field(default_factory=dict)  # resolved key -> report
+    figures: list = field(default_factory=list)          # stored figure bundles
+    figure_palette: dict = field(default_factory=dict)  # condition -> colour, ONE per run
     quotes: dict = field(default_factory=dict)          # ref_index -> verbatim quote
     flagged_citations: set = field(default_factory=set)   # unquotable at last check
 
@@ -2377,21 +2381,42 @@ def submit_report(ctx: RunContextWrapper[LoopContext], report_markdown: str) -> 
     # arrives thin and undelegated says so; the second goes through regardless,
     # because a tool that can refuse twice is a workflow step wearing a tool's
     # clothes.
-    time_to_act = c.hard_deadline - time.time()
-    if (c.submit_attempts == 1 and not c.delegated
-            and len(report_markdown.strip()) < 9000
-            and time_to_act > NUDGE_MIN_SECONDS):
-        out = ("NOT SUBMITTED YET (this is the only time you will be asked). You "
-               "have not delegated any pathway analysis, and %d characters cannot "
-               "cover %d enriched pathways -- the per-pathway detail is what makes "
-               "a report usable. Call delegate_interpretation over the top "
-               "clusters (two calls cover everything, ~30 s each), then submit "
-               "again. If you have a considered reason to submit as it stands, "
-               "call submit_report again now and it will be accepted."
-               % (len(report_markdown.strip()), len(c.pathways)))
-        _trace(c, "submit_report", "%d chars, no delegation"
-               % len(report_markdown.strip()), "nudged once", t0)
-        return out
+    # Measured against the RUN's end, not `hard_deadline`.
+    #
+    # `hard_deadline` is already `start + AGENT_RUN_SECONDS - GATE_RESERVE`
+    # (150 s), and the loop tells the agent to start writing at
+    # `hard_deadline - WRITE_RESERVE` (110 s). So the window in which a nudge
+    # was allowed -- deadline minus NUDGE_MIN_SECONDS (90 s) -- opened 20
+    # seconds before writing began and closed while the report was still being
+    # written. Measured: across six live runs "NOT SUBMITTED YET" appears ZERO
+    # times, so all three nudges (delegation, citations, figures) are inert at
+    # the configured 600 s budget -- including the citation nudge this file
+    # documents as having improved 10 of 10 runs.
+    #
+    # The gate reserve is the verification gate's to spend, not the nudge's: a
+    # nudge happens before submission and costs the AGENT one more turn. So the
+    # question is how much of the agent's own run is left.
+    time_to_act = (c.started_at + AGENT_RUN_SECONDS) - time.time()
+    # ONE nudge, carrying EVERY first-submit problem.
+    #
+    # These used to be separate `if submit_attempts == 1` blocks that each
+    # returned, so the first one to fire spent the whole budget and the rest
+    # were unreachable. Measured: across three live runs the citation nudge
+    # fired 27-30 times and the figures nudge -- checked after it -- fired
+    # ZERO times, while every one of those runs shipped figures it never
+    # cited. A check that cannot fire is not a check.
+    #
+    # The rule the separate blocks were protecting still holds: asked once,
+    # then accepted whatever the agent decides. Collecting the problems keeps
+    # that promise and stops one of them hiding the others.
+    problems = []
+    if not c.delegated and len(report_markdown.strip()) < 9000:
+        problems.append(
+            "You have not delegated any pathway analysis, and %d characters "
+            "cannot cover %d enriched pathways -- the per-pathway detail is "
+            "what makes a report usable. Call delegate_interpretation over the "
+            "top clusters (two calls cover everything, ~30 s each)."
+            % (len(report_markdown.strip()), len(c.pathways)))
     if len(report_markdown.strip()) < 500:
         out = ("REJECTED: that is not a report (%d chars). Write the full "
                "analysis: Key Findings, Cross-Pathway Themes, Detailed Pathway "
@@ -2410,23 +2435,73 @@ def submit_report(ctx: RunContextWrapper[LoopContext], report_markdown: str) -> 
     # that can refuse twice is a workflow step wearing a tool's clothes.
     still_flagged = sorted(i for i in c.flagged_citations
                            if ("[%d]" % i) in report_markdown)
-    if (c.submit_attempts == 1 and still_flagged
+    if still_flagged:
+        problems.append(
+            "Your own check_my_citations run found no supporting quote for %s, "
+            "and they are still in this draft -- the gate will delete each one "
+            "along with the sentence carrying it. Fix them the way that tool "
+            "suggested (cite another paper, soften the claim, or read_paper and "
+            "quote what you find)."
+            % ", ".join("[%d]" % i for i in still_flagged[:10]))
+    # A figure callout is a claim like any other: `![Fig. 2](figure:fig2-x)`
+    # must name a bundle this run actually produced. An id that does not exist
+    # renders as a broken image for the reader and is indistinguishable, in the
+    # markdown, from a figure that was made -- so it is rejected outright
+    # rather than nudged. Citing one that FAILED its standards checks is a
+    # different mistake and gets the one shared nudge.
+    cited_ids = set(re.findall(r"\(figure:([A-Za-z0-9_.-]+)\)", report_markdown))
+    known = {f["id"]: f for f in c.figures}
+    unknown = sorted(cited_ids - set(known))
+    if unknown:
+        out = ("REJECTED: the report cites %d figure(s) that do not exist: %s. "
+               "Only ids returned by make_figure can be cited%s."
+               % (len(unknown), ", ".join(unknown[:6]),
+                  "; this run made none" if not known else
+                  " -- this run made: " + ", ".join(sorted(known))))
+        _trace(c, "submit_report", "%d unknown figure id(s)" % len(unknown),
+               "rejected", t0)
+        return out
+    if known and not cited_ids:
+        problems.append(
+            "You made %d figure(s) and the report cites none of them, so the "
+            "reader gets none. Paste each callout make_figure returned into "
+            "the section that discusses its finding: %s"
+            % (len(known), ", ".join("![Fig. %d](figure:%s)" % (i + 1, f["id"])
+                                     for i, f in enumerate(c.figures)
+                                     if f.get("id"))[:500]))
+    failed_cited = sorted(i for i in cited_ids if not known[i]["qa_passed"])
+    if failed_cited:
+        problems.append(
+            "You cite %s, which did not pass its standards checks. Either say "
+            "so in the text where it appears, or drop the callout and keep the "
+            "sentence." % ", ".join(failed_cited[:6]))
+
+    # The single nudge. Asked once; the next submit is accepted whatever the
+    # agent decides, which is what keeps this a tool rather than a workflow
+    # step wearing a tool's clothes.
+    if (c.submit_attempts == 1 and problems
             and time_to_act > NUDGE_MIN_SECONDS):
         out = ("NOT SUBMITTED YET (this is the only time you will be asked). "
-               "Your own check_my_citations run found no supporting quote for "
-               "%s, and they are still in this draft -- the gate will delete "
-               "each one along with the sentence carrying it. Fix them the way "
-               "that tool suggested (cite another paper, soften the claim, or "
-               "read_paper and quote what you find), then submit. If you have a "
-               "considered reason to submit as it stands, call submit_report "
-               "again now and it will be accepted."
-               % ", ".join("[%d]" % i for i in still_flagged[:10]))
-        _trace(c, "submit_report", "%d chars, %d flagged citations"
-               % (len(report_markdown.strip()), len(still_flagged)),
+               "%d thing(s) to fix first:\n\n%s\n\nFix what you agree with and "
+               "submit again -- the next submit is accepted as it stands."
+               % (len(problems),
+                  "\n\n".join("%d. %s" % (i + 1, p) for i, p in enumerate(problems))))
+        _trace(c, "submit_report", "%d problem(s)" % len(problems),
                "nudged once", t0)
         return out
+
     c.submitted_report = report_markdown
-    _trace(c, "submit_report", "%d chars" % len(report_markdown), "accepted", t0)
+    # The trace carries the nudge's own inputs, always. Two rounds of this
+    # investigation were spent inferring from the outcome whether a nudge had
+    # fired -- first from a log line that tool RESULTS never reach, then from a
+    # window I had mis-derived. A gate that does not record why it did nothing
+    # cannot be debugged from a stored run, and every run here is stored.
+    _trace(c, "submit_report",
+           "%d chars" % len(report_markdown),
+           "accepted (attempt %d, %d problem(s) found, %ds of run left, "
+           "nudge needs >%ds)"
+           % (c.submit_attempts, len(problems), int(time_to_act),
+              int(NUDGE_MIN_SECONDS)), t0)
     return "SUBMITTED. Reply with the single word DONE and stop."
 
 
@@ -2561,6 +2636,120 @@ def _neighbour_block(ctx, found, steps):
     return "\n".join(lines)
 
 
+@function_tool(failure_error_function=_tool_failure("make_figure"))
+def make_figure(ctx: RunContextWrapper[LoopContext], archetype: str,
+                conclusion: str, genes: list[str] = [], pathway_id: str = "",
+                title: str = "", width: str = "single") -> str:
+    """Draw a publication-grade figure from data you already hold, and get back a callout to paste. archetype: timecourse | heatmap | enrichment | scatter. conclusion is the ONE sentence the figure proves -- it becomes the legend's first line, so write the claim, not the topic. Name EITHER genes (symbols; timecourse/heatmap/scatter) OR pathway_id (its matched genes); enrichment needs neither and uses the significant pathways. You never supply numbers -- the values are read from the job, so a figure cannot disagree with your text. Costs a render (seconds); eight per report."""
+    c = ctx.context
+    t0 = time.time()
+    guard = _time_guard(c)
+    if guard:
+        return guard
+    archetype = (archetype or "").strip().lower()
+    if archetype not in figures_mod.ARCHETYPES:
+        out = "archetype must be one of %s" % ", ".join(figures_mod.ARCHETYPES)
+        _trace(c, "make_figure", archetype, out, t0)
+        return _spend(c, out, "make_figure")
+    if not (conclusion or "").strip():
+        out = ("A figure needs its conclusion sentence: it is what the legend "
+               "opens with and what the QA check looks for.")
+        _trace(c, "make_figure", archetype, out, t0)
+        return _spend(c, out, "make_figure")
+    if len(c.figures) >= figures_mod.FIGURE_CAP:
+        out = ("Figure cap reached (%d per report). The %d already made are the "
+               "ones this report can show." % (figures_mod.FIGURE_CAP, len(c.figures)))
+        _trace(c, "make_figure", archetype, "cap", t0)
+        return _spend(c, out, "make_figure")
+
+    conditions = figures_mod._conditions(c.job_instance)
+    if not c.figure_palette:
+        # Assigned ONCE per run: the same condition must be the same colour in
+        # every panel, and a per-figure assignment is how panel b ends up
+        # disagreeing with panel a.
+        c.figure_palette = figure_style.condition_colours(conditions)
+
+    note, missing = "", []
+    if archetype == "enrichment":
+        rows = figures_mod.resolve_enrichment(c)
+        if not rows:
+            out = "No pathway clears p<0.05, so an enrichment figure would be empty."
+            _trace(c, "make_figure", archetype, out, t0)
+            return _spend(c, out, "make_figure")
+        data_slice = {"pathways": rows, "conditions": conditions,
+                      "features": [], "colours": dict(c.figure_palette)}
+    else:
+        if pathway_id:
+            pathway = figures_mod.resolve_pathway(c, pathway_id)
+            if pathway is None:
+                out = "Pathway %s is not in this job's ranked list." % pathway_id
+                _trace(c, "make_figure", archetype, out, t0)
+                return _spend(c, out, "make_figure")
+            rows = figures_mod.resolve_pathway_genes(c.job_instance, pathway)
+        else:
+            rows, missing = figures_mod.resolve_genes(c.job_instance, genes)
+        if not rows:
+            out = ("None of those features carry values in this job%s -- nothing "
+                   "to draw." % (": %s" % ", ".join(missing[:8]) if missing else ""))
+            _trace(c, "make_figure", archetype, out, t0)
+            return _spend(c, out, "make_figure")
+        if missing:
+            # Named and returned, never silently dropped: a figure of six of the
+            # ten features asked for, unremarked, is a misleading figure.
+            note = ("not in this job, so not drawn: %s"
+                    % ", ".join(sorted(set(missing))[:8]))
+        data_slice = {"conditions": conditions, "features": rows,
+                      "colours": dict(c.figure_palette), "pathways": []}
+
+    has_negative = any(v < 0 for row in data_slice["features"]
+                       for v in row.get("values") or [])
+    spec = {"archetype": archetype, "conclusion": conclusion.strip(),
+            "title": (title or "").strip(), "width": width or "single",
+            "has_negative": has_negative, "centre_zero": None,
+            "n": len(data_slice["features"]) or len(data_slice["pathways"]),
+            "test": None}
+    # Reserve the slot BEFORE building. Sub-agents call this concurrently, and
+    # `len(c.figures) + 1` computed at build time gave two figures the same
+    # number: one live run produced fig1-, fig1-, fig3-, fig3- while telling
+    # the agent "Fig. 1" and "Fig. 2" for the first two. A number that does not
+    # match its own id is a number nobody can paste with confidence.
+    c.figures.append({"id": None, "archetype": archetype,
+                      "conclusion": conclusion.strip(), "qa_passed": False,
+                      "qa": [], "rendered": False, "bundle": ""})
+    index = len(c.figures)
+    slot = c.figures[index - 1]
+    fig_id = "fig%d-%s" % (index, figures_mod._slug(conclusion))
+    slot["id"] = fig_id
+    try:
+        bundle, (passed, lines), result = figures_mod.build_bundle(
+            c.job_instance, fig_id, archetype, data_slice, spec)
+    except figures_mod.EmptyFigure as exc:
+        # Nothing to draw is not a crash, and the agent can still act on it:
+        # say which way the slice came out empty and give the slot back, so
+        # the answer is "choose a different archetype", not "you have seven
+        # figures left and one empty panel the reader will be shown".
+        c.figures.pop(index - 1) if c.figures[index - 1] is slot else None
+        out = ("No figure was drawn, and this did not cost you a figure: %s"
+               % exc)
+        _trace(c, "make_figure", archetype, "empty", t0)
+        return _spend(c, out, "make_figure")
+    except Exception as exc:                      # a failed figure is data
+        logger.warning("[%s][loop] make_figure failed: %s", c.job_id, exc,
+                       exc_info=True)
+        c.figures.pop(index - 1) if c.figures[index - 1] is slot else None
+        out = "The figure could not be built (%s: %s)." % (type(exc).__name__, exc)
+        _trace(c, "make_figure", archetype, "error", t0)
+        return _spend(c, out, "make_figure")
+
+    slot.update({"bundle": bundle, "qa_passed": bool(passed), "qa": lines,
+                 "rendered": bool(getattr(result, "ok", False))})
+    out = figures_mod.figure_block(fig_id, index, spec, passed, lines,
+                                   result, note)
+    _trace(c, "make_figure", "%s/%s" % (archetype, fig_id),
+           "qa %s" % ("pass" if passed else "fail"), t0)
+    return _spend(c, out, "make_figure")
+
+
 @function_tool(failure_error_function=_tool_failure("list_pathway_genes"))
 def list_pathway_genes(ctx: RunContextWrapper[LoopContext],
                        pathway_names: list[str],
@@ -2609,8 +2798,119 @@ def list_pathway_genes(ctx: RunContextWrapper[LoopContext],
     return out
 
 
+@function_tool(failure_error_function=_tool_failure("test_gene_set"))
+def test_gene_set(ctx: RunContextWrapper[LoopContext], set_name: str,
+                  genes: list[str], omic: str = "") -> str:
+    """Test whether a gene set YOU name is enriched among this job's significant features. Use it for a published signature, a hallmark/GO/Reactome set you know by name, or the overlap list from another paper -- anything that is not one of the pathway databases already loaded. genes: the symbols in that set. omic: restrict to one layer (e.g. Proteomics) to ask whether the set moves in one layer and not another. Returns a hypergeometric p-value against THIS experiment's measured genes, how many of your symbols were measured at all, and the up/down split of the significant members."""
+    c = ctx.context
+    t0 = time.time()
+    name = (set_name or "").strip() or "unnamed set"
+    from . import gene_sets as gene_sets_mod
+    try:
+        res = gene_sets_mod.test_gene_set(c.job_instance, genes or [], omic or None)
+    except Exception as exc:                       # noqa: BLE001
+        logger.warning("[%s][loop] test_gene_set failed: %s", c.job_id, exc,
+                       exc_info=True)
+        _trace(c, "test_gene_set", name, "error", t0)
+        return _spend(c, "The gene set could not be tested (%s)." % exc,
+                      "test_gene_set")
+    out = gene_sets_mod.format_result(name, res)
+    _trace(c, "test_gene_set", "%s/%d" % (name, res.get("measured") or 0),
+           "p=%s" % (("%.3g" % res["p_value"]) if "p_value" in res else "n/a"), t0)
+    return _spend(c, out, "test_gene_set")
+
+
+@function_tool(failure_error_function=_tool_failure("differential_test"))
+def differential_test(ctx: RunContextWrapper[LoopContext], omic: str,
+                      condition_a: str, condition_b: str) -> str:
+    """Run a per-feature statistical test between two conditions, using the REPLICATES the user uploaded. Gives log2 fold change, p and BH q per feature, plus how many are significant and in which direction -- the numbers a Results section needs and that per-condition means cannot give. Only works when the upload carried replicate columns; it tells you if it did not, and lists the conditions you can name. Quote q, and say the test and the n."""
+    c = ctx.context
+    t0 = time.time()
+    from . import differential as diff_mod
+    try:
+        res = diff_mod.differential_test(c.job_instance, omic, condition_a,
+                                         condition_b)
+    except Exception as exc:                       # noqa: BLE001
+        logger.warning("[%s][loop] differential_test failed: %s", c.job_id, exc,
+                       exc_info=True)
+        _trace(c, "differential_test", omic, "error", t0)
+        return _spend(c, "The differential test could not be run (%s)." % exc,
+                      "differential_test")
+    out = diff_mod.format_result(res)
+    _trace(c, "differential_test", "%s/%s-vs-%s" % (omic, condition_a, condition_b),
+           ("%d sig" % res["significant"]) if "significant" in res else "refused",
+           t0)
+    return _spend(c, out, "differential_test")
+
+
+@function_tool(failure_error_function=_tool_failure("sample_ordination"))
+def sample_ordination(ctx: RunContextWrapper[LoopContext], omic: str) -> str:
+    """Project the SAMPLES of one omic on their first two principal components, and say whether the conditions separate. This is the question a Results section opens with -- do the groups actually differ, and is any sample an outlier -- and it is the check that tells you how much weight a per-gene story can carry. Needs an upload with replicates; it says so if there are none. Report what it shows BEFORE interpreting pathways, including when the groups overlap."""
+    c = ctx.context
+    t0 = time.time()
+    from . import ordination as ord_mod
+    try:
+        header = _replicate_header(c.job_instance, omic)
+        res = ord_mod.ordinate(c.job_instance, omic, header)
+        out = ord_mod.format_result(res, ord_mod.separation(res))
+    except Exception as exc:                       # noqa: BLE001
+        logger.warning("[%s][loop] sample_ordination failed: %s", c.job_id, exc,
+                       exc_info=True)
+        _trace(c, "sample_ordination", omic, "error", t0)
+        return _spend(c, "The ordination could not be run (%s)." % exc,
+                      "sample_ordination")
+    _trace(c, "sample_ordination", omic,
+           ("PC1 %.0f%%" % res["pc1_percent"]) if "pc1_percent" in res else "refused", t0)
+    return _spend(c, out, "sample_ordination")
+
+
+def _replicate_header(job_instance, omic_name):
+    """The per-omic sample names PaintOmics derived from the upload header."""
+    for bucket in ("geneBasedInputOmics", "compoundBasedInputOmics"):
+        for omic in (getattr(job_instance, bucket, None) or []):
+            if (omic.get("omicName") or "").strip() != (omic_name or "").strip():
+                continue
+            header = list(omic.get("sampleHeader") or [])
+            mapping = omic.get("replicateMapping") or []
+            if header and mapping and all(isinstance(m, int) for m in mapping):
+                counts = {}
+                names = []
+                for sample in mapping:
+                    if not (0 <= sample < len(header)):
+                        names.append("unassigned")
+                        continue
+                    counts[sample] = counts.get(sample, 0) + 1
+                    names.append("%s_rep%d" % (header[sample], counts[sample]))
+                return names
+    return None
+
+
+@function_tool(failure_error_function=_tool_failure("compare_sets"))
+def compare_sets(ctx: RunContextWrapper[LoopContext],
+                 name_a: str, genes_a: list[str],
+                 name_b: str, genes_b: list[str], omic: str = "") -> str:
+    """Overlap two feature lists WITH a statistic: how many they share, how many they would share by chance in this experiment, Jaccard, and a hypergeometric p. Use it whenever two results ought to agree -- the significant genes of two contrasts, the same pathway in two layers, your list against a published one. The background is what THIS experiment measured, never the genome, and the reply says what that was."""
+    c = ctx.context
+    t0 = time.time()
+    from . import set_overlap as overlap_mod
+    pairs = [(name_a or "set A", list(genes_a or [])),
+             (name_b or "set B", list(genes_b or []))]
+    try:
+        res = overlap_mod.compare(c.job_instance, pairs, omic or None)
+        out = overlap_mod.format_result(res)
+    except Exception as exc:                       # noqa: BLE001
+        logger.warning("[%s][loop] compare_sets failed: %s", c.job_id, exc,
+                       exc_info=True)
+        _trace(c, "compare_sets", "%s/%s" % (name_a, name_b), "error", t0)
+        return _spend(c, "The overlap could not be computed (%s)." % exc, "compare_sets")
+    shared = res["pairs"][0]["shared"] if res.get("pairs") else "refused"
+    _trace(c, "compare_sets", "%s/%s" % (name_a, name_b), "shared %s" % shared, t0)
+    return _spend(c, out, "compare_sets")
+
+
 TOOLBELT = [get_experiment_overview, get_pathway_details,
-            list_pathway_genes, get_gene_measurements,
+            list_pathway_genes, get_gene_measurements, make_figure,
+            test_gene_set, differential_test, sample_ordination, compare_sets,
             cluster_pathways, search_literature, read_paper, notebook_write,
             check_my_citations, delegate_interpretation, submit_report]
 
@@ -2654,6 +2954,12 @@ WHAT MUST NOT CHANGE
   fact. Carry each one to whichever sentence now carries its claim. Do not
   renumber, do not add new markers, do not cite anything not already cited.
 - Every numeric value, gene symbol, p-value and direction of change.
+- **Every figure callout `![Fig. N](figure:<id>)`, on its own line, in the
+  subsection that discusses its finding.** The panel it points at exists, was
+  drawn from this job's own values and passed its quality checks; dropping the
+  callout is dropping a finding the reader can SEE. Keep the id exactly --
+  never invent one, never renumber the ids -- and renumber only the "Fig. N"
+  label if your ordering changes. A rewrite that loses a callout is discarded.
 - The "### References" section at the end, exactly as it stands.
 
 EVERY ONE OF THESE PATHWAYS MUST STILL BE DISCUSSED BY NAME:
@@ -3100,6 +3406,17 @@ async def _write_results_section(agent, ctx, report, cluster_text, pathways,
         low = str(text).lower()
         return {n for n in names if n and n.lower() in low}
 
+    def _figure_callouts(text):
+        """The figure callouts in a report, as a set of ids.
+
+        Conserved across the Results rewrite exactly like citation markers.
+        Measured: a Lead submitted a 9 kB draft carrying its callouts and the
+        56 kB report the reader got carried none -- the rewrite reorganises
+        prose and drops the image markdown, silently, which is the same
+        failure the marker conservation above was built for.
+        """
+        return set(re.findall(r"\]\((?:figure:)([A-Za-z0-9_.-]+)\)", text or ""))
+
     def _body_markers(text):
         """Markers in the PROSE, not in the reference list.
 
@@ -3151,6 +3468,11 @@ async def _write_results_section(agent, ctx, report, cluster_text, pathways,
             reasons.append("droppedpathways_%d" % len(pw_before - cand_pw))
         if "### References" in report and "### References" not in chunked:
             reasons.append("no_references")
+        lost_figs = _figure_callouts(report) - _figure_callouts(chunked)
+        if lost_figs:
+            # A dropped figure is a dropped claim: the panel exists, was
+            # checked, and the sentence that pointed at it is gone.
+            reasons.append("droppedfigures_%d" % len(lost_figs))
         if reasons:
             stats["results_rejected"] = ",".join(reasons)
             stats["results_s"] = time.time() - t0
@@ -4298,4 +4620,16 @@ def run_agent_loop_workflow(job_instance, job_id, experiment_design,
 
     report, papers, ctx = asyncio.run(_with_deadline())
     stats["total_s"] = time.time() - t0
-    return {"report": report, "papers": papers, "stats": stats}
+    # The figure bundles are on disk under the job's own output directory; what
+    # travels here is the manifest the stored record needs to render callouts
+    # and offer downloads. `bundle` is an absolute path and is deliberately NOT
+    # included: the servlet builds the client-visible URL from the job, and a
+    # server path in a stored record is one edit away from being served.
+    figures = [{"id": f["id"], "archetype": f["archetype"],
+                "conclusion": f["conclusion"], "qa_passed": f["qa_passed"],
+                "qa": f["qa"], "rendered": f["rendered"]}
+               for f in getattr(ctx, "figures", [])]
+    stats["figures"] = len(figures)
+    stats["figures_failing_qa"] = sum(1 for f in figures if not f["qa_passed"])
+    return {"report": report, "papers": papers, "stats": stats,
+            "figures": figures}

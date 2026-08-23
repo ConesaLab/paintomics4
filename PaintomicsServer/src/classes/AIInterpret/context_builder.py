@@ -59,13 +59,48 @@ def build_pathway_context(job_instance, max_pathways=15, pathway_ids=None):
     return pathways
 
 
+def _shorten_condition_labels(columns):
+    """Column headers -> the labels the agent sees, WITHOUT losing a factor.
+
+    The old rule was "take the part after the last underscore", which turns
+    `Ikaros/Control_0h` into `0h` -- readable, and correct for the time course
+    this pipeline was built against, whose labels differ only in that part.
+
+    On a factorial design it deletes the experiment. Measured on three blind
+    runs of harvested studies (2026-08-23):
+
+        CTRL_SHAM, CTRL_CLP, TCPOBOP_SHAM, TCPOBOP_CLP -> SHAM, CLP, SHAM, CLP
+        WT_aCD40, WT_aCD40_TLR9, ROCK1cKO_aCD40, ...   -> aCD40, TLR9, aCD40, TLR9
+        WT_CD_5m ... FXRKO_WD_15m (12 conditions)      -> 5m, 10m, 15m repeated 4x
+
+    Two columns then carry the same name, so every value the agent quotes is
+    ambiguous and the contrast the study exists to make is invisible. One of
+    those reports told its reader "the pooled WT/KO design means specific
+    changes cannot be attributed to ROCK1 loss alone" -- a false statement
+    about the experiment, produced from the labels rather than the data; the
+    genotype never appeared in 57 kB, and the sepsis run reported "no
+    TCPOBOP-specific modulation is evident in any pathway" for the same
+    reason.
+
+    So: shorten only while the short form stays unique. If it collides, every
+    label keeps its full column name. Shortening is a convenience; telling two
+    conditions apart is not.
+    """
+    full = [str(col).strip() for col in columns]
+    short = []
+    for col_str in full:
+        parts = col_str.rsplit("_", 1)
+        short.append(parts[-1] if len(parts) == 2 and parts[-1] else col_str)
+    return short if len(set(short)) == len(short) else full
+
+
 def _build_omic_header_map(job_instance):
-    """Map omicName -> [timepoint_labels] from input omic headers.
+    """Map omicName -> [condition_labels] from input omic headers.
 
     Each inputOmic dict has "omicHeader" (list where [0] is gene ID column,
-    [1:] are timepoint/condition labels) and "omicName".
-    Labels are simplified by extracting the part after the last underscore
-    (e.g., "Ikaros/Control_0h" -> "0h"), falling back to the full string.
+    [1:] are the condition labels) and "omicName". Labels are shortened by
+    `_shorten_condition_labels`, which refuses to shorten when that would make
+    two conditions indistinguishable.
     """
     header_map = {}
     for input_omic in job_instance.getGeneBasedInputOmics():
@@ -74,13 +109,7 @@ def _build_omic_header_map(job_instance):
         if not raw_header or not isinstance(raw_header, list) or len(raw_header) < 2:
             continue
         # [1:] skips the gene ID column
-        labels = []
-        for col in raw_header[1:]:
-            col_str = str(col).strip()
-            # Simplify: take part after last underscore if present
-            parts = col_str.rsplit("_", 1)
-            labels.append(parts[-1] if len(parts) == 2 and parts[-1] else col_str)
-        header_map[omic_name] = labels
+        header_map[omic_name] = _shorten_condition_labels(raw_header[1:])
     return header_map
 
 

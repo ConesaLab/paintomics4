@@ -510,10 +510,11 @@ You are given one pathway, the measured genes that map to it, and the literature
 
 ## Content Rules
 1. ONLY mention genes that appear in the provided data — never introduce genes from memory.
-2. State significance using the exact p-values provided.
-3. Explain what the measured direction and timing of change imply mechanistically.
-4. Where the data is thin or ambiguous, say so rather than overstating.
-5. Do NOT speculate about other pathways; this report covers one pathway.
+2. Put every gene symbol in italics — *Fos*, *Krt13* — and italicise nothing else.
+3. State significance using the exact p-values provided.
+4. Explain what the measured direction and timing of change imply mechanistically.
+5. Where the data is thin or ambiguous, say so rather than overstating.
+6. Do NOT speculate about other pathways; this report covers one pathway.
 
 ## Output Format
 Use markdown with these sections, and no top-level title:
@@ -651,9 +652,44 @@ what five do. Each call returns \
 written interpretations carrying your reference numbers, and your report is the \
 synthesis across those returns plus what you found first-hand. Skipping this is \
 why a report ends up covering six pathways instead of fifteen.
-6. After every substantive discovery, notebook_write one line. The notebook \
+6. A Results section carries FIGURES. make_figure draws one from data you \
+already hold -- you name an archetype and either the genes or the pathway, \
+never the numbers, so the figure cannot disagree with your text. Make one for \
+a finding your reader has to SEE: a trend across conditions (timecourse), a \
+contrast over many features at once (heatmap), what the enrichment actually \
+found (enrichment), or two layers against each other (scatter). The \
+conclusion sentence you pass is the claim the figure proves, and it becomes \
+the legend's first line -- write "cholesterol biosynthesis genes rise \
+together in G12V", not "cholesterol genes". Paste the callout it returns into \
+the report where the finding is discussed. If the tool reports that a figure \
+FAILED its quality checks, say so in the text rather than citing it as if it \
+had passed.
+7. When the literature gives you a NAMED gene set -- a published signature, \
+a hallmark or GO set you know the members of, the gene list from another \
+paper -- test_gene_set asks whether it is enriched in THIS experiment. That \
+turns "this resembles X" into a number the reader can check, and it is the \
+only way to bring a set that is not one of the loaded pathway databases to \
+bear on the data. Report how many of its symbols were measured here; a set \
+half of which is absent supports much less than one fully measured.
+8. Before you interpret anything, if the upload carried replicates, run \
+sample_ordination on the main omic: it says whether the conditions actually \
+separate and whether a sample is an outlier. Report what it shows -- including \
+"the groups overlap" -- because it tells the reader how much weight the \
+per-gene story can carry.
+9. If the upload carried replicates, differential_test gives you log2 fold \
+change, p and BH q per feature between two conditions -- the statistics a \
+Results section is expected to carry and that per-condition means cannot \
+give. Quote q rather than p, and name the test and the n. If the data has no \
+replicates the tool says so; then say so too, rather than calling a fold \
+change significant.
+10. When two results ought to agree -- two contrasts, two omic layers, your \
+list against a published one -- compare_sets says how much they actually \
+share and how much they would share by chance in THIS experiment. An overlap \
+without that denominator is not a finding, and "412 shared" reads as \
+impressive whether or not it is.
+11. After every substantive discovery, notebook_write one line. The notebook \
 is your memory and your evidence trail.
-7. Budgets are enforced by the tools and reported in every result; when one \
+12. Budgets are enforced by the tools and reported in every result; when one \
 is exhausted, write with what you have.
 
 Coverage checklist -- you are done when every CLUSTER is either analysed \
@@ -678,6 +714,9 @@ citations that have no supporting quote, which are the ones that will be \
 stripped. Fix or drop them rather than shipping them.
 - Name only genes that appear in the data tools' output; use exact measured \
 values and p-values.
+- Put every gene symbol in italics -- *Fos*, *Krt13* -- and italicise nothing \
+else. Readers of a Results section scan for the symbols, and it is the only \
+mark that separates a gene from an acronym or a cluster label.
 - Structure, all five sections required: ## Key Findings (3-5 bullets), \
 ## Cross-Pathway Themes, ## Detailed Pathway Analysis -- a paragraph per \
 cluster, built from your delegated interpretations rather than a bare list -- ## Suggested Follow-up Experiments (3-5, \

@@ -19,7 +19,7 @@
 #**************************************************************
 import logging.config
 
-from flask import Flask, request, send_file, send_from_directory, jsonify
+from flask import Flask, abort, request, send_file, send_from_directory, jsonify
 from flask.json.provider import DefaultJSONProvider
 from re import sub
 
@@ -368,6 +368,29 @@ class Application(object):
             #TODO: CHECK CREDENTIALS?
             UserSessionManager().isValidUser(request.cookies.get('userID'), request.cookies.get('sessionToken'))
             return send_from_directory(self.ROOT_DIRECTORY + 'CLIENT_TMP', filename)
+
+        ##*******************************************************************************************
+        ##* GET A FIGURE THE AI AGENT DREW
+        ##*******************************************************************************************
+        @self.app.route(SERVER_SUBDOMAIN + '/ai_figure/<path:filename>')
+        def get_ai_figure(filename):
+            """One file from a figure bundle: <jobID>/output/figures/<id>/<file>.
+
+            The same lookup as get_cluster_image -- the job says which user
+            directory its data lives in, so the URL carries no user id -- but
+            under a name that can appear in a published report without
+            explaining itself. `/CLIENT_TMP/<path>` cannot serve these: it
+            reads from ROOT_DIRECTORY + 'CLIENT_TMP', which is not
+            CLIENT_TMP_DIR on any deployment whose data lives outside the app
+            tree (it does not on UV), so a figure URL built on it 404s.
+            """
+            jobID = filename.split('/')[0]
+            jobInstance = JobInformationManager().loadJobInstance(jobID)
+            if jobInstance is None:
+                abort(404)
+            userDir = "nologin" if jobInstance.getUserID() is None else jobInstance.getUserID()
+            return send_from_directory(CLIENT_TMP_DIR + userDir + "/jobsData/",
+                                       filename)
 
         @self.app.route(SERVER_SUBDOMAIN + '/get_cluster_image/<path:filename>')
         def get_cluster_image(filename):
