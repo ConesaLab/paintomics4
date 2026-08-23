@@ -4,9 +4,7 @@
 Why this exists
 ---------------
 `feature-backlog.md` ranks sample-level ordination **first** — nine dev studies
-want it, effort small. In the TEST scoring it came back `not-derivable` every
-time it appeared (2026-41629358 Figs 1A and 3A, 2025-41044368 Fig 1b,
-2025-41111196 Fig 1B), because PaintOmics had no per-sample view at all.
+want it, effort small — because PaintOmics had no per-sample view at all.
 
 It has one now that recipes can keep their replicates. What is pinned here is
 the arithmetic and the honesty: a PCA of flat features is a PCA of noise, so

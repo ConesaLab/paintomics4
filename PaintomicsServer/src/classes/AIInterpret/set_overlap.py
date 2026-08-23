@@ -4,11 +4,7 @@ Why this exists
 ---------------
 `feature-backlog.md` #4, wanted by seven dev studies: *k* named lists in, all
 intersections out, with a test against a stated universe. It is the Venn or
-UpSet panel these papers reach for constantly, and in the TEST scoring it came
-back missed or not-derivable in four of the eleven studies —
-`2026-42149034` (DEGs across four sex x genotype comparisons),
-`2026-41746732` (day-1 vs day-5 DEGs), `2026-41629358` (proteome vs
-transcriptome), `2025-41249093` (KEGG enrichment shared between layers).
+UpSet panel these papers reach for constantly.
 
 The point is not the diagram. It is that "these two contrasts share 412 genes"
 means nothing without knowing how many they would share by chance, which
