@@ -182,6 +182,27 @@ def _bundle_dir(job_instance, fig_id):
     return base
 
 
+class EmptyFigure(Exception):
+    """No row survived the slice -- there is nothing to draw."""
+
+
+def _empty_reason(archetype, data_slice):
+    """Say which way the slice came out empty, in terms the agent can act on."""
+    n = len((data_slice or {}).get("features") or [])
+    if archetype == "scatter":
+        return ("a scatter needs features measured in BOTH layers, and none of "
+                "the %d you named are in both. Name features that carry a value "
+                "in each layer, or use timecourse/heatmap for a single layer." % n)
+    if archetype == "enrichment":
+        return ("no pathway in this slice has the counts an enrichment panel "
+                "needs. Name pathways from the enrichment results.")
+    if not n:
+        return ("no feature in this job matched the ones you named, so there is "
+                "nothing to draw. Check the names against the data tools' output.")
+    return ("the %d feature(s) you named carry no values in the conditions of "
+            "this slice, so there is nothing to draw." % n)
+
+
 def build_bundle(job_instance, fig_id, archetype, data_slice, spec):
     """Write data.tsv + figure.py, render, QA. Returns (bundle_dir, qa, result)."""
     from . import figure_qa, figure_sandbox, figure_templates
@@ -191,6 +212,15 @@ def build_bundle(job_instance, fig_id, archetype, data_slice, spec):
                "enrichment": figure_templates.build_enrichment,
                "scatter": figure_templates.build_scatter}[archetype]
     data_tsv, script, legend = builder(data_slice, spec)
+
+    # An empty panel is worse than no panel: the store-time guarantee shows
+    # every figure to the reader, so a bundle with a header and no rows is
+    # now certain to reach them. It happened for real -- a scatter over ten
+    # genes where not one was measured in BOTH layers, rendered as 23 kB of
+    # empty axes. Refuse here, where the agent can still choose differently,
+    # instead of letting QA report it after the slot is spent.
+    if len([r for r in (data_tsv or "").strip().splitlines()[1:] if r.strip()]) == 0:
+        raise EmptyFigure(_empty_reason(archetype, data_slice))
 
     bundle = _bundle_dir(job_instance, fig_id)
     with open(os.path.join(bundle, "data.tsv"), "w") as fh:

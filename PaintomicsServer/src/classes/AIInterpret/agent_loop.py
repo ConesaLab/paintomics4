@@ -2723,6 +2723,16 @@ def make_figure(ctx: RunContextWrapper[LoopContext], archetype: str,
     try:
         bundle, (passed, lines), result = figures_mod.build_bundle(
             c.job_instance, fig_id, archetype, data_slice, spec)
+    except figures_mod.EmptyFigure as exc:
+        # Nothing to draw is not a crash, and the agent can still act on it:
+        # say which way the slice came out empty and give the slot back, so
+        # the answer is "choose a different archetype", not "you have seven
+        # figures left and one empty panel the reader will be shown".
+        c.figures.pop(index - 1) if c.figures[index - 1] is slot else None
+        out = ("No figure was drawn, and this did not cost you a figure: %s"
+               % exc)
+        _trace(c, "make_figure", archetype, "empty", t0)
+        return _spend(c, out, "make_figure")
     except Exception as exc:                      # a failed figure is data
         logger.warning("[%s][loop] make_figure failed: %s", c.job_id, exc,
                        exc_info=True)
