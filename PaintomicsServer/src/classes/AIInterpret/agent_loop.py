@@ -2381,7 +2381,22 @@ def submit_report(ctx: RunContextWrapper[LoopContext], report_markdown: str) -> 
     # arrives thin and undelegated says so; the second goes through regardless,
     # because a tool that can refuse twice is a workflow step wearing a tool's
     # clothes.
-    time_to_act = c.hard_deadline - time.time()
+    # Measured against the RUN's end, not `hard_deadline`.
+    #
+    # `hard_deadline` is already `start + AGENT_RUN_SECONDS - GATE_RESERVE`
+    # (150 s), and the loop tells the agent to start writing at
+    # `hard_deadline - WRITE_RESERVE` (110 s). So the window in which a nudge
+    # was allowed -- deadline minus NUDGE_MIN_SECONDS (90 s) -- opened 20
+    # seconds before writing began and closed while the report was still being
+    # written. Measured: across six live runs "NOT SUBMITTED YET" appears ZERO
+    # times, so all three nudges (delegation, citations, figures) are inert at
+    # the configured 600 s budget -- including the citation nudge this file
+    # documents as having improved 10 of 10 runs.
+    #
+    # The gate reserve is the verification gate's to spend, not the nudge's: a
+    # nudge happens before submission and costs the AGENT one more turn. So the
+    # question is how much of the agent's own run is left.
+    time_to_act = (c.started_at + AGENT_RUN_SECONDS) - time.time()
     # ONE nudge, carrying EVERY first-submit problem.
     #
     # These used to be separate `if submit_attempts == 1` blocks that each

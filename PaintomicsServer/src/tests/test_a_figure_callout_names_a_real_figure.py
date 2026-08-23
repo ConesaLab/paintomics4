@@ -51,7 +51,12 @@ def _context(figures, attempts=1):
     c.figures = figures
     c.submit_attempts = attempts - 1        # the tool increments on entry
     c.delegated = ["something"]             # silence the delegation nudge
-    c.hard_deadline = time.time() + 3600    # nudges are allowed to fire
+    # A nudge is gated on the RUN's remaining time, not on hard_deadline: the
+    # deadline already excludes the 150 s gate reserve, which left a 20-second
+    # window in which no report was ever finished. Six live runs fired zero
+    # nudges before this was found.
+    c.started_at = time.time()
+    c.hard_deadline = time.time() + 3600
     return c
 
 
@@ -128,6 +133,31 @@ class UncitedFiguresTest(unittest.TestCase):
     def test_a_run_with_no_figures_is_never_nudged_about_them(self):
         out = _submit(_context([]), REPORT)
         self.assertNotIn("NOT SUBMITTED YET", out)
+
+
+class TheNudgeWindowIsOpenTest(unittest.TestCase):
+    """The nudge must be possible at the moment a report is finished.
+
+    It was not: the window opened 20 s before the write phase began and shut
+    while the report was still being written, so every nudge in this file was
+    dead code at the configured run budget.
+    """
+
+    def test_a_run_that_has_just_finished_writing_can_still_be_nudged(self):
+        c = _context(PASSING)
+        # the write phase starts at run - GATE_RESERVE - WRITE_RESERVE; a
+        # report finished a minute after that must still be nudgeable
+        c.started_at = time.time() - (al.AGENT_RUN_SECONDS
+                                      - al.GATE_RESERVE_SECONDS
+                                      - al.WRITE_RESERVE_SECONDS + 60)
+        c.hard_deadline = c.started_at + al.AGENT_RUN_SECONDS - al.GATE_RESERVE_SECONDS
+        self.assertIn("NOT SUBMITTED YET", _submit(c, REPORT))
+
+    def test_a_run_out_of_time_is_not_nudged(self):
+        c = _context(PASSING)
+        c.started_at = time.time() - al.AGENT_RUN_SECONDS
+        c.hard_deadline = time.time() - 10
+        self.assertNotIn("NOT SUBMITTED YET", _submit(c, REPORT))
 
 
 class OneNudgeCarriesEverythingTest(unittest.TestCase):
