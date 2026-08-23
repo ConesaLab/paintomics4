@@ -2382,20 +2382,26 @@ def submit_report(ctx: RunContextWrapper[LoopContext], report_markdown: str) -> 
     # because a tool that can refuse twice is a workflow step wearing a tool's
     # clothes.
     time_to_act = c.hard_deadline - time.time()
-    if (c.submit_attempts == 1 and not c.delegated
-            and len(report_markdown.strip()) < 9000
-            and time_to_act > NUDGE_MIN_SECONDS):
-        out = ("NOT SUBMITTED YET (this is the only time you will be asked). You "
-               "have not delegated any pathway analysis, and %d characters cannot "
-               "cover %d enriched pathways -- the per-pathway detail is what makes "
-               "a report usable. Call delegate_interpretation over the top "
-               "clusters (two calls cover everything, ~30 s each), then submit "
-               "again. If you have a considered reason to submit as it stands, "
-               "call submit_report again now and it will be accepted."
-               % (len(report_markdown.strip()), len(c.pathways)))
-        _trace(c, "submit_report", "%d chars, no delegation"
-               % len(report_markdown.strip()), "nudged once", t0)
-        return out
+    # ONE nudge, carrying EVERY first-submit problem.
+    #
+    # These used to be separate `if submit_attempts == 1` blocks that each
+    # returned, so the first one to fire spent the whole budget and the rest
+    # were unreachable. Measured: across three live runs the citation nudge
+    # fired 27-30 times and the figures nudge -- checked after it -- fired
+    # ZERO times, while every one of those runs shipped figures it never
+    # cited. A check that cannot fire is not a check.
+    #
+    # The rule the separate blocks were protecting still holds: asked once,
+    # then accepted whatever the agent decides. Collecting the problems keeps
+    # that promise and stops one of them hiding the others.
+    problems = []
+    if not c.delegated and len(report_markdown.strip()) < 9000:
+        problems.append(
+            "You have not delegated any pathway analysis, and %d characters "
+            "cannot cover %d enriched pathways -- the per-pathway detail is "
+            "what makes a report usable. Call delegate_interpretation over the "
+            "top clusters (two calls cover everything, ~30 s each)."
+            % (len(report_markdown.strip()), len(c.pathways)))
     if len(report_markdown.strip()) < 500:
         out = ("REJECTED: that is not a report (%d chars). Write the full "
                "analysis: Key Findings, Cross-Pathway Themes, Detailed Pathway "
@@ -2414,21 +2420,14 @@ def submit_report(ctx: RunContextWrapper[LoopContext], report_markdown: str) -> 
     # that can refuse twice is a workflow step wearing a tool's clothes.
     still_flagged = sorted(i for i in c.flagged_citations
                            if ("[%d]" % i) in report_markdown)
-    if (c.submit_attempts == 1 and still_flagged
-            and time_to_act > NUDGE_MIN_SECONDS):
-        out = ("NOT SUBMITTED YET (this is the only time you will be asked). "
-               "Your own check_my_citations run found no supporting quote for "
-               "%s, and they are still in this draft -- the gate will delete "
-               "each one along with the sentence carrying it. Fix them the way "
-               "that tool suggested (cite another paper, soften the claim, or "
-               "read_paper and quote what you find), then submit. If you have a "
-               "considered reason to submit as it stands, call submit_report "
-               "again now and it will be accepted."
-               % ", ".join("[%d]" % i for i in still_flagged[:10]))
-        _trace(c, "submit_report", "%d chars, %d flagged citations"
-               % (len(report_markdown.strip()), len(still_flagged)),
-               "nudged once", t0)
-        return out
+    if still_flagged:
+        problems.append(
+            "Your own check_my_citations run found no supporting quote for %s, "
+            "and they are still in this draft -- the gate will delete each one "
+            "along with the sentence carrying it. Fix them the way that tool "
+            "suggested (cite another paper, soften the claim, or read_paper and "
+            "quote what you find)."
+            % ", ".join("[%d]" % i for i in still_flagged[:10]))
     # A figure callout is a claim like any other: `![Fig. 2](figure:fig2-x)`
     # must name a bundle this run actually produced. An id that does not exist
     # renders as a broken image for the reader and is indistinguishable, in the
@@ -2447,34 +2446,32 @@ def submit_report(ctx: RunContextWrapper[LoopContext], report_markdown: str) -> 
         _trace(c, "submit_report", "%d unknown figure id(s)" % len(unknown),
                "rejected", t0)
         return out
-    if (c.submit_attempts == 1 and known and not cited_ids
-            and time_to_act > NUDGE_MIN_SECONDS):
-        # Measured on the first live run with figures: the tool offered 26
-        # callouts and the submitted report contained none. The figures were
-        # drawn, rendered and passed their checks, and the reader never saw
-        # one -- which is the same outcome as not having the tool. Same shape
-        # as the delegation and citation nudges: asked once, then accepted.
-        out = ("NOT SUBMITTED YET (this is the only time you will be asked). "
-               "You made %d figure(s) and the report cites none of them, so "
-               "the reader gets none: %s. Paste each callout make_figure "
-               "returned into the section that discusses its finding "
-               "(`![Fig. N](figure:<id>)` on its own line). If a figure is not "
-               "worth showing, say nothing about it and submit again now."
-               % (len(known), ", ".join("![Fig. %d](figure:%s)" % (i + 1, f["id"])
-                                        for i, f in enumerate(c.figures)
-                                        if f.get("id"))[:600]))
-        _trace(c, "submit_report", "%d figures, 0 cited" % len(known),
-               "nudged once", t0)
-        return out
+    if known and not cited_ids:
+        problems.append(
+            "You made %d figure(s) and the report cites none of them, so the "
+            "reader gets none. Paste each callout make_figure returned into "
+            "the section that discusses its finding: %s"
+            % (len(known), ", ".join("![Fig. %d](figure:%s)" % (i + 1, f["id"])
+                                     for i, f in enumerate(c.figures)
+                                     if f.get("id"))[:500]))
     failed_cited = sorted(i for i in cited_ids if not known[i]["qa_passed"])
-    if (c.submit_attempts == 1 and failed_cited
+    if failed_cited:
+        problems.append(
+            "You cite %s, which did not pass its standards checks. Either say "
+            "so in the text where it appears, or drop the callout and keep the "
+            "sentence." % ", ".join(failed_cited[:6]))
+
+    # The single nudge. Asked once; the next submit is accepted whatever the
+    # agent decides, which is what keeps this a tool rather than a workflow
+    # step wearing a tool's clothes.
+    if (c.submit_attempts == 1 and problems
             and time_to_act > NUDGE_MIN_SECONDS):
         out = ("NOT SUBMITTED YET (this is the only time you will be asked). "
-               "You cite %s, which did not pass its standards checks. Either "
-               "say so in the text where it appears, or drop the callout and "
-               "keep the sentence. Submitting again now accepts it as it "
-               "stands." % ", ".join(failed_cited[:6]))
-        _trace(c, "submit_report", "%d failed figure(s) cited" % len(failed_cited),
+               "%d thing(s) to fix first:\n\n%s\n\nFix what you agree with and "
+               "submit again -- the next submit is accepted as it stands."
+               % (len(problems),
+                  "\n\n".join("%d. %s" % (i + 1, p) for i, p in enumerate(problems))))
+        _trace(c, "submit_report", "%d problem(s)" % len(problems),
                "nudged once", t0)
         return out
 

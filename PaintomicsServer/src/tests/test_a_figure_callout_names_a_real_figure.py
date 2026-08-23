@@ -130,6 +130,31 @@ class UncitedFiguresTest(unittest.TestCase):
         self.assertNotIn("NOT SUBMITTED YET", out)
 
 
+class OneNudgeCarriesEverythingTest(unittest.TestCase):
+    """Every first-submit problem in ONE message, or the first hides the rest.
+
+    They used to be separate `submit_attempts == 1` blocks that each returned.
+    Measured across three live runs: the citation nudge fired 27-30 times and
+    the figures nudge -- checked after it -- fired ZERO, while all three runs
+    shipped figures they never cited. A check that cannot fire is not a check.
+    """
+
+    def test_citations_and_figures_are_raised_together(self):
+        c = _context(PASSING)
+        c.flagged_citations = {3, 7}
+        out = _submit(c, REPORT + "\n\nSee [3] and [7].\n")
+        self.assertIn("NOT SUBMITTED YET", out)
+        self.assertIn("2 thing(s) to fix", out)
+        self.assertIn("[3]", out)                       # the citation problem
+        self.assertIn("cites none of them", out)        # and the figure one
+        self.assertNotIn("NOT SUBMITTED YET", _submit(c, REPORT))
+
+    def test_one_problem_still_reads_as_one(self):
+        c = _context(PASSING)
+        out = _submit(c, REPORT)
+        self.assertIn("1 thing(s) to fix", out)
+
+
 class FailedQaTest(unittest.TestCase):
 
     def test_citing_a_failed_figure_is_nudged_once_then_accepted(self):

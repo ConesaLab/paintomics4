@@ -206,6 +206,8 @@ def _panel_label(ax_expr="ax"):
 # ---------------------------------------------------------------------------
 
 def build_timecourse(data_slice, spec):
+    """One line per feature. The legend sits outside the axes, so a wide slice
+    makes the canvas wider rather than burying the lines under the key."""
     conditions = list(data_slice.get("conditions") or [])
     features = list(data_slice.get("features") or [])
     header = ["feature"] + conditions
@@ -216,6 +218,10 @@ def build_timecourse(data_slice, spec):
 
     # Colour by FEATURE here (the conditions are the x axis), from the same
     # palette, so a reader who has seen the heatmap recognises the ink.
+    # A double-width canvas whenever the key is long: the legend is outside, so
+    # the plot area must not be squeezed to nothing to make room for it.
+    if len(features) > 4 and (spec.get("width") or "single") == "single":
+        spec = dict(spec, width="double")
     script = _preamble(spec) + '''
 
 def main():
@@ -239,10 +245,12 @@ def main():
     ax.set_ylabel("value")
     # Individual points are already drawn (marker="o"): the standards ask for
     # them whenever n < 10, and a time course has no error bar to hide behind.
-    if len(rows) <= 8:
-        ax.legend(loc="best", ncol=1)
-    else:
-        ax.legend(loc="best", ncol=2, fontsize=%r)
+    # OUTSIDE the axes, always. "best" puts the legend inside, where its
+    # entries land on the lines and on each other: eight of twenty figures in
+    # one live batch failed the collision check with pairs like 'Csf1r' /
+    # 'Csf2rb' overlapping. Stacked outside, matplotlib spaces them itself.
+    ax.legend(loc="center left", bbox_to_anchor=(1.02, 0.5), fontsize=%r,
+              borderaxespad=0.0, handlelength=1.2)
     %s    fig.tight_layout()
     save(fig)
 
