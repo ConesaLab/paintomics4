@@ -96,21 +96,20 @@ def _build_header_map(job_instance):
     """Map omicName -> list of simplified timepoint labels from omicHeader.
 
     Reads getGeneBasedInputOmics(); for each omic, omicHeader[0] is the gene
-    ID column and omicHeader[1:] are the data column labels.  Labels are
-    simplified by extracting the part after the last underscore (e.g.
-    "treatment_0h" -> "0h").
+    ID column and omicHeader[1:] are the data column labels. Shortening is
+    delegated to `context_builder._shorten_condition_labels`, which keeps the
+    full column name whenever the short form would make two conditions
+    indistinguishable -- this module had its own copy of the truncation and
+    would otherwise disagree with the pathway context about what a condition
+    is called.
     """
+    from .context_builder import _shorten_condition_labels
     header_map = {}
     for omic in job_instance.getGeneBasedInputOmics():
         omic_name = omic.get("omicName", "")
         headers = omic.get("omicHeader")
         if headers and isinstance(headers, list) and len(headers) > 1:
-            labels = []
-            for h in headers[1:]:
-                col_str = str(h).strip()
-                parts = col_str.rsplit("_", 1)
-                labels.append(parts[-1] if len(parts) == 2 and parts[-1] else col_str)
-            header_map[omic_name] = labels
+            header_map[omic_name] = _shorten_condition_labels(headers[1:])
         else:
             header_map[omic_name] = None
     return header_map
