@@ -18,6 +18,7 @@
 #  Technical contact paintomicsai@gmail.com
 #**************************************************************
 import logging.config
+import os
 
 from flask import Flask, abort, request, send_file, send_from_directory, jsonify
 from flask.json.provider import DefaultJSONProvider
@@ -242,6 +243,15 @@ class Application(object):
             logging.info(_figpy())
         except Exception as exc:
             logging.warning("figure renderer probe failed: %r", exc)
+        # And, when the operator asks for the full proof, one real render
+        # through the sandbox -- the probe checks the interpreter, this checks
+        # fonts, caches, rlimits and the child environment on THIS box.
+        if os.getenv("AI_FIGURE_SELFCHECK", "").lower() in ("1", "true", "render"):
+            try:
+                from src.common.FigureSelfCheck import run_selfcheck
+                run_selfcheck()
+            except Exception as exc:
+                logging.warning("figure self-check did not run: %r", exc)
 
         #******************************************************************************************
         #     ______ _____ _      ______  _____
