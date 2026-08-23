@@ -180,6 +180,13 @@ AI_INTERPRETATION_ENABLED = os.getenv("AI_INTERPRETATION_ENABLED", "true").lower
 # quota that is shared with AI report generation, so a deployment opts in.
 AI_INPUT_CONVERTER = os.getenv("AI_INPUT_CONVERTER", "false").lower() == "true"
 
+# Absolute path of the Python interpreter the AI figure sandbox execs to render
+# figure bundles. Leave empty to let src/common/PythonExecutable.py probe for
+# one (sys.executable on the dev server; the venv's python3 beside the uwsgi
+# binary in production -- under uWSGI sys.executable is uwsgi itself and cannot
+# render). Set it explicitly only when the probe picks the wrong interpreter.
+PYTHON_EXECUTABLE = os.getenv("PYTHON_EXECUTABLE", "")
+
 # Provider used by src/classes/AIInterpret/. "csic" is the deployment default:
 # a free OpenAI-compatible vLLM gateway run by IIIA-CSIC. Tokens are
 # self-service from https://console.llm.iiia.es (CSIC SSO).

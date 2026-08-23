@@ -75,6 +75,15 @@ scipy==1.13.1
 statsmodels==0.14.6
 patsy==1.0.2
 
+# matplotlib renders the AI figure bundles (src/classes/AIInterpret/figures.py
+# writes data.tsv + figure.py; figure_sandbox execs them in a subprocess). It
+# was never declared, so a clean image rendered nothing: every figure died in
+# the child with ModuleNotFoundError while the server logged RENDER FAILED.
+# The sandbox child is probed for this exact import at start-up
+# (src/common/PythonExecutable.py). 3.11.1 is the resolved version on the
+# pinned Python 3.11 / numpy 1.26.4 stack.
+matplotlib==3.11.1
+
 # --- Image and SVG rendering ---
 # pycairo is deliberately absent: nothing imports it, it is not installed in the
 # working environment, and it needs cairo headers to build. cairosvg renders via

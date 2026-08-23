@@ -241,7 +241,7 @@ def render(bundle_dir, timeout=DEFAULT_TIMEOUT):
 
     Returns a RenderResult. Never raises -- see RenderResult's docstring.
 
-    `[sys.executable, "-I", "figure.py"]`: `-I` is isolated mode (implies -E and
+    `[PythonExecutable.resolve(), "-I", "figure.py"]`: `-I` is isolated mode (implies -E and
     -s, and on 3.11+ -P), so the child ignores PYTHON* variables, user
     site-packages, and the script directory as an import root. A generated
     `figure.py` imports only matplotlib, numpy and csv, so it loses nothing;
@@ -275,13 +275,20 @@ def render(bundle_dir, timeout=DEFAULT_TIMEOUT):
 
     plan = _limit_plan()
     attempted = ", ".join(name for _c, _v, name in plan) or "none"
+    # NOT sys.executable: under uWSGI that is the uwsgi binary itself, and
+    # exec'ing it with a script argument fed every render to the web server's
+    # argument parser -- rc=-1, RENDER FAILED, on every figure in production
+    # while launch_server.py looked fine. PythonExecutable probes for an
+    # interpreter that can actually import matplotlib, once per process.
+    from src.common.PythonExecutable import resolve as _python_executable
+    interpreter = _python_executable()
     header = ("figure_sandbox: %s -I %s\n"
               "  cwd            : %s\n"
               "  wall timeout   : %ss\n"
               "  rlimits tried  : %s\n"
               "  (a limit this kernel refuses is skipped -- macOS refuses "
               "RLIMIT_AS)\n"
-              % (sys.executable, SCRIPT_NAME, bundle_dir, timeout, attempted))
+              % (interpreter, SCRIPT_NAME, bundle_dir, timeout, attempted))
 
     before = _snapshot(bundle_dir)
     timed_out = False
@@ -289,7 +296,7 @@ def render(bundle_dir, timeout=DEFAULT_TIMEOUT):
 
     try:
         proc = subprocess.run(
-            [sys.executable, "-I", SCRIPT_NAME],
+            [interpreter, "-I", SCRIPT_NAME],
             cwd=bundle_dir,
             env=_child_env(bundle_dir),
             stdin=subprocess.DEVNULL,       # a script that waits on stdin would

@@ -231,6 +231,18 @@ class Application(object):
         self.queue = Queue()
         self.queue.start_worker(N_WORKERS)
 
+        # Which Python will render AI figure bundles. Under uWSGI
+        # sys.executable is the uwsgi binary, not a Python -- exec'ing it
+        # failed every production figure render while the dev server looked
+        # fine. Resolve (and probe) once at boot and put the verdict in the
+        # boot log, so a deploy whose figures cannot render says so here
+        # instead of at the first user figure.
+        try:
+            from src.common.PythonExecutable import describe as _figpy
+            logging.info(_figpy())
+        except Exception as exc:
+            logging.warning("figure renderer probe failed: %r", exc)
+
         #******************************************************************************************
         #     ______ _____ _      ______  _____
         #   |  ____|_   _| |    |  ____|/ ____|
