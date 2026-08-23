@@ -960,6 +960,42 @@ def _link_figures(report, manifest):
     return re.sub(r"\]\(figure:([A-Za-z0-9_.-]+)\)", _sub, report or "")
 
 
+def _ensure_figures_shown(report, manifest):
+    """Every figure the run produced reaches the reader, guaranteed.
+
+    The agent pastes its callouts into the draft it submits. That draft is not
+    what the reader gets: the loop keeps the Lead's head and tail and stitches
+    the delegated per-pathway sections into the middle, and the callouts sit
+    in exactly the middle that is replaced. Measured on four stored runs --
+    the submit trace says "0 problem(s) found", so the callouts WERE in the
+    draft, and the stored report contains none.
+
+    Asking each stage to preserve markdown images is the fragile version of
+    this: the text is reshaped in three places and every one of them can drop
+    an image silently. So the guarantee is made once, deterministically, at
+    the moment the report is stored -- any figure not already shown is
+    appended with its own conclusion sentence as the caption. A figure that
+    was drawn, checked and never shown is a figure the reader did not get.
+
+    Figures the prose already cites are left exactly where the agent put them.
+    """
+    text = report or ""
+    missing = [f for f in (manifest or []) if f.get("png") and f["png"] not in text]
+    if not missing:
+        return text
+    lines = ["", "", "### Figures", ""]
+    for fig in missing:
+        caption = (fig.get("conclusion") or "").strip()
+        lines.append("![%s](%s)" % (caption or fig["id"], fig["png"]))
+        note = "" if fig.get("qa_passed") else (
+            " *(this panel did not pass its quality checks; treat it as "
+            "provisional.)*")
+        lines.append("")
+        lines.append("**%s.**%s" % (caption or fig["id"], note))
+        lines.append("")
+    return text.rstrip() + "\n".join(lines) + "\n"
+
+
 def run_ai_agent(job_id, experiment_design, RESPONSE):
     """Servlet entry point — drop-in replacement for pipeline.run_ai_agent.
 
@@ -1021,6 +1057,7 @@ def run_ai_agent(job_id, experiment_design, RESPONSE):
         papers = out.get("papers") or []
         figures = _figure_manifest(job_instance, out.get("figures") or [])
         report = _link_figures(report, figures)
+        report = _ensure_figures_shown(report, figures)
         if papers:
             dao.save_papers(job_id, papers)
         # A finished run with an empty report is a failure wearing success's
