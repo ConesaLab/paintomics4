@@ -971,3 +971,19 @@ tr.ai-cluster-row-flash > td {
 }
 .ai-gdpr-sent-title { color: #C44500; }
 .ai-gdpr-notsent-title { color: #2e7d32; }
+
+/* Figures the agent drew.
+   The PNG is 300 dpi at its physical print width, so its pixel width (about
+   1000 px for a single column) is far wider than the report panel: without
+   this it overflows the reading column and the panel scrolls sideways. The
+   figure keeps its aspect ratio and its own background, because a
+   transparent figure on the dark theme loses its axes. */
+.ai-message img,
+.ai-report img {
+	display: block;
+	max-width: 100%;
+	height: auto;
+	margin: 12px auto;
+	background: #ffffff;
+	border-radius: 4px;
+}

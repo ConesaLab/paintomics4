@@ -2429,6 +2429,36 @@ def submit_report(ctx: RunContextWrapper[LoopContext], report_markdown: str) -> 
                % (len(report_markdown.strip()), len(still_flagged)),
                "nudged once", t0)
         return out
+    # A figure callout is a claim like any other: `![Fig. 2](figure:fig2-x)`
+    # must name a bundle this run actually produced. An id that does not exist
+    # renders as a broken image for the reader and is indistinguishable, in the
+    # markdown, from a figure that was made -- so it is rejected outright
+    # rather than nudged. Citing one that FAILED its standards checks is a
+    # different mistake and gets the one shared nudge.
+    cited_ids = set(re.findall(r"\(figure:([A-Za-z0-9_.-]+)\)", report_markdown))
+    known = {f["id"]: f for f in c.figures}
+    unknown = sorted(cited_ids - set(known))
+    if unknown:
+        out = ("REJECTED: the report cites %d figure(s) that do not exist: %s. "
+               "Only ids returned by make_figure can be cited%s."
+               % (len(unknown), ", ".join(unknown[:6]),
+                  "; this run made none" if not known else
+                  " -- this run made: " + ", ".join(sorted(known))))
+        _trace(c, "submit_report", "%d unknown figure id(s)" % len(unknown),
+               "rejected", t0)
+        return out
+    failed_cited = sorted(i for i in cited_ids if not known[i]["qa_passed"])
+    if (c.submit_attempts == 1 and failed_cited
+            and time_to_act > NUDGE_MIN_SECONDS):
+        out = ("NOT SUBMITTED YET (this is the only time you will be asked). "
+               "You cite %s, which did not pass its standards checks. Either "
+               "say so in the text where it appears, or drop the callout and "
+               "keep the sentence. Submitting again now accepts it as it "
+               "stands." % ", ".join(failed_cited[:6]))
+        _trace(c, "submit_report", "%d failed figure(s) cited" % len(failed_cited),
+               "nudged once", t0)
+        return out
+
     c.submitted_report = report_markdown
     _trace(c, "submit_report", "%d chars" % len(report_markdown), "accepted", t0)
     return "SUBMITTED. Reply with the single word DONE and stop."
@@ -4395,4 +4425,16 @@ def run_agent_loop_workflow(job_instance, job_id, experiment_design,
 
     report, papers, ctx = asyncio.run(_with_deadline())
     stats["total_s"] = time.time() - t0
-    return {"report": report, "papers": papers, "stats": stats}
+    # The figure bundles are on disk under the job's own output directory; what
+    # travels here is the manifest the stored record needs to render callouts
+    # and offer downloads. `bundle` is an absolute path and is deliberately NOT
+    # included: the servlet builds the client-visible URL from the job, and a
+    # server path in a stored record is one edit away from being served.
+    figures = [{"id": f["id"], "archetype": f["archetype"],
+                "conclusion": f["conclusion"], "qa_passed": f["qa_passed"],
+                "qa": f["qa"], "rendered": f["rendered"]}
+               for f in getattr(ctx, "figures", [])]
+    stats["figures"] = len(figures)
+    stats["figures_failing_qa"] = sum(1 for f in figures if not f["qa_passed"])
+    return {"report": report, "papers": papers, "stats": stats,
+            "figures": figures}

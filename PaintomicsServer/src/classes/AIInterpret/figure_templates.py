@@ -201,8 +201,14 @@ def main():
     palette = %r
     fig, ax = plt.subplots()
     x = list(range(len(conditions)))
+    bares = [r[0].split("|")[0] for r in rows]
     for i, row in enumerate(rows):
-        label, values = row[0].split("|")[0], [float(v) for v in row[1:]]
+        # The row id is `Symbol|Omic`; show the omic whenever the bare symbol
+        # would repeat, or a gene measured in two layers gives a legend with
+        # two entries reading "Fos" and no way to tell them apart.
+        bare = row[0].split("|")[0]
+        label = row[0].replace("|", " \u00b7 ") if bares.count(bare) > 1 else bare
+        values = [float(v) for v in row[1:]]
         ax.plot(x, values, marker="o", color=palette[i %% len(palette)],
                 label=label)
     ax.set_xticks(x)
@@ -255,7 +261,9 @@ def build_heatmap(data_slice, spec):
 def main():
     header, rows = read_tsv()
     conditions = header[1:]
-    labels = [r[0].replace("|", " ") for r in rows]
+    bares = [r[0].split("|")[0] for r in rows]
+    labels = [(r[0].replace("|", " \u00b7 ") if bares.count(r[0].split("|")[0]) > 1
+               else r[0].split("|")[0]) for r in rows]
     matrix = [[float(v) for v in r[1:]] for r in rows]
     flat = [v for row in matrix for v in row]
     fig, ax = plt.subplots()

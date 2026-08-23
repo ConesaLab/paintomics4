@@ -386,6 +386,10 @@ def aiInterpretReport(REQUEST, RESPONSE):
                 "report": record.get("report", ""),
                 "verification": record.get("verification", {}),
                 "papers": record.get("papers", []),
+                # The figures this run drew: the report's markdown already
+                # points at their PNGs, and this list carries the QA verdict
+                # and the svg/pdf/script/data URLs a manuscript needs.
+                "figures": record.get("figures", []),
                 # Lets the client turn pathway names in the report prose into
                 # links that open the pathway. Sent as id/name/source only.
                 "pathways": record.get("pathwayIndex", []),

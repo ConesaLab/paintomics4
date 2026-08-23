@@ -900,6 +900,66 @@ class _Heartbeat:
 
 
 
+def _figure_manifest(job_instance, figures):
+    """The stored figure list, with the URL the client can actually load.
+
+    The bundles are written under the job's own output directory, which the
+    server already serves at `/CLIENT_TMP/<path>` (session-checked) -- so a
+    figure needs no new route, only the relative path. The absolute bundle
+    path is deliberately dropped here: a server path inside a stored record is
+    one careless template away from being shown to a user.
+    """
+    try:
+        job_id = job_instance.getJobID()
+    except Exception:
+        return []
+    # `/ai_figure/<jobID>/...` resolves the user directory from the job, so no
+    # user id travels in a URL that ends up in a report. NOT `/CLIENT_TMP/`:
+    # that route serves from ROOT_DIRECTORY + 'CLIENT_TMP', which is not
+    # CLIENT_TMP_DIR wherever the data lives outside the app tree -- verified
+    # 404 locally, and UV is such a deployment.
+    base = "%s/output/figures" % job_id
+    out = []
+    for fig in figures or []:
+        rel = "%s/%s" % (base, fig.get("id"))
+        out.append({
+            "id": fig.get("id"),
+            "archetype": fig.get("archetype"),
+            "conclusion": fig.get("conclusion"),
+            "qa_passed": bool(fig.get("qa_passed")),
+            "qa": fig.get("qa") or [],
+            "rendered": bool(fig.get("rendered")),
+            # Everything a reader or a manuscript needs, by the same route.
+            "png": "/ai_figure/%s/figure.png" % rel,
+            "svg": "/ai_figure/%s/figure.svg" % rel,
+            "pdf": "/ai_figure/%s/figure.pdf" % rel,
+            "script": "/ai_figure/%s/figure.py" % rel,
+            "data": "/ai_figure/%s/data.tsv" % rel,
+            "legend": "/ai_figure/%s/legend.md" % rel,
+        })
+    return out
+
+
+def _link_figures(report, manifest):
+    """Turn `![Fig. 2](figure:fig2-x)` into a real image URL.
+
+    The agent writes an id because it has no business knowing where the file
+    landed; the substitution happens once, here, at the moment the report is
+    stored. A callout whose id is not in the manifest is left ALONE rather
+    than removed: `submit_report` already rejects unknown ids, so one arriving
+    here means the two disagree, and a visible `figure:` token in the text is
+    how that gets noticed instead of quietly deleted.
+    """
+    if not manifest:
+        return report
+    urls = {f["id"]: f["png"] for f in manifest}
+
+    def _sub(match):
+        return "](%s)" % urls.get(match.group(1), "figure:" + match.group(1))
+
+    return re.sub(r"\]\(figure:([A-Za-z0-9_.-]+)\)", _sub, report or "")
+
+
 def run_ai_agent(job_id, experiment_design, RESPONSE):
     """Servlet entry point — drop-in replacement for pipeline.run_ai_agent.
 
@@ -959,6 +1019,8 @@ def run_ai_agent(job_id, experiment_design, RESPONSE):
                                       experiment_design, hooks=hooks)
         report = out.get("report") or ""
         papers = out.get("papers") or []
+        figures = _figure_manifest(job_instance, out.get("figures") or [])
+        report = _link_figures(report, figures)
         if papers:
             dao.save_papers(job_id, papers)
         # A finished run with an empty report is a failure wearing success's
@@ -976,6 +1038,11 @@ def run_ai_agent(job_id, experiment_design, RESPONSE):
         dao.save_progress(job_id, {
             "status": "done", "percent": 100, "detail": detail,
             "report": report,
+            # The figure bundles this run produced: id, conclusion, QA verdict
+            # and the URLs of every file a manuscript would want (png for the
+            # page, svg/pdf for the figure itself, script + data so the number
+            # can be re-derived by whoever receives it).
+            "figures": figures,
             # The stored contract: "verification" is verify_report_v2's dict
             # (references_section_found, citations_checked, failed_citations);
             # timings and counters live beside it, not inside it.

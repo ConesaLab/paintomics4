@@ -447,12 +447,21 @@ function PA_AIInterpretView() {
         A:1, B:1, BLOCKQUOTE:1, BR:1, CODE:1, DD:1, DEL:1, DIV:1, DL:1, DT:1,
         EM:1, H1:1, H2:1, H3:1, H4:1, H5:1, H6:1, HR:1, I:1, LI:1, OL:1, P:1,
         PRE:1, SPAN:1, STRONG:1, SUB:1, SUP:1, TABLE:1, TBODY:1, TD:1, TH:1,
-        THEAD:1, TR:1, UL:1
+        THEAD:1, TR:1, UL:1,
+        // The report can now carry figures the agent drew. IMG is allowed
+        // ONLY with a src the server produced (see SANITIZE_IMG_SRC below):
+        // the report text is model output, so an unrestricted src would let it
+        // name any URL and turn every reader of a report into a request to it.
+        IMG:1, FIGURE:1, FIGCAPTION:1
     };
     var SANITIZE_ALLOWED_ATTRS = {
         href:1, title:1, "class":1, target:1, rel:1,
+        src:1, alt:1,
         "data-pathway-id":1, "data-pathway-name":1
     };
+    // Same-origin, and only the route that serves figure bundles. A relative path cannot leave the origin, and the prefix keeps a
+    // report from pointing at anything else the app happens to serve.
+    var SANITIZE_IMG_SRC = /^\/ai_figure\/[A-Za-z0-9_.\-\/]+\.(png|svg)$/;
 
     /**
      * Strip anything executable from report HTML.
@@ -508,6 +517,13 @@ function PA_AIInterpretView() {
                         continue;
                     }
                     if (name === "href" && !/^(https?:|mailto:|#)/i.test(value.replace(/\s/g, ""))) {
+                        child.removeAttribute(attrs[a].name);
+                    }
+                    // A src that is not a figure this server wrote is removed,
+                    // which leaves a broken image rather than a request the
+                    // report chose -- the same trade the href rule makes.
+                    if (name === "src" && (tag !== "IMG"
+                            || !SANITIZE_IMG_SRC.test(value.replace(/\s/g, "")))) {
                         child.removeAttribute(attrs[a].name);
                     }
                 }
