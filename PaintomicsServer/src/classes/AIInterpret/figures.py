@@ -329,6 +329,11 @@ def _register_builtins():
     register_archetype("pca", q.build_pca, q.values_for_pca)
     register_archetype("samplecorr", q.build_samplecorr,
                        q.values_for_samplecorr)
+    from . import figure_sets as fs
+    register_archetype("venn", fs.build_venn, fs.values_for_venn)
+    register_archetype("upset", fs.build_upset, fs.values_for_upset)
+    register_archetype("concordance", fs.build_concordance,
+                       fs.values_for_concordance)
 
 
 _register_builtins()
