@@ -99,6 +99,37 @@ class UnknownIdTest(unittest.TestCase):
         self.assertNotIn("REJECTED", out)
 
 
+class UncitedFiguresTest(unittest.TestCase):
+    """Figures drawn and never cited are figures the reader never gets.
+
+    Measured on the first live run with figures: the tool offered 26 callouts
+    and the submitted report contained none, so four rendered, QA-passing
+    panels reached nobody -- the same outcome as not having the tool at all.
+    """
+
+    def test_a_run_that_cites_none_of_its_figures_is_nudged_once(self):
+        context = _context(PASSING)
+        first = _submit(context, REPORT)                 # no callouts at all
+        self.assertIn("NOT SUBMITTED YET", first)
+        self.assertIn("cites none of them", first)
+        self.assertIn("fig1-cholesterol", first, "name the callouts to paste")
+        second = _submit(context, REPORT)                # asked once, then accepted
+        self.assertNotIn("NOT SUBMITTED YET", second)
+
+    def test_citing_one_of_two_is_not_nudged(self):
+        """The nudge is for NONE cited, not for a judgement about how many."""
+        two = PASSING + [{"id": "fig2-other", "archetype": "heatmap",
+                          "conclusion": "c2", "qa_passed": True, "qa": [],
+                          "rendered": True, "bundle": "/tmp/y"}]
+        out = _submit(_context(two),
+                      REPORT + "\n\n![Fig. 1](figure:fig1-cholesterol)\n")
+        self.assertNotIn("NOT SUBMITTED YET", out)
+
+    def test_a_run_with_no_figures_is_never_nudged_about_them(self):
+        out = _submit(_context([]), REPORT)
+        self.assertNotIn("NOT SUBMITTED YET", out)
+
+
 class FailedQaTest(unittest.TestCase):
 
     def test_citing_a_failed_figure_is_nudged_once_then_accepted(self):

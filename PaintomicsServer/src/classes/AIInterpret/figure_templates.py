@@ -37,15 +37,38 @@ PANEL_LABEL = "a"
 # ---------------------------------------------------------------------------
 
 def _row_id(feature):
-    """The TSV's first column: unique per ROW, not per gene.
+    """`Symbol|Omic` -- unique per ROW in the common case, not per gene.
 
     A gene measured in two layers is two rows; keying them both on the symbol
     would make the values check compare a protein value against a transcript
-    one. `Fos|Proteomics` is unique and still readable, and the scripts strip
-    the suffix for display.
+    one. The scripts strip the suffix for display.
     """
     omic = feature.get("omic")
     return "%s|%s" % (feature["label"], omic) if omic else str(feature["label"])
+
+
+def row_ids(features):
+    """Ids for a whole slice, disambiguated -- the ONE rule both sides use.
+
+    `Symbol|Omic` is not always unique: a gene can carry two measurements in
+    the SAME layer (two probes, two transcripts), and a live run produced a
+    data.tsv with `Rpl18|Gene expression` twice at different values. The
+    writer emitted both rows while `values_for` -- a dict -- kept only the
+    last, so the QA check compared row one against row two's numbers and
+    failed. It was right to: two rows claiming to be the same feature is a
+    figure that would have drawn two lines under one label.
+
+    A repeat gets `#2`, `#3` in iteration order. Both the TSV writer and
+    `values_for` call this, so they cannot disagree about identity -- while
+    still deriving the VALUES by separate paths, which is what makes the
+    check a real comparison.
+    """
+    seen, out = {}, []
+    for f in features or []:
+        base = _row_id(f)
+        seen[base] = seen.get(base, 0) + 1
+        out.append(base if seen[base] == 1 else "%s#%d" % (base, seen[base]))
+    return out
 
 
 def values_for(archetype, data_slice):
@@ -82,9 +105,8 @@ def values_for(archetype, data_slice):
                               "y_mean": sum(ys) / len(ys)}
         return out
     conditions = list(data_slice.get("conditions") or [])
-    return {_row_id(f): dict(zip(conditions,
-                                 [float(v) for v in f.get("values") or []]))
-            for f in features}
+    return {rid: dict(zip(conditions, [float(v) for v in f.get("values") or []]))
+            for rid, f in zip(row_ids(features), features)}
 
 
 def _tsv(header, rows):
@@ -187,8 +209,9 @@ def build_timecourse(data_slice, spec):
     conditions = list(data_slice.get("conditions") or [])
     features = list(data_slice.get("features") or [])
     header = ["feature"] + conditions
-    rows = [[_row_id(f), *[_num(v) for v in f.get("values") or []]]
-            for f in features]
+    ids = row_ids(features)
+    rows = [[rid, *[_num(v) for v in f.get("values") or []]]
+            for rid, f in zip(ids, features)]
     data = _tsv(header, rows)
 
     # Colour by FEATURE here (the conditions are the x axis), from the same
@@ -201,12 +224,12 @@ def main():
     palette = %r
     fig, ax = plt.subplots()
     x = list(range(len(conditions)))
-    bares = [r[0].split("|")[0] for r in rows]
+    bares = [r[0].split("|")[0].split("#")[0] for r in rows]
     for i, row in enumerate(rows):
         # The row id is `Symbol|Omic`; show the omic whenever the bare symbol
         # would repeat, or a gene measured in two layers gives a legend with
         # two entries reading "Fos" and no way to tell them apart.
-        bare = row[0].split("|")[0]
+        bare = row[0].split("|")[0].split("#")[0]
         label = row[0].replace("|", " \u00b7 ") if bares.count(bare) > 1 else bare
         values = [float(v) for v in row[1:]]
         ax.plot(x, values, marker="o", color=palette[i %% len(palette)],
@@ -243,8 +266,9 @@ def build_heatmap(data_slice, spec):
     conditions = list(data_slice.get("conditions") or [])
     features = list(data_slice.get("features") or [])
     header = ["feature"] + conditions
-    rows = [[_row_id(f), *[_num(v) for v in f.get("values") or []]]
-            for f in features]
+    ids = row_ids(features)
+    rows = [[rid, *[_num(v) for v in f.get("values") or []]]
+            for rid, f in zip(ids, features)]
     data = _tsv(header, rows)
 
     has_negative = any(float(v) < 0 for f in features

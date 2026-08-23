@@ -175,6 +175,22 @@ class ValuesContractTest(unittest.TestCase):
                     self.assertAlmostEqual(float(cell), float(expected[key][column]),
                                            places=9, msg="%s %s/%s" % (name, key, column))
 
+    def test_two_measurements_of_one_gene_in_one_layer_stay_distinct(self):
+        """The defect a live run's QA check caught: `Rpl18|Gene expression`
+        twice, at different values, so the dict kept one and the file had two."""
+        dup = [{"id": "a", "label": "Rpl18", "omic": "Gene expression",
+                "values": [10.1936, 10.1627, 1.0, 2.0]},
+               {"id": "b", "label": "Rpl18", "omic": "Gene expression",
+                "values": [10.2129, 10.2160, 1.0, 2.0]}]
+        sl = _slice(dup)
+        data, _s, _l = ft.build_timecourse(sl, _spec("timecourse"))
+        ids = [r.split("\t")[0] for r in data.strip().splitlines()[1:]]
+        self.assertEqual(ids, ["Rpl18|Gene expression", "Rpl18|Gene expression#2"])
+        expected = ft.values_for("timecourse", sl)
+        self.assertEqual(sorted(expected), sorted(ids))
+        self.assertAlmostEqual(expected["Rpl18|Gene expression"]["WT_aCD40"], 10.1936)
+        self.assertAlmostEqual(expected["Rpl18|Gene expression#2"]["WT_aCD40"], 10.2129)
+
     def test_a_gene_in_two_layers_is_two_distinct_rows(self):
         sl = _slice()
         data, _s, _l = ft.build_timecourse(sl, _spec("timecourse"))

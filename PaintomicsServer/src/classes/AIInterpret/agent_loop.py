@@ -2447,6 +2447,25 @@ def submit_report(ctx: RunContextWrapper[LoopContext], report_markdown: str) -> 
         _trace(c, "submit_report", "%d unknown figure id(s)" % len(unknown),
                "rejected", t0)
         return out
+    if (c.submit_attempts == 1 and known and not cited_ids
+            and time_to_act > NUDGE_MIN_SECONDS):
+        # Measured on the first live run with figures: the tool offered 26
+        # callouts and the submitted report contained none. The figures were
+        # drawn, rendered and passed their checks, and the reader never saw
+        # one -- which is the same outcome as not having the tool. Same shape
+        # as the delegation and citation nudges: asked once, then accepted.
+        out = ("NOT SUBMITTED YET (this is the only time you will be asked). "
+               "You made %d figure(s) and the report cites none of them, so "
+               "the reader gets none: %s. Paste each callout make_figure "
+               "returned into the section that discusses its finding "
+               "(`![Fig. N](figure:<id>)` on its own line). If a figure is not "
+               "worth showing, say nothing about it and submit again now."
+               % (len(known), ", ".join("![Fig. %d](figure:%s)" % (i + 1, f["id"])
+                                        for i, f in enumerate(c.figures)
+                                        if f.get("id"))[:600]))
+        _trace(c, "submit_report", "%d figures, 0 cited" % len(known),
+               "nudged once", t0)
+        return out
     failed_cited = sorted(i for i in cited_ids if not known[i]["qa_passed"])
     if (c.submit_attempts == 1 and failed_cited
             and time_to_act > NUDGE_MIN_SECONDS):
@@ -2667,21 +2686,32 @@ def make_figure(ctx: RunContextWrapper[LoopContext], archetype: str,
             "has_negative": has_negative, "centre_zero": None,
             "n": len(data_slice["features"]) or len(data_slice["pathways"]),
             "test": None}
-    fig_id = "fig%d-%s" % (len(c.figures) + 1, figures_mod._slug(conclusion))
+    # Reserve the slot BEFORE building. Sub-agents call this concurrently, and
+    # `len(c.figures) + 1` computed at build time gave two figures the same
+    # number: one live run produced fig1-, fig1-, fig3-, fig3- while telling
+    # the agent "Fig. 1" and "Fig. 2" for the first two. A number that does not
+    # match its own id is a number nobody can paste with confidence.
+    c.figures.append({"id": None, "archetype": archetype,
+                      "conclusion": conclusion.strip(), "qa_passed": False,
+                      "qa": [], "rendered": False, "bundle": ""})
+    index = len(c.figures)
+    slot = c.figures[index - 1]
+    fig_id = "fig%d-%s" % (index, figures_mod._slug(conclusion))
+    slot["id"] = fig_id
     try:
         bundle, (passed, lines), result = figures_mod.build_bundle(
             c.job_instance, fig_id, archetype, data_slice, spec)
     except Exception as exc:                      # a failed figure is data
         logger.warning("[%s][loop] make_figure failed: %s", c.job_id, exc,
                        exc_info=True)
+        c.figures.pop(index - 1) if c.figures[index - 1] is slot else None
         out = "The figure could not be built (%s: %s)." % (type(exc).__name__, exc)
         _trace(c, "make_figure", archetype, "error", t0)
         return _spend(c, out, "make_figure")
 
-    c.figures.append({"id": fig_id, "archetype": archetype, "bundle": bundle,
-                      "conclusion": conclusion.strip(), "qa_passed": bool(passed),
-                      "qa": lines, "rendered": bool(getattr(result, "ok", False))})
-    out = figures_mod.figure_block(fig_id, len(c.figures), spec, passed, lines,
+    slot.update({"bundle": bundle, "qa_passed": bool(passed), "qa": lines,
+                 "rendered": bool(getattr(result, "ok", False))})
+    out = figures_mod.figure_block(fig_id, index, spec, passed, lines,
                                    result, note)
     _trace(c, "make_figure", "%s/%s" % (archetype, fig_id),
            "qa %s" % ("pass" if passed else "fail"), t0)
