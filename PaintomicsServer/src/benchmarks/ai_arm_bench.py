@@ -195,6 +195,11 @@ STAGE_COUNTS = ("delegate_fulltext_gained", "quotes_supplied", "quotes_reused", 
                 "results_citations_kept", "results_attempts", "results_section",
                 # "short" is a ratio, so keep the ratio, not just the verdict.
                 "topup_candidate_ratio",
+                # Figures drawn, and how many failed QA: the store-time
+                # guarantee shows EVERY figure to the reader, so a run's
+                # failing count is a reader-visible defect count, not an
+                # internal one.
+                "figures", "figures_failing_qa",
                 # How big the agent's territory was, and how much of it a tool
                 # edited out of a request without saying so. Coverage means
                 # nothing without the denominator: 15 pathways of 15 and 15 of

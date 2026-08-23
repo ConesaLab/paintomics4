@@ -25,6 +25,12 @@ import traceback
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
+# Grounding constructs an LLMClient before the (stubbed) quote collection runs;
+# with no key in the environment that constructor raises inside a try that is
+# deliberately swallowed, and three tests fail for a reason that has nothing to
+# do with delegation. Every other AI suite pins a dummy key; so does this one.
+os.environ.setdefault("AI_CSIC_API_KEY", "test-key-not-used")
+
 # `_trace` archives to CLIENT_TMP_DIR/ai_traces, the corpus every
 # tool-usefulness figure here is computed from -- servlet runs included.
 # Redirected BEFORE agent_loop is imported: serverconf is read at import time.

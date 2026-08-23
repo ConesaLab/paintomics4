@@ -63,7 +63,13 @@ def test_descriptions_stay_affordable():
     assert not oversized, ("descriptions over 700 chars: %s"
                            % ", ".join("%s=%d" % o for o in oversized))
     total = sum(len(t.description or "") for t in TOOLBELT)
-    assert total < 3500, (
+    # 3500 was the ten-tool budget. The belt grew to sixteen through measured
+    # rounds where the description text itself was the fix ("Tell the agent
+    # compare_sets exists"), so the honest ceiling is the current spend plus
+    # room for none: growth from here comes from the Paper Agent's specialist
+    # split (spec 3.1), which gives each agent a five-tool belt instead of
+    # growing this one.
+    assert total < 6200, (
         "the toolbelt's descriptions total %d chars, re-sent every Decide turn; "
         "trim one before adding another" % total)
 
@@ -187,6 +193,12 @@ KNOWN_ORPHAN_DEFS = {
     # master, so they are pinned rather than removed.
     "Verdict",          # superseded by _parse_json_verdict's free-text parsing
     "verify_report",    # superseded by verify_report_v2
+    # Paper Agent kernel API (design spec 2026-08-23): consumers land with the
+    # graph/enrichment/QC steps and the orchestration; pinned here so the
+    # kernel could ship first with its own tests.
+    "archetype_names",       # figures.py -- registry surface for the specialists
+    "LayerMatrix",           # layer_matrix.py -- consumed by QC v2 and enrichment
+    "available_conditions",  # differential.py -- consumed by the comparison inventory
 }
 
 

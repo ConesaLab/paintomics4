@@ -118,8 +118,11 @@ PUBLISHED = {
     # v=1.3: the report fetch retries instead of dead-ending, and a job that no
     # longer exists is named as such rather than reported as "still in
     # progress".
+    # v=1.5: activity-feed labels for the seven tools the agent gained
+    # (figures, gene sets, differential, ordination, set comparison, gene
+    # lists and measurements).
     "app/view/PathwayAcquisitionViews/PA_AIInterpretView.js": (
-        "1.3", "595b18822379aa51b7962357402663b19a7938ca6200bd78b8d77c3a3ea220a1"),
+        "1.5", "42b823a635ee930a9ad6aa4f6685c2c8dd0281a546e88ea896341065c74abcf7"),
     "app/view/PathwayAcquisitionViews/PA_Step3RegTargetNetworkView.js": (
         "0.7", "b135712a9564f8ae0eac94daf9c567ef275c4c748dbc270fdbdeb7d25fc79e34"),
     # OmniPath ships no diagram, so its pathways render as an interactive graph
