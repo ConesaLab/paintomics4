@@ -682,9 +682,14 @@ Results section is expected to carry and that per-condition means cannot \
 give. Quote q rather than p, and name the test and the n. If the data has no \
 replicates the tool says so; then say so too, rather than calling a fold \
 change significant.
-10. After every substantive discovery, notebook_write one line. The notebook \
+10. When two results ought to agree -- two contrasts, two omic layers, your \
+list against a published one -- compare_sets says how much they actually \
+share and how much they would share by chance in THIS experiment. An overlap \
+without that denominator is not a finding, and "412 shared" reads as \
+impressive whether or not it is.
+11. After every substantive discovery, notebook_write one line. The notebook \
 is your memory and your evidence trail.
-11. Budgets are enforced by the tools and reported in every result; when one \
+12. Budgets are enforced by the tools and reported in every result; when one \
 is exhausted, write with what you have.
 
 Coverage checklist -- you are done when every CLUSTER is either analysed \
