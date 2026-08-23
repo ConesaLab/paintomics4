@@ -283,9 +283,11 @@ def verify_report_v2(report_text, gene_whitelist, unique_papers, job_instance):
             })
 
     # 4. Gene whitelist check (informational)
-    mentioned_genes = _extract_gene_mentions(report_text)
+    mentioned_genes, gene_source = gene_mentions(report_text)
     valid_genes = sum(1 for g in mentioned_genes if g.upper() in gene_whitelist)
     gene_accuracy = valid_genes / max(len(mentioned_genes), 1)
+    # Only the convention-marked mentions are a measurement; see gene_mentions.
+    gene_measured = gene_source == "italic" and bool(mentioned_genes)
 
     # 5. Compute ref accuracy
     total_refs = len(parsed_refs) + len(invalid_indices)
@@ -295,7 +297,14 @@ def verify_report_v2(report_text, gene_whitelist, unique_papers, job_instance):
     # 6. P-value check (informational)
     pval_issues = _check_pvalues(report_text, job_instance)
 
-    score = 0.5 * ref_accuracy + 0.2 * gene_accuracy + 0.3 * (1 - min(len(pval_issues) / 5, 1))
+    pval_ok = 1 - min(len(pval_issues) / 5, 1)
+    if gene_measured:
+        score = 0.5 * ref_accuracy + 0.2 * gene_accuracy + 0.3 * pval_ok
+    else:
+        # Feeding an unmeasured gene term into the score docks every report
+        # by up to 0.2 for a number nobody measured. Renormalise over the
+        # two terms that WERE measured instead of scoring a guess.
+        score = (0.5 * ref_accuracy + 0.3 * pval_ok) / 0.8
 
     # Whether the quotations could be checked at all, kept separate from
     # whether they passed. Roughly two reports in five carry inline [N] markers
@@ -309,6 +318,9 @@ def verify_report_v2(report_text, gene_whitelist, unique_papers, job_instance):
         "score": round(score, 2),
         "failed_citations": failed_citations,
         "gene_accuracy": round(gene_accuracy, 2),
+        "gene_mentions_checked": len(mentioned_genes),
+        "gene_mentions_source": gene_source,
+        "gene_accuracy_measured": gene_measured,
         "ref_accuracy": round(ref_accuracy, 2),
         "references_section_found": bool(parsed_refs),
         "citations_checked": len([r for r in parsed_refs if r.get("cited_text")]),
@@ -1111,6 +1123,72 @@ def _extract_gene_mentions(text):
     """Extract likely gene symbols — require at least 2 uppercase chars and filter common words."""
     candidates = set(re.findall(r'\b([A-Z][A-Z0-9][A-Za-z0-9]{0,6})\b', text))
     return [g for g in candidates if g.upper() not in _COMMON_WORDS]
+
+
+# --- what a gene mention actually is ------------------------------------
+#
+# The heuristic above answers "which tokens LOOK shouty", which is not the
+# same question. Measured over 32 stored blind runs it put gene_accuracy at
+# 0.35, and the tokens it counted wrong were, in frequency order: the
+# report's own cluster labels (C01..C31, present in every single run), the
+# head of a hyphenated complex name (NF from NF-kB, AP from AP-1), the
+# organism code (MMU), roman numerals, and plural family words (GTPases,
+# TNFs). None of those are claims about a gene, so counting them as failed
+# gene claims measures the extractor, not the report.
+#
+# Reports mark gene symbols in italics -- a convention the writing prompt
+# sets and the reader relies on. Read THAT and the same 32 runs give 909 of
+# 934 italicised symbols present in the job's own data (0.973); the 25
+# leftovers are emphasis ("*entirely*", "*down*") and two family names.
+#
+# When a report does not use the convention there is nothing precise to
+# read, and the honest answer is "not measured" -- the same failure the
+# `quotations_unverifiable` flag exists to make visible, for the same
+# reason: a fabricated 0.35 and a real 0.35 must not look alike.
+
+_ITALIC_SPAN = re.compile(r"(?<![*\w])\*([^*\n]{1,40})\*(?![*\w])")
+_GENE_TOKEN = re.compile(r"^[A-Za-z][A-Za-z0-9.-]{0,11}$")
+_CLUSTER_LABEL = re.compile(r"^C\d{1,3}$")
+_ROMAN = frozenset({"II", "III", "IV", "VI", "VII", "VIII", "IX", "XI", "XII"})
+
+# Enough italicised symbols that the report is clearly using the convention
+# rather than italicising the odd word for emphasis.
+MIN_ITALIC_GENE_MENTIONS = 10
+
+
+def _italic_gene_mentions(text):
+    """Gene symbols the report itself marks as gene symbols.
+
+    Splits `*Fos, Egr1 and Junb*` into three, and drops the emphasis case:
+    a symbol is never all-lowercase in mouse or human nomenclature, so
+    "*entirely*" and "*down*" cannot be mistaken for one.
+    """
+    out = []
+    for span in _ITALIC_SPAN.findall(text or ""):
+        for tok in re.split(r"[,;/]|\band\b|\bor\b", span):
+            tok = tok.strip().strip(".")
+            if not tok or " " in tok or not _GENE_TOKEN.match(tok):
+                continue
+            if not any(c.isalpha() for c in tok) or tok.islower():
+                continue
+            out.append(tok)
+    return out
+
+
+def gene_mentions(text):
+    """(mentions, source) -- 'italic' when the report marks its symbols.
+
+    Falls back to the shouty-token heuristic with the three families it is
+    known to miscount removed, and says so: 'heuristic' means the number
+    that follows is indicative, not a measurement.
+    """
+    italic = _italic_gene_mentions(text)
+    if len(italic) >= MIN_ITALIC_GENE_MENTIONS:
+        return italic, "italic"
+    rough = [g for g in _extract_gene_mentions(text or "")
+             if not _CLUSTER_LABEL.match(g) and g.upper() not in _ROMAN
+             and not g.endswith("s")]
+    return rough, "heuristic"
 
 def _check_pvalues(text, job_instance):
     issues = []
