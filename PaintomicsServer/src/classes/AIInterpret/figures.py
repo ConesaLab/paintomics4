@@ -46,7 +46,56 @@ logger = logging.getLogger(__name__)
 FIGURE_CAP = 8
 RENDER_TIMEOUT = 90
 
-ARCHETYPES = ("timecourse", "heatmap", "enrichment", "scatter")
+# ---------------------------------------------------------------------------
+# The archetype registry. An archetype is a pair of functions:
+#
+#   builder(data_slice, spec) -> (data_tsv, script, legend)
+#   values_for(data_slice)    -> {row_id: {column: float}}
+#
+# `values_for` re-derives what the TSV should contain BY A DIFFERENT PATH than
+# the builder that writes it, which is what makes figure_qa's "every value on
+# the canvas is the job's" check a comparison instead of a tautology. Every
+# new figure kind -- network, pca, venn, nes_dotplot -- registers here and
+# gets the whole pipeline (sandbox render, QA, store-time guarantee, cap)
+# without touching it. `ARCHETYPES` stays a module attribute because the
+# make_figure tool validates against it; it is rebuilt on every registration.
+# ---------------------------------------------------------------------------
+
+_REGISTRY = {}
+
+ARCHETYPES = ()
+
+
+def register_archetype(name, builder, values_for):
+    """Add (or re-affirm) one archetype. Collisions with a DIFFERENT builder
+    are refused: two modules silently fighting over a name would make the
+    rendered figure depend on import order."""
+    global ARCHETYPES
+    key = str(name).strip().lower()
+    if not key:
+        raise ValueError("an archetype needs a name")
+    if not callable(builder) or not callable(values_for):
+        raise ValueError("archetype %r needs callable (builder, values_for)"
+                         % key)
+    existing = _REGISTRY.get(key)
+    if existing is not None and (existing[0] is not builder
+                                 or existing[1] is not values_for):
+        raise ValueError("archetype %r is already registered with a "
+                         "different builder" % key)
+    _REGISTRY[key] = (builder, values_for)
+    ARCHETYPES = tuple(_REGISTRY)
+
+
+def archetype_names():
+    return tuple(_REGISTRY)
+
+
+def _archetype(name):
+    entry = _REGISTRY.get(str(name).strip().lower())
+    if entry is None:
+        raise KeyError("unknown archetype %r (registered: %s)"
+                       % (name, ", ".join(_REGISTRY) or "none"))
+    return entry
 
 # Kept in one place because three different callers need to agree on it.
 _SLUG = re.compile(r"[^a-z0-9]+")
@@ -205,12 +254,9 @@ def _empty_reason(archetype, data_slice):
 
 def build_bundle(job_instance, fig_id, archetype, data_slice, spec):
     """Write data.tsv + figure.py, render, QA. Returns (bundle_dir, qa, result)."""
-    from . import figure_qa, figure_sandbox, figure_templates
+    from . import figure_qa, figure_sandbox
 
-    builder = {"timecourse": figure_templates.build_timecourse,
-               "heatmap": figure_templates.build_heatmap,
-               "enrichment": figure_templates.build_enrichment,
-               "scatter": figure_templates.build_scatter}[archetype]
+    builder, _values_for = _archetype(archetype)
     data_tsv, script, legend = builder(data_slice, spec)
 
     # An empty panel is worse than no panel: the store-time guarantee shows
@@ -236,7 +282,7 @@ def build_bundle(job_instance, fig_id, archetype, data_slice, spec):
     # From the SLICE, by a different code path than the writer -- so the check
     # "every value in data.tsv is the job's" compares two derivations instead
     # of comparing the file with itself.
-    values = figure_templates.values_for(archetype, data_slice)
+    values = _values_for(data_slice)
     passed, lines = figure_qa.check(bundle, spec, values)
     with open(os.path.join(bundle, "qa.json"), "w") as fh:
         json.dump({"passed": passed, "checks": lines,
@@ -260,3 +306,23 @@ def figure_block(fig_id, index, spec, passed, lines, result, note=""):
     if note:
         out.append(note)
     return "\n".join(out)
+
+
+# ---------------------------------------------------------------------------
+# The four built-in archetypes. Registered at import so ARCHETYPES is complete
+# before any tool validates against it; the partial binds the archetype name
+# into figure_templates' shared values_for.
+# ---------------------------------------------------------------------------
+
+def _register_builtins():
+    import functools
+    from . import figure_templates as t
+    for name, builder in (("timecourse", t.build_timecourse),
+                          ("heatmap", t.build_heatmap),
+                          ("enrichment", t.build_enrichment),
+                          ("scatter", t.build_scatter)):
+        register_archetype(name, builder,
+                           functools.partial(t.values_for, name))
+
+
+_register_builtins()
