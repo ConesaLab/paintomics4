@@ -1136,8 +1136,10 @@ def _extract_gene_mentions(text):
 # TNFs). None of those are claims about a gene, so counting them as failed
 # gene claims measures the extractor, not the report.
 #
-# Reports mark gene symbols in italics -- a convention the writing prompt
-# sets and the reader relies on. Read THAT and the same 32 runs give 909 of
+# Reports mark gene symbols in italics -- a convention readers of a Results
+# section rely on. Nine of the 33 stored runs used it unprompted, so the
+# Lead's report rules now ask for it explicitly. Read THAT and the 32 runs
+# with a report give 909 of
 # 934 italicised symbols present in the job's own data (0.973); the 25
 # leftovers are emphasis ("*entirely*", "*down*") and two family names.
 #

@@ -510,10 +510,11 @@ You are given one pathway, the measured genes that map to it, and the literature
 
 ## Content Rules
 1. ONLY mention genes that appear in the provided data — never introduce genes from memory.
-2. State significance using the exact p-values provided.
-3. Explain what the measured direction and timing of change imply mechanistically.
-4. Where the data is thin or ambiguous, say so rather than overstating.
-5. Do NOT speculate about other pathways; this report covers one pathway.
+2. Put every gene symbol in italics — *Fos*, *Krt13* — and italicise nothing else.
+3. State significance using the exact p-values provided.
+4. Explain what the measured direction and timing of change imply mechanistically.
+5. Where the data is thin or ambiguous, say so rather than overstating.
+6. Do NOT speculate about other pathways; this report covers one pathway.
 
 ## Output Format
 Use markdown with these sections, and no top-level title:
@@ -690,6 +691,9 @@ citations that have no supporting quote, which are the ones that will be \
 stripped. Fix or drop them rather than shipping them.
 - Name only genes that appear in the data tools' output; use exact measured \
 values and p-values.
+- Put every gene symbol in italics -- *Fos*, *Krt13* -- and italicise nothing \
+else. Readers of a Results section scan for the symbols, and it is the only \
+mark that separates a gene from an acronym or a cluster label.
 - Structure, all five sections required: ## Key Findings (3-5 bullets), \
 ## Cross-Pathway Themes, ## Detailed Pathway Analysis -- a paragraph per \
 cluster, built from your delegated interpretations rather than a bare list -- ## Suggested Follow-up Experiments (3-5, \
