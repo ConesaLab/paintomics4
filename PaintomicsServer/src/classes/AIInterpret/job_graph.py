@@ -284,7 +284,9 @@ def _pathway_rows(ctx_pathways):
             if str(name) not in genes:
                 genes.append(str(name))
         compounds = []
-        for met in (pw.get("top_metabolites") or []):
+        # The run context calls them top_compounds; older fixtures said
+        # top_metabolites. Read both, first key wins.
+        for met in (pw.get("top_compounds") or pw.get("top_metabolites") or []):
             label = met.get("name") or met.get("symbol")
             if label:
                 compounds.append(str(label))
