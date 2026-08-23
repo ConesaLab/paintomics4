@@ -155,15 +155,20 @@ def enrich_collection(collection, hits, universe, alpha=DEFAULT_ALPHA,
     qvalues = bh_qvalues([r["p"] for r in results])
     for r, q in zip(results, qvalues):
         r["q"] = q
-        if ledger is not None:
+    results.sort(key=lambda r: r["p"])
+    n_significant = sum(1 for r in results if r["q"] <= alpha)
+    kept = results[:max_results]
+    # Only the REPORTED rows enter the ledger: 4,754 tested GO terms would
+    # otherwise mint ~14k fact ids per call, and the supplementary table is
+    # meant to trace the numbers a reader can see, not the whole scan.
+    if ledger is not None:
+        for r in kept:
             scope = {"set": r["id"], "source": collection.source}
             r["p_fact"] = ledger.add("pvalue", r["p"], scope,
                                      "enrich_collection")
-            r["q_fact"] = ledger.add("q", q, scope, "enrich_collection")
-    results.sort(key=lambda r: r["p"])
-    n_significant = sum(1 for r in results if r["q"] <= alpha)
+            r["q_fact"] = ledger.add("q", r["q"], scope, "enrich_collection")
     return {"source": collection.source,
-            "results": results[:max_results],
+            "results": kept,
             "n_tested": len(results), "n_significant": n_significant,
             "universe": len(universe), "hits_in_universe": len(hits),
             "method": ("Fisher exact per set against the measured universe, "
@@ -260,14 +265,16 @@ def run_gsea(ranked_genes, scores, collection, n_permutations=GSEA_PERMUTATIONS,
     qvalues = bh_qvalues([r["p"] for r in results])
     for r, q in zip(results, qvalues):
         r["q"] = q
-        if ledger is not None:
+    results.sort(key=lambda r: r["p"])
+    kept = results[:max_results]
+    if ledger is not None:                      # reported rows only, as above
+        for r in kept:
             scope = {"set": r["id"], "source": collection.source}
             r["nes_fact"] = ledger.add("stat", r["nes"], scope, "run_gsea")
             r["p_fact"] = ledger.add("pvalue", r["p"], scope, "run_gsea")
-            r["q_fact"] = ledger.add("q", q, scope, "run_gsea")
-    results.sort(key=lambda r: r["p"])
+            r["q_fact"] = ledger.add("q", r["q"], scope, "run_gsea")
     floor = 1.0 / (n_permutations + 1)
-    return {"source": collection.source, "results": results[:max_results],
+    return {"source": collection.source, "results": kept,
             "n_tested": len(results),
             "min_attainable_p": floor,
             "method": ("pre-ranked GSEA, weight |score|^1, %d seeded "
@@ -276,3 +283,38 @@ def run_gsea(ranked_genes, scores, collection, n_permutations=GSEA_PERMUTATIONS,
                        "phenotype permutation a two-digit floor), NES by "
                        "same-sign permutation mean, BH across sets"
                        % (n_permutations, floor))}
+
+
+# ---------------------------------------------------------- job-facing door
+
+def enrich_direction(matrix, collection, omic, direction="both",
+                     condition=None, **kw):
+    """Enrichment of one layer's up/down/both list, universe = that layer.
+
+    `direction` composes the set-descriptor grammar: "up"/"down" resolve the
+    signed slices, "both" the whole relevant list. The universe is ALWAYS the
+    clone-deduplicated measured features of the same layer -- passing a
+    different universe is not offered, because that is the mistake this
+    module exists to prevent.
+    """
+    from .sets import resolve_descriptor
+    layer = matrix.get(omic)
+    if layer is None:
+        return {"error": "no layer called %r (layers: %s)"
+                         % (omic, ", ".join(matrix.omics()) or "none")}
+    universe = layer.deduplicated().labels
+    direction = str(direction or "both").lower()
+    if direction not in ("up", "down", "both"):
+        return {"error": "direction must be up, down or both"}
+    descriptor = ("relevant in %s" % omic if direction == "both"
+                  else "%s in %s%s" % (direction, omic,
+                                       " at %s" % condition if condition
+                                       else ""))
+    hits, note = resolve_descriptor(matrix, descriptor)
+    if hits is None:
+        return {"error": note}
+    out = enrich_collection(collection, hits, universe, **kw)
+    if "error" not in out:
+        out["descriptor"] = descriptor
+        out["descriptor_note"] = note
+    return out

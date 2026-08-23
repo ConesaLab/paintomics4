@@ -334,6 +334,11 @@ def _register_builtins():
     register_archetype("upset", fs.build_upset, fs.values_for_upset)
     register_archetype("concordance", fs.build_concordance,
                        fs.values_for_concordance)
+    from . import figure_gsea as g
+    register_archetype("nes_dotplot", g.build_nes_dotplot,
+                       g.values_for_nes_dotplot)
+    register_archetype("gsea_running", g.build_gsea_running,
+                       g.values_for_gsea_running)
 
 
 _register_builtins()

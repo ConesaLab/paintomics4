@@ -76,6 +76,23 @@ SLICES = {
                   {"name": "Metab", "members": ["FOS", "CIT", "AKT1"]}],
          "features": [1], "conditions": [], "colours": {}, "pathways": []},
         _spec("upset", "Three layers overlap unevenly.")),
+    "nes_dotplot": (
+        {"results": [
+            {"id": "H1", "name": "HALLMARK_APOPTOSIS", "nes": 1.8,
+             "q": 0.01, "size": 12},
+            {"id": "H2", "name": "HALLMARK_HYPOXIA", "nes": -1.2,
+             "q": 0.30, "size": 8},
+            {"id": "H3", "name": "HALLMARK_MYC_TARGETS", "nes": 2.4,
+             "q": 0.002, "size": 20}],
+         "features": [1], "conditions": [], "colours": {}, "pathways": []},
+        _spec("nes_dotplot", "Three hallmark sets shift with treatment.")),
+    "gsea_running": (
+        {"set_name": "HALLMARK_APOPTOSIS",
+         "es": 0.62,
+         "running": [0.2, 0.4, 0.62, 0.5, 0.35, 0.2, 0.1, -0.05, -0.1, 0.0],
+         "positions": [0, 1, 2],
+         "features": [1], "conditions": [], "colours": {}, "pathways": []},
+        _spec("gsea_running", "Apoptosis genes concentrate at the top.")),
     "concordance": (
         {"omic_a": "RNA", "omic_b": "Protein",
          "quadrants": {"++": 2, "--": 1, "+-": 1, "-+": 0},

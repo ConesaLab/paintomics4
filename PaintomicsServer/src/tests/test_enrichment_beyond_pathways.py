@@ -59,6 +59,39 @@ class BHTest(unittest.TestCase):
                             for i in range(len(pairs) - 1)))
 
 
+class DirectionDoorTest(unittest.TestCase):
+
+    def _matrix(self):
+        from src.classes.AIInterpret.layer_matrix import Layer, LayerMatrix
+        layer = Layer("RNA", "gene", ["T1"])
+        for i, (label, value, relevant) in enumerate(
+                [("G00", 1.0, True), ("G01", 2.0, True),
+                 ("G02", -1.0, True)] +
+                [("G%02d" % i, 0.1, False) for i in range(3, 50)]):
+            layer.feature_ids.append("f%d" % i)
+            layer.labels.append(label)
+            layer.values.append([value])
+            layer.relevant.append(relevant)
+        return LayerMatrix({"RNA": layer})
+
+    def test_direction_resolves_through_the_grammar(self):
+        from src.classes.AIInterpret.enrichment import enrich_direction
+        col = _collection()
+        matrix = self._matrix()
+        up = enrich_direction(matrix, col, "RNA", "up", condition="T1",
+                              elim=False)
+        self.assertEqual(up["hits_in_universe"], 2)          # G00, G01
+        self.assertEqual(up["descriptor"], "up in RNA at T1")
+        both = enrich_direction(matrix, col, "RNA", "both", elim=False)
+        self.assertEqual(both["hits_in_universe"], 3)
+
+    def test_a_wrong_direction_is_refused(self):
+        from src.classes.AIInterpret.enrichment import enrich_direction
+        res = enrich_direction(self._matrix(), _collection(), "RNA",
+                               "sideways")
+        self.assertIn("error", res)
+
+
 class EnrichTest(unittest.TestCase):
 
     HITS = ["G00", "G01", "G02"]
