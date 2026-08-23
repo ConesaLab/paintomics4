@@ -199,6 +199,20 @@ KNOWN_ORPHAN_DEFS = {
     "archetype_names",       # figures.py -- registry surface for the specialists
     "LayerMatrix",           # layer_matrix.py -- consumed by QC v2 and enrichment
     "available_conditions",  # differential.py -- consumed by the comparison inventory
+    # Paper Agent v1 wires a SUBSET of the kernel into the specialists'
+    # deterministic passes; the rest is the belts' remaining surface
+    # (spec 3.1): run_gsea is the optional pre-ranked leg, the four graph
+    # reads beyond schema/hubs/subgraph are the Network analyst's, and the
+    # store helpers serve the installer path and the corpus harness.
+    "run_gsea",              # enrichment.py -- exercised by tests + corpus runs
+    "available_collections", # gene_set_store.py -- the UI/tool discovery door
+    "from_gmt",              # gene_set_store.py -- user-supplied GMT path
+    "reset_cache_for_tests", # gene_set_store.py -- test isolation hook
+    "graph_neighbors",       # graph_tools.py -- Network analyst belt
+    "graph_path",            # graph_tools.py -- Network analyst belt
+    "graph_evidence",        # graph_tools.py -- Network analyst belt
+    "graph_filter",          # graph_tools.py -- Network analyst belt
+    "concordance",           # sets.py -- Enrichment analyst belt (2-layer jobs)
 }
 
 

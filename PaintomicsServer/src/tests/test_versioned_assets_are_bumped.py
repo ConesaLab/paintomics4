@@ -121,6 +121,10 @@ PUBLISHED = {
     # v=1.5: activity-feed labels for the seven tools the agent gained
     # (figures, gene sets, differential, ordination, set comparison, gene
     # lists and measurements).
+    # v=0.1: the Paper agent's tab -- consent, one progress lane per
+    # specialist, the manuscript with the gate's verdict, Markdown export.
+    "app/view/PathwayAcquisitionViews/PA_PaperView.js": (
+        "0.1", "04764bc90e491df7b843ad296d85c90497ccc78d894500e51c0c2994290f91c3"),
     "app/view/PathwayAcquisitionViews/PA_AIInterpretView.js": (
         "1.5", "42b823a635ee930a9ad6aa4f6685c2c8dd0281a546e88ea896341065c74abcf7"),
     "app/view/PathwayAcquisitionViews/PA_Step3RegTargetNetworkView.js": (
@@ -137,7 +141,7 @@ PUBLISHED = {
     # read it as undefined, and `failures >= undefined` is false for ever --
     # which is precisely the endless poll this release exists to stop.
     "resources/ServerConfiguration.js": (
-        "1.0", "6d9d416610b8384c78fb7e46b10aa4414aea0886d720a840499904aec0e9fe85"),
+        "1.1", "4b59bc9e2de5b92016b1c6c40b7bba8b1f5cea2be883637db78aca8e8545067c"),
     # The evidence layer itself: MORE relationships drawn on the diagram and
     # classified against KEGG, Reactome and OmniPath.
     "app/view/PathwayAcquisitionViews/PA_Step4EvidenceOverlay.js": (
