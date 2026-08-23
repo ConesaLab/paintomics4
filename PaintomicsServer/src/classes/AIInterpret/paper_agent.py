@@ -298,8 +298,13 @@ def design_qc_analyst(ctx, llm):
         # the most-separated pair of PC1 group means, plus first-vs-last in
         # the design's own column order.
         from . import differential
-        conditions_avail = differential.available_conditions(
-            ctx.job_instance, omic)
+        # available_conditions returns dicts ({name, replicates}); the test
+        # takes NAMES. The first r2 run refused every contrast for exactly
+        # this: "conditions must be two of: WT_CD_5m, ..." against a dict.
+        conditions_avail = [
+            (c.get("name") if isinstance(c, dict) else c)
+            for c in differential.available_conditions(ctx.job_instance, omic)]
+        conditions_avail = [c for c in conditions_avail if c]
         contrasts = []
         if len(conditions_avail) >= 2:
             contrasts.append((conditions_avail[0], conditions_avail[-1]))
