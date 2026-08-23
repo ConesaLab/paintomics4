@@ -320,7 +320,15 @@ def from_job(job_instance, ctx_pathways=None, classify=True):
     """Build the JobGraph for a live job, saying what could not be read."""
     notes = []
 
-    rows, conditions, _symbols = _regulation_rows(job_instance)
+    rows, conditions, symbols = _regulation_rows(job_instance)
+    if symbols:
+        # The MORE table stores feature names (Ensembl ids where no symbol
+        # exists) and a symbols map beside them. Nodes take the symbol: it is
+        # what a reader knows, what the report writes, and an 18-character
+        # Ensembl id as a node label collides with everything near it.
+        for row in rows:
+            row["regulator"] = symbols.get(row["regulator"], row["regulator"])
+            row["target"] = symbols.get(row["target"], row["target"])
     if not rows:
         notes.append("MORE: no regulation table on this job; no REGULATES edges")
     elif classify:

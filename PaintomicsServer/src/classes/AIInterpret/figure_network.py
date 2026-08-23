@@ -63,7 +63,13 @@ def build_network(data_slice, spec):
     if len(edges) > 12 and (spec.get("width") or "single") == "single":
         spec = dict(spec, width="double")
 
-    script = _preamble(spec, height_mm=110) + '''
+    # Canvas grows with the node count: 30 edges over 40 nodes on a fixed
+    # 110 mm canvas put 'Jun' on top of 'Myc' on the first real subgraph and
+    # QA (rightly) failed the figure. Height and spring spread both scale.
+    nodes = {e.get("from") for e in edges} | {e.get("to") for e in edges}
+    height_mm = min(210, 90 + 3 * len(nodes))
+
+    script = _preamble(spec, height_mm=height_mm) + '''
 
 import networkx as nx
 
@@ -80,7 +86,8 @@ def main():
                    evidence=evidence)
     # Seeded so the same data always lands in the same embedding; k spreads
     # nodes enough that default-size labels do not collide on 30 edges.
-    pos = nx.spring_layout(g, seed=42, k=1.6 / max(1, len(g)) ** 0.5)
+    pos = nx.spring_layout(g, seed=42, k=2.4 / max(1, len(g)) ** 0.5,
+                           iterations=100)
     fig, ax = plt.subplots()
     regulators = {s for s, _t in g.edges()}
     for node, (x, y) in pos.items():
@@ -88,7 +95,11 @@ def main():
         ax.scatter([x], [y], s=110 if is_regulator else 70,
                    c="#0072B2" if is_regulator else "#D55E00",
                    zorder=3, edgecolors="white", linewidths=0.8)
-        ax.annotate(node, (x, y), textcoords="offset points",
+        # A label longer than 14 characters (an unmapped Ensembl id) is
+        # truncated with an ellipsis: the full id stays in data.tsv, and two
+        # full-length ids side by side cannot avoid colliding.
+        shown = node if len(node) <= 14 else node[:11] + "..."
+        ax.annotate(shown, (x, y), textcoords="offset points",
                     xytext=(0, 7), ha="center", fontsize=%r, zorder=4)
     for source, target, d in g.edges(data=True):
         colour = EVIDENCE_COLOURS.get(d["evidence"], "#56B4E9")
