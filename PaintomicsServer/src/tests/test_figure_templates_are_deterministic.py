@@ -200,5 +200,35 @@ class ValuesContractTest(unittest.TestCase):
         self.assertEqual(len(set(ids)), len(ids))
 
 
+class HeatmapRoomTest(unittest.TestCase):
+    """A heatmap's rows are y tick labels in a fixed column of pixels.
+
+    Two blind runs failed `no_label_collisions` on heatmaps alone — the
+    labels are as long as 'Ahsg | Proteomics' and past a dozen features they
+    land on each other. Height has to follow the row count, the way the
+    enrichment bars already do, and it has to stop at the type area.
+    """
+
+    def _height(self, n):
+        feats = [{"id": "G%d|g" % i, "label": "G%d" % i, "omic": "g",
+                  "values": [1.0, 2.0, 3.0, 4.0]} for i in range(n)]
+        _d, script, _l = ft.build_heatmap(_slice(feats), _spec("heatmap"))
+        line = [ln for ln in script.splitlines()
+                if "'figure.figsize'" in ln][0]
+        return eval(line.strip().rstrip(",").split(":", 1)[1])[1]
+
+    def test_more_rows_get_more_room(self):
+        few, many = self._height(3), self._height(30)
+        self.assertGreater(many, few, "30 rows must be taller than 3")
+
+    def test_a_short_heatmap_keeps_a_sane_floor(self):
+        self.assertGreaterEqual(self._height(1) * figure_style.MM_PER_INCH,
+                                50.0 - 0.01)   # mm -> in -> mm rounding
+
+    def test_a_very_tall_heatmap_stops_at_the_type_area(self):
+        mm = self._height(500) * figure_style.MM_PER_INCH
+        self.assertLessEqual(mm, figure_style.MAX_HEIGHT_MM + 1e-6)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

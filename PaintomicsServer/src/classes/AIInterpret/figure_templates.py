@@ -288,7 +288,11 @@ def build_heatmap(data_slice, spec):
     spec["centre_zero"] = centre_zero
     spec["cmap"] = cmap
 
-    script = _preamble(spec) + '''
+    # A heatmap's rows are y tick labels stacked in a fixed height: past a
+    # dozen features they land on each other, which is what the collision
+    # check kept failing on ('Ahsg . Proteomics' over its neighbour). Give
+    # each row its own vertical room, as the enrichment bars already do.
+    script = _preamble(spec, height_mm=max(50.0, 5.0 * len(features) + 28.0)) + '''
 
 def main():
     header, rows = read_tsv()
