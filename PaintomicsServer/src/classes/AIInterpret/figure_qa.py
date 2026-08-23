@@ -189,6 +189,10 @@ def _check_bundle_complete(bundle_dir, _spec, _values):
     return name, True, "all %d bundle files present and non-empty" % len(REQUIRED_FILES)
 
 
+#: Archetypes whose data cells are a raster grid by construction.
+GRID_ARCHETYPES = ("heatmap", "samplecorr")
+
+
 def _check_svg_text_is_text(bundle_dir, _spec, _values):
     name = "svg_text_is_text"
     svg, err = _read(os.path.join(bundle_dir, "figure.svg"))
@@ -206,12 +210,14 @@ def _check_svg_text_is_text(bundle_dir, _spec, _values):
                 "svg has no <text> elements -- labels were drawn as paths "
                 "(set svg.fonttype='none')%s" % raster)
     # The standard is "text as text", and that is what the count above proves.
-    # A heatmap's CELLS are an image by construction (imshow rasterises the
+    # A data grid's CELLS are an image by construction (imshow rasterises the
     # grid, as every published heatmap does); refusing that would fail a
-    # correct figure, so the raster is allowed exactly where the archetype
-    # draws a data grid and is reported everywhere else.
+    # correct figure, so the raster is allowed exactly for the archetypes
+    # that draw a data grid -- heatmap, and samplecorr's correlation matrix
+    # (whose colourbar rasterises the same way) -- and reported everywhere
+    # else.
     archetype = str((_spec or {}).get("archetype") or "").lower()
-    if n_image and archetype != "heatmap":
+    if n_image and archetype not in GRID_ARCHETYPES:
         return (name, False,
                 "svg embeds %d <image> element(s) in a %s, which draws no data "
                 "grid -- a raster here means something was flattened"

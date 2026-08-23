@@ -325,6 +325,10 @@ def _register_builtins():
                            functools.partial(t.values_for, name))
     from . import figure_network as n
     register_archetype("network", n.build_network, n.values_for_network)
+    from . import figure_qc as q
+    register_archetype("pca", q.build_pca, q.values_for_pca)
+    register_archetype("samplecorr", q.build_samplecorr,
+                       q.values_for_samplecorr)
 
 
 _register_builtins()
