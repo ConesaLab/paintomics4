@@ -32,8 +32,14 @@ def build_pca(data_slice, spec):
     pc1 = float(data_slice.get("pc1_percent") or 0.0)
     pc2 = float(data_slice.get("pc2_percent") or 0.0)
 
+    # Past a dozen samples, per-point name labels are what fails QA: 48
+    # replicate names cannot avoid each other on one panel, and a paper's
+    # PCA identifies groups by colour, not by naming every point.
+    annotate_names = len(samples) <= 12
+
     script = _preamble(spec) + '''
 
+ANNOTATE_NAMES = %r
 CONDITIONS = %r
 PALETTE = %r
 PC1_PERCENT = %r
@@ -53,10 +59,11 @@ def main():
         ys = [float(r[2]) for r in rows if condition_of(r[0]) == cond]
         ax.scatter(xs, ys, s=55, color=PALETTE[i %% len(PALETTE)],
                    label=cond, edgecolors="white", linewidths=0.6, zorder=3)
-    for r in rows:
-        ax.annotate(r[0], (float(r[1]), float(r[2])),
-                    textcoords="offset points", xytext=(0, 6),
-                    ha="center", fontsize=%r)
+    if ANNOTATE_NAMES:
+        for r in rows:
+            ax.annotate(r[0], (float(r[1]), float(r[2])),
+                        textcoords="offset points", xytext=(0, 6),
+                        ha="center", fontsize=%r)
     ax.set_xlabel("PC1 (%%.1f%%%% of variance)" %% PC1_PERCENT)
     ax.set_ylabel("PC2 (%%.1f%%%% of variance)" %% PC2_PERCENT)
     ax.axhline(0, color="#cccccc", lw=0.6, zorder=1)
@@ -69,7 +76,7 @@ def main():
 
 if __name__ == "__main__":
     main()
-''' % (conditions, list(figure_style.PALETTE), pc1, pc2,
+''' % (annotate_names, conditions, list(figure_style.PALETTE), pc1, pc2,
        figure_style.MIN_FONT_PT, figure_style.MIN_FONT_PT, _panel_label_src())
 
     spec = dict(spec, n=len(samples))
@@ -104,7 +111,12 @@ def build_samplecorr(data_slice, spec):
     # whole report to one ramp.
     flat = [v for row in matrix for v in row]
     cmap, _centre = figure_style.colormap_for(bool(flat and min(flat) < 0))
-    script = _preamble(spec, height_mm=100) + '''
+    # Every sample name is a y tick: give each row its own vertical room, as
+    # the heatmap archetype does, or 48 replicate labels land on each other.
+    height_mm = max(100.0, 3.2 * len(names) + 30.0)
+    if len(names) > 16 and (spec.get("width") or "single") == "single":
+        spec = dict(spec, width="double")
+    script = _preamble(spec, height_mm=height_mm) + '''
 
 def main():
     header, rows = read_tsv()

@@ -93,6 +93,19 @@ SLICES = {
          "positions": [0, 1, 2],
          "features": [1], "conditions": [], "colours": {}, "pathways": []},
         _spec("gsea_running", "Apoptosis genes concentrate at the top.")),
+    "pathway_diagram": (
+        {"pathway": {"id": "mmu04110", "name": "Cell cycle"},
+         "png_path": None,           # filled in setUpClass
+         "boxes": [
+             {"label": "Fos", "x": 100, "y": 80, "w": 46, "h": 17,
+              "value": 2.1},
+             {"label": "Jun", "x": 200, "y": 80, "w": 46, "h": 17,
+              "value": -1.4},
+             {"label": "Myc", "x": 150, "y": 160, "w": 46, "h": 17,
+              "value": 0.6}],
+         "crop": [40, 30, 320, 220],
+         "conditions": [], "features": [1], "colours": {}, "pathways": []},
+        _spec("pathway_diagram", "Three genes painted on the map.")),
     "concordance": (
         {"omic_a": "RNA", "omic_b": "Protein",
          "quadrants": {"++": 2, "--": 1, "+-": 1, "-+": 0},
@@ -104,6 +117,16 @@ SLICES = {
          "conditions": [], "colours": {}, "pathways": []},
         _spec("concordance", "Directions mostly agree across layers.")),
 }
+
+
+def _tiny_map_png():
+    """A small white PNG standing in for a KEGG map; written once per run."""
+    import tempfile
+    from PIL import Image
+    path = os.path.join(tempfile.gettempdir(), "qa8-tiny-map.png")
+    if not os.path.exists(path):
+        Image.new("RGB", (400, 300), "white").save(path)
+    return path
 
 
 class _Job(object):
@@ -118,6 +141,8 @@ class RenderAllTest(unittest.TestCase):
 
     def _render(self, archetype):
         data_slice, spec = SLICES[archetype]
+        if archetype == "pathway_diagram" and not data_slice.get("png_path"):
+            data_slice = dict(data_slice, png_path=_tiny_map_png())
         outdir = tempfile.mkdtemp(prefix="qa8-%s-" % archetype)
         try:
             bundle, (passed, lines), result = figures.build_bundle(
