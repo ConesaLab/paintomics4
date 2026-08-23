@@ -291,6 +291,65 @@ def design_qc_analyst(ctx, llm):
         if fig_id:
             note.figures.append(fig_id)
 
+        # Contrasts: where do the groups actually DIFFER? The first corpus
+        # round showed the cost of skipping this -- the interpreter recovered
+        # "Nr1i3 falls in CLP" from the same data by asking per-gene, and the
+        # fixed contracts never asked. Up to three Welch contrasts per layer:
+        # the most-separated pair of PC1 group means, plus first-vs-last in
+        # the design's own column order.
+        from . import differential
+        conditions_avail = differential.available_conditions(
+            ctx.job_instance, omic)
+        contrasts = []
+        if len(conditions_avail) >= 2:
+            contrasts.append((conditions_avail[0], conditions_avail[-1]))
+            if "error" not in res:
+                by_condition = {}
+                for sample in res["samples"]:
+                    by_condition.setdefault(sample["condition"], []).append(
+                        sample["pc1"])
+                means = {c: sum(v) / len(v) for c, v in by_condition.items()
+                         if c in conditions_avail}
+                if len(means) >= 2:
+                    ordered = sorted(means, key=means.get)
+                    extreme = (ordered[0], ordered[-1])
+                    if extreme not in contrasts and                             tuple(reversed(extreme)) not in contrasts:
+                        contrasts.append(extreme)
+        for cond_a, cond_b in contrasts[:3]:
+            de = differential.differential_test(ctx.job_instance, omic,
+                                                cond_a, cond_b)
+            if "error" in de:
+                note.unused_occasions.append(
+                    {"occasion": "contrast %s vs %s on %s"
+                                 % (cond_a, cond_b, omic),
+                     "reason": de["error"]})
+                continue
+            significant = [r for r in de["rows"] if r["q"] <= 0.05]
+            n_tag = ctx.ledger.tag("count", len(significant),
+                                   {"omic": omic,
+                                    "contrast": "%s|%s" % (cond_a, cond_b)},
+                                   "differential_test")
+            heads = []
+            for r in significant[:6]:
+                fc_tag = ctx.ledger.tag("log2fc", r["log2FC"],
+                                        {"feature": r["feature"],
+                                         "contrast": "%s|%s"
+                                                     % (cond_a, cond_b)},
+                                        "differential_test")
+                q_tag = ctx.ledger.tag("q", r["q"],
+                                       {"feature": r["feature"],
+                                        "contrast": "%s|%s"
+                                                    % (cond_a, cond_b)},
+                                       "differential_test")
+                heads.append("%s log2FC %s %s (q %.3g %s)"
+                             % (r["feature"], r["log2FC"], fc_tag,
+                                r["q"], q_tag))
+            note.evidence.append(
+                "contrast %s vs %s (%s; Welch t, BH): %d %s features at "
+                "q<=0.05 of %d tested; strongest: %s"
+                % (cond_a, cond_b, omic, len(significant), n_tag,
+                   de["tested"], "; ".join(heads) or "none"))
+
         movers = qc.top_movers(layer, k=5)
         if movers:
             note.evidence.append(
