@@ -911,6 +911,11 @@ def paperInitiate(REQUEST, RESPONSE, QUEUE_INSTANCE):
         formFields = REQUEST.form
         jobID = formFields.get("jobID")
         experimentDesign = formFields.get("experimentDesign", "")
+        # Optional retrieval ceiling (a year): literature after it is not
+        # fetched. The corpus harness sets it from the study's year.
+        dateCeiling = (formFields.get("dateCeiling") or "").strip() or None
+        if dateCeiling and not dateCeiling.isdigit():
+            raise UserWarning("dateCeiling must be a year.")
         if not jobID:
             raise UserWarning("Missing jobID parameter.")
 
@@ -952,7 +957,7 @@ def paperInitiate(REQUEST, RESPONSE, QUEUE_INSTANCE):
 
         QUEUE_INSTANCE.enqueue(
             fn=run_paper_agent,
-            args=(jobID, experimentDesign, RESPONSE),
+            args=(jobID, experimentDesign, RESPONSE, dateCeiling),
             timeout=1500,
             job_id=paper_job_id)
         dao = AIInterpretDAO()

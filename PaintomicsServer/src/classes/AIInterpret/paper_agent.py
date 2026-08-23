@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import logging
 import math
+import os
 import re
 import time
 from dataclasses import dataclass, field
@@ -977,7 +978,7 @@ def assemble_paper(ctx, llm, hooks=None):
 # The run wrapper: the servlet entry point, PySiQ-shaped.
 # ---------------------------------------------------------------------------
 
-def run_paper_agent(job_id, experiment_design, RESPONSE):
+def run_paper_agent(job_id, experiment_design, RESPONSE, date_ceiling=None):
     from src.common.JobInformationManager import JobInformationManager
     from src.common.DAO.AIInterpretDAO import AIInterpretDAO
     from src.classes.AIInterpret.agent import _agent_semaphore, _figure_manifest
@@ -1001,6 +1002,22 @@ def run_paper_agent(job_id, experiment_design, RESPONSE):
 
         _agent_semaphore.acquire()
         acquired = True
+
+        if date_ceiling:
+            # A per-run retrieval ceiling on top of the server's blocklist:
+            # the harness knows the study's year (the run itself stays
+            # blind), and a paper about a 2024 dataset must not lean on 2026
+            # literature. Sequential runs only -- the guard is module state.
+            try:
+                from . import pubmed_client
+                blocked = [x for x in
+                           (os.environ.get("AGENTEVOLVE_BLOCKLIST", "")
+                            .replace(",", " ").split()) if x]
+                pubmed_client.set_retrieval_guard(blocked, str(date_ceiling))
+                logger.info("[paper] retrieval ceiling %s, %d blocked ids",
+                            date_ceiling, len(blocked))
+            except Exception as exc:
+                logger.warning("[paper] ceiling not applied: %s", exc)
 
         llm = LLMClient(AI_PROVIDERS[AI_LLM_PROVIDER])
 
