@@ -2232,6 +2232,40 @@ class PathwayAcquisitionJob(Job):
                 if member in wanted:
                     mappingZip.extract(member, path=self.getTemporalDir())
 
+        # An omic whose identifiers matched NOTHING produces an empty
+        # `<omic>_matched.txt`, and generateMetaGenes.R then dies inside
+        # read.table with "no lines available in input". The user is shown an R
+        # stack trace four steps downstream of the real problem, which is that
+        # none of their ids belong to this organism -- a version-suffixed
+        # Ensembl id (ENSMUSG00000000001.4) is enough to cause it, and GEO ships
+        # those routinely. Found on a sealed TEST study, where 0 of 54,232
+        # features mapped; see proposals/2026-08-23-zero-mapped-features-dies-in-r.md
+        for inputOmic in filtered_omics:
+            matchedPath = self.getTemporalDir() + "/" + inputOmic.get("omicName") + "_matched.txt"
+            if os.path.isfile(matchedPath) and os.path.getsize(matchedPath) > 0:
+                continue
+            sample = []
+            unmatchedPath = matchedPath.replace("_matched.txt", "_unmatched.txt")
+            try:
+                with zipFile(self.getOutputDir() + "/mapping_results_" + self.getJobID() + ".zip") as mz:
+                    member = os.path.basename(unmatchedPath)
+                    if member in mz.namelist():
+                        with mz.open(member) as fh:
+                            for line in fh:
+                                sample.append(line.decode("utf-8", "replace").split("\t")[0].strip())
+                                if len(sample) >= 3:
+                                    break
+            except Exception:                                    # noqa: BLE001
+                pass
+            raise Exception(
+                "None of the identifiers in omic '%s' matched %s. Nothing can be "
+                "computed from it. The first few were: %s. This is usually a "
+                "version suffix on an Ensembl id (ENSMUSG00000000001.4 instead "
+                "of ENSMUSG00000000001), transcript ids where gene ids are "
+                "expected, or a different organism."
+                % (inputOmic.get("omicName"), self.getOrganism(),
+                   ", ".join(sample) if sample else "(none readable)"))
+
         # STEP 2. GENERATE THE DATA FOR EACH OMIC DATA TYPE
 
         # This loop is the whole of the metagenes phase and its size is known
