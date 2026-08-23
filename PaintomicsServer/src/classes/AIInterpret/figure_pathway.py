@@ -85,16 +85,40 @@ def main():
 
     fig, ax = plt.subplots()
     ax.imshow(base)
+    # The base map already prints every gene's name inside its box; extra
+    # labels exist only to flag the strongest signals. Label the top few by
+    # |value|, alternating above/below so neighbours cannot collide.
+    # Greedy spacing: a candidate too close to an already-labelled box is
+    # skipped rather than drawn into it (Gnb4 sat directly above Gng5 on
+    # mmu04725 and alternating sides could not save them).
+    labelled_ids, placed = set(), []
+    for b in sorted(boxes, key=lambda bb: -abs(bb[5])):
+        if len(labelled_ids) >= 8:
+            break
+        if any(abs(b[1] - px) < 70 and abs(b[2] - py) < 34
+               for px, py in placed):
+            continue
+        labelled_ids.add(b[0])
+        placed.append((b[1], b[2]))
+    side = 1
     for label, x, y, w, h, value in boxes:
         # KGML x/y are box centres.
+        # rasterized: the painted boxes join the base map's raster layer in
+        # the SVG, exactly as a heatmap's cells do -- the palette check
+        # audits vector fills, and a colormap ramp is not the house palette.
         ax.add_patch(patches.Rectangle(
             (x - w / 2.0, y - h / 2.0), w, h,
             facecolor=cmap(norm(value)), edgecolor="#222222",
-            linewidth=0.7, alpha=0.85, zorder=3))
-        ax.annotate(label, (x, y - h / 2.0 - 2), ha="center", va="bottom",
-                    fontsize=FONT_PT - 1, zorder=4,
-                    bbox=dict(boxstyle="round,pad=0.12", fc="white",
-                              ec="none", alpha=0.75))
+            linewidth=0.7, alpha=0.85, zorder=3, rasterized=True))
+        if label in labelled_ids:
+            above = side > 0
+            side = -side
+            ax.annotate(label,
+                        (x, y - h / 2.0 - 2 if above else y + h / 2.0 + 2),
+                        ha="center", va="bottom" if above else "top",
+                        fontsize=FONT_PT, zorder=4,
+                        bbox=dict(boxstyle="round,pad=0.12", fc="white",
+                                  ec="none", alpha=0.8))
     if CROP:
         x0, y0, x1, y1 = CROP
         ax.set_xlim(x0, x1)
