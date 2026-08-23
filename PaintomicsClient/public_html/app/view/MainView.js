@@ -54,23 +54,56 @@ function MainView() {
 		return null;
 	};
 
+	/**
+	* Leaves the current job behind: every view it created is destroyed, not
+	* just forgotten.
+	*
+	* removeAll() on the centre panel destroys what is inside the panel, and
+	* only that. changeMainView() moves the outgoing view out of the panel with
+	* remove(cmp, false) so a step can be returned to, which means that by the
+	* time a user is looking at a pathway (Step 4) the Step 1, 2 and 3
+	* components are all detached: rendered, alive, and not in anything
+	* removeAll() sweeps. This method used to drop its references to them and
+	* leave it there, so their `beforedestroy` listeners never ran. Step 3's is
+	* the one that tears down the AI widget -- the widget lives on document.body,
+	* outside the panel, precisely so it can stay visible over Step 4 -- so
+	* leaving a job from the pathway view (wordmark -> "Yes") put the landing
+	* page up with the AI launcher still in the corner, its status poll still
+	* running against the abandoned job, and ~150 ExtJS components leaked per
+	* reset. From Step 3 itself the same click worked, because there Step 3 was
+	* the view inside the panel; that is what made the bug look intermittent.
+	*
+	* The component is read off the view directly rather than through
+	* getComponent(), which instantiates a component that is still null: a
+	* view that was registered but never shown has nothing to destroy.
+	*/
 	this.clearSubViews = function(){
+		var centerPanel = this.getComponent().queryById("mainViewCenterPanel");
 		for(var i in this.subviews){
-			if(this.subviews[i].getModel && this.subviews[i].getModel() !== null){
-					var observers = this.subviews[i].getModel().getObservers();
+			var view = this.subviews[i];
+			if(view && view.getModel && view.getModel() !== null){
+					var observers = view.getModel().getObservers();
 					for(var j = observers.length - 1; j >= 0; j--) {
-						this.subviews[i].getModel().deleteObserver(observers[j])
+						view.getModel().deleteObserver(observers[j])
 					}
 			}
 
 			nObservers = 0;
+
+			var component = (view && view.component) ? view.component : null;
+			if (component && !component.isDestroyed && typeof component.destroy === "function") {
+				component.destroy();
+			}
 
 			delete this.subviews[i];
 			this.subviews[i] = null;
 		}
 		this.currentView = null;
 		this.subviews = {};
-		this.getComponent().queryById("mainViewCenterPanel").removeAll();
+		// Anything else the panel holds. Every subview's component has already
+		// removed itself from the panel on destroy, so this is a no-op for them
+		// and a sweep for whatever was added to the panel outside the map.
+		centerPanel.removeAll();
 	};
 
 	this.changeMainView = function(aViewName) {
