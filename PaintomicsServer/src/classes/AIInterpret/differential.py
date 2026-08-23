@@ -36,18 +36,34 @@ MIN_REPLICATES = 2         # a t-test needs two per side
 
 
 def _groups_for(job_instance, omic_name):
-    """(sampleHeader, groups) for one omic, or (None, None) if not replicated."""
+    """(sampleHeader, groups) for one omic, or (None, None) if not replicated.
+
+    The job stores `replicateMapping` in the FLAT shape the detector returns:
+    `mapping[i]` is the index into `sampleHeader` for replicate column *i*,
+    or -1 when that column matched nothing. It is NOT a list of groups --
+    a live run is what settled that, after unit tests happily passed against
+    a fixture in the shape I had assumed. Both shapes are accepted here so a
+    caller that already holds groups is not punished for it.
+    """
     for bucket in ("geneBasedInputOmics", "compoundBasedInputOmics"):
         for omic in (getattr(job_instance, bucket, None) or []):
             if (omic.get("omicName") or "").strip() != (omic_name or "").strip():
                 continue
             header = list(omic.get("sampleHeader") or [])
             mapping = omic.get("replicateMapping") or []
-            # replicateMapping is groups[s] -> [column indices]
-            groups = [list(g) for g in mapping] if mapping else []
-            if header and groups and len(header) == len(groups):
-                return header, groups
-            return header or None, groups or None
+            if not header or not mapping:
+                return header or None, None
+            if all(isinstance(m, int) for m in mapping):
+                groups = [[] for _ in header]
+                for col, sample in enumerate(mapping):
+                    if 0 <= sample < len(groups):
+                        groups[sample].append(col)
+            else:
+                groups = [list(g) for g in mapping]
+            groups = [g for g in groups]
+            if len(groups) != len(header):
+                return header, None
+            return header, groups
     return None, None
 
 
@@ -88,8 +104,13 @@ def differential_test(job_instance, omic_name, condition_a, condition_b,
     header, groups = _groups_for(job_instance, omic_name)
     if not header or not groups:
         return {"error": "omic '%s' has no replicate mapping in this job, so "
-                         "there is nothing to test: it was uploaded with one "
-                         "value per condition." % omic_name}
+                         "there is no way to know which columns are repeats of "
+                         "the same condition. PaintOmics only groups columns it "
+                         "can be sure about -- an explicit replicate marker "
+                         "(CTRL_rep1, CTRL_rep2) or a design file. Bare "
+                         "'COND-1, COND-2' is left alone on purpose, because it "
+                         "is indistinguishable from a time course or a subject "
+                         "id." % omic_name}
     names = {str(h).strip().lower(): i for i, h in enumerate(header)}
     ia = names.get(str(condition_a or "").strip().lower())
     ib = names.get(str(condition_b or "").strip().lower())

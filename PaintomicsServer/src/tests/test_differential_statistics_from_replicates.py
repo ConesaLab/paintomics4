@@ -37,8 +37,13 @@ os.environ.setdefault("AI_CSIC_API_KEY", "test-key-not-used")
 from src.classes.AIInterpret import differential  # noqa: E402
 
 OMIC = "Gene expression"
-# 6 replicate columns: 0-2 = CTRL, 3-5 = TREAT
-GROUPS = [[0, 1, 2], [3, 4, 5]]
+# The job stores replicateMapping in the FLAT shape the detector returns:
+# mapping[column] = index into sampleHeader. A live job settled this --
+# the first version of these fixtures used a list-of-groups and every test
+# passed against a structure that never occurs, while the real job raised
+# TypeError on the first call. Fixtures now mirror a real job exactly:
+#   6 columns, 0-2 = CTRL, 3-5 = TREAT
+MAPPING = [0, 0, 0, 1, 1, 1]
 HEADER = ["CTRL", "TREAT"]
 
 
@@ -65,11 +70,12 @@ class _Feature(object):
 
 
 class _Job(object):
-    def __init__(self, features, header=HEADER, groups=GROUPS):
+    def __init__(self, features, header=HEADER, groups=MAPPING):
         self._f = features
         self.geneBasedInputOmics = [{
             "omicName": OMIC, "sampleHeader": list(header),
-            "replicateMapping": [list(g) for g in groups],
+            "replicateMapping": list(groups),
+            "replicateSource": "auto" if groups else None,
         }]
         self.compoundBasedInputOmics = []
 
@@ -131,7 +137,7 @@ class HonestyTest(unittest.TestCase):
         self.assertIn("no replicate mapping", res["error"])
 
     def test_too_few_replicates_refuses_rather_than_guesses(self):
-        job = _job({"G": [1.0, 5.0]}, header=["A", "B"], groups=[[0], [1]])
+        job = _job({"G": [1.0, 5.0]}, header=["A", "B"], groups=[0, 1])
         res = differential.differential_test(job, OMIC, "A", "B")
         self.assertIn("at least 2 replicates", res["error"])
 
@@ -183,6 +189,41 @@ class ScaleTest(unittest.TestCase):
         self.assertEqual(res["significant"], 20)
         qs = [r["q"] for r in res["rows"]]
         self.assertEqual(qs, sorted(qs), "rows must come back ordered by q")
+
+class TheShapeTheJobActuallyStoresTest(unittest.TestCase):
+    """The bug a live run caught and the unit tests did not.
+
+    `replicateMapping` is flat -- mapping[column] = sample index -- and the
+    first version of this module read it as a list of groups. Every test
+    passed; the first real job raised TypeError. Both shapes are accepted
+    now, and both are pinned.
+    """
+
+    def test_the_flat_shape_a_real_job_stores(self):
+        got = differential.available_conditions(
+            _job({"G": [1.0] * 6}, groups=[0, 0, 0, 1, 1, 1]), OMIC)
+        self.assertEqual(got, [{"name": "CTRL", "replicates": 3},
+                               {"name": "TREAT", "replicates": 3}])
+
+    def test_the_group_shape_is_still_accepted(self):
+        got = differential.available_conditions(
+            _job({"G": [1.0] * 6}, groups=[[0, 1, 2], [3, 4, 5]]), OMIC)
+        self.assertEqual([g["replicates"] for g in got], [3, 3])
+
+    def test_unmatched_columns_marked_minus_one_are_dropped(self):
+        # the detector writes -1 for a column it could not place
+        got = differential.available_conditions(
+            _job({"G": [1.0] * 6}, groups=[0, 0, -1, 1, 1, -1]), OMIC)
+        self.assertEqual([g["replicates"] for g in got], [2, 2])
+
+    def test_a_real_two_by_two_design_tests_end_to_end(self):
+        job = _job({"UP": [1.0, 1.1, 5.0, 5.2], "FLAT": [2.0, 2.1, 2.0, 2.1]},
+                   header=["GM-TC", "M-TC"], groups=[0, 0, 1, 1])
+        res = differential.differential_test(job, OMIC, "GM-TC", "M-TC")
+        self.assertEqual(res["tested"], 2)
+        by = {r["feature"]: r for r in res["rows"]}
+        self.assertAlmostEqual(by["UP"]["log2FC"], 4.05, places=2)
+        self.assertLess(by["UP"]["p"], by["FLAT"]["p"])
 
 
 if __name__ == "__main__":
