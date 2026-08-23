@@ -2833,6 +2833,12 @@ WHAT MUST NOT CHANGE
   fact. Carry each one to whichever sentence now carries its claim. Do not
   renumber, do not add new markers, do not cite anything not already cited.
 - Every numeric value, gene symbol, p-value and direction of change.
+- **Every figure callout `![Fig. N](figure:<id>)`, on its own line, in the
+  subsection that discusses its finding.** The panel it points at exists, was
+  drawn from this job's own values and passed its quality checks; dropping the
+  callout is dropping a finding the reader can SEE. Keep the id exactly --
+  never invent one, never renumber the ids -- and renumber only the "Fig. N"
+  label if your ordering changes. A rewrite that loses a callout is discarded.
 - The "### References" section at the end, exactly as it stands.
 
 EVERY ONE OF THESE PATHWAYS MUST STILL BE DISCUSSED BY NAME:
@@ -3279,6 +3285,17 @@ async def _write_results_section(agent, ctx, report, cluster_text, pathways,
         low = str(text).lower()
         return {n for n in names if n and n.lower() in low}
 
+    def _figure_callouts(text):
+        """The figure callouts in a report, as a set of ids.
+
+        Conserved across the Results rewrite exactly like citation markers.
+        Measured: a Lead submitted a 9 kB draft carrying its callouts and the
+        56 kB report the reader got carried none -- the rewrite reorganises
+        prose and drops the image markdown, silently, which is the same
+        failure the marker conservation above was built for.
+        """
+        return set(re.findall(r"\]\((?:figure:)([A-Za-z0-9_.-]+)\)", text or ""))
+
     def _body_markers(text):
         """Markers in the PROSE, not in the reference list.
 
@@ -3330,6 +3347,11 @@ async def _write_results_section(agent, ctx, report, cluster_text, pathways,
             reasons.append("droppedpathways_%d" % len(pw_before - cand_pw))
         if "### References" in report and "### References" not in chunked:
             reasons.append("no_references")
+        lost_figs = _figure_callouts(report) - _figure_callouts(chunked)
+        if lost_figs:
+            # A dropped figure is a dropped claim: the panel exists, was
+            # checked, and the sentence that pointed at it is gone.
+            reasons.append("droppedfigures_%d" % len(lost_figs))
         if reasons:
             stats["results_rejected"] = ",".join(reasons)
             stats["results_s"] = time.time() - t0
