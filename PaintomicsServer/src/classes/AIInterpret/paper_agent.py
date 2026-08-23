@@ -829,6 +829,33 @@ def lead_author(ctx, llm):
 
 _SENTENCE = re.compile(r"(?<=[.!?])\s+")
 
+# Kind-aware token slots: a {{fN}} standing where a p-value belongs must BE a
+# p-value. The first corpus batch produced "a combined p-value of 95 with
+# 1.5x10^-6 matched genes" -- every number faithfully substituted, two tokens
+# swapped by the Lead. Substitution cannot catch that; the KINDS can.
+_P_SLOT = re.compile(
+    r"(?:p[- ]?values?\s+(?:of|was|were|=|below|under)|combined\s+p\s*=|"
+    r"q\s*[=<]|q-values?\s+of)\s*\{\{\s*(f\d+)\s*\}\}", re.I)
+_COUNT_SLOT = re.compile(
+    r"\{\{\s*(f\d+)\s*\}\}\s+(?:matched\s+genes?|gene\s+boxes?|genes?\b|"
+    r"hits?\b|features?\b|columns?\b|conditions?\b|samples?\b|edges?\b|"
+    r"nodes?\b|boxes?\b|terms?\b|pathways?\b)", re.I)
+_P_KINDS = {"pvalue", "q"}
+_COUNT_KINDS = {"count", "n"}
+
+
+def _kind_mismatch(ledger, sentence):
+    """True when a token sits in a slot its kind cannot fill."""
+    for match in _P_SLOT.finditer(sentence):
+        fact = ledger.get(match.group(1))
+        if fact is not None and fact.kind not in _P_KINDS:
+            return True
+    for match in _COUNT_SLOT.finditer(sentence):
+        fact = ledger.get(match.group(1))
+        if fact is not None and fact.kind not in _COUNT_KINDS:
+            return True
+    return False
+
 
 def _redact_sentences(text, offender_check, counter):
     """Drop the sentences offender_check flags; keep paragraph structure."""
@@ -918,15 +945,20 @@ def assemble_paper(ctx, llm, hooks=None):
     verification = {"facts_substituted": 0, "facts_unknown": 0,
                     "sentences_redacted_numbers": [],
                     "sentences_redacted_tokens": [],
+                    "sentences_redacted_kinds": [],
                     "citations_kept": 0, "citations_dropped": 0,
                     "figures_total": len(ctx.figures),
                     "figures_failing_qa": sum(1 for f in ctx.figures
                                               if not f["qa_passed"])}
 
     # Order matters and is pinned by tests: bare-number scan FIRST (while
-    # legitimate numbers are still tokens), then unknown-token redaction,
-    # then substitution, then citations.
+    # legitimate numbers are still tokens), then kind-mismatched tokens,
+    # then unknown tokens, then substitution, then citations.
     draft = _scan_and_redact_bare_numbers(ctx, draft, verification)
+
+    draft = _redact_sentences(
+        draft, lambda sent: _kind_mismatch(ctx.ledger, sent),
+        verification["sentences_redacted_kinds"])
 
     known = {f.fid for f in ctx.ledger.items()}
     token_re = re.compile(r"\{\{\s*(f\d+)\s*\}\}")

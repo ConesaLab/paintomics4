@@ -68,6 +68,42 @@ def _ctx():
     return ctx
 
 
+class KindMismatchTest(unittest.TestCase):
+
+    def test_a_pvalue_token_in_a_count_slot_kills_the_sentence(self):
+        ctx = _ctx()
+        p_fid = ctx.ledger.add("pvalue", 1.5e-6, {"pathway": "x"}, "enrich")
+        n_fid = ctx.ledger.add("count", 95, {"pathway": "x"}, "enrich")
+
+        class _Swapper(object):
+            def complete(self, messages, **kw):
+                return "\n\n".join([
+                    "# T", "## Results", "### Data overview and quality",
+                    "The pathway had a combined p-value of {{%s}} with "
+                    "{{%s}} matched genes. "
+                    "The groups separate on PC1 (p = {{%s}})."
+                    % (n_fid, p_fid, ctx.fid)])
+        markdown, verification = P.assemble_paper(ctx, _Swapper())
+        self.assertTrue(verification["sentences_redacted_kinds"])
+        self.assertNotIn("matched genes", markdown.split("## Limitations")[0])
+        self.assertIn("p = 0.05", markdown)     # the honest sentence survives
+
+    def test_matched_kinds_pass(self):
+        ctx = _ctx()
+        p_fid = ctx.ledger.add("pvalue", 1.5e-6, {"pathway": "x"}, "enrich")
+        n_fid = ctx.ledger.add("count", 95, {"pathway": "x"}, "enrich")
+
+        class _Honest(object):
+            def complete(self, messages, **kw):
+                return "\n\n".join([
+                    "# T", "## Results", "### Data overview and quality",
+                    "The pathway had a combined p-value of {{%s}} with "
+                    "{{%s}} matched genes." % (p_fid, n_fid)])
+        markdown, verification = P.assemble_paper(ctx, _Honest())
+        self.assertEqual(verification["sentences_redacted_kinds"], [])
+        self.assertIn("95 matched genes", markdown)
+
+
 class _SinningLead(object):
     """Commits every sin the gate exists to catch."""
 
