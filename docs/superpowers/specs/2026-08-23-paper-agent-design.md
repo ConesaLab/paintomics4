@@ -144,6 +144,34 @@ Five layers, each leaving evidence. (1) Unit: standalone `__main__` tests per mo
 
 The runnable goal statement for this plan lives at `agentevolve/prompts/GOAL-paper-agent.md`.
 
+## 8. What was built, and what the first corpus round measured (2026-08-24)
+
+Items 1-7 of the goal shipped on `feat/paper-agent` (PaintOmics PR #83);
+evidence in `docs/verification/paper-agent/`. Two deviations from §3 are
+worth recording:
+
+* **The specialists' mandatory pass is executed as code, and the model
+  narrates it** (spec §2's hybrid, taken further than §3.1's tool-loop
+  sketch). One narrate call per specialist over evidence it did not compute;
+  the Lead assembles. This is why `facts_unknown = 0` on every corpus run.
+* **The gate grew two checks the design did not foresee**: a token whose
+  KIND cannot fill its slot ("a combined p-value of {{count}}") is redacted,
+  and a `(Figure: x)` pointer at a non-figure is stripped. Both came from
+  reading real manuscripts.
+* **`pathway_diagram`** was added after the first human read: when the text
+  explains a pathway, the figure is that pathway's own KEGG map, painted
+  with the job's values and cropped to the region under discussion.
+
+**Round 1 on nine blind dev studies** (`agentevolve/proposals/
+2026-08-24-paper-agent-scored.md`): 16 of 37 derivable main-claim analyses
+reached (43 %) against the interpreter's 26/37 (70 %) on the same maps,
+**zero contradictions**, 45-91 s per manuscript. The agent is broader per
+run (QC with PERMANOVA's floor stated, GO+elim, painted diagrams, generated
+Methods, every number ledgered) and narrower per claim: everything
+conditions on the pooled relevant list, so a claim inside one contrast is
+invisible. The contrast pass (spec §3.1's Design&QC contract, extended)
+addresses exactly that and is the subject of round 2.
+
 ## 7. Decisions needed
 
 1. **"Correlation network"** — do you mean the Step-3 pathways network + metabolite hub neighbourhoods (both go into `JobGraph` as designed), or a feature–feature correlation across replicates (one extra tool, +2 d)?
