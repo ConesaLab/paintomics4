@@ -888,3 +888,146 @@ def aiInterpretPathway(REQUEST, RESPONSE):
         if dao is not None:
             dao.closeConnection()
         return RESPONSE
+
+
+# ---------------------------------------------------------------------------
+# The Paper agent: same entitlements as the interpreter, its own queue slot
+# and its own DAO keys (paper_*), so the two features coexist on one job.
+# ---------------------------------------------------------------------------
+
+def paperInitiate(REQUEST, RESPONSE, QUEUE_INSTANCE):
+    """Start (or re-check) the Paper agent for a job."""
+    from src.classes.AIInterpret.paper_agent import run_paper_agent
+    userID = None
+    try:
+        userID = REQUEST.cookies.get('userID')
+        sessionToken = REQUEST.cookies.get('sessionToken')
+        UserSessionManager().isValidUser(userID, sessionToken)
+
+        if not AI_INTERPRETATION_ENABLED:
+            raise UserWarning("AI interpretation is not enabled on this server.")
+        _requireLLMCredentials()
+
+        formFields = REQUEST.form
+        jobID = formFields.get("jobID")
+        experimentDesign = formFields.get("experimentDesign", "")
+        if not jobID:
+            raise UserWarning("Missing jobID parameter.")
+
+        jobInstance = _requireJobAccess(jobID, userID)
+        if not jobInstance.getAIConsent():
+            raise UserWarning(
+                "AI interpretation was not enabled for this job. Re-run the "
+                "analysis with 'Enable AI pathway interpretation' ticked if "
+                "you want its summaries sent to the external AI service.")
+
+        paper_job_id = "paper_" + jobID
+        existingJob = QUEUE_INSTANCE.fetch_job(paper_job_id)
+
+        dao_check = AIInterpretDAO()
+        try:
+            record = dao_check.find_by_job_id(jobID) or {}
+            paper_status = (record.get("paper_status") or {}).get("status")
+        finally:
+            dao_check.closeConnection()
+
+        if existingJob is not None:
+            if existingJob.status == JobStatus.FINISHED and paper_status != "error":
+                RESPONSE.setContent({"success": True, "jobID": jobID,
+                                     "status": "already_finished"})
+                return RESPONSE
+            elif existingJob.status == JobStatus.FAILED or paper_status == "error":
+                dao = AIInterpretDAO()
+                try:
+                    dao.save_progress(jobID, {"paper_status": {
+                        "status": "queued", "percent": 0,
+                        "detail": "Retrying..."}, "paper": None})
+                finally:
+                    dao.closeConnection()
+                QUEUE_INSTANCE.get_result(paper_job_id, remove=True)
+            else:
+                RESPONSE.setContent({"success": True, "jobID": jobID,
+                                     "status": "already_running"})
+                return RESPONSE
+
+        QUEUE_INSTANCE.enqueue(
+            fn=run_paper_agent,
+            args=(jobID, experimentDesign, RESPONSE),
+            timeout=1500,
+            job_id=paper_job_id)
+        dao = AIInterpretDAO()
+        try:
+            dao.save_progress(jobID, {"paper_status": {
+                "status": "queued", "percent": 0,
+                "detail": "Waiting for a worker..."}})
+        finally:
+            dao.closeConnection()
+        RESPONSE.setContent({"success": True, "jobID": jobID,
+                             "status": "queued"})
+    except Exception as ex:
+        handleException(RESPONSE, ex, __file__, "paperInitiate",
+                        userID=userID)
+    finally:
+        return RESPONSE
+
+
+def paperStatus(REQUEST, RESPONSE):
+    """Progress of the Paper agent for one job (the client polls this)."""
+    userID = None
+    try:
+        userID = REQUEST.cookies.get('userID')
+        sessionToken = REQUEST.cookies.get('sessionToken')
+        UserSessionManager().isValidUser(userID, sessionToken)
+        jobID = REQUEST.args.get("jobID")
+        if not jobID:
+            raise UserWarning("Missing jobID parameter.")
+        _requireJobAccess(jobID, userID)
+        dao = AIInterpretDAO()
+        try:
+            record = dao.find_by_job_id(jobID) or {}
+        finally:
+            dao.closeConnection()
+        RESPONSE.setContent({"success": True, "jobID": jobID,
+                             "paper_status": record.get("paper_status") or
+                             {"status": "none", "percent": 0,
+                              "detail": "No paper run yet"}})
+    except Exception as ex:
+        handleException(RESPONSE, ex, __file__, "paperStatus", userID=userID)
+    finally:
+        return RESPONSE
+
+
+def paperReport(REQUEST, RESPONSE):
+    """The finished manuscript with its verification and figure manifest."""
+    userID = None
+    try:
+        userID = REQUEST.cookies.get('userID')
+        sessionToken = REQUEST.cookies.get('sessionToken')
+        UserSessionManager().isValidUser(userID, sessionToken)
+        jobID = REQUEST.args.get("jobID")
+        if not jobID:
+            raise UserWarning("Missing jobID parameter.")
+        _requireJobAccess(jobID, userID)
+        dao = AIInterpretDAO()
+        try:
+            record = dao.find_by_job_id(jobID) or {}
+        finally:
+            dao.closeConnection()
+        status = (record.get("paper_status") or {})
+        if status.get("status") != "done" or not record.get("paper"):
+            RESPONSE.setContent({
+                "success": False, "jobID": jobID,
+                "message": "The paper is not ready (%s)."
+                           % (status.get("status") or "no run")})
+            return RESPONSE
+        RESPONSE.setContent({
+            "success": True, "jobID": jobID,
+            "paper": record.get("paper"),
+            "figures": record.get("paper_figures") or [],
+            "verification": record.get("paper_verification") or {},
+            "notes": record.get("paper_notes") or {},
+        })
+    except Exception as ex:
+        handleException(RESPONSE, ex, __file__, "paperReport", userID=userID)
+    finally:
+        return RESPONSE

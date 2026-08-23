@@ -106,6 +106,7 @@ from src.servlets.AIInterpretServlet import (
     aiGenerateExpDesign,
     aiInterpretChat,
     aiInterpretInitiate,
+    paperInitiate, paperStatus, paperReport,
     aiInterpretPathway,
     aiInterpretReport,
     aiInterpretStatus,
@@ -794,6 +795,19 @@ class Application(object):
         @self.app.route(SERVER_SUBDOMAIN + '/ai_interpret_initiate', methods=['OPTIONS', 'POST'])
         def aiInterpretInitiateHandler():
             return aiInterpretInitiate(request, Response(), self.queue).getResponse()
+
+        # The Paper agent: same entitlements, its own queue slot and DAO keys.
+        @self.app.route(SERVER_SUBDOMAIN + '/paper_initiate', methods=['OPTIONS', 'POST'])
+        def paperInitiateHandler():
+            return paperInitiate(request, Response(), self.queue).getResponse()
+
+        @self.app.route(SERVER_SUBDOMAIN + '/paper_status', methods=['OPTIONS', 'GET'])
+        def paperStatusHandler():
+            return paperStatus(request, Response()).getResponse()
+
+        @self.app.route(SERVER_SUBDOMAIN + '/paper_report', methods=['OPTIONS', 'GET'])
+        def paperReportHandler():
+            return paperReport(request, Response()).getResponse()
 
         @self.app.route(SERVER_SUBDOMAIN + '/ai_interpret_status', methods=['OPTIONS', 'POST'])
         def aiInterpretStatusHandler():
