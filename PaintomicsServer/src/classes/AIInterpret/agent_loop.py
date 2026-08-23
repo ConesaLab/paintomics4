@@ -2491,7 +2491,17 @@ def submit_report(ctx: RunContextWrapper[LoopContext], report_markdown: str) -> 
         return out
 
     c.submitted_report = report_markdown
-    _trace(c, "submit_report", "%d chars" % len(report_markdown), "accepted", t0)
+    # The trace carries the nudge's own inputs, always. Two rounds of this
+    # investigation were spent inferring from the outcome whether a nudge had
+    # fired -- first from a log line that tool RESULTS never reach, then from a
+    # window I had mis-derived. A gate that does not record why it did nothing
+    # cannot be debugged from a stored run, and every run here is stored.
+    _trace(c, "submit_report",
+           "%d chars" % len(report_markdown),
+           "accepted (attempt %d, %d problem(s) found, %ds of run left, "
+           "nudge needs >%ds)"
+           % (c.submit_attempts, len(problems), int(time_to_act),
+              int(NUDGE_MIN_SECONDS)), t0)
     return "SUBMITTED. Reply with the single word DONE and stop."
 
 
