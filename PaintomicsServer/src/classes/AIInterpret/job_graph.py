@@ -99,7 +99,12 @@ class JobGraph(object):
             reg = _node(row["regulator"], "regulator",
                         omic=row.get("omic"), area=row.get("area"))
             tgt = _node(row["target"], "gene")
-            g.add_edge(reg, tgt, key="REGULATES", type="REGULATES",
+            # Keyed by omic as well: one regulator can regulate the same
+            # target through two regulatory layers, and a shared key would
+            # silently keep only the last row (3 edges vanished on the first
+            # real job when symbol mapping made two names identical).
+            g.add_edge(reg, tgt, key="REGULATES-%s" % (row.get("omic") or ""),
+                       type="REGULATES",
                        coefficient=float(row.get("coefficient") or 0.0),
                        condition=row.get("condition"),
                        coef_by_condition=dict(row.get("coef_by_condition") or {}),
@@ -219,8 +224,15 @@ def _regulation_rows(job_instance):
     return rows, conditions, dict(table.symbols or {})
 
 
-def _classify_regulation(job_instance, rows):
-    """Attach supported/novel/unsupported + sources, job-wide (needs Mongo)."""
+def _classify_regulation(job_instance, rows, id_to_label=None):
+    """Attach supported/novel/unsupported + sources, job-wide (needs Mongo).
+
+    Returns (note, omnipath_edges): the note names why classification could
+    not run (or None), and omnipath_edges are the curated OmniPath
+    interactions among the JOB'S OWN genes -- (label_a, label_b, meta) --
+    so the graph carries them as edges of their own, not only as support
+    annotations on MORE claims.
+    """
     from pymongo import MongoClient
     from src.conf.serverconf import MONGODB_HOST, MONGODB_PORT
     from src.classes.PathwayEvidence import (EvidenceKnowledge,
@@ -234,7 +246,8 @@ def _classify_regulation(job_instance, rows):
         ids, _symbols = resolveDatabaseIds(organism, ["KEGG"], database)
         target_dbname = ids.get("KEGG")
         if target_dbname is None:
-            return "evidence: no KEGG id space for %s; REGULATES edges stay unclassified" % organism
+            return ("evidence: no KEGG id space for %s; REGULATES edges stay "
+                    "unclassified" % organism), []
         names = sorted({r["regulator"] for r in rows} | {r["target"] for r in rows})
         translation = findIDsByFeaturesName(job_instance.getJobID(), names,
                                             database, target_dbname)
@@ -242,7 +255,8 @@ def _classify_regulation(job_instance, rows):
                                                  job_instance.getJobID(),
                                                  database)
         if not len(knowledge):
-            return "evidence: no interaction source installed for %s; REGULATES edges stay unclassified" % organism
+            return ("evidence: no interaction source installed for %s; "
+                    "REGULATES edges stay unclassified" % organism), []
         pathway_names = {doc.get("ID"): doc.get("name")
                          for doc in database["kegg"].find({}, {"ID": 1, "name": 1})}
         for row in rows:
@@ -267,7 +281,27 @@ def _classify_regulation(job_instance, rows):
                 row["evidence"] = "novel"
             else:
                 row["evidence"] = "unsupported"
-        return None
+
+        omnipath_edges = []
+        if id_to_label:
+            seen = set()
+            for source in knowledge.sources:
+                if source.name != "OmniPath":
+                    continue
+                for (a, b), provenance in source._edges.items():
+                    la, lb = id_to_label.get(str(a)), id_to_label.get(str(b))
+                    if la is None or lb is None or la == lb:
+                        continue
+                    pair = tuple(sorted((la, lb)))
+                    if pair in seen:      # both directions are stored
+                        continue
+                    seen.add(pair)
+                    refs = provenance[1] if len(provenance) > 1 else ""
+                    n_refs = len([r for r in str(refs or "").split(";") if r])
+                    omnipath_edges.append((la, lb,
+                                           {"sources": ["OmniPath"],
+                                            "references": n_refs}))
+        return None, omnipath_edges
     finally:
         client.close()
 
@@ -320,6 +354,13 @@ def from_job(job_instance, ctx_pathways=None, classify=True):
     """Build the JobGraph for a live job, saying what could not be read."""
     notes = []
 
+    id_to_label = {}
+    try:
+        for fid, feature in (job_instance.getInputGenesData() or {}).items():
+            id_to_label[str(fid)] = feature.getName() or str(fid)
+    except Exception:
+        pass
+
     rows, conditions, symbols = _regulation_rows(job_instance)
     if symbols:
         # The MORE table stores feature names (Ensembl ids where no symbol
@@ -329,24 +370,23 @@ def from_job(job_instance, ctx_pathways=None, classify=True):
         for row in rows:
             row["regulator"] = symbols.get(row["regulator"], row["regulator"])
             row["target"] = symbols.get(row["target"], row["target"])
+    omnipath = []
     if not rows:
         notes.append("MORE: no regulation table on this job; no REGULATES edges")
-    elif classify:
+    if classify:
         try:
-            note = _classify_regulation(job_instance, rows)
+            note, omnipath = _classify_regulation(job_instance, rows,
+                                                  id_to_label)
             if note:
                 notes.append(note)
+            if not omnipath:
+                notes.append("OmniPath: no curated interactions among this "
+                             "job's genes (source absent or not installed "
+                             "for this organism)")
         except Exception as exc:
             logger.warning("JobGraph evidence classification failed: %s", exc)
             notes.append("evidence classification failed (%s); REGULATES "
                          "edges stay unclassified" % exc)
-
-    id_to_label = {}
-    try:
-        for fid, feature in (job_instance.getInputGenesData() or {}).items():
-            id_to_label[str(fid)] = feature.getName() or str(fid)
-    except Exception:
-        pass
 
     kgml, kgml_read = [], 0
     try:
@@ -362,7 +402,8 @@ def from_job(job_instance, ctx_pathways=None, classify=True):
                      "SIMILAR_TO edges")
 
     graph = JobGraph.build(regulation=rows, pathways=pathways, kgml=kgml,
-                           conditions=conditions, notes=notes)
+                           omnipath=omnipath, conditions=conditions,
+                           notes=notes)
     if not graph.nodes_of_kind("compound"):
         graph.notes.append("no compound layer; no NEIGHBOUR_OF edges")
     return graph
