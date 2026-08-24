@@ -38,7 +38,13 @@ try:
     COMMON_BUILD_DB_TOOLS.processUniProtData()
     COMMON_BUILD_DB_TOOLS.processRefSeqGeneSymbolData()
     # COMMON_BUILD_DB_TOOLS.processVegaData()
-    #COMMON_BUILD_DB_TOOLS.processKEGGMappingData()
+    # KEGG keys C. elegans on its own identifier space (CELE_C17G1.7), which
+    # no other source here produces: with this call commented out the species
+    # had ensembl/refseq/uniprot tables and nothing that matched a single one of
+    # its KEGG pathway genes, so every worm job mapped 0 features and reported
+    # success. This builds kegg_id (plus ncbi_geneid, which bridges it to the
+    # Ensembl-side identifiers users actually upload).
+    COMMON_BUILD_DB_TOOLS.processKEGGMappingData()
 
 
     #**************************************************************************

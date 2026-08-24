@@ -35,7 +35,13 @@ try:
     COMMON_BUILD_DB_TOOLS.processUniProtData()
     COMMON_BUILD_DB_TOOLS.processRefSeqGeneSymbolData()
     # COMMON_BUILD_DB_TOOLS.processVegaData()
-    #COMMON_BUILD_DB_TOOLS.processKEGGMappingData()
+    # Zebrafish never received mapping/ensembl_mapping.list, so the Ensembl,
+    # RefSeq and UniProt steps above all produced nothing and dre shipped with
+    # no gene identifier table at all -- resolveDatabaseIds then raised on the
+    # configured `entrezgene` and every dre job failed at step 1. The KEGG
+    # mapping files ARE present, and this call turns them into kegg_id /
+    # ncbi_geneid / uniprot_acc / kegg_gene_symbol.
+    COMMON_BUILD_DB_TOOLS.processKEGGMappingData()
 
 
     #**************************************************************************
