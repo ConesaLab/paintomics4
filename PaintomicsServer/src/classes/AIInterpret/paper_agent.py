@@ -334,8 +334,12 @@ def design_qc_analyst(ctx, llm):
                                    {"omic": omic,
                                     "contrast": "%s|%s" % (cond_a, cond_b)},
                                    "differential_test")
+            # Twelve, not six: round 3 ran the right contrast for
+            # "Nr1i3 falls in CLP" (CTRL_SHAM vs CTRL_CLP) and the gene still
+            # never reached the narrator, because only the six strongest rows
+            # were echoed. Depth is cheap here; the claim is not.
             heads = []
-            for r in significant[:6]:
+            for r in significant[:12]:
                 fc_tag = ctx.ledger.tag("log2fc", r["log2FC"],
                                         {"feature": r["feature"],
                                          "contrast": "%s|%s"
