@@ -157,8 +157,14 @@ class TwoHopMappingTest(unittest.TestCase):
         test asserts -- and `ensembl_peptide` must not be in the bridge set.
         """
         self.assertNotIn("ensembl_peptide", mapper.GENE_LEVEL_BRIDGE_DATABASES)
+        # `ncbi_geneid` is the other name the installers give the SAME NCBI gene
+        # space as `entrezgene`, so it is gene-level by construction and joined
+        # the set in #85. The list is pinned rather than filtered because the
+        # property under test is membership, not shape: a peptide- or
+        # transcript-level database appearing here is the bug this catches, and
+        # only an explicit list makes that visible when someone adds one.
         self.assertEqual(tuple(mapper.GENE_LEVEL_BRIDGE_DATABASES),
-                         ("entrezgene", "ensembl_gene", "kegg_id"))
+                         ("entrezgene", "ncbi_geneid", "ensembl_gene", "kegg_id"))
 
     def testFirstHopAnswerIsNotDisturbed(self):
         """A name the first hop resolves must not be re-resolved or re-ordered."""
