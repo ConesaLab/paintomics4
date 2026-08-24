@@ -3,7 +3,19 @@ dicDatabases = {
         'hsa'   :   [{'KEGG': 'entrezgene', 'Reactome': 'reactome_gene_id', 'OmniPath': 'uniprot_acc'}, {'KEGG': 'refseq_gene_symbol', 'Reactome': 'reactome_gene_id', 'OmniPath': 'refseq_gene_symbol'}],
         'dre'   :   [{'KEGG': 'entrezgene', 'Reactome': 'reactome_gene_id'}, {'KEGG': 'refseq_gene_symbol', 'Reactome': 'reactome_gene_id'}],
         'dme'   :   [{'KEGG': 'kegg_id', 'Reactome': 'reactome_gene_id'}, {'KEGG': 'kegg_gene_symbol', 'Reactome': 'reactome_gene_id'}],
-        'bta'   :   [{'KEGG': 'kegg_id', 'Reactome': 'reactome_gene_id'}, {'KEGG': 'kegg_gene_symbol', 'Reactome': 'reactome_gene_id'}],
+        # bta/ptr/acs declared kegg_id, which only processKEGGMappingData() builds
+        # and none of their build scripts calls -- so `resolveDatabaseIds` found no
+        # such table and every gene-based job on them died with
+        # "'NoneType' object has no attribute 'get'". They do not need that table:
+        # verified 2026-08-24 against rest.kegg.jp/list/<code> and against the
+        # installed pathway documents, all three name their genes by NCBI gene id
+        # (bta:281543, ptr:450664, acs:100552963), which is exactly what their
+        # Ensembl-based build already installs as `entrezgene`. Same shape as
+        # hsa/mmu/rno. Drosophila is the odd one out -- KEGG keys dme on
+        # Dmel_CG#### -- so dme keeps kegg_id and builds it instead.
+        'bta'   :   [{'KEGG': 'entrezgene', 'Reactome': 'reactome_gene_id'}, {'KEGG': 'refseq_gene_symbol', 'Reactome': 'reactome_gene_id'}],
+        'ptr'   :   [{'KEGG': 'entrezgene'}, {'KEGG': 'refseq_gene_symbol'}],
+        'acs'   :   [{'KEGG': 'entrezgene'}, {'KEGG': 'refseq_gene_symbol'}],
         'dosa'  :   [{'KEGG': 'ensembl_transcript'}, {'KEGG': 'kegg_gene_symbol'}],
         'sly'   :   [{'KEGG': 'entrezgene', 'MapMan': 'mapman_gene_id'}, {'KEGG': 'kegg_gene_symbol', 'MapMan': 'mapman_gene_id'}],
         'rno'   :   [{'KEGG': 'entrezgene', 'Reactome': 'reactome_gene_id', 'OmniPath': 'uniprot_acc'}, {'KEGG': 'refseq_gene_symbol', 'Reactome': 'reactome_gene_id', 'OmniPath': 'refseq_gene_symbol'}],
