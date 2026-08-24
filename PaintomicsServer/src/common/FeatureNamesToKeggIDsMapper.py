@@ -587,9 +587,46 @@ def resolveDatabaseIds(organism, databases, db=None):
     client = None
     if db is None:
         client, db = getConnectionByOrganismCode(organism)
+    def _resolveOne(sourceDB, configuredTables, role):
+        """The `dbname` _id of the table `organismDB` says this source translates into.
+
+        Both lookups below used to be `find_one(...).get("_id")`. `find_one`
+        returns None for a table the species does not carry, so a species whose
+        organismDB entry named a table its build script never produced raised
+
+            AttributeError: 'NoneType' object has no attribute 'get'
+
+        from inside a dict comprehension -- no organism, no database, no table
+        name. It reached the user as a bare "Oops..Internal error!" and reached
+        the log the same way, so seven identical submissions were needed before
+        the cause was visible. dme declared `kegg_id` while
+        `dme_resources/build_database.py` had processKEGGMappingData() commented
+        out; bta, ptr and acs were in the same state.
+
+        A configuration error, not a data error: state it as one and name the
+        three things needed to fix it.
+        """
+        table = configuredTables.get(sourceDB)
+        if table is not None:
+            document = db.dbname.find_one({"dbname": table}, {"item": 1, "qty": 1})
+            if document is not None:
+                return document.get("_id")
+
+        raise Exception(
+            "[b]" + str(organism) + " cannot translate identifiers for the " +
+            str(sourceDB) + " database.[/b][br]" +
+            ("Its configuration (conf/organismDB.py) names no " + role +
+             " table for " + str(sourceDB) + "."
+             if table is None else
+             "Its configuration (conf/organismDB.py) points the " + role +
+             " table at '" + str(table) + "', but the installed " + str(organism) +
+             " database has no such identifier table -- it was never built.") +
+            "[br]Please report this to the administrator, and in the meantime "
+            "try another pathway database for this species.")
+
     try:
-        databaseConvertion_ids = {dbname: db.dbname.find_one({"dbname": gene_databases.get(dbname)}, {"item": 1, "qty": 1}).get("_id") for dbname in databases}
-        databaseGeneSymbol_ids = {dbname: db.dbname.find_one({"dbname": symbol_databases.get(dbname)}, {"item": 1, "qty": 1}).get("_id") for dbname in databases}
+        databaseConvertion_ids = {dbname: _resolveOne(dbname, gene_databases, "identifier") for dbname in databases}
+        databaseGeneSymbol_ids = {dbname: _resolveOne(dbname, symbol_databases, "gene-symbol") for dbname in databases}
 
         # Some databases declare THEMSELVES as their symbol database (every
         # Reactome entry and three MapMan entries in organismDB map e.g.

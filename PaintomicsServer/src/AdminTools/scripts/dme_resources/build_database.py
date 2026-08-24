@@ -43,7 +43,12 @@ try:
     COMMON_BUILD_DB_TOOLS.processUniProtData()
     COMMON_BUILD_DB_TOOLS.processRefSeqGeneSymbolData()
     # COMMON_BUILD_DB_TOOLS.processVegaData()
-    #COMMON_BUILD_DB_TOOLS.processKEGGMappingData()
+    # Drosophila's KEGG gene ids are Dmel_CG#### -- its own identifier space,
+    # not Entrez -- so `organismDB` translates KEGG into `kegg_id` for dme and
+    # this call is the ONLY thing that builds that table (plus kegg_gene_symbol
+    # and its synonyms). It sat commented out, so every gene-based dme job died
+    # in resolveDatabaseIds on a find_one that returned None.
+    COMMON_BUILD_DB_TOOLS.processKEGGMappingData()
 
 
     #**************************************************************************
