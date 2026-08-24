@@ -16,6 +16,7 @@ QA compares the file against a second derivation, not against itself.
 from __future__ import annotations
 
 import itertools
+import re
 
 from . import figure_style
 from .figure_templates import _legend, _num, _preamble, _tsv
@@ -24,11 +25,30 @@ MAX_VENN_SETS = 3
 MAX_UPSET_SETS = 6
 
 
+#: Set names come from the descriptor grammar ("relevant in Gene expression"),
+#: which is exactly long enough that two circle labels collide on a Venn. The
+#: descriptor is kept in the legend; the panel gets the short form.
+_DESCRIPTOR_LABEL = re.compile(
+    r"^(relevant|up|down)\s+in\s+(.+?)(?:\s+at\s+(.+))?$", re.I)
+
+
+def _short_label(name):
+    match = _DESCRIPTOR_LABEL.match(str(name).strip())
+    if not match:
+        return str(name)[:22]
+    direction, omic, condition = match.groups()
+    omic = "".join(w[0].upper() + w[1:4] for w in str(omic).split())[:12]
+    label = omic if direction.lower() == "relevant" else "%s %s" % (
+        direction.lower(), omic)
+    return (label + (" @%s" % condition[:8] if condition else ""))[:22]
+
+
 def _named_sets(data_slice, cap):
     named = []
     for entry in (data_slice.get("sets") or [])[:cap]:
         name = str(entry.get("name") or "set%d" % (len(named) + 1))
-        named.append((name, {str(m).upper() for m in (entry.get("members") or [])}))
+        named.append((_short_label(name),
+                      {str(m).upper() for m in (entry.get("members") or [])}))
     return named
 
 
@@ -113,10 +133,12 @@ if __name__ == "__main__":
        figure_style.MIN_FONT_PT, figure_style.MIN_FONT_PT, _panel_label_src())
 
     spec = dict(spec, n=sum(regions.values()))
+    full = [str(e.get("name")) for e in (data_slice.get("sets") or [])[:MAX_VENN_SETS]]
     legend = _legend(
         spec,
-        "Exclusive region counts for %s; every member is counted in exactly "
-        "one region. Counts are in data.tsv." % ", ".join(names),
+        "Exclusive region counts for %s (panel labels abbreviated: %s); every "
+        "member is counted in exactly one region. Counts are in data.tsv."
+        % (", ".join(full), ", ".join(names)),
         extra="Circle areas are NOT proportional to set sizes; read the "
               "numbers, not the geometry.")
     return data, script, legend
