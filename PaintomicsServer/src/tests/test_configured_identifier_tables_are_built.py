@@ -34,10 +34,20 @@ import unittest
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
 from src.conf.organismDB import dicDatabases
-from src.common.FeatureNamesToKeggIDsMapper import resolveDatabaseIds
+from src.common.FeatureNamesToKeggIDsMapper import (
+    GENE_LEVEL_BRIDGE_DATABASES, resolveDatabaseIds)
 
 SCRIPTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                            "..", "AdminTools", "scripts")
+COMMON_BUILDER = os.path.join(SCRIPTS_DIR, "common_build_database.py")
+
+#: Every name the builders file NCBI *gene* ids under. They are one identifier
+#: space with two names -- `processEnsemblData` says `entrezgene`,
+#: `processKEGGMappingData` says `ncbi_geneid` -- so a species built by both
+#: carries two mate islands, and only a bridge that knows BOTH names can cross
+#: between them.
+NCBI_GENE_TABLE_PATTERN = re.compile(
+    r'DBNAME_Entry\("(entrezgene|ncbi_geneid)"')
 
 #: The tables `processKEGGMappingData()` -- and only it -- inserts.
 KEGG_MAPPING_TABLES = ("kegg_id", "kegg_gene_symbol", "kegg_gene_symbol_synonyms")
@@ -112,6 +122,27 @@ class TestConfiguredIdentifierTablesAreBuilt(unittest.TestCase):
                               "but its build script never calls processKEGGMappingData()"
                               % (organism, list(FALLBACK_TABLES)))
         self.assertEqual([], broken, "\n  ".join([""] + broken))
+
+    def test_every_name_for_the_ncbi_gene_space_can_bridge(self):
+        """Both builder names for NCBI gene ids must be bridgeable, or islands form.
+
+        dme is built by processEnsemblData AND processKEGGMappingData, so its
+        FlyBase ids sat in the Ensembl island and kegg_id sat in the KEGG island.
+        Every one of a real user's 1,325 identifiers had a complete path across
+        (FBgn0000147 -> entrezgene 41446 -> ncbi_geneid 41446 -> kegg_id
+        Dmel_CG3068) and not one could be walked: `ncbi_geneid` was not a
+        declared bridge, so the job mapped 0 features and reported success.
+        """
+        with open(COMMON_BUILDER, encoding="utf-8") as handle:
+            built = set(NCBI_GENE_TABLE_PATTERN.findall(handle.read()))
+
+        self.assertTrue(built, "no NCBI gene table found in common_build_database.py")
+        missing = sorted(built - set(GENE_LEVEL_BRIDGE_DATABASES))
+        self.assertEqual(
+            [], missing,
+            "the builders file NCBI gene ids as %s, but %s cannot be bridged "
+            "through, so those groups cannot reach the others"
+            % (sorted(built), missing))
 
     def test_missing_identifier_table_names_itself(self):
         """The failure must be diagnosable from the message the user is shown."""

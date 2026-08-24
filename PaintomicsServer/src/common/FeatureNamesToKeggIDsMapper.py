@@ -142,7 +142,19 @@ def getConnectionByOrganismCode(organism):
 #: transcript- and peptide-level identifiers are NOT, because a shared peptide
 #: can join two paralogues and would silently map a feature onto its family
 #: member. Names, not ids -- the ids are per-species and resolved at call time.
-GENE_LEVEL_BRIDGE_DATABASES = ("entrezgene", "ensembl_gene", "kegg_id")
+#:
+#: `ncbi_geneid` and `entrezgene` are the SAME identifier space under two names:
+#: the KEGG builder (processKEGGMappingData) files NCBI gene ids as
+#: `ncbi_geneid`, the Ensembl builder (processEnsemblData) files them as
+#: `entrezgene`. A species built by both therefore carries two mate islands that
+#: no hop could cross -- the KEGG island holds kegg_id and kegg_gene_symbol, the
+#: Ensembl island holds everything a user typically uploads. Measured on dme
+#: after its kegg_id table was built: 0 of the 1,325 FlyBase ids in a real user
+#: submission reached kegg_id, though every one of them had the full path
+#: FBgn0000147 -> entrezgene 41446 -> ncbi_geneid 41446 -> kegg_id Dmel_CG3068.
+#: Listing both names is what joins the islands, and it is an identity step by
+#: the same rule as the others here: an NCBI gene id names one gene.
+GENE_LEVEL_BRIDGE_DATABASES = ("entrezgene", "ncbi_geneid", "ensembl_gene", "kegg_id")
 
 #: One tiny query per species per process, and mapping runs in forked workers
 #: that each map tens of thousands of names in batches of a few hundred.
