@@ -137,8 +137,14 @@ PUBLISHED = {
         "1.0", "6d9d416610b8384c78fb7e46b10aa4414aea0886d720a840499904aec0e9fe85"),
     # The evidence layer itself: MORE relationships drawn on the diagram and
     # classified against KEGG, Reactome and OmniPath.
+    # v=2.8 draws regulators the map does not print, colours them from the
+    # regulator's own values and ends every edge with a direction mark. A
+    # browser keeping the v=1.6 copy would ask a server that now returns
+    # off-map edges to be drawn by code that has no branch for them: it reads
+    # rasterBox(regulatorID) as null and falls through to an arc between two
+    # boxes, one of which does not exist, so the edge silently disappears.
     "app/view/PathwayAcquisitionViews/PA_Step4EvidenceOverlay.js": (
-        "1.6", "8d59f773c20e2b81e998c5512cba525e9d65003bd88b6c8a90086c3da1545f63"),
+        "2.8", "b56c3ce3224ba610e1268b85339eaed7dbfea1eab8d70b6284895cfbade81f86"),
     "js/libs/linkurious/sigma.min.js": ("0.1", None),
     "js/libs/linkurious/plugins.js": ("0.2", None),
     # Versioned by its release rather than by a counter. A vendored library is
