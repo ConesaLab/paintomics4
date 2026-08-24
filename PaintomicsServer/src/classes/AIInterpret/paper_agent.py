@@ -714,6 +714,49 @@ def enrichment_analyst(ctx, llm):
                 "Overlap of %s and %s." % (a, b), "venn")
             if fig_id:
                 note.figures.append(fig_id)
+    # Cross-layer join (backlog P3): which PATHWAYS carry evidence from more
+    # than one layer? The inventory compares feature sets; this compares the
+    # per-omic significance the job already computed, which is the sentence
+    # three round-1 studies wanted and none of them got.
+    if len(ctx.matrix.omics()) > 1:
+        # per_omic reaches the run as the RENDERED string the agent reads
+        # ("DNase-seq: p=0.0721 (41/177 relevant); Gene expression: p=0.0000
+        # ..."), not a dict -- parse it rather than re-deriving.
+        _PER_OMIC = re.compile(r"([^;:]+):\s*p\s*=\s*([0-9.eE+-]+)")
+        shared = []
+        for pw in (ctx.pathways or []):
+            raw = pw.get("per_omic")
+            pairs = []
+            if isinstance(raw, dict):
+                pairs = list(raw.items())
+            elif isinstance(raw, str):
+                pairs = _PER_OMIC.findall(raw)
+            hits = []
+            for omic, value in pairs:
+                try:
+                    if float(value) < 0.05:
+                        hits.append(str(omic).strip())
+                except (TypeError, ValueError):
+                    continue
+            if len(hits) > 1:
+                shared.append((pw, hits))
+        if shared:
+            n_tag = ctx.ledger.tag("count", len(shared),
+                                   {"what": "multi_layer_pathways"},
+                                   "cross_layer_join")
+            named = "; ".join(
+                "%s (%s)" % (pw.get("name"), ", ".join(hits))
+                for pw, hits in shared[:6])
+            note.evidence.append(
+                "cross-layer: %d %s pathway(s) are significant (p<0.05) in "
+                "more than one layer -- %s"
+                % (len(shared), n_tag, named))
+        else:
+            note.unused_occasions.append(
+                {"occasion": "cross-layer pathway agreement",
+                 "reason": "no pathway is significant in more than one layer "
+                           "(per-omic p<0.05) on this job"})
+
     note.findings = _narrate(llm, "enrichment", note.evidence, n_max=7)
     return note
 
