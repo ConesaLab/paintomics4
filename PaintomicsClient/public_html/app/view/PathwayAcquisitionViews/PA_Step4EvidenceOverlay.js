@@ -26,10 +26,11 @@
 //
 //   3. ENDPOINTS ARE OFTEN NOT GENES. Features bucket by the literal string
 //      x + "#" + y, so co-located genes share one drawn box, and a box holding
-//      more than five features is silently replaced by a PCA metagene. An
+//      more than five features is silently replaced by a PCA metagene. A solid
 //      arrowhead cannot disambiguate a 46x17 px box holding six genes, so an
-//      edge landing on a shared box gets a hollow BADGE terminal instead of an
-//      arrowhead, and says so in its tooltip.
+//      edge landing on a shared box is drawn HOLLOW -- same shape, empty
+//      middle -- and says so in its tooltip. Shape carries the direction of
+//      the effect, fill carries whether the endpoint is one gene.
 //
 // Anchoring is at the box perimeter, never the centre, so an edge never
 // disappears under the omics sprite it points at.
@@ -43,11 +44,32 @@ function PA_Step4EvidenceOverlay() {
 		unsupported:  {stroke: "#B39DDB", width: 1.6, dash: "1.5,4", opacity: 0.8}
 	};
 
+	/**
+	* Two of these three are the same answer for different reasons.
+	*
+	* Corroborated is one thing; novel and unsupported are both "no database
+	* records this interaction", differing only in whether the databases were
+	* in a position to record one. Listing them as three peers made the third
+	* read as evidence AGAINST the relationship, which it never is -- it means
+	* one partner has no curated interactions at all, so the silence says
+	* nothing. They are therefore grouped under one heading with the reason
+	* spelled out, and "unsupported" is not used as a user-facing word.
+	*
+	* The classification itself is unchanged: three classes, three line styles,
+	* three counts.
+	*/
 	this.CLASS_LABEL = {
 		corroborated: "Corroborated &mdash; a curated database records this interaction",
-		novel:        "Novel &mdash; both proteins known, no reported interaction",
-		unsupported:  "Unsupported &mdash; no external evidence either way"
+		novel:        "Novel &mdash; both partners are curated, nothing links them",
+		unsupported:  "No coverage &mdash; a partner has no curated interactions"
 	};
+
+	//: The three classes as the legend groups them: what the databases record,
+	//: and what they do not.
+	this.CLASS_GROUPS = [
+		{title: null, members: ["corroborated"]},
+		{title: "Not recorded", members: ["novel", "unsupported"]}
+	];
 
 	this.CLASS_ORDER = ["corroborated", "novel", "unsupported"];
 
@@ -69,6 +91,61 @@ function PA_Step4EvidenceOverlay() {
 	* fell into.
 	*/
 	this.NEAR_RADIUS = 70;
+
+	/**
+	* Size of a box this layer ADDS for a regulator the map does not print.
+	*
+	* Modelled on the target's own rectangle rather than a hard constant, so the
+	* added box matches the map it lands on -- KEGG draws genes at 46x17 raster
+	* px, Reactome and OmniPath do not. 0.85 is the same shrink a copied box
+	* gets: an added box must never be pixel-identical to a printed one, or it
+	* claims an annotation KEGG never made.
+	*/
+	this.ADDED_BOX_WIDTH = 46;
+	this.ADDED_BOX_HEIGHT = 17;
+	this.ADDED_BOX_SCALE = 0.85;
+
+	/**
+	* Every stroke width and mark size in this file is a RASTER px figure and
+	* has to pass through here.
+	*
+	* The overlay draws in canvas units, which are raster px times the panel's
+	* adjustFactor -- 0.607 on a full-width panel, and smaller as the panel
+	* narrows. A constant written straight into an attribute is therefore a
+	* different physical size on every layout. Measured before this existed: a
+	* KEGG gene box came out 23.7 x 8.8 canvas units while a `size = 7`
+	* arrowhead came out 11.9 wide, so the mark was half the width of the box
+	* it pointed at, and a cluster of them covered the boxes underneath in
+	* violet -- which reads as the boxes having changed colour.
+	*
+	* Same rule as the satellite offsets, for the same reason: raster px are
+	* the only unit on this diagram that means one thing everywhere.
+	*/
+	this.ink = function(rasterPx) {
+		return rasterPx * (this.options.adjustFactor || 1);
+	};
+
+	/** A dash pattern in raster px, scaled like every other stroke. */
+	this.inkDash = function(dash) {
+		if (!dash) { return dash; }
+		var me = this;
+		return String(dash).split(",").map(function(part) {
+			return me.ink(parseFloat(part));
+		}).join(",");
+	};
+
+	/**
+	* Does MORE's fitted coefficient say this regulator pushes the target DOWN?
+	*
+	* This is the model's own sign, for the condition the payload selected --
+	* NOT a claim that the curated databases agree. Sign concordance between
+	* MORE and KEGG/Reactome/OmniPath measured 58.3% against 52.8% by chance,
+	* so the terminal is driven by the coefficient and the line style by the
+	* evidence class, and the two must never be crossed.
+	*/
+	this.isRepression = function(edge) {
+		return typeof edge.coefficient === "number" && edge.coefficient < 0;
+	};
 
 	this.group = null;
 	this.legendEl = null;
@@ -231,35 +308,93 @@ function PA_Step4EvidenceOverlay() {
 		return element;
 	};
 
-	/** Arrowhead / badge polygon at the target end, oriented along the tangent. */
-	this.terminal = function(to, control, style, shared) {
+	/**
+	* Mark at the target end, oriented along the tangent.
+	*
+	* Two independent things to say, so two independent channels:
+	*
+	*   SHAPE  triangle = MORE fitted a positive coefficient, bar = negative.
+	*   FILL   solid = the target box holds one gene, hollow = it holds several
+	*          and the edge cannot say which of them is acted on.
+	*
+	* The hollow square this used to draw for a shared box collapsed both into
+	* one mark and threw the direction away -- and 68.7% of drawn KEGG features
+	* share their box, so on a map like mmu04330 every single terminal was a
+	* square and the sign was never visible anywhere. A bar needs no hollow
+	* variant: it lies ACROSS the arrival instead of pointing into it, so it
+	* never singles a gene out in the first place.
+	*/
+	this.terminal = function(to, control, style, shared, repress) {
 		var dx = to.x - control.x, dy = to.y - control.y;
 		var length = Math.sqrt(dx * dx + dy * dy) || 1;
 		var ux = dx / length, uy = dy / length;
-		var size = shared ? 5 : 7;
+		/* 6 raster px: KEGG draws its own arrowheads at about that. */
+		var size = this.ink(6);
 		var baseX = to.x - ux * size, baseY = to.y - uy * size;
 		var normalX = -uy * size * 0.55, normalY = ux * size * 0.55;
 
-		if (shared) {
-			/* The box holds several genes (or is a PCA metagene), so this edge
-			   cannot honestly claim WHICH one it acts on. A hollow square says
-			   "somewhere in this box" where an arrowhead would over-claim. */
-			var half = size * 0.85;
-			return this.append("rect", {
-				x: to.x - half, y: to.y - half,
-				width: half * 2, height: half * 2,
-				fill: "none", stroke: style.stroke, "stroke-width": 1.6,
-				opacity: style.opacity
+		if (repress) {
+			/* A bar across the tangent, the convention every pathway figure
+			   uses for inhibition. Drawn at the endpoint rather than set back
+			   from it: an arrowhead has a body to occupy the gap, a bar does
+			   not, and a bar floating short of the box reads as a stray tick. */
+			var barHalf = size * 0.85;
+			return this.append("line", {
+				x1: to.x - uy * barHalf, y1: to.y + ux * barHalf,
+				x2: to.x + uy * barHalf, y2: to.y - ux * barHalf,
+				stroke: style.stroke, "stroke-width": this.ink(2.2),
+				"stroke-linecap": "round", opacity: style.opacity
 			});
 		}
 
+		/* Hollow when the box holds several genes: the head still says which way
+		   the effect runs, the empty middle says "one of the genes in here". */
 		return this.append("polygon", {
 			points: [to.x + "," + to.y,
 					 (baseX + normalX) + "," + (baseY + normalY),
 					 (baseX - normalX) + "," + (baseY - normalY)].join(" "),
-			fill: style.stroke,
+			fill: shared ? "#ffffff" : style.stroke,
+			stroke: shared ? style.stroke : "none",
+			"stroke-width": shared ? this.ink(1.4) : 0,
 			opacity: style.opacity
 		});
+	};
+
+	/**
+	* The same three marks as terminal(), painted onto an element that already
+	* exists.
+	*
+	* A satellite's stub is redrawn on every drag, so its mark cannot be a node
+	* appended once at draw time -- it has to be re-aimed with the line. One
+	* <path> covers all three shapes, so the element survives a drag and only
+	* its geometry and paint change.
+	*/
+	this.aimMark = function(element, to, from, style, shared, repress) {
+		var dx = to.x - from.x, dy = to.y - from.y;
+		var length = Math.sqrt(dx * dx + dy * dy) || 1;
+		var ux = dx / length, uy = dy / length;
+		var size = this.ink(6);
+
+		if (repress) {
+			var barHalf = size * 0.85;
+			element.setAttribute("d",
+				"M" + (to.x - uy * barHalf) + "," + (to.y + ux * barHalf) +
+				"L" + (to.x + uy * barHalf) + "," + (to.y - ux * barHalf));
+			element.setAttribute("fill", "none");
+			element.setAttribute("stroke", style.stroke);
+			element.setAttribute("stroke-width", this.ink(2.2));
+		} else {
+			var bx = to.x - ux * size, by = to.y - uy * size;
+			var nx = -uy * size * 0.55, ny = ux * size * 0.55;
+			element.setAttribute("d",
+				"M" + to.x + "," + to.y +
+				"L" + (bx + nx) + "," + (by + ny) +
+				"L" + (bx - nx) + "," + (by - ny) + "Z");
+			element.setAttribute("fill", shared ? "#ffffff" : style.stroke);
+			element.setAttribute("stroke", shared ? style.stroke : "none");
+			element.setAttribute("stroke-width", shared ? this.ink(1.4) : 0);
+		}
+		element.setAttribute("opacity", style.opacity);
 	};
 
 	this.tooltip = function(element, text) {
@@ -507,6 +642,44 @@ function PA_Step4EvidenceOverlay() {
 		return best;
 	};
 
+	/**
+	* The regulator's own measured values, collapsed the way a printed box
+	* collapses them.
+	*
+	* A box the layer adds has no feature behind it on this map, so it cannot
+	* go through generateBox. It can still be painted with exactly the same
+	* numbers and the same scale: the server sends the regulator's values (its
+	* own expression -- a regulatory omic stores TARGET:::REGULATOR rows and
+	* every row of one regulator carries that regulator's profile), and
+	* getMinMax/getColor are the globals the real boxes use. Painting it any
+	* other way would put two colour languages on one diagram.
+	*
+	* @returns {Array} one colour per condition, or [] when nothing is known.
+	*/
+	this.regulatorColours = function(edge) {
+		var stored = edge.regulatorValues;
+		if (!stored) { return []; }
+
+		var jobView = this.options.jobView;
+		var mode = (jobView && jobView.getModel && jobView.getModel().getReplicateMode)
+			? jobView.getModel().getReplicateMode() : "replicates";
+		var values = (mode === "samples" && stored.sampleValues && stored.sampleValues.length)
+			? stored.sampleValues : stored.values;
+		if (!values || !values.length) { return []; }
+
+		var omicName = stored.omicName;
+		var summaries = this.options.summaries || {};
+		var visual = this.options.visualOptions || {};
+		if (typeof getMinMax !== "function" || typeof getColor !== "function"
+				|| !summaries[omicName]) { return []; }
+
+		var limits = getMinMax(summaries[omicName],
+			(visual.colorReferences || {})[omicName]);
+		return values.map(function(value) {
+			return getColor(limits, value, visual.colorScale);
+		});
+	};
+
 	/** Regenerate the regulator's own glyph so its gene symbol comes baked in. */
 	this.satelliteGlyph = function(featureID, satW) {
 		var item = (this.options.itemsByID || {})[featureID];
@@ -546,7 +719,11 @@ function PA_Step4EvidenceOverlay() {
 		var perTarget = {};
 
 		var counts = {drawn: 0, badged: 0, satellites: 0, fellBack: 0,
-					  linked: 0, selfLoops: 0, moved: 0};
+					  linked: 0, selfLoops: 0, moved: 0,
+					  /* added: boxes this layer created for a regulator the map
+					     does not print. unplaced: the same, with nowhere to put
+					     it -- no arc fallback exists for a single endpoint. */
+					  added: 0, unplaced: 0};
 
 		edges.forEach(function(edge) {
 			var targetRaster = me.rasterBox(edge.targetID);
@@ -590,7 +767,7 @@ function PA_Step4EvidenceOverlay() {
 										   imageWidth, imageHeight);
 					if (slot) {
 						var handle = me.drawSatellite(edge, targetRaster, slot,
-													  satW, satH, factor);
+													  satW, satH, factor, false);
 						/* A placed satellite becomes an obstacle for the next.
 						   Its AUTOMATIC slot, not the dragged one: a position
 						   the user chose is their business, and letting a
@@ -607,6 +784,46 @@ function PA_Step4EvidenceOverlay() {
 						return;
 					}
 				}
+			}
+
+			if (targetRaster && !regulatorRaster) {
+				/* THE REGULATOR IS NOT ON THIS MAP AT ALL.
+				   This is the majority case and it used to be discarded on the
+				   server: 1,233 of 1,382 relationships on mmu05226, and 42 of
+				   204 regulators that no map in the organism draws, so they
+				   could never be seen anywhere. There is no box to copy and no
+				   second point to draw a line from, so the layer makes the box
+				   -- which is what a satellite already is. It carries the
+				   regulator's own symbol as real text (no sprite exists to
+				   bake one in) inside the same dashed violet frame, whose
+				   documented meaning is exactly this: a box the layer added,
+				   not a KEGG annotation. */
+				var addedUsed = perTarget[edge.targetID] || 0;
+				if (addedUsed < 4) {
+					var addW = Math.max(30, (targetRaster.width || me.ADDED_BOX_WIDTH) * me.ADDED_BOX_SCALE);
+					var addH = Math.max(12, (targetRaster.height || me.ADDED_BOX_HEIGHT) * me.ADDED_BOX_SCALE);
+					var addGap = (me.payload.source === "Reactome") ? 8 : 6;
+					var addSlot = me.findSlot(targetRaster, addW, addH, addGap, occupancyRects,
+											  imageWidth, imageHeight);
+					if (addSlot) {
+						var addHandle = me.drawSatellite(edge, targetRaster, addSlot,
+														 addW, addH, factor, true);
+						occupancyRects.push({
+							left: addSlot.cx - addW / 2, right: addSlot.cx + addW / 2,
+							top: addSlot.cy - addH / 2, bottom: addSlot.cy + addH / 2
+						});
+						perTarget[edge.targetID] = addedUsed + 1;
+						counts.drawn++;
+						counts.added++;
+						if (addHandle && (addHandle.dx || addHandle.dy)) { counts.moved++; }
+						return;
+					}
+				}
+				/* No free space, and the arc fallback below cannot help: it
+				   needs two boxes and there is only one. Counted so the legend
+				   can say so rather than leaving a silent hole. */
+				counts.unplaced++;
+				return;
 			}
 
 			/* FALLBACK: no free space beside the target, so fall back to the
@@ -648,7 +865,7 @@ function PA_Step4EvidenceOverlay() {
 			width: (box.halfWidth + pad) * 2,
 			height: (box.halfHeight + pad) * 2,
 			fill: "none",
-			stroke: style.stroke, "stroke-width": 1.6,
+			stroke: style.stroke, "stroke-width": this.ink(1.6),
 			rx: 1.5, opacity: 0.95,
 			"pointer-events": "none"
 		});
@@ -670,7 +887,7 @@ function PA_Step4EvidenceOverlay() {
 		};
 
 		var halo = this.append("text", Ext.apply({
-			fill: "none", stroke: "#ffffff", "stroke-width": 2.4,
+			fill: "none", stroke: "#ffffff", "stroke-width": this.ink(2.4),
 			"stroke-linejoin": "round", opacity: 0.85
 		}, attributes));
 		halo.textContent = text;
@@ -729,19 +946,19 @@ function PA_Step4EvidenceOverlay() {
 		   rather than as an erasure. */
 		this.append("path", {
 			d: d, fill: "none", stroke: "#ffffff",
-			"stroke-width": style.width + 2.4,
+			"stroke-width": this.ink(style.width + 2.4),
 			"stroke-linecap": "round", opacity: 0.65
 		});
 
 		var path = this.append("path", {
 			d: d, fill: "none", stroke: style.stroke,
-			"stroke-width": style.width,
+			"stroke-width": this.ink(style.width),
 			"stroke-linecap": "round",
-			"stroke-dasharray": style.dash,
+			"stroke-dasharray": this.inkDash(style.dash),
 			opacity: style.opacity
 		});
 
-		var head = this.terminal(to, control, style, shared);
+		var head = this.terminal(to, control, style, shared, this.isRepression(edge));
 		if (straight) {
 			/* Only for the near case. Over a long bowed arc the reader can
 			   follow the curve back to its origin, so a ring there would be
@@ -783,14 +1000,14 @@ function PA_Step4EvidenceOverlay() {
 
 		this.append("path", {
 			d: d, fill: "none", stroke: "#ffffff",
-			"stroke-width": style.width + 2.4,
+			"stroke-width": this.ink(style.width + 2.4),
 			"stroke-linecap": "round", opacity: 0.65
 		});
 		var loop = this.append("path", {
 			d: d, fill: "none", stroke: style.stroke,
-			"stroke-width": style.width,
+			"stroke-width": this.ink(style.width),
 			"stroke-linecap": "round",
-			"stroke-dasharray": style.dash,
+			"stroke-dasharray": this.inkDash(style.dash),
 			opacity: style.opacity
 		});
 		/* Pointing straight down into the box it came from. */
@@ -830,7 +1047,16 @@ function PA_Step4EvidenceOverlay() {
 	* framed in the overlay's own violet dash, so it reads as evidence-layer
 	* furniture rather than as part of the map.
 	*/
-	this.drawSatellite = function(edge, target, slot, satW, satH, factor) {
+	/**
+	* @param {Boolean} added true when this box is one the layer INVENTED for a
+	*        regulator the map does not print, false when it duplicates a box
+	*        KEGG drew elsewhere. Taken from the branch that called, not from
+	*        edge.regulatorDrawn: the server decides that flag from the stored
+	*        pathway document and the client from its own graphical data, and
+	*        when those two disagree the tooltip must describe the box actually
+	*        on screen.
+	*/
+	this.drawSatellite = function(edge, target, slot, satW, satH, factor, added) {
 		var style = this.CLASS_STYLE[edge.evidenceClass] || this.CLASS_STYLE.unsupported;
 		var glyph = this.satelliteGlyph(edge.regulatorID, satW);
 		var key = this.edgeKey(edge);
@@ -845,12 +1071,15 @@ function PA_Step4EvidenceOverlay() {
 		   group: one of its ends is nailed to the target box and must not move
 		   with the hand. It is redrawn from the satellite's live centre instead. */
 		var casing = this.append("path", {
-			fill: "none", stroke: "#ffffff", "stroke-width": 3.2, opacity: 0.7
+			fill: "none", stroke: "#ffffff", "stroke-width": this.ink(3.2), opacity: 0.7
 		});
 		var stub = this.append("path", {
-			fill: "none", stroke: style.stroke, "stroke-width": 1.5,
-			"stroke-dasharray": style.dash, opacity: style.opacity
+			fill: "none", stroke: style.stroke, "stroke-width": this.ink(1.5),
+			"stroke-dasharray": this.inkDash(style.dash), opacity: style.opacity
 		});
+		/* Direction mark at the TARGET end of the stub, re-aimed by
+		   applyPlacement so it follows the box when the reader moves it. */
+		var mark = this.append("path", {fill: "none"});
 
 		/* Everything that MOVES lives in one <g>, so a drag is a single
 		   translate rather than five coordinate rewrites -- and so the export,
@@ -864,6 +1093,23 @@ function PA_Step4EvidenceOverlay() {
 			x: left, y: top, width: width, height: height,
 			fill: "#ffffff", opacity: 0.92, rx: 1
 		}));
+
+		/* An ADDED box gets the regulator's own values painted as one cell per
+		   condition, left to right, the same order and the same scale as every
+		   printed box on this map. Without it the box is white, and a white box
+		   on a coloured map states "no data" about a feature that is measured
+		   in this very job. */
+		var cellColours = added ? this.regulatorColours(edge) : [];
+		if (cellColours.length) {
+			var cellWidth = width / cellColours.length;
+			for (var c = 0; c < cellColours.length; c++) {
+				node.appendChild(this.svgEl("rect", {
+					x: left + c * cellWidth, y: top,
+					width: cellWidth + 0.2, height: height,
+					fill: cellColours[c]
+				}));
+			}
+		}
 
 		if (glyph) {
 			var image = this.svgEl("image", {
@@ -882,34 +1128,57 @@ function PA_Step4EvidenceOverlay() {
 			   external font, so the CairoSVG export can still resolve it.
 			   Measured on mmu04330: 2 of 6 satellites take this path. */
 			var fontSize = Math.max(5, Math.min(height * 0.68, 11));
-			var label = this.svgEl("text", {
+			var labelText = edge.regulatorLabel || edge.regulator;
+			var labelAttrs = {
 				x: left + width / 2, y: top + height / 2 + fontSize * 0.36,
 				"text-anchor": "middle",
 				"font-family": "Helvetica, Arial, sans-serif",
-				"font-size": fontSize,
-				fill: style.stroke
-			});
-			label.textContent = edge.regulatorLabel || edge.regulator;
+				"font-size": fontSize
+			};
+
+			/* Black straight over the cells, exactly as the printed boxes do
+			   it, and with NO halo. A white halo was tried first and it wrecked
+			   the thing it was meant to protect: at a 2.6px stroke on a 14px
+			   box it painted over most of the strip, so a 12-condition box read
+			   as a flat pale rectangle with a sliver of colour at each end.
+			   The scale runs white -> red, so its luminance never drops far
+			   enough to swallow black text -- which is why the printed boxes
+			   need no halo either. Violet stays for an uncoloured box, where
+			   there is no strip to protect and the hue carries the meaning. */
+			var label = this.svgEl("text", Ext.apply({
+				fill: cellColours.length ? "#1a1a1a" : style.stroke
+			}, labelAttrs));
+			label.textContent = labelText;
 			node.appendChild(label);
 		}
 
 		var frame = this.svgEl("rect", {
 			x: left, y: top, width: width, height: height,
 			fill: "none",
-			stroke: style.stroke, "stroke-width": 1.2,
-			"stroke-dasharray": "3,2", rx: 1, opacity: 0.95
+			stroke: style.stroke, "stroke-width": this.ink(1.2),
+			"stroke-dasharray": this.inkDash("3,2"), rx: 1, opacity: 0.95
 		});
 		node.appendChild(frame);
 
-		var tip = this.edgeTooltip(edge, false) +
-			"\n(duplicate of " + edge.regulatorLabel +
-			", placed here by the evidence layer — not a KEGG annotation)" +
+		/* Two different claims, and conflating them would make the second one
+		   false: a satellite for a regulator KEGG drew elsewhere on this map is
+		   a DUPLICATE the reader could have found; a box for a regulator the
+		   map does not print at all is new information the layer is adding. */
+		var provenance = added
+			? "\n(" + edge.regulatorLabel + " is not drawn on this map — this box " +
+			  "was added by the evidence layer, it is not a KEGG annotation)"
+			: "\n(duplicate of " + edge.regulatorLabel +
+			  ", placed here by the evidence layer — not a KEGG annotation)";
+		var tip = this.edgeTooltip(edge, false) + provenance +
 			"\ndrag to move it; “reset positions” in the legend puts it back";
 		this.tooltip(frame, tip);
 		this.tooltip(stub, tip);
 
 		var handle = {
 			key: key, node: node, stub: stub, casing: casing,
+			mark: mark, style: style, edge: edge, added: !!added,
+			shared: (this.options.boxOccupancy || {})[target.key] > 1,
+			repress: this.isRepression(edge),
 			slot: slot, width: width, height: height,
 			dx: saved.dx || 0, dy: saved.dy || 0,
 			target: {
@@ -959,6 +1228,11 @@ function PA_Step4EvidenceOverlay() {
 				" L" + satellitePoint.x + "," + satellitePoint.y;
 		handle.stub.setAttribute("d", d);
 		handle.casing.setAttribute("d", d);
+		if (handle.mark) {
+			this.aimMark(handle.mark, targetPoint,
+						 {x: satellitePoint.x, y: satellitePoint.y},
+						 handle.style, handle.shared, handle.repress);
+		}
 	};
 
 	/**
@@ -995,6 +1269,9 @@ function PA_Step4EvidenceOverlay() {
 			var inverse = screenMatrix.inverse();
 			var start = me.clientToCanvas(event.clientX, event.clientY, inverse);
 			var origin = {dx: handle.dx, dy: handle.dy};
+			/* Screen pixels, not canvas units: the threshold is about the
+			   steadiness of a hand, which does not rescale with the zoom. */
+			var pressedAt = {x: event.clientX, y: event.clientY};
 			var factor = me.options.adjustFactor;
 			try { node.setPointerCapture(event.pointerId); } catch (error) { /* no capture */ }
 
@@ -1033,12 +1310,95 @@ function PA_Step4EvidenceOverlay() {
 					delete me.placement[handle.key];
 				}
 				me.savePlacement();
+
+				/* A press that did not travel is a CLICK, and a box that looks
+				   like every other box on the map has to answer a click like
+				   them: the feature panel, with this regulator's own values.
+				   Decided here rather than with a separate click listener,
+				   because pointerdown is cancelled above to keep the map from
+				   panning, and a cancelled gesture emits no click event. */
+				var travelled = Math.abs(releaseEvent.clientX - pressedAt.x) +
+								Math.abs(releaseEvent.clientY - pressedAt.y);
+				if (travelled <= 4) { me.openFeatureDetails(handle); }
 			};
 
 			node.addEventListener("pointermove", move);
 			node.addEventListener("pointerup", release);
 			node.addEventListener("pointercancel", release);
 		});
+	};
+
+	/**
+	* The Feature behind an added box.
+	*
+	* Built from the payload, NOT from the job's feature store, and that is
+	* deliberate. In a MORE job a stored Feature is a TARGET: its omicsValues
+	* hold one entry per regulator acting on it. Opening the store's entry for
+	* Smad7 therefore filled the panel with Smad3, Rela, Sp1, Smad4, Egr1 and
+	* Dand5 -- Smad7's own regulators -- under a heading naming Smad7, while
+	* the box the reader clicked means "Smad7, the regulator, with this
+	* profile". The payload carries exactly that profile, so the panel and the
+	* box describe the same thing. The store is only a fallback for a job that
+	* predates the payload field.
+	*/
+	this.featureForEdge = function(edge) {
+		var stored = edge.regulatorValues;
+		if (!stored || typeof Feature !== "function" || typeof SimpleOmicValue !== "function") {
+			var jobView = this.options.jobView;
+			var model = jobView && jobView.getModel ? jobView.getModel() : null;
+			var store = (model && model.getOmicsValues) ? model.getOmicsValues() : null;
+			return (store && store[edge.regulatorID]) ? store[edge.regulatorID] : null;
+		}
+
+		/* SimpleOmicValue, not the OmicValue base: the panel's addTableEntrie
+		   asks every value isCompoundOmicsValue(), and the base class throws
+		   "Not implemented" for it -- the panel then renders its headings and
+		   nothing else. */
+		var omicValue = new SimpleOmicValue();
+		omicValue.setOmicName(stored.omicName);
+		omicValue.setInputName(stored.originalName || edge.regulatorLabel);
+		omicValue.setValues(stored.values || []);
+		if (stored.sampleValues) { omicValue.setSampleValues(stored.sampleValues); }
+		omicValue.originalName = stored.originalName || edge.regulatorLabel;
+		omicValue.setRelevant([]);
+
+		var feature = new Feature();
+		feature.setID(edge.regulatorID);
+		feature.setName(edge.regulatorLabel || edge.regulator);
+		feature.setFeatureType("Gene");
+		feature.setOmicsValues([omicValue]);
+		return feature;
+	};
+
+	/**
+	* Open the feature panel for an added box, as a printed box does on click.
+	*
+	* The panel takes a FeatureSet, so the regulator is wrapped in one of its
+	* own -- placed at the slot the box occupies, which is where the reader
+	* just clicked. FeatureSetElem's graphical data is null: this feature has
+	* no box in the pathway document, which is the entire reason the layer drew
+	* one, and every consumer that reads it guards for a missing value.
+	*/
+	this.openFeatureDetails = function(handle) {
+		var pathwayView = this.options.pathwayView;
+		if (!handle || !handle.edge || !pathwayView || !pathwayView.showFeatureSetDetails) {
+			return;
+		}
+		if (typeof FeatureSet !== "function" || typeof FeatureSetElem !== "function") {
+			return;
+		}
+
+		var feature = this.featureForEdge(handle.edge);
+		if (!feature) { return; }
+
+		try {
+			var set = new FeatureSet(handle.slot.cx, handle.slot.cy);
+			set.addFeature(new FeatureSetElem(feature, null));
+			set.setMainFeature(feature);
+			pathwayView.showFeatureSetDetails(handle.key, set);
+		} catch (error) {
+			console.warn("Evidence overlay: could not open the feature panel", error);
+		}
 	};
 
 	/** Screen coordinates to the canvas units the overlay draws in. */
@@ -1110,7 +1470,7 @@ function PA_Step4EvidenceOverlay() {
 		var host = this.legendHost();
 		if (!host) { return; }
 
-		var rows = this.CLASS_ORDER.map(function(name) {
+		var row = function(name) {
 			var style = me.CLASS_STYLE[name];
 			var dash = style.dash ? ' stroke-dasharray="' + style.dash + '"' : "";
 			return '<li>' +
@@ -1121,6 +1481,22 @@ function PA_Step4EvidenceOverlay() {
 				'<span class="evidenceLegend-name">' + me.CLASS_LABEL[name] + '</span>' +
 				'<span class="evidenceLegend-count">' + (byClass[name] || 0) + '</span>' +
 				'</li>';
+		};
+
+		/* One list per group, so "Not recorded" can carry its two reasons under
+		   a single heading with its own total. The heading states the total
+		   because that is the number a reader compares against the corroborated
+		   one; the two rows beneath say why each edge is in it. */
+		var rows = this.CLASS_GROUPS.map(function(group) {
+			var total = group.members.reduce(function(sum, name) {
+				return sum + (byClass[name] || 0);
+			}, 0);
+			var heading = group.title
+				? '<li class="evidenceLegend-group">' +
+				  '<span class="evidenceLegend-name">' + group.title + '</span>' +
+				  '<span class="evidenceLegend-count">' + total + '</span></li>'
+				: "";
+			return heading + group.members.map(row).join("");
 		}).join("");
 
 		/* Which databases actually corroborated anything here, strongest first.
@@ -1142,9 +1518,16 @@ function PA_Step4EvidenceOverlay() {
 			omissions.push(statistics.hidden + " more on this map are hidden by the " +
 				drawn + "-edge readability cap");
 		}
-		if (statistics.offMapRegulators) {
-			omissions.push(statistics.offMapRegulators.toLocaleString() +
-				" relationships have a regulator with no box on this map");
+		if (statistics.offMapTargets) {
+			/* The one endpoint that is still required. A mark has to be
+			   anchored to something the map prints. */
+			omissions.push(statistics.offMapTargets.toLocaleString() +
+				" relationships act on a target this map does not draw");
+		}
+		if (counts.unplaced) {
+			omissions.push(counts.unplaced + (counts.unplaced === 1
+				? " added regulator had nowhere free to sit beside its target"
+				: " added regulators had nowhere free to sit beside their target"));
 		}
 		if (fellBack) {
 			/* Named, not hidden. An edge that could not be parked is drawn as
@@ -1161,7 +1544,7 @@ function PA_Step4EvidenceOverlay() {
 			omissions.push(badged + (badged === 1
 				? " edge ends on a box holding several genes"
 				: " edges end on a box holding several genes") +
-				" and cannot say which one (hollow terminal)");
+				" and cannot say which one (hollow arrowhead)");
 		}
 		if (statistics.recordedElsewhere) {
 			/* The number that only exists because more than one database is
@@ -1176,6 +1559,16 @@ function PA_Step4EvidenceOverlay() {
 		if (statistics.multiBoxEndpoints) {
 			omissions.push(statistics.multiBoxEndpoints +
 				" had an endpoint drawn at several places on this map; one was chosen");
+		}
+		if (counts.added) {
+			/* The headline of what this layer now does. Kept separate from the
+			   duplicate-satellite line above: one says a box was copied, this
+			   one says a box was INVENTED, and a reader deciding how much to
+			   trust the picture needs to know which. */
+			omissions.push("<b>" + counts.added + "</b> of the drawn " +
+				(counts.added === 1 ? "regulator is" : "regulators are") +
+				" not printed on this map at all — added here beside their " +
+				"target in a <b>dashed</b> violet frame");
 		}
 		if (counts.linked || counts.selfLoops) {
 			/* Stated rather than silent: these are the edges that did NOT get a
@@ -1230,16 +1623,26 @@ function PA_Step4EvidenceOverlay() {
 			'    <a href="javascript:void(0)" class="button evidenceLegend-button evidenceLegend-toggle" ' +
 			'       title="Show or hide the whole evidence layer">' +
 			'      <i class="fa fa-eye-slash"></i> Hide layer</a>' +
-			(counts.satellites
+			/* Gated on BOTH: an added box is draggable exactly like a copied
+			   one, so gating on counts.satellites alone left every map whose
+			   boxes were all added with a drag and no way to undo it. */
+			((counts.satellites || counts.added)
 				? '    <a href="javascript:void(0)" class="button evidenceLegend-button evidenceLegend-reset" ' +
 				  '       title="Put every dragged regulator back where the layer placed it">' +
 				  '      <i class="fa fa-undo"></i> Reset positions</a>'
 				: "") +
 			'  </div>' +
-			(counts.satellites
+			((counts.satellites || counts.added)
 				? '  <p class="evidenceLegend-note evidenceLegend-hint">Drag any ' +
 				  '<b>dashed</b> violet box on the map to move it. A <b>solid</b> ' +
-				  'violet ring marks a regulator KEGG itself drew.</p>'
+				  'violet ring marks a regulator KEGG itself drew.<br>' +
+				  /* The sign is the model's, and the sentence has to say so:
+				     MORE and the curated databases agree on direction only
+				     58.3% of the time, against 52.8% by chance. */
+				  'An <b>arrow</b> ends an edge whose MORE coefficient is positive, ' +
+				  'a <b>bar</b> one whose coefficient is negative — this job’s ' +
+				  'model, not a curated claim. A <b>hollow</b> arrow means the box ' +
+				  'it lands on holds several genes.</p>'
 				: "") +
 			(omissions.length
 				? '<p class="evidenceLegend-note">' + omissions.join("<br>") + '</p>'
@@ -1298,6 +1701,13 @@ function PA_Step4EvidenceOverlay() {
 	};
 
 	this.clear = function() {
+		/* The handles go with the <g> that held their nodes. Without this they
+		   accumulate: every redraw -- a colour-scale Apply, a reset, a zoom --
+		   pushed six more onto the list while removing their DOM, so a map with
+		   6 boxes was carrying 24 handles, each pinning a detached SVG node and
+		   a copy of its edge. Nothing read the stale ones, which is why it went
+		   unnoticed, but they were retained for the life of the view. */
+		this.satellites = [];
 		if (this.group) {
 			try {
 				if (this.group.parentNode) {

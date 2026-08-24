@@ -46,6 +46,24 @@
 
 .evidenceLegend-list svg { flex: 0 0 34px; }
 
+/* The heading of a group of classes that share an answer ("Not recorded"),
+   carrying the total the reader compares against the corroborated count. It
+   has no stroke sample of its own -- the rows beneath it do -- so it takes the
+   34 px the samples occupy as indentation for them instead. */
+.evidenceLegend-group {
+	margin-top: 4px;
+	padding-top: 4px;
+	border-top: 1px solid #e6e4dd;
+	font-size: 11px;
+	font-weight: 600;
+	color: #52525b;
+}
+
+.evidenceLegend-group + li,
+.evidenceLegend-group + li + li {
+	padding-left: 10px;
+}
+
 .evidenceLegend-name {
 	flex: 1 1 auto;
 	/* The column is 300 px wide, so these wrap rather than pushing the count

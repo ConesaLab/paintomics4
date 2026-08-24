@@ -1205,6 +1205,14 @@ function PA_Step4KeggDiagramView() {
 									: diagramPanelEl.find(".lateralOptionsPanel-body");
 							},
 							jobID: me.getParent("PA_Step4JobView").getModel().getJobID(),
+							/* For the replicate mode: a box the layer adds paints
+							   the regulator's values, and it has to collapse them
+							   the same way every printed box on this map does. */
+							jobView: me.getParent("PA_Step4JobView"),
+							/* For the click-through: an added box opens the same
+							   feature panel a printed box opens, and that panel
+							   is owned by the pathway view. */
+							pathwayView: me.getParent(),
 							pathwayID: me.getModel().getID(),
 							graphicalOptions: graphicalOptions,
 							adjustFactor: adjustFactor,

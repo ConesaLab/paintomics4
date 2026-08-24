@@ -26,7 +26,7 @@
 
 import logging
 
-from src.conf.serverconf import MONGODB_HOST, MONGODB_PORT
+from src.conf.serverconf import MONGODB_HOST, MONGODB_PORT, MONGODB_DATABASE
 
 #: Relationship MORE found AND OmniPath independently records an interaction
 #: for. This is an EXISTENCE claim only. Sign concordance between MORE's
@@ -702,6 +702,78 @@ def _drawnFeatureIDs(pathwayDocument):
     return drawn
 
 
+def attachRegulatorValues(edges, jobID, client):
+    """Give every ADDED regulator box the regulator's own measured values.
+
+    A box the layer invents has no feature behind it on this map, so without
+    this it is drawn empty -- a white rectangle on a map where every other box
+    carries colour, which reads as "no data" when the regulator is in fact one
+    of the best-measured features in the job.
+
+    The values are not stored under the regulator. A regulatory omic's features
+    are TARGET:::REGULATOR pairs, and the values on every one of those rows are
+    the REGULATOR's own expression, repeated once per target it acts on --
+    verified on job 3xr0326VH6, where all 59 rows carrying Myc are identical
+    after the id column. So any row mentioning the regulator answers for it,
+    and one $elemMatch per regulator is enough.
+
+    Called after the cap, so it costs at most maxEdges queries and never one
+    per drawable relationship. Best effort: a regulator whose values cannot be
+    found keeps an uncoloured box rather than losing its edge.
+    """
+    wanted = {}
+    for edge in edges:
+        if edge.get("regulatorDrawn") is False:
+            wanted.setdefault((edge["regulatorLabel"], edge.get("omic")), []).append(edge)
+
+    if not wanted:
+        return
+
+    features = client[MONGODB_DATABASE]["featuresCollection"]
+    for (label, omicName), sharing in wanted.items():
+        # The omic is named twice in this job with different punctuation: the
+        # RegulationPerCondition table says "Transcription_factor" because R
+        # made the column a syntactic name, while the stored feature says
+        # "Transcription factor". Matching on the first spelling finds nothing
+        # and the box silently comes out white, so try the spellings in order
+        # and fall back to matching on the regulator alone -- a regulator's
+        # values are the same on every row that mentions it.
+        candidates = []
+        if omicName:
+            candidates.append({"originalName": label, "omicName": omicName})
+            spaced = str(omicName).replace("_", " ")
+            if spaced != omicName:
+                candidates.append({"originalName": label, "omicName": spaced})
+        candidates.append({"originalName": label})
+
+        stored = None
+        for criteria in candidates:
+            try:
+                document = features.find_one(
+                    {"jobID": jobID, "omicsValues": {"$elemMatch": criteria}},
+                    {"_id": 0, "omicsValues": {"$elemMatch": criteria}})
+            except Exception as ex:
+                logging.warning("PathwayEvidence - could not read values for regulator "
+                                "%s: %s", label, str(ex))
+                break
+            if document and document.get("omicsValues"):
+                stored = document["omicsValues"][0]
+                break
+        if stored is None:
+            continue
+        payload = {
+            "omicName": stored.get("omicName"),
+            "values": stored.get("values"),
+            "sampleValues": stored.get("sampleValues"),
+            #: inputName is the TARGET whose row we borrowed the values from,
+            #: so it is deliberately not sent: naming it here would label the
+            #: box with a gene that has nothing to do with this regulator.
+            "originalName": stored.get("originalName"),
+        }
+        for edge in sharing:
+            edge["regulatorValues"] = payload
+
+
 def buildPathwayEvidence(jobInstance, pathwayID, condition=None,
                          maxEdges=DEFAULT_MAX_EDGES, classes=None):
     """Evidence edges drawable on one pathway, ranked, capped and accounted for.
@@ -728,6 +800,10 @@ def buildPathwayEvidence(jobInstance, pathwayID, condition=None,
         "conditions": table.conditionNames,
         "condition": condition,
         "drawable": 0,
+        #: Drawable relationships whose regulator this map prints no box for.
+        #: These are DRAWN, as a box the layer adds beside the target -- the
+        #: count is what the legend uses to say how much of the layer is an
+        #: extension of the map rather than an annotation of it.
         "offMapRegulators": 0,
         "offMapTargets": 0,
         "hidden": 0,
@@ -794,17 +870,35 @@ def buildPathwayEvidence(jobInstance, pathwayID, condition=None,
             drawnRegulators = [featureID for featureID in regulatorIDs if featureID in drawn]
             drawnTargets = [featureID for featureID in targetIDs if featureID in drawn]
 
-            if not drawnRegulators:
-                statistics["offMapRegulators"] += 1
-                continue
+            # The TARGET must be drawn: it is what a mark is anchored to, and
+            # there is nothing to park a regulator beside without it.
             if not drawnTargets:
                 statistics["offMapTargets"] += 1
                 continue
 
+            # The REGULATOR need not be. Requiring it was correct only while an
+            # edge was an arc between two existing boxes (c3d2ad99); 827d7102
+            # replaced arcs with a box this layer PLACES, which removed the
+            # need, and the rule outlived it. On the mouse STATegra MORE job it
+            # was discarding 1,233 of 1,382 relationships on mmu05226 alone and
+            # hiding 42 of 204 regulators from every map in the organism.
+            regulatorDrawn = bool(drawnRegulators)
+            if not regulatorDrawn:
+                statistics["offMapRegulators"] += 1
+
             # Deterministic representative when a symbol resolves to several
             # genes drawn on this map. The alternative -- drawing all of them --
-            # turns 131 Reactome edges into 3,252 line segments.
-            regulatorID = sorted(drawnRegulators)[0]
+            # turns 131 Reactome edges into 3,252 line segments. An off-map
+            # regulator keeps its translated ID so the databases can still be
+            # asked about the pair; a regulator this organism's database cannot
+            # name at all gets a synthetic key, which no lookup will match and
+            # which therefore classifies as unsupported -- literally true.
+            if regulatorDrawn:
+                regulatorID = sorted(drawnRegulators)[0]
+            elif regulatorIDs:
+                regulatorID = sorted(regulatorIDs)[0]
+            else:
+                regulatorID = "name:" + str(relationship["regulator"])
             targetID = sorted(drawnTargets)[0]
             if regulatorID == targetID:
                 continue
@@ -860,20 +954,26 @@ def buildPathwayEvidence(jobInstance, pathwayID, condition=None,
                 "curationEffort": curationEffort,
                 "evidenceSources": evidenceSources,
                 "ambiguousEndpoint": ambiguous,
+                #: False when this map prints no box for the regulator, so the
+                #: client must synthesise one rather than copy an existing glyph.
+                "regulatorDrawn": regulatorDrawn,
                 "regulatorBoxes": len(drawnRegulators),
                 "targetBoxes": len(drawnTargets),
             })
+        # Rank: corroborated first (it is the only class that can cite
+        # anything), then novel, then the unsupported bulk, each by coefficient
+        # magnitude. Inside the try because the values lookup below needs the
+        # connection, and it must only run for the edges that survive the cap.
+        edges.sort(key=lambda edge: (CLASS_PRIORITY[edge["evidenceClass"]],
+                                     -abs(edge["coefficient"])))
+
+        if maxEdges is not None and len(edges) > maxEdges:
+            statistics["hidden"] = len(edges) - maxEdges
+            edges = edges[:maxEdges]
+
+        attachRegulatorValues(edges, jobInstance.getJobID(), client)
     finally:
         client.close()
-
-    # Rank: corroborated first (it is the only class that can cite anything),
-    # then novel, then the unsupported bulk, each by coefficient magnitude.
-    edges.sort(key=lambda edge: (CLASS_PRIORITY[edge["evidenceClass"]],
-                                 -abs(edge["coefficient"])))
-
-    if maxEdges is not None and len(edges) > maxEdges:
-        statistics["hidden"] = len(edges) - maxEdges
-        edges = edges[:maxEdges]
 
     statistics["shown"] = len(edges)
     return {"pathwayID": pathwayID, "edges": edges,
