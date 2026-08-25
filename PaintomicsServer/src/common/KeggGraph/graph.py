@@ -45,6 +45,7 @@ class KeggGraph(object):
         counts = np.zeros(len(self.names) + 1, np.int64)
         np.add.at(counts, u[order].astype(np.int64) + 1, 1)
         self._indptr = np.cumsum(counts)
+        self._compound_balls = {}
 
     def _neighbours(self, code):
         return self._indices[self._indptr[code]:self._indptr[code + 1]]
@@ -129,6 +130,33 @@ class KeggGraph(object):
                  for name in sorted(kept)]
         return {"seed": seed, "source": self.source, "truncated": truncated,
                 "nodes": nodes, "edges": edges}
+
+    def compound_balls(self, k=4):
+        """Cumulative k-step balls for EVERY compound, as integer code arrays,
+        memoised on the graph.
+
+        The scorer needs the whole background on every job, and these are a pure
+        function of the graph -- so they belong to the graph's lifetime, not the
+        job's. Returned as node codes rather than names so scoring is numpy
+        masking rather than millions of dict lookups: that is the difference
+        between ~2.3 s per job (what the R scorer also paid) and milliseconds.
+
+        `balls[compound][i]` is the cumulative ball out to radius i+1, unique and
+        seed-free. Rings are disjoint, so the cumulative count is also the node
+        count -- which is what `ball_size` reports.
+        """
+        cached = self._compound_balls.get(k)
+        if cached is not None:
+            return cached
+        out = {}
+        for compound in self.compounds():
+            running, cumulative = [], []
+            for ring in self.rings(compound, k):
+                running.extend(self._code[n] for n in ring)
+                cumulative.append(np.array(running, dtype=np.int32))
+            out[compound] = cumulative
+        self._compound_balls[k] = out
+        return out
 
     def compounds(self):
         return [n for n in self.names if self.node_type.get(n) == "compound"]
