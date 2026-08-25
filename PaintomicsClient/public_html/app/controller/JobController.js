@@ -510,6 +510,13 @@ function JobController() {
 
 
 
+						// Carried from step 1 so step 2 knows whether this job may use
+						// the AI at all. The other two responses that send it
+						// (step 3, pa_recover_job) arrive too late for step 2.
+						if (response.aiConsent === true || response.aiConsent === "true") {
+							jobModel.aiConsent = true;
+						}
+
 						//TODO: IF IS THE SECOND TIME THAT THE PREVIOUS STEP WAS EXECUTED AND NOTHING CHANGES, AVOID RESENDING?
 						jobModel.setFoundCompounds([]);
 						var matchedMetabolites = response.matchedMetabolites;
@@ -577,6 +584,116 @@ function JobController() {
 	* @param {type} jobView
 	* @returns {undefined}
 	************************************************************/
+	/**
+	* "Choose for me": ask the server which KEGG compound each ambiguous name
+	* meant, then apply the answer to the cards.
+	*
+	* Enqueue-and-poll, not one request: the server puts the work on its job
+	* queue because a route that blocked on the LLM gateway would hold one of
+	* the four uWSGI threads that serve the whole site.
+	*
+	* Nothing is saved by this. The suggestions move checkboxes in the browser's
+	* own model; the analysis only changes if the user then presses Next step,
+	* and Undo puts every tick back.
+	*
+	* @param {PA_Step2JobView} jobView
+	*/
+	this.step2SuggestCompoundsHandler = function (jobView) {
+		var me = this;
+		var jobID = jobView.getModel().getJobID();
+		var attempts = 0;
+		var failures = 0;
+
+		var fail = function (message) {
+			jobView.setAIButtonState("idle");
+			showErrorMessage(message || "The AI could not choose the compounds.", {
+				height: 200, width: 420
+			});
+		};
+
+		var poll = function () {
+			attempts++;
+			// Ceiling rather than a timeout on the request: the server's own
+			// budget stops the gateway call, and this only has to outlast it.
+			if (attempts > AI_SUGGEST_MAX_POLLS) {
+				fail("The AI is taking longer than expected. Your selection has "
+					+ "not been changed \u2014 please choose the compounds yourself, "
+					+ "or try again.");
+				return;
+			}
+
+			$.ajax({
+				type: "POST", url: SERVER_URL_PA_SUGGEST_COMPOUNDS_STATUS,
+				data: {jobID: jobID}, dataType: "json",
+				success: function (response) {
+					if (!response || response.success !== true) {
+						fail(response && (response.errorMessage || response.message));
+						return;
+					}
+					if (response.status === "running" || response.status === "queued") {
+						setTimeout(poll, AI_POLL_INTERVAL);
+						return;
+					}
+					if (response.status !== "finished") {
+						fail("The AI compound selection did not finish.");
+						return;
+					}
+
+					// applyAISuggestions re-renders the panel, and the panel is
+					// where the buttons live now -- Undo appears with it.
+					var counts = jobView.applyAISuggestions(response);
+					jobView.setAIButtonState("done");
+
+					// Same verb as the banner it appears over. "Selected" would
+					// also overstate it: these are the cards that CHANGED, not
+					// every card the run decided.
+					var changed = counts.byRule + counts.byAI;
+					showSuccessMessage(
+						changed > 0
+							? "Changed " + changed + " compound selection" + (changed === 1 ? "" : "s")
+							  + (counts.unsure > 0 ? ", " + counts.unsure + " left for you" : "")
+							: "Your selection already matched \u2014 nothing changed",
+						{showTimeout: 1, closeTimeout: 3});
+				},
+				error: function (xhr) {
+					// One dropped request must not end the poll: the AI status
+					// poll shipped with exactly that bug and died on a single
+					// blip. Only a run of them gives up.
+					//
+					// Counted separately from `attempts`. Guarded on that, the
+					// branch below was unreachable -- poll() returns early once
+					// `attempts` passes the ceiling, so inside a running poll
+					// the test was always true and a server that was down for
+					// the whole window reported "taking longer than expected"
+					// instead of the transport error it actually hit.
+					failures++;
+					if (failures <= AI_SUGGEST_MAX_TRANSPORT_FAILURES) {
+						setTimeout(poll, AI_POLL_INTERVAL);
+						return;
+					}
+					ajaxErrorHandler(xhr);
+					jobView.setAIButtonState("idle");
+				}
+			});
+		};
+
+		$.ajax({
+			type: "POST", url: SERVER_URL_PA_SUGGEST_COMPOUNDS,
+			data: {jobID: jobID}, dataType: "json",
+			success: function (response) {
+				if (!response || response.success !== true) {
+					fail(response && (response.errorMessage || response.message));
+					return;
+				}
+				setTimeout(poll, AI_POLL_INTERVAL);
+			},
+			error: function (xhr) {
+				ajaxErrorHandler(xhr);
+				jobView.setAIButtonState("idle");
+			}
+		});
+	};
+
 	this.step2OnFormSubmitHandler = function (jobView) {
 		if (jobView.checkForm() === true) {
 			var me = this;

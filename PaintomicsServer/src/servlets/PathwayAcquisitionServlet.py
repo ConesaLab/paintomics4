@@ -377,6 +377,12 @@ def pathwayAcquisitionStep1_PART2(jobInstance, userID, exampleMode, RESPONSE):
             "compoundBasedInputOmics": inputOmicsForClient(jobInstance.getCompoundBasedInputOmics()),
             "databases": jobInstance.getDatabases(),
             "name": jobInstance.getName(),
+            # Step 3 and pa_recover_job have always sent this; step 1 did not,
+            # so a browser arriving at step 2 straight from step 1 had no
+            # consent flag on its job model at all. Step 2's "Choose for me"
+            # button is gated on it, so without this the button was invisible
+            # on the only path a user actually takes to step 2.
+            "aiConsent": jobInstance.getAIConsent(),
             "timestamp": int(time())
         })
 

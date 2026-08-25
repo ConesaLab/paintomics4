@@ -43,6 +43,12 @@ SERVER_URL_PA_STEP1 = SERVER_URL + "pa_step1";
 SERVER_URL_PA_EXAMPLE_STEP1 = "pa_step1/example";
 SERVER_URL_PA_STEP2 = SERVER_URL + "pa_step2";
 SERVER_URL_PA_STEP3 = SERVER_URL + "pa_step3";
+/* Step 2's "Choose for me". Two URLs because the work goes on the server's job
+   queue rather than into the request: uWSGI serves this site on four threads,
+   so a route that waited on the LLM gateway would be an outage rather than a
+   slow response. See CompoundSuggestionServlet.py. */
+SERVER_URL_PA_SUGGEST_COMPOUNDS = SERVER_URL + "pa_suggest_compounds";
+SERVER_URL_PA_SUGGEST_COMPOUNDS_STATUS = SERVER_URL + "pa_suggest_compounds_status";
 SERVER_URL_PA_SAVE_IMAGE = SERVER_URL + "pa_save_image";
 SERVER_URL_PA_SAVE_VISUAL_OPTIONS = SERVER_URL + "pa_save_visual_options";
 SERVER_URL_PA_PATHWAY_EVIDENCE = SERVER_URL + "pa_pathway_evidence";
@@ -72,6 +78,19 @@ SERVER_URL_AI_GENERATE_EXP_DESIGN = SERVER_URL + "ai_generate_exp_design";
    is a false statement. See getAIProviderInfo() in AIInterpretServlet.py. */
 SERVER_URL_AI_PROVIDER = SERVER_URL + "ai_provider";
 AI_POLL_INTERVAL = 3000;
+/* Polls before "Choose for me" gives up. The server caps one gateway batch at
+   180s (DEFAULT_BATCH_BUDGET_SECONDS) and nothing caps the number of batches --
+   a job with more than 30 residual names runs two or more, so 100 x 3s = 5 min
+   was SHORTER than the server's own worst case and the browser abandoned runs
+   that were still executing. PySiQ never enforces the timeout passed to
+   enqueue, so the worker would keep going with nobody left to collect. 400 x 3s
+   = 20 min covers six slow batches. */
+AI_SUGGEST_MAX_POLLS = 400;
+
+/* Consecutive dropped requests before the poll reports the transport error
+   rather than a timeout. Separate from the ceiling above: one blip must not end
+   a run, but a server that is down should say so. */
+AI_SUGGEST_MAX_TRANSPORT_FAILURES = 5;
 // How many consecutive unhandled refusals from /ai_interpret_status before the
 // widget gives up and says so. A refusal it recognises as permanent -- the job
 // no longer exists -- stops immediately and does not consume these; this is the

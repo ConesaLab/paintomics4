@@ -133,8 +133,12 @@ PUBLISHED = {
     # v=1.0 adds AI_POLL_MAX_FAILURES. A browser keeping the old copy would
     # read it as undefined, and `failures >= undefined` is false for ever --
     # which is precisely the endless poll this release exists to stop.
+    # v=1.2: the step-2 compound-suggestion endpoints, and a poll ceiling that
+    # actually outlasts the server's own worst case (400 x 3s) plus a separate
+    # transport-failure budget. A browser holding the old copy would poll two
+    # URLs it has no constants for.
     "resources/ServerConfiguration.js": (
-        "1.0", "6d9d416610b8384c78fb7e46b10aa4414aea0886d720a840499904aec0e9fe85"),
+        "1.2", "5eebc8f3202877310f0b4e8df4d14d4a5e412292eefbbb12b5bdde13a6d05361"),
     # The evidence layer itself: MORE relationships drawn on the diagram and
     # classified against KEGG, Reactome and OmniPath.
     # v=2.8 draws regulators the map does not print, colours them from the
