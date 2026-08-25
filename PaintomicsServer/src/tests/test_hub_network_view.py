@@ -160,8 +160,91 @@ class HubNetworkViewContractTest(unittest.TestCase):
         self.assertIn("beforedestroy", body)
         self.assertIn("cy.destroy()", body)
 
-    def test_announces_truncation(self):
-        self.assertIn("truncated", self.source())
+    def test_announces_what_was_not_drawn(self):
+        """A cap must never read as "this is all there is".
+
+        The first version hardcoded "Showing the 400 edges closest to X" while
+        rings 3 and 4 were missing entirely -- true, and useless. The server
+        budgets per ring now and reports shown/total, so the panel says
+        "step 3 showing 40 of 461".
+        """
+        body = self.source()
+        self.assertIn("payload.rings", body)
+        self.assertIn("r.shown < r.total", body)
+        # comment-stripped: the docblock names the old string to record it
+        self.assertNotIn("400 edges closest", self.code())
+
+    def test_ring_labels_carry_the_sample_size(self):
+        self.assertIn('info.shown < info.total', self.source())
+
+    def test_state_is_read_through_the_omicvalue_accessors(self):
+        """entry.relevant is an ARRAY after OmicValue.loadFromJSON, and [] is
+        truthy -- testing the property directly made "measured but not DE"
+        unreachable and painted every measured feature up or down."""
+        body = self.code()
+        self.assertIn("entry.isRelevant()", body)
+        self.assertIn("entry.isRelevantAssociation()", body)
+        self.assertNotIn("entry.relevant ||", body)
+
+    def test_a_node_click_opens_a_heatmap(self):
+        body = self.source()
+        self.assertIn('cy.on("tap", "node"', body)
+        self.assertIn("generateHeatmap(", body)
+        self.assertIn("generatePlot(", body)
+
+    def test_heatmap_and_plot_divs_are_adjacent_siblings(self):
+        """The heatmap's point handlers reach the plot with
+        .parent().next().highcharts(); anything between them makes that
+        undefined and hovering a cell throws."""
+        body = self.source()
+        heat = body.index("PA_step5_heatmapContainer")
+        plot = body.index("PA_step5_plotContainer")
+        self.assertLess(heat, plot)
+        between = body[heat:plot]
+        self.assertNotIn("<h3", between)
+        self.assertNotIn("paColorLegend", between)
+
+    def test_charts_are_destroyed_before_redraw(self):
+        """Highcharts appends and neither primitive clears its container;
+        emptying the div alone orphans every resize and tooltip listener."""
+        body = self.source()
+        self.assertIn("chart.destroy()", body)
+        self.assertIn("this.charts = []", body)
+
+    def test_omic_name_is_derived_not_hardcoded(self):
+        """The old handler hardcoded "Gene expression" / "Metabolomics", so
+        every other omic silently drew nothing."""
+        body = self.code()
+        self.assertIn("getGeneBasedInputOmics()", body)
+        self.assertIn("getCompoundBasedInputOmics()", body)
+        self.assertNotIn('"Metabolomics"', body)
+
+    def test_unmeasured_node_explains_itself(self):
+        body = self.source()
+        self.assertIn("paEmptyNote", body)
+        self.assertIn("connectedEdges()", body)
+
+    def test_click_highlight_does_not_fight_the_dim_class(self):
+        """setLevel owns .dim; a click highlight needs its own class."""
+        self.assertIn('"picked"', self.source())
+
+    def test_the_heading_is_an_h2_in_the_body(self):
+        """paTocSections() queries h2 only, so an Ext panel header never
+        reaches the contents rail."""
+        body = self.source()
+        self.assertIn("<h2 id=", body)
+        self.assertNotIn('title: "Metabolite neighbourhood"', body)
+
+    def test_the_panel_is_a_contentbox_with_a_margin(self):
+        body = self.source()
+        self.assertIn('cls: "contentbox pa-hub-net"', body)
+        self.assertIn('margin: "10 10 10 10"', body)
+
+    def test_the_list_replaces_the_grid(self):
+        body = self.source()
+        self.assertIn("pa-hub-item", body)
+        self.assertIn("buildList", body)
+        self.assertIn("SORTS", body)
 
     def test_refuses_arrows_from_the_legacy_source(self):
         """The legacy fallback carries no subtypes; direction would be invented."""
@@ -218,7 +301,12 @@ class RegistrationTest(unittest.TestCase):
             body = handle.read()
         self.assertIn("new PA_Step3HubNetworkView()", body)
         self.assertIn("hubNetworkView.getComponent()", body)
-        self.assertIn("showCompound(", body)
+
+    def test_the_old_grid_is_no_longer_mounted(self):
+        """The nine-column table is replaced, not merely supplemented."""
+        with open(STEP3_VIEWS, "r", encoding="utf-8") as handle:
+            body = handle.read()
+        self.assertNotIn("me.hubAnalysisView.getComponent()", body)
 
     def test_url_constant_exists(self):
         path = os.path.join(CLIENT, "resources", "ServerConfiguration.js")

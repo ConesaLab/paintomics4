@@ -1281,8 +1281,11 @@ function PA_Step3JobView() {
 				},
 				// See hasMetaboliteData: gated on the resolved compounds these
 				// panels draw, not on the candidate list that step 2 consumes.
-				(!this.hasMetaboliteData()?null:me.hubAnalysisView.getComponent()),
-				// Hop-ring network -- mounted under the hub table it is opened from.
+				// The hub grid was replaced by the network panel below: a
+				// nine-column table of one row per (metabolite, radius) that
+				// needed its own step filter to be readable, describing a
+				// network the browser could not draw. PA_Step3HubAnalysis is
+				// left in the file for the moment but is no longer mounted.
 				(!this.hasMetaboliteData()?null:me.hubNetworkView.getComponent()),
 				(!this.metaboliteView?null:me.metaboliteView.getComponent()),
 				// MORE Regulation panel — independent of metabolomics presence.

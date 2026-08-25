@@ -536,3 +536,135 @@
 	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
 	pointer-events: none;
 }
+
+
+/* ---- Hub panel: list rail, controls, node detail --------------------------
+   The panel replaced a nine-column sortable grid, so the list has to carry the
+   two orderings people actually used -- FDR and DE-neighbour count -- or the
+   redesign loses information rather than clarifying it. */
+.pa-hub-net h2 {
+	margin-bottom: 4px;
+}
+.pa-hub-intro {
+	margin: 0 var(--pa-card-inset, 26px) 10px;
+	font-size: 13px;
+	color: var(--pa-ink-muted, #595959);
+	max-width: 70ch;
+}
+.pa-hub-controls {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	flex-wrap: wrap;
+	margin: 0 var(--pa-card-inset, 26px) 10px;
+}
+.pa-hub-search {
+	flex: 0 1 260px;
+	min-width: 160px;
+	padding: 5px 9px;
+	font: inherit;
+	font-size: 13px;
+	color: var(--pa-ink, #18181b);
+	background: var(--pa-surface, #fff);
+	border: 1px solid var(--pa-border, #d4d4d8);
+	border-radius: 4px;
+}
+.pa-hub-sortlabel {
+	font-size: 12px;
+	color: var(--pa-ink-muted, #595959);
+}
+.pa-hub-sort {
+	padding: 5px 8px;
+	font: inherit;
+	font-size: 13px;
+	color: var(--pa-ink, #18181b);
+	background: var(--pa-surface, #fff);
+	border: 1px solid var(--pa-border, #d4d4d8);
+	border-radius: 4px;
+}
+
+/* The list rail. Anchors, not <li>: the alignment overlay measures list items
+   and would judge every row against the page rails. */
+.pa-hub-listrail {
+	width: 244px;
+	flex: 0 0 244px;
+	padding: 4px 0;
+}
+.pa-hub-item {
+	display: block;
+	padding: 7px 12px;
+	border-left: 3px solid transparent;
+	color: var(--pa-ink, #18181b);
+	text-decoration: none;
+	border-bottom: 1px solid var(--pa-border-subtle, #ececec);
+}
+.pa-hub-item:hover {
+	background: var(--pa-surface, #fff);
+	text-decoration: none;
+}
+.pa-hub-item.is-current {
+	background: var(--pa-surface, #fff);
+	border-left-color: var(--hub-ink, #18181b);
+}
+.pa-hub-item.is-significant { border-left-color: var(--hub-up, #e34948); }
+.pa-hub-item.is-marginal    { border-left-color: var(--hub-absent, #a1a1aa); }
+.pa-hub-item-name {
+	display: block;
+	font-size: 13px;
+	line-height: 1.3;
+	word-break: break-word;
+}
+.pa-hub-item-meta {
+	display: block;
+	margin-top: 2px;
+	font-size: 11px;
+	color: var(--pa-ink-muted, #595959);
+	font-variant-numeric: tabular-nums;
+}
+.pa-hub-list-empty {
+	margin: 12px;
+	font-size: 12px;
+	color: var(--pa-ink-muted, #595959);
+}
+
+.pa-hub-tip-hint {
+	color: var(--pa-ink-muted, #595959);
+	font-size: 11px;
+}
+
+/* Node detail sits BELOW the network at full width: the 300px heatmap
+   container plus its plot does not fit a 244px rail. */
+.pa-hub-detail:empty { display: none; }
+.pa-hub-detail {
+	margin: 12px var(--pa-card-inset, 26px) 4px;
+}
+.pa-hub-detail-title {
+	margin: 0 0 6px;
+	font-size: 15px;
+}
+.pa-hub-detail-where {
+	font-size: 12px;
+	font-weight: 400;
+	color: var(--pa-ink-muted, #595959);
+}
+.pa-hub-detail-sub {
+	margin: 10px 0 4px;
+	font-size: 12px;
+	font-weight: 600;
+	color: var(--pa-ink-muted, #595959);
+}
+.pa-hub-edges {
+	margin: 0;
+	padding-left: 18px;
+	font-size: 12px;
+	color: var(--pa-ink-muted, #595959);
+}
+.pa-hub-warn { color: var(--hub-up, #e34948); }
+
+@media (max-width: 900px) {
+	.pa-hub-listrail {
+		width: auto;
+		flex: 1 1 auto;
+		max-height: 220px;
+	}
+}

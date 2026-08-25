@@ -1,12 +1,15 @@
 /**
- * PA_Step3HubNetworkView -- a metabolite's 1..4 step neighbourhood, drawn as
- * concentric hop rings.
+ * PA_Step3HubNetworkView -- metabolite hub analysis as a network, not a table.
  *
  * Why this exists. The KEGG interaction graph has always been on the server and
- * has never reached the browser: compoundRegulateFeatures ships node SETS with
- * no pairs, no direction, no edge types and no intermediate hops, so a client
- * could not tell whether a radius-3 gene reached the metabolite via gene X or
- * gene Y. The hub table reported numbers about a network nobody could see.
+ * never reached the browser: compoundRegulateFeatures ships node SETS with no
+ * pairs, no direction, no edge types and no intermediate hops, so a client could
+ * not tell whether a radius-3 gene reached the metabolite via gene X or gene Y.
+ * The hub table reported numbers about a network nobody could see.
+ *
+ * This panel replaces that table. A metabolite LIST ranked by significance
+ * selects the seed; the network draws its 1..4 step neighbourhood as concentric
+ * rings; clicking any node opens its expression heatmap and plot underneath.
  *
  * Encoding, decided colour-last:
  *
@@ -26,32 +29,209 @@
 function PA_Step3HubNetworkView() {
 	this.name = "PA_Step3HubNetworkView";
 	// Randomised ids: Step 3 can hold more than one network panel, and Ext
-	// reuses component ids across job loads.
+	// reuses component ids across job loads. The old Paint handler used the
+	// literal id "divIdComp" and collided with itself for exactly this reason.
 	var salt = Math.floor(Math.random() * 1e9);
 	this.canvasID = "hubNetCanvas" + salt;
 	this.ringsID = "hubNetRings" + salt;
 	this.noticeID = "hubNetNotice" + salt;
 	this.tipID = "hubNetTip" + salt;
+	this.listID = "hubNetList" + salt;
+	this.searchID = "hubNetSearch" + salt;
+	this.sortID = "hubNetSort" + salt;
+	this.summaryID = "hubNetSummary" + salt;
+	this.detailID = "hubNetDetail" + salt;
+
 	this.cy = null;
 	this.level = 1;
 	this.payload = null;
+	this.seed = null;
+	this.charts = [];        // Highcharts instances owned by the detail panel
+	this.metabolites = [];   // one entry per compound, with its four step rows
+	this.sortKey = "padjust";
+	this.query = "";
+
+	/* ------------------------------------------------------------------ *
+	 * Model                                                               *
+	 * ------------------------------------------------------------------ */
 
 	this.loadModel = function (model) {
-		this.model = model;
+		var me = this;
+		me.model = model;
+		me.buildList();
+		me.renderList();
+		me.renderSummary();
+		// loadModel and afterrender race: PA_Step3JobView constructs the view,
+		// calls loadModel, and only then lays the panel out. Whichever runs
+		// second has to do the work.
+		if (me.component && me.component.rendered && me.hasData()) {
+			me.component.show();
+			me.renderList();
+			me.renderSummary();
+			me.bindControls();
+			me.selectFirst();
+		}
 	};
+
+	/**
+	 * Collapse the hub rows to ONE entry per compound.
+	 *
+	 * getHubAnalysisResult() is one row per (compound, radius), so every
+	 * metabolite appears four times -- which is why the grid it replaces needed
+	 * a step filter to be readable at all. Here the four scores become a
+	 * per-step array on a single entry and the network's ring buttons are the
+	 * step control.
+	 */
+	this.buildList = function () {
+		var rows = (this.model && this.model.getHubAnalysisResult()) || {};
+		var mapping = (this.model && this.model.mappingComp) || {};
+		var byID = {};
+		for (var key in rows) {
+			var row = paHubRow(rows[key]);
+			if (!row || !row.ID) { continue; }
+			var entry = byID[row.ID];
+			if (!entry) {
+				entry = byID[row.ID] = {
+					ID: row.ID,
+					name: mapping[row.ID] || row.ID,
+					steps: {}
+				};
+			}
+			entry.steps[row.Step] = row;
+		}
+		this.metabolites = [];
+		for (var id in byID) {
+			var item = byID[id];
+			// Rank on the metabolite's BEST step -- a compound that is
+			// significant at radius 2 and nowhere else is still a finding, and
+			// ranking on a fixed radius would bury it.
+			var best = null;
+			for (var step in item.steps) {
+				var candidate = item.steps[step];
+				if (best === null || Number(candidate.padjust) < Number(best.padjust)) {
+					best = candidate;
+				}
+			}
+			item.best = best;
+			item.bestStep = best ? Number(best.Step) : 1;
+			item.padjust = best ? Number(best.padjust) : 1;
+			item.pvalue = best ? Number(best.pvalue) : 1;
+			item.density = best ? Number(best.Percentage) : 0;
+			item.den = best ? Number(best.DEN) : 0;
+			this.metabolites.push(item);
+		}
+		this.sortList();
+	};
+
+	this.SORTS = {
+		padjust: function (a, b) { return a.padjust - b.padjust || a.name.localeCompare(b.name); },
+		density: function (a, b) { return b.density - a.density || a.name.localeCompare(b.name); },
+		den: function (a, b) { return b.den - a.den || a.name.localeCompare(b.name); },
+		name: function (a, b) { return a.name.localeCompare(b.name); }
+	};
+
+	this.sortList = function () {
+		this.metabolites.sort(this.SORTS[this.sortKey] || this.SORTS.padjust);
+	};
+
+	/* ------------------------------------------------------------------ *
+	 * Summary                                                             *
+	 * ------------------------------------------------------------------ */
+
+	this.renderSummary = function () {
+		var host = document.getElementById(this.summaryID);
+		if (!host) { return; }
+		var total = this.metabolites.length;
+		var significant = this.metabolites.filter(function (m) {
+			return m.padjust < 0.05;
+		}).length;
+		var deTotal = this.metabolites.reduce(function (sum, m) {
+			return sum + (m.den || 0);
+		}, 0);
+		host.innerHTML =
+			'<div class="po-band">' +
+			  this.stat("flask", total, "Metabolites scored", false) +
+			  this.stat("star", significant, "Significant (FDR &lt; 0.05)", significant > 0) +
+			  this.stat("share-alt", deTotal, "DE neighbours found", false) +
+			'</div>';
+	};
+
+	this.stat = function (icon, count, label, highlight) {
+		return '<div class="po-pathway-stat">' +
+			'<div class="po-pathway-icon' + (highlight ? " is-significant" : "") + '">' +
+			  '<i class="fa fa-' + icon + '" aria-hidden="true"></i></div>' +
+			'<div class="po-band-figure">' +
+			  '<div class="po-pathway-count">' + count + '</div>' +
+			  '<div class="po-pathway-label">' + label + '</div>' +
+			'</div></div>';
+	};
+
+	/* ------------------------------------------------------------------ *
+	 * Metabolite list                                                     *
+	 * ------------------------------------------------------------------ */
+
+	this.renderList = function () {
+		var me = this;
+		var host = document.getElementById(this.listID);
+		if (!host) { return; }
+		var query = this.query.toLowerCase();
+		var shown = this.metabolites.filter(function (m) {
+			return !query || m.name.toLowerCase().indexOf(query) >= 0 ||
+			       m.ID.toLowerCase().indexOf(query) >= 0;
+		});
+		if (!shown.length) {
+			host.innerHTML = '<p class="pa-hub-list-empty">' +
+				(this.metabolites.length ? "No metabolite matches that search."
+				                         : "This job has no scored metabolites.") +
+				'</p>';
+			return;
+		}
+		host.innerHTML = shown.map(function (m) {
+			var fdr = Number(m.padjust);
+			// The grid tinted p-values with renderFunctionLimit; the same
+			// signal survives here as a class rather than an inline colour.
+			var tone = fdr < 0.05 ? " is-significant" : (fdr < 0.1 ? " is-marginal" : "");
+			return '<a class="pa-hub-item' + tone +
+				(m.ID === me.seed ? " is-current" : "") +
+				'" data-id="' + m.ID + '" data-step="' + m.bestStep + '" href="#">' +
+				'<span class="pa-hub-item-name">' + Ext.String.htmlEncode(m.name) + '</span>' +
+				'<span class="pa-hub-item-meta">FDR ' + me.fmt(fdr) +
+				' &middot; ' + m.den + ' DE &middot; step ' + m.bestStep + '</span>' +
+				'</a>';
+		}).join("");
+		Array.prototype.forEach.call(host.querySelectorAll(".pa-hub-item"), function (el) {
+			el.addEventListener("click", function (event) {
+				event.preventDefault();
+				me.showCompound(el.getAttribute("data-id"),
+				                el.getAttribute("data-step"));
+			});
+		});
+	};
+
+	this.fmt = function (value) {
+		if (!isFinite(value)) { return "-"; }
+		if (value < 0.001) { return Number(value).toExponential(1); }
+		return Number(value).toFixed(3);
+	};
+
+	/* ------------------------------------------------------------------ *
+	 * Network                                                             *
+	 * ------------------------------------------------------------------ */
 
 	this.showCompound = function (compoundID, level) {
 		var me = this;
+		me.seed = compoundID;
 		me.level = Math.max(1, Math.min(4, parseInt(level, 10) || 1));
 		me.note("Loading the neighbourhood of " + compoundID + "…");
-		if (me.component && me.component.isHidden && me.component.isHidden()) {
-			me.component.show();
-		}
+		me.clearDetail();
+		me.renderList();
+		me.syncStepButtons();
 		$.post(SERVER_URL_PA_HUB_SUBGRAPH, {
 			jobID: me.model.getJobID(),
 			compoundID: compoundID,
-			level: 4,                 // fetch all four; the control dims, never refetches
-			maxEdges: 400
+			level: 4,             // fetch all four; the control dims, never refetches
+			maxEdges: 600,
+			perRing: 40
 		}).done(function (payload) {
 			if (typeof payload === "string") {
 				try { payload = JSON.parse(payload); } catch (e) { payload = null; }
@@ -74,17 +254,29 @@ function PA_Step3HubNetworkView() {
 
 	this.note = function (text) {
 		var el = document.getElementById(this.noticeID);
-		if (el) { el.textContent = text || ""; }
+		if (el) { el.innerHTML = text || ""; }
 	};
 
-	/** DE state for one feature, from the expression data the job already ships. */
-	this.stateOf = function (id) {
-		var data = this.model && this.model.globalExpressionData;
-		var entry = data && ((data.inputGene && data.inputGene[id]) ||
-		                     (data.inputCompound && data.inputCompound[id]));
+	/**
+	 * DE state for one feature.
+	 *
+	 * `entry.relevant` is an ARRAY after OmicValue.loadFromJSON, and [] is
+	 * truthy -- so testing the property directly made "measured but not DE"
+	 * unreachable and painted every measured feature up or down. Ask the
+	 * OmicValue instead; that is what its accessors are for.
+	 */
+	this.stateOf = function (id, kind) {
+		var data = this.model && this.model.getGlobalExpressionData();
+		var entry = data && ((kind === "compound")
+			? (data.inputCompound || {})[id]
+			: (data.inputGene || {})[id]);
 		if (!entry) { return "absent"; }              // never measured
-		if (!(entry.relevant || entry.relevantAssociation)) { return "quiet"; }
-		var first = (entry.values && entry.values.length) ? Number(entry.values[0]) : 0;
+		var de = (typeof entry.isRelevant === "function")
+			? (entry.isRelevant() || entry.isRelevantAssociation())
+			: false;
+		if (!de) { return "quiet"; }
+		var values = (typeof entry.getValues === "function") ? entry.getValues() : entry.values;
+		var first = (values && values.length) ? Number(values[0]) : 0;
 		return (first < 0) ? "down" : "up";
 	};
 
@@ -92,7 +284,7 @@ function PA_Step3HubNetworkView() {
 		var me = this, out = [];
 		var mapping = (me.model && me.model.mappingComp) || {};
 		payload.nodes.forEach(function (n) {
-			var state = (n.step === 0) ? "seed" : me.stateOf(n.id);
+			var state = (n.step === 0) ? "seed" : me.stateOf(n.id, n.type);
 			out.push({ group: "nodes", data: {
 				id: n.id,
 				label: (n.step === 0) ? (mapping[n.id] || n.id) : n.id,
@@ -122,14 +314,7 @@ function PA_Step3HubNetworkView() {
 
 	this.render = function (payload) {
 		var me = this;
-		// A cap must never read as "this is all there is".
-		me.note(payload.truncated
-			? ("Showing the 400 edges closest to " + payload.seed +
-			   " — the full neighbourhood is larger.")
-			: (payload.source === "legacy-json"
-				? "This organism has no KGML on disk, so only direct neighbours " +
-				  "are drawn and relation types are unavailable."
-				: ""));
+		me.describe(payload);
 
 		var host = document.getElementById(me.canvasID);
 		if (!host) { return; }
@@ -180,10 +365,6 @@ function PA_Step3HubNetworkView() {
 					"border-width": 3, "border-color": "#18181b",
 					"font-size": 12, "font-weight": "bold" }},
 				{ selector: "node[showLabel = 1]", style: { "label": "data(label)" }},
-				// Ring 2 alone can hold a hundred nodes; at the zoom that fits
-				// them, every label is unreadable and only adds noise. They come
-				// back as soon as the user zooms in far enough to read them.
-				{ selector: ".far node, node.far", style: { "label": "" }},
 				{ selector: "edge", style: {
 					"width": 1, "line-color": "#d4d4d8",
 					"curve-style": "bezier", "opacity": 0.75 }},
@@ -194,14 +375,18 @@ function PA_Step3HubNetworkView() {
 					"target-arrow-shape": "tee" }},
 				{ selector: ".dim", style: { "opacity": 0.08 }},
 				{ selector: ".hovered", style: {
-					"border-width": 3, "border-color": "#18181b" }}
+					"border-width": 3, "border-color": "#18181b" }},
+				// setLevel owns .dim; a click highlight must use its own class
+				// or the two fight over the same property.
+				{ selector: ".picked", style: {
+					"border-width": 4, "border-color": "#18181b" }}
 			]
 		});
 
 		me.cy.one("layoutstop", function () {
-			// fit() on afterrender runs before any data exists, so the graph came
-			// up as a speck in the middle of an empty canvas. The layout is the
-			// only moment the node positions are real.
+			// fit() on afterrender runs before any data exists, so the graph
+			// came up as a speck in the middle of an empty canvas. The layout
+			// is the only moment the node positions are real.
 			me.fitToVisible();
 			me.drawRings();
 		});
@@ -210,7 +395,49 @@ function PA_Step3HubNetworkView() {
 			me.drawRings();
 		});
 		me.bindHover();
+		me.bindTap();
 		me.setLevel(me.level);
+	};
+
+	/**
+	 * Say what was drawn and what was not.
+	 *
+	 * The server budgets PER RING and reports shown/total for each, so a cap can
+	 * never read as "this is all there is". The first version hardcoded
+	 * "Showing the 400 edges closest to X" while rings 3 and 4 were missing
+	 * entirely -- true, and useless.
+	 */
+	this.describe = function (payload) {
+		var lines = [];
+		if (payload.source === "legacy-json") {
+			lines.push('<span class="pa-hub-warn">This organism has no KGML on ' +
+				'disk, so only direct neighbours are drawn and relation types ' +
+				'are unavailable.</span>');
+		}
+		// A step whose ring is genuinely empty must SAY so. Clicking 3 and
+		// getting no visible change is indistinguishable from a broken control,
+		// and most compounds run out well before radius 4.
+		var reach = 0;
+		(payload.rings || []).forEach(function (r) {
+			if (r.total > 0) { reach = Math.max(reach, r.step); }
+		});
+		if (this.level > reach) {
+			lines.push("<b>" + (payload.seed || "This metabolite") +
+				"</b> has no neighbours beyond step " + reach +
+				", so there is nothing to show at step " + this.level + ".");
+		}
+
+		var sampled = (payload.rings || []).filter(function (r) {
+			return r.shown < r.total && r.step <= this.level;
+		}, this);
+		if (sampled.length) {
+			lines.push("Large rings are sampled, differentially expressed features first: " +
+				sampled.map(function (r) {
+					return "step " + r.step + " showing <b>" + r.shown + " of " +
+					       r.total + "</b>";
+				}).join(" &middot; ") + ".");
+		}
+		this.note(lines.join(" "));
 	};
 
 	/**
@@ -239,6 +466,8 @@ function PA_Step3HubNetworkView() {
 		});
 		var cx = origin.x * zoom + pan.x, cyy = origin.y * zoom + pan.y;
 		var NS = "http://www.w3.org/2000/svg";
+		var counts = {};
+		(me.payload && me.payload.rings || []).forEach(function (r) { counts[r.step] = r; });
 		Object.keys(radii).sort().forEach(function (step) {
 			var list = radii[step];
 			var mean = list.reduce(function (a, b) { return a + b; }, 0) / list.length;
@@ -255,7 +484,10 @@ function PA_Step3HubNetworkView() {
 			text.setAttribute("y", cyy - r - 5);
 			text.setAttribute("text-anchor", "middle");
 			text.setAttribute("class", "pa-hub-ring-label" + (current ? " is-current" : ""));
-			text.textContent = "step " + step;
+			var info = counts[step];
+			text.textContent = "step " + step +
+				(info && info.shown < info.total
+					? " (" + info.shown + " of " + info.total + ")" : "");
 			svg.appendChild(text);
 		});
 	};
@@ -272,7 +504,8 @@ function PA_Step3HubNetworkView() {
 			var step = n.data("step");
 			tip.innerHTML = "<b>" + n.data("label") + "</b><br>" +
 				(n.data("kind") || "feature") + " · " + WORDS[n.data("state")] +
-				(step ? "<br>" + step + " step" + (step === 1 ? "" : "s") + " away" : "");
+				(step ? "<br>" + step + " step" + (step === 1 ? "" : "s") + " away" : "") +
+				'<br><span class="pa-hub-tip-hint">click for expression</span>';
 			tip.style.display = "block";
 		});
 		me.cy.on("mouseout", "node", function (event) {
@@ -295,14 +528,138 @@ function PA_Step3HubNetworkView() {
 		});
 	};
 
-	/**
-	 * Fit to what is actually lit.
-	 *
-	 * Fitting to every element keeps the dimmed outer rings in frame, and
-	 * radius 4 is wide enough that step 1 becomes a few pixels across. The
-	 * dimmed rings are still THERE -- the guide circles show where they run --
-	 * but the viewport belongs to the ring the user asked for.
-	 */
+	this.bindTap = function () {
+		var me = this;
+		me.cy.on("tap", "node", function (event) {
+			me.cy.nodes().removeClass("picked");
+			event.target.addClass("picked");
+			me.showDetail(event.target);
+		});
+		me.cy.on("tap", function (event) {
+			if (event.target === me.cy) {
+				me.cy.nodes().removeClass("picked");
+				me.clearDetail();
+			}
+		});
+	};
+
+	/* ------------------------------------------------------------------ *
+	 * Node detail: the expression heatmap                                 *
+	 * ------------------------------------------------------------------ */
+
+	this.clearDetail = function () {
+		// Highcharts instances keep resize and tooltip listeners; emptying the
+		// container alone orphans them. The Paint handler this replaces never
+		// destroyed a single chart.
+		this.charts.forEach(function (chart) {
+			try { if (chart && chart.destroy) { chart.destroy(); } } catch (e) {}
+		});
+		this.charts = [];
+		var host = document.getElementById(this.detailID);
+		if (host) { host.innerHTML = ""; }
+	};
+
+	this.showDetail = function (node) {
+		var me = this;
+		var host = document.getElementById(me.detailID);
+		if (!host) { return; }
+		me.clearDetail();
+
+		var id = node.id();
+		var kind = node.data("kind");
+		var step = node.data("step");
+		var data = me.model.getGlobalExpressionData() || {};
+		var entry = (kind === "compound") ? (data.inputCompound || {})[id]
+		                                  : (data.inputGene || {})[id];
+		var title = (kind === "compound")
+			? ((me.model.mappingComp || {})[id] || id)
+			: id;
+		var where = step === 0
+			? "the metabolite this network is centred on"
+			: step + " step" + (step === 1 ? "" : "s") + " from " +
+			  ((me.model.mappingComp || {})[me.seed] || me.seed);
+
+		if (!entry) {
+			// The legitimate "absent" case. There is no client-side id->symbol
+			// table for an unmeasured gene, so show what IS known -- and the
+			// genuinely new information the old table could never give: HOW it
+			// reaches the seed.
+			var edges = node.connectedEdges().map(function (e) {
+				return "<li><b>" + e.data("source") + " — " + e.data("target") +
+					"</b> · " + e.data("kind") +
+					(e.data("subtype") ? " · " + e.data("subtype") : "") +
+					(e.data("pathway") ? " · " + e.data("pathway") : "") + "</li>";
+			}).slice(0, 12).join("");
+			host.innerHTML =
+				'<h3 class="pa-hub-detail-title">' + Ext.String.htmlEncode(title) + '</h3>' +
+				'<div class="contentbox paEmptyNote"><p>' + kind + ", " + where +
+				". No expression was measured for it in the omics you uploaded, " +
+				"so there is nothing to plot.</p></div>" +
+				(edges ? '<p class="pa-hub-detail-sub">How it connects</p>' +
+				         '<ul class="pa-hub-edges">' + edges + '</ul>' : "");
+			return;
+		}
+
+		// omicName must be a KEY of dataDistributionSummaries, and it is not
+		// carried on the entry -- the server ships omicsValues[0] only. Derive
+		// it from the model rather than hardcoding "Gene expression" /
+		// "Metabolomics", which is why the old handler drew nothing for any
+		// other omic.
+		var summaries = me.model.getDataDistributionSummaries() || {};
+		var omics = (kind === "compound")
+			? (me.model.getCompoundBasedInputOmics() || [])
+			: (me.model.getGeneBasedInputOmics() || []);
+		var omicName = null;
+		for (var i = 0; i < omics.length; i++) {
+			if (omics[i] && omics[i].omicName && (omics[i].omicName in summaries)) {
+				omicName = omics[i].omicName;
+				break;
+			}
+		}
+		if (!omicName) {
+			host.innerHTML =
+				'<h3 class="pa-hub-detail-title">' + Ext.String.htmlEncode(title) + '</h3>' +
+				'<div class="contentbox paEmptyNote"><p>' + kind + ", " + where +
+				". This job carries no distribution summary for its omic, so the " +
+				"heatmap cannot be scaled.</p></div>";
+			return;
+		}
+
+		var width = Math.max(260, $(host).width() - 400);
+		// The heatmap div and the plot div must be ADJACENT SIBLINGS with the
+		// heatmap first: the heatmap's point handlers reach the plot with
+		// .parent().next().highcharts(). Anything between them -- a title, a
+		// legend -- makes that undefined and hovering a cell throws.
+		host.innerHTML =
+			'<h3 class="pa-hub-detail-title">' + Ext.String.htmlEncode(title) +
+			  ' <span class="pa-hub-detail-where">' + where + '</span></h3>' +
+			'<div class="contentbox">' +
+			  '<div class="PA_step5_heatmapContainer" id="' + me.detailID + '_hm" ' +
+			    'style="height:130px"></div>' +
+			  '<div class="PA_step5_plotContainer" id="' + me.detailID + '_plot" ' +
+			    'style="width:' + width + 'px;height:130px"></div>' +
+			'</div>';
+
+		var headers = paOmicHeaders(me.model, omicName);
+		var visual = (me.getParent && me.getParent() && me.getParent().visualOptions) || {};
+		try {
+			me.charts = [
+				generateHeatmap(me.detailID + "_hm", omicName, [entry], summaries, visual, headers),
+				generatePlot(me.detailID + "_plot", omicName, [entry], summaries, null, visual, headers)
+			];
+		} catch (error) {
+			// A silent guard reads as a dead button, so say what happened.
+			console.warn("[hub] could not draw " + id + ": " + error);
+			host.innerHTML +=
+				'<div class="contentbox paEmptyNote"><p>The expression figure for ' +
+				Ext.String.htmlEncode(title) + ' could not be drawn.</p></div>';
+		}
+	};
+
+	/* ------------------------------------------------------------------ *
+	 * Rings and zoom                                                      *
+	 * ------------------------------------------------------------------ */
+
 	this.fitToVisible = function () {
 		if (!this.cy) { return; }
 		var lit = this.cy.elements().not(".dim");
@@ -341,15 +698,30 @@ function PA_Step3HubNetworkView() {
 		});
 		me.fitToVisible();
 		me.drawRings();
+		me.describe(me.payload);
 	};
+
+	this.syncStepButtons = function () {
+		if (!this.stepButtons) { return; }
+		var me = this;
+		this.stepButtons.forEach(function (button, index) {
+			button.toggle(index + 1 === me.level, true);
+		});
+	};
+
+	/* ------------------------------------------------------------------ *
+	 * Component                                                           *
+	 * ------------------------------------------------------------------ */
 
 	this.getComponent = function () {
 		var me = this;
-		var steps = [1, 2, 3, 4].map(function (n) {
-			return { xtype: "button", text: String(n), enableToggle: true,
-			         toggleGroup: "hubNetStep" + me.canvasID,
-			         pressed: (n === 1),
-			         handler: function () { me.setLevel(n); } };
+		me.stepButtons = [1, 2, 3, 4].map(function (n) {
+			return Ext.create("Ext.button.Button", {
+				text: String(n), enableToggle: true,
+				toggleGroup: "hubNetStep" + me.canvasID,
+				pressed: (n === 1),
+				handler: function () { me.setLevel(n); }
+			});
 		});
 		var legend =
 			'<div class="pa-hub-legend">' +
@@ -359,24 +731,63 @@ function PA_Step3HubNetworkView() {
 			  '<span><i class="sw absent"></i>not measured</span>' +
 			  '<span><i class="sw seed"></i>this metabolite</span>' +
 			'</div>';
+
 		this.component = Ext.create("Ext.panel.Panel", {
-			title: "Metabolite neighbourhood",
-			cls: "pa-hub-net-toolbar pa-hub-net",
+			// contentbox + the 10px margin every other Step 3 card uses; without
+			// them this panel sits inset from its neighbours and draws no edge.
+			cls: "contentbox pa-hub-net",
+			border: 0,
+			margin: "10 10 10 10",
+			// Self-suppressing, the way the other network views are: the panel
+			// starts hidden and reveals itself in afterrender only if the job
+			// actually scored some metabolites. It is the whole hub UI now, not
+			// a popup opened from a table, so it must not need a click to appear.
 			hidden: true,
-			collapsible: true,
-			html: '<div id="' + me.noticeID + '" class="pa-net-notice"></div>' +
-			      legend +
-			      '<div class="pa-hub-stage">' +
-			        '<svg id="' + me.ringsID + '" class="pa-hub-rings"></svg>' +
-			        '<div id="' + me.canvasID + '" class="pa-net-canvas"></div>' +
-			        '<div id="' + me.tipID + '" class="pa-hub-tip"></div>' +
-			      '</div>',
-			bbar: [{ xtype: "tbtext", text: "Steps from the metabolite:" }].concat(steps),
+			// The heading is an <h2> in the body, NOT an Ext panel header:
+			// paTocSections() queries h2 only, so an Ext header never reaches
+			// the contents rail.
+			html:
+				'<h2 id="HubNetworkSection">Metabolite hub analysis</h2>' +
+				'<p class="pa-hub-intro">Genes within <b>1 to 4 network steps</b> of ' +
+				'each metabolite, and how much of the differential expression ' +
+				'sits among them. Pick a metabolite on the left; click any node ' +
+				'for its expression.</p>' +
+				'<div id="' + me.summaryID + '"></div>' +
+				'<div class="pa-hub-controls">' +
+				  '<input type="search" id="' + me.searchID + '" class="pa-hub-search" ' +
+				    'placeholder="Search metabolites…" aria-label="Search metabolites">' +
+				  '<label class="pa-hub-sortlabel" for="' + me.sortID + '">Rank by</label>' +
+				  '<select id="' + me.sortID + '" class="pa-hub-sort">' +
+				    '<option value="padjust">FDR</option>' +
+				    '<option value="density">% DE neighbours</option>' +
+				    '<option value="den">DE neighbours</option>' +
+				    '<option value="name">Name</option>' +
+				  '</select>' +
+				'</div>' +
+				legend +
+				'<div id="' + me.noticeID + '" class="pa-net-notice"></div>' +
+				'<div class="more-net-body">' +
+				  '<div class="more-net-sidepanel pa-hub-listrail" id="' + me.listID + '"></div>' +
+				  '<div class="pa-hub-stage more-net-canvas">' +
+				    '<svg id="' + me.ringsID + '" class="pa-hub-rings"></svg>' +
+				    '<div id="' + me.canvasID + '" class="pa-net-canvas"></div>' +
+				    '<div id="' + me.tipID + '" class="pa-hub-tip"></div>' +
+				  '</div>' +
+				'</div>' +
+				'<div id="' + me.detailID + '" class="pa-hub-detail"></div>',
+			bbar: [{ xtype: "tbtext", text: "Steps from the metabolite:" }]
+				.concat(me.stepButtons),
 			listeners: {
 				// paDeferFrame, NOT requestAnimationFrame: rAF never runs in a
 				// background tab and the panel came up permanently blank.
 				afterrender: function () {
 					paDeferFrame(function () {
+						if (!me.hasData()) { return; }   // stays hidden
+						me.component.show();
+						me.renderList();
+						me.renderSummary();
+						me.bindControls();
+						me.selectFirst();
 						if (me.cy) { me.cy.resize(); me.fitToVisible(); me.drawRings(); }
 					});
 				},
@@ -384,11 +795,48 @@ function PA_Step3HubNetworkView() {
 					if (me.cy) { me.cy.resize(); me.fitToVisible(); me.drawRings(); }
 				},
 				beforedestroy: function () {
+					me.clearDetail();
 					if (me.cy) { me.cy.destroy(); me.cy = null; }
 				}
 			}
 		});
 		return this.component;
+	};
+
+	this.bindControls = function () {
+		var me = this;
+		var search = document.getElementById(me.searchID);
+		if (search) {
+			var timer = null;
+			search.addEventListener("input", function () {
+				// buffer:100 is the house debounce (ExtJS_extensions.js:209-239)
+				clearTimeout(timer);
+				timer = setTimeout(function () {
+					me.query = search.value || "";
+					me.renderList();
+				}, 100);
+			});
+		}
+		var sort = document.getElementById(me.sortID);
+		if (sort) {
+			sort.addEventListener("change", function () {
+				me.sortKey = sort.value;
+				me.sortList();
+				me.renderList();
+			});
+		}
+	};
+
+	/** Open the most significant metabolite so the panel is never empty. */
+	this.selectFirst = function () {
+		if (this.seed || !this.metabolites.length) { return; }
+		var first = this.metabolites[0];
+		this.showCompound(first.ID, first.bestStep);
+	};
+
+	/** Whether this job has anything for the panel to show. */
+	this.hasData = function () {
+		return this.metabolites.length > 0;
 	};
 }
 PA_Step3HubNetworkView.prototype = new View();

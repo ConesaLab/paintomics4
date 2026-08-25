@@ -126,11 +126,12 @@ PUBLISHED = {
     # rather than as boxes painted over a raster; this is that view.
     "app/view/PathwayAcquisitionViews/PA_Step4OmniPathNetworkView.js": (
         "0.1", "fbcdaeb4087e5edb65c09fa347ac22f0d001331c502fedfbd973ba9893d50e15"),
-    # A metabolite's 1..4 step neighbourhood as concentric hop rings. v=0.3
-    # fits the graph at layoutstop rather than at afterrender (before the data
-    # exists) and suppresses labels below 0.55 zoom.
+    # The whole hub UI: a metabolite list, the hop-ring network, and a
+    # node-click expression panel. v=0.6 replaced the nine-column grid, fixed
+    # stateOf (entry.relevant is an ARRAY, so [] was truthy and "measured, not
+    # DE" was unreachable), and announces both sampled and empty rings.
     "app/view/PathwayAcquisitionViews/PA_Step3HubNetworkView.js": (
-        "0.3", "28bbb6b552acb03558afd377b4e1e1a914e9cf086fbfa3d3fb27863f5ab7649d"),
+        "0.6", "92cd012cdce957d1a80ec8a2c6174f942d41296616348f6e3bfb30a22bab909b"),
     # v=0.9 adds SERVER_URL_PA_PATHWAY_EVIDENCE. The endpoint was added at
     # v=0.8 WITHOUT a bump, which this guard caught: a returning browser keeps
     # this file for up to 12 hours, so the evidence overlay would have POSTed
