@@ -74,7 +74,3 @@ def nameSimilarity(candidateName, inputName):
         return MAIN_SIMILARITY_THRESHOLD
     return SequenceMatcher(a=candidate, b=query).ratio()
 
-
-def isMainCandidate(candidateName, inputName):
-    """Whether ``candidateName`` belongs in the main bucket for ``inputName``."""
-    return nameSimilarity(candidateName, inputName) >= MAIN_SIMILARITY_THRESHOLD

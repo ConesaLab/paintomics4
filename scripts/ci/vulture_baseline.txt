@@ -156,6 +156,8 @@ PaintomicsServer/src/paintomicsserver.py: unused function 'aiProviderHandler' (6
 PaintomicsServer/src/paintomicsserver.py: unused function 'applyReplicateMappingHandler' (60% confidence)
 PaintomicsServer/src/paintomicsserver.py: unused function 'changePasswordHandler' (60% confidence)
 PaintomicsServer/src/paintomicsserver.py: unused function 'checkJobStatus' (60% confidence)
+PaintomicsServer/src/paintomicsserver.py: unused function 'compoundSuggestionInitiateHandler' (60% confidence)
+PaintomicsServer/src/paintomicsserver.py: unused function 'compoundSuggestionStatusHandler' (60% confidence)
 PaintomicsServer/src/paintomicsserver.py: unused function 'deleteFileHandler' (60% confidence)
 PaintomicsServer/src/paintomicsserver.py: unused function 'deleteJobHandler' (60% confidence)
 PaintomicsServer/src/paintomicsserver.py: unused function 'deleteMessage' (60% confidence)
