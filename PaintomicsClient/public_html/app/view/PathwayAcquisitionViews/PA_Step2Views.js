@@ -516,18 +516,16 @@ function PA_Step2JobView() {
 			  '<i class="fa fa-undo"></i> Undo</a>'
 			: "";
 
+		var mark = (typeof getAIMark === "function") ? getAIMark() : "";
+
 		return '' +
 		'<div class="aiSuggestActions"' + hidden + '>' +
-		'  <div class="aiSuggestActionsText">' +
-		'    <h3 class="aiSuggestActionsTitle">Not sure which one?</h3>' +
-		'    <p class="aiSuggestHint">PaintOmics picks the most likely KEGG compound ' +
-		'for each ambiguous name, from the organism and your experiment design. It ' +
-		'chooses only from the candidates already on a card, leaves anything genuinely ' +
-		'ambiguous to you, and saves nothing until you press <b>Next step</b>.</p>' +
-		'  </div>' +
+		'  <h3 class="aiSuggestActionsTitle">' + mark + ' Let PaintOmics AI choose</h3>' +
+		'  <p class="aiSuggestHint">It reads your organism and experiment design, and ' +
+		'only ever picks a candidate already on a card.</p>' +
 		'  <div class="aiSuggestActionsRow">' +
 		'    <a href="javascript:void(0)" class="button btn-info" id="aiSuggestButton">' +
-		'      <i class="fa fa-magic"></i> Choose for me</a>' +
+		       mark + ' Choose for me</a>' +
 		     undo +
 		'  </div>' +
 		'</div>';
@@ -591,8 +589,8 @@ function PA_Step2JobView() {
 		'<div class="contentbox omicSummaryBox compoundsIntroBox">' +
 		'  <div id="about">' +
 		'    <h2>Compounds disambiguation</h2>' +
-		'    <p>Some compound names matched more than one KEGG compound. Choose the one ' +
-		'you measured on each card below \u2014 or let PaintOmics propose them.</p>' +
+		'    <p>Some names matched more than one KEGG compound. Pick the one you ' +
+		'measured on each card.</p>' +
 		     me.renderAIActions() +
 		'  </div>' +
 		'</div>' +
@@ -624,32 +622,32 @@ function PA_Step2JobView() {
 
 		var parts = [];
 		if (summary.byRule > 0) {
-			parts.push('<b>' + summary.byRule + '</b> by name matching');
+			parts.push('<b>' + summary.byRule + '</b> by name');
 		}
 		if (summary.byAI > 0) {
-			parts.push('<b>' + summary.byAI + '</b> by the AI');
+			parts.push('<b>' + summary.byAI + '</b> by PaintOmics AI');
 		}
 
 		// The count is of cards CHANGED. Saying "selected" would claim the ones
 		// that were already right, which is most of them on a typical job.
 		var headline = parts.length
 			? 'Changed ' + parts.join(' and ') + '.'
-			: 'Nothing needed changing \u2014 your selection already matched.';
+			: 'Nothing needed changing.';
 
 		var tail = summary.unsure > 0
-			? ' <b>' + summary.unsure + '</b> left for you, marked <i>AI unsure</i> below.'
-			: ' Nothing was left undecided.';
+			? ' <b>' + summary.unsure + '</b> left for you.'
+			: '';
 
 		var model = summary.model
-			? '<div class="aiSuggestModel">Answered by ' + Ext.String.htmlEncode(summary.model) +
-			  '. Every choice was checked against the candidates on its own card; ' +
-			  'anything outside them was discarded.</div>'
+			? '<div class="aiSuggestModel">' + Ext.String.htmlEncode(summary.model) +
+			  ' \u00b7 every choice checked against its own card</div>'
 			: '';
 
 		return '' +
 		'<div class="contentbox aiSuggestSummary">' +
 		'  <div class="aiSuggestSummaryHead">' +
-		'    <i class="fa fa-magic aiSuggestSummaryMark"></i>' +
+		'    <span class="aiSuggestSummaryMark">' +
+		       ((typeof getAIMark === "function") ? getAIMark() : "") + '</span>' +
 		'    <span>' + headline + tail + '</span>' +
 		'  </div>' +
 		model +

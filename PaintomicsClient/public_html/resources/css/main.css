@@ -8817,28 +8817,33 @@ div.repDetectionCard h3 {
 
 /* Deliberately not in the step toolbar: those buttons act on the whole step
    (go back, run, reset) and this one acts on the cards directly below it.
-   Here there is also room to say what it does before it is pressed.
 
-   Two columns at full width: what it does on the left, the control on the
-   right, sharing one baseline band. It wraps to a stack below 720px, where two
-   columns would leave the text at about 30 characters a line. */
+   One left-aligned column, not two. Spread across the full width the button
+   sat about a thousand pixels from the sentence explaining it, on the far side
+   of a card whose middle was empty -- the two read as unrelated controls. A
+   button belongs next to its own words. */
 .aiSuggestActions {
-	display: flex;
-	flex-wrap: wrap;
-	align-items: center;
-	justify-content: space-between;
-	gap: 12px 32px;
 	margin: 18px var(--pa-card-inset) 4px var(--pa-card-inset);
 	padding-top: 16px;
 	border-top: 1px solid var(--pa-surface-quiet);
 }
-.aiSuggestActionsText {
-	flex: 1 1 26rem;
-	min-width: 0;
+/* This block carries the card's inset on itself (the margin above), so its
+   children must not add it a second time -- `div.contentbox h3` and
+   `div.contentbox p` both pad by --pa-card-inset, which put this heading and
+   its line 26px right of the paragraph above them. The file already has this
+   category: "Blocks that supply their own inset ... opt out below."
+
+   The mark keeps hanging in the gutter through the existing
+   `div.contentbox h3 > svg.po-ai-mark:first-child` rule, so the heading's TEXT
+   lands on the same rail as the prose rather than 1em right of it. */
+.aiSuggestActions > .aiSuggestActionsTitle,
+.aiSuggestActions > .aiSuggestHint {
+	padding-left: 0;
+	padding-right: 0;
 }
 .aiSuggestActionsTitle {
-	margin: 0 0 5px 0;
-	font-size: 15px;
+	margin: 0 0 2px 0;
+	font-size: 14px;
 	font-weight: 600;
 	color: var(--pa-ink-title, #222);
 }
@@ -8848,8 +8853,8 @@ div.repDetectionCard h3 {
 	line-height: 1.55;
 	color: var(--pa-ink-muted);
 	/* A measure, not a width: prose set the full width of this card runs to
-	   about 140 characters a line, which is roughly twice a readable line. */
-	max-width: 78ch;
+	   about 140 characters a line, roughly twice a readable line. */
+	max-width: 70ch;
 }
 /* dark.css sets every `p` inside a contentbox to body ink through
    `[data-theme="dark"] #mainViewCenterPanel .contentbox div > p`, which
@@ -8868,7 +8873,7 @@ div.repDetectionCard h3 {
 	flex-wrap: wrap;
 	gap: 8px;
 	align-items: center;
-	flex: 0 0 auto;
+	margin-top: 12px;
 }
 .aiSuggestActionsRow .button {
 	margin: 0;
@@ -8898,10 +8903,11 @@ div.repDetectionCard h3 {
 	color: var(--pa-ink-body, #333);
 }
 .aiSuggestSummaryMark {
+	display: inline-flex;
 	color: var(--pa-ai-blue);
-	/* Baseline alignment puts an icon slightly high against 15px text. */
+	/* Baseline alignment puts the mark slightly high against 15px text. */
 	position: relative;
-	top: 1px;
+	top: 2px;
 }
 /* Which model answered, and that its answers were checked. Available to a
    reader who wants it rather than announced to one who does not. */

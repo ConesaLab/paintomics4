@@ -287,7 +287,9 @@ class Step2AISuggestionsTest(unittest.TestCase):
         case = self.out["noop"]
         self.assertEqual(0, case["counts"]["byRule"])
         self.assertEqual(0, case["counts"]["byAI"])
-        self.assertIn("already matched", case["banner"])
+        # Asserted as "claims no changes" rather than against a phrase, so
+        # rewording the banner cannot fail a test about arithmetic.
+        self.assertNotIn("Changed", case["banner"])
 
 
 if __name__ == "__main__":
