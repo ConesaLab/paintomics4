@@ -505,8 +505,23 @@ class SeedSummaryTest(unittest.TestCase):
         window = body[start:start + 2600]
         self.assertIn("not scored", window)
 
+    def test_a_step_that_adds_nothing_is_marked_and_explained(self):
+        """Four rows of identical numbers read as a broken step control.
+
+        A compound in a small component of the KEGG graph runs out of new
+        neighbours and every step past that point scores the SAME genes:
+        C22353's rings are 32, 1, 0, 0, so steps 3 and 4 print step 2's
+        numbers. Correct, and indistinguishable from a bug unless it is said.
+        """
+        body = self._view()
+        start = body.index("this.showSeedDetail = function")
+        window = body[start:start + 3600]
+        self.assertIn("is-saturated", window)
+        self.assertIn("has no ", window)
+        self.assertIn("grew", window)
+
     def test_the_cumulative_column_is_labelled_as_such(self):
-        self.assertIn("Cumulative, and counting only", self._view())
+        self.assertIn("Counts are cumulative and count only genes measured", self._view())
 
 
 class TheOldGridIsGoneTest(unittest.TestCase):

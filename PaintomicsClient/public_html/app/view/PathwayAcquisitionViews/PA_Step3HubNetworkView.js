@@ -859,6 +859,22 @@ function PA_Step3HubNetworkView() {
 		// not derivable from the rest -- the percentile is the scorer's own
 		// size-stratified ECDF rank, which is the only column that says
 		// whether a density is unusual FOR A BALL THIS SIZE.
+		// A row that scores the SAME genes as the row above it is not a bug,
+		// and it is the single thing about this table people ask about: a
+		// compound in a small component of the KEGG graph runs out of new
+		// neighbours, and every step past that point repeats. C22353's rings
+		// are 32, 1, 0, 0 -- so steps 3 and 4 score an identical set of 33
+		// genes and print identical numbers. Unexplained, that reads as a
+		// broken step control.
+		var previousMeasured = null, grew = 0;
+		[1, 2, 3, 4].forEach(function (step) {
+			var row = entry.steps[step];
+			if (!row) { return; }
+			var count = Number(row.DEN) + Number(row.noDEN);
+			if (previousMeasured === null || count > previousMeasured) { grew = step; }
+			previousMeasured = count;
+		});
+
 		var rows = [1, 2, 3, 4].map(function (step) {
 			var row = entry.steps[step];
 			if (!row) {
@@ -867,7 +883,11 @@ function PA_Step3HubNetworkView() {
 			}
 			var fdr = Number(row.padjust);
 			var percentile = Number(row.Percentile);
-			return '<tr' + (step === me.level ? ' class="is-current"' : "") + '>' +
+			var repeats = (step > grew);
+			return '<tr class="' + (step === me.level ? "is-current " : "") +
+				(repeats ? "is-saturated" : "") + '"' +
+				(repeats ? ' title="No new neighbours at this step, so it scores' +
+				           ' the same genes as step ' + grew + '"' : "") + '>' +
 				'<td>' + step + '</td>' +
 				'<td>' + row.DEN + '</td>' +
 				'<td>' + (Number(row.DEN) + Number(row.noDEN)) + '</td>' +
@@ -896,9 +916,14 @@ function PA_Step3HubNetworkView() {
 			  // MEASURED genes and counts them cumulatively (scorer.py:88,
 			  // `ids[measured_gene[ids]]`), while a chip counts every node --
 			  // compounds and unmeasured genes included -- in one ring.
-			  '<p class="pa-hub-detail-summary">Cumulative, and counting only ' +
-			    'genes measured in your data. The step chips above count every ' +
-			    'node in a single ring, so the two do not add up.</p>' +
+			  '<p class="pa-hub-detail-summary">' +
+			    (grew < 4
+			      ? '<b>' + Ext.String.htmlEncode(entry.name) + '</b> has no ' +
+			        'neighbours beyond step ' + grew + ', so the greyed steps ' +
+			        'score the same genes and repeat its numbers. ' : "") +
+			    'Counts are cumulative and count only genes measured in your ' +
+			    'data; the step chips above count every node in a single ring, ' +
+			    'so the two do not add up.</p>' +
 			  '<div class="pa-hub-omics"></div>' +
 			'</div>', reveal);
 		if (host) { me.fillOmics(host, me.seed, "compound"); }

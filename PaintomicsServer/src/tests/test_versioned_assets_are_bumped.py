@@ -130,6 +130,8 @@ PUBLISHED = {
     # node-click expression panel. v=0.6 replaced the nine-column grid, fixed
     # stateOf (entry.relevant is an ARRAY, so [] was truthy and "measured, not
     # DE" was unreachable), and announces both sampled and empty rings.
+    # v=1.7 drops the cached job when the server's HUB_SCHEMA_VERSION moves
+    # past the cached rows', and groups the card's heatmaps by omic.
     # v=1.5 titles everything by NAME -- Phytoceramide, Krt5 -- from
     # /pa_hub_names plus globalExpressionData's keggName.
     # v=1.3 moves the node detail INSIDE the network stage. A browser holding
@@ -139,7 +141,7 @@ PUBLISHED = {
     # same invisible-heatmap bug this release exists to fix, reintroduced by
     # the cache for everyone who had already loaded the site.
     "app/view/PathwayAcquisitionViews/PA_Step3HubNetworkView.js": (
-        "1.5", "e78c01f934b153ccf1e383c00f3f4af5a16f96bf1b06dcd7f7790b930d05b6fa"),
+        "1.7", "c0398cb84806cb716475d1b30396cf46ac018271f806727d08a9bd92b41cfff7"),
     # v=0.9 adds SERVER_URL_PA_PATHWAY_EVIDENCE. The endpoint was added at
     # v=0.8 WITHOUT a bump, which this guard caught: a returning browser keeps
     # this file for up to 12 hours, so the evidence overlay would have POSTed

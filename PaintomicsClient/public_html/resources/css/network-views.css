@@ -838,6 +838,9 @@
 }
 .pa-hub-steptable tr.is-current { background: var(--pa-surface-subtle, #f5f4ef); }
 .pa-hub-steptable tr.is-absent td { color: var(--pa-ink-muted, #595959); }
+/* A step that adds no new neighbours repeats the row above it. Greyed,
+   because identical numbers on four rows read as a broken control. */
+.pa-hub-steptable tr.is-saturated td { color: var(--pa-ink-muted, #595959); }
 .pa-hub-steptable td.is-significant { font-weight: 600; }
 
 /* One box per omic. globalExpressionData carries omicsValues[0] only, so this
