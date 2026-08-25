@@ -865,27 +865,43 @@ def pathwayAcquisitionRecoverJob(request, response, QUEUE_INSTANCE):
         # every job opened from its link. See getCompoundRegulateFeatures().
         safe_compoundRegulateFeatures = _as_dict(jobInstance.getCompoundRegulateFeatures())
         safe_globalExpressionData = _as_dict(jobInstance.getGlobalExpressionData())
-        # Rows stored before schema 2 came from the R scorer, computed on a
-        # graph with mis-attributed subtypes (28.2% of relations) and balls that
-        # could contain their own seed. Re-score rather than render them: it
-        # costs ~0.09 s once the organism's graph is cached, and it leaves the
-        # client exactly one row shape to read instead of a dual-shape reader on
-        # both sides. Jobs expire in at most 14 days, so this branch is
-        # deletable then.
+        # The hub table is DERIVED, not owned by the job -- the same footing as
+        # compoundRegulateFeatures just above. Re-derive it whenever what is
+        # stored is unusable, which is two cases:
+        #
+        #   stale schema  rows written by the R scorer, computed on a graph with
+        #                 28.2% mis-attributed subtypes and balls that could
+        #                 contain their own seed. Rendering them faithfully
+        #                 would preserve numbers we know to be wrong.
+        #   no table      jobs whose hubAnalysisResult never persisted at all.
+        #                 These showed an empty grid with headers and no
+        #                 explanation; deriving costs ~0.09 s once the
+        #                 organism's graph is cached, so there is no reason to.
+        #
+        # Either way the client is left with exactly one row shape to read
+        # instead of a dual-shape reader on both sides.
         from src.common.KeggGraph.scorer import HUB_SCHEMA_VERSION
         _stored = jobInstance.hubAnalysisResult
         if isinstance(_stored, dict) and _stored:
             _sample = next(iter(_stored.values()))
-            if not (isinstance(_sample, dict)
-                    and _sample.get("schema") == HUB_SCHEMA_VERSION):
-                logging.info("RECOVER_JOB - re-scoring stale hub rows for %s", jobID)
-                try:
-                    jobInstance.hubAnalysis()
-                except Exception as _ex:
-                    logging.warning("RECOVER_JOB - could not re-score hub rows "
-                                    "for %s (%s); dropping them rather than "
-                                    "rendering the old shape.", jobID, str(_ex))
-                    jobInstance.hubAnalysisResult = None
+            _stale = not (isinstance(_sample, dict)
+                          and _sample.get("schema") == HUB_SCHEMA_VERSION)
+            _reason = "stale schema"
+        else:
+            # adaptBSON turns a stored None into the STRING "None", so anything
+            # that is not a populated dict means "no usable table".
+            _stale = True
+            _reason = "no stored table"
+        if _stale:
+            logging.info("RECOVER_JOB - re-deriving hub rows for %s (%s)",
+                         jobID, _reason)
+            try:
+                jobInstance.hubAnalysis()
+            except Exception as _ex:
+                logging.warning("RECOVER_JOB - could not derive hub rows for "
+                                "%s (%s); leaving the panel empty rather than "
+                                "rendering the old shape.", jobID, str(_ex))
+                jobInstance.hubAnalysisResult = None
         safe_hubAnalysisResult = _as_dict(jobInstance.hubAnalysisResult)
 
         logging.info("RECOVER_JOB - JOB " + jobInstance.getJobID() + " LOADED SUCCESSFULLY.")

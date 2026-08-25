@@ -180,6 +180,10 @@ function PA_Step3HubNetworkView() {
 					"border-width": 3, "border-color": "#18181b",
 					"font-size": 12, "font-weight": "bold" }},
 				{ selector: "node[showLabel = 1]", style: { "label": "data(label)" }},
+				// Ring 2 alone can hold a hundred nodes; at the zoom that fits
+				// them, every label is unreadable and only adds noise. They come
+				// back as soon as the user zooms in far enough to read them.
+				{ selector: ".far node, node.far", style: { "label": "" }},
 				{ selector: "edge", style: {
 					"width": 1, "line-color": "#d4d4d8",
 					"curve-style": "bezier", "opacity": 0.75 }},
@@ -194,8 +198,17 @@ function PA_Step3HubNetworkView() {
 			]
 		});
 
-		me.cy.one("layoutstop", function () { me.drawRings(); });
-		me.cy.on("pan zoom resize", function () { me.drawRings(); });
+		me.cy.one("layoutstop", function () {
+			// fit() on afterrender runs before any data exists, so the graph came
+			// up as a speck in the middle of an empty canvas. The layout is the
+			// only moment the node positions are real.
+			me.fitToVisible();
+			me.drawRings();
+		});
+		me.cy.on("pan zoom resize", function () {
+			me.applyLabelZoom();
+			me.drawRings();
+		});
 		me.bindHover();
 		me.setLevel(me.level);
 	};
@@ -283,6 +296,32 @@ function PA_Step3HubNetworkView() {
 	};
 
 	/**
+	 * Fit to what is actually lit.
+	 *
+	 * Fitting to every element keeps the dimmed outer rings in frame, and
+	 * radius 4 is wide enough that step 1 becomes a few pixels across. The
+	 * dimmed rings are still THERE -- the guide circles show where they run --
+	 * but the viewport belongs to the ring the user asked for.
+	 */
+	this.fitToVisible = function () {
+		if (!this.cy) { return; }
+		var lit = this.cy.elements().not(".dim");
+		this.cy.fit(lit.length ? lit : this.cy.elements(), 40);
+		this.applyLabelZoom();
+	};
+
+	/** Labels only where they can be read. */
+	this.LABEL_ZOOM = 0.55;
+	this.applyLabelZoom = function () {
+		if (!this.cy) { return; }
+		var far = this.cy.zoom() < this.LABEL_ZOOM;
+		this.cy.nodes().toggleClass("far", far);
+		// The seed keeps its label at every zoom -- it is the one node whose
+		// identity the panel is about.
+		this.cy.nodes("[seed = 1]").removeClass("far");
+	};
+
+	/**
 	 * Light the chosen ring, dim the rest. Hide-don't-remove: removing elements
 	 * forces a relayout and the rings jump between steps.
 	 */
@@ -300,6 +339,7 @@ function PA_Step3HubNetworkView() {
 					e.source().hasClass("dim") || e.target().hasClass("dim"));
 			});
 		});
+		me.fitToVisible();
 		me.drawRings();
 	};
 
@@ -337,11 +377,11 @@ function PA_Step3HubNetworkView() {
 				// background tab and the panel came up permanently blank.
 				afterrender: function () {
 					paDeferFrame(function () {
-						if (me.cy) { me.cy.resize(); me.cy.fit(); me.drawRings(); }
+						if (me.cy) { me.cy.resize(); me.fitToVisible(); me.drawRings(); }
 					});
 				},
 				expand: function () {
-					if (me.cy) { me.cy.resize(); me.cy.fit(); me.drawRings(); }
+					if (me.cy) { me.cy.resize(); me.fitToVisible(); me.drawRings(); }
 				},
 				beforedestroy: function () {
 					if (me.cy) { me.cy.destroy(); me.cy = null; }
