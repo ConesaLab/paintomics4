@@ -19,7 +19,7 @@
 #**************************************************************
 
 from src.common.Util import Model
-from difflib import SequenceMatcher
+from src.common.CompoundNameSimilarity import nameSimilarity
 
 #**************************************************************
 # CLASS Feature
@@ -248,11 +248,14 @@ class Compound(Feature):
         self.similarity= 0
 
     def calculateSimilarity(self, other_name):
-        mainPrefixes = {"", "cis-","trans-","d-","l-","(s)-","alpha-","beta-","alpha-d-","beta-d-","alpha-l-","beta-l-"}
-        if self.getName().lower() == other_name.lower():
-            self.similarity = 1
-        elif self.getName().lower().replace(other_name.lower(), "") in mainPrefixes:
-            self.similarity = 0.9
-        else:
-            self.similarity = SequenceMatcher(a=self.getName().lower(), b=other_name.lower()).ratio()
+        """Score this candidate against the name the user uploaded, and keep it.
+
+        The arithmetic lives in :mod:`src.common.CompoundNameSimilarity` so
+        that the step-2 ranker, which rescores candidates read back out of
+        MongoDB, cannot disagree with the mapper about which candidates are
+        "main" ones. Setting ``self.similarity`` stays here: it is this
+        object's state, and JobController reads it off the wire to break ties
+        when two input names propose the same KEGG compound.
+        """
+        self.similarity = nameSimilarity(self.getName(), other_name)
         return self.similarity

@@ -176,6 +176,13 @@ EMAIL_REPORT_RECIPIENTS = [
 # ========== AI INTERPRETATION ==========
 AI_INTERPRETATION_ENABLED = os.getenv("AI_INTERPRETATION_ENABLED", "true").lower() == "true"
 
+# Step 2's "Choose for me" button. Separate from AI_INTERPRETATION_ENABLED so a
+# deployment can offer compound disambiguation without the literature pipeline
+# or the other way round -- they cost very differently (one short batched call
+# against a multi-phase run with PubMed retrieval). Both must be on for the
+# button to appear; AI_INTERPRETATION_ENABLED remains the master switch.
+AI_COMPOUND_SUGGESTIONS_ENABLED = os.getenv("AI_COMPOUND_SUGGESTIONS_ENABLED", "true").lower() == "true"
+
 # AI-assisted conversion of uploaded files. Ships inert: it spends gateway
 # quota that is shared with AI report generation, so a deployment opts in.
 AI_INPUT_CONVERTER = os.getenv("AI_INPUT_CONVERTER", "false").lower() == "true"

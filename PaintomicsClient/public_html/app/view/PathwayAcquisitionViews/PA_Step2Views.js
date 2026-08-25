@@ -408,29 +408,7 @@ function PA_Step2JobView() {
 		}
 
 		if (me.items.length > 0) {
-			// The whole disambiguation panel is one string of HTML inside a
-			// single component. It used to be a column layout holding one
-			// container per matched name, each holding one Ext box per candidate
-			// plus an Ext.tip.ToolTip per candidate; a job with 6592 matched
-			// names built tens of thousands of components and froze the tab for
-			// minutes before the first paint. The markup below reproduces the
-			// same DOM (the cards are laid out by .metaboliteBox:nth-child in
-			// main.css, not by the column layout) at a fraction of the cost.
-			compoundsPanelHTML =
-			'<div class="contentbox omicSummaryBox">' +
-			'  <div id="about">' +
-			'    <h2>Compounds disambiguation</h2>' +
-			'    <p>Some compounds names need to be disambiguated.</p>' +
-			'    <p>Please check the list below and choose the compounds in which you are interested.</p> ' +
-			'  </div>' +
-			'</div>' +
-			me.items.map(function(compoundSetView, index) {
-				return compoundSetView.renderCard(index);
-			}).join("") +
-			// The cards are floated; the column layout used to supply the
-			// clearfix, so without this the panel would collapse to no height
-			// and the cards would spill out of the step-2 form.
-			'<div style="clear: both;"></div>';
+			compoundsPanelHTML = me.renderCompoundsPanel();
 		}
 
 		this.component = Ext.widget({
@@ -477,6 +455,7 @@ function PA_Step2JobView() {
 					$('#download_mapping_file').click(function() {
 						application.getController("DataManagementController").downloadFilesHandler(me, "mapping_results_" + me.getModel().getJobID() + ".zip", "job_result", me.getModel().getJobID());
 					});
+					me.initAISuggestButton();
 					initializeTooltips(".helpTip");
 					me.initCompoundsPanelHandlers(this.queryById("compoundsPanelsContainer"));
 				},
@@ -488,6 +467,305 @@ function PA_Step2JobView() {
 
 		return this.component;
 	};
+	/**
+	* Show the button only where it can actually do something.
+	*
+	* Three conditions, all of which have to hold: this deployment has AI
+	* switched on AND has a token (`/ai_provider` answers both), the job carries
+	* consent, and there is at least one card to decide. A button that appears
+	* and then reports that the server has no API key is worse than no button.
+	*/
+	this.initAISuggestButton = function() {
+		var me = this;
+		if (me.items.length === 0) {
+			return;
+		}
+		if (me.getModel().aiConsent !== true) {
+			return;
+		}
+		if (typeof withAIProviderInfo !== "function") {
+			return;
+		}
+		withAIProviderInfo(function(info) {
+			if (!info || info.enabled !== true || info.configured !== true) {
+				return;
+			}
+			// Kept on the view rather than only in the DOM: the panel is
+			// re-rendered whenever picks are applied or undone, and the answer
+			// to "may this job use the AI" must survive that.
+			me.aiAvailable = true;
+			$(".aiSuggestActions").show();
+		});
+	};
+
+	/**
+	* The AI controls, inside the card that introduces the section.
+	*
+	* Deliberately here rather than in the step's toolbar. The toolbar's buttons
+	* act on the whole step - go back, run the next step, reset everything - and
+	* this one acts on the compound cards immediately below it. Next to them it
+	* can also say what it does and what it costs the user, which a toolbar
+	* button has no room for.
+	*
+	* @returns {String}
+	*/
+	this.renderAIActions = function() {
+		var hidden = this.aiAvailable ? "" : ' style="display:none;"';
+		var undo = this.aiSnapshot
+			? '<a href="javascript:void(0)" class="button btn-default" id="aiUndoButton">' +
+			  '<i class="fa fa-undo"></i> Undo</a>'
+			: "";
+
+		return '' +
+		'<div class="aiSuggestActions"' + hidden + '>' +
+		'  <div class="aiSuggestActionsText">' +
+		'    <h3 class="aiSuggestActionsTitle">Not sure which one?</h3>' +
+		'    <p class="aiSuggestHint">PaintOmics picks the most likely KEGG compound ' +
+		'for each ambiguous name, from the organism and your experiment design. It ' +
+		'chooses only from the candidates already on a card, leaves anything genuinely ' +
+		'ambiguous to you, and saves nothing until you press <b>Next step</b>.</p>' +
+		'  </div>' +
+		'  <div class="aiSuggestActionsRow">' +
+		'    <a href="javascript:void(0)" class="button btn-info" id="aiSuggestButton">' +
+		'      <i class="fa fa-magic"></i> Choose for me</a>' +
+		     undo +
+		'  </div>' +
+		'</div>';
+	};
+
+	/**
+	* The button's four states, in one place so none of them can be half-applied.
+	*
+	* @param {String} state one of "idle", "working", "done"
+	* @param {String} label optional text for the "done" state
+	*/
+	this.setAIButtonState = function(state, label) {
+		var button = $("#aiSuggestButton");
+		if (button.length === 0) {
+			return;
+		}
+		if (state === "working") {
+			button.addClass("aiWorking")
+				.html('<i class="fa fa-circle-o-notch fa-spin"></i> Choosing\u2026');
+		} else if (state === "done") {
+			button.removeClass("aiWorking")
+				.html('<i class="fa fa-magic"></i> ' + (label || "Choose again"));
+		} else {
+			button.removeClass("aiWorking")
+				.html('<i class="fa fa-magic"></i> Choose for me');
+		}
+	};
+
+	this.aiSuggestHandler = function() {
+		if ($("#aiSuggestButton").hasClass("aiWorking")) {
+			return;
+		}
+		this.setAIButtonState("working");
+		this.controller.step2SuggestCompoundsHandler(this);
+	};
+
+	/**
+	* The whole disambiguation panel as one string of HTML.
+	*
+	* It used to be a column layout holding one container per matched name, each
+	* holding one Ext box per candidate plus an Ext.tip.ToolTip per candidate; a
+	* job with 6592 matched names built tens of thousands of components and froze
+	* the tab for minutes before the first paint. This markup reproduces the same
+	* DOM (the cards are laid out by .metaboliteBox:nth-child in main.css, not by
+	* the column layout) at a fraction of the cost.
+	*
+	* Extracted from the component definition so that accepting the AI's picks
+	* can rebuild it. Re-rendering rather than patching checkboxes in place is
+	* deliberate: a collapsed card's alternatives are not in the document at all,
+	* so a DOM-only update would silently miss exactly the candidates the AI is
+	* most likely to have turned OFF.
+	*
+	* @returns {String}
+	*/
+	this.renderCompoundsPanel = function() {
+		var me = this;
+		return '' +
+		// `compoundsIntroBox` takes this card out of the 49%-wide odd/even
+		// float grid the metabolite cards use. As one of those it was a
+		// half-width block of prose with an empty half-row beside it.
+		'<div class="contentbox omicSummaryBox compoundsIntroBox">' +
+		'  <div id="about">' +
+		'    <h2>Compounds disambiguation</h2>' +
+		'    <p>Some compound names matched more than one KEGG compound. Choose the one ' +
+		'you measured on each card below \u2014 or let PaintOmics propose them.</p>' +
+		     me.renderAIActions() +
+		'  </div>' +
+		'</div>' +
+		me.renderAISummary() +
+		me.items.map(function(compoundSetView, index) {
+			return compoundSetView.renderCard(index);
+		}).join("") +
+		// The cards are floated; the column layout used to supply the clearfix,
+		// so without this the panel would collapse to no height and the cards
+		// would spill out of the step-2 form.
+		'<div style="clear: both;"></div>';
+	};
+
+	/**
+	* The banner that says what the AI did, or nothing at all before it has run.
+	*
+	* The counts are of cards actually CHANGED, not of decisions received: the
+	* server ranks every compound set it has, including ones this view draws no
+	* card for, and reporting those would credit the feature with work the user
+	* cannot see.
+	*
+	* @returns {String}
+	*/
+	this.renderAISummary = function() {
+		var summary = this.aiSummary;
+		if (!summary) {
+			return "";
+		}
+
+		var parts = [];
+		if (summary.byRule > 0) {
+			parts.push('<b>' + summary.byRule + '</b> by name matching');
+		}
+		if (summary.byAI > 0) {
+			parts.push('<b>' + summary.byAI + '</b> by the AI');
+		}
+
+		// The count is of cards CHANGED. Saying "selected" would claim the ones
+		// that were already right, which is most of them on a typical job.
+		var headline = parts.length
+			? 'Changed ' + parts.join(' and ') + '.'
+			: 'Nothing needed changing \u2014 your selection already matched.';
+
+		var tail = summary.unsure > 0
+			? ' <b>' + summary.unsure + '</b> left for you, marked <i>AI unsure</i> below.'
+			: ' Nothing was left undecided.';
+
+		var model = summary.model
+			? '<div class="aiSuggestModel">Answered by ' + Ext.String.htmlEncode(summary.model) +
+			  '. Every choice was checked against the candidates on its own card; ' +
+			  'anything outside them was discarded.</div>'
+			: '';
+
+		return '' +
+		'<div class="contentbox aiSuggestSummary">' +
+		'  <div class="aiSuggestSummaryHead">' +
+		'    <i class="fa fa-magic aiSuggestSummaryMark"></i>' +
+		'    <span>' + headline + tail + '</span>' +
+		'  </div>' +
+		model +
+		'</div>';
+	};
+
+	/**
+	* Accept a suggestion payload: tick what it chose, untick its rivals.
+	*
+	* Only ever touches candidates INSIDE a set the server named, and only sets
+	* this view actually drew a card for. A decision for an input name this view
+	* has no card for is dropped rather than applied blind - the server's idea of
+	* which sets need a decision is deliberately more permissive than this one
+	* (`selected` does not exist server-side), and the cards are what the user
+	* consented to by pressing the button.
+	*
+	* @param {Object} payload as returned by /pa_suggest_compounds_status
+	* @returns {Object} {byRule, byAI, unsure} counts of cards actually changed
+	*/
+	this.applyAISuggestions = function(payload) {
+		var me = this;
+		var byTitle = {};
+		me.items.forEach(function(compoundSetView) {
+			byTitle[compoundSetView.getModel().getTitle()] = compoundSetView;
+		});
+
+		// One snapshot of every tick before anything moves, so Undo is exact
+		// rather than an attempt to invert the decisions one at a time.
+		me.aiSnapshot = me.items.map(function(compoundSetView) {
+			var model = compoundSetView.getModel();
+			return {
+				view: compoundSetView,
+				state: model.getMainCompounds().concat(model.getOtherCompounds())
+					.map(function(compound) { return compound.selected === true; }),
+				aiState: compoundSetView.aiState || null
+			};
+		});
+
+		var counts = {byRule: 0, byAI: 0, unsure: 0};
+
+		(payload.decisions || []).forEach(function(decision) {
+			var compoundSetView = byTitle[decision.title];
+			if (!compoundSetView || !decision.keggID) {
+				return;
+			}
+
+			// Only a card whose ticks actually MOVED gets marked. The server
+			// decides every set it has, and on a typical job most of those
+			// decisions agree with what was already selected -- badging those
+			// too put a chip on 52 of 47 cards, at which point the chip stops
+			// meaning anything and the eye cannot find the changes.
+			if (!compoundSetView.selectOnly(decision.keggID)) {
+				return;
+			}
+
+			if (decision.tier === "ai") { counts.byAI++; } else { counts.byRule++; }
+			compoundSetView.aiState = {
+				status: "picked", keggID: decision.keggID, tier: decision.tier,
+				confidence: decision.confidence || "", reason: decision.reason || ""
+			};
+		});
+
+		(payload.unresolved || []).forEach(function(entry) {
+			var compoundSetView = byTitle[entry.title];
+			if (!compoundSetView) {
+				return;
+			}
+			counts.unsure++;
+			compoundSetView.aiState = {
+				status: "unsure", keggID: null, tier: "ai", confidence: "",
+				reason: entry.reason || entry.detail || ""
+			};
+		});
+
+		me.aiSummary = {byRule: counts.byRule, byAI: counts.byAI,
+		                unsure: counts.unsure, model: payload.model || ""};
+		me.refreshCompoundsPanel();
+		return counts;
+	};
+
+	/**
+	* Put every tick back exactly as it was before the button was pressed.
+	*/
+	this.undoAISuggestions = function() {
+		var snapshot = this.aiSnapshot;
+		if (!snapshot) {
+			return;
+		}
+		snapshot.forEach(function(entry) {
+			var model = entry.view.getModel();
+			var compounds = model.getMainCompounds().concat(model.getOtherCompounds());
+			compounds.forEach(function(compound, index) {
+				compound.selected = entry.state[index];
+			});
+			entry.view.aiState = entry.aiState;
+		});
+		this.aiSnapshot = null;
+		this.aiSummary = null;
+		this.refreshCompoundsPanel();
+	};
+
+	/**
+	* Rebuild the cards and rebind the delegated handlers they depend on.
+	*/
+	this.refreshCompoundsPanel = function() {
+		var container = this.component && this.component.queryById
+			? this.component.queryById("compoundsPanelsContainer") : null;
+		if (!container) {
+			return;
+		}
+		container.update(this.renderCompoundsPanel());
+		// update() replaces the element's children, so the delegated handlers
+		// bound to the OLD element are gone with it.
+		this.initCompoundsPanelHandlers(container);
+	};
+
 	this.submitFormHandler = function() {
 		this.controller.step2OnFormSubmitHandler(this);
 	};
@@ -526,6 +804,20 @@ function PA_Step2JobView() {
 
 		panel.on("click", ".showOtherCompoundsButton", function() {
 			me.showOtherCompoundsHandler($(this));
+		});
+
+		// Delegated, like everything else bound here: the AI controls live
+		// inside this panel now, and the panel's HTML is replaced wholesale
+		// each time picks are applied or undone. A handler bound straight to
+		// the button would be thrown away with the element it was bound to,
+		// and Undo would stop responding after the first use.
+		panel.on("click", "#aiSuggestButton", function() {
+			me.aiSuggestHandler();
+		});
+
+		panel.on("click", "#aiUndoButton", function() {
+			me.undoAISuggestions();
+			me.setAIButtonState("idle");
 		});
 
 		Ext.create('Ext.tip.ToolTip', {
@@ -962,13 +1254,16 @@ function foundCountLabel(count, noun) {
 * @param {Number} columnWidth width in px of the cell, as the old view had it
 * @returns {String}
 */
-function renderCompoundCandidate(compound, columnWidth) {
+function renderCompoundCandidate(compound, columnWidth, aiPickedID) {
 	var compoundID = compound.getID();
 	var safeID = Ext.String.htmlEncode(compoundID);
 	var safeName = Ext.String.htmlEncode(compound.getName());
+	// Marks the one candidate the AI chose, so a card with four ticked-looking
+	// rows still says WHICH row the machine is responsible for.
+	var picked = (aiPickedID && compoundID === aiPickedID) ? " aiPickedCandidate" : "";
 
 	return '' +
-	'<div class="metaboliteCompound" data-compound-id="' + safeID + '" data-compound-name="' + safeName + '"' +
+	'<div class="metaboliteCompound' + picked + '" data-compound-id="' + safeID + '" data-compound-name="' + safeName + '"' +
 	' style="float:left; width:' + columnWidth + 'px; max-width:' + columnWidth + 'px; margin-top:5px;' +
 	' white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">' +
 	'  <input type="checkbox"' + (compound.isSelected() ? " checked" : "") + ' name="metabolite" value="' + safeID + '">' +
@@ -1032,17 +1327,86 @@ function PA_Step2CompoundSetView() {
 	* @param {Number} index
 	* @returns {String}
 	*/
+	/**
+	* Tick exactly one candidate in this set and untick every other.
+	*
+	* The only mutation the AI path performs on the model. It is scoped to this
+	* one compound set by construction, so a suggestion can never reach across
+	* to another input name's candidates.
+	*
+	* @param {String} keggID the candidate to keep
+	* @returns {Boolean} whether anything actually changed
+	*/
+	this.selectOnly = function(keggID) {
+		var compounds = this.model.getMainCompounds().concat(this.model.getOtherCompounds());
+
+		// Membership is decided BEFORE anything moves. Written the other way -
+		// untick as you scan, check afterwards - an id this set does not
+		// contain clears every tick in it on the way to returning false, which
+		// is the worst outcome available: the user loses a selection they made,
+		// to an answer that was never valid for this card.
+		var found = compounds.some(function(compound) {
+			return compound.getID() === keggID;
+		});
+		if (!found) {
+			return false;
+		}
+
+		var changed = false;
+		compounds.forEach(function(compound) {
+			var wanted = (compound.getID() === keggID);
+			if (compound.selected !== wanted) {
+				compound.selected = wanted;
+				changed = true;
+			}
+		});
+		return changed;
+	};
+
+	/**
+	* The "AI" / "AI unsure" chip on a card, with its reason as the tooltip.
+	*
+	* @returns {String}
+	*/
+	this.renderAIBadge = function() {
+		var state = this.aiState;
+		if (!state) {
+			return "";
+		}
+		// Three states, three colours, and the deterministic one is NOT the
+		// AI colour. A rule that matched a name did not consult a model, and
+		// dressing it in the AI blue would claim credit the feature has not
+		// earned -- the point of the chip is to say what touched this card.
+		var kind = state.status === "unsure" ? "unsure"
+			: (state.tier === "ai" ? "ai" : "auto");
+		var label = {unsure: "AI unsure", ai: "AI", auto: "Auto"}[kind];
+		var icon = {unsure: "fa-question-circle", ai: "fa-magic", auto: "fa-check"}[kind];
+		var reason = Ext.String.htmlEncode(state.reason || "");
+
+		return '<span class="aiBadge aiBadge-' + kind + '"' +
+		       (reason ? ' title="' + reason + '"' : "") + '>' +
+		       '<i class="fa ' + icon + '"></i> ' + label + '</span>';
+	};
+
 	this.renderCard = function(index) {
 		var mainCompounds = this.model.getMainCompounds();
 		var otherCompounds = this.model.getOtherCompounds();
 
+		var aiPickedID = (this.aiState && this.aiState.keggID) || null;
+		var cardClass = "contentbox metaboliteBox";
+		if (this.aiState) {
+			cardClass += this.aiState.status === "unsure" ? " aiBox-unsure"
+				: (this.aiState.tier === "ai" ? " aiBox-ai" : " aiBox-auto");
+		}
+
 		var html =
-		'<div class="contentbox metaboliteBox" data-compoundset="' + index + '">' +
-		'  <h3 class="metaboliteTitle">' + Ext.String.htmlEncode(this.model.getTitle()) + '</h3>' +
+		'<div class="' + cardClass + '" data-compoundset="' + index + '">' +
+		'  <h3 class="metaboliteTitle">' + Ext.String.htmlEncode(this.model.getTitle()) +
+		     this.renderAIBadge() + '</h3>' +
 		'  <h4 style="padding-left: var(--pa-card-inset);">' + foundCountLabel(mainCompounds.length, "compound") + '</h4>' +
 		'  <div class="mainCompoundsPanel" style="padding: 3px 15px; overflow: hidden;">' +
 		mainCompounds.map(function(compound) {
-			return renderCompoundCandidate(compound, 200);
+			return renderCompoundCandidate(compound, 200, aiPickedID);
 		}).join("") +
 		'  </div>';
 
@@ -1066,8 +1430,9 @@ function PA_Step2CompoundSetView() {
 	* @returns {String}
 	*/
 	this.renderOtherCompounds = function() {
+		var aiPickedID = (this.aiState && this.aiState.keggID) || null;
 		return this.model.getOtherCompounds().map(function(compound) {
-			return renderCompoundCandidate(compound, 250);
+			return renderCompoundCandidate(compound, 250, aiPickedID);
 		}).join("");
 	};
 

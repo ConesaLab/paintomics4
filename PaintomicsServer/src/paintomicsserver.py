@@ -101,6 +101,10 @@ from src.servlets.AdminServlet import (
     adminServletSystemInformation,
     clearFailedData,
 )
+from src.servlets.CompoundSuggestionServlet import (
+    compoundSuggestionInitiate,
+    compoundSuggestionStatus,
+)
 from src.servlets.AIInterpretServlet import (
     aiGenerateExpDesign,
     aiInterpretChat,
@@ -675,6 +679,17 @@ class Application(object):
         @self.app.route(SERVER_SUBDOMAIN + '/pa_step2', methods=['OPTIONS', 'POST'])
         def pathwayAcquisitionStep2Handler():
             return pathwayAcquisitionStep2_PART1(request, Response(), self.queue, self.ROOT_DIRECTORY).getResponse()
+
+        # Step 2's "Choose for me" button. Enqueue-and-poll rather than one
+        # blocking call: uWSGI runs this site on four threads, so a route that
+        # waits on the LLM gateway would take a quarter of the site with it.
+        @self.app.route(SERVER_SUBDOMAIN + '/pa_suggest_compounds', methods=['OPTIONS', 'POST'])
+        def compoundSuggestionInitiateHandler():
+            return compoundSuggestionInitiate(request, Response(), self.queue).getResponse()
+
+        @self.app.route(SERVER_SUBDOMAIN + '/pa_suggest_compounds_status', methods=['OPTIONS', 'POST'])
+        def compoundSuggestionStatusHandler():
+            return compoundSuggestionStatus(request, Response(), self.queue).getResponse()
         #*******************************************************************************************
         # STEP 3 HANDLERS
         #*******************************************************************************************

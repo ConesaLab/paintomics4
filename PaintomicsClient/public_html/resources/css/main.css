@@ -8777,3 +8777,195 @@ div.repDetectionCard h3 {
   color: inherit;
   font-weight: 700;
 }
+
+/* ==========================================================================
+   Step 2 - "Choose for me" (AI compound disambiguation)
+
+   Built entirely from tokens dark.css already redefines, so the theme follows
+   without a single [data-theme] rule here.
+
+   The one idea this styling has to carry: after the button runs, you should be
+   able to tell at a glance WHAT touched each card. Three states, three colours,
+   and they are not interchangeable --
+
+     Auto       --pa-ink-muted     a name-matching rule; no model was involved,
+                                   so it must not wear the AI colour
+     AI         --pa-ai-blue       the application's one AI colour, shared with
+                                   the mark, the consent block and the widget
+     AI unsure  --pa-accent-orange the model declined; this one is still yours
+
+   Cards the run did not change carry no mark at all. Badging those too put a
+   chip on nearly every card, and a chip on everything is a chip on nothing.
+   ========================================================================== */
+
+/* ---- The section header, and the control inside it ----------------------- */
+
+/* The metabolite cards are laid out by `width: 49%` plus odd/even floats (see
+   `.omicSummaryBox, .metaboliteBox` above). The card that INTRODUCES them was
+   picking that up as well, so the section opened with a half-width block of
+   prose and an empty half-row beside it. It is a header, not a card in the
+   grid: it takes the row.
+
+   `min-height` is reset for the same reason -- 230px is a floor that keeps two
+   side-by-side cards even, and this one has nothing beside it. */
+.contentbox.omicSummaryBox.compoundsIntroBox {
+	float: none;
+	width: 100%;
+	min-height: 0;
+	margin-bottom: 14px;
+}
+
+/* Deliberately not in the step toolbar: those buttons act on the whole step
+   (go back, run, reset) and this one acts on the cards directly below it.
+   Here there is also room to say what it does before it is pressed.
+
+   Two columns at full width: what it does on the left, the control on the
+   right, sharing one baseline band. It wraps to a stack below 720px, where two
+   columns would leave the text at about 30 characters a line. */
+.aiSuggestActions {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px 32px;
+	margin: 18px var(--pa-card-inset) 4px var(--pa-card-inset);
+	padding-top: 16px;
+	border-top: 1px solid var(--pa-surface-quiet);
+}
+.aiSuggestActionsText {
+	flex: 1 1 26rem;
+	min-width: 0;
+}
+.aiSuggestActionsTitle {
+	margin: 0 0 5px 0;
+	font-size: 15px;
+	font-weight: 600;
+	color: var(--pa-ink-title, #222);
+}
+.aiSuggestHint {
+	margin: 0;
+	font-size: 13px;
+	line-height: 1.55;
+	color: var(--pa-ink-muted);
+	/* A measure, not a width: prose set the full width of this card runs to
+	   about 140 characters a line, which is roughly twice a readable line. */
+	max-width: 78ch;
+}
+/* dark.css sets every `p` inside a contentbox to body ink through
+   `[data-theme="dark"] #mainViewCenterPanel .contentbox div > p`, which
+   outranks a single class -- so in the dark theme this hint was rendering at
+   the same weight as the heading above it and the hierarchy collapsed.
+
+   Matched on specificity rather than forced with !important: this is secondary
+   text in both themes, and the token already knows what "secondary" means in
+   each of them. */
+#mainViewCenterPanel .contentbox .aiSuggestActions .aiSuggestHint {
+	color: var(--pa-ink-muted);
+}
+
+.aiSuggestActionsRow {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	align-items: center;
+	flex: 0 0 auto;
+}
+.aiSuggestActionsRow .button {
+	margin: 0;
+}
+/* Anchors, so `disabled` does nothing; pointer-events is what stops a second
+   click while the gateway is answering. */
+#aiSuggestButton.aiWorking {
+	opacity: 0.72;
+	pointer-events: none;
+}
+
+/* ---- What happened, once it has run ------------------------------------- */
+
+.contentbox.aiSuggestSummary {
+	margin: 5px 0 14px 0;
+	padding: 15px var(--pa-card-inset);
+	border-left: 3px solid var(--pa-ai-blue);
+	background: var(--pa-surface-subtle);
+	clear: both;
+}
+.aiSuggestSummaryHead {
+	display: flex;
+	align-items: baseline;
+	gap: 9px;
+	font-size: 15px;
+	line-height: 1.5;
+	color: var(--pa-ink-body, #333);
+}
+.aiSuggestSummaryMark {
+	color: var(--pa-ai-blue);
+	/* Baseline alignment puts an icon slightly high against 15px text. */
+	position: relative;
+	top: 1px;
+}
+/* Which model answered, and that its answers were checked. Available to a
+   reader who wants it rather than announced to one who does not. */
+.aiSuggestModel {
+	margin-top: 7px;
+	font-size: 12px;
+	line-height: 1.5;
+	color: var(--pa-ink-muted);
+}
+
+/* ---- Per-card provenance ------------------------------------------------- */
+
+.aiBadge {
+	display: inline-block;
+	margin-left: 8px;
+	padding: 1px 8px;
+	border: 1px solid currentColor;
+	border-radius: 10px;
+	font-size: 11px;
+	font-weight: normal;
+	/* Fixed line-height and inline-block so a metabolite name wrapping to two
+	   lines cannot stretch the chip with it. */
+	line-height: 16px;
+	white-space: nowrap;
+	vertical-align: middle;
+	cursor: help;
+}
+.aiBadge .fa {
+	font-size: 10px;
+	margin-right: 3px;
+}
+.aiBadge-auto   { color: var(--pa-ink-muted); }
+.aiBadge-ai     { color: var(--pa-ai-blue); }
+.aiBadge-unsure { color: var(--pa-accent-orange); }
+
+/* A 3px rail, so the state is readable while scanning a column of cards and
+   not only when reading one. */
+.contentbox.metaboliteBox.aiBox-auto   { border-left: 3px solid var(--pa-ink-muted); }
+.contentbox.metaboliteBox.aiBox-ai     { border-left: 3px solid var(--pa-ai-blue); }
+.contentbox.metaboliteBox.aiBox-unsure { border-left: 3px solid var(--pa-accent-orange); }
+
+/* The one candidate the machine is responsible for. A card can show several
+   ticked-looking rows, so "which row" is said rather than left to the box. */
+.metaboliteCompound.aiPickedCandidate > a {
+	font-weight: 600;
+	color: var(--pa-ai-blue);
+}
+
+/* One quiet reveal on the cards that moved. The panel is rebuilt wholesale, so
+   this runs once per apply and never on the cards left alone -- which is the
+   point: the motion is the answer to "what just changed?". */
+@keyframes aiCardSettle {
+	from { background-color: var(--pa-surface-subtle); }
+	to   { background-color: transparent; }
+}
+.contentbox.metaboliteBox.aiBox-auto,
+.contentbox.metaboliteBox.aiBox-ai,
+.contentbox.metaboliteBox.aiBox-unsure {
+	animation: aiCardSettle 900ms ease-out 1;
+}
+@media (prefers-reduced-motion: reduce) {
+	.contentbox.metaboliteBox.aiBox-auto,
+	.contentbox.metaboliteBox.aiBox-ai,
+	.contentbox.metaboliteBox.aiBox-unsure {
+		animation: none;
+	}
+}
