@@ -5762,6 +5762,35 @@ PA_Step3StatsView.prototype = new View();
 /*
 FOR PaintOmics 4
  */
+/**
+ * Map one hub-analysis row to the grid's field names.
+ *
+ * Rows used to arrive as a headerless 8-element array whose column order was
+ * stated in exactly one place on each side and versioned nowhere: reordering
+ * the R frame silently relabelled the whole grid with no error anywhere.
+ * Since schema 2 they are named dicts, and this is the only place the names
+ * are read.
+ *
+ * There is deliberately NO legacy branch. A job stored before schema 2 is
+ * re-scored on the server (PathwayAcquisitionServlet, recovery path) rather
+ * than translated here -- the rows expire in at most 14 days, and a re-score
+ * returns the corrected numbers instead of faithfully preserving the wrong
+ * ones, which came from a graph with 28% mis-attributed subtypes.
+ */
+var paHubRow = function (raw) {
+	return {
+		ID: raw.name,
+		Step: raw.step,
+		Percentage: raw.density,
+		Percentile: raw.percentile,
+		DEN: raw.DEN,
+		noDEN: raw.noDEN,
+		pvalue: raw.pvalue,
+		padjust: raw.pvalue_adjust,
+		ballFraction: raw.ball_fraction
+	};
+};
+
 function PA_Step3HubAnalysis () {
 	let me = this;
 	this.name = "PA_Step3HubAnalysis";
@@ -5780,20 +5809,14 @@ function PA_Step3HubAnalysis () {
 		this.model = model;
 		this.model.addObserver(this);
 		const hubAnalysisResult = this.model.getHubAnalysisResult();
-		for (keys in hubAnalysisResult) {
-			hubTable.push(
-				{
-					Metabolite: this.model.mappingComp[hubAnalysisResult[keys][1]],
-					ID: hubAnalysisResult[keys][1],
-					Step: hubAnalysisResult[keys][5],
-					Percentage: hubAnalysisResult[keys][0],
-					Percentile: hubAnalysisResult[keys][2],
-					DEN: hubAnalysisResult[keys][6],
-					noDEN:hubAnalysisResult[keys][7],
-					pvalue: hubAnalysisResult[keys][3],
-					padjust: hubAnalysisResult[keys][4]
-				}
-			)
+		// loadModel runs on every model load, and the view is constructed once
+		// (PA_Step3Views.js:350-354). Appending without clearing meant job B's
+		// rows were pushed onto job A's array on the controller's force path.
+		hubTable.length = 0;
+		for (let key in hubAnalysisResult) {
+			let row = paHubRow(hubAnalysisResult[key]);
+			row.Metabolite = this.model.mappingComp[row.ID] || row.ID;
+			hubTable.push(row);
 		}
 
 		compRegulateFeatures = this.model.compoundRegulateFeatures

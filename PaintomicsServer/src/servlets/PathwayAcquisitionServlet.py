@@ -865,6 +865,27 @@ def pathwayAcquisitionRecoverJob(request, response, QUEUE_INSTANCE):
         # every job opened from its link. See getCompoundRegulateFeatures().
         safe_compoundRegulateFeatures = _as_dict(jobInstance.getCompoundRegulateFeatures())
         safe_globalExpressionData = _as_dict(jobInstance.getGlobalExpressionData())
+        # Rows stored before schema 2 came from the R scorer, computed on a
+        # graph with mis-attributed subtypes (28.2% of relations) and balls that
+        # could contain their own seed. Re-score rather than render them: it
+        # costs ~0.09 s once the organism's graph is cached, and it leaves the
+        # client exactly one row shape to read instead of a dual-shape reader on
+        # both sides. Jobs expire in at most 14 days, so this branch is
+        # deletable then.
+        from src.common.KeggGraph.scorer import HUB_SCHEMA_VERSION
+        _stored = jobInstance.hubAnalysisResult
+        if isinstance(_stored, dict) and _stored:
+            _sample = next(iter(_stored.values()))
+            if not (isinstance(_sample, dict)
+                    and _sample.get("schema") == HUB_SCHEMA_VERSION):
+                logging.info("RECOVER_JOB - re-scoring stale hub rows for %s", jobID)
+                try:
+                    jobInstance.hubAnalysis()
+                except Exception as _ex:
+                    logging.warning("RECOVER_JOB - could not re-score hub rows "
+                                    "for %s (%s); dropping them rather than "
+                                    "rendering the old shape.", jobID, str(_ex))
+                    jobInstance.hubAnalysisResult = None
         safe_hubAnalysisResult = _as_dict(jobInstance.hubAnalysisResult)
 
         logging.info("RECOVER_JOB - JOB " + jobInstance.getJobID() + " LOADED SUCCESSFULLY.")

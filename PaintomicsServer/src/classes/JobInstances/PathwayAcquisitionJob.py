@@ -2648,7 +2648,7 @@ class PathwayAcquisitionJob(Job):
         self.globalExpressionData = globalExpressionData
         return self.globalExpressionData
 
-    def hubAnalysis(self, ROOT_DIRECTORY):
+    def hubAnalysis(self, ROOT_DIRECTORY=None):
         """Metabolite hub analysis. Pure Python since 2026-08.
 
         Was: write two CSVs, fork `Rscript hubAnalysis.R`, read a headerless
@@ -2657,7 +2657,8 @@ class PathwayAcquisitionJob(Job):
         for a measured 2.7-3.0 s. The graph is derived from KGML and cached per
         organism now, so a warm job costs ~0.09 s.
 
-        ROOT_DIRECTORY is unused and kept only so callers need not change.
+        ROOT_DIRECTORY is unused -- there is no script to locate any more -- and
+        is kept optional only so the step-2 call site need not change.
         """
         from src.common.KeggGraph import store
         from src.common.KeggGraph.scorer import score
