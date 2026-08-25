@@ -211,6 +211,54 @@ const out = {};
                 banner: view.renderAISummary()};
 }
 
+// --- a model identifier must never reach the interface ----------------------
+{
+    const set = compoundSet("Alanine", [
+        compound("C00041", "L-Alanine", true),
+        compound("C00133", "D-Alanine", true)]);
+    const view = jobView([set]);
+    view.applyAISuggestions({
+        decisions: [{title: "Alanine", keggID: "C00041", tier: "ai",
+                     confidence: "high", reason: "mouse"}],
+        unresolved: [],
+        model: "deepseek-ai/DeepSeek-V4-Flash-0731"});
+    out.modelLeak = {banner: view.renderAISummary()};
+}
+
+// --- the same compound must not be selected under two input names ----------
+{
+    const alanine = compoundSet("Alanine", [
+        compound("C00099", "beta-Alanine", true),
+        compound("C00041", "L-Alanine", false)]);
+    const betaAla = compoundSet("beta-alanine", [compound("C00099", "beta-Alanine", false)]);
+    const view = jobView([alanine, betaAla]);
+    const counts = view.applyAISuggestions({
+        decisions: [
+            {title: "beta-alanine", keggID: "C00099", tier: "ai",
+             confidence: "high", reason: "exact"}],
+        unresolved: []});
+    out.crossSet = {
+        alanineTicks: ticks(alanine), betaTicks: ticks(betaAla),
+        counts: counts, betaState: view.items[1].aiState};
+}
+
+// --- Undo after a second run returns the USER's ticks, not the first result --
+{
+    const set = compoundSet("Serine", [
+        compound("C00065", "L-Serine", false),
+        compound("C00740", "D-Serine", true)]);
+    const view = jobView([set]);
+    const original = ticks(set);
+    view.applyAISuggestions({decisions: [{title: "Serine", keggID: "C00065",
+        tier: "ai", confidence: "high", reason: "L"}], unresolved: []});
+    const afterFirst = ticks(set);
+    view.applyAISuggestions({decisions: [{title: "Serine", keggID: "C00740",
+        tier: "ai", confidence: "high", reason: "D"}], unresolved: []});
+    view.undoAISuggestions();
+    out.doubleRunUndo = {original: original, afterFirst: afterFirst,
+                         afterUndo: ticks(set)};
+}
+
 process.stdout.write(JSON.stringify(out));
 """
 
@@ -271,6 +319,48 @@ class Step2AISuggestionsTest(unittest.TestCase):
         self.assertIn("AI unsure", case["card"])
         self.assertIn("aiBox-unsure", case["card"])
         self.assertIn("aiBadge-unsure", case["card"])
+
+    def test_a_compound_already_used_elsewhere_is_not_selected_twice(self):
+        """Step 1 de-duplicates across boxes on purpose; applying picks must too.
+
+        JobController unselects the losing copy when two input names propose the
+        same KEGG id, and the checkbox carries a duplicate warning. That warning
+        only fires on a real `change` event, so applying set by set would have
+        re-created exactly the duplicate both guards exist to prevent -- silently,
+        and posted twice to step 3.
+        """
+        case = self.out["crossSet"]
+        # "Alanine" keeps C00099; "beta-alanine" is left alone and explained.
+        self.assertEqual([True, False], case["alanineTicks"])
+        self.assertEqual([False], case["betaTicks"])
+        self.assertEqual(0, case["counts"]["byAI"])
+        self.assertEqual(1, case["counts"]["unsure"])
+        self.assertEqual("unsure", case["betaState"]["status"])
+        self.assertIn("already uses this compound", case["betaState"]["reason"])
+
+    def test_undo_after_a_second_run_restores_the_users_own_ticks(self):
+        """The snapshot is taken once, not refreshed by "Choose again".
+
+        Overwritten on the second run, Undo restored the AI's FIRST answer while
+        the control still promised to put every tick back as it was.
+        """
+        case = self.out["doubleRunUndo"]
+        self.assertEqual([False, True], case["original"])
+        self.assertEqual([True, False], case["afterFirst"])
+        self.assertEqual(case["original"], case["afterUndo"])
+
+    def test_the_model_identifier_never_reaches_the_banner(self):
+        """PA_Step1Views states the rule for the consent copy; it holds here too.
+
+        Naming a specific build invites the reader to evaluate the model rather
+        than the decision in front of them, and the string goes stale the moment
+        the gateway is repointed. The server no longer sends it either -- this
+        pins the rendering half, by handing the view one anyway.
+        """
+        banner = self.out["modelLeak"]["banner"]
+        self.assertNotIn("deepseek", banner.lower())
+        self.assertNotIn("DeepSeek", banner)
+        self.assertIn("checked against the candidates", banner)
 
     def test_a_decision_that_changes_nothing_leaves_no_badge(self):
         """A chip on every card is a chip on none.

@@ -79,9 +79,18 @@ SERVER_URL_AI_GENERATE_EXP_DESIGN = SERVER_URL + "ai_generate_exp_design";
 SERVER_URL_AI_PROVIDER = SERVER_URL + "ai_provider";
 AI_POLL_INTERVAL = 3000;
 /* Polls before "Choose for me" gives up. The server caps one gateway batch at
-   180s (DEFAULT_BATCH_BUDGET_SECONDS) and a large job can run several, so this
-   has to outlast the server's own budget rather than race it. 100 x 3s = 5 min. */
-AI_SUGGEST_MAX_POLLS = 100;
+   180s (DEFAULT_BATCH_BUDGET_SECONDS) and nothing caps the number of batches --
+   a job with more than 30 residual names runs two or more, so 100 x 3s = 5 min
+   was SHORTER than the server's own worst case and the browser abandoned runs
+   that were still executing. PySiQ never enforces the timeout passed to
+   enqueue, so the worker would keep going with nobody left to collect. 400 x 3s
+   = 20 min covers six slow batches. */
+AI_SUGGEST_MAX_POLLS = 400;
+
+/* Consecutive dropped requests before the poll reports the transport error
+   rather than a timeout. Separate from the ceiling above: one blip must not end
+   a run, but a server that is down should say so. */
+AI_SUGGEST_MAX_TRANSPORT_FAILURES = 5;
 // How many consecutive unhandled refusals from /ai_interpret_status before the
 // widget gives up and says so. A refusal it recognises as permanent -- the job
 // no longer exists -- stops immediately and does not consume these; this is the

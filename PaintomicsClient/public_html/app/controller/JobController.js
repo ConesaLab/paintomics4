@@ -602,6 +602,7 @@ function JobController() {
 		var me = this;
 		var jobID = jobView.getModel().getJobID();
 		var attempts = 0;
+		var failures = 0;
 
 		var fail = function (message) {
 			jobView.setAIButtonState("idle");
@@ -657,8 +658,16 @@ function JobController() {
 				error: function (xhr) {
 					// One dropped request must not end the poll: the AI status
 					// poll shipped with exactly that bug and died on a single
-					// blip. Only a run of them gives up, via the attempt ceiling.
-					if (attempts <= AI_SUGGEST_MAX_POLLS) {
+					// blip. Only a run of them gives up.
+					//
+					// Counted separately from `attempts`. Guarded on that, the
+					// branch below was unreachable -- poll() returns early once
+					// `attempts` passes the ceiling, so inside a running poll
+					// the test was always true and a server that was down for
+					// the whole window reported "taking longer than expected"
+					// instead of the transport error it actually hit.
+					failures++;
+					if (failures <= AI_SUGGEST_MAX_TRANSPORT_FAILURES) {
 						setTimeout(poll, AI_POLL_INTERVAL);
 						return;
 					}

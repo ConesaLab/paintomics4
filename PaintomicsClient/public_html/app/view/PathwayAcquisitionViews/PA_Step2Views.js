@@ -655,10 +655,14 @@ function PA_Step2JobView() {
 			? ' <b>' + summary.unsure + '</b> left for you.'
 			: '';
 
-		var model = summary.model
-			? '<div class="aiSuggestModel">' + Ext.String.htmlEncode(summary.model) +
-			  ' \u00b7 every choice checked against its own card</div>'
-			: '';
+		// The model identifier is deliberately not shown, here or anywhere else
+		// in the interface -- the same rule PA_Step1Views states for the consent
+		// copy. Naming a specific build invites the reader to evaluate the model
+		// rather than the decision in front of them, and the string goes stale
+		// the moment the gateway is repointed. What matters to a reader is that
+		// the answers were checked, which is what this says.
+		var model = '<div class="aiSuggestModel">' +
+			'Every choice was checked against the candidates on its own card.</div>';
 
 		return '' +
 		'<div class="contentbox aiSuggestSummary">' +
@@ -693,7 +697,13 @@ function PA_Step2JobView() {
 
 		// One snapshot of every tick before anything moves, so Undo is exact
 		// rather than an attempt to invert the decisions one at a time.
-		me.aiSnapshot = me.items.map(function(compoundSetView) {
+		//
+		// Taken ONCE. Overwriting it on "Choose again" replaced the user's own
+		// selection with the previous run's output, so Undo restored the AI's
+		// first answer while the button still promised "put every tick back as
+		// it was". The snapshot is cleared by undoAISuggestions, so the next
+		// run after an Undo takes a fresh one.
+		me.aiSnapshot = me.aiSnapshot || me.items.map(function(compoundSetView) {
 			var model = compoundSetView.getModel();
 			return {
 				view: compoundSetView,
@@ -705,9 +715,41 @@ function PA_Step2JobView() {
 
 		var counts = {byRule: 0, byAI: 0, unsure: 0};
 
+		// Which KEGG compound is already spoken for, and by which input name.
+		// Step 1 de-duplicates across boxes on purpose (JobController unselects
+		// the losing copy when two names propose the same id), and the warning
+		// on the checkbox exists for the same reason -- but that warning only
+		// fires on a real `change` event, so applying picks set by set would
+		// have re-created exactly the duplicates both guards prevent, silently,
+		// and posted the same compound twice to step 3.
+		var claimedBy = {};
+		me.items.forEach(function(compoundSetView) {
+			var model = compoundSetView.getModel();
+			model.getMainCompounds().concat(model.getOtherCompounds())
+				.forEach(function(compound) {
+					if (compound.selected === true) {
+						claimedBy[compound.getID()] = model.getTitle();
+					}
+				});
+		});
+
 		(payload.decisions || []).forEach(function(decision) {
 			var compoundSetView = byTitle[decision.title];
 			if (!compoundSetView || !decision.keggID) {
+				return;
+			}
+
+			// Already selected under a DIFFERENT input name: leave this set
+			// alone and say so, rather than duplicate the compound.
+			var owner = claimedBy[decision.keggID];
+			if (owner !== undefined && owner !== decision.title) {
+				counts.unsure++;
+				compoundSetView.aiState = {
+					status: "unsure", keggID: null, tier: decision.tier,
+					confidence: "",
+					reason: "\u201c" + owner + "\u201d already uses this compound, " +
+						"so it was left for you to decide"
+				};
 				return;
 			}
 
@@ -717,8 +759,21 @@ function PA_Step2JobView() {
 			// too put a chip on 52 of 47 cards, at which point the chip stops
 			// meaning anything and the eye cannot find the changes.
 			if (!compoundSetView.selectOnly(decision.keggID)) {
+				claimedBy[decision.keggID] = decision.title;
 				return;
 			}
+
+			// selectOnly cleared this set's other ticks; release their claims so
+			// a later decision can legitimately take one of them.
+			var model = compoundSetView.getModel();
+			model.getMainCompounds().concat(model.getOtherCompounds())
+				.forEach(function(compound) {
+					if (claimedBy[compound.getID()] === decision.title &&
+						compound.getID() !== decision.keggID) {
+						delete claimedBy[compound.getID()];
+					}
+				});
+			claimedBy[decision.keggID] = decision.title;
 
 			if (decision.tier === "ai") { counts.byAI++; } else { counts.byRule++; }
 			compoundSetView.aiState = {
@@ -740,7 +795,7 @@ function PA_Step2JobView() {
 		});
 
 		me.aiSummary = {byRule: counts.byRule, byAI: counts.byAI,
-		                unsure: counts.unsure, model: payload.model || ""};
+		                unsure: counts.unsure};
 		me.refreshCompoundsPanel();
 		return counts;
 	};
@@ -813,29 +868,48 @@ function PA_Step2JobView() {
 		// different items array.
 		var panel = $(panelComponent.el.dom);
 
-		panel.on("change", "input[type=checkbox][name=metabolite]", function() {
+		// Every binding below is namespaced and cleared first, because this
+		// function runs again on each apply and undo.
+		//
+		// The assumption that made that safe was wrong. Ext's Component.update()
+		// resolves to `getTargetEl().update(html)` -> `dom.innerHTML = html`, so
+		// the panel ELEMENT survives and only its children are replaced --
+		// delegated handlers bound to it survive with it. Re-binding therefore
+		// added a second copy of each: measured after one "Choose for me", the
+		// panel carried six click handlers instead of three, so
+		// showOtherCompoundsHandler ran twice per click -- the first call opened
+		// the alternatives and the second read `hasClass('visible')` as true and
+		// closed them again. "Show" became a dead button, and every checkbox
+		// fired its duplicate-compound warning twice.
+		panel.off(".paStep2");
+
+		panel.on("change.paStep2", "input[type=checkbox][name=metabolite]", function() {
 			me.compoundSelectionHandler($(this));
 		});
 
-		panel.on("click", ".showOtherCompoundsButton", function() {
+		panel.on("click.paStep2", ".showOtherCompoundsButton", function() {
 			me.showOtherCompoundsHandler($(this));
 		});
 
-		// Delegated, like everything else bound here: the AI controls live
-		// inside this panel now, and the panel's HTML is replaced wholesale
-		// each time picks are applied or undone. A handler bound straight to
-		// the button would be thrown away with the element it was bound to,
-		// and Undo would stop responding after the first use.
-		panel.on("click", "#aiSuggestButton", function() {
+		// Delegated rather than bound to the buttons themselves: the AI controls
+		// live inside this panel, and its HTML is replaced wholesale on every
+		// apply and undo, so a handler bound to the button would go with it.
+		panel.on("click.paStep2", "#aiSuggestButton", function() {
 			me.aiSuggestHandler();
 		});
 
-		panel.on("click", "#aiUndoButton", function() {
+		panel.on("click.paStep2", "#aiUndoButton", function() {
 			me.undoAISuggestions();
 			me.setAIButtonState("idle");
 		});
 
-		Ext.create('Ext.tip.ToolTip', {
+		// Same story: one tooltip per panel, not one per refresh. Each call used
+		// to leak another Ext.tip.ToolTip bound to the same target, which is the
+		// per-candidate tooltip cost this panel was rewritten to avoid.
+		if (me.compoundTooltip) {
+			me.compoundTooltip.destroy();
+		}
+		me.compoundTooltip = Ext.create('Ext.tip.ToolTip', {
 			target: panel[0],
 			delegate: '.metaboliteCompound',
 			listeners: {

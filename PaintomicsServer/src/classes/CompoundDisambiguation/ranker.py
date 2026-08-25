@@ -231,23 +231,27 @@ def rankCompoundSet(compoundSet, onMapIDs, organismLabel="", synonymsByID=None):
     # Rule 2 -- exactly one main candidate this organism actually draws. A
     # compound on no pathway of the species contributes nothing downstream, so
     # dropping it cannot change a result except by removing a false positive.
-    if onMapIDs and mainIDs:
-        onMap = mainIDs & set(onMapIDs)
-        if len(onMap) == 1:
+    # Applied to whichever pool this set actually has. Guarded on `mainIDs` it
+    # skipped the sets that need it MOST: a name where nothing scores 0.9 has
+    # only fuzzy substring hits, and those went to the model unfiltered --
+    # including compounds drawn on no pathway of the organism at all.
+    pool = mainIDs or set(byID.keys())
+    if onMapIDs:
+        onMap = pool & set(onMapIDs)
+        if len(onMap) == 1 and mainIDs:
             keggID = next(iter(onMap))
             where = ("a %s pathway" % organismLabel) if organismLabel else "a pathway of this organism"
             return {"title": title, "status": "resolved", "keggID": keggID,
-                    "tier": "deterministic", "candidates": _promptPool(byID, mainIDs),
+                    "tier": "deterministic", "candidates": _promptPool(byID, pool),
                     "reason": "the only matching candidate drawn on " + where}
         if len(onMap) > 1:
-            mainIDs = onMap  # narrow what the model is asked to choose between
+            pool = onMap  # narrow what the model is asked to choose between
 
     # What is left is a real judgement: L- against D-, an anomer, or a generic
     # form competing with a specific one. That goes to the model.
-    preferred = mainIDs or set(byID.keys())
     return {"title": title, "status": "residual", "tier": "residual",
-            "candidates": _promptPool(byID, preferred),
-            "reason": "%d candidates remain after the deterministic rules" % len(preferred)}
+            "candidates": _promptPool(byID, pool),
+            "reason": "%d candidates remain after the deterministic rules" % len(pool)}
 
 
 def partitionCompoundSets(compoundSets, onMapIDs, organismLabel="", synonymsByID=None):
@@ -363,7 +367,11 @@ def loadCompoundSynonyms(keggIDs):
     @param {Iterable} keggIDs
     @returns {Dict} keggID -> [names]
     """
-    keggIDs = list(keggIDs or ())[:MAX_SYNONYM_LOOKUP]
+    # Sorted before slicing: `collectKeggIDs` returns a set, and slicing one
+    # takes whatever order it happened to iterate in. Past the cap that gave a
+    # different subset of candidates their real names on every run, and so a
+    # different prompt -- which is the determinism TEMPERATURE = 0.0 is set for.
+    keggIDs = sorted(keggIDs or ())[:MAX_SYNONYM_LOOKUP]
     if not keggIDs:
         return {}
 

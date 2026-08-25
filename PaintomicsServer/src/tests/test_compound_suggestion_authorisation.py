@@ -96,7 +96,9 @@ class ServletGuardsTest(unittest.TestCase):
 
     def setUp(self):
         self._patched = {}
-        self._patch(servlet.UserSessionManager, "isValidUser", lambda self, u, t: True)
+        # *_ rather than named parameters: the stub ignores them, and vulture
+        # reports a named-but-unused one as dead code at 100% confidence.
+        self._patch(servlet.UserSessionManager, "isValidUser", lambda *_: True)
         self._patch(servlet, "_requireCapability", lambda: None)
         self.queue = FakeQueue()
 
@@ -112,7 +114,11 @@ class ServletGuardsTest(unittest.TestCase):
                 setattr(target, name, old)
 
     def _run(self, job, form=None):
-        servlet._requireJobAccess = lambda jobID, userID: job
+        # Through _patch, so tearDown restores it. Assigned directly, the stub
+        # outlived the test and every later test in the same interpreter got a
+        # permanently stubbed authorisation function -- an access-control
+        # regression in _requireJobAccess would have passed unnoticed.
+        self._patch(servlet, "_requireJobAccess", lambda jobID, userID: job)
         response = FakeResponse()
         # `form if form is not None` and not `form or ...`: an empty form is
         # exactly the missing-jobID case, and it is falsy.

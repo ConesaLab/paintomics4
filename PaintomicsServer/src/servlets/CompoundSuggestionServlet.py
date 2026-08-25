@@ -136,7 +136,7 @@ def runCompoundSuggestion(jobID):
     # see coerceCompoundSets for why that is normalised here.
     compoundSets = ranker.coerceCompoundSets(jobInstance.getFoundCompounds())
     if not compoundSets:
-        return {"decisions": [], "unresolved": [], "model": "",
+        return {"decisions": [], "unresolved": [],
                 "stats": {"deterministic": 0, "ai": 0, "unresolved": 0, "rejected": 0}}
 
     organism = jobInstance.getOrganism()
@@ -166,10 +166,13 @@ def runCompoundSuggestion(jobID):
                    "candidates": entry.get("candidates", [])}
                   for entry in suggestions["abstained"]]
 
+    # The model identifier is deliberately NOT in this payload. The interface
+    # never names a specific build (see PA_Step1Views on the consent copy), and
+    # the surest way to keep it that way is not to hand the browser the string.
+    # It stays in the server log, where the audit trail wants it.
     return {
         "decisions": decisions,
         "unresolved": unresolved,
-        "model": suggestions.get("model", ""),
         "stats": {
             "deterministic": len(resolved),
             "ai": len(suggestions["accepted"]),

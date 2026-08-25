@@ -121,6 +121,14 @@ def validateChoice(choice, decision):
         return {"outcome": "abstained", "keggID": None, "confidence": confidence,
                 "reason": reason, "detail": "the model abstained"}
 
+    # Matched case-insensitively. The ABSTAIN token already was, and a gateway
+    # that dropped response_format answers in free text, where "c00041" for
+    # C00041 is a formatting difference -- not the invented id this check is
+    # for. Rejecting it logged a real closed-set violation that never happened.
+    canonical = {cid.upper(): cid for cid in candidateIDs}
+    if keggID.upper() in canonical:
+        keggID = canonical[keggID.upper()]
+
     if keggID not in candidateIDs:
         # Either invented, or lifted from another input name in the same batch.
         # Both are the same failure from here: an id this name never matched.
@@ -229,7 +237,25 @@ def suggestCompounds(decisions, context, client=None, batchSize=DEFAULT_BATCH_SI
         return {"accepted": [], "abstained": [], "rejected": [], "model": "", "batches": 0}
 
     if client is None:
-        client = buildClient()
+        try:
+            client = buildClient()
+        except Exception as ex:
+            # A missing or malformed key, or a provider entry without an
+            # api_base: nothing here can run. That must not cost the caller the
+            # tier-1 decisions it already has, which needed no gateway at all --
+            # raising from here failed the whole queued job and the browser was
+            # told "AI compound selection failed" for a run that had already
+            # settled most of the sets by rule.
+            logging.warning("COMPOUND DISAMBIGUATION - job %s: no usable AI client "
+                            "(%s); leaving %d set(s) to the user", jobID, ex,
+                            len(decisions))
+            return {"accepted": [], "rejected": [],
+                    "abstained": [{"title": d["title"], "keggID": None,
+                                   "confidence": "", "reason": "",
+                                   "detail": "the AI service is not available",
+                                   "tier": "ai", "candidates": d.get("candidates", [])}
+                                  for d in decisions],
+                    "model": "", "batches": 0}
 
     from src.classes.AIInterpret.llm_client import json_schema_format
 
@@ -272,6 +298,16 @@ def suggestCompounds(decisions, context, client=None, batchSize=DEFAULT_BATCH_SI
     # The audit trail. Nothing about these choices is written to the job, so
     # the log is where "which compound did the model pick for job X, and what
     # did it refuse" is recoverable afterwards.
+    #
+    # The model identifier is named HERE and only here. It is deliberately kept
+    # out of the browser payload (the interface never names a build), which is
+    # exactly why it has to be recorded on this side -- otherwise "which model
+    # chose C00041 for job X" is answerable from nowhere at all.
+    logging.info("COMPOUND DISAMBIGUATION - job %s: %d batch(es) answered by %s "
+                 "(%d accepted, %d abstained, %d rejected)",
+                 jobID, batches, getattr(client, "model", "") or "unknown",
+                 len(accepted), len(abstained), len(rejected))
+
     for entry in accepted:
         logging.info("COMPOUND DISAMBIGUATION - job %s: %r -> %s (%s) %s",
                      jobID, entry["title"], entry["keggID"], entry["confidence"],
