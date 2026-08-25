@@ -290,6 +290,92 @@ class PerRingBudgetTest(unittest.TestCase):
         self.assertNotIn("values.relevant or", window)
 
 
+class CompoundNamesTest(unittest.TestCase):
+    """Readable names, and where the ids to name come from.
+
+    The panel printed "C12145" everywhere. mappingComp cannot help -- it holds
+    what the USER uploaded, so a metabolomics file keyed by KEGG id makes it
+    the id again (all 213 entries on job fh304774Lw).
+    """
+
+    def _read(self, *parts):
+        path = os.path.join(os.path.dirname(os.path.dirname(
+            os.path.abspath(__file__))), *parts)
+        with open(path, "r", encoding="utf-8") as handle:
+            return handle.read()
+
+    def _predicate(self):
+        root = os.path.dirname(os.path.dirname(os.path.dirname(
+            os.path.abspath(__file__))))
+        if root not in sys.path:
+            sys.path.insert(0, root)
+        from src.servlets.PathwayAcquisitionServlet import (
+            _isDisplayableCompoundName)
+        return _isDisplayableCompoundName
+
+    def test_a_real_name_is_displayable(self):
+        keep = self._predicate()
+        self.assertTrue(keep("ATP", "C00002"))
+        self.assertTrue(keep("Phytoceramide", "C12145"))
+        self.assertTrue(keep("  H2O  ", "C00001"))
+
+    def test_the_id_is_not_a_name(self):
+        """kegg_compounds stores the id itself as one of the rows, which is
+        exactly why an upload keyed by id came back named "C00001, C00001"."""
+        self.assertFalse(self._predicate()("C00002", "C00002"))
+
+    def test_chebi_and_bare_numbers_are_not_names(self):
+        keep = self._predicate()
+        self.assertFalse(keep("chebi:15422", "C00002"))
+        self.assertFalse(keep("CHEBI:15422", "C00002"))
+        self.assertFalse(keep("15422", "C00002"))
+
+    def test_empty_is_not_a_name(self):
+        keep = self._predicate()
+        self.assertFalse(keep("", "C00002"))
+        self.assertFalse(keep(None, "C00002"))
+        self.assertFalse(keep("   ", "C00002"))
+
+    def test_the_route_is_registered_and_imported(self):
+        server = self._read("paintomicsserver.py")
+        self.assertIn("/pa_hub_names", server)
+        self.assertIn("pathwayAcquisitionHubNames", server)
+
+    def test_the_route_is_guarded(self):
+        source = self._read("servlets", "PathwayAcquisitionServlet.py")
+        start = source.index("def pathwayAcquisitionHubNames")
+        body = source[start:start + 3000]
+        self.assertIn("_hubOwnedJob(", body)
+
+    def test_the_ids_come_from_the_request_not_the_stored_rows(self):
+        """Jobs written before the schema-2 rewrite still hold headerless
+        8-element LISTS in Mongo -- 860 of them on job fh304774Lw -- and only
+        pathwayAcquisitionRecoverJob re-scores them on the way out. Reading
+        hubAnalysisResult here returned 0 names for exactly that reason."""
+        source = self._read("servlets", "PathwayAcquisitionServlet.py")
+        start = source.index("def pathwayAcquisitionHubNames")
+        # Bounded at the NEXT def, not by a character count: a 3000-char window
+        # ran into the following function and matched its prose instead.
+        body = source[start:source.index("\ndef ", start + 1)]
+        code = body[body.index("    try:"):]
+        self.assertIn('request.form.get("ids")', code)
+        self.assertNotIn("hubAnalysisResult", code)
+
+    def test_the_id_list_is_capped(self):
+        source = self._read("servlets", "PathwayAcquisitionServlet.py")
+        start = source.index("def pathwayAcquisitionHubNames")
+        body = source[start:start + 3000]
+        self.assertIn("_HUB_NAMES_MAX_IDS", body)
+
+    def test_the_subgraph_carries_names_for_its_own_compounds(self):
+        """A ring can hold compounds the job never measured, so never scored:
+        without this they would be the only nodes still labelled by id."""
+        source = self._read("servlets", "PathwayAcquisitionServlet.py")
+        start = source.index("def pathwayAcquisitionHubSubgraph")
+        body = source[start:start + 5000]
+        self.assertIn('payload["names"]', body)
+
+
 def main():
     suite = unittest.TestLoader().loadTestsFromModule(sys.modules[__name__])
     result = unittest.TextTestRunner(verbosity=2).run(suite)

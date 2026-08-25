@@ -498,6 +498,78 @@ class SeedSummaryTest(unittest.TestCase):
         self.assertIn("Cumulative, and counting only", self._view())
 
 
+class NamesNotIdsTest(unittest.TestCase):
+    """The panel shows names. It showed "C12145" and "225256" everywhere.
+
+    Two different sources, because the data has two: compound names come from
+    the server (global-paintomics.kegg_compounds), gene names are already in
+    the browser as globalExpressionData's `keggName` -- the SYMBOL the mapper
+    resolved (Aanat, Abca1, Krt5).
+    """
+
+    def _view(self):
+        with open(HUB_NETWORK_VIEW, "r", encoding="utf-8") as handle:
+            body = handle.read()
+        body = re.sub(r"/\*.*?\*/", "", body, flags=re.S)
+        return re.sub(r"(?m)^\s*//.*$", "", body)
+
+    def test_the_name_map_is_fetched_once(self):
+        body = self._view()
+        self.assertIn("SERVER_URL_PA_HUB_NAMES", body)
+        self.assertIn("loadNames", body)
+
+    def test_genes_are_named_from_keggname(self):
+        body = self._view()
+        start = body.index("this.nameOf = function")
+        window = body[start:start + 700]
+        self.assertIn("keggName", window)
+        self.assertIn("compoundNames", window)
+
+    def test_a_symbol_equal_to_the_id_is_not_a_name(self):
+        """keggName is not always resolved; when it is the id, it adds nothing
+        and the id should be printed once, not twice."""
+        body = self._view()
+        start = body.index("this.nameOf = function")
+        window = body[start:start + 700]
+        self.assertIn("symbol !== id", window)
+
+    def test_the_id_survives_beside_the_name(self):
+        """A KEGG id is what a reader carries to another tool, and several
+        compounds share a common name."""
+        body = self._view()
+        self.assertIn("nameWithID", body)
+        self.assertIn("pa-hub-id", body)
+
+    def test_the_list_row_carries_the_id(self):
+        body = self._view()
+        start = body.index("this.renderList = function")
+        window = body[start:start + 2200]
+        self.assertIn("pa-hub-item-meta", window)
+        self.assertIn("m.name === m.ID", window)
+
+    def test_canvas_labels_are_truncated_but_tooltips_are_not(self):
+        """Compound names run long ("Ultra-long-chain omega-hydroxy fatty
+        acid"); a label wider than its ring is worse than an id."""
+        body = self._view()
+        start = body.index("this.elements = function")
+        window = body[start:start + 1600]
+        self.assertIn("fullName", window)
+        self.assertIn("name.length > 24", window)
+        self.assertIn('n.data("fullName")', body)
+
+    def test_ring_compound_names_arrive_with_the_subgraph(self):
+        body = self._view()
+        self.assertIn("mergeNames(payload.names", body)
+
+    def test_mappingcomp_is_only_a_fallback(self):
+        """It holds what the USER uploaded, which for a file keyed by KEGG id
+        is the id again -- so it can be a last resort and nothing more."""
+        body = self._view()
+        self.assertEqual(body.count("mappingComp"), 1)
+        start = body.index("this.nameOf = function")
+        self.assertGreater(body.index("mappingComp"), start)
+
+
 def main():
     suite = unittest.TestLoader().loadTestsFromModule(sys.modules[__name__])
     result = unittest.TextTestRunner(verbosity=2).run(suite)

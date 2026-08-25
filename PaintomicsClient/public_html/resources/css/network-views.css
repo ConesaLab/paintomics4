@@ -740,6 +740,15 @@
 	cursor: default;
 }
 
+/* The KEGG id, kept beside the name it was replaced by: an id is what a reader
+   carries to another tool, and several compounds share a common name. */
+.pa-hub-id {
+	font-size: 11px;
+	font-weight: 400;
+	color: var(--pa-ink-muted, #595959);
+	font-variant-numeric: tabular-nums;
+}
+
 .pa-hub-tip-hint {
 	color: var(--pa-ink-muted, #595959);
 	font-size: 11px;

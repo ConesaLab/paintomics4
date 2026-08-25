@@ -58,6 +58,7 @@ function PA_Step3HubNetworkView() {
 	this.charts = [];        // Highcharts instances owned by the detail card
 	this.metabolites = [];   // one entry per compound, with its four step rows
 	this.featureCache = {};  // id|kind -> /pa_hub_feature payload
+	this.compoundNames = {}; // KEGG compound id -> readable name
 	this.sortKey = "padjust";
 	this.query = "";
 
@@ -80,11 +81,80 @@ function PA_Step3HubNetworkView() {
 
 	/** Everything that needs the panel's DOM to exist. */
 	this.mount = function () {
+		this.loadNames();
 		this.renderList();
 		this.renderCount();
 		this.renderSteps();
 		this.bindControls();
 		this.selectFirst();
+	};
+
+	/**
+	 * Readable names for the scored compounds, in one call.
+	 *
+	 * The list was titled "C12145". mappingComp cannot help -- it holds the
+	 * name the USER uploaded, so a metabolomics file keyed by KEGG id makes it
+	 * the id again (measured: every one of this job's 213 entries). The names
+	 * live in global-paintomics.kegg_compounds, server side only.
+	 *
+	 * Asynchronous on purpose: the panel renders from ids immediately and
+	 * re-titles itself when the map lands, rather than holding an empty list
+	 * behind a request.
+	 */
+	this.loadNames = function () {
+		var me = this;
+		if (!me.metabolites.length) { return; }
+		// The ids come from HERE, not from the job's stored rows: jobs written
+		// before the schema-2 rewrite still hold headerless lists in Mongo, and
+		// only the recovery route upgrades them on the way out. This view is
+		// already holding the upgraded rows.
+		var ids = me.metabolites.map(function (m) { return m.ID; }).join(",");
+		$.post(SERVER_URL_PA_HUB_NAMES, { jobID: me.model.getJobID(), ids: ids })
+			.done(function (payload) {
+				if (typeof payload === "string") {
+					try { payload = JSON.parse(payload); } catch (e) { payload = null; }
+				}
+				if (!payload || !payload.success || !payload.names) { return; }
+				me.mergeNames(payload.names);
+				me.buildList();
+				me.renderList();
+				if (me.seed) { me.setSeedName(me.nameOf(me.seed, "compound")); }
+			});
+	};
+
+	this.mergeNames = function (names) {
+		for (var id in names) {
+			if (names[id]) { this.compoundNames[id] = names[id]; }
+		}
+	};
+
+	/**
+	 * The display name for one node, or its id when nothing better is known.
+	 *
+	 * Compounds are named from the server map. Genes are named from
+	 * globalExpressionData's `keggName`, which is the gene SYMBOL the mapper
+	 * resolved (Aanat, Abca1, ...) -- so every measured gene has one, and only
+	 * genes the job never measured fall back to the KEGG id. That is also
+	 * every gene node this panel labels, since labels go to the seed and the
+	 * DE nodes.
+	 */
+	this.nameOf = function (id, kind) {
+		if (kind === "compound") {
+			return this.compoundNames[id] ||
+			       ((this.model && this.model.mappingComp) || {})[id] || id;
+		}
+		var entry = this.expressionFor(id, kind);
+		var symbol = entry && entry.keggName;
+		return (symbol && symbol !== id) ? symbol : id;
+	};
+
+	/** "Phytoceramide (C12145)", or just the id when it IS the name. */
+	this.nameWithID = function (id, kind) {
+		var name = this.nameOf(id, kind);
+		return (name === id) ? Ext.String.htmlEncode(id)
+		                     : Ext.String.htmlEncode(name) +
+		                       ' <span class="pa-hub-id">' +
+		                       Ext.String.htmlEncode(id) + '</span>';
 	};
 
 	/**
@@ -98,7 +168,6 @@ function PA_Step3HubNetworkView() {
 	 */
 	this.buildList = function () {
 		var rows = (this.model && this.model.getHubAnalysisResult()) || {};
-		var mapping = (this.model && this.model.mappingComp) || {};
 		var byID = {};
 		for (var key in rows) {
 			var row = paHubRow(rows[key]);
@@ -107,7 +176,7 @@ function PA_Step3HubNetworkView() {
 			if (!entry) {
 				entry = byID[row.ID] = {
 					ID: row.ID,
-					name: mapping[row.ID] || row.ID,
+					name: this.nameOf(row.ID, "compound"),
 					steps: {}
 				};
 			}
@@ -204,7 +273,11 @@ function PA_Step3HubNetworkView() {
 				(m.ID === me.seed ? " is-current" : "") +
 				'" data-id="' + m.ID + '" href="#">' +
 				'<span class="pa-hub-item-name">' + Ext.String.htmlEncode(m.name) + '</span>' +
-				'<span class="pa-hub-item-meta">FDR ' + me.fmt(fdr) +
+				// The id stays on the row: a KEGG id is what a reader carries
+				// to another tool, and several compounds share a common name.
+				'<span class="pa-hub-item-meta">' +
+				(m.name === m.ID ? "" : m.ID + ' &middot; ') +
+				'FDR ' + me.fmt(fdr) +
 				' &middot; ' + m.den + ' DE &middot; best at step ' + m.bestStep + '</span>' +
 				'</a>';
 		}).join("");
@@ -284,7 +357,7 @@ function PA_Step3HubNetworkView() {
 		me.clearDetail();
 		me.renderList();
 		me.renderSteps();
-		me.setSeedName(entry ? entry.name : compoundID);
+		me.setSeedName(me.nameOf(compoundID, "compound"));
 		$.post(SERVER_URL_PA_HUB_SUBGRAPH, {
 			jobID: me.model.getJobID(),
 			compoundID: compoundID,
@@ -304,6 +377,9 @@ function PA_Step3HubNetworkView() {
 				        "for this organism.");
 				return;
 			}
+			// Ring compounds the job never measured are not in the scored
+			// list, so their names arrive with the subgraph instead.
+			me.mergeNames(payload.names || {});
 			me.payload = payload;
 			me.render(payload);
 			me.renderSteps();
@@ -355,12 +431,17 @@ function PA_Step3HubNetworkView() {
 
 	this.elements = function (payload) {
 		var me = this, out = [];
-		var mapping = (me.model && me.model.mappingComp) || {};
 		payload.nodes.forEach(function (n) {
 			var state = (n.step === 0) ? "seed" : me.stateOf(n.id, n.type);
+			var name = me.nameOf(n.id, n.type);
 			out.push({ group: "nodes", data: {
 				id: n.id,
-				label: (n.step === 0) ? (mapping[n.id] || n.id) : n.id,
+				// Truncated on the canvas only. Compound names run long
+				// ("Ultra-long-chain omega-hydroxy fatty acid"), and a label
+				// wider than its ring is worse than an id. The tooltip and the
+				// detail card carry the whole name.
+				label: (name.length > 24) ? name.slice(0, 23) + "\u2026" : name,
+				fullName: name,
 				step: n.step,
 				kind: n.type,
 				state: state,
@@ -496,7 +577,8 @@ function PA_Step3HubNetworkView() {
 			if (r.total > 0) { reach = Math.max(reach, r.step); }
 		});
 		if (this.level > reach) {
-			lines.push("<b>" + (payload.seed || "This metabolite") +
+			lines.push("<b>" + Ext.String.htmlEncode(payload.seed
+					? this.nameOf(payload.seed, "compound") : "This metabolite") +
 				"</b> has no neighbours beyond step " + reach +
 				", so there is nothing to show at step " + this.level + ".");
 		}
@@ -576,7 +658,11 @@ function PA_Step3HubNetworkView() {
 			var n = event.target;
 			n.addClass("hovered");
 			var step = n.data("step");
-			tip.innerHTML = "<b>" + n.data("label") + "</b><br>" +
+			var label = n.data("fullName") || n.data("label"), id = n.id();
+			tip.innerHTML = "<b>" + Ext.String.htmlEncode(label) + "</b>" +
+				(label === id ? "" :
+					' <span class="pa-hub-tip-hint">' +
+					Ext.String.htmlEncode(id) + "</span>") + "<br>" +
 				(n.data("kind") || "feature") + " · " + WORDS[n.data("state")] +
 				(step ? "<br>" + step + " step" + (step === 1 ? "" : "s") + " away" : "") +
 				'<br><span class="pa-hub-tip-hint">click for expression</span>';
@@ -588,7 +674,8 @@ function PA_Step3HubNetworkView() {
 		});
 		me.cy.on("mouseover", "edge", function (event) {
 			var e = event.target;
-			tip.innerHTML = "<b>" + e.data("source") + " — " + e.data("target") +
+			tip.innerHTML = "<b>" + Ext.String.htmlEncode(me.edgeEnd(e, "source")) +
+				" — " + Ext.String.htmlEncode(me.edgeEnd(e, "target")) +
 				"</b><br>" + e.data("kind") +
 				(e.data("subtype") ? " · " + e.data("subtype") : "") +
 				(e.data("pathway") ? "<br>" + e.data("pathway") : "");
@@ -600,6 +687,14 @@ function PA_Step3HubNetworkView() {
 			tip.style.left = (event.renderedPosition.x + 14) + "px";
 			tip.style.top = (event.renderedPosition.y + 14) + "px";
 		});
+	};
+
+	/** An edge endpoint by name, using the node already on the graph. */
+	this.edgeEnd = function (edge, which) {
+		var id = edge.data(which);
+		var node = this.cy && this.cy.getElementById(id);
+		return (node && node.length)
+			? (node.data("fullName") || node.data("label")) : id;
 	};
 
 	this.bindTap = function () {
@@ -722,12 +817,9 @@ function PA_Step3HubNetworkView() {
 				  me.fmt(fdr) + '</td></tr>';
 		}).join("");
 
-		// mappingComp falls back to the ID, so printing both unconditionally
-		// rendered "C22353  C22353 · the metabolite ...".
-		var named = (entry.name !== entry.ID);
 		var host = me.openDetail(
-			'<h3 class="pa-hub-detail-title">' + Ext.String.htmlEncode(entry.name) +
-			  ' <span class="pa-hub-detail-where">' + (named ? entry.ID + ' &middot; ' : "") +
+			'<h3 class="pa-hub-detail-title">' + me.nameWithID(entry.ID, "compound") +
+			  ' <span class="pa-hub-detail-where">' +
 			  'the metabolite this network is centred on</span></h3>' +
 			'<div class="pa-hub-detail-body">' +
 			  '<table class="pa-hub-steptable">' +
@@ -757,7 +849,7 @@ function PA_Step3HubNetworkView() {
 		if (step === 0) { me.showSeedDetail(true); return; }
 
 		me.clearDetail();
-		var seedName = (me.model.mappingComp || {})[me.seed] || me.seed;
+		var seedName = me.nameOf(me.seed, "compound");
 		var WORDS = { up: "up in this comparison", down: "down in this comparison",
 		              quiet: "measured, not differentially expressed",
 		              absent: "not measured in any omic you uploaded" };
@@ -767,7 +859,8 @@ function PA_Step3HubNetworkView() {
 		// compoundRegulateFeatures shipped node sets, so no earlier view could
 		// answer "via what?" for anything past the first ring.
 		var edges = node.connectedEdges().map(function (e) {
-			return '<li><b>' + e.data("source") + " → " + e.data("target") +
+			return '<li><b>' + Ext.String.htmlEncode(me.edgeEnd(e, "source")) +
+				" → " + Ext.String.htmlEncode(me.edgeEnd(e, "target")) +
 				'</b> · ' + e.data("kind") +
 				(e.data("subtype") ? " · " + e.data("subtype") : "") +
 				(e.data("pathway") ? ' <span class="pa-hub-edge-src">' +
@@ -775,7 +868,7 @@ function PA_Step3HubNetworkView() {
 		}).slice(0, 8).join("");
 
 		var host = me.openDetail(
-			'<h3 class="pa-hub-detail-title">' + Ext.String.htmlEncode(id) +
+			'<h3 class="pa-hub-detail-title">' + me.nameWithID(id, kind) +
 			  ' <span class="pa-hub-detail-where">' + kind + " &middot; " + step +
 			  " step" + (step === 1 ? "" : "s") + " from " +
 			  Ext.String.htmlEncode(seedName) + '</span></h3>' +

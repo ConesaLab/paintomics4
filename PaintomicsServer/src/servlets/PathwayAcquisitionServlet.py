@@ -1646,6 +1646,122 @@ def _hubOwnedJob(jobID, userID, tag):
     return jobInstance, None
 
 
+_KEGG_COMPOUND_NAMES = None
+
+
+def _isDisplayableCompoundName(name, compoundID):
+    """Whether a kegg_compounds row carries something worth showing a reader.
+
+    That collection stores one document per NAME, and "name" includes the KEGG
+    id itself and the compound's ChEBI ids -- which is why an upload keyed by
+    id comes back named "C00001, C00001". Measured on the live table: C00002
+    holds ATP, "Adenosine 5'-triphosphate", "chebi:15422" and "15422".
+    """
+    name = str(name or "").strip()
+    if not name or name == compoundID:
+        return False
+    if name.isdigit() or name.lower().startswith("chebi:"):
+        return False
+    return True
+
+
+def _keggCompoundNames():
+    """KEGG compound id -> a readable name, loaded once per process.
+
+    The hub panel had nothing better to print than "C12145". mappingComp is no
+    help: it holds the name the USER uploaded, and a metabolomics file keyed by
+    KEGG id makes that the id again. The real names are in
+    global-paintomics.kegg_compounds, which the mapper already reads.
+
+    That collection stores one document per NAME, and among them the id itself
+    and the compound's ChEBI ids -- which is why an upload keyed by id comes
+    back named "C00001, C00001". Those rows are skipped here; the first real
+    name in natural order wins (C00001 -> H2O, C00002 -> ATP, C12145 ->
+    Phytoceramide).
+
+    93k documents projected to two fields, scanned once and kept: ~19k entries.
+    Failure is not fatal -- the panel falls back to ids.
+    """
+    global _KEGG_COMPOUND_NAMES
+    if _KEGG_COMPOUND_NAMES is not None:
+        return _KEGG_COMPOUND_NAMES
+
+    names = {}
+    client = None
+    try:
+        from src.common.FeatureNamesToKeggIDsMapper import getConnectionByOrganismCode
+        client, db = getConnectionByOrganismCode("global")
+        for doc in db.kegg_compounds.find({}, {"_id": 0, "id": 1, "name": 1}):
+            compoundID = doc.get("id")
+            if not compoundID or compoundID in names:
+                continue
+            name = str(doc.get("name") or "").strip()
+            # First acceptable name in natural order wins: C00001 -> H2O,
+            # C00002 -> ATP, C12145 -> Phytoceramide.
+            if _isDisplayableCompoundName(name, compoundID):
+                names[compoundID] = name
+        logging.info("HUB_NAMES - %d KEGG compound names cached", len(names))
+    except Exception as ex:
+        logging.warning("HUB_NAMES - could not load KEGG compound names (%s); "
+                        "the panel will show ids.", str(ex))
+    finally:
+        if client is not None:
+            client.close()
+
+    _KEGG_COMPOUND_NAMES = names
+    return names
+
+
+#: One panel's metabolite list. Well above the largest real job seen (213),
+#: and low enough that a malformed request cannot ask for the whole table.
+_HUB_NAMES_MAX_IDS = 5000
+
+
+def pathwayAcquisitionHubNames(request, response, QUEUE_INSTANCE):
+    """Readable names for the compound ids the caller names.
+
+    Fetched once when the panel mounts, so the metabolite list can be titled by
+    name rather than by id. Per-node naming inside the network comes from the
+    same map, which is why it is one bulk call and not one call per node.
+
+    The ids come from the REQUEST, not from jobInstance.hubAnalysisResult.
+    Reading them off the loaded job was the obvious implementation and it
+    returned nothing: jobs stored before the schema-2 rewrite still hold
+    headerless 8-element LISTS in Mongo (job fh304774Lw: 860 of them), and only
+    pathwayAcquisitionRecoverJob re-scores them on the way out. The client is
+    holding the upgraded rows already -- it renders the list from them -- so
+    asking it removes the dependency on which schema happens to be on disk.
+    """
+    try:
+        jobID = request.form.get("jobID")
+        userID = request.cookies.get("userID")
+
+        jobInstance, refusal = _hubOwnedJob(jobID, userID, "HUB_NAMES")
+        if refusal is not None:
+            response.setContent(refusal)
+            return response
+
+        requested = request.form.get("ids") or ""
+        ids = [value.strip() for value in requested.split(",") if value.strip()]
+        if len(ids) > _HUB_NAMES_MAX_IDS:
+            ids = ids[:_HUB_NAMES_MAX_IDS]
+            logging.warning("HUB_NAMES - %s asked for more than %d ids; "
+                            "the rest keep their KEGG id as the label.",
+                            jobID, _HUB_NAMES_MAX_IDS)
+
+        table = _keggCompoundNames()
+        names = {}
+        for compoundID in ids:
+            if compoundID in table:
+                names[compoundID] = table[compoundID]
+
+        response.setContent({"success": True, "names": names})
+    except Exception as ex:
+        logging.error("HUB_NAMES - %s", str(ex))
+        response.setContent({"success": False, "errorMessage": str(ex)})
+    return response
+
+
 def pathwayAcquisitionHubSubgraph(request, response, QUEUE_INSTANCE):
     """The induced subgraph behind one row of the hub-analysis table.
 
@@ -1710,6 +1826,18 @@ def pathwayAcquisitionHubSubgraph(request, response, QUEUE_INSTANCE):
 
         payload = graph.subgraph(compoundID, level, budget, priority=priority,
                                  per_ring=perRing)
+
+        # Names for the compound nodes in THIS subgraph. /pa_hub_names covers
+        # the scored list; a ring can also hold compounds the job never
+        # measured and so never scored, and those would otherwise be the only
+        # nodes still labelled with a bare id.
+        table = _keggCompoundNames()
+        payload["names"] = {
+            node["id"]: table[node["id"]]
+            for node in payload.get("nodes", [])
+            if node.get("type") == "compound" and node.get("id") in table
+        }
+
         payload["success"] = True
         response.setContent(payload)
     except Exception as ex:
