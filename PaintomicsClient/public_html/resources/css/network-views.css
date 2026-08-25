@@ -45,7 +45,8 @@
    row on a 660px panel. A zero-width item with margins costs zero. */
 .pa-net-toolbar,
 .more-net-toolbar,
-.omnipath-net-toolbar {
+.omnipath-net-toolbar,
+.pa-hub-net-toolbar {
 	display: flex;
 	flex-wrap: wrap;
 	align-items: center;
@@ -423,4 +424,115 @@
 	background: var(--pa-surface, #FFFFFF);
 	border: 1px solid var(--pa-border, #D4D4D8);
 	border-radius: 4px;
+}
+
+
+/* ---- Metabolite hop-ring network ------------------------------------------
+   Colours are validated, not chosen by eye: the two poles clear CVD dE 21.6
+   (target >=8) and normal-vision dE 32.3 (floor >=15) against the light
+   surface. Hop distance is carried by RING POSITION, so it deliberately takes
+   no colour; the hue is spent on DE direction, which is what the panel exists
+   to show.
+
+   NOTE: this application ships light-only -- there is no prefers-color-scheme
+   rule anywhere in resources/css. The validated dark steps are recorded here
+   for whenever a theme lands: up #e66767, down #3987e5 on surface #1a1a19
+   (CVD dE 19.2, normal-vision 29.0). Do not add a dark block for this one
+   component; it would be the only one in the app. */
+.pa-hub-net {
+	--hub-up:        #e34948;
+	--hub-down:      #2a78d6;
+	--hub-quiet:     #ffffff;   /* hollow: the STROKE carries the contrast.  */
+	--hub-quiet-ink: #595959;   /* #f0efec was rejected at 1.12:1 on white.  */
+	--hub-absent:    #a1a1aa;
+	--hub-ring:      #e7e7e4;
+	--hub-ink:       var(--pa-ink, #18181b);
+	--hub-muted:     var(--pa-ink-muted, #595959);
+	--hub-surface:   var(--pa-surface, #ffffff);
+}
+
+/* Truncation and empty-state text above a network canvas. A cap must never
+   read as "this is all there is". */
+.pa-net-notice {
+	min-height: 1.2em;
+	margin: 0 0 6px 0;
+	font-size: 12px;
+	color: var(--hub-muted, #595959);
+}
+.pa-net-notice:empty { display: none; }
+
+/* A legend is always present: identity must never be colour-alone. */
+.pa-hub-legend {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 14px;
+	margin: 0 0 8px 0;
+	font-size: 12px;
+	color: var(--hub-muted, #595959);
+}
+.pa-hub-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.pa-hub-legend .sw {
+	width: 11px;
+	height: 11px;
+	border-radius: 50%;
+	border: 1.5px solid var(--hub-quiet-ink, #595959);
+	background: var(--hub-quiet, #ffffff);
+}
+.pa-hub-legend .sw.up     { background: var(--hub-up);   border-color: var(--hub-up); }
+.pa-hub-legend .sw.down   { background: var(--hub-down); border-color: var(--hub-down); }
+.pa-hub-legend .sw.absent { border-style: dashed; border-color: var(--hub-absent); }
+.pa-hub-legend .sw.seed   {
+	border-radius: 2px;
+	transform: rotate(45deg);
+	border-width: 2px;
+	border-color: var(--hub-ink);
+}
+
+/* The SVG ring guides sit UNDER the Cytoscape canvas and never take pointer
+   events, so hover and drag reach the graph unchanged. */
+.pa-hub-stage { position: relative; }
+.pa-hub-rings {
+	position: absolute;
+	top: 0; left: 0; right: 0; bottom: 0;
+	width: 100%;
+	height: 100%;
+	pointer-events: none;
+	z-index: 0;
+}
+.pa-hub-stage .pa-net-canvas {
+	position: relative;
+	z-index: 1;
+	background: transparent;
+}
+.pa-hub-ring {
+	fill: none;
+	stroke: var(--hub-ring, #e7e7e4);
+	stroke-width: 1;
+	stroke-dasharray: 3 4;
+}
+.pa-hub-ring.is-current {
+	stroke: var(--hub-muted, #595959);
+	stroke-dasharray: none;
+}
+.pa-hub-ring-label {
+	font-size: 10px;
+	fill: var(--hub-muted, #595959);
+	opacity: 0.75;
+}
+.pa-hub-ring-label.is-current { opacity: 1; font-weight: 600; }
+
+.pa-hub-tip {
+	position: absolute;
+	z-index: 2;
+	display: none;
+	max-width: 260px;
+	padding: 6px 8px;
+	font-size: 12px;
+	line-height: 1.35;
+	color: var(--hub-ink, #18181b);
+	background: var(--hub-surface, #ffffff);
+	border: 1px solid var(--hub-ring, #e7e7e4);
+	border-radius: 4px;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+	pointer-events: none;
 }

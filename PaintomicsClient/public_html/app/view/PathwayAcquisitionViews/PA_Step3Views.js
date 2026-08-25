@@ -69,6 +69,7 @@ function PA_Step3JobView() {
 	this.regTargetNetworkView = null;
 
 	this.hubAnalysisView = null;
+	this.hubNetworkView = null;
 	this.aiWidget = null;
 	this.aiJobID = null;
 	// Shared-feature pathway partition from the AI report (cluster mode), or null.
@@ -353,6 +354,15 @@ function PA_Step3JobView() {
 			this.hubAnalysisView.setParent(this);
 		}
 		this.hubAnalysisView.loadModel(model);
+
+		// The metabolite hop-ring network. Constructed unconditionally -- it
+		// renders a hidden container until a hub row asks for a compound.
+		if (this.hubNetworkView === null) {
+			this.hubNetworkView = new PA_Step3HubNetworkView();
+			this.hubNetworkView.setController(this.getController());
+			this.hubNetworkView.setParent(this);
+		}
+		this.hubNetworkView.loadModel(model);
 
 		// MORE Regulation panel — instantiate unconditionally; the view itself
 		// self-suppresses when the model has no rpc data, so we don't have to
@@ -1272,6 +1282,8 @@ function PA_Step3JobView() {
 				// See hasMetaboliteData: gated on the resolved compounds these
 				// panels draw, not on the candidate list that step 2 consumes.
 				(!this.hasMetaboliteData()?null:me.hubAnalysisView.getComponent()),
+				// Hop-ring network -- mounted under the hub table it is opened from.
+				(!this.hasMetaboliteData()?null:me.hubNetworkView.getComponent()),
 				(!this.metaboliteView?null:me.metaboliteView.getComponent()),
 				// MORE Regulation panel — independent of metabolomics presence.
 				// The view returns a hidden container when no rpc data; safe to
@@ -6029,6 +6041,27 @@ function PA_Step3HubAnalysis () {
 										}
 
 										fitPlotPanel('hubAnalysisPlotPanel', 'hubAnalysisPlot');
+									}
+								}]
+							},
+							{
+								xtype: 'customactioncolumn',
+								text: "Network",
+								menuDisabled: true,
+								width: 70,
+								items: [{
+									icon: "fa-share-alt",
+									text: "",
+									tooltip: 'Draw this metabolite\'s neighbourhood',
+									style: "font-size: 20px;",
+									handler: function (grid, rowIndex) {
+										// The hub table reports numbers about a
+										// network nobody could see; this draws it.
+										let row = grid.getStore().data.items[rowIndex].data;
+										let view = me.getParent().hubNetworkView;
+										if (view) {
+											view.showCompound(row.ID, row.Step);
+										}
 									}
 								}]
 							},

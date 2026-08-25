@@ -130,6 +130,102 @@ class SyntaxTest(unittest.TestCase):
         self.assertEqual(done.returncode, 0, done.stderr)
 
 
+
+@unittest.skipIf(shutil.which("node") is None, "node is not installed")
+class HubNetworkViewContractTest(unittest.TestCase):
+    """The design decisions that are easy to undo by accident."""
+
+    def source(self):
+        with open(HUB_NETWORK_VIEW, "r", encoding="utf-8") as handle:
+            return handle.read()
+
+    def code(self):
+        """Source with comments stripped.
+
+        The "must not appear" assertions below are about CODE. This file's
+        comments deliberately NAME the APIs it avoids -- requestAnimationFrame
+        and svg.js's .path() -- to record why, and matching those explanations
+        would fail the very tests that document them.
+        """
+        body = re.sub(r"/\*.*?\*/", "", self.source(), flags=re.S)
+        return re.sub(r"(?m)^\s*//.*$", "", body)
+
+    def test_uses_defer_frame_not_raf(self):
+        """rAF never fires in a background tab; the panel came up blank."""
+        self.assertIn("paDeferFrame", self.source())
+        self.assertNotIn("requestAnimationFrame", self.code())
+
+    def test_destroys_cytoscape_on_teardown(self):
+        body = self.source()
+        self.assertIn("beforedestroy", body)
+        self.assertIn("cy.destroy()", body)
+
+    def test_announces_truncation(self):
+        self.assertIn("truncated", self.source())
+
+    def test_refuses_arrows_from_the_legacy_source(self):
+        """The legacy fallback carries no subtypes; direction would be invented."""
+        self.assertIn("legacy-json", self.source())
+
+    def test_hop_distance_is_not_encoded_as_colour(self):
+        """Rings already carry distance; spending hue on it too would leave
+        nothing for DE direction, which is what the panel exists to show."""
+        body = self.source()
+        self.assertIn("node[state = 'up']", body)
+        self.assertIn("node[state = 'down']", body)
+        self.assertNotIn('"background-color": "data(step)"', body)
+
+    def test_uses_the_validated_palette(self):
+        """CVD dE 21.6 / normal-vision 32.3, checked with the palette validator.
+        A casual colour edit should have to come past this test."""
+        body = self.source()
+        self.assertIn("#e34948", body)
+        self.assertIn("#2a78d6", body)
+
+    def test_labels_are_selective(self):
+        """Radius 4 can reach thousands of nodes; a label on each is unreadable."""
+        self.assertIn("showLabel", self.source())
+
+    def test_has_a_legend_and_a_hover_layer(self):
+        body = self.source()
+        self.assertIn("pa-hub-legend", body)
+        self.assertIn("mouseover", body)
+
+    def test_ring_guides_use_createElementNS(self):
+        """svg.js 2.0.5's .path() reads pathSegList, removed in Chrome 48 --
+        which is why no diagram here had ever carried a vector primitive."""
+        self.assertIn("createElementNS", self.source())
+        self.assertNotIn(".path(", self.code())
+
+
+class RegistrationTest(unittest.TestCase):
+    def test_view_is_registered_in_index_html(self):
+        path = os.path.join(CLIENT, "index.html")
+        with open(path, "r", encoding="utf-8") as handle:
+            body = handle.read()
+        self.assertIn("PA_Step3HubNetworkView.js", body)
+
+    def test_toolbar_joins_the_shared_stylesheet(self):
+        path = os.path.join(CLIENT, "resources", "css", "network-views.css")
+        with open(path, "r", encoding="utf-8") as handle:
+            body = handle.read()
+        self.assertIn(".pa-hub-net-toolbar", body)
+        self.assertIn(".pa-net-notice", body)
+        self.assertIn(".pa-hub-ring", body)
+
+    def test_step3_mounts_and_feeds_the_view(self):
+        with open(STEP3_VIEWS, "r", encoding="utf-8") as handle:
+            body = handle.read()
+        self.assertIn("new PA_Step3HubNetworkView()", body)
+        self.assertIn("hubNetworkView.getComponent()", body)
+        self.assertIn("showCompound(", body)
+
+    def test_url_constant_exists(self):
+        path = os.path.join(CLIENT, "resources", "ServerConfiguration.js")
+        with open(path, "r", encoding="utf-8") as handle:
+            self.assertIn("SERVER_URL_PA_HUB_SUBGRAPH", handle.read())
+
+
 def main():
     suite = unittest.TestLoader().loadTestsFromModule(sys.modules[__name__])
     result = unittest.TextTestRunner(verbosity=2).run(suite)
