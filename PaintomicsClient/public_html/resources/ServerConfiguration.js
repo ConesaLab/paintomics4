@@ -43,6 +43,7 @@ SERVER_URL_PA_STEP1 = SERVER_URL + "pa_step1";
 SERVER_URL_PA_EXAMPLE_STEP1 = "pa_step1/example";
 SERVER_URL_PA_STEP2 = SERVER_URL + "pa_step2";
 SERVER_URL_PA_STEP3 = SERVER_URL + "pa_step3";
+SERVER_URL_PA_HUB_SUBGRAPH = SERVER_URL + "pa_hub_subgraph";
 /* Step 2's "Choose for me". Two URLs because the work goes on the server's job
    queue rather than into the request: uWSGI serves this site on four threads,
    so a route that waited on the LLM gateway would be an outage rather than a

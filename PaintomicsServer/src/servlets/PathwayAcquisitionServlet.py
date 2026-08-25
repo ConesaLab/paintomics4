@@ -1583,3 +1583,54 @@ def pathwayAcquisitionAdjustPvalues(request, response):
         handleException(response, ex, __file__ , "pathwayAcquisitionAdjustPvalues")
     finally:
         return response
+
+
+def pathwayAcquisitionHubSubgraph(request, response, QUEUE_INSTANCE):
+    """The induced subgraph behind one row of the hub-analysis table.
+
+    The graph has always existed on the server and never reached the browser:
+    compoundRegulateFeatures ships node SETS with no pairs, no direction, no edge
+    types and no intermediate hops, so a client cannot tell whether a radius-3
+    gene reaches the metabolite via gene X or gene Y. That is why no network was
+    ever drawn.
+
+    Ownership is checked the way pathwayAcquisitionRecoverJob does. The endpoint
+    that ships hubAnalysisResult today, /check_job_status, checks nothing at all
+    -- a separate and broader fix; this route does not inherit it.
+    """
+    try:
+        jobID = request.form.get("jobID")
+        compoundID = request.form.get("compoundID")
+        level = max(1, min(4, int(request.form.get("level", 1) or 1)))
+        budget = max(1, min(2000, int(request.form.get("maxEdges", 400) or 400)))
+        userID = request.cookies.get("userID")
+
+        jobInstance = JobInformationManager().loadJobInstance(jobID)
+        if jobInstance is None:
+            response.setContent({"success": False,
+                                 "errorMessage": "Job " + str(jobID) + " not found."})
+            return response
+        if (str(jobInstance.getUserID()) != "None"
+                and jobInstance.getUserID() != userID
+                and not jobInstance.getAllowSharing()):
+            logging.info("HUB_SUBGRAPH - JOB %s DOES NOT BELONG TO USER %s",
+                         jobID, str(userID))
+            response.setContent({"success": False,
+                                 "errorMessage": "Invalid Job ID for current user."})
+            return response
+
+        from src.common.KeggGraph import store
+        graph = store.get_graph(jobInstance.getOrganism())
+        if graph is None:
+            response.setContent({"success": False,
+                                 "errorMessage": "No interaction network is "
+                                                 "installed for this organism."})
+            return response
+
+        payload = graph.subgraph(compoundID, level, budget)
+        payload["success"] = True
+        response.setContent(payload)
+    except Exception as ex:
+        logging.error("HUB_SUBGRAPH - %s", str(ex))
+        response.setContent({"success": False, "errorMessage": str(ex)})
+    return response
