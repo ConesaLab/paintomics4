@@ -54,6 +54,7 @@ except ImportError:
 from src.servlets.PathwayAcquisitionServlet import (
     pathwayAcquisitionAdjustPvalues,
     pathwayAcquisitionHubSubgraph,
+    pathwayAcquisitionHubFeature,
     pathwayAcquisitionApplyReplicateMapping,
     pathwayAcquisitionMetagenes_PART1,
     pathwayAcquisitionPathwayEvidence,
@@ -704,6 +705,12 @@ class Application(object):
         @self.app.route(SERVER_SUBDOMAIN + '/pa_hub_subgraph', methods=['OPTIONS', 'POST'])
         def pathwayAcquisitionHubSubgraphHandler():
             return pathwayAcquisitionHubSubgraph(request, Response(), self.queue).getResponse()
+
+        # Every omic for one clicked node. globalExpressionData ships
+        # omicsValues[0] only, so this is the rest of the feature's data.
+        @self.app.route(SERVER_SUBDOMAIN + '/pa_hub_feature', methods=['OPTIONS', 'POST'])
+        def pathwayAcquisitionHubFeatureHandler():
+            return pathwayAcquisitionHubFeature(request, Response(), self.queue).getResponse()
         #*******************************************************************************************
         # RECOVER JOB HANDLER
         #*******************************************************************************************

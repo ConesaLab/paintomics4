@@ -213,16 +213,42 @@ class HubNetworkViewContractTest(unittest.TestCase):
 
     def test_omic_name_is_derived_not_hardcoded(self):
         """The old handler hardcoded "Gene expression" / "Metabolomics", so
-        every other omic silently drew nothing."""
+        every other omic silently drew nothing.
+
+        The name is no longer guessed from the model at all: /pa_hub_feature
+        returns the omic each value actually belongs to, so the panel labels
+        and scales a row with its own omic rather than with whichever omic
+        happened to be first in the job.
+        """
         body = self.code()
-        self.assertIn("getGeneBasedInputOmics()", body)
-        self.assertIn("getCompoundBasedInputOmics()", body)
+        self.assertIn("o.omicName", body)
         self.assertNotIn('"Metabolomics"', body)
+        self.assertNotIn('"Gene expression"', body)
+
+    def test_every_omic_is_drawn_not_just_the_first(self):
+        """globalExpressionData carries omicsValues[0] only, so a job with four
+        gene-based omics showed one of them -- and said nothing about the other
+        three, while the pathway views on the same page showed all four."""
+        body = self.code()
+        self.assertIn("SERVER_URL_PA_HUB_FEATURE", body)
+        self.assertIn("payload.omics", body)
+        self.assertIn("drawable.forEach", body)
+
+    def test_the_feature_fetch_is_cached(self):
+        """Re-clicking a node must not re-hit the server."""
+        body = self.code()
+        self.assertIn("featureCache", body)
+
+    def test_a_late_response_does_not_write_into_a_replaced_card(self):
+        """Clicking a second node before the first request lands must not paint
+        the first node's heatmap into the second node's card."""
+        self.assertIn("document.body.contains(slot)", self.code())
 
     def test_unmeasured_node_explains_itself(self):
-        body = self.source()
-        self.assertIn("paEmptyNote", body)
+        body = self.code()
         self.assertIn("connectedEdges()", body)
+        self.assertIn("How it connects", body)
+        self.assertIn("nothing to plot", body)
 
     def test_click_highlight_does_not_fight_the_dim_class(self):
         """setLevel owns .dim; a click highlight needs its own class."""
@@ -312,6 +338,164 @@ class RegistrationTest(unittest.TestCase):
         path = os.path.join(CLIENT, "resources", "ServerConfiguration.js")
         with open(path, "r", encoding="utf-8") as handle:
             self.assertIn("SERVER_URL_PA_HUB_SUBGRAPH", handle.read())
+
+
+class DetailIsVisibleTest(unittest.TestCase):
+    """The card a click opens must be ON SCREEN.
+
+    Measured on job fh304774Lw: the detail rendered its heatmap correctly at
+    y=1254 in an 806px viewport -- 448px below the fold, under a 720px canvas.
+    It drew, and from the user's seat clicking a node did nothing. Both halves
+    of the fix are asserted here because both were needed: the card is a child
+    of the stage (so it cannot open below the canvas), and the canvas resizes
+    and re-fits when it opens (so the graph is not clipped instead).
+    """
+
+    def _view(self):
+        with open(HUB_NETWORK_VIEW, "r", encoding="utf-8") as handle:
+            return handle.read()
+
+    def _css(self):
+        path = os.path.join(CLIENT, "resources", "css", "network-views.css")
+        with open(path, "r", encoding="utf-8") as handle:
+            return handle.read()
+
+    def test_the_card_is_inside_the_stage(self):
+        """Declared after the stage opens and before the body's flex row ends,
+        so it is a flex child of the stage rather than a block after it."""
+        body = self._view()
+        stage = body.index('class="pa-hub-stage')
+        rail = body.index('class="more-net-body"')
+        detail = body.index('class="pa-hub-detail"')
+        self.assertLess(rail, stage)
+        self.assertGreater(detail, stage,
+                           "the detail card must be declared inside the stage")
+
+    def test_the_fit_does_not_magnify_a_small_ring(self):
+        """fit() scales to fill: a five-node ring came up at 3x with 60px
+        labels. Zoom carries no information here -- the rings do."""
+        body = self._view()
+        start = body.index("this.fitToVisible = function")
+        window = body[start:start + 700]
+        self.assertIn("MAX_FIT_ZOOM", window)
+        self.assertIn("cy.center(", window)
+
+    def test_opening_the_card_resizes_and_refits_the_graph(self):
+        body = self._view()
+        start = body.index("this.resizeGraph = function")
+        window = body[start:start + 700]
+        self.assertIn("cy.resize()", window)
+        self.assertIn("fitToVisible()", window)
+
+    def test_the_card_has_no_height_transition(self):
+        """Measured: with `transition: height`, the flex item resolved to 1px
+        and stayed there while Cytoscape resized against the same box. Sized
+        with flex-basis instead, it settled immediately."""
+        css = self._css()
+        start = css.index(".pa-hub-detail {")
+        window = css[start:css.index(".pa-hub-detail-body")]
+        self.assertNotIn("transition: height", window)
+        self.assertIn("flex-basis", css[start:start + 900])
+
+    def test_a_click_scrolls_the_card_into_view_but_the_load_does_not(self):
+        """block:"nearest" is a no-op when the card is already visible; the
+        panel opening its first metabolite by itself must not scroll the page
+        to Step 3's seventh section."""
+        body = self._view()
+        self.assertIn('scrollIntoView({ block: "nearest" })', body)
+        start = body.index("this.selectFirst = function")
+        window = body[start:start + 400]
+        self.assertNotIn("true", window)
+
+
+class NoFigureBandTest(unittest.TestCase):
+    """The three-tile figure band is gone.
+
+    It spent a quarter of the panel's height on three circled icons and 48px
+    numerals, above the list they described. The counts survive as one line of
+    text in the rail head.
+    """
+
+    def _view(self):
+        with open(HUB_NETWORK_VIEW, "r", encoding="utf-8") as handle:
+            body = handle.read()
+        body = re.sub(r"/\*.*?\*/", "", body, flags=re.S)
+        return re.sub(r"(?m)^\s*//.*$", "", body)
+
+    def test_the_stat_tiles_are_gone(self):
+        body = self._view()
+        self.assertNotIn("po-pathway-stat", body)
+        self.assertNotIn("po-band-figure", body)
+        self.assertNotIn("renderSummary", body)
+
+    def test_the_counts_survive_as_text(self):
+        body = self._view()
+        self.assertIn("renderCount", body)
+        self.assertIn("with FDR", body)
+
+
+class StepControlTest(unittest.TestCase):
+    """The step control sits with the graph and says which steps are empty.
+
+    It was four toggle buttons in the panel's bottom toolbar -- as far from the
+    graph as the layout allows, and silent about which of them had anything to
+    show. Most compounds run out well before radius 4, so a pressable button
+    that changed nothing was the common case.
+    """
+
+    def _view(self):
+        with open(HUB_NETWORK_VIEW, "r", encoding="utf-8") as handle:
+            return handle.read()
+
+    def test_the_bottom_toolbar_is_gone(self):
+        self.assertNotIn("bbar:", self._view())
+
+    def test_an_empty_ring_disables_its_chip(self):
+        body = self._view()
+        start = body.index("this.renderSteps = function")
+        window = body[start:start + 1800]
+        self.assertIn("total === 0", window)
+        self.assertIn("disabled", window)
+
+    def test_the_chip_badge_is_the_ring_and_says_so(self):
+        """The chip counts one ring; the step table counts the whole ball.
+        Both are on screen at once, so the chip's tooltip has to name which."""
+        body = self._view()
+        start = body.index("this.renderSteps = function")
+        window = body[start:start + 1800]
+        self.assertIn("exactly", window)
+
+
+class SeedSummaryTest(unittest.TestCase):
+    """Selecting a metabolite prints its four step scores.
+
+    These four rows per compound are what the removed grid held. Dropping the
+    grid without printing them anywhere would have lost information rather than
+    clarified it.
+    """
+
+    def _view(self):
+        with open(HUB_NETWORK_VIEW, "r", encoding="utf-8") as handle:
+            return handle.read()
+
+    def test_the_step_table_exists(self):
+        body = self._view()
+        self.assertIn("pa-hub-steptable", body)
+        start = body.index("this.showSeedDetail = function")
+        window = body[start:start + 2600]
+        self.assertIn("[1, 2, 3, 4]", window)
+        self.assertIn("row.DEN", window)
+        self.assertIn("row.noDEN", window)
+        self.assertIn("row.padjust", window)
+
+    def test_a_step_that_was_not_scored_says_so(self):
+        body = self._view()
+        start = body.index("this.showSeedDetail = function")
+        window = body[start:start + 2600]
+        self.assertIn("not scored", window)
+
+    def test_the_cumulative_column_is_labelled_as_such(self):
+        self.assertIn("Cumulative, and counting only", self._view())
 
 
 def main():

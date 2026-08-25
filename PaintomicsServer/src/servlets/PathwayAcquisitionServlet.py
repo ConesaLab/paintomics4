@@ -1622,6 +1622,30 @@ def pathwayAcquisitionAdjustPvalues(request, response):
         return response
 
 
+def _hubOwnedJob(jobID, userID, tag):
+    """Load a job for a hub route, refusing it unless the caller may see it.
+
+    Both hub routes need the same check, and the check is the reason they
+    exist as separate endpoints at all: /check_job_status ships the same job's
+    hub payload with no session and no ownership test. Writing it once means a
+    later route cannot quietly ship without it.
+
+    Returns (jobInstance, None) on success, or (None, refusalDict).
+    """
+    jobInstance = JobInformationManager().loadJobInstance(jobID)
+    if jobInstance is None:
+        return None, {"success": False,
+                      "errorMessage": "Job " + str(jobID) + " not found."}
+    if (str(jobInstance.getUserID()) != "None"
+            and jobInstance.getUserID() != userID
+            and not jobInstance.getAllowSharing()):
+        logging.info("%s - JOB %s DOES NOT BELONG TO USER %s",
+                     tag, jobID, str(userID))
+        return None, {"success": False,
+                      "errorMessage": "Invalid Job ID for current user."}
+    return jobInstance, None
+
+
 def pathwayAcquisitionHubSubgraph(request, response, QUEUE_INSTANCE):
     """The induced subgraph behind one row of the hub-analysis table.
 
@@ -1643,18 +1667,9 @@ def pathwayAcquisitionHubSubgraph(request, response, QUEUE_INSTANCE):
         perRing = max(5, min(200, int(request.form.get("perRing", 40) or 40)))
         userID = request.cookies.get("userID")
 
-        jobInstance = JobInformationManager().loadJobInstance(jobID)
-        if jobInstance is None:
-            response.setContent({"success": False,
-                                 "errorMessage": "Job " + str(jobID) + " not found."})
-            return response
-        if (str(jobInstance.getUserID()) != "None"
-                and jobInstance.getUserID() != userID
-                and not jobInstance.getAllowSharing()):
-            logging.info("HUB_SUBGRAPH - JOB %s DOES NOT BELONG TO USER %s",
-                         jobID, str(userID))
-            response.setContent({"success": False,
-                                 "errorMessage": "Invalid Job ID for current user."})
+        jobInstance, refusal = _hubOwnedJob(jobID, userID, "HUB_SUBGRAPH")
+        if refusal is not None:
+            response.setContent(refusal)
             return response
 
         from src.common.KeggGraph import store
@@ -1670,17 +1685,25 @@ def pathwayAcquisitionHubSubgraph(request, response, QUEUE_INSTANCE):
         # DE genes would misrepresent it. Only the server knows which features
         # are relevant for THIS job, so the priority set is built here rather
         # than left to the client, which never receives the dropped nodes.
+        #
+        # Any gene-based omic counts, not just one named "Gene expression".
+        # "Gene expression" is only the default label the upload form suggests
+        # for the first omic; a job whose omics are named "RNA-seq" and
+        # "Proteomics" is not a job without differential expression. Asking
+        # isRelevant() rather than testing `relevant` for truth is the same
+        # point: `relevant` is a LIST, and a list of all-False is truthy.
         priority = set()
         try:
             for geneID, gene in (jobInstance.inputGenesData or {}).items():
-                for values in gene.omicsValues:
-                    if values.omicName == "Gene expression" and (
-                            values.relevant or values.relevantAssociation):
+                for values in (gene.omicsValues or []):
+                    if values.isRelevant() or values.isRelevantAssociation():
                         priority.add(geneID)
                         break
             for compID, comp in (jobInstance.inputCompoundsData or {}).items():
-                if comp.omicsValues[0].relevant:
-                    priority.add(compID)
+                for values in (comp.omicsValues or []):
+                    if values.isRelevant() or values.isRelevantAssociation():
+                        priority.add(compID)
+                        break
         except Exception as ex:
             logging.warning("HUB_SUBGRAPH - could not build the DE priority set "
                             "for %s (%s); sampling by degree alone.", jobID, str(ex))
@@ -1691,5 +1714,73 @@ def pathwayAcquisitionHubSubgraph(request, response, QUEUE_INSTANCE):
         response.setContent(payload)
     except Exception as ex:
         logging.error("HUB_SUBGRAPH - %s", str(ex))
+        response.setContent({"success": False, "errorMessage": str(ex)})
+    return response
+
+
+def pathwayAcquisitionHubFeature(request, response, QUEUE_INSTANCE):
+    """Every omic measured for ONE feature in the hop-ring network.
+
+    globalExpressionData -- the only expression payload the panel had -- carries
+    ``omicsValues[0]`` and nothing else (see
+    PathwayAcquisitionJob.getGlobalExpressionData). On a job with four
+    gene-based omics that is a quarter of the data, drawn with no hint that the
+    other three exist, while the pathway views next to it show all four.
+
+    Shipping every omic for every feature instead would multiply a payload that
+    already measures ~4 MB on a job this size, for data almost none of which is
+    ever looked at. One clicked feature is a few hundred bytes, so it is
+    fetched here on demand -- the same derive-when-asked rule the graph itself
+    follows.
+    """
+    try:
+        jobID = request.form.get("jobID")
+        featureID = request.form.get("featureID")
+        featureType = (request.form.get("featureType") or "gene").lower()
+        userID = request.cookies.get("userID")
+
+        jobInstance, refusal = _hubOwnedJob(jobID, userID, "HUB_FEATURE")
+        if refusal is not None:
+            response.setContent(refusal)
+            return response
+
+        source = (jobInstance.inputCompoundsData if featureType == "compound"
+                  else jobInstance.inputGenesData) or {}
+        feature = source.get(featureID)
+        if feature is None:
+            # Not an error: most nodes in a radius-4 ring were never measured,
+            # and the client draws a "how it connects" panel for those. Saying
+            # so with success=True keeps that path off the error branch.
+            response.setContent({"success": True, "id": featureID,
+                                 "type": featureType, "name": "", "omics": []})
+            return response
+
+        omics = []
+        for values in (feature.omicsValues or []):
+            entry = {
+                # keggName is what the heatmap prints as the row label; it
+                # lives on the OmicValue client-side, so it is repeated per
+                # omic rather than sent once beside them.
+                "keggName": feature.name,
+                "omicName": values.omicName,
+                "inputName": values.inputName,
+                "originalName": values.originalName,
+                "values": values.values,
+                "relevant": values.relevant,
+                "relevantAssociation": values.relevantAssociation
+            }
+            # Only when populated. adaptBSON turns None into the STRING "None",
+            # and paValuesForHeader would then see a non-array sampleValues.
+            if values.sampleValues is not None:
+                entry["sampleValues"] = values.sampleValues
+            if values.sampleRelevant is not None:
+                entry["sampleRelevant"] = values.sampleRelevant
+            omics.append(entry)
+
+        response.setContent({"success": True, "id": featureID,
+                             "type": featureType, "name": feature.name,
+                             "omics": omics})
+    except Exception as ex:
+        logging.error("HUB_FEATURE - %s", str(ex))
         response.setContent({"success": False, "errorMessage": str(ex)})
     return response

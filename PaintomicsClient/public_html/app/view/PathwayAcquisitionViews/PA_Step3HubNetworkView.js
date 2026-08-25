@@ -7,9 +7,16 @@
  * not tell whether a radius-3 gene reached the metabolite via gene X or gene Y.
  * The hub table reported numbers about a network nobody could see.
  *
- * This panel replaces that table. A metabolite LIST ranked by significance
- * selects the seed; the network draws its 1..4 step neighbourhood as concentric
- * rings; clicking any node opens its expression heatmap and plot underneath.
+ * This panel replaces that table. A metabolite LIST -- one entry per compound,
+ * ranked by significance -- selects the seed; the network draws its 1..4 step
+ * neighbourhood as concentric rings; the step control and the expression
+ * figures live INSIDE the network stage.
+ *
+ * Layout rule, learned the hard way: the detail sat below a 720px canvas, so
+ * clicking a node put its heatmap 448px below the fold. It drew correctly and
+ * nobody could see it, which from the user's seat is identical to a dead click.
+ * Anything a click produces is now docked in the stage, above the fold, and the
+ * canvas shrinks to make room rather than being covered.
  *
  * Encoding, decided colour-last:
  *
@@ -39,15 +46,19 @@ function PA_Step3HubNetworkView() {
 	this.listID = "hubNetList" + salt;
 	this.searchID = "hubNetSearch" + salt;
 	this.sortID = "hubNetSort" + salt;
-	this.summaryID = "hubNetSummary" + salt;
+	this.countID = "hubNetCount" + salt;
+	this.stepsID = "hubNetSteps" + salt;
+	this.seedNameID = "hubNetSeedName" + salt;
+	this.plotID = "hubNetPlot" + salt;
 	this.detailID = "hubNetDetail" + salt;
 
 	this.cy = null;
 	this.level = 1;
 	this.payload = null;
 	this.seed = null;
-	this.charts = [];        // Highcharts instances owned by the detail panel
+	this.charts = [];        // Highcharts instances owned by the detail card
 	this.metabolites = [];   // one entry per compound, with its four step rows
+	this.featureCache = {};  // id|kind -> /pa_hub_feature payload
 	this.sortKey = "padjust";
 	this.query = "";
 
@@ -59,18 +70,22 @@ function PA_Step3HubNetworkView() {
 		var me = this;
 		me.model = model;
 		me.buildList();
-		me.renderList();
-		me.renderSummary();
 		// loadModel and afterrender race: PA_Step3JobView constructs the view,
 		// calls loadModel, and only then lays the panel out. Whichever runs
 		// second has to do the work.
 		if (me.component && me.component.rendered && me.hasData()) {
 			me.component.show();
-			me.renderList();
-			me.renderSummary();
-			me.bindControls();
-			me.selectFirst();
+			me.mount();
 		}
+	};
+
+	/** Everything that needs the panel's DOM to exist. */
+	this.mount = function () {
+		this.renderList();
+		this.renderCount();
+		this.renderSteps();
+		this.bindControls();
+		this.selectFirst();
 	};
 
 	/**
@@ -79,8 +94,8 @@ function PA_Step3HubNetworkView() {
 	 * getHubAnalysisResult() is one row per (compound, radius), so every
 	 * metabolite appears four times -- which is why the grid it replaces needed
 	 * a step filter to be readable at all. Here the four scores become a
-	 * per-step array on a single entry and the network's ring buttons are the
-	 * step control.
+	 * per-step array on a single entry, the ring buttons are the step control,
+	 * and the four rows are shown together in the metabolite's own summary.
 	 */
 	this.buildList = function () {
 		var rows = (this.model && this.model.getHubAnalysisResult()) || {};
@@ -134,41 +149,36 @@ function PA_Step3HubNetworkView() {
 		this.metabolites.sort(this.SORTS[this.sortKey] || this.SORTS.padjust);
 	};
 
-	/* ------------------------------------------------------------------ *
-	 * Summary                                                             *
-	 * ------------------------------------------------------------------ */
-
-	this.renderSummary = function () {
-		var host = document.getElementById(this.summaryID);
-		if (!host) { return; }
-		var total = this.metabolites.length;
-		var significant = this.metabolites.filter(function (m) {
-			return m.padjust < 0.05;
-		}).length;
-		var deTotal = this.metabolites.reduce(function (sum, m) {
-			return sum + (m.den || 0);
-		}, 0);
-		host.innerHTML =
-			'<div class="po-band">' +
-			  this.stat("flask", total, "Metabolites scored", false) +
-			  this.stat("star", significant, "Significant (FDR &lt; 0.05)", significant > 0) +
-			  this.stat("share-alt", deTotal, "DE neighbours found", false) +
-			'</div>';
-	};
-
-	this.stat = function (icon, count, label, highlight) {
-		return '<div class="po-pathway-stat">' +
-			'<div class="po-pathway-icon' + (highlight ? " is-significant" : "") + '">' +
-			  '<i class="fa fa-' + icon + '" aria-hidden="true"></i></div>' +
-			'<div class="po-band-figure">' +
-			  '<div class="po-pathway-count">' + count + '</div>' +
-			  '<div class="po-pathway-label">' + label + '</div>' +
-			'</div></div>';
+	this.entryFor = function (compoundID) {
+		for (var i = 0; i < this.metabolites.length; i++) {
+			if (this.metabolites[i].ID === compoundID) { return this.metabolites[i]; }
+		}
+		return null;
 	};
 
 	/* ------------------------------------------------------------------ *
 	 * Metabolite list                                                     *
 	 * ------------------------------------------------------------------ */
+
+	/**
+	 * How much there is to look through, as one line of text.
+	 *
+	 * This replaces a three-tile figure band. The counts were worth keeping --
+	 * "96 of 213 are significant" is the shape of the result -- but three
+	 * circled icons and 48px numerals spent a quarter of the panel's height
+	 * saying it, above the thing they describe.
+	 */
+	this.renderCount = function () {
+		var host = document.getElementById(this.countID);
+		if (!host) { return; }
+		var total = this.metabolites.length;
+		var significant = this.metabolites.filter(function (m) {
+			return m.padjust < 0.05;
+		}).length;
+		host.innerHTML = total
+			? total + " metabolites &middot; <b>" + significant + "</b> with FDR &lt; 0.05"
+			: "";
+	};
 
 	this.renderList = function () {
 		var me = this;
@@ -193,17 +203,16 @@ function PA_Step3HubNetworkView() {
 			var tone = fdr < 0.05 ? " is-significant" : (fdr < 0.1 ? " is-marginal" : "");
 			return '<a class="pa-hub-item' + tone +
 				(m.ID === me.seed ? " is-current" : "") +
-				'" data-id="' + m.ID + '" data-step="' + m.bestStep + '" href="#">' +
+				'" data-id="' + m.ID + '" href="#">' +
 				'<span class="pa-hub-item-name">' + Ext.String.htmlEncode(m.name) + '</span>' +
 				'<span class="pa-hub-item-meta">FDR ' + me.fmt(fdr) +
-				' &middot; ' + m.den + ' DE &middot; step ' + m.bestStep + '</span>' +
+				' &middot; ' + m.den + ' DE &middot; best at step ' + m.bestStep + '</span>' +
 				'</a>';
 		}).join("");
 		Array.prototype.forEach.call(host.querySelectorAll(".pa-hub-item"), function (el) {
 			el.addEventListener("click", function (event) {
 				event.preventDefault();
-				me.showCompound(el.getAttribute("data-id"),
-				                el.getAttribute("data-step"));
+				me.showCompound(el.getAttribute("data-id"), null, true);
 			});
 		});
 	};
@@ -215,17 +224,68 @@ function PA_Step3HubNetworkView() {
 	};
 
 	/* ------------------------------------------------------------------ *
+	 * Step control                                                        *
+	 * ------------------------------------------------------------------ */
+
+	/**
+	 * The four steps, as chips carrying their own ring size.
+	 *
+	 * They were four toggle buttons in the panel's bottom toolbar -- as far from
+	 * the graph as the layout allows, and silent about which of them had
+	 * anything to show. Most compounds run out well before radius 4, so a
+	 * pressable button that changes nothing was the common case, not the edge
+	 * case. A chip whose ring is empty is disabled and says "0".
+	 */
+	this.renderSteps = function () {
+		var me = this;
+		var host = document.getElementById(me.stepsID);
+		if (!host) { return; }
+		var counts = {};
+		((me.payload && me.payload.rings) || []).forEach(function (r) {
+			counts[r.step] = r.total;
+		});
+		host.innerHTML = [1, 2, 3, 4].map(function (n) {
+			var total = counts[n];
+			var known = (total !== undefined);
+			var empty = known && total === 0;
+			// The badge is the size of THIS ring, not of the ball -- that is
+			// what makes a 0 meaningful. The button itself is cumulative (it
+			// lights every ring up to n), and the two numbers differ, so the
+			// tooltip says which is which rather than leaving the reader to
+			// reconcile "2 1" against a table row reading 33.
+			return '<button type="button" class="pa-hub-step' +
+				(n === me.level ? " is-current" : "") + (empty ? " is-empty" : "") +
+				'" data-step="' + n + '"' + (empty ? " disabled" : "") +
+				' title="' + (empty
+					? "No neighbours exactly " + n + " steps out"
+					: "Show everything within " + n + " step" + (n === 1 ? "" : "s") +
+					  (known ? " — " + total + " exactly " + n + " out" : "")) + '">' +
+				n + (known ? '<em>' + total + '</em>' : "") +
+				'</button>';
+		}).join("");
+		Array.prototype.forEach.call(host.querySelectorAll(".pa-hub-step"), function (el) {
+			el.addEventListener("click", function () {
+				me.setLevel(parseInt(el.getAttribute("data-step"), 10));
+			});
+		});
+	};
+
+	/* ------------------------------------------------------------------ *
 	 * Network                                                             *
 	 * ------------------------------------------------------------------ */
 
-	this.showCompound = function (compoundID, level) {
+	this.showCompound = function (compoundID, level, reveal) {
 		var me = this;
+		var entry = me.entryFor(compoundID);
 		me.seed = compoundID;
-		me.level = Math.max(1, Math.min(4, parseInt(level, 10) || 1));
+		me.level = Math.max(1, Math.min(4,
+			parseInt(level, 10) || (entry ? entry.bestStep : 1)));
+		me.payload = null;
 		me.note("Loading the neighbourhood of " + compoundID + "…");
 		me.clearDetail();
 		me.renderList();
-		me.syncStepButtons();
+		me.renderSteps();
+		me.setSeedName(entry ? entry.name : compoundID);
 		$.post(SERVER_URL_PA_HUB_SUBGRAPH, {
 			jobID: me.model.getJobID(),
 			compoundID: compoundID,
@@ -247,9 +307,19 @@ function PA_Step3HubNetworkView() {
 			}
 			me.payload = payload;
 			me.render(payload);
+			me.renderSteps();
+			// Selecting a metabolite opens the metabolite, not an empty card:
+			// its four step scores are the numbers the removed grid carried,
+			// and this is now the only place they are printed.
+			me.showSeedDetail(reveal);
 		}).fail(function () {
 			me.note("Could not reach the server.");
 		});
+	};
+
+	this.setSeedName = function (name) {
+		var el = document.getElementById(this.seedNameID);
+		if (el) { el.innerHTML = Ext.String.htmlEncode(name || ""); }
 	};
 
 	this.note = function (text) {
@@ -266,10 +336,7 @@ function PA_Step3HubNetworkView() {
 	 * OmicValue instead; that is what its accessors are for.
 	 */
 	this.stateOf = function (id, kind) {
-		var data = this.model && this.model.getGlobalExpressionData();
-		var entry = data && ((kind === "compound")
-			? (data.inputCompound || {})[id]
-			: (data.inputGene || {})[id]);
+		var entry = this.expressionFor(id, kind);
 		if (!entry) { return "absent"; }              // never measured
 		var de = (typeof entry.isRelevant === "function")
 			? (entry.isRelevant() || entry.isRelevantAssociation())
@@ -278,6 +345,13 @@ function PA_Step3HubNetworkView() {
 		var values = (typeof entry.getValues === "function") ? entry.getValues() : entry.values;
 		var first = (values && values.length) ? Number(values[0]) : 0;
 		return (first < 0) ? "down" : "up";
+	};
+
+	this.expressionFor = function (id, kind) {
+		var data = this.model && this.model.getGlobalExpressionData();
+		return data && ((kind === "compound")
+			? (data.inputCompound || {})[id]
+			: (data.inputGene || {})[id]);
 	};
 
 	this.elements = function (payload) {
@@ -320,10 +394,9 @@ function PA_Step3HubNetworkView() {
 		if (!host) { return; }
 		// Cytoscape measures its container once, so the height must be real
 		// BEFORE construction or the graph lays out into a zero-height box.
-		// Height normally comes from --pa-net-canvas-height via .pa-net-canvas
-		// in network-views.css -- do not hardcode over it. Only force a value
-		// if the class produced nothing, which happens while still collapsed.
-		if (host.getBoundingClientRect().height === 0) { host.style.height = "520px"; }
+		// Height comes from the flex stage; only force a value if that produced
+		// nothing, which happens while the panel is still collapsed.
+		if (host.getBoundingClientRect().height === 0) { host.style.height = "420px"; }
 
 		if (me.cy) { me.cy.destroy(); me.cy = null; }
 		me.cy = cytoscape({
@@ -365,6 +438,7 @@ function PA_Step3HubNetworkView() {
 					"border-width": 3, "border-color": "#18181b",
 					"font-size": 12, "font-weight": "bold" }},
 				{ selector: "node[showLabel = 1]", style: { "label": "data(label)" }},
+				{ selector: "node.far", style: { "label": "" }},
 				{ selector: "edge", style: {
 					"width": 1, "line-color": "#d4d4d8",
 					"curve-style": "bezier", "opacity": 0.75 }},
@@ -408,6 +482,7 @@ function PA_Step3HubNetworkView() {
 	 * entirely -- true, and useless.
 	 */
 	this.describe = function (payload) {
+		if (!payload) { this.note(""); return; }
 		var lines = [];
 		if (payload.source === "legacy-json") {
 			lines.push('<span class="pa-hub-warn">This organism has no KGML on ' +
@@ -533,18 +608,21 @@ function PA_Step3HubNetworkView() {
 		me.cy.on("tap", "node", function (event) {
 			me.cy.nodes().removeClass("picked");
 			event.target.addClass("picked");
-			me.showDetail(event.target);
+			me.showNodeDetail(event.target);
 		});
 		me.cy.on("tap", function (event) {
+			// Tapping the background returns to the metabolite, rather than
+			// emptying the card: an empty card below the graph reads as a
+			// layout bug, and the seed's own numbers are always relevant here.
 			if (event.target === me.cy) {
 				me.cy.nodes().removeClass("picked");
-				me.clearDetail();
+				me.showSeedDetail(true);
 			}
 		});
 	};
 
 	/* ------------------------------------------------------------------ *
-	 * Node detail: the expression heatmap                                 *
+	 * The detail card: summary + one heatmap per omic                     *
 	 * ------------------------------------------------------------------ */
 
 	this.clearDetail = function () {
@@ -556,114 +634,295 @@ function PA_Step3HubNetworkView() {
 		});
 		this.charts = [];
 		var host = document.getElementById(this.detailID);
-		if (host) { host.innerHTML = ""; }
+		if (host) {
+			host.innerHTML = "";
+			host.classList.remove("is-open");
+		}
+		this.resizeGraph();
 	};
 
-	this.showDetail = function (node) {
+	/**
+	 * Open the card, resizing the canvas so the graph is never covered.
+	 *
+	 * `reveal` scrolls the card into view, and only a click passes it: the
+	 * panel opens its first metabolite by itself on load, and scrolling the
+	 * page to Step 3's seventh section because a panel initialised would be a
+	 * worse bug than the one this fixes. block:"nearest" is a no-op when the
+	 * card is already fully visible, which is the common case once the reader
+	 * has scrolled to the section.
+	 */
+	this.openDetail = function (html, reveal) {
 		var me = this;
 		var host = document.getElementById(me.detailID);
-		if (!host) { return; }
+		if (!host) { return null; }
+		host.innerHTML =
+			'<button type="button" class="pa-hub-detail-close" ' +
+			  'aria-label="Close">&times;</button>' + html;
+		host.classList.add("is-open");
+		var close = host.querySelector(".pa-hub-detail-close");
+		if (close) {
+			close.addEventListener("click", function () {
+				if (me.cy) { me.cy.nodes().removeClass("picked"); }
+				me.clearDetail();
+			});
+		}
+		me.resizeGraph();
+		if (reveal) { host.scrollIntoView({ block: "nearest" }); }
+		return host;
+	};
+
+	/**
+	 * The canvas is a flex child of the stage; opening the card resizes it.
+	 *
+	 * resize() alone is not enough, and the difference is visible: Cytoscape
+	 * keeps its pan and zoom across a resize, so a canvas that lost 264px of
+	 * height kept drawing the same extent and the bottom third of the graph
+	 * was simply cut off by the card. Re-fitting costs a zoom change; being
+	 * silently clipped costs the nodes.
+	 */
+	this.resizeGraph = function () {
+		var me = this;
+		if (!me.cy) { return; }
+		// One frame after the class change, so the flex box has been laid out.
+		// paDeferFrame, not rAF: rAF never fires in a background tab.
+		paDeferFrame(function () {
+			if (!me.cy) { return; }
+			me.cy.resize();
+			me.fitToVisible();
+			me.drawRings();
+		});
+	};
+
+	/**
+	 * The selected metabolite: its four step scores, then its own expression.
+	 *
+	 * These four rows per compound are exactly what the removed grid held. The
+	 * grid printed all 852 of them at once and made you filter by step to read
+	 * any of them; here they are four rows about the one compound you asked
+	 * about, with the step you are looking at marked.
+	 */
+	this.showSeedDetail = function (reveal) {
+		var me = this;
+		var entry = me.entryFor(me.seed);
+		if (!entry) { me.clearDetail(); return; }
 		me.clearDetail();
 
+		var rows = [1, 2, 3, 4].map(function (step) {
+			var row = entry.steps[step];
+			if (!row) {
+				return '<tr class="is-absent"><td>' + step +
+					'</td><td colspan="4">not scored</td></tr>';
+			}
+			var fdr = Number(row.padjust);
+			return '<tr' + (step === me.level ? ' class="is-current"' : "") + '>' +
+				'<td>' + step + '</td>' +
+				'<td>' + row.DEN + '</td>' +
+				'<td>' + (Number(row.DEN) + Number(row.noDEN)) + '</td>' +
+				'<td>' + (Number(row.Percentage) * 100).toFixed(1) + '%</td>' +
+				'<td' + (fdr < 0.05 ? ' class="is-significant"' : "") + '>' +
+				  me.fmt(fdr) + '</td></tr>';
+		}).join("");
+
+		// mappingComp falls back to the ID, so printing both unconditionally
+		// rendered "C22353  C22353 · the metabolite ...".
+		var named = (entry.name !== entry.ID);
+		var host = me.openDetail(
+			'<h3 class="pa-hub-detail-title">' + Ext.String.htmlEncode(entry.name) +
+			  ' <span class="pa-hub-detail-where">' + (named ? entry.ID + ' &middot; ' : "") +
+			  'the metabolite this network is centred on</span></h3>' +
+			'<div class="pa-hub-detail-body">' +
+			  '<table class="pa-hub-steptable">' +
+			    '<thead><tr><th>Step</th><th>DE</th><th>Measured</th>' +
+			    '<th>% DE</th><th>FDR</th></tr></thead>' +
+			    '<tbody>' + rows + '</tbody>' +
+			  '</table>' +
+			  // The two counts on screen measure different things and would
+			  // otherwise look like a contradiction: the scorer counts only
+			  // MEASURED genes and counts them cumulatively (scorer.py:88,
+			  // `ids[measured_gene[ids]]`), while a chip counts every node --
+			  // compounds and unmeasured genes included -- in one ring.
+			  '<p class="pa-hub-detail-summary">Cumulative, and counting only ' +
+			    'genes measured in your data. The step chips above count every ' +
+			    'node in a single ring, so the two do not add up.</p>' +
+			  '<div class="pa-hub-omics"></div>' +
+			'</div>', reveal);
+		if (host) { me.fillOmics(host, me.seed, "compound"); }
+	};
+
+	/** A clicked node: what it is, how far, how it connects, its expression. */
+	this.showNodeDetail = function (node) {
+		var me = this;
 		var id = node.id();
 		var kind = node.data("kind");
 		var step = node.data("step");
-		var data = me.model.getGlobalExpressionData() || {};
-		var entry = (kind === "compound") ? (data.inputCompound || {})[id]
-		                                  : (data.inputGene || {})[id];
-		var title = (kind === "compound")
-			? ((me.model.mappingComp || {})[id] || id)
-			: id;
-		var where = step === 0
-			? "the metabolite this network is centred on"
-			: step + " step" + (step === 1 ? "" : "s") + " from " +
-			  ((me.model.mappingComp || {})[me.seed] || me.seed);
+		if (step === 0) { me.showSeedDetail(true); return; }
 
-		if (!entry) {
-			// The legitimate "absent" case. There is no client-side id->symbol
-			// table for an unmeasured gene, so show what IS known -- and the
-			// genuinely new information the old table could never give: HOW it
-			// reaches the seed.
-			var edges = node.connectedEdges().map(function (e) {
-				return "<li><b>" + e.data("source") + " — " + e.data("target") +
-					"</b> · " + e.data("kind") +
-					(e.data("subtype") ? " · " + e.data("subtype") : "") +
-					(e.data("pathway") ? " · " + e.data("pathway") : "") + "</li>";
-			}).slice(0, 12).join("");
-			host.innerHTML =
-				'<h3 class="pa-hub-detail-title">' + Ext.String.htmlEncode(title) + '</h3>' +
-				'<div class="contentbox paEmptyNote"><p>' + kind + ", " + where +
-				". No expression was measured for it in the omics you uploaded, " +
-				"so there is nothing to plot.</p></div>" +
-				(edges ? '<p class="pa-hub-detail-sub">How it connects</p>' +
-				         '<ul class="pa-hub-edges">' + edges + '</ul>' : "");
-			return;
-		}
+		me.clearDetail();
+		var seedName = (me.model.mappingComp || {})[me.seed] || me.seed;
+		var WORDS = { up: "up in this comparison", down: "down in this comparison",
+		              quiet: "measured, not differentially expressed",
+		              absent: "not measured in any omic you uploaded" };
+		var state = node.data("state");
 
-		// omicName must be a KEY of dataDistributionSummaries, and it is not
-		// carried on the entry -- the server ships omicsValues[0] only. Derive
-		// it from the model rather than hardcoding "Gene expression" /
-		// "Metabolomics", which is why the old handler drew nothing for any
-		// other omic.
-		var summaries = me.model.getDataDistributionSummaries() || {};
-		var omics = (kind === "compound")
-			? (me.model.getCompoundBasedInputOmics() || [])
-			: (me.model.getGeneBasedInputOmics() || []);
-		var omicName = null;
-		for (var i = 0; i < omics.length; i++) {
-			if (omics[i] && omics[i].omicName && (omics[i].omicName in summaries)) {
-				omicName = omics[i].omicName;
-				break;
+		// How a gene reaches the seed is the genuinely new information here:
+		// compoundRegulateFeatures shipped node sets, so no earlier view could
+		// answer "via what?" for anything past the first ring.
+		var edges = node.connectedEdges().map(function (e) {
+			return '<li><b>' + e.data("source") + " → " + e.data("target") +
+				'</b> · ' + e.data("kind") +
+				(e.data("subtype") ? " · " + e.data("subtype") : "") +
+				(e.data("pathway") ? ' <span class="pa-hub-edge-src">' +
+				                     e.data("pathway") + '</span>' : "") + '</li>';
+		}).slice(0, 8).join("");
+
+		var host = me.openDetail(
+			'<h3 class="pa-hub-detail-title">' + Ext.String.htmlEncode(id) +
+			  ' <span class="pa-hub-detail-where">' + kind + " &middot; " + step +
+			  " step" + (step === 1 ? "" : "s") + " from " +
+			  Ext.String.htmlEncode(seedName) + '</span></h3>' +
+			'<div class="pa-hub-detail-body">' +
+			  '<p class="pa-hub-detail-summary">' + (WORDS[state] || state) + '.</p>' +
+			  '<div class="pa-hub-omics"></div>' +
+			  (edges ? '<p class="pa-hub-detail-sub">How it connects</p>' +
+			           '<ul class="pa-hub-edges">' + edges + '</ul>' : "") +
+			'</div>', true);
+		if (host) { me.fillOmics(host, id, kind); }
+	};
+
+	/**
+	 * Draw one heatmap + plot per omic, from /pa_hub_feature.
+	 *
+	 * globalExpressionData carries omicsValues[0] and nothing else, so drawing
+	 * from it showed one of this job's four gene-based omics and said nothing
+	 * about the other three -- while the pathway views on the same page show
+	 * them all. The clicked feature's full set is a few hundred bytes, so it is
+	 * fetched per click and cached.
+	 */
+	this.fillOmics = function (host, id, kind) {
+		var me = this;
+		var slot = host.querySelector(".pa-hub-omics");
+		if (!slot) { return; }
+		var key = kind + "|" + id;
+
+		var draw = function (payload) {
+			// The card may have been replaced while the request was in flight.
+			if (!document.body.contains(slot)) { return; }
+			var omics = (payload && payload.omics) || [];
+			if (!omics.length) {
+				slot.innerHTML = '<p class="pa-hub-detail-summary">' +
+					'No expression was measured for it, so there is nothing to plot.</p>';
+				return;
 			}
-		}
-		if (!omicName) {
-			host.innerHTML =
-				'<h3 class="pa-hub-detail-title">' + Ext.String.htmlEncode(title) + '</h3>' +
-				'<div class="contentbox paEmptyNote"><p>' + kind + ", " + where +
-				". This job carries no distribution summary for its omic, so the " +
-				"heatmap cannot be scaled.</p></div>";
+			me.drawOmics(slot, omics);
+		};
+
+		if (me.featureCache[key]) { draw(me.featureCache[key]); return; }
+		slot.innerHTML = '<p class="pa-hub-detail-summary">' +
+			'<i class="fa fa-cog fa-spin"></i> Loading expression…</p>';
+		$.post(SERVER_URL_PA_HUB_FEATURE, {
+			jobID: me.model.getJobID(), featureID: id, featureType: kind
+		}).done(function (payload) {
+			if (typeof payload === "string") {
+				try { payload = JSON.parse(payload); } catch (e) { payload = null; }
+			}
+			if (!payload || !payload.success) {
+				if (!document.body.contains(slot)) { return; }
+				slot.innerHTML = '<p class="pa-hub-detail-summary">' +
+					((payload && payload.errorMessage) ||
+					 "The expression for this feature could not be loaded.") + '</p>';
+				return;
+			}
+			me.featureCache[key] = payload;
+			draw(payload);
+		}).fail(function () {
+			if (!document.body.contains(slot)) { return; }
+			slot.innerHTML = '<p class="pa-hub-detail-summary">' +
+				'Could not reach the server for this feature’s expression.</p>';
+		});
+	};
+
+	this.drawOmics = function (slot, omics) {
+		var me = this;
+		var summaries = me.model.getDataDistributionSummaries() || {};
+		var visual = (me.getParent && me.getParent() && me.getParent().visualOptions) || {};
+		var drawable = omics.filter(function (o) { return o.omicName in summaries; });
+
+		if (!drawable.length) {
+			slot.innerHTML = '<p class="pa-hub-detail-summary">This job carries no ' +
+				'distribution summary for ' +
+				omics.map(function (o) { return Ext.String.htmlEncode(o.omicName); }).join(", ") +
+				', so the heatmap cannot be scaled.</p>';
 			return;
 		}
 
-		var width = Math.max(260, $(host).width() - 400);
-		// The heatmap div and the plot div must be ADJACENT SIBLINGS with the
-		// heatmap first: the heatmap's point handlers reach the plot with
-		// .parent().next().highcharts(). Anything between them -- a title, a
-		// legend -- makes that undefined and hovering a cell throws.
-		host.innerHTML =
-			'<h3 class="pa-hub-detail-title">' + Ext.String.htmlEncode(title) +
-			  ' <span class="pa-hub-detail-where">' + where + '</span></h3>' +
-			'<div class="contentbox">' +
-			  '<div class="PA_step5_heatmapContainer" id="' + me.detailID + '_hm" ' +
-			    'style="height:130px"></div>' +
-			  '<div class="PA_step5_plotContainer" id="' + me.detailID + '_plot" ' +
-			    'style="width:' + width + 'px;height:130px"></div>' +
-			'</div>';
+		slot.innerHTML = drawable.map(function (o, index) {
+			// The colour ramp these heatmaps are painted with. The charts carry
+			// legend:{enabled:false}, so without this the scale is stated
+			// nowhere. Guarded: a bad summary for one omic must not stop the rest.
+			var legend = "";
+			try {
+				legend = paColorLegend(
+					getMinMax(summaries[o.omicName], visual.colorReferences
+						? visual.colorReferences[o.omicName] : "p10p90"),
+					visual.colorScale);
+			} catch (error) {
+				console.warn("[hub] no colour legend for " + o.omicName + ": " + error);
+			}
+			// The heatmap div and the plot div must be ADJACENT SIBLINGS with
+			// the heatmap first: the heatmap's point handlers reach the plot
+			// with .parent().next().highcharts(). Anything between them makes
+			// that undefined and hovering a cell throws.
+			return '<div class="contentbox pa-hub-omic">' +
+				'<h4>' + Ext.String.htmlEncode(o.omicName) + '</h4>' + legend +
+				'<div class="PA_step5_heatmapContainer" ' +
+				  'id="' + me.detailID + '_hm' + index + '" style="height:130px"></div>' +
+				'<div class="PA_step5_plotContainer" ' +
+				  'id="' + me.detailID + '_pl' + index + '" style="height:130px"></div>' +
+				'</div>';
+		}).join("");
 
-		var headers = paOmicHeaders(me.model, omicName);
-		var visual = (me.getParent && me.getParent() && me.getParent().visualOptions) || {};
-		try {
-			me.charts = [
-				generateHeatmap(me.detailID + "_hm", omicName, [entry], summaries, visual, headers),
-				generatePlot(me.detailID + "_plot", omicName, [entry], summaries, null, visual, headers)
-			];
-		} catch (error) {
-			// A silent guard reads as a dead button, so say what happened.
-			console.warn("[hub] could not draw " + id + ": " + error);
-			host.innerHTML +=
-				'<div class="contentbox paEmptyNote"><p>The expression figure for ' +
-				Ext.String.htmlEncode(title) + ' could not be drawn.</p></div>';
-		}
+		drawable.forEach(function (o, index) {
+			var value = OmicValue.loadFromJSON(o);
+			try {
+				me.charts.push(generateHeatmap(me.detailID + "_hm" + index, o.omicName,
+					[value], summaries, visual, paOmicHeaders(me.model, o.omicName)));
+				me.charts.push(generatePlot(me.detailID + "_pl" + index, o.omicName,
+					[value], summaries, null, visual, paOmicHeaders(me.model, o.omicName)));
+			} catch (error) {
+				// A silent guard reads as a dead click, so say what happened.
+				console.warn("[hub] could not draw " + o.omicName + ": " + error);
+				var box = document.getElementById(me.detailID + "_hm" + index);
+				if (box) {
+					box.innerHTML = '<p class="pa-hub-detail-summary">This omic could ' +
+						'not be drawn.</p>';
+				}
+			}
+		});
 	};
 
 	/* ------------------------------------------------------------------ *
 	 * Rings and zoom                                                      *
 	 * ------------------------------------------------------------------ */
 
+	/**
+	 * Fit the lit subset, but never magnify past MAX_FIT_ZOOM.
+	 *
+	 * fit() alone scales to fill: step 1 of a compound with five neighbours
+	 * came up at 3x, with node labels rendered 60px tall and five dots spread
+	 * across a 1000px canvas. Zoom is not carrying information here -- the
+	 * rings are -- so it is capped and the graph simply sits in the middle of
+	 * the space it does not need.
+	 */
+	this.MAX_FIT_ZOOM = 1.3;
 	this.fitToVisible = function () {
 		if (!this.cy) { return; }
 		var lit = this.cy.elements().not(".dim");
-		this.cy.fit(lit.length ? lit : this.cy.elements(), 40);
+		var shown = lit.length ? lit : this.cy.elements();
+		this.cy.fit(shown, 40);
+		if (this.cy.zoom() > this.MAX_FIT_ZOOM) {
+			this.cy.zoom(this.MAX_FIT_ZOOM);
+			this.cy.center(shown);
+		}
 		this.applyLabelZoom();
 	};
 
@@ -685,6 +944,7 @@ function PA_Step3HubNetworkView() {
 	this.setLevel = function (level) {
 		var me = this;
 		me.level = level;
+		me.renderSteps();
 		if (!me.cy) { return; }
 		me.cy.batch(function () {
 			me.cy.nodes().forEach(function (n) {
@@ -699,14 +959,11 @@ function PA_Step3HubNetworkView() {
 		me.fitToVisible();
 		me.drawRings();
 		me.describe(me.payload);
-	};
-
-	this.syncStepButtons = function () {
-		if (!this.stepButtons) { return; }
-		var me = this;
-		this.stepButtons.forEach(function (button, index) {
-			button.toggle(index + 1 === me.level, true);
-		});
+		// The step table marks the step you are looking at, so it has to be
+		// redrawn -- but only while the card is showing the metabolite, or
+		// changing step would throw away the node you clicked.
+		var host = document.getElementById(me.detailID);
+		if (host && host.querySelector(".pa-hub-steptable")) { me.showSeedDetail(); }
 	};
 
 	/* ------------------------------------------------------------------ *
@@ -715,14 +972,6 @@ function PA_Step3HubNetworkView() {
 
 	this.getComponent = function () {
 		var me = this;
-		me.stepButtons = [1, 2, 3, 4].map(function (n) {
-			return Ext.create("Ext.button.Button", {
-				text: String(n), enableToggle: true,
-				toggleGroup: "hubNetStep" + me.canvasID,
-				pressed: (n === 1),
-				handler: function () { me.setLevel(n); }
-			});
-		});
 		var legend =
 			'<div class="pa-hub-legend">' +
 			  '<span><i class="sw up"></i>up</span>' +
@@ -748,35 +997,43 @@ function PA_Step3HubNetworkView() {
 			// the contents rail.
 			html:
 				'<h2 id="HubNetworkSection">Metabolite hub analysis</h2>' +
-				'<p class="pa-hub-intro">Genes within <b>1 to 4 network steps</b> of ' +
-				'each metabolite, and how much of the differential expression ' +
-				'sits among them. Pick a metabolite on the left; click any node ' +
-				'for its expression.</p>' +
-				'<div id="' + me.summaryID + '"></div>' +
-				'<div class="pa-hub-controls">' +
-				  '<input type="search" id="' + me.searchID + '" class="pa-hub-search" ' +
-				    'placeholder="Search metabolites…" aria-label="Search metabolites">' +
-				  '<label class="pa-hub-sortlabel" for="' + me.sortID + '">Rank by</label>' +
-				  '<select id="' + me.sortID + '" class="pa-hub-sort">' +
-				    '<option value="padjust">FDR</option>' +
-				    '<option value="density">% DE neighbours</option>' +
-				    '<option value="den">DE neighbours</option>' +
-				    '<option value="name">Name</option>' +
-				  '</select>' +
-				'</div>' +
-				legend +
-				'<div id="' + me.noticeID + '" class="pa-net-notice"></div>' +
+				'<p class="pa-hub-intro">Which metabolites have differentially ' +
+				'expressed genes concentrated around them in the KEGG network. ' +
+				'Pick a metabolite; click any node for its expression.</p>' +
 				'<div class="more-net-body">' +
-				  '<div class="more-net-sidepanel pa-hub-listrail" id="' + me.listID + '"></div>' +
-				  '<div class="pa-hub-stage more-net-canvas">' +
-				    '<svg id="' + me.ringsID + '" class="pa-hub-rings"></svg>' +
-				    '<div id="' + me.canvasID + '" class="pa-net-canvas"></div>' +
-				    '<div id="' + me.tipID + '" class="pa-hub-tip"></div>' +
+				  '<div class="more-net-sidepanel pa-hub-listrail">' +
+				    '<div class="pa-hub-railhead">' +
+				      '<input type="search" id="' + me.searchID + '" class="pa-hub-search" ' +
+				        'placeholder="Search metabolites…" aria-label="Search metabolites">' +
+				      '<div class="pa-hub-railsort">' +
+				        '<label class="pa-hub-sortlabel" for="' + me.sortID + '">Rank by</label>' +
+				        '<select id="' + me.sortID + '" class="pa-hub-sort">' +
+				          '<option value="padjust">FDR</option>' +
+				          '<option value="density">% DE neighbours</option>' +
+				          '<option value="den">DE neighbours</option>' +
+				          '<option value="name">Name</option>' +
+				        '</select>' +
+				      '</div>' +
+				      '<p class="pa-hub-railcount" id="' + me.countID + '"></p>' +
+				    '</div>' +
+				    '<div class="pa-hub-listbody" id="' + me.listID + '"></div>' +
 				  '</div>' +
-				'</div>' +
-				'<div id="' + me.detailID + '" class="pa-hub-detail"></div>',
-			bbar: [{ xtype: "tbtext", text: "Steps from the metabolite:" }]
-				.concat(me.stepButtons),
+				  '<div class="pa-hub-stage more-net-canvas">' +
+				    '<div class="pa-hub-stagehead">' +
+				      '<span class="pa-hub-seedname" id="' + me.seedNameID + '"></span>' +
+				      '<span class="pa-hub-steplabel">steps away:</span>' +
+				      '<span class="pa-hub-steps" id="' + me.stepsID + '"></span>' +
+				      legend +
+				    '</div>' +
+				    '<div id="' + me.noticeID + '" class="pa-net-notice"></div>' +
+				    '<div class="pa-hub-plot" id="' + me.plotID + '">' +
+				      '<svg id="' + me.ringsID + '" class="pa-hub-rings"></svg>' +
+				      '<div id="' + me.canvasID + '" class="pa-net-canvas"></div>' +
+				      '<div id="' + me.tipID + '" class="pa-hub-tip"></div>' +
+				    '</div>' +
+				    '<div id="' + me.detailID + '" class="pa-hub-detail"></div>' +
+				  '</div>' +
+				'</div>',
 			listeners: {
 				// paDeferFrame, NOT requestAnimationFrame: rAF never runs in a
 				// background tab and the panel came up permanently blank.
@@ -784,10 +1041,7 @@ function PA_Step3HubNetworkView() {
 					paDeferFrame(function () {
 						if (!me.hasData()) { return; }   // stays hidden
 						me.component.show();
-						me.renderList();
-						me.renderSummary();
-						me.bindControls();
-						me.selectFirst();
+						me.mount();
 						if (me.cy) { me.cy.resize(); me.fitToVisible(); me.drawRings(); }
 					});
 				},
@@ -806,7 +1060,8 @@ function PA_Step3HubNetworkView() {
 	this.bindControls = function () {
 		var me = this;
 		var search = document.getElementById(me.searchID);
-		if (search) {
+		if (search && !search.dataset.hubBound) {
+			search.dataset.hubBound = "1";
 			var timer = null;
 			search.addEventListener("input", function () {
 				// buffer:100 is the house debounce (ExtJS_extensions.js:209-239)
@@ -818,7 +1073,8 @@ function PA_Step3HubNetworkView() {
 			});
 		}
 		var sort = document.getElementById(me.sortID);
-		if (sort) {
+		if (sort && !sort.dataset.hubBound) {
+			sort.dataset.hubBound = "1";
 			sort.addEventListener("change", function () {
 				me.sortKey = sort.value;
 				me.sortList();
@@ -830,8 +1086,7 @@ function PA_Step3HubNetworkView() {
 	/** Open the most significant metabolite so the panel is never empty. */
 	this.selectFirst = function () {
 		if (this.seed || !this.metabolites.length) { return; }
-		var first = this.metabolites[0];
-		this.showCompound(first.ID, first.bestStep);
+		this.showCompound(this.metabolites[0].ID);
 	};
 
 	/** Whether this job has anything for the panel to show. */

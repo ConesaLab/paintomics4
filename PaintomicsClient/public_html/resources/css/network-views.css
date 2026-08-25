@@ -488,9 +488,25 @@
 	border-color: var(--hub-ink);
 }
 
+/* The stage is a column: head, notice, graph, detail card. The graph is the
+   only flexible row, so opening the card SHRINKS the canvas instead of
+   covering it, and everything a click produces stays inside the viewport.
+   Before this, the detail sat below a 720px canvas -- it rendered correctly
+   448px below the fold, which is indistinguishable from a dead click. */
+.pa-hub-stage {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+}
+.pa-hub-plot {
+	position: relative;
+	flex: 1 1 auto;
+	min-height: 0;            /* or the flex item refuses to shrink at all */
+}
+
 /* The SVG ring guides sit UNDER the Cytoscape canvas and never take pointer
    events, so hover and drag reach the graph unchanged. */
-.pa-hub-stage { position: relative; }
 .pa-hub-rings {
 	position: absolute;
 	top: 0; left: 0; right: 0; bottom: 0;
@@ -499,9 +515,12 @@
 	pointer-events: none;
 	z-index: 0;
 }
-.pa-hub-stage .pa-net-canvas {
+/* Height comes from the flex row, not from --pa-net-canvas-height: inside the
+   stage the canvas is one of four stacked things, not the whole panel. */
+.pa-hub-plot .pa-net-canvas {
 	position: relative;
 	z-index: 1;
+	height: 100%;
 	background: transparent;
 }
 .pa-hub-ring {
@@ -538,7 +557,7 @@
 }
 
 
-/* ---- Hub panel: list rail, controls, node detail --------------------------
+/* ---- Hub panel: list rail, step chips, node detail ------------------------
    The panel replaced a nine-column sortable grid, so the list has to carry the
    two orderings people actually used -- FDR and DE-neighbour count -- or the
    redesign loses information rather than clarifying it. */
@@ -546,21 +565,58 @@
 	margin-bottom: 4px;
 }
 .pa-hub-intro {
-	margin: 0 var(--pa-card-inset, 26px) 10px;
+	/* No horizontal margin: `div.contentbox p` in main.css already pads every
+	   paragraph in this card by --pa-card-inset, so a margin here inset the
+	   intro TWICE and put it 26px right of the h2 it sits under. */
+	margin: 0 0 10px;
 	font-size: 13px;
 	color: var(--pa-ink-muted, #595959);
 	max-width: 70ch;
 }
-.pa-hub-controls {
+
+/* ---- The metabolite rail ------------------------------------------------ */
+
+/* Anchors, not <li>: the alignment overlay measures list items and would judge
+   every row against the page rails. */
+.pa-hub-listrail {
+	width: 252px;
+	flex: 0 0 252px;
+	display: flex;
+	flex-direction: column;
+	padding: 0;
+	overflow: hidden;         /* the BODY scrolls; the head stays put */
+	border-left: 0;
+	border-right: 1px solid var(--pa-border, #e0e0e0);
+}
+.pa-hub-railhead {
+	flex: 0 0 auto;
+	padding: 10px 12px 8px;
+	border-bottom: 1px solid var(--pa-border, #e0e0e0);
+}
+.pa-hub-railsort {
 	display: flex;
 	align-items: center;
-	gap: 10px;
-	flex-wrap: wrap;
-	margin: 0 var(--pa-card-inset, 26px) 10px;
+	gap: 6px;
+	margin-top: 6px;
+}
+.pa-hub-railcount {
+	/* Same double-inset as the intro: this <p> is inside a 12px-padded rail
+	   head, and main.css adds another 26px on top of that. */
+	margin: 7px 0 0;
+	padding: 0;
+	font-size: 11px;
+	color: var(--pa-ink-muted, #595959);
+	font-variant-numeric: tabular-nums;
+}
+.pa-hub-railcount:empty { display: none; }
+.pa-hub-listbody {
+	flex: 1 1 auto;
+	overflow-y: auto;
+	min-height: 0;
 }
 .pa-hub-search {
-	flex: 0 1 260px;
-	min-width: 160px;
+	width: 100%;
+	box-sizing: border-box;
 	padding: 5px 9px;
 	font: inherit;
 	font-size: 13px;
@@ -570,25 +626,21 @@
 	border-radius: 4px;
 }
 .pa-hub-sortlabel {
+	flex: 0 0 auto;
+	white-space: nowrap;      /* "Rank by" wrapped to two lines in a 252px rail */
 	font-size: 12px;
 	color: var(--pa-ink-muted, #595959);
 }
 .pa-hub-sort {
-	padding: 5px 8px;
+	flex: 1 1 auto;
+	min-width: 0;
+	padding: 4px 6px;
 	font: inherit;
-	font-size: 13px;
+	font-size: 12px;
 	color: var(--pa-ink, #18181b);
 	background: var(--pa-surface, #fff);
 	border: 1px solid var(--pa-border, #d4d4d8);
 	border-radius: 4px;
-}
-
-/* The list rail. Anchors, not <li>: the alignment overlay measures list items
-   and would judge every row against the page rails. */
-.pa-hub-listrail {
-	width: 244px;
-	flex: 0 0 244px;
-	padding: 4px 0;
 }
 .pa-hub-item {
 	display: block;
@@ -623,8 +675,69 @@
 }
 .pa-hub-list-empty {
 	margin: 12px;
+	padding: 0;              /* see .pa-hub-intro */
 	font-size: 12px;
 	color: var(--pa-ink-muted, #595959);
+}
+
+/* ---- Stage head: seed name, step chips, legend -------------------------- */
+
+.pa-hub-stagehead {
+	flex: 0 0 auto;
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 6px 12px;
+	padding: 8px 10px 6px;
+}
+.pa-hub-seedname {
+	font-size: 14px;
+	font-weight: 600;
+	color: var(--hub-ink, #18181b);
+}
+.pa-hub-steplabel {
+	font-size: 12px;
+	color: var(--pa-ink-muted, #595959);
+}
+
+/* A step whose ring is empty is disabled and says "0". Four identical toggle
+   buttons in a bottom toolbar could not say which of them had anything to
+   show, and most compounds run out well before radius 4 -- so a pressable
+   button that changed nothing was the common case, not the edge case. */
+.pa-hub-steps {
+	display: inline-flex;
+	gap: 4px;
+}
+.pa-hub-step {
+	display: inline-flex;
+	align-items: baseline;
+	gap: 4px;
+	padding: 3px 9px;
+	font: inherit;
+	font-size: 12px;
+	line-height: 1.4;
+	color: var(--pa-ink, #18181b);
+	background: var(--pa-surface, #fff);
+	border: 1px solid var(--pa-border, #d4d4d8);
+	border-radius: 12px;
+	cursor: pointer;
+}
+.pa-hub-step em {
+	font-style: normal;
+	font-size: 10px;
+	color: var(--pa-ink-muted, #595959);
+	font-variant-numeric: tabular-nums;
+}
+.pa-hub-step:hover:not(:disabled) { border-color: var(--hub-ink, #18181b); }
+.pa-hub-step.is-current {
+	color: #fff;
+	background: var(--hub-ink, #18181b);
+	border-color: var(--hub-ink, #18181b);
+}
+.pa-hub-step.is-current em { color: rgba(255, 255, 255, 0.75); }
+.pa-hub-step:disabled {
+	opacity: 0.4;
+	cursor: default;
 }
 
 .pa-hub-tip-hint {
@@ -632,15 +745,49 @@
 	font-size: 11px;
 }
 
-/* Node detail sits BELOW the network at full width: the 300px heatmap
-   container plus its plot does not fit a 244px rail. */
-.pa-hub-detail:empty { display: none; }
+/* ---- The node detail card ------------------------------------------------
+   Docked to the bottom of the stage rather than placed after it: the canvas is
+   720px tall, so anything below it opens off-screen. Height 0 when closed so
+   the graph gets the whole stage back. */
+/* Sized with flex-basis, and with NO height transition. Both are the same
+   measured bug: with `transition: height`, this item resolved to 1px and stayed
+   there -- the animation and the flex pass kept restarting each other while
+   Cytoscape resized against the same box. flex-basis is what the column flex
+   algorithm actually reads, and it settled at the right size immediately. */
 .pa-hub-detail {
-	margin: 12px var(--pa-card-inset, 26px) 4px;
+	position: relative;
+	flex: 0 0 0;
+	overflow: hidden;
+	background: var(--pa-surface, #fff);
 }
+.pa-hub-detail.is-open {
+	flex-basis: 264px;
+	border-top: 1px solid var(--pa-border, #e0e0e0);
+}
+.pa-hub-detail-body {
+	height: calc(100% - 30px);
+	overflow-y: auto;
+	padding: 0 12px 10px;
+}
+.pa-hub-detail-close {
+	position: absolute;
+	top: 4px;
+	right: 6px;
+	z-index: 2;
+	width: 22px;
+	height: 22px;
+	padding: 0;
+	font-size: 17px;
+	line-height: 1;
+	color: var(--pa-ink-muted, #595959);
+	background: transparent;
+	border: 0;
+	cursor: pointer;
+}
+.pa-hub-detail-close:hover { color: var(--hub-ink, #18181b); }
 .pa-hub-detail-title {
-	margin: 0 0 6px;
-	font-size: 15px;
+	margin: 8px 34px 6px 12px;
+	font-size: 14px;
 }
 .pa-hub-detail-where {
 	font-size: 12px;
@@ -653,12 +800,60 @@
 	font-weight: 600;
 	color: var(--pa-ink-muted, #595959);
 }
+.pa-hub-detail-summary {
+	margin: 0 0 8px;
+	padding: 0;              /* see .pa-hub-intro -- main.css pads every <p> */
+	font-size: 12px;
+	color: var(--pa-ink-muted, #595959);
+}
+
+/* The four rows the removed grid held for this compound -- all of them, about
+   one compound, instead of 852 rows needing a step filter to be readable. */
+.pa-hub-steptable {
+	margin: 0 0 10px;
+	border-collapse: collapse;
+	font-size: 12px;
+	font-variant-numeric: tabular-nums;
+}
+.pa-hub-steptable th,
+.pa-hub-steptable td {
+	padding: 3px 12px 3px 0;
+	text-align: right;
+	border-bottom: 1px solid var(--pa-border-subtle, #ececec);
+}
+.pa-hub-steptable th:first-child,
+.pa-hub-steptable td:first-child { text-align: left; }
+.pa-hub-steptable th {
+	font-weight: 600;
+	color: var(--pa-ink-muted, #595959);
+}
+.pa-hub-steptable tr.is-current { background: var(--pa-surface-subtle, #f5f4ef); }
+.pa-hub-steptable tr.is-absent td { color: var(--pa-ink-muted, #595959); }
+.pa-hub-steptable td.is-significant { font-weight: 600; }
+
+/* One box per omic. globalExpressionData carries omicsValues[0] only, so this
+   is fed by /pa_hub_feature rather than by the job payload. */
+.pa-hub-omic {
+	margin: 0 0 10px;
+	padding: 6px 8px;
+}
+.pa-hub-omic h4 {
+	margin: 0 0 2px;
+	font-size: 12px;
+	font-weight: 600;
+}
+.pa-hub-omic .PA_step5_heatmapContainer { width: 320px; }
+.pa-hub-omic .PA_step5_plotContainer { flex: 1 1 auto; min-width: 240px; }
+.pa-hub-omic .PA_step5_heatmapContainer,
+.pa-hub-omic .PA_step5_plotContainer { display: inline-block; vertical-align: top; }
+
 .pa-hub-edges {
 	margin: 0;
 	padding-left: 18px;
 	font-size: 12px;
 	color: var(--pa-ink-muted, #595959);
 }
+.pa-hub-edge-src { color: var(--pa-ink-subtle, #8a8a8a); }
 .pa-hub-warn { color: var(--hub-up, #e34948); }
 
 @media (max-width: 900px) {
@@ -666,5 +861,8 @@
 		width: auto;
 		flex: 1 1 auto;
 		max-height: 220px;
+		border-right: 0;
+		border-bottom: 1px solid var(--pa-border, #e0e0e0);
 	}
+	.pa-hub-detail.is-open { flex-basis: 300px; }
 }

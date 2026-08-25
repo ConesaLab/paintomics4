@@ -111,11 +111,59 @@ class RouteWiringTest(unittest.TestCase):
                       self._read("paintomicsserver.py"))
 
     def test_handler_checks_ownership(self):
+        """Both hub routes go through the one guarded loader.
+
+        The check used to be inlined here. It moved into _hubOwnedJob when the
+        second route arrived, precisely so a new route cannot ship without it --
+        so the assertion is now "the route delegates" plus "the delegate
+        checks", which is what actually has to hold.
+        """
         source = self._read("servlets", "PathwayAcquisitionServlet.py")
         start = source.index("def pathwayAcquisitionHubSubgraph")
         body = source[start:start + 3000]
-        self.assertIn("getUserID", body)
-        self.assertIn("getAllowSharing", body)
+        self.assertIn("_hubOwnedJob(", body)
+
+        guard = source[source.index("def _hubOwnedJob"):]
+        guard = guard[:guard.index("def pathwayAcquisitionHubSubgraph")]
+        self.assertIn("getUserID", guard)
+        self.assertIn("getAllowSharing", guard)
+
+    def test_the_feature_route_is_guarded_the_same_way(self):
+        source = self._read("servlets", "PathwayAcquisitionServlet.py")
+        start = source.index("def pathwayAcquisitionHubFeature")
+        body = source[start:start + 3000]
+        self.assertIn("_hubOwnedJob(", body)
+
+    def test_the_feature_route_is_registered_and_imported(self):
+        server = self._read("paintomicsserver.py")
+        self.assertIn("/pa_hub_feature", server)
+        self.assertIn("pathwayAcquisitionHubFeature", server)
+
+    def test_the_feature_route_ships_every_omic(self):
+        """globalExpressionData carries omicsValues[0] only; this route is the
+        rest of the feature, so it must iterate the whole list.
+
+        Read from the CODE, not the whole function: this docstring and the
+        route's own explain why omicsValues[0] is not enough, and an assertion
+        that matched prose would pass on a comment while the code did the
+        wrong thing. That has caught me three times on this branch.
+        """
+        source = self._read("servlets", "PathwayAcquisitionServlet.py")
+        start = source.index("def pathwayAcquisitionHubFeature")
+        body = source[start:start + 3000]
+        code = body[body.index("    try:"):]
+        self.assertIn("feature.omicsValues", code)
+        self.assertNotIn("omicsValues[0]", code)
+        self.assertIn('"omicName"', code)
+
+    def test_a_feature_that_was_never_measured_is_not_an_error(self):
+        """Most nodes in a radius-4 ring were never measured, and the client
+        draws a "how it connects" panel for those."""
+        source = self._read("servlets", "PathwayAcquisitionServlet.py")
+        start = source.index("def pathwayAcquisitionHubFeature")
+        body = source[start:start + 3000]
+        window = body[body.index("if feature is None"):]
+        self.assertIn('"success": True', window[:400])
 
     def test_level_and_budget_are_clamped(self):
         source = self._read("servlets", "PathwayAcquisitionServlet.py")
@@ -207,7 +255,39 @@ class PerRingBudgetTest(unittest.TestCase):
         start = source.index("def pathwayAcquisitionHubSubgraph")
         body = source[start:start + 4000]
         self.assertIn("priority=priority", body)
-        self.assertIn("relevantAssociation", body)
+        self.assertIn("isRelevantAssociation()", body)
+
+    def test_the_priority_set_is_not_limited_to_one_omic_name(self):
+        """It asked for omicName == "Gene expression" and nothing else.
+
+        That name is only the default the upload form suggests for the first
+        omic; a job whose omics are called "RNA-seq" and "Proteomics" is not a
+        job without differential expression, and its priority set came out
+        empty -- so every large ring was sampled by degree alone and the DE
+        genes the panel exists to show were the ones dropped.
+        """
+        path = os.path.join(os.path.dirname(os.path.dirname(
+            os.path.abspath(__file__))), "servlets",
+            "PathwayAcquisitionServlet.py")
+        with open(path, "r", encoding="utf-8") as handle:
+            source = handle.read()
+        start = source.index("def pathwayAcquisitionHubSubgraph")
+        body = source[start:start + 4000]
+        window = body[body.index("priority = set()"):body.index("payload = graph.subgraph")]
+        self.assertNotIn('"Gene expression"', window)
+
+    def test_the_priority_set_asks_isRelevant_not_the_list(self):
+        """`relevant` is a LIST, and a list of all-False is truthy."""
+        path = os.path.join(os.path.dirname(os.path.dirname(
+            os.path.abspath(__file__))), "servlets",
+            "PathwayAcquisitionServlet.py")
+        with open(path, "r", encoding="utf-8") as handle:
+            source = handle.read()
+        start = source.index("def pathwayAcquisitionHubSubgraph")
+        body = source[start:start + 4000]
+        window = body[body.index("priority = set()"):body.index("payload = graph.subgraph")]
+        self.assertIn("isRelevant()", window)
+        self.assertNotIn("values.relevant or", window)
 
 
 def main():
