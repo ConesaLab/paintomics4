@@ -130,8 +130,14 @@ PUBLISHED = {
     # node-click expression panel. v=0.6 replaced the nine-column grid, fixed
     # stateOf (entry.relevant is an ARRAY, so [] was truthy and "measured, not
     # DE" was unreachable), and announces both sampled and empty rings.
+    # v=1.3 moves the node detail INSIDE the network stage. A browser holding
+    # the v=0.6 copy would run the old view against network-views.css v=1.5,
+    # whose .pa-hub-detail is `flex: 0 0 0` and only opens on .is-open -- a
+    # class the old view never adds. The card would be permanently 0px: the
+    # same invisible-heatmap bug this release exists to fix, reintroduced by
+    # the cache for everyone who had already loaded the site.
     "app/view/PathwayAcquisitionViews/PA_Step3HubNetworkView.js": (
-        "0.6", "92cd012cdce957d1a80ec8a2c6174f942d41296616348f6e3bfb30a22bab909b"),
+        "1.3", "fbf0e8f09d1e666418564fcbf3820fae7d0c0919801fc10ac6849a91c07318fb"),
     # v=0.9 adds SERVER_URL_PA_PATHWAY_EVIDENCE. The endpoint was added at
     # v=0.8 WITHOUT a bump, which this guard caught: a returning browser keeps
     # this file for up to 12 hours, so the evidence overlay would have POSTed
@@ -143,8 +149,10 @@ PUBLISHED = {
     # actually outlasts the server's own worst case (400 x 3s) plus a separate
     # transport-failure budget. A browser holding the old copy would poll two
     # URLs it has no constants for.
+    # v=1.4 adds SERVER_URL_PA_HUB_FEATURE. Same failure mode as v=0.9 above:
+    # a browser keeping the old copy POSTs every node click to `undefined`.
     "resources/ServerConfiguration.js": (
-        "1.3", "0950f90cbc7e5c0f2943afa2a2ac5d72a6a1463adf21f4a29b4d7e7df87e4aa0"),
+        "1.4", "3b4647908cda679f1fc0c63282187cf363bfa7aa0ea5578bf4bd5f9a32b2d1a7"),
     # The evidence layer itself: MORE relationships drawn on the diagram and
     # classified against KEGG, Reactome and OmniPath.
     # v=2.8 draws regulators the map does not print, colours them from the
