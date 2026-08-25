@@ -1640,6 +1640,7 @@ def pathwayAcquisitionHubSubgraph(request, response, QUEUE_INSTANCE):
         compoundID = request.form.get("compoundID")
         level = max(1, min(4, int(request.form.get("level", 1) or 1)))
         budget = max(1, min(2000, int(request.form.get("maxEdges", 400) or 400)))
+        perRing = max(5, min(200, int(request.form.get("perRing", 40) or 40)))
         userID = request.cookies.get("userID")
 
         jobInstance = JobInformationManager().loadJobInstance(jobID)
@@ -1664,7 +1665,28 @@ def pathwayAcquisitionHubSubgraph(request, response, QUEUE_INSTANCE):
                                                  "installed for this organism."})
             return response
 
-        payload = graph.subgraph(compoundID, level, budget)
+        # The per-ring sample must keep the DE features first: DE concentration
+        # is the claim the panel exists to show, and a sample that dropped the
+        # DE genes would misrepresent it. Only the server knows which features
+        # are relevant for THIS job, so the priority set is built here rather
+        # than left to the client, which never receives the dropped nodes.
+        priority = set()
+        try:
+            for geneID, gene in (jobInstance.inputGenesData or {}).items():
+                for values in gene.omicsValues:
+                    if values.omicName == "Gene expression" and (
+                            values.relevant or values.relevantAssociation):
+                        priority.add(geneID)
+                        break
+            for compID, comp in (jobInstance.inputCompoundsData or {}).items():
+                if comp.omicsValues[0].relevant:
+                    priority.add(compID)
+        except Exception as ex:
+            logging.warning("HUB_SUBGRAPH - could not build the DE priority set "
+                            "for %s (%s); sampling by degree alone.", jobID, str(ex))
+
+        payload = graph.subgraph(compoundID, level, budget, priority=priority,
+                                 per_ring=perRing)
         payload["success"] = True
         response.setContent(payload)
     except Exception as ex:

@@ -125,6 +125,91 @@ class RouteWiringTest(unittest.TestCase):
         self.assertIn("min(2000", body)
 
 
+
+class PerRingBudgetTest(unittest.TestCase):
+    """Every ring must be represented, and DE nodes must survive the sample.
+
+    The first version ranked all candidate edges by distance from the seed and
+    truncated at `budget`. Rings 1 and 2 ate the whole allowance, so levels 2, 3
+    and 4 returned BYTE-IDENTICAL subgraphs -- measured on job fh304774Lw,
+    C00097: 147 nodes and {step 0:1, 1:17, 2:129} at every one of those levels,
+    with no step-3 or step-4 node at all. `truncated` was true, which was
+    technically honest and completely hid that entire rings were missing.
+    """
+
+    def _wide(self):
+        """A seed with a small ring 1 and a ring 2 far larger than any quota."""
+        edges = [Edge("C1", "hub", "PPrel", "", "p", False)]
+        types = {"C1": "compound", "hub": "gene"}
+        for index in range(100):
+            name = "g%03d" % index
+            edges.append(Edge("hub", name, "PPrel", "", "p", False))
+            types[name] = "gene"
+        return KeggGraph(edges, types, "test")
+
+    def test_each_level_adds_its_own_ring(self):
+        graph = self._wide()
+        seen = []
+        for level in (1, 2):
+            out = graph.subgraph("C1", level, 500, per_ring=10)
+            seen.append(max(n["step"] for n in out["nodes"]))
+        self.assertEqual(seen, [1, 2])
+
+    def test_a_big_ring_is_sampled_not_dropped(self):
+        out = self._wide().subgraph("C1", 2, 500, per_ring=10)
+        ring2 = [r for r in out["rings"] if r["step"] == 2][0]
+        self.assertEqual(ring2["total"], 100)
+        self.assertGreater(ring2["shown"], 0)
+        self.assertLess(ring2["shown"], 100)
+
+    def test_de_nodes_are_kept_first(self):
+        """The sample must preserve the signal the panel exists to show."""
+        graph = self._wide()
+        priority = {"g0%02d" % i for i in range(90, 100)}
+        out = graph.subgraph("C1", 2, 500, priority=priority, per_ring=5)
+        shown = {n["id"] for n in out["nodes"] if n["step"] == 2}
+        self.assertTrue(shown.issubset(priority),
+                        "a non-DE node displaced a DE one: %s" % (shown - priority))
+
+    def test_unused_quota_carries_outward(self):
+        """Ring 1 needs one slot; ring 2 should get the rest."""
+        out = self._wide().subgraph("C1", 2, 500, per_ring=10)
+        ring1 = [r for r in out["rings"] if r["step"] == 1][0]
+        ring2 = [r for r in out["rings"] if r["step"] == 2][0]
+        self.assertEqual(ring1["shown"], 1)
+        self.assertGreater(ring2["shown"], 10)
+
+    def test_rings_report_shown_against_total(self):
+        out = self._wide().subgraph("C1", 2, 500, per_ring=10)
+        for ring in out["rings"]:
+            self.assertIn("shown", ring)
+            self.assertIn("total", ring)
+            self.assertIn("de_shown", ring)
+            self.assertIn("de_total", ring)
+            self.assertLessEqual(ring["shown"], ring["total"])
+
+    def test_sampling_sets_truncated_even_when_edges_fit(self):
+        out = self._wide().subgraph("C1", 2, 5000, per_ring=10)
+        self.assertTrue(out["truncated"])
+        self.assertGreater(out["nodes_dropped"], 0)
+
+    def test_nothing_dropped_means_not_truncated(self):
+        out = self._wide().subgraph("C1", 2, 5000, per_ring=500)
+        self.assertFalse(out["truncated"])
+        self.assertEqual(out["nodes_dropped"], 0)
+
+    def test_the_servlet_passes_a_de_priority_set(self):
+        path = os.path.join(os.path.dirname(os.path.dirname(
+            os.path.abspath(__file__))), "servlets",
+            "PathwayAcquisitionServlet.py")
+        with open(path, "r", encoding="utf-8") as handle:
+            source = handle.read()
+        start = source.index("def pathwayAcquisitionHubSubgraph")
+        body = source[start:start + 4000]
+        self.assertIn("priority=priority", body)
+        self.assertIn("relevantAssociation", body)
+
+
 def main():
     suite = unittest.TestLoader().loadTestsFromModule(sys.modules[__name__])
     result = unittest.TextTestRunner(verbosity=2).run(suite)

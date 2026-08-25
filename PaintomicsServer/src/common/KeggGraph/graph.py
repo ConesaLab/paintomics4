@@ -97,26 +97,66 @@ class KeggGraph(object):
             out.append([self.names[int(x)] for x in found])
         return out
 
-    def subgraph(self, seed, k, budget):
-        """The induced subgraph of the seed's k-step ball, ranked and capped.
+    def subgraph(self, seed, k, budget, priority=None, per_ring=40):
+        """The seed's k-step neighbourhood, budgeted PER RING.
 
-        Ranking is by hop distance then by endpoint degree, so a cap keeps the
-        edges nearest the seed and drops the periphery -- the rank-then-cap
-        discipline the OmniPath and RegTarget views already use. `truncated`
-        exists so a cap can never read as "this is all there is".
+        The first version ranked every candidate edge by distance from the seed
+        and truncated at `budget`. Rings 1 and 2 then ate the whole allowance and
+        rings 3 and 4 contributed nothing at all -- levels 2, 3 and 4 returned
+        byte-identical subgraphs, so the step control had nothing to light.
+        `truncated` was technically true but hid that ENTIRE RINGS were missing.
+
+        So the budget is allocated per ring instead. Each ring keeps at most
+        `per_ring` nodes; a ring that needs fewer hands the remainder to the
+        rings outside it, which are the ones that actually run out. Within a
+        ring, `priority` ids are kept first -- the caller passes the job's
+        differentially expressed features, because DE concentration is the whole
+        claim the panel exists to show, and a sample that dropped the DE genes
+        would misrepresent it. Ties break on degree, then on id for determinism.
+
+        `rings` reports shown vs total per ring so the UI can say "40 of 312"
+        rather than implying it drew everything.
         """
         empty = {"seed": seed, "source": self.source, "truncated": False,
-                 "nodes": [], "edges": []}
+                 "nodes": [], "edges": [], "rings": []}
         code = self._code.get(seed)
         if code is None:
             return empty
 
-        step_of = {seed: 0}
-        for radius, ring in enumerate(self.rings(seed, k), start=1):
-            for name in ring:
-                step_of.setdefault(name, radius)
+        priority = priority or set()
+        rings = self.rings(seed, k)
 
+        kept_by_step, ring_report, dropped = {0: [seed]}, [], 0
+        carry = 0
+        for index, ring in enumerate(rings, start=1):
+            allowance = per_ring + carry
+            if len(ring) <= allowance:
+                chosen = list(ring)
+                carry = allowance - len(ring)
+            else:
+                carry = 0
+                chosen = sorted(
+                    ring,
+                    key=lambda name: (0 if name in priority else 1,
+                                      -int(self._indptr[self._code[name] + 1]
+                                           - self._indptr[self._code[name]]),
+                                      name))[:allowance]
+            dropped += len(ring) - len(chosen)
+            kept_by_step[index] = chosen
+            ring_report.append({
+                "step": index,
+                "shown": len(chosen),
+                "total": len(ring),
+                "de_shown": sum(1 for n in chosen if n in priority),
+                "de_total": sum(1 for n in ring if n in priority),
+            })
+
+        step_of = {}
+        for step, names in kept_by_step.items():
+            for name in names:
+                step_of.setdefault(name, step)
         codes = {self._code[n] for n in step_of}
+
         picked = []
         for edge_id in range(len(self.edge_kind)):
             a = int(self.edge_src[edge_id])
@@ -127,55 +167,27 @@ class KeggGraph(object):
                           (self._indptr[b + 1] - self._indptr[b]))
                 picked.append((near, -int(degree), edge_id))
         picked.sort()
-        truncated = len(picked) > budget
+        edges_truncated = len(picked) > budget
         picked = picked[:budget]
 
-        kept = {seed}
         edges = []
         for _near, _degree, edge_id in picked:
-            a = self.names[int(self.edge_src[edge_id])]
-            b = self.names[int(self.edge_dst[edge_id])]
-            kept.add(a)
-            kept.add(b)
             edges.append({
-                "source": a, "target": b,
+                "source": self.names[int(self.edge_src[edge_id])],
+                "target": self.names[int(self.edge_dst[edge_id])],
                 "kind": self.edge_kind[edge_id],
                 "subtype": self.edge_subtype[edge_id],
                 "pathway": self.edge_pathway[edge_id],
                 "reversible": bool(self.edge_reversible[edge_id]),
             })
+
         nodes = [{"id": name, "type": self.node_type.get(name),
-                  "step": step_of.get(name, k)}
-                 for name in sorted(kept)]
-        return {"seed": seed, "source": self.source, "truncated": truncated,
-                "nodes": nodes, "edges": edges}
-
-    def compound_balls(self, k=4):
-        """Cumulative k-step balls for EVERY compound, as integer code arrays,
-        memoised on the graph.
-
-        The scorer needs the whole background on every job, and these are a pure
-        function of the graph -- so they belong to the graph's lifetime, not the
-        job's. Returned as node codes rather than names so scoring is numpy
-        masking rather than millions of dict lookups: that is the difference
-        between ~2.3 s per job (what the R scorer also paid) and milliseconds.
-
-        `balls[compound][i]` is the cumulative ball out to radius i+1, unique and
-        seed-free. Rings are disjoint, so the cumulative count is also the node
-        count -- which is what `ball_size` reports.
-        """
-        cached = self._compound_balls.get(k)
-        if cached is not None:
-            return cached
-        out = {}
-        for compound in self.compounds():
-            running, cumulative = [], []
-            for ring in self.rings(compound, k):
-                running.extend(self._code[n] for n in ring)
-                cumulative.append(np.array(running, dtype=np.int32))
-            out[compound] = cumulative
-        self._compound_balls[k] = out
-        return out
+                  "step": step_of[name]}
+                 for name in sorted(step_of)]
+        return {"seed": seed, "source": self.source,
+                "truncated": bool(dropped) or edges_truncated,
+                "nodes_dropped": dropped,
+                "nodes": nodes, "edges": edges, "rings": ring_report}
 
     def compounds(self):
         return [n for n in self.names if self.node_type.get(n) == "compound"]
