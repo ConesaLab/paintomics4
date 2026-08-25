@@ -18,7 +18,12 @@ from statsmodels.stats.multitest import multipletests
 
 logger = logging.getLogger(__name__)
 
-HUB_SCHEMA_VERSION = 2
+# 3: the measured/relevant sets now span EVERY gene-based omic. Until this
+#    version they were built only from an omic literally named "Gene
+#    expression", so rows scored under version 2 answer a different
+#    question and must be re-scored rather than served -- which is what
+#    this constant is for (PathwayAcquisitionServlet checks it on recovery).
+HUB_SCHEMA_VERSION = 3
 _QUINTILES = 5
 
 

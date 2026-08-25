@@ -1755,7 +1755,14 @@ def pathwayAcquisitionHubNames(request, response, QUEUE_INSTANCE):
             if compoundID in table:
                 names[compoundID] = table[compoundID]
 
-        response.setContent({"success": True, "names": names})
+        # The scoring contract the server is on. The client caches the job
+        # model in IndexedDB, so a browser that loaded this job before an
+        # upgrade keeps serving rows scored under the old definition -- which
+        # is exactly what HUB_SCHEMA_VERSION exists to prevent, and the check
+        # only ever ran on the server's recovery path.
+        from src.common.KeggGraph.scorer import HUB_SCHEMA_VERSION
+        response.setContent({"success": True, "names": names,
+                             "hubSchema": HUB_SCHEMA_VERSION})
     except Exception as ex:
         logging.error("HUB_NAMES - %s", str(ex))
         response.setContent({"success": False, "errorMessage": str(ex)})

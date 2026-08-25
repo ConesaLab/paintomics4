@@ -232,7 +232,18 @@ class HubNetworkViewContractTest(unittest.TestCase):
         body = self.code()
         self.assertIn("SERVER_URL_PA_HUB_FEATURE", body)
         self.assertIn("payload.omics", body)
-        self.assertIn("drawable.forEach", body)
+        self.assertIn("order.forEach", body)
+
+    def test_rows_of_one_omic_share_a_heatmap(self):
+        """One KEGG gene can map to several input features, and the payload
+        carries one OmicValue per (omic, input row). Gene 100040843 has seven
+        "Gene expression" rows; a box each produced seven single-row heatmaps
+        under seven identical headings."""
+        body = self.code()
+        start = body.index("this.drawOmics = function")
+        window = body[start:start + 3000]
+        self.assertIn("grouped[o.omicName]", window)
+        self.assertIn("grouped[omicName].length", window)
 
     def test_the_feature_fetch_is_cached(self):
         """Re-clicking a node must not re-hit the server."""
@@ -496,6 +507,46 @@ class SeedSummaryTest(unittest.TestCase):
 
     def test_the_cumulative_column_is_labelled_as_such(self):
         self.assertIn("Cumulative, and counting only", self._view())
+
+
+class TheOldGridIsGoneTest(unittest.TestCase):
+    """The nine-column hub table is deleted, not merely unmounted.
+
+    It was left in the file after the network panel replaced it, which meant
+    534 lines of it were still constructed and loadModel'd on every job -- an
+    852-row Ext store plus its heatmap machinery -- for a component nobody
+    rendered.
+    """
+
+    def _step3(self):
+        with open(STEP3_VIEWS, "r", encoding="utf-8") as handle:
+            return handle.read()
+
+    def test_the_view_is_deleted(self):
+        body = self._step3()
+        self.assertNotIn("function PA_Step3HubAnalysis", body)
+        self.assertNotIn("PA_Step3HubAnalysis.prototype", body)
+
+    def test_nothing_constructs_it_any_more(self):
+        body = self._step3()
+        self.assertNotIn("hubAnalysisView", body)
+
+    def test_the_row_normaliser_survives(self):
+        """paHubRow lives outside the deleted view and the network panel and
+        its tests read it."""
+        self.assertIn("var paHubRow = function", self._step3())
+
+    def test_every_column_it_carried_is_in_the_card(self):
+        """Removing the table must not remove what the table said. Percentile
+        is the one that is not derivable from the rest -- it is the scorer's
+        size-stratified ECDF rank."""
+        with open(HUB_NETWORK_VIEW, "r", encoding="utf-8") as handle:
+            view = handle.read()
+        start = view.index("this.showSeedDetail = function")
+        window = view[start:start + 3200]
+        for column in ("row.DEN", "row.noDEN", "row.Percentage",
+                       "row.Percentile", "row.pvalue", "row.padjust"):
+            self.assertIn(column, window, column + " is not in the step table")
 
 
 class NamesNotIdsTest(unittest.TestCase):

@@ -2663,18 +2663,40 @@ class PathwayAcquisitionJob(Job):
         from src.common.KeggGraph import store
         from src.common.KeggGraph.scorer import score
 
+        # ANY gene-based omic counts, and DE in any one of them makes the gene
+        # relevant.
+        #
+        # This asked for `omicName == 'Gene expression'` and skipped everything
+        # else. That name is only the default the upload form suggests for the
+        # first omic: a job whose omics are called "RNA-seq" and "Proteomics"
+        # left `measured` empty and scored the binomial test on compounds
+        # alone -- a wrong table, not an absent one. On a job that DOES have an
+        # omic by that name, three quarters of this one's gene data were being
+        # ignored by a test whose whole claim is "how much of the differential
+        # expression sits near this metabolite".
+        #
+        # isRelevant() rather than testing `relevant` for truth: it is a LIST,
+        # and a list of all-False is truthy. It happens to be [] for non-DE
+        # features today, so the old form was right by accident.
         measured, relevant = set(), set()
         for geneID in self.inputGenesData:
-            for values in self.inputGenesData[geneID].omicsValues:
-                if values.omicName != 'Gene expression':
-                    continue
-                if values.relevant or values.relevantAssociation:
+            values = self.inputGenesData[geneID].omicsValues or []
+            if not values:
+                continue
+            measured.add(geneID)
+            for omicValue in values:
+                if omicValue.isRelevant() or omicValue.isRelevantAssociation():
                     relevant.add(geneID)
-                measured.add(geneID)
+                    break
         for compoundID in self.inputCompoundsData:
-            if self.inputCompoundsData[compoundID].omicsValues[0].relevant:
-                relevant.add(compoundID)
+            values = self.inputCompoundsData[compoundID].omicsValues or []
+            if not values:
+                continue
             measured.add(compoundID)
+            for omicValue in values:
+                if omicValue.isRelevant() or omicValue.isRelevantAssociation():
+                    relevant.add(compoundID)
+                    break
 
         if not relevant:
             return False

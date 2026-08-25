@@ -290,6 +290,82 @@ class PerRingBudgetTest(unittest.TestCase):
         self.assertNotIn("values.relevant or", window)
 
 
+class EveryNodeIsExplainedTest(unittest.TestCase):
+    """A drawn node must have an edge that explains why it is in its ring.
+
+    Edges were ranked by distance from the seed and truncated at `budget`, so
+    rings 1-2 spent the whole allowance: measured on the live job, C02686 at
+    radius 4 returned 161 nodes and 600 edges with **50 of those nodes
+    carrying no edge at all**. "Four steps away" is a statement about a path,
+    and the card's "how it connects" list -- the one thing no earlier view
+    could show -- silently vanished for a third of the graph.
+    """
+
+    def _dense(self):
+        """A seed, a wide ring 1, and a ring 2 reachable only through it.
+
+        Ring 1 is deliberately dense with sibling edges, which is what used to
+        soak up the budget before ring 2 was reached at all.
+        """
+        edges = []
+        for i in range(6):
+            edges.append(Edge("C1", "g%d" % i, "reaction", "", "p1", False))
+        for i in range(6):
+            for j in range(i + 1, 6):
+                edges.append(Edge("g%d" % i, "g%d" % j, "reaction", "", "p1", False))
+        for i in range(6):
+            edges.append(Edge("g%d" % i, "h%d" % i, "reaction", "", "p1", False))
+        types = {"C1": "compound"}
+        for i in range(6):
+            types["g%d" % i] = "gene"
+            types["h%d" % i] = "gene"
+        return KeggGraph(edges, types, "test")
+
+    def _isolated(self, out):
+        attached = set()
+        for edge in out["edges"]:
+            attached.add(edge["source"])
+            attached.add(edge["target"])
+        return [n["id"] for n in out["nodes"]
+                if n["step"] and n["id"] not in attached]
+
+    def test_no_drawn_node_is_left_without_an_edge(self):
+        out = self._dense().subgraph("C1", 2, 12, per_ring=20)
+        self.assertEqual(self._isolated(out), [])
+
+    def test_the_far_ring_is_reachable_within_a_tight_budget(self):
+        """The failure this fixes: ring 2 nodes drawn, none of them connected.
+        With sibling edges soaking the budget, every h* node used to be an
+        unattached dot."""
+        out = self._dense().subgraph("C1", 2, 12, per_ring=20)
+        drawn = {n["id"] for n in out["nodes"]}
+        self.assertTrue(any(name.startswith("h") for name in drawn))
+        self.assertEqual(self._isolated(out), [])
+
+    def test_the_budget_is_still_a_hard_cap(self):
+        """Reserving explanatory edges must not quietly exceed the caller's
+        cap -- that would trade one silent behaviour for another."""
+        for budget in (2, 5, 9, 40):
+            out = self._dense().subgraph("C1", 2, budget, per_ring=20)
+            self.assertLessEqual(len(out["edges"]), budget, budget)
+
+    def test_a_node_that_cannot_be_explained_is_not_drawn(self):
+        """When the budget is too small to reach a node at all, it is dropped
+        and its ring's `shown` says so, rather than being drawn unattached."""
+        out = self._dense().subgraph("C1", 2, 2, per_ring=20)
+        self.assertEqual(self._isolated(out), [])
+        for report in out["rings"]:
+            drawn = sum(1 for n in out["nodes"] if n["step"] == report["step"])
+            self.assertEqual(report["shown"], drawn)
+        self.assertTrue(out["truncated"])
+
+    def test_shown_counts_still_match_the_nodes_returned(self):
+        out = self._dense().subgraph("C1", 2, 500, per_ring=20)
+        for report in out["rings"]:
+            drawn = sum(1 for n in out["nodes"] if n["step"] == report["step"])
+            self.assertEqual(report["shown"], drawn, report)
+
+
 class CompoundNamesTest(unittest.TestCase):
     """Readable names, and where the ids to name come from.
 

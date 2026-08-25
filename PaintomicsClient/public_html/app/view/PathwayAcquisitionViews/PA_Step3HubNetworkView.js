@@ -115,11 +115,64 @@ function PA_Step3HubNetworkView() {
 					try { payload = JSON.parse(payload); } catch (e) { payload = null; }
 				}
 				if (!payload || !payload.success || !payload.names) { return; }
+				me.checkSchema(payload.hubSchema);
 				me.mergeNames(payload.names);
 				me.buildList();
 				me.renderList();
 				if (me.seed) { me.setSeedName(me.nameOf(me.seed, "compound")); }
 			});
+	};
+
+	/**
+	 * Refuse to render rows scored under a superseded contract.
+	 *
+	 * HUB_SCHEMA_VERSION exists so rows that answer a DIFFERENT question are
+	 * re-scored rather than served, and the server honours it on recovery --
+	 * but the client caches the whole job model in IndexedDB (app.js,
+	 * Dexie "paintomics"/"jobs"), so a browser that loaded this job before an
+	 * upgrade never asks the server again and keeps the old numbers for ever.
+	 *
+	 * Measured while verifying the omic fix: the panel showed byte-identical
+	 * scores after a change that moves 403 genes into the relevant set, and
+	 * /pa_recover_job returned different ones for the same job. Same class as
+	 * an unbumped ?v= marker -- new code, cached data.
+	 *
+	 * Dropping the cache and reloading is the whole repair: the job lives on
+	 * the server, and the recovery path re-scores it. Guarded so it can happen
+	 * at most once per job per session and cannot become a reload loop.
+	 */
+	this.checkSchema = function (serverSchema) {
+		var me = this;
+		if (!serverSchema) { return; }
+		var rows = (me.model && me.model.getHubAnalysisResult()) || {};
+		var keys = Object.keys(rows);
+		if (!keys.length) { return; }
+		var stored = rows[keys[0]] && rows[keys[0]].schema;
+		var flag = "paHubSchemaReload:" + me.model.getJobID();
+		if (stored === undefined || stored === serverSchema) {
+			// Back in step: let a LATER upgrade heal itself too.
+			try { sessionStorage.removeItem(flag); } catch (e) {}
+			return;
+		}
+		try {
+			if (sessionStorage.getItem(flag)) {
+				console.warn("[hub] cached rows are schema " + stored +
+					" and the server scores at " + serverSchema +
+					", but the reload has already been tried this session.");
+				return;
+			}
+			sessionStorage.setItem(flag, "1");
+		} catch (e) {
+			return;   // no sessionStorage: no loop guard, so do not reload
+		}
+		console.warn("[hub] cached rows are schema " + stored +
+			", the server scores at " + serverSchema +
+			"; dropping the cached job and reloading.");
+		if (typeof discardCachedJobModel === "function") {
+			discardCachedJobModel(me.model.getJobID(), function () {
+				window.location.reload();
+			});
+		}
 	};
 
 	this.mergeNames = function (names) {
@@ -801,18 +854,27 @@ function PA_Step3HubNetworkView() {
 		if (!entry) { me.clearDetail(); return; }
 		me.clearDetail();
 
+		// Every column the removed grid carried, for this compound. Percentile
+		// and the raw p-value are here because they were in that grid and are
+		// not derivable from the rest -- the percentile is the scorer's own
+		// size-stratified ECDF rank, which is the only column that says
+		// whether a density is unusual FOR A BALL THIS SIZE.
 		var rows = [1, 2, 3, 4].map(function (step) {
 			var row = entry.steps[step];
 			if (!row) {
 				return '<tr class="is-absent"><td>' + step +
-					'</td><td colspan="4">not scored</td></tr>';
+					'</td><td colspan="6">not scored</td></tr>';
 			}
 			var fdr = Number(row.padjust);
+			var percentile = Number(row.Percentile);
 			return '<tr' + (step === me.level ? ' class="is-current"' : "") + '>' +
 				'<td>' + step + '</td>' +
 				'<td>' + row.DEN + '</td>' +
 				'<td>' + (Number(row.DEN) + Number(row.noDEN)) + '</td>' +
 				'<td>' + (Number(row.Percentage) * 100).toFixed(1) + '%</td>' +
+				'<td>' + (isFinite(percentile)
+					? (percentile * 100).toFixed(0) + '%' : "-") + '</td>' +
+				'<td>' + me.fmt(Number(row.pvalue)) + '</td>' +
 				'<td' + (fdr < 0.05 ? ' class="is-significant"' : "") + '>' +
 				  me.fmt(fdr) + '</td></tr>';
 		}).join("");
@@ -824,7 +886,9 @@ function PA_Step3HubNetworkView() {
 			'<div class="pa-hub-detail-body">' +
 			  '<table class="pa-hub-steptable">' +
 			    '<thead><tr><th>Step</th><th>DE</th><th>Measured</th>' +
-			    '<th>% DE</th><th>FDR</th></tr></thead>' +
+			    '<th>% DE</th><th title="Where this density ranks among balls ' +
+			    'of a similar size">Percentile</th><th>p</th>' +
+			    '<th>FDR</th></tr></thead>' +
 			    '<tbody>' + rows + '</tbody>' +
 			  '</table>' +
 			  // The two counts on screen measure different things and would
@@ -933,56 +997,86 @@ function PA_Step3HubNetworkView() {
 		});
 	};
 
+	/**
+	 * One box per OMIC, with every row that omic has for this feature.
+	 *
+	 * Grouping matters: one KEGG gene can map to several input features, and
+	 * the payload carries one OmicValue per (omic, input row). Gene 100040843
+	 * has seven "Gene expression" rows -- seven different Ensembl ids -- and
+	 * drawing a box each produced seven single-row heatmaps under seven
+	 * identical headings, which reads as a rendering fault and hides that the
+	 * rows are different input features of the same gene. The pathway views
+	 * group by omic name and stack the rows; so does this.
+	 */
 	this.drawOmics = function (slot, omics) {
 		var me = this;
 		var summaries = me.model.getDataDistributionSummaries() || {};
 		var visual = (me.getParent && me.getParent() && me.getParent().visualOptions) || {};
-		var drawable = omics.filter(function (o) { return o.omicName in summaries; });
 
-		if (!drawable.length) {
+		var order = [], grouped = {};
+		omics.forEach(function (o) {
+			if (!(o.omicName in summaries)) { return; }
+			if (!grouped[o.omicName]) { grouped[o.omicName] = []; order.push(o.omicName); }
+			grouped[o.omicName].push(OmicValue.loadFromJSON(o));
+		});
+
+		if (!order.length) {
+			var named = omics.map(function (o) {
+				return Ext.String.htmlEncode(o.omicName);
+			}).filter(function (name, index, all) {
+				return all.indexOf(name) === index;
+			});
 			slot.innerHTML = '<p class="pa-hub-detail-summary">This job carries no ' +
-				'distribution summary for ' +
-				omics.map(function (o) { return Ext.String.htmlEncode(o.omicName); }).join(", ") +
+				'distribution summary for ' + named.join(", ") +
 				', so the heatmap cannot be scaled.</p>';
 			return;
 		}
 
-		slot.innerHTML = drawable.map(function (o, index) {
+		slot.innerHTML = order.map(function (omicName, index) {
 			// The colour ramp these heatmaps are painted with. The charts carry
 			// legend:{enabled:false}, so without this the scale is stated
 			// nowhere. Guarded: a bad summary for one omic must not stop the rest.
 			var legend = "";
 			try {
 				legend = paColorLegend(
-					getMinMax(summaries[o.omicName], visual.colorReferences
-						? visual.colorReferences[o.omicName] : "p10p90"),
+					getMinMax(summaries[omicName], visual.colorReferences
+						? visual.colorReferences[omicName] : "p10p90"),
 					visual.colorScale);
 			} catch (error) {
-				console.warn("[hub] no colour legend for " + o.omicName + ": " + error);
+				console.warn("[hub] no colour legend for " + omicName + ": " + error);
 			}
+			// Same row height as the pathway views, so a five-row omic here and
+			// a five-row omic there are the same object.
+			var height = (grouped[omicName].length * 30) + 100;
+			var count = grouped[omicName].length;
 			// The heatmap div and the plot div must be ADJACENT SIBLINGS with
 			// the heatmap first: the heatmap's point handlers reach the plot
 			// with .parent().next().highcharts(). Anything between them makes
 			// that undefined and hovering a cell throws.
 			return '<div class="contentbox pa-hub-omic">' +
-				'<h4>' + Ext.String.htmlEncode(o.omicName) + '</h4>' + legend +
+				'<h4>' + Ext.String.htmlEncode(omicName) +
+				(count > 1 ? ' <span class="pa-hub-id">' + count +
+				             ' input rows</span>' : "") + '</h4>' + legend +
 				'<div class="PA_step5_heatmapContainer" ' +
-				  'id="' + me.detailID + '_hm' + index + '" style="height:130px"></div>' +
+				  'id="' + me.detailID + '_hm' + index + '" ' +
+				  'style="height:' + height + 'px"></div>' +
 				'<div class="PA_step5_plotContainer" ' +
-				  'id="' + me.detailID + '_pl' + index + '" style="height:130px"></div>' +
+				  'id="' + me.detailID + '_pl' + index + '" ' +
+				  'style="height:' + height + 'px"></div>' +
 				'</div>';
 		}).join("");
 
-		drawable.forEach(function (o, index) {
-			var value = OmicValue.loadFromJSON(o);
+		order.forEach(function (omicName, index) {
+			var values = grouped[omicName];
+			var headers = paOmicHeaders(me.model, omicName);
 			try {
-				me.charts.push(generateHeatmap(me.detailID + "_hm" + index, o.omicName,
-					[value], summaries, visual, paOmicHeaders(me.model, o.omicName)));
-				me.charts.push(generatePlot(me.detailID + "_pl" + index, o.omicName,
-					[value], summaries, null, visual, paOmicHeaders(me.model, o.omicName)));
+				me.charts.push(generateHeatmap(me.detailID + "_hm" + index, omicName,
+					values, summaries, visual, headers));
+				me.charts.push(generatePlot(me.detailID + "_pl" + index, omicName,
+					values, summaries, null, visual, headers));
 			} catch (error) {
 				// A silent guard reads as a dead click, so say what happened.
-				console.warn("[hub] could not draw " + o.omicName + ": " + error);
+				console.warn("[hub] could not draw " + omicName + ": " + error);
 				var box = document.getElementById(me.detailID + "_hm" + index);
 				if (box) {
 					box.innerHTML = '<p class="pa-hub-detail-summary">This omic could ' +

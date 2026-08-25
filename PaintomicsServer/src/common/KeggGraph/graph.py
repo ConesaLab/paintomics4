@@ -157,33 +157,88 @@ class KeggGraph(object):
                 step_of.setdefault(name, step)
         codes = {self._code[n] for n in step_of}
 
-        picked = []
+        candidates = []
         for edge_id in range(len(self.edge_kind)):
             a = int(self.edge_src[edge_id])
             b = int(self.edge_dst[edge_id])
             if a in codes and b in codes:
-                near = min(step_of[self.names[a]], step_of[self.names[b]])
+                step_a = step_of[self.names[a]]
+                step_b = step_of[self.names[b]]
                 degree = ((self._indptr[a + 1] - self._indptr[a]) +
                           (self._indptr[b + 1] - self._indptr[b]))
-                picked.append((near, -int(degree), edge_id))
-        picked.sort()
-        edges_truncated = len(picked) > budget
-        picked = picked[:budget]
+                candidates.append((min(step_a, step_b), -int(degree), edge_id,
+                                   a, b, step_a, step_b))
+        candidates.sort()
 
-        edges = []
-        for _near, _degree, edge_id in picked:
+        # Every drawn node keeps the edge that explains why it is in its ring.
+        #
+        # Ranking edges by distance and truncating at `budget` spent the whole
+        # allowance on rings 1-2: measured on C02686 at radius 4, 50 of 161
+        # nodes (31%) came back with NO edge at all. A node drawn in ring 4
+        # with nothing attached to it is a claim the panel cannot support --
+        # "four steps away" is a statement about a path -- and the card's "how
+        # it connects" list, the one thing no earlier view could show, silently
+        # vanished for a third of the graph.
+        #
+        # So a parent edge per node is reserved first (to a kept node one step
+        # closer to the seed; any kept neighbour if the real parents were
+        # sampled away), and only the remaining budget is ranked. At most
+        # len(nodes) - 1 edges are reserved, so the reservation cannot itself
+        # exhaust a sane budget.
+        required, rank = {}, {}
+        for near, neg_degree, edge_id, a, b, step_a, step_b in candidates:
+            rank[edge_id] = (near, neg_degree, edge_id)
+            if step_a == step_b:
+                continue                    # a sibling edge explains nothing
+            child = a if step_a > step_b else b
+            if step_of[self.names[child]] and child not in required:
+                required[child] = edge_id
+        for near, neg_degree, edge_id, a, b, step_a, step_b in candidates:
+            for node in (a, b):
+                if step_of[self.names[node]] and node not in required:
+                    required[node] = edge_id
+
+        # `budget` stays a hard cap -- it is a payload-size guard, and quietly
+        # exceeding it would trade one silent behaviour for another. What
+        # changes is the ORDER it is spent in: the explanatory edges first,
+        # each still ranked nearest-the-seed, then everything else.
+        required_ids = sorted(dict.fromkeys(required.values()),
+                              key=lambda edge_id: rank[edge_id])
+        reserved = set(required_ids)
+        extras = [edge_id for _n, _d, edge_id, _a, _b, _sa, _sb in candidates
+                  if edge_id not in reserved]
+        ordered = required_ids + extras
+        edges_truncated = len(ordered) > budget
+        chosen = ordered[:budget]
+
+        edges, attached = [], set()
+        for edge_id in chosen:
+            source = self.names[int(self.edge_src[edge_id])]
+            target = self.names[int(self.edge_dst[edge_id])]
+            attached.add(source)
+            attached.add(target)
             edges.append({
-                "source": self.names[int(self.edge_src[edge_id])],
-                "target": self.names[int(self.edge_dst[edge_id])],
+                "source": source,
+                "target": target,
                 "kind": self.edge_kind[edge_id],
                 "subtype": self.edge_subtype[edge_id],
                 "pathway": self.edge_pathway[edge_id],
                 "reversible": bool(self.edge_reversible[edge_id]),
             })
 
+        # A node whose every neighbour was sampled away cannot be explained by
+        # anything on screen, so it is not drawn and its ring says so.
+        isolated = {name for name, step in step_of.items()
+                    if step and name not in attached}
+        if isolated:
+            for report in ring_report:
+                report["shown"] -= sum(1 for name in isolated
+                                       if step_of[name] == report["step"])
+            dropped += len(isolated)
+
         nodes = [{"id": name, "type": self.node_type.get(name),
                   "step": step_of[name]}
-                 for name in sorted(step_of)]
+                 for name in sorted(step_of) if name not in isolated]
         return {"seed": seed, "source": self.source,
                 "truncated": bool(dropped) or edges_truncated,
                 "nodes_dropped": dropped,
