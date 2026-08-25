@@ -58,8 +58,7 @@ section "R runtime"
 # packages here produce a server that works until someone clicks the button.
 if "${COMPOSE[@]}" exec -T app Rscript -e '
 pkgs <- c("purrr", "cluster", "mclust", "amap", "factoextra", "igraph",
-          "ggplot2", "jsonlite", "stringr", "dplyr", "qdapRegex",
-          "KEGGgraph", "AnnotationDbi")
+          "ggplot2", "jsonlite", "stringr", "dplyr")
 missing <- pkgs[!vapply(pkgs, requireNamespace, logical(1), quietly = TRUE)]
 if (length(missing)) { cat("MISSING:", paste(missing, collapse=", "), "\n"); quit(status=1) }
 cat("ok\n")' >/dev/null 2>&1; then
@@ -68,7 +67,7 @@ else
     bad "R packages missing:"
     "${COMPOSE[@]}" exec -T app Rscript -e '
 pkgs <- c("purrr","cluster","mclust","amap","factoextra","igraph","ggplot2",
-          "jsonlite","stringr","dplyr","qdapRegex","KEGGgraph","AnnotationDbi")
+          "jsonlite","stringr","dplyr")
 missing <- pkgs[!vapply(pkgs, requireNamespace, logical(1), quietly=TRUE)]
 cat("MISSING:", paste(missing, collapse=", "), "\n")' 2>&1 | tail -3
 fi

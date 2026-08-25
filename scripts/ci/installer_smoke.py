@@ -7,7 +7,7 @@ exit() calls -- exit(0) on success -- so each gets its own interpreter,
 exactly like an operator's shell) through the same two commands:
 
     download --specie=<sp> --kegg=1 --mapping=1 --common=0 --reactome=0
-    install  --specie=<sp> --common=0 --hub=0
+    install  --specie=<sp> --common=0
 
 into a KEGG_DATA tree and a mongod that this script creates and owns, then
 asserts what an operator would check by hand:
@@ -146,7 +146,7 @@ def main():
         print("smoke: download staged all artefacts")
 
         print("smoke: installing %s ..." % sp)
-        dbmanager("install_command(specie=%r, common=0, hub=0)" % sp)
+        dbmanager("install_command(specie=%r, common=0)" % sp)
 
         if not os.path.isdir(os.path.join(kegg_data, "current", sp, "kgml")):
             fail("install did not promote download/%s into current/" % sp)
