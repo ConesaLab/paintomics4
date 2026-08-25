@@ -55,21 +55,23 @@ def _kgml_signature(kgml_dir):
     return (count, newest) if count else None
 
 
-def _legacy_edges(path):
-    """Rebuild edges from hubData/kegg_interaction.json.
+def _legacy_network(path):
+    """(edges, types, rings) from hubData/kegg_interaction.json.
 
-    That file holds each compound's cumulative 1..4-step BALLS, not pairs, so the
-    only honest reconstruction is compound -> radius-1 members. It is a safety
-    net for species whose KGML was not retained, and it inherits the old parse:
-    no subtypes, no reaction direction. `graph.source` says so, and the network
-    view refuses to draw arrowheads when it sees it.
+    Shape, verified against the installed ath file: {compound: {"1".."4": [...]}}
+    where each list is the CUMULATIVE ball out to that radius (ath C00001 gives
+    7 / 48 / 192 / 617). Balls are converted to exclusive rings and used
+    verbatim -- reconstructing edges from them would invent topology KEGG never
+    stated. Radius-1 members do become real edges, so a subgraph request draws a
+    star rather than nothing; `graph.source` is "legacy-json" and the view uses
+    that to refuse arrowheads.
     """
     try:
         with open(path, "r", encoding="utf-8") as handle:
             payload = json.load(handle)
     except (OSError, ValueError) as exc:
         logger.warning("[keggraph] unreadable %s: %s", path, exc)
-        return [], {}
+        return [], {}, {}
     for _ in range(4):                       # tolerate the old double encoding
         if isinstance(payload, list) and len(payload) == 1:
             payload = payload[0]
@@ -79,20 +81,30 @@ def _legacy_edges(path):
             except ValueError:
                 break
     if not isinstance(payload, dict):
-        return [], {}
+        return [], {}, {}
 
-    edges, types = [], {}
+    edges, types, rings = [], {}, {}
     for compound, radii in payload.items():
+        if isinstance(radii, dict):
+            balls = [radii.get(str(step)) or [] for step in range(1, 5)]
+        elif isinstance(radii, list):
+            balls = [(r if isinstance(r, list) else [r]) for r in radii[:4]]
+        else:
+            continue
         types[compound] = "compound"
-        first = radii[0] if isinstance(radii, list) and radii else []
-        if isinstance(first, str):
-            first = [first]
-        for neighbour in first or []:
-            neighbour = str(neighbour)
-            types.setdefault(neighbour,
-                             "compound" if neighbour[:1] in "CGD" else "gene")
+        exclusive, seen = [], {compound}
+        for ball in balls:
+            fresh = [str(n) for n in ball if str(n) not in seen]
+            seen.update(fresh)
+            exclusive.append(fresh)
+        rings[compound] = exclusive
+        for name in seen:
+            if name == compound:
+                continue
+            types.setdefault(name, "compound" if name[:1] in "CGD" else "gene")
+        for neighbour in exclusive[0]:
             edges.append(Edge(compound, neighbour, "legacy", "", "", False))
-    return edges, types
+    return edges, types, rings
 
 
 def get_graph(organism):
@@ -111,6 +123,7 @@ def get_graph(organism):
             _CACHE.move_to_end(key)
             return cached
 
+    legacy_rings = None
     if signature is not None:
         edges, types, files = parse_directory(kgml_dir)
         source = "kgml"
@@ -123,14 +136,14 @@ def get_graph(organism):
                            "kegg_interaction.json; hub features unavailable",
                            organism)
             return None
-        edges, types = _legacy_edges(legacy)
+        edges, types, legacy_rings = _legacy_network(legacy)
         source = "legacy-json"
         logger.warning("[keggraph] %s has no KGML; falling back to %s "
                        "(no subtypes, no direction)", organism, legacy)
 
     if not edges:
         return None
-    graph = KeggGraph(edges, types, source)
+    graph = KeggGraph(edges, types, source, precomputed_rings=legacy_rings)
 
     with _LOCK:
         _CACHE[key] = graph

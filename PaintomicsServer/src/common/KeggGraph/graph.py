@@ -13,15 +13,30 @@ MAP_TYPE = "map"
 
 
 class KeggGraph(object):
-    def __init__(self, edges, types, source):
+    def __init__(self, edges, types, source, precomputed_rings=None):
+        """`precomputed_rings` is {compound: [ring1, ring2, ...]}, EXCLUSIVE.
+
+        Only the legacy fallback supplies it. hubData/kegg_interaction.json
+        already holds each compound's cumulative balls out to radius 4, and
+        reconstructing topology from them would invent edges that KEGG never
+        stated -- so the balls are used verbatim and `rings()` serves them.
+        Nodes reachable only through those balls still have to exist in the
+        index, so they join the node universe below.
+        """
         self.source = source
+        self._precomputed = precomputed_rings or {}
         # Map entries are pathway cross-links, not biological entities. The R
         # pipeline filtered them twice -- once at install and again at scoring;
         # do it once, here.
         kept = [e for e in edges
                 if types.get(e.a) != MAP_TYPE and types.get(e.b) != MAP_TYPE]
 
-        self.names = sorted({e.a for e in kept} | {e.b for e in kept})
+        universe = {e.a for e in kept} | {e.b for e in kept}
+        for seed, rings in self._precomputed.items():
+            universe.add(seed)
+            for ring in rings:
+                universe.update(ring)
+        self.names = sorted(universe)
         self._code = {name: index for index, name in enumerate(self.names)}
         self.node_type = {name: types.get(name) for name in self.names}
 
@@ -59,6 +74,10 @@ class KeggGraph(object):
         neighbourhood -- nine mmu compounds, including C00024, the one every
         worked example used, which is why it hid.
         """
+        stored = self._precomputed.get(seed)
+        if stored is not None:
+            out = [list(ring) for ring in stored[:k]]
+            return out + [[] for _ in range(k - len(out))]
         code = self._code.get(seed)
         if code is None:
             return [[] for _ in range(k)]

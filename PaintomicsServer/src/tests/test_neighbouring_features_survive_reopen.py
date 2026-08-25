@@ -51,6 +51,7 @@ import unittest
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
 from src.classes.JobInstances import PathwayAcquisitionJob as job_module
+from src.common.KeggGraph import store as graph_store
 from src.classes.JobInstances.PathwayAcquisitionJob import (
     PathwayAcquisitionJob, PAINTOMICS4_LARGE_FIELDS)
 
@@ -88,18 +89,20 @@ class NeighbourMapDerivationTest(unittest.TestCase):
         with open(self.interactionPath, "w", encoding="utf-8") as handle:
             json.dump(NETWORK, handle)
 
-        # _loadCompoundNeighbourMap keeps one organism per process; a stale
-        # entry from another test would make this pass for the wrong reason.
-        job_module._compoundNeighbourCache["key"] = None
-        job_module._compoundNeighbourCache["map"] = None
+        # The graph store caches per organism; a stale entry from another test
+        # would make this pass for the wrong reason. (This replaced
+        # _compoundNeighbourCache, which held ONE organism per process.)
+        graph_store.clear_cache()
 
         self.keggDataDir = job_module.KEGG_DATA_DIR
+        self.storeDataDir = graph_store.KEGG_DATA_DIR
         job_module.KEGG_DATA_DIR = self.directory
+        graph_store.KEGG_DATA_DIR = self.directory + os.sep
 
     def tearDown(self):
         job_module.KEGG_DATA_DIR = self.keggDataDir
-        job_module._compoundNeighbourCache["key"] = None
-        job_module._compoundNeighbourCache["map"] = None
+        graph_store.KEGG_DATA_DIR = self.storeDataDir
+        graph_store.clear_cache()
         shutil.rmtree(self.directory, ignore_errors=True)
 
     def _job(self, compoundIDs):
@@ -177,22 +180,23 @@ class NeighbourMapDerivationTest(unittest.TestCase):
         instance = self._job([])
         instance.compoundRegulateFeatures = None
 
-        opened = []
-        realOpen = job_module.open if hasattr(job_module, "open") else open
+        # The interaction file is read by the graph store now, not by the job,
+        # so the guard is that the store is never consulted at all.
+        called = []
+        realGetGraph = graph_store.get_graph
 
-        def tracking_open(path, *args, **kwargs):
-            opened.append(path)
-            return realOpen(path, *args, **kwargs)
+        def tracking_get_graph(organism):
+            called.append(organism)
+            return realGetGraph(organism)
 
-        job_module.open = tracking_open
+        graph_store.get_graph = tracking_get_graph
         try:
             self.assertEqual(instance.getCompoundRegulateFeatures(), {})
         finally:
-            del job_module.open
+            graph_store.get_graph = realGetGraph
 
-        self.assertEqual(
-            [path for path in opened if "kegg_interaction" in str(path)], [],
-            "a job with no compounds parsed the interaction file anyway")
+        self.assertEqual(called, [],
+                         "a job with no compounds derived the graph anyway")
 
     def test_a_species_without_hubdata_degrades_to_empty(self):
         os.remove(self.interactionPath)
