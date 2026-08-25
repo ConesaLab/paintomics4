@@ -8798,7 +8798,7 @@ div.repDetectionCard h3 {
    chip on nearly every card, and a chip on everything is a chip on nothing.
    ========================================================================== */
 
-/* ---- The section header, and the control inside it ----------------------- */
+/* ---- The section header, and the AI offer beside it ---------------------- */
 
 /* The metabolite cards are laid out by `width: 49%` plus odd/even floats (see
    `.omicSummaryBox, .metaboliteBox` above). The card that INTRODUCES them was
@@ -8815,74 +8815,175 @@ div.repDetectionCard h3 {
 	margin-bottom: 14px;
 }
 
-/* Deliberately not in the step toolbar: those buttons act on the whole step
-   (go back, run, reset) and this one acts on the cards directly below it.
-
-   One left-aligned column, not two. Spread across the full width the button
-   sat about a thousand pixels from the sentence explaining it, on the far side
-   of a card whose middle was empty -- the two read as unrelated controls. A
-   button belongs next to its own words. */
-.aiSuggestActions {
-	margin: 18px var(--pa-card-inset) 4px var(--pa-card-inset);
-	padding-top: 16px;
-	border-top: 1px solid var(--pa-surface-quiet);
-}
-/* This block carries the card's inset on itself (the margin above), so its
-   children must not add it a second time -- `div.contentbox h3` and
-   `div.contentbox p` both pad by --pa-card-inset, which put this heading and
-   its line 26px right of the paragraph above them. The file already has this
-   category: "Blocks that supply their own inset ... opt out below."
-
-   The mark keeps hanging in the gutter through the existing
-   `div.contentbox h3 > svg.po-ai-mark:first-child` rule, so the heading's TEXT
-   lands on the same rail as the prose rather than 1em right of it. */
-.aiSuggestActions > .aiSuggestActionsTitle,
-.aiSuggestActions > .aiSuggestHint {
-	padding-left: 0;
-	padding-right: 0;
-}
-.aiSuggestActionsTitle {
-	margin: 0 0 2px 0;
-	font-size: 14px;
-	font-weight: 600;
-	color: var(--pa-ink-title, #222);
-}
-.aiSuggestHint {
-	margin: 0;
-	font-size: 13px;
-	line-height: 1.55;
-	color: var(--pa-ink-muted);
-	/* A measure, not a width: prose set the full width of this card runs to
-	   about 140 characters a line, roughly twice a readable line. */
-	max-width: 70ch;
-}
-/* dark.css sets every `p` inside a contentbox to body ink through
-   `[data-theme="dark"] #mainViewCenterPanel .contentbox div > p`, which
-   outranks a single class -- so in the dark theme this hint was rendering at
-   the same weight as the heading above it and the hierarchy collapsed.
-
-   Matched on specificity rather than forced with !important: this is secondary
-   text in both themes, and the token already knows what "secondary" means in
-   each of them. */
-#mainViewCenterPanel .contentbox .aiSuggestActions .aiSuggestHint {
-	color: var(--pa-ink-muted);
-}
-
-.aiSuggestActionsRow {
+/* Two columns: what the user has to do, and the offer to do it for them.
+   Neither half works alone at this width -- prose across 1360px runs to about
+   140 characters a line, and a lone button under it had no surface of its own
+   and nothing to balance against. */
+.compoundsIntroLayout {
 	display: flex;
 	flex-wrap: wrap;
-	gap: 8px;
 	align-items: center;
-	margin-top: 12px;
+	justify-content: space-between;
+	/* No column gap. The two halves are 49% each and the gutter is the 2%
+	   `space-between` distributes -- which is exactly how the floated cards
+	   below make theirs. A 28px gap on top of 98% overflows the row and wraps
+	   the panel under the text. */
+	gap: 10px 0;
 }
-.aiSuggestActionsRow .button {
+/* 49%, which is exactly the column the metabolite cards below use (see
+   `.omicSummaryBox, .metaboliteBox`). The header then sits ON the grid it
+   introduces rather than beside it -- the alternative, letting these two size
+   themselves, gave either a 944px line of prose or a 528px pool of dead space
+   between the halves, both of which read as a layout accident. */
+.compoundsIntroText {
+	flex: 0 1 49%;
+	min-width: 0;
+}
+
+/* ---- The AI offer ------------------------------------------------------- */
+
+/* Its own surface, tinted with the application's AI colour. A control that
+   costs a gateway call and changes what the analysis is about should look
+   like a thing you decide to use, not like a link someone left in a paragraph.
+
+   color-mix keeps the tint honest in both themes: it is always the CURRENT
+   --pa-ai-blue over the CURRENT surface, so dark.css's lighter blue on its
+   near-black panel comes out at the same weight the light theme has. The plain
+   declarations before each one are the fallback for a browser without it. */
+.aiSuggestActions {
+	flex: 0 0 49%;
+	/* Its own two columns: what it is on the left, the control on the right.
+	   Inside a 49% panel they sit about 300px apart -- close enough to read as
+	   one offer, where the same split across the whole 1360px card had put a
+	   thousand pixels between a sentence and the button it describes. */
+	display: flex;
+	align-items: center;
+	gap: 18px;
+	margin: 2px 0;
+	padding: 15px 17px;
+	border-radius: var(--pa-radius);
+	background: var(--pa-surface-subtle);
+	background: color-mix(in srgb, var(--pa-ai-blue) 7%, var(--pa-surface));
+	border: 1px solid var(--pa-border);
+	border: 1px solid color-mix(in srgb, var(--pa-ai-blue) 26%, transparent);
+}
+
+/* A small-caps label rather than a sentence: the panel's job is to be
+   recognised, and the line under it does the explaining. Opted out of
+   `div.contentbox h3`'s padding, which would inset it from its own panel. */
+/* The `.aiSuggestActionsBody >` prefix is load bearing twice over. `div.contentbox
+   h3` is one class and two elements, which outranks a bare class, so `padding: 0`
+   lost and the label carried the CARD's 26px inset inside its own panel. And the
+   parent has to be named correctly: written as `.aiSuggestActions >` it matched
+   nothing at all once the panel gained its body wrapper, and the label silently
+   fell all the way back to the card's h3 -- dark grey, 13.5px, not the AI colour
+   and not small caps. */
+.aiSuggestActionsBody > .aiSuggestActionsTitle {
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	margin: 0 0 7px 0;
+	padding: 0;
+	font-size: 11.5px;
+	font-weight: 700;
+	letter-spacing: 0.07em;
+	text-transform: uppercase;
+	color: var(--pa-ai-blue);
+}
+/* `:first-child` is here to outscore `div.contentbox h3 > svg.po-ai-mark:first-child`,
+   which hangs the mark a full em into the gutter. That is right for a heading
+   inside a card, whose gutter is the card's 26px inset -- and wrong here, where
+   the gutter is this panel's 17px padding and the mark would hang past its own
+   border. Without it the mark sat outside the tinted surface. */
+.aiSuggestActionsBody > .aiSuggestActionsTitle > svg.po-ai-mark:first-child {
+	width: 15px;
+	height: 15px;
+	margin-left: 0;
+}
+.aiSuggestActionsBody > .aiSuggestHint {
 	margin: 0;
+	padding: 0;
+	font-size: 12.5px;
+	line-height: 1.5;
+	color: var(--pa-ink-muted);
+}
+
+.aiSuggestActionsBody {
+	flex: 1 1 auto;
+	min-width: 0;
+}
+.aiSuggestActionsRow {
+	display: flex;
+	align-items: stretch;
+	gap: 8px;
+	flex: 0 0 auto;
+}
+/* `.button` floats right and carries side margins, which inside a flex row
+   would put the primary and its Undo in the wrong order with a gap nobody
+   asked for. */
+.aiSuggestActionsRow > .button {
+	float: none;
+	margin: 0;
+}
+
+/* The primary. Fills the panel it lives in, so it reads as the panel's action
+   rather than as a button that happens to be nearby. --pa-ai-action-bg is the
+   fill the rest of the application already uses for an AI call to action, and
+   is deliberately NOT re-themed: it carries white text. */
+#aiSuggestButton {
+	flex: 0 0 auto;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	padding: 11px 20px;
+	/* Fits the longest label this button takes ("Choosing...") without
+	   resizing. Left to size itself it grew and shrank between the three
+	   states, and the paragraph beside it reflowed from two lines to one and
+	   back on every click. */
+	min-width: 172px;
+	font-size: 13.5px;
+	font-weight: 600;
+	color: #FFFFFF;
+	background-color: var(--pa-ai-action-bg);
+	border-color: var(--pa-ai-action-bg);
+	box-shadow: var(--pa-shadow);
+}
+#aiSuggestButton:hover {
+	color: #FFFFFF;
+	background-color: var(--pa-ai-action-bg-hover);
+	border-color: var(--pa-ai-action-bg-hover);
+}
+#aiSuggestButton svg.po-ai-mark {
+	width: 16px;
+	height: 16px;
+	color: inherit;
 }
 /* Anchors, so `disabled` does nothing; pointer-events is what stops a second
    click while the gateway is answering. */
 #aiSuggestButton.aiWorking {
 	opacity: 0.72;
 	pointer-events: none;
+}
+
+/* Undo is an escape hatch, not a second offer: icon only, quiet, and it keeps
+   its meaning through the tooltip. Giving it equal weight would ask the user
+   to choose between two buttons when only one of them is the point. */
+#aiUndoButton {
+	flex: 0 0 auto;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 38px;
+	padding: 10px 12px;
+	color: var(--pa-ink-control, #3F3F46);
+	background-color: transparent;
+	border-color: var(--pa-border);
+}
+#aiUndoButton:hover {
+	color: var(--pa-ink-title, #222);
+	background-color: var(--pa-surface);
+	border-color: var(--pa-ink-muted);
 }
 
 /* ---- What happened, once it has run ------------------------------------- */
@@ -8974,4 +9075,21 @@ div.repDetectionCard h3 {
 	.contentbox.metaboliteBox.aiBox-unsure {
 		animation: none;
 	}
+}
+
+/* The jump from an omic's mapping summary down to the compound cards. Sits
+   under the mapped/unmapped caption, on the caption's own centre line. */
+.mappingSummaryJump {
+	text-align: center;
+	font-size: 12px;
+	padding-bottom: 6px;
+}
+.mappingSummaryJump > a {
+	color: var(--pa-link);
+	text-decoration: none;
+	border-bottom: 1px solid transparent;
+}
+.mappingSummaryJump > a:hover {
+	color: var(--pa-link-hover);
+	border-bottom-color: currentColor;
 }

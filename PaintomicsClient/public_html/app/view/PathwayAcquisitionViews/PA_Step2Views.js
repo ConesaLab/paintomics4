@@ -512,20 +512,28 @@ function PA_Step2JobView() {
 	this.renderAIActions = function() {
 		var hidden = this.aiAvailable ? "" : ' style="display:none;"';
 		var undo = this.aiSnapshot
-			? '<a href="javascript:void(0)" class="button btn-default" id="aiUndoButton">' +
-			  '<i class="fa fa-undo"></i> Undo</a>'
+			? '<a href="javascript:void(0)" class="button btn-ai-quiet" id="aiUndoButton" ' +
+			  'title="Put every tick back as it was">' +
+			  '<i class="fa fa-undo"></i></a>'
 			: "";
 
 		var mark = (typeof getAIMark === "function") ? getAIMark() : "";
 
 		return '' +
 		'<div class="aiSuggestActions"' + hidden + '>' +
-		'  <h3 class="aiSuggestActionsTitle">' + mark + ' Let PaintOmics AI choose</h3>' +
-		'  <p class="aiSuggestHint">It reads your organism and experiment design, and ' +
-		'only ever picks a candidate already on a card.</p>' +
+		'  <div class="aiSuggestActionsBody">' +
+		// data-guides="ignore": the alignment overlay measures where TYPE starts,
+		// and an icon-led label starts its type one icon in. The mark is on the
+		// panel's rail, which is the edge a reader sees; the offset is the icon,
+		// and it is declared here rather than left for the HUD to rediscover.
+		'    <h3 class="aiSuggestActionsTitle" data-guides="ignore">' +
+		       mark + '<span>PaintOmics AI</span></h3>' +
+		'    <p class="aiSuggestHint">Picks the most likely compound for each name, from ' +
+		'your organism and experiment design.</p>' +
+		'  </div>' +
 		'  <div class="aiSuggestActionsRow">' +
-		'    <a href="javascript:void(0)" class="button btn-info" id="aiSuggestButton">' +
-		       mark + ' Choose for me</a>' +
+		'    <a href="javascript:void(0)" class="button btn-ai" id="aiSuggestButton">' +
+		       mark + '<span>Choose for me</span></a>' +
 		     undo +
 		'  </div>' +
 		'</div>';
@@ -542,15 +550,17 @@ function PA_Step2JobView() {
 		if (button.length === 0) {
 			return;
 		}
+		var mark = (typeof getAIMark === "function") ? getAIMark() : "";
+
 		if (state === "working") {
 			button.addClass("aiWorking")
-				.html('<i class="fa fa-circle-o-notch fa-spin"></i> Choosing\u2026');
+				.html('<i class="fa fa-circle-o-notch fa-spin"></i><span>Choosing\u2026</span>');
 		} else if (state === "done") {
 			button.removeClass("aiWorking")
-				.html('<i class="fa fa-magic"></i> ' + (label || "Choose again"));
+				.html(mark + '<span>' + (label || "Choose again") + '</span>');
 		} else {
 			button.removeClass("aiWorking")
-				.html('<i class="fa fa-magic"></i> Choose for me');
+				.html(mark + '<span>Choose for me</span>');
 		}
 	};
 
@@ -586,11 +596,18 @@ function PA_Step2JobView() {
 		// `compoundsIntroBox` takes this card out of the 49%-wide odd/even
 		// float grid the metabolite cards use. As one of those it was a
 		// half-width block of prose with an empty half-row beside it.
+		//
+		// Two columns inside it: what the user has to do, and the offer to do
+		// it for them. A lone button under a line of prose in a 1360px card
+		// read as an afterthought -- it had no surface of its own and nothing
+		// to balance against.
 		'<div class="contentbox omicSummaryBox compoundsIntroBox">' +
-		'  <div id="about">' +
-		'    <h2>Compounds disambiguation</h2>' +
-		'    <p>Some names matched more than one KEGG compound. Pick the one you ' +
-		'measured on each card.</p>' +
+		'  <div id="about" class="compoundsIntroLayout">' +
+		'    <div class="compoundsIntroText">' +
+		'      <h2>Compounds disambiguation</h2>' +
+		'      <p><b>' + me.items.length + '</b> of your compound names matched more than ' +
+		'one KEGG compound. Pick the one you measured on each card below.</p>' +
+		'    </div>' +
 		     me.renderAIActions() +
 		'  </div>' +
 		'</div>' +
@@ -1474,6 +1491,67 @@ function mappingSummaryCaption(mappedFeatures, unmappedFeatures) {
 		'</div>';
 }
 
+/**
+* The mapped/unmapped ring, drawn the same way for every omic.
+*
+* Extracted because the compound omics were not getting one. The old code drew
+* this only for gene-based omics and gave a compound omic
+* `<b>See Compounds disambiguation</b>`, 60px down an otherwise empty 327x195
+* box -- a slot that looked broken beside four cards that all had a chart, and
+* a line that looked like a link and was not one.
+*
+* The reason given was that a compound omic has no per-database breakdown, and
+* that is true -- but the breakdown was only ever the tooltip's `note`. The
+* ring itself is mapped against unmapped, which every omic has.
+*
+* @param {String} divName the panel's id prefix
+* @param {String} omicName series name, shown in the tooltip
+* @param {Number} mapped features that resolved to an identifier
+* @param {Number} unmapped features that did not
+* @param {String} note per-database detail for the tooltip, "" when there is none
+*/
+function renderMappingDonut(divName, omicName, mapped, unmapped, note) {
+	$('#' + divName + 'mapping_summary_plot').highcharts({
+		chart: {type: 'pie', height: 195},
+		title: {
+			text: "Mapped/Unmapped features",
+			style: {"fontSize": "13px"}
+		},
+		credits: {enabled: false},
+		tooltip: {
+			pointFormat: '{series.name}: <b>{point.y}</b><br/><br/>{point.options.note}<br/>'
+		},
+		plotOptions: {
+			pie: {
+				// Off on purpose: see mappingSummaryCaption. At this size
+				// Highcharts hid the "Mapped features" label on every omic and
+				// clipped the other one, so the ring is now the proportion and
+				// the caption underneath carries the numbers. With no labels to
+				// leave room for, the ring can sit in the middle of its box.
+				dataLabels: {enabled: false},
+				center: ['50%', '45%']
+			}
+		},
+		series: [{
+			type: 'pie',
+			name: omicName,
+			size: 100,
+			innerSize: '30%',
+			data: [{
+				name: 'Unmapped features',
+				y: Number.parseFloat(unmapped),
+				color: "rgb(250, 112, 112)",
+				note: ""
+			}, {
+				name: 'Mapped features',
+				y: Number.parseFloat(mapped),
+				color: "rgb(106, 208, 150)",
+				note: note
+			}]
+		}]
+	});
+}
+
 function PA_OmicSummaryPanel(omicName, dataDistribution, isCompoundOmic) {
 	/***********************************************************************
 	* ATTRIBUTES
@@ -1534,59 +1612,37 @@ function PA_OmicSummaryPanel(omicName, dataDistribution, isCompoundOmic) {
 							}
 						}
 
-						//WHEN THE BOX IS READY, CALL HIGHCHARTS AND CREATE THE PIE WITH MAPPING SUMMARY AND THE BOXPLOT FOR DATA DISTRIBUTION
-						$('#' + divName + 'mapping_summary_plot').highcharts({
-							chart: {type: 'pie',height: 195},
-							title: {
-								text: "Mapped/Unmapped features",
-								style: {"fontSize": "13px"}
-							},
-							credits: {enabled: false},
-							tooltip: {
-									pointFormat: '{series.name}: <b>{point.y}</b><br/><br/>{point.options.note}<br/>'
-							},
-							plotOptions: {
-								pie: {
-									// Off on purpose: see mappingSummaryCaption. At
-									// this size Highcharts hid the "Mapped features"
-									// label on every omic and clipped the other one,
-									// so the ring is now the proportion and the
-									// caption underneath carries the numbers. With
-									// no labels to leave room for, the ring can sit
-									// in the middle of its box.
-									dataLabels: {enabled: false},
-									center: ['50%', '45%']
-								}
-							},
-							series: [{
-								type: 'pie',
-								name: me.omicName,
-								size: 100,
-								innerSize: '30%',
-								data: [{
-									name: 'Unmapped features',
-									y: Number.parseFloat(me.dataDistribution[1]),
-									color: "rgb(250, 112, 112)",
-									note: ""
-								}, {
-									name: 'Mapped features',
-									y: Number.parseFloat(mappedFeatures),
-									color: "rgb(106, 208, 150)",
-									note: added_info
-								}]
-							}]
-						});
+						renderMappingDonut(divName, me.omicName, mappedFeatures,
+							me.dataDistribution[1], added_info);
 					} else {
-						// A compound omic is matched once against KEGG compound
-						// IDs, so there is no per-database breakdown to draw - but
-						// its mapped/unmapped counts matter just as much, and until
-						// now the panel reported neither.
+						// A compound omic is matched once against KEGG compound ids, so
+						// there is no per-database breakdown for the TOOLTIP -- and that
+						// is all that is missing. The mapped and unmapped counts it does
+						// have are the same two numbers every other omic's ring is drawn
+						// from. They were being discarded, and the slot printed a bold
+						// line 60px down an otherwise empty 327x195 box.
 						mappedFeatures = me.dataDistribution[0];
-						$('#' + divName + 'mapping_summary_plot').html('<div style="text-align:center; padding-top:60px;"><b>See Compounds disambiguation</b></div>');
+						added_info = "";
+						renderMappingDonut(divName, me.omicName, mappedFeatures,
+							me.dataDistribution[1], added_info);
 					}
 
+					// A real control now. It used to be a bare <b> styled like a
+					// link: it looked clickable and did nothing when clicked.
 					$('#' + divName + 'mapping_summary_caption')
-						.html(mappingSummaryCaption(mappedFeatures, me.dataDistribution[1]));
+						.html(mappingSummaryCaption(mappedFeatures, me.dataDistribution[1]) +
+							(isCompoundOmic
+								? '<div class="mappingSummaryJump">' +
+								  '<a href="javascript:void(0)" class="compoundsJumpLink">' +
+								  'See compounds disambiguation</a></div>'
+								: ''))
+						.off("click.paJump")
+						.on("click.paJump", ".compoundsJumpLink", function() {
+							var target = document.querySelector(".compoundsIntroBox");
+							if (target) {
+								target.scrollIntoView({block: "start", behavior: "smooth"});
+							}
+						});
 
 					//   0        1       2    3    4    5     6,   7   8      9        10
 					//[MAPPED, UNMAPPED, MIN, P10, Q1, MEDIAN, Q3, P90, MAX, MIN_IR, Max_IR]
