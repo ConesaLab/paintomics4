@@ -49,7 +49,6 @@ function PA_Step3HubNetworkView() {
 	this.countID = "hubNetCount" + salt;
 	this.stepsID = "hubNetSteps" + salt;
 	this.seedNameID = "hubNetSeedName" + salt;
-	this.plotID = "hubNetPlot" + salt;
 	this.detailID = "hubNetDetail" + salt;
 
 	this.cy = null;
@@ -1026,7 +1025,7 @@ function PA_Step3HubNetworkView() {
 				      legend +
 				    '</div>' +
 				    '<div id="' + me.noticeID + '" class="pa-net-notice"></div>' +
-				    '<div class="pa-hub-plot" id="' + me.plotID + '">' +
+				    '<div class="pa-hub-plot">' +
 				      '<svg id="' + me.ringsID + '" class="pa-hub-rings"></svg>' +
 				      '<div id="' + me.canvasID + '" class="pa-net-canvas"></div>' +
 				      '<div id="' + me.tipID + '" class="pa-hub-tip"></div>' +
