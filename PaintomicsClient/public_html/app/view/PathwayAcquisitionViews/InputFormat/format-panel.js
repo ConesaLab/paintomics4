@@ -292,9 +292,32 @@
         var needed = strip ? strip.getBoundingClientRect().height : 0;
         if (!needed) return;
 
+        /* Size from what the card's own items want NOW, not from the height
+           snapshot taken when it was primed.
+
+           The snapshot is not always the settled height. A card is primed as
+           soon as it is laid out once, and the MORE panel is tall enough that
+           its sections had not finished: it recorded 662 where itemsContainer
+           alone settles at 684. Growing that by the strip pinned the card 64px
+           short of its contents -- and the omic title is a `flex: 1` item, so
+           the vbox took the whole shortfall out of the title, which collapsed
+           to nothing and overlapped the first heading. Measured: title bottom
+           74px, next section top 30px.
+
+           Summing the items cannot drift the same way, and it stays a maximum
+           against the snapshot so the cards whose height their parent assigns
+           are unaffected. */
+        var content = 0;
+        component.items.each(function (child) {
+            if (child === host) return;
+            var dom = child.el && child.el.dom;
+            if (dom) content += Math.max(child.getHeight() || 0, dom.scrollHeight || 0);
+        });
+
         Ext.suspendLayouts();
         component.flex = null;
-        component.setHeight(component.__paBaseHeight + Math.ceil(needed) + 12);
+        component.setHeight(Math.max(component.__paBaseHeight, content) +
+                            Math.ceil(needed) + 12);
         Ext.resumeLayouts(true);
     }
 
