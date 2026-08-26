@@ -58,7 +58,7 @@ class RScriptsAreGoneTest(unittest.TestCase):
         needles = ("hubAnalysisInstall.R", "GalaxyNetworkFunctionsv2.R",
                    "bioscripts/hubAnalysis.R")
         offenders = []
-        for base, dirs, files in os.walk(REPO):
+        for base, _dirs, files in os.walk(REPO):
             # src/tests is excluded on purpose: these suites NAME the scripts in
             # order to assert they are gone, so including them would make the
             # check fail on its own assertions. The point is production code.

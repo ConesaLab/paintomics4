@@ -50,13 +50,13 @@ class KeggGraph(object):
             (bool(e.reversible) for e in kept), bool, count)
         self.edge_src, self.edge_dst = src, dst
 
-        # Symmetric CSR. `_edge_id` lets subgraph() recover an edge's attributes.
+        # Symmetric CSR, for _neighbours() alone. It carries no edge id:
+        # subgraph() walks the unsorted edge arrays and indexes them directly,
+        # so a CSR-order id would be a second numbering nothing reads.
         u = np.concatenate([src, dst])
         v = np.concatenate([dst, src])
-        eid = np.concatenate([np.arange(count), np.arange(count)]).astype(np.int32)
         order = np.argsort(u, kind="stable")
         self._indices = v[order]
-        self._edge_id = eid[order]
         counts = np.zeros(len(self.names) + 1, np.int64)
         np.add.at(counts, u[order].astype(np.int64) + 1, 1)
         self._indptr = np.cumsum(counts)

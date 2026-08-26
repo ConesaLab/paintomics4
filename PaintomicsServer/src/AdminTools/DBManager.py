@@ -1021,13 +1021,6 @@ def replaceNewVersionData(origin, destination, dirname, backup_dir, isRestore=Fa
         raise Exception(error_msg)
 
 
-def directory_has_contents(path):
-    """
-    Returns True if the directory exists and contains at least one file.
-    """
-    return os.path.isdir(path) and bool(os.listdir(path))
-
-
 def hub_data_is_complete(path):
     """
     Returns True only if `path` holds a FINISHED hub-analysis install.
