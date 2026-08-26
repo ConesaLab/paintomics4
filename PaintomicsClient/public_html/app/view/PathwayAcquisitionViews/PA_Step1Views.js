@@ -38,8 +38,8 @@
    deliberate departures. The ramp is the product's own rather than the
    system's ColorBrewer values: the component's stated constraint is that
    these colours match the painted pathway diagrams, and what the product
-   actually paints is getColor(..., 'bwr') in PA_Step3Views.js -- a pure RGB
-   ramp, red at max, white at zero, blue at min. And the three beats are
+   actually paints is getColor(..., 'bwr') in PA_Step3Views.js -- a diverging
+   ramp built in OKLab, red at max, a light neutral at zero, blue at min. And the three beats are
    stacked as rows rather than set as columns, so the viewBox is 1:1 with
    the rendered width and every label is drawn at the size it is read at;
    the system's 660-wide landscape version has to shrink to 0.65 in this
@@ -60,7 +60,7 @@
 /* The hero visual: the product doing its own job.
    
    A pathway network is drawn, its features are painted with the same bwr ramp
-   the application paints real data with - red high, white zero, blue low - and
+   the application paints real data with - red high, neutral zero, blue low - and
    then the AI panel reads the painted result and writes an interpretation.
    That is literally the pipeline, so this is the one picture on the page that
    is not decoration: everything it shows, the tool actually does.
@@ -76,7 +76,7 @@
 
    Two pathway networks, cross-faded. Each carries its own topology and its own
    values, painted with the same bwr ramp the application paints real data with
-   - red high, white zero, blue low. Recolouring a single fixed network was not
+   - red high, neutral zero, blue low. Recolouring a single fixed network was not
    enough: the point is that you ask about a different pathway and get a
    different answer, so the network has to change too.
 
@@ -116,21 +116,21 @@ var PO_HERO_VIZ_SVG =
 		'<path d="M46 186 L42 96"/>' +
 	'</g>' +
 		'<circle cx="42" cy="96" r="11" fill="#FFFFFF" stroke="#878787" stroke-width="1.8"/>' +
-		'<circle cx="42" cy="96" r="11" fill="#FF0000"/>' +
+		'<circle cx="42" cy="96" r="11" fill="#A51F1E"/>' +
 		'<circle cx="104" cy="58" r="11" fill="#FFFFFF" stroke="#878787" stroke-width="1.8"/>' +
-		'<circle cx="104" cy="58" r="11" fill="#FF8080"/>' +
+		'<circle cx="104" cy="58" r="11" fill="#D9847B"/>' +
 		'<rect x="156" y="80" width="13" height="16" rx="1.5" fill="#FFFFFF" stroke="#878787" stroke-width="1.6"/>' +
-		'<rect x="156" y="80" width="13" height="16" rx="1.5" fill="#0000FF"/>' +
+		'<rect x="156" y="80" width="13" height="16" rx="1.5" fill="#0F59A9"/>' +
 		'<rect x="169" y="80" width="13" height="16" rx="1.5" fill="#FFFFFF" stroke="#878787" stroke-width="1.6"/>' +
-		'<rect x="169" y="80" width="13" height="16" rx="1.5" fill="#8080FF"/>' +
+		'<rect x="169" y="80" width="13" height="16" rx="1.5" fill="#78A1D6"/>' +
 		'<circle cx="96" cy="148" r="11" fill="#FFFFFF" stroke="#878787" stroke-width="1.8"/>' +
-		'<circle cx="96" cy="148" r="11" fill="#FF0000"/>' +
+		'<circle cx="96" cy="148" r="11" fill="#A51F1E"/>' +
 		'<circle cx="196" cy="168" r="11" fill="#FFFFFF" stroke="#878787" stroke-width="1.8"/>' +
-		'<circle cx="196" cy="168" r="11" fill="#8080FF"/>' +
+		'<circle cx="196" cy="168" r="11" fill="#78A1D6"/>' +
 		'<circle cx="118" cy="210" r="11" fill="#FFFFFF" stroke="#878787" stroke-width="1.8"/>' +
-		'<circle cx="118" cy="210" r="11" fill="#FF8080"/>' +
+		'<circle cx="118" cy="210" r="11" fill="#D9847B"/>' +
 		'<circle cx="46" cy="186" r="11" fill="#FFFFFF" stroke="#878787" stroke-width="1.8"/>' +
-		'<circle cx="46" cy="186" r="11" fill="#0000FF"/>' +
+		'<circle cx="46" cy="186" r="11" fill="#0F59A9"/>' +
 	'</g>' +
 
 	'<g class="po-viz-net po-viz-net-b">' +
@@ -145,21 +145,21 @@ var PO_HERO_VIZ_SVG =
 		'<path d="M112 214 L72 152"/>' +
 	'</g>' +
 		'<circle cx="58" cy="72" r="11" fill="#FFFFFF" stroke="#878787" stroke-width="1.8"/>' +
-		'<circle cx="58" cy="72" r="11" fill="#8080FF"/>' +
+		'<circle cx="58" cy="72" r="11" fill="#78A1D6"/>' +
 		'<rect x="116" y="56" width="13" height="16" rx="1.5" fill="#FFFFFF" stroke="#878787" stroke-width="1.6"/>' +
-		'<rect x="116" y="56" width="13" height="16" rx="1.5" fill="#FF0000"/>' +
+		'<rect x="116" y="56" width="13" height="16" rx="1.5" fill="#A51F1E"/>' +
 		'<rect x="129" y="56" width="13" height="16" rx="1.5" fill="#FFFFFF" stroke="#878787" stroke-width="1.6"/>' +
-		'<rect x="129" y="56" width="13" height="16" rx="1.5" fill="#FF8080"/>' +
+		'<rect x="129" y="56" width="13" height="16" rx="1.5" fill="#D9847B"/>' +
 		'<circle cx="190" cy="92" r="11" fill="#FFFFFF" stroke="#878787" stroke-width="1.8"/>' +
-		'<circle cx="190" cy="92" r="11" fill="#FF0000"/>' +
+		'<circle cx="190" cy="92" r="11" fill="#A51F1E"/>' +
 		'<circle cx="152" cy="146" r="11" fill="#FFFFFF" stroke="#878787" stroke-width="1.8"/>' +
 		'<circle cx="152" cy="146" r="11" fill="#FFFFFF"/>' +
 		'<circle cx="72" cy="152" r="11" fill="#FFFFFF" stroke="#878787" stroke-width="1.8"/>' +
-		'<circle cx="72" cy="152" r="11" fill="#FF8080"/>' +
+		'<circle cx="72" cy="152" r="11" fill="#D9847B"/>' +
 		'<circle cx="196" cy="196" r="11" fill="#FFFFFF" stroke="#878787" stroke-width="1.8"/>' +
-		'<circle cx="196" cy="196" r="11" fill="#0000FF"/>' +
+		'<circle cx="196" cy="196" r="11" fill="#0F59A9"/>' +
 		'<circle cx="112" cy="214" r="11" fill="#FFFFFF" stroke="#878787" stroke-width="1.8"/>' +
-		'<circle cx="112" cy="214" r="11" fill="#FF0000"/>' +
+		'<circle cx="112" cy="214" r="11" fill="#A51F1E"/>' +
 	'</g>' +
 
 	/* --- the agent: what the network hands off to, and what hands off to the
@@ -250,20 +250,20 @@ var PO_STEP_ART_UPLOAD =
 	'<rect x="258" y="12" width="186" height="20" rx="5" fill="#55C9A6" fill-opacity=".16" stroke="#55C9A6" stroke-opacity=".55"/>' +
 	'<circle cx="271" cy="22" r="4.5" fill="#55C9A6"/>' +
 	'<text x="283" y="26" font-size="11" fill="currentColor">Gene expression</text>' +
-	'<rect x="410" y="18" width="7" height="7" rx="1" fill="#FF0000" stroke="#878787" stroke-width="1"/>' +
-	'<rect x="419" y="18" width="7" height="7" rx="1" fill="#FF8080" stroke="#878787" stroke-width="1"/>' +
-	'<rect x="428" y="18" width="7" height="7" rx="1" fill="#8080FF" stroke="#878787" stroke-width="1"/>' +
+	'<rect x="410" y="18" width="7" height="7" rx="1" fill="#A51F1E" stroke="#878787" stroke-width="1"/>' +
+	'<rect x="419" y="18" width="7" height="7" rx="1" fill="#D9847B" stroke="#878787" stroke-width="1"/>' +
+	'<rect x="428" y="18" width="7" height="7" rx="1" fill="#78A1D6" stroke="#878787" stroke-width="1"/>' +
 	'<rect x="258" y="34" width="186" height="20" rx="5" fill="#79B0EC" fill-opacity=".16" stroke="#79B0EC" stroke-opacity=".55"/>' +
 	'<circle cx="271" cy="44" r="4.5" fill="#79B0EC"/>' +
 	'<text x="283" y="48" font-size="11" fill="currentColor">Metabolomics</text>' +
-	'<rect x="410" y="40" width="7" height="7" rx="1" fill="#8080FF" stroke="#878787" stroke-width="1"/>' +
+	'<rect x="410" y="40" width="7" height="7" rx="1" fill="#78A1D6" stroke="#878787" stroke-width="1"/>' +
 	'<rect x="419" y="40" width="7" height="7" rx="1" fill="#FFFFFF" stroke="#878787" stroke-width="1"/>' +
-	'<rect x="428" y="40" width="7" height="7" rx="1" fill="#FF0000" stroke="#878787" stroke-width="1"/>' +
+	'<rect x="428" y="40" width="7" height="7" rx="1" fill="#A51F1E" stroke="#878787" stroke-width="1"/>' +
 	'<rect x="258" y="56" width="186" height="20" rx="5" fill="#B4A1DD" fill-opacity=".16" stroke="#B4A1DD" stroke-opacity=".55"/>' +
 	'<circle cx="271" cy="66" r="4.5" fill="#B4A1DD"/>' +
 	'<text x="283" y="70" font-size="11" fill="currentColor">Proteomics</text>' +
-	'<rect x="410" y="62" width="7" height="7" rx="1" fill="#FF8080" stroke="#878787" stroke-width="1"/>' +
-	'<rect x="419" y="62" width="7" height="7" rx="1" fill="#FF0000" stroke="#878787" stroke-width="1"/>' +
+	'<rect x="410" y="62" width="7" height="7" rx="1" fill="#D9847B" stroke="#878787" stroke-width="1"/>' +
+	'<rect x="419" y="62" width="7" height="7" rx="1" fill="#A51F1E" stroke="#878787" stroke-width="1"/>' +
 	'<rect x="428" y="62" width="7" height="7" rx="1" fill="#FFFFFF" stroke="#878787" stroke-width="1"/>' +
 	'<rect x="258" y="78" width="186" height="20" rx="5" fill="#738B9D" fill-opacity=".16" stroke="#738B9D" stroke-opacity=".55"/>' +
 	'<circle cx="271" cy="88" r="4.5" fill="#738B9D"/>' +
@@ -332,17 +332,17 @@ var PO_STEP_ART_EXPLORE =
 	'<line x1="74" y1="92" x2="18" y2="78" stroke="#878787" stroke-width="1.6" stroke-opacity=".55"/>' +
 	'<line x1="74" y1="92" x2="128" y2="74" stroke="#878787" stroke-width="1.6" stroke-opacity=".55"/>' +
 	'<line x1="18" y1="78" x2="12" y2="30" stroke="#878787" stroke-width="1.6" stroke-opacity=".55"/>' +
-	'<circle cx="12" cy="30" r="9" fill="#FF0000" stroke="#878787" stroke-width="1.6"/>' +
-	'<circle cx="52" cy="12" r="9" fill="#FF8080" stroke="#878787" stroke-width="1.6"/>' +
-	'<rect x="39" y="50" width="10" height="12" fill="#0000FF" stroke="#878787" stroke-width="1.6"/>' +
-	'<rect x="49" y="50" width="10" height="12" fill="#8080FF" stroke="#878787" stroke-width="1.6"/>' +
+	'<circle cx="12" cy="30" r="9" fill="#A51F1E" stroke="#878787" stroke-width="1.6"/>' +
+	'<circle cx="52" cy="12" r="9" fill="#D9847B" stroke="#878787" stroke-width="1.6"/>' +
+	'<rect x="39" y="50" width="10" height="12" fill="#0F59A9" stroke="#878787" stroke-width="1.6"/>' +
+	'<rect x="49" y="50" width="10" height="12" fill="#78A1D6" stroke="#878787" stroke-width="1.6"/>' +
 	'<rect x="59" y="50" width="10" height="12" fill="#FFFFFF" stroke="#878787" stroke-width="1.6"/>' +
-	'<rect x="83" y="28" width="10" height="12" fill="#FF0000" stroke="#878787" stroke-width="1.6"/>' +
-	'<rect x="93" y="28" width="10" height="12" fill="#FF8080" stroke="#878787" stroke-width="1.6"/>' +
-	'<rect x="103" y="28" width="10" height="12" fill="#FF0000" stroke="#878787" stroke-width="1.6"/>' +
-	'<circle cx="128" cy="74" r="9" fill="#8080FF" stroke="#878787" stroke-width="1.6"/>' +
+	'<rect x="83" y="28" width="10" height="12" fill="#A51F1E" stroke="#878787" stroke-width="1.6"/>' +
+	'<rect x="93" y="28" width="10" height="12" fill="#D9847B" stroke="#878787" stroke-width="1.6"/>' +
+	'<rect x="103" y="28" width="10" height="12" fill="#A51F1E" stroke="#878787" stroke-width="1.6"/>' +
+	'<circle cx="128" cy="74" r="9" fill="#78A1D6" stroke="#878787" stroke-width="1.6"/>' +
 	'<circle cx="74" cy="92" r="9" fill="#FFFFFF" stroke="#878787" stroke-width="1.6"/>' +
-	'<circle cx="18" cy="78" r="9" fill="#0000FF" stroke="#878787" stroke-width="1.6"/>' +
+	'<circle cx="18" cy="78" r="9" fill="#0F59A9" stroke="#878787" stroke-width="1.6"/>' +
 	'</g>' +
 	'</svg>';
 

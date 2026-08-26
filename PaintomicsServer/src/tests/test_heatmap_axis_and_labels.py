@@ -204,7 +204,12 @@ class HeatmapLabelHelperBehaviour(unittest.TestCase):
     # paColorLegend was again the only assertion that reached far enough to
     # notice, dying on "paOutlierFraction is not defined". Anything getColor
     # calls belongs here.
-    COLOUR_DEPENDENCIES = ("paRampPosition", "paOutlierFraction", "paChannel")
+    # It happened a third time. The bwr branch became a call to
+    # paDivergingChannels (which calls paOklabChannels and reads PA_RAMP) when
+    # the ramp moved into OKLab, and again the only assertion that reached far
+    # enough to notice was the colour-legend one.
+    COLOUR_DEPENDENCIES = ("paRampPosition", "paOutlierFraction", "paChannel",
+                           "PA_RAMP", "paOklabChannels", "paDivergingChannels")
 
     @classmethod
     def setUpClass(cls):
@@ -215,7 +220,8 @@ class HeatmapLabelHelperBehaviour(unittest.TestCase):
         cls.helpers = source[start:end]
 
         def lift(name):
-            begin = source.index("var %s = function" % name)
+            # Not "= function": PA_RAMP is an object literal.
+            begin = source.index("var %s = " % name)
             return source[begin:source.index("\n};", begin) + 3]
 
         cls.dependencies = "\n".join(lift(name) for name in cls.COLOUR_DEPENDENCIES)

@@ -1062,20 +1062,28 @@
 [data-theme="dark"] #mainViewCenterPanel .contentbox div > p { color: var(--pa-ink-body); }
 
 
-/* Inline `style="color:#555"` / `#666` written into markup as a string, which
-   no stylesheet rule can reach - #555 measures 2.21 against the dark panel.
-   `!important` is the only thing that beats an inline declaration, and the
-   selectors are pinned to the exact values so they stop applying the moment
-   that markup is cleaned up.
+/* All three inline `style="color:#555"` / `#666` writers are gone now. The
+   Step 1 AI paragraph and the consent notice's fine print became
+   .ai-intro-copy and .ai-gdpr-fineprint when the AI surfaces were put on one
+   type scale; the last one was PA_Step3Views.js's .paColorLegend, which now
+   states its colours in main.css and takes its ink from the theme tokens like
+   everything else. The two `[style*=...] { ... !important }` rules that stood
+   here existed only because an inline declaration cannot be reached by a
+   stylesheet - with nothing left writing one, they had nothing to override.
 
-   Two of the three have been cleaned up: the Step 1 AI paragraph and the
-   consent notice's fine print became .ai-intro-copy and .ai-gdpr-fineprint
-   when the AI surfaces were put on one type scale, and are restated by class
-   in section 4. What is left below them is PA_Step3Views.js's .paColorLegend,
-   which still writes its colour inline, so these two rules stay until it does
-   not. */
-[data-theme="dark"] #mainViewCenterPanel [style*="color:#555"] { color: var(--pa-ink-body) !important; }
-[data-theme="dark"] #mainViewCenterPanel [style*="color:#666"] { color: var(--pa-ink-label) !important; }
+   The legend's own dark-theme needs are two: its inset hairline is a black
+   shadow, invisible on a dark panel, and its zero tick is a black line for the
+   same reason. Both are restated against light instead. */
+[data-theme="dark"] .paColorLegend-bar { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .16); }
+[data-theme="dark"] .paColorLegend-tick { background: rgba(255, 255, 255, .55); }
+
+/* And the omic name beside that legend, for the third time on this file's
+   terms: main.css sets a bare `h4 { color: #27272A }`, and every card that
+   draws an h4 has to answer it here or the heading is inked near-black on a
+   near-black panel. Measured on the metabolite hub's node detail card:
+   #27272A on #1E1F23 is 1.06:1, which is not dim, it is absent -- the omic's
+   name simply was not on the screen in dark mode. */
+[data-theme="dark"] .pa-hub-omic h4 { color: var(--pa-ink-label); }
 
 /* ---------------------------------------------------------------------------
    8. Step 1's AI callout

@@ -62,7 +62,8 @@ STEP3_VIEWS = os.path.abspath(os.path.join(
 # one by hand, and for two years getMinMax could not produce the very shape
 # those tests assert on. See SequentialRangeReachableTest.
 HELPERS = ("paColourRange", "getMinMax", "paMetageneLimits", "paOutlierFraction",
-           "paChannel", "paRampPosition", "getColor", "paValuesForHeader",
+           "paChannel", "paRampPosition", "PA_RAMP", "paOklabChannels",
+           "paDivergingChannels", "getColor", "paValuesForHeader",
            "paTruncateTail", "paConditionAxis")
 
 
@@ -72,8 +73,16 @@ def read_source():
 
 
 def extract(source, name):
-    """The text of `var <name> = function ... };`, brace-matched."""
-    match = re.search(r"var\s+%s\s*=\s*function" % re.escape(name), source)
+    """The text of `var <name> = <brace-delimited value>;`, brace-matched.
+
+    Matches up to the `=` rather than to `function`, so a plain object literal
+    lifts out the same way a function does. PA_RAMP is one: the ramp's
+    endpoints are data, not code, and getColor cannot run without them.
+    """
+    # Lookahead, not a consuming group: the brace scan below starts from
+    # match.end(), so consuming the `{` of an object literal would make it
+    # find the first NESTED brace and stop at the wrong place.
+    match = re.search(r"var\s+%s\s*=\s*(?=function|\{)" % re.escape(name), source)
     if match is None:
         raise AssertionError("%s() is not defined in %s" % (name, STEP3_VIEWS))
 
@@ -114,8 +123,8 @@ class SourceStructureTest(unittest.TestCase):
         source = read_source()
         for name in HELPERS:
             self.assertIsNotNone(
-                re.search(r"var\s+%s\s*=\s*function" % re.escape(name), source),
-                "%s() has been renamed or removed" % name)
+                re.search(r"var\s+%s\s*=\s*(?:function|\{)" % re.escape(name), source),
+                "%s has been renamed or removed" % name)
 
     def test_no_scale_divides_by_a_limit_directly(self):
         """The division that produced NaN must stay behind paRampPosition().
@@ -169,8 +178,8 @@ class ColourStopTest(unittest.TestCase):
             }));
         """)
         # Pale end at the observed minimum, saturated at the maximum.
-        self.assertEqual(result["atMin"], "rgb(255, 255,255)")
-        self.assertEqual(result["atMax"], "rgb(255, 0,0)")
+        self.assertEqual(result["atMin"], "rgb(232, 232,232)")
+        self.assertEqual(result["atMax"], "rgb(165, 31,30)")
 
     def test_a_diverging_range_keeps_its_zero_anchor(self):
         result = run_in_node("""
@@ -181,9 +190,9 @@ class ColourStopTest(unittest.TestCase):
               atMax: getColor(limits, 3, "bwr")
             }));
         """)
-        self.assertEqual(result["atMin"], "rgb(0, 0,255)")
-        self.assertEqual(result["atZero"], "rgb(255, 255,255)")
-        self.assertEqual(result["atMax"], "rgb(255, 0,0)")
+        self.assertEqual(result["atMin"], "rgb(15, 89,169)")
+        self.assertEqual(result["atZero"], "rgb(232, 232,232)")
+        self.assertEqual(result["atMax"], "rgb(165, 31,30)")
 
 
 # [MAPPED, UNMAPPED, MIN, P10, Q1, MEDIAN, Q3, P90, MAX, MIN_IR, MAX_IR,
@@ -248,8 +257,8 @@ class SequentialRangeReachableTest(unittest.TestCase):
             }));
         """ % json.dumps(row))
 
-        self.assertEqual(result["atMin"], "rgb(255, 255,255)")
-        self.assertEqual(result["atMax"], "rgb(255, 0,0)")
+        self.assertEqual(result["atMin"], "rgb(232, 232,232)")
+        self.assertEqual(result["atMax"], "rgb(165, 31,30)")
 
     def test_the_interquartile_range_is_no_longer_compressed(self):
         """The complaint, quantified.
@@ -261,11 +270,17 @@ class SequentialRangeReachableTest(unittest.TestCase):
         row = summary(1.93, 8.50, 10.99, 12.75, 13.73, 14.71, 20.93)
         result = run_in_node("""
             const limits = getMinMax(%s, "absoluteMinMax");
-            const channel = v => parseInt(getColor(limits, v, "bwr").split(",")[1], 10);
-            process.stdout.write(JSON.stringify({q1: channel(10.99), q3: channel(13.73)}));
+            const step = v => Math.round(paRampPosition(limits, v) * 255);
+            process.stdout.write(JSON.stringify({q1: step(10.99), q3: step(13.73)}));
         """ % json.dumps(row))
 
-        spread = result["q1"] - result["q3"]
+        # Measured on paRampPosition rather than on a colour channel. The green
+        # channel used to BE the ramp position -- the old scale walked it 255
+        # to 0 in a straight line -- so reading it was a shortcut, not a
+        # measurement, and the shortcut stopped being true when the ramp moved
+        # into OKLab. The claim was always about how much of the ramp the
+        # middle half occupies, and that is what is asked now.
+        spread = result["q3"] - result["q1"]
         self.assertGreater(spread, 33,
                            "the interquartile range still occupies no more of "
                            "the ramp than it did when anchored at zero")
@@ -324,8 +339,8 @@ class SequentialRangeReachableTest(unittest.TestCase):
             }));
         """ % json.dumps(row))
 
-        self.assertEqual(result["nearestZero"], "rgb(255, 255,255)")
-        self.assertEqual(result["furthest"], "rgb(0, 0,255)")
+        self.assertEqual(result["nearestZero"], "rgb(232, 232,232)")
+        self.assertEqual(result["furthest"], "rgb(15, 89,169)")
 
     def test_the_custom_slider_can_actually_move_the_low_end(self):
         """The setting that looked like a workaround and was not one.
@@ -361,8 +376,8 @@ class SequentialRangeReachableTest(unittest.TestCase):
             }));
         """ % json.dumps(row))
 
-        self.assertEqual(result["belowClip"], "rgb(255, 255,255)")
-        self.assertEqual(result["atClip"], "rgb(255, 255,255)")
+        self.assertEqual(result["belowClip"], "rgb(232, 232,232)")
+        self.assertEqual(result["atClip"], "rgb(232, 232,232)")
 
     def test_an_outlier_above_a_clipped_range_is_still_darkened(self):
         """The clamp must not cost the outlier shading above the clip.
@@ -378,7 +393,7 @@ class SequentialRangeReachableTest(unittest.TestCase):
             }));
         """ % json.dumps(row))
 
-        self.assertEqual(result["atClip"], "rgb(255, 0,0)")
+        self.assertEqual(result["atClip"], "rgb(165, 31,30)")
         self.assertNotEqual(result["beyond"], result["atClip"],
                             "a value past the p90 clip is drawn identically to "
                             "the clip itself, so the outlier shading is gone")
@@ -485,26 +500,43 @@ class MetageneTrendsGetTheirOwnScaleTest(unittest.TestCase):
         """Blue for down, red for up, white for no change."""
         metagenes = [{"values": [-4.0, 4.0]}]
         result = self._colours(metagenes, [-4.0, 0.0, 4.0])
-        self.assertEqual(result["colours"][0], "rgb(0, 0,255)")
-        self.assertEqual(result["colours"][1], "rgb(255, 255,255)")
-        self.assertEqual(result["colours"][2], "rgb(255, 0,0)")
+        self.assertEqual(result["colours"][0], "rgb(15, 89,169)")
+        self.assertEqual(result["colours"][1], "rgb(232, 232,232)")
+        self.assertEqual(result["colours"][2], "rgb(165, 31,30)")
 
     def test_the_range_is_symmetric_so_equal_moves_read_equally(self):
-        """An asymmetric trend range would say -2 and +2 differ. They do not."""
+        """An asymmetric trend range would say -2 and +2 differ. They do not.
+
+        Asked of the ramp POSITION, not of a raw channel. Comparing the blue
+        channel of the down colour with the red channel of the up one worked
+        only while the two poles were pure primaries and each owned exactly one
+        channel. The diverging ramp gives its two sides deliberately different
+        chroma -- blue needs less of it to carry the same weight -- so equal
+        channel numbers would now mean unequal colours, and the test would have
+        been enforcing the opposite of what it says.
+        """
         metagenes = [{"values": [-1.0, 8.0]}]
-        result = self._colours(metagenes, [-2.0, 2.0])
-        down = int(result["colours"][0].split(",")[2].rstrip(")"))
-        up = int(result["colours"][1].split(",")[0].split("(")[1])
-        self.assertEqual(down, up,
-                         "equal magnitudes either side of zero are drawn at "
-                         "different intensities")
+        result = run_in_node("""
+            const limits = paMetageneLimits(%s);
+            process.stdout.write(JSON.stringify({
+              down: paRampPosition(limits, -2.0),
+              up: paRampPosition(limits, 2.0),
+              colours: [-2.0, 2.0].map(v => getColor(limits, v, "bwr"))
+            }));
+        """ % json.dumps(metagenes))
+
+        self.assertAlmostEqual(result["down"], result["up"],
+                               msg="equal magnitudes either side of zero are "
+                                   "drawn at different intensities")
+        # ...and they are still two different colours, not one.
+        self.assertNotEqual(result["colours"][0], result["colours"][1])
 
     def test_several_trends_share_one_scale(self):
         """Rows of the same chart must be comparable with each other."""
         metagenes = [{"values": [-1.0, 1.0]}, {"values": [-5.0, 5.0]}]
         result = self._colours(metagenes, [5.0])
         self.assertAlmostEqual(result["limits"]["max"], 5.0)
-        self.assertEqual(result["colours"][0], "rgb(255, 0,0)")
+        self.assertEqual(result["colours"][0], "rgb(165, 31,30)")
 
     def test_unusable_values_do_not_poison_the_chart(self):
         """One NaN must not take every colour on the chart with it.
@@ -658,71 +690,80 @@ class GetColorAlwaysReturnsAColourTest(unittest.TestCase):
 # versioned-asset guard already does in this repo, and it cannot rot that way.
 #
 # (summary index, colour reference, value, scale, colour)
+#
+# The `bwr` column was RE-BASELINED when that scale moved off the pure primaries
+# and onto the OKLab diverging ramp (PA_RAMP). That was a deliberate,
+# whole-application repaint, so "unchanged" could not be asserted of it and
+# pretending otherwise would have meant deleting the rows -- which would have
+# left the one scale the application actually defaults to as the only one this
+# table does not cover. The `rbg` and `bwr2` rows were NOT touched: they still
+# pin the clamp fix against the exact colours it shipped with, so an accidental
+# change to the shared arithmetic still shows up here.
 COLOURS_BEFORE_THE_CLAMP = [
-    (0, 'absoluteMinMax', 0.79, 'bwr', 'rgb(255, 255,255)'),
+    (0, 'absoluteMinMax', 0.79, 'bwr', 'rgb(232, 232,232)'),
     (0, 'absoluteMinMax', 0.79, 'bwr2', 'rgb(255, 255,255)'),
     (0, 'absoluteMinMax', 0.79, 'rbg', 'rgb(0, 0,0)'),
-    (0, 'absoluteMinMax', 1.1, 'bwr', 'rgb(255, 127,127)'),
+    (0, 'absoluteMinMax', 1.1, 'bwr', 'rgb(217, 132,123)'),
     (0, 'absoluteMinMax', 1.1, 'bwr2', 'rgb(255, 127,127)'),
     (0, 'absoluteMinMax', 1.1, 'rbg', 'rgb(128, 0,0)'),
-    (0, 'absoluteMinMax', 1.41, 'bwr', 'rgb(255, 0,0)'),
+    (0, 'absoluteMinMax', 1.41, 'bwr', 'rgb(165, 31,30)'),
     (0, 'absoluteMinMax', 1.41, 'bwr2', 'rgb(255, 0,0)'),
     (0, 'absoluteMinMax', 1.41, 'rbg', 'rgb(255, 0,0)'),
-    (0, 'p10p90', 0.79, 'bwr', 'rgb(255, 255,255)'),
+    (0, 'p10p90', 0.79, 'bwr', 'rgb(232, 232,232)'),
     (0, 'p10p90', 0.79, 'bwr2', 'rgb(255, 86,255)'),
     (0, 'p10p90', 0.79, 'rbg', 'rgb(0, 0,0)'),
-    (0, 'p10p90', 1.1, 'bwr', 'rgb(234, 0,0)'),
+    (0, 'p10p90', 1.1, 'bwr', 'rgb(156, 25,25)'),
     (0, 'p10p90', 1.1, 'bwr2', 'rgb(255, 21,0)'),
-    (0, 'p10p90', 1.41, 'bwr', 'rgb(127, 0,0)'),
+    (0, 'p10p90', 1.41, 'bwr', 'rgb(109, 0,0)'),
     (0, 'p10p90', 1.41, 'bwr2', 'rgb(255, 128,0)'),
-    (1, 'absoluteMinMax', -1.27, 'bwr', 'rgb(0, 0,255)'),
+    (1, 'absoluteMinMax', -1.27, 'bwr', 'rgb(15, 89,169)'),
     (1, 'absoluteMinMax', -1.27, 'bwr2', 'rgb(0, 0,255)'),
     (1, 'absoluteMinMax', -1.27, 'rbg', 'rgb(0, 255,0)'),
-    (1, 'absoluteMinMax', -0.355, 'bwr', 'rgb(184, 184,255)'),
+    (1, 'absoluteMinMax', -0.355, 'bwr', 'rgb(164, 193,230)'),
     (1, 'absoluteMinMax', -0.355, 'bwr2', 'rgb(184, 184,255)'),
     (1, 'absoluteMinMax', -0.355, 'rbg', 'rgb(0, 71,0)'),
-    (1, 'absoluteMinMax', 0.56, 'bwr', 'rgb(255, 143,143)'),
+    (1, 'absoluteMinMax', 0.56, 'bwr', 'rgb(222, 143,134)'),
     (1, 'absoluteMinMax', 0.56, 'bwr2', 'rgb(255, 143,143)'),
     (1, 'absoluteMinMax', 0.56, 'rbg', 'rgb(112, 0,0)'),
-    (1, 'p10p90', -1.27, 'bwr', 'rgb(0, 0,127)'),
+    (1, 'p10p90', -1.27, 'bwr', 'rgb(0, 51,114)'),
     (1, 'p10p90', -1.27, 'bwr2', 'rgb(0, 128,255)'),
-    (1, 'p10p90', -0.355, 'bwr', 'rgb(167, 167,255)'),
+    (1, 'p10p90', -0.355, 'bwr', 'rgb(151, 184,226)'),
     (1, 'p10p90', -0.355, 'bwr2', 'rgb(167, 167,255)'),
     (1, 'p10p90', -0.355, 'rbg', 'rgb(0, 88,0)'),
-    (1, 'p10p90', 0.56, 'bwr', 'rgb(255, 116,116)'),
+    (1, 'p10p90', 0.56, 'bwr', 'rgb(213, 124,114)'),
     (1, 'p10p90', 0.56, 'bwr2', 'rgb(255, 116,116)'),
     (1, 'p10p90', 0.56, 'rbg', 'rgb(139, 0,0)'),
-    (2, 'absoluteMinMax', 1.93, 'bwr', 'rgb(255, 255,255)'),
+    (2, 'absoluteMinMax', 1.93, 'bwr', 'rgb(232, 232,232)'),
     (2, 'absoluteMinMax', 1.93, 'bwr2', 'rgb(255, 255,255)'),
     (2, 'absoluteMinMax', 1.93, 'rbg', 'rgb(0, 0,0)'),
-    (2, 'absoluteMinMax', 11.43, 'bwr', 'rgb(255, 128,128)'),
+    (2, 'absoluteMinMax', 11.43, 'bwr', 'rgb(217, 132,123)'),
     (2, 'absoluteMinMax', 11.43, 'bwr2', 'rgb(255, 128,128)'),
     (2, 'absoluteMinMax', 11.43, 'rbg', 'rgb(128, 0,0)'),
-    (2, 'absoluteMinMax', 20.93, 'bwr', 'rgb(255, 0,0)'),
+    (2, 'absoluteMinMax', 20.93, 'bwr', 'rgb(165, 31,30)'),
     (2, 'absoluteMinMax', 20.93, 'bwr2', 'rgb(255, 0,0)'),
     (2, 'absoluteMinMax', 20.93, 'rbg', 'rgb(255, 0,0)'),
-    (2, 'p10p90', 1.93, 'bwr', 'rgb(255, 255,255)'),
+    (2, 'p10p90', 1.93, 'bwr', 'rgb(232, 232,232)'),
     (2, 'p10p90', 1.93, 'rbg', 'rgb(0, 0,0)'),
-    (2, 'p10p90', 11.43, 'bwr', 'rgb(255, 134,134)'),
+    (2, 'p10p90', 11.43, 'bwr', 'rgb(219, 137,128)'),
     (2, 'p10p90', 11.43, 'bwr2', 'rgb(255, 134,134)'),
     (2, 'p10p90', 11.43, 'rbg', 'rgb(121, 0,0)'),
-    (2, 'p10p90', 20.93, 'bwr', 'rgb(127, 0,0)'),
+    (2, 'p10p90', 20.93, 'bwr', 'rgb(109, 0,0)'),
     (2, 'p10p90', 20.93, 'bwr2', 'rgb(255, 128,0)'),
-    (3, 'absoluteMinMax', -8, 'bwr', 'rgb(0, 0,255)'),
+    (3, 'absoluteMinMax', -8, 'bwr', 'rgb(15, 89,169)'),
     (3, 'absoluteMinMax', -8, 'bwr2', 'rgb(0, 0,255)'),
     (3, 'absoluteMinMax', -8, 'rbg', 'rgb(0, 255,0)'),
-    (3, 'absoluteMinMax', 0, 'bwr', 'rgb(255, 255,255)'),
+    (3, 'absoluteMinMax', 0, 'bwr', 'rgb(232, 232,232)'),
     (3, 'absoluteMinMax', 0, 'bwr2', 'rgb(255, 255,255)'),
     (3, 'absoluteMinMax', 0, 'rbg', 'rgb(0, 0,0)'),
-    (3, 'absoluteMinMax', 8, 'bwr', 'rgb(255, 0,0)'),
+    (3, 'absoluteMinMax', 8, 'bwr', 'rgb(165, 31,30)'),
     (3, 'absoluteMinMax', 8, 'bwr2', 'rgb(255, 0,0)'),
     (3, 'absoluteMinMax', 8, 'rbg', 'rgb(255, 0,0)'),
-    (3, 'p10p90', -8, 'bwr', 'rgb(0, 0,127)'),
+    (3, 'p10p90', -8, 'bwr', 'rgb(0, 51,114)'),
     (3, 'p10p90', -8, 'bwr2', 'rgb(0, 128,255)'),
-    (3, 'p10p90', 0, 'bwr', 'rgb(255, 255,255)'),
+    (3, 'p10p90', 0, 'bwr', 'rgb(232, 232,232)'),
     (3, 'p10p90', 0, 'bwr2', 'rgb(255, 255,255)'),
     (3, 'p10p90', 0, 'rbg', 'rgb(0, 0,0)'),
-    (3, 'p10p90', 8, 'bwr', 'rgb(127, 0,0)'),
+    (3, 'p10p90', 8, 'bwr', 'rgb(109, 0,0)'),
     (3, 'p10p90', 8, 'bwr2', 'rgb(255, 128,0)'),
 ]
 
@@ -743,7 +784,8 @@ class LegitimateColoursAreUnchangedTest(unittest.TestCase):
     produced a colour at all, is recorded above and required to still hold.
 
     Cases where the old answer was NOT a colour are deliberately absent: those
-    are exactly what changed, on purpose.
+    are exactly what changed, on purpose. So is the `bwr` column, once -- see
+    the note on the table.
     """
 
     def test_every_previously_valid_colour_is_unchanged(self):
@@ -766,6 +808,104 @@ class LegitimateColoursAreUnchangedTest(unittest.TestCase):
                          "a colour that was already valid has changed")
         self.assertEqual(result["checked"], len(COLOURS_BEFORE_THE_CLAMP))
         self.assertGreater(result["checked"], 40, "the table is suspiciously small")
+
+
+class TheDivergingRampTest(unittest.TestCase):
+    """What the ramp has to be, stated as behaviour rather than as hex codes.
+
+    Both of these are regressions with a face: the first is why every heatmap
+    in the application carried a black grid, and the second is the solid black
+    colour legend beside the metabolite hub heatmaps.
+    """
+
+    LIMITS = {"min": -8, "max": 8, "absMin": -8, "absMax": 8}
+
+    def _colour(self, value, scale="bwr"):
+        return run_in_node("""
+            process.stdout.write(JSON.stringify(getColor(%s, %s, %s)));
+        """ % (json.dumps(self.LIMITS), json.dumps(value),
+               "undefined" if scale is None else json.dumps(scale)))
+
+    @staticmethod
+    def _channels(colour):
+        return [int(part) for part in re.findall(r"\d+", colour)]
+
+    def test_the_midpoint_is_a_cell_and_not_a_hole(self):
+        """Zero must be distinguishable from the white panel behind it.
+
+        `rgb(255,255,255)` on a white card is not a pale cell, it is the
+        absence of one, and it is the entire reason the heatmaps drew a 0.5px
+        black border around every cell: the outline was doing the work the fill
+        could not. With a toned neutral the grid is not load-bearing any more
+        and generateHeatmap can separate cells with a transparent gap instead.
+        """
+        channels = self._channels(self._colour(0))
+        self.assertTrue(all(c < 250 for c in channels),
+                        "the midpoint is white again, so a value of zero is "
+                        "invisible on a white panel: %s" % channels)
+        # ...but still clearly the PALE end, not a grey that competes with data.
+        self.assertTrue(all(c > 200 for c in channels),
+                        "the midpoint has drifted dark enough to out-weigh "
+                        "small real changes: %s" % channels)
+
+    def test_the_midpoint_is_neutral_and_takes_no_side(self):
+        """A tinted midpoint would nudge every zero toward one of the poles."""
+        channels = self._channels(self._colour(0))
+        self.assertEqual(max(channels) - min(channels), 0,
+                         "the midpoint leans toward one pole: %s" % channels)
+
+    def test_an_unknown_scale_paints_the_default_ramp_not_black(self):
+        """The black colour-scale bar, pinned.
+
+        getColor's unknown-scale branch left red, green and blue undefined and
+        fell through to the shared return, where paChannel turned every NaN
+        into 0. Callers that pass a scale they were never given -- which is
+        what the hub panel did, because it read a network options object that
+        has no colorScale on it -- got rgb(0,0,0) for every single value, and
+        the legend rendered as a solid black strip beside correctly coloured
+        cells.
+        """
+        self.assertEqual(self._colour(8, scale=None), self._colour(8, "bwr"))
+        self.assertEqual(self._colour(-8, scale=None), self._colour(-8, "bwr"))
+        self.assertNotEqual(self._colour(8, scale=None), "rgb(0, 0,0)")
+
+    def test_a_shipped_file_contains_no_debugger_statement(self):
+        """Neither fall-through may stop the application for a reader.
+
+        getColor and getMinMax both ended their unknown-input branch with
+        `debugger;`. With devtools open that is a breakpoint, and both branches
+        run once per cell -- a legend alone hit one of them 25 times.
+        """
+        source = read_source()
+        self.assertNotIn("\n\t\t\t\tdebugger;", source)
+        self.assertIsNone(re.search(r"^\s*debugger\s*;", source, re.MULTILINE),
+                          "a debugger statement is back in PA_Step3Views.js")
+
+    def test_lightness_rises_without_a_single_step_backwards(self):
+        """Monotone lightness is what a colour-blind reader is left with.
+
+        If the ramp ever gets lighter as a value moves further from zero, the
+        one channel of information that survives total colour blindness is
+        reporting the opposite of the data.
+        """
+        result = run_in_node("""
+            const limits = %s;
+            const luma = v => {
+              const c = getColor(limits, v, "bwr").match(/\\d+/g).map(Number);
+              return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+            };
+            const up = [], down = [];
+            for (let i = 0; i <= 32; i++) { up.push(luma(i / 4)); down.push(luma(-i / 4)); }
+            process.stdout.write(JSON.stringify({up: up, down: down}));
+        """ % json.dumps(self.LIMITS))
+
+        for side in ("up", "down"):
+            series = result[side]
+            for index in range(1, len(series)):
+                self.assertLessEqual(
+                    round(series[index], 6), round(series[index - 1], 6),
+                    "%s side gets lighter between step %d and %d"
+                    % (side, index - 1, index))
 
 
 if __name__ == "__main__":

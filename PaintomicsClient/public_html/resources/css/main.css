@@ -4817,10 +4817,15 @@ div[id^=matching_table] table {
 	display: block;
 	margin-left: 10px;
 }
+/* Was an <img> whose intrinsic 120x18 supplied the width. It is a <span> with a
+   live gradient now (paScaleThumb), so the box has to be stated. */
 .colorScaleThumb {
+	display: inline-block;
+	width: 120px;
 	height: 12px;
 	margin-right: 20px;
 	border-radius: 2px;
+	box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .10);
 	float: right;
 }
 .visualSettingsButton {
@@ -5471,6 +5476,61 @@ div.omicSelection div.omicPosition + div {
 	min-width: 300px;
 	display: inline-block;
 	vertical-align: top;
+}
+
+/* The colour ramp a heatmap was painted with, drawn by paColorLegend() in
+   PA_Step3Views.js.
+
+   It used to write every one of these declarations inline, which is why
+   dark.css carried a pair of `[style*="color:#555"]` overrides - an inline
+   colour is unreachable by any stylesheet, so `!important` on a value-matched
+   attribute selector was the only way to theme it. Stated here, it themes
+   itself and those two rules could be deleted.
+
+   The bar is separated from the surface by an inset hairline rather than a
+   solid #999 border: a 1px mid-grey box around a 10px strip is most of what
+   the eye sees at that size, and it competed with the ramp it was framing. */
+.paColorLegend {
+	/* Block-level, not inline. As an inline-block it flowed onto the same line
+	   as the .PA_step5_heatmapContainer beside it (also inline-block), which
+	   is how it ended up marooned to the left of the figure. */
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+	margin: 2px 0 8px 0;
+	font-size: 10px;
+	line-height: 1.3;
+	color: var(--pa-ink-muted, #595959);
+}
+.paColorLegend-bar {
+	position: relative;
+	display: block;
+	height: 12px;
+	border-radius: 2px;
+	box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .10);
+}
+/* Where zero falls. Drawn slightly proud of the bar at both ends so it reads
+   as a tick against the ramp rather than as a seam in it. */
+.paColorLegend-tick {
+	position: absolute;
+	top: -2px;
+	bottom: -2px;
+	width: 1px;
+	margin-left: -0.5px;
+	background: rgba(0, 0, 0, .42);
+}
+.paColorLegend-scale {
+	position: relative;
+	display: flex;
+	justify-content: space-between;
+	font-variant-numeric: tabular-nums;
+}
+.paColorLegend-zero {
+	position: absolute;
+	transform: translateX(-50%);
+}
+.paColorLegend-caption {
+	color: var(--pa-ink-subtle, #8A8A8A);
 }
 
 /* Shown where a figure would go when there is nothing to draw. Previously these

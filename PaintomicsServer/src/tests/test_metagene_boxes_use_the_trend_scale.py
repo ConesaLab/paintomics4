@@ -65,7 +65,10 @@ def strip_comments(text):
 
 
 def extract(source, name):
-    match = re.search(r"var\s+%s\s*=\s*function" % re.escape(name), source)
+    # Lookahead so an object literal lifts the same way a function does, and so
+    # the brace scan below still starts at the value's own opening brace.
+    # PA_RAMP is data getColor cannot run without.
+    match = re.search(r"var\s+%s\s*=\s*(?=function|\{)" % re.escape(name), source)
     if match is None:
         raise AssertionError("%s is not defined" % name)
     opening = source.index("{", match.end())
@@ -103,6 +106,7 @@ class TrendScaleBehaviourTest(unittest.TestCase):
         helpers = "\n".join(extract(step3, name) for name in
                             ("paColourRange", "getMinMax", "paMetageneLimits",
                              "paOutlierFraction", "paChannel", "paRampPosition",
+                             "PA_RAMP", "paOklabChannels", "paDivergingChannels",
                              "getColor"))
         directory = tempfile.mkdtemp(prefix="paintomics-metabox-")
         try:
@@ -117,8 +121,16 @@ class TrendScaleBehaviourTest(unittest.TestCase):
         finally:
             shutil.rmtree(directory, ignore_errors=True)
 
-    def test_the_production_metagenes_are_no_longer_flat_yellow(self):
-        """The three values the live server was painting identically."""
+    def test_the_production_metagenes_are_no_longer_flat(self):
+        """The three values the live server was painting identically.
+
+        The colour they came out as has changed -- it was `rgb(255, 255,127)`,
+        a yellow that is not on the blue-white-red ramp at all and only existed
+        because an out-of-range channel had been clamped. The diverging ramp
+        puts them at its neutral instead. The DEFECT is the same either way and
+        is what this test is about: on the omic's scale all three values are
+        one colour, so the reader cannot tell them apart.
+        """
         result = self.run_js("""
             // the Proteomics omic on job bF624h75w1, and its metagenes
             const omic = getMinMax([0,0,0.789984901,0.9859346925,null,null,null,
@@ -132,19 +144,18 @@ class TrendScaleBehaviourTest(unittest.TestCase):
             }));
         """)
 
-        # Every value was the same yellow before: indistinguishable.
-        self.assertEqual(set(result["onTheOmicScale"]), {"rgb(255, 255,127)"},
+        # Every value lands on one colour: indistinguishable.
+        self.assertEqual(len(set(result["onTheOmicScale"])), 1,
                          "the premise has changed; re-derive this test")
 
         distinct = set(result["onTheTrendScale"])
-        self.assertGreater(len(distinct), 1,
-                           "the trend scale still paints every metagene the "
-                           "same colour: %s" % distinct)
-        for colour in result["onTheTrendScale"]:
-            self.assertNotIn("255,127", colour,
-                             "still the meaningless yellow: %s" % colour)
+        self.assertEqual(len(distinct), len(result["onTheTrendScale"]),
+                         "the trend scale still collapses metagenes onto one "
+                         "colour: %s" % distinct)
+        # And none of them is the flat colour the omic scale produced.
+        self.assertNotIn(result["onTheOmicScale"][0], distinct)
 
-    def test_a_trend_near_zero_is_near_white(self):
+    def test_a_trend_near_zero_is_near_the_neutral(self):
         """The reading that matters: small change looks like small change."""
         result = self.run_js("""
             const trend = paMetageneLimits([{values: [-4, 4]}]);
@@ -155,15 +166,22 @@ class TrendScaleBehaviourTest(unittest.TestCase):
               stronglyUp: getColor(trend, 4, "bwr")
             }));
         """)
-        self.assertEqual(result["atZero"], "rgb(255, 255,255)")
-        self.assertEqual(result["stronglyDown"], "rgb(0, 0,255)")
-        self.assertEqual(result["stronglyUp"], "rgb(255, 0,0)")
+        self.assertEqual(result["atZero"], "rgb(232, 232,232)")
+        self.assertEqual(result["stronglyDown"], "rgb(15, 89,169)")
+        self.assertEqual(result["stronglyUp"], "rgb(165, 31,30)")
 
-        # "almost no change" must be almost white, not a saturated anything.
-        channels = [int(n) for n in re.findall(r"-?\d+", result["slightlyDown"])]
-        self.assertTrue(all(c > 230 for c in channels),
-                        "a metagene of -0.04 on a -4..4 scale is drawn as %s, "
-                        "which is not 'nearly unchanged'" % result["slightlyDown"])
+        # "almost no change" must sit almost ON the neutral, not on a saturated
+        # anything. Measured as a distance from the midpoint rather than as an
+        # absolute channel floor: the midpoint is no longer 255, so a floor
+        # would be asserting the ramp's endpoint, not the reading.
+        near = [int(n) for n in re.findall(r"-?\d+", result["slightlyDown"])]
+        neutral = [int(n) for n in re.findall(r"-?\d+", result["atZero"])]
+        drift = max(abs(a - b) for a, b in zip(near, neutral))
+        self.assertLessEqual(drift, 8,
+                             "a metagene of -0.04 on a -4..4 scale is drawn as "
+                             "%s against a midpoint of %s, which is not "
+                             "'nearly unchanged'" % (result["slightlyDown"],
+                                                     result["atZero"]))
 
     def test_sibling_boxes_share_one_scale(self):
         """Boxes of the same set must be comparable with each other.

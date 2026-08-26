@@ -2262,6 +2262,10 @@ function PA_Step4KeggDiagramFeatureView(showButtons) {
 			"^": '<i class="relevantAssociationFeature"></i>'
 		};
 
+		/* The gap that separates one cell from the next, in the colour of the
+		   surface behind this chart. See paCellGap(). */
+		var cellGap = paCellGap(divID);
+
 		var heatmap = new Highcharts.Chart({
 			chart: {type: 'heatmap',renderTo: divID, height: chartHeight},
 			title: null,
@@ -2306,18 +2310,21 @@ function PA_Step4KeggDiagramFeatureView(showButtons) {
 			series: series,
 			plotOptions: {
 				heatmap: {
-					// A light gap instead of a black grid: it reads as separation
-					// between saturated cells on both the light and dark surface this
-					// chart sits on, without a hairline that goes muddy against the
-					// diverging blue/red fills.
-					borderColor: "rgba(255,255,255,0.55)",
-					borderWidth: 1.5,
+					// A gap instead of a black grid. This one used to be a
+					// translucent white, which was right for the two surfaces this
+					// tooltip is drawn on but had to be judged by eye; paCellGap
+					// reads the surface instead, so every heatmap in the application
+					// separates its cells the same way.
+					borderColor: cellGap.borderColor,
+					borderWidth: cellGap.borderWidth,
 					dataLabels: {
 						enabled: true,
 						useHTML: true,
 						formatter: function() {
 							if (this.point.isSignificant && maxX > 1) {
-								return '<i class="fa fa-star" style="color: white !important; font-size: 8px; padding: 0;"></i>';
+								return '<i class="fa fa-star" style="color: ' +
+									paInkOnCell(this.point.color) +
+									' !important; font-size: 8px; padding: 0;"></i>';
 							}
 						}
 					}
@@ -3049,8 +3056,12 @@ function PA_Step4VisualOptionsView() {
 		'  </div>' +
 		'  <h5>Color scale</h5>' +
 		'  <div>' +
-		'    <div class="radio"><img class="colorScaleThumb" src="resources/images/bwrscale_120x18.jpg"><input '+ ((visualOptions.colorScale ==="bwr")?"checked ":"") +'type="radio" id="colorScaleCheckbox1" name="colorScaleCheckbox" value="bwr"><label for="colorScaleCheckbox1">Blue-White-Red</label></div>' +
-		'    <div class="radio"><img class="colorScaleThumb" src="resources/images/gbrscale_120x18.jpg"><input '+ ((visualOptions.colorScale ==="rbg")?"checked ":"") +'type="radio" id="colorScaleCheckbox3" name="colorScaleCheckbox" value="rbg"><label for="colorScaleCheckbox3">Green-Black-Red</label></div>' +
+		// Swatches are sampled from getColor() rather than loaded as pictures of
+		// it - see paScaleThumb(). The first option is named for what it now
+		// paints: its midpoint is a light neutral, not white, which is what lets
+		// the heatmaps drop their black cell grid.
+		'    <div class="radio">' + paScaleThumb("bwr") + '<input '+ ((visualOptions.colorScale ==="bwr")?"checked ":"") +'type="radio" id="colorScaleCheckbox1" name="colorScaleCheckbox" value="bwr"><label for="colorScaleCheckbox1">Blue-Grey-Red</label></div>' +
+		'    <div class="radio">' + paScaleThumb("rbg") + '<input '+ ((visualOptions.colorScale ==="rbg")?"checked ":"") +'type="radio" id="colorScaleCheckbox3" name="colorScaleCheckbox" value="rbg"><label for="colorScaleCheckbox3">Green-Black-Red</label></div>' +
 		//'    <div class="radio"><input type="radio" id="colorScaleCheckbox2" name="colorScaleCheckbox" value="bwr2"><label for="colorScaleCheckbox2">Blue-White-Red (alt.)<img class="colorScaleThumb" src="resources/images/bwr2scale_120x18.jpg"></label></div>' +
 		'  </div>';
 
@@ -3540,7 +3551,8 @@ function PA_Step4GlobalHeatmapView() {
 			try {
 				legendGH = paColorLegend(
 					getMinMax(distributionSummariesGH[omicName], visualOptionsGH.colorReferences[omicName]),
-					visualOptionsGH.colorScale);
+					visualOptionsGH.colorScale,
+					{caption: paColourReferenceLabel(visualOptionsGH.colorReferences[omicName])});
 			} catch (error) {
 				// A missing summary for one omic must not stop the other omics'
 				// heatmaps from being drawn; the legend is decoration.
@@ -3875,6 +3887,10 @@ function PA_Step4GlobalHeatmapView() {
 		var showStarsGH = this.showSignificanceStars !== false;
 
 		//STEP 2. DRAW THE HEATMAP
+		/* The gap that separates one cell from the next, in the colour of the
+		   surface behind this chart. See paCellGap(). */
+		var cellGap = paCellGap(targetID);
+
 		var heatmap = new Highcharts.Chart({
 			chart: {
 				type: 'heatmap',
@@ -3883,9 +3899,13 @@ function PA_Step4GlobalHeatmapView() {
 			title: null,
 			legend: {enabled: false},
 			credits: {enabled: false},
+			/* The row-under-the-pointer outline. A 3px pure-black box around a
+			   30px row was the loudest mark on the figure, louder than any cell
+			   it was pointing at. 2px of the app's ink still reads as a frame
+			   without out-shouting the data. */
 			heatmapSelector: {
-				color: '#000',
-				lineWidth: 3
+				color: '#3F3F46',
+				lineWidth: 2
 			},
 			clusterize: clusterize,
 			tooltip: {
@@ -3929,17 +3949,21 @@ function PA_Step4GlobalHeatmapView() {
 			series: series,
 			plotOptions: {
 				heatmap: {
-					borderColor: "#000000",
-					borderWidth: 0.5,
-					// White star on cells significant for that condition. Guarded by
+					borderColor: cellGap.borderColor,
+					borderWidth: cellGap.borderWidth,
+					// Star on cells significant for that condition. Guarded by
 					// maxX > 1 so it only shows for multi-condition data (mirrors the
-					// pathway-box tooltip heatmap behaviour).
+					// pathway-box tooltip heatmap behaviour). Its ink comes from the
+					// cell's luminance -- a white star vanished on the pale half of
+					// the ramp, which is most of it.
 					dataLabels: {
 						enabled: true,
 						useHTML: true,
 						formatter: function() {
 							if (showStarsGH && this.point.isSignificant && maxX > 1) {
-								return '<i class="fa fa-star" style="color: white !important; font-size: 8px; padding: 0;"></i>';
+								return '<i class="fa fa-star" style="color: ' +
+									paInkOnCell(this.point.color) +
+									' !important; font-size: 8px; padding: 0;"></i>';
 							}
 						}
 					}
@@ -4330,7 +4354,8 @@ function PA_Step4DetailsView() {
 			try {
 				legendDV = paColorLegend(
 					getMinMax(distributionSummariesDV[omicNames[i].split("#")[0]], visualOptionsDV.colorReferences[omicNames[i].split("#")[0]]),
-					visualOptionsDV.colorScale);
+					visualOptionsDV.colorScale,
+					{caption: paColourReferenceLabel(visualOptionsDV.colorReferences[omicNames[i].split("#")[0]])});
 			} catch (error) {
 				console.error(Date.logFormat() + " could not build the colour legend for " + omicNames[i] + ".", error);
 			}
@@ -4473,9 +4498,13 @@ function PA_Step4DetailsView() {
 		var xAxisConfig = paConditionAxis(maxX, omicHeaderDV, {maxChars: 12});
 		var xAxisCat = xAxisConfig.categories;
 
+		/* The gap that separates one cell from the next, in the colour of the
+		   surface behind this chart. See paCellGap(). */
+		var cellGap = paCellGap(targetID);
+
 		var heatmap = new Highcharts.Chart({
 			chart: {type: 'heatmap', renderTo: targetID},
-			heatmapSelector: {color: '#000', lineWidth: 3},
+			heatmapSelector: {color: '#3F3F46', lineWidth: 2},
 			title: null, legend: {enabled: false}, credits: {enabled: false},
 			clusterize: clusterize,
 			tooltip: {
@@ -4511,17 +4540,20 @@ function PA_Step4DetailsView() {
 			series: series,
 			plotOptions: {
 				heatmap: {
-					borderColor: "#000000",
-					borderWidth: 0.5,
-					// White star on cells significant for that condition. Guarded by
+					borderColor: cellGap.borderColor,
+					borderWidth: cellGap.borderWidth,
+					// Star on cells significant for that condition. Guarded by
 					// maxX > 1 so it only shows for multi-condition data (mirrors the
-					// pathway-box tooltip and global heatmaps).
+					// pathway-box tooltip and global heatmaps). Ink from the cell's
+					// luminance -- see paInkOnCell.
 					dataLabels: {
 						enabled: true,
 						useHTML: true,
 						formatter: function() {
 							if (this.point.isSignificant && maxX > 1) {
-								return '<i class="fa fa-star" style="color: white !important; font-size: 8px; padding: 0;"></i>';
+								return '<i class="fa fa-star" style="color: ' +
+									paInkOnCell(this.point.color) +
+									' !important; font-size: 8px; padding: 0;"></i>';
 							}
 						}
 					}
@@ -4592,9 +4624,10 @@ function PA_Step4DetailsView() {
 		}
 
 		if (limits.max !== limits.absMax && limits.min !== limits.absMin) {
+			// Where the colour scale clips - see paScaleClipLine().
 			yAxisItem.plotLines = [
-				{label: {text: 'min', align: 'right', style: {color: 'gray'}}, color: '#dedede', value: limits.min, width: 1},
-				{label: {text: 'max', align: 'right', style: {color: 'gray'}}, color: '#dedede', value: limits.max, width: 1}
+				paScaleClipLine(limits.max, "scale max", true),
+				paScaleClipLine(limits.min, "scale min", false)
 			];
 		}
 
