@@ -935,7 +935,12 @@
 .pa-convert-composer-input:disabled { opacity: 0.55; }
 .pa-convert-composer-send {
     flex: 0 0 auto;
-    min-height: 38px;
+    /* The same height as the input at rest (66px, its two rows), so the two
+       read as one block. At 38px against a 66px box the button was a small
+       control parked under a tall one, with a 28px step between their top
+       edges. It stays bottom-aligned, so when the input grows with what is
+       typed the button keeps its size and sits on the same baseline. */
+    min-height: 66px;
     padding: 0 16px;
     border-radius: var(--pa-radius-sm, 6px);
     border: 1px solid var(--cv-ai-ink);
