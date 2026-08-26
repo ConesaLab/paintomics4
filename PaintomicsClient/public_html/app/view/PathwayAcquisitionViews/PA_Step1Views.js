@@ -1266,6 +1266,13 @@ function PA_Step1JobView() {
 	this.submitFormHandler = function() {
 		var aux, omicBoxes;
 
+		/* Which panels are in this submission is only knowable once the empty
+		   ones are gone, so drop them first. A panel dropped afterwards is a
+		   destroyed component still sitting in the pre-processing list, and
+		   step1ComplexFormSubmitHandler throws on the first queryById of a
+		   container that is no longer there. */
+		this.dropEmptyOmicPanels();
+
 		omicBoxes = this.getComponent().queryById("submittingPanelsContainer").query("container[cls=omicbox regionBasedOmic],[cls=omicbox miRNABasedOmic],[cls=omicbox moreBasedOmic]");
 		for (var i = omicBoxes.length; i--;) {
 			aux = omicBoxes[i].queryById("itemsContainer");
@@ -1281,28 +1288,75 @@ function PA_Step1JobView() {
 		}
 	};
 	/**
+	* Removes the omic panels the user left empty, and returns the ones that stay.
+	*
+	* Step 1 opens with a Gene expression panel and a Metabolomics panel already
+	* on the form, and adding a Region-based, miRNA or MORE panel is one click in
+	* "Available omics". A panel with no file in it means "I did not want this
+	* one", so it is taken off the form rather than reported -- and because it is
+	* taken off the form, nothing downstream may treat it as part of the job.
+	*
+	* @returns {Array} the panels that carry a file
+	*/
+	this.dropEmptyOmicPanels = function() {
+		var items, filled, i;
+
+		items = this.getComponent().query("container[cls=omicbox], container[cls=omicbox regionBasedOmic],[cls=omicbox miRNABasedOmic],[cls=omicbox moreBasedOmic]");
+
+		filled = [];
+		for (i = 0; i < items.length; i++) {
+			if (items[i].isEmpty() === true) {
+				$(items[i].getEl().dom).find("a.deleteOmicBox").click();
+			} else {
+				filled.push(items[i]);
+			}
+		}
+
+		return filled;
+	};
+	/**
 	* This function checks the validity for each OmicSubmittingPanel
+	*
+	* Sets `formIsEmpty` as a side effect: true when the form was refused
+	* because nothing was filled in, so the caller can say that instead of
+	* sending the user looking for field errors that do not exist.
 	*
 	* @returns Boolean
 	*/
 	this.checkForm = function() {
-		var items, valid, emptyFields;
+		var filled, valid, i;
 
-		items = this.getComponent().query("container[cls=omicbox], container[cls=omicbox regionBasedOmic],[cls=omicbox miRNABasedOmic],[cls=omicbox moreBasedOmic]");
+		/* Drop the empty panels BEFORE validating anything.
+
+		   The two halves used to run the other way round -- validate every
+		   panel, then delete the empty ones -- and disagreed. An empty panel
+		   was counted as invalid and then deleted by the very next loop. The
+		   plain omic panel hid it (its isValid() returns early when the panel
+		   is empty); the region, miRNA and MORE panels have no such guard, so
+		   empty they mark their own file fields and return false. Those three
+		   are also the only panels that route the submit through
+		   step1ComplexFormSubmitHandler, whose refusal is the one that says
+		   "please check the form errors" and offers Report error.
+
+		   So: fill in Gene expression, add a Region-based panel, press Run --
+		   the form was refused because of the region panel, the region panel
+		   was deleted a moment later, and the user was left looking at one
+		   clean box with nothing marked anywhere, told to check errors that no
+		   longer existed. That is the 2026-08-26 report; reproduced in Chrome
+		   with 0 fields marked invalid on the form it left behind. */
+		filled = this.dropEmptyOmicPanels();
+
+		this.formIsEmpty = (filled.length === 0);
+		if (this.formIsEmpty) {
+			return false;
+		}
+
 		valid = this.getComponent().queryById("speciesCombobox").isValid();
-		for (var i in items) {
-			valid = valid && items[i].isValid();
+		for (i = 0; i < filled.length; i++) {
+			valid = valid && filled[i].isValid();
 		}
 
-		emptyFields = 0;
-		for (var i in items) {
-			if (items[i].isEmpty() === true) {
-				emptyFields++;
-				$(items[i].getEl().dom).find("a.deleteOmicBox").click();
-			}
-		}
-
-		return valid && (emptyFields < items.length);
+		return valid;
 	};
 
 	//    this.showMyDataPanel = function () {

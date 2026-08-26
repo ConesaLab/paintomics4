@@ -58,6 +58,33 @@ function withExampleScenario(exampleURL, jobView) {
 	return scenarioId ? exampleURL + "/" + encodeURIComponent(scenarioId) : exampleURL;
 }
 
+/* What a Step 1 submission is told when the form holds no omic data at all.
+   Both submit paths reach that state, so both say it in the same words. */
+var STEP1_NO_DATA_MESSAGE = "Invalid form. <br/> Please provide at least: " +
+	"<span style='color: auto;text-decoration: underline;'>Gene expression /Metabolomics /Proteomics data.</span>" +
+	" Also, please make sure to <span style='color: auto;text-decoration: underline;'>select an organism.</span>";
+
+/**
+* The refusal a Step 1 submission gets when checkForm() said no.
+*
+* Two different things can be wrong and they do not read the same. When a field
+* is wrong the form marks it and "please check the form errors" is a direction;
+* when nothing was filled in there is no field to point at, and the same
+* sentence sends the user hunting for something that is not on the page. That
+* second case is what a user reported on 2026-08-26, so checkForm() sets
+* `formIsEmpty` and the two are told apart here.
+*
+* @param {PA_Step1JobView} jobView
+*/
+function showInvalidStep1FormMessage(jobView) {
+	if (jobView && jobView.formIsEmpty === true) {
+		showErrorMessage(STEP1_NO_DATA_MESSAGE, {height: 150, width: 400, showReportButton: false});
+		return;
+	}
+	showErrorMessage("Invalid Form. </br> Please check the form errors.",
+		{height: 150, width: 400, showReportButton: true});
+}
+
 function JobController() {
 	/**
 	*
@@ -391,7 +418,7 @@ function JobController() {
 			//SEND ALL FORM TO THE QUEUE
 			sendRequest(jobView, specialOmics);
 		} else {
-			showErrorMessage("Invalid Form. </br> Please check the form errors.", {height: 150, width: 400, showReportButton:true});
+			showInvalidStep1FormMessage(jobView);
 			return false;
 		}
 	};
@@ -574,7 +601,7 @@ function JobController() {
 				// a form that fails validation here must not keep it.
 				this.endStep1Submission(jobView);
 			}
-			showErrorMessage("Invalid form. <br/> Please provide at least: <span style='color: auto;text-decoration: underline;'>Gene expression /Metabolomics /Proteomics data.</span> Also, please make sure to <span style='color: auto;text-decoration: underline;'>select an organism.</span>", {height: 150, width: 400, showReportButton:false});
+			showErrorMessage(STEP1_NO_DATA_MESSAGE, {height: 150, width: 400, showReportButton:false});
 			return false;
 		}
 	};
