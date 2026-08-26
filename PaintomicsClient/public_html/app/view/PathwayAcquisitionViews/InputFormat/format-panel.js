@@ -24,7 +24,79 @@
     var FULL_CHECK_LIMIT = 25 * 1024 * 1024;
     var PARTIAL_CHECK_BYTES = 5 * 1024 * 1024;
 
-    var VALUES_FIELD = /^omic\d+_file$/;
+    /*
+     * The contract a picked file is held to, keyed by the SLOT it was picked
+     * into.
+     *
+     * This replaces a test on the field's NAME (/^omic\d+_file$/). That is the
+     * plain, region-based and miRNA panels' naming convention and it is not the
+     * MORE panel's -- MORE calls its five selectors conditions, rnaseqaux,
+     * file_0, relevant_file_0 and assoc_file_0 -- so every file picked into a
+     * Regulatory Omic (MORE) panel went unchecked: no strip, no warning, no
+     * offer to fix, and no block. Reported 2026-08-26 by a user whose files
+     * used decimal commas, the single fault this module exists to catch and
+     * blocks a submit over. She was told nothing, and the run failed on the
+     * server an hour later.
+     *
+     * itemId is the key because it is the one thing every panel type agrees
+     * on; the field names differ per panel and the file names are not evidence
+     * of anything (see roleForFileName's note in format-roles.js).
+     *
+     * Two slots are deliberately absent, because this module does not model
+     * what they hold and judging them by a validator that does not fit would
+     * block work that is correct:
+     *
+     *   tertiaryFileSelector    the region panel's GTF -- not a delimited
+     *                           table in any of these contracts;
+     *   third/fourthFileSelector  the miRNA panel's RESULTS container, filled
+     *                           by setContent with server paths rather than
+     *                           picked, so there is no browser file to read.
+     *                           An empty regulator_relevant_associations file
+     *                           is a legitimate conversion output and the
+     *                           relevant-associations contract rejects it, so
+     *                           judging them could only ever block correct work;
+     *   mirnaTargetsFileSelector  the miRNA2Genes prediction table, which is
+     *                           miRNA / gene / PLR. The shipped
+     *                           mirna_to_gene_associations.tab has THREE
+     *                           columns for that reason, so the two-column
+     *                           associations contract rejects it -- the very
+     *                           trap format-roles.js records under
+     *                           roleForFileName.
+     */
+    var ROLE_BY_SLOT = {
+        mainFileSelector: "values",
+        rnaseqauxFileSelector: "values",
+        secondaryFileSelector: "relevant",
+        moreRelevantFileSelector: "relevant",
+        mainAssociationFileSelector: "associations",
+        moreAssociationsFileSelector: "associations",
+        secondaryAssociationFileSelector: "relevant-associations",
+        conditionsFileSelector: "design"
+    };
+
+    /* The Ext filefield that owns this DOM input, or null. */
+    function extFieldFor(input) {
+        if (!window.Ext || !Ext.ComponentQuery) return null;
+        var fields = Ext.ComponentQuery.query("filefield");
+        for (var i = 0; i < fields.length; i++) {
+            var dom = fields[i].fileInputEl && fields[i].fileInputEl.dom;
+            if (dom === input) return fields[i];
+        }
+        return null;
+    }
+
+    /* The role of the slot a filefield sits in, or null when it is not one of
+       the omic panels' data slots. */
+    function roleForField(field) {
+        if (!field || !field.up) return null;
+        var selector = field.up("myFilesSelectorButton");
+        if (!selector || !selector.itemId) return null;
+        return ROLE_BY_SLOT[selector.itemId] || null;
+    }
+
+    function roleForInput(input) {
+        return roleForField(extFieldFor(input));
+    }
 
     /*
      * Files we KNOW the server will reject, keyed by field name.
@@ -80,12 +152,25 @@
      */
     // The omic's display name, used by the submit-time banner, which can be
     // about several omics at once.
-    function omicNameFor(fieldName) {
-        var prefix = fieldName.replace(/_file$/, "");
-        if (!window.Ext || !Ext.ComponentQuery) return prefix;
-        var field = Ext.ComponentQuery.query("[name=" + prefix + "_omic_name]")[0];
-        var value = field && field.getValue && field.getValue();
-        return value || prefix;
+    //
+    // Taken off the card the input sits in, not from the field name. The name
+    // lookup this replaces asked for "<prefix>_omic_name", which the MORE panel
+    // does not have -- its combo is `omic_name_0` -- so a MORE file would have
+    // been announced to the user as "file_0".
+    function omicNameFor(input, fieldName) {
+        var card = cardComponentFor(input);
+        if (card) {
+            var combo = card.down && card.down("#omicNameField");
+            var typed = combo && combo.getValue && combo.getValue();
+            if (typed) return typed;
+            var heading = card.el && card.el.dom &&
+                          card.el.dom.querySelector(".omicboxTitle h4");
+            if (heading) {
+                var text = String(heading.textContent || "").replace(/\s+/g, " ").trim();
+                if (text) return text;
+            }
+        }
+        return String(fieldName || "").replace(/_file$/, "") || "this omic";
     }
 
     function cardFor(input) {
@@ -299,14 +384,33 @@
 
     function aiExplainer() { return AI_EXPLAINER; }
 
+    /* What an accepted file is worth saying about it, per contract.
+     *
+     * Only the values summary carries numericColumns and idSample; a design
+     * matrix reports its conditions and the two association contracts report
+     * nothing but their shape. Reading the values fields unconditionally threw
+     * ("Cannot read properties of undefined") the moment this module started
+     * checking the other slots, leaving a blank green strip. */
+    function summaryBits(summary) {
+        var bits = [plural(summary.nRows, "row")];
+        if (summary.numericColumns) {
+            bits.push(plural(summary.numericColumns.length, "value column"));
+        } else if (summary.conditions) {
+            bits.push(plural(summary.conditions.length, "condition") +
+                      " (" + summary.conditions.slice(0, 4).join(", ") + ")");
+        } else if (summary.nCols) {
+            bits.push(plural(summary.nCols, "column"));
+        }
+        if (summary.idSample && summary.idSample.length) {
+            bits.push("IDs like " + summary.idSample.slice(0, 3).join(", "));
+        }
+        return bits;
+    }
+
     function renderOk(strip, summary, partial, input) {
         strip.className = "pa-format-strip pa-format-ok";
         strip.innerHTML = "";
-        var bits = [plural(summary.nRows, "row"),
-                    plural(summary.numericColumns.length, "value column")];
-        if (summary.idSample.length) {
-            bits.push("IDs like " + summary.idSample.slice(0, 3).join(", "));
-        }
+        var bits = summaryBits(summary || {});
         strip.appendChild(el("span", "pa-format-icon", "✓"));
         var body = el("div", "pa-format-body");
         var line = el("div", "pa-format-text",
@@ -456,7 +560,7 @@
         if (counts.DECIMAL_COMMA) {
             return "Numbers use commas as the decimal mark; PaintOmics needs dots.";
         }
-        if (counts.NON_NUMERIC && summary.textColumns.length) {
+        if (counts.NON_NUMERIC && summary.textColumns && summary.textColumns.length) {
             var names = summary.textColumns.map(function (i) {
                 return summary.columnNames[i] || ("column " + (i + 1));
             });
@@ -469,6 +573,30 @@
         if (counts.TOO_FEW_COLUMNS) return "The file has only one column; a values file needs an identifier plus at least one measurement.";
         if (counts.NO_FEATURE_LINES) return "The file has a header but no data rows.";
         if (counts.EMPTY) return "The file is empty.";
+
+        /* The other contracts. Without these every fault in a conditions,
+           associations or relevant-features file fell through to the generic
+           sentence below, which tells the reader nothing they can act on --
+           and telling them is the whole purpose of this module. */
+        if (counts.NOT_INDICATOR) {
+            return "A conditions file marks each sample with 1 or 0 in every " +
+                   "group column; this one holds other values.";
+        }
+        if (counts.NOT_ONE_CONDITION) {
+            return "Every sample must belong to exactly one condition — one 1 per row.";
+        }
+        if (counts.CONDITION_MISMATCH) {
+            return "This file does not have one column per condition.";
+        }
+        if (counts.NOT_TWO_COLUMNS) {
+            return "An associations file needs exactly two columns: the target and its regulator.";
+        }
+        if (counts.BAD_COLUMN_COUNT) {
+            return "The file does not have the number of columns this slot expects.";
+        }
+        if (counts.FIELD_TOO_LONG) {
+            return "A field is far too long to be an identifier — this looks like the wrong file for the slot.";
+        }
         return "The file does not match the format PaintOmics expects.";
     }
 
@@ -478,12 +606,18 @@
      * already asked for the file to be fixed -- making them find the strip and
      * press a second button would be two clicks for one intention.
      */
-    function check(input, file, fieldName, autoApply) {
+    function check(input, file, fieldName, autoApply, role) {
+        /* Every slot is held to its OWN contract. Running the values-matrix
+           validator over an associations file or a 0/1 design matrix would
+           report faults they cannot have; format-roles.js already models
+           each one. */
+        role = role || roleForInput(input) || "values";
+        var validate = function (rows) { return API.validateForRole(role, rows); };
         var strip = hostFor(input);
         if (!strip) return;
         strip.__input = input;
         strip.__field = fieldName;
-        strip.__omic = omicNameFor(fieldName);
+        strip.__omic = omicNameFor(input, fieldName);
         // Set by the conversion sheet just before it hands the table over;
         // consumed here so a file the user picks by hand afterwards carries no
         // stale provenance.
@@ -527,7 +661,7 @@
             // does not actually have.
             if (partial && read.rows.length > 1) read.rows.pop();
 
-            var result = API.validateValues(read.rows);
+            var result = validate(read.rows);
             if (result.ok) {
                 clearBlocked(fieldName);
                 renderOk(strip, result.summary, partial, input);
@@ -536,13 +670,13 @@
 
             var repairs = API.proposeRepairs(read.rows, read.delimiter, result.problems);
             var repaired = repairs.length ? API.applyRepairs(read.rows, repairs) : null;
-            var fixable = repaired && API.validateValues(repaired.rows).ok && !partial;
+            var fixable = repaired && validate(repaired.rows).ok && !partial;
 
             if (fixable) {
                 if (autoApply) {
                     replaceFile(input, repaired.rows, file.name);
                     clearBlocked(fieldName);
-                    renderOk(hostFor(input), API.validateValues(repaired.rows).summary, false, input);
+                    renderOk(hostFor(input), validate(repaired.rows).summary, false, input);
                     return;
                 }
                 markBlocked(fieldName, {
@@ -552,7 +686,7 @@
                         replaceFile(input, repaired.rows, file.name);
                         clearBlocked(fieldName);
                         renderOk(hostFor(input),
-                                 API.validateValues(repaired.rows).summary, false, input);
+                                 validate(repaired.rows).summary, false, input);
                     }
                 });
                 var body = renderProblem(strip, "warn", describeProblems(result),
@@ -560,7 +694,7 @@
                     " This is a direct find-and-replace, not an AI conversion.",
                     [{ label: "Fix automatically", primary: true, onClick: function () {
                           replaceFile(input, repaired.rows, file.name);
-                          renderOk(hostFor(input), API.validateValues(repaired.rows).summary, false, input);
+                          renderOk(hostFor(input), validate(repaired.rows).summary, false, input);
                       } },
                     ]);
                 return;
@@ -602,13 +736,8 @@
      * ------------------------------------------------------------------ */
 
     function extFieldNameFor(input) {
-        if (!window.Ext || !Ext.ComponentQuery) return null;
-        var fields = Ext.ComponentQuery.query("filefield");
-        for (var i = 0; i < fields.length; i++) {
-            var dom = fields[i].fileInputEl && fields[i].fileInputEl.dom;
-            if (dom === input) return fields[i].name || null;
-        }
-        return null;
+        var field = extFieldFor(input);
+        return (field && field.name) || null;
     }
 
     /* ------------------------------------------------------------------ *
@@ -731,7 +860,7 @@
         if (!window.Ext || !Ext.ComponentQuery) return null;
         var fields = Ext.ComponentQuery.query("filefield");
         for (var i = 0; i < fields.length; i++) {
-            if (!VALUES_FIELD.test(fields[i].name || "")) continue;
+            if (!roleForField(fields[i])) continue;
             var dom = fields[i].fileInputEl && fields[i].fileInputEl.dom;
             var file = dom && dom.files && dom.files[0];
             if (!file) continue;
@@ -809,7 +938,7 @@
         var component = Ext.getCmp(cardEl.id);
         if (!component || !component.query) return;
         var hasValuesField = component.query("filefield").some(function (f) {
-            return VALUES_FIELD.test(f.name || "");
+            return !!roleForField(f);
         });
         if (!hasValuesField) return;
         cardEl.__paPrimed = true;
@@ -858,9 +987,10 @@
         var input = event.target;
         if (!input || input.type !== "file" || !input.files || !input.files.length) return;
         var name = extFieldNameFor(input);
-        if (!name || !VALUES_FIELD.test(name)) return;
+        var role = roleForInput(input);
+        if (!name || !role) return;
         try {
-            check(input, input.files[0], name);
+            check(input, input.files[0], name, false, role);
         } catch (e) {
             // Never let a check failure take the upload with it: the user can
             // always still submit, exactly as before this module existed.
