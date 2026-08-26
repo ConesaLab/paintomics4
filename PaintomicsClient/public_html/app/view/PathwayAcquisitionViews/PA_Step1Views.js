@@ -1358,6 +1358,34 @@ function PA_Step1JobView() {
 
 		return valid;
 	};
+	/**
+	* The first field on the form carrying an error, or null.
+	*
+	* "Please check the form errors" is only a direction if the reader can find
+	* the error, and this form is three sections tall: the organism sits in
+	* section 1 and the omic panels in section 3, so the field that refused the
+	* submission is routinely off screen when the dialog opens over it. The
+	* reporting user on 2026-08-26 had filled in a MORE panel at the bottom of
+	* the page and never chosen an organism at the top -- nginx has her first
+	* /organism_databases (the combo's change listener, once per page load)
+	* landing 31 seconds AFTER the report -- so the one thing wrong with her
+	* form was a field she had no reason to be looking at.
+	*
+	* Only visible fields count: a hidden one cannot be shown to anybody, and
+	* naming it would be worse than saying nothing.
+	*
+	* @returns {Ext.form.field.Base|null}
+	*/
+	this.firstFormError = function() {
+		var fields = this.getComponent().query("field"), i;
+		for (i = 0; i < fields.length; i++) {
+			if (fields[i].hasActiveError && fields[i].hasActiveError() &&
+				fields[i].isVisible(true) && fields[i].getEl()) {
+				return fields[i];
+			}
+		}
+		return null;
+	};
 
 	//    this.showMyDataPanel = function () {
 	//        this.controller.showMyDataPanelClickHandler(this);
