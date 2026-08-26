@@ -22,7 +22,7 @@ from io import BytesIO
 from PIL import Image
 from textwrap import wrap
 from time import strftime, sleep, time
-from subprocess import check_call, check_output, CalledProcessError, STDOUT
+from subprocess import check_call, CalledProcessError
 
 from conf.serverconf import KEGG_DATA_DIR, DOWNLOAD_DELAY_1, DOWNLOAD_DELAY_2, MAX_TRIES_1
 
@@ -384,13 +384,13 @@ def download_command(inputfile=None, specie=None, kegg=0, mapping=0, common=0, r
         exit(0)
 
 
-def install_command(inputfile=None, specie=None, species=None, common=0, hub=1, reinstall=0):
+def install_command(inputfile=None, specie=None, species=None, common=0, reinstall=0):
     """
     Install the information for given species
     Usage: AdminTools.py install <options>
     Examples:
-              ./DBManager.py install --specie=mmu --common=0 --hub=1
-              ./DBManager.py install --species=hsa,mmu,ath --common=0 --hub=0
+              ./DBManager.py install --specie=mmu --common=0
+              ./DBManager.py install --species=hsa,mmu,ath --common=0
               ./DBManager.py install --species=hsa,mmu --reinstall=1
 
     Keyword arguments:
@@ -398,7 +398,6 @@ def install_command(inputfile=None, specie=None, species=None, common=0, hub=1, 
         specie    -- a single valid KEGG specie code e.g. mmu, hsa
         species   -- a comma-separated list of species codes, e.g. hsa,mmu,ath
         common    -- (optional) 1 if Pathways info (classification, PNG images...) should be reinstalled, 0 to keep from previous version. Default=0
-        hub       -- (optional) 1 to build the hub-analysis data. Default=1
         reinstall -- (optional) 1 to rebuild from the data already in current/ without
                      promoting anything from download/. Default=0
 
@@ -536,126 +535,22 @@ def install_command(inputfile=None, specie=None, species=None, common=0, hub=1, 
     # **************************************************************************
 
     # ********************************************************************************
-    # STEP 2.A.1 IF WE CHOOSED TO install THE hub analysis data
+    # HUB ANALYSIS DATA IS NO LONGER BUILT AT INSTALL TIME
     # ********************************************************************************
-    hubDir = None
-    try:
-        if hub:
-            for hubSpecie in SPECIES_INSTALL.keys():
-                if hubSpecie[0] == "#":
-                    continue
+    # It used to be: ~65 s per species of R (hubAnalysisInstall.R +
+    # GalaxyNetworkFunctionsv2.R) producing a 60 MB tree of 1,865 .RData files
+    # plus a 34 MB JSON -- two copies of the same neighbourhoods.
+    #
+    # The graph is derived from the KGML this installer already downloads, on
+    # first use and in about a second (mmu: 364 files, 96,618 edges, 1.03 s).
+    # See src/common/KeggGraph/store.py and
+    # docs/superpowers/specs/2026-08-25-metabolite-hub-graph-design.md.
+    #
+    # The move/preservation logic further down is deliberately LEFT IN PLACE.
+    # Existing current/<specie>/hubData is the fallback source for any species
+    # whose kgml/ was not retained, so it must survive an update; it simply is
+    # never created any more. Those branches no-op when there is nothing to move.
 
-                # Built from the bare species code, exactly as replaceNewVersionData
-                # builds the path it will later move.
-                hubDir = os.path.join(downloadDir, hubSpecie, "hubData/")
-                currentHubDir = os.path.join(currentDataDir, hubSpecie, "hubData/")
-
-                if hub_data_is_complete(currentHubDir):
-                    log("STEP EXTRA: [" + hubSpecie + "] Hub data already complete in current/, skipping regeneration...")
-                elif hub_data_is_complete(hubDir):
-                    log("STEP EXTRA: [" + hubSpecie + "] Hub data already staged in download/, skipping regeneration...")
-                else:
-                    # A directory that merely EXISTS is not a finished install: the R
-                    # script writes pathway_list.list within seconds and
-                    # kegg_interaction.json only at the very end, so any crash in
-                    # between used to leave a populated directory that every later run
-                    # accepted as complete and reported as SUCCESS. Clear the partial
-                    # tree and rebuild it.
-                    if os.path.isdir(hubDir) and directory_has_contents(hubDir):
-                        log("STEP EXTRA: [" + hubSpecie + "] Discarding an incomplete hub directory before rebuilding...")
-                        shutil.rmtree(hubDir, ignore_errors=True)
-                    os.makedirs(hubDir, exist_ok=True)
-
-                    # Reuse the KGML the KEGG installer already downloaded instead of
-                    # re-fetching ~364 files from rest.kegg.jp. This step runs BEFORE
-                    # the species move below, so on a fresh install the files are still
-                    # under download/<specie>/kgml and only on a reinstall under
-                    # current/<specie>/kgml -- probe in that order.
-                    kgmlDir = None
-                    for candidate in (os.path.join(downloadDir, hubSpecie, "kgml"),
-                                      os.path.join(currentDataDir, hubSpecie, "kgml")):
-                        if os.path.isdir(candidate) and os.listdir(candidate):
-                            kgmlDir = candidate
-                            break
-
-                    hubCommand = [
-                        ROOT_DIRECTORY + "AdminTools/scripts/hubAnalysisInstall.R",
-                        '--organism="' + hubSpecie + '"',
-                        '--scriptDir="' + ROOT_DIRECTORY + 'AdminTools/scripts/' + '"',
-                        '--outputDir="' + hubDir + '"'
-                    ]
-                    if kgmlDir:
-                        log("STEP EXTRA: [" + hubSpecie + "] Reusing local KGML from " + kgmlDir)
-                        # Only ever appended when we actually have a directory. Passing
-                        # --kgmlDir="" would parse to the literal string "kgmlDir" and
-                        # silently send every pathway back over HTTP.
-                        hubCommand.append('--kgmlDir="' + kgmlDir + '"')
-                    else:
-                        log("STEP EXTRA: [" + hubSpecie + "] No local KGML found; pathways will be fetched over HTTP (slow)")
-
-                    log("STEP EXTRA: [" + hubSpecie + "] INSTALLING HUB ANALYSIS INFORMATION...")
-                    # Capture the output rather than discarding it. This used to
-                    # run with stderr=STDOUT, stdout=DEVNULL, which merges the R
-                    # error into stdout and then throws it away -- so a missing R
-                    # package surfaced only as "returned non-zero exit status 1"
-                    # and had to be reproduced by hand to find out which one.
-                    try:
-                        hubOutput = check_output(hubCommand, stderr=STDOUT, universal_newlines=True)
-                        for outputLine in (hubOutput or "").splitlines():
-                            if "KeggParser:" in outputLine or "STEP 3: dropped" in outputLine:
-                                log("          " + outputLine)
-                    except CalledProcessError as hubError:
-                        log("        hubAnalysisInstall.R failed (exit " +
-                            str(hubError.returncode) + "). Last output:")
-                        for outputLine in (hubError.output or "").splitlines()[-25:]:
-                            log("          " + outputLine)
-                        raise
-
-                    if not hub_data_is_complete(hubDir):
-                        raise Exception("hubAnalysisInstall.R exited 0 but produced an incomplete hub directory: " + hubDir)
-
-                # Do NOT move hubData into current/ here.
-                #
-                # This used to call replaceNewVersionData for <specie>/hubData
-                # immediately. That put the data in current/<specie>/hubData --
-                # and then the species-level replaceNewVersionData further down
-                # replaced the whole of current/<specie> with download/<specie>,
-                # whose hubData had just been moved away and was therefore empty.
-                # The freshly generated hub data ended up archived under old/ and
-                # current/ was left with an empty directory, so the first Step 2
-                # of any job died with
-                #   FileNotFoundError: .../current/<specie>/hubData/kegg_interaction.json
-                #
-                # Leaving it in download/<specie>/hubData lets the species move
-                # carry it across, which is both simpler and correct.
-                #
-                # Staging is UNCONDITIONAL. It used to sit in the `else` of "current/
-                # already has hub data", i.e. in the one branch where it could never
-                # run, so the reuse case shipped an empty directory into current/.
-                if not hub_data_is_complete(hubDir) and hub_data_is_complete(currentHubDir):
-                    log("STEP EXTRA: [" + hubSpecie + "] Reusing existing hub data; staging it for the species move...")
-                    shutil.copytree(currentHubDir, hubDir, dirs_exist_ok=True)
-
-                if not hub_data_is_complete(hubDir):
-                    raise Exception("Hub analysis data is missing or incomplete in both download and current directories for " + hubSpecie)
-                log("STEP EXTRA: [" + hubSpecie + "] Hub data staged in the download directory; "
-                    "the species install below moves it into current/.")
-    except Exception as e:
-        # Hub analysis is an optional panel, not the species. Aborting the whole install
-        # for it is why 170 runs in the production summary.log say "UNABLE TO CONTINUE"
-        # -- every one of those species could have been installed without it and simply
-        # shown no Hub Analysis section. Warn, drop the partial hub tree, carry on.
-        log("WARNING: hub analysis could not be built (" + str(e) + ")")
-        log("         -> the species installs WITHOUT hub data; the Hub Analysis panel "
-            "will be unavailable until it is rebuilt with --hub=1")
-        summary.write('HUB ANALYSIS SKIPPED (species still installed): ' + str(e) + '\n')
-        INSTALL_WARNINGS.append(("hub analysis", str(e)))
-        # rmtree, not rmdir: rmdir cannot remove a non-empty directory, so a crash after
-        # the first .RData was written left the partial tree in place and every later
-        # run treated it as a finished install.
-        if hubDir:
-            shutil.rmtree(hubDir, ignore_errors=True)
-        errorlog(e)
     # ********************************************************************************
     # STEP 2.A.1 IF WE CHOOSED TO DONWLOAD THE GENERAL DATA (PATHWAYS CLASSIFICATION, ETC.)
     # ********************************************************************************
@@ -726,7 +621,7 @@ def install_command(inputfile=None, specie=None, species=None, common=0, hub=1, 
                 # ...with one exception. The hub step above always stages into
                 # download/<specie>/hubData and relies on the species move to carry it
                 # across -- a move reinstall deliberately skips. Without this, a
-                # `reinstall --hub=1` builds the hub data, leaves all 1,637 files in
+                # `reinstall --hub=1` used to build the hub data, leaving all 1,637 files in
                 # download/, and reports SUCCESS with nothing installed.
                 stagedHubDir = os.path.join(downloadDir, specie, "hubData")
                 if hub_data_is_complete(stagedHubDir):
@@ -847,6 +742,53 @@ def install_command(inputfile=None, specie=None, species=None, common=0, hub=1, 
     version.write("\n\n")
     version.write("----------------------------------------------------------------------\n\n")
     version.close()
+
+
+def hubdoctor_command(species=None):
+    """Check that every installed species yields a usable interaction graph.
+
+    Deriving the graph on demand moved parse failures from install time to
+    runtime. This is how you get the install-time check back when you want it --
+    by choice, rather than paying ~65 s per species on every install for it.
+
+    Usage:
+              ./DBManager.py hubdoctor
+              ./DBManager.py hubdoctor --species=mmu,ath
+
+    Exit code is the number of species with no usable graph, so it can gate a
+    deploy. Output goes to stdout rather than through log(): log() is
+    logging.info, which is not enabled on a CLI run, and a diagnostic command
+    that prints nothing is worse than no command at all.
+    """
+    from src.common.KeggGraph import store
+
+    currentDir = os.path.join(KEGG_DATA_DIR, "current")
+    if species:
+        codes = [code.strip() for code in species.split(",") if code.strip()]
+    else:
+        # `current/` also holds shared trees and hand-made backups, none of
+        # which is a species: reporting "mapman.bak NO GRAPH" is noise that
+        # makes the real failures harder to see.
+        skip = ("common", "reactome", "mapman", "global")
+        codes = sorted(name for name in os.listdir(currentDir)
+                       if os.path.isdir(os.path.join(currentDir, name))
+                       and name not in skip
+                       and not name.endswith((".bak", ".old", ".tmp")))
+
+    failures = 0
+    for code in codes:
+        store.clear_cache()
+        started = time()          # DBManager does `from time import ... time`
+        graph = store.get_graph(code)
+        if graph is None:
+            print("HUB DOCTOR: %-8s NO GRAPH (no kgml/ and no legacy hubData)" % code)
+            failures += 1
+            continue
+        print("HUB DOCTOR: %-8s %6d edges  %5d nodes  %5d compounds  %-11s %5.2fs"
+              % (code, len(graph.edge_kind), len(graph.names),
+                 len(graph.compounds()), graph.source, time() - started))
+    print("HUB DOCTOR: %d of %d species have no usable graph" % (failures, len(codes)))
+    return failures
 
 
 def restore_command(remove=1, force=0):
@@ -1079,13 +1021,6 @@ def replaceNewVersionData(origin, destination, dirname, backup_dir, isRestore=Fa
         raise Exception(error_msg)
 
 
-def directory_has_contents(path):
-    """
-    Returns True if the directory exists and contains at least one file.
-    """
-    return os.path.isdir(path) and bool(os.listdir(path))
-
-
 def hub_data_is_complete(path):
     """
     Returns True only if `path` holds a FINISHED hub-analysis install.
@@ -1121,13 +1056,13 @@ def hub_data_is_complete(path):
     return any(entry.endswith(".RData") for entry in entries)
 
 
-def reinstall_command(species=None, specie=None, inputfile=None, common=0, hub=0):
+def reinstall_command(species=None, specie=None, inputfile=None, common=0):
     """
     Rebuild the database for species that are already installed, without downloading.
     Usage: AdminTools.py reinstall <options>
     Examples:
               ./DBManager.py reinstall --species=hsa,mmu,ath
-              ./DBManager.py reinstall --specie=ath --hub=1
+              ./DBManager.py reinstall --specie=ath
               ./DBManager.py reinstall --inputfile=species.txt
 
     Reads only from KEGG_DATA/current/<specie>/ and moves nothing: no promotion from
@@ -1135,15 +1070,13 @@ def reinstall_command(species=None, specie=None, inputfile=None, common=0, hub=0
     parser change, without re-fetching gigabytes that have not changed.
 
     A species that is not installed is skipped with a warning; the rest still run.
-    `hub` defaults to 0 here because rebuilding hub data is the slow part and is rarely
-    what you want from a re-run -- pass --hub=1 to include it.
     """
     if species == None and specie == None and inputfile == None:
         print("Organisms not specified, please type ./DBManager.py reinstall -h for help")
         exit(-1)
 
     return install_command(inputfile=inputfile, specie=specie, species=species,
-                           common=common, hub=hub, reinstall=1)
+                           common=common, reinstall=1)
 
 
 def restorePreviousVersionData(origin, destination, dirname, backup_dir):

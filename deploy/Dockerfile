@@ -116,32 +116,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         cmake \
     && rm -rf /var/lib/apt/lists/*
 
-# Not packaged for bookworm; these come from a package repository.
-#   factoextra  -> generateMetaGenes.R
-#   qdapRegex   -> hubAnalysisInstall.R
-#   ggpubr/ggsignif/visNetwork -> plotting helpers sourced by the above
+# No CRAN or Bioconductor step any more.
 #
-# Only qdapRegex and visNetwork are absent from bookworm. Both are stable and
-# declare R >= 3.x, so plain CRAN serves versions that work on R 4.2 -- unlike
-# factoextra, whose current dependencies (FactoMineR, Matrix) require R >= 4.4
-# and which is therefore taken from Debian above.
+# There used to be two: qdapRegex + visNetwork from CRAN, and KEGGgraph +
+# AnnotationDbi from Bioconductor. All four existed for hubAnalysisInstall.R,
+# which is gone -- the KEGG graph is derived in Python from the KGML the
+# installer already downloads. Checked against every surviving .R file: they
+# load only MORE, amap, cluster, factoextra, mclust and optparse, none of which
+# needs these four.
 #
-# Keeping this to two leaf packages also means the build barely depends on any
-# external R repository, which matters here: the Drago VM sits behind an
-# OpenStack network where a Docker MTU mismatch silently broke exactly this
-# kind of large download.
-#
-# options(warn = 2) is deliberate. install.packages() reports an unavailable
-# dependency as a *warning* and still exits 0, so without it a missing package
-# sails through the build and only surfaces when a user runs a Metagenes job.
-RUN Rscript -e 'options(warn = 2, Ncpus = parallel::detectCores()); \
-      install.packages(c("qdapRegex", "visNetwork"), \
-                       repos = "https://cloud.r-project.org")'
-
-# Bioconductor. KEGGgraph and AnnotationDbi are needed by hubAnalysisInstall.R
-# and are not on CRAN.
-RUN Rscript -e 'options(warn = 2); \
-      BiocManager::install(c("KEGGgraph", "AnnotationDbi"), ask = FALSE, update = FALSE)'
+# Dropping the Bioconductor step is the bigger win; BiocManager::install pulls a
+# long dependency chain and was among the slowest layers in this image.
 
 # MORE, the regulatory-analysis backend behind runMORE.R. Not on CRAN or
 # Bioconductor -- it is installed from GitHub.
@@ -226,10 +211,9 @@ RUN Rscript -e 'options(warn = 2); \
 # dependency anywhere, add it here too.
 RUN Rscript -e 'pkgs <- c("purrr", "cluster", "mclust", "amap", "factoextra", \
                           "igraph", "ggplot2", "ggpubr", "ggsignif", "reshape2", \
-                          "gridExtra", "visNetwork", "jsonlite", "tibble", \
+                          "gridExtra", "jsonlite", "tibble", \
                           "stringr", "dplyr", "tidyr", "readr", "rvest", "xml2", \
-                          "gtools", "qdapRegex", "tidyverse", \
-                          "KEGGgraph", "AnnotationDbi"); \
+                          "gtools", "tidyverse"); \
       missing <- pkgs[!vapply(pkgs, requireNamespace, logical(1), quietly = TRUE)]; \
       if (length(missing)) stop("missing R packages: ", paste(missing, collapse = ", ")); \
       cat("all", length(pkgs), "R packages import cleanly\n")'
@@ -417,10 +401,9 @@ RUN set -eux; \
     echo "every external command the installer needs is present"; \
     Rscript -e 'pkgs <- c("purrr", "cluster", "mclust", "amap", "factoextra", \
                           "igraph", "ggplot2", "ggpubr", "ggsignif", "reshape2", \
-                          "gridExtra", "visNetwork", "jsonlite", "tibble", \
+                          "gridExtra", "jsonlite", "tibble", \
                           "stringr", "dplyr", "tidyr", "readr", "rvest", "xml2", \
-                          "gtools", "qdapRegex", "tidyverse", \
-                          "KEGGgraph", "AnnotationDbi"); \
+                          "gtools", "tidyverse"); \
       failed <- character(0); \
       for (p in pkgs) { \
         ok <- tryCatch({ suppressPackageStartupMessages(library(p, character.only = TRUE)); TRUE }, \

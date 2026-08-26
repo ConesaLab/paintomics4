@@ -27,7 +27,7 @@ from os import path as os_path, makedirs as os_makedirs
 from csv import reader as csv_reader
 from zipfile import ZipFile as zipFile
 
-from subprocess import check_call, STDOUT, CalledProcessError
+from subprocess import STDOUT, CalledProcessError
 
 from src.common.Util import unifyAndSort
 
@@ -101,81 +101,11 @@ PAINTOMICS4_LARGE_FIELDS = {
 }
 
 
-import json as _json
-import threading as _threading
-
-# One organism's kegg_interaction.json, parsed once per process:
-# (path, mtime, size) -> {compoundID: compact JSON text of its neighbours}.
-_compoundNeighbourCache = {"key": None, "map": None}
-_compoundNeighbourCacheLock = _threading.Lock()
-
-
-def _loadCompoundNeighbourMap(interactionJSONPath):
-    """
-    {compoundID: JSON text} for every compound in ``interactionJSONPath``,
-    or {} when the file is missing or does not hold a compound map (both
-    logged, exactly as before).
-
-    kegg_interaction.json is the whole KEGG compound -> neighbour map (34 MB
-    locally, 79 MB for production mmu) and it was read and json.loads()ed on
-    every step 2 with metabolites -- ~370 MB of transient Python objects
-    (~1 GB on the production file) to look up the 50-100 compounds of one
-    job. It is per-organism, static between installs, so it is parsed once
-    per process and kept as one compact JSON string per compound: about the
-    size of the file itself, and a lookup is json.loads of one small string
-    -- the same dict/list/str the full parse produced. One organism is kept
-    (the last used); the key includes mtime and size so a reinstall in place
-    is noticed.
-
-    The file is double-encoded: the top level is a one-element list holding
-    the JSON *text* of the map, not the map itself; a file written either
-    way loads (unwrapped until a dict falls out).
-
-    Not every installed species ships hubData (87 of ~97 on the production
-    server; a fresh install may lack it entirely). That used to be a
-    FileNotFoundError that killed the whole of step 2 for eco and every newly
-    installed bacterium -- the hub extras must degrade, not take the pathway
-    results down with them.
-    """
-    if not os_path.isfile(interactionJSONPath):
-        logging.warning("HUB ANALYSIS - %s does not exist (species installed "
-                        "without hubData); metabolite neighbours will be "
-                        "unavailable.", interactionJSONPath)
-        return {}
-
-    stat = os.stat(interactionJSONPath)
-    key = (interactionJSONPath, stat.st_mtime, stat.st_size)
-    with _compoundNeighbourCacheLock:
-        if _compoundNeighbourCache["key"] == key:
-            return _compoundNeighbourCache["map"]
-
-        with open(interactionJSONPath, 'r') as e:
-            compoundRegulateFeatures = _json.loads(e.read())
-
-        for _ in range(4):
-            if isinstance(compoundRegulateFeatures, dict):
-                break
-            if isinstance(compoundRegulateFeatures, list) and len(compoundRegulateFeatures) == 1:
-                compoundRegulateFeatures = compoundRegulateFeatures[0]
-            elif isinstance(compoundRegulateFeatures, str):
-                compoundRegulateFeatures = _json.loads(compoundRegulateFeatures)
-            else:
-                break
-
-        if not isinstance(compoundRegulateFeatures, dict):
-            logging.warning("HUB ANALYSIS - %s holds %s, not a compound map; "
-                            "metabolite neighbours will be unavailable.",
-                            interactionJSONPath, type(compoundRegulateFeatures).__name__)
-            return {}
-
-        compact = {compoundID: _json.dumps(neighbours, separators=(",", ":"))
-                   for compoundID, neighbours in compoundRegulateFeatures.items()}
-        _compoundNeighbourCache["key"] = key
-        _compoundNeighbourCache["map"] = compact
-        logging.info("HUB ANALYSIS - cached %d compound neighbour entries from %s",
-                     len(compact), interactionJSONPath)
-        return compact
-
+# _loadCompoundNeighbourMap and its single-slot cache of kegg_interaction.json
+# were deleted with the R hub path. The graph comes from
+# src.common.KeggGraph.store now, which derives it from the organism's KGML in
+# ~1 s and holds an LRU of four organisms at ~30 MB each -- against the 393 MB
+# peak that one JSON parse measured, in a cache with room for a single species.
 
 def _metagenesParallelism():
     """How many omics' R scripts run at once. Each Rscript peaks near 260 MB
@@ -2491,9 +2421,9 @@ class PathwayAcquisitionJob(Job):
         with open(brPath, 'r') as f:
             temp = json.loads(f.read())
 
-        # The compound -> neighbour map for this job's compounds, from the
-        # per-process cache of kegg_interaction.json; {} when the species has no
-        # hubData or the file is not a compound map -- both already warned.
+        # The compound -> neighbour map for this job's compounds, derived from
+        # the organism's cached KEGG graph; {} when the species has neither KGML
+        # nor a legacy hubData file -- already warned by the store.
         # One implementation, in getCompoundRegulateFeatures(), because the
         # recovery path needs the same derivation: the field is cache-only, so
         # reading the attribute there gave a reopened job nothing. Cleared first
@@ -2632,16 +2562,15 @@ class PathwayAcquisitionJob(Job):
         on every job opened from its URL after a restart. Returning the
         attribute there made both panels dead, silently.
 
-        Nothing needs storing: the map is `kegg_interaction.json` (static per
-        organism, parsed once per process by _loadCompoundNeighbourMap)
-        intersected with `inputCompoundsData`, and inputCompoundsData is
-        persisted. This is the same arrangement getGlobalExpressionData() has
-        always had, which is why that field -- in the same LARGE_FIELDS set --
-        survives a reopen and this one did not.
+        Nothing needs storing: the neighbourhoods are a pure function of the
+        organism's KEGG graph (static, cached per process by
+        src.common.KeggGraph.store) intersected with `inputCompoundsData`, and
+        inputCompoundsData is persisted. This is the same arrangement
+        getGlobalExpressionData() has always had, which is why that field -- in
+        the same LARGE_FIELDS set -- survives a reopen and this one did not.
 
-        A job with no compounds returns {} without touching the file: it is
-        34 MB locally and 79 MB for production mmu, and gene-only jobs are the
-        common case.
+        A job with no compounds returns {} without deriving anything, and
+        gene-only jobs are the common case.
 
         The dict check is the whole point of the guard, not defensiveness:
         DAO.adaptBSON turns every None leaf into the STRING "None" -- documented
@@ -2659,23 +2588,29 @@ class PathwayAcquisitionJob(Job):
         if not inputCompoundIDs:
             return {}
 
-        interactionJSONPath = os_path.join(
-            KEGG_DATA_DIR, "current", self.organism, "hubData",
-            "kegg_interaction.json")
+        from src.common.KeggGraph import store
+        graph = store.get_graph(self.organism)
+        if graph is None:
+            return {}
 
-        neighbourMap = _loadCompoundNeighbourMap(interactionJSONPath)
-        matchedNeighbourIDs = inputCompoundIDs & set(neighbourMap.keys())
+        # Cumulative balls keyed by radius as a string -- the shape the Step 3
+        # Paint handler and the Step 4 Neighbouring-features panel already read.
+        result = {}
+        for compoundID in inputCompoundIDs:
+            rings = graph.rings(compoundID, 4)
+            if not any(rings):
+                continue
+            cumulative, seen = {}, []
+            for radius, ring in enumerate(rings, start=1):
+                seen = seen + ring
+                cumulative[str(radius)] = list(seen)
+            result[compoundID] = cumulative
 
-        if neighbourMap and not matchedNeighbourIDs:
-            logging.warning("HUB ANALYSIS - none of the %d input compounds appear in %s; "
-                            "check that both use KEGG compound IDs.",
-                            len(inputCompoundIDs), interactionJSONPath)
-
-        self.compoundRegulateFeatures = {
-            compoundID: _json.loads(neighbourMap[compoundID])
-            for compoundID in matchedNeighbourIDs
-        }
-
+        if not result:
+            logging.warning("HUB ANALYSIS - none of the %d input compounds "
+                            "appear in the %s graph; check that both use KEGG "
+                            "compound IDs.", len(inputCompoundIDs), self.organism)
+        self.compoundRegulateFeatures = result
         return self.compoundRegulateFeatures
 
     def getGlobalExpressionData(self):
@@ -2713,78 +2648,79 @@ class PathwayAcquisitionJob(Job):
         self.globalExpressionData = globalExpressionData
         return self.globalExpressionData
 
-    def hubAnalysis(self, ROOT_DIRECTORY):
+    def hubAnalysis(self, ROOT_DIRECTORY=None):
+        """Metabolite hub analysis. Pure Python since 2026-08.
 
-        userDEfeatures = set()
-        userDataset = set()
-        #userGenePathway = set()
+        Was: write two CSVs, fork `Rscript hubAnalysis.R`, read a headerless
+        8-column TSV back. The R side re-read a 13 MB CSV and 1,865 .RData files
+        on every job -- I/O proportional to the species, not to the dataset --
+        for a measured 2.7-3.0 s. The graph is derived from KGML and cached per
+        organism now, so a warm job costs ~0.09 s.
 
-        # Only test gene inside the pathway
-        #for pathway in self.matchedPathways:
-        #    for gene in self.matchedPathways[pathway].matchedGenes:
-        #        userGenePathway.add(gene)
+        ROOT_DIRECTORY is unused -- there is no script to locate any more -- and
+        is kept optional only so the step-2 call site need not change.
+        """
+        from src.common.KeggGraph import store
+        from src.common.KeggGraph.scorer import score
 
-        for i in self.inputGenesData:
-            for k in self.inputGenesData[i].omicsValues:
-                if k.omicName == 'Gene expression':
-                    #if i in userGenePathway:
-                    if k.relevant or k.relevantAssociation:
-                      userDEfeatures.add( i )
-                    userDataset.add( i )
+        # ANY gene-based omic counts, and DE in any one of them makes the gene
+        # relevant.
+        #
+        # This asked for `omicName == 'Gene expression'` and skipped everything
+        # else. That name is only the default the upload form suggests for the
+        # first omic: a job whose omics are called "RNA-seq" and "Proteomics"
+        # left `measured` empty and scored the binomial test on compounds
+        # alone -- a wrong table, not an absent one. On a job that DOES have an
+        # omic by that name, three quarters of this one's gene data were being
+        # ignored by a test whose whole claim is "how much of the differential
+        # expression sits near this metabolite".
+        #
+        # isRelevant() rather than testing `relevant` for truth: it is a LIST,
+        # and a list of all-False is truthy. It happens to be [] for non-DE
+        # features today, so the old form was right by accident.
+        measured, relevant = set(), set()
+        for geneID in self.inputGenesData:
+            values = self.inputGenesData[geneID].omicsValues or []
+            if not values:
+                continue
+            measured.add(geneID)
+            for omicValue in values:
+                if omicValue.isRelevant() or omicValue.isRelevantAssociation():
+                    relevant.add(geneID)
+                    break
+        for compoundID in self.inputCompoundsData:
+            values = self.inputCompoundsData[compoundID].omicsValues or []
+            if not values:
+                continue
+            measured.add(compoundID)
+            for omicValue in values:
+                if omicValue.isRelevant() or omicValue.isRelevantAssociation():
+                    relevant.add(compoundID)
+                    break
 
-        for j in self.inputCompoundsData:
-            if self.inputCompoundsData[j].omicsValues[0].relevant:
-                userDEfeatures.add(j)
-            userDataset.add(j)
-
-        # IF there is no relevant features, we can not do metabolite hub analysis
-        if not userDEfeatures:
+        if not relevant:
             return False
 
-        # A species installed without hubData has nothing for the R script to
-        # read; the client already renders hubAnalysisResult=False as "no hub
-        # analysis", so degrade the same way instead of crashing step 2.
-        hubDataDir = KEGG_DATA_DIR + 'current/' + self.organism + '/hubData/'
-        if not os.path.isdir(hubDataDir):
-            logging.warning("HUB ANALYSIS - %s does not exist (species installed "
-                            "without hubData); skipping hub analysis.", hubDataDir)
+        graph = store.get_graph(self.organism)
+        if graph is None:
+            logging.warning("HUB ANALYSIS - no interaction graph available for "
+                            "%s; skipping hub analysis.", self.organism)
             return False
 
-        import csv
-        with open(self.outputDir + "userDataset.csv", 'w') as w:
-            writer = csv.writer(w)
-            writer.writerow(userDataset)
-
-        with open(self.outputDir + "userDEfeatures.csv", 'w') as w:
-            writer = csv.writer(w)
-            writer.writerow(userDEfeatures)
-
-        # The hub analysis is an enhancement panel: a failure in the R script
-        # (partial hubData, missing R deps) must not take down the pathway
-        # results that step 2 exists to produce.
         try:
-            check_call(
-                [
-                    ROOT_DIRECTORY + "common/bioscripts/hubAnalysis.R",
-                    '--data_dir="' + self.outputDir + '"',
-                    '--inputDir="' + hubDataDir + '"'
-                ], stderr=STDOUT
-            )
-
-            hubResult = {}
-
-            with open(self.outputDir + 'hub_result.csv', "r") as f:
-                reader = csv.reader(f, delimiter="\t")
-                for i, line in enumerate(reader):
-                    hubResult[i] = line
+            rows = score(graph, measured, relevant)
         except Exception as ex:
+            # An enhancement panel must not take down the pathway results that
+            # step 2 exists to produce.
             logging.warning("HUB ANALYSIS - failed for %s (%s); continuing "
                             "without hub results.", self.organism, str(ex))
             return False
 
-        self.hubAnalysisResult = hubResult
-
+        if not rows:
+            return False
+        self.hubAnalysisResult = {index: row for index, row in enumerate(rows)}
         return self.hubAnalysisResult
+
 
     def parseRegulationPerCondition(self):
         """Load MORE's RegulationPerCondition table for the Step 3 panel.

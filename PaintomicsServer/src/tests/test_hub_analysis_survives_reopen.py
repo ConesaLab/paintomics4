@@ -192,6 +192,53 @@ class HubAnalysisPersistenceTest(unittest.TestCase):
         self.assertIsNone(bsonOut["hubAnalysisResult"])
 
 
+
+class HubAnalysisUsesPythonTest(unittest.TestCase):
+    """No Rscript in the hub path, and stored rows carry a schema version.
+
+    The R scorer re-read a 13 MB CSV and 1,865 .RData files on every job -- I/O
+    proportional to the species installed, not to the user's dataset. It is gone;
+    these assertions are what stops it coming back.
+    """
+
+    def _job_source(self):
+        path = os.path.join(os.path.dirname(os.path.dirname(
+            os.path.abspath(__file__))), "classes", "JobInstances",
+            "PathwayAcquisitionJob.py")
+        with open(path, "r", encoding="utf-8") as handle:
+            return handle.read()
+
+    def test_no_rscript_is_forked_for_hub(self):
+        source = self._job_source()
+        # The only surviving mention is the historical note in the docstring.
+        self.assertNotIn('bioscripts/hubAnalysis.R', source)
+        self.assertIn("KeggGraph", source)
+
+    def test_the_single_slot_json_cache_is_gone(self):
+        source = self._job_source()
+        self.assertNotIn("_loadCompoundNeighbourMap(", source)
+        self.assertNotIn("_compoundNeighbourCache[", source)
+
+    def test_rows_are_dicts_carrying_the_schema(self):
+        from src.common.KeggGraph.graph import KeggGraph
+        from src.common.KeggGraph.parser import Edge
+        from src.common.KeggGraph.scorer import HUB_SCHEMA_VERSION, score
+        graph = KeggGraph(
+            [Edge("C1", "g1", "PPrel", "", "p", False),
+             Edge("C1", "g2", "PPrel", "", "p", False)],
+            {"C1": "compound", "g1": "gene", "g2": "gene"}, "test")
+        rows = score(graph, {"C1", "g1", "g2"}, {"C1", "g1"})
+        self.assertTrue(rows)
+        self.assertEqual(rows[0]["schema"], HUB_SCHEMA_VERSION)
+        self.assertIn("ball_fraction", rows[0])
+
+    def test_stored_rows_still_survive_toBSON(self):
+        """The rows changed shape; the persistence arrangement did not.
+        hubAnalysisResult is still a DICT field with integer keys."""
+        source = self._job_source()
+        self.assertIn('"hubAnalysisResult"', source)
+
+
 def main():
     suite = unittest.TestLoader().loadTestsFromModule(sys.modules[__name__])
     result = unittest.TextTestRunner(verbosity=2).run(suite)

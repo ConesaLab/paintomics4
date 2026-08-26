@@ -53,6 +53,9 @@ except ImportError:
 
 from src.servlets.PathwayAcquisitionServlet import (
     pathwayAcquisitionAdjustPvalues,
+    pathwayAcquisitionHubSubgraph,
+    pathwayAcquisitionHubFeature,
+    pathwayAcquisitionHubNames,
     pathwayAcquisitionApplyReplicateMapping,
     pathwayAcquisitionMetagenes_PART1,
     pathwayAcquisitionPathwayEvidence,
@@ -696,6 +699,25 @@ class Application(object):
         @self.app.route(SERVER_SUBDOMAIN + '/pa_step3', methods=['OPTIONS', 'POST'])
         def pathwayAcquisitionStep3Handler():
             return pathwayAcquisitionStep3(request, Response()).getResponse()
+
+        # The metabolite hop-ring network. Unlike /check_job_status, which ships
+        # the same job's hub payload with no session and no ownership check,
+        # this one is guarded.
+        @self.app.route(SERVER_SUBDOMAIN + '/pa_hub_subgraph', methods=['OPTIONS', 'POST'])
+        def pathwayAcquisitionHubSubgraphHandler():
+            return pathwayAcquisitionHubSubgraph(request, Response(), self.queue).getResponse()
+
+        # Every omic for one clicked node. globalExpressionData ships
+        # omicsValues[0] only, so this is the rest of the feature's data.
+        @self.app.route(SERVER_SUBDOMAIN + '/pa_hub_feature', methods=['OPTIONS', 'POST'])
+        def pathwayAcquisitionHubFeatureHandler():
+            return pathwayAcquisitionHubFeature(request, Response(), self.queue).getResponse()
+
+        # Readable compound names for the scored list. mappingComp holds what
+        # the user uploaded, which for a file keyed by KEGG id is the id again.
+        @self.app.route(SERVER_SUBDOMAIN + '/pa_hub_names', methods=['OPTIONS', 'POST'])
+        def pathwayAcquisitionHubNamesHandler():
+            return pathwayAcquisitionHubNames(request, Response(), self.queue).getResponse()
         #*******************************************************************************************
         # RECOVER JOB HANDLER
         #*******************************************************************************************

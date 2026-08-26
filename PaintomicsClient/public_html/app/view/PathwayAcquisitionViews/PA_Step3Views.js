@@ -68,7 +68,7 @@ function PA_Step3JobView() {
 	this.regulationView = null;
 	this.regTargetNetworkView = null;
 
-	this.hubAnalysisView = null;
+	this.hubNetworkView = null;
 	this.aiWidget = null;
 	this.aiJobID = null;
 	// Shared-feature pathway partition from the AI report (cluster mode), or null.
@@ -347,12 +347,15 @@ function PA_Step3JobView() {
 			this.metaboliteView.loadModel(model);
 		}
 
-		if (this.hubAnalysisView === null) {
-			this.hubAnalysisView = new PA_Step3HubAnalysis();
-			this.hubAnalysisView.setController(this.getController());
-			this.hubAnalysisView.setParent(this);
+
+		// The metabolite hop-ring network. Constructed unconditionally -- it
+		// renders a hidden container until a hub row asks for a compound.
+		if (this.hubNetworkView === null) {
+			this.hubNetworkView = new PA_Step3HubNetworkView();
+			this.hubNetworkView.setController(this.getController());
+			this.hubNetworkView.setParent(this);
 		}
-		this.hubAnalysisView.loadModel(model);
+		this.hubNetworkView.loadModel(model);
 
 		// MORE Regulation panel — instantiate unconditionally; the view itself
 		// self-suppresses when the model has no rpc data, so we don't have to
@@ -581,7 +584,6 @@ function PA_Step3JobView() {
 			this.metaboliteView.updateObserver();
 		}
 
-		this.hubAnalysisView.updateObserver();
 		/********************************************************/
 		/* STEP 4: GENERATE THE PATHWAYS NETWORK                */
 		/********************************************************/
@@ -663,9 +665,6 @@ function PA_Step3JobView() {
 			   reports "25 of 364" and the summary still reports 364. */
 			if (this.metaboliteView) {
 				this.metaboliteView.updateVisiblePathways(true);
-			}
-			if (this.hubAnalysisView) {
-				this.hubAnalysisView.updateObserver(true);
 			}
 		}
 		/********************************************************/
@@ -1271,7 +1270,13 @@ function PA_Step3JobView() {
 				},
 				// See hasMetaboliteData: gated on the resolved compounds these
 				// panels draw, not on the candidate list that step 2 consumes.
-				(!this.hasMetaboliteData()?null:me.hubAnalysisView.getComponent()),
+				// The hub grid was replaced by the network panel below: a
+				// nine-column table of one row per (metabolite, radius) --
+				// 852 of them on a real job -- that needed its own step filter
+				// to be readable, describing a network the browser could not
+				// draw. Every column it carried is now in the metabolite's own
+				// card, four rows about the one compound you asked about.
+				(!this.hasMetaboliteData()?null:me.hubNetworkView.getComponent()),
 				(!this.metaboliteView?null:me.metaboliteView.getComponent()),
 				// MORE Regulation panel — independent of metabolomics presence.
 				// The view returns a hidden container when no rpc data; safe to
@@ -5762,525 +5767,35 @@ PA_Step3StatsView.prototype = new View();
 /*
 FOR PaintOmics 4
  */
-function PA_Step3HubAnalysis () {
-	let me = this;
-	this.name = "PA_Step3HubAnalysis";
-	this.tableData = null;
-	let hubTable =[];
-	let globalExpressionGene = [];
-	let globalExpressionComp = [];
-	let compRegulateFeatures = [];
-	let distributionSummaries = null;
-	let visualOptions = null;
-
-	this.loadModel = function (model) {
-		if (this.model !== null) {
-			this.model.deleteObserver(this);
-		}
-		this.model = model;
-		this.model.addObserver(this);
-		const hubAnalysisResult = this.model.getHubAnalysisResult();
-		for (keys in hubAnalysisResult) {
-			hubTable.push(
-				{
-					Metabolite: this.model.mappingComp[hubAnalysisResult[keys][1]],
-					ID: hubAnalysisResult[keys][1],
-					Step: hubAnalysisResult[keys][5],
-					Percentage: hubAnalysisResult[keys][0],
-					Percentile: hubAnalysisResult[keys][2],
-					DEN: hubAnalysisResult[keys][6],
-					noDEN:hubAnalysisResult[keys][7],
-					pvalue: hubAnalysisResult[keys][3],
-					padjust: hubAnalysisResult[keys][4]
-				}
-			)
-		}
-
-		compRegulateFeatures = this.model.compoundRegulateFeatures
-		if (this.model.globalExpressionData) {
-			if (typeof this.model.globalExpressionData['inputCompound'] !== 'undefined') {
-				globalExpressionComp = this.model.globalExpressionData['inputCompound']
-			}
-			if (typeof this.model.globalExpressionData['inputGene'] !== 'undefined') {
-			globalExpressionGene = this.model.globalExpressionData['inputGene']
-		}
-		}
-		distributionSummaries = this.model.getDataDistributionSummaries()
-		visualOptions = me.getParent().visualOptions
-
-	}
-
-	this.initComponent = function () {
-		Ext.define('User', {
-			extend: 'Ext.data.Model',
-			fields: ['Metabolite', 'ID', 'Step', 'Percentage', "Percentile", 'DEN', 'noDEN', 'pvalue', 'padjust']
-		});
-
-		var userStore = Ext.create('Ext.data.Store', {
-			model: 'User',
-			data: hubTable
-		});
-
-
-		this.component = Ext.widget(
-			{
-				xtype: 'container',
-
-				border: 0,
-				maxWidth: 1900,
-				/* Same inset as every other card on this step - see the
-				   metabolite-class grid below, which had the same omission. */
-				style: "margin: 5px 10px;",
-				layout: 'column',
-				items: [
-					{
-						xtype: "gridpanel",
-						itemId: 'hubAnalysisGrid',
-						cls: "contentbox paWrapHeaders",
-						columnWidth: 1,
-						store: userStore,
-						height: 350,
-						header: {
-							xtype: 'box',
-							flex: 2,
-							border: 0,
-							// A minimum, not a height. Pinned at 70 this clipped its
-							// own second line: an h2 and two .infoTip lines measure
-							// 76px, so the last one was cut in half by the column
-							// headers below it. A minimum keeps the spacing this was
-							// chosen for and still lets the header grow when the
-							// text wraps, which it also does at narrow widths.
-							minHeight: 70,
-							html: '<h2 id="EnrichmentSection">Metabolite hub analysis</h2>' +
-								' <span class="infoTip">Neighbouring genes for each metabolite at <b> 1 to 4 network steps </b> are identified.</b></span> ' +
-								' <span class="infoTip">The percentile and binomial tests are used to identify metabolites with a high density of DEGs in their proximal network.</span>',
-
-							style: {
-								backgroundColor: 'white'
-							}
-						},
-
-						columns: [
-							{
-								xtype: 'customactioncolumn',
-								text: "Paint",
-								menuDisabled: true,
-								width: 55,
-								items: [{
-									icon: "fa-paint-brush-o",
-									text: "",
-									tooltip: 'Paint this feature',
-									style: "font-size: 20px;",
-									handler: function (grid, rowIndex) {
-										revealPlotPanel('hubAnalysisPlotPanel');
-
-										let elem = $("#hubAnalysisPlot");
-										elem.empty();
-										/* The heatmap is a fixed 300px block and the plot sits beside
-										   it, so the plot may only claim what is left. Giving it the
-										   full width pushed it onto its own line, where a 300px strip
-										   above a 1240px chart of the same samples read as a broken
-										   figure. The floor keeps a usable chart if the panel is ever
-										   too narrow for the pair, in which case they stack. */
-										let divWidth = Math.max(260, elem.width() - 400);
-
-										let hubTable = {};
-
-										for (let i = 0; i < grid.getStore().data.items.length; i++) {
-											hubTable[i] = grid.getStore().data.items[i].data
-										}
-										// Expression value of this set
-										let ID = hubTable[rowIndex]['ID'];
-										let compExpression = globalExpressionComp[ID];
-										if (compExpression && !(compExpression instanceof OmicValue)) {
-											compExpression = OmicValue.loadFromJSON(compExpression);
-										}
-										let divIdComp = 'divIdComp'
-										htmlCode =
-											'<h2 style="background-color: white"> Metabolite Expression Value</h2>' +
-											"<div class='contentbox'>" +
-											"  <div class='PA_step5_heatmapContainer' id='" + divIdComp + "'  style='height: " + 130 + "px'><i class='fa fa-cog fa-spin'></i> Loading..</div>" +
-											"  <div class='PA_step5_plotContainer' id='" + divIdComp + "_plotContainer'  style='width:" + divWidth + "px;height: " + 130 + "px'><i class='fa fa-cog fa-spin'></i> Loading..</div>" +
-											"</div>" +
-											'<h2 style="background-color: white">Neighbouring features</h2>'
-										elem.append(htmlCode);
-
-										heatmapSite = generateHeatmap(divIdComp, "Metabolomics", [compExpression], distributionSummaries, visualOptions, paOmicHeaders(me.model, "Metabolomics"))
-										plotSite = generatePlot(divIdComp + "_plotContainer", "Metabolomics", [compExpression], distributionSummaries, divIdComp + "_plotlegendContainer", visualOptions, paOmicHeaders(me.model, "Metabolomics"));
-
-										// Expression value of regulate features.
-										//
-										// compRegulateFeatures[ID][step] was indexed without a guard,
-										// so any metabolite missing from the map threw a TypeError
-										// here - after the "Metabolite regulates Features" heading
-										// had already been appended. The section then rendered as a
-										// title with nothing whatsoever under it, which is what the
-										// missing DE neighbours look like from the outside. The map
-										// is absent for every job reopened by its URL, because
-										// compoundRegulateFeatures is not among the fields written
-										// back at step 2 (see PAINTOMICS4_LARGE_FIELDS).
-										let stepNames = {'One Step': 1, 'Two Steps': 2, 'Three Steps': 3, 'Four Steps': 4};
-										let rawStep = hubTable[rowIndex]['Step'];
-										let step = stepNames[rawStep] || parseInt(rawStep, 10);
-										let neighboursByStep = compRegulateFeatures ? compRegulateFeatures[ID] : null;
-										let regulateFeatures = (neighboursByStep && step) ? neighboursByStep[step] : null;
-
-										if (!regulateFeatures || !regulateFeatures.length) {
-											elem.append(
-												'<div class="contentbox paEmptyNote">' +
-												'  <p>No expression data is available for the neighbours of this metabolite.</p>' +
-												'  <p>Neighbour identities are held only for the run that produced them, so they are not restored when a job is reopened from its link. Re-run the analysis to see them.</p>' +
-												'</div>');
-											fitPlotPanel('hubAnalysisPlotPanel', 'hubAnalysisPlot');
-											return;
-										}
-
-										// Every omic can legitimately have no measured neighbour, in
-										// which case the loop below draws nothing - the same dangling
-										// heading by another route.
-										let paintedAnyOmic = false;
-
-										for (key in distributionSummaries) {
-											let omicName = key
-											let divId = key.replace(/\s/g, '_') + 'hubAnlysis'
-											let regulateOmicsValue = []
-											for (let i = 0; i < regulateFeatures.length; i++) {
-												let regulateFeature = regulateFeatures[i]
-												try {
-													let ov = null;
-													if (key == "Gene expression") {
-														ov = globalExpressionGene[regulateFeature];
-													} else if (key == "Metabolomics") {
-														ov = globalExpressionComp[regulateFeature];
-													}
-													if (ov) {
-														if (!(ov instanceof OmicValue)) {
-															ov = OmicValue.loadFromJSON(ov);
-														}
-														regulateOmicsValue.push(ov);
-													}
-												} catch (e) {
-													console.log('No expression data for: ' + regulateFeature)
-												}
-											}
-											regulateOmicsValue = regulateOmicsValue.filter(function (x) {
-													return x !== undefined;
-												}
-											);
-											if (regulateOmicsValue.length === 0) {
-												continue;
-											}
-											paintedAnyOmic = true;
-											htmlCode =
-												"<div class='contentbox'>" +
-												"  <h3>" + omicName + "<span><input type='checkbox' id='" + divId + "_cb_relevant' value='" + omicName + "'/>Only relevant</span></h3>" +
-												"  <div class='PA_step5_heatmapContainer' id='" + divId + "'  style='height: " + ((regulateOmicsValue.length * 30) + 100) + "px'><i class='fa fa-cog fa-spin'></i> Loading..</div>" +
-												"  <div class='PA_step5_plotContainer' id='" + divId + "_plotContainer'  style='width:" + divWidth + "px;height: " + ((regulateOmicsValue.length * 30) + 100) + "px'><i class='fa fa-cog fa-spin'></i> Loading..</div>" +
-												"</div>";
-											elem.append(htmlCode);
-											// expression of this site
-
-
-											// expression of regulate features
-											heatmapGene = generateHeatmap(divId, omicName, regulateOmicsValue, distributionSummaries, visualOptions, paOmicHeaders(me.model, omicName))
-											plot = generatePlot(divId + "_plotContainer", omicName, regulateOmicsValue, distributionSummaries, divId + "_plotlegendContainer", visualOptions, paOmicHeaders(me.model, omicName));
-											$("div.contentbox h3 :checkbox").change(function () {
-												let onlyRelevants = $(this).is(":checked");
-												// Highcharts does not automatically hide Y labels when hiding series, so it is easier and faster
-												// to recreate the whole graphic.
-												let omicValues = regulateOmicsValue;
-												if (onlyRelevants) {
-													omicValues = omicValues.filter(x => x.isRelevant() || x.isRelevantAssociation());
-												}
-												$('#' + divId + "_heatmapContainer").height(omicValues.length * 30 + 100);
-												generateHeatmap(divId, omicName, omicValues, distributionSummaries, visualOptions, paOmicHeaders(me.model, omicName))
-												generatePlot(divId + "_plotContainer", omicName, omicValues, distributionSummaries, divId + "_plotlegendContainer", visualOptions, paOmicHeaders(me.model, omicName));
-											})
-										}
-
-										if (!paintedAnyOmic) {
-											elem.append(
-												'<div class="contentbox paEmptyNote">' +
-												'  <p>This metabolite has ' + regulateFeatures.length + ' neighbour' + (regulateFeatures.length === 1 ? '' : 's') + ' at ' + step + ' step' + (step === 1 ? '' : 's') + ', but none of them carry measured values in the omics you uploaded.</p>' +
-												'</div>');
-										}
-
-										fitPlotPanel('hubAnalysisPlotPanel', 'hubAnalysisPlot');
-									}
-								}]
-							},
-							{
-								xtype: 'customactioncolumn',
-								text: "Search",
-								menuDisabled: true,
-								width: 66,
-								items: [{
-									icon: "fas fa-search",
-									text: "",
-									tooltip: 'Find this feature in pathways',
-									style: "font-size: 20px;",
-									handler: function (grid, rowIndex) {
-
-										//update hubTable
-										let hubTable = {};
-										for (let i = 0; i < grid.getStore().data.items.length; i++) {
-											hubTable[i] = grid.getStore().data.items[i].data
-										}
-										let ID = hubTable[rowIndex]['Metabolite'];
-										$(document).ready(function () {
-												$("[name = 'searchField']")[0].value = ID
-												if (document.getElementsByClassName("x-field x-table-plain x-form-item x-form-type-checkbox x-field-toolbar x-box-item x-toolbar-item x-field-default-toolbar x-hbox-form-item")[2].classList.contains("x-form-cb-checked")) {
-													document.getElementsByClassName('x-form-field x-form-checkbox x-form-cb')[2].click()
-													document.getElementsByClassName('x-form-field x-form-checkbox x-form-cb')[2].click()
-												} else {
-													document.getElementsByClassName('x-form-field x-form-checkbox x-form-cb')[2].click()
-												}
-											}
-										)
-									}
-								}]
-							},
-							{
-								text: 'Metabolite',
-								flex: 21 / 100,
-								sortable: true,
-								hideable: false,
-								dataIndex: 'Metabolite',
-								renderer: truncatableTextRenderer
-							},
-							{
-								text: 'ID',
-								flex: 9 / 100,
-								sortable: true,
-								hideable: false,
-								dataIndex: 'ID'
-							},
-							{
-								text: 'Step',
-								flex: 7 / 100,
-								sortable: true,
-								hideable: false,
-								dataIndex: 'Step'
-							},
-							{
-							    text: 'DE neighbors',
-								flex: 9.5 / 100,
-								sortable: true,
-								hideable: false,
-								dataIndex: 'DEN'
-							},
-							{
-								text: 'not DE neighbors',
-								flex: 9.5 / 100,
-								sortable: true,
-								hideable: false,
-								dataIndex: 'noDEN'
-							},
-							/* "Percentage" and "Percentile" are single words, so unlike the
-							   neighbour columns they cannot wrap out of a narrow share - they
-							   just ellipsise into "Percentage." and "Percentile..". The width
-							   they need comes from the columns above, whose headers now wrap
-							   and whose values are one or two digits. */
-							{
-								text: 'Percentage',
-								flex: 13 / 100,
-								sortable: true,
-								hideable: false,
-								dataIndex: 'Percentage'
-							},
-							{
-								text: 'Percentile',
-								flex: 12 / 100,
-								sortable: true,
-								hideable: false,
-								dataIndex: 'Percentile',
-								renderer: renderFunctionHub
-							},
-							{
-								text: 'P-values',
-								flex:10/100,
-								sortable: true,
-								hideable: false,
-								dataIndex: 'pvalue',
-								renderer: renderFunctionLimit
-							},
-							{
-								text: 'FDR BH',
-								flex:9/100,
-								sortable: true,
-								hideable: false,
-								dataIndex: 'padjust',
-								renderer: renderFunctionLimit
-							}
-
-							/*
-							{
-								text: "DE neighbors",
-								flex: 20 / 100,
-								sortable: true,
-								dataIndex: 'DE_neighbors'
-
-							},
-
-							{
-								text: "not DE neighbors",
-								flex: 20 / 100,
-								sortable: true,
-								dataIndex: "not_DE_neighbors"
-
-							},
-
-							{
-								text: "% DE neighbors",
-								flex: 20 / 100,
-								sortable: true,
-								dataIndex: "Percentage"
-							},
-
-							{
-								text: "RDE neighbors",
-								flex: 20 / 100,
-								sortable: true,
-								dataIndex: "RDE_neighbors"
-							},
-							{
-								text: "Rnot DE neighbors",
-								flex: 20 / 100,
-								sortable: true,
-								dataIndex: "Rnot_DE_neighbors"
-							},
-
-							{
-								text: "% RDE neighbors",
-								flex: 20 / 100,
-								sortable: true,
-								dataIndex: "RPercentage"
-
-							},
-
-							{
-								text: "P value",
-								flex: 20 / 100,
-								sortable: true,
-								dataIndex: "P_value",
-								renderer: renderFunctionLimit
-
-
-							},
-							{
-								text: "P adjusted",
-								flex: 20 / 100,
-								sortable: true,
-								dataIndex: "P_adjusted",
-								renderer: renderFunctionLimit
-							},
-							{
-								text: "fisher",
-								flex: 20 / 100,
-								sortable: true,
-								dataIndex: "fisher",
-								renderer: renderFunctionLimit
-							},
-							{
-								text: "fisher adjusted",
-								flex: 20 / 100,
-								sortable: true,
-								dataIndex: "fisher_adjusted",
-								renderer: renderFunctionLimit
-							}
-							 */
-						],
-						bbar: {
-							xtpe: 'toolbar',
-							items: [
-								'-', {
-									xtype: 'combo',
-									fieldLabel: 'Select a step:',
-									labelAlign: 'right',
-									forceSelection: true,
-									emptyText: '--Select--',
-									store: {
-										fields: ['Step'],
-										data: [
-											{
-												Step: 'One Step'
-											}, {
-												Step: 'Two Steps'
-											}, {
-												Step: 'Three Steps'
-											}, {
-												Step: 'Four Steps'
-											}, {
-												Step: 'All Steps'
-											}
-										]
-									},
-									displayField: 'Step',
-									valueField: 'Step',
-									listeners: {
-										change: function (combo, value) {
-											let grid = this.up('grid'), store = grid.getStore();
-											if (!value || value === 'All Steps') {
-												store.clearFilter();
-											} else {
-												store.clearFilter();
-												if (value == 'One Step') {
-													value = 1
-												} else if (value == 'Two Steps') {
-													value = 2
-												} else if (value == 'Three Steps') {
-													value = 3
-												} else if (value == 'Four Steps') {
-													value = 4
-												}
-												store.filter([{
-														property: 'Step',
-														value: value
-													}]);
-											}
-										}
-									}
-
-								}
-							]
-						}
-					},
-					{
-						xtype: 'container',
-						itemId: 'hubAnalysisPlotPanel',
-						cls: "contentbox",
-						/* Hidden until a row is painted, then full width beneath the table
-						   rather than a 300px column beside it - see revealPlotPanel(). */
-						hidden: true,
-						columnWidth: 1,
-						padding: '30',
-						height: 350,
-						autoScroll: true,
-						items: [
-							{
-								xtype: "box",
-								html:
-									' <h4>Expression Value<span class="infoTip">Use this tool to show expression details of a metabolite and its <b>neighbouring features</b></span></h4> '
-							},
-							{
-								xtype: 'box',
-								html:
-									' <div id="hubAnalysisPlot" style="height: 100%; overflow: auto;" ></div>'
-							}
-						]
-
-					}
-				]
-			}
-		);
-
-
+/**
+ * Map one hub-analysis row to the grid's field names.
+ *
+ * Rows used to arrive as a headerless 8-element array whose column order was
+ * stated in exactly one place on each side and versioned nowhere: reordering
+ * the R frame silently relabelled the whole grid with no error anywhere.
+ * Since schema 2 they are named dicts, and this is the only place the names
+ * are read.
+ *
+ * There is deliberately NO legacy branch. A job stored before schema 2 is
+ * re-scored on the server (PathwayAcquisitionServlet, recovery path) rather
+ * than translated here -- the rows expire in at most 14 days, and a re-score
+ * returns the corrected numbers instead of faithfully preserving the wrong
+ * ones, which came from a graph with 28% mis-attributed subtypes.
+ */
+var paHubRow = function (raw) {
+	return {
+		ID: raw.name,
+		Step: raw.step,
+		Percentage: raw.density,
+		Percentile: raw.percentile,
+		DEN: raw.DEN,
+		noDEN: raw.noDEN,
+		pvalue: raw.pvalue,
+		padjust: raw.pvalue_adjust,
+		ballFraction: raw.ball_fraction
 	};
+};
 
-	return this;
-
-}
-PA_Step3HubAnalysis.prototype = new View();
 
 function PA_Step3MetaboliteView() {
 

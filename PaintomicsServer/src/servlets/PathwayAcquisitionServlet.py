@@ -865,6 +865,43 @@ def pathwayAcquisitionRecoverJob(request, response, QUEUE_INSTANCE):
         # every job opened from its link. See getCompoundRegulateFeatures().
         safe_compoundRegulateFeatures = _as_dict(jobInstance.getCompoundRegulateFeatures())
         safe_globalExpressionData = _as_dict(jobInstance.getGlobalExpressionData())
+        # The hub table is DERIVED, not owned by the job -- the same footing as
+        # compoundRegulateFeatures just above. Re-derive it whenever what is
+        # stored is unusable, which is two cases:
+        #
+        #   stale schema  rows written by the R scorer, computed on a graph with
+        #                 28.2% mis-attributed subtypes and balls that could
+        #                 contain their own seed. Rendering them faithfully
+        #                 would preserve numbers we know to be wrong.
+        #   no table      jobs whose hubAnalysisResult never persisted at all.
+        #                 These showed an empty grid with headers and no
+        #                 explanation; deriving costs ~0.09 s once the
+        #                 organism's graph is cached, so there is no reason to.
+        #
+        # Either way the client is left with exactly one row shape to read
+        # instead of a dual-shape reader on both sides.
+        from src.common.KeggGraph.scorer import HUB_SCHEMA_VERSION
+        _stored = jobInstance.hubAnalysisResult
+        if isinstance(_stored, dict) and _stored:
+            _sample = next(iter(_stored.values()))
+            _stale = not (isinstance(_sample, dict)
+                          and _sample.get("schema") == HUB_SCHEMA_VERSION)
+            _reason = "stale schema"
+        else:
+            # adaptBSON turns a stored None into the STRING "None", so anything
+            # that is not a populated dict means "no usable table".
+            _stale = True
+            _reason = "no stored table"
+        if _stale:
+            logging.info("RECOVER_JOB - re-deriving hub rows for %s (%s)",
+                         jobID, _reason)
+            try:
+                jobInstance.hubAnalysis()
+            except Exception as _ex:
+                logging.warning("RECOVER_JOB - could not derive hub rows for "
+                                "%s (%s); leaving the panel empty rather than "
+                                "rendering the old shape.", jobID, str(_ex))
+                jobInstance.hubAnalysisResult = None
         safe_hubAnalysisResult = _as_dict(jobInstance.hubAnalysisResult)
 
         logging.info("RECOVER_JOB - JOB " + jobInstance.getJobID() + " LOADED SUCCESSFULLY.")
@@ -1583,3 +1620,302 @@ def pathwayAcquisitionAdjustPvalues(request, response):
         handleException(response, ex, __file__ , "pathwayAcquisitionAdjustPvalues")
     finally:
         return response
+
+
+def _hubOwnedJob(jobID, userID, tag):
+    """Load a job for a hub route, refusing it unless the caller may see it.
+
+    Both hub routes need the same check, and the check is the reason they
+    exist as separate endpoints at all: /check_job_status ships the same job's
+    hub payload with no session and no ownership test. Writing it once means a
+    later route cannot quietly ship without it.
+
+    Returns (jobInstance, None) on success, or (None, refusalDict).
+    """
+    jobInstance = JobInformationManager().loadJobInstance(jobID)
+    if jobInstance is None:
+        return None, {"success": False,
+                      "errorMessage": "Job " + str(jobID) + " not found."}
+    if (str(jobInstance.getUserID()) != "None"
+            and jobInstance.getUserID() != userID
+            and not jobInstance.getAllowSharing()):
+        logging.info("%s - JOB %s DOES NOT BELONG TO USER %s",
+                     tag, jobID, str(userID))
+        return None, {"success": False,
+                      "errorMessage": "Invalid Job ID for current user."}
+    return jobInstance, None
+
+
+_KEGG_COMPOUND_NAMES = None
+
+
+def _isDisplayableCompoundName(name, compoundID):
+    """Whether a kegg_compounds row carries something worth showing a reader.
+
+    That collection stores one document per NAME, and "name" includes the KEGG
+    id itself and the compound's ChEBI ids -- which is why an upload keyed by
+    id comes back named "C00001, C00001". Measured on the live table: C00002
+    holds ATP, "Adenosine 5'-triphosphate", "chebi:15422" and "15422".
+    """
+    name = str(name or "").strip()
+    if not name or name == compoundID:
+        return False
+    if name.isdigit() or name.lower().startswith("chebi:"):
+        return False
+    return True
+
+
+def _keggCompoundNames():
+    """KEGG compound id -> a readable name, loaded once per process.
+
+    The hub panel had nothing better to print than "C12145". mappingComp is no
+    help: it holds the name the USER uploaded, and a metabolomics file keyed by
+    KEGG id makes that the id again. The real names are in
+    global-paintomics.kegg_compounds, which the mapper already reads.
+
+    That collection stores one document per NAME, and among them the id itself
+    and the compound's ChEBI ids -- which is why an upload keyed by id comes
+    back named "C00001, C00001". Those rows are skipped here; the first real
+    name in natural order wins (C00001 -> H2O, C00002 -> ATP, C12145 ->
+    Phytoceramide).
+
+    93k documents projected to two fields, scanned once and kept: ~19k entries.
+    Failure is not fatal -- the panel falls back to ids.
+    """
+    global _KEGG_COMPOUND_NAMES
+    if _KEGG_COMPOUND_NAMES is not None:
+        return _KEGG_COMPOUND_NAMES
+
+    names = {}
+    client = None
+    try:
+        from src.common.FeatureNamesToKeggIDsMapper import getConnectionByOrganismCode
+        client, db = getConnectionByOrganismCode("global")
+        for doc in db.kegg_compounds.find({}, {"_id": 0, "id": 1, "name": 1}):
+            compoundID = doc.get("id")
+            if not compoundID or compoundID in names:
+                continue
+            name = str(doc.get("name") or "").strip()
+            # First acceptable name in natural order wins: C00001 -> H2O,
+            # C00002 -> ATP, C12145 -> Phytoceramide.
+            if _isDisplayableCompoundName(name, compoundID):
+                names[compoundID] = name
+        logging.info("HUB_NAMES - %d KEGG compound names cached", len(names))
+    except Exception as ex:
+        logging.warning("HUB_NAMES - could not load KEGG compound names (%s); "
+                        "the panel will show ids.", str(ex))
+    finally:
+        if client is not None:
+            client.close()
+
+    _KEGG_COMPOUND_NAMES = names
+    return names
+
+
+#: One panel's metabolite list. Well above the largest real job seen (213),
+#: and low enough that a malformed request cannot ask for the whole table.
+_HUB_NAMES_MAX_IDS = 5000
+
+
+def pathwayAcquisitionHubNames(request, response, QUEUE_INSTANCE):
+    """Readable names for the compound ids the caller names.
+
+    Fetched once when the panel mounts, so the metabolite list can be titled by
+    name rather than by id. Per-node naming inside the network comes from the
+    same map, which is why it is one bulk call and not one call per node.
+
+    The ids come from the REQUEST, not from jobInstance.hubAnalysisResult.
+    Reading them off the loaded job was the obvious implementation and it
+    returned nothing: jobs stored before the schema-2 rewrite still hold
+    headerless 8-element LISTS in Mongo (job fh304774Lw: 860 of them), and only
+    pathwayAcquisitionRecoverJob re-scores them on the way out. The client is
+    holding the upgraded rows already -- it renders the list from them -- so
+    asking it removes the dependency on which schema happens to be on disk.
+    """
+    try:
+        jobID = request.form.get("jobID")
+        userID = request.cookies.get("userID")
+
+        jobInstance, refusal = _hubOwnedJob(jobID, userID, "HUB_NAMES")
+        if refusal is not None:
+            response.setContent(refusal)
+            return response
+
+        requested = request.form.get("ids") or ""
+        ids = [value.strip() for value in requested.split(",") if value.strip()]
+        if len(ids) > _HUB_NAMES_MAX_IDS:
+            ids = ids[:_HUB_NAMES_MAX_IDS]
+            logging.warning("HUB_NAMES - %s asked for more than %d ids; "
+                            "the rest keep their KEGG id as the label.",
+                            jobID, _HUB_NAMES_MAX_IDS)
+
+        table = _keggCompoundNames()
+        names = {}
+        for compoundID in ids:
+            if compoundID in table:
+                names[compoundID] = table[compoundID]
+
+        # The scoring contract the server is on. The client caches the job
+        # model in IndexedDB, so a browser that loaded this job before an
+        # upgrade keeps serving rows scored under the old definition -- which
+        # is exactly what HUB_SCHEMA_VERSION exists to prevent, and the check
+        # only ever ran on the server's recovery path.
+        from src.common.KeggGraph.scorer import HUB_SCHEMA_VERSION
+        response.setContent({"success": True, "names": names,
+                             "hubSchema": HUB_SCHEMA_VERSION})
+    except Exception as ex:
+        logging.error("HUB_NAMES - %s", str(ex))
+        response.setContent({"success": False, "errorMessage": str(ex)})
+    return response
+
+
+def pathwayAcquisitionHubSubgraph(request, response, QUEUE_INSTANCE):
+    """The induced subgraph behind one row of the hub-analysis table.
+
+    The graph has always existed on the server and never reached the browser:
+    compoundRegulateFeatures ships node SETS with no pairs, no direction, no edge
+    types and no intermediate hops, so a client cannot tell whether a radius-3
+    gene reaches the metabolite via gene X or gene Y. That is why no network was
+    ever drawn.
+
+    Ownership is checked the way pathwayAcquisitionRecoverJob does. The endpoint
+    that ships hubAnalysisResult today, /check_job_status, checks nothing at all
+    -- a separate and broader fix; this route does not inherit it.
+    """
+    try:
+        jobID = request.form.get("jobID")
+        compoundID = request.form.get("compoundID")
+        level = max(1, min(4, int(request.form.get("level", 1) or 1)))
+        budget = max(1, min(2000, int(request.form.get("maxEdges", 400) or 400)))
+        perRing = max(5, min(200, int(request.form.get("perRing", 40) or 40)))
+        userID = request.cookies.get("userID")
+
+        jobInstance, refusal = _hubOwnedJob(jobID, userID, "HUB_SUBGRAPH")
+        if refusal is not None:
+            response.setContent(refusal)
+            return response
+
+        from src.common.KeggGraph import store
+        graph = store.get_graph(jobInstance.getOrganism())
+        if graph is None:
+            response.setContent({"success": False,
+                                 "errorMessage": "No interaction network is "
+                                                 "installed for this organism."})
+            return response
+
+        # The per-ring sample must keep the DE features first: DE concentration
+        # is the claim the panel exists to show, and a sample that dropped the
+        # DE genes would misrepresent it. Only the server knows which features
+        # are relevant for THIS job, so the priority set is built here rather
+        # than left to the client, which never receives the dropped nodes.
+        #
+        # Any gene-based omic counts, not just one named "Gene expression".
+        # "Gene expression" is only the default label the upload form suggests
+        # for the first omic; a job whose omics are named "RNA-seq" and
+        # "Proteomics" is not a job without differential expression. Asking
+        # isRelevant() rather than testing `relevant` for truth is the same
+        # point: `relevant` is a LIST, and a list of all-False is truthy.
+        priority = set()
+        try:
+            for geneID, gene in (jobInstance.inputGenesData or {}).items():
+                for values in (gene.omicsValues or []):
+                    if values.isRelevant() or values.isRelevantAssociation():
+                        priority.add(geneID)
+                        break
+            for compID, comp in (jobInstance.inputCompoundsData or {}).items():
+                for values in (comp.omicsValues or []):
+                    if values.isRelevant() or values.isRelevantAssociation():
+                        priority.add(compID)
+                        break
+        except Exception as ex:
+            logging.warning("HUB_SUBGRAPH - could not build the DE priority set "
+                            "for %s (%s); sampling by degree alone.", jobID, str(ex))
+
+        payload = graph.subgraph(compoundID, level, budget, priority=priority,
+                                 per_ring=perRing)
+
+        # Names for the compound nodes in THIS subgraph. /pa_hub_names covers
+        # the scored list; a ring can also hold compounds the job never
+        # measured and so never scored, and those would otherwise be the only
+        # nodes still labelled with a bare id.
+        table = _keggCompoundNames()
+        payload["names"] = {
+            node["id"]: table[node["id"]]
+            for node in payload.get("nodes", [])
+            if node.get("type") == "compound" and node.get("id") in table
+        }
+
+        payload["success"] = True
+        response.setContent(payload)
+    except Exception as ex:
+        logging.error("HUB_SUBGRAPH - %s", str(ex))
+        response.setContent({"success": False, "errorMessage": str(ex)})
+    return response
+
+
+def pathwayAcquisitionHubFeature(request, response, QUEUE_INSTANCE):
+    """Every omic measured for ONE feature in the hop-ring network.
+
+    globalExpressionData -- the only expression payload the panel had -- carries
+    ``omicsValues[0]`` and nothing else (see
+    PathwayAcquisitionJob.getGlobalExpressionData). On a job with four
+    gene-based omics that is a quarter of the data, drawn with no hint that the
+    other three exist, while the pathway views next to it show all four.
+
+    Shipping every omic for every feature instead would multiply a payload that
+    already measures ~4 MB on a job this size, for data almost none of which is
+    ever looked at. One clicked feature is a few hundred bytes, so it is
+    fetched here on demand -- the same derive-when-asked rule the graph itself
+    follows.
+    """
+    try:
+        jobID = request.form.get("jobID")
+        featureID = request.form.get("featureID")
+        featureType = (request.form.get("featureType") or "gene").lower()
+        userID = request.cookies.get("userID")
+
+        jobInstance, refusal = _hubOwnedJob(jobID, userID, "HUB_FEATURE")
+        if refusal is not None:
+            response.setContent(refusal)
+            return response
+
+        source = (jobInstance.inputCompoundsData if featureType == "compound"
+                  else jobInstance.inputGenesData) or {}
+        feature = source.get(featureID)
+        if feature is None:
+            # Not an error: most nodes in a radius-4 ring were never measured,
+            # and the client draws a "how it connects" panel for those. Saying
+            # so with success=True keeps that path off the error branch.
+            response.setContent({"success": True, "id": featureID,
+                                 "type": featureType, "name": "", "omics": []})
+            return response
+
+        omics = []
+        for values in (feature.omicsValues or []):
+            entry = {
+                # keggName is what the heatmap prints as the row label; it
+                # lives on the OmicValue client-side, so it is repeated per
+                # omic rather than sent once beside them.
+                "keggName": feature.name,
+                "omicName": values.omicName,
+                "inputName": values.inputName,
+                "originalName": values.originalName,
+                "values": values.values,
+                "relevant": values.relevant,
+                "relevantAssociation": values.relevantAssociation
+            }
+            # Only when populated. adaptBSON turns None into the STRING "None",
+            # and paValuesForHeader would then see a non-array sampleValues.
+            if values.sampleValues is not None:
+                entry["sampleValues"] = values.sampleValues
+            if values.sampleRelevant is not None:
+                entry["sampleRelevant"] = values.sampleRelevant
+            omics.append(entry)
+
+        response.setContent({"success": True, "id": featureID,
+                             "type": featureType, "name": feature.name,
+                             "omics": omics})
+    except Exception as ex:
+        logging.error("HUB_FEATURE - %s", str(ex))
+        response.setContent({"success": False, "errorMessage": str(ex)})
+    return response

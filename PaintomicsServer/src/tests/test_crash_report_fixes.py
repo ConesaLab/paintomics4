@@ -162,15 +162,19 @@ class EmptyFilenamePartTest(unittest.TestCase):
 
 class MissingHubDataTest(unittest.TestCase):
     def test_hubAnalysis_returns_False_when_hubData_is_absent(self):
+        from src.classes.Feature import OmicValue
         from src.classes.JobInstances.PathwayAcquisitionJob import PathwayAcquisitionJob
 
-        class _OmicValue:
-            omicName = "Gene expression"
-            relevant = True
-            relevantAssociation = False
+        # The real OmicValue, not a stub with the two fields spelled as bare
+        # attributes: hubAnalysis asks isRelevant(), because `relevant` is a
+        # LIST and a list of all-False is truthy. A hand-rolled double drifted
+        # away from that the moment the caller stopped reading the attribute.
+        omicValue = OmicValue("g1")
+        omicValue.setOmicName("Gene expression")
+        omicValue.setRelevant([True])
 
         class _Gene:
-            omicsValues = [_OmicValue()]
+            omicsValues = [omicValue]
 
         job = object.__new__(PathwayAcquisitionJob)
         job.organism = "no-such-species-xyz"
