@@ -141,8 +141,14 @@ PUBLISHED = {
     # class the old view never adds. The card would be permanently 0px: the
     # same invisible-heatmap bug this release exists to fix, reintroduced by
     # the cache for everyone who had already loaded the site.
+    # v=1.9 fixes the solid black colour legend (it read colorScale off the
+    # network options object, which has none) and retimes the omic figure's
+    # height. It ships with main.css v=1.61 and network-views.css v=1.8, which
+    # is where .paColorLegend and .pa-hub-omic-figure now live -- a browser
+    # keeping the v=1.8 script would build the old single-row markup those
+    # rules no longer describe.
     "app/view/PathwayAcquisitionViews/PA_Step3HubNetworkView.js": (
-        "1.8", "61da7f53c60fccaf1dff88c5c7f81decd91347058c97d2814e439041c483142f"),
+        "1.9", "825efe7af3560cbc34b7c27bc681dc378a9e9a978d3e83450bbdb9d41624b690"),
     # v=0.9 adds SERVER_URL_PA_PATHWAY_EVIDENCE. The endpoint was added at
     # v=0.8 WITHOUT a bump, which this guard caught: a returning browser keeps
     # this file for up to 12 hours, so the evidence overlay would have POSTed
