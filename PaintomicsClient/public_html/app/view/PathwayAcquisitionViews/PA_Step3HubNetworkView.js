@@ -33,6 +33,20 @@
  * diverging midpoint was rejected at 1.12:1 contrast -- "measured but not DE" is
  * most of the graph, so those nodes are hollow and the STROKE carries contrast.
  */
+/**
+ * Everything in an omic figure that is not a data row: the chart's top margin
+ * plus the room the rotated condition names need under the plot area.
+ *
+ * The panel used `rows * 30 + 100`, which is what the pathway views use in
+ * containers 400px wider. Here the axis labels are drawn at -45 degrees and
+ * the last line of them was clipped by the container -- on the STATegra job
+ * the "I/C_24h" chips lost their bottom half. Sized from what the axis
+ * actually needs: 12 characters at 9px, rotated, is about 40px of vertical
+ * run, and the chart wants ~28px above the plot area and ~20px of padding
+ * below the labels.
+ */
+var PA_OMIC_CHART_FURNITURE = 132;
+
 function PA_Step3HubNetworkView() {
 	this.name = "PA_Step3HubNetworkView";
 	// Randomised ids: Step 3 can hold more than one network panel, and Ext
@@ -1036,7 +1050,21 @@ function PA_Step3HubNetworkView() {
 	this.drawOmics = function (slot, omics) {
 		var me = this;
 		var summaries = me.model.getDataDistributionSummaries() || {};
-		var visual = (me.getParent && me.getParent() && me.getParent().visualOptions) || {};
+
+		/* NOT the parent's `visualOptions`. That object belongs to the pathway
+		   NETWORK - node sizes, edge classes, p-value methods, the visible
+		   pathway list - and has never had a `colorScale` or a
+		   `colorReferences` on it. Reading it here handed `undefined` to both
+		   painters. generateHeatmap has its own "bwr" fallback so the cells
+		   came out right; paColorLegend passed the undefined straight to
+		   getColor, which fell through its unknown-scale branch and returned
+		   rgb(0,0,0) for every stop. That is the solid black bar in the panel.
+		   Both ends now name the same defaults, which is the only arrangement
+		   in which they cannot disagree again. */
+		var visual = {
+			colorScale: PA_DEFAULT_COLOR_SCALE,
+			colorReference: PA_DEFAULT_COLOR_REFERENCE
+		};
 
 		var order = [], grouped = {};
 		omics.forEach(function (o) {
@@ -1064,30 +1092,40 @@ function PA_Step3HubNetworkView() {
 			var legend = "";
 			try {
 				legend = paColorLegend(
-					getMinMax(summaries[omicName], visual.colorReferences
-						? visual.colorReferences[omicName] : "p10p90"),
-					visual.colorScale);
+					getMinMax(summaries[omicName], visual.colorReference),
+					visual.colorScale,
+					{caption: paColourReferenceLabel(visual.colorReference)});
 			} catch (error) {
 				console.warn("[hub] no colour legend for " + omicName + ": " + error);
 			}
-			// Same row height as the pathway views, so a five-row omic here and
-			// a five-row omic there are the same object.
-			var height = (grouped[omicName].length * 30) + 100;
 			var count = grouped[omicName].length;
+			/* Row pitch is the pathway views' 30px, so a five-row omic here and
+			   a five-row omic there are the same object. The constant on the end
+			   is the chart's own furniture, and 100 was not enough for it: the
+			   condition names are drawn at -45 degrees, and on this job the
+			   bottom of "I/C_24h" was cut off by the container. It has to cover
+			   the plot's top margin AND the rotated axis beneath it. */
+			var height = (count * 30) + PA_OMIC_CHART_FURNITURE;
 			// The heatmap div and the plot div must be ADJACENT SIBLINGS with
 			// the heatmap first: the heatmap's point handlers reach the plot
 			// with .parent().next().highcharts(). Anything between them makes
-			// that undefined and hovering a cell throws.
+			// that undefined and hovering a cell throws. The wrapper below keeps
+			// them adjacent -- it is their parent, not a separator.
 			return '<div class="contentbox pa-hub-omic">' +
-				'<h4>' + Ext.String.htmlEncode(omicName) +
-				(count > 1 ? ' <span class="pa-hub-id">' + count +
-				             ' input rows</span>' : "") + '</h4>' + legend +
-				'<div class="PA_step5_heatmapContainer" ' +
-				  'id="' + me.detailID + '_hm' + index + '" ' +
-				  'style="height:' + height + 'px"></div>' +
-				'<div class="PA_step5_plotContainer" ' +
-				  'id="' + me.detailID + '_pl' + index + '" ' +
-				  'style="height:' + height + 'px"></div>' +
+				'<div class="pa-hub-omic-head">' +
+					'<h4>' + Ext.String.htmlEncode(omicName) +
+					(count > 1 ? ' <span class="pa-hub-id">' + count +
+					             ' input rows</span>' : "") + '</h4>' +
+					legend +
+				'</div>' +
+				'<div class="pa-hub-omic-figure">' +
+					'<div class="PA_step5_heatmapContainer" ' +
+					  'id="' + me.detailID + '_hm' + index + '" ' +
+					  'style="height:' + height + 'px"></div>' +
+					'<div class="PA_step5_plotContainer" ' +
+					  'id="' + me.detailID + '_pl' + index + '" ' +
+					  'style="height:' + height + 'px"></div>' +
+				'</div>' +
 				'</div>';
 		}).join("");
 

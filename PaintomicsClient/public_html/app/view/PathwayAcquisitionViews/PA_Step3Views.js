@@ -4283,6 +4283,10 @@ function PA_Step3PathwayDetailsView() {
 				"^": '<i class="relevantAssociationFeature"></i>'
 			};
 
+			/* The gap that separates one cell from the next, in the colour of the
+			   surface behind this chart. See paCellGap(). */
+			var cellGap = paCellGap(targetID);
+
 			var heatmap = new Highcharts.Chart({
 				chart: {type: 'heatmap', renderTo: targetID},
 				title: null, legend: {enabled: false}, credits: {enabled: false},
@@ -4314,7 +4318,7 @@ function PA_Step3PathwayDetailsView() {
 				},
 				series: series,
 				plotOptions: {
-					heatmap: {borderColor: "#000000",borderWidth: 0.5},
+					heatmap: {borderColor: cellGap.borderColor, borderWidth: cellGap.borderWidth},
 					series: {
 						point: {
 							events: {
@@ -6676,8 +6680,17 @@ var getMinMax = function(dataDistributionSummaries, option) {
 			range = paColourRange(dataDistributionSummaries[11], dataDistributionSummaries[12]);
 		}
 	} else {
-		console.error("getMinMax:" + option + "Not implemented!!");
-		debugger;
+		/* Same shape as getColor's fall-through: a caller that has not been
+		   told which reference to use is asking for the default, not for a
+		   breakpoint. `debugger;` stood here too, and a shipped file must not
+		   contain one -- it freezes the application for anyone with devtools
+		   open, and both of these branches run per cell. */
+		if (option !== undefined && option !== null && !getMinMax.warnedAboutOption) {
+			getMinMax.warnedAboutOption = true;
+			/* Plain console.warn -- see the note in getColor's fall-through. */
+			console.warn("[paintomics] colour reference '" + option +
+				"' is not implemented; using the full observed range.");
+		}
 		range = absRange;
 	}
 
@@ -6692,12 +6705,19 @@ var getMinMax = function(dataDistributionSummaries, option) {
 
 /**
 		* This function returns the corresponding RGB color (for heatmap) for
-		* a given value, based var getColor = on a min/max values.
+		* a given value, based on a min/max range.
+		*
+		* (The line above used to read "based var getColor = on a min/max
+		* values" - a search-and-replace had struck inside the prose. It is
+		* repaired rather than left alone because it is not only unreadable:
+		* it parses as a variable declaration, and the test harness that lifts
+		* these helpers out by name matched the COMMENT instead of the
+		* function.)
 		*
 		* @param {type} min
 		* @param {type} max
 		* @param {type} value
-		* @param {String} colorScale the color scale (RED-BLACK-GREEN -> "rbg", BLUE-WHITE-RED -> "bwr")
+		* @param {String} colorScale the color scale (RED-BLACK-GREEN -> "rbg", BLUE-NEUTRAL-RED -> "bwr")
 		* @returns {String}
 		*/
 /**
@@ -6765,6 +6785,166 @@ var paRampPosition = function (limits, value) {
 	return (position < 0) ? 0 : position;
 };
 
+/**
+ * The diverging ramp every heatmap cell and every painted pathway box uses.
+ *
+ * Built in OKLab rather than written down as RGB, for three reasons that the
+ * pure-primary ramp it replaces could not satisfy at once.
+ *
+ * 1. THE MIDPOINT IS NOT WHITE. `rgb(255,255,255)` on a white card is not a
+ *    cell, it is a hole -- measured contrast against the panel surface is
+ *    1.03:1. That is the whole reason the heatmaps carried a 0.5px black grid:
+ *    the border was doing the job the fill could not, and it is what made them
+ *    look like a 2003 spreadsheet. A faintly-toned neutral (1.19:1) is visible
+ *    on its own, so the grid can go and the cells can be separated by a gap in
+ *    the surface colour instead -- see generateHeatmap.
+ *
+ * 2. LIGHTNESS IS MONOTONE BY CONSTRUCTION. L is interpolated linearly from
+ *    the neutral to the pole, so "further from zero" always reads as "darker",
+ *    including for a reader who cannot separate the two hues at all.
+ *
+ * 3. HUE IS NEVER INTERPOLATED. Walking hue from the blue pole to the red one
+ *    passes through green and turns a diverging scale into a rainbow. Each
+ *    side keeps its own fixed hue and only chroma moves, so the two halves
+ *    can never meet anywhere but at the neutral.
+ *
+ * Chroma rises on a k^0.68 curve rather than linearly: linear chroma leaves
+ * the near-zero half of each side almost grey, which throws away the
+ * resolution where most omics data actually sits.
+ *
+ * Measured against the ramp it replaces (OKLab dE x100, light surface):
+ * pole-to-neutral separation 45.5 under protanopia, against 37.4 before.
+ */
+var PA_RAMP = {
+	neutral:  {L: 0.931, C: 0.000},
+	negative: {L: 0.470, C: 0.145, h: 255},   /* blue  */
+	positive: {L: 0.470, C: 0.170, h: 27},    /* red   */
+	/* Where a value past the colour reference's clip ends up. It keeps
+	   travelling in the same hue and only gets darker, so "off the end of the
+	   scale" stays legible as more of the same thing rather than becoming a
+	   new colour. */
+	outlierL: 0.330
+};
+
+/** OKLab -> sRGB. Returns channels, not a string: getColor does the formatting
+ *  and the clamping for every scale in one place. */
+var paOklabChannels = function (L, a, b) {
+	var l_ = L + 0.3963377774 * a + 0.2158037573 * b;
+	var m_ = L - 0.1055613458 * a - 0.0638541728 * b;
+	var s_ = L - 0.0894841775 * a - 1.2914855480 * b;
+	var l = l_ * l_ * l_, m = m_ * m_ * m_, s = s_ * s_ * s_;
+	var linear = [
+		 4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
+		-1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
+		-0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s
+	];
+
+	return linear.map(function (c) {
+		c = (c <= 0.0031308) ? (12.92 * c) : (1.055 * Math.pow(c, 1 / 2.4) - 0.055);
+		return c * 255;
+	});
+};
+
+/** One cell's colour on the diverging ramp, as [r, g, b] in 0..255. */
+var paDivergingChannels = function (limits, value) {
+	var pole = (value > 0) ? PA_RAMP.positive : PA_RAMP.negative;
+	var position = paRampPosition(limits, value);
+	var k = Math.min(position, 1);
+
+	/* An outlier is a value PAST THE FAR END OF THE RAMP, which is exactly
+	   `position > 1` and is not the same question as "outside [min, max]".
+	   The two come apart wherever the colour reference clips one-sided data,
+	   and getting it wrong inverts the scale:
+
+	     - a custom reference of 5..12 over data reaching down to 1.93 puts
+	       1.93 below `limits.min` while it is the value NEAREST ZERO. It
+	       belongs at the pale end, not painted as the strongest outlier.
+	     - the Proteomics omic on job bF624h75w1 clips to 0.79..1.04, and its
+	       metagenes are small negatives. Every one of them is below
+	       `limits.min` and every one of them is a near-zero value.
+
+	   paRampPosition has already resolved which end is which for both the
+	   diverging and the one-sided case, so asking it is the one test that
+	   cannot disagree with the ramp it is placing the value on. */
+	var beyond = (position > 1) ? paOutlierFraction(limits, value) : 0;
+
+	var L = PA_RAMP.neutral.L + (pole.L - PA_RAMP.neutral.L) * k;
+	var C = PA_RAMP.neutral.C + (pole.C - PA_RAMP.neutral.C) * Math.pow(k, 0.68);
+
+	if (beyond > 0) {
+		L = pole.L + (PA_RAMP.outlierL - pole.L) * beyond;
+		C = pole.C * (1 - 0.15 * beyond);
+	}
+
+	var radians = pole.h * Math.PI / 180;
+
+	return paOklabChannels(L, C * Math.cos(radians), C * Math.sin(radians));
+};
+
+/**
+ * How one heatmap cell is separated from the next.
+ *
+ * Every heatmap in the application drew a 0.5px `#000000` border on each cell.
+ * That grid was never a design decision -- it was load-bearing: with a white
+ * midpoint, a cell holding a value near zero is the same colour as the panel
+ * behind it, and without the black outline those cells simply disappeared. The
+ * side effect was a hard black lattice over every figure.
+ *
+ * With a toned neutral at the midpoint (see PA_RAMP) the fill can hold its own
+ * cell, so the separator's only job is separation: a gap the width of the
+ * surface, not a line drawn in ink.
+ *
+ * It has to be the surface's ACTUAL COLOUR, and that is worth stating because
+ * the obvious shortcut does not work. A transparent border looks like it
+ * should let the panel show through, but Highcharts renders the cell border as
+ * an SVG stroke, and a transparent stroke paints nothing at all -- the fills
+ * still reach the rect edges and the cells butt together with no separator
+ * whatsoever. Measured after trying exactly that: `x=0 w=28`, `x=28 w=28`, not
+ * one pixel between them.
+ *
+ * So the colour is resolved from the chart's own container, by walking up
+ * until something actually paints a background. That is right in both themes
+ * and inside any panel, without the caller having to know where it is. A theme
+ * switch after the chart is drawn leaves the old colour behind until the chart
+ * is rebuilt, which is true of every other colour baked into these charts.
+ */
+var paCellGap = function (targetID) {
+	var element = document.getElementById(targetID);
+	var background;
+
+	while (element) {
+		background = window.getComputedStyle(element).backgroundColor;
+		if (background && background !== "transparent" &&
+			!/^rgba\(\s*0,\s*0,\s*0,\s*0\s*\)$/.test(background)) {
+			return {borderColor: background, borderWidth: 2};
+		}
+		element = element.parentElement;
+	}
+
+	return {borderColor: "#FFFFFF", borderWidth: 2};
+};
+
+/**
+ * Ink for a mark drawn ON TOP of a painted cell - today, the significance star.
+ *
+ * The star was hard-coded `color: white !important`. White is right on a
+ * saturated cell and invisible on a pale one, and "pale" is most of the ramp:
+ * a starred cell whose value sat near zero showed no star at all, so the mark
+ * that says "significant here" was missing exactly where the reader could not
+ * infer it from the colour. Picked from the cell's own luminance instead.
+ */
+var paInkOnCell = function (color) {
+	var channels = String(color || "").match(/\d+(\.\d+)?/g);
+
+	if (!channels || channels.length < 3) { return "#FFFFFF"; }
+
+	/* Rec. 709 luma is enough here: the question is only "is this cell light
+	   or dark", and the answer only has to be right, not calibrated. */
+	var luma = (0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2]) / 255;
+
+	return (luma > 0.6) ? "#3F3F46" : "#FFFFFF";
+};
+
 var getColor = function (limits, value, colorScale) {
 			var red, blue, green;
 			//RED-BLACK-GREEN
@@ -6774,13 +6954,11 @@ var getColor = function (limits, value, colorScale) {
 				red = (value > 0) ? 255 * percentage : 0;
 				blue = 0;
 			} else if (colorScale === "bwr") {
-				//BLUE-WHITE-RED
-				var percentage = Math.max(0, 1 - paRampPosition(limits, value));
-
-				var outlierPercentage = paOutlierFraction(limits, value);
-				green = percentage * 255;
-				red = (value > 0) ? ((value > limits.max) ? 255 - (outlierPercentage * 128) : 255) : (percentage * 255);
-				blue = (value < 0) ? ((value < limits.min) ? 255 - (outlierPercentage * 128) : 255) : (percentage * 255);
+				//BLUE-NEUTRAL-RED, the default. See PA_RAMP.
+				var channels = paDivergingChannels(limits, value);
+				red = channels[0];
+				green = channels[1];
+				blue = channels[2];
 
 			} else if (colorScale === "bwr2") {
 				//BLUE-WHITE-RED
@@ -6791,8 +6969,36 @@ var getColor = function (limits, value, colorScale) {
 				red = (value > 0) ? 255 : (percentage * 255);
 				blue = (value > 0) ? (percentage * 255) : 255;
 			} else {
-				console.error("Color scale " + colorScale + "Not implemented!!");
-				debugger;
+				/* A missing or unknown scale name used to fall straight through
+				   here with red, green and blue left undefined. paChannel turns
+				   NaN into 0, so every colour this function returned was
+				   rgb(0,0,0) -- which is how the colour legend beside the
+				   metabolite hub heatmaps came out as a solid BLACK bar while
+				   the cells beside it were correctly blue and red: the cell
+				   painters pass "bwr" explicitly when the option is absent,
+				   and paColorLegend passed the absent option straight on.
+				   The right answer for "I was not told which scale" is the
+				   default scale, not black.
+
+				   `debugger;` also used to sit here. It is not a diagnostic in
+				   a shipped file, it is a breakpoint that freezes the whole
+				   application for anyone who happens to have devtools open --
+				   and this branch ran once per gradient stop, 25 times per
+				   legend. */
+				if (!getColor.warnedAboutScale) {
+					getColor.warnedAboutScale = true;
+					/* No Date.logFormat() here on purpose. These helpers are lifted
+					   out of this file and run standalone under node by
+					   src/tests/test_heatmap_colour_and_column_space.py, where
+					   the application's Date extensions do not exist -- a
+					   warning that throws is worse than the bug it reports. */
+					console.warn("[paintomics] colour scale '" + colorScale +
+						"' is not implemented; painting with the default diverging ramp.");
+				}
+				var fallback = paDivergingChannels(limits, value);
+				red = fallback[0];
+				green = fallback[1];
+				blue = fallback[2];
 			}
 			/* Whatever the arithmetic above decided, what leaves here is a
 			   colour. Channels were free to run out of range and did: measured
@@ -7357,6 +7563,79 @@ var paRowLabel = function (primary, secondary, options) {
  * Styles are inline because this markup is injected into containers owned by
  * several different views, none of which has a stylesheet rule for it.
  */
+/* The scale every painter falls back to when it has not been told one. Named
+   so the cell painters and the legend cannot drift apart -- when they did, the
+   cells came out blue-and-red and the legend came out black. */
+var PA_DEFAULT_COLOR_SCALE = "bwr";
+
+/**
+ * One of the two lines showing where the colour scale stops and outliers begin.
+ *
+ * Drawn under the series (zIndex 1; Highcharts puts series at 3), and labelled
+ * above the upper line and below the lower one so the text never lands on the
+ * line it belongs to.
+ */
+var paScaleClipLine = function (value, text, above) {
+	return {
+		value: value,
+		color: "#E4E4E7",
+		width: 1,
+		zIndex: 1,
+		label: {
+			text: text,
+			align: "right",
+			x: -3,
+			y: above ? -4 : 11,
+			style: {color: "#A1A1AA", fontSize: "9px"}
+		}
+	};
+};
+
+/* Likewise for the range the scale is stretched over. */
+var PA_DEFAULT_COLOR_REFERENCE = "p10p90";
+
+/**
+ * The colour reference, in the words the configurator uses for it.
+ *
+ * A legend that says only "-0.68 ... 0.68" does not say what those numbers
+ * ARE, and they are not the data's range: p10p90 clips a tenth off each end.
+ * Two omics whose legends read the same width can be showing very different
+ * amounts of data.
+ */
+var paColourReferenceLabel = function (option) {
+	return ({
+		p10p90:         "10th-90th percentile",
+		riMinMax:       "interquartile range",
+		absoluteMinMax: "full range",
+		custom:         "custom range"
+	})[option || PA_DEFAULT_COLOR_REFERENCE] || "full range";
+};
+
+/**
+ * The swatch beside a colour-scale radio button, drawn from getColor().
+ *
+ * These were two JPEGs -- bwrscale_120x18.jpg and gbrscale_120x18.jpg -- baked
+ * when the ramps were written. A picture of a colour scale is a copy of the
+ * truth, and this one went stale the moment the ramp moved: the option labelled
+ * "Blue-White-Red" would have shown a pure-primary strip while selecting it
+ * painted something else. Sampling the live function is the same rule
+ * paColorLegend follows, and for the same reason.
+ */
+var paScaleThumb = function (colorScale) {
+	/* A nominal symmetric range with no outlier zone: the swatch is showing
+	   the SHAPE of the ramp, not any particular omic's numbers. */
+	var nominal = {min: -1, max: 1, absMin: -1, absMax: 1};
+	var stops = [];
+	var i;
+
+	for (i = 0; i <= 40; i++) {
+		stops.push(getColor(nominal, -1 + (i / 20), colorScale) + " " + (i * 2.5) + "%");
+	}
+
+	return '<span class="colorScaleThumb" style="background:linear-gradient(to right,' +
+		stops.join(",") + ');"></span>';
+};
+
 var paColorLegend = function (limits, colorScale, options) {
 	options = options || {};
 
@@ -7367,8 +7646,14 @@ var paColorLegend = function (limits, colorScale, options) {
 		return "";
 	}
 
-	var steps = options.steps || 24;
-	var barWidth = options.width || 120;
+	/* The scale is what the CELLS were painted with. A caller that does not
+	   know it is not asking for black -- see the fall-through in getColor. */
+	colorScale = colorScale || PA_DEFAULT_COLOR_SCALE;
+
+	/* 24 stops was enough for a two-primary ramp; the diverging ramp moves in
+	   lightness as well as chroma, and banding showed at that count. */
+	var steps = options.steps || 48;
+	var barWidth = options.width || 160;
 	var stops = [];
 	var i, ratio;
 
@@ -7384,12 +7669,35 @@ var paColorLegend = function (limits, colorScale, options) {
 			: value.toFixed(2);
 	};
 
-	return '<div class="paColorLegend" style="display:inline-block;font-size:10px;color:#555;margin:2px 0 6px 0;white-space:nowrap;">' +
-		'<span style="vertical-align:middle;">' + format(limits.min) + '</span>' +
-		'<span title="Colour scale used by this heatmap. Values outside the range are drawn as outliers." ' +
-		'style="display:inline-block;vertical-align:middle;margin:0 5px;width:' + barWidth + 'px;height:10px;border:1px solid #999;' +
-		'background:linear-gradient(to right,' + stops.join(",") + ');"></span>' +
-		'<span style="vertical-align:middle;">' + format(limits.max) + '</span>' +
+	/* Where zero falls on the bar. On a diverging scale that is the one
+	   position a reader needs to locate, and two bare end numbers never said
+	   where it was: on an asymmetric colour reference it is not the middle.
+	   Omitted when the range does not cross zero, because then there is no
+	   zero on the bar to point at. */
+	var crossesZero = (limits.min < 0 && limits.max > 0);
+	var zeroAt = crossesZero
+		? ((0 - limits.min) / (limits.max - limits.min)) * 100
+		: null;
+
+	var tooltip = "Colour scale for this heatmap" +
+		(options.caption ? " (" + options.caption + ")" : "") +
+		". Values past either end are painted darker rather than clipped.";
+
+	return '<div class="paColorLegend" style="width:' + barWidth + 'px;">' +
+		'<span class="paColorLegend-bar" title="' + paEscapeAttribute(tooltip) + '" ' +
+			'style="background:linear-gradient(to right,' + stops.join(",") + ');">' +
+			(zeroAt === null ? "" :
+				'<i class="paColorLegend-tick" style="left:' + zeroAt.toFixed(2) + '%;"></i>') +
+		'</span>' +
+		'<span class="paColorLegend-scale">' +
+			'<span>' + format(limits.min) + '</span>' +
+			(zeroAt === null ? "" :
+				'<span class="paColorLegend-zero" style="left:' + zeroAt.toFixed(2) + '%;">0</span>') +
+			'<span>' + format(limits.max) + '</span>' +
+		'</span>' +
+		(options.caption
+			? '<span class="paColorLegend-caption">' + paEscapeAttribute(options.caption) + '</span>'
+			: "") +
 		'</div>';
 };
 
@@ -7566,9 +7874,13 @@ if (omicsValues[i].isRelevantAssociation()) {
 		dendogram: false
 	} : false;
 
+	/* The gap that separates one cell from the next, in the colour of the
+	   surface behind this chart. See paCellGap(). */
+	var cellGap = paCellGap(targetID);
+
 	var heatmap = new Highcharts.Chart({
 		chart: {type: 'heatmap', renderTo: targetID},
-		heatmapSelector: {color: '#000', lineWidth: 3},
+		heatmapSelector: {color: '#3F3F46', lineWidth: 2},
 		title: null, legend: {enabled: false}, credits: {enabled: false},
 		clusterize: clusterize,
 		tooltip: {
@@ -7600,14 +7912,16 @@ if (omicsValues[i].isRelevantAssociation()) {
 		series: series,
 		plotOptions: {
 			heatmap: {
-				borderColor: "#000000",
-				borderWidth: 0.5,
+				borderColor: cellGap.borderColor,
+				borderWidth: cellGap.borderWidth,
 				dataLabels: {
 					enabled: true,
 					useHTML: true,
 					formatter: function() {
 						if (this.point.isSignificant && maxX > 1) {
-							return '<i class="fa fa-star" style="color: white !important; font-size: 8px; padding: 0;"></i>';
+							return '<i class="fa fa-star" style="color: ' +
+								paInkOnCell(this.point.color) +
+								' !important; font-size: 8px; padding: 0;"></i>';
 						}
 					}
 				}
@@ -7681,9 +7995,16 @@ if (omicsValues[i].isRelevantAssociation()) {
 	}
 
 	if (limits.max !== limits.absMax && limits.min !== limits.absMin) {
+		/* These two lines mark where the COLOUR SCALE clips, not where the data
+		   ends -- a point beyond them is drawn as an outlier in the heatmap
+		   beside this chart. They were labelled 'min' and 'max', which reads as
+		   the minimum and maximum of the series, and the labels were centred on
+		   the lines themselves, so on a flat series the word sat on top of the
+		   data it was annotating. Named for what they are and nudged clear of
+		   their own line. */
 		yAxisItem.plotLines = [
-			{label: {text: 'min', align: 'right', style: {color: 'gray'}}, color: '#dedede', value: limits.min, width: 1},
-			{label: {text: 'max', align: 'right', style: {color: 'gray'}}, color: '#dedede', value: limits.max, width: 1}
+			paScaleClipLine(limits.max, "scale max", true),
+			paScaleClipLine(limits.min, "scale min", false)
 		];
 	}
 

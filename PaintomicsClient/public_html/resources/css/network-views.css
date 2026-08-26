@@ -770,7 +770,12 @@
 	background: var(--pa-surface, #fff);
 }
 .pa-hub-detail.is-open {
-	flex-basis: 264px;
+	/* 264px was sized against an omic figure of `rows * 30 + 100`. The figure
+	   is 32px taller now -- the condition names were being clipped at the old
+	   height -- and the legend gained a scale row, so the first omic no longer
+	   fitted under the card's own title and summary and was cut off at the
+	   card's edge on open. The stage gives the 36px up from a 720px canvas. */
+	flex-basis: 300px;
 	border-top: 1px solid var(--pa-border, #e0e0e0);
 }
 .pa-hub-detail-body {
@@ -849,15 +854,42 @@
 	margin: 0 0 10px;
 	padding: 6px 8px;
 }
+/* The omic's name and the scale it is painted on, on one line.
+
+   These used to be three inline-blocks in a row - legend, heatmap, plot - so
+   the ramp sat in the far left of the figure with a wide empty gutter between
+   it and the first cell, and the reader had to cross the whole heatmap to get
+   from a colour to its meaning. The legend belongs with the label, and the
+   figure below it is then two panes and no dead space. */
+.pa-hub-omic-head {
+	display: flex;
+	/* Centred, not bottom-aligned: the legend is three stacked lines (ramp,
+	   numbers, reference) and the heading is one, so flex-end hung the heading
+	   off the bottom of it. */
+	align-items: center;
+	/* Packed to the left, NOT space-between. The box spans the heatmap and the
+	   line chart, so pushing the legend to the far edge parked the colour ramp
+	   above the chart that has no colours in it. It belongs over the heatmap
+	   it describes, which is the left 320px. */
+	justify-content: flex-start;
+	gap: 20px;
+	flex-wrap: wrap;
+	margin: 0 0 4px;
+}
 .pa-hub-omic h4 {
-	margin: 0 0 2px;
+	margin: 0;
 	font-size: 12px;
 	font-weight: 600;
 }
-.pa-hub-omic .PA_step5_heatmapContainer { width: 320px; }
-.pa-hub-omic .PA_step5_plotContainer { flex: 1 1 auto; min-width: 240px; }
-.pa-hub-omic .PA_step5_heatmapContainer,
-.pa-hub-omic .PA_step5_plotContainer { display: inline-block; vertical-align: top; }
+.pa-hub-omic-head .paColorLegend { margin: 0; }
+
+.pa-hub-omic-figure {
+	display: flex;
+	align-items: flex-start;
+	gap: 12px;
+}
+.pa-hub-omic .PA_step5_heatmapContainer { flex: 0 0 320px; width: 320px; }
+.pa-hub-omic .PA_step5_plotContainer { flex: 1 1 auto; min-width: 240px; width: auto; }
 
 .pa-hub-edges {
 	margin: 0;
