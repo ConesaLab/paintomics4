@@ -283,6 +283,23 @@
         return (box && window.Ext && Ext.getCmp) ? Ext.getCmp(box.id) : null;
     }
 
+    /* The omic-name field a card would submit. A region or pairwise card holds
+       two with the same itemId -- the first is the disabled, empty twin of the
+       "already mapped" form -- so queryById returned the one the form ignores.
+       Same rule as format-panel's omicNameFieldIn. */
+    function liveNameField(component) {
+        if (!component || !component.query) return null;
+        var fields = component.query("#omicNameField");
+        if (!fields.length) return null;
+        var live = fields.filter(function (f) { return !(f.isDisabled ? f.isDisabled() : f.disabled); });
+        var pool = live.length ? live : fields;
+        for (var i = 0; i < pool.length; i++) {
+            var value = pool[i].getValue && pool[i].getValue();
+            if (value && String(value).trim()) return pool[i];
+        }
+        return pool[0];
+    }
+
     function fileInputIn(component, itemId) {
         var selector = component && component.queryById ? component.queryById(itemId) : null;
         var field = selector && selector.queryById ? selector.queryById("fileField") : null;
@@ -310,7 +327,7 @@
             if (!panel || !panel.getComponent) return false;
             var component = panel.getComponent();
             var fill = function () {
-                var nameField = component.queryById("omicNameField");
+                var nameField = liveNameField(component);
                 if (nameField && nameField.setValue) nameField.setValue(omicName);
                 var main = fileInputIn(component, "mainFileSelector");
                 if (main) setFile(main, values.bytes, values.name);
@@ -883,6 +900,72 @@
                 omicType: (context && context.omicType) || "unknown",
                 species: (context && context.species) || "unknown",
                 goal: "Convert this file into the format PaintOmics accepts, keeping every measurement it holds.",
+                /* When the SERVER is the one that refused, hand the agent what
+                   it said. Without this the agent re-reads a file the client
+                   checker already considers valid and finds nothing, because
+                   the fault is one only the server can see -- a sample name
+                   that does not line up with the design file, an identifier
+                   space that does not match the other omics. */
+                instructions: (input && input.__paServerSaid)
+                    ? ["PaintOmics refused this job when the analysis ran. It said: "
+                       + input.__paServerSaid]
+                        .concat(input.__paSiblings ? [input.__paSiblings] : [])
+                        /* The limit of what you can DO, stated separately from
+                           what you can SEE.
+                         *
+                           The sandbox receives exactly one file (files:
+                           {fileKey: bytes}), so the other files are readable
+                           context and nothing more. Without this the agent
+                           offered "use the contrast as-is and adjust the design
+                           to match it" -- an action it cannot perform -- then
+                           edited the one file it holds, reported success, and
+                           the run failed in the same place. Reported as "the AI
+                           said it fixed the problem and it fails again".
+
+                           Measured, on this job: MORE intersects sample names
+                           across target, condition and every regulator file, so
+                           renaming this file's column to match the target
+                           leaves the design disagreeing, and renaming it to
+                           match the design leaves the target disagreeing. Both
+                           give 0 common samples. No edit to ONE file can
+                           satisfy a three-way intersection. */
+                        .concat(["You can rewrite ONLY the file you were given. "
+                                 + "The other files listed above are read-only "
+                                 + "context -- you cannot edit them, and you must "
+                                 + "not offer to. If the remedy needs a different "
+                                 + "file changed, or needs data that is not in any "
+                                 + "of them, say which file and what has to change "
+                                 + "and let the user do it. A fix that only makes "
+                                 + "THIS file self-consistent, while the others "
+                                 + "still disagree, is not a fix: it will fail "
+                                 + "again in the same place."])
+                        .concat(["This file may well be valid on its own -- the "
+                                 + "format check passed it. Judge it against the "
+                                 + "other files listed above: what has to agree "
+                                 + "between them, and what does not.",
+                                 /* The guard, added after watching the agent
+                                    do exactly this: given the siblings, it
+                                    renamed a column so the two VALUES files
+                                    agreed with each other, ignored the design
+                                    file entirely, and reported success. The
+                                    job would have failed again in the same
+                                    place. Cross-file context makes a confident
+                                    wrong answer as easy as a right one, so the
+                                    authority has to be named. */
+                                 "The design/conditions file is the AUTHORITY on "
+                                 + "sample names. Never rename a column to make two "
+                                 + "values files agree with each other: rename only "
+                                 + "to a name that actually appears in the design "
+                                 + "file. If the values files hold CONTRASTS "
+                                 + "(names like A_vs_B) while the design lists "
+                                 + "individual samples, they cannot be reconciled by "
+                                 + "renaming at all. In that case ASK THE USER rather "
+                                 + "than converting: state what each file holds, why "
+                                 + "the two cannot be matched, and that this analysis "
+                                 + "needs one column per sample. Asking is a real "
+                                 + "answer here; a converted file that still will not "
+                                 + "run is not."])
+                    : undefined,
                 ask: askUser,
                 onEvent: onEvent
             }, extra || {}));
@@ -1005,6 +1088,27 @@
             var chosen = out.values.filter(function (f) { return f.recommended; })[0] || out.values[0];
             var addOthers = false;
 
+            /* The file that belongs in the slot the drawer was opened from.
+             *
+             * Everything below used to key off `out.values`, and a conversion
+             * that produces no values table has none -- so the review ended
+             * with Cancel and "Download all", and the user had to save the
+             * file to disk and pick it again through Browse. Reported on the
+             * conversion that made this obvious: a MORE Conditions file, where
+             * the agent read 24 rows of sample metadata and wrote exactly the
+             * 0/1 experimental design PaintOmics wanted, named it design.tab,
+             * and then offered no way to put it in the field the user had
+             * clicked Convert on.
+             *
+             * Same shape as the rest of this family: code that enumerates omic
+             * files knows the plain values case and forgets design,
+             * associations and relevant-associations. The slot the user
+             * started from already says which role is wanted, so match on it.
+             */
+            var slotRole = (context && context.slotRole) || "values";
+            var forSlot = chosen ? null
+                : (out.files.filter(function (f) { return f.role === slotRole; })[0] || null);
+
             out.values.forEach(function (f) {
                 var rcard = el("article", "pa-convert-result" + (f === chosen ? " pa-convert-result-chosen" : ""));
                 var rhead = el("header", "pa-convert-result-head");
@@ -1106,7 +1210,8 @@
             actions.innerHTML = "";
             actions.appendChild(dismiss);
             actions.appendChild(downloadAll);
-            if (out.values.length) actions.appendChild(accept);
+            var wantsValues = ((context && context.slotRole) || "values") === "values";
+            if ((wantsValues && out.values.length) || forSlot) actions.appendChild(accept);
 
             function syncActions() {
                 accept.textContent = addOthers
@@ -1116,6 +1221,25 @@
             syncActions();
 
             accept.addEventListener("click", function () {
+                var slotRole = (context && context.slotRole) || "values";
+                if (slotRole !== "values" && !forSlot) {
+                    // The slot asked for a design / relevant / associations
+                    // file and the conversion made none: a values table in a
+                    // conditions slot is worse than an empty one. Leave the
+                    // downloads on the review and keep the field as it was.
+                    shutdown();
+                    return;
+                }
+                if (forSlot && (!chosen || slotRole !== "values")) {
+                    // The conversion produced the file this slot asked for.
+                    // Put it straight back in the field.
+                    input.__paConverted = { from: file.name, original: file,
+                                            fieldName: fieldName, label: forSlot.label,
+                                            attempts: result.attempts || 1, relevant: false };
+                    setFile(input, forSlot.bytes, forSlot.name);
+                    shutdown();
+                    return;
+                }
                 if (!chosen) return;
                 var omicType = (context && context.omicType) || "Gene expression";
                 var linkedList = out.lists.filter(function (l) { return l.relevantFor === chosen.name; })[0];
@@ -1123,7 +1247,7 @@
 
                 if (addOthers) {
                     // Keep names unique across the job: the server keys omics by name.
-                    var nameField = component && component.queryById("omicNameField");
+                    var nameField = liveNameField(component);
                     if (nameField && nameField.setValue) nameField.setValue(omicType + " (" + chosen.label + ")");
                     out.values.filter(function (v) { return v !== chosen; }).forEach(function (v) {
                         var vList = out.lists.filter(function (l) { return l.relevantFor === v.name; })[0];
@@ -1194,16 +1318,22 @@
      * file differently from a gene-expression one and would otherwise be
      * guessing from the file alone.
      */
-    function openConvertDrawer(input, file, fieldName) {
+    function openConvertDrawer(input, file, fieldName, slotRole) {
         var prefix = String(fieldName || "").replace(/_file$/, "");
         function fieldValue(name) {
             if (!window.Ext || !Ext.ComponentQuery) return null;
             var f = Ext.ComponentQuery.query("[name=" + name + "]")[0];
             return f && f.getValue ? f.getValue() : null;
         }
+        /* The card's own live name field first: "omicN_omic_name" is the plain
+           panels' convention only, and MORE's slots (file_0, conditions,
+           rnaseqaux) and every relevant slot resolved to "unknown". */
+        var cardName = liveNameField(omicComponentOf(input));
+        var typed = cardName && cardName.getValue && cardName.getValue();
         return openDrawer(input, file, fieldName, {
-            omicType: fieldValue(prefix + "_omic_name") || "unknown",
-            species: fieldValue("specie") || "unknown"
+            omicType: (typed && String(typed).trim()) || fieldValue(prefix + "_omic_name") || "unknown",
+            species: fieldValue("specie") || "unknown",
+            slotRole: slotRole || "values"
         });
     }
 

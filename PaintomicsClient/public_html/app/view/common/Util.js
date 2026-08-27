@@ -465,7 +465,17 @@ function showMessage(title, data) {
     title = '<i class="fa fa-' + data.icon + '"></i> ' + title;
 
     message = message.replace(/\[b\]/g, "<b>").replace(/\[\/b\]/g, "</b>").replace(/\[br\]/g, "</br>").replace(/\[ul\]/g, "<ul>").replace(/\[\/ul\]/g, "</ul>").replace(/\[li\]/g, "<li>").replace(/\[\/li\]/g, "</li>");
-    extra = JSON.stringify(extra);
+    /* Only when there IS something. `extra` carries a server stack trace on the
+       dialogs that have one; the Step 1 form refusals have none, and
+       JSON.stringify("") is the two-character string `""`, which went straight
+       into the hidden body and from there into the report the user emails.
+       That is the trailing `""` on the error report of 2026-08-26:
+
+           Invalid Form. Please check the form errors. ""
+
+       -- a reader's first guess is that PaintOmics failed to name the field,
+       when in fact nothing was ever meant to be there. */
+    extra = (extra === "") ? "" : JSON.stringify(extra);
 
     // The dismiss button used to be coloured by message type: red on an error,
     // amber on a warning, cyan on an info, green on a success. It does the same
@@ -625,7 +635,13 @@ function showMessage(title, data) {
                         messageDialog.close();
                     });
                     $("#reportErrorButton").click(function () {
-                        sendReportMessage("error", $("#messageDialogTitle").text() + "\n" + $("#messageDialogBody").text() + "\n" + $("#hiddenMessageDialogBody").text());
+                        // Joined on the parts that have content, so a dialog
+                        // with no stack trace does not end in a blank line.
+                        sendReportMessage("error", [
+                            $("#messageDialogTitle").text(),
+                            $("#messageDialogBody").text(),
+                            $("#hiddenMessageDialogBody").text()
+                        ].filter(function (part) { return part !== ""; }).join("\n"));
                     });
                 }
             }

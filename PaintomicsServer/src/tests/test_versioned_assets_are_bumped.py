@@ -90,17 +90,17 @@ PUBLISHED = {
     "app/view/PathwayAcquisitionViews/InputFormat/format-repair.js": (
         "0.1", "944c929f1496258aba56f026e7c30e4affb7052dcbc127b06982eaadff205cd2"),
     "app/view/PathwayAcquisitionViews/InputFormat/format-panel.js": (
-        "1.9", "7198efa3a416c7527ab58602339f97df0e81a9f532c65b19f81c23c42dc56b2f"),
+        "3.1", "1b2fb789d33d925c7ae482b76c0ac05b1417e7984b61f71e9321dd125461780c"),
     "app/view/PathwayAcquisitionViews/InputFormat/format-roles.js": (
-        "0.2", "4c5afdf4f9c59d167756516db823cc1fa01179f3cd7b967d137c38a78c0508dd"),
+        "0.5", "02fca3cace94756275993739d36deb728b1870c21be9ec5477f853828e7a67b6"),
     "app/view/PathwayAcquisitionViews/InputFormat/convert-profiler.js": (
         "0.3", "d7f2846c58226fdfe334fefc68c8d6519cc4eae393265e15dd047e5babded4f3"),
     "app/view/PathwayAcquisitionViews/InputFormat/convert-agent.js": (
         "0.6", "d884a0d8344fccf966aab1219c9c70f9e29ca93a4a42e7ddf8f0852189f5ecdd"),
     "app/view/PathwayAcquisitionViews/InputFormat/convert-drawer.js": (
-        "0.7", "241e9a48b99f6ca40f3f9d3b5dd29f27513ca38c181fb902075a0149af9ca4b3"),
+        "1.4", "41be9f21d19a4471273310d905412abf67c98ad2f2734364d2fcdd54e1e4ca4b"),
     "app/view/common/Util.js": (
-        "2.1", "12359b8bf746394f63a7e0a15513a4f9ac82de1a25bbaa0e91e6b2fdd7e0050e"),
+        "2.2", "ddc63bd8e92a72d3604d9e6c435df3f26be92a6e5c0e4073785fef28d39ae087"),
     "app/view/common/OrganismSearch.js": (
         "1.0", "7903626835e7703bdb6a1e31b78e3ca00539eee23b8fa67a37524cd9cc4d2e7f"),
     "app/view/common/ExtJS_extensions.js": (
