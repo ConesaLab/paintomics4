@@ -7,11 +7,22 @@
 #      whitelist (scripts/ci/vulture_whitelist.py -- every row carries its
 #      reason). A finding here is a hard failure.
 #   2. >=60% confidence: this band contains live code vulture cannot see
-#      (Flask routes, methods the ExtJS client calls by name), so zero is a
-#      lie -- instead NO NEW candidates may appear beyond the committed
-#      baseline (scripts/ci/vulture_baseline.txt, line numbers stripped so
-#      unrelated edits do not shift it). Candidates disappearing is fine;
-#      refresh the baseline in the same commit that removes the code.
+#      (methods the ExtJS client calls by name), so zero is a lie -- instead
+#      NO NEW candidates may appear beyond the committed baseline
+#      (scripts/ci/vulture_baseline.txt, line numbers stripped so unrelated
+#      edits do not shift it). Candidates disappearing is fine; refresh the
+#      baseline in the same commit that removes the code.
+#
+# Flask routes are excluded by --ignore-decorators rather than by the baseline.
+# A route handler is reached through the decorator, never by name, so vulture
+# calls every one of them dead -- and the effect was that ADDING A ROUTE FAILED
+# THE GATE. Six of this gate's twelve red runs were exactly that ("you added a
+# route, edit the baseline"; 32874521989 named pathwayAcquisitionHubFeature-
+# Handler, ...HubNamesHandler, ...HubSubgraphHandler), against six that found
+# real dead code. A gate wrong half the time is one people learn to wave
+# through. Measured on this tree: the >=60% band goes 363 -> 287 rows, the 76
+# that go are route handlers, and the >=80% band stays at zero findings. The
+# real catches are undecorated methods and attributes, so they are untouched.
 #
 # Usage: scripts/ci/vulture_gate.sh   (from the repository root)
 
@@ -21,7 +32,8 @@ WHITELIST=scripts/ci/vulture_whitelist.py
 BASELINE=scripts/ci/vulture_baseline.txt
 
 echo "== vulture >=80% against the whitelist"
-if ! vulture PaintomicsServer/src "$WHITELIST" --min-confidence 80; then
+if ! vulture PaintomicsServer/src "$WHITELIST" --min-confidence 80 \
+        --ignore-decorators "@*.route,@*.errorhandler,@*.before_request,@*.after_request"; then
     echo "FAIL: new >=80% candidate. Delete it with evidence (grep the client"
     echo "for string call sites, coverage, git history) or whitelist it WITH"
     echo "a reason in $WHITELIST."
@@ -31,7 +43,8 @@ echo "   clean"
 
 echo "== vulture >=60% ratchet against $BASELINE"
 current=$(mktemp)
-vulture PaintomicsServer/src "$WHITELIST" --min-confidence 60 2>/dev/null \
+vulture PaintomicsServer/src "$WHITELIST" --min-confidence 60 \
+    --ignore-decorators "@*.route,@*.errorhandler,@*.before_request,@*.after_request" 2>/dev/null \
     | sed -E 's/:[0-9]+:/:/' | sort > "$current" || true
 
 new_lines=$(comm -13 "$BASELINE" "$current")

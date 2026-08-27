@@ -46,8 +46,24 @@ jobs:
           for script in scripts/*.sh scripts/ci/*.sh deploy/*.sh; do
             bash -n "$script" || exit 1
           done
-      - name: Byte-compile the server
-        run: python -m compileall -q PaintomicsServer/src scripts
+      # The client is the largest unguarded surface in the repository: ruff.toml
+      # excludes PaintomicsClient, and no workflow mentions node or eslint, so
+      # a .js file that no longer parses reached the browser. `node --check` on
+      # the first-party files only -- the bundled ExtJS and vendor trees are not
+      # ours to police. Measured: 80 files, 3.2 s, 0 failures today, against a
+      # Lint job whose worst run is 40 s of a 300 s cap.
+      - name: Client JavaScript parses
+        run: |
+          find PaintomicsClient -name '*.js' \
+            | grep -vEi '/(lib|libs|vendor|ext-[0-9]|extjs|jquery|node_modules)/' \
+            | xargs -n1 node --check
+      # "Byte-compile the server" stood here. ruff selects E9 and parses every
+      # file compileall did except one -- scripts/ci/vulture_whitelist.py, which
+      # ruff.toml excludes because its bare names read as F821 -- so the step
+      # was one file away from being pure duplication. That one file is checked
+      # here instead, and the duplicate pass over the other 467 is gone.
+      - name: The one file ruff does not parse
+        run: python -m compileall -q scripts/ci/vulture_whitelist.py
 
   unit-tests:
     # Two shards: the single job crept from 7 to 10 minutes as suites were

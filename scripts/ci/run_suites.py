@@ -55,6 +55,68 @@ def run_suite(name, timeout):
             "tail": "\n".join(out.strip().splitlines()[-TAIL_LINES:])}
 
 
+SUITE_TIMES = os.path.join(HERE, "suite_times.txt")
+
+
+def recorded_times():
+    """What each suite cost last time anybody measured, or {} if unknown."""
+    times = {}
+    try:
+        with open(SUITE_TIMES) as handle:
+            for line in handle:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                name, _, secs = line.partition("\t")
+                try:
+                    times[name] = float(secs)
+                except ValueError:
+                    continue
+    except OSError:
+        return {}
+    return times
+
+
+def split(names, index, count):
+    """The `index`-th of `count` shards, balanced by what the suites cost.
+
+    This used to be `position % count` over the alphabetical list, which is
+    arbitrary with respect to cost. The top six suites are 52% of the budget,
+    so which shard carries them was decided by how the files are spelled --
+    and adding or renaming ONE file re-deals every suite in the repository.
+    Measured: parity gives 264 s / 198 s where this gives 231 s / 231 s, and in
+    CI the same lottery has produced 395 s against 81 s (run 32859901451) and a
+    601 s shard against a 600 s cap (run 33010348812).
+
+    Longest-processing-time first: hand each suite, costliest first, to
+    whichever shard is currently lightest. Deterministic -- ties break on the
+    name -- so every runner in the matrix computes the same partition without
+    talking to the others. A suite with no recorded time is charged the median,
+    so a new one is never assumed free, and with no times file at all this
+    falls back to the old parity split rather than failing.
+    """
+    times = recorded_times()
+    if not times:
+        return [name for position, name in enumerate(names)
+                if position % count == index - 1]
+
+    known = sorted(times.values())
+    median = known[len(known) // 2]
+    cost = lambda name: times.get(name, median)  # noqa: E731
+
+    load = [0.0] * count
+    shards = [[] for _ in range(count)]
+    for name in sorted(names, key=lambda n: (-cost(n), n)):
+        lightest = load.index(min(load))
+        shards[lightest].append(name)
+        load[lightest] += cost(name)
+
+    print("shard %d/%d: %d suites, ~%.0f s of %.0f s (worst shard ~%.0f s)"
+          % (index, count, len(shards[index - 1]), load[index - 1],
+             sum(load), max(load)))
+    return sorted(shards[index - 1])
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--jobs", type=int, default=max(1, (os.cpu_count() or 2) - 1))
@@ -63,8 +125,10 @@ def main(argv=None):
     parser.add_argument("--slowest", type=int, default=15,
                         help="how many of the slowest suites to list")
     parser.add_argument("--shard", default="",
-                        help="I/N: run only every N-th suite starting at I (1-based), "
-                             "so the sweep can be spread over N runners")
+                        help="I/N: run the I-th of N shards (1-based), balanced by "
+                             "the costs in suite_times.txt, so the sweep can be "
+                             "spread over N runners without one carrying the "
+                             "slow suites by accident")
     args = parser.parse_args(argv)
 
     names = sorted(os.path.basename(path)[:-3]
@@ -73,8 +137,7 @@ def main(argv=None):
         names = [name for name in names if args.only in name]
     if args.shard:
         index, count = (int(part) for part in args.shard.split("/"))
-        names = [name for position, name in enumerate(names) if position % count == index - 1]
-        print("shard %d/%d: %d suites" % (index, count, len(names)))
+        names = split(names, index, count)
     if not names:
         print("no suite matched", file=sys.stderr)
         return 2
