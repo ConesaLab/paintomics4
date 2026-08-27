@@ -9189,7 +9189,12 @@ div.repDetectionCard h3 {
 .paClassMapKeys { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center;
                   margin: 12px 0 4px; padding: 0; list-style: none;
                   color: #44556A; font-size: 12px; }
-.paClassMapKeys li { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+.paClassMapKeys li { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap;
+                     /* No own indent: the ul carries the chart's padL, and an
+                        inherited 4px here put the first swatch 4px right of
+                        the axis line it is meant to sit under (measured with
+                        the guides: li at 337, swatch at 341, axis at 337). */
+                     padding-left: 0; }
 /* Colour keys say what a mark is made of; shape keys say what it scored. The
    extra space is the only thing separating the two ideas. */
 .paClassMapKeys li.paKeyBreak { margin-left: 12px; padding-left: 24px;

@@ -82,7 +82,7 @@ DOUBLE_FILED = ["C00246", "C01585"]
 SINGLE_FILED = ["C00158"]
 
 
-class BackgroundCountsDistinctCompounds(unittest.TestCase):
+class BackgroundCountsDistinctCompoundsTest(unittest.TestCase):
 
     def test_a_compound_in_two_classes_is_counted_once(self):
         ids = DOUBLE_FILED + SINGLE_FILED
@@ -110,7 +110,7 @@ class BackgroundCountsDistinctCompounds(unittest.TestCase):
         self.assertEqual(job.classificationMeta["nullProportion"], [1.0])
 
 
-class AdjustedPValuesKeepTheirPrecision(unittest.TestCase):
+class AdjustedPValuesKeepTheirPrecisionTest(unittest.TestCase):
 
     def test_a_strong_class_does_not_round_to_zero(self):
         # 25 relevant compounds against a null of 0.05 gives an adjusted p far
@@ -138,7 +138,7 @@ class AdjustedPValuesKeepTheirPrecision(unittest.TestCase):
                         "expected the fixture to land below the old rounding floor")
 
 
-class ClassesReportTheirParentAndNull(unittest.TestCase):
+class ClassesReportTheirParentAndNullTest(unittest.TestCase):
 
     def test_every_tested_class_names_its_brite_parent(self):
         # C00037 is filed under both "Amino acids" (Peptides) and
