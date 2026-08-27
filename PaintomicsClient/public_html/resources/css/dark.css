@@ -1958,7 +1958,6 @@
 :root[data-theme="dark"] .paClassMapLabel { fill: #E3EAF2; }
 :root[data-theme="dark"] .paClassMapCount { fill: #A1B0C0; }
 :root[data-theme="dark"] .paClassMapSummary,
-:root[data-theme="dark"] .paClassMapLegend { color: #A1B0C0; }
 :root[data-theme="dark"] .paClassMapWarn { color: #C9524D; }
 :root[data-theme="dark"] .paClassMapMuted { color: #6F7F8E; }
 :root[data-theme="dark"] .paKeyUp { background: #4A8CD2; }

@@ -274,7 +274,7 @@ function PA_Step2JobView() {
 							return true;
 						}
 						var proportion = Number(value);
-						if (isNaN(proportion) || proportion <= 0 || proportion > 1) {
+						if (isNaN(proportion) || proportion <= 0 || proportion >= 1) {
 							return '"' + value + '" is not a proportion between 0 and 1. '
 								+ 'Enter a value such as 0.30, or choose "Generate automatically".';
 						}

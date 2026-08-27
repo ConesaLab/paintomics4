@@ -110,6 +110,28 @@ class BackgroundCountsDistinctCompoundsTest(unittest.TestCase):
         self.assertEqual(job.classificationMeta["nullProportion"], [1.0])
 
 
+class OneFeatureUnderTwoIdsCountsOnceTest(unittest.TestCase):
+
+    def test_two_ids_for_one_name_are_one_trial(self):
+        """Alanine ticked as C00041 and C01401 (both Amino acids) is one
+        measurement, not two independent trials of the same outcome."""
+        from scipy.stats import binomtest
+        compounds = {
+            "C00041": _Compound(True, [1.0], "Alanine"),
+            "C01401": _Compound(True, [1.0], "Alanine"),
+            "C00037": _Compound(True, [1.0], "Glycine"),
+            "C00049": _Compound(False, [1.0], "Aspartate"),
+        }
+        job = _job(compounds)
+        _, pValueInDict, _, _, _, totalRelevant, featureSummary, _ = _run(job, threshold="0.5")
+        # three features (Alanine, Glycine, Aspartate), two relevant
+        self.assertEqual(featureSummary[0], 3)
+        self.assertEqual(featureSummary[1], [2])
+        self.assertEqual(totalRelevant[0]["Amino acids"], 2)
+        self.assertAlmostEqual(pValueInDict[0]["Amino acids"],
+                               binomtest(2, 3, 0.5, alternative="greater").pvalue, delta=1e-12)
+
+
 class AdjustedPValuesKeepTheirPrecisionTest(unittest.TestCase):
 
     def test_a_strong_class_does_not_round_to_zero(self):
@@ -136,6 +158,54 @@ class AdjustedPValuesKeepTheirPrecisionTest(unittest.TestCase):
                            "an adjusted p rounded to 0.0 makes -log10(FDR) infinite")
         self.assertLess(adjusted, 1e-4,
                         "expected the fixture to land below the old rounding floor")
+        # Pinned to an independent computation, not just to "small": the raw
+        # p is the exact binomial of 25 of 25 at p0 = 0.05, and the adjusted
+        # one is BH over the classes these 25 compounds populate (several of
+        # them are filed under more than one BRITE class).
+        from scipy.stats import binomtest
+        from statsmodels.stats.multitest import multipletests
+        _, pValueInDict, _, _, _, _, _, _ = _run(job, threshold="0.05")
+        raw = pValueInDict[0]
+        self.assertAlmostEqual(raw["Amino acids"],
+                               binomtest(25, 25, 0.05, alternative="greater").pvalue,
+                               delta=1e-40)
+        names = sorted(raw)
+        expected = dict(zip(names, multipletests([raw[n] for n in names], method="fdr_bh")[1]))
+        self.assertAlmostEqual(adjusted, expected["Amino acids"], delta=expected["Amino acids"] * 1e-9)
+
+    def test_several_classes_are_adjusted_the_way_statsmodels_does(self):
+        """BH over the classes the job populates, per condition."""
+        import json as _json
+        from scipy.stats import binomtest
+        from statsmodels.stats.multitest import multipletests
+        with open(os.path.join(SERVER_ROOT, "src", "common", "br08001.json")) as handle:
+            tree = _json.load(handle)
+        byClass = {}
+        for level1 in tree["children"]:
+            for level2 in level1["children"]:
+                ids = []
+                for level3 in level2["children"]:
+                    for leaf in level3["children"]:
+                        ids.append(leaf["name"].split()[0])
+                byClass[level2["name"]] = sorted(set(ids))
+        # three classes, different relevance: 4/5, 1/5, 0/5
+        picks = {"Amino acids": 4, "Nucleosides": 1, "Vitamins": 0}
+        compounds = {}
+        for name, relevantCount in picks.items():
+            for index, cid in enumerate(byClass[name][:5]):
+                compounds[cid] = _Compound(index < relevantCount, [1.0], cid)
+        job = _job(compounds)
+        _, pValueInDict, classificationDict, _, adjustPvalue, _, featureSummary, _ = _run(job, threshold="0.2")
+        raw = pValueInDict[0]
+        names = sorted(raw)
+        expectedRaw = {name: binomtest(
+            sum(1 for cid in classificationDict[name] if compounds[cid].omicsValues[0].relevant),
+            len(classificationDict[name]), 0.2, alternative="greater").pvalue for name in names}
+        for name in names:
+            self.assertAlmostEqual(raw[name], expectedRaw[name], delta=1e-12, msg=name)
+        expectedBH = dict(zip(names, multipletests([raw[n] for n in names], method="fdr_bh")[1]))
+        for name in names:
+            self.assertAlmostEqual(adjustPvalue[0]["FDR BH"][name], expectedBH[name], delta=1e-12, msg=name)
 
 
 class ClassesReportTheirParentAndNullTest(unittest.TestCase):

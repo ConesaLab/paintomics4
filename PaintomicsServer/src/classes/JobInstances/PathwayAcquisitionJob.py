@@ -2476,7 +2476,20 @@ class PathwayAcquisitionJob(Job):
         # counted each of those twice. This denominator is the null proportion
         # p0 under "generate automatically", so the inflation went straight
         # into every class's p-value.
-        totalFeatures = len({compoundID
+        # A trial is a MEASURED feature, not a KEGG id. One name ticked under
+        # two ids in step 2 (Alanine -> C00041 and C01401, both "Amino acids")
+        # is one measurement carried twice, with perfectly correlated
+        # relevance: counted as two it adds 2 to n and 2 to k and halves the
+        # p-value for nothing (3/4 at p0 = .5 is .312; the same data as 6/8
+        # is .145). Ids are collapsed on the feature they came from.
+        def featureKeyOf(compoundID):
+            comp = self.inputCompoundsData.get(compoundID)
+            omicValue = comp.omicsValues[0] if comp and comp.omicsValues else None
+            return (getattr(omicValue, "originalName", None)
+                    or getattr(omicValue, "inputName", None)
+                    or compoundID)
+
+        totalFeatures = len({featureKeyOf(compoundID)
                              for compoundIDs in classificationDict.values()
                              for compoundID in compoundIDs})
         totalFeaturesInCategory = defaultdict(int)
@@ -2504,8 +2517,11 @@ class PathwayAcquisitionJob(Job):
         pValueInDict_cond = [{} for _ in range(nConditions)]
 
         for key, items in classificationDict.items():
-            totalFeaturesInCategory[key] = len(items)
+            featuresInClass = set()
+            relevantInClass = [set() for _ in range(nConditions)]
             for item in items:
+                featureKey = featureKeyOf(item)
+                featuresInClass.add(featureKey)
                 comp = self.inputCompoundsData.get(item)
                 if comp and comp.omicsValues:
                     rel = comp.omicsValues[0].relevant
@@ -2513,8 +2529,12 @@ class PathwayAcquisitionJob(Job):
                         rel = [rel]
                     for c in range(min(nConditions, len(rel))):
                         if rel[c]:
-                            totalRelevantFeaturesInCategory_cond[c][key] += 1
-                            relevantCompoundIDs_cond[c].add(item)
+                            relevantInClass[c].add(featureKey)
+                            relevantCompoundIDs_cond[c].add(featureKey)
+            totalFeaturesInCategory[key] = len(featuresInClass)
+            for c in range(nConditions):
+                if relevantInClass[c]:
+                    totalRelevantFeaturesInCategory_cond[c][key] = len(relevantInClass[c])
 
         totalRelevantFeatures_cond = [len(compoundIDs) for compoundIDs in relevantCompoundIDs_cond]
 
@@ -2526,7 +2546,11 @@ class PathwayAcquisitionJob(Job):
             except:
                 threshold = None
 
-        usingUserThreshold = bool(threshold and 0 < threshold <= 1)
+        # Strictly below 1: at p0 = 1 every class scores p = 1.0 and the
+        # analysis says nothing; the step-2 combo dropped 1.0 for that reason
+        # and a typed "1" used to get through. Anything else falls back to
+        # the derived null, and the caption says which ran.
+        usingUserThreshold = bool(threshold and 0 < threshold < 1)
         nullProportion_cond = []
 
         for c in range(nConditions):

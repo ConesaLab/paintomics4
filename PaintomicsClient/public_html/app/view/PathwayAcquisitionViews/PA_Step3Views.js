@@ -5825,7 +5825,7 @@ function PA_Step3MetaboliteView() {
 	   them is the difference between "p0 = 0.741" and a number a reader can
 	   check. */
 	let classifiableTotal = 0;
-	let classifiableRelevant = 0;
+	let classifiableRelevant = [];   // per condition, like nullProportion
 	let me = this;
 
 
@@ -5917,7 +5917,7 @@ function PA_Step3MetaboliteView() {
 		classifiableTotal = Array.isArray(featureSummary) ? (featureSummary[0] || 0) : 0;
 		var relevantTotals = (Array.isArray(featureSummary) && Array.isArray(featureSummary[1]))
 			? featureSummary[1] : [];
-		classifiableRelevant = relevantTotals[0] || 0;
+		classifiableRelevant = relevantTotals;
 		classificationDictRef = classificationDict || {};
 		classMapCondition = 0;
 
@@ -6080,9 +6080,6 @@ function PA_Step3MetaboliteView() {
 		var rows = [];
 		var meta = classMapMeta || {};
 		var parents = meta.parents || {};
-		var nullList = meta.nullProportion || [];
-		var p0 = (typeof nullList[conditionIndex] === "number") ? nullList[conditionIndex] : null;
-
 		for (var className in classificationDictRef) {
 			var compoundIDs = classificationDictRef[className] || [];
 			var n = compoundIDs.length;
@@ -6484,7 +6481,10 @@ function PA_Step3MetaboliteView() {
 			var userSet = (meta.thresholdSource === "user");
 			var background = "";
 			if (!userSet && classifiableTotal) {
-				background = ' &mdash; ' + classifiableRelevant + ' of the ' + classifiableTotal
+				/* [classMapCondition], like p0 on the same line: with the
+				   numerator pinned to condition 0 the sentence contradicted
+				   the number beside it for every other condition. */
+				background = ' &mdash; ' + (classifiableRelevant[classMapCondition] || 0) + ' of the ' + classifiableTotal
 					+ ' compounds KEGG BRITE can classify in this job are relevant,'
 					+ ' and that is the bar every class is measured against';
 			}
@@ -6542,13 +6542,27 @@ function PA_Step3MetaboliteView() {
 								   listener cannot throw. */
 								if (!me._classMapResizeBound) {
 									me._classMapResizeBound = true;
-									window.addEventListener('resize', function () {
+									me._classMapResizeHandler = function () {
 										clearTimeout(me._classMapResizeTimer);
 										me._classMapResizeTimer = setTimeout(function () {
 											me.drawClassMap();
 										}, 200);
-									});
+									};
+									window.addEventListener('resize', me._classMapResizeHandler);
 								}
+							},
+							/* Unbound with the box. clearSubViews() destroys the
+							   component but the closure kept the view alive, so
+							   every job ever opened in the tab redrew ITS rows
+							   into the new #classActivityMap on each resize
+							   before the live handler overwrote them. */
+							beforedestroy: function () {
+								if (me._classMapResizeHandler) {
+									window.removeEventListener('resize', me._classMapResizeHandler);
+									me._classMapResizeHandler = null;
+									me._classMapResizeBound = false;
+								}
+								clearTimeout(me._classMapResizeTimer);
 							}
 						}
 					},
