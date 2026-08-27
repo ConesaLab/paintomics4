@@ -2589,6 +2589,28 @@ body > .x-mask {
 }
 #messageDialog .button{float: none;}
 
+/* The dialog's button row. It was a centred inline run of floated buttons,
+   which wrapped into a ragged 2x2 block the moment a third action was added:
+   format-panel.js puts the AI offer on a file error, and it landed on its own
+   line under "Report error", aligned to nothing. A flex row keeps every action
+   on one line while there is room and wraps them evenly when there is not, and
+   DOM order is display order, so the offer can go first. */
+#messageDialog .messageDialogActions {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	align-items: center;
+	gap: 8px;
+	margin-top: 14px;
+}
+#messageDialog .messageDialogActions .button {
+	margin: 0;
+}
+#messageDialog .messageDialogActions .po-ai-mark {
+	margin-right: 4px;
+	vertical-align: -0.15em;
+}
+
 /** SIGMA TOOLTIP OPTIONS **/
 .sigma-tooltip {
 	width: 200px;

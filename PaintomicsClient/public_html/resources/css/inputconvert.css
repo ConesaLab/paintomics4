@@ -1012,3 +1012,8 @@
     top: 0;
     border: 0;
 }
+
+/* The job-level review: one card per omic, titled by the omic first, then
+   the file it started from and the file that replaces it. */
+.pa-convert-target-omic { color: var(--cv-omic, var(--pa-accent-blue, #19589E)); }
+.pa-convert-target-arrow { color: var(--pa-ink-muted, #595959); font-weight: 400; }

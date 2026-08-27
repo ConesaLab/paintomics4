@@ -241,12 +241,69 @@
                 failures.push("No values matrix was produced and the manifest does not explain why.");
             }
         }
+        if (context && context.harmonise) {
+            failures = failures.concat(harmoniseFailures(context.harmonise, manifest, reports, values));
+        }
         return {
             ok: failures.length === 0,
             reports: reports,
             manifest: manifest,
             summary: failures.length ? failures.join("\n") : "All output files pass validation."
         };
+    }
+
+    /*
+     * The extra contract when several values files are converted TOGETHER so
+     * that a job's omics agree (see MAKING THE OMICS AGREE in prompts.py).
+     *
+     * The single-file grader cannot see the fault the run was refused for --
+     * every file passes on its own, they disagree with each other -- so the
+     * exit condition has to be stated here, deterministically, or the loop
+     * ends on the model's opinion that it is done: every input is answered by
+     * one values output (manifest "for": <input path>), and every values
+     * output has the same number of columns. That second rule is exactly
+     * PathwayAcquisitionJob.validateInput's, which is the check that refused
+     * the job in the first place.
+     *
+     * `harmonise.inputs` is [{path, omic}] as the sandbox saw them.
+     */
+    function harmoniseFailures(harmonise, manifest, reports, values) {
+        var failures = [];
+        var inputs = (harmonise && harmonise.inputs) || [];
+        var entries = (manifest && Array.isArray(manifest.files)) ? manifest.files : [];
+        var byInput = {};
+        entries.forEach(function (f) {
+            if (!f || !f.name || !f["for"]) return;
+            if ((reports[f.name] || {}).role !== "values") return;
+            byInput[String(f["for"])] = f.name;
+        });
+        inputs.forEach(function (input) {
+            var path = String(input.path || "");
+            var name = byInput[path] || byInput[path.replace(/^.*\//, "")];
+            if (!name) {
+                failures.push("No values file is declared for the input " + path +
+                    (input.omic ? " (" + input.omic + ")" : "") +
+                    ": every input needs one manifest entry with \"for\": \"" + path +
+                    "\" (write it back unchanged, with \"unchanged\": true, if it already has the right shape).");
+            }
+        });
+        var widths = {};
+        values.forEach(function (name) {
+            var cols = ((reports[name] || {}).summary || {}).nCols;
+            if (typeof cols !== "number") return;
+            (widths[cols] = widths[cols] || []).push(name);
+        });
+        var distinct = Object.keys(widths);
+        if (distinct.length > 1) {
+            failures.push("The values files still disagree on their number of columns: " +
+                distinct.map(function (w) {
+                    return widths[w].join(", ") + " (" + w + " columns, " + (Number(w) - 1) + " condition" +
+                           (Number(w) - 1 === 1 ? "" : "s") + ")";
+                }).join("; ") +
+                ". PaintOmics needs every omic to have the same number of condition columns; " +
+                "reduce the wider ones to the narrowest shape.");
+        }
+        return failures;
     }
 
     /*
@@ -301,7 +358,48 @@
         var history = [];
 
         var profile = options.profile || null;
-        if (!profile) {
+        /*
+         * Several inputs at once -- the values files of one job that disagree
+         * with each other. Each is profiled on its own (the profiler reads the
+         * first file it finds in /work, so it is run once per file with only
+         * that file mounted) and the model is handed the list; there is no
+         * single profile. `options.inputs` is [{key, path, omic, fileName,
+         * role, conditions}], keyed like `files`.
+         */
+        var inputs = Array.isArray(options.inputs) && options.inputs.length ? options.inputs : null;
+        var harmonise = inputs ? { inputs: inputs.map(function (i) {
+            return { path: i.path, omic: i.omic, fileName: i.fileName };
+        }) } : null;
+        if (inputs && !options.inputProfiles) {
+            step(onEvent, "profiling", "Reading your " + inputs.length + " files",
+                 "Working out each file's structure. Measurements stay on this computer; only " +
+                 "column names, counts and a few example rows describe the files.",
+                 1, maxAttempts);
+            var described = [];
+            for (var n = 0; n < inputs.length; n++) {
+                var one = {};
+                one[inputs[n].key] = files[inputs[n].key];
+                var oneRun = await sandbox.run(api.PROFILE_CODE, one);
+                var oneProfile = null;
+                if (oneRun.ok) {
+                    try { oneProfile = JSON.parse(oneRun.stdout.trim().split("\n").pop()); }
+                    catch (e) { oneProfile = null; }
+                }
+                if (!oneProfile) {
+                    emit(onEvent, { type: "failed", reason: "profile", traceback: oneRun.traceback || "The profiler returned no description." });
+                    return { ok: false, stage: "profile", traceback: oneRun.traceback || oneRun.stdout, history: history };
+                }
+                described.push(Object.assign({}, inputs[n], { profile: oneProfile }));
+                emit(onEvent, { type: "profile", profile: oneProfile, input: inputs[n] });
+            }
+            options.inputProfiles = described;
+            step(onEvent, "profiling", "Structure found", described.map(function (d) {
+                var t = (d.profile.tables || [])[0] || {};
+                var rows = t.exact ? t.exact.data_rows : t.sampled_rows;
+                return (d.omic || d.fileName) + ": " + rows + " rows × " + t.n_columns + " columns";
+            }).join(" · "), 1, maxAttempts);
+        }
+        if (!profile && !inputs) {
             step(onEvent, "profiling", "Reading your file",
                  "Working out its structure. Measurements stay on this computer; only " +
                  "column names, counts and a few example rows describe the file.",
@@ -341,6 +439,12 @@
             inputPath: options.inputPath || ("/work/" + (options.fileName || "input")),
             sampleRows: sample ? SAMPLE_ROWS : null,
             profile: profile,
+            // The list the server's build_user_message renders as "## Inputs";
+            // `key` is the sandbox's business and stays here.
+            inputs: inputs ? (options.inputProfiles || []).map(function (d) {
+                return { path: d.path, omic: d.omic, fileName: d.fileName, role: d.role || "values",
+                         conditions: d.conditions, profile: d.profile };
+            }) : undefined,
             history: history,
             answers: options.answers || {},
             instructions: options.instructions || [],
@@ -432,7 +536,7 @@
             step(onEvent, "validating", "Checking the result",
                  "Against the exact format PaintOmics accepts.", attempt, maxAttempts);
 
-            var grade = gradeOutputs(run.outputs, api, { answers: state.answers, instructions: state.instructions });
+            var grade = gradeOutputs(run.outputs, api, { answers: state.answers, instructions: state.instructions, harmonise: harmonise });
             history.push({ attempt: attempt, code: action.python, stdout: run.stdout,
                            valid: grade.ok, validation: grade.summary });
             state.history = history;
@@ -460,7 +564,7 @@
                     state.history = history;
                     continue;
                 }
-                var fullGrade = gradeOutputs(full.outputs, api, { answers: state.answers, instructions: state.instructions });
+                var fullGrade = gradeOutputs(full.outputs, api, { answers: state.answers, instructions: state.instructions, harmonise: harmonise });
                 history.push({ attempt: attempt, code: action.python, full: true,
                                stdout: full.stdout, valid: fullGrade.ok,
                                validation: fullGrade.summary });
@@ -484,7 +588,7 @@
             return { ok: true, attempts: attempt, outputs: run.outputs,
                      reports: grade.reports, manifest: grade.manifest,
                      code: action.python, stdout: run.stdout, history: history,
-                     profile: profile, answers: state.answers,
+                     profile: profile, inputProfiles: options.inputProfiles || null, answers: state.answers,
                      instructions: state.instructions };
         }
 
@@ -495,7 +599,7 @@
             reports: best ? best.reports : null,
             manifest: best ? best.manifest : null,
             code: best ? best.code : null,
-            history: history, profile: profile, answers: state.answers,
+            history: history, profile: profile, inputProfiles: options.inputProfiles || null, answers: state.answers,
             instructions: state.instructions
         };
     }

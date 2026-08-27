@@ -137,10 +137,45 @@ class RunFailureReachesTheAgentTest(unittest.TestCase):
         self.assertIn('.toLowerCase() + ":"', matcher,
                       "a bare omic name is not evidence that a file failed")
 
-    def test_both_offers_are_made_and_they_differ(self):
-        """Re-checking repairs mechanically; the agent can be told what broke."""
-        self.assertIn("Check this file again", self.panel_code)
+    def test_one_offer_the_agent_and_not_a_mechanical_re_check(self):
+        """"Check this file again" is gone from the dialog.
+
+        It re-ran the mechanical repair, and from the dialog that could never
+        help: a file with a repairable fault is stopped BEFORE submit, so the
+        dialog is only reached past it by "Submit anyway" -- when the user has
+        already declined the repair. Two green buttons for the same file read
+        as a duplicate, and were reported as one (2026-08-27 screenshot)."""
+        self.assertNotIn("Check this file again", self.panel_code)
         self.assertIn("Ask the PaintOmics AI agent", self.panel_code)
+
+    # -- a refusal about the JOB opens the agent on the whole job ----------
+
+    def test_a_width_disagreement_routes_to_the_job_level_agent(self):
+        """The 2026-08-27 guest report: Proteomics id+FC beside Metabolomics
+        id+14 samples, each file valid, refused together. Handed either file
+        alone the agent rightly finds nothing to fix, so the dialog's offer
+        for that class hands over EVERY values file of the run."""
+        hook = self.panel_code[self.panel_code.index("function attachDialogFix"):]
+        self.assertIn("same number of conditions|expected", hook)
+        self.assertIn("widthDisagreement()", hook)
+        self.assertIn("requestHarmonise(widths, serverSaid)", hook)
+        # And the per-file route is still there for every other failure.
+        self.assertIn("siblingSummaries(picked.input)", hook)
+
+    def test_the_job_level_route_reaches_the_drawer(self):
+        self.assertIn("function requestHarmonise", self.panel_code)
+        self.assertIn("openHarmoniseDrawer", self.panel_code)
+        self.assertIn("function openHarmoniseDrawer", self.drawer_code)
+        self.assertIn("openHarmoniseDrawer: openHarmoniseDrawer", self.drawer_code)
+
+    def test_in_the_job_level_mode_every_file_is_in_the_sandbox(self):
+        """The single-file brief ("rewrite ONLY the file you were given") is
+        true of the single-file mode and false of this one, so the drawer
+        must not send it here: every target's bytes go in, and the agent
+        loop is told which input is which."""
+        self.assertIn("files: harmonise ? allBytes()", self.drawer_code)
+        self.assertIn("inputs: harmonise ? harmoniseInputs()", self.drawer_code)
+        self.assertIn("instructions: harmonise ? harmoniseInstructions()", self.drawer_code)
 
     # -- the agent is given the job, not one file --------------------------
 

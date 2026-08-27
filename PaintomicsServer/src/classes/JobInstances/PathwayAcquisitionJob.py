@@ -495,6 +495,9 @@ class PathwayAcquisitionJob(Job):
         error = ""
 
         nConditions = -1
+        # Which omic fixed nConditions for the whole job. A file that disagrees
+        # with it is told so by name -- see _conditionsDisagreement.
+        self._conditionsFixedBy = None
 
         # Establish nConditions from the first available data file
         all_omics = self.geneBasedInputOmics + self.compoundBasedInputOmics
@@ -519,6 +522,7 @@ class PathwayAcquisitionJob(Job):
                                 try:
                                     float(line[1])
                                     nConditions = len(line)
+                                    self._rememberConditionsFixedBy(inputOmic, nConditions)
                                     break
                                 except ValueError:
                                     continue
@@ -539,6 +543,49 @@ class PathwayAcquisitionJob(Job):
                 "[b]Errors detected in input files, please fix the following issues and try again:[/b][br]" + error)
 
         return True
+
+    def _rememberConditionsFixedBy(self, inputOmic, nConditions):
+        """Record the omic whose values file set the job-wide condition count."""
+        self._conditionsFixedBy = {
+            "omicName": inputOmic.get("omicName") or "the first omic",
+            "file": inputOmic.get("inputDataFile") or "",
+            "nConditions": nConditions,
+        }
+
+    @staticmethod
+    def _conditionCount(nColumns):
+        """'1 condition column' / '14 condition columns' from a line width."""
+        conditions = max(0, int(nColumns) - 1)
+        return "%d condition column%s" % (conditions, "" if conditions == 1 else "s")
+
+    def _conditionsDisagreement(self, inputOmic, fileWidth):
+        """The one sentence a uniformly-wider (or narrower) omic is refused with.
+
+        PaintOmics paints every omic on ONE set of conditions, so validateInput
+        fixes nConditions from the first values file it reads and every other
+        omic must match it. A job whose omics are individually well-formed but
+        of different widths -- one fold-change column beside twelve samples and
+        two means, the shape of the 2026-08-27 guest report -- used to be
+        refused with ten copies of "Line N: Expected 2 columns but found 15",
+        which names neither the rule nor the omic the 2 came from. The reader
+        was left to guess which file was "wrong", when neither is: they
+        disagree with each other.
+
+        Returns None when the disagreement is not with ANOTHER omic (the width
+        was fixed by this very file, so the file is ragged and the per-line
+        report is the right one), or when nothing fixed it at all.
+        """
+        fixedBy = getattr(self, "_conditionsFixedBy", None)
+        if not fixedBy or fixedBy.get("file") == inputOmic.get("inputDataFile"):
+            return None
+        return ("Every omic in one run must have the same number of conditions: "
+                "[b]" + str(fixedBy["omicName"]) + "[/b] (" + str(fixedBy["file"]) + ") has "
+                + self._conditionCount(fixedBy["nConditions"]) + ", but [b]"
+                + str(inputOmic.get("omicName") or "this omic") + "[/b] ("
+                + str(inputOmic.get("inputDataFile") or "") + ") has "
+                + self._conditionCount(fileWidth) + ". Bring them to the same "
+                "conditions -- for instance one fold change per contrast in both -- "
+                "or run them as separate analyses.\n")
 
     def validateFile(self, inputOmic, nConditions, error):
         """
@@ -698,6 +745,11 @@ class PathwayAcquisitionJob(Job):
             with open(valuesFileName, newline='', encoding='utf-8-sig' ) as inputDataFile:
                 nLine = -1
                 erroneousLines = {}
+                # The width faults on their own, and every width this file's
+                # data lines had, so that a file that is uniformly a different
+                # width from the job can be told apart from a ragged one.
+                widthFaults = {}
+                widthsSeen = set()
                 for line in csv_reader(inputDataFile, delimiter=values_delimiter):
                     nLine = nLine + 1
                     # TODO: HACER ALGO CON EL HEADER?
@@ -715,6 +767,7 @@ class PathwayAcquisitionJob(Job):
                             erroneousLines[nLine] = "Expected at least 2 columns, but found one."
                             break
                         nConditions = len(line)
+                        self._rememberConditionsFixedBy(inputOmic, nConditions)
 
                     # *************************************************************************
                     # STEP 2.2 CHECK IF IT EXCEEDS THE MAX NUMBER OF FEATURES ALLOWED
@@ -728,9 +781,12 @@ class PathwayAcquisitionJob(Job):
                     # **************************************************************************************
                     # STEP 2.3 IF LINE LENGTH DOES NOT MATCH WITH EXPECTED NUMBER OF CONDITIONS, ADD ERROR
                     # **************************************************************************************
+                    if len(line) > 0:
+                        widthsSeen.add(len(line))
                     if nConditions != len(line) and len(line) > 0:
-                        erroneousLines[nLine] = "Expected " + str(nConditions) + " columns but found " + str(
+                        widthFaults[nLine] = "Expected " + str(nConditions) + " columns but found " + str(
                             len(line)) + ";"
+                        erroneousLines[nLine] = widthFaults[nLine]
 
                     # **************************************************************************************
                     # STEP 2.4 IF CONTAINS NOT VALID VALUES, ADD ERROR
@@ -749,6 +805,23 @@ class PathwayAcquisitionJob(Job):
                         break
 
             inputDataFile.close()
+
+            # A file whose every line (of the ten read before the cap) is the
+            # SAME width, and that width is not the job's, is not a broken
+            # file: it is a well-formed omic that disagrees with another one.
+            # Say that once, by name, instead of ten times by line number. A
+            # file whose widths vary is ragged and keeps the per-line report;
+            # so does a value fault on any of those lines.
+            if widthFaults and len(widthsSeen) == 1:
+                disagreement = self._conditionsDisagreement(inputOmic, next(iter(widthsSeen)))
+                if disagreement is not None:
+                    for k, fault in widthFaults.items():
+                        rest = erroneousLines.get(k, "").replace(fault, "", 1)
+                        if rest.strip():
+                            erroneousLines[k] = rest
+                        else:
+                            erroneousLines.pop(k, None)
+                    error += disagreement
 
             # *************************************************************************
             # STEP 3. CHECK THE ERRORS AND RETURN

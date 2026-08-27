@@ -89,10 +89,17 @@ function clearBlocked(fieldName) { calls.push('clearBlocked:' + fieldName);
 function renderOk() { calls.push('renderOk'); }
 function hostFor() { return {}; }
 function validate() { return { ok: true, summary: { nRows: 112 } }; }
+// The width guard collaborators applyRepair gained: a values file records its
+// condition count after a repair so the cross-omic comparison stays current.
+// In the browser these are the enclosing check()'s `role` argument and two
+// module functions; extracted alone, the harness must supply them.
+function recordConditions() { calls.push('recordConditions'); }
+function syncWidthNotes() { calls.push('syncWidthNotes'); }
 
 const input = {};
 const fieldName = 'omic0_file';
 const file = { name: 'DEGs2.txt' };
+const role = 'values';
 const repaired = { rows: [['#gene', 'v'], ['Cp', '-1.86']] };
 
 %(apply_repair)s

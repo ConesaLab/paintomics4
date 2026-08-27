@@ -27,7 +27,10 @@ It is Python, not JSON: write True, False and None, never true, false or
 null, and build /out/manifest.json with json.dump.
 
 The input is ONE FILE, and its exact path is given below under "Input path".
-That path is a file, not a directory -- do not append anything to it.
+That path is a file, not a directory -- do not append anything to it. When the
+message lists SEVERAL inputs instead (a "## Inputs" section), read the section
+MAKING THE OMICS AGREE below: every listed path is a file, and you write one
+output for each.
 
 Return ONE JSON object, nothing else, matching one of these three shapes:
 
@@ -269,6 +272,47 @@ in real user data.
   treat the first data column as the identifier. European CSVs use ";" as the
   separator and "," as the decimal mark (sep=";", decimal=",").
 
+MAKING THE OMICS AGREE (several inputs)
+
+When the message lists several inputs, they are the values files of the omics
+of ONE PaintOmics run, and the run was refused because PaintOmics paints every
+omic on the same conditions: every values file must have the SAME NUMBER of
+condition columns, with column k meaning the same condition in every file.
+Each file is valid on its own -- the format check passed all of them -- so do
+not look for a fault inside one file. They disagree with EACH OTHER, and your
+job is to rewrite them so that they agree, losing as little as possible:
+
+- Find the omic with the FEWEST condition columns and what those columns mean:
+  one fold change or ratio for one contrast; a log fold change per contrast;
+  one mean per condition; one value per replicate sample.
+- Bring every wider omic to THAT shape by DERIVING the same quantities from
+  its own columns. Deriving is allowed here, and only here: the mean of a
+  condition's replicates; the ratio of two condition means when the narrow
+  omic holds plain ratios (values around 1, all positive); log2 of that ratio
+  when it holds log fold changes (values around 0, signed). Use group means the
+  file already carries (media_c, mean_T, avg_ctrl ...) before computing any,
+  and take the direction (treated over control) from the narrow omic's own
+  header when it says. Say exactly what you computed, and from which columns,
+  in the file's note and in the summary.
+- Never widen the narrow omic: no nan padding, no duplicated columns, no
+  invented condition. Never rescale a file that already has the right shape --
+  the narrowest omic is normally written back UNCHANGED, and you say so.
+- Name the output condition columns identically across the files (the same
+  "T_vs_C" in every file), in the same order.
+- Ask (a "question" action) when the data cannot settle it: which samples
+  form which group when the names do not say; which direction the contrast
+  runs when neither header says; which conditions correspond when two
+  per-sample omics have different sample sets. Put the option the headers
+  suggest first. Two per-sample omics with different numbers of samples cannot
+  be aligned by sample: reduce both to one mean per condition and say so, or
+  ask when the conditions do not correspond.
+
+Write ONE values file per input, and give every manifest entry the input it
+replaces: "for": "<that input's path exactly as listed>". An input you leave
+as it is still gets an entry and is still written to /out/ unchanged, with
+"unchanged": true. Every output must have the same number of columns; the
+validator refuses the set until they do, and tells you which one differs.
+
 You will be told what went wrong after each attempt: a Python traceback, or the
 validator's report on the files you produced. Fix the specific problem named.
 """
@@ -289,11 +333,30 @@ def build_user_message(state):
     # instead: the instruction never reached the model at all.
     if state.get("goal"):
         parts.append("goal: %s" % state["goal"])
-    if state.get("inputPath"):
-        parts.append("Input path: %s" % state["inputPath"])
-    parts += ["omic type: %s" % state.get("omicType", "unknown"),
-              "species: %s" % state.get("species", "unknown"),
-              "file name: %s" % state.get("fileName", "unknown")]
+    # Several inputs: the values files of one job that disagree with each
+    # other (see MAKING THE OMICS AGREE in the system prompt). Each is listed
+    # with the omic it belongs to and its own profile; there is no single
+    # "Input path" and no single "What the file looks like".
+    inputs = [i for i in (state.get("inputs") or []) if isinstance(i, dict)]
+    if inputs:
+        parts.append("species: %s" % state.get("species", "unknown"))
+        parts += ["", "## Inputs (%d files of one run; read MAKING THE OMICS AGREE)" % len(inputs)]
+        for k, entry in enumerate(inputs, 1):
+            width = entry.get("conditions")
+            parts += ["", "### Input %d: %s" % (k, entry.get("path", "?")),
+                      "omic: %s" % entry.get("omic", "unknown"),
+                      "file name: %s" % entry.get("fileName", "unknown"),
+                      "role: %s" % entry.get("role", "values")]
+            if width is not None:
+                parts.append("condition columns: %s" % width)
+            parts += ["What it looks like:",
+                      json.dumps(entry.get("profile", {}), indent=1)[:24000]]
+    else:
+        if state.get("inputPath"):
+            parts.append("Input path: %s" % state["inputPath"])
+        parts += ["omic type: %s" % state.get("omicType", "unknown"),
+                  "species: %s" % state.get("species", "unknown"),
+                  "file name: %s" % state.get("fileName", "unknown")]
 
     instructions = [str(i).strip() for i in (state.get("instructions") or []) if str(i).strip()]
     if instructions:
@@ -310,8 +373,9 @@ def build_user_message(state):
         if accepted.get("manifest"):
             parts += ["Its manifest:", json.dumps(accepted["manifest"])[:3000]]
 
-    parts += ["", "## What the file looks like",
-              json.dumps(state.get("profile", {}), indent=1)[:60000]]
+    if not inputs:
+        parts += ["", "## What the file looks like",
+                  json.dumps(state.get("profile", {}), indent=1)[:60000]]
 
     answers = state.get("answers") or {}
     if answers:

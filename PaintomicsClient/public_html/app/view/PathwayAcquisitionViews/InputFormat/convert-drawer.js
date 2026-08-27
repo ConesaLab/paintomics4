@@ -306,6 +306,24 @@
         return field && field.fileInputEl ? field.fileInputEl.dom : null;
     }
 
+    /* The LIVE file input for a slot, by the field name that never changes.
+     *
+     * The DOM input does not survive a Step 1 submit: step1OnFormSubmitHandler
+     * moves the inputs into a temporary form and ExtJS's filefield re-creates
+     * fileInputEl afterwards. A drawer opened from the error dialog therefore
+     * holds a DETACHED twin of every input it was handed, and setFile on that
+     * twin writes to nothing the form will submit -- the card keeps its
+     * original file and the run fails again. Measured on the reported job:
+     * after "Submit anyway", the harmonised metabolomics file went to the twin
+     * and the live card still held the 14-column upload. So the input is
+     * resolved by name at the moment it is written, not captured when the
+     * drawer opens. */
+    function liveInputFor(fieldName) {
+        if (!fieldName || !window.Ext || !Ext.ComponentQuery) return null;
+        var field = Ext.ComponentQuery.query("filefield[name=" + fieldName + "]")[0];
+        return field && field.fileInputEl ? field.fileInputEl.dom : null;
+    }
+
     var PANEL_TYPE = {
         "gene expression": "geneexpression", "proteomics": "proteomics",
         "metabolomics": "metabolomics", "mirna-seq": "mirnaseq", "dnase-seq": "dnaseseq",
@@ -552,15 +570,40 @@
         var omicLabel = (context && context.omicType && context.omicType !== "unknown") ? context.omicType : "";
         var speciesLabel = (context && context.species && context.species !== "unknown") ? context.species : "";
 
+        /*
+         * Several files at once: the values files of ONE job that are each
+         * valid and disagree with each other on their number of conditions
+         * (see openHarmoniseDrawer). Every target keeps its own input element,
+         * file and sandbox key; the sheet is opened on the first of them.
+         */
+        var harmonise = (context && context.harmonise) || null;
+        var targets = harmonise ? harmonise.targets.map(function (t, i) {
+            return Object.assign({}, t, { key: safeName(t.file.name) || ("input" + i), bytes: null });
+        }) : [];
+        var seenKeys = {};
+        targets.forEach(function (t, i) {
+            // Two uploads may share a name; the sandbox needs distinct paths.
+            if (seenKeys[t.key]) t.key = i + "_" + t.key;
+            seenKeys[t.key] = true;
+        });
+
         // ---- header -------------------------------------------------------
         var header = el("header", "pa-convert-header");
         var mark = el("span", "pa-convert-mark");
         mark.innerHTML = typeof window.getAIMark === "function" ? window.getAIMark() : svg("thinking");
         header.appendChild(mark);
         var titles = el("div", "pa-convert-titles");
-        titles.appendChild(el("h2", "pa-convert-title", "Convert with the PaintOmics AI agent"));
+        titles.appendChild(el("h2", "pa-convert-title", harmonise
+            ? "Make the omics agree with the PaintOmics AI agent"
+            : "Convert with the PaintOmics AI agent"));
         var subject = el("p", "pa-convert-subject");
-        subject.appendChild(el("span", "pa-convert-filename", file.name));
+        if (harmonise) {
+            targets.forEach(function (t) {
+                subject.appendChild(el("span", "pa-convert-filename", t.file.name));
+            });
+        } else {
+            subject.appendChild(el("span", "pa-convert-filename", file.name));
+        }
         if (omicLabel) subject.appendChild(el("span", "pa-convert-omic", omicLabel));
         if (speciesLabel) subject.appendChild(el("span", "pa-convert-species", speciesLabel));
         titles.appendChild(subject);
@@ -853,6 +896,42 @@
         var bytes = null;
         var fileKey = safeName(file.name) || "input";
 
+        function allBytes() {
+            var f = {};
+            targets.forEach(function (t) { f[t.key] = t.bytes; });
+            return f;
+        }
+
+        /* What the agent loop needs to know about each file: where it sits
+           in the sandbox, which omic it is, and how wide the format check
+           measured it. The profiles are added by the loop itself. */
+        function harmoniseInputs() {
+            return targets.map(function (t) {
+                return { key: t.key, path: "/work/" + t.key, omic: t.omic || "",
+                         fileName: t.file.name, role: "values", conditions: t.conditions };
+            });
+        }
+
+        /* The facts the model is told up front: the refusal, when there was
+           one, and every file's width as measured here -- so it does not have
+           to infer from the profiles what the job was refused for. The rule
+           itself and how to satisfy it live in the system prompt (MAKING THE
+           OMICS AGREE). */
+        function harmoniseInstructions() {
+            var lines = [];
+            if (harmonise.serverSaid) {
+                lines.push("PaintOmics refused this job when the analysis ran. It said: " + harmonise.serverSaid);
+            }
+            lines.push("These are the values files of one run, and PaintOmics needs every one of " +
+                       "them to have the same number of condition columns. As the format check " +
+                       "measured them: " + targets.map(function (t) {
+                           return (t.omic ? t.omic + " (" + t.file.name + ")" : t.file.name) + " has " +
+                                  (t.conditions == null ? "an unknown number of condition columns"
+                                                        : plural(t.conditions, "condition column"));
+                       }).join("; ") + ".");
+            return lines;
+        }
+
         function onEvent(event) {
             if (cancelled) return;
             if (event.type === "step") {
@@ -865,6 +944,11 @@
                 pendingCode = event.code;
             } else if (event.type === "output") {
                 attachOutput(event.stdout);
+            } else if (event.type === "profile" && event.profile && event.input) {
+                // One "what the AI sees" card per input, in the order read.
+                profileShown = profileShown || event.profile;
+                anatomyHost.appendChild(renderAnatomy(event.profile,
+                    (event.input.omic ? event.input.omic + " — " : "") + event.input.fileName, providerName));
             } else if (event.type === "profile" && event.profile && !profileShown) {
                 profileShown = event.profile;
                 anatomyHost.innerHTML = "";
@@ -877,11 +961,11 @@
         provider().then(function (p) {
             if (!p || !p.success) return;
             providerName = (p.operator || p.provider || "") + (p.host ? " (" + p.host + ")" : "");
-            var meta = anatomyHost.querySelector(".pa-convert-anatomy-meta");
-            if (meta && profileShown) {
+            anatomyHost.querySelectorAll(".pa-convert-anatomy-meta").forEach(function (meta) {
+                if (!profileShown) return;
                 var chars = profileShown.description_chars ? fmtInt(profileShown.description_chars) + " characters" : "structure only";
                 meta.textContent = chars + " · sent to " + providerName;
-            }
+            });
         });
 
         async function runOnce(extra) {
@@ -894,19 +978,30 @@
                 api: api(),
                 sandbox: sandbox,
                 transport: serverTransport(),
-                files: (function () { var f = {}; f[fileKey] = bytes; return f; })(),
+                files: harmonise ? allBytes() : (function () { var f = {}; f[fileKey] = bytes; return f; })(),
+                inputs: harmonise ? harmoniseInputs() : undefined,
                 inputPath: "/work/" + fileKey,
                 fileName: file.name,
                 omicType: (context && context.omicType) || "unknown",
                 species: (context && context.species) || "unknown",
-                goal: "Convert this file into the format PaintOmics accepts, keeping every measurement it holds.",
+                goal: harmonise
+                    ? "These values files belong to one PaintOmics run and disagree on their number " +
+                      "of condition columns. Rewrite them so that they agree, keeping as much of the " +
+                      "data as possible."
+                    : "Convert this file into the format PaintOmics accepts, keeping every measurement it holds.",
                 /* When the SERVER is the one that refused, hand the agent what
                    it said. Without this the agent re-reads a file the client
                    checker already considers valid and finds nothing, because
                    the fault is one only the server can see -- a sample name
                    that does not line up with the design file, an identifier
-                   space that does not match the other omics. */
-                instructions: (input && input.__paServerSaid)
+                   space that does not match the other omics.
+
+                   The job-level conversion is the OTHER answer to the same
+                   observation: when the disagreement is between values files,
+                   every one of them is in the sandbox and the model rewrites
+                   them together, so the single-file brief below -- "you can
+                   rewrite ONLY the file you were given" -- does not apply. */
+                instructions: harmonise ? harmoniseInstructions() : (input && input.__paServerSaid)
                     ? ["PaintOmics refused this job when the analysis ran. It said: "
                        + input.__paServerSaid]
                         .concat(input.__paSiblings ? [input.__paSiblings] : [])
@@ -986,6 +1081,7 @@
             var instructions = (last.instructions || []).concat([instruction]);
             await runOnce({
                 profile: last.profile,
+                inputProfiles: last.inputProfiles || undefined,
                 instructions: instructions,
                 answers: last.answers || {},
                 accepted: last.code ? { code: last.code, manifest: last.manifest } : null
@@ -1018,7 +1114,10 @@
                 addStep({ phase: "profiling", title: "Starting the Python sandbox",
                           detail: "An isolated interpreter with no access to this page or the network." });
                 await sandbox.boot();
-                setNow("Reading your file");
+                setNow(harmonise ? "Reading your files" : "Reading your file");
+                for (var t = 0; t < targets.length; t++) {
+                    targets[t].bytes = new Uint8Array(await targets[t].file.arrayBuffer());
+                }
                 bytes = new Uint8Array(await file.arrayBuffer());
                 return await runOnce();
             } catch (err) {
@@ -1066,10 +1165,139 @@
             });
         }
 
+        /*
+         * The review of a job-level conversion: one card per omic, in the
+         * order of the form, each saying which file it started from, which
+         * output replaces it, and whether the agent left it as it was. There
+         * is nothing to choose between -- the point was to make the set
+         * agree -- so the one decision is to use the set or not.
+         */
+        function renderHarmoniseReview(result) {
+            setStage("review", "ready");
+            setNow("Ready to review");
+
+            var out = describeOutputs(result);
+            var entries = ((out.manifest && out.manifest.files) || []).filter(function (f) { return f && f.name; });
+            var forInput = {};
+            entries.forEach(function (f) { if (f["for"]) forInput[String(f["for"])] = f; });
+            var plan = targets.map(function (t) {
+                var entry = forInput["/work/" + t.key] || forInput[t.key] || forInput[t.file.name] || null;
+                var output = entry ? out.files.filter(function (f) { return f.name === entry.name; })[0] || null : null;
+                return { target: t, entry: entry, output: output };
+            });
+            var ready = plan.filter(function (p) { return p.output; });
+
+            var review = el("section", "pa-convert-review");
+            review.setAttribute("aria-label", "Review the result");
+            var head = el("div", "pa-convert-review-head");
+            head.appendChild(el("h3", "pa-convert-review-title",
+                ready.length === targets.length ? "The omics agree" : "Not every omic was answered"));
+            head.appendChild(el("span", "pa-convert-review-count",
+                plural(out.files.length, "file") + " · " + plural(result.attempts || 1, "attempt") + " · " + fmtSeconds(Date.now() - startedAt)));
+            review.appendChild(head);
+            if (out.manifest.summary) review.appendChild(el("p", "pa-convert-summary", out.manifest.summary));
+
+            plan.forEach(function (p) {
+                var unchanged = !!(p.entry && p.entry.unchanged);
+                var rcard = el("article", "pa-convert-result pa-convert-result-chosen pa-convert-target");
+                var rhead = el("header", "pa-convert-result-head");
+                var labels = el("div", "pa-convert-result-titles");
+                var title = el("div", "pa-convert-result-title");
+                title.appendChild(el("span", "pa-convert-target-omic", p.target.omic || p.target.file.name));
+                title.appendChild(document.createTextNode(" · " + p.target.file.name));
+                if (p.output && !unchanged && p.output.name !== p.target.file.name) {
+                    title.appendChild(el("span", "pa-convert-target-arrow", " → "));
+                    title.appendChild(document.createTextNode(p.output.name));
+                }
+                labels.appendChild(title);
+                var meta = p.output
+                    ? [p.output.nRows != null ? plural(p.output.nRows, "row") : null,
+                       p.output.nCols ? plural(p.output.nCols - 1, "condition") : null,
+                       (p.output.rowsIn != null && p.output.rowsOut != null && p.output.rowsIn !== p.output.rowsOut)
+                           ? fmtInt(p.output.rowsIn - p.output.rowsOut) + " rows left out" : null]
+                      .filter(Boolean).join(" · ")
+                    : "no file was produced for this omic";
+                labels.appendChild(el("div", "pa-convert-result-meta", meta));
+                rhead.appendChild(labels);
+                if (p.output) {
+                    rhead.appendChild(el("span", "pa-convert-badge", unchanged ? "Unchanged" : "Rewritten"));
+                    rhead.appendChild(iconButton("download", "Download " + p.output.name, function () {
+                        download(p.output.bytes, p.output.name);
+                    }));
+                }
+                rcard.appendChild(rhead);
+                if (p.output) {
+                    rcard.appendChild(previewTable(p.output.preview));
+                    var kept = chips("Kept", p.output.kept, "pa-convert-kept");
+                    var dropped = chips("Left out", p.output.dropped, "pa-convert-dropped");
+                    if (kept || dropped) {
+                        var cols = el("div", "pa-convert-columns");
+                        if (kept) cols.appendChild(kept);
+                        if (dropped) cols.appendChild(dropped);
+                        rcard.appendChild(cols);
+                    }
+                    if (p.output.note) rcard.appendChild(el("p", "pa-convert-result-note", p.output.note));
+                }
+                review.appendChild(rcard);
+            });
+
+            var extras = out.files.filter(function (f) {
+                return !plan.some(function (p) { return p.output === f; });
+            });
+            if (extras.length) {
+                var also = el("div", "pa-convert-extras");
+                also.appendChild(el("h4", "pa-convert-extras-title", "Also produced"));
+                extras.forEach(function (f) {
+                    also.appendChild(linkedRow(f.role === "relevant" ? "list" : "table",
+                        "<b>" + escapeHtml(f.label) + "</b>" + (f.nRows != null ? " — " + plural(f.nRows, "row") : "") +
+                        (f.note ? " (" + escapeHtml(f.note) + ")" : ""), f.bytes, f.name));
+                });
+                review.appendChild(also);
+            }
+
+            reviewHost.innerHTML = "";
+            reviewHost.appendChild(review);
+
+            var accept = el("button", "pa-convert-accept", "Use these " + plural(ready.length, "table"));
+            accept.type = "button";
+            var downloadAll = el("button", "pa-convert-dismiss", "Download all");
+            downloadAll.type = "button";
+            downloadAll.addEventListener("click", function () {
+                out.files.forEach(function (f, i) { setTimeout(function () { download(f.bytes, f.name); }, i * 150); });
+            });
+            var dismiss = el("button", "pa-convert-dismiss is-quiet", "Cancel");
+            dismiss.type = "button";
+            dismiss.addEventListener("click", cancel);
+            actions.innerHTML = "";
+            actions.appendChild(dismiss);
+            actions.appendChild(downloadAll);
+            if (ready.length === targets.length) actions.appendChild(accept);
+
+            accept.addEventListener("click", function () {
+                ready.forEach(function (p) {
+                    // A file the agent left as it was stays the user's own
+                    // upload: no provenance to record, nothing to re-check.
+                    if (p.entry && p.entry.unchanged) return;
+                    // The LIVE input, resolved now: a submit between opening the
+                    // drawer and this click will have replaced the DOM node.
+                    var input = liveInputFor(p.target.fieldName) || p.target.input;
+                    input.__paConverted = {
+                        from: p.target.file.name, original: null, fieldName: p.target.fieldName,
+                        label: p.output.label, attempts: result.attempts || 1, relevant: false,
+                        harmonised: true
+                    };
+                    setFile(input, p.output.bytes, p.output.name);
+                });
+                shutdown();
+            });
+            body.scrollTop = review.getBoundingClientRect().top - body.getBoundingClientRect().top + body.scrollTop - 10;
+        }
+
         function renderReview(result) {
             finished = true;
             freezeCurrent();
             if (!result.ok) { renderFailure(result); return; }
+            if (harmonise) { renderHarmoniseReview(result); return; }
             setStage("review", "ready");
             setNow("Ready to review");
 
@@ -1337,7 +1565,30 @@
         });
     }
 
+    /*
+     * Several values files of ONE job, converted together so that they agree.
+     *
+     * `targets` is [{input, file, fieldName, omic, conditions}] -- one per
+     * omic card, from format-panel's width guard or its error-dialog hook --
+     * and `options.serverSaid` is the server's refusal when there was one.
+     * Opened on the first target; every target's file goes into the sandbox.
+     */
+    function openHarmoniseDrawer(targets, options) {
+        var first = targets[0];
+        function fieldValue(name) {
+            if (!window.Ext || !Ext.ComponentQuery) return null;
+            var f = Ext.ComponentQuery.query("[name=" + name + "]")[0];
+            return f && f.getValue ? f.getValue() : null;
+        }
+        return openDrawer(first.input, first.file, first.fieldName, {
+            species: fieldValue("specie") || "unknown",
+            slotRole: "values",
+            harmonise: { targets: targets, serverSaid: (options && options.serverSaid) || "" }
+        });
+    }
+
     return { openDrawer: openDrawer, openConvertDrawer: openConvertDrawer,
+             openHarmoniseDrawer: openHarmoniseDrawer,
              createSandbox: createSandbox, describeOutputs: describeOutputs,
              renderAnatomy: renderAnatomy };
 });
