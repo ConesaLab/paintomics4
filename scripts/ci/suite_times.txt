@@ -8,8 +8,8 @@
 # scripts/ci/setup-r-packages.sh does not install MORE and they all skip.
 #
 # READ THIS BEFORE TRUSTING THE BALANCE. test_compound_name_table_matches_mongo
-# is 216 s of a 677 s budget -- 32%% on its own -- and it swings: 176.9 s in one
-# run, 216.3 s in the next, 22%% apart. No split can absorb that. The shard
+# is 216 s of a 702 s budget -- 31% on its own -- and it swings: 176.9 s in one
+# run, 216.3 s in the next, 22% apart. No split can absorb that. The shard
 # holding it is the critical path whatever the other 248 suites do, and the
 # real fix is to make that suite cheap (its Mongo half is a pure function of a
 # snapshot pinned by cache key, so it can become a committed digest fixture),

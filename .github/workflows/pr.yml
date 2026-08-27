@@ -80,8 +80,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-paintomics
       - name: Test suites (shard ${{ matrix.shard }})
-        # 600 s per suite: the slowest (test_compound_name_table_matches_mongo)
-        # takes ~150 s on a laptop and ran past 180 s on the runner.
+        # 420 s per suite, under the job's 10-minute cap with the ~110 s of
+        # setup taken out. It used to be 600 s -- the whole cap -- so a hung
+        # suite was killed by the JOB, and the runner never printed which suite
+        # it was nor the results of the others on that shard. 420 s is 1.7x
+        # the worst suite observed (249 s, test_compound_name_table_matches_mongo).
         #
         # --slowest 400 prints EVERY suite's duration, not the top 15. The
         # shard split is balanced from scripts/ci/suite_times.txt, and the only
@@ -89,7 +92,7 @@ jobs:
         # (the R-MORE suites cost 113 s locally and nothing here, because they
         # skip). Publishing the whole table makes refreshing it a copy.
         run: >-
-          scripts/ci/run-unit-tests.sh --timeout 600 --slowest 400
+          scripts/ci/run-unit-tests.sh --timeout 420 --slowest 400
           --shard "${{ matrix.shard }}"
 
   fixtures:

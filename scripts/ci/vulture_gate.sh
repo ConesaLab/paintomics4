@@ -30,9 +30,13 @@ set -euo pipefail
 
 WHITELIST=scripts/ci/vulture_whitelist.py
 BASELINE=scripts/ci/vulture_baseline.txt
+# serverconf.py is gitignored: absent in CI, present locally (run-unit-tests.sh
+# copies the template in). Scanning it made the local and CI bands differ by
+# nine rows, and a baseline refreshed from CI output then failed locally.
+EXCLUDE='*/conf/serverconf.py'
 
 echo "== vulture >=80% against the whitelist"
-if ! vulture PaintomicsServer/src "$WHITELIST" --min-confidence 80 \
+if ! vulture PaintomicsServer/src "$WHITELIST" --min-confidence 80 --exclude "$EXCLUDE" \
         --ignore-decorators "@*.route,@*.errorhandler,@*.before_request,@*.after_request"; then
     echo "FAIL: new >=80% candidate. Delete it with evidence (grep the client"
     echo "for string call sites, coverage, git history) or whitelist it WITH"
@@ -43,7 +47,7 @@ echo "   clean"
 
 echo "== vulture >=60% ratchet against $BASELINE"
 current=$(mktemp)
-vulture PaintomicsServer/src "$WHITELIST" --min-confidence 60 \
+vulture PaintomicsServer/src "$WHITELIST" --min-confidence 60 --exclude "$EXCLUDE" \
     --ignore-decorators "@*.route,@*.errorhandler,@*.before_request,@*.after_request" 2>/dev/null \
     | sed -E 's/:[0-9]+:/:/' | sort > "$current" || true
 

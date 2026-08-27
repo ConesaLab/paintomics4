@@ -114,6 +114,12 @@ def split(names, index, count):
     print("shard %d/%d: %d suites, ~%.0f s of %.0f s (worst shard ~%.0f s)"
           % (index, count, len(shards[index - 1]), load[index - 1],
              sum(load), max(load)))
+    # The median is 1.3 s; a new Mongo-backed suite at 100 s is mis-costed by
+    # two orders of magnitude until the times file is refreshed. Say which.
+    unrecorded = sorted(name for name in names if name not in times)
+    if unrecorded:
+        print("   %d suite(s) with no recorded time, charged the median %.1f s: %s"
+              % (len(unrecorded), median, ", ".join(unrecorded)))
     return sorted(shards[index - 1])
 
 
