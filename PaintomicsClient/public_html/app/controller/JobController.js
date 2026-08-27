@@ -80,12 +80,24 @@ function step1FailureReason(response) {
 		if (message.length > 300) { message = message.slice(0, 300) + "..."; }
 	}
 	if (!message) { return ""; }
-	return String(message)
+	/* "Exception: AT MiRNA2GenesServlet.py: fromMiRNAtoGenes_STEP2. ERROR
+	   MESSAGE: ..." -- everything before the marker is for the log, the same
+	   split UserController and convert-drawer already make. The text is the
+	   user's own identifiers, so it is escaped before the [b]-style markup is
+	   turned into tags: "<NA>" is an id, not an element, and "A&B" stays A&B.
+	   The " - " the server puts at the head of a message is a marker, not a
+	   separator: it used to become a line break wherever it appeared, which
+	   split "hsa-miR-1 - 5p" in two. */
+	var split = String(message).split("ERROR MESSAGE:");
+	message = (split.length > 1 ? split.slice(1).join("ERROR MESSAGE:") : split[0]).trim();
+	message = message.replace(/^-\s*/, "");
+	return message
+		.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
 		.replace(/\[b\]/g, "<b>").replace(/\[\/b\]/g, "</b>")
 		.replace(/\[br\]/g, "</br>")
 		.replace(/\[ul\]/g, "<ul>").replace(/\[\/ul\]/g, "</ul>")
 		.replace(/\[li\]/g, "<li>").replace(/\[\/li\]/g, "</li>")
-		.replace(/ - /g, "<br/>");
+		.replace(/\n\s*-\s+/g, "<br/>");
 }
 
 /* The dialog shown when one or more files could not be prepared.
@@ -102,10 +114,15 @@ function showStep1PreparationFailure(jobView) {
 	var detail = reasons.length
 		? reasons.join("</br></br>")
 		: "The server did not say why. The omic cards below may carry more detail.";
+	/* failedRequests counts every omic that failed, reasons only those whose
+	   body could be read; the larger of the two is the honest count. The
+	   height follows the text: a 700-character explanation in a 320px box
+	   was clipped (see "a panel clips revealed messages"). */
+	var failed = Math.max(reasons.length, (jobView && jobView.failedRequests) || 0, 1);
 	if (jobView) { jobView.step1FailureReasons = []; }
 	showErrorMessage("Ops!... Something went wrong while preparing your files.", {
-		message: (reasons.length || 1) + " file(s) could not be prepared.</br></br>" + detail,
-		width: 620, height: 320
+		message: failed + " file(s) could not be prepared.</br></br>" + detail,
+		width: 620, height: Math.min(620, 200 + Math.ceil(detail.replace(/<[^>]*>/g, "").length / 85) * 22)
 	});
 }
 

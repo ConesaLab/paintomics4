@@ -63,42 +63,75 @@ def explainEmptyResult(stats):
         return ", ".join(str(i) for i in (ids or [])[:3])
 
 
+    # The order is the order of certainty: each branch is only reached when
+    # the ones above it cannot be the cause. A single condition column does
+    # not stop identifiers from joining, so the join is judged first (the
+    # first cut said "read and matched" about 148,184 pairs of which none had
+    # matched, and never mentioned the ENSMUSG-versus-symbol mismatch that was
+    # the actual cause, nor the blank rows).
+    conditions = stats.get("tooFewConditions")
+    # 0. No data rows at all.
+    if stats.get("regulators", 1) == 0:
+        lines.append(
+            "Your miRNA quantification file has no data rows -- it is empty or "
+            "holds only a header -- so there is no miRNA to pair with anything.")
     # 1. Nothing to join with: the regulators named in the associations file are
     #    not the regulators in the quantification file.
-    if stats.get("pairs", 0) == 0:
+    elif stats.get("pairs", 0) == 0:
         lines.append(
             "Your miRNA quantification file holds %d miRNAs (e.g. %s), but none "
             "of them appears in the first column of your targets/associations "
             "file. The two files have to use the same miRNA identifiers."
             % (stats.get("regulators", 0), sample(stats.get("sampleRegulators"))))
-    # 2. Pairs exist, so the regulators lined up. From here the fault is in the
-    #    SCORING, and blaming identifiers would send the user to rebuild files
-    #    that were fine.
-    elif stats.get("tooFewConditions") is not None:
-        return (" - Your data has %d condition column, and a correlation needs "
-                "at least two: with a single column every pair is a tie, so "
-                "there is nothing to correlate. %d miRNA-target pairs were read "
-                "and matched. Either supply the conditions you want correlated, "
-                "or provide a relevant associations file so the pairs are taken "
-                "from it instead of being scored."
-                % (stats["tooFewConditions"], stats.get("pairs", 0)))
-    elif stats.get("aborted"):
-        return (" - The scoring step stopped after %d miRNA-target pairs with: "
-                "%s. The result file was truncated there, so this is not a "
-                "problem with your identifiers."
-                % (stats.get("abortedAfterPairs", 0), stats["aborted"]))
-    # 3. They joined, but the target ids do not exist in the expression file.
+    # 2. They joined, but not one target id exists in the expression file.
     elif stats.get("scored", 0) == 0 and stats.get("unmatchedTargets", 0):
         lines.append(
             "%d miRNA-target pairs were read, but not one target gene was found "
             "in your gene expression file, so no correlation could be computed."
             % stats.get("pairs", 0))
+        nearMiss = stats.get("sampleNearMiss")
+        if stats.get("nearMisses") and nearMiss:
+            lines.append(
+                "%d of the first %d unmatched targets differ from a gene id only "
+                "in case or in a version suffix (e.g. %s in the targets file, %s "
+                "in the expression file) -- the identifiers are the same kind, "
+                "written differently."
+                % (stats["nearMisses"], stats.get("nearMissesOf", 0),
+                   nearMiss[0], nearMiss[1]))
+        else:
+            lines.append(
+                "Targets in the associations file look like: %s. Identifiers in "
+                "the gene expression file look like: %s. These are two different "
+                "identifier spaces -- convert one side to the other."
+                % (sample(stats.get("sampleUnmatchedTargets") or stats.get("sampleTargets")),
+                   sample(stats.get("sampleGenes"))))
+        if conditions is not None:
+            lines.append(
+                "Once the targets match, note that a correlation also needs at "
+                "least two condition columns; this data has %d." % conditions)
+    # 3. Targets matched, so the fault is in the SCORING, and blaming
+    #    identifiers would send the user to rebuild files that were fine.
+    elif conditions is not None:
         lines.append(
-            "Targets in the associations file look like: %s. Identifiers in the "
-            "gene expression file look like: %s. These are two different "
-            "identifier spaces -- convert one side to the other."
-            % (sample(stats.get("sampleUnmatchedTargets") or stats.get("sampleTargets")),
-               sample(stats.get("sampleGenes"))))
+            "Your data has %d condition column, and a correlation needs at "
+            "least two: with a single column every pair is a tie, so there is "
+            "nothing to correlate. %d miRNA-target pairs were read. Either "
+            "supply the conditions you want correlated, or provide a relevant "
+            "associations file so the pairs are taken from it instead of being "
+            "scored." % (conditions, stats.get("pairs", 0)))
+    elif stats.get("aborted"):
+        lines.append(
+            "The scoring step stopped after %d miRNA-target pairs with: %s. The "
+            "result file was truncated there, so this is not a problem with "
+            "your identifiers."
+            % (stats.get("abortedAfterPairs", 0), stats["aborted"]))
+    elif stats.get("scored", 0) and stats.get("nanScores", 0) == stats.get("scored", 0):
+        lines.append(
+            "All %d scored miRNA-target pairs gave an undefined correlation "
+            "(nan): each pair's values are identical across the conditions, so "
+            "there is nothing to correlate. Check that the condition columns "
+            "differ, or provide a relevant associations file."
+            % stats.get("scored", 0))
     else:
         lines.append(
             "%d miRNA-target pairs were read and %d were scored, but none "
@@ -460,6 +493,13 @@ class MiRNA2GeneJob(Job):
         matchStats = run_miRNA2Target(referenceFile, relevantReferenceFile, dataFile, geneExpressionFile, tmpFile, self.score_method)
         logging.info("STARTING miRNA2Target PROCESS...Done")
         logging.info("miRNA2Target ACCOUNT: %s", matchStats)
+        # Rows whose every score is nan are not results: nan > cutoff is False,
+        # so such a run "succeeded" with zero relevant associations and no word
+        # about why (two identical condition columns do this for kendall,
+        # pearson and spearman alike).
+        if isinstance(matchStats, dict) and matchStats.get("scored") \
+                and matchStats.get("nanScores") == matchStats.get("scored"):
+            raise Exception(explainEmptyResult(matchStats))
 
         #STEP 3. PARSE RELEVANT FILE
         logging.info("PROCESSING RELEVANT FEATURES FILE...")

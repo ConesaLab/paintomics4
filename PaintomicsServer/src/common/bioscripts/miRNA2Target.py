@@ -23,6 +23,7 @@
 #
 #**************************************************************
 
+import re
 import getopt
 import sys
 import os.path
@@ -137,7 +138,10 @@ def run(referenceFile, relevantReferenceFile, dataFile, geneExpresion, corrOutpu
                "associationTargets": 0, "genes": 0}
     seenTargets = set()
     unmatchedSample = []
-    stats = {"dropped": dropped, "pairs": 0, "scored": 0, "unmatchedTargets": 0}
+    stats = {"dropped": dropped, "pairs": 0, "scored": 0, "unmatchedTargets": 0,
+             "nanScores": 0}
+    unmatchedDistinct = set()   # bounded: the first 2000 distinct unmatched targets
+    geneOrder = []              # the first gene ids in FILE order, header included
 
     #STEP 1. GENERATE THE TABLE WITH ALL THE MIRNAS IN THE INPUT
     print("STEP 1. Reading miRNA expression file...")
@@ -177,15 +181,17 @@ def run(referenceFile, relevantReferenceFile, dataFile, geneExpresion, corrOutpu
             # target column was blank from top to bottom.
             #
             # Dropped here, at the read, so no later stage can join on nothing.
-            if not line or not line[0].strip():
+            if not line:
+                continue            # a trailing empty line is not a row
+            if not line[0].strip():
                 dropped["regulators"] += 1
                 continue
 
             # "values" stays as text because it is written back out verbatim on
             # every result row; "floats" is the same row parsed once, for the
-            # correlation.
-            miRNAtable[line[0]] = {"values" : line[1:], "targets" : list(),
-                                   "floats" : toFloats(line[1:])}
+            # correlation. The key is stripped: "G1 " and "G1" are one id.
+            miRNAtable[line[0].strip()] = {"values" : line[1:], "targets" : list(),
+                                           "floats" : toFloats(line[1:])}
     inputDataFile.close()
 
     if dataFile_header is None:
@@ -198,15 +204,18 @@ def run(referenceFile, relevantReferenceFile, dataFile, geneExpresion, corrOutpu
         for line in csv_reader(inputDataFile, delimiter="\t"):
             # Half a pair is not a pair. A row missing either id is counted and
             # dropped rather than joined on a blank -- see STEP 1.
-            if not line or not line[0].strip():
+            if not line:
+                continue
+            if not line[0].strip():
                 dropped["associationRegulators"] += 1
                 continue
             if len(line) < 2 or not line[1].strip():
                 dropped["associationTargets"] += 1
                 continue
-            if line[0] in miRNAtable:
-                miRNAtable[line[0]]["targets"].append(line[1])
-                seenTargets.add(line[1])
+            regulator, target = line[0].strip(), line[1].strip()
+            if regulator in miRNAtable:
+                miRNAtable[regulator]["targets"].append(target)
+                seenTargets.add(target)
     inputDataFile.close()
 
 
@@ -222,11 +231,15 @@ def run(referenceFile, relevantReferenceFile, dataFile, geneExpresion, corrOutpu
             print("STEP 3. Processing mRNA expression file...")
             with open(geneExpresion, 'r') as inputDataFile:
                 for line in csv_reader(inputDataFile, delimiter="\t"):
-                    if not line or not line[0].strip():
+                    if not line:
+                        continue
+                    if not line[0].strip():
                         dropped["genes"] += 1
                         continue
                     # Only ever read by getScore, so it can be stored parsed.
-                    geneTable[line[0]] = toFloats(line[1:])
+                    geneTable[line[0].strip()] = toFloats(line[1:])
+                    if len(geneOrder) < 4:
+                        geneOrder.append(line[0].strip())
             inputDataFile.close()
         else:
             print("STEP 3. No mRNA expression file was provided...")
@@ -281,9 +294,16 @@ def run(referenceFile, relevantReferenceFile, dataFile, geneExpresion, corrOutpu
                             stats["unmatchedTargets"] += 1
                             if len(unmatchedSample) < 3 and target_id not in unmatchedSample:
                                 unmatchedSample.append(target_id)
+                            if len(unmatchedDistinct) < 2000:
+                                unmatchedDistinct.add(target_id)
 
                         if method == "fc" or target_values is not None:
                             score = getScore(miRNA_floats, target_values, method)
+                            # nan is what every correlation returns when a
+                            # pair is all ties (two identical columns, say):
+                            # it is written, it is not a result.
+                            if score != score:
+                                stats["nanScores"] += 1
                             rows.append(rowPrefix + target_id + "\t" + str(score) + "\t" + method + rowSuffix)
                             stats["scored"] += 1
                     else:
@@ -311,8 +331,25 @@ def run(referenceFile, relevantReferenceFile, dataFile, geneExpresion, corrOutpu
     stats["targets"] = len(seenTargets)
     stats["sampleRegulators"] = sorted(miRNAtable)[:3]
     stats["sampleTargets"] = sorted(seenTargets)[:3]
-    stats["sampleGenes"] = sorted(geneTable)[:3]
+    # In FILE order and past the first line: sorted() put the header first
+    # ("#geneID" sorts before every letter), so the example identifier the
+    # message offered was the header.
+    stats["sampleGenes"] = (geneOrder[1:4] if len(geneOrder) > 1 else geneOrder[:3])
     stats["sampleUnmatchedTargets"] = unmatchedSample
+    # Near misses: an unmatched target that differs from a gene id only in
+    # case or in an Ensembl version suffix is not "a different identifier
+    # space", and saying so sends the user to the wrong conversion.
+    if unmatchedDistinct and geneTable:
+        def fold(identifier):
+            return re.sub(r"\.\d+$", "", identifier).lower()
+        foldedGenes = {}
+        for geneID in geneTable:
+            foldedGenes.setdefault(fold(geneID), geneID)
+        nearMisses = [(t, foldedGenes[fold(t)]) for t in sorted(unmatchedDistinct)
+                      if fold(t) in foldedGenes]
+        stats["nearMisses"] = len(nearMisses)
+        stats["nearMissesOf"] = len(unmatchedDistinct)
+        stats["sampleNearMiss"] = list(nearMisses[0]) if nearMisses else None
     stats["usedCorrelation"] = useCorrelation
     stats["method"] = method
     return stats

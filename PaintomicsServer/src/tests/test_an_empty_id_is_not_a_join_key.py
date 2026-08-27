@@ -214,6 +214,81 @@ class EmptyIdIsNotAJoinKeyTest(unittest.TestCase):
         self.assertIn("stopped after 22", message)
         self.assertIn("not a problem with your identifiers", message)
 
+    def test_a_join_that_produced_nothing_is_named_before_the_conditions(self):
+        """The reporting user's files: one condition column AND targets that
+        never joined. No number of conditions fixes the join, so the join is
+        what the message has to say -- the first cut said "148,184 pairs were
+        read and matched" about pairs of which none had matched."""
+        values = write(self.dir, "v.tab", [["#gene", "C1"], ["mmu-miR-1", "0.1"]])
+        targets = write(self.dir, "t.tab", [["mmu-miR-1", "Fxyd4"]])
+        genes = write(self.dir, "g.tab", [["gene", "C1"], ["ENSMUSG00000062006", "1.0"]])
+        stats = run(targets, None, values, genes, self.out, "pearson")
+        message = explainEmptyResult(stats)
+        self.assertIn("not one target gene was found", message)
+        self.assertIn("Fxyd4", message)
+        self.assertNotIn("were read and matched", message)
+        self.assertIn("also needs at least two condition columns", message)
+
+    def test_the_gene_file_header_is_not_offered_as_an_example_id(self):
+        values = write(self.dir, "v.tab", [["#gene", "C1", "C2"], ["mmu-miR-1", "0.1", "0.2"]])
+        targets = write(self.dir, "t.tab", [["mmu-miR-1", "Fxyd4"]])
+        genes = write(self.dir, "g.tab", [["#geneID", "C1", "C2"],
+                                          ["ENSMUSG00000062006", "1.0", "2.0"],
+                                          ["ENSMUSG00000020169", "1.0", "2.0"]])
+        stats = run(targets, None, values, genes, self.out, "pearson")
+        self.assertEqual(stats["sampleGenes"], ["ENSMUSG00000062006", "ENSMUSG00000020169"])
+        self.assertNotIn("#geneID", explainEmptyResult(stats))
+
+    def test_an_empty_quantification_file_is_named_as_such(self):
+        values = write(self.dir, "v.tab", [["#gene", "C1", "C2"]])
+        targets = write(self.dir, "t.tab", [["mmu-miR-1", "G1"]])
+        genes = write(self.dir, "g.tab", [["gene", "C1", "C2"], ["G1", "1.0", "2.0"]])
+        stats = run(targets, None, values, genes, self.out, "pearson")
+        message = explainEmptyResult(stats)
+        self.assertIn("no data rows", message)
+        self.assertNotIn("(e.g. )", message)
+
+    def test_a_near_miss_is_not_called_a_different_identifier_space(self):
+        """fxyd4 vs Fxyd4, ENSMUSG00000062006.2 vs ENSMUSG00000062006."""
+        values = write(self.dir, "v.tab", [["#gene", "C1", "C2"], ["mmu-miR-1", "0.1", "0.2"]])
+        targets = write(self.dir, "t.tab", [["mmu-miR-1", "ENSMUSG00000062006.2"],
+                                            ["mmu-miR-1", "fxyd4"]])
+        genes = write(self.dir, "g.tab", [["gene", "C1", "C2"],
+                                          ["ENSMUSG00000062006", "1.0", "2.0"],
+                                          ["Fxyd4", "1.0", "2.0"]])
+        stats = run(targets, None, values, genes, self.out, "pearson")
+        self.assertEqual(stats["nearMisses"], 2)
+        message = explainEmptyResult(stats)
+        self.assertIn("only in case or in a version suffix", message)
+        self.assertNotIn("two different identifier spaces", message)
+
+    def test_a_trailing_blank_line_is_not_a_blank_identifier(self):
+        values = write(self.dir, "v.tab", [["#gene", "C1", "C2"], ["mmu-miR-1", "0.1", "0.2"], []])
+        targets = write(self.dir, "t.tab", [["mmu-miR-1", "G1"], []])
+        genes = write(self.dir, "g.tab", [["gene", "C1", "C2"], ["G1", "1.0", "2.0"], []])
+        stats = run(targets, None, values, genes, self.out, "pearson")
+        self.assertEqual(stats["dropped"], {"regulators": 0, "associationRegulators": 0,
+                                            "associationTargets": 0, "genes": 0})
+
+    def test_a_key_with_stray_whitespace_still_joins(self):
+        values = write(self.dir, "v.tab", [["#gene", "C1", "C2"], ["mmu-miR-1 ", "0.1", "0.2"]])
+        targets = write(self.dir, "t.tab", [["mmu-miR-1", "G1 "]])
+        genes = write(self.dir, "g.tab", [["gene", "C1", "C2"], ["G1", "1.0", "2.0"]])
+        stats = run(targets, None, values, genes, self.out, "pearson")
+        self.assertEqual(stats["scored"], 1)
+        self.assertEqual(stats["unmatchedTargets"], 0)
+
+    def test_all_nan_scores_are_not_a_result(self):
+        """Two identical condition columns: every correlation is nan, and
+        `nan > cutoff` is False, so the run "succeeded" with nothing relevant."""
+        values = write(self.dir, "v.tab", [["#gene", "C1", "C2"], ["mmu-miR-1", "0.1", "0.1"]])
+        targets = write(self.dir, "t.tab", [["mmu-miR-1", "G1"]])
+        genes = write(self.dir, "g.tab", [["gene", "C1", "C2"], ["G1", "1.0", "1.0"]])
+        stats = run(targets, None, values, genes, self.out, "kendall")
+        self.assertEqual(stats["scored"], 1)
+        self.assertEqual(stats["nanScores"], 1)
+        self.assertIn("undefined correlation", explainEmptyResult(stats))
+
     def test_a_missing_account_falls_back_rather_than_crashing(self):
         """The old caller passed nothing; a None must not raise."""
         self.assertIn("did not return any result", explainEmptyResult(None))
