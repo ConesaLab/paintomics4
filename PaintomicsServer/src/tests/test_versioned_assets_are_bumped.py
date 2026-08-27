@@ -90,7 +90,7 @@ PUBLISHED = {
     "app/view/PathwayAcquisitionViews/InputFormat/format-repair.js": (
         "0.1", "944c929f1496258aba56f026e7c30e4affb7052dcbc127b06982eaadff205cd2"),
     "app/view/PathwayAcquisitionViews/InputFormat/format-panel.js": (
-        "2.1", "adda1f328157c8ee0225c6f304d1d4a669809782b8f9f2fc0c12371d496cc185"),
+        "2.2", "563453b4916e86032a36c221eeaa6c9f0387f2892f86682ebaa8d335b985d0b9"),
     "app/view/PathwayAcquisitionViews/InputFormat/format-roles.js": (
         "0.2", "4c5afdf4f9c59d167756516db823cc1fa01179f3cd7b967d137c38a78c0508dd"),
     "app/view/PathwayAcquisitionViews/InputFormat/convert-profiler.js": (
@@ -98,7 +98,7 @@ PUBLISHED = {
     "app/view/PathwayAcquisitionViews/InputFormat/convert-agent.js": (
         "0.6", "d884a0d8344fccf966aab1219c9c70f9e29ca93a4a42e7ddf8f0852189f5ecdd"),
     "app/view/PathwayAcquisitionViews/InputFormat/convert-drawer.js": (
-        "0.7", "241e9a48b99f6ca40f3f9d3b5dd29f27513ca38c181fb902075a0149af9ca4b3"),
+        "0.8", "0bf9ac82da279bb3d51e01532ae320f2258c4f5bed3d8a5679748ff9070e7448"),
     "app/view/common/Util.js": (
         "2.1", "12359b8bf746394f63a7e0a15513a4f9ac82de1a25bbaa0e91e6b2fdd7e0050e"),
     "app/view/common/OrganismSearch.js": (

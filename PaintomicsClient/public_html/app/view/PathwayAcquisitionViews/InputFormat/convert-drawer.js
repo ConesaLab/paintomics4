@@ -1005,6 +1005,27 @@
             var chosen = out.values.filter(function (f) { return f.recommended; })[0] || out.values[0];
             var addOthers = false;
 
+            /* The file that belongs in the slot the drawer was opened from.
+             *
+             * Everything below used to key off `out.values`, and a conversion
+             * that produces no values table has none -- so the review ended
+             * with Cancel and "Download all", and the user had to save the
+             * file to disk and pick it again through Browse. Reported on the
+             * conversion that made this obvious: a MORE Conditions file, where
+             * the agent read 24 rows of sample metadata and wrote exactly the
+             * 0/1 experimental design PaintOmics wanted, named it design.tab,
+             * and then offered no way to put it in the field the user had
+             * clicked Convert on.
+             *
+             * Same shape as the rest of this family: code that enumerates omic
+             * files knows the plain values case and forgets design,
+             * associations and relevant-associations. The slot the user
+             * started from already says which role is wanted, so match on it.
+             */
+            var slotRole = (context && context.slotRole) || "values";
+            var forSlot = chosen ? null
+                : (out.files.filter(function (f) { return f.role === slotRole; })[0] || null);
+
             out.values.forEach(function (f) {
                 var rcard = el("article", "pa-convert-result" + (f === chosen ? " pa-convert-result-chosen" : ""));
                 var rhead = el("header", "pa-convert-result-head");
@@ -1106,7 +1127,7 @@
             actions.innerHTML = "";
             actions.appendChild(dismiss);
             actions.appendChild(downloadAll);
-            if (out.values.length) actions.appendChild(accept);
+            if (out.values.length || forSlot) actions.appendChild(accept);
 
             function syncActions() {
                 accept.textContent = addOthers
@@ -1116,6 +1137,16 @@
             syncActions();
 
             accept.addEventListener("click", function () {
+                if (!chosen && forSlot) {
+                    // No values table -- the conversion produced the file this
+                    // slot asked for. Put it straight back in the field.
+                    input.__paConverted = { from: file.name, original: file,
+                                            fieldName: fieldName, label: forSlot.label,
+                                            attempts: result.attempts || 1, relevant: false };
+                    setFile(input, forSlot.bytes, forSlot.name);
+                    shutdown();
+                    return;
+                }
                 if (!chosen) return;
                 var omicType = (context && context.omicType) || "Gene expression";
                 var linkedList = out.lists.filter(function (l) { return l.relevantFor === chosen.name; })[0];
@@ -1194,7 +1225,7 @@
      * file differently from a gene-expression one and would otherwise be
      * guessing from the file alone.
      */
-    function openConvertDrawer(input, file, fieldName) {
+    function openConvertDrawer(input, file, fieldName, slotRole) {
         var prefix = String(fieldName || "").replace(/_file$/, "");
         function fieldValue(name) {
             if (!window.Ext || !Ext.ComponentQuery) return null;
@@ -1203,7 +1234,8 @@
         }
         return openDrawer(input, file, fieldName, {
             omicType: fieldValue(prefix + "_omic_name") || "unknown",
-            species: fieldValue("specie") || "unknown"
+            species: fieldValue("specie") || "unknown",
+            slotRole: slotRole || "values"
         });
     }
 

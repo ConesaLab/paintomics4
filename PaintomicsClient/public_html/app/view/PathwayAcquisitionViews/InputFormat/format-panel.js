@@ -721,7 +721,13 @@
        silently does nothing reads as a broken page. */
     function requestAgent(input, file, fieldName) {
         if (window.PaintomicsInputFormat.openConvertDrawer) {
-            window.PaintomicsInputFormat.openConvertDrawer(input, file, fieldName);
+            // The slot's role goes with it. The drawer decides from this which
+            // produced file belongs back in the field the user started from --
+            // without it, it can only recognise a `values` table, and a
+            // conversion that produces a design or an associations file has no
+            // way home.
+            window.PaintomicsInputFormat.openConvertDrawer(
+                input, file, fieldName, roleForInput(input));
             return;
         }
         var strip = hostFor(input);
