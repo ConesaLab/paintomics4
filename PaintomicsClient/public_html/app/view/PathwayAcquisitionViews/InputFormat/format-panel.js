@@ -228,21 +228,35 @@
      * ------------------------------------------------------------------ */
 
     /*
-     * The omic cards are `flex: 1` items in an ExtJS vbox, and the vbox lays
-     * them out as position:absolute elements carrying an inline `top`. That is
-     * the whole difficulty: growing a card's DOM does not move the card below
-     * it, because nothing rewrites that `top`.
+     * The omic cards are items in an ExtJS vbox, and the vbox lays them out as
+     * position:absolute elements carrying an inline `top`. That is the whole
+     * difficulty: growing a card's DOM does not move the card below it,
+     * because nothing rewrites that `top`.
      *
-     * Ext rewrites it when a child's height changes IN THE LAYOUT MODEL. So the
-     * recipe is: drop `flex` so the card stops sharing a budget, then set an
-     * explicit height with setHeight(), inside suspendLayouts/resumeLayouts.
-     * Measured: growing a card by 90px moved the card beneath it down 95px and
-     * grew the column from 314 to 404.
+     * What this module used to do about that was compute the height the card
+     * ought to have and setHeight() it. A computed height is a MEASUREMENT,
+     * and a measurement has a moment. The MORE card is tall enough that its
+     * sections had not settled when the card was primed -- 662px recorded
+     * where itemsContainer alone settles at 684 -- so the card was pinned 66px
+     * short of its own contents. The omic title is itself a `flex: 1` item, so
+     * the vbox took the entire shortfall out of the title: it was allocated
+     * 0px, CSS min-height painted it at 44px regardless, and it landed on top
+     * of the first section heading. Reported twice from a screenshot.
      *
-     * What does NOT work, all measured: raw DOM insertion; adding a real
-     * Ext.Component; dropping flex without setting a height; updateLayout() on
-     * the card, the column or the form; and suspendLayouts + resumeLayouts(true)
-     * around any of those. Each grew the card and left every sibling in place.
+     * There is no number to get wrong in what replaces it. A vbox child with
+     * neither `flex` nor an explicit height shrink-wraps its own items, so the
+     * card is whatever its contents are, whenever they change; updateLayout()
+     * is what rewrites the siblings' `top`.
+     *
+     * Dropping `flex` is what makes that hold, and it is also the reading
+     * behind the older note here that "updateLayout() on the card does not
+     * work": while the card shares a height budget with its siblings, its
+     * height is the layout's to decide and updateLayout() can only hand back
+     * the same number. Out of the budget, it works. Measured on the MORE card:
+     * idle strip -> card 771px, title 44px, overlap 0; growing the strip by
+     * 34px -> card 805px and the card below moved from 1028 to 1062. Plain
+     * cards go 178 -> 175, which is exactly the 3px the title's own flex had
+     * been stretching them by.
      */
     function hostFor(input) {
         return hostForComponent(cardComponentFor(input));
@@ -254,71 +268,48 @@
         var existing = component.down && component.down("[itemId=paFormatHost]");
         if (existing) return existing.getEl().dom.firstChild;
 
-        // Remember what the card looked like before we touched it, so the
-        // original layout can be restored exactly when the file becomes valid.
-        if (component.__paBaseHeight === undefined) {
-            component.__paBaseHeight = component.getHeight();
-            component.__paBaseFlex = component.flex;
-        }
-
         var host = null;
         Ext.suspendLayouts();
+        freeCardHeight(component);
         host = component.add(Ext.create("Ext.Component", {
             itemId: "paFormatHost",
             cls: "pa-format-strip-host",
             html: '<div class="pa-format-strip"></div>'
         }));
         Ext.resumeLayouts(true);
+        component.updateLayout();
         return host.getEl().dom.firstChild;
     }
 
     /*
-     * Resize the card to fit whatever the message currently is.
+     * Take the card out of the vbox's height budget, once, so that it sizes
+     * itself from its items from here on. Both halves are needed: `flex` keeps
+     * the layout deciding the height, and the inline height the layout has
+     * already written keeps the DOM at that decision.
+     */
+    function freeCardHeight(component) {
+        if (!component || component.__paFreed) return;
+        component.__paFreed = true;
+        component.flex = null;
+        component.height = null;
+        if (component.el && component.el.dom) component.el.dom.style.height = "";
+    }
+
+    /*
+     * Re-lay the card out to fit whatever the message currently is.
      *
      * Called after every render because the message changes height -- opening
-     * the change preview roughly doubles it -- and a card sized for the old
-     * message would clip the new one.
+     * the change preview roughly doubles it -- and the vbox does not notice a
+     * child's DOM growing underneath it. Measured with the strip grown by 34px
+     * and no relayout: the strip hangs 33px below the card's own bottom edge.
      */
     function syncCardHeight(input) {
         syncCardHeightFor(cardComponentFor(input));
     }
 
     function syncCardHeightFor(component) {
-        if (!component || component.__paBaseHeight === undefined) return;
-        var host = component.down && component.down("[itemId=paFormatHost]");
-        if (!host || !host.getEl()) return;
-
-        var strip = host.getEl().dom.firstChild;
-        var needed = strip ? strip.getBoundingClientRect().height : 0;
-        if (!needed) return;
-
-        /* Size from what the card's own items want NOW, not from the height
-           snapshot taken when it was primed.
-
-           The snapshot is not always the settled height. A card is primed as
-           soon as it is laid out once, and the MORE panel is tall enough that
-           its sections had not finished: it recorded 662 where itemsContainer
-           alone settles at 684. Growing that by the strip pinned the card 64px
-           short of its contents -- and the omic title is a `flex: 1` item, so
-           the vbox took the whole shortfall out of the title, which collapsed
-           to nothing and overlapped the first heading. Measured: title bottom
-           74px, next section top 30px.
-
-           Summing the items cannot drift the same way, and it stays a maximum
-           against the snapshot so the cards whose height their parent assigns
-           are unaffected. */
-        var content = 0;
-        component.items.each(function (child) {
-            if (child === host) return;
-            var dom = child.el && child.el.dom;
-            if (dom) content += Math.max(child.getHeight() || 0, dom.scrollHeight || 0);
-        });
-
-        Ext.suspendLayouts();
-        component.flex = null;
-        component.setHeight(Math.max(component.__paBaseHeight, content) +
-                            Math.ceil(needed) + 12);
-        Ext.resumeLayouts(true);
+        if (!component || component.isDestroyed || !component.__paFreed) return;
+        component.updateLayout();
     }
 
     /*
@@ -336,19 +327,6 @@
             body.appendChild(region);
         }
         return region;
-    }
-
-    /* Give the card back exactly the layout it had before this module ran. */
-    function releaseCard(input) {
-        var component = cardComponentFor(input);
-        if (!component || component.__paBaseHeight === undefined) return;
-        var host = component.down && component.down("[itemId=paFormatHost]");
-        Ext.suspendLayouts();
-        if (host) component.remove(host, true);
-        component.setHeight(undefined);
-        component.flex = component.__paBaseFlex;
-        Ext.resumeLayouts(true);
-        component.__paBaseHeight = undefined;
     }
 
     /*
@@ -952,9 +930,11 @@
      * upload step reads as "bring any file" before a file is picked rather
      * than only after one fails. Cards are created by ExtJS on drag or on the
      * plus button, so they are found by watching the DOM; the strip is added
-     * only once the card has been laid out, because hostFor records the
-     * card's height as the base to grow from and a card measured before its
-     * first layout is 0px tall.
+     * once the card is rendered, which is all `component.add()` needs. It used
+     * to wait for a card taller than 100px as well, because the card's height
+     * was recorded here as the base to grow from -- nothing is recorded now,
+     * and that wait was in any case no guarantee the height had settled: on
+     * the MORE card it fired at 662px against a settled 771px.
      */
     function primeCard(cardEl) {
         if (!cardEl || cardEl.__paPrimed || !window.Ext || !Ext.getCmp) return;
@@ -972,7 +952,7 @@
             renderIdle(strip);
             syncCardHeightFor(component);
         };
-        if (component.rendered && component.getHeight() > 100) prime();
+        if (component.rendered) prime();
         else component.on("afterlayout", prime, null, { single: true, delay: 30 });
     }
 

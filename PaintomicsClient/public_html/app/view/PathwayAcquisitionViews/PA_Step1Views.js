@@ -2408,7 +2408,14 @@ function OmicSubmittingPanel(nElem, options) {
 			type: me.type, layout: {align: 'stretch',type: 'vbox'},
 			items: [
 				{
-					xtype: "box", flex: 1, cls: "omicboxTitle " + this.class, html:
+/* No `flex`. The title is a fixed 44px bar (.omicboxTitle min-height), and a
+					   flexed item in a vbox is where the layout puts any height the card has
+					   left over -- or, when the card is SHORT of its contents, where it takes
+					   the shortfall from. That is what a short MORE card did to this heading:
+					   allocated 0px, painted at 44px by the CSS min-height, sitting on top of
+					   the first section. Nothing else in the card is flexed, so slack now
+					   simply stays at the bottom where it is invisible. */
+					xtype: "box", cls: "omicboxTitle " + this.class, html:
 					'<h4>' +
 					' <a class="deleteOmicBox" href="javascript:void(0)" style="margin: 0; float:right;  padding-right: 15px;"><i class="fa fa-trash"></i></a>' +
 					this.title +
@@ -2729,8 +2736,10 @@ function RegionBasedOmicSubmittingPanel(nElem, options) {
 				type: 'vbox'
 			},
 			items: [{
+				/* No `flex` -- see the note on the first omicboxTitle above: a
+				   flexed 44px header is where a short card takes its shortfall
+				   from, and it landed on the section heading below. */
 				xtype: "box",
-				flex: 1,
 				cls: "omicboxTitle " + this.class,
 				html: '<h4><a class="deleteOmicBox" href="javascript:void(0)" style="margin: 0; float:right;  padding-right: 15px;">' +
 				(me.removable ? ' <i class="fa fa-trash"></i></a>' : "</a>") + this.title +
@@ -3573,8 +3582,10 @@ function MiRNAOmicSubmittingPanel(nElem, options) {
 				type: 'vbox'
 			},
 			items: [{
+				/* No `flex` -- see the note on the first omicboxTitle above: a
+				   flexed 44px header is where a short card takes its shortfall
+				   from, and it landed on the section heading below. */
 				xtype: "box",
-				flex: 1,
 				cls: "omicboxTitle " + this.class,
 				html: '<h4><a class="deleteOmicBox" href="javascript:void(0)" style="margin: 0; float:right;  padding-right: 15px;">' +
 				(me.removable ? ' <i class="fa fa-trash"></i></a>' : "</a>") + this.title +
@@ -4244,8 +4255,10 @@ function MORESubmittingPanel(nElem, options) {
 				type: 'vbox'
 			},
 			items: [{
+				/* No `flex` -- see the note on the first omicboxTitle above: a
+				   flexed 44px header is where a short card takes its shortfall
+				   from, and it landed on the section heading below. */
 				xtype: "box",
-				flex: 1,
 				cls: "omicboxTitle moreBasedFileBox",
 				html: '<h4><a class="deleteOmicBox" href="javascript:void(0)" style="margin: 0; float:right;  padding-right: 15px;">' +
 				(me.removable ? ' <i class="fa fa-trash"></i></a>' : "</a>") + this.title +
