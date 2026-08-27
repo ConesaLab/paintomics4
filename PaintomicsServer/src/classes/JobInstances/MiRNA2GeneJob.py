@@ -518,7 +518,24 @@ class MiRNA2GeneJob(Job):
                 regulator2genesRelevant.write("# Gene name\tmiRNA ID\n")
 
                 logging.info("ORDERING miRNAS BY CORRELATION / FC...")
+                # An identifier is what makes a row mean anything. Written
+                # without one, a row is not a weak result -- it is not a result.
+                #
+                # Found on a user's own regulator_associations file, produced by
+                # this very method and handed back to them as a success:
+                # 6,039 rows, 6,039 of them with an EMPTY target gene id.
+                # Downstream, MORE says "Association file shares no target IDs
+                # with the target expression file / association targets: " with
+                # nothing after the colon, and the user is sent to check an
+                # identifier space that was never written.
+                #
+                # `geneID` comes from `line[1].upper()` with nothing asserting
+                # it is non-empty, and none of the five writes below looked.
+                skippedUnnamed = 0
                 for geneID, gene in self.getInputGenesData().items():
+                    if not str(geneID).strip():
+                        skippedUnnamed += 1
+                        continue
                     #GET ALL THE miRNAs AND SORT
                     sortedScores = sorted(scoresTable[geneID], key=lambda omicValue: omicValue[0], reverse=True)
 
@@ -555,6 +572,29 @@ class MiRNA2GeneJob(Job):
                         if omicValue.isRelevantAssociation():
                             #WRITE RESULTS TO mirna2genesRelevant FILE -->   gen_id mirna
                             regulatorRelevantAssociations.write(geneID + "\t" + omicValue.getOriginalName() + "\n")
+
+                # Say what was dropped, and refuse if that was everything.
+                # Silence here is what turned a broken run into a "successful"
+                # one with an unusable file.
+                written = len(self.getInputGenesData()) - skippedUnnamed
+                if skippedUnnamed:
+                    logging.warning(
+                        "regu2Target: %d of %d target genes had no identifier "
+                        "and were dropped; %d written.",
+                        skippedUnnamed, len(self.getInputGenesData()), written)
+                if skippedUnnamed and written == 0:
+                    # Everything was unnamed, so every output file would be a
+                    # column of empty strings. Shipping that as a success is
+                    # what produced the 6,039-empty-id associations file: the
+                    # user gets a plausible-looking result and finds out three
+                    # steps later, from an error about identifier spaces that
+                    # names nothing on one side.
+                    raise Exception(
+                        " - None of the %d target genes carried an identifier, so "
+                        "every association row would have been written with an "
+                        "empty name. Check that the second column of your "
+                        "associations file holds the target gene ID."
+                        % skippedUnnamed)
 
                 genesToMiRNAFile.close()
                 regulator2genesOutput.close()
