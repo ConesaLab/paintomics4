@@ -579,6 +579,22 @@
            associations or relevant-features file fell through to the generic
            sentence below, which tells the reader nothing they can act on --
            and telling them is the whole purpose of this module. */
+        if (counts.DUPLICATE_IDENTIFIER) {
+            /* First, because it is fatal and because every other complaint
+               about this file is downstream of it. The numbers are in the
+               message on purpose: "you have duplicates" sends someone hunting,
+               "65 rows share ENSMUSG00000104758" tells them where to look and
+               how bad it is. */
+            var dup = result.problems.filter(function (p) {
+                return p.code === "DUPLICATE_IDENTIFIER";
+            })[0].detail;
+            return dup.ids + " identifier" + (dup.ids === 1 ? "" : "s") +
+                   " name more than one row — " + dup.rows + " rows in all, and " +
+                   "\u201C" + dup.worst + "\u201D appears " + dup.worstCount +
+                   " times. Every row has to name a different feature: the " +
+                   "analysis reads this file into a table keyed on that column, " +
+                   "and cannot hold two values under one name.";
+        }
         if (counts.NOT_INDICATOR) {
             return "A conditions file marks each sample with 1 or 0 in every " +
                    "group column; this one holds other values.";

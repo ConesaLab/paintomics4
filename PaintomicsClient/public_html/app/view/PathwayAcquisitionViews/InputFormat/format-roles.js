@@ -229,12 +229,80 @@
         return report;
     }
 
+    /* How wide the identifier is.
+     *
+     * One column normally, three for a region file, where chr/start/end
+     * together name the feature and column 0 alone repeats for every region on
+     * a chromosome. Lifted from convert-agent.js, which has graded the AI's
+     * own output this way since the converter shipped -- the rule was right,
+     * it just never ran on a file the user picked themselves. */
+    function idColumnCount(body) {
+        if (!body.length || body[0].length < 4) return 1;
+        var sample = body.slice(0, 200);
+        var pairs = 0, checked = 0;
+        for (var i = 0; i < sample.length; i++) {
+            var a = sample[i][1], b = sample[i][2];
+            if (!/^-?\d+$/.test(String(a).trim()) || !/^-?\d+$/.test(String(b).trim())) return 1;
+            checked++;
+            if (parseInt(b, 10) >= parseInt(a, 10)) pairs++;
+        }
+        return (checked && pairs / checked >= 0.9) ? 3 : 1;
+    }
+
+    /* Every identifier that names more than one row, worst first. */
+    function duplicateIdentifiers(rows) {
+        var all = nonEmptyRows(rows);
+        if (!all.length) return { count: 0, rows: 0, worst: null, worstCount: 0 };
+        var header = all[0].slice(1).every(function (c) { return V.isPythonFloat(String(c)); })
+            ? null : all[0];
+        var body = header ? all.slice(1) : all;
+        var idCols = idColumnCount(body);
+        var seen = Object.create(null), repeated = 0, rowsOver = 0;
+        var worst = null, worstCount = 0;
+        for (var i = 0; i < body.length; i++) {
+            var key = body[i].slice(0, idCols).map(function (c) { return String(c).trim(); }).join(":");
+            if (key.replace(/:/g, "") === "") continue;
+            seen[key] = (seen[key] || 0) + 1;
+            if (seen[key] === 2) repeated++;
+            if (seen[key] > 1) rowsOver++;
+            if (seen[key] > worstCount) { worstCount = seen[key]; worst = key; }
+        }
+        return { count: repeated, rows: rowsOver, worst: worst, worstCount: worstCount };
+    }
+
+    /* The roles whose identifier has to be unique.
+     *
+     * `values` and `design` are read into a matrix keyed on the identifier --
+     * runMORE.R:82 uses row.names=1, and the Rust port reproduces the same
+     * rejection deliberately (MORE/rust/src/data.rs:141) -- so a repeat is
+     * fatal on both engines, not a matter of taste.
+     *
+     * The association roles are deliberately absent: many regulators to one
+     * target is the whole point of those files, and a repeated identifier
+     * there is the file working as intended. */
+    var UNIQUE_KEY_ROLES = { values: true, design: true };
+
     function validateForRole(role, rows, conditions) {
-        if (role === "associations") return validateAssociations(rows);
-        if (role === "relevant-associations") return validateRelevantAssociations(rows);
-        if (role === "relevant") return validateRelevant(rows, conditions);
-        if (role === "design") return validateDesign(rows);
-        return validateValuesWithRegionCheck(rows);
+        var report;
+        if (role === "associations") report = validateAssociations(rows);
+        else if (role === "relevant-associations") report = validateRelevantAssociations(rows);
+        else if (role === "relevant") report = validateRelevant(rows, conditions);
+        else if (role === "design") report = validateDesign(rows);
+        else report = validateValuesWithRegionCheck(rows);
+
+        if (UNIQUE_KEY_ROLES[role || "values"]) {
+            var dup = duplicateIdentifiers(rows);
+            if (dup.count) {
+                report.problems = (report.problems || []).concat([
+                    problem("DUPLICATE_IDENTIFIER", 0, {
+                        ids: dup.count, rows: dup.rows,
+                        worst: dup.worst, worstCount: dup.worstCount
+                    })
+                ]);
+                report.ok = false;
+            }
+        }
+        return report;
     }
 
     return {
@@ -246,6 +314,7 @@
         rolesFromManifest: rolesFromManifest,
         ROLES: ROLES,
         validateForRole: validateForRole,
+        duplicateIdentifiers: duplicateIdentifiers,
         looksLikeRegionHeader: looksLikeRegionHeader,
         validateValuesWithRegionCheck: validateValuesWithRegionCheck
     };
