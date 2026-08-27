@@ -1388,10 +1388,46 @@ function fitPlotPanel(panelItemId, contentSelector) {
         return;
     }
 
-    var chrome = panel.getHeight() - content.clientHeight;
-    var wanted = content.scrollHeight + (chrome > 0 ? chrome : 60);
+    /* Measure what was DRAWN, not the wrapper.
+     *
+     * The content div is styled height:100%, so its own clientHeight and
+     * scrollHeight are a function of the panel height being computed here.
+     * Feeding that back in made the height a fixed point the panel could only
+     * ratchet upwards through: painting a 40-compound metabolite class grew it
+     * to the 820 cap, and every smaller class opened afterwards kept the cap
+     * with the difference showing as blank space -- 130px of figure in an 820px
+     * panel, measured on the STATegra example.
+     *
+     * The appended figures carry explicit pixel heights before Highcharts draws
+     * into them, so their boxes are the honest measurement and are final as
+     * soon as the markup is in the document.
+     */
+    content.scrollTop = 0;
+    var topEdge = content.getBoundingClientRect().top;
+    var drawn = 0;
+    Array.prototype.forEach.call(content.children, function (child) {
+        /* Plus the bottom margin: getBoundingClientRect stops at the border
+           box, so leaving it out sized the panel five pixels short of its own
+           content and put a scrollbar on a panel that fits. */
+        var margin = parseFloat(window.getComputedStyle(child).marginBottom) || 0;
+        var edge = child.getBoundingClientRect().bottom - topEdge + margin;
+        if (edge > drawn) {
+            drawn = edge;
+        }
+    });
+    if (!drawn) {
+        drawn = content.scrollHeight;
+    }
 
-    panel.setHeight(Math.max(260, Math.min(wanted, 820)));
+    var chrome = panel.getHeight() - content.clientHeight;
+    var wanted = Math.ceil(drawn) + (chrome > 0 ? chrome : 60);
+
+    /* The floor exists so a single-compound class still looks like a panel
+     * rather than a sliver; it used to be 260, which was itself taller than
+     * some figures. The cap keeps a class with hundreds of compounds from
+     * producing a page that cannot be scrolled past.
+     */
+    panel.setHeight(Math.max(180, Math.min(wanted, 820)));
 }
 
 /**
