@@ -587,6 +587,12 @@ def pathwayAcquisitionStep2_PART2(jobID, userID, selectedCompounds, clusterNumbe
         jobInstance.updateSubmitedCompoundsList(selectedCompounds)
         logging.info("STEP2 - UPDATING SELECTED COMPOUNDS LIST...DONE")
 
+        # Nothing matched anywhere: say so now, in the user's identifiers,
+        # rather than let the metagenes step fail inside R over an empty file.
+        emptyMapping = jobInstance.explainEmptyMapping(selectedCompounds)
+        if emptyMapping:
+            raise UserWarning(emptyMapping)
+
         logging.info("STEP2 - GENERATING PATHWAYS INFORMATION...")
         JobProgress.enter(jobID, "pathways")
         summary = jobInstance.generatePathwaysList()
