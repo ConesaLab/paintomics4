@@ -58,6 +58,57 @@ function withExampleScenario(exampleURL, jobView) {
 	return scenarioId ? exampleURL + "/" + encodeURIComponent(scenarioId) : exampleURL;
 }
 
+/* The reason a pre-processing job failed, as readable HTML, or "".
+ *
+ * JSON.parse used to be called on response.responseText unguarded, inside the
+ * error handler itself. Anything that is not JSON -- a Flask HTML error page, a
+ * proxy timeout, a truncated body -- threw from there, so `pendingRequests === 0`
+ * was never reached: endStep1Submission() never ran, the submit lock was never
+ * released, and NO dialog appeared at all. The one path whose whole job is to
+ * report a failure was the one that could fail silently.
+ */
+function step1FailureReason(response) {
+	var body = response && response.responseText;
+	if (!body) { return ""; }
+	var message;
+	try {
+		message = JSON.parse(body).message;
+	} catch (notJson) {
+		/* Not JSON. Show it as text rather than nothing -- a proxy's "504
+		   Gateway Timeout" is a better answer than "check the form". */
+		message = String(body).replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+		if (message.length > 300) { message = message.slice(0, 300) + "..."; }
+	}
+	if (!message) { return ""; }
+	return String(message)
+		.replace(/\[b\]/g, "<b>").replace(/\[\/b\]/g, "</b>")
+		.replace(/\[br\]/g, "</br>")
+		.replace(/\[ul\]/g, "<ul>").replace(/\[\/ul\]/g, "</ul>")
+		.replace(/\[li\]/g, "<li>").replace(/\[\/li\]/g, "</li>")
+		.replace(/ - /g, "<br/>");
+}
+
+/* The dialog shown when one or more files could not be prepared.
+ *
+ * It used to say "Please check the form for more information" and carry none of
+ * it. The information was real -- the error handler had already parsed the
+ * server's message -- but it went into a box inside the omic's own card, below
+ * the fold of a long Step 1, so from where the user stands the run failed for
+ * no stated reason. Reported as exactly that, on a MORE run whose actual cause
+ * was a duplicate identifier the server named precisely.
+ */
+function showStep1PreparationFailure(jobView) {
+	var reasons = (jobView && jobView.step1FailureReasons) || [];
+	var detail = reasons.length
+		? reasons.join("</br></br>")
+		: "The server did not say why. The omic cards below may carry more detail.";
+	if (jobView) { jobView.step1FailureReasons = []; }
+	showErrorMessage("Ops!... Something went wrong while preparing your files.", {
+		message: (reasons.length || 1) + " file(s) could not be prepared.</br></br>" + detail,
+		width: 620, height: 320
+	});
+}
+
 function JobController() {
 	/**
 	*
@@ -343,7 +394,7 @@ function JobController() {
 									me.step1OnFormSubmitHandler(jobView, {chained: true});
 								} else {
 									me.endStep1Submission(jobView);
-									showErrorMessage("Ops!... Something went wrong during the request files processing.", {message: "One or more files were not succesfully processed.</br>Please check the form for more info."});
+									showStep1PreparationFailure(jobView);
 								}
 							}
 						};
@@ -355,18 +406,18 @@ function JobController() {
 							jobView.failedRequests++;
 							jobView.pendingRequests--;
 
-							if (response.responseText) {
-								var response = JSON.parse(response.responseText);
-								var parsedMessage = response.message.replace(/\[b\]/g, "<b>").replace(/\[\/b\]/g, "</b>").replace(/\[br\]/g, "</br>").replace(/\[ul\]/g, "<ul>").replace(/\[\/ul\]/g, "</ul>").replace(/\[li\]/g, "<li>").replace(/\[\/li\]/g, "</li>").replace(/ - /g, "<br/>");
-	
-								other.subview.add(Ext.widget({xtype: "box", itemId: "errorMessage", html: '<h3 style="color: #EC696E;  font-size: 20px;"><i class="fa fa-cog fa-spin"></i> Error when processing the request file.<br><span style="font-size:14px;">' + parsedMessage + '</span></h3>'}));	
+							var parsedMessage = step1FailureReason(response);
+							if (parsedMessage) {
+								// Kept for the dialog, which is the surface the
+								// user is on; the box below keeps the detail.
+								jobView.step1FailureReasons = jobView.step1FailureReasons || [];
+								jobView.step1FailureReasons.push("<b>" + omicLabel + "</b>: " + parsedMessage);
+								other.subview.add(Ext.widget({xtype: "box", itemId: "errorMessage", html: '<h3 style="color: #EC696E;  font-size: 20px;"><i class="fa fa-cog fa-spin"></i> Error when processing the request file.<br><span style="font-size:14px;">' + parsedMessage + '</span></h3>'}));
 							}
 
 							if (jobView.pendingRequests === 0) {
 								me.endStep1Submission(jobView);
-								showErrorMessage("Ops!... Something went wrong during the request files processing.", {
-									message: "One or more files were not succesfully processed.</br>Please check the form for more information."
-								});
+								showStep1PreparationFailure(jobView);
 							}
 						};
 
