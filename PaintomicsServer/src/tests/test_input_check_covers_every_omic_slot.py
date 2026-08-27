@@ -200,7 +200,12 @@ class InputCheckCoversEverySlotTest(unittest.TestCase):
         # The three gates must all ask the slot, not the name. (The old regex
         # still appears in the comment that explains the bug, so the check is
         # on the calls rather than on the file's text.)
-        self.assertEqual(source.count("roleForField("), 4)
+        # At least four -- the gates that must ask the slot. Not EXACTLY four:
+        # this was an exact count and it failed the first time a legitimate new
+        # caller appeared (siblingSummaries, which has to know each file's role
+        # to describe it). A test that breaks when the code grows correctly is
+        # a test people learn to edit rather than read.
+        self.assertGreaterEqual(source.count("roleForField("), 4)
         self.assertIn("var role = roleForInput(input);", source)
 
     def test_every_slot_the_form_can_show_is_covered(self):

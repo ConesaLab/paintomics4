@@ -748,8 +748,15 @@
     /* Layer 2 hand-off. Replaced by convert-drawer.js when that ships; until
        then it says so plainly rather than doing nothing, because a button that
        silently does nothing reads as a broken page. */
-    function requestAgent(input, file, fieldName) {
+    function requestAgent(input, file, fieldName, serverSaid, siblings) {
         if (window.PaintomicsInputFormat.openConvertDrawer) {
+            // What the server said, when it is the server that refused, and
+            // what the job's other files look like. The agent is otherwise
+            // reading ONE file blind against a fault that is not in it: these
+            // files disagree with EACH OTHER, and no single one of them is
+            // wrong on its own -- the format check passed all of them.
+            if (serverSaid) { input.__paServerSaid = serverSaid; }
+            if (siblings) { input.__paSiblings = siblings; }
             // The slot's role goes with it. The drawer decides from this which
             // produced file belongs back in the field the user started from --
             // without it, it can only recognise a `values` table, and a
@@ -892,6 +899,100 @@
      * all of those the user still lands on the error dialog, and that dialog is
      * where the offer to fix belongs.
      */
+    /* What every OTHER file in this job looks like, one line each.
+     *
+     * The converter is per-file, and the failures that actually reach a user
+     * with real data are not. Each file here is individually valid -- the
+     * client check passes all of them -- and they are wrong TOGETHER:
+     *
+     *   MORE ERROR: No common sample names across input files.
+     *   Target samples: DSSmEVs_vs_DSS
+     *   Condition rows: 1-C1, 2-C2, 3-C3, ...
+     *   miRNA-Seq_data samples: DSS_SDmEV_vs_DSS
+     *
+     * Nothing about the regulator file on its own says that. The agent needs
+     * to see the design file's sample column and the target file's headers
+     * next to it, or it re-reads a valid file and finds nothing wrong.
+     *
+     * Only the HEADER of each -- the first 64 KB is read, never the
+     * measurements -- because column names are what disagree. Same rule as the
+     * rest of this module: the numbers stay in the browser.
+     */
+    function siblingSummaries(exceptInput) {
+        if (!window.Ext || !Ext.ComponentQuery) return Promise.resolve([]);
+        var jobs = [];
+        Ext.ComponentQuery.query("filefield").forEach(function (field) {
+            var role = roleForField(field);
+            if (!role) return;
+            var dom = field.fileInputEl && field.fileInputEl.dom;
+            var file = dom && dom.files && dom.files[0];
+            if (!file || dom === exceptInput) return;
+            var card = field.up && field.up("[cls~=omicbox]");
+            var nameField = card && card.queryById && card.queryById("omicNameField");
+            jobs.push(new Promise(function (resolve) {
+                var reader = new FileReader();
+                reader.onload = function () {
+                    var first = String(reader.result || "").split(/\r?\n/)[0] || "";
+                    var cells = first.split(first.indexOf("\t") !== -1 ? "\t" : ",");
+                    resolve({
+                        name: file.name, role: role,
+                        omic: (nameField && nameField.getValue && nameField.getValue()) || "",
+                        columns: cells.length,
+                        header: cells.slice(0, 12).join(" | ")
+                    });
+                };
+                reader.onerror = function () { resolve(null); };
+                reader.readAsText(file.slice(0, 65536));
+            }));
+        });
+        return Promise.all(jobs).then(function (all) {
+            return all.filter(Boolean);
+        });
+    }
+
+    /* The sibling summaries as one instruction the agent can read. */
+    function siblingBrief(summaries) {
+        if (!summaries.length) return "";
+        return "The other files in this job, so you can judge whether they " +
+               "agree with each other (only their first line was read):\n" +
+               summaries.map(function (f) {
+                   return "- " + f.name + " (" + f.role +
+                          (f.omic ? ", omic \u201C" + f.omic + "\u201D" : "") +
+                          ", " + f.columns + " columns): " + f.header;
+               }).join("\n");
+    }
+
+    /* The values file of whichever omic card the error names.
+     *
+     * Second chance for the errors that identify the omic rather than the
+     * file, which is most of what the analysis stage produces: it knows which
+     * omic it was modelling, not which upload the bytes came from. */
+    function pickedFileForOmicNamedIn(text) {
+        if (!window.Ext || !Ext.ComponentQuery) return null;
+        var haystack = String(text).replace(/[\s_]+/g, " ").toLowerCase();
+        var fields = Ext.ComponentQuery.query("filefield");
+        for (var i = 0; i < fields.length; i++) {
+            if (roleForField(fields[i]) !== "values") continue;
+            var dom = fields[i].fileInputEl && fields[i].fileInputEl.dom;
+            var file = dom && dom.files && dom.files[0];
+            if (!file) continue;
+            /* `[cls~=omicbox]`, not `.omicbox`: ComponentQuery has no CSS
+               class selector, and `.omicbox` silently matches nothing. Same
+               family as the `[cls=omicbox]` exact-match trap that has caught
+               this file's neighbours -- one entry of the whitespace list, not
+               the whole string and not a CSS class. */
+            var card = fields[i].up && fields[i].up("[cls~=omicbox]");
+            var nameField = card && card.queryById && card.queryById("omicNameField");
+            var omic = nameField && nameField.getValue && nameField.getValue();
+            if (!omic || String(omic).trim().length < 3) continue;
+            var needle = String(omic).replace(/[\s_]+/g, " ").trim().toLowerCase();
+            if (haystack.indexOf(needle) !== -1) {
+                return { input: dom, file: file, fieldName: fields[i].name };
+            }
+        }
+        return null;
+    }
+
     function pickedFileMatching(reportedName) {
         if (!window.Ext || !Ext.ComponentQuery) return null;
         var fields = Ext.ComponentQuery.query("filefield");
@@ -916,25 +1017,83 @@
         if (!body || !closeButton || !closeButton.parentNode) return;
         if (document.getElementById("pa-format-dialog-fix")) return;
 
+        /* Which file the server is complaining about, from ANY error that
+           names one.
+         *
+         * This used to require the literal phrase "Errors detected while
+         * processing", which is one servlet's wording. Every other failure --
+         * and the ones that actually reach a user with real data are the MORE
+         * ones -- says something else entirely, so the offer never appeared:
+         *
+         *   The MORE analysis failed (more-rs backend). Details:
+         *   MORE ERROR: no data columns could be read from
+         *     /.../inputData/mirna_values.tab
+         *
+         * That names the file perfectly well. So the dialog is read for
+         * anything shaped like one of OUR file names and matched against what
+         * the user actually picked, which is the question that was being asked
+         * all along. Reported by a user watching a MORE run fail with the agent
+         * sitting one click away and never offered. */
         var text = body.textContent || "";
-        if (text.indexOf("Errors detected while processing") === -1) return;
+        var picked = null;
+        var names = text.match(/[\w./\\-]+\.(?:tab|txt|csv|tsv|xls|xlsx|xlsm|ods|gtf|bed)\b/gi) || [];
+        for (var n = 0; n < names.length && !picked; n++) {
+            picked = pickedFileMatching(names[n].replace(/^.*[\\/]/, ""));
+        }
+        /* Some failures name no file at all. The one that sent a user looking
+           for this button is the clearest example -- it names sample names and
+           an omic, and nothing else:
 
-        var match = /Errors detected while processing ([^\s:]+)/.exec(text);
-        if (!match) return;
-        var picked = pickedFileMatching(match[1]);
+             MORE ERROR: No common sample names across input files.
+             Target samples: DSSmEVs_vs_DSS
+             Condition rows: 1-C1, 2-C2, 3-C3, ...
+             miRNA-Seq_data samples: DSS_SDmEV_vs_DSS
+
+           `miRNA-Seq_data` is the name the user typed into Omic Name, so the
+           card is identifiable even though the file is not. Underscores because
+           the backend substitutes them for spaces. */
+        if (!picked) picked = pickedFileForOmicNamedIn(text);
         if (!picked) return;
 
-        var button = el("a", "button btn-secondary btn-right", "Fix this file");
-        button.title = "Repairs the file in place, then you can run again.";
-        button.id = "pa-format-dialog-fix";
-        button.href = "#";
-        button.style.display = "inline-block";
-        button.addEventListener("click", function (event) {
+        /* Two different offers, because they do different things and the
+           difference matters. Re-checking applies a MECHANICAL repair and is
+           only useful when the fault is one this module models. The agent can
+           be told what the server said, which is the only route open when the
+           server knows something the client checker does not -- a sample name
+           that does not line up, an identifier space that does not match. */
+        var wrap = el("span", null, null);
+        wrap.id = "pa-format-dialog-fix";
+
+        var ask = el("a", "button btn-secondary btn-right", "Ask the PaintOmics AI agent");
+        ask.title = "Opens the agent on this file, with what the server said.";
+        ask.href = "#";
+        ask.style.display = "inline-block";
+        ask.addEventListener("click", function (event) {
+            event.preventDefault();
+            var serverSaid = text.replace(/\s+/g, " ").trim();
+            // Gathered BEFORE the dialog closes, while every field still holds
+            // its file, so the agent starts with the whole job in front of it
+            // rather than one file out of context.
+            siblingSummaries(picked.input).then(function (others) {
+                if (typeof closeButton.click === "function") closeButton.click();
+                requestAgent(picked.input, picked.file, picked.fieldName,
+                             serverSaid, siblingBrief(others));
+            });
+        });
+
+        var again = el("a", "button btn-secondary btn-right", "Check this file again");
+        again.title = "Re-reads the file and repairs what can be repaired mechanically.";
+        again.href = "#";
+        again.style.display = "inline-block";
+        again.addEventListener("click", function (event) {
             event.preventDefault();
             if (typeof closeButton.click === "function") closeButton.click();
             check(picked.input, picked.file, picked.fieldName, true);
         });
-        closeButton.parentNode.insertBefore(button, closeButton);
+
+        wrap.appendChild(again);
+        wrap.appendChild(ask);
+        closeButton.parentNode.insertBefore(wrap, closeButton);
     }
 
     // The dialog is rendered by Util.js's showMessage, which several call sites

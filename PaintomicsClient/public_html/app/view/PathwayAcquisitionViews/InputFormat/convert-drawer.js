@@ -883,6 +883,43 @@
                 omicType: (context && context.omicType) || "unknown",
                 species: (context && context.species) || "unknown",
                 goal: "Convert this file into the format PaintOmics accepts, keeping every measurement it holds.",
+                /* When the SERVER is the one that refused, hand the agent what
+                   it said. Without this the agent re-reads a file the client
+                   checker already considers valid and finds nothing, because
+                   the fault is one only the server can see -- a sample name
+                   that does not line up with the design file, an identifier
+                   space that does not match the other omics. */
+                instructions: (input && input.__paServerSaid)
+                    ? ["PaintOmics refused this job when the analysis ran. It said: "
+                       + input.__paServerSaid]
+                        .concat(input.__paSiblings ? [input.__paSiblings] : [])
+                        .concat(["This file may well be valid on its own -- the "
+                                 + "format check passed it. Judge it against the "
+                                 + "other files listed above: what has to agree "
+                                 + "between them, and what does not.",
+                                 /* The guard, added after watching the agent
+                                    do exactly this: given the siblings, it
+                                    renamed a column so the two VALUES files
+                                    agreed with each other, ignored the design
+                                    file entirely, and reported success. The
+                                    job would have failed again in the same
+                                    place. Cross-file context makes a confident
+                                    wrong answer as easy as a right one, so the
+                                    authority has to be named. */
+                                 "The design/conditions file is the AUTHORITY on "
+                                 + "sample names. Never rename a column to make two "
+                                 + "values files agree with each other: rename only "
+                                 + "to a name that actually appears in the design "
+                                 + "file. If the values files hold CONTRASTS "
+                                 + "(names like A_vs_B) while the design lists "
+                                 + "individual samples, they cannot be reconciled by "
+                                 + "renaming at all. In that case ASK THE USER rather "
+                                 + "than converting: state what each file holds, why "
+                                 + "the two cannot be matched, and that this analysis "
+                                 + "needs one column per sample. Asking is a real "
+                                 + "answer here; a converted file that still will not "
+                                 + "run is not."])
+                    : undefined,
                 ask: askUser,
                 onEvent: onEvent
             }, extra || {}));
