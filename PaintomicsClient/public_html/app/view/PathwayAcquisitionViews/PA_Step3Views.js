@@ -5820,7 +5820,6 @@ function PA_Step3MetaboliteView() {
 	let classMapHasDirection = false;
 	let classificationDictRef = {};
 	let classMapRowsCache = [];
-	let classMapExpanded = {};
 	let me = this;
 
 
@@ -5909,7 +5908,6 @@ function PA_Step3MetaboliteView() {
 		visualOptions = me.getParent().visualOptions
 
 		classMapMeta = this.model.getClassificationMeta() || {};
-		classMapExpanded = {};
 		classificationDictRef = classificationDict || {};
 		classMapCondition = 0;
 
@@ -6181,21 +6179,23 @@ function PA_Step3MetaboliteView() {
 		});
 	};
 
-	/* Highlight one class across both views, and say what it is in the line
-	   under the heading. The hover readout lives there rather than above the
-	   compound list because that line is already the caption of the chart the
-	   cursor is on -- a second readout further down is text the eye never
-	   reaches while pointing at a mark. */
+	/* Hovering a mark rings it, dims the rest, and says what it is in the line
+	   under the heading -- that line is already the caption of the chart the
+	   cursor is on, so the numbers appear where the eye is. It restores its
+	   resting summary on mouseleave.
+
+	   "Click to paint" rides on the hover readout rather than standing as its
+	   own hint: it is the only route to the compounds now, so it has to be
+	   discoverable, but a permanent instruction is furniture. */
 	this.focusClass = function (className) {
 		var map = document.getElementById("classActivityMap");
-		var heat = document.getElementById("classActivityHeat");
-		[map, heat].forEach(function (root) {
-			if (!root) return;
-			root.classList.toggle("paIsFocusing", !!className);
-			Array.prototype.forEach.call(root.querySelectorAll("[data-class]"), function (node) {
-				node.classList.toggle("paIsFocused", !!className && node.getAttribute("data-class") === className);
+		if (map) {
+			map.classList.toggle("paIsFocusing", !!className);
+			Array.prototype.forEach.call(map.querySelectorAll("[data-class]"), function (node) {
+				node.classList.toggle("paIsFocused",
+					!!className && node.getAttribute("data-class") === className);
 			});
-		});
+		}
 
 		var summary = document.getElementById("classActivityMapSummary");
 		if (!summary) return;
@@ -6215,173 +6215,8 @@ function PA_Step3MetaboliteView() {
 			+ (classMapHasDirection
 				? ' &nbsp; <span class="paDirUp">▲' + row.up + '</span> <span class="paDirDown">▼' + row.down + '</span>'
 				: "")
-			+ (row.reachable ? "" : ' &nbsp; <span class="paClassMapWarn">cannot reach FDR 0.05 at n=' + row.n + '</span>');
-	};
-
-	/* The compounds behind each class.
-
-	   No heading and no instructions: the marks above and the rows below carry
-	   the same class names in the same order, hovering either one dims the
-	   other, and a row that can be clicked says so with a cursor. Three lines of
-	   chrome telling the reader that was three lines between them and the data.
-
-	   The condition axis is sticky instead of printed once at the top, where it
-	   sat above an empty band and scrolled away before the rows it labelled.
-
-	   Long classes collapse to their relevant compounds. Amino acids alone is 40
-	   rows on the bundled example -- five times the next class -- so printed in
-	   full it becomes the panel rather than a part of it. */
-	var CLASSHEAT_COLLAPSE_OVER = 12;
-
-	this.renderClassHeatmap = function (rows, p0) {
-		var host = document.getElementById("classActivityHeat");
-		if (!host) return;
-
-		var omicName = "Metabolomics";
-		try {
-			var compoundOmics = me.model.getCompoundBasedInputOmics();
-			if (compoundOmics && compoundOmics.length && compoundOmics[0].omicName) {
-				omicName = compoundOmics[0].omicName;
-			}
-		} catch (e) { /* fall back to the default name */ }
-
-		var headers = [];
-		try { headers = paOmicHeaders(me.model, omicName) || []; } catch (e) { headers = []; }
-
-		var limits = null;
-		try {
-			var reference = (visualOptions && visualOptions.colorReferences
-				&& visualOptions.colorReferences[omicName]) || "p10p90";
-			limits = getMinMax(distributionSummaries[omicName], reference);
-		} catch (e) { limits = null; }
-		var colorScale = (visualOptions && visualOptions.colorScale) || "bwr";
-
-		var ordered = rows.slice().sort(function (a, b) {
-			return a.parent.localeCompare(b.parent) || b.n - a.n || a.name.localeCompare(b.name);
-		});
-
-		var columnCount = 0;
-		ordered.forEach(function (row) {
-			(classificationDictRef[row.name] || []).forEach(function (compoundID) {
-				var values = tableData.exprssionMetabolites[compoundID];
-				if (values && values.length > columnCount) columnCount = values.length;
-			});
-		});
-		if (!columnCount) {
-			host.innerHTML = '<p class="paEmptyNote">No measured values are attached to these compounds.</p>';
-			return;
-		}
-
-		/* paOmicHeaders returns the file's header ROW, so it leads with the id
-		   column ("#compound") and is one longer than the value vector. Take the
-		   trailing columnCount labels, or every condition name slides one left. */
-		var valueHeaders = (headers.length > columnCount)
-			? headers.slice(headers.length - columnCount)
-			: headers;
-		var columnLabels = [];
-		for (var ci = 0; ci < columnCount; ci++) {
-			columnLabels.push(valueHeaders[ci] || conditionNames[ci] || ("C" + (ci + 1)));
-		}
-
-		var html = '<div class="paClassHeat">'
-			+ '<div class="paClassHeatAxis"><span class="paClassHeatLabel"></span>'
-			+ '<span class="paClassHeatCells">';
-		columnLabels.forEach(function (label) {
-			html += '<i title="' + classMapEscape(label) + '">' + classMapEscape(label) + '</i>';
-		});
-		html += '</span></div>';
-
-		ordered.forEach(function (row) {
-			var compoundIDs = classificationDictRef[row.name] || [];
-			var relevantIDs = compoundIDs.filter(function (id) {
-				return me.compoundIsRelevant(id, classMapCondition);
-			});
-			var collapsed = compoundIDs.length > CLASSHEAT_COLLAPSE_OVER
-				&& relevantIDs.length > 0 && !classMapExpanded[row.name];
-			var shown = collapsed ? relevantIDs : compoundIDs;
-
-			var verdict = row.significant
-				? '<span class="paChip paChipYes">significant</span>'
-				: (row.reachable ? "" : '<span class="paChip paChipDead">cannot reach</span>');
-
-			html += '<section class="paClassHeatGroup' + (row.significant ? " paGroupSignificant" : "")
-				+ '" data-class="' + classMapEscape(row.name) + '">'
-				+ '<header class="paClassHeatGroupHead">'
-				+ '<span class="paClassHeatTitle">' + classMapEscape(row.name)
-				+ '<em>' + classMapEscape(row.parent) + '</em></span>'
-				+ '<span class="paClassBar" title="' + row.k + ' of ' + row.n + ' relevant">'
-				+ '<i style="width:' + (row.proportion * 100).toFixed(1) + '%"></i></span>'
-				+ '<span class="paClassHeatCount">' + row.k + '/' + row.n + '</span>'
-				+ verdict + '</header>';
-
-			shown.forEach(function (compoundID) {
-				var values = tableData.exprssionMetabolites[compoundID] || [];
-				var name = (tableData.mappingComp && tableData.mappingComp[compoundID]) || compoundID;
-				var relevant = me.compoundIsRelevant(compoundID, classMapCondition);
-
-				html += '<div class="paClassHeatRow' + (relevant ? " paIsRelevant" : "") + '">'
-					+ '<span class="paClassHeatLabel" title="' + classMapEscape(compoundID + " — " + name) + '">'
-					+ (relevant ? '<b class="paRelevantDot" title="relevant">•</b>'
-					            : '<b class="paRelevantDot paIsBlank"></b>')
-					+ classMapEscape(name) + '</span><span class="paClassHeatCells">';
-
-				for (var c = 0; c < columnCount; c++) {
-					var value = values[c];
-					var numeric = Number(value);
-					if (value === null || value === undefined || isNaN(numeric)) {
-						html += '<i class="paCellBlank" title="' + classMapEscape(name)
-							+ ' — ' + classMapEscape(columnLabels[c]) + ': no value"></i>';
-					} else {
-						var fill = "#CCCCCC";
-						try { fill = getColor(limits, numeric, colorScale); } catch (e) { /* keep the fallback */ }
-						html += '<i style="background:' + fill + '" title="' + classMapEscape(name)
-							+ ' — ' + classMapEscape(columnLabels[c]) + ': ' + numeric.toFixed(3) + '"></i>';
-					}
-				}
-				html += '</span></div>';
-			});
-
-			if (collapsed) {
-				html += '<button type="button" class="paClassHeatMore" data-class="'
-					+ classMapEscape(row.name) + '">'
-					+ 'Show all ' + compoundIDs.length + ' — '
-					+ (compoundIDs.length - shown.length) + ' more, none relevant here</button>';
-			}
-
-			html += '</section>';
-		});
-
-		html += '</div>';
-		host.innerHTML = html;
-
-		Array.prototype.forEach.call(host.querySelectorAll(".paClassHeatGroup"), function (group) {
-			var className = group.getAttribute("data-class");
-			group.addEventListener("mouseenter", function () { me.focusClass(className); });
-			group.addEventListener("mouseleave", function () { me.focusClass(null); });
-			group.querySelector(".paClassHeatGroupHead").addEventListener("click", function () {
-				me.paintClassCompounds(className);
-			});
-		});
-
-		Array.prototype.forEach.call(host.querySelectorAll(".paClassHeatMore"), function (button) {
-			button.addEventListener("click", function (event) {
-				event.stopPropagation();
-				classMapExpanded[button.getAttribute("data-class")] = true;
-				me.renderClassHeatmap(rows, p0);
-			});
-		});
-	};
-
-	/* Per-condition where the data supports it, overall otherwise. */
-	this.compoundIsRelevant = function (compoundID, conditionIndex) {
-		var omicValue = globalExpressionComp ? globalExpressionComp[compoundID] : null;
-		if (!omicValue) return false;
-		if (!(omicValue instanceof OmicValue)) {
-			try { omicValue = OmicValue.loadFromJSON(omicValue); }
-			catch (e) { return false; }
-		}
-		return (nCond > 1) ? omicValue.isRelevant(conditionIndex) === true
-		                   : omicValue.isRelevant() === true;
+			+ (row.reachable ? "" : ' &nbsp; <span class="paClassMapWarn">cannot reach FDR 0.05 at n=' + row.n + '</span>')
+			+ ' &nbsp; <span class="paClassMapMuted">click to paint its compounds</span>';
 	};
 
 	this.drawClassMap = function () {
@@ -6584,7 +6419,6 @@ function PA_Step3MetaboliteView() {
 		host.appendChild(svg);
 
 		me.renderClassMapControls();
-		me.renderClassHeatmap(rows, p0);
 
 		var unreachable = rows.filter(function (r) { return !r.reachable; }).length;
 		var passing = rows.filter(function (r) { return r.significant; }).length;
@@ -6641,7 +6475,7 @@ function PA_Step3MetaboliteView() {
 							'  <li><span class="paKeyGlyph paKeyRing"></span>passes FDR 0.05</li>' +
 							'  <li><span class="paKeyGlyph paKeyDash"></span>cannot reach it at this n</li>' +
 							'</ul>' +
-							'<div id="classActivityHeat"></div>',
+							'',
 						listeners: {
 							afterrender: function (box) {
 								/* clientWidth is 0 until the column layout has

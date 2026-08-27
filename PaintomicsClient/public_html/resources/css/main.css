@@ -9197,66 +9197,16 @@ div.repDetectionCard h3 {
 .paKeyRing { border: 1.8px solid #141E2B; }
 .paKeyDash { border: 1.4px dashed #78879A; }
 
-/* Class-grouped heatmap. Replaces the Ext grid: the grid showed a p-value per
-   class and never the metabolites that produced it. Cells use the app's own
-   getColor(..., 'bwr'), so a cell is the same colour here, on a pathway diagram
-   and in the Step 4 heatmaps.
-
-   No heading and no hint text. The marks above and the rows below carry the
-   same class names in the same order and hovering either dims the other, so
-   the relationship is shown rather than captioned. */
-.paClassHeat { margin-top: 14px; border-top: 1px solid #E4EAF0; }
-
-/* Sticky, so the condition labels stay with the rows they label. Printed once
-   at the top they sat above an empty band and scrolled away first. */
-.paClassHeatAxis { position: sticky; top: 0; z-index: 2; display: flex; gap: 10px;
-                   align-items: flex-end; padding: 6px 0 4px; background: #FFFFFF; }
-.paClassHeatAxis .paClassHeatCells i { font-style: normal; font-size: 10px; color: #78879A;
-    writing-mode: vertical-rl; transform: rotate(180deg); height: 58px; background: none;
-    display: inline-block; text-align: right; }
-.paClassHeatGroup { border-top: 1px solid #EDF1F5; padding: 9px 0 11px; transition: opacity .12s; }
-.paClassHeatGroup:first-of-type { border-top: none; }
-.paClassHeatGroupHead { display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-                        margin-bottom: 6px; cursor: pointer; }
-.paClassHeatTitle { font-weight: 600; color: #141E2B; font-size: 13.5px; }
-.paClassHeatTitle em { display: block; font-style: normal; font-weight: 400;
-                       color: #78879A; font-size: 11px; }
-.paClassHeatCount { font-family: Menlo, Consolas, monospace; font-size: 12px; color: #44556A;
-                    font-variant-numeric: tabular-nums; }
-.paClassHeatRow { display: flex; align-items: center; gap: 10px; height: 17px; }
-.paClassHeatLabel { flex: 0 0 190px; width: 190px; font-size: 11.5px; color: #44556A;
-                    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.paClassHeatRow.paIsRelevant .paClassHeatLabel { color: #141E2B; font-weight: 600; }
-.paRelevantDot { display: inline-block; width: 9px; color: #0F59A9; font-weight: 700; }
-.paRelevantDot.paIsBlank { color: transparent; }
-.paClassHeatCells { display: flex; gap: 2px; }
-.paClassHeatCells i { display: block; width: 26px; height: 15px; border-radius: 2px; }
-.paCellBlank { background: repeating-linear-gradient(45deg, #EDF1F5, #EDF1F5 3px, #E0E7EE 3px, #E0E7EE 6px); }
-.paClassHeatMore { margin: 5px 0 0 200px; padding: 3px 9px; font-size: 11px; cursor: pointer;
-                   color: #44556A; background: #F1F5F8; border: 1px solid #D2DBE4; border-radius: 10px; }
-.paClassHeatMore:hover { color: #141E2B; border-color: #B5C1CE; }
-
-/* Linked highlight. Hovering a class anywhere dims everything else in BOTH
-   views, which is what makes the marks above and the rows below read as one
-   instrument rather than two coincidental panels. */
-.paIsFocusing .paClassHeatGroup { opacity: .3; }
-.paIsFocusing .paClassHeatGroup.paIsFocused { opacity: 1; }
-.paClassHeatGroup.paIsFocused { background: #F5F8FA; box-shadow: inset 3px 0 0 #0F59A9;
-                                padding-left: 9px; }
+/* Hover linkage. Pointing at a mark rings it and drops every other class to a
+   fifth, which is what makes eight marks read as a set being compared rather
+   than eight independent dots. */
 .paIsFocusing .paClassMapMark { opacity: .22; }
 .paIsFocusing .paClassMapMark.paIsFocused { opacity: 1; }
 .paClassMapMark.paIsFocused .paClassMapDisc { stroke: #B5761F; stroke-width: 3; }
-.paGroupSignificant .paClassHeatTitle { color: #0F59A9; }
 /* The caption doubles as the hover readout. */
 .paClassMapSummary.paIsFocused { color: #141E2B; }
-
-.paClassBar { display: inline-block; width: 90px; height: 7px; border-radius: 4px;
-              background: #E4EAF0; overflow: hidden; vertical-align: middle; }
-.paClassBar i { display: block; height: 100%; background: #0F59A9; border-radius: 4px; }
-.paChip { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px;
-          font-weight: 600; white-space: nowrap; }
-.paChipYes { background: rgba(31,111,74,.12); color: #1F6F4A; }
-.paChipDead { background: rgba(165,31,30,.10); color: #A51F1E; }
+.paDirUp { color: #0F59A9; font-weight: 600; }
+.paDirDown { color: #A51F1E; font-weight: 600; }
 .paClassMapControls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
                       margin: 4px 0 12px; }
 .paClassMapControlLabel { font-size: 11px; letter-spacing: .06em; text-transform: uppercase;
