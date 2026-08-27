@@ -38,6 +38,78 @@ from collections import defaultdict
 import shutil
 from src.conf.serverconf import MAX_NUMBER_FEATURES
 
+def explainEmptyResult(stats):
+    """Why no miRNA-target pair survived, in the user's own identifiers.
+
+    The message this replaces was " - Your mirna2gene association process did
+    not return any result. Please, check the files (same identifiers, etc) and
+    parameters." -- true, and useless: it names none of the three files, none of
+    the identifier spaces, and no number. A user hit it twice in two minutes
+    (2026-08-27) and had nothing to act on either time.
+
+    Everything below is counted from the files that were just read. Nothing is
+    estimated and nothing is invented; when a number is not known the sentence
+    that would have used it is not written.
+    """
+    if not isinstance(stats, dict):
+        return (" - Your mirna2gene association process did not return any "
+                "result. Please, check the files (same identifiers, etc) and "
+                "parameters.")
+
+    dropped = stats.get("dropped") or {}
+    lines = [" - No miRNA was matched to a target gene, so there is nothing to analyse."]
+
+    def sample(ids):
+        return ", ".join(str(i) for i in (ids or [])[:3])
+
+    # 1. Nothing to join with: the regulators named in the associations file are
+    #    not the regulators in the quantification file.
+    if stats.get("pairs", 0) == 0:
+        lines.append(
+            "Your miRNA quantification file holds %d miRNAs (e.g. %s), but none "
+            "of them appears in the first column of your targets/associations "
+            "file. The two files have to use the same miRNA identifiers."
+            % (stats.get("regulators", 0), sample(stats.get("sampleRegulators"))))
+    # 2. They joined, but the target ids do not exist in the expression file.
+    elif stats.get("scored", 0) == 0 and stats.get("unmatchedTargets", 0):
+        lines.append(
+            "%d miRNA-target pairs were read, but not one target gene was found "
+            "in your gene expression file, so no correlation could be computed."
+            % stats.get("pairs", 0))
+        lines.append(
+            "Targets in the associations file look like: %s. Identifiers in the "
+            "gene expression file look like: %s. These are two different "
+            "identifier spaces -- convert one side to the other."
+            % (sample(stats.get("sampleUnmatchedTargets") or stats.get("sampleTargets")),
+               sample(stats.get("sampleGenes"))))
+    else:
+        lines.append(
+            "%d miRNA-target pairs were read and %d were scored, but none "
+            "carried a usable target gene."
+            % (stats.get("pairs", 0), stats.get("scored", 0)))
+
+    # 3. Blank cells, reported whenever there were any -- they are usually the
+    #    reason a file "looks fine" and matches nothing.
+    blanks = []
+    if dropped.get("regulators"):
+        blanks.append("%d rows of the quantification file had no miRNA id"
+                      % dropped["regulators"])
+    if dropped.get("associationRegulators"):
+        blanks.append("%d rows of the associations file had an empty first column"
+                      % dropped["associationRegulators"])
+    if dropped.get("associationTargets"):
+        blanks.append("%d rows of the associations file had an empty second column"
+                      % dropped["associationTargets"])
+    if dropped.get("genes"):
+        blanks.append("%d rows of the gene expression file had no gene id"
+                      % dropped["genes"])
+    if blanks:
+        lines.append("Rows skipped because an identifier was blank: " +
+                     "; ".join(blanks) + ".")
+
+    return " ".join(lines)
+
+
 class MiRNA2GeneJob(Job):
     #******************************************************************************************************************
     # CONSTRUCTORS
@@ -368,8 +440,9 @@ class MiRNA2GeneJob(Job):
 
         #STEP 2. CALL TO miRNA2Target SCRIPT AND GENERATE ASSOCIATION BETWEEN miRNAS AND TARGET GENES
         logging.info("STARTING miRNA2Target PROCESS.")
-        run_miRNA2Target(referenceFile, relevantReferenceFile, dataFile, geneExpressionFile, tmpFile, self.score_method)
+        matchStats = run_miRNA2Target(referenceFile, relevantReferenceFile, dataFile, geneExpressionFile, tmpFile, self.score_method)
         logging.info("STARTING miRNA2Target PROCESS...Done")
+        logging.info("miRNA2Target ACCOUNT: %s", matchStats)
 
         #STEP 3. PARSE RELEVANT FILE
         logging.info("PROCESSING RELEVANT FEATURES FILE...")
@@ -493,7 +566,7 @@ class MiRNA2GeneJob(Job):
                 # Abort the process to let the user know that there were no results.
                 if len(self.getInputGenesData()) < 1:
                     logging.info("MIRNA2GENES - NO RESULTS")
-                    raise Exception(" - Your mirna2gene association process did not return any result. Please, check the files (same identifiers, etc) and parameters.")
+                    raise Exception(explainEmptyResult(matchStats))
 
                 #EVEN WHEN THE USER HAS CHOOSE THE OPTION "FC", if the conditions do no allow to calculate the
                 #correlation, the script will calculate the FC

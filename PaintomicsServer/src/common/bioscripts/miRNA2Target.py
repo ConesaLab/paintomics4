@@ -129,6 +129,16 @@ def run(referenceFile, relevantReferenceFile, dataFile, geneExpresion, corrOutpu
     dataFile_header = None
     rawHeader = None
 
+    # What was dropped and what was joined, so the caller can say why an empty
+    # result is empty instead of asking the user to "check the files". Counters
+    # and at most three example ids per side: the point is to name the two
+    # identifier spaces, not to carry the files around a second time.
+    dropped = {"regulators": 0, "associationRegulators": 0,
+               "associationTargets": 0, "genes": 0}
+    seenTargets = set()
+    unmatchedSample = []
+    stats = {"dropped": dropped, "pairs": 0, "scored": 0, "unmatchedTargets": 0}
+
     #STEP 1. GENERATE THE TABLE WITH ALL THE MIRNAS IN THE INPUT
     print("STEP 1. Reading miRNA expression file...")
     with open(dataFile, 'r') as inputDataFile:
@@ -152,6 +162,25 @@ def run(referenceFile, relevantReferenceFile, dataFile, geneExpresion, corrOutpu
                 else:
                     dataFile_header = rawHeader[1:]      # first cell labels the ID column
 
+            # An unnamed row is not a feature.
+            #
+            # `""` is a perfectly good dict key, so a row whose id cell is
+            # blank becomes a regulator called "" -- and then joins to every
+            # OTHER blank cell in the other two files. That is not a corner
+            # case: it is what happened to a real user (2026-08-27). Their
+            # targets file carried 6,039 rows with an empty target id and their
+            # expression file 13 rows with an empty gene id, so `""` matched
+            # `""` and those 6,039 pairs were the ONLY ones that scored -- every
+            # real target was an ENSMUSG id while the expression file was keyed
+            # by gene symbol, an overlap of zero. PaintOmics then reported
+            # success and handed back an associations file of 6,039 rows whose
+            # target column was blank from top to bottom.
+            #
+            # Dropped here, at the read, so no later stage can join on nothing.
+            if not line or not line[0].strip():
+                dropped["regulators"] += 1
+                continue
+
             # "values" stays as text because it is written back out verbatim on
             # every result row; "floats" is the same row parsed once, for the
             # correlation.
@@ -167,8 +196,17 @@ def run(referenceFile, relevantReferenceFile, dataFile, geneExpresion, corrOutpu
 
     with open(referenceFile, 'r', encoding='utf-8-sig', errors='replace') as inputDataFile:
         for line in csv_reader(inputDataFile, delimiter="\t"):
+            # Half a pair is not a pair. A row missing either id is counted and
+            # dropped rather than joined on a blank -- see STEP 1.
+            if not line or not line[0].strip():
+                dropped["associationRegulators"] += 1
+                continue
+            if len(line) < 2 or not line[1].strip():
+                dropped["associationTargets"] += 1
+                continue
             if line[0] in miRNAtable:
                 miRNAtable[line[0]]["targets"].append(line[1])
+                seenTargets.add(line[1])
     inputDataFile.close()
 
 
@@ -184,6 +222,9 @@ def run(referenceFile, relevantReferenceFile, dataFile, geneExpresion, corrOutpu
             print("STEP 3. Processing mRNA expression file...")
             with open(geneExpresion, 'r') as inputDataFile:
                 for line in csv_reader(inputDataFile, delimiter="\t"):
+                    if not line or not line[0].strip():
+                        dropped["genes"] += 1
+                        continue
                     # Only ever read by getScore, so it can be stored parsed.
                     geneTable[line[0]] = toFloats(line[1:])
             inputDataFile.close()
@@ -221,14 +262,21 @@ def run(referenceFile, relevantReferenceFile, dataFile, geneExpresion, corrOutpu
             rows = []
             try:
                 for target_id in miRNA_targets:
+                    stats["pairs"] += 1
                     if useCorrelation:
                         target_values = geneTable.get(target_id, None)
+                        if target_values is None:
+                            stats["unmatchedTargets"] += 1
+                            if len(unmatchedSample) < 3 and target_id not in unmatchedSample:
+                                unmatchedSample.append(target_id)
 
                         if method == "fc" or target_values is not None:
                             score = getScore(miRNA_floats, target_values, method)
                             rows.append(rowPrefix + target_id + "\t" + str(score) + "\t" + method + rowSuffix)
+                            stats["scored"] += 1
                     else:
                         rows.append(rowPrefix + target_id + "\t" + str(0) + "\t" + "Association" + rowSuffix)
+                        stats["scored"] += 1
             finally:
                 outputFile.writelines(rows)
     except Exception as e:
@@ -238,7 +286,19 @@ def run(referenceFile, relevantReferenceFile, dataFile, geneExpresion, corrOutpu
         print("STEP 5. Done")
         outputFile.close()
 
-    return True
+    # The three identifier spaces, named. When nothing joined, which of them
+    # failed to meet is the whole answer, and it is not derivable from the
+    # empty output file the caller is holding.
+    stats["regulators"] = len(miRNAtable)
+    stats["genes"] = len(geneTable)
+    stats["targets"] = len(seenTargets)
+    stats["sampleRegulators"] = sorted(miRNAtable)[:3]
+    stats["sampleTargets"] = sorted(seenTargets)[:3]
+    stats["sampleGenes"] = sorted(geneTable)[:3]
+    stats["sampleUnmatchedTargets"] = unmatchedSample
+    stats["usedCorrelation"] = useCorrelation
+    stats["method"] = method
+    return stats
 
 
 def kendallTauB(x, y):
