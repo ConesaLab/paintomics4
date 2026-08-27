@@ -1941,3 +1941,55 @@
 [data-theme="dark"] .pa-convert-composer-send { background: var(--pa-accent-blue); border-color: var(--pa-accent-blue); color: #0F1A2B; }
 [data-theme="dark"] .pa-convert-composer-send:hover:not(:disabled) { background: #86B8F4; }
 [data-theme="dark"] .pa-convert-composer-input:focus { box-shadow: 0 0 0 3px rgba(107, 168, 240, 0.25); }
+
+/* Class activity map. Re-stepped for the dark surface rather than inverted:
+   the light blue/red pair drops below 3:1 against #151D26. */
+:root[data-theme="dark"] .paClassMapBand { fill: #1B242E; }
+:root[data-theme="dark"] .paClassMapGrid { stroke: #28333F; }
+:root[data-theme="dark"] .paClassMapDisc { fill: #35424F; stroke: #151D26; }
+:root[data-theme="dark"] .paClassMapUp { fill: #4A8CD2; stroke: #151D26; }
+:root[data-theme="dark"] .paClassMapDown { fill: #C9524D; stroke: #151D26; }
+:root[data-theme="dark"] .paClassMapNeutral { fill: #7C93AD; stroke: #151D26; }
+:root[data-theme="dark"] .paClassMapRing { stroke: #E3EAF2; }
+:root[data-theme="dark"] .paClassMapRingUnreachable { stroke: #6F7F8E; }
+:root[data-theme="dark"] .paClassMapSigLine { stroke: #B8892B; }
+:root[data-theme="dark"] .paClassMapSigLabel { fill: #B8892B; }
+:root[data-theme="dark"] .paClassMapTick,
+:root[data-theme="dark"] .paClassMapAxis { fill: #8A99A9; }
+:root[data-theme="dark"] .paClassMapLabel { fill: #E3EAF2; }
+:root[data-theme="dark"] .paClassMapCount { fill: #A1B0C0; }
+:root[data-theme="dark"] .paClassMapSummary,
+:root[data-theme="dark"] .paClassMapLegend { color: #A1B0C0; }
+:root[data-theme="dark"] .paClassMapWarn { color: #C9524D; }
+:root[data-theme="dark"] .paClassMapMuted { color: #6F7F8E; }
+:root[data-theme="dark"] .paKeyUp { background: #4A8CD2; }
+:root[data-theme="dark"] .paKeyDown { background: #C9524D; }
+:root[data-theme="dark"] .paKeyNeutral { background: #7C93AD; }
+:root[data-theme="dark"] .paKeyNull { background: #35424F; }
+:root[data-theme="dark"] .paKeyArea { background: #35424F; box-shadow: 0 0 0 3px rgba(53,66,79,.45); }
+:root[data-theme="dark"] .paKeyRing { border-color: #E3EAF2; }
+:root[data-theme="dark"] .paKeyDash { border-color: #6F7F8E; }
+:root[data-theme="dark"] .paClassMapKeys { color: #A1B0C0; }
+
+:root[data-theme="dark"] .paClassHeatHint,
+:root[data-theme="dark"] .paClassHeatP,
+:root[data-theme="dark"] .paClassHeatColumns .paClassHeatCells i,
+:root[data-theme="dark"] .paClassMapControlLabel,
+:root[data-theme="dark"] .paClassMapControlNote { color: #6F7F8E; }
+:root[data-theme="dark"] .paClassMapReadout,
+:root[data-theme="dark"] .paClassHeatLabel,
+:root[data-theme="dark"] .paClassHeatCount { color: #A1B0C0; }
+:root[data-theme="dark"] .paClassHeatGroup { border-top-color: #28333F; }
+:root[data-theme="dark"] .paClassHeatTitle { color: #E3EAF2; }
+:root[data-theme="dark"] .paClassHeatTitle em { color: #6F7F8E; }
+:root[data-theme="dark"] .paClassHeatRow.paIsRelevant .paClassHeatLabel { color: #E3EAF2; }
+:root[data-theme="dark"] .paRelevantDot { color: #4A8CD2; }
+:root[data-theme="dark"] .paCellBlank { background: repeating-linear-gradient(45deg, #1D2731, #1D2731 3px, #27333F 3px, #27333F 6px); }
+:root[data-theme="dark"] .paClassHeatGroup.paIsFocused { background: #1D2731; box-shadow: inset 3px 0 0 #4A8CD2; }
+:root[data-theme="dark"] .paGroupSignificant .paClassHeatTitle { color: #4A8CD2; }
+:root[data-theme="dark"] .paClassBar { background: #27333F; }
+:root[data-theme="dark"] .paClassBar i { background: #4A8CD2; }
+:root[data-theme="dark"] .paChipYes { background: rgba(78,158,118,.16); color: #4E9E76; }
+:root[data-theme="dark"] .paChipNo { background: #27333F; color: #8A99A9; }
+:root[data-theme="dark"] .paChipDead { background: rgba(201,82,77,.15); color: #C9524D; }
+:root[data-theme="dark"] .paClassMapSelect { background: #1D2731; border-color: #3A4756; color: #E3EAF2; }

@@ -492,6 +492,9 @@ function JobController() {
 							jobModel.setCompoundRegulateFeatures(response.compoundRegulateFeatures)
 						}
 
+						if (response.classificationMeta) {
+							jobModel.setClassificationMeta(response.classificationMeta)
+						}
 						if (response.featureSummary) {
 							jobModel.setFeatureSummary(response.featureSummary)
 						}
@@ -815,6 +818,9 @@ function JobController() {
 							jobModel.setCompoundRegulateFeatures(response.compoundRegulateFeatures)
 						}
 
+						if (response.classificationMeta) {
+							jobModel.setClassificationMeta(response.classificationMeta)
+						}
 						if (response.featureSummary) {
 							jobModel.setFeatureSummary(response.featureSummary)
 						}
@@ -1153,6 +1159,9 @@ function JobController() {
 							jobModel.setCompoundRegulateFeatures(response.compoundRegulateFeatures)
 						}
 
+						if (response.classificationMeta) {
+							jobModel.setClassificationMeta(response.classificationMeta)
+						}
 						if (response.featureSummary) {
 							jobModel.setFeatureSummary(response.featureSummary)
 						}
