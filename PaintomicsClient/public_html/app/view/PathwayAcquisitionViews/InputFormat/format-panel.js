@@ -673,31 +673,44 @@
             var repaired = repairs.length ? API.applyRepairs(read.rows, repairs) : null;
             var fixable = repaired && validate(repaired.rows).ok && !partial;
 
+            /*
+             * ONE implementation, used by all three ways of applying a repair.
+             *
+             * There used to be three copies, and the one the user actually
+             * clicks -- the "Fix automatically" button -- was the only one that
+             * forgot `clearBlocked`. The block is keyed by field name and kept
+             * alive by comparing the picked file's NAME, and a repair rewrites
+             * the file in place under the same name. So the card went green and
+             * the entry stayed live: the strip said
+             *
+             *     OK Gene expression: 112 rows - 1 value column
+             *
+             * while the submit interceptor still refused, with
+             *
+             *     X Gene expression: the server will reject this file
+             *
+             * -- two verdicts on the same file, from this module, at the same
+             * moment. The banner renders at the END of the form, so from the
+             * top of a long Step 1 the Run button simply looks dead. Hit on the
+             * reporting user's own DEGs2.txt, whose only fault was decimal
+             * commas that this very button had just fixed.
+             */
+            var applyRepair = function () {
+                replaceFile(input, repaired.rows, file.name);
+                clearBlocked(fieldName);
+                renderOk(hostFor(input), validate(repaired.rows).summary, false, input);
+            };
+
             if (fixable) {
-                if (autoApply) {
-                    replaceFile(input, repaired.rows, file.name);
-                    clearBlocked(fieldName);
-                    renderOk(hostFor(input), validate(repaired.rows).summary, false, input);
-                    return;
-                }
+                if (autoApply) { applyRepair(); return; }
                 markBlocked(fieldName, {
                     fieldName: fieldName, fileName: file.name, input: input,
-                    omic: strip.__omic, fixable: true,
-                    apply: function () {
-                        replaceFile(input, repaired.rows, file.name);
-                        clearBlocked(fieldName);
-                        renderOk(hostFor(input),
-                                 validate(repaired.rows).summary, false, input);
-                    }
+                    omic: strip.__omic, fixable: true, apply: applyRepair
                 });
-                var body = renderProblem(strip, "warn", describeProblems(result),
+                renderProblem(strip, "warn", describeProblems(result),
                     repairs.map(function (r) { return r.describe(); }).join(" ") +
                     " This is a direct find-and-replace, not an AI conversion.",
-                    [{ label: "Fix automatically", primary: true, onClick: function () {
-                          replaceFile(input, repaired.rows, file.name);
-                          renderOk(hostFor(input), validate(repaired.rows).summary, false, input);
-                      } },
-                    ]);
+                    [{ label: "Fix automatically", primary: true, onClick: applyRepair }]);
                 return;
             }
 
