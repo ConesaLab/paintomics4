@@ -38,6 +38,128 @@ from collections import defaultdict
 import shutil
 from src.conf.serverconf import MAX_NUMBER_FEATURES
 
+def explainEmptyResult(stats):
+    """Why no miRNA-target pair survived, in the user's own identifiers.
+
+    The message this replaces was " - Your mirna2gene association process did
+    not return any result. Please, check the files (same identifiers, etc) and
+    parameters." -- true, and useless: it names none of the three files, none of
+    the identifier spaces, and no number. A user hit it twice in two minutes
+    (2026-08-27) and had nothing to act on either time.
+
+    Everything below is counted from the files that were just read. Nothing is
+    estimated and nothing is invented; when a number is not known the sentence
+    that would have used it is not written.
+    """
+    if not isinstance(stats, dict):
+        return (" - Your mirna2gene association process did not return any "
+                "result. Please, check the files (same identifiers, etc) and "
+                "parameters.")
+
+    dropped = stats.get("dropped") or {}
+    lines = [" - No miRNA was matched to a target gene, so there is nothing to analyse."]
+
+    def sample(ids):
+        return ", ".join(str(i) for i in (ids or [])[:3])
+
+
+    # The order is the order of certainty: each branch is only reached when
+    # the ones above it cannot be the cause. A single condition column does
+    # not stop identifiers from joining, so the join is judged first (the
+    # first cut said "read and matched" about 148,184 pairs of which none had
+    # matched, and never mentioned the ENSMUSG-versus-symbol mismatch that was
+    # the actual cause, nor the blank rows).
+    conditions = stats.get("tooFewConditions")
+    # 0. No data rows at all.
+    if stats.get("regulators", 1) == 0:
+        lines.append(
+            "Your miRNA quantification file has no data rows -- it is empty or "
+            "holds only a header -- so there is no miRNA to pair with anything.")
+    # 1. Nothing to join with: the regulators named in the associations file are
+    #    not the regulators in the quantification file.
+    elif stats.get("pairs", 0) == 0:
+        lines.append(
+            "Your miRNA quantification file holds %d miRNAs (e.g. %s), but none "
+            "of them appears in the first column of your targets/associations "
+            "file. The two files have to use the same miRNA identifiers."
+            % (stats.get("regulators", 0), sample(stats.get("sampleRegulators"))))
+    # 2. They joined, but not one target id exists in the expression file.
+    elif stats.get("scored", 0) == 0 and stats.get("unmatchedTargets", 0):
+        lines.append(
+            "%d miRNA-target pairs were read, but not one target gene was found "
+            "in your gene expression file, so no correlation could be computed."
+            % stats.get("pairs", 0))
+        nearMiss = stats.get("sampleNearMiss")
+        if stats.get("nearMisses") and nearMiss:
+            lines.append(
+                "%d of the first %d unmatched targets differ from a gene id only "
+                "in case or in a version suffix (e.g. %s in the targets file, %s "
+                "in the expression file) -- the identifiers are the same kind, "
+                "written differently."
+                % (stats["nearMisses"], stats.get("nearMissesOf", 0),
+                   nearMiss[0], nearMiss[1]))
+        else:
+            lines.append(
+                "Targets in the associations file look like: %s. Identifiers in "
+                "the gene expression file look like: %s. These are two different "
+                "identifier spaces -- convert one side to the other."
+                % (sample(stats.get("sampleUnmatchedTargets") or stats.get("sampleTargets")),
+                   sample(stats.get("sampleGenes"))))
+        if conditions is not None:
+            lines.append(
+                "Once the targets match, note that a correlation also needs at "
+                "least two condition columns; this data has %d." % conditions)
+    # 3. Targets matched, so the fault is in the SCORING, and blaming
+    #    identifiers would send the user to rebuild files that were fine.
+    elif conditions is not None:
+        lines.append(
+            "Your data has %d condition column, and a correlation needs at "
+            "least two: with a single column every pair is a tie, so there is "
+            "nothing to correlate. %d miRNA-target pairs were read. Either "
+            "supply the conditions you want correlated, or provide a relevant "
+            "associations file so the pairs are taken from it instead of being "
+            "scored." % (conditions, stats.get("pairs", 0)))
+    elif stats.get("aborted"):
+        lines.append(
+            "The scoring step stopped after %d miRNA-target pairs with: %s. The "
+            "result file was truncated there, so this is not a problem with "
+            "your identifiers."
+            % (stats.get("abortedAfterPairs", 0), stats["aborted"]))
+    elif stats.get("scored", 0) and stats.get("nanScores", 0) == stats.get("scored", 0):
+        lines.append(
+            "All %d scored miRNA-target pairs gave an undefined correlation "
+            "(nan): each pair's values are identical across the conditions, so "
+            "there is nothing to correlate. Check that the condition columns "
+            "differ, or provide a relevant associations file."
+            % stats.get("scored", 0))
+    else:
+        lines.append(
+            "%d miRNA-target pairs were read and %d were scored, but none "
+            "carried a usable target gene."
+            % (stats.get("pairs", 0), stats.get("scored", 0)))
+
+    # 4. Blank cells, reported whenever there were any -- they are usually the
+    #    reason a file "looks fine" and matches nothing.
+    blanks = []
+    if dropped.get("regulators"):
+        blanks.append("%d rows of the quantification file had no miRNA id"
+                      % dropped["regulators"])
+    if dropped.get("associationRegulators"):
+        blanks.append("%d rows of the associations file had an empty first column"
+                      % dropped["associationRegulators"])
+    if dropped.get("associationTargets"):
+        blanks.append("%d rows of the associations file had an empty second column"
+                      % dropped["associationTargets"])
+    if dropped.get("genes"):
+        blanks.append("%d rows of the gene expression file had no gene id"
+                      % dropped["genes"])
+    if blanks:
+        lines.append("Rows skipped because an identifier was blank: " +
+                     "; ".join(blanks) + ".")
+
+    return " ".join(lines)
+
+
 class MiRNA2GeneJob(Job):
     #******************************************************************************************************************
     # CONSTRUCTORS
@@ -368,8 +490,16 @@ class MiRNA2GeneJob(Job):
 
         #STEP 2. CALL TO miRNA2Target SCRIPT AND GENERATE ASSOCIATION BETWEEN miRNAS AND TARGET GENES
         logging.info("STARTING miRNA2Target PROCESS.")
-        run_miRNA2Target(referenceFile, relevantReferenceFile, dataFile, geneExpressionFile, tmpFile, self.score_method)
+        matchStats = run_miRNA2Target(referenceFile, relevantReferenceFile, dataFile, geneExpressionFile, tmpFile, self.score_method)
         logging.info("STARTING miRNA2Target PROCESS...Done")
+        logging.info("miRNA2Target ACCOUNT: %s", matchStats)
+        # Rows whose every score is nan are not results: nan > cutoff is False,
+        # so such a run "succeeded" with zero relevant associations and no word
+        # about why (two identical condition columns do this for kendall,
+        # pearson and spearman alike).
+        if isinstance(matchStats, dict) and matchStats.get("scored") \
+                and matchStats.get("nanScores") == matchStats.get("scored"):
+            raise Exception(explainEmptyResult(matchStats))
 
         #STEP 3. PARSE RELEVANT FILE
         logging.info("PROCESSING RELEVANT FEATURES FILE...")
@@ -493,7 +623,7 @@ class MiRNA2GeneJob(Job):
                 # Abort the process to let the user know that there were no results.
                 if len(self.getInputGenesData()) < 1:
                     logging.info("MIRNA2GENES - NO RESULTS")
-                    raise Exception(" - Your mirna2gene association process did not return any result. Please, check the files (same identifiers, etc) and parameters.")
+                    raise Exception(explainEmptyResult(matchStats))
 
                 #EVEN WHEN THE USER HAS CHOOSE THE OPTION "FC", if the conditions do no allow to calculate the
                 #correlation, the script will calculate the FC
@@ -518,7 +648,24 @@ class MiRNA2GeneJob(Job):
                 regulator2genesRelevant.write("# Gene name\tmiRNA ID\n")
 
                 logging.info("ORDERING miRNAS BY CORRELATION / FC...")
+                # An identifier is what makes a row mean anything. Written
+                # without one, a row is not a weak result -- it is not a result.
+                #
+                # Found on a user's own regulator_associations file, produced by
+                # this very method and handed back to them as a success:
+                # 6,039 rows, 6,039 of them with an EMPTY target gene id.
+                # Downstream, MORE says "Association file shares no target IDs
+                # with the target expression file / association targets: " with
+                # nothing after the colon, and the user is sent to check an
+                # identifier space that was never written.
+                #
+                # `geneID` comes from `line[1].upper()` with nothing asserting
+                # it is non-empty, and none of the five writes below looked.
+                skippedUnnamed = 0
                 for geneID, gene in self.getInputGenesData().items():
+                    if not str(geneID).strip():
+                        skippedUnnamed += 1
+                        continue
                     #GET ALL THE miRNAs AND SORT
                     sortedScores = sorted(scoresTable[geneID], key=lambda omicValue: omicValue[0], reverse=True)
 
@@ -555,6 +702,29 @@ class MiRNA2GeneJob(Job):
                         if omicValue.isRelevantAssociation():
                             #WRITE RESULTS TO mirna2genesRelevant FILE -->   gen_id mirna
                             regulatorRelevantAssociations.write(geneID + "\t" + omicValue.getOriginalName() + "\n")
+
+                # Say what was dropped, and refuse if that was everything.
+                # Silence here is what turned a broken run into a "successful"
+                # one with an unusable file.
+                written = len(self.getInputGenesData()) - skippedUnnamed
+                if skippedUnnamed:
+                    logging.warning(
+                        "regu2Target: %d of %d target genes had no identifier "
+                        "and were dropped; %d written.",
+                        skippedUnnamed, len(self.getInputGenesData()), written)
+                if skippedUnnamed and written == 0:
+                    # Everything was unnamed, so every output file would be a
+                    # column of empty strings. Shipping that as a success is
+                    # what produced the 6,039-empty-id associations file: the
+                    # user gets a plausible-looking result and finds out three
+                    # steps later, from an error about identifier spaces that
+                    # names nothing on one side.
+                    raise Exception(
+                        " - None of the %d target genes carried an identifier, so "
+                        "every association row would have been written with an "
+                        "empty name. Check that the second column of your "
+                        "associations file holds the target gene ID."
+                        % skippedUnnamed)
 
                 genesToMiRNAFile.close()
                 regulator2genesOutput.close()

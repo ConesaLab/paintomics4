@@ -60,11 +60,27 @@ read_matrix <- function(path) {
   # So the separator is chosen by what it produces, not by whether the first
   # attempt happened to raise, and a parse with no data columns is rejected
   # rather than propagated.
+  # comment.char="" because PaintOmics' OWN format writes the header as `#gene`.
+  # read.table defaults to comment.char="#", which strips that line -- so the
+  # first DATA row becomes the header and its VALUES become the sample names.
+  # Measured on a 3-feature file headed `#gene\ts1\ts2\ts3\ts4`:
+  #
+  #   as shipped   nrow=2  samples "1.0,2.0,3.0,4.0"  features G2,G3 (G1 LOST)
+  #   with this    nrow=3  samples "s1,s2,s3,s4"      features G1,G2,G3
+  #   the Rust port (unchanged)    same as "with this"
+  #
+  # So the two engines disagreed on any file carrying the convention this
+  # project documents, and R was the one that was wrong. It usually surfaces
+  # later as "No common sample names across input files", which sends the user
+  # to look at their sample naming when nothing is wrong with it; twelve of the
+  # shipped example datasets write `#`-headed values files, and so does every
+  # file a user exports from PaintOmics.
   best <- NULL
   problems <- character(0)
   for (sep in c("\t", ",")) {
     parsed <- tryCatch(
-      read.table(path, header=TRUE, sep=sep, check.names=FALSE, quote="\"", row.names=1),
+      read.table(path, header=TRUE, sep=sep, check.names=FALSE, quote="\"",
+                 row.names=1, comment.char=""),
       error = function(e) {
         problems <<- c(problems, paste0(if (sep == "\t") "tab" else "comma",
                                         ": ", conditionMessage(e)))
@@ -156,7 +172,11 @@ for (i in seq_along(omic_names)) {
     # malformed upload.
     a_path <- assoc_paths[i]
     if (a_path != "NULL") {
-      assoc_df <- read.table(a_path, header=TRUE, sep="\t", stringsAsFactors=FALSE, check.names=FALSE)
+      # comment.char="" for the same reason as read_matrix above: `#` opens a
+      # HEADER in this project's format, never a comment, and the default would
+      # silently drop the first pair of any association file that uses it.
+      assoc_df <- read.table(a_path, header=TRUE, sep="\t", stringsAsFactors=FALSE,
+                             check.names=FALSE, comment.char="")
       cat(paste("MORE: Loaded association file for", name, "with", nrow(assoc_df), "rows and", ncol(assoc_df), "columns.\n"))
       cat(paste("MORE: First row of association file:", paste(assoc_df[1,], collapse=" | "), "\n"))
 
