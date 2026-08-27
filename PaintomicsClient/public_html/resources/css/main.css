@@ -9199,7 +9199,7 @@ div.repDetectionCard h3 {
 .paClassMapCount { fill: #44556A; font-size: 10px; }
 .paClassMapMark { cursor: pointer; }
 .paClassMapMark:hover .paClassMapDisc { stroke: #B5761F; }
-.paClassMapSummary { margin: 2px 0 10px; color: #44556A; font-size: 13px; }
+.paClassMapSummary { position: relative; margin: 2px 0 10px; color: #44556A; font-size: 13px; }
 .paClassMapWarn { color: #A51F1E; }
 .paClassMapMuted { color: #78879A; }
 /* Legend. A list, not a run-on sentence: each item is one nowrap flex child,
@@ -9240,7 +9240,19 @@ div.contentbox .paClassMapKeys li { padding-left: 0; }
 .paIsFocusing .paClassMapMark { opacity: .22; }
 .paIsFocusing .paClassMapMark.paIsFocused { opacity: 1; }
 .paClassMapMark.paIsFocused .paClassMapDisc { stroke: #B5761F; stroke-width: 3; }
-/* The caption doubles as the hover readout. */
+/* The caption doubles as the hover readout. The readout is laid OVER the
+   caption, not swapped into its place: the caption is what sizes this
+   paragraph, and the SVG sits directly under it, so a swap that changed the
+   line count moved the map out from under a resting cursor -- mouseleave,
+   swap back, mouseenter, 27 times a second, and the mark "shone". visibility,
+   not display, on the hidden caption: it must keep occupying its lines.
+   padding: inherit, because the card inset lives on `div.contentbox p` and an
+   absolute child at left: 0 sits at the padding edge -- measured 26px left of
+   the caption it stands in for. */
+.paClassMapSummary .paClassMapReadout { display: none; position: absolute; top: 0; left: 0; right: 0;
+                                        padding: inherit; box-sizing: border-box; }
+.paClassMapSummary.paIsFocused .paClassMapBase { visibility: hidden; }
+.paClassMapSummary.paIsFocused .paClassMapReadout { display: block; }
 .paClassMapSummary.paIsFocused { color: #141E2B; }
 .paDirUp { color: #0F59A9; font-weight: 600; }
 .paDirDown { color: #A51F1E; font-weight: 600; }
