@@ -5208,13 +5208,15 @@ function fillAIProvenance(root) {
 /*****************************************************************************
 **** "DRAFT THIS FOR ME" - EXPERIMENT DESIGN *********************************
 *****************************************************************************/
-/* Reads the header row of each data file the user has picked, sends just those
-   names to /ai_generate_exp_design, and writes the reply into the experiment
-   design box.
+/* Reads the header row of each file the user has picked, sends just those names
+   to /ai_generate_exp_design, and writes the reply into the experiment design
+   box.
 
-   Only the first line of each file is read, and only the main data files --
-   never the relevant-features lists, which are one column of identifiers and
-   describe no design. Nothing is read from disk until the button is pressed. */
+   Only the first line of each file is read, and nothing is read from disk until
+   the button is pressed. Every picked file is taken: one line each costs
+   nothing, and each one says something about the design the others do not --
+   a conditions file names the factors, an associations file says the study is
+   regulatory, a values matrix names the samples. */
 
 /* Enough of the file to be sure of catching the first newline. A header row for
    a wide matrix can be long, but not this long, and reading a fixed slice keeps
@@ -5245,23 +5247,110 @@ function readHeaderRow(file, callback) {
 	reader.readAsText(file.slice(0, EXP_DESIGN_HEADER_BYTES));
 }
 
-/* Every main data file the user has picked, as
-   [{omicName, fileName, fileField}]. The runtime field names are omicN_file
-   for the data file and omicN_relevant_file / omicN_associations_file for the
-   others, so the pattern anchors on the end to take only the first. */
+/* Plain text out of a fieldLabel, which may carry markup
+   ('Relevant regulators file<br>(optional)') and a trailing colon. */
+function plainFieldLabel(text) {
+	return String(text == null ? "" : text)
+		.replace(/<[^>]*>/g, " ")
+		.replace(/\s+/g, " ")
+		.replace(/^ | $/g, "")
+		.replace(/\s*:$/, "");
+}
+
+/* What one picked file is: which panel it sits in, and which slot of it.
+   "Regulatory Omic - MORE / Conditions file", "Gene expression / Data file".
+
+   Read off the component tree, never off the field's name. Every panel agrees
+   on its itemIds and its labels and disagrees on its field NAMES, which is the
+   whole of the bug this replaces. */
+/* The omic name the user typed for this file's panel, or "".
+
+   Two traps, both measured in Chrome. A region or pairwise card holds TWO
+   #omicNameField -- the first is the disabled, empty twin of the "already
+   mapped" alternative form -- so panel.down('#omicNameField') returned the
+   twin and the name the user typed never reached the label. And MORE stacks
+   regulators: block i names its files file_i / relevant_file_i / assoc_file_i
+   and its omic name omic_name_i, with no itemId at all, so every file of the
+   2nd regulator was labelled with the 1st regulator's name. The conditions and
+   gene-expression (rnaseqaux) files belong to the whole MORE panel, not to a
+   regulator: they take the panel heading. */
+function typedOmicName(panel, field) {
+	var fieldName = String((field && field.name) || "");
+	var block = fieldName.match(/^(?:file|relevant_file|assoc_file)_(\d+)(?:_file)?$/);
+	if (block) {
+		var combos = panel.query ? panel.query('[name=omic_name_' + block[1] + ']') : [];
+		var typed = (combos.length && combos[0].getValue) ? combos[0].getValue() : "";
+		return typed ? String(typed).trim() : "";
+	}
+	if (/^(?:conditions|rnaseqaux)(?:_file)?$/.test(fieldName)) { return ""; }
+
+	var fields = panel.query ? panel.query('#omicNameField') : [];
+	var live = fields.filter(function (f) { return !(f.isDisabled ? f.isDisabled() : f.disabled); });
+	var pool = live.length ? live : fields;
+	for (var i = 0; i < pool.length; i++) {
+		var value = pool[i].getValue && pool[i].getValue();
+		if (value && String(value).trim()) { return String(value).trim(); }
+	}
+	return "";
+}
+
+function pickedFileLabel(field) {
+	var panel = field.up('[cls~=omicbox]');
+	var selector = field.up('myFilesSelectorButton');
+	var slot = selector ? plainFieldLabel(selector.fieldLabel) : "";
+	var omic = "";
+
+	if (panel) {
+		/* What the user typed, when they typed one; otherwise the heading the
+		   panel prints, which every panel type renders the same way. */
+		omic = typedOmicName(panel, field);
+		if (!omic && panel.el && panel.el.dom) {
+			var heading = panel.el.dom.querySelector('.omicboxTitle h4');
+			omic = heading ? plainFieldLabel(heading.textContent) : "";
+		}
+		if (!omic) { omic = panel.type || ""; }
+	}
+
+	if (omic && slot) { return omic + " / " + slot; }
+	return omic || slot || field.name || "file";
+}
+
+/* A form cannot hand over an unbounded number of files. Six omics with four
+   selectors each is 24, which is past anything the form is used for. */
+var EXP_DESIGN_MAX_FILES = 24;
+
+/* Every file the user has picked, as [{omicName, file}].
+ *
+ * This used to keep only fields whose NAME matched /^omic\d+_file$/. That is
+ * the plain, region-based and miRNA panels' convention and it is not the MORE
+ * panel's: MORE names its five selectors conditions, rnaseqaux, file_0,
+ * relevant_file_0 and assoc_file_0. So a form holding a MORE panel and four
+ * chosen files collected NOTHING, and "Draft this for me" answered "There is
+ * nothing to read yet. Add an omic ... and pick its Data file" to a user who
+ * had done exactly that. Reported 2026-08-26; MORE was the only panel affected,
+ * and the file it most wanted -- the conditions file -- is the experimental
+ * design itself.
+ *
+ * Nothing about any panel's field names is encoded here now, so a fifth panel
+ * type cannot go blind the same way.
+ */
 function collectPickedOmicFiles() {
 	var picked = [];
 	Ext.each(Ext.ComponentQuery.query('filefield'), function(field) {
-		var name = field.name || "";
-		if (!/^omic\d+_file$/.test(name)) { return; }
+		if (picked.length >= EXP_DESIGN_MAX_FILES) { return false; }
 
 		var input = field.fileInputEl && field.fileInputEl.dom;
 		if (!input || !input.files || input.files.length === 0) { return; }
 
-		var omicPrefix = name.replace(/_file$/, "");
-		var nameField = Ext.ComponentQuery.query('[name=' + omicPrefix + '_omic_name]')[0];
+		/* The region panel's GTF: its first line is an annotation record or a
+		   "#!genome-build" comment, not column names -- nothing for a design
+		   drafter to read, and the one file the old name filter excluded on
+		   purpose. */
+		var selector = field.up('myFilesSelectorButton');
+		if (selector && selector.itemId === 'tertiaryFileSelector') { return; }
+
 		picked.push({
-			omicName: nameField ? nameField.getValue() : omicPrefix,
+			omicName: pickedFileLabel(field),
 			file: input.files[0]
 		});
 	});
