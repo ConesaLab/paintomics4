@@ -76,9 +76,9 @@ class EmptyIdIsNotAJoinKeyTest(unittest.TestCase):
     # the two identifier spaces are the two they actually had.
     def theirFiles(self):
         values = write(self.dir, "mirna_values.tab", [
-            ["#gene", "DSS_SDmEV_vs_DSS"],
-            ["ENSMUSG00000065402", "0.145"],
-            ["ENSMUSG00000065421", "-0.278"],
+            ["#gene", "DSS_SDmEV_vs_DSS", "DSS_vs_ctrl"],
+            ["ENSMUSG00000065402", "0.145", "0.51"],
+            ["ENSMUSG00000065421", "-0.278", "-0.62"],
         ])
         targets = write(self.dir, "targets.tab", [
             ["mirnaid", "gene_ID"],
@@ -87,9 +87,9 @@ class EmptyIdIsNotAJoinKeyTest(unittest.TestCase):
             ["ENSMUSG00000065421", ""],
         ])
         genes = write(self.dir, "degs.tab", [
-            ["genesymbol", "DSSmEVs_vs_DSS"],
-            ["Fxyd4", "-10.88"],
-            ["", "-5.62"],
+            ["genesymbol", "DSSmEVs_vs_DSS", "DSS_vs_ctrl"],
+            ["Fxyd4", "-10.88", "-3.1"],
+            ["", "-5.62", "-1.4"],
         ])
         return targets, values, genes
 
@@ -109,21 +109,21 @@ class EmptyIdIsNotAJoinKeyTest(unittest.TestCase):
 
     def test_a_blank_regulator_is_dropped_too(self):
         """PaintOmics' own broken output, fed back in as the targets file."""
-        values = write(self.dir, "v.tab", [["#gene", "C1"],
-                                           ["ENSMUSG00000065402", "0.1"]])
+        values = write(self.dir, "v.tab", [["#gene", "C1", "C2"],
+                                           ["ENSMUSG00000065402", "0.1", "0.4"]])
         targets = write(self.dir, "t.tab", [["", "ENSMUSG00000062006"],
                                             ["", "ENSMUSG00000020169"]])
-        genes = write(self.dir, "g.tab", [["gene", "C1"],
-                                          ["ENSMUSG00000062006", "1.0"]])
+        genes = write(self.dir, "g.tab", [["gene", "C1", "C2"],
+                                          ["ENSMUSG00000062006", "1.0", "2.0"]])
         stats = run(targets, None, values, genes, self.out, "pearson")
         self.assertEqual(stats["dropped"]["associationRegulators"], 2)
         self.assertEqual(stats["pairs"], 0)
 
     def test_a_values_row_with_no_id_is_dropped(self):
-        values = write(self.dir, "v.tab", [["#gene", "C1"], ["", "0.1"],
-                                           ["ENSMUSG00000065402", "0.2"]])
+        values = write(self.dir, "v.tab", [["#gene", "C1", "C2"], ["", "0.1", "0.3"],
+                                           ["ENSMUSG00000065402", "0.2", "0.5"]])
         targets = write(self.dir, "t.tab", [["ENSMUSG00000065402", "G1"]])
-        genes = write(self.dir, "g.tab", [["gene", "C1"], ["G1", "1.0"]])
+        genes = write(self.dir, "g.tab", [["gene", "C1", "C2"], ["G1", "1.0", "2.0"]])
         stats = run(targets, None, values, genes, self.out, "pearson")
         self.assertEqual(stats["dropped"]["regulators"], 1)
         self.assertEqual(stats["regulators"], 1)
@@ -140,10 +140,10 @@ class EmptyIdIsNotAJoinKeyTest(unittest.TestCase):
         self.assertIn("two different identifier spaces", message)
 
     def test_the_message_says_when_nothing_joined_at_all(self):
-        values = write(self.dir, "v.tab", [["#gene", "C1"],
-                                           ["ENSMUSG00000065402", "0.1"]])
+        values = write(self.dir, "v.tab", [["#gene", "C1", "C2"],
+                                           ["ENSMUSG00000065402", "0.1", "0.4"]])
         targets = write(self.dir, "t.tab", [["", "ENSMUSG00000062006"]])
-        genes = write(self.dir, "g.tab", [["gene", "C1"], ["G1", "1.0"]])
+        genes = write(self.dir, "g.tab", [["gene", "C1", "C2"], ["G1", "1.0", "2.0"]])
         stats = run(targets, None, values, genes, self.out, "pearson")
         message = explainEmptyResult(stats)
         self.assertIn("none of them appears in the first column", message)
@@ -171,6 +171,48 @@ class EmptyIdIsNotAJoinKeyTest(unittest.TestCase):
         self.assertIn("%d miRNA-target pairs" % stats["pairs"], message)
         self.assertNotIn("approximately", message.lower())
         self.assertNotIn("about ", message.lower())
+
+    def test_one_condition_is_named_as_the_fault(self):
+        """A correlation over one column is undefined, not weak.
+
+        Measured on the reporting user's files, which have a single condition
+        column: pearson RAISED "x and y must have length at least 2", the
+        blanket handler kept the truncated file, and they were told their
+        identifiers did not match -- while kendall, on the same data, wrote
+        30,722 rows whose score was `nan` in every one of them.
+        """
+        values = write(self.dir, "v.tab", [["#gene", "C1"],
+                                           ["mmu-miR-1", "0.1"]])
+        targets = write(self.dir, "t.tab", [["mmu-miR-1", "G1"]])
+        genes = write(self.dir, "g.tab", [["gene", "C1"], ["G1", "1.0"]])
+        stats = run(targets, None, values, genes, self.out, "pearson")
+        self.assertEqual(stats["tooFewConditions"], 1)
+        message = explainEmptyResult(stats)
+        self.assertIn("needs at least two", message)
+        self.assertNotIn("identifier", message,
+                         "a single condition is not an identifier problem")
+
+    def test_two_conditions_are_not_flagged(self):
+        values = write(self.dir, "v.tab", [["#gene", "C1", "C2"],
+                                           ["mmu-miR-1", "0.1", "0.4"]])
+        targets = write(self.dir, "t.tab", [["mmu-miR-1", "G1"]])
+        genes = write(self.dir, "g.tab", [["gene", "C1", "C2"],
+                                          ["G1", "1.0", "2.0"]])
+        stats = run(targets, None, values, genes, self.out, "pearson")
+        self.assertIsNone(stats.get("tooFewConditions"))
+
+    def test_an_abort_is_not_reported_as_an_identifier_problem(self):
+        """The blanket handler keeps the partial file; it must not stay silent.
+
+        A truncated run read as "no results" is exactly how a crash reached a
+        user as a message about identifier spaces.
+        """
+        stats = {"dropped": {}, "pairs": 900, "scored": 0,
+                 "aborted": "x and y must have length at least 2",
+                 "abortedAfterPairs": 22}
+        message = explainEmptyResult(stats)
+        self.assertIn("stopped after 22", message)
+        self.assertIn("not a problem with your identifiers", message)
 
     def test_a_missing_account_falls_back_rather_than_crashing(self):
         """The old caller passed nothing; a None must not raise."""

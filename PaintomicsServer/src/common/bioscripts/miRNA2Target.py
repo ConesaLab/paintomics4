@@ -232,6 +232,18 @@ def run(referenceFile, relevantReferenceFile, dataFile, geneExpresion, corrOutpu
             print("STEP 3. No mRNA expression file was provided...")
             method = "fc"
 
+        # A correlation over a single condition is not a weak correlation, it
+        # is undefined -- scipy raises "x and y must have length at least 2"
+        # for pearson/spearman, and kendall returns nan for every pair because
+        # every pair is a tie. Both were invisible: the raise landed in the
+        # blanket handler below, which keeps the partial file, so a user with
+        # one condition got an EMPTY result and was told their identifiers did
+        # not match; kendall got them 30,722 rows of "nan". Recorded here so
+        # the caller can say which it is.
+        stats["conditions"] = len(dataFile_header)
+        if useCorrelation and method != "fc" and len(dataFile_header) < 2:
+            stats["tooFewConditions"] = len(dataFile_header)
+
         outputFile = open(corrOutputFile, 'w')
         outputFile.write("# miRNA_id\ttarget_id\tscore\tscore method\t" + "\t".join(dataFile_header) + "\n")
 
@@ -280,8 +292,13 @@ def run(referenceFile, relevantReferenceFile, dataFile, geneExpresion, corrOutpu
             finally:
                 outputFile.writelines(rows)
     except Exception as e:
+        # Kept as a catch-all so a bad row cannot lose the rows already
+        # written, but no longer SILENT: an abort truncates the output, and a
+        # truncated file read as "no results" is how a crash got reported to a
+        # user as an identifier mismatch.
         print("Exception catched " +  str(e))
-        pass
+        stats["aborted"] = str(e)
+        stats["abortedAfterPairs"] = stats["pairs"]
     finally:
         print("STEP 5. Done")
         outputFile.close()

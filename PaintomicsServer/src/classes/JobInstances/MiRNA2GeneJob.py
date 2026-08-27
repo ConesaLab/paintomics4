@@ -62,6 +62,7 @@ def explainEmptyResult(stats):
     def sample(ids):
         return ", ".join(str(i) for i in (ids or [])[:3])
 
+
     # 1. Nothing to join with: the regulators named in the associations file are
     #    not the regulators in the quantification file.
     if stats.get("pairs", 0) == 0:
@@ -70,7 +71,23 @@ def explainEmptyResult(stats):
             "of them appears in the first column of your targets/associations "
             "file. The two files have to use the same miRNA identifiers."
             % (stats.get("regulators", 0), sample(stats.get("sampleRegulators"))))
-    # 2. They joined, but the target ids do not exist in the expression file.
+    # 2. Pairs exist, so the regulators lined up. From here the fault is in the
+    #    SCORING, and blaming identifiers would send the user to rebuild files
+    #    that were fine.
+    elif stats.get("tooFewConditions") is not None:
+        return (" - Your data has %d condition column, and a correlation needs "
+                "at least two: with a single column every pair is a tie, so "
+                "there is nothing to correlate. %d miRNA-target pairs were read "
+                "and matched. Either supply the conditions you want correlated, "
+                "or provide a relevant associations file so the pairs are taken "
+                "from it instead of being scored."
+                % (stats["tooFewConditions"], stats.get("pairs", 0)))
+    elif stats.get("aborted"):
+        return (" - The scoring step stopped after %d miRNA-target pairs with: "
+                "%s. The result file was truncated there, so this is not a "
+                "problem with your identifiers."
+                % (stats.get("abortedAfterPairs", 0), stats["aborted"]))
+    # 3. They joined, but the target ids do not exist in the expression file.
     elif stats.get("scored", 0) == 0 and stats.get("unmatchedTargets", 0):
         lines.append(
             "%d miRNA-target pairs were read, but not one target gene was found "
@@ -88,7 +105,7 @@ def explainEmptyResult(stats):
             "carried a usable target gene."
             % (stats.get("pairs", 0), stats.get("scored", 0)))
 
-    # 3. Blank cells, reported whenever there were any -- they are usually the
+    # 4. Blank cells, reported whenever there were any -- they are usually the
     #    reason a file "looks fine" and matches nothing.
     blanks = []
     if dropped.get("regulators"):
