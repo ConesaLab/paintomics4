@@ -82,7 +82,15 @@ jobs:
       - name: Test suites (shard ${{ matrix.shard }})
         # 600 s per suite: the slowest (test_compound_name_table_matches_mongo)
         # takes ~150 s on a laptop and ran past 180 s on the runner.
-        run: scripts/ci/run-unit-tests.sh --timeout 600 --shard "${{ matrix.shard }}"
+        #
+        # --slowest 400 prints EVERY suite's duration, not the top 15. The
+        # shard split is balanced from scripts/ci/suite_times.txt, and the only
+        # honest source for that file is a CI run: a laptop mis-costs it badly
+        # (the R-MORE suites cost 113 s locally and nothing here, because they
+        # skip). Publishing the whole table makes refreshing it a copy.
+        run: >-
+          scripts/ci/run-unit-tests.sh --timeout 600 --slowest 400
+          --shard "${{ matrix.shard }}"
 
   fixtures:
     name: Example datasets, one per pipeline class
