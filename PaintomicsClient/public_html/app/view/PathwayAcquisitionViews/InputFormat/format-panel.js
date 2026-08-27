@@ -24,7 +24,134 @@
     var FULL_CHECK_LIMIT = 25 * 1024 * 1024;
     var PARTIAL_CHECK_BYTES = 5 * 1024 * 1024;
 
-    var VALUES_FIELD = /^omic\d+_file$/;
+    /*
+     * The contract a picked file is held to, keyed by the SLOT it was picked
+     * into.
+     *
+     * This replaces a test on the field's NAME (/^omic\d+_file$/). That is the
+     * plain, region-based and miRNA panels' naming convention and it is not the
+     * MORE panel's -- MORE calls its five selectors conditions, rnaseqaux,
+     * file_0, relevant_file_0 and assoc_file_0 -- so every file picked into a
+     * Regulatory Omic (MORE) panel went unchecked: no strip, no warning, no
+     * offer to fix, and no block. Reported 2026-08-26 by a user whose files
+     * used decimal commas, the single fault this module exists to catch and
+     * blocks a submit over. She was told nothing, and the run failed on the
+     * server an hour later.
+     *
+     * itemId is the key because it is the one thing every panel type agrees
+     * on; the field names differ per panel and the file names are not evidence
+     * of anything (see roleForFileName's note in format-roles.js).
+     *
+     * Two slots are deliberately absent, because this module does not model
+     * what they hold and judging them by a validator that does not fit would
+     * block work that is correct:
+     *
+     *   tertiaryFileSelector    the region panel's GTF -- not a delimited
+     *                           table in any of these contracts;
+     *   third/fourthFileSelector  the miRNA panel's RESULTS container, filled
+     *                           by setContent with server paths rather than
+     *                           picked, so there is no browser file to read.
+     *                           An empty regulator_relevant_associations file
+     *                           is a legitimate conversion output and the
+     *                           relevant-associations contract rejects it, so
+     *                           judging them could only ever block correct work;
+     *   mirnaTargetsFileSelector  the miRNA2Genes prediction table, which is
+     *                           miRNA / gene / PLR. The shipped
+     *                           mirna_to_gene_associations.tab has THREE
+     *                           columns for that reason, so the two-column
+     *                           associations contract rejects it -- the very
+     *                           trap format-roles.js records under
+     *                           roleForFileName.
+     */
+    var ROLE_BY_SLOT = {
+        mainFileSelector: "values",
+        rnaseqauxFileSelector: "values",
+        secondaryFileSelector: "relevant",
+        moreRelevantFileSelector: "relevant",
+        mainAssociationFileSelector: "associations",
+        /* The miRNA panel's targets table -- miRNA / gene / score. It was left
+           out because it is not the 2-column `associations` contract, and so
+           went completely unchecked; it now has a contract of its own. */
+        mirnaTargetsFileSelector: "regulator-targets",
+        /* runMORE.R stops only on fewer than 2 or more than 3 columns and
+           documents the third (interaction type / area), so the two-column
+           `associations` contract was refusing a file the server takes. */
+        moreAssociationsFileSelector: "regulator-targets",
+        secondaryAssociationFileSelector: "relevant-associations",
+        conditionsFileSelector: "design"
+    };
+
+    /* The omic-name field a card would actually submit.
+     *
+     * A card can hold TWO of them. The miRNA panel builds one name field inside
+     * `itemsContainer` and another inside `itemsContainerAlt` -- the two
+     * layouts of the "map regions" toggle -- both with itemId `omicNameField`
+     * and both with name `omicN_omic_name`; the inactive one is DISABLED, which
+     * is how the browser knows not to serialise it. `queryById`/`down` return
+     * the first match, which on a real miRNA card is the disabled, empty one.
+     *
+     * Measured in Chrome on the reporting user's own form (2026-08-27):
+     *
+     *   combobox-1412  itemsContainerAlt  disabled:true   value ""
+     *   combobox-1466  itemsContainer     disabled:false  value "miRNA-Seq data"
+     *
+     * So every lookup of the omic name on a miRNA card read "" -- which is why
+     * the failure dialog for that job offered no agent button at all: the
+     * matcher requires a name to look for and was handed nothing.
+     *
+     * `disabled` is the discriminator rather than visibility, because
+     * visibility is the thing that is unreliable here (a hidden tab, a card
+     * mid-layout), while disabled is exactly the flag the form itself obeys. */
+    function omicNameFieldIn(card) {
+        if (!card || !card.query) return null;
+        var fields = card.query("#omicNameField");
+        if (!fields.length) return null;
+        var live = fields.filter(function (f) {
+            return !(f.isDisabled ? f.isDisabled() : f.disabled);
+        });
+        var pool = live.length ? live : fields;
+        for (var i = 0; i < pool.length; i++) {
+            var value = pool[i].getValue && pool[i].getValue();
+            if (value && String(value).trim()) return pool[i];
+        }
+        return pool[0];
+    }
+
+    /* The Ext filefield that owns this DOM input, or null. */
+    function extFieldFor(input) {
+        if (!window.Ext || !Ext.ComponentQuery) return null;
+        var fields = Ext.ComponentQuery.query("filefield");
+        for (var i = 0; i < fields.length; i++) {
+            var dom = fields[i].fileInputEl && fields[i].fileInputEl.dom;
+            if (dom === input) return fields[i];
+        }
+        return null;
+    }
+
+    /* The role of the slot a filefield sits in, or null when it is not one of
+       the omic panels' data slots. */
+    function roleForField(field) {
+        if (!field || !field.up) return null;
+        var selector = field.up("myFilesSelectorButton");
+        if (!selector || !selector.itemId) return null;
+        return ROLE_BY_SLOT[selector.itemId] || null;
+    }
+
+    function roleForInput(input) {
+        return roleForField(extFieldFor(input));
+    }
+
+    /* Whether the slot feeds MORE, whose R and Rust readers refuse a repeated
+       identifier. Every other pipeline merges repeats, so the duplicate rule
+       is only a hard block here. Recognised by the slot MORE alone has (the
+       conditions file) or by the card's class; never by a field NAME. */
+    function feedsMore(input) {
+        var component = cardComponentFor(input);
+        if (!component) return false;
+        if (component.down && component.down("[itemId=conditionsFileSelector]")) return true;
+        var cls = String((component.cls || "") + " " + (component.initialConfig && component.initialConfig.cls || ""));
+        return cls.indexOf("moreBasedOmic") !== -1;
+    }
 
     /*
      * Files we KNOW the server will reject, keyed by field name.
@@ -64,28 +191,35 @@
     /*
      * Where the message lives, and why the omic card carries the state.
      *
-     * The message cannot go INSIDE the omic card. The cards are `flex: 1` items
-     * in a vbox whose height is fixed at 314px by an hbox pinned at 400px, so
-     * the layout ASSIGNS each card its height out of a fixed budget rather than
-     * measuring its content. Nothing added to a card can make it taller; it can
-     * only overflow, and the row is overflow:hidden. Measured three ways -- raw
-     * DOM insertion, a real Ext.Component, and updateLayout on the card, its
-     * container and the form -- and the sibling omic moved 0px every time.
-     *
-     * So the message sits just below the omics row, but pinned to the same left
-     * edge and width as the cards and pulled up into the row's unused space, and
-     * the CARD is tinted to carry the state. The tint is what makes a problem
-     * impossible to miss; the message below it is what says how to fix it.
-     * Neither costs a single pixel of layout.
+     * The strip lives INSIDE the omic card now (hostForComponent adds it as a
+     * child component), which took freeCardHeight: the cards used to be
+     * `flex: 1` items in a vbox with a fixed height budget, so nothing added
+     * to one could make it taller -- measured three ways, and the sibling
+     * omic moved 0px every time. Each card sizes itself since; the CARD is
+     * still tinted to carry the state, because the tint is what makes a
+     * problem impossible to miss, and the strip is what says how to fix it.
      */
     // The omic's display name, used by the submit-time banner, which can be
     // about several omics at once.
-    function omicNameFor(fieldName) {
-        var prefix = fieldName.replace(/_file$/, "");
-        if (!window.Ext || !Ext.ComponentQuery) return prefix;
-        var field = Ext.ComponentQuery.query("[name=" + prefix + "_omic_name]")[0];
-        var value = field && field.getValue && field.getValue();
-        return value || prefix;
+    //
+    // Taken off the card the input sits in, not from the field name. The name
+    // lookup this replaces asked for "<prefix>_omic_name", which the MORE panel
+    // does not have -- its combo is `omic_name_0` -- so a MORE file would have
+    // been announced to the user as "file_0".
+    function omicNameFor(input, fieldName) {
+        var card = cardComponentFor(input);
+        if (card) {
+            var combo = omicNameFieldIn(card);
+            var typed = combo && combo.getValue && combo.getValue();
+            if (typed) return typed;
+            var heading = card.el && card.el.dom &&
+                          card.el.dom.querySelector(".omicboxTitle h4");
+            if (heading) {
+                var text = String(heading.textContent || "").replace(/\s+/g, " ").trim();
+                if (text) return text;
+            }
+        }
+        return String(fieldName || "").replace(/_file$/, "") || "this omic";
     }
 
     function cardFor(input) {
@@ -121,15 +255,29 @@
      * one line later. addCls/removeCls put the class in the list Ext rebuilds
      * from, so it survives.
      */
+    /* The other slots of this input's card that still hold a blocked file.
+       A MORE or pairwise card has five to eight slots and ONE strip, so each
+       pick overwrote the previous verdict: a bad conditions file, then a good
+       regulators file, and the card went green with the bad file still in it
+       and the refusal waiting at the end of the form. */
+    function otherBlockedInCard(input) {
+        var card = cardFor(input);
+        if (!card) return [];
+        return liveBlocked().filter(function (entry) {
+            return entry.input && entry.input !== input && cardFor(entry.input) === card;
+        });
+    }
+
     function setCardState(input, state) {
         var component = cardComponentFor(input);
         var card = cardFor(input);
+        var cardState = (state !== "err" && otherBlockedInCard(input).length) ? "err" : state;
         if (component && component.addCls) {
             CARD_STATES.forEach(function (cls) { component.removeCls(cls); });
-            if (state) component.addCls("pa-state-" + state);
+            if (cardState) component.addCls("pa-state-" + cardState);
         } else if (card) {
             CARD_STATES.forEach(function (cls) { card.classList.remove(cls); });
-            if (state) card.classList.add("pa-state-" + state);
+            if (cardState) card.classList.add("pa-state-" + cardState);
         }
 
         var box = filenameBoxFor(input);
@@ -143,21 +291,35 @@
      * ------------------------------------------------------------------ */
 
     /*
-     * The omic cards are `flex: 1` items in an ExtJS vbox, and the vbox lays
-     * them out as position:absolute elements carrying an inline `top`. That is
-     * the whole difficulty: growing a card's DOM does not move the card below
-     * it, because nothing rewrites that `top`.
+     * The omic cards are items in an ExtJS vbox, and the vbox lays them out as
+     * position:absolute elements carrying an inline `top`. That is the whole
+     * difficulty: growing a card's DOM does not move the card below it,
+     * because nothing rewrites that `top`.
      *
-     * Ext rewrites it when a child's height changes IN THE LAYOUT MODEL. So the
-     * recipe is: drop `flex` so the card stops sharing a budget, then set an
-     * explicit height with setHeight(), inside suspendLayouts/resumeLayouts.
-     * Measured: growing a card by 90px moved the card beneath it down 95px and
-     * grew the column from 314 to 404.
+     * What this module used to do about that was compute the height the card
+     * ought to have and setHeight() it. A computed height is a MEASUREMENT,
+     * and a measurement has a moment. The MORE card is tall enough that its
+     * sections had not settled when the card was primed -- 662px recorded
+     * where itemsContainer alone settles at 684 -- so the card was pinned 66px
+     * short of its own contents. The omic title is itself a `flex: 1` item, so
+     * the vbox took the entire shortfall out of the title: it was allocated
+     * 0px, CSS min-height painted it at 44px regardless, and it landed on top
+     * of the first section heading. Reported twice from a screenshot.
      *
-     * What does NOT work, all measured: raw DOM insertion; adding a real
-     * Ext.Component; dropping flex without setting a height; updateLayout() on
-     * the card, the column or the form; and suspendLayouts + resumeLayouts(true)
-     * around any of those. Each grew the card and left every sibling in place.
+     * There is no number to get wrong in what replaces it. A vbox child with
+     * neither `flex` nor an explicit height shrink-wraps its own items, so the
+     * card is whatever its contents are, whenever they change; updateLayout()
+     * is what rewrites the siblings' `top`.
+     *
+     * Dropping `flex` is what makes that hold, and it is also the reading
+     * behind the older note here that "updateLayout() on the card does not
+     * work": while the card shares a height budget with its siblings, its
+     * height is the layout's to decide and updateLayout() can only hand back
+     * the same number. Out of the budget, it works. Measured on the MORE card:
+     * idle strip -> card 771px, title 44px, overlap 0; growing the strip by
+     * 34px -> card 805px and the card below moved from 1028 to 1062. Plain
+     * cards go 178 -> 175, which is exactly the 3px the title's own flex had
+     * been stretching them by.
      */
     function hostFor(input) {
         return hostForComponent(cardComponentFor(input));
@@ -169,48 +331,48 @@
         var existing = component.down && component.down("[itemId=paFormatHost]");
         if (existing) return existing.getEl().dom.firstChild;
 
-        // Remember what the card looked like before we touched it, so the
-        // original layout can be restored exactly when the file becomes valid.
-        if (component.__paBaseHeight === undefined) {
-            component.__paBaseHeight = component.getHeight();
-            component.__paBaseFlex = component.flex;
-        }
-
         var host = null;
         Ext.suspendLayouts();
+        freeCardHeight(component);
         host = component.add(Ext.create("Ext.Component", {
             itemId: "paFormatHost",
             cls: "pa-format-strip-host",
             html: '<div class="pa-format-strip"></div>'
         }));
         Ext.resumeLayouts(true);
+        component.updateLayout();
         return host.getEl().dom.firstChild;
     }
 
     /*
-     * Resize the card to fit whatever the message currently is.
+     * Take the card out of the vbox's height budget, once, so that it sizes
+     * itself from its items from here on. Both halves are needed: `flex` keeps
+     * the layout deciding the height, and the inline height the layout has
+     * already written keeps the DOM at that decision.
+     */
+    function freeCardHeight(component) {
+        if (!component || component.__paFreed) return;
+        component.__paFreed = true;
+        component.flex = null;
+        component.height = null;
+        if (component.el && component.el.dom) component.el.dom.style.height = "";
+    }
+
+    /*
+     * Re-lay the card out to fit whatever the message currently is.
      *
      * Called after every render because the message changes height -- opening
-     * the change preview roughly doubles it -- and a card sized for the old
-     * message would clip the new one.
+     * the change preview roughly doubles it -- and the vbox does not notice a
+     * child's DOM growing underneath it. Measured with the strip grown by 34px
+     * and no relayout: the strip hangs 33px below the card's own bottom edge.
      */
     function syncCardHeight(input) {
         syncCardHeightFor(cardComponentFor(input));
     }
 
     function syncCardHeightFor(component) {
-        if (!component || component.__paBaseHeight === undefined) return;
-        var host = component.down && component.down("[itemId=paFormatHost]");
-        if (!host || !host.getEl()) return;
-
-        var strip = host.getEl().dom.firstChild;
-        var needed = strip ? strip.getBoundingClientRect().height : 0;
-        if (!needed) return;
-
-        Ext.suspendLayouts();
-        component.flex = null;
-        component.setHeight(component.__paBaseHeight + Math.ceil(needed) + 12);
-        Ext.resumeLayouts(true);
+        if (!component || component.isDestroyed || !component.__paFreed) return;
+        component.updateLayout();
     }
 
     /*
@@ -228,19 +390,6 @@
             body.appendChild(region);
         }
         return region;
-    }
-
-    /* Give the card back exactly the layout it had before this module ran. */
-    function releaseCard(input) {
-        var component = cardComponentFor(input);
-        if (!component || component.__paBaseHeight === undefined) return;
-        var host = component.down && component.down("[itemId=paFormatHost]");
-        Ext.suspendLayouts();
-        if (host) component.remove(host, true);
-        component.setHeight(undefined);
-        component.flex = component.__paBaseFlex;
-        Ext.resumeLayouts(true);
-        component.__paBaseHeight = undefined;
     }
 
     /*
@@ -299,18 +448,47 @@
 
     function aiExplainer() { return AI_EXPLAINER; }
 
+    /* What an accepted file is worth saying about it, per contract.
+     *
+     * Only the values summary carries numericColumns and idSample; a design
+     * matrix reports its conditions and the two association contracts report
+     * nothing but their shape. Reading the values fields unconditionally threw
+     * ("Cannot read properties of undefined") the moment this module started
+     * checking the other slots, leaving a blank green strip. */
+    function summaryBits(summary) {
+        var bits = [plural(summary.nRows, "row")];
+        if (summary.numericColumns) {
+            bits.push(plural(summary.numericColumns.length, "value column"));
+        } else if (summary.conditions) {
+            bits.push(plural(summary.conditions.length, "condition") +
+                      " (" + summary.conditions.slice(0, 4).join(", ") + ")");
+        } else if (summary.nCols) {
+            bits.push(plural(summary.nCols, "column"));
+        }
+        if (summary.idSample && summary.idSample.length) {
+            bits.push("IDs like " + summary.idSample.slice(0, 3).join(", "));
+        }
+        return bits;
+    }
+
     function renderOk(strip, summary, partial, input) {
         strip.className = "pa-format-strip pa-format-ok";
         strip.innerHTML = "";
-        var bits = [plural(summary.nRows, "row"),
-                    plural(summary.numericColumns.length, "value column")];
-        if (summary.idSample.length) {
-            bits.push("IDs like " + summary.idSample.slice(0, 3).join(", "));
-        }
+        var bits = summaryBits(summary || {});
         strip.appendChild(el("span", "pa-format-icon", "✓"));
         var body = el("div", "pa-format-body");
         var line = el("div", "pa-format-text",
             (strip.__omic ? strip.__omic + ": " : "") + bits.join(" · "));
+        /* Repeated identifiers outside MORE: the server merges them, so this
+           is information, not a fault -- but "65 rows share one id" is worth
+           knowing before the values are averaged into one feature. */
+        var dup = summary && summary.duplicates;
+        if (dup) {
+            line.appendChild(el("span", "pa-format-note",
+                " · " + dup.ids + " identifier" + (dup.ids === 1 ? "" : "s") +
+                " repeat" + (dup.ids === 1 ? "s" : "") + " (\u201C" + dup.worst + "\u201D " +
+                dup.worstCount + " times); the server merges their rows"));
+        }
         if (partial) {
             line.appendChild(el("span", "pa-format-note",
                 " (checked the first " + Math.round(PARTIAL_CHECK_BYTES / 1048576) + " MB)"));
@@ -353,7 +531,27 @@
             body.appendChild(prov);
         }
         strip.appendChild(body);
-        if (input) { setCardState(input, "ok"); syncCardHeight(input); }
+        if (input) { appendCardReminder(body, input); setCardState(input, "ok"); syncCardHeight(input); }
+    }
+
+    /* "Still blocked in this card: Conditions file (design.csv)" -- so a green
+       verdict on one slot never hides a red one on another. */
+    function appendCardReminder(body, input) {
+        var others = otherBlockedInCard(input);
+        if (!others.length) return;
+        var names = others.map(function (entry) {
+            var label = slotLabelFor(entry.input) || entry.fieldName;
+            return label + (entry.fileName ? " (" + entry.fileName + ")" : "");
+        });
+        body.appendChild(el("div", "pa-format-note pa-format-reminder",
+            "Still blocked in this card: " + names.join("; ") + "."));
+    }
+
+    function slotLabelFor(input) {
+        var field = extFieldFor(input);
+        var selector = field && field.up && field.up("myFilesSelectorButton");
+        var label = selector && selector.fieldLabel;
+        return label ? String(label).replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").replace(/\s*:\s*$/, "").trim() : "";
     }
 
     function markBlocked(fieldName, entry) { blocked[fieldName] = entry; }
@@ -421,6 +619,7 @@
         body.appendChild(bar);
         strip.appendChild(body);
         if (strip.__input) {
+            appendCardReminder(body, strip.__input);
             setCardState(strip.__input, kind === "warn" ? "warn" : "err");
             syncCardHeight(strip.__input);
         }
@@ -451,12 +650,12 @@
     function describeProblems(result) {
         var counts = {};
         result.problems.forEach(function (p) { counts[p.code] = (counts[p.code] || 0) + 1; });
-        var summary = result.summary;
+        var summary = result.summary || {};
 
         if (counts.DECIMAL_COMMA) {
             return "Numbers use commas as the decimal mark; PaintOmics needs dots.";
         }
-        if (counts.NON_NUMERIC && summary.textColumns.length) {
+        if (counts.NON_NUMERIC && summary.textColumns && summary.textColumns.length) {
             var names = summary.textColumns.map(function (i) {
                 return summary.columnNames[i] || ("column " + (i + 1));
             });
@@ -469,6 +668,62 @@
         if (counts.TOO_FEW_COLUMNS) return "The file has only one column; a values file needs an identifier plus at least one measurement.";
         if (counts.NO_FEATURE_LINES) return "The file has a header but no data rows.";
         if (counts.EMPTY) return "The file is empty.";
+
+        /* The other contracts. Without these every fault in a conditions,
+           associations or relevant-features file fell through to the generic
+           sentence below, which tells the reader nothing they can act on --
+           and telling them is the whole purpose of this module. */
+        if (counts.BLANK_IDENTIFIER) {
+            /* Before DUPLICATE and before the shape complaints: a blank id is
+               not a weak row, it is a row that will JOIN to every other blank
+               id in the job and quietly outvote the real data. */
+            var blank = result.problems.filter(function (p) {
+                return p.code === "BLANK_IDENTIFIER";
+            })[0].detail;
+            return blank.rows + " row" + (blank.rows === 1 ? "" : "s") +
+                   " of " + blank.total + " have no identifier (first at line " +
+                   blank.line + ", column " + blank.column + "). An empty name " +
+                   "is still a name to the analysis: those rows match every " +
+                   "other blank cell in your other files, and can end up being " +
+                   "the only thing that matches.";
+        }
+        if (counts.DUPLICATE_IDENTIFIER) {
+            /* Fatal on MORE's matrix readers (advisory elsewhere, where it never
+               reaches here). The numbers are in the
+               message on purpose: "you have duplicates" sends someone hunting,
+               "65 rows share ENSMUSG00000104758" tells them where to look and
+               how bad it is. */
+            var dup = result.problems.filter(function (p) {
+                return p.code === "DUPLICATE_IDENTIFIER";
+            })[0].detail;
+            return dup.ids + " identifier" + (dup.ids === 1 ? "" : "s") +
+                   " name more than one row — " + dup.rows + " rows in all, and " +
+                   "\u201C" + dup.worst + "\u201D appears " + dup.worstCount +
+                   " times. Every row has to name a different feature: the " +
+                   "analysis reads this file into a table keyed on that column, " +
+                   "and cannot hold two values under one name.";
+        }
+        if (counts.BAD_COLUMN_COUNT) {
+            return "Every line of this file needs the same columns; at least " +
+                   "one line does not. A regulator-to-target table is " +
+                   "Regulator, Target and optionally a score.";
+        }
+        if (counts.NOT_INDICATOR) {
+            return "A conditions file holds a number (1 or 0) in every " +
+                   "group column; this one holds text there.";
+        }
+        if (counts.NOT_ONE_CONDITION) {
+            return "Every sample must belong to exactly one condition — one 1 per row.";
+        }
+        if (counts.CONDITION_MISMATCH) {
+            return "This file does not have one column per condition.";
+        }
+        if (counts.NOT_TWO_COLUMNS) {
+            return "An associations file needs exactly two columns: the target and its regulator.";
+        }
+        if (counts.FIELD_TOO_LONG) {
+            return "A field is far too long to be an identifier — this looks like the wrong file for the slot.";
+        }
         return "The file does not match the format PaintOmics expects.";
     }
 
@@ -478,12 +733,21 @@
      * already asked for the file to be fixed -- making them find the strip and
      * press a second button would be two clicks for one intention.
      */
-    function check(input, file, fieldName, autoApply) {
+    function check(input, file, fieldName, autoApply, role) {
+        /* Every slot is held to its OWN contract. Running the values-matrix
+           validator over an associations file or a 0/1 design matrix would
+           report faults they cannot have; format-roles.js already models
+           each one. */
+        role = role || roleForInput(input) || "values";
+        var strictKeys = feedsMore(input);
+        var validate = function (rows) {
+            return API.validateForRole(role, rows, undefined, { strictKeys: strictKeys });
+        };
         var strip = hostFor(input);
         if (!strip) return;
         strip.__input = input;
         strip.__field = fieldName;
-        strip.__omic = omicNameFor(fieldName);
+        strip.__omic = omicNameFor(input, fieldName);
         // Set by the conversion sheet just before it hands the table over;
         // consumed here so a file the user picks by hand afterwards carries no
         // stale provenance.
@@ -527,7 +791,7 @@
             // does not actually have.
             if (partial && read.rows.length > 1) read.rows.pop();
 
-            var result = API.validateValues(read.rows);
+            var result = validate(read.rows);
             if (result.ok) {
                 clearBlocked(fieldName);
                 renderOk(strip, result.summary, partial, input);
@@ -536,33 +800,46 @@
 
             var repairs = API.proposeRepairs(read.rows, read.delimiter, result.problems);
             var repaired = repairs.length ? API.applyRepairs(read.rows, repairs) : null;
-            var fixable = repaired && API.validateValues(repaired.rows).ok && !partial;
+            var fixable = repaired && validate(repaired.rows).ok && !partial;
+
+            /*
+             * ONE implementation, used by all three ways of applying a repair.
+             *
+             * There used to be three copies, and the one the user actually
+             * clicks -- the "Fix automatically" button -- was the only one that
+             * forgot `clearBlocked`. The block is keyed by field name and kept
+             * alive by comparing the picked file's NAME, and a repair rewrites
+             * the file in place under the same name. So the card went green and
+             * the entry stayed live: the strip said
+             *
+             *     OK Gene expression: 112 rows - 1 value column
+             *
+             * while the submit interceptor still refused, with
+             *
+             *     X Gene expression: the server will reject this file
+             *
+             * -- two verdicts on the same file, from this module, at the same
+             * moment. The banner renders at the END of the form, so from the
+             * top of a long Step 1 the Run button simply looks dead. Hit on the
+             * reporting user's own DEGs2.txt, whose only fault was decimal
+             * commas that this very button had just fixed.
+             */
+            var applyRepair = function () {
+                replaceFile(input, repaired.rows, file.name);
+                clearBlocked(fieldName);
+                renderOk(hostFor(input), validate(repaired.rows).summary, false, input);
+            };
 
             if (fixable) {
-                if (autoApply) {
-                    replaceFile(input, repaired.rows, file.name);
-                    clearBlocked(fieldName);
-                    renderOk(hostFor(input), API.validateValues(repaired.rows).summary, false, input);
-                    return;
-                }
+                if (autoApply) { applyRepair(); return; }
                 markBlocked(fieldName, {
                     fieldName: fieldName, fileName: file.name, input: input,
-                    omic: strip.__omic, fixable: true,
-                    apply: function () {
-                        replaceFile(input, repaired.rows, file.name);
-                        clearBlocked(fieldName);
-                        renderOk(hostFor(input),
-                                 API.validateValues(repaired.rows).summary, false, input);
-                    }
+                    omic: strip.__omic, fixable: true, apply: applyRepair
                 });
-                var body = renderProblem(strip, "warn", describeProblems(result),
+                renderProblem(strip, "warn", describeProblems(result),
                     repairs.map(function (r) { return r.describe(); }).join(" ") +
                     " This is a direct find-and-replace, not an AI conversion.",
-                    [{ label: "Fix automatically", primary: true, onClick: function () {
-                          replaceFile(input, repaired.rows, file.name);
-                          renderOk(hostFor(input), API.validateValues(repaired.rows).summary, false, input);
-                      } },
-                    ]);
+                    [{ label: "Fix automatically", primary: true, onClick: applyRepair }]);
                 return;
             }
 
@@ -584,9 +861,22 @@
     /* Layer 2 hand-off. Replaced by convert-drawer.js when that ships; until
        then it says so plainly rather than doing nothing, because a button that
        silently does nothing reads as a broken page. */
-    function requestAgent(input, file, fieldName) {
+    function requestAgent(input, file, fieldName, serverSaid, siblings) {
         if (window.PaintomicsInputFormat.openConvertDrawer) {
-            window.PaintomicsInputFormat.openConvertDrawer(input, file, fieldName);
+            // What the server said, when it is the server that refused, and
+            // what the job's other files look like. The agent is otherwise
+            // reading ONE file blind against a fault that is not in it: these
+            // files disagree with EACH OTHER, and no single one of them is
+            // wrong on its own -- the format check passed all of them.
+            if (serverSaid) { input.__paServerSaid = serverSaid; }
+            if (siblings) { input.__paSiblings = siblings; }
+            // The slot's role goes with it. The drawer decides from this which
+            // produced file belongs back in the field the user started from --
+            // without it, it can only recognise a `values` table, and a
+            // conversion that produces a design or an associations file has no
+            // way home.
+            window.PaintomicsInputFormat.openConvertDrawer(
+                input, file, fieldName, roleForInput(input));
             return;
         }
         var strip = hostFor(input);
@@ -602,13 +892,8 @@
      * ------------------------------------------------------------------ */
 
     function extFieldNameFor(input) {
-        if (!window.Ext || !Ext.ComponentQuery) return null;
-        var fields = Ext.ComponentQuery.query("filefield");
-        for (var i = 0; i < fields.length; i++) {
-            var dom = fields[i].fileInputEl && fields[i].fileInputEl.dom;
-            if (dom === input) return fields[i].name || null;
-        }
-        return null;
+        var field = extFieldFor(input);
+        return (field && field.name) || null;
     }
 
     /* ------------------------------------------------------------------ *
@@ -727,11 +1012,129 @@
      * all of those the user still lands on the error dialog, and that dialog is
      * where the offer to fix belongs.
      */
+    /* What every OTHER file in this job looks like, one line each.
+     *
+     * The converter is per-file, and the failures that actually reach a user
+     * with real data are not. Each file here is individually valid -- the
+     * client check passes all of them -- and they are wrong TOGETHER:
+     *
+     *   MORE ERROR: No common sample names across input files.
+     *   Target samples: DSSmEVs_vs_DSS
+     *   Condition rows: 1-C1, 2-C2, 3-C3, ...
+     *   miRNA-Seq_data samples: DSS_SDmEV_vs_DSS
+     *
+     * Nothing about the regulator file on its own says that. The agent needs
+     * to see the design file's sample column and the target file's headers
+     * next to it, or it re-reads a valid file and finds nothing wrong.
+     *
+     * Only the HEADER of each -- the first 64 KB is read, never the
+     * measurements -- because column names are what disagree. Same rule as the
+     * rest of this module: the numbers stay in the browser.
+     */
+    function siblingSummaries(exceptInput) {
+        if (!window.Ext || !Ext.ComponentQuery) return Promise.resolve([]);
+        var jobs = [];
+        Ext.ComponentQuery.query("filefield").forEach(function (field) {
+            var role = roleForField(field);
+            if (!role) return;
+            var dom = field.fileInputEl && field.fileInputEl.dom;
+            var file = dom && dom.files && dom.files[0];
+            if (!file || dom === exceptInput) return;
+            var card = field.up && field.up("[cls~=omicbox]");
+            var nameField = omicNameFieldIn(card);
+            jobs.push(new Promise(function (resolve) {
+                var reader = new FileReader();
+                reader.onload = function () {
+                    var first = String(reader.result || "").split(/\r?\n/)[0] || "";
+                    var cells = first.split(first.indexOf("\t") !== -1 ? "\t" : ",");
+                    resolve({
+                        name: file.name, role: role,
+                        omic: (nameField && nameField.getValue && nameField.getValue()) || "",
+                        columns: cells.length,
+                        header: cells.slice(0, 12).join(" | ")
+                    });
+                };
+                reader.onerror = function () { resolve(null); };
+                reader.readAsText(file.slice(0, 65536));
+            }));
+        });
+        return Promise.all(jobs).then(function (all) {
+            return all.filter(Boolean);
+        });
+    }
+
+    /* The sibling summaries as one instruction the agent can read. */
+    function siblingBrief(summaries) {
+        if (!summaries.length) return "";
+        return "The other files in this job, so you can judge whether they " +
+               "agree with each other (only their first line was read):\n" +
+               summaries.map(function (f) {
+                   return "- " + f.name + " (" + f.role +
+                          (f.omic ? ", omic \u201C" + f.omic + "\u201D" : "") +
+                          ", " + f.columns + " columns): " + f.header;
+               }).join("\n");
+    }
+
+    /* The values file of whichever omic card the error names.
+     *
+     * Second chance for the errors that identify the omic rather than the
+     * file, which is most of what the analysis stage produces: it knows which
+     * omic it was modelling, not which upload the bytes came from. */
+    function pickedFileForOmicNamedIn(text) {
+        if (!window.Ext || !Ext.ComponentQuery) return null;
+        var haystack = String(text).replace(/[\s_]+/g, " ").toLowerCase();
+        /* mainFileSelector first: on a MORE card the gene-expression target
+           slot (rnaseqauxFileSelector) precedes the regulator's own data file
+           and both are `values`, so the first match sent the agent the TARGET
+           file for an error that named the regulator omic. */
+        var fields = Ext.ComponentQuery.query("filefield").slice().sort(function (a, b) {
+            var ia = a.up && a.up("myFilesSelectorButton"), ib = b.up && b.up("myFilesSelectorButton");
+            var ma = ia && ia.itemId === "mainFileSelector" ? 0 : 1;
+            var mb = ib && ib.itemId === "mainFileSelector" ? 0 : 1;
+            return ma - mb;
+        });
+        for (var i = 0; i < fields.length; i++) {
+            if (roleForField(fields[i]) !== "values") continue;
+            var dom = fields[i].fileInputEl && fields[i].fileInputEl.dom;
+            var file = dom && dom.files && dom.files[0];
+            if (!file) continue;
+            /* `[cls~=omicbox]`, not `.omicbox`: ComponentQuery has no CSS
+               class selector, and `.omicbox` silently matches nothing. Same
+               family as the `[cls=omicbox]` exact-match trap that has caught
+               this file's neighbours -- one entry of the whitespace list, not
+               the whole string and not a CSS class. */
+            var card = fields[i].up && fields[i].up("[cls~=omicbox]");
+            var nameField = omicNameFieldIn(card);
+            var omic = nameField && nameField.getValue && nameField.getValue();
+            if (!omic || String(omic).trim().length < 3) continue;
+            /* `omic:` and not a bare `omic`.
+             *
+             * Matching the name anywhere in the text was far too loose to stand
+             * on its own -- omic names are ordinary words. Measured: the form's
+             * own refusal, "Please provide at least: Gene expression
+             * /Metabolomics /Proteomics data", contains "Gene expression", so a
+             * card carrying the default name matched it and both buttons
+             * appeared on a dialog that names no file and reports no file
+             * problem at all. Reported as "why do these two buttons always
+             * exist".
+             *
+             * A failure that is about an omic writes it as a label -- the
+             * preparation dialog builds "<omic>: <what the server said>" -- and
+             * prose does not put a colon there. That one character is the
+             * difference between naming a subject and mentioning a word. */
+            var needle = String(omic).replace(/[\s_]+/g, " ").trim().toLowerCase() + ":";
+            if (haystack.indexOf(needle) !== -1) {
+                return { input: dom, file: file, fieldName: fields[i].name };
+            }
+        }
+        return null;
+    }
+
     function pickedFileMatching(reportedName) {
         if (!window.Ext || !Ext.ComponentQuery) return null;
         var fields = Ext.ComponentQuery.query("filefield");
         for (var i = 0; i < fields.length; i++) {
-            if (!VALUES_FIELD.test(fields[i].name || "")) continue;
+            if (!roleForField(fields[i])) continue;
             var dom = fields[i].fileInputEl && fields[i].fileInputEl.dom;
             var file = dom && dom.files && dom.files[0];
             if (!file) continue;
@@ -751,25 +1154,83 @@
         if (!body || !closeButton || !closeButton.parentNode) return;
         if (document.getElementById("pa-format-dialog-fix")) return;
 
+        /* Which file the server is complaining about, from ANY error that
+           names one.
+         *
+         * This used to require the literal phrase "Errors detected while
+         * processing", which is one servlet's wording. Every other failure --
+         * and the ones that actually reach a user with real data are the MORE
+         * ones -- says something else entirely, so the offer never appeared:
+         *
+         *   The MORE analysis failed (more-rs backend). Details:
+         *   MORE ERROR: no data columns could be read from
+         *     /.../inputData/mirna_values.tab
+         *
+         * That names the file perfectly well. So the dialog is read for
+         * anything shaped like one of OUR file names and matched against what
+         * the user actually picked, which is the question that was being asked
+         * all along. Reported by a user watching a MORE run fail with the agent
+         * sitting one click away and never offered. */
         var text = body.textContent || "";
-        if (text.indexOf("Errors detected while processing") === -1) return;
+        var picked = null;
+        var names = text.match(/[\w./\\-]+\.(?:tab|txt|csv|tsv|xls|xlsx|xlsm|ods|gtf|bed)\b/gi) || [];
+        for (var n = 0; n < names.length && !picked; n++) {
+            picked = pickedFileMatching(names[n].replace(/^.*[\\/]/, ""));
+        }
+        /* Some failures name no file at all. The one that sent a user looking
+           for this button is the clearest example -- it names sample names and
+           an omic, and nothing else:
 
-        var match = /Errors detected while processing ([^\s:]+)/.exec(text);
-        if (!match) return;
-        var picked = pickedFileMatching(match[1]);
+             MORE ERROR: No common sample names across input files.
+             Target samples: DSSmEVs_vs_DSS
+             Condition rows: 1-C1, 2-C2, 3-C3, ...
+             miRNA-Seq_data samples: DSS_SDmEV_vs_DSS
+
+           `miRNA-Seq_data` is the name the user typed into Omic Name, so the
+           card is identifiable even though the file is not. Underscores because
+           the backend substitutes them for spaces. */
+        if (!picked) picked = pickedFileForOmicNamedIn(text);
         if (!picked) return;
 
-        var button = el("a", "button btn-secondary btn-right", "Fix this file");
-        button.title = "Repairs the file in place, then you can run again.";
-        button.id = "pa-format-dialog-fix";
-        button.href = "#";
-        button.style.display = "inline-block";
-        button.addEventListener("click", function (event) {
+        /* Two different offers, because they do different things and the
+           difference matters. Re-checking applies a MECHANICAL repair and is
+           only useful when the fault is one this module models. The agent can
+           be told what the server said, which is the only route open when the
+           server knows something the client checker does not -- a sample name
+           that does not line up, an identifier space that does not match. */
+        var wrap = el("span", null, null);
+        wrap.id = "pa-format-dialog-fix";
+
+        var ask = el("a", "button btn-secondary btn-right", "Ask the PaintOmics AI agent");
+        ask.title = "Opens the agent on this file, with what the server said.";
+        ask.href = "#";
+        ask.style.display = "inline-block";
+        ask.addEventListener("click", function (event) {
+            event.preventDefault();
+            var serverSaid = text.replace(/\s+/g, " ").trim();
+            // Gathered BEFORE the dialog closes, while every field still holds
+            // its file, so the agent starts with the whole job in front of it
+            // rather than one file out of context.
+            siblingSummaries(picked.input).then(function (others) {
+                if (typeof closeButton.click === "function") closeButton.click();
+                requestAgent(picked.input, picked.file, picked.fieldName,
+                             serverSaid, siblingBrief(others));
+            });
+        });
+
+        var again = el("a", "button btn-secondary btn-right", "Check this file again");
+        again.title = "Re-reads the file and repairs what can be repaired mechanically.";
+        again.href = "#";
+        again.style.display = "inline-block";
+        again.addEventListener("click", function (event) {
             event.preventDefault();
             if (typeof closeButton.click === "function") closeButton.click();
             check(picked.input, picked.file, picked.fieldName, true);
         });
-        closeButton.parentNode.insertBefore(button, closeButton);
+
+        wrap.appendChild(again);
+        wrap.appendChild(ask);
+        closeButton.parentNode.insertBefore(wrap, closeButton);
     }
 
     // The dialog is rendered by Util.js's showMessage, which several call sites
@@ -800,16 +1261,18 @@
      * upload step reads as "bring any file" before a file is picked rather
      * than only after one fails. Cards are created by ExtJS on drag or on the
      * plus button, so they are found by watching the DOM; the strip is added
-     * only once the card has been laid out, because hostFor records the
-     * card's height as the base to grow from and a card measured before its
-     * first layout is 0px tall.
+     * once the card is rendered, which is all `component.add()` needs. It used
+     * to wait for a card taller than 100px as well, because the card's height
+     * was recorded here as the base to grow from -- nothing is recorded now,
+     * and that wait was in any case no guarantee the height had settled: on
+     * the MORE card it fired at 662px against a settled 771px.
      */
     function primeCard(cardEl) {
         if (!cardEl || cardEl.__paPrimed || !window.Ext || !Ext.getCmp) return;
         var component = Ext.getCmp(cardEl.id);
         if (!component || !component.query) return;
         var hasValuesField = component.query("filefield").some(function (f) {
-            return VALUES_FIELD.test(f.name || "");
+            return !!roleForField(f);
         });
         if (!hasValuesField) return;
         cardEl.__paPrimed = true;
@@ -820,7 +1283,7 @@
             renderIdle(strip);
             syncCardHeightFor(component);
         };
-        if (component.rendered && component.getHeight() > 100) prime();
+        if (component.rendered) prime();
         else component.on("afterlayout", prime, null, { single: true, delay: 30 });
     }
 
@@ -843,7 +1306,15 @@
                 });
             });
             if (!found.length) return;
-            requestAnimationFrame(function () {
+            /* paDeferFrame, not a bare requestAnimationFrame: Chrome throttles
+               rAF to zero in a hidden tab, and a card primed in a bare frame
+               would then have no strip and no input check at all until the tab
+               came forward. Util.js keeps the house version of this -- rAF when
+               visible, setTimeout(0) when hidden -- and four pieces of this app
+               have already been caught scheduling layout work on the bare one.
+               Guarded, because this module is loaded on its own in the tests. */
+            var defer = window.paDeferFrame || requestAnimationFrame;
+            defer(function () {
                 found.forEach(function (c) {
                     try { primeCard(c); }
                     catch (e) { if (window.console && console.warn) console.warn("[inputformat] prime failed", e); }
@@ -858,9 +1329,10 @@
         var input = event.target;
         if (!input || input.type !== "file" || !input.files || !input.files.length) return;
         var name = extFieldNameFor(input);
-        if (!name || !VALUES_FIELD.test(name)) return;
+        var role = roleForInput(input);
+        if (!name || !role) return;
         try {
-            check(input, input.files[0], name);
+            check(input, input.files[0], name, false, role);
         } catch (e) {
             // Never let a check failure take the upload with it: the user can
             // always still submit, exactly as before this module existed.
