@@ -375,7 +375,7 @@ class DraftReadsEveryPanelTest(unittest.TestCase):
     def test_the_server_keeps_every_entry_the_client_can_send(self):
         """The server cap was 10 against a client cap of 24: entries 11+ were
         silently dropped and the note under the button said nothing."""
-        client = read(STEP1_VIEWS) if "STEP1_VIEWS" in globals() else read(SOURCE)
+        client = read(STEP1_VIEWS)
         server = read(os.path.join(os.path.dirname(__file__), "..", "servlets", "AIInterpretServlet.py"))
         clientCap = int(re.search(r"var EXP_DESIGN_MAX_FILES = (\d+);", client).group(1))
         serverCap = int(re.search(r"_EXPDESIGN_MAX_OMICS = (\d+)", server).group(1))
