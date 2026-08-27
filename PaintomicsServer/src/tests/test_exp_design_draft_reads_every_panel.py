@@ -45,6 +45,7 @@ Usage:
 """
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -58,6 +59,7 @@ STEP1_VIEWS = os.path.join(
 
 BLOCK_HEADERS = {
     "plainFieldLabel": "function plainFieldLabel(text) {",
+    "typedOmicName": "function typedOmicName(panel, field) {",
     "pickedFileLabel": "function pickedFileLabel(field) {",
     "collectPickedOmicFiles": "function collectPickedOmicFiles() {",
 }
@@ -131,15 +133,25 @@ var Ext = {
     }
 };
 
-function makePanel(cls, heading, omicNameValue, type) {
+/* nameFields: the #omicNameField list the panel answers query() with -- a
+   region or pairwise card really holds two, the first disabled and empty.
+   blocks: MORE's omic_name_<i> combos by index. */
+function makePanel(cls, heading, omicNameValue, type, extra) {
+    extra = extra || {};
+    var nameFields = extra.nameFields || (omicNameValue === null ? [] :
+        [{disabled: false, getValue: function () { return omicNameValue; }}]);
     var panel = {
         cls: cls,
         type: type,
         ownerCt: null,
-        down: function (selector) {
-            if (selector !== '#omicNameField') { throw new Error(selector); }
-            if (omicNameValue === null) { return null; }
-            return {getValue: function () { return omicNameValue; }};
+        query: function (selector) {
+            if (selector === '#omicNameField') { return nameFields; }
+            var block = selector.match(/^\[name=omic_name_(\d+)\]$/);
+            if (block) {
+                var typed = (extra.blocks || {})[block[1]];
+                return typed === undefined ? [] : [{getValue: function () { return typed; }}];
+            }
+            throw new Error(selector);
         },
         el: {dom: {querySelector: function (selector) {
             if (selector !== '.omicboxTitle h4') { throw new Error(selector); }
@@ -149,8 +161,8 @@ function makePanel(cls, heading, omicNameValue, type) {
     return panel;
 }
 
-function addSelector(panel, fieldLabel, fieldName, pickedFileName) {
-    var selector = {xtype: 'myFilesSelectorButton', fieldLabel: fieldLabel, ownerCt: panel};
+function addSelector(panel, fieldLabel, fieldName, pickedFileName, itemId) {
+    var selector = {xtype: 'myFilesSelectorButton', fieldLabel: fieldLabel, ownerCt: panel, itemId: itemId};
     var field = {
         xtype: 'filefield',
         name: fieldName,
@@ -172,6 +184,7 @@ function addSelector(panel, fieldLabel, fieldName, pickedFileName) {
 }
 
 %(plainFieldLabel)s
+%(typedOmicName)s
 %(pickedFileLabel)s
 %(EXP_DESIGN_MAX_FILES)s
 %(collectPickedOmicFiles)s
@@ -244,6 +257,30 @@ results.slotOnly = run(function () {
     addSelector(panel, 'Data file:', 'omic1_file', 'orphan.tab');
 });
 
+// A region card holds two #omicNameField: the disabled, empty twin of the
+// "already mapped" form comes FIRST, and down() used to return it.
+results.twinNameFields = run(function () {
+    var panel = makePanel('omicbox regionBasedOmic', 'Region-based omic', null, undefined, {
+        nameFields: [{disabled: true, getValue: function () { return ""; }},
+                     {disabled: false, getValue: function () { return "ATAC-seq"; }}]});
+    addSelector(panel, 'Regions file (BED + Quantification):', 'omic1_file', 'peaks.bed');
+});
+// MORE's second regulator has its own omic_name_1 combo and no itemId at all;
+// its files were labelled with regulator 0's name. The conditions and gene
+// expression files belong to the panel, not to a regulator.
+results.moreSecondRegulator = run(function () {
+    var more = makePanel('omicbox moreBasedOmic', 'Regulatory Omic - MORE', 'miRNA-seq', 'moreanalysis',
+                         {blocks: {"0": "miRNA-seq", "1": "Transcription factor"}});
+    addSelector(more, 'Conditions file', 'conditions_file', 'design.tab');
+    addSelector(more, 'Regulators expression file', 'file_0_file', 'mirna.tab');
+    addSelector(more, 'Regulators expression file', 'file_1_file', 'tf.tab');
+});
+// The region panel's GTF is annotation rows, not column names: never sent.
+results.gtfSkipped = run(function () {
+    var panel = makePanel('omicbox regionBasedOmic', 'Region-based omic', 'DNase', undefined);
+    addSelector(panel, 'Regions file (BED + Quantification):', 'omic1_file', 'regions.tab', 'mainFileSelector');
+    addSelector(panel, 'Annotations file (GTF):', 'omic1_annotations_file', 'mmu.gtf', 'tertiaryFileSelector');
+});
 console.log(JSON.stringify(results));
 """
 
@@ -293,7 +330,7 @@ class DraftReadsEveryPanelTest(unittest.TestCase):
     def test_the_conditions_file_is_named_as_what_it_is(self):
         """It is the experimental design; the drafter has to know that."""
         self.assertEqual(self.labels("moreOnly")[0],
-                         "miRNA-Seq data / Conditions file")
+                         "Regulatory Omic - MORE / Conditions file")
 
     def test_markup_never_reaches_the_label(self):
         for name in self.results:
@@ -320,6 +357,29 @@ class DraftReadsEveryPanelTest(unittest.TestCase):
     def test_the_label_falls_back_to_the_panel_heading(self):
         self.assertEqual(self.labels("headingFallback"),
                          ["Region-based omic / Regions file (BED + Quantification)"])
+
+    def test_the_typed_name_wins_over_the_disabled_twin(self):
+        labels = [p["label"] for p in self.results["twinNameFields"]["picked"]]
+        self.assertEqual(labels, ["ATAC-seq / Regions file (BED + Quantification)"])
+
+    def test_each_more_regulator_carries_its_own_name(self):
+        labels = [p["label"] for p in self.results["moreSecondRegulator"]["picked"]]
+        self.assertEqual(labels, ["Regulatory Omic - MORE / Conditions file",
+                                  "miRNA-seq / Regulators expression file",
+                                  "Transcription factor / Regulators expression file"])
+
+    def test_the_gtf_is_never_sent(self):
+        files = [p["file"] for p in self.results["gtfSkipped"]["picked"]]
+        self.assertEqual(files, ["regions.tab"])
+
+    def test_the_server_keeps_every_entry_the_client_can_send(self):
+        """The server cap was 10 against a client cap of 24: entries 11+ were
+        silently dropped and the note under the button said nothing."""
+        client = read(STEP1_VIEWS) if "STEP1_VIEWS" in globals() else read(SOURCE)
+        server = read(os.path.join(os.path.dirname(__file__), "..", "servlets", "AIInterpretServlet.py"))
+        clientCap = int(re.search(r"var EXP_DESIGN_MAX_FILES = (\d+);", client).group(1))
+        serverCap = int(re.search(r"_EXPDESIGN_MAX_OMICS = (\d+)", server).group(1))
+        self.assertGreaterEqual(serverCap, clientCap)
 
     def test_a_panel_with_no_identity_still_labels_the_slot(self):
         self.assertEqual(self.labels("slotOnly"), ["Data file"])

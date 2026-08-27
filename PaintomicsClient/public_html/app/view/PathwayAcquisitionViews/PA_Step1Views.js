@@ -5175,6 +5175,37 @@ function plainFieldLabel(text) {
    Read off the component tree, never off the field's name. Every panel agrees
    on its itemIds and its labels and disagrees on its field NAMES, which is the
    whole of the bug this replaces. */
+/* The omic name the user typed for this file's panel, or "".
+
+   Two traps, both measured in Chrome. A region or pairwise card holds TWO
+   #omicNameField -- the first is the disabled, empty twin of the "already
+   mapped" alternative form -- so panel.down('#omicNameField') returned the
+   twin and the name the user typed never reached the label. And MORE stacks
+   regulators: block i names its files file_i / relevant_file_i / assoc_file_i
+   and its omic name omic_name_i, with no itemId at all, so every file of the
+   2nd regulator was labelled with the 1st regulator's name. The conditions and
+   gene-expression (rnaseqaux) files belong to the whole MORE panel, not to a
+   regulator: they take the panel heading. */
+function typedOmicName(panel, field) {
+	var fieldName = String((field && field.name) || "");
+	var block = fieldName.match(/^(?:file|relevant_file|assoc_file)_(\d+)(?:_file)?$/);
+	if (block) {
+		var combos = panel.query ? panel.query('[name=omic_name_' + block[1] + ']') : [];
+		var typed = (combos.length && combos[0].getValue) ? combos[0].getValue() : "";
+		return typed ? String(typed).trim() : "";
+	}
+	if (/^(?:conditions|rnaseqaux)(?:_file)?$/.test(fieldName)) { return ""; }
+
+	var fields = panel.query ? panel.query('#omicNameField') : [];
+	var live = fields.filter(function (f) { return !(f.isDisabled ? f.isDisabled() : f.disabled); });
+	var pool = live.length ? live : fields;
+	for (var i = 0; i < pool.length; i++) {
+		var value = pool[i].getValue && pool[i].getValue();
+		if (value && String(value).trim()) { return String(value).trim(); }
+	}
+	return "";
+}
+
 function pickedFileLabel(field) {
 	var panel = field.up('[cls~=omicbox]');
 	var selector = field.up('myFilesSelectorButton');
@@ -5184,8 +5215,7 @@ function pickedFileLabel(field) {
 	if (panel) {
 		/* What the user typed, when they typed one; otherwise the heading the
 		   panel prints, which every panel type renders the same way. */
-		var nameField = panel.down ? panel.down('#omicNameField') : null;
-		omic = (nameField && nameField.getValue && nameField.getValue()) || "";
+		omic = typedOmicName(panel, field);
 		if (!omic && panel.el && panel.el.dom) {
 			var heading = panel.el.dom.querySelector('.omicboxTitle h4');
 			omic = heading ? plainFieldLabel(heading.textContent) : "";
@@ -5223,6 +5253,13 @@ function collectPickedOmicFiles() {
 
 		var input = field.fileInputEl && field.fileInputEl.dom;
 		if (!input || !input.files || input.files.length === 0) { return; }
+
+		/* The region panel's GTF: its first line is an annotation record or a
+		   "#!genome-build" comment, not column names -- nothing for a design
+		   drafter to read, and the one file the old name filter excluded on
+		   purpose. */
+		var selector = field.up('myFilesSelectorButton');
+		if (selector && selector.itemId === 'tertiaryFileSelector') { return; }
 
 		picked.push({
 			omicName: pickedFileLabel(field),
