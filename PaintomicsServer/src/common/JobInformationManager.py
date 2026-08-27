@@ -104,7 +104,8 @@ class JobInformationManager(metaclass=Singleton):
                     daoInstance.update(jobInstance, {"fieldList": ["summary", "lastStep",
                          "mappingComp", "classificationDict", "pValueInDict",
                          "adjustPvalue", "totalRelevantFeaturesInCategory",
-                         "featureSummary", "aiConsent", "experimentDesign",
+                         "featureSummary", "classificationMeta",
+                         "aiConsent", "experimentDesign",
                          "regulationPerConditionData", "hubAnalysisResult",
                          "exprssionMetabolites"]})
                     daoInstance = FoundFeatureDAO()

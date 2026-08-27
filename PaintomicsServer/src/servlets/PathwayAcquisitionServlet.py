@@ -670,6 +670,7 @@ def pathwayAcquisitionStep2_PART2(jobID, userID, selectedCompounds, clusterNumbe
                 "adjustPvalue": adjustPvalue,
                 "totalRelevantFeaturesInCategory": totalRelevantFeaturesInCategory,
                 "featureSummary":featureSummary,
+                "classificationMeta": jobInstance.classificationMeta or {},
                 # Add compound regulate features
                 "compoundRegulateFeatures": compoundRegulateFeatures,
                 # Add global gene expression information
@@ -705,6 +706,7 @@ def pathwayAcquisitionStep2_PART2(jobID, userID, selectedCompounds, clusterNumbe
                 "adjustPvalue": [],
                 "totalRelevantFeaturesInCategory": [],
                 "featureSummary": [0, 0],
+                "classificationMeta": {},
                 "compoundRegulateFeatures": {},
                 "hubAnalysisResult": {},
                 "globalExpressionData": globalExpressionData,
@@ -955,6 +957,7 @@ def pathwayAcquisitionRecoverJob(request, response, QUEUE_INSTANCE):
                     "adjustPvalue": safe_adjustPvalue,
                     "totalRelevantFeaturesInCategory": safe_totalRelevantFeaturesInCategory,
                     "featureSummary": safe_featureSummary,
+                    "classificationMeta": _as_dict(jobInstance.classificationMeta),
                     # Add compound regulate features
                     "compoundRegulateFeatures": safe_compoundRegulateFeatures,
                     # Add global gene expression information

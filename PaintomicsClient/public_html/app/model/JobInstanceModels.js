@@ -491,6 +491,20 @@ function JobInstance(jobID) {
 		return this.featureSummary == null ? {} : this.featureSummary
 	}
 
+	/* Class-map metadata: {parents: {class: briteLevel1}, nullProportion: [p0
+	   per condition], thresholdSource: "user"|"auto"}. The parent lets the map
+	   group classes by chemical family -- without it the nine steroid classes
+	   read as "18-Carbon atoms".."30-Carbon atoms" -- and nullProportion is the
+	   value the binomial was actually run against, which no client can derive
+	   because the auto branch differs per condition. */
+	this.setClassificationMeta = function (classificationMeta) {
+		this.classificationMeta = classificationMeta;
+	}
+
+	this.getClassificationMeta = function () {
+		return this.classificationMeta == null ? {} : this.classificationMeta;
+	}
+
 	this.setClassificationDict = function (classificationDict) {
 		this.classificationDict = classificationDict;
 	}

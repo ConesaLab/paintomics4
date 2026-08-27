@@ -5807,13 +5807,25 @@ function PA_Step3MetaboliteView() {
 	this.name = "PA_Step3MetaboliteView";
 	this.tableData = null;
 	let dataFinal = new Object();
-	var dataShow2 = [];
-	let userStore;
 	let globalExpressionComp = [];
 	let distributionSummaries = null;
 	let visualOptions = null;
 	let nCond = 1;
 	let conditionNames = [];
+	/* tableData was an implicit global -- declared here so the class-map
+	   renderer below reads this view's copy and not whatever ran last. */
+	let tableData = null;
+	let classMapMeta = {};
+	let classMapCondition = 0;
+	let classMapHasDirection = false;
+	let classificationDictRef = {};
+	let classMapRowsCache = [];
+	/* featureSummary = [distinct classifiable compounds, [relevant per condition]].
+	   These are the numerator and denominator of the derived null, and naming
+	   them is the difference between "p0 = 0.741" and a number a reader can
+	   check. */
+	let classifiableTotal = 0;
+	let classifiableRelevant = [];   // per condition, like nullProportion
 	let me = this;
 
 
@@ -5828,7 +5840,6 @@ function PA_Step3MetaboliteView() {
 
 		// Reset data structures to avoid stale data
 		dataFinal = new Object();
-		dataShow2 = [];
 
 		var mappingComp = this.model.mappingComp;
 		var pValueClassification = this.model.getpValueInDict();
@@ -5895,47 +5906,603 @@ function PA_Step3MetaboliteView() {
 			}
 		}
 
-		var fields = ['name', 'totalFeatures', 'foundFeatures'];
-		for (var c = 0; c < nCond; c++) {
-			fields.push('pValue_c' + c);
-			fields.push('FDR_BH_c' + c);
-			fields.push('FDR_BY_c' + c);
-			fields.push('foundRelevant_c' + c);
-		}
-
-		for (var keys in dataFinal) {
-			var row = {
-				name: keys,
-				totalFeatures: dataFinal[keys]["totalFeatures"],
-				foundFeatures: dataFinal[keys]["foundFeatures"]
-			};
-			for (var c = 0; c < nCond; c++) {
-				row['pValue_c' + c] = dataFinal[keys]["pValue_c" + c];
-				row['FDR_BH_c' + c] = dataFinal[keys]["FDR BH_c" + c];
-				row['FDR_BY_c' + c] = dataFinal[keys]["FDR BY_c" + c];
-				row['foundRelevant_c' + c] = dataFinal[keys]["foundRelevant_c" + c];
-			}
-			dataShow2.push(row);
-		}
-
-		Ext.define('User', {
-			extend: 'Ext.data.Model',
-			fields: fields
-		});
-
-		userStore = Ext.create('Ext.data.Store', {
-			model: 'User',
-			data: dataShow2
-		});
-
 		if (typeof this.model.globalExpressionData['inputCompound'] !== 'undefined') {
 			globalExpressionComp = this.model.globalExpressionData['inputCompound']
 		}
 
 		distributionSummaries = this.model.getDataDistributionSummaries()
 		visualOptions = me.getParent().visualOptions
+
+		classMapMeta = this.model.getClassificationMeta() || {};
+		classifiableTotal = Array.isArray(featureSummary) ? (featureSummary[0] || 0) : 0;
+		var relevantTotals = (Array.isArray(featureSummary) && Array.isArray(featureSummary[1]))
+			? featureSummary[1] : [];
+		classifiableRelevant = relevantTotals;
+		classificationDictRef = classificationDict || {};
+		classMapCondition = 0;
+
+		/* Direction is only meaningful if the uploaded values are ratios. If
+		   nothing is ever negative the omic is abundance-like and a "70% up"
+		   claim would be an artefact of the scale, so the map drops the hue
+		   channel entirely rather than assert a direction nobody measured. */
+		var sawNegative = false, sawPositive = false;
+		for (var compoundID in exprssionMetabolites) {
+			var vals = exprssionMetabolites[compoundID] || [];
+			for (var vi = 0; vi < vals.length; vi++) {
+				var v = Number(vals[vi]);
+				if (isNaN(v)) continue;
+				if (v < 0) sawNegative = true;
+				else if (v > 0) sawPositive = true;
+			}
+			if (sawNegative && sawPositive) break;
+		}
+		classMapHasDirection = sawNegative && sawPositive;
 	}
 
+
+	/* The Paint action, addressed by class name so both the grid's brush
+	   column and a click on the class map can reach it. */
+	this.paintClassCompounds = function (className) {
+
+			revealPlotPanel('classificationPlotPanel');
+
+			let elem = $("#classificationPlot");
+			elem.empty();
+			/* Reserve the fixed-width heatmap that sits beside the
+			   plot, as in the hub table above - otherwise the pair
+			   wraps and the strip is left stranded above a chart
+			   four times its width. */
+			let divWidth = Math.max(260, elem.width() - 400);
+			let regulateFeatures = (dataFinal[className] || {}).ID || [];
+			let regulateOmicsValueComp = []
+			let omicName =  "Metabolomics"
+			let divId = "Compound_expression_heatmapContainer_class"
+
+
+			for (let i = 0; i < regulateFeatures.length; i++) {
+				let regulateFeature = regulateFeatures[i]
+				try {
+					let ov = globalExpressionComp[regulateFeature];
+					if (ov) {
+						if (!(ov instanceof OmicValue)) {
+							ov = OmicValue.loadFromJSON(ov);
+						}
+						regulateOmicsValueComp.push(ov);
+					}
+				} catch (e) {
+					console.log('No expression data for: ' + regulateFeature)
+				}
+			}
+
+			regulateOmicsValueComp = regulateOmicsValueComp.filter(function (x) {
+					return x !== undefined;
+				}
+			);
+
+			if (regulateOmicsValueComp.length > 0) {
+				htmlCode =
+					"<div class='contentbox'>" +
+					"  <h3>" + omicName + "<span><input type='checkbox' id='" + divId + "_cb_relevant' value='" + omicName + "'/>Only relevant</span></h3>" +
+					"  <div class='PA_step5_heatmapContainer' id='Compound_expression_heatmapContainer_class'  style='height: " + ((regulateOmicsValueComp.length * 30) + 100) + "px'><i class='fa fa-cog fa-spin'></i> Loading..</div>" +
+					"  <div class='PA_step5_plotContainer' id='" + divId + "_plotContainer'  style='width:" + divWidth + "px;height: " + ((regulateOmicsValueComp.length * 30) + 100) + "px'><i class='fa fa-cog fa-spin'></i> Loading..</div>" +
+
+					"</div>";
+				elem.append(htmlCode);
+				heatmapComp = generateHeatmap(divId, omicName, regulateOmicsValueComp, distributionSummaries, visualOptions, paOmicHeaders(me.model, omicName))
+				plot = generatePlot(divId + "_plotContainer", omicName, regulateOmicsValueComp, distributionSummaries, divId + "_plotlegendContainer", visualOptions, paOmicHeaders(me.model, omicName));
+
+				$("#" + divId + "_cb_relevant").change(function () {
+					let onlyRelevants = $(this).is(":checked");
+
+					// Highcharts does not automatically hide Y labels when hiding series, so it is easier and faster
+					// to recreate the whole graphic.
+					let omicValues = regulateOmicsValueComp;
+
+					if (onlyRelevants) {
+						omicValues = omicValues.filter(x => x.isRelevant() || x.isRelevantAssociation());
+					}
+
+					$('#' + divId).height(omicValues.length * 30 + 100);
+
+					heatmapComp = generateHeatmap(divId, omicName, omicValues, distributionSummaries, visualOptions, paOmicHeaders(me.model, omicName))
+					plot = generatePlot(divId + "_plotContainer", omicName, omicValues, distributionSummaries, divId + "_plotlegendContainer", visualOptions, paOmicHeaders(me.model, omicName));
+
+				});
+
+			} else {
+				// The panel is revealed before the data is checked, so
+				// without this the class opens an empty white box.
+				elem.append(
+					'<div class="contentbox paEmptyNote">' +
+					'  <p>None of the ' + regulateFeatures.length + ' metabolite' + (regulateFeatures.length === 1 ? '' : 's') + ' in this class carry measured values in the omics you uploaded.</p>' +
+					'</div>');
+			}
+
+			fitPlotPanel('classificationPlotPanel', 'classificationPlot');
+	};
+
+	/* ==================================================================
+	   The class map.
+
+	   One mark per tested metabolite class:
+	     x           grouped by the BRITE level-1 parent. A GROUPING, not a
+	                 measurement -- ChemRICH puts median XLogP here, computed
+	                 from SMILES, which PaintOmics does not ship. ChemRICH's own
+	                 paper figure falls back to tree order for the same reason.
+	     y           -log10 of the BH-adjusted p-value. ChemRICH's y is a KS test
+	                 over per-compound p-values; this pipeline stores a boolean
+	                 relevance flag, so that test does not exist here.
+	     area        compounds measured in the class (n).
+	     fill sweep  k/n -- the proportion the binomial actually tested.
+	                 ChemRICH computes this (its "altratio") and prints it only
+	                 in a table; putting it in the mark is the whole point.
+	     hue         direction among the significant compounds, but only when
+	                 the omic crosses zero. Abundance data has no direction and
+	                 the mark stays neutral rather than claiming one.
+	     ring        solid = passes FDR 0.05. Dashed = CANNOT reach it at this
+	                 n: the best a class can do is k = n, giving p = p0^n, and
+	                 if that exceeds 0.05 no data could ever move it.
+
+	   Drawn as SVG rather than a Highcharts series because the sweep is the
+	   load-bearing encoding and no bundled series draws a partly-filled bubble.
+	   ================================================================== */
+
+	var CLASSMAP_NS = "http://www.w3.org/2000/svg";
+
+	function classMapEl(tag, attrs) {
+		var node = document.createElementNS(CLASSMAP_NS, tag);
+		for (var key in attrs) {
+			if (attrs[key] !== null && attrs[key] !== undefined) {
+				node.setAttribute(key, attrs[key]);
+			}
+		}
+		return node;
+	}
+
+	function classMapText(content, x, y, cls, attrs) {
+		var node = classMapEl("text", Ext.apply({x: x, y: y, "class": cls}, attrs || {}));
+		node.textContent = content;
+		return node;
+	}
+
+	/* Server sends the adjusted p unrounded now, but a job stored before that
+	   change still has 0.0 for anything below 1e-4. Floor at that resolution so
+	   an old job renders as a capped bar instead of an infinite one. */
+	var CLASSMAP_FDR_FLOOR = 1e-4;
+
+	function classMapFormatP(value) {
+		if (value === null || value === undefined || isNaN(value)) return "n/a";
+		return value < 1e-4 ? Number(value).toExponential(1) : Number(value).toFixed(4);
+	}
+
+	/* Rows for one condition, in the shape the renderer wants. */
+	this.buildClassMapRows = function (conditionIndex) {
+		var rows = [];
+		var meta = classMapMeta || {};
+		var parents = meta.parents || {};
+		for (var className in classificationDictRef) {
+			var compoundIDs = classificationDictRef[className] || [];
+			var n = compoundIDs.length;
+			if (!n) continue;
+
+			var relObj = tableData.totalRelevantFeaturesInCategory_list[conditionIndex] || {};
+			/* totalRelevantFeaturesInCategory is a defaultdict server-side: a
+			   class with no relevant compounds is ABSENT, not zero. Reading it
+			   without this default yields undefined, and every downstream
+			   number becomes NaN. */
+			var k = relObj[className];
+			k = (typeof k === "number") ? k : 0;
+
+			var pObj = tableData.pValueClassification_list[conditionIndex] || {};
+			var bhObj = tableData.adjustPValueBH_list[conditionIndex] || {};
+
+			var up = 0, down = 0;
+			if (classMapHasDirection) {
+				for (var i = 0; i < compoundIDs.length; i++) {
+					var sign = me.compoundDirection(compoundIDs[i], conditionIndex);
+					if (sign > 0) up++;
+					else if (sign < 0) down++;
+				}
+			}
+
+			var byObj = tableData.adjustPValueBY_list[conditionIndex] || {};
+			var fdr = bhObj[className];
+			rows.push({
+				fdrBY: byObj[className],
+				name: className,
+				parent: parents[className] || "Unclassified",
+				n: n,
+				k: k,
+				proportion: k / n,
+				p: pObj[className],
+				fdr: fdr,
+				up: up,
+				down: down,
+				significant: (typeof fdr === "number") && fdr < 0.05,
+				/* No reachability flag. It used to say "cannot reach FDR 0.05 at
+				   this n", computed as p0^n <= 0.05 -- wrong twice over. It held
+				   p0 fixed while k rose to n, but p0 is DERIVED from the same
+				   counts, so raising k raises the bar with it: Amino acids at
+				   40/40 moves p0 from 0.741 to 0.897, and its best raw p is
+				   0.0127, not 0. And it compared that raw p against 0.05 while
+				   the label promised FDR -- the true best-case FDR there is
+				   0.101, so the one class the caption called reachable is not.
+				   On the bundled STATegra job it printed 7; the truth is 8 with
+				   the other classes held and 2 with the background free. */
+			});
+		}
+		return rows;
+	};
+
+	/* +1 / -1 / 0 for one compound in one condition. 0 means "not relevant, or
+	   no usable value" -- never a guess. */
+	this.compoundDirection = function (compoundID, conditionIndex) {
+		var omicValue = globalExpressionComp ? globalExpressionComp[compoundID] : null;
+		if (!omicValue) return 0;
+		if (!(omicValue instanceof OmicValue)) {
+			try { omicValue = OmicValue.loadFromJSON(omicValue); }
+			catch (e) { return 0; }
+		}
+		var relevant = (nCond > 1) ? omicValue.isRelevant(conditionIndex) : omicValue.isRelevant();
+		if (!relevant) return 0;
+
+		var values = omicValue.getValues();
+		if (!values || !values.length) return 0;
+		var value = (values.length === nCond) ? values[conditionIndex]
+		                                      : values.reduce(function (a, b) { return a + Number(b); }, 0) / values.length;
+		if (value === null || value === undefined || isNaN(value)) return 0;
+		return value > 0 ? 1 : (value < 0 ? -1 : 0);
+	};
+
+	/* The compounds behind the map, grouped by the same classes the map draws.
+
+	   This replaces the Ext grid. A grid of p-values told you a class was not
+	   significant; it never showed you the metabolites that made it so. The
+	   heatmap uses the app's own bwr ramp via getColor(), so a cell here is the
+	   same colour it is on a pathway diagram and in the Step 4 heatmaps.
+
+	   The two views are one instrument: hovering a class anywhere highlights it
+	   everywhere and dims the rest, so it is obvious that the marks above and
+	   the rows below are the same eight classes. */
+	function classMapEscape(value) {
+		return String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+	}
+
+	function classMapConditionLabel(index) {
+		return conditionNames[index] || ("Condition " + (index + 1));
+	}
+
+	this.renderClassMapControls = function () {
+		var host = document.getElementById("classActivityMapControls");
+		if (!host) return;
+		if (nCond <= 1) {
+			/* A job can carry six conditions and still be tested once. The server
+			   infers the condition count from whether omicsValues[0].relevant is
+			   a list (PathwayAcquisitionJob.py:2484-2488), so a relevance file
+			   with one flag per compound collapses every condition into a single
+			   pooled test -- while the rest of the page goes on naming six. Say
+			   so, rather than let a six-timepoint job look per-timepoint. */
+			host.innerHTML = (conditionNames.length > 1)
+				? '<span class="paClassMapControlNote">Your ' + conditionNames.length
+					+ ' conditions are pooled into one test here: the relevance file for this omic'
+					+ ' carries a single flag per compound, not one per condition.</span>'
+				: "";
+			return;
+		}
+
+		var options = "";
+		for (var c = 0; c < nCond; c++) {
+			options += '<option value="' + c + '"' + (c === classMapCondition ? " selected" : "") + '>'
+				+ classMapEscape(classMapConditionLabel(c)) + '</option>';
+		}
+		host.innerHTML = '<label class="paClassMapControlLabel" for="classActivityCondition">Condition</label>'
+			+ '<select id="classActivityCondition" class="paClassMapSelect">' + options + '</select>'
+			+ '<span class="paClassMapControlNote">p-values are corrected within each condition, '
+			+ 'so they are not comparable across them.</span>';
+
+		document.getElementById("classActivityCondition").addEventListener("change", function (event) {
+			classMapCondition = parseInt(event.target.value, 10) || 0;
+			me.drawClassMap();
+		});
+	};
+
+	/* Hovering a mark rings it, dims the rest, and says what it is in the line
+	   under the heading -- that line is already the caption of the chart the
+	   cursor is on, so the numbers appear where the eye is. It restores its
+	   resting summary on mouseleave.
+
+	   "Click to paint" rides on the hover readout rather than standing as its
+	   own hint: it is the only route to the compounds now, so it has to be
+	   discoverable, but a permanent instruction is furniture. */
+	this.focusClass = function (className) {
+		var map = document.getElementById("classActivityMap");
+		if (map) {
+			map.classList.toggle("paIsFocusing", !!className);
+			Array.prototype.forEach.call(map.querySelectorAll("[data-class]"), function (node) {
+				node.classList.toggle("paIsFocused",
+					!!className && node.getAttribute("data-class") === className);
+			});
+		}
+
+		var summary = document.getElementById("classActivityMapSummary");
+		if (!summary) return;
+		if (!className) {
+			summary.innerHTML = summary.getAttribute("data-base") || "";
+			summary.classList.remove("paIsFocused");
+			return;
+		}
+		var row = (classMapRowsCache || []).filter(function (r) { return r.name === className; })[0];
+		if (!row) return;
+		summary.classList.add("paIsFocused");
+		summary.innerHTML =
+			'<b>' + classMapEscape(row.name) + '</b> <span class="paClassMapMuted">'
+			+ classMapEscape(row.parent) + '</span> &nbsp; '
+			+ '<b>' + row.k + '</b>/' + row.n + ' relevant (' + Math.round(row.proportion * 100) + '%)'
+			+ ' &nbsp; p ' + classMapFormatP(row.p) + ' &nbsp; FDR BH ' + classMapFormatP(row.fdr)
+			+ (classMapHasDirection
+				? ' &nbsp; <span class="paDirUp">▲' + row.up + '</span> <span class="paDirDown">▼' + row.down + '</span>'
+				: "")
+			+ ' &nbsp; <span class="paClassMapMuted">click to paint its compounds</span>';
+	};
+
+	this.drawClassMap = function () {
+		var host = document.getElementById("classActivityMap");
+		if (!host) return;
+		host.innerHTML = "";
+
+		var rows = me.buildClassMapRows(classMapCondition);
+		classMapRowsCache = rows;
+		if (!rows.length) {
+			host.innerHTML = '<p class="paEmptyNote">No metabolite class in this job carries measured compounds.</p>';
+			return;
+		}
+
+		var meta = classMapMeta || {};
+		var nullList = meta.nullProportion || [];
+		var p0 = (typeof nullList[classMapCondition] === "number") ? nullList[classMapCondition] : null;
+
+		/* Parent groups, ordered by how much of the job they carry, so the
+		   busiest chemistry is not stranded at the right edge. */
+		var byParent = {};
+		rows.forEach(function (row) {
+			(byParent[row.parent] = byParent[row.parent] || []).push(row);
+		});
+		var groups = Object.keys(byParent).sort(function (a, b) {
+			var sa = byParent[a].reduce(function (t, r) { return t + r.n; }, 0);
+			var sb = byParent[b].reduce(function (t, r) { return t + r.n; }, 0);
+			return sb - sa || a.localeCompare(b);
+		});
+
+		var width = Math.max(760, host.clientWidth || 760);
+		var height = 470;
+		var padL = 62, padR = 24, padT = 40, padB = 116;
+		var plotW = width - padL - padR;
+		var plotH = height - padT - padB;
+		var bandW = plotW / groups.length;
+
+		var maxY = 2.2;
+		rows.forEach(function (row) {
+			var fdr = (typeof row.fdr === "number" && row.fdr > 0) ? row.fdr : CLASSMAP_FDR_FLOOR;
+			maxY = Math.max(maxY, -Math.log(fdr) / Math.LN10);
+		});
+		maxY = maxY * 1.14;
+
+		function yFor(value) { return padT + plotH - (value / maxY) * plotH; }
+		function radiusFor(n) { return Math.max(7, Math.sqrt(n) * 4.4); }
+
+		var svg = classMapEl("svg", {
+			viewBox: "0 0 " + width + " " + height,
+			width: "100%", height: height, "class": "paClassMap", role: "img",
+			"aria-label": "Metabolite class map. Horizontal position groups classes by KEGG BRITE parent; "
+				+ "vertical position is minus log 10 of the BH-adjusted p-value; mark area is the number of "
+				+ "compounds measured; the filled sweep is the proportion of those compounds that were relevant."
+		});
+
+		groups.forEach(function (group, index) {
+			if (index % 2 === 0) {
+				svg.appendChild(classMapEl("rect", {
+					x: padL + index * bandW, y: padT - 8,
+					width: bandW, height: plotH + 8, "class": "paClassMapBand"
+				}));
+			}
+			var cx = padL + (index + 0.5) * bandW;
+			var label = group.length > 20 ? group.slice(0, 19) + "…" : group;
+			svg.appendChild(classMapText(label, cx, height - padB + 30, "paClassMapTick", {
+				"text-anchor": "end",
+				transform: "rotate(-34 " + cx + " " + (height - padB + 30) + ")"
+			}));
+		});
+
+		var step = maxY > 6 ? 2 : 1;
+		for (var v = 0; v <= maxY; v += step) {
+			svg.appendChild(classMapEl("line", {
+				x1: padL, x2: width - padR, y1: yFor(v), y2: yFor(v), "class": "paClassMapGrid"
+			}));
+			svg.appendChild(classMapText(v.toFixed(0), padL - 9, yFor(v) + 4, "paClassMapTick",
+				{"text-anchor": "end"}));
+		}
+		svg.appendChild(classMapText("−log₁₀ FDR (BH)", padL - 9, padT - 18, "paClassMapAxis"));
+		svg.appendChild(classMapText("BRITE parent group · x is a grouping, not a measurement",
+			padL, height - 12, "paClassMapAxis"));
+
+		var sigY = yFor(-Math.log(0.05) / Math.LN10);
+		if (sigY > padT && sigY < padT + plotH) {
+			svg.appendChild(classMapEl("line", {
+				x1: padL, x2: width - padR, y1: sigY, y2: sigY, "class": "paClassMapSigLine"
+			}));
+			svg.appendChild(classMapText("FDR 0.05", width - padR - 4, sigY - 7, "paClassMapSigLabel",
+				{"text-anchor": "end"}));
+		}
+
+		/* Geometry first, so a label can never be dropped on another mark. */
+		var laid = [];
+		groups.forEach(function (group) {
+			var list = byParent[group].slice().sort(function (a, b) { return b.n - a.n; });
+			var groupIndex = groups.indexOf(group);
+			var cx0 = padL + (groupIndex + 0.5) * bandW;
+			list.forEach(function (row, i) {
+				var offset = (list.length === 1) ? 0
+					: ((i % 2 ? 1 : -1) * Math.ceil(i / 2)) * (bandW * 0.27);
+				var fdr = (typeof row.fdr === "number" && row.fdr > 0) ? row.fdr : CLASSMAP_FDR_FLOOR;
+				laid.push({
+					row: row, cx: cx0 + offset,
+					cy: yFor(-Math.log(fdr) / Math.LN10),
+					rr: radiusFor(row.n)
+				});
+			});
+		});
+
+		var occupied = laid.map(function (d) {
+			return {x0: d.cx - d.rr - 3, x1: d.cx + d.rr + 3, y0: d.cy - d.rr - 3, y1: d.cy + d.rr + 3};
+		});
+
+		laid.slice().sort(function (a, b) { return b.row.n - a.row.n; }).forEach(function (d) {
+			var row = d.row, cx = d.cx, cy = d.cy, rr = d.rr;
+			var group = classMapEl("g", {"class": "paClassMapMark", "data-class": row.name});
+
+			group.appendChild(classMapEl("circle", {
+				cx: cx, cy: cy, r: rr, "class": "paClassMapDisc"
+			}));
+
+			if (row.k > 0) {
+				var start = -Math.PI / 2;
+				var sweep = row.proportion * Math.PI * 2;
+				var directional = classMapHasDirection && (row.up + row.down) > 0;
+				var upFraction = directional ? row.up / (row.up + row.down) : 0;
+
+				var addWedge = function (from, to, cls) {
+					if (to - from < 1e-6) return;
+					var large = (to - from) > Math.PI ? 1 : 0;
+					group.appendChild(classMapEl("path", {
+						d: "M " + cx + " " + cy
+							+ " L " + (cx + rr * Math.cos(from)) + " " + (cy + rr * Math.sin(from))
+							+ " A " + rr + " " + rr + " 0 " + large + " 1 "
+							+ (cx + rr * Math.cos(to)) + " " + (cy + rr * Math.sin(to)) + " Z",
+						"class": cls
+					}));
+				};
+
+				if (directional) {
+					addWedge(start, start + sweep * upFraction, "paClassMapUp");
+					addWedge(start + sweep * upFraction, start + sweep, "paClassMapDown");
+				} else {
+					addWedge(start, start + sweep, "paClassMapNeutral");
+				}
+			}
+
+			if (row.significant) {
+				group.appendChild(classMapEl("circle",
+					{cx: cx, cy: cy, r: rr + 4, "class": "paClassMapRing"}));
+			}
+
+			if (row.n >= 5 || row.significant) {
+				var labelWidth = Math.max(row.name.length * 6.6, 34) + 10;
+				var labelY = cy - rr - 13;
+				var placed = false;
+				for (var attempt = 0; attempt < 6; attempt++) {
+					var box = {x0: cx - labelWidth / 2, x1: cx + labelWidth / 2,
+						y0: labelY - 11, y1: labelY + 13};
+					var clash = occupied.some(function (q) {
+						return box.x0 < q.x1 && box.x1 > q.x0 && box.y0 < q.y1 && box.y1 > q.y0;
+					});
+					if (!clash) { occupied.push(box); placed = true; break; }
+					labelY -= 14;
+				}
+				if (placed) {
+					group.appendChild(classMapText(row.name, cx, labelY, "paClassMapLabel",
+						{"text-anchor": "middle"}));
+					group.appendChild(classMapText(row.k + "/" + row.n, cx, labelY + 11,
+						"paClassMapCount", {"text-anchor": "middle"}));
+				}
+			}
+
+			var tip = row.name + " (" + row.parent + ")"
+				+ "\n" + row.k + " of " + row.n + " measured compounds relevant"
+				+ " = " + (row.proportion * 100).toFixed(0) + "%"
+				+ (p0 === null ? "" : "\nnull p0 = " + p0.toFixed(3))
+				+ "\np = " + classMapFormatP(row.p)
+				+ "   FDR BH = " + classMapFormatP(row.fdr)
+				+ (classMapHasDirection ? "\ndirection: " + row.up + " up, " + row.down + " down" : "");
+			var title = classMapEl("title", {});
+			title.textContent = tip;
+			group.appendChild(title);
+
+			group.addEventListener("mouseenter", function () { me.focusClass(row.name); });
+			group.addEventListener("mouseleave", function () { me.focusClass(null); });
+			group.addEventListener("click", function () {
+				me.paintClassCompounds(row.name);
+			});
+
+			svg.appendChild(group);
+		});
+
+		host.appendChild(svg);
+
+		/* The legend describes marks inside the plot, and the axis caption
+		   directly above it is drawn at x = padL. Flush to the card, the legend
+		   sat padL to the left of both. The SVG scales with its viewBox, so the
+		   indent is padL through the same scale rather than a fixed 62px. */
+		var keys = document.getElementById("classActivityKeys");
+		if (keys) {
+			/* Only the keys this chart actually uses. Direction is dropped when
+			   the omic never crosses zero, and printing its two colours anyway
+			   put swatches in the legend that appear nowhere on the plot -- and
+			   pushed the row to a second line to do it. */
+			var items = classMapHasDirection
+				? [['paKeySwatch paKeyUp', 'relevant &amp; increased'],
+				   ['paKeySwatch paKeyDown', 'relevant &amp; decreased']]
+				: [['paKeySwatch paKeyNeutral', 'relevant']];
+			items.push(['paKeySwatch paKeyNull', 'measured, not relevant']);
+			items.push(['paKeyGlyph paKeyArea', 'area = compounds measured', true]);
+			items.push(['paKeyGlyph paKeyRing', 'passes FDR 0.05']);
+
+			keys.innerHTML = items.map(function (item) {
+				return '<li' + (item[2] ? ' class="paKeyBreak"' : '') + '>'
+					+ '<span class="' + item[0] + '"></span>' + item[1] + '</li>';
+			}).join("");
+
+			var rendered = svg.getBoundingClientRect().width || width;
+			keys.style.paddingLeft = Math.round(padL * (rendered / width)) + "px";
+		}
+
+		me.renderClassMapControls();
+
+		var passing = rows.filter(function (r) { return r.significant; }).length;
+		var summary = document.getElementById("classActivityMapSummary");
+		if (summary) {
+			summary.classList.remove("paIsFocused");
+			/* The null, in the words of the question it asks, and the counts it
+			   was estimated from. Which of the two hypotheses ran is the whole
+			   meaning of the result and used to be invisible: the automatic
+			   branch compares a class with the rest of the job (competitive),
+			   a typed threshold compares it with a constant (self-contained),
+			   and one combo in step 2 switched between them with no change
+			   anywhere in the output. */
+			var userSet = (meta.thresholdSource === "user");
+			var background = "";
+			if (!userSet && classifiableTotal) {
+				/* [classMapCondition], like p0 on the same line: with the
+				   numerator pinned to condition 0 the sentence contradicted
+				   the number beside it for every other condition. */
+				background = ' &mdash; ' + (classifiableRelevant[classMapCondition] || 0) + ' of the ' + classifiableTotal
+					+ ' compounds KEGG BRITE can classify in this job are relevant,'
+					+ ' and that is the bar every class is measured against';
+			}
+			summary.innerHTML =
+				'<b>' + passing + '</b> of ' + rows.length + ' classes at FDR &lt; 0.05'
+				+ (p0 === null ? "" :
+					' &middot; ' + (userSet
+						? 'tested against <b>' + p0.toFixed(3) + '</b>, the fixed proportion you set'
+							+ ' <span class="paClassMapMuted">(not a comparison with the rest of your data)</span>'
+						: 'tested against the rest of this job, p<sub>0</sub> = <b>' + p0.toFixed(3) + '</b>'
+							+ '<span class="paClassMapMuted">' + background + '</span>'))
+				+ (classMapHasDirection ? "" :
+					' &middot; <span class="paClassMapMuted">values never cross zero, so no direction is shown</span>');
+			/* focusClass borrows this line while a class is hovered, so keep the
+			   resting text to put back on mouseleave. */
+			summary.setAttribute("data-base", summary.innerHTML);
+		}
+	};
 
 	this.initComponent = function () {
 		this.component = Ext.widget(
@@ -5953,200 +6520,57 @@ function PA_Step3MetaboliteView() {
 
 				items: [
 					{
-						xtype: "gridpanel",
-						itemId: 'classificationGrid',
-						cls: "contentbox paWrapHeaders",
+						xtype: 'box',
+						itemId: 'classActivityMapPanel',
+						cls: 'contentbox',
 						columnWidth: 1,
-
-						autoScroll: true,
-						store: userStore,
-						height: 350,
+						html:
+							'<h2 id="EnrichmentSection">Metabolite class activity analysis</h2>' +
+							'<p class="paClassMapSummary" id="classActivityMapSummary"></p>' +
+							'<div class="paClassMapControls" id="classActivityMapControls"></div>' +
+							'<div id="classActivityMap"></div>' +
+							/* data-guides="ignore": the keys sit on the chart's
+							   own axis line (x = padL inside the SVG), which the
+							   alignment overlay does not rail -- it reads DOM
+							   boxes, not SVG geometry -- so it would list them
+							   against the enrichment table's cell inset 4px
+							   away. Measured: li 337, swatch 337, axis 337. */
+							'<ul class="paClassMapKeys" id="classActivityKeys" data-guides="ignore"></ul>' +
+							'',
 						listeners: {
-							afterrender: function(grid) {
-								grid.el.on('click', function(e, t) {
-									var target = $(t);
-									if (target.hasClass('expandMetaboliteConditions')) {
-										var isExpanded = target.hasClass('fa-chevron-down');
-										if (isExpanded) {
-											target.removeClass('fa-chevron-down').addClass('fa-chevron-right');
-										} else {
-											target.removeClass('fa-chevron-right').addClass('fa-chevron-down');
-										}
-										
-										// Toggle visibility of condition columns
-										var columns = grid.headerCt.getGridColumns();
-										columns.forEach(function(col) {
-											if (col.conditionIndex !== undefined) {
-												if (isExpanded) col.hide();
-												else col.show();
-											}
-										});
-									}
-								});
-							}
-						},
-						header: {
-							xtype: 'box',
-							flex: 1,
-							border: 0,
-							minHeight: 35,
-							html: '<h2 id="EnrichmentSection"> Metabolite class activity analysis</h2>',
-							style: {
-								backgroundColor: 'white'
-							}
-						},
-
-						columns: (function() {
-							var baseCols = [
-								{
-									xtype: 'customactioncolumn',
-									text: "Paint",
-									menuDisabled: true,
-									width: 55,
-									items: [{
-										icon: "fa-paint-brush-o",
-										text: "",
-										tooltip: 'Paint this classification',
-										style: "font-size: 20px;",
-										handler: function (grid, rowIndex) {
-
-											revealPlotPanel('classificationPlotPanel');
-
-											let elem = $("#classificationPlot");
-											elem.empty();
-											/* Reserve the fixed-width heatmap that sits beside the
-											   plot, as in the hub table above - otherwise the pair
-											   wraps and the strip is left stranded above a chart
-											   four times its width. */
-											let divWidth = Math.max(260, elem.width() - 400);
-											let regulateFeatures = dataFinal[grid.getStore().getAt(rowIndex).data.name].ID;
-											let regulateOmicsValueComp = []
-											let omicName =  "Metabolomics"
-											let divId = "Compound_expression_heatmapContainer_class"
-
-
-											for (let i = 0; i < regulateFeatures.length; i++) {
-												let regulateFeature = regulateFeatures[i]
-												try {
-													let ov = globalExpressionComp[regulateFeature];
-													if (ov) {
-														if (!(ov instanceof OmicValue)) {
-															ov = OmicValue.loadFromJSON(ov);
-														}
-														regulateOmicsValueComp.push(ov);
-													}
-												} catch (e) {
-													console.log('No expression data for: ' + regulateFeature)
-												}
-											}
-
-											regulateOmicsValueComp = regulateOmicsValueComp.filter(function (x) {
-													return x !== undefined;
-												}
-											);
-
-											if (regulateOmicsValueComp.length > 0) {
-												htmlCode =
-													"<div class='contentbox'>" +
-													"  <h3>" + omicName + "<span><input type='checkbox' id='" + divId + "_cb_relevant' value='" + omicName + "'/>Only relevant</span></h3>" +
-													"  <div class='PA_step5_heatmapContainer' id='Compound_expression_heatmapContainer_class'  style='height: " + ((regulateOmicsValueComp.length * 30) + 100) + "px'><i class='fa fa-cog fa-spin'></i> Loading..</div>" +
-													"  <div class='PA_step5_plotContainer' id='" + divId + "_plotContainer'  style='width:" + divWidth + "px;height: " + ((regulateOmicsValueComp.length * 30) + 100) + "px'><i class='fa fa-cog fa-spin'></i> Loading..</div>" +
-
-													"</div>";
-												elem.append(htmlCode);
-												heatmapComp = generateHeatmap(divId, omicName, regulateOmicsValueComp, distributionSummaries, visualOptions, paOmicHeaders(me.model, omicName))
-												plot = generatePlot(divId + "_plotContainer", omicName, regulateOmicsValueComp, distributionSummaries, divId + "_plotlegendContainer", visualOptions, paOmicHeaders(me.model, omicName));
-
-												$("#" + divId + "_cb_relevant").change(function () {
-													let onlyRelevants = $(this).is(":checked");
-
-													// Highcharts does not automatically hide Y labels when hiding series, so it is easier and faster
-													// to recreate the whole graphic.
-													let omicValues = regulateOmicsValueComp;
-
-													if (onlyRelevants) {
-														omicValues = omicValues.filter(x => x.isRelevant() || x.isRelevantAssociation());
-													}
-
-													$('#' + divId).height(omicValues.length * 30 + 100);
-
-													heatmapComp = generateHeatmap(divId, omicName, omicValues, distributionSummaries, visualOptions, paOmicHeaders(me.model, omicName))
-													plot = generatePlot(divId + "_plotContainer", omicName, omicValues, distributionSummaries, divId + "_plotlegendContainer", visualOptions, paOmicHeaders(me.model, omicName));
-
-												});
-
-											} else {
-												// The panel is revealed before the data is checked, so
-												// without this the class opens an empty white box.
-												elem.append(
-													'<div class="contentbox paEmptyNote">' +
-													'  <p>None of the ' + regulateFeatures.length + ' metabolite' + (regulateFeatures.length === 1 ? '' : 's') + ' in this class carry measured values in the omics you uploaded.</p>' +
-													'</div>');
-											}
-
-											fitPlotPanel('classificationPlotPanel', 'classificationPlot');
-										}
-									}]
-								},
-								{
-									text: 'Name',
-									flex: 25 / 100,
-									sortable: true,
-									hideable: false,
-									dataIndex: 'name'
-								},
-								{
-									text: 'Unique Features',
-									flex: 15 / 100,
-									sortable: true,
-									hideable: false,
-									dataIndex: 'foundFeatures'
+							afterrender: function (box) {
+								/* clientWidth is 0 until the column layout has
+								   run, and a 0-width chart draws nothing. */
+								Ext.defer(function () { me.drawClassMap(); }, 60);
+								/* Ext.on is 5.x; this client is 4.2.1. Attached
+								   once per view, and drawClassMap no-ops when
+								   its host div is gone, so a detached view's
+								   listener cannot throw. */
+								if (!me._classMapResizeBound) {
+									me._classMapResizeBound = true;
+									me._classMapResizeHandler = function () {
+										clearTimeout(me._classMapResizeTimer);
+										me._classMapResizeTimer = setTimeout(function () {
+											me.drawClassMap();
+										}, 200);
+									};
+									window.addEventListener('resize', me._classMapResizeHandler);
 								}
-							];
-
-							var pValueCol = {
-								text: (nCond > 1 ? '<i class="fa fa-chevron-right expandMetaboliteConditions" style="cursor:pointer;"></i> ' : '') + "P Value",
-								flex: 15 / 100,
-								sortable: true,
-								dataIndex: 'pValue_c0',
-								renderer: renderFunctionLimit
-							};
-
-							if (nCond > 1) {
-								var subCols = [{
-									text: 'Global',
-									dataIndex: 'pValue_c0', // Placeholder or minimum?
-									flex: 1,
-									renderer: renderFunctionLimit,
-									hidden: false
-								}];
-								for (var c = 0; c < nCond; c++) {
-									subCols.push({
-										text: conditionNames[c] || ("Cond " + (c+1)),
-										dataIndex: 'pValue_c' + c,
-										flex: 1,
-										renderer: renderFunctionLimit,
-										hidden: true,
-										conditionIndex: c
-									});
+							},
+							/* Unbound with the box. clearSubViews() destroys the
+							   component but the closure kept the view alive, so
+							   every job ever opened in the tab redrew ITS rows
+							   into the new #classActivityMap on each resize
+							   before the live handler overwrote them. */
+							beforedestroy: function () {
+								if (me._classMapResizeHandler) {
+									window.removeEventListener('resize', me._classMapResizeHandler);
+									me._classMapResizeHandler = null;
+									me._classMapResizeBound = false;
 								}
-								pValueCol.columns = subCols;
-								pValueCol.flex = (subCols.length) * 10 / 100;
+								clearTimeout(me._classMapResizeTimer);
 							}
-
-							baseCols.push(pValueCol);
-							
-							// Add FDR columns (can be simple or expanded too, keep simple for now or expanded if needed)
-							baseCols.push({
-								text: "FDR BH",
-								flex: 15 / 100,
-								sortable: true,
-								dataIndex: "FDR_BH_c0",
-								renderer: renderFunctionLimit
-							});
-							
-							return baseCols;
-						})(),
+						}
 					},
 					{
 						xtype: 'box',

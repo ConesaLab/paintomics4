@@ -63,6 +63,10 @@ from src.common.Util import ensure_utf8
 PAINTOMICS4_DICT_FIELDS = {
     "mappingComp", "classificationDict", "pValueInDict",
     "adjustPvalue", "totalRelevantFeaturesInCategory", "featureSummary",
+    # Class-map metadata: the BRITE level-1 parent per tested class, and the
+    # null proportion each condition was actually judged against. Both were
+    # computed and discarded before; both are needed to draw an honest chart.
+    "classificationMeta",
     # MORE rpc table. Bounded at 100k rows by parseRegulationPerCondition,
     # so worst-case ~5 MB — well under the 16 MB Mongo doc limit and an order
     # of magnitude smaller than the LARGE_FIELDS set's compoundRegulateFeatures.
@@ -238,6 +242,7 @@ class PathwayAcquisitionJob(Job):
         self.adjustPvalue = None
         self.totalRelevantFeaturesInCategory = None
         self.featureSummary = None
+        self.classificationMeta = None
         self.compoundRegulateFeatures = None
 
         self.globalExpressionData = None
@@ -2435,8 +2440,14 @@ class PathwayAcquisitionJob(Job):
         temp2 = temp["children"]
 
         keggCompondsList = defaultdict(set)
+        # The level-1 group each tested class belongs to. The walk below always
+        # had it in hand as i['name'] and dropped it, which is why the nine
+        # steroid classes reach the client as "18-Carbon atoms" .. "30-Carbon
+        # atoms" with nothing saying they are steroids.
+        classParents = {}
         for i in temp2:
             for j in i['children']:
+                classParents[j['name']] = i['name']
                 for w in j['children']:
                     for t in w['children']:
                         subt = t['name'].split()[0]
@@ -2458,8 +2469,29 @@ class PathwayAcquisitionJob(Job):
                 if compoundID in IDs:
                     classificationDict[key].append(compoundID)
 
-        # Prepare values to test category significance
-        totalFeatures = sum(map(len, classificationDict.values()))
+        # Prepare values to test category significance.
+        # Distinct compounds, not the sum of the per-class lists: br08001 files
+        # 33 of its 621 compounds under more than one level-2 class (ATP,
+        # glycine, glutamate and aspartate among them), and summing the lists
+        # counted each of those twice. This denominator is the null proportion
+        # p0 under "generate automatically", so the inflation went straight
+        # into every class's p-value.
+        # A trial is a MEASURED feature, not a KEGG id. One name ticked under
+        # two ids in step 2 (Alanine -> C00041 and C01401, both "Amino acids")
+        # is one measurement carried twice, with perfectly correlated
+        # relevance: counted as two it adds 2 to n and 2 to k and halves the
+        # p-value for nothing (3/4 at p0 = .5 is .312; the same data as 6/8
+        # is .145). Ids are collapsed on the feature they came from.
+        def featureKeyOf(compoundID):
+            comp = self.inputCompoundsData.get(compoundID)
+            omicValue = comp.omicsValues[0] if comp and comp.omicsValues else None
+            return (getattr(omicValue, "originalName", None)
+                    or getattr(omicValue, "inputName", None)
+                    or compoundID)
+
+        totalFeatures = len({featureKeyOf(compoundID)
+                             for compoundIDs in classificationDict.values()
+                             for compoundID in compoundIDs})
         totalFeaturesInCategory = defaultdict(int)
         
         # Determine number of conditions
@@ -2468,14 +2500,28 @@ class PathwayAcquisitionJob(Job):
             if feature.omicsValues and isinstance(feature.omicsValues[0].relevant, list):
                 nConditions = max(nConditions, len(feature.omicsValues[0].relevant))
         
-        # totalRelevantFeaturesInCategory[conditionIndex][category] = count
+        # totalRelevantFeaturesInCategory[conditionIndex][category] = count.
+        # Per class, and it stays per class -- it is the k of that class's
+        # binomial, where a compound filed under two classes genuinely counts
+        # in both.
         totalRelevantFeaturesInCategory_cond = [defaultdict(int) for _ in range(nConditions)]
+        # The OVERALL relevant count is a property of the compound set, not of
+        # the classes, so it must count each compound once -- the same
+        # correction as totalFeatures above. Both halves of the derived null
+        # were inflated before, which partly cancelled; correcting only the
+        # denominator drives p0 above 1.0, and binomtest rejects that, which
+        # the bare except-branch below would have turned into p = 1.0 for
+        # every class in the job.
+        relevantCompoundIDs_cond = [set() for _ in range(nConditions)]
         # pValueInDict[conditionIndex][category] = pValue
         pValueInDict_cond = [{} for _ in range(nConditions)]
 
         for key, items in classificationDict.items():
-            totalFeaturesInCategory[key] = len(items)
+            featuresInClass = set()
+            relevantInClass = [set() for _ in range(nConditions)]
             for item in items:
+                featureKey = featureKeyOf(item)
+                featuresInClass.add(featureKey)
                 comp = self.inputCompoundsData.get(item)
                 if comp and comp.omicsValues:
                     rel = comp.omicsValues[0].relevant
@@ -2483,9 +2529,14 @@ class PathwayAcquisitionJob(Job):
                         rel = [rel]
                     for c in range(min(nConditions, len(rel))):
                         if rel[c]:
-                            totalRelevantFeaturesInCategory_cond[c][key] += 1
+                            relevantInClass[c].add(featureKey)
+                            relevantCompoundIDs_cond[c].add(featureKey)
+            totalFeaturesInCategory[key] = len(featuresInClass)
+            for c in range(nConditions):
+                if relevantInClass[c]:
+                    totalRelevantFeaturesInCategory_cond[c][key] = len(relevantInClass[c])
 
-        totalRelevantFeatures_cond = [sum(counts.values()) for counts in totalRelevantFeaturesInCategory_cond]
+        totalRelevantFeatures_cond = [len(compoundIDs) for compoundIDs in relevantCompoundIDs_cond]
 
         from scipy import stats
         threshold = metaboliteClassThreshold.get("thresholdMetaboliteClass")
@@ -2495,15 +2546,23 @@ class PathwayAcquisitionJob(Job):
             except:
                 threshold = None
 
+        # Strictly below 1: at p0 = 1 every class scores p = 1.0 and the
+        # analysis says nothing; the step-2 combo dropped 1.0 for that reason
+        # and a typed "1" used to get through. Anything else falls back to
+        # the derived null, and the caption says which ran.
+        usingUserThreshold = bool(threshold and 0 < threshold < 1)
+        nullProportion_cond = []
+
         for c in range(nConditions):
             totalRel = totalRelevantFeatures_cond[c]
+            if usingUserThreshold:
+                p_param = threshold
+            else:
+                p_param = totalRel / totalFeatures if totalFeatures > 0 else 0
+            nullProportion_cond.append(p_param)
+
             for key in classificationDict:
                 try:
-                    if threshold and 0 < threshold <= 1:
-                        p_param = threshold
-                    else:
-                        p_param = totalRel / totalFeatures if totalFeatures > 0 else 0
-                    
                     pValueInDict_cond[c][key] = stats.binomtest(
                         totalRelevantFeaturesInCategory_cond[c].get(key, 0),
                         n=totalFeaturesInCategory.get(key),
@@ -2516,10 +2575,11 @@ class PathwayAcquisitionJob(Job):
         # adjustPvalue[conditionIndex] = {category: adjustedPValue}
         adjustPvalue_cond = [adjustPvalues(p_dict) for p_dict in pValueInDict_cond]
 
-        for c in range(nConditions):
-            for method, items in adjustPvalue_cond[c].items():
-                for item in items:
-                    adjustPvalue_cond[c][method][item] = round(items[item], 4)
+        # Deliberately NOT rounded. round(p, 4) turned every adjusted p-value
+        # below 1e-4 into exactly 0.0, so -log10(FDR) is +Inf for precisely the
+        # classes with the strongest evidence -- a significance axis built on
+        # this field breaks on its own best result. The client formats for
+        # display; the transport keeps full precision.
 
         # Save the expression values
         valuesSet = set()
@@ -2546,6 +2606,14 @@ class PathwayAcquisitionJob(Job):
         self.adjustPvalue = adjustPvalue_cond
         self.totalRelevantFeaturesInCategory = totalRelevantFeaturesInCategory_cond
         self.featureSummary = featureSummary
+        # Only the classes this job actually populated, so the client does not
+        # have to carry all 36 br08001 names to look up nine steroid parents.
+        self.classificationMeta = {
+            "parents": {className: classParents.get(className, "")
+                        for className in classificationDict},
+            "nullProportion": nullProportion_cond,
+            "thresholdSource": "user" if usingUserThreshold else "auto",
+        }
         self.compoundRegulateFeatures = compoundRegulateFeatures
 
         return self.mappingComp, self.pValueInDict, self.classificationDict, self.exprssionMetabolites, self.adjustPvalue, self.totalRelevantFeaturesInCategory, self.featureSummary, self.compoundRegulateFeatures

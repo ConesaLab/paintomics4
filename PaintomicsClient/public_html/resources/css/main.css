@@ -9153,3 +9153,79 @@ div.repDetectionCard h3 {
 	color: var(--pa-link-hover);
 	border-bottom-color: currentColor;
 }
+
+/* ------------------------------------------------------------------
+   Metabolite class activity map (PA_Step3MetaboliteView.drawClassMap).
+
+   Fills live in CSS rather than on the SVG nodes so dark.css can restyle
+   the chart without a redraw -- an inline fill is unreachable from a
+   stylesheet, and the theme toggle does not re-render Step 3.
+   ------------------------------------------------------------------ */
+.paClassMap { display: block; max-width: 100%; }
+.paClassMapBand { fill: #F1F5F8; }
+.paClassMapGrid { stroke: #D2DBE4; stroke-width: 1; }
+.paClassMapDisc { fill: #C4CFDA; stroke: #FFFFFF; stroke-width: 2; }
+.paClassMapUp { fill: #0F59A9; stroke: #FFFFFF; stroke-width: 1; }
+.paClassMapDown { fill: #A51F1E; stroke: #FFFFFF; stroke-width: 1; }
+.paClassMapNeutral { fill: #4A6785; stroke: #FFFFFF; stroke-width: 1; }
+.paClassMapRing { fill: none; stroke: #141E2B; stroke-width: 1.8; }
+.paClassMapSigLine { stroke: #B5761F; stroke-width: 1.5; stroke-dasharray: 6 4; }
+.paClassMapSigLabel { fill: #B5761F; font-size: 11px; font-weight: 600; }
+.paClassMapTick { fill: #78879A; font-size: 10.5px; }
+.paClassMapAxis { fill: #78879A; font-size: 10px; letter-spacing: .07em; text-transform: uppercase; }
+.paClassMapLabel { fill: #141E2B; font-size: 11.5px; }
+.paClassMapCount { fill: #44556A; font-size: 10px; }
+.paClassMapMark { cursor: pointer; }
+.paClassMapMark:hover .paClassMapDisc { stroke: #B5761F; }
+.paClassMapSummary { margin: 2px 0 10px; color: #44556A; font-size: 13px; }
+.paClassMapWarn { color: #A51F1E; }
+.paClassMapMuted { color: #78879A; }
+/* Legend. A list, not a run-on sentence: each item is one nowrap flex child,
+   so a narrow card wraps BETWEEN keys instead of mid-phrase. */
+/* Aligned to the plot area by drawClassMap, which sets padding-left from the
+   chart's own padL so the keys start under the axis caption rather than at the
+   card edge. Each li is one nowrap flex child, so a narrow card wraps BETWEEN
+   keys instead of mid-phrase. */
+.paClassMapKeys { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center;
+                  margin: 12px 0 4px; padding: 0; list-style: none;
+                  color: #44556A; font-size: 12px; }
+.paClassMapKeys li { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+/* No own indent: the ul carries the chart's padL, and `div.contentbox li`
+   (padding-left: 4px, two class-and-element parts to this rule's one) put the
+   first swatch 4px right of the axis line it sits under -- measured with the
+   guides: li at 337, swatch at 341, axis at 337. Written at the higher
+   specificity so it actually applies. */
+div.contentbox .paClassMapKeys li { padding-left: 0; }
+/* Colour keys say what a mark is made of; shape keys say what it scored. The
+   extra space is the only thing separating the two ideas. */
+.paClassMapKeys li.paKeyBreak { margin-left: 12px; padding-left: 24px;
+                                border-left: 1px solid #E4EAF0; }
+.paKeySwatch, .paKeyGlyph { box-sizing: border-box; flex: none; }
+.paKeySwatch { width: 12px; height: 12px; border-radius: 2px; }
+.paKeyUp { background: #0F59A9; }
+.paKeyDown { background: #A51F1E; }
+.paKeyNeutral { background: #4A6785; }
+.paKeyNull { background: #C4CFDA; }
+.paKeyGlyph { width: 13px; height: 13px; border-radius: 50%; }
+/* No outer halo: box-shadow paints outside the layout box, so this key read a
+   third wider than every other one while measuring the same. */
+.paKeyArea { background: #C4CFDA; }
+.paKeyRing { border: 1.8px solid #141E2B; }
+
+/* Hover linkage. Pointing at a mark rings it and drops every other class to a
+   fifth, which is what makes eight marks read as a set being compared rather
+   than eight independent dots. */
+.paIsFocusing .paClassMapMark { opacity: .22; }
+.paIsFocusing .paClassMapMark.paIsFocused { opacity: 1; }
+.paClassMapMark.paIsFocused .paClassMapDisc { stroke: #B5761F; stroke-width: 3; }
+/* The caption doubles as the hover readout. */
+.paClassMapSummary.paIsFocused { color: #141E2B; }
+.paDirUp { color: #0F59A9; font-weight: 600; }
+.paDirDown { color: #A51F1E; font-weight: 600; }
+.paClassMapControls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+                      margin: 4px 0 12px; }
+.paClassMapControlLabel { font-size: 11px; letter-spacing: .06em; text-transform: uppercase;
+                          color: #78879A; font-weight: 600; }
+.paClassMapSelect { padding: 4px 8px; border: 1px solid #B5C1CE; border-radius: 4px;
+                    background: #FFFFFF; color: #141E2B; font-size: 13px; }
+.paClassMapControlNote { color: #78879A; font-size: 12px; }
