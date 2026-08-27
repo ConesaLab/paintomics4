@@ -107,6 +107,36 @@ class RunFailureReachesTheAgentTest(unittest.TestCase):
         self.assertEqual(names, [], "this error names a file after all")
         self.assertIn("miRNA-Seq_data", MORE_ERROR)
 
+    def test_the_omic_must_be_named_as_a_subject_not_mentioned_in_prose(self):
+        """Reported as "why do these two buttons always exist".
+
+        Matching an omic NAME anywhere in the text is far too loose to stand on
+        its own -- omic names are ordinary words. The form's own refusal,
+        "Please provide at least: Gene expression /Metabolomics /Proteomics
+        data", contains "Gene expression", so a card carrying the default name
+        matched it and both buttons appeared on a dialog that names no file and
+        reports no file problem at all.
+
+        A failure that is ABOUT an omic writes it as a label -- the preparation
+        dialog builds "<omic>: <what the server said>" -- and prose does not put
+        a colon there.
+
+        Measured in Chrome with a card named "Gene expression" holding
+        myvalues.tab, after the change:
+
+            form: no data (names no file)          no buttons
+            form: field required                   no buttons
+            session expired                        no buttons
+            omic mentioned in prose                no buttons
+            names the picked file                  Check / Ask
+            "Gene expression: MORE ERROR: ..."     Check / Ask
+        """
+        matcher = self.panel_code[
+            self.panel_code.index("function pickedFileForOmicNamedIn"):]
+        matcher = matcher[:matcher.index("function pickedFileMatching")]
+        self.assertIn('.toLowerCase() + ":"', matcher,
+                      "a bare omic name is not evidence that a file failed")
+
     def test_both_offers_are_made_and_they_differ(self):
         """Re-checking repairs mechanically; the agent can be told what broke."""
         self.assertIn("Check this file again", self.panel_code)

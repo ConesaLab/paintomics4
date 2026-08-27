@@ -985,7 +985,22 @@
             var nameField = card && card.queryById && card.queryById("omicNameField");
             var omic = nameField && nameField.getValue && nameField.getValue();
             if (!omic || String(omic).trim().length < 3) continue;
-            var needle = String(omic).replace(/[\s_]+/g, " ").trim().toLowerCase();
+            /* `omic:` and not a bare `omic`.
+             *
+             * Matching the name anywhere in the text was far too loose to stand
+             * on its own -- omic names are ordinary words. Measured: the form's
+             * own refusal, "Please provide at least: Gene expression
+             * /Metabolomics /Proteomics data", contains "Gene expression", so a
+             * card carrying the default name matched it and both buttons
+             * appeared on a dialog that names no file and reports no file
+             * problem at all. Reported as "why do these two buttons always
+             * exist".
+             *
+             * A failure that is about an omic writes it as a label -- the
+             * preparation dialog builds "<omic>: <what the server said>" -- and
+             * prose does not put a colon there. That one character is the
+             * difference between naming a subject and mentioning a word. */
+            var needle = String(omic).replace(/[\s_]+/g, " ").trim().toLowerCase() + ":";
             if (haystack.indexOf(needle) !== -1) {
                 return { input: dom, file: file, fieldName: fields[i].name };
             }
