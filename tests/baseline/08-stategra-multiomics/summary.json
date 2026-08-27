@@ -2,7 +2,7 @@
   "dataset": "08-stategra-multiomics",
   "parts": {
     "step1": {
-      "bytes": 30924648,
+      "bytes": 30924750,
       "headline": {
         "compoundBasedInputOmics": 1,
         "databases": 3,
@@ -11,10 +11,10 @@
         "matchedMetabolites": 52,
         "organism": 3
       },
-      "sha256": "ffa7114c246dfe71a5b9b3a62713212a6d9a258ceeca04151753efcb0947a27e"
+      "sha256": "f7996d21091b3fb286cde361ec405a0d1aad1d14dad88ba4a65916c6dec90761"
     },
     "step2": {
-      "bytes": 18273800,
+      "bytes": 18813949,
       "headline": {
         "adjustPvalue": 1,
         "classInfo": 28,
@@ -111,16 +111,16 @@
         ],
         "totalRelevantFeaturesInCategory": 1
       },
-      "sha256": "a46adc75d4d182e63f356f696594cc53d4ba2f7f47a39358e6186a8eeb2878c3"
+      "sha256": "58ad80287797756940d096ca81c28e9dafb6ed7117e32e0b2e5fe7384b6a5c86"
     },
     "step3": {
-      "bytes": 45107061,
+      "bytes": 45107117,
       "headline": {
         "graphicalOptionsInstances": 1007,
         "omicsValues": 16905,
         "selectedPathways": 1007
       },
-      "sha256": "8141f3aa7bc07142dc797de386f93327c5035f8511db2b06f5ebb108c510772a"
+      "sha256": "93d432c833f642b951d28c19e568f34935caef0fb02b8543ac000fb15fed02a4"
     }
   },
   "pipeline": "pathway-acquisition",
