@@ -5820,6 +5820,12 @@ function PA_Step3MetaboliteView() {
 	let classMapHasDirection = false;
 	let classificationDictRef = {};
 	let classMapRowsCache = [];
+	/* featureSummary = [distinct classifiable compounds, [relevant per condition]].
+	   These are the numerator and denominator of the derived null, and naming
+	   them is the difference between "p0 = 0.741" and a number a reader can
+	   check. */
+	let classifiableTotal = 0;
+	let classifiableRelevant = 0;
 	let me = this;
 
 
@@ -5908,6 +5914,10 @@ function PA_Step3MetaboliteView() {
 		visualOptions = me.getParent().visualOptions
 
 		classMapMeta = this.model.getClassificationMeta() || {};
+		classifiableTotal = Array.isArray(featureSummary) ? (featureSummary[0] || 0) : 0;
+		var relevantTotals = (Array.isArray(featureSummary) && Array.isArray(featureSummary[1]))
+			? featureSummary[1] : [];
+		classifiableRelevant = relevantTotals[0] || 0;
 		classificationDictRef = classificationDict || {};
 		classMapCondition = 0;
 
@@ -6019,7 +6029,7 @@ function PA_Step3MetaboliteView() {
 	                 measurement -- ChemRICH puts median XLogP here, computed
 	                 from SMILES, which PaintOmics does not ship. ChemRICH's own
 	                 paper figure falls back to tree order for the same reason.
-	     y           -log10 of the binomial p-value. ChemRICH's y is a KS test
+	     y           -log10 of the BH-adjusted p-value. ChemRICH's y is a KS test
 	                 over per-compound p-values; this pipeline stores a boolean
 	                 relevance flag, so that test does not exist here.
 	     area        compounds measured in the class (n).
@@ -6112,9 +6122,16 @@ function PA_Step3MetaboliteView() {
 				up: up,
 				down: down,
 				significant: (typeof fdr === "number") && fdr < 0.05,
-				/* Best case is every measured compound relevant, i.e. k = n,
-				   which gives raw p = p0^n. */
-				reachable: (p0 === null) ? true : (Math.pow(p0, n) <= 0.05)
+				/* No reachability flag. It used to say "cannot reach FDR 0.05 at
+				   this n", computed as p0^n <= 0.05 -- wrong twice over. It held
+				   p0 fixed while k rose to n, but p0 is DERIVED from the same
+				   counts, so raising k raises the bar with it: Amino acids at
+				   40/40 moves p0 from 0.741 to 0.897, and its best raw p is
+				   0.0127, not 0. And it compared that raw p against 0.05 while
+				   the label promised FDR -- the true best-case FDR there is
+				   0.101, so the one class the caption called reachable is not.
+				   On the bundled STATegra job it printed 7; the truth is 8 with
+				   the other classes held and 2 with the background free. */
 			});
 		}
 		return rows;
@@ -6215,7 +6232,6 @@ function PA_Step3MetaboliteView() {
 			+ (classMapHasDirection
 				? ' &nbsp; <span class="paDirUp">▲' + row.up + '</span> <span class="paDirDown">▼' + row.down + '</span>'
 				: "")
-			+ (row.reachable ? "" : ' &nbsp; <span class="paClassMapWarn">cannot reach FDR 0.05 at n=' + row.n + '</span>')
 			+ ' &nbsp; <span class="paClassMapMuted">click to paint its compounds</span>';
 	};
 
@@ -6268,7 +6284,7 @@ function PA_Step3MetaboliteView() {
 			viewBox: "0 0 " + width + " " + height,
 			width: "100%", height: height, "class": "paClassMap", role: "img",
 			"aria-label": "Metabolite class map. Horizontal position groups classes by KEGG BRITE parent; "
-				+ "vertical position is minus log 10 of the binomial p-value; mark area is the number of "
+				+ "vertical position is minus log 10 of the BH-adjusted p-value; mark area is the number of "
 				+ "compounds measured; the filled sweep is the proportion of those compounds that were relevant."
 		});
 
@@ -6295,7 +6311,7 @@ function PA_Step3MetaboliteView() {
 			svg.appendChild(classMapText(v.toFixed(0), padL - 9, yFor(v) + 4, "paClassMapTick",
 				{"text-anchor": "end"}));
 		}
-		svg.appendChild(classMapText("−log₁₀ binomial p", padL - 9, padT - 18, "paClassMapAxis"));
+		svg.appendChild(classMapText("−log₁₀ FDR (BH)", padL - 9, padT - 18, "paClassMapAxis"));
 		svg.appendChild(classMapText("BRITE parent group · x is a grouping, not a measurement",
 			padL, height - 12, "paClassMapAxis"));
 
@@ -6367,9 +6383,6 @@ function PA_Step3MetaboliteView() {
 			if (row.significant) {
 				group.appendChild(classMapEl("circle",
 					{cx: cx, cy: cy, r: rr + 4, "class": "paClassMapRing"}));
-			} else if (!row.reachable) {
-				group.appendChild(classMapEl("circle",
-					{cx: cx, cy: cy, r: rr + 4, "class": "paClassMapRingUnreachable"}));
 			}
 
 			if (row.n >= 5 || row.significant) {
@@ -6399,10 +6412,7 @@ function PA_Step3MetaboliteView() {
 				+ (p0 === null ? "" : "\nnull p0 = " + p0.toFixed(3))
 				+ "\np = " + classMapFormatP(row.p)
 				+ "   FDR BH = " + classMapFormatP(row.fdr)
-				+ (classMapHasDirection ? "\ndirection: " + row.up + " up, " + row.down + " down" : "")
-				+ (row.reachable ? "" :
-					"\nCannot reach FDR 0.05 at n=" + row.n
-					+ " even if every compound were relevant");
+				+ (classMapHasDirection ? "\ndirection: " + row.up + " up, " + row.down + " down" : "");
 			var title = classMapEl("title", {});
 			title.textContent = tip;
 			group.appendChild(title);
@@ -6435,7 +6445,6 @@ function PA_Step3MetaboliteView() {
 			items.push(['paKeySwatch paKeyNull', 'measured, not relevant']);
 			items.push(['paKeyGlyph paKeyArea', 'area = compounds measured', true]);
 			items.push(['paKeyGlyph paKeyRing', 'passes FDR 0.05']);
-			items.push(['paKeyGlyph paKeyDash', 'cannot reach it at this n']);
 
 			keys.innerHTML = items.map(function (item) {
 				return '<li' + (item[2] ? ' class="paKeyBreak"' : '') + '>'
@@ -6448,19 +6457,32 @@ function PA_Step3MetaboliteView() {
 
 		me.renderClassMapControls();
 
-		var unreachable = rows.filter(function (r) { return !r.reachable; }).length;
 		var passing = rows.filter(function (r) { return r.significant; }).length;
 		var summary = document.getElementById("classActivityMapSummary");
 		if (summary) {
 			summary.classList.remove("paIsFocused");
+			/* The null, in the words of the question it asks, and the counts it
+			   was estimated from. Which of the two hypotheses ran is the whole
+			   meaning of the result and used to be invisible: the automatic
+			   branch compares a class with the rest of the job (competitive),
+			   a typed threshold compares it with a constant (self-contained),
+			   and one combo in step 2 switched between them with no change
+			   anywhere in the output. */
+			var userSet = (meta.thresholdSource === "user");
+			var background = "";
+			if (!userSet && classifiableTotal) {
+				background = ' &mdash; ' + classifiableRelevant + ' of the ' + classifiableTotal
+					+ ' compounds KEGG BRITE can classify in this job are relevant,'
+					+ ' and that is the bar every class is measured against';
+			}
 			summary.innerHTML =
-				'<b>' + passing + '</b> of ' + rows.length + ' classes pass FDR &lt; 0.05'
+				'<b>' + passing + '</b> of ' + rows.length + ' classes at FDR &lt; 0.05'
 				+ (p0 === null ? "" :
-					' &middot; null p<sub>0</sub> = <b>' + p0.toFixed(3) + '</b> ('
-					+ (meta.thresholdSource === "user" ? "your threshold" : "derived from this job") + ')')
-				+ (unreachable ?
-					' &middot; <span class="paClassMapWarn">' + unreachable
-					+ ' cannot reach it at any data</span>' : "")
+					' &middot; ' + (userSet
+						? 'tested against <b>' + p0.toFixed(3) + '</b>, the fixed proportion you set'
+							+ ' <span class="paClassMapMuted">(not a comparison with the rest of your data)</span>'
+						: 'tested against the rest of this job, p<sub>0</sub> = <b>' + p0.toFixed(3) + '</b>'
+							+ '<span class="paClassMapMuted">' + background + '</span>'))
 				+ (classMapHasDirection ? "" :
 					' &middot; <span class="paClassMapMuted">values never cross zero, so no direction is shown</span>');
 			/* focusClass borrows this line while a class is hovered, so keep the

@@ -9169,7 +9169,6 @@ div.repDetectionCard h3 {
 .paClassMapDown { fill: #A51F1E; stroke: #FFFFFF; stroke-width: 1; }
 .paClassMapNeutral { fill: #4A6785; stroke: #FFFFFF; stroke-width: 1; }
 .paClassMapRing { fill: none; stroke: #141E2B; stroke-width: 1.8; }
-.paClassMapRingUnreachable { fill: none; stroke: #78879A; stroke-width: 1.2; stroke-dasharray: 2 2.6; }
 .paClassMapSigLine { stroke: #B5761F; stroke-width: 1.5; stroke-dasharray: 6 4; }
 .paClassMapSigLabel { fill: #B5761F; font-size: 11px; font-weight: 600; }
 .paClassMapTick { fill: #78879A; font-size: 10.5px; }
@@ -9206,7 +9205,6 @@ div.repDetectionCard h3 {
    third wider than every other one while measuring the same. */
 .paKeyArea { background: #C4CFDA; }
 .paKeyRing { border: 1.8px solid #141E2B; }
-.paKeyDash { border: 1.4px dashed #78879A; }
 
 /* Hover linkage. Pointing at a mark rings it and drops every other class to a
    fifth, which is what makes eight marks read as a set being compared rather

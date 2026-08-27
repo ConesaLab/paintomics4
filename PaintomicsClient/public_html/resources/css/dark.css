@@ -1951,7 +1951,6 @@
 :root[data-theme="dark"] .paClassMapDown { fill: #C9524D; stroke: #151D26; }
 :root[data-theme="dark"] .paClassMapNeutral { fill: #7C93AD; stroke: #151D26; }
 :root[data-theme="dark"] .paClassMapRing { stroke: #E3EAF2; }
-:root[data-theme="dark"] .paClassMapRingUnreachable { stroke: #6F7F8E; }
 :root[data-theme="dark"] .paClassMapSigLine { stroke: #B8892B; }
 :root[data-theme="dark"] .paClassMapSigLabel { fill: #B8892B; }
 :root[data-theme="dark"] .paClassMapTick,
@@ -1969,7 +1968,6 @@
 :root[data-theme="dark"] .paKeyArea { background: #35424F; }
 :root[data-theme="dark"] .paClassMapKeys li.paKeyBreak { border-left-color: #28333F; }
 :root[data-theme="dark"] .paKeyRing { border-color: #E3EAF2; }
-:root[data-theme="dark"] .paKeyDash { border-color: #6F7F8E; }
 :root[data-theme="dark"] .paClassMapKeys { color: #A1B0C0; }
 
 :root[data-theme="dark"] .paClassMapControlLabel,
