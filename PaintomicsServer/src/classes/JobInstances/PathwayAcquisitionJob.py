@@ -122,6 +122,84 @@ def _metagenesParallelism():
         return 3
 
 
+def mappedTotal(omicSummary):
+    """The number of features an omic mapped, from its omicSummary.
+
+    First position: a dictionary per database ("Total" is the maximum) for
+    gene-based omics, a bare int for compound-based ones. Shared with
+    getMappedRatios, which used to carry this rule alone.
+    """
+    if not omicSummary:
+        return 0
+    first = omicSummary[0]
+    if isinstance(first, int):
+        return first
+    if isinstance(first, dict):
+        total = first.get("Total")
+        if total is None:
+            total = next(iter(first.values()), 0)
+        try:
+            return int(total or 0)
+        except (TypeError, ValueError):
+            return 0
+    return 0
+
+
+def hasDataRows(path):
+    """Whether a mapping file holds at least one non-blank line."""
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as handle:
+            for line in handle:
+                if line.strip():
+                    return True
+    except OSError:
+        return False
+    return False
+
+
+_ENSEMBL_VERSIONED = re.compile(r"^ENS[A-Z]*[GTP]\d{5,}\.\d+$")
+
+
+def explainEmptyMapping(organism, geneOmics, sampleUnmatchedFor):
+    """Why step 2 has nothing to work on, or None.
+
+    An omic whose identifiers matched nothing passed step 1 as a success
+    (omicSummary {KEGG: 0}) and then step 2 died INSIDE R -- generateMetaGenes.R
+    was handed an empty <omic>_matched.txt and reported "no lines available in
+    input", which reached the user as a metagenes failure. Measured on three
+    real files (2026-08-27): a GEO count matrix with versioned Ensembl ids
+    (ENSMUSG00000102693.2), PacBio transcript ids, and a human file run as
+    mouse. None of them is a metagenes problem; all three are "nothing
+    matched", and that is what this says, with the identifiers in question.
+    """
+    if not geneOmics:
+        return None
+    if any(mappedTotal(omic.get("omicSummary")) > 0 for omic in geneOmics):
+        return None
+    parts, samples = [], []
+    for omic in geneOmics:
+        name = omic.get("omicName") or "omic"
+        summary = omic.get("omicSummary") or []
+        unmatched = summary[1] if len(summary) > 1 and isinstance(summary[1], int) else None
+        sample = list(sampleUnmatchedFor(name) or [])[:3]
+        samples.extend(sample)
+        parts.append("'%s'%s%s" % (
+            name,
+            (" (%d identifiers)" % unmatched) if unmatched is not None else "",
+            (", e.g. " + ", ".join(sample)) if sample else ""))
+    lines = ["None of the identifiers in your data matched %s's KEGG genes: %s "
+             "matched 0, so there is nothing to analyse." % (organism, "; ".join(parts))]
+    if samples and all(_ENSEMBL_VERSIONED.match(x) for x in samples):
+        lines.append("These carry an Ensembl version suffix (the .%s in %s); KEGG "
+                     "knows them without it, so strip the suffix and run again."
+                     % (samples[0].rsplit(".", 1)[1], samples[0]))
+    else:
+        lines.append("Check the organism you chose and the kind of identifier "
+                     "in the first column: the mapping summary on this page "
+                     "says which identifiers PaintOmics recognised.")
+    return " ".join(lines)
+
+
 def _runMetagenesScripts(omicNames, databases, commands):
     """
     Run one generateMetaGenes.R per (omic, database) -- `commands[(omic, db)]`
@@ -335,6 +413,33 @@ class PathwayAcquisitionJob(Job):
 
         return self.description
 
+    def sampleUnmatched(self, omicName, limit=3):
+        """The first identifiers of <omic>_unmatched.txt in the mapping zip."""
+        try:
+            with zipFile(self.getOutputDir() + "/mapping_results_" + self.getJobID() + ".zip") as mappingZip:
+                member = omicName + "_unmatched.txt"
+                if member not in mappingZip.namelist():
+                    return []
+                sample = []
+                with mappingZip.open(member) as handle:
+                    for raw in handle:
+                        first = raw.decode("utf-8", "replace").split("\t")[0].strip()
+                        if first and not first.startswith("#"):
+                            sample.append(first)
+                        if len(sample) >= limit:
+                            break
+                return sample
+        except Exception:
+            return []
+
+    def explainEmptyMapping(self, selectedCompounds=None):
+        """See explainEmptyMapping(): None unless every gene-based omic mapped
+        nothing and no compound was selected either."""
+        if selectedCompounds:
+            return None
+        return explainEmptyMapping(self.getOrganism(), self.getGeneBasedInputOmics(),
+                                   self.sampleUnmatched)
+
     def getMappedRatios(self):
         # Calculate the mapped/unmapped ratio of each omic
         mapped_ratios = {}
@@ -347,12 +452,7 @@ class PathwayAcquisitionJob(Job):
             # Compounds omics only have one value (no dict)
             # Lazy fallback: .get(key, expr) evaluates expr even when the key
             # exists, and an empty dict made list({}.values())[0] raise.
-            if isinstance(omicSummary[0], int):
-                totalMapped = omicSummary[0]
-            else:
-                totalMapped = omicSummary[0].get("Total")
-                if totalMapped is None:
-                    totalMapped = next(iter(omicSummary[0].values()), 0)
+            totalMapped = mappedTotal(omicSummary)
 
             # Second position: considering total if it exists
             totalUnmapped = omicSummary[1]
@@ -2166,6 +2266,35 @@ class PathwayAcquisitionJob(Job):
             for member in mappingZip.namelist():
                 if member in wanted:
                     mappingZip.extract(member, path=self.getTemporalDir())
+
+        # An omic that matched nothing has an empty <omic>_matched.txt, and
+
+        # generateMetaGenes.R read it as "no lines available in input" -- a
+
+        # crash reported to the user as a metagenes failure. There is nothing
+
+        # to cluster; the omic is skipped here and step 2 says why (see
+
+        # explainEmptyMapping) when it was the only one.
+
+        eligible = []
+
+        for inputOmic in filtered_omics:
+
+            matchedFile = self.getTemporalDir() + "/" + inputOmic.get("omicName") + "_matched.txt"
+
+            if hasDataRows(matchedFile):
+
+                eligible.append(inputOmic)
+
+            else:
+
+                logging.warning("STEP2 - omic '%s' matched no feature; metagenes skipped.",
+
+                                inputOmic.get("omicName"))
+
+        filtered_omics = eligible
+
 
         # STEP 2. GENERATE THE DATA FOR EACH OMIC DATA TYPE
 
