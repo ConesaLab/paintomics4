@@ -222,6 +222,24 @@ class OmicCardSizesItselfTest(unittest.TestCase):
         self.assertNotIn("__paBaseHeight", code)
         self.assertNotIn("setHeight", code)
 
+    def test_the_card_observer_does_not_schedule_on_a_bare_frame(self):
+        """Chrome throttles requestAnimationFrame to zero in a hidden tab.
+
+        The observer that primes each card deferred through a bare rAF, so a
+        card added while the tab was behind something got no strip and no input
+        check at all. Measured in a tab reporting visibilityState "hidden":
+        MORE card primed=false, host=false before; primed=true, host=true after.
+        Util.js keeps the house version -- rAF when visible, setTimeout(0) when
+        hidden -- and four other pieces of this app have already been caught on
+        the bare one.
+        """
+        code = re.sub(r"/\*.*?\*/", "", self.panel_source, flags=re.S)
+        self.assertIn("window.paDeferFrame", code)
+        primer = code[code.index("MutationObserver"):]
+        primer = primer[:primer.index("observer.observe")]
+        self.assertNotIn("requestAnimationFrame(function", primer,
+                         "the card observer must defer through paDeferFrame")
+
     def test_no_omic_title_is_flexed(self):
         """A flexed 44px header is where a short card takes its shortfall from.
 

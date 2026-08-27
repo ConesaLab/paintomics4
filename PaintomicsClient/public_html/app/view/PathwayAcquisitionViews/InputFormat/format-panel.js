@@ -975,7 +975,15 @@
                 });
             });
             if (!found.length) return;
-            requestAnimationFrame(function () {
+            /* paDeferFrame, not a bare requestAnimationFrame: Chrome throttles
+               rAF to zero in a hidden tab, and a card primed in a bare frame
+               would then have no strip and no input check at all until the tab
+               came forward. Util.js keeps the house version of this -- rAF when
+               visible, setTimeout(0) when hidden -- and four pieces of this app
+               have already been caught scheduling layout work on the bare one.
+               Guarded, because this module is loaded on its own in the tests. */
+            var defer = window.paDeferFrame || requestAnimationFrame;
+            defer(function () {
                 found.forEach(function (c) {
                     try { primeCard(c); }
                     catch (e) { if (window.console && console.warn) console.warn("[inputformat] prime failed", e); }
