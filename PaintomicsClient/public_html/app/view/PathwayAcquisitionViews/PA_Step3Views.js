@@ -6529,7 +6529,13 @@ function PA_Step3MetaboliteView() {
 							'<p class="paClassMapSummary" id="classActivityMapSummary"></p>' +
 							'<div class="paClassMapControls" id="classActivityMapControls"></div>' +
 							'<div id="classActivityMap"></div>' +
-							'<ul class="paClassMapKeys" id="classActivityKeys"></ul>' +
+							/* data-guides="ignore": the keys sit on the chart's
+							   own axis line (x = padL inside the SVG), which the
+							   alignment overlay does not rail -- it reads DOM
+							   boxes, not SVG geometry -- so it would list them
+							   against the enrichment table's cell inset 4px
+							   away. Measured: li 337, swatch 337, axis 337. */
+							'<ul class="paClassMapKeys" id="classActivityKeys" data-guides="ignore"></ul>' +
 							'',
 						listeners: {
 							afterrender: function (box) {
