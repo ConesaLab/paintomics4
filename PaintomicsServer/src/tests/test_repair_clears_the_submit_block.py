@@ -106,6 +106,20 @@ console.log(JSON.stringify({
 """
 
 
+def stripComments(source):
+    """The JS block comments removed, so an assertion reads code and not prose.
+
+    Spelled out because the inline version of this was wrong and passed anyway:
+    it was written `r"/\\*.*?\\*/"`, where `\\*` is "zero or more literal
+    backslashes", so the pattern reduced to `/ ... /` and paired up SLASHES --
+    eating regex literals and leaving comments in place. Every assertion below
+    still held, by luck, until an edit elsewhere in the file changed which
+    slashes paired with which. A test whose green depends on that is not
+    testing what it says it tests.
+    """
+    return re.sub(r"/\*.*?\*/", "", source, flags=re.S)
+
+
 @unittest.skipIf(shutil.which("node") is None, "node is not installed")
 class RepairClearsTheSubmitBlockTest(unittest.TestCase):
 
@@ -142,13 +156,13 @@ class RepairClearsTheSubmitBlockTest(unittest.TestCase):
 
     def test_there_is_exactly_one_way_to_apply_a_repair(self):
         """Three copies drifted apart once; one cannot."""
-        code = re.sub(r"/\\*.*?\\*/", "", self.source, flags=re.S)
+        code = stripComments(self.source)
         self.assertEqual(code.count("replaceFile(input, repaired.rows, file.name)"), 1,
                          "a second copy of the repair has appeared")
         self.assertEqual(code.count("var applyRepair = function ()"), 1)
 
     def test_every_path_goes_through_it(self):
-        code = re.sub(r"/\\*.*?\\*/", "", self.source, flags=re.S)
+        code = stripComments(self.source)
         self.assertIn("if (autoApply) { applyRepair(); return; }", code)
         self.assertIn("fixable: true, apply: applyRepair", code)
         self.assertIn('onClick: applyRepair', code)
@@ -159,7 +173,7 @@ class RepairClearsTheSubmitBlockTest(unittest.TestCase):
         If this ever changes to compare content, size or an identity token, the
         explicit clear may stop being necessary -- but until then it is.
         """
-        code = re.sub(r"/\\*.*?\\*/", "", self.source, flags=re.S)
+        code = stripComments(self.source)
         self.assertIn("current.name !== blocked[fieldName].fileName", code)
 
 

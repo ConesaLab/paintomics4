@@ -48,6 +48,31 @@
                  summary: { nRows: body.length, nCols: 2 } };
     }
 
+    /* A regulator-to-target table: two identifier columns, and optionally a
+     * third holding a prediction score.
+     *
+     * This is the miRNA panel's "targets" slot -- mirna_to_gene_associations.tab
+     * and mmu_mirBase_to_ensembl.tab both ship as miRNA / Ensembl.Gene.ID / PLR
+     * -- which is why it could not be held to the 2-column `associations`
+     * contract and was left with no role at all. Left unchecked, it accepted
+     * the file that broke a real run: 6,039 rows whose target column was empty.
+     */
+    function validateRegulatorTargets(rows) {
+        var problems = [];
+        var body = nonEmptyRows(rows);
+        if (!body.length) problems.push(problem("EMPTY", 0, "The file is empty."));
+        body.forEach(function (r, i) {
+            if (i > MAX_NUMBER_FEATURES) return;
+            if (r.length < 2 || r.length > 3) {
+                problems.push(problem("BAD_COLUMN_COUNT", i,
+                    "Expected 2 or 3 columns (Regulator, Target[, score]) but found " +
+                    r.length + "."));
+            }
+        });
+        return { ok: problems.length === 0, problems: problems.slice(0, 10),
+                 summary: { nRows: body.length } };
+    }
+
     /* One or two columns. */
     function validateRelevantAssociations(rows) {
         var problems = [];
@@ -148,7 +173,8 @@
                             conditions: header.slice(1) } };
     }
 
-    var ROLES = ["values", "relevant", "associations", "relevant-associations", "design"];
+    var ROLES = ["values", "relevant", "associations", "relevant-associations",
+                 "regulator-targets", "design"];
 
     /*
      * A LAST-RESORT guess at a file's contract from its name.
@@ -270,6 +296,55 @@
         return { count: repeated, rows: rowsOver, worst: worst, worstCount: worstCount };
     }
 
+    /* How many leading cells of a row are its identifier, per role.
+     *
+     * `values` and `design` defer to idColumnCount, which returns 3 for a
+     * region-based table (id, start, end) and 1 otherwise. The pair roles hold
+     * two ids side by side; a relevant-associations file may legitimately be a
+     * single column. */
+    function idColumnsForRole(role, body) {
+        var width = body.length ? body[0].length : 0;
+        if (role === "associations" || role === "regulator-targets") return Math.min(2, width);
+        if (role === "relevant-associations") return Math.min(2, width);
+        if (role === "relevant") return 1;
+        return idColumnCount(body);
+    }
+
+    /* Rows whose identifier cell is blank.
+     *
+     * An identifier is what makes a row mean anything, and a blank one is worse
+     * than a missing row: `""` is a valid key, so it JOINS -- to every other
+     * blank cell in every other file. Measured on a user's real job
+     * (2026-08-27): their targets file held 6,039 rows with an empty target id
+     * and their expression file 13 rows with an empty gene id, so `""` matched
+     * `""` and those 6,039 pairs were the only ones the server scored. Every
+     * real target was an ENSMUSG id and the expression file was keyed by gene
+     * symbol -- a true overlap of zero. The run was reported as a SUCCESS and
+     * produced an associations file that was blank down its whole first column.
+     *
+     * The header is skipped the same way duplicateIdentifiers skips it, so a
+     * labelled first row is not counted as a fault. */
+    function blankIdentifiers(rows, role) {
+        var all = nonEmptyRows(rows);
+        if (!all.length) return { rows: 0, first: 0, column: 1 };
+        var header = all[0].slice(1).every(function (c) { return V.isPythonFloat(String(c)); })
+            ? null : all[0];
+        var body = header ? all.slice(1) : all;
+        var idCols = idColumnsForRole(role, body);
+        var offset = header ? 2 : 1;
+        var count = 0, first = 0, column = 1;
+        for (var i = 0; i < body.length; i++) {
+            for (var c = 0; c < idCols; c++) {
+                if (String(body[i][c] === undefined ? "" : body[i][c]).trim() === "") {
+                    count++;
+                    if (!first) { first = i + offset; column = c + 1; }
+                    break;
+                }
+            }
+        }
+        return { rows: count, first: first, column: column, total: body.length };
+    }
+
     /* The roles whose identifier has to be unique.
      *
      * `values` and `design` are read into a matrix keyed on the identifier --
@@ -284,11 +359,23 @@
 
     function validateForRole(role, rows, conditions) {
         var report;
-        if (role === "associations") report = validateAssociations(rows);
+        if (role === "regulator-targets") report = validateRegulatorTargets(rows);
+        else if (role === "associations") report = validateAssociations(rows);
         else if (role === "relevant-associations") report = validateRelevantAssociations(rows);
         else if (role === "relevant") report = validateRelevant(rows, conditions);
         else if (role === "design") report = validateDesign(rows);
         else report = validateValuesWithRegionCheck(rows);
+
+        var blank = blankIdentifiers(rows, role);
+        if (blank.rows) {
+            report.problems = (report.problems || []).concat([
+                problem("BLANK_IDENTIFIER", blank.first, {
+                    rows: blank.rows, total: blank.total,
+                    line: blank.first, column: blank.column
+                })
+            ]);
+            report.ok = false;
+        }
 
         if (UNIQUE_KEY_ROLES[role || "values"]) {
             var dup = duplicateIdentifiers(rows);
@@ -307,6 +394,8 @@
 
     return {
         validateAssociations: validateAssociations,
+        validateRegulatorTargets: validateRegulatorTargets,
+        blankIdentifiers: blankIdentifiers,
         validateRelevantAssociations: validateRelevantAssociations,
         validateRelevant: validateRelevant,
         validateDesign: validateDesign,

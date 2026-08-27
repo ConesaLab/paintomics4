@@ -68,11 +68,17 @@ DATASETS = os.path.join(REPO, "PaintomicsServer", "src", "examplefiles", "datase
 # panel's annotations slot is left alone on purpose. Anything else missing from
 # ROLE_BY_SLOT is a slot that silently goes unchecked.
 # Slots this module deliberately does not judge, each for a reason recorded
-# next to ROLE_BY_SLOT: a GTF is not a delimited contract; the miRNA targets
-# table is miRNA/gene/PLR and not the two-column associations contract; and
-# third/fourth live in the RESULTS container, which is filled with server paths
-# rather than picked, where an empty file is a legitimate output.
-EXEMPT_SLOTS = {"tertiaryFileSelector", "mirnaTargetsFileSelector",
+# next to ROLE_BY_SLOT: a GTF is not a delimited contract; and third/fourth live
+# in the RESULTS container, which is filled with server paths rather than
+# picked, where an empty file is a legitimate output.
+#
+# `mirnaTargetsFileSelector` used to be here too, exempted because the miRNA
+# targets table is miRNA/gene/PLR and so does not fit the two-column
+# `associations` contract. "Does not fit the contract we have" was never a
+# reason to check nothing: that slot took the file that broke a real user's run
+# (2026-08-27) -- 6,039 rows with an empty target column -- without a word. It
+# now has a contract of its own, `regulator-targets`.
+EXEMPT_SLOTS = {"tertiaryFileSelector",
                 "thirdFileSelector", "fourthFileSelector"}
 
 # The role each shipped example file would be picked into. Asserted exhaustive
@@ -105,10 +111,10 @@ EXAMPLE_ROLES = {
     "transcription_factor_relevant_regulators.tab": "relevant",
     "mirna_associations.tab": "associations",
     # miRNA / gene / PLR -- the miRNA2Genes prediction table, which is NOT the
-    # two-column associations contract its name suggests. Its slot is exempt.
-    "mirna_to_gene_associations.tab": None,
+    # two-column associations contract its name suggests; it has its own.
+    "mirna_to_gene_associations.tab": "regulator-targets",
     "transcription_factor_associations.tab": "associations",
-    "mmu_mirBase_to_ensembl.tab": None,      # same three-column shape
+    "mmu_mirBase_to_ensembl.tab": "regulator-targets",   # same three-column shape
     "experimental_design.tab": "design",
     "synthetic_mmu.gtf": None,          # not a delimited contract; never checked
 }
@@ -217,13 +223,15 @@ class InputCheckCoversEverySlotTest(unittest.TestCase):
     def test_the_more_panel_slots_are_covered(self):
         """Named explicitly: these are the ones that were blind."""
         for slot in ("conditionsFileSelector", "rnaseqauxFileSelector",
-                     "moreRelevantFileSelector", "moreAssociationsFileSelector"):
+                     "moreRelevantFileSelector", "moreAssociationsFileSelector",
+                     "mirnaTargetsFileSelector"):
             self.assertIn(slot, self.roles)
 
     def test_the_role_table_names_only_real_roles(self):
         for slot, role in self.roles.items():
             self.assertIn(role, ("values", "relevant", "associations",
-                                 "relevant-associations", "design"),
+                                 "relevant-associations", "regulator-targets",
+                                 "design"),
                           "%s has role %r" % (slot, role))
 
     def test_every_example_file_has_a_declared_role(self):

@@ -69,10 +69,50 @@
         secondaryFileSelector: "relevant",
         moreRelevantFileSelector: "relevant",
         mainAssociationFileSelector: "associations",
+        /* The miRNA panel's targets table -- miRNA / gene / score. It was left
+           out because it is not the 2-column `associations` contract, and so
+           went completely unchecked; it now has a contract of its own. */
+        mirnaTargetsFileSelector: "regulator-targets",
         moreAssociationsFileSelector: "associations",
         secondaryAssociationFileSelector: "relevant-associations",
         conditionsFileSelector: "design"
     };
+
+    /* The omic-name field a card would actually submit.
+     *
+     * A card can hold TWO of them. The miRNA panel builds one name field inside
+     * `itemsContainer` and another inside `itemsContainerAlt` -- the two
+     * layouts of the "map regions" toggle -- both with itemId `omicNameField`
+     * and both with name `omicN_omic_name`; the inactive one is DISABLED, which
+     * is how the browser knows not to serialise it. `queryById`/`down` return
+     * the first match, which on a real miRNA card is the disabled, empty one.
+     *
+     * Measured in Chrome on the reporting user's own form (2026-08-27):
+     *
+     *   combobox-1412  itemsContainerAlt  disabled:true   value ""
+     *   combobox-1466  itemsContainer     disabled:false  value "miRNA-Seq data"
+     *
+     * So every lookup of the omic name on a miRNA card read "" -- which is why
+     * the failure dialog for that job offered no agent button at all: the
+     * matcher requires a name to look for and was handed nothing.
+     *
+     * `disabled` is the discriminator rather than visibility, because
+     * visibility is the thing that is unreliable here (a hidden tab, a card
+     * mid-layout), while disabled is exactly the flag the form itself obeys. */
+    function omicNameFieldIn(card) {
+        if (!card || !card.query) return null;
+        var fields = card.query("#omicNameField");
+        if (!fields.length) return null;
+        var live = fields.filter(function (f) {
+            return !(f.isDisabled ? f.isDisabled() : f.disabled);
+        });
+        var pool = live.length ? live : fields;
+        for (var i = 0; i < pool.length; i++) {
+            var value = pool[i].getValue && pool[i].getValue();
+            if (value && String(value).trim()) return pool[i];
+        }
+        return pool[0];
+    }
 
     /* The Ext filefield that owns this DOM input, or null. */
     function extFieldFor(input) {
@@ -160,7 +200,7 @@
     function omicNameFor(input, fieldName) {
         var card = cardComponentFor(input);
         if (card) {
-            var combo = card.down && card.down("#omicNameField");
+            var combo = omicNameFieldIn(card);
             var typed = combo && combo.getValue && combo.getValue();
             if (typed) return typed;
             var heading = card.el && card.el.dom &&
@@ -595,6 +635,25 @@
                    "analysis reads this file into a table keyed on that column, " +
                    "and cannot hold two values under one name.";
         }
+        if (counts.BLANK_IDENTIFIER) {
+            /* Before DUPLICATE and before the shape complaints: a blank id is
+               not a weak row, it is a row that will JOIN to every other blank
+               id in the job and quietly outvote the real data. */
+            var blank = result.problems.filter(function (p) {
+                return p.code === "BLANK_IDENTIFIER";
+            })[0].detail;
+            return blank.rows + " row" + (blank.rows === 1 ? "" : "s") +
+                   " of " + blank.total + " have no identifier (first at line " +
+                   blank.line + ", column " + blank.column + "). An empty name " +
+                   "is still a name to the analysis: those rows match every " +
+                   "other blank cell in your other files, and can end up being " +
+                   "the only thing that matches.";
+        }
+        if (counts.BAD_COLUMN_COUNT) {
+            return "Every line of this file needs the same columns; at least " +
+                   "one line does not. A regulator-to-target table is " +
+                   "Regulator, Target and optionally a score.";
+        }
         if (counts.NOT_INDICATOR) {
             return "A conditions file marks each sample with 1 or 0 in every " +
                    "group column; this one holds other values.";
@@ -928,7 +987,7 @@
             var file = dom && dom.files && dom.files[0];
             if (!file || dom === exceptInput) return;
             var card = field.up && field.up("[cls~=omicbox]");
-            var nameField = card && card.queryById && card.queryById("omicNameField");
+            var nameField = omicNameFieldIn(card);
             jobs.push(new Promise(function (resolve) {
                 var reader = new FileReader();
                 reader.onload = function () {
@@ -982,7 +1041,7 @@
                this file's neighbours -- one entry of the whitespace list, not
                the whole string and not a CSS class. */
             var card = fields[i].up && fields[i].up("[cls~=omicbox]");
-            var nameField = card && card.queryById && card.queryById("omicNameField");
+            var nameField = omicNameFieldIn(card);
             var omic = nameField && nameField.getValue && nameField.getValue();
             if (!omic || String(omic).trim().length < 3) continue;
             /* `omic:` and not a bare `omic`.
