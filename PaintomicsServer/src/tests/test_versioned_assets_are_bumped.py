@@ -90,22 +90,22 @@ PUBLISHED = {
     "app/view/PathwayAcquisitionViews/InputFormat/format-repair.js": (
         "0.1", "944c929f1496258aba56f026e7c30e4affb7052dcbc127b06982eaadff205cd2"),
     "app/view/PathwayAcquisitionViews/InputFormat/format-panel.js": (
-        "3.1", "1b2fb789d33d925c7ae482b76c0ac05b1417e7984b61f71e9321dd125461780c"),
+        "3.3", "995e88fbe45955de2991e51aecd814d624d22371b66afaf5ce20795a4284d7f2"),
     "app/view/PathwayAcquisitionViews/InputFormat/format-roles.js": (
         "0.5", "02fca3cace94756275993739d36deb728b1870c21be9ec5477f853828e7a67b6"),
     "app/view/PathwayAcquisitionViews/InputFormat/convert-profiler.js": (
         "0.3", "d7f2846c58226fdfe334fefc68c8d6519cc4eae393265e15dd047e5babded4f3"),
     "app/view/PathwayAcquisitionViews/InputFormat/convert-agent.js": (
-        "0.6", "d884a0d8344fccf966aab1219c9c70f9e29ca93a4a42e7ddf8f0852189f5ecdd"),
+        "0.7", "f7046f6383282d5a3e45b96519c9191bb639bd732ffbf225b08b09f5da867d87"),
     "app/view/PathwayAcquisitionViews/InputFormat/convert-drawer.js": (
-        "1.4", "41be9f21d19a4471273310d905412abf67c98ad2f2734364d2fcdd54e1e4ca4b"),
+        "1.6", "9bda68bffafde80c9ef414db497109b09acb81a813d0a67f8128c196a911427f"),
     # v=2.2 makes fitPlotPanel measure the figures it drew instead of the
     # height:100% wrapper it drew them into. The old reading was a function of
     # the panel height it was computing, so the panel could only grow: a
     # 40-compound metabolite class pinned it at the 820 cap and every smaller
     # class after that kept the cap as blank space.
     "app/view/common/Util.js": (
-        "2.3", "d9d16f7e672d480ed107e06d6bfcd1ae66e64e5238d1971f7816fd958eebe5a0"),
+        "2.4", "567f6bb041e2d3be89490b9b76a01940ff7865c45a97a902922ab88de605dd8f"),
     "app/view/common/OrganismSearch.js": (
         "1.0", "7903626835e7703bdb6a1e31b78e3ca00539eee23b8fa67a37524cd9cc4d2e7f"),
     "app/view/common/ExtJS_extensions.js": (

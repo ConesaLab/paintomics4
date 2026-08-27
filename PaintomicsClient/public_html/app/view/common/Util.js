@@ -520,7 +520,9 @@ function showMessage(title, data) {
             $("#messageDialogTitle").html(title);
         }
         $("#messageDialogBody").html(message.replace(/\n/g, "</br>"));
-        $("#hiddenMessageDialogBody").text(extra);
+        // `hidden` is the half of a server message that is for the log rather
+        // than the reader (see splitServerError); it travels with the report.
+        $("#hiddenMessageDialogBody").text([data.hidden || "", extra].filter(Boolean).join("\n"));
 
         // The bar replaces the spinner rather than joining it - two things
         // moving at once to say the same "still working" is noise.
@@ -619,9 +621,13 @@ function showMessage(title, data) {
                 '   </div>' +
                 ' </div>' +
                 ' <p id="messageDialogSpin" ><img src="resources/images/loadingpaintomics2.gif"></img></p>' +
-                ' <div style="text-align:center; margin-top:10px;">' +
-                '   <a id="reportErrorButton" class="button btn-warning" id="messageDialogButton"><i class="fa fa-bug"></i> Report error</a>' +
-                '   <a id="messageDialogButton" class="button btn-default" id="messageDialogButton">Close</a>' +
+                // A flex row (main.css .messageDialogActions), not a centred
+                // run of floats: with a third action -- the AI offer that
+                // format-panel.js adds on a file error -- the floats wrapped
+                // into a ragged 2x2 block with the offer on its own line.
+                ' <div id="messageDialogActions" class="messageDialogActions">' +
+                '   <a id="reportErrorButton" class="button btn-warning"><i class="fa fa-bug"></i> Report error</a>' +
+                '   <a id="messageDialogButton" class="button btn-default">Close</a>' +
                 " </div>" +
                 "</div>",
             listeners: {
@@ -796,14 +802,40 @@ function ajaxErrorHandler(responseObj) {
     var serverSide = !!(err.extra && (err.extra.file_name || err.extra.exc_type));
     var adminLink = "If the error persists, please contact the " +
         "<a href='mailto:paintomicsai@gmail.com' target='_blank'> administrator</a>.";
+    var halves = splitServerError(err.message);
 
     showErrorMessage("Oops..Internal error!", {
-        message: err.message + "</br>" + (serverSide
+        message: halves.readable + "</br>" + (serverSide
             ? "This happened on the server, so retrying in the browser will not help. " + adminLink
             : "Try running it in private mode or clear your web cache in your browser.</br>" + adminLink),
         extra: err.extra,
+        hidden: halves.technical,
         showButton: true
     });
+}
+
+/*
+ * The two halves of a servlet error.
+ *
+ * ServerErrorManager prefixes every message with where it was raised --
+ *
+ *     Exception: AT PathwayAcquisitionServlet.py: pathwayAcquisitionStep1_PART2.
+ *     ERROR MESSAGE: Errors detected in input files, ...
+ *
+ * -- which is for the log. The dialog printed the whole line, so the person
+ * who pressed Run read a Python file name and a function before the sentence
+ * that was written for them (the 2026-08-27 screenshot opens with exactly
+ * that). The readable half goes on screen; the prefix goes to the hidden body
+ * that "Report error" already sends, so the report loses nothing. Same split
+ * UserController, JobController and convert-drawer already make on their own
+ * paths.
+ */
+function splitServerError(message) {
+    var raw = String(message || "");
+    var at = raw.indexOf("ERROR MESSAGE:");
+    if (at === -1) return { readable: raw, technical: "" };
+    return { readable: raw.slice(at + "ERROR MESSAGE:".length).trim() || raw,
+             technical: raw.slice(0, at).trim() };
 }
 
 function extJSErrorHandler(form, responseObj) {
@@ -827,8 +859,10 @@ function extJSErrorHandler(form, responseObj) {
         return;
     }
 
+    var halves = splitServerError(err.message);
     showErrorMessage("Oops..Internal error!", {
-        message: err.message + "</br>Please try again later.</br>If the error persists, please contact your web <a href='mailto:paintomicsai@gmail.com' target='_blank'> administrator</a>.",
+        message: halves.readable + "</br>Please try again later.</br>If the error persists, please contact your web <a href='mailto:paintomicsai@gmail.com' target='_blank'> administrator</a>.",
+        hidden: halves.technical,
         showButton: true
     });
 }

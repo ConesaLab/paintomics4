@@ -385,3 +385,23 @@ input[type="text"].pa-field-err {
     .po-upload-ai-specs { flex-direction: column; align-items: flex-start; gap: 12px; }
     .po-upload-ai a.po-download-example { margin-left: 0; }
 }
+
+/* ------------------------------------------------------------------------
+   Omics that disagree on their number of conditions.
+
+   Each file is fine; the job is not. PaintOmics paints every omic on one set
+   of conditions, so a one-column fold change beside a fourteen-column sample
+   table is refused by the server however correct each file is. The note sits
+   under the green verdict of every card involved, in the warning colour, and
+   carries the one action that can fix a disagreement BETWEEN files: handing
+   them to the agent together.
+   ------------------------------------------------------------------------ */
+.pa-format-width {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px dashed var(--pa-border, #D4D4D8);
+}
+.pa-format-width .pa-format-detail {
+    color: var(--pa-accent-orange, #AD5022);
+}
+.pa-format-width .pa-format-actions { margin-top: 8px; }

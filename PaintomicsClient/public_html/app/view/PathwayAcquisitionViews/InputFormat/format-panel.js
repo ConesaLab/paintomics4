@@ -268,7 +268,10 @@
         });
     }
 
-    function setCardState(input, state) {
+    /* options.field === false: tint the card but leave the filename box
+       alone -- for a verdict about the JOB (the omics disagree) rather than
+       about this file, which is fine. */
+    function setCardState(input, state, options) {
         var component = cardComponentFor(input);
         var card = cardFor(input);
         var cardState = (state !== "err" && otherBlockedInCard(input).length) ? "err" : state;
@@ -280,6 +283,7 @@
             if (cardState) card.classList.add("pa-state-" + cardState);
         }
 
+        if (options && options.field === false) return;
         var box = filenameBoxFor(input);
         if (!box) return;
         box.classList.remove("pa-field-warn", "pa-field-err");
@@ -448,6 +452,167 @@
 
     function aiExplainer() { return AI_EXPLAINER; }
 
+    /* ------------------------------------------------------------------ *
+     * Omics that disagree on their number of conditions
+     *
+     * The per-file check passes each file on its own -- and that is the
+     * whole trouble. PathwayAcquisitionJob.validateInput fixes ONE condition
+     * count for the whole job from the first values file it reads and holds
+     * every other omic to it, so a one-column fold change beside a
+     * fourteen-column sample table is refused by the server however correct
+     * each file is. That is the 2026-08-27 guest report (job q603AOxICD):
+     * two green ticks on the form, "Expected 2 columns but found 15" from the
+     * server, and an agent that, handed either file alone, rightly found
+     * nothing to fix.
+     *
+     * So the widths are compared HERE, across the cards, the moment a second
+     * values file is checked; the cards involved say so; Run is stopped the
+     * way a known-bad file stops it; and the one action offered is the one
+     * that can fix a disagreement between files -- handing them to the agent
+     * together (openHarmoniseDrawer), not one at a time.
+     * ------------------------------------------------------------------ */
+
+    /* How many conditions the server will count for a checked values file:
+       every column after the identifier, or after chr/start/end. */
+    function conditionsOf(summary) {
+        if (!summary || typeof summary.nCols !== "number") return null;
+        return Math.max(0, summary.nCols - (summary.regionBased ? 3 : 1));
+    }
+
+    /* Remembered on the Ext filefield COMPONENT, against the file name, so a
+       file the user swaps out never speaks for the one that replaced it.
+       On the component and not on the DOM input, because the DOM input does
+       not survive a submit: step1OnFormSubmitHandler moves the inputs into a
+       temporary form and ExtJS's filefield re-creates its input afterwards,
+       so a record on the element was gone by the time the server's refusal
+       came back -- measured in Chrome: files still in every slot, and not
+       one width record left. Same reason `blocked` is keyed by field name. */
+    function recordConditions(input, file, summary) {
+        var conditions = conditionsOf(summary);
+        var record = (conditions === null) ? null
+            : { fileName: file.name, conditions: conditions };
+        var field = extFieldFor(input);
+        if (field) field.__paConditions = record;
+        input.__paConditions = record;
+    }
+
+    function forgetConditions(input) {
+        var field = extFieldFor(input);
+        if (field) field.__paConditions = null;
+        input.__paConditions = null;
+    }
+
+    /* Every values slot that holds a checked file, live. */
+    function valuesEntries() {
+        var entries = [];
+        if (!window.Ext || !Ext.ComponentQuery) return entries;
+        Ext.ComponentQuery.query("filefield").forEach(function (field) {
+            if (roleForField(field) !== "values") return;
+            var dom = field.fileInputEl && field.fileInputEl.dom;
+            var file = dom && dom.files && dom.files[0];
+            var record = field.__paConditions || (dom && dom.__paConditions);
+            if (!file || !record || record.fileName !== file.name) return;
+            entries.push({ input: dom, file: file, fieldName: field.name,
+                           omic: omicNameFor(dom, field.name), conditions: record.conditions });
+        });
+        return entries;
+    }
+
+    /* The entries, when they do not all agree; nothing otherwise. Pure over
+       its argument so the rule can be tested without a form. */
+    function widthDisagreement(entries) {
+        entries = entries || valuesEntries();
+        var seen = {};
+        entries.forEach(function (e) { seen[e.conditions] = true; });
+        return Object.keys(seen).length > 1 ? entries : [];
+    }
+
+    /* "Proteomics (vp_fc_values.tab) has 1 condition; Metabolomics
+       (lipidomica_samples.tab) has 14." */
+    function describeWidths(entries) {
+        return entries.map(function (e) {
+            return e.omic + " (" + e.file.name + ") has " + plural(e.conditions, "condition");
+        }).join("; ") + ".";
+    }
+
+    var HARMONISE_LABEL = "Make them agree with the PaintOmics AI agent";
+
+    function harmoniseButton(entries, serverSaid) {
+        var button = el("button", "pa-format-button pa-format-primary");
+        button.type = "button";
+        if (typeof window.getAIMark === "function") {
+            button.innerHTML = window.getAIMark();
+            button.appendChild(document.createTextNode(" " + HARMONISE_LABEL));
+        } else {
+            button.textContent = HARMONISE_LABEL;
+        }
+        button.addEventListener("click", function () { requestHarmonise(entries, serverSaid); });
+        return button;
+    }
+
+    /* Layer 2, for the job rather than for one file. */
+    function requestHarmonise(entries, serverSaid) {
+        var api = window.PaintomicsInputFormat;
+        if (api && api.openHarmoniseDrawer) {
+            api.openHarmoniseDrawer(entries.map(function (e) {
+                return { input: e.input, file: e.file, fieldName: e.fieldName,
+                         omic: e.omic, conditions: e.conditions };
+            }), { serverSaid: serverSaid || "" });
+            return;
+        }
+        var strip = hostFor(entries[0].input);
+        if (!strip) return;
+        renderProblem(strip, "err", "AI conversion is not enabled on this server.",
+            "Ask an administrator to enable it, or reduce the wider omic to the same " +
+            "conditions as the narrower one by hand.", []);
+    }
+
+    /* The note under a green verdict: this file's width, the others', and
+       the offer. */
+    function widthNote(entry, entries) {
+        var others = entries.filter(function (o) {
+            return o.input !== entry.input && o.conditions !== entry.conditions;
+        });
+        var note = el("div", "pa-format-width");
+        var text = el("div", "pa-format-detail");
+        text.appendChild(el("b", null, "⚠ " + plural(entry.conditions, "condition") + " here"));
+        text.appendChild(document.createTextNode(", " + others.map(function (o) {
+            return plural(o.conditions, "condition") + " in " + o.omic;
+        }).join(", ") + ". PaintOmics paints every omic on one set of conditions, so the " +
+        "server would refuse this run."));
+        note.appendChild(text);
+        var bar = el("div", "pa-format-actions");
+        bar.appendChild(harmoniseButton(entries, null));
+        note.appendChild(bar);
+        return note;
+    }
+
+    /*
+     * Re-read every card's width and say, on every card involved, whether
+     * they agree. Called after every check, because ONE file changing can
+     * put every other card in or out of agreement; the notes are rebuilt
+     * from live data each time rather than patched.
+     */
+    function syncWidthNotes() {
+        var entries = valuesEntries();
+        var disagree = widthDisagreement(entries);
+        entries.forEach(function (e) {
+            var component = cardComponentFor(e.input);
+            var host = component && component.down && component.down("[itemId=paFormatHost]");
+            var strip = host && host.getEl && host.getEl() && host.getEl().dom.firstChild;
+            if (!strip) return;
+            var old = strip.querySelector(".pa-format-width");
+            if (old) old.remove();
+            // Only a green strip carries the note: a card with a fault of its
+            // own already has a message, and the fault comes first.
+            if (!strip.classList.contains("pa-format-ok")) return;
+            var body = strip.querySelector(".pa-format-body");
+            if (disagree.length && body) body.appendChild(widthNote(e, disagree));
+            setCardState(e.input, disagree.length ? "warn" : "ok", { field: false });
+            syncCardHeight(e.input);
+        });
+    }
+
     /* What an accepted file is worth saying about it, per contract.
      *
      * Only the values summary carries numericColumns and idSample; a design
@@ -514,6 +679,7 @@
             var extras = [];
             if (converted.label) extras.push("table “" + converted.label + "”");
             if (converted.relevant) extras.push("relevant-features list attached");
+            if (converted.harmonised) extras.push("brought to the same conditions as the other omics");
             if (extras.length) what.appendChild(document.createTextNode(" (" + extras.join(", ") + ")"));
             what.appendChild(document.createTextNode("."));
             if (converted.original) {
@@ -745,6 +911,10 @@
         };
         var strip = hostFor(input);
         if (!strip) return;
+        // Whatever this slot used to hold no longer counts against the other
+        // cards' widths; the new file is counted once it has passed.
+        forgetConditions(input);
+        syncWidthNotes();
         strip.__input = input;
         strip.__field = fieldName;
         strip.__omic = omicNameFor(input, fieldName);
@@ -794,7 +964,9 @@
             var result = validate(read.rows);
             if (result.ok) {
                 clearBlocked(fieldName);
+                if (role === "values") recordConditions(input, file, result.summary);
                 renderOk(strip, result.summary, partial, input);
+                syncWidthNotes();
                 return;
             }
 
@@ -827,7 +999,10 @@
             var applyRepair = function () {
                 replaceFile(input, repaired.rows, file.name);
                 clearBlocked(fieldName);
-                renderOk(hostFor(input), validate(repaired.rows).summary, false, input);
+                var repairedSummary = validate(repaired.rows).summary;
+                if (role === "values") recordConditions(input, file, repairedSummary);
+                renderOk(hostFor(input), repairedSummary, false, input);
+                syncWidthNotes();
             };
 
             if (fixable) {
@@ -991,15 +1166,58 @@
         if (!target.closest("#submitButton")) return;
 
         var entries = liveBlocked();
-        if (!entries.length) return;
+        // A job whose omics disagree on their conditions is as certain a
+        // refusal as a file the server will reject; it is only reported once
+        // every file is individually fine, because a file fault comes first.
+        var widths = entries.length ? [] : widthDisagreement();
+        if (!entries.length && !widths.length) return;
 
         // stopImmediatePropagation, not just preventDefault: the submit is
         // wired as a jQuery/ExtJS click handler on the same element, and
         // preventDefault alone would let it run.
         event.preventDefault();
         event.stopImmediatePropagation();
-        renderBlockBanner(entries);
+        if (entries.length) renderBlockBanner(entries);
+        else renderWidthBanner(widths);
     }, true);
+
+    /* The submit-time banner for omics that disagree on their conditions:
+       the same shape as renderBlockBanner, with the job-level offer. */
+    function renderWidthBanner(entries) {
+        var input = entries[0].input;
+        var region = regionFor(input);
+        if (!region) return;
+
+        var existing = region.querySelector(".pa-format-block");
+        if (existing) existing.remove();
+
+        var banner = el("div", "pa-format-strip pa-format-err pa-format-block");
+        banner.appendChild(el("span", "pa-format-icon", "✗"));
+        var body = el("div", "pa-format-body");
+        body.appendChild(el("div", "pa-format-headline",
+            "These omics do not have the same number of conditions, so the server will refuse this run."));
+        body.appendChild(el("div", "pa-format-detail",
+            describeWidths(entries) + " PaintOmics paints every omic on one set of conditions: " +
+            "every values file needs the same number of columns, meaning the same things, in the " +
+            "same order. The PaintOmics AI agent can read these files together and bring the wider " +
+            "ones to the narrower one's shape -- you see what it computed before anything is used."));
+
+        var bar = el("div", "pa-format-actions");
+        bar.appendChild(harmoniseButton(entries, null));
+        var anyway = el("button", "pa-format-button", "Submit anyway");
+        anyway.type = "button";
+        anyway.addEventListener("click", function () {
+            banner.remove();
+            submitNow();
+        });
+        bar.appendChild(anyway);
+
+        body.appendChild(bar);
+        banner.appendChild(body);
+        region.appendChild(banner);
+        relayout(input);
+        banner.scrollIntoView({ block: "center", behavior: "smooth" });
+    }
 
     /* ------------------------------------------------------------------ *
      * The same offer, on the error the server sends back
@@ -1190,24 +1408,48 @@
            card is identifiable even though the file is not. Underscores because
            the backend substitutes them for spaces. */
         if (!picked) picked = pickedFileForOmicNamedIn(text);
-        if (!picked) return;
 
-        /* Two different offers, because they do different things and the
-           difference matters. Re-checking applies a MECHANICAL repair and is
-           only useful when the fault is one this module models. The agent can
-           be told what the server said, which is the only route open when the
-           server knows something the client checker does not -- a sample name
-           that does not line up, an identifier space that does not match. */
+        /* The refusal that is about the JOB, not about a file: the omics do
+           not have the same number of conditions. The server names the rule
+           now ("same number of conditions"); older servers say it ten times
+           as "Expected 2 columns but found 15". Either way the file it names
+           is fine, and handing that one file to the agent is exactly the
+           request that came back "nothing to fix" -- so when the cards
+           confirm the disagreement, the offer is the job-level one. */
+        var widths = /same number of conditions|expected \d+ columns but found \d+/i.test(text)
+            ? widthDisagreement() : [];
+        if (!picked && !widths.length) return;
+
+        /* One offer. There used to be two -- "Check this file again", which
+           re-ran the mechanical repair, beside the agent -- and the re-check
+           could never help from here: a file with a repairable fault is
+           stopped before submit, so a dialog can only be reached past it by
+           "Submit anyway", when the user has already declined the repair. Two
+           green buttons that do different things for the same file read as a
+           duplicate, and were reported as one. */
         var wrap = el("span", null, null);
         wrap.id = "pa-format-dialog-fix";
 
-        var ask = el("a", "button btn-secondary btn-right", "Ask the PaintOmics AI agent");
-        ask.title = "Opens the agent on this file, with what the server said.";
+        var ask = el("a", "button btn-secondary pa-dialog-ai");
+        if (typeof window.getAIMark === "function") {
+            ask.innerHTML = window.getAIMark();
+            ask.appendChild(document.createTextNode(" Ask the PaintOmics AI agent"));
+        } else {
+            ask.textContent = "Ask the PaintOmics AI agent";
+        }
+        ask.title = widths.length
+            ? "Opens the agent on every values file of this run together, with what the server said."
+            : "Opens the agent on this file, with what the server said.";
         ask.href = "#";
         ask.style.display = "inline-block";
         ask.addEventListener("click", function (event) {
             event.preventDefault();
             var serverSaid = text.replace(/\s+/g, " ").trim();
+            if (widths.length) {
+                if (typeof closeButton.click === "function") closeButton.click();
+                requestHarmonise(widths, serverSaid);
+                return;
+            }
             // Gathered BEFORE the dialog closes, while every field still holds
             // its file, so the agent starts with the whole job in front of it
             // rather than one file out of context.
@@ -1218,19 +1460,11 @@
             });
         });
 
-        var again = el("a", "button btn-secondary btn-right", "Check this file again");
-        again.title = "Re-reads the file and repairs what can be repaired mechanically.";
-        again.href = "#";
-        again.style.display = "inline-block";
-        again.addEventListener("click", function (event) {
-            event.preventDefault();
-            if (typeof closeButton.click === "function") closeButton.click();
-            check(picked.input, picked.file, picked.fieldName, true);
-        });
-
-        wrap.appendChild(again);
         wrap.appendChild(ask);
-        closeButton.parentNode.insertBefore(wrap, closeButton);
+        // First in the row: it is the action that resolves the dialog, and
+        // Report error / Close are the standing furniture.
+        var actions = closeButton.parentNode;
+        actions.insertBefore(wrap, actions.firstChild);
     }
 
     // The dialog is rendered by Util.js's showMessage, which several call sites
@@ -1298,13 +1532,27 @@
     if (typeof MutationObserver === "function") {
         var observer = new MutationObserver(function (records) {
             var found = [];
+            var removed = false;
             records.forEach(function (r) {
+                // A deleted card takes its width out of the comparison; the
+                // notes on the cards that stay are rebuilt from what is left.
+                r.removedNodes.forEach(function (n) {
+                    if (n.nodeType !== 1) return;
+                    if ((n.matches && n.matches(".omicbox")) ||
+                        (n.querySelector && n.querySelector(".omicbox"))) removed = true;
+                });
                 r.addedNodes.forEach(function (n) {
                     if (n.nodeType !== 1) return;
                     if (n.matches && n.matches(".omicbox")) found.push(n);
                     if (n.querySelectorAll) n.querySelectorAll(".omicbox").forEach(function (c) { found.push(c); });
                 });
             });
+            if (removed) {
+                (window.paDeferFrame || requestAnimationFrame)(function () {
+                    try { syncWidthNotes(); }
+                    catch (e) { if (window.console && console.warn) console.warn("[inputformat] width sync failed", e); }
+                });
+            }
             if (!found.length) return;
             /* paDeferFrame, not a bare requestAnimationFrame: Chrome throttles
                rAF to zero in a hidden tab, and a card primed in a bare frame
