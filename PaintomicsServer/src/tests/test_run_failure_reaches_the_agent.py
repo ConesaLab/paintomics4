@@ -151,6 +151,33 @@ class RunFailureReachesTheAgentTest(unittest.TestCase):
         self.assertIn("ASK THE USER rather", self.drawer_code)
         self.assertIn("one column per sample", self.drawer_code)
 
+    def test_the_agent_is_told_it_can_rewrite_only_the_file_it_holds(self):
+        """Reported as "the AI said it fixed the problem and it fails again".
+
+        The sandbox receives exactly one file -- files: {fileKey: bytes} -- so
+        every other file is read-only context. Without this the agent offered
+        "use the contrast as-is and adjust the design to match it", an action it
+        cannot perform, then edited the one file it holds and reported success.
+
+        Measured on the reported job: MORE intersects sample names across the
+        target, the condition file and every regulator file, so renaming this
+        file's column to match the target leaves the design disagreeing, and
+        renaming it to match the design leaves the target disagreeing -- both
+        give 0 common samples. No edit to ONE file can satisfy a three-way
+        intersection, so an agent that can only edit one must say so.
+        """
+        self.assertIn("rewrite ONLY the file you were given", self.drawer_code)
+        self.assertIn("read-only", self.drawer_code)
+        # Phrases that sit inside ONE string literal: the instruction is built
+        # by concatenation, so anything spanning a `+ "` is not there to find.
+        self.assertIn("you cannot edit them", self.drawer_code)
+        self.assertIn("will fail", self.drawer_code)
+
+    def test_the_sandbox_really_does_receive_one_file(self):
+        """The premise above. If this ever becomes many, the instruction is
+        wrong and this suite should be the thing that notices."""
+        self.assertIn("f[fileKey] = bytes; return f;", self.drawer_code)
+
     def test_the_brief_is_only_added_when_the_server_refused(self):
         """A file the user picks themselves is still a per-file conversion."""
         block = self.drawer_code[self.drawer_code.index("instructions:"):]

@@ -893,6 +893,35 @@
                     ? ["PaintOmics refused this job when the analysis ran. It said: "
                        + input.__paServerSaid]
                         .concat(input.__paSiblings ? [input.__paSiblings] : [])
+                        /* The limit of what you can DO, stated separately from
+                           what you can SEE.
+                         *
+                           The sandbox receives exactly one file (files:
+                           {fileKey: bytes}), so the other files are readable
+                           context and nothing more. Without this the agent
+                           offered "use the contrast as-is and adjust the design
+                           to match it" -- an action it cannot perform -- then
+                           edited the one file it holds, reported success, and
+                           the run failed in the same place. Reported as "the AI
+                           said it fixed the problem and it fails again".
+
+                           Measured, on this job: MORE intersects sample names
+                           across target, condition and every regulator file, so
+                           renaming this file's column to match the target
+                           leaves the design disagreeing, and renaming it to
+                           match the design leaves the target disagreeing. Both
+                           give 0 common samples. No edit to ONE file can
+                           satisfy a three-way intersection. */
+                        .concat(["You can rewrite ONLY the file you were given. "
+                                 + "The other files listed above are read-only "
+                                 + "context -- you cannot edit them, and you must "
+                                 + "not offer to. If the remedy needs a different "
+                                 + "file changed, or needs data that is not in any "
+                                 + "of them, say which file and what has to change "
+                                 + "and let the user do it. A fix that only makes "
+                                 + "THIS file self-consistent, while the others "
+                                 + "still disagree, is not a fix: it will fail "
+                                 + "again in the same place."])
                         .concat(["This file may well be valid on its own -- the "
                                  + "format check passed it. Judge it against the "
                                  + "other files listed above: what has to agree "
