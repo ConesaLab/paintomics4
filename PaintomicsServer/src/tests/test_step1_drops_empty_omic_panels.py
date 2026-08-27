@@ -58,6 +58,7 @@ import unittest
 CLIENT_ROOT = os.path.abspath(os.path.join(
     os.path.dirname(__file__), "..", "..", "..",
     "PaintomicsClient", "public_html"))
+JOB_CONTROLLER = os.path.join(CLIENT_ROOT, "app", "controller", "JobController.js")
 STEP1_VIEWS = os.path.join(
     CLIENT_ROOT, "app", "view", "PathwayAcquisitionViews", "PA_Step1Views.js")
 
@@ -381,6 +382,28 @@ class Step1DropsEmptyOmicPanelsTest(unittest.TestCase):
         self.assertFalse(result["accepted"])
         self.assertFalse(panelNamed(result, "region")["deleted"],
                          "a panel carrying the error must stay on the form")
+
+    def test_every_filled_panel_is_validated_even_when_the_organism_is_wrong(self):
+        """`valid = valid && panel.isValid()` short-circuited: with the organism
+        missing no panel was validated or marked, and the user learnt about
+        the panel only on the NEXT round. The panel call must come first."""
+        source = read(STEP1_VIEWS)
+        self.assertIn("valid = filled[i].isValid() && valid;", source)
+        self.assertNotIn("valid = valid && filled[i].isValid();", source)
+
+    def test_the_plain_panel_actually_validates_itself(self):
+        """`if (this.isEmpty)` tested the METHOD -- always truthy -- so a plain
+        panel with a file and no omic name was posted with an empty name."""
+        source = read(STEP1_VIEWS)
+        self.assertNotIn("if (this.isEmpty) {", source)
+        self.assertIn("if (this.isEmpty()) {", source)
+
+    def test_the_plain_submit_path_shows_the_same_refusal(self):
+        """The plain path said "provide at least Gene expression..." whatever
+        was wrong; both paths now go through showInvalidStep1FormMessage."""
+        source = read(JOB_CONTROLLER)
+        self.assertEqual(source.count("showInvalidStep1FormMessage(jobView);"), 2,
+                         "both submit paths must call it")
 
     def test_a_form_with_nothing_in_it_is_refused(self):
         self.assertFalse(self.results["everyPanelEmpty"]["accepted"])

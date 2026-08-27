@@ -60,6 +60,7 @@ JOB_CONTROLLER = os.path.join(
 
 VIEW_HEADERS = {"firstFormError": "this.firstFormError = function() {"}
 CONTROLLER_HEADERS = {
+    "plainFieldText": "function plainFieldText(html) {",
     "fieldErrorText": "function fieldErrorText(field) {",
     "showInvalidStep1FormMessage": "function showInvalidStep1FormMessage(jobView) {",
 }
@@ -132,6 +133,7 @@ var shown = [];
 function showErrorMessage(title, opts) { shown.push({title: title, opts: opts}); }
 
 %(STEP1_NO_DATA_MESSAGE)s
+%(plainFieldText)s
 %(fieldErrorText)s
 %(showInvalidStep1FormMessage)s
 
@@ -216,6 +218,18 @@ results.unrenderedField = run("unrenderedField", [
                rendered: false})
 ], false);
 
+// Six shipped labels carry a <br>, and the file widget's inner textfield --
+// the one markInvalid() lands on -- is built with that same label.
+results.labelMarkup = run("labelMarkup", [
+    makeField({name: "speciesCombobox", label: "Organism"}),
+    makeField({name: "mainFileSelector", label: "Regions file <br>(BED + Quantification):",
+               error: "Please, provide a Data file."})
+], false);
+// Several errors on one field arrive as several <li>; they must not be glued.
+results.twoErrors = run("twoErrors", [
+    makeField({name: "jobDescription", label: "Description",
+               error: '<ul class="x-list-plain"><li>This field is required</li><li>Maximum length is 100</li></ul>'})
+], false);
 console.log(JSON.stringify(results));
 """
 
@@ -290,6 +304,16 @@ class InvalidFormNamesTheFieldTest(unittest.TestCase):
     def test_an_unrendered_field_still_produces_a_message(self):
         entry = self.results["unrenderedField"]["shown"][0]
         self.assertIn("Invalid Form", entry["title"])
+
+    def test_a_label_carrying_markup_is_shown_as_text(self):
+        """Regions file <br>(BED + Quantification): the <br> was printed."""
+        title = self.results["labelMarkup"]["shown"][0]["title"]
+        self.assertIn("Regions file (BED + Quantification)", title)
+        self.assertNotIn("br", title.replace("</br>", ""))
+
+    def test_several_errors_on_one_field_are_not_glued(self):
+        title = self.results["twoErrors"]["shown"][0]["title"]
+        self.assertIn("This field is required \u2014 Maximum length is 100", title)
 
     def test_every_case_shows_exactly_one_dialog(self):
         for name, result in self.results.items():

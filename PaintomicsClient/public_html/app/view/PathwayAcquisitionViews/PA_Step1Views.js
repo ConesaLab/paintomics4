@@ -1331,8 +1331,8 @@ function PA_Step1JobView() {
 		   The two halves used to run the other way round -- validate every
 		   panel, then delete the empty ones -- and disagreed. An empty panel
 		   was counted as invalid and then deleted by the very next loop. The
-		   plain omic panel hid it (its isValid() returns early when the panel
-		   is empty); the region, miRNA and MORE panels have no such guard, so
+		   plain omic panel hid it (its isValid() tested `this.isEmpty` -- the
+		   method, always truthy -- so it validated nothing); the region, miRNA and MORE panels have no such guard, so
 		   empty they mark their own file fields and return false. Those three
 		   are also the only panels that route the submit through
 		   step1ComplexFormSubmitHandler, whose refusal is the one that says
@@ -1351,9 +1351,12 @@ function PA_Step1JobView() {
 			return false;
 		}
 
+		/* isValid() first, so a wrong organism does not short-circuit the loop:
+		   every panel is validated and marked in one pass. The dialog names the
+		   first field, the rest are red on the page -- one round, not two. */
 		valid = this.getComponent().queryById("speciesCombobox").isValid();
 		for (i = 0; i < filled.length; i++) {
-			valid = valid && filled[i].isValid();
+			valid = filled[i].isValid() && valid;
 		}
 
 		return valid;
@@ -2633,7 +2636,10 @@ function OmicSubmittingPanel(nElem, options) {
 			isValid: function() {
 				var valid = true;
 
-				if (this.isEmpty) {
+				/* isEmpty() -- the call. `this.isEmpty` alone was the method
+				   reference, always truthy, so this returned true for every
+				   plain panel and none of the checks below ever ran. */
+				if (this.isEmpty()) {
 					return true;
 				}
 

@@ -67,12 +67,22 @@ var STEP1_NO_DATA_MESSAGE = "Invalid form. <br/> Please provide at least: " +
 /* The plain text of a field's error. ExtJS wraps several in a <ul>, and a
    custom markInvalid() message only ever appears in the active error, not in
    getErrors(), so this reads the active error and strips the markup. */
-function fieldErrorText(field) {
-	var error = (field && field.getActiveError) ? field.getActiveError() : "";
-	return String(error || "")
+/* Markup stripped to plain text: tags out, whitespace collapsed, edges trimmed. */
+function plainFieldText(html) {
+	return String(html || "")
+		.replace(/<\/li>\s*<li[^>]*>/gi, " \u2014 ")
 		.replace(/<[^>]*>/g, " ")
 		.replace(/\s+/g, " ")
 		.replace(/^ | $/g, "");
+}
+
+/* The plain text of a field's error. ExtJS wraps several in a <ul>, and a
+   custom markInvalid() message only ever appears in the active error, not in
+   getErrors(), so this reads the active error and strips the markup. Several
+   errors are joined with a dash rather than glued into one sentence. */
+function fieldErrorText(field) {
+	var error = (field && field.getActiveError) ? field.getActiveError() : "";
+	return plainFieldText(error);
 }
 
 /**
@@ -109,7 +119,10 @@ function showInvalidStep1FormMessage(jobView) {
 			/* An unrendered field cannot be scrolled to; the message still names it. */
 		}
 
-		var label = String(field.fieldLabel || "").replace(/\s*:\s*$/, "");
+		/* Six shipped labels carry a <br> ("Regions file <br>(BED + Quantification)"),
+		   and that is the label the file widget's inner textfield inherits, so the
+		   markup is stripped exactly as the error text is. */
+		var label = plainFieldText(field.fieldLabel).replace(/\s*:\s*$/, "");
 		var reason = fieldErrorText(field) || "Please check this field.";
 		showErrorMessage("Invalid Form. </br>" +
 			(label ? " <b>" + Ext.String.htmlEncode(label) + "</b>: " : " ") +
@@ -638,7 +651,11 @@ function JobController() {
 				// a form that fails validation here must not keep it.
 				this.endStep1Submission(jobView);
 			}
-			showErrorMessage(STEP1_NO_DATA_MESSAGE, {height: 150, width: 400, showReportButton:false});
+			/* The same refusal the pre-processing path shows: an all-empty form
+			   is told so, and a wrong field is named and scrolled to. This path
+			   used to say "provide at least Gene expression..." unconditionally,
+			   which was wrong whenever the organism was the fault. */
+			showInvalidStep1FormMessage(jobView);
 			return false;
 		}
 	};
