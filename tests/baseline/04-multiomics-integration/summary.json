@@ -2,7 +2,7 @@
   "dataset": "04-multiomics-integration",
   "parts": {
     "step1": {
-      "bytes": 7127020,
+      "bytes": 7136354,
       "headline": {
         "compoundBasedInputOmics": 1,
         "databases": 3,
@@ -11,20 +11,20 @@
         "matchedMetabolites": 4667,
         "organism": 3
       },
-      "sha256": "ff4d9145f36ed6fac680a3b1ff48a2211aeb9b189b97a7c2b74b2bc9683a8731"
+      "sha256": "1be032e22b2d62ddabdcf62ab989412b4576f8b076109619974acdb0165aefb5"
     },
     "step2": {
-      "bytes": 43388465,
+      "bytes": 58316988,
       "headline": {
         "adjustPvalue": 1,
         "classInfo": 28,
         "classificationDict": 34,
-        "compoundRegulateFeatures": 1624,
+        "compoundRegulateFeatures": 1612,
         "conditionNames": 6,
         "exprssionMetabolites": 4667,
         "featureSummary": 2,
         "globalExpressionData": 2,
-        "hubAnalysisResult": 872,
+        "hubAnalysisResult": 860,
         "mappingComp": 4667,
         "omicsValuesID": 33597,
         "pValueInDict": 1,
@@ -111,16 +111,16 @@
         ],
         "totalRelevantFeaturesInCategory": 1
       },
-      "sha256": "bece9af31c30515007c8e8e36602d505cc164dfc650c5762bd38da2e8a3cb62d"
+      "sha256": "60cc4d72060bab301503d1aed8c9b045a85528463007f3097db71151923b1c10"
     },
     "step3": {
-      "bytes": 29707684,
+      "bytes": 29716906,
       "headline": {
         "graphicalOptionsInstances": 1006,
         "omicsValues": 23121,
         "selectedPathways": 1006
       },
-      "sha256": "9ad2f381ebd466fb9fe0893a4c7eebf7d082c9f194bbc92cea9259c06df878ed"
+      "sha256": "527d64edc91e2c0211a992014f5d7fabdb3ac0040978547ea0c725bed052ce3c"
     }
   },
   "pipeline": "pathway-acquisition",
