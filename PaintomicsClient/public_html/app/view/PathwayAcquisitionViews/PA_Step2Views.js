@@ -252,12 +252,34 @@ function PA_Step2JobView() {
 			if (isCompoundBased) {
 				thresholdMetaboliteClass.push({
 					xtype: 'combo',
-					fieldLabel: 'Metabolite class activity threshold',
+					fieldLabel: 'Expected proportion of significant compounds',
 					name: 'thresholdMetaboliteClass',
 					value: 'default',
 					displayField: 'name', valueField: 'value',
 					editable: true,
 					allowBlank: false,
+					/* The field is editable, and until this validator existed
+					   anything outside (0,1] was accepted here and then quietly
+					   discarded by the server: compundsClassification only honours
+					   the value when `0 < threshold <= 1`
+					   (PathwayAcquisitionJob.py:2529), so "30", "0", "-0.5" and
+					   "abc" all fell back to the automatic null. That is not a
+					   harmless fallback -- it swaps a self-contained test against
+					   the number you typed for a competitive test against the rest
+					   of your job, which is a different hypothesis, and nothing in
+					   the results said so. */
+					validator: function (value) {
+						if (value === 'default' || value === 'Generate automatically'
+							|| value === '' || value === null || value === undefined) {
+							return true;
+						}
+						var proportion = Number(value);
+						if (isNaN(proportion) || proportion <= 0 || proportion > 1) {
+							return '"' + value + '" is not a proportion between 0 and 1. '
+								+ 'Enter a value such as 0.30, or choose "Generate automatically".';
+						}
+						return true;
+					},
 					/* Same rail as the cluster combo above. */
 					labelAlign: 'left',
 					labelWidth: 240,
@@ -273,17 +295,27 @@ function PA_Step2JobView() {
 							['0.6', 0.6],
 							['0.7', 0.7],
 							['0.8', 0.8],
-							['0.9', 0.9],
-							['1.0', 1.0]]
+							['0.9', 0.9]]
+						/* No 1.0. A null of 1.0 says "expect every compound in the
+						   class to be significant", which makes the one-sided
+						   binomial return exactly p = 1.0 for every class in the
+						   job while still rendering a full map -- an option whose
+						   only outcome is a guaranteed empty result. */
 					}),
-					// "Average percentage" is what the paragraph above this panel used
-					// to say and it is not what the code does. compundsClassification
-					// falls back to `totalRelevantFeatures / totalFeatures`
-					// (PathwayAcquisitionJob.py:2280-2283) - the proportion of
-					// significant metabolites across the whole dataset, not an average
-					// of per-class percentages. The two differ whenever the classes are
-					// unequally sized, which they always are.
-					helpTip: "With 'Generate automatically', the threshold is the proportion of significant metabolites across your whole dataset. Otherwise choose a value between 0 and 1."
+					/* "Average percentage" is what the paragraph above this panel
+					   used to say and it is not what the code does.
+					   compundsClassification falls back to
+					   `totalRelevantFeatures / totalFeatures`
+					   (PathwayAcquisitionJob.py:2537) -- a POOLED proportion over
+					   the compounds br08001 can classify, not an average of
+					   per-class percentages, and not "your whole dataset" either:
+					   compounds BRITE cannot file are excluded from both halves.
+					   The two statistics differ whenever classes are unequally
+					   sized, which they always are. */
+					helpTip: "This analysis asks whether a class holds more significant compounds than expected, and this is where you say what 'expected' means. "
+						+ "'Generate automatically' compares each class with the rest of your job: the expected proportion is the proportion of significant compounds among those KEGG BRITE can classify, and the class being tested is part of that figure. "
+						+ "If most of your compounds changed - normal in a targeted assay - this bar is high and few classes will stand out. "
+						+ "Choosing a number instead compares each class with that fixed proportion and does not involve the rest of your data. These are different questions and can give opposite answers."
 				});
 
 			}
@@ -390,11 +422,26 @@ function PA_Step2JobView() {
 				items: [{
 					html: '<h2 style="width: 100%;">Configure the metabolite class activity threshold</h2>'
 				}, {
-					html: '<p>To test the hypothesis of a\n' +
-						'metabolite class being regulated, PaintOmics implements\n' +
-						'a metabolite class activity analysis tool, where a binomial\n' +
-						'test is used to assess the hypothesis of the proportion of significant compounds in a given measured metabolite class\n' +
-						'being higher than a user-defined threshold.</p>'
+					/* The old copy described only the manual branch -- "higher than
+					   a user-defined threshold" -- while the field defaults to the
+					   automatic one, which tests something else entirely: a
+					   competitive comparison against the rest of the job rather
+					   than a self-contained comparison against a constant. Both
+					   are named here because the choice below silently switches
+					   between them. */
+					html: '<p>A one-sided binomial test asks, for each metabolite class, whether it holds\n' +
+						'a higher proportion of significant compounds than expected. You choose what\n' +
+						'"expected" means:</p>' +
+						'<ul style="margin: 0 0 10px 18px;">' +
+						'<li><b>Generate automatically</b> compares each class with the rest of your job -\n' +
+						'the proportion of significant compounds among those KEGG BRITE can classify.\n' +
+						'The class being tested is part of that figure. In a targeted assay where most\n' +
+						'compounds changed, this bar is high and few classes will stand out.</li>' +
+						'<li><b>A fixed proportion</b> compares each class with the number you set, and\n' +
+						'does not involve the rest of your data.</li>' +
+						'</ul>' +
+						'<p>These are different questions and can give opposite answers. P-values are\n' +
+						'corrected for multiple testing across the classes your data populates.</p>'
 				},{
 					xtype: 'form',
 					maxWidth: 600,

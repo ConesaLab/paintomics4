@@ -6178,7 +6178,20 @@ function PA_Step3MetaboliteView() {
 	this.renderClassMapControls = function () {
 		var host = document.getElementById("classActivityMapControls");
 		if (!host) return;
-		if (nCond <= 1) { host.innerHTML = ""; return; }
+		if (nCond <= 1) {
+			/* A job can carry six conditions and still be tested once. The server
+			   infers the condition count from whether omicsValues[0].relevant is
+			   a list (PathwayAcquisitionJob.py:2484-2488), so a relevance file
+			   with one flag per compound collapses every condition into a single
+			   pooled test -- while the rest of the page goes on naming six. Say
+			   so, rather than let a six-timepoint job look per-timepoint. */
+			host.innerHTML = (conditionNames.length > 1)
+				? '<span class="paClassMapControlNote">Your ' + conditionNames.length
+					+ ' conditions are pooled into one test here: the relevance file for this omic'
+					+ ' carries a single flag per compound, not one per condition.</span>'
+				: "";
+			return;
+		}
 
 		var options = "";
 		for (var c = 0; c < nCond; c++) {
