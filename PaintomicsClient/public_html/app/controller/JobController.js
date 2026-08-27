@@ -58,6 +58,83 @@ function withExampleScenario(exampleURL, jobView) {
 	return scenarioId ? exampleURL + "/" + encodeURIComponent(scenarioId) : exampleURL;
 }
 
+/* What a Step 1 submission is told when the form holds no omic data at all.
+   Both submit paths reach that state, so both say it in the same words. */
+var STEP1_NO_DATA_MESSAGE = "Invalid form. <br/> Please provide at least: " +
+	"<span style='color: auto;text-decoration: underline;'>Gene expression /Metabolomics /Proteomics data.</span>" +
+	" Also, please make sure to <span style='color: auto;text-decoration: underline;'>select an organism.</span>";
+
+/* The plain text of a field's error. ExtJS wraps several in a <ul>, and a
+   custom markInvalid() message only ever appears in the active error, not in
+   getErrors(), so this reads the active error and strips the markup. */
+/* Markup stripped to plain text: tags out, whitespace collapsed, edges trimmed. */
+function plainFieldText(html) {
+	return String(html || "")
+		.replace(/<\/li>\s*<li[^>]*>/gi, " \u2014 ")
+		.replace(/<[^>]*>/g, " ")
+		.replace(/\s+/g, " ")
+		.replace(/^ | $/g, "");
+}
+
+/* The plain text of a field's error. ExtJS wraps several in a <ul>, and a
+   custom markInvalid() message only ever appears in the active error, not in
+   getErrors(), so this reads the active error and strips the markup. Several
+   errors are joined with a dash rather than glued into one sentence. */
+function fieldErrorText(field) {
+	var error = (field && field.getActiveError) ? field.getActiveError() : "";
+	return plainFieldText(error);
+}
+
+/**
+* The refusal a Step 1 submission gets when checkForm() said no.
+*
+* Three things can be wrong and they do not read the same:
+*
+*   - nothing filled in at all: there is no field to point at, so it says so
+*     and does not offer Report error -- nothing here is a bug;
+*   - a field is wrong: name it, say what it wants, and scroll it into view.
+*     The form is three sections tall, so the field that refused the
+*     submission is routinely off screen behind the dialog. The user who
+*     reported this on 2026-08-26 had filled in a MORE panel in section 3 and
+*     never chosen an organism in section 1 -- "please check the form errors"
+*     was true and still told her nothing;
+*   - a refusal with nothing marked anywhere: that is the old wording, kept as
+*     a fallback, and it is the shape of a bug, so Report error stays.
+*
+* @param {PA_Step1JobView} jobView
+*/
+function showInvalidStep1FormMessage(jobView) {
+	if (jobView && jobView.formIsEmpty === true) {
+		showErrorMessage(STEP1_NO_DATA_MESSAGE, {height: 150, width: 400, showReportButton: false});
+		return;
+	}
+
+	var field = (jobView && jobView.firstFormError) ? jobView.firstFormError() : null;
+	if (field) {
+		/* Scrolled before the dialog opens, so closing it leaves the reader
+		   looking at the field the message just named. */
+		try {
+			field.getEl().dom.scrollIntoView({block: "center"});
+		} catch (ignored) {
+			/* An unrendered field cannot be scrolled to; the message still names it. */
+		}
+
+		/* Six shipped labels carry a <br> ("Regions file <br>(BED + Quantification)"),
+		   and that is the label the file widget's inner textfield inherits, so the
+		   markup is stripped exactly as the error text is. */
+		var label = plainFieldText(field.fieldLabel).replace(/\s*:\s*$/, "");
+		var reason = fieldErrorText(field) || "Please check this field.";
+		showErrorMessage("Invalid Form. </br>" +
+			(label ? " <b>" + Ext.String.htmlEncode(label) + "</b>: " : " ") +
+			Ext.String.htmlEncode(reason),
+			{height: 150, width: 400, showReportButton: true});
+		return;
+	}
+
+	showErrorMessage("Invalid Form. </br> Please check the form errors.",
+		{height: 150, width: 400, showReportButton: true});
+}
+
 function JobController() {
 	/**
 	*
@@ -391,7 +468,7 @@ function JobController() {
 			//SEND ALL FORM TO THE QUEUE
 			sendRequest(jobView, specialOmics);
 		} else {
-			showErrorMessage("Invalid Form. </br> Please check the form errors.", {height: 150, width: 400, showReportButton:true});
+			showInvalidStep1FormMessage(jobView);
 			return false;
 		}
 	};
@@ -574,7 +651,11 @@ function JobController() {
 				// a form that fails validation here must not keep it.
 				this.endStep1Submission(jobView);
 			}
-			showErrorMessage("Invalid form. <br/> Please provide at least: <span style='color: auto;text-decoration: underline;'>Gene expression /Metabolomics /Proteomics data.</span> Also, please make sure to <span style='color: auto;text-decoration: underline;'>select an organism.</span>", {height: 150, width: 400, showReportButton:false});
+			/* The same refusal the pre-processing path shows: an all-empty form
+			   is told so, and a wrong field is named and scrolled to. This path
+			   used to say "provide at least Gene expression..." unconditionally,
+			   which was wrong whenever the organism was the fault. */
+			showInvalidStep1FormMessage(jobView);
 			return false;
 		}
 	};
