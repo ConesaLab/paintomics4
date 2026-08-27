@@ -1266,6 +1266,13 @@ function PA_Step1JobView() {
 	this.submitFormHandler = function() {
 		var aux, omicBoxes;
 
+		/* Which panels are in this submission is only knowable once the empty
+		   ones are gone, so drop them first. A panel dropped afterwards is a
+		   destroyed component still sitting in the pre-processing list, and
+		   step1ComplexFormSubmitHandler throws on the first queryById of a
+		   container that is no longer there. */
+		this.dropEmptyOmicPanels();
+
 		omicBoxes = this.getComponent().queryById("submittingPanelsContainer").query("container[cls=omicbox regionBasedOmic],[cls=omicbox miRNABasedOmic],[cls=omicbox moreBasedOmic]");
 		for (var i = omicBoxes.length; i--;) {
 			aux = omicBoxes[i].queryById("itemsContainer");
@@ -1281,28 +1288,106 @@ function PA_Step1JobView() {
 		}
 	};
 	/**
+	* Removes the omic panels the user left empty, and returns the ones that stay.
+	*
+	* Step 1 opens with a Gene expression panel and a Metabolomics panel already
+	* on the form, and adding a Region-based, miRNA or MORE panel is one click in
+	* "Available omics". A panel with no file in it means "I did not want this
+	* one", so it is taken off the form rather than reported -- and because it is
+	* taken off the form, nothing downstream may treat it as part of the job.
+	*
+	* @returns {Array} the panels that carry a file
+	*/
+	this.dropEmptyOmicPanels = function() {
+		var items, filled, i;
+
+		items = this.getComponent().query("container[cls=omicbox], container[cls=omicbox regionBasedOmic],[cls=omicbox miRNABasedOmic],[cls=omicbox moreBasedOmic]");
+
+		filled = [];
+		for (i = 0; i < items.length; i++) {
+			if (items[i].isEmpty() === true) {
+				$(items[i].getEl().dom).find("a.deleteOmicBox").click();
+			} else {
+				filled.push(items[i]);
+			}
+		}
+
+		return filled;
+	};
+	/**
 	* This function checks the validity for each OmicSubmittingPanel
+	*
+	* Sets `formIsEmpty` as a side effect: true when the form was refused
+	* because nothing was filled in, so the caller can say that instead of
+	* sending the user looking for field errors that do not exist.
 	*
 	* @returns Boolean
 	*/
 	this.checkForm = function() {
-		var items, valid, emptyFields;
+		var filled, valid, i;
 
-		items = this.getComponent().query("container[cls=omicbox], container[cls=omicbox regionBasedOmic],[cls=omicbox miRNABasedOmic],[cls=omicbox moreBasedOmic]");
-		valid = this.getComponent().queryById("speciesCombobox").isValid();
-		for (var i in items) {
-			valid = valid && items[i].isValid();
+		/* Drop the empty panels BEFORE validating anything.
+
+		   The two halves used to run the other way round -- validate every
+		   panel, then delete the empty ones -- and disagreed. An empty panel
+		   was counted as invalid and then deleted by the very next loop. The
+		   plain omic panel hid it (its isValid() tested `this.isEmpty` -- the
+		   method, always truthy -- so it validated nothing); the region, miRNA and MORE panels have no such guard, so
+		   empty they mark their own file fields and return false. Those three
+		   are also the only panels that route the submit through
+		   step1ComplexFormSubmitHandler, whose refusal is the one that says
+		   "please check the form errors" and offers Report error.
+
+		   So: fill in Gene expression, add a Region-based panel, press Run --
+		   the form was refused because of the region panel, the region panel
+		   was deleted a moment later, and the user was left looking at one
+		   clean box with nothing marked anywhere, told to check errors that no
+		   longer existed. That is the 2026-08-26 report; reproduced in Chrome
+		   with 0 fields marked invalid on the form it left behind. */
+		filled = this.dropEmptyOmicPanels();
+
+		this.formIsEmpty = (filled.length === 0);
+		if (this.formIsEmpty) {
+			return false;
 		}
 
-		emptyFields = 0;
-		for (var i in items) {
-			if (items[i].isEmpty() === true) {
-				emptyFields++;
-				$(items[i].getEl().dom).find("a.deleteOmicBox").click();
+		/* isValid() first, so a wrong organism does not short-circuit the loop:
+		   every panel is validated and marked in one pass. The dialog names the
+		   first field, the rest are red on the page -- one round, not two. */
+		valid = this.getComponent().queryById("speciesCombobox").isValid();
+		for (i = 0; i < filled.length; i++) {
+			valid = filled[i].isValid() && valid;
+		}
+
+		return valid;
+	};
+	/**
+	* The first field on the form carrying an error, or null.
+	*
+	* "Please check the form errors" is only a direction if the reader can find
+	* the error, and this form is three sections tall: the organism sits in
+	* section 1 and the omic panels in section 3, so the field that refused the
+	* submission is routinely off screen when the dialog opens over it. The
+	* reporting user on 2026-08-26 had filled in a MORE panel at the bottom of
+	* the page and never chosen an organism at the top -- nginx has her first
+	* /organism_databases (the combo's change listener, once per page load)
+	* landing 31 seconds AFTER the report -- so the one thing wrong with her
+	* form was a field she had no reason to be looking at.
+	*
+	* Only visible fields count: a hidden one cannot be shown to anybody, and
+	* naming it would be worse than saying nothing.
+	*
+	* @returns {Ext.form.field.Base|null}
+	*/
+	this.firstFormError = function() {
+		var fields = this.getComponent().query("field"), i;
+		for (i = 0; i < fields.length; i++) {
+			if (fields[i].hasActiveError && fields[i].hasActiveError() &&
+				fields[i].isVisible(true) && fields[i].getEl()) {
+				return fields[i];
 			}
 		}
-
-		return valid && (emptyFields < items.length);
+		return null;
 	};
 
 	//    this.showMyDataPanel = function () {
@@ -2408,7 +2493,14 @@ function OmicSubmittingPanel(nElem, options) {
 			type: me.type, layout: {align: 'stretch',type: 'vbox'},
 			items: [
 				{
-					xtype: "box", flex: 1, cls: "omicboxTitle " + this.class, html:
+/* No `flex`. The title is a fixed 44px bar (.omicboxTitle min-height), and a
+					   flexed item in a vbox is where the layout puts any height the card has
+					   left over -- or, when the card is SHORT of its contents, where it takes
+					   the shortfall from. That is what a short MORE card did to this heading:
+					   allocated 0px, painted at 44px by the CSS min-height, sitting on top of
+					   the first section. Nothing else in the card is flexed, so slack now
+					   simply stays at the bottom where it is invisible. */
+					xtype: "box", cls: "omicboxTitle " + this.class, html:
 					'<h4>' +
 					' <a class="deleteOmicBox" href="javascript:void(0)" style="margin: 0; float:right;  padding-right: 15px;"><i class="fa fa-trash"></i></a>' +
 					this.title +
@@ -2551,7 +2643,10 @@ function OmicSubmittingPanel(nElem, options) {
 			isValid: function() {
 				var valid = true;
 
-				if (this.isEmpty) {
+				/* isEmpty() -- the call. `this.isEmpty` alone was the method
+				   reference, always truthy, so this returned true for every
+				   plain panel and none of the checks below ever ran. */
+				if (this.isEmpty()) {
 					return true;
 				}
 
@@ -2729,8 +2824,10 @@ function RegionBasedOmicSubmittingPanel(nElem, options) {
 				type: 'vbox'
 			},
 			items: [{
+				/* No `flex` -- see the note on the first omicboxTitle above: a
+				   flexed 44px header is where a short card takes its shortfall
+				   from, and it landed on the section heading below. */
 				xtype: "box",
-				flex: 1,
 				cls: "omicboxTitle " + this.class,
 				html: '<h4><a class="deleteOmicBox" href="javascript:void(0)" style="margin: 0; float:right;  padding-right: 15px;">' +
 				(me.removable ? ' <i class="fa fa-trash"></i></a>' : "</a>") + this.title +
@@ -3573,8 +3670,10 @@ function MiRNAOmicSubmittingPanel(nElem, options) {
 				type: 'vbox'
 			},
 			items: [{
+				/* No `flex` -- see the note on the first omicboxTitle above: a
+				   flexed 44px header is where a short card takes its shortfall
+				   from, and it landed on the section heading below. */
 				xtype: "box",
-				flex: 1,
 				cls: "omicboxTitle " + this.class,
 				html: '<h4><a class="deleteOmicBox" href="javascript:void(0)" style="margin: 0; float:right;  padding-right: 15px;">' +
 				(me.removable ? ' <i class="fa fa-trash"></i></a>' : "</a>") + this.title +
@@ -4244,8 +4343,10 @@ function MORESubmittingPanel(nElem, options) {
 				type: 'vbox'
 			},
 			items: [{
+				/* No `flex` -- see the note on the first omicboxTitle above: a
+				   flexed 44px header is where a short card takes its shortfall
+				   from, and it landed on the section heading below. */
 				xtype: "box",
-				flex: 1,
 				cls: "omicboxTitle moreBasedFileBox",
 				html: '<h4><a class="deleteOmicBox" href="javascript:void(0)" style="margin: 0; float:right;  padding-right: 15px;">' +
 				(me.removable ? ' <i class="fa fa-trash"></i></a>' : "</a>") + this.title +
@@ -4415,18 +4516,30 @@ function MORESubmittingPanel(nElem, options) {
 								xtype: "myFilesSelectorButton",
 								fieldLabel: 'Regulators expression file',
 								namePrefix: 'file_' + i,
+								/* The same itemIds as the first regulator's
+								   selectors: the input check keys its
+								   contract on the slot's itemId, and without
+								   one these three went completely unchecked
+								   (measured: the same decimal-comma file was
+								   flagged in file_0 and passed silently in
+								   file_1). Siblings may share an itemId; the
+								   check reaches it through up(), not
+								   queryById. */
+								itemId: "mainFileSelector",
 								helpTip: "Upload the quantification file (i.e. miRNA Quantification) or choose it from your data folder. See above the accepted format for the file."
 							},
 							{
 								xtype: "myFilesSelectorButton",
 								fieldLabel: 'Relevant regulators file<br>(optional)',
 								namePrefix: 'relevant_file_' + i,
+								itemId: "moreRelevantFileSelector",
 								helpTip: "Upload the list of relevant (differentially expressed) features (TAB format) or choose it from your data folder. See above the accepted format for the file."
 							},
 							{
 								xtype: "myFilesSelectorButton",
 								fieldLabel: 'Associations file',
 								namePrefix: 'assoc_file_' + i,
+								itemId: "moreAssociationsFileSelector",
 								helpTip: "Upload the reference file that relates each feature (i.e. miRNA) with its potential targets. This information is usually extracted from popular databases such as miRbase for miRNAs. See above the accepted format for the file."
 							},
 							{
@@ -5120,13 +5233,15 @@ function fillAIProvenance(root) {
 /*****************************************************************************
 **** "DRAFT THIS FOR ME" - EXPERIMENT DESIGN *********************************
 *****************************************************************************/
-/* Reads the header row of each data file the user has picked, sends just those
-   names to /ai_generate_exp_design, and writes the reply into the experiment
-   design box.
+/* Reads the header row of each file the user has picked, sends just those names
+   to /ai_generate_exp_design, and writes the reply into the experiment design
+   box.
 
-   Only the first line of each file is read, and only the main data files --
-   never the relevant-features lists, which are one column of identifiers and
-   describe no design. Nothing is read from disk until the button is pressed. */
+   Only the first line of each file is read, and nothing is read from disk until
+   the button is pressed. Every picked file is taken: one line each costs
+   nothing, and each one says something about the design the others do not --
+   a conditions file names the factors, an associations file says the study is
+   regulatory, a values matrix names the samples. */
 
 /* Enough of the file to be sure of catching the first newline. A header row for
    a wide matrix can be long, but not this long, and reading a fixed slice keeps
@@ -5157,23 +5272,110 @@ function readHeaderRow(file, callback) {
 	reader.readAsText(file.slice(0, EXP_DESIGN_HEADER_BYTES));
 }
 
-/* Every main data file the user has picked, as
-   [{omicName, fileName, fileField}]. The runtime field names are omicN_file
-   for the data file and omicN_relevant_file / omicN_associations_file for the
-   others, so the pattern anchors on the end to take only the first. */
+/* Plain text out of a fieldLabel, which may carry markup
+   ('Relevant regulators file<br>(optional)') and a trailing colon. */
+function plainFieldLabel(text) {
+	return String(text == null ? "" : text)
+		.replace(/<[^>]*>/g, " ")
+		.replace(/\s+/g, " ")
+		.replace(/^ | $/g, "")
+		.replace(/\s*:$/, "");
+}
+
+/* What one picked file is: which panel it sits in, and which slot of it.
+   "Regulatory Omic - MORE / Conditions file", "Gene expression / Data file".
+
+   Read off the component tree, never off the field's name. Every panel agrees
+   on its itemIds and its labels and disagrees on its field NAMES, which is the
+   whole of the bug this replaces. */
+/* The omic name the user typed for this file's panel, or "".
+
+   Two traps, both measured in Chrome. A region or pairwise card holds TWO
+   #omicNameField -- the first is the disabled, empty twin of the "already
+   mapped" alternative form -- so panel.down('#omicNameField') returned the
+   twin and the name the user typed never reached the label. And MORE stacks
+   regulators: block i names its files file_i / relevant_file_i / assoc_file_i
+   and its omic name omic_name_i, with no itemId at all, so every file of the
+   2nd regulator was labelled with the 1st regulator's name. The conditions and
+   gene-expression (rnaseqaux) files belong to the whole MORE panel, not to a
+   regulator: they take the panel heading. */
+function typedOmicName(panel, field) {
+	var fieldName = String((field && field.name) || "");
+	var block = fieldName.match(/^(?:file|relevant_file|assoc_file)_(\d+)(?:_file)?$/);
+	if (block) {
+		var combos = panel.query ? panel.query('[name=omic_name_' + block[1] + ']') : [];
+		var typed = (combos.length && combos[0].getValue) ? combos[0].getValue() : "";
+		return typed ? String(typed).trim() : "";
+	}
+	if (/^(?:conditions|rnaseqaux)(?:_file)?$/.test(fieldName)) { return ""; }
+
+	var fields = panel.query ? panel.query('#omicNameField') : [];
+	var live = fields.filter(function (f) { return !(f.isDisabled ? f.isDisabled() : f.disabled); });
+	var pool = live.length ? live : fields;
+	for (var i = 0; i < pool.length; i++) {
+		var value = pool[i].getValue && pool[i].getValue();
+		if (value && String(value).trim()) { return String(value).trim(); }
+	}
+	return "";
+}
+
+function pickedFileLabel(field) {
+	var panel = field.up('[cls~=omicbox]');
+	var selector = field.up('myFilesSelectorButton');
+	var slot = selector ? plainFieldLabel(selector.fieldLabel) : "";
+	var omic = "";
+
+	if (panel) {
+		/* What the user typed, when they typed one; otherwise the heading the
+		   panel prints, which every panel type renders the same way. */
+		omic = typedOmicName(panel, field);
+		if (!omic && panel.el && panel.el.dom) {
+			var heading = panel.el.dom.querySelector('.omicboxTitle h4');
+			omic = heading ? plainFieldLabel(heading.textContent) : "";
+		}
+		if (!omic) { omic = panel.type || ""; }
+	}
+
+	if (omic && slot) { return omic + " / " + slot; }
+	return omic || slot || field.name || "file";
+}
+
+/* A form cannot hand over an unbounded number of files. Six omics with four
+   selectors each is 24, which is past anything the form is used for. */
+var EXP_DESIGN_MAX_FILES = 24;
+
+/* Every file the user has picked, as [{omicName, file}].
+ *
+ * This used to keep only fields whose NAME matched /^omic\d+_file$/. That is
+ * the plain, region-based and miRNA panels' convention and it is not the MORE
+ * panel's: MORE names its five selectors conditions, rnaseqaux, file_0,
+ * relevant_file_0 and assoc_file_0. So a form holding a MORE panel and four
+ * chosen files collected NOTHING, and "Draft this for me" answered "There is
+ * nothing to read yet. Add an omic ... and pick its Data file" to a user who
+ * had done exactly that. Reported 2026-08-26; MORE was the only panel affected,
+ * and the file it most wanted -- the conditions file -- is the experimental
+ * design itself.
+ *
+ * Nothing about any panel's field names is encoded here now, so a fifth panel
+ * type cannot go blind the same way.
+ */
 function collectPickedOmicFiles() {
 	var picked = [];
 	Ext.each(Ext.ComponentQuery.query('filefield'), function(field) {
-		var name = field.name || "";
-		if (!/^omic\d+_file$/.test(name)) { return; }
+		if (picked.length >= EXP_DESIGN_MAX_FILES) { return false; }
 
 		var input = field.fileInputEl && field.fileInputEl.dom;
 		if (!input || !input.files || input.files.length === 0) { return; }
 
-		var omicPrefix = name.replace(/_file$/, "");
-		var nameField = Ext.ComponentQuery.query('[name=' + omicPrefix + '_omic_name]')[0];
+		/* The region panel's GTF: its first line is an annotation record or a
+		   "#!genome-build" comment, not column names -- nothing for a design
+		   drafter to read, and the one file the old name filter excluded on
+		   purpose. */
+		var selector = field.up('myFilesSelectorButton');
+		if (selector && selector.itemId === 'tertiaryFileSelector') { return; }
+
 		picked.push({
-			omicName: nameField ? nameField.getValue() : omicPrefix,
+			omicName: pickedFileLabel(field),
 			file: input.files[0]
 		});
 	});

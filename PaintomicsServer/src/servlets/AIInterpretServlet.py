@@ -494,7 +494,12 @@ def aiInterpretChat(REQUEST, RESPONSE):
 # 60 columns is enough to show the shape of every design this form accepts --
 # a 2 x 6 timecourse in triplicate is 36 -- and the count of what was dropped
 # is still sent, so the model is told the matrix is wider than the sample.
-_EXPDESIGN_MAX_OMICS = 10
+# The client sends up to EXP_DESIGN_MAX_FILES = 24 entries (six omics with four
+# selectors each). This was 10, so a form with six plain omics had its sixth
+# omic's Data file -- the design signal -- silently dropped after five
+# one-identifier relevant lists, and the note under the button said nothing.
+# Each entry is already bounded to 60 columns of 80 characters.
+_EXPDESIGN_MAX_OMICS = 24
 _EXPDESIGN_MAX_COLUMNS = 60
 _EXPDESIGN_MAX_COLUMN_LEN = 80
 
@@ -665,13 +670,19 @@ def aiGenerateExpDesign(REQUEST, RESPONSE, EXAMPLE_FILES_DIR=None):
         for entry in omics[:_EXPDESIGN_MAX_OMICS]:
             if not isinstance(entry, dict):
                 continue
-            columns, dropped = _sanitizeColumnNames(entry.get("columns") or [])
+            rawColumns = [str(column) for column in (entry.get("columns") or [])]
+            # A headerless file's first line is measurements, not column names
+            # -- the same rule the example path applies -- and the note would
+            # otherwise promise "no values were sent" over a row of values.
+            if _looksLikeDataRow(rawColumns):
+                continue
+            columns, dropped = _sanitizeColumnNames(rawColumns)
             if not columns:
                 continue
             totalDropped += dropped
 
             omicName = _EXPDESIGN_CONTROL_CHARS.sub(
-                " ", str(entry.get("omicName") or "Omic"))[:60].strip() or "Omic"
+                " ", str(entry.get("omicName") or "Omic"))[:100].strip() or "Omic"
             described.append(
                 "- %s: %d column%s%s\n  %s" % (
                     omicName, len(columns) + dropped,
