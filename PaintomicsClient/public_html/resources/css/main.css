@@ -9183,17 +9183,28 @@ div.repDetectionCard h3 {
 .paClassMapMuted { color: #78879A; }
 /* Legend. A list, not a run-on sentence: each item is one nowrap flex child,
    so a narrow card wraps BETWEEN keys instead of mid-phrase. */
-.paClassMapKeys { display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: center;
+/* Aligned to the plot area by drawClassMap, which sets padding-left from the
+   chart's own padL so the keys start under the axis caption rather than at the
+   card edge. Each li is one nowrap flex child, so a narrow card wraps BETWEEN
+   keys instead of mid-phrase. */
+.paClassMapKeys { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center;
                   margin: 12px 0 4px; padding: 0; list-style: none;
                   color: #44556A; font-size: 12px; }
-.paClassMapKeys li { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
-.paKeySwatch { width: 12px; height: 12px; border-radius: 2px; flex: none; }
+.paClassMapKeys li { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+/* Colour keys say what a mark is made of; shape keys say what it scored. The
+   extra space is the only thing separating the two ideas. */
+.paClassMapKeys li.paKeyBreak { margin-left: 12px; padding-left: 24px;
+                                border-left: 1px solid #E4EAF0; }
+.paKeySwatch, .paKeyGlyph { box-sizing: border-box; flex: none; }
+.paKeySwatch { width: 12px; height: 12px; border-radius: 2px; }
 .paKeyUp { background: #0F59A9; }
 .paKeyDown { background: #A51F1E; }
 .paKeyNeutral { background: #4A6785; }
 .paKeyNull { background: #C4CFDA; }
-.paKeyGlyph { width: 13px; height: 13px; border-radius: 50%; flex: none; }
-.paKeyArea { background: #C4CFDA; box-shadow: 0 0 0 3px rgba(196,207,218,.35); }
+.paKeyGlyph { width: 13px; height: 13px; border-radius: 50%; }
+/* No outer halo: box-shadow paints outside the layout box, so this key read a
+   third wider than every other one while measuring the same. */
+.paKeyArea { background: #C4CFDA; }
 .paKeyRing { border: 1.8px solid #141E2B; }
 .paKeyDash { border: 1.4px dashed #78879A; }
 

@@ -1966,7 +1966,8 @@
 :root[data-theme="dark"] .paKeyDown { background: #C9524D; }
 :root[data-theme="dark"] .paKeyNeutral { background: #7C93AD; }
 :root[data-theme="dark"] .paKeyNull { background: #35424F; }
-:root[data-theme="dark"] .paKeyArea { background: #35424F; box-shadow: 0 0 0 3px rgba(53,66,79,.45); }
+:root[data-theme="dark"] .paKeyArea { background: #35424F; }
+:root[data-theme="dark"] .paClassMapKeys li.paKeyBreak { border-left-color: #28333F; }
 :root[data-theme="dark"] .paKeyRing { border-color: #E3EAF2; }
 :root[data-theme="dark"] .paKeyDash { border-color: #6F7F8E; }
 :root[data-theme="dark"] .paClassMapKeys { color: #A1B0C0; }

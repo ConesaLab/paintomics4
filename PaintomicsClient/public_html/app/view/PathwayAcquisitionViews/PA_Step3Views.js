@@ -6418,6 +6418,34 @@ function PA_Step3MetaboliteView() {
 
 		host.appendChild(svg);
 
+		/* The legend describes marks inside the plot, and the axis caption
+		   directly above it is drawn at x = padL. Flush to the card, the legend
+		   sat padL to the left of both. The SVG scales with its viewBox, so the
+		   indent is padL through the same scale rather than a fixed 62px. */
+		var keys = document.getElementById("classActivityKeys");
+		if (keys) {
+			/* Only the keys this chart actually uses. Direction is dropped when
+			   the omic never crosses zero, and printing its two colours anyway
+			   put swatches in the legend that appear nowhere on the plot -- and
+			   pushed the row to a second line to do it. */
+			var items = classMapHasDirection
+				? [['paKeySwatch paKeyUp', 'relevant &amp; increased'],
+				   ['paKeySwatch paKeyDown', 'relevant &amp; decreased']]
+				: [['paKeySwatch paKeyNeutral', 'relevant']];
+			items.push(['paKeySwatch paKeyNull', 'measured, not relevant']);
+			items.push(['paKeyGlyph paKeyArea', 'area = compounds measured', true]);
+			items.push(['paKeyGlyph paKeyRing', 'passes FDR 0.05']);
+			items.push(['paKeyGlyph paKeyDash', 'cannot reach it at this n']);
+
+			keys.innerHTML = items.map(function (item) {
+				return '<li' + (item[2] ? ' class="paKeyBreak"' : '') + '>'
+					+ '<span class="' + item[0] + '"></span>' + item[1] + '</li>';
+			}).join("");
+
+			var rendered = svg.getBoundingClientRect().width || width;
+			keys.style.paddingLeft = Math.round(padL * (rendered / width)) + "px";
+		}
+
 		me.renderClassMapControls();
 
 		var unreachable = rows.filter(function (r) { return !r.reachable; }).length;
@@ -6466,15 +6494,7 @@ function PA_Step3MetaboliteView() {
 							'<p class="paClassMapSummary" id="classActivityMapSummary"></p>' +
 							'<div class="paClassMapControls" id="classActivityMapControls"></div>' +
 							'<div id="classActivityMap"></div>' +
-							'<ul class="paClassMapKeys">' +
-							'  <li><span class="paKeySwatch paKeyUp"></span>relevant &amp; increased</li>' +
-							'  <li><span class="paKeySwatch paKeyDown"></span>relevant &amp; decreased</li>' +
-							'  <li><span class="paKeySwatch paKeyNeutral"></span>relevant</li>' +
-							'  <li><span class="paKeySwatch paKeyNull"></span>measured, not relevant</li>' +
-							'  <li><span class="paKeyGlyph paKeyArea"></span>area = compounds measured</li>' +
-							'  <li><span class="paKeyGlyph paKeyRing"></span>passes FDR 0.05</li>' +
-							'  <li><span class="paKeyGlyph paKeyDash"></span>cannot reach it at this n</li>' +
-							'</ul>' +
+							'<ul class="paClassMapKeys" id="classActivityKeys"></ul>' +
 							'',
 						listeners: {
 							afterrender: function (box) {
