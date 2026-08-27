@@ -73,7 +73,10 @@
            out because it is not the 2-column `associations` contract, and so
            went completely unchecked; it now has a contract of its own. */
         mirnaTargetsFileSelector: "regulator-targets",
-        moreAssociationsFileSelector: "associations",
+        /* runMORE.R stops only on fewer than 2 or more than 3 columns and
+           documents the third (interaction type / area), so the two-column
+           `associations` contract was refusing a file the server takes. */
+        moreAssociationsFileSelector: "regulator-targets",
         secondaryAssociationFileSelector: "relevant-associations",
         conditionsFileSelector: "design"
     };
@@ -138,6 +141,18 @@
         return roleForField(extFieldFor(input));
     }
 
+    /* Whether the slot feeds MORE, whose R and Rust readers refuse a repeated
+       identifier. Every other pipeline merges repeats, so the duplicate rule
+       is only a hard block here. Recognised by the slot MORE alone has (the
+       conditions file) or by the card's class; never by a field NAME. */
+    function feedsMore(input) {
+        var component = cardComponentFor(input);
+        if (!component) return false;
+        if (component.down && component.down("[itemId=conditionsFileSelector]")) return true;
+        var cls = String((component.cls || "") + " " + (component.initialConfig && component.initialConfig.cls || ""));
+        return cls.indexOf("moreBasedOmic") !== -1;
+    }
+
     /*
      * Files we KNOW the server will reject, keyed by field name.
      *
@@ -176,19 +191,13 @@
     /*
      * Where the message lives, and why the omic card carries the state.
      *
-     * The message cannot go INSIDE the omic card. The cards are `flex: 1` items
-     * in a vbox whose height is fixed at 314px by an hbox pinned at 400px, so
-     * the layout ASSIGNS each card its height out of a fixed budget rather than
-     * measuring its content. Nothing added to a card can make it taller; it can
-     * only overflow, and the row is overflow:hidden. Measured three ways -- raw
-     * DOM insertion, a real Ext.Component, and updateLayout on the card, its
-     * container and the form -- and the sibling omic moved 0px every time.
-     *
-     * So the message sits just below the omics row, but pinned to the same left
-     * edge and width as the cards and pulled up into the row's unused space, and
-     * the CARD is tinted to carry the state. The tint is what makes a problem
-     * impossible to miss; the message below it is what says how to fix it.
-     * Neither costs a single pixel of layout.
+     * The strip lives INSIDE the omic card now (hostForComponent adds it as a
+     * child component), which took freeCardHeight: the cards used to be
+     * `flex: 1` items in a vbox with a fixed height budget, so nothing added
+     * to one could make it taller -- measured three ways, and the sibling
+     * omic moved 0px every time. Each card sizes itself since; the CARD is
+     * still tinted to carry the state, because the tint is what makes a
+     * problem impossible to miss, and the strip is what says how to fix it.
      */
     // The omic's display name, used by the submit-time banner, which can be
     // about several omics at once.
@@ -246,15 +255,29 @@
      * one line later. addCls/removeCls put the class in the list Ext rebuilds
      * from, so it survives.
      */
+    /* The other slots of this input's card that still hold a blocked file.
+       A MORE or pairwise card has five to eight slots and ONE strip, so each
+       pick overwrote the previous verdict: a bad conditions file, then a good
+       regulators file, and the card went green with the bad file still in it
+       and the refusal waiting at the end of the form. */
+    function otherBlockedInCard(input) {
+        var card = cardFor(input);
+        if (!card) return [];
+        return liveBlocked().filter(function (entry) {
+            return entry.input && entry.input !== input && cardFor(entry.input) === card;
+        });
+    }
+
     function setCardState(input, state) {
         var component = cardComponentFor(input);
         var card = cardFor(input);
+        var cardState = (state !== "err" && otherBlockedInCard(input).length) ? "err" : state;
         if (component && component.addCls) {
             CARD_STATES.forEach(function (cls) { component.removeCls(cls); });
-            if (state) component.addCls("pa-state-" + state);
+            if (cardState) component.addCls("pa-state-" + cardState);
         } else if (card) {
             CARD_STATES.forEach(function (cls) { card.classList.remove(cls); });
-            if (state) card.classList.add("pa-state-" + state);
+            if (cardState) card.classList.add("pa-state-" + cardState);
         }
 
         var box = filenameBoxFor(input);
@@ -456,6 +479,16 @@
         var body = el("div", "pa-format-body");
         var line = el("div", "pa-format-text",
             (strip.__omic ? strip.__omic + ": " : "") + bits.join(" · "));
+        /* Repeated identifiers outside MORE: the server merges them, so this
+           is information, not a fault -- but "65 rows share one id" is worth
+           knowing before the values are averaged into one feature. */
+        var dup = summary && summary.duplicates;
+        if (dup) {
+            line.appendChild(el("span", "pa-format-note",
+                " · " + dup.ids + " identifier" + (dup.ids === 1 ? "" : "s") +
+                " repeat" + (dup.ids === 1 ? "s" : "") + " (\u201C" + dup.worst + "\u201D " +
+                dup.worstCount + " times); the server merges their rows"));
+        }
         if (partial) {
             line.appendChild(el("span", "pa-format-note",
                 " (checked the first " + Math.round(PARTIAL_CHECK_BYTES / 1048576) + " MB)"));
@@ -498,7 +531,27 @@
             body.appendChild(prov);
         }
         strip.appendChild(body);
-        if (input) { setCardState(input, "ok"); syncCardHeight(input); }
+        if (input) { appendCardReminder(body, input); setCardState(input, "ok"); syncCardHeight(input); }
+    }
+
+    /* "Still blocked in this card: Conditions file (design.csv)" -- so a green
+       verdict on one slot never hides a red one on another. */
+    function appendCardReminder(body, input) {
+        var others = otherBlockedInCard(input);
+        if (!others.length) return;
+        var names = others.map(function (entry) {
+            var label = slotLabelFor(entry.input) || entry.fieldName;
+            return label + (entry.fileName ? " (" + entry.fileName + ")" : "");
+        });
+        body.appendChild(el("div", "pa-format-note pa-format-reminder",
+            "Still blocked in this card: " + names.join("; ") + "."));
+    }
+
+    function slotLabelFor(input) {
+        var field = extFieldFor(input);
+        var selector = field && field.up && field.up("myFilesSelectorButton");
+        var label = selector && selector.fieldLabel;
+        return label ? String(label).replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").replace(/\s*:\s*$/, "").trim() : "";
     }
 
     function markBlocked(fieldName, entry) { blocked[fieldName] = entry; }
@@ -566,6 +619,7 @@
         body.appendChild(bar);
         strip.appendChild(body);
         if (strip.__input) {
+            appendCardReminder(body, strip.__input);
             setCardState(strip.__input, kind === "warn" ? "warn" : "err");
             syncCardHeight(strip.__input);
         }
@@ -596,7 +650,7 @@
     function describeProblems(result) {
         var counts = {};
         result.problems.forEach(function (p) { counts[p.code] = (counts[p.code] || 0) + 1; });
-        var summary = result.summary;
+        var summary = result.summary || {};
 
         if (counts.DECIMAL_COMMA) {
             return "Numbers use commas as the decimal mark; PaintOmics needs dots.";
@@ -619,22 +673,6 @@
            associations or relevant-features file fell through to the generic
            sentence below, which tells the reader nothing they can act on --
            and telling them is the whole purpose of this module. */
-        if (counts.DUPLICATE_IDENTIFIER) {
-            /* First, because it is fatal and because every other complaint
-               about this file is downstream of it. The numbers are in the
-               message on purpose: "you have duplicates" sends someone hunting,
-               "65 rows share ENSMUSG00000104758" tells them where to look and
-               how bad it is. */
-            var dup = result.problems.filter(function (p) {
-                return p.code === "DUPLICATE_IDENTIFIER";
-            })[0].detail;
-            return dup.ids + " identifier" + (dup.ids === 1 ? "" : "s") +
-                   " name more than one row — " + dup.rows + " rows in all, and " +
-                   "\u201C" + dup.worst + "\u201D appears " + dup.worstCount +
-                   " times. Every row has to name a different feature: the " +
-                   "analysis reads this file into a table keyed on that column, " +
-                   "and cannot hold two values under one name.";
-        }
         if (counts.BLANK_IDENTIFIER) {
             /* Before DUPLICATE and before the shape complaints: a blank id is
                not a weak row, it is a row that will JOIN to every other blank
@@ -649,14 +687,30 @@
                    "other blank cell in your other files, and can end up being " +
                    "the only thing that matches.";
         }
+        if (counts.DUPLICATE_IDENTIFIER) {
+            /* Fatal on MORE's matrix readers (advisory elsewhere, where it never
+               reaches here). The numbers are in the
+               message on purpose: "you have duplicates" sends someone hunting,
+               "65 rows share ENSMUSG00000104758" tells them where to look and
+               how bad it is. */
+            var dup = result.problems.filter(function (p) {
+                return p.code === "DUPLICATE_IDENTIFIER";
+            })[0].detail;
+            return dup.ids + " identifier" + (dup.ids === 1 ? "" : "s") +
+                   " name more than one row — " + dup.rows + " rows in all, and " +
+                   "\u201C" + dup.worst + "\u201D appears " + dup.worstCount +
+                   " times. Every row has to name a different feature: the " +
+                   "analysis reads this file into a table keyed on that column, " +
+                   "and cannot hold two values under one name.";
+        }
         if (counts.BAD_COLUMN_COUNT) {
             return "Every line of this file needs the same columns; at least " +
                    "one line does not. A regulator-to-target table is " +
                    "Regulator, Target and optionally a score.";
         }
         if (counts.NOT_INDICATOR) {
-            return "A conditions file marks each sample with 1 or 0 in every " +
-                   "group column; this one holds other values.";
+            return "A conditions file holds a number (1 or 0) in every " +
+                   "group column; this one holds text there.";
         }
         if (counts.NOT_ONE_CONDITION) {
             return "Every sample must belong to exactly one condition — one 1 per row.";
@@ -666,9 +720,6 @@
         }
         if (counts.NOT_TWO_COLUMNS) {
             return "An associations file needs exactly two columns: the target and its regulator.";
-        }
-        if (counts.BAD_COLUMN_COUNT) {
-            return "The file does not have the number of columns this slot expects.";
         }
         if (counts.FIELD_TOO_LONG) {
             return "A field is far too long to be an identifier — this looks like the wrong file for the slot.";
@@ -688,7 +739,10 @@
            report faults they cannot have; format-roles.js already models
            each one. */
         role = role || roleForInput(input) || "values";
-        var validate = function (rows) { return API.validateForRole(role, rows); };
+        var strictKeys = feedsMore(input);
+        var validate = function (rows) {
+            return API.validateForRole(role, rows, undefined, { strictKeys: strictKeys });
+        };
         var strip = hostFor(input);
         if (!strip) return;
         strip.__input = input;
@@ -1029,7 +1083,16 @@
     function pickedFileForOmicNamedIn(text) {
         if (!window.Ext || !Ext.ComponentQuery) return null;
         var haystack = String(text).replace(/[\s_]+/g, " ").toLowerCase();
-        var fields = Ext.ComponentQuery.query("filefield");
+        /* mainFileSelector first: on a MORE card the gene-expression target
+           slot (rnaseqauxFileSelector) precedes the regulator's own data file
+           and both are `values`, so the first match sent the agent the TARGET
+           file for an error that named the regulator omic. */
+        var fields = Ext.ComponentQuery.query("filefield").slice().sort(function (a, b) {
+            var ia = a.up && a.up("myFilesSelectorButton"), ib = b.up && b.up("myFilesSelectorButton");
+            var ma = ia && ia.itemId === "mainFileSelector" ? 0 : 1;
+            var mb = ib && ib.itemId === "mainFileSelector" ? 0 : 1;
+            return ma - mb;
+        });
         for (var i = 0; i < fields.length; i++) {
             if (roleForField(fields[i]) !== "values") continue;
             var dom = fields[i].fileInputEl && fields[i].fileInputEl.dom;

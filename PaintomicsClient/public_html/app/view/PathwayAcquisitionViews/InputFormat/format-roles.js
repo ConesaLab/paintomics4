@@ -63,9 +63,12 @@
         if (!body.length) problems.push(problem("EMPTY", 0, "The file is empty."));
         body.forEach(function (r, i) {
             if (i > MAX_NUMBER_FEATURES) return;
-            if (r.length < 2 || r.length > 3) {
+            /* Fewer than two is the only shape the server cannot use:
+               miRNA2Target.py reads line[0] and line[1] and ignores the rest,
+               and runMORE.R documents a third column and tolerates more. */
+            if (r.length < 2) {
                 problems.push(problem("BAD_COLUMN_COUNT", i,
-                    "Expected 2 or 3 columns (Regulator, Target[, score]) but found " +
+                    "Expected at least 2 columns (Regulator, Target[, score]) but found " +
                     r.length + "."));
             }
         });
@@ -73,11 +76,14 @@
                  summary: { nRows: body.length } };
     }
 
-    /* One or two columns. */
+    /* One or two columns. Empty is fine: a run whose correlation filter kept
+       no pair writes an empty relevant-associations file, and the server's
+       loop over it (PathwayAcquisitionJob.py, the relevant-associations
+       reader) raises nothing on zero lines -- the same reason third/fourth
+       FileSelector are exempt from checking altogether. */
     function validateRelevantAssociations(rows) {
         var problems = [];
         var body = nonEmptyRows(rows);
-        if (!body.length) problems.push(problem("EMPTY", 0, "The file is empty."));
         body.forEach(function (r, i) {
             if (r.length !== 1 && r.length !== 2) {
                 problems.push(problem("BAD_COLUMN_COUNT", i,
@@ -143,34 +149,41 @@
             problems.push(problem("EMPTY", 0, "A design file needs a header and at least one sample."));
             return { ok: false, problems: problems, summary: { nRows: 0 } };
         }
+        /* What runMORE.R's read_matrix actually requires, replicated in R
+           4.6.0: a header of N or N-1 cells (R's own write.table default
+           leaves the row-name column unnamed), numeric cells, unique sample
+           names -- and nothing else. The first cut also demanded 0/1 cells
+           with exactly one 1 per row, and blocked three files R accepts: an
+           R-written header one cell short, a multi-factor row (which
+           MOREServlet._designPatternNames handles on purpose), and numeric
+           levels such as Time 0/24/48. The design-matrix advice stays as
+           advice; only what R rejects is refused here. */
         var header = body[0];
-        if (header.length < 2) {
+        var samples = body.slice(1);
+        var wide = samples.length && samples.every(function (r) { return r.length === header.length + 1; });
+        var width = wide ? header.length + 1 : header.length;
+        var conditions = wide ? header.slice(0) : header.slice(1);
+        if (width < 2) {
             problems.push(problem("TOO_FEW_COLUMNS", 0,
                 "Expected a Sample column and at least one condition column."));
         }
-        body.slice(1).forEach(function (r, i) {
+        samples.forEach(function (r, i) {
             var line = i + 1;
-            if (r.length !== header.length) {
+            if (r.length !== width) {
                 problems.push(problem("RAGGED", line,
-                    "Expected " + header.length + " columns but found " + r.length + "."));
+                    "Expected " + width + " columns but found " + r.length + "."));
                 return;
             }
-            var ones = 0;
             r.slice(1).forEach(function (cell) {
                 var t = String(cell).trim();
-                if (t !== "0" && t !== "1") {
+                if (!V.isPythonFloat(t)) {
                     problems.push(problem("NOT_INDICATOR", line,
-                        "Condition columns must be 0 or 1, found " + JSON.stringify(t) + "."));
-                } else if (t === "1") ones++;
+                        "Condition columns must be numeric (1/0 indicators), found " + JSON.stringify(t) + "."));
+                }
             });
-            if (ones !== 1) {
-                problems.push(problem("NOT_ONE_CONDITION", line,
-                    "Each sample must belong to exactly one condition, found " + ones + "."));
-            }
         });
         return { ok: problems.length === 0, problems: problems.slice(0, 10),
-                 summary: { nRows: body.length - 1, nCols: header.length,
-                            conditions: header.slice(1) } };
+                 summary: { nRows: samples.length, nCols: width, conditions: conditions } };
     }
 
     var ROLES = ["values", "relevant", "associations", "relevant-associations",
@@ -327,6 +340,15 @@
     function blankIdentifiers(rows, role) {
         var all = nonEmptyRows(rows);
         if (!all.length) return { rows: 0, first: 0, column: 1 };
+        /* A relevance list wider than one column is one column PER CONDITION
+           (example 03-gene-multi-condition-relevance): a gene not relevant in
+           condition 1 has an empty first cell, and that is the format, not a
+           fault -- the server's parseSignificativeFeaturesFile skips blank
+           cells by design. Only the one-column list keys on column 1, and
+           nonEmptyRows already guarantees each row holds something. */
+        if (role === "relevant" && all[0].length > 1) {
+            return { rows: 0, first: 0, column: 1, total: all.length };
+        }
         var header = all[0].slice(1).every(function (c) { return V.isPythonFloat(String(c)); })
             ? null : all[0];
         var body = header ? all.slice(1) : all;
@@ -357,7 +379,16 @@
      * there is the file working as intended. */
     var UNIQUE_KEY_ROLES = { values: true, design: true };
 
-    function validateForRole(role, rows, conditions) {
+    /* options.strictKeys: the file is bound for a MORE slot, whose R/Rust
+       matrix readers refuse a repeated key. Anywhere else a repeated
+       identifier in a values file is MERGED by the server
+       (Job.addInputGeneData -> addOmicValues) and never rejected -- so a hard
+       block there was a false "the server will reject this file", and it
+       also took the decimal-comma repair away from files that carried both
+       (the repair is only offered when the repaired file validates). Outside
+       MORE the repeat is reported on the summary and the file stays OK. */
+    function validateForRole(role, rows, conditions, options) {
+        options = options || {};
         var report;
         if (role === "regulator-targets") report = validateRegulatorTargets(rows);
         else if (role === "associations") report = validateAssociations(rows);
@@ -380,13 +411,17 @@
         if (UNIQUE_KEY_ROLES[role || "values"]) {
             var dup = duplicateIdentifiers(rows);
             if (dup.count) {
-                report.problems = (report.problems || []).concat([
-                    problem("DUPLICATE_IDENTIFIER", 0, {
-                        ids: dup.count, rows: dup.rows,
-                        worst: dup.worst, worstCount: dup.worstCount
-                    })
-                ]);
-                report.ok = false;
+                var detail = { ids: dup.count, rows: dup.rows,
+                               worst: dup.worst, worstCount: dup.worstCount };
+                if (role === "design" || options.strictKeys) {
+                    report.problems = (report.problems || []).concat([
+                        problem("DUPLICATE_IDENTIFIER", 0, detail)
+                    ]);
+                    report.ok = false;
+                } else {
+                    report.summary = report.summary || {};
+                    report.summary.duplicates = detail;
+                }
             }
         }
         return report;

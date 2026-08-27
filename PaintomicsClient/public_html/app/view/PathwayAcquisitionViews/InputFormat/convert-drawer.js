@@ -283,6 +283,23 @@
         return (box && window.Ext && Ext.getCmp) ? Ext.getCmp(box.id) : null;
     }
 
+    /* The omic-name field a card would submit. A region or pairwise card holds
+       two with the same itemId -- the first is the disabled, empty twin of the
+       "already mapped" form -- so queryById returned the one the form ignores.
+       Same rule as format-panel's omicNameFieldIn. */
+    function liveNameField(component) {
+        if (!component || !component.query) return null;
+        var fields = component.query("#omicNameField");
+        if (!fields.length) return null;
+        var live = fields.filter(function (f) { return !(f.isDisabled ? f.isDisabled() : f.disabled); });
+        var pool = live.length ? live : fields;
+        for (var i = 0; i < pool.length; i++) {
+            var value = pool[i].getValue && pool[i].getValue();
+            if (value && String(value).trim()) return pool[i];
+        }
+        return pool[0];
+    }
+
     function fileInputIn(component, itemId) {
         var selector = component && component.queryById ? component.queryById(itemId) : null;
         var field = selector && selector.queryById ? selector.queryById("fileField") : null;
@@ -310,7 +327,7 @@
             if (!panel || !panel.getComponent) return false;
             var component = panel.getComponent();
             var fill = function () {
-                var nameField = component.queryById("omicNameField");
+                var nameField = liveNameField(component);
                 if (nameField && nameField.setValue) nameField.setValue(omicName);
                 var main = fileInputIn(component, "mainFileSelector");
                 if (main) setFile(main, values.bytes, values.name);
@@ -1193,7 +1210,8 @@
             actions.innerHTML = "";
             actions.appendChild(dismiss);
             actions.appendChild(downloadAll);
-            if (out.values.length || forSlot) actions.appendChild(accept);
+            var wantsValues = ((context && context.slotRole) || "values") === "values";
+            if ((wantsValues && out.values.length) || forSlot) actions.appendChild(accept);
 
             function syncActions() {
                 accept.textContent = addOthers
@@ -1203,9 +1221,18 @@
             syncActions();
 
             accept.addEventListener("click", function () {
-                if (!chosen && forSlot) {
-                    // No values table -- the conversion produced the file this
-                    // slot asked for. Put it straight back in the field.
+                var slotRole = (context && context.slotRole) || "values";
+                if (slotRole !== "values" && !forSlot) {
+                    // The slot asked for a design / relevant / associations
+                    // file and the conversion made none: a values table in a
+                    // conditions slot is worse than an empty one. Leave the
+                    // downloads on the review and keep the field as it was.
+                    shutdown();
+                    return;
+                }
+                if (forSlot && (!chosen || slotRole !== "values")) {
+                    // The conversion produced the file this slot asked for.
+                    // Put it straight back in the field.
                     input.__paConverted = { from: file.name, original: file,
                                             fieldName: fieldName, label: forSlot.label,
                                             attempts: result.attempts || 1, relevant: false };
@@ -1220,7 +1247,7 @@
 
                 if (addOthers) {
                     // Keep names unique across the job: the server keys omics by name.
-                    var nameField = component && component.queryById("omicNameField");
+                    var nameField = liveNameField(component);
                     if (nameField && nameField.setValue) nameField.setValue(omicType + " (" + chosen.label + ")");
                     out.values.filter(function (v) { return v !== chosen; }).forEach(function (v) {
                         var vList = out.lists.filter(function (l) { return l.relevantFor === v.name; })[0];
@@ -1298,8 +1325,13 @@
             var f = Ext.ComponentQuery.query("[name=" + name + "]")[0];
             return f && f.getValue ? f.getValue() : null;
         }
+        /* The card's own live name field first: "omicN_omic_name" is the plain
+           panels' convention only, and MORE's slots (file_0, conditions,
+           rnaseqaux) and every relevant slot resolved to "unknown". */
+        var cardName = liveNameField(omicComponentOf(input));
+        var typed = cardName && cardName.getValue && cardName.getValue();
         return openDrawer(input, file, fieldName, {
-            omicType: fieldValue(prefix + "_omic_name") || "unknown",
+            omicType: (typed && String(typed).trim()) || fieldValue(prefix + "_omic_name") || "unknown",
             species: fieldValue("specie") || "unknown",
             slotRole: slotRole || "values"
         });

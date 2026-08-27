@@ -199,6 +199,10 @@ class BlankIdentifierTest(unittest.TestCase):
                  "rows": [["a", "b", "c", "d"], ["e", "f", "g", "h"]]},
                 {"name": "blank-association", "role": "associations",
                  "rows": [["ENSMUSG1", "mmu-miR-1"], ["", "mmu-miR-2"]]},
+                # One column per condition: a gene not relevant in condition 1
+                # has an empty first cell. That is the format (example 03).
+                {"name": "per-condition-relevant", "role": "relevant",
+                 "rows": [["ENSMUSG1", "ENSMUSG2"], ["", "ENSMUSG3"], ["ENSMUSG4", ""]]},
             ]),
         })}
         cls.names = run_node(NAME_FIELD % {
@@ -251,9 +255,19 @@ class BlankIdentifierTest(unittest.TestCase):
         self.assertTrue(self.reports["shipped-targets"]["ok"],
                         self.reports["shipped-targets"]["codes"])
 
-    def test_two_columns_are_accepted_and_four_are_not(self):
+    def test_a_per_condition_relevance_list_is_not_a_blank_identifier(self):
+        """The shipped 03 example was refused as "627 rows of 895 have no
+        identifier": a per-condition list has blank cells by design, and the
+        server's parseSignificativeFeaturesFile skips them."""
+        report = self.reports["per-condition-relevant"]
+        self.assertTrue(report["ok"], report["codes"])
+        self.assertIsNone(report["blank"])
+
+    def test_two_columns_are_accepted_and_so_are_four(self):
+        """miRNA2Target.py reads line[0] and line[1] and ignores the rest, and
+        runMORE.R documents a third column: extra columns are not a fault."""
         self.assertTrue(self.reports["two-column-targets"]["ok"])
-        self.assertFalse(self.reports["four-column-targets"]["ok"])
+        self.assertTrue(self.reports["four-column-targets"]["ok"])
 
     def test_the_slot_has_a_role(self):
         self.assertIn('mirnaTargetsFileSelector: "regulator-targets"', self.source)

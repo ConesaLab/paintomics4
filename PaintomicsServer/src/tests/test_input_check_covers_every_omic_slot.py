@@ -109,12 +109,14 @@ EXAMPLE_ROLES = {
     "proteomics_relevant.tab": "relevant",
     "transcription_factor_relevant.tab": "relevant",
     "transcription_factor_relevant_regulators.tab": "relevant",
-    "mirna_associations.tab": "associations",
+    "mirna_associations.tab": "regulator-targets",
     # miRNA / gene / PLR -- the miRNA2Genes prediction table, which is NOT the
     # two-column associations contract its name suggests; it has its own.
     "mirna_to_gene_associations.tab": "regulator-targets",
-    "transcription_factor_associations.tab": "associations",
+    "transcription_factor_associations.tab": "regulator-targets",
     "mmu_mirBase_to_ensembl.tab": "regulator-targets",   # same three-column shape
+    # MORE's associations slot takes 2 or 3 columns (runMORE.R), so it is the
+    # regulator-targets contract too; the two-column rule refused a third.
     "experimental_design.tab": "design",
     "synthetic_mmu.gtf": None,          # not a delimited contract; never checked
 }
@@ -142,8 +144,15 @@ def declared_slots():
         window = source[match.start():match.start() + 900]
         window = window[:window.find("\n\t\t\t\t},")] if "\n\t\t\t\t}," in window else window
         found = re.search(r'itemId:\s*"(\w+)"', window)
-        if found:
-            slots.add(found.group(1))
+        if not found:
+            # A selector without an itemId has NO role and goes unchecked --
+            # exactly how MORE's "Add another Regulatory Omic" slots escaped
+            # (the same decimal-comma file was flagged in file_0 and passed in
+            # file_1). This used to skip them silently.
+            raise AssertionError("a myFilesSelectorButton without an itemId at "
+                                 "PA_Step1Views.js offset %d cannot be checked: %s"
+                                 % (match.start(), window[:160].replace("\n", " ")))
+        slots.add(found.group(1))
     return slots
 
 
@@ -248,14 +257,17 @@ class InputCheckCoversEverySlotTest(unittest.TestCase):
         Every one of these files runs today, so any of them failing its role
         means the check would now refuse a submit that works.
         """
-        cases, seen = [], set()
+        # Every PATH, not every basename: the 11 datasets reuse names, and
+        # deduplicating on the name skipped 23 of the 50 shipped files --
+        # among them 03's per-condition relevance list, the one file the
+        # blank-identifier rule was refusing.
+        cases = []
         for path in sorted(glob.glob(os.path.join(DATASETS, "*", "data", "*"))):
             name = os.path.basename(path)
             role = EXAMPLE_ROLES.get(name)
-            if role is None or name in seen:
+            if role is None:
                 continue
-            seen.add(name)
-            cases.append({"file": name, "role": role, "path": path})
+            cases.append({"file": os.path.relpath(path, DATASETS), "role": role, "path": path})
 
         results = run_node(VALIDATE_SCRIPT % {
             "jsdir": json.dumps(JS_DIR),

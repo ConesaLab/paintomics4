@@ -4428,18 +4428,30 @@ function MORESubmittingPanel(nElem, options) {
 								xtype: "myFilesSelectorButton",
 								fieldLabel: 'Regulators expression file',
 								namePrefix: 'file_' + i,
+								/* The same itemIds as the first regulator's
+								   selectors: the input check keys its
+								   contract on the slot's itemId, and without
+								   one these three went completely unchecked
+								   (measured: the same decimal-comma file was
+								   flagged in file_0 and passed silently in
+								   file_1). Siblings may share an itemId; the
+								   check reaches it through up(), not
+								   queryById. */
+								itemId: "mainFileSelector",
 								helpTip: "Upload the quantification file (i.e. miRNA Quantification) or choose it from your data folder. See above the accepted format for the file."
 							},
 							{
 								xtype: "myFilesSelectorButton",
 								fieldLabel: 'Relevant regulators file<br>(optional)',
 								namePrefix: 'relevant_file_' + i,
+								itemId: "moreRelevantFileSelector",
 								helpTip: "Upload the list of relevant (differentially expressed) features (TAB format) or choose it from your data folder. See above the accepted format for the file."
 							},
 							{
 								xtype: "myFilesSelectorButton",
 								fieldLabel: 'Associations file',
 								namePrefix: 'assoc_file_' + i,
+								itemId: "moreAssociationsFileSelector",
 								helpTip: "Upload the reference file that relates each feature (i.e. miRNA) with its potential targets. This information is usually extracted from popular databases such as miRbase for miRNAs. See above the accepted format for the file."
 							},
 							{

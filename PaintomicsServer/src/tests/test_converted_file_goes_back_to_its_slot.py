@@ -213,7 +213,7 @@ class ConvertedFileGoesBackToItsSlotTest(unittest.TestCase):
         """The one line that caused this."""
         code = re.sub(r"/\*.*?\*/", "", self.drawer, flags=re.S)
         self.assertNotIn("if (out.values.length) actions.appendChild(accept)", code)
-        self.assertIn("if (out.values.length || forSlot) actions.appendChild(accept)", code)
+        self.assertIn("if ((wantsValues && out.values.length) || forSlot) actions.appendChild(accept)", code)
 
 
 if __name__ == "__main__":

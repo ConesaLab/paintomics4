@@ -81,8 +81,8 @@ const assoc = [["G1","R1"], ["G1","R2"], ["G2","R1"]];
 
 const dupCode = (r) => (r.problems||[]).filter(p => p.code === "DUPLICATE_IDENTIFIER");
 const out = {};
-const check = (name, role, rows) => {
-    const report = API.validateForRole(role, rows);
+const check = (name, role, rows, options) => {
+    const report = API.validateForRole(role, rows, undefined, options);
     const found = dupCode(report);
     out[name] = { ok: !!report.ok, flagged: found.length > 0,
                   detail: found.length ? found[0].detail : null };
@@ -90,10 +90,12 @@ const check = (name, role, rows) => {
 
 check("values_clean",      "values", clean);
 check("values_dupes",      "values", dupes);
+check("values_dupes_more", "values", dupes, { strictKeys: true });
+out.values_dupes.summary = API.validateForRole("values", dupes).summary;
 check("design_clean",      "design", design);
 check("design_dupes",      "design", dupDesign);
 check("regions_clean",     "values", regions);
-check("regions_dupes",     "values", dupRegions);
+check("regions_dupes",     "values", dupRegions, { strictKeys: true });
 check("assoc_many_to_one", "associations", assoc);
 check("relevant_repeats",  "relevant", [["G1"],["G1"],["G2"]]);
 
@@ -125,10 +127,20 @@ class DuplicateIdentifiersAreRefusedTest(unittest.TestCase):
 
     # -- the rule ----------------------------------------------------------
 
-    def test_a_repeated_identifier_is_refused_in_a_values_file(self):
-        """The regression: this file got a green tick and killed the job."""
-        self.assertTrue(self.r["values_dupes"]["flagged"])
-        self.assertFalse(self.r["values_dupes"]["ok"])
+    def test_a_repeated_identifier_is_refused_in_a_more_values_file(self):
+        """The regression: this file got a green tick and killed the MORE job
+        (runMORE.R row.names=1). strictKeys is what a MORE slot passes."""
+        self.assertTrue(self.r["values_dupes_more"]["flagged"])
+        self.assertFalse(self.r["values_dupes_more"]["ok"])
+
+    def test_a_repeat_outside_more_is_advisory(self):
+        """Everywhere else the server MERGES repeats (Job.addInputGeneData),
+        so a hard block was a false "the server will reject this file" -- it
+        refused a user's kinase table and PaintOmics' own miRNA2Genes output,
+        and took the decimal-comma repair away from files carrying both."""
+        self.assertFalse(self.r["values_dupes"]["flagged"])
+        self.assertTrue(self.r["values_dupes"]["ok"])
+        self.assertEqual(self.r["values_dupes"]["summary"]["duplicates"]["worst"], "G1")
 
     def test_a_repeated_sample_is_refused_in_a_design_file(self):
         """runMORE.R intersects sample names; a repeat breaks the same read."""
@@ -137,7 +149,7 @@ class DuplicateIdentifiersAreRefusedTest(unittest.TestCase):
 
     def test_the_message_carries_the_numbers(self):
         """"You have duplicates" sends someone hunting; the count says where."""
-        detail = self.r["values_dupes"]["detail"]
+        detail = self.r["values_dupes_more"]["detail"]
         self.assertEqual(detail["ids"], 1)
         self.assertEqual(detail["worst"], "G1")
         self.assertEqual(detail["worstCount"], 3)
