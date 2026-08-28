@@ -161,8 +161,14 @@ PUBLISHED = {
     # .pa-hub-tab, .pa-hub-facet, .pa-hub-conns and the scroll fade live -- a
     # browser keeping the v=1.9 script would build markup those rules describe
     # while a browser keeping the old CSS would render the new markup unstyled.
+    # v=2.6 removes the single-fill DE direction. A node carries one wedge per
+    # condition now, painted by getColor against that omic's own distribution
+    # summary, so it agrees with the heatmap in the card by construction. It
+    # ships with network-views.css v=2.3, which is where .sw.de and the
+    # tooltip's value table live -- a browser keeping the old CSS would show
+    # the legend's wedge swatch as a plain hollow circle.
     "app/view/PathwayAcquisitionViews/PA_Step3HubNetworkView.js": (
-        "2.5", "f06fdb156681d2b0d607d272d3c884e88940228d828553031dfe6e37d90d9852"),
+        "2.6", "41a98d56055e548d69fb1adc90914059dd1c93665da83fcaab6989509f8fed22"),
     # v=0.9 adds SERVER_URL_PA_PATHWAY_EVIDENCE. The endpoint was added at
     # v=0.8 WITHOUT a bump, which this guard caught: a returning browser keeps
     # this file for up to 12 hours, so the evidence overlay would have POSTed

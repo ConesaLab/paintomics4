@@ -32,6 +32,7 @@ STEP3_VIEWS = os.path.join(CLIENT, "app", "view", "PathwayAcquisitionViews",
 HUB_NETWORK_VIEW = os.path.join(CLIENT, "app", "view",
                                 "PathwayAcquisitionViews",
                                 "PA_Step3HubNetworkView.js")
+SERVER_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 def extract(source, name):
@@ -296,18 +297,79 @@ class HubNetworkViewContractTest(unittest.TestCase):
 
     def test_hop_distance_is_not_encoded_as_colour(self):
         """Rings already carry distance; spending hue on it too would leave
-        nothing for DE direction, which is what the panel exists to show."""
+        nothing for the expression values, which is what the panel exists to
+        show."""
         body = self.source()
-        self.assertIn("node[state = 'up']", body)
-        self.assertIn("node[state = 'down']", body)
+        self.assertIn("node[state = 'de']", body)
         self.assertNotIn('"background-color": "data(step)"', body)
 
-    def test_uses_the_validated_palette(self):
-        """CVD dE 21.6 / normal-vision 32.3, checked with the palette validator.
-        A casual colour edit should have to come past this test."""
+    def test_direction_is_never_reduced_to_one_colour(self):
+        """The bug this encoding replaced, stated as a test.
+
+        `stateOf` returned `values[0] < 0 ? "down" : "up"`, so a feature with
+        one value per condition was painted from condition 1 alone. On the
+        STATegra job that made citric acid RED -- "up" -- while the heatmap
+        directly beneath it fell from +0.22 at 0h to -0.34 at 24h, and across
+        that job's DE features the first condition disagrees with the
+        largest-magnitude one for 26% of genes and 68% of metabolites.
+
+        No summary rule replaces it, because none of them is right: moanin,
+        which exists to reduce a time course to a single fold change, documents
+        that a feature moving in both directions cannot be summarised by one.
+        So the states themselves are gone, and this test keeps them gone -- any
+        of them coming back means some condition is speaking for the others.
+        """
+        code = self.code()
+        self.assertNotIn("\"up\"", code)
+        self.assertNotIn("\"down\"", code)
+        self.assertNotIn("state = 'up'", code)
+        self.assertNotIn("state = 'down'", code)
+        self.assertNotIn("values[0]", code)
+
+    def test_the_node_face_is_painted_by_the_heatmap_s_own_functions(self):
+        """The node and the figure under it must be ONE calculation.
+
+        They disagreed because they were two: the heatmap ran the omic's values
+        through getMinMax + getColor against that omic's distribution summary,
+        and the node ran a sign test. Reading the same two functions with the
+        same default reference is what makes a repeat of that impossible --
+        verified live on the STATegra job, where all six of citric acid's
+        wedges are byte-identical colour strings to the six heatmap cells.
+        """
         body = self.source()
-        self.assertIn("#e34948", body)
-        self.assertIn("#2a78d6", body)
+        self.assertIn("paHubWedgeImage", body)
+        self.assertIn("getMinMax(summaries[omicName], PA_DEFAULT_COLOR_REFERENCE)", body)
+        self.assertIn("getColor(limits, value, PA_DEFAULT_COLOR_SCALE)", body)
+        self.assertIn('"background-image": "data(wedges)"', body)
+
+    def test_the_wedge_clip_keeps_the_shape_language(self):
+        """Compounds are diamonds and genes are ellipses, and that survives.
+
+        cytoscape's own `pie-*` styles draw a CIRCLE whatever the node's shape
+        is, so slicing a compound through them would silently erase the diamond
+        that tells it apart from a gene -- measured in the browser before this
+        was written. The clip is therefore drawn in the SVG, and cytoscape is
+        told not to clip again.
+        """
+        body = self.source()
+        self.assertIn("M50 0 L100 50 L50 100 L0 50 Z", body)   # the diamond
+        self.assertIn('<circle cx="50" cy="50" r="50"/>', body)
+        self.assertIn('"background-clip": "none"', body)
+        self.assertNotIn("pie-size", self.code())
+
+    def test_the_omic_behind_a_node_is_named(self):
+        """globalExpressionData is omicsValues[0] and nothing else -- one omic,
+        whichever the job uploaded. Without its NAME there is no distribution
+        summary to scale it against, so the server has to send it."""
+        self.assertIn("omicNameOf", self.source())
+        with open(
+            os.path.join(SERVER_ROOT, "classes", "JobInstances",
+                         "PathwayAcquisitionJob.py"), "r", encoding="utf-8"
+        ) as handle:
+            job = handle.read()
+        self.assertEqual(
+            2, job.count("'omicName': self.input"),
+            "globalExpressionData must name its omic for genes AND compounds")
 
     def test_labels_are_selective(self):
         """Radius 4 can reach thousands of nodes; a label on each is unreadable."""
@@ -735,16 +797,15 @@ class ConnectionsModelTest(unittest.TestCase):
         """DE concentration is the claim the whole panel exists to show, so a
         DE neighbour must never sort below a gene nobody measured."""
         out = self.run_model("""
-        var edges = ["quietOne", "absentOne", "downOne", "upOne"].map(function (t) {
+        var edges = ["quietOne", "absentOne", "deOne"].map(function (t) {
           return { source: "hub", target: t, kind: "ECrel", subtype: "", pathway: "p1" };
         });
-        var STATE = { quietOne: "quiet", absentOne: "absent",
-                      downOne: "down", upOne: "up" };
+        var STATE = { quietOne: "quiet", absentOne: "absent", deOne: "de" };
         function describe(id) { return { name: id, state: STATE[id] || "absent" }; }
         var m = paHubConnections(edges, "hub", describe);
         console.log(JSON.stringify(m.groups[0].rows.map(function (r) { return r.state; })));
         """)
-        self.assertEqual(out, ["up", "down", "quiet", "absent"])
+        self.assertEqual(out, ["de", "quiet", "absent"])
 
     def test_pathways_are_ranked_by_how_much_de_they_carry(self):
         """A pathway holding the DE neighbours outranks a bigger one that
@@ -756,7 +817,7 @@ class ConnectionsModelTest(unittest.TestCase):
           { source: "hub", target: "q2", kind: "ECrel", subtype: "", pathway: "big" },
           { source: "hub", target: "q3", kind: "ECrel", subtype: "", pathway: "big" }
         ];
-        var STATE = { u1: "up", q1: "quiet", q2: "quiet", q3: "quiet" };
+        var STATE = { u1: "de", q1: "quiet", q2: "quiet", q3: "quiet" };
         function describe(id) { return { name: id, state: STATE[id] || "absent" }; }
         var m = paHubConnections(edges, "hub", describe);
         console.log(JSON.stringify(m.groups.map(function (g) { return g.pathway; })));
@@ -793,11 +854,11 @@ class ConnectionsModelTest(unittest.TestCase):
           { source: "hub", target: "a", kind: "ECrel", subtype: "", pathway: "p1" },
           { source: "hub", target: "a", kind: "PPrel", subtype: "", pathway: "p2" }
         ];
-        function describe(id) { return { name: id, state: "up" }; }
+        function describe(id) { return { name: id, state: "de" }; }
         var m = paHubConnections(edges, "hub", describe);
         console.log(JSON.stringify(m.states));
         """)
-        self.assertEqual(out["up"], 1)
+        self.assertEqual(out["de"], 1)
 
     def test_direction_survives_so_reciprocal_edges_stay_distinct(self):
         """KEGG records Ggt1->Chac1 AND Chac1->Ggt1 as two ECrel edges in
