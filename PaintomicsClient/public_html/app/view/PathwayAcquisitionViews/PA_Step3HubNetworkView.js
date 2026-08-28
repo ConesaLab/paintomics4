@@ -1213,11 +1213,22 @@ function PA_Step3HubNetworkView() {
 		}
 	};
 
-	/** The clicked node's connections, as the model behind the card. */
+	/**
+	 * The clicked node's connections, as the model behind the card.
+	 *
+	 * Scoped to the CURRENT STEP, because everything else in this panel is:
+	 * the ring chips gate the graph, the ring labels, and the notice above it.
+	 * At step 1 gene 27053 has 15 edges in the fetched subgraph and exactly one
+	 * of them is in view -- a card reading "Connections 15" beside a graph
+	 * lighting one edge is the same kind of untruth as the eight-row cap this
+	 * change removes. The count on the tab always equals what the graph lights.
+	 */
 	this.connectionsFor = function (node) {
 		var me = this;
 		var id = node.id();
-		var edges = node.connectedEdges().map(function (e) {
+		var edges = node.connectedEdges().filter(function (e) {
+			return !e.hasClass("dim");
+		}).map(function (e) {
 			return { source: e.data("source"), target: e.data("target"),
 			         kind: e.data("kind"), subtype: e.data("subtype"),
 			         pathway: e.data("pathway") };

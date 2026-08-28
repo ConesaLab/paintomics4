@@ -875,6 +875,16 @@ class NodeInspectorTest(unittest.TestCase):
         end = body.index("this.showNodeDetail = function", start)
         self.assertIn("focusEgo(null)", body[start:end])
 
+    def test_the_list_is_scoped_to_the_step_the_graph_is_showing(self):
+        """Everything else in the panel is step-scoped -- the chips, the ring
+        labels, the notice. At step 1 gene 27053 has 15 edges in the fetched
+        subgraph and one in view; a card reading "Connections 15" next to a
+        graph lighting one edge is the same untruth as the eight-row cap."""
+        body = self.code()
+        start = body.index("this.connectionsFor = function")
+        window = body[start:start + 700]
+        self.assertIn('hasClass("dim")', window)
+
     def test_the_drawer_separates_expression_from_connections(self):
         body = self.code()
         self.assertIn("pa-hub-tab", body)
