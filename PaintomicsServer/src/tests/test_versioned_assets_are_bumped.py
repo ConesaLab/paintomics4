@@ -104,8 +104,11 @@ PUBLISHED = {
     # the panel height it was computing, so the panel could only grow: a
     # 40-compound metabolite class pinned it at the 820 cap and every smaller
     # class after that kept the cap as blank space.
+    # v=2.5 drops revealPlotPanel and fitPlotPanel: the metabolite class
+    # detail opens inside its own card now, so nothing reveals or fits a
+    # separate plot panel any more.
     "app/view/common/Util.js": (
-        "2.4", "567f6bb041e2d3be89490b9b76a01940ff7865c45a97a902922ab88de605dd8f"),
+        "2.5", "ca790958fec8c7d7bc91d8bdf0e93710097fd8c7a08f106487dea7f226f47cf2"),
     "app/view/common/OrganismSearch.js": (
         "1.0", "7903626835e7703bdb6a1e31b78e3ca00539eee23b8fa67a37524cd9cc4d2e7f"),
     "app/view/common/ExtJS_extensions.js": (
