@@ -38,7 +38,8 @@ matrix with a stray value is rejected loudly rather than half-read.
 
 from collections import OrderedDict
 
-__all__ = ["parse_design", "derive_groupings", "looks_like_indicator_matrix"]
+__all__ = ["parse_design", "derive_groupings", "looks_like_indicator_matrix",
+           "factorPositions"]
 
 
 # Cells an indicator matrix is allowed to contain. "1.0"/"0.0" appear when a
@@ -261,3 +262,15 @@ def derive_groupings(replicateHeader, sampleHeader, mapping):
              values, columnToGroup)
 
     return groupings
+
+
+def factorPositions(conditionNames):
+    """Public name for :func:`_factor_positions`.
+
+    ``[(separator, position, [value, ...]), ...]`` -- the crossed factors a
+    set of condition names encodes. ClassActivity stratifies its permutation
+    test by the positions that are NOT the factor under study, so it needs
+    the positions themselves, not the groupings derive_groupings builds from
+    them.
+    """
+    return _factor_positions(list(conditionNames))

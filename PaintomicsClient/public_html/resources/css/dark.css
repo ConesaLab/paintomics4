@@ -1991,3 +1991,43 @@
 :root[data-theme="dark"] .paClassDetailClose { color: #8A99A9; }
 :root[data-theme="dark"] .paClassDetailTools { color: #A1B0C0; }
 :root[data-theme="dark"] .paClassDetailClose:hover { color: #E3EAF2; }
+
+/* Class activity ladder (Step 3). Additive, same tokens as the class map. */
+:root[data-theme="dark"] .paLadderSeg { background: #151D26; border-color: #3A4754; }
+:root[data-theme="dark"] .paLadderSeg button { color: #A1B0C0; border-right-color: #28333F; }
+:root[data-theme="dark"] .paLadderSeg button[aria-pressed="true"] { background: #4A8CD2; color: #0F1E30; }
+:root[data-theme="dark"] .paLadderSeg button small { color: #6F7F8E; }
+:root[data-theme="dark"] .paLadderSwitch, :root[data-theme="dark"] .paLadderExcluded,
+:root[data-theme="dark"] .paLadderExcluded summary, :root[data-theme="dark"] .paLadderMembers .paLadderNote { color: #A1B0C0; }
+:root[data-theme="dark"] .paLadderWarn { background: #2A2416; border-left-color: #B8892B; color: #C9D3DD; }
+:root[data-theme="dark"] .paLadder { background: #151D26; border-color: #28333F; }
+:root[data-theme="dark"] .paLadderHead { background: #1B242E; border-bottom-color: #28333F; color: #8A99A9; }
+:root[data-theme="dark"] .paLadderHead .paLadderAxis span { color: #8A99A9; }
+:root[data-theme="dark"] .paLadderHead .paLadderAxis span.paIsZero { color: #E3EAF2; }
+:root[data-theme="dark"] .paLadderRowWrap { border-bottom-color: #28333F; }
+:root[data-theme="dark"] .paLadderRow:hover, :root[data-theme="dark"] .paLadderRow[aria-expanded="true"] { background: #1B242E; }
+:root[data-theme="dark"] .paLadderRow.paIsSelected { background: #1E2C3B; }
+:root[data-theme="dark"] .paLadderTitle, :root[data-theme="dark"] .paLadderNum,
+:root[data-theme="dark"] .paLadderFBar .paLadderVal, :root[data-theme="dark"] .paLadderMembers td { color: #E3EAF2; }
+:root[data-theme="dark"] .paLadderCrumb, :root[data-theme="dark"] .paLadderSub,
+:root[data-theme="dark"] .paLadderP small, :root[data-theme="dark"] .paLadderMembers th { color: #6F7F8E; }
+:root[data-theme="dark"] .paLadderChip { border-color: #3A4754; color: #A1B0C0; }
+:root[data-theme="dark"] .paLadderChip.paIsWarn { border-color: #B8892B; color: #B8892B; }
+:root[data-theme="dark"] .paLadderRow.paIsDesc .paLadderName, :root[data-theme="dark"] .paLadderRow.paIsDesc .paLadderNum { color: #6F7F8E; }
+:root[data-theme="dark"] .paLadderFBar .paLadderTrack { background: #1B242E; }
+:root[data-theme="dark"] .paLadderFBar .paLadderFill, :root[data-theme="dark"] .paLadderMembers .paLadderMBar .paLadderFill { background: #7C93AD; }
+:root[data-theme="dark"] .paLadderRow.paIsDesc .paLadderFill, :root[data-theme="dark"] .paLadderMembers tr.paIsNs .paLadderFill { background: #35424F; }
+:root[data-theme="dark"] .paLadderFBar .paLadderZero, :root[data-theme="dark"] .paLadderMembers .paLadderMBar .paLadderZero { background: #3A4754; }
+:root[data-theme="dark"] .paLadderFBar .paLadderQ95 { background: #B8892B; }
+:root[data-theme="dark"] .paLadderFBar .paLadderQ95::after { border-top-color: #B8892B; }
+:root[data-theme="dark"] .paLadderStrip i { background: #2A3340; }
+:root[data-theme="dark"] .paLadderStrip i:hover { outline-color: #E3EAF2; }
+:root[data-theme="dark"] .paLadderPill { background: #E3EAF2; color: #151D26; }
+:root[data-theme="dark"] .paLadderPill.paIsNs { background: transparent; color: #6F7F8E; border-color: #3A4754; }
+:root[data-theme="dark"] .paLadderMembers { background: #131A22; border-top-color: #28333F; }
+:root[data-theme="dark"] .paLadderMembers th, :root[data-theme="dark"] .paLadderMembers td { border-bottom-color: #28333F; }
+:root[data-theme="dark"] .paLadderMembers tr.paIsNs td { color: #6F7F8E; }
+:root[data-theme="dark"] .paLadderExcluded li.paIsSig { color: #E3EAF2; }
+:root[data-theme="dark"] .paLadderTip { background: #E3EAF2; color: #151D26; }
+:root[data-theme="dark"] .paDesignNote { color: #A1B0C0; }
+:root[data-theme="dark"] .paClassTestDesign { background: #16241A; border-left-color: #4CAF50; color: #C9D3DD; }

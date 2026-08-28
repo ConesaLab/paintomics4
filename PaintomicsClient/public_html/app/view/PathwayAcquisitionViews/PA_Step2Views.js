@@ -250,72 +250,88 @@ function PA_Step2JobView() {
 			}
 
 			if (isCompoundBased) {
+				/* The class activity test this omic can support. With a design
+				   applied (replicate columns collapsed to conditions) the
+				   permutation test runs on the replicates and the threshold
+				   below is only the fallback; without one, the binomial on the
+				   relevant list runs against that threshold. */
+				var compoundOmic = (me.getModel().getCompoundBasedInputOmics() || []).filter(function (o) {
+					return o.omicName === omicName;
+				})[0] || {};
+				var design = paClassActivityDesign(compoundOmic);
+				if (design) {
+					thresholdMetaboliteClass.push({
+						xtype: 'box',
+						cls: 'paClassTestDesign',
+						html: '<p class="paClassTestDesign"><i class="fa fa-check-circle"></i> <b>' + Ext.String.htmlEncode(omicName)
+							+ '</b> carries ' + design.columns + ' sample columns in ' + design.conditions
+							+ ' conditions. The class activity test will be a <b>permutation test on your replicates</b>'
+							+ ' (' + design.replicates + ' per condition): for each class, the mean F of its metabolites for the'
+							+ ' factor chosen below, against re-labellings of that factor inside the other factors.'
+							+ ' The threshold below is used only if the permutation test cannot run.</p>'
+					});
+					if (design.factors.length > 1) {
+						thresholdMetaboliteClass.push({
+							xtype: 'combo',
+							fieldLabel: 'Factor to test',
+							name: 'thresholdMetaboliteClassFactor',
+							value: design.factors[0].id,
+							displayField: 'name', valueField: 'value',
+							editable: false, allowBlank: false,
+							labelAlign: 'left', labelWidth: 240, width: 460,
+							store: Ext.create('Ext.data.ArrayStore', {
+								fields: ['name', 'value'],
+								data: design.factors.map(function (f) { return [f.label, f.id]; })
+							}),
+							helpTip: "Your condition names encode more than one factor. The test asks whether each class responds to this one; the others are held as strata."
+						});
+					}
+				}
 				thresholdMetaboliteClass.push({
 					xtype: 'combo',
-					fieldLabel: 'Expected proportion of significant compounds',
+					fieldLabel: design ? 'Fallback: significance threshold of your relevant list'
+					                   : 'Significance threshold of your relevant list',
 					name: 'thresholdMetaboliteClass',
-					value: 'default',
+					value: 0.05,
 					displayField: 'name', valueField: 'value',
 					editable: true,
 					allowBlank: false,
 					/* The field is editable, and until this validator existed
-					   anything outside (0,1] was accepted here and then quietly
+					   anything outside (0,1) was accepted here and then quietly
 					   discarded by the server: compundsClassification only honours
-					   the value when `0 < threshold <= 1`
-					   (PathwayAcquisitionJob.py:2529), so "30", "0", "-0.5" and
+					   the value when `0 < threshold < 1`, so "30", "0", "-0.5" and
 					   "abc" all fell back to the automatic null. That is not a
 					   harmless fallback -- it swaps a self-contained test against
 					   the number you typed for a competitive test against the rest
 					   of your job, which is a different hypothesis, and nothing in
 					   the results said so. */
 					validator: function (value) {
-						if (value === 'default' || value === 'Generate automatically'
+						if (value === 'default' || value === 'Relative to this job (automatic)'
 							|| value === '' || value === null || value === undefined) {
 							return true;
 						}
 						var proportion = Number(value);
 						if (isNaN(proportion) || proportion <= 0 || proportion >= 1) {
-							return '"' + value + '" is not a proportion between 0 and 1. '
-								+ 'Enter a value such as 0.30, or choose "Generate automatically".';
+							return '"' + value + '" is not a threshold between 0 and 1. '
+								+ 'Enter the p-value or FDR cut-off you used, such as 0.05, or choose "Relative to this job".';
 						}
 						return true;
 					},
 					/* Same rail as the cluster combo above. */
 					labelAlign: 'left',
 					labelWidth: 240,
-					width: 300,
+					width: 460,
 					store: Ext.create('Ext.data.ArrayStore', {
 						fields: ['name', 'value'],
-						data: [['Generate automatically', 'default'],
-							['0.1', 0.1],
-							['0.2', 0.2],
-							['0.3', 0.3],
-							['0.4', 0.4],
-							['0.5', 0.5],
-							['0.6', 0.6],
-							['0.7', 0.7],
-							['0.8', 0.8],
-							['0.9', 0.9]]
+						data: [['0.01', 0.01],
+							['0.05', 0.05],
+							['0.10', 0.10],
+							['Relative to this job (automatic)', 'default']]
 						/* No 1.0. A null of 1.0 says "expect every compound in the
 						   class to be significant", which makes the one-sided
-						   binomial return exactly p = 1.0 for every class in the
-						   job while still rendering a full map -- an option whose
-						   only outcome is a guaranteed empty result. */
+						   binomial p = 1.0 for every class. */
 					}),
-					/* "Average percentage" is what the paragraph above this panel
-					   used to say and it is not what the code does.
-					   compundsClassification falls back to
-					   `totalRelevantFeatures / totalFeatures`
-					   (PathwayAcquisitionJob.py:2537) -- a POOLED proportion over
-					   the compounds br08001 can classify, not an average of
-					   per-class percentages, and not "your whole dataset" either:
-					   compounds BRITE cannot file are excluded from both halves.
-					   The two statistics differ whenever classes are unequally
-					   sized, which they always are. */
-					helpTip: "This analysis asks whether a class holds more significant compounds than expected, and this is where you say what 'expected' means. "
-						+ "'Generate automatically' compares each class with the rest of your job: the expected proportion is the proportion of significant compounds among those KEGG BRITE can classify, and the class being tested is part of that figure. "
-						+ "If most of your compounds changed - normal in a targeted assay - this bar is high and few classes will stand out. "
-						+ "Choosing a number instead compares each class with that fixed proportion and does not involve the rest of your data. These are different questions and can give opposite answers."
+					helpTip: "The p-value or FDR cut-off you used to build the relevant-features list. Under \"no member of this class changed\" each member is flagged only by a type-I error, at that rate, so 3 of 4 flagged is p = 0.0005 at 0.05. \"Relative to this job\" instead compares the class with the rest of your panel."
 				});
 
 			}
@@ -420,28 +436,26 @@ function PA_Step2JobView() {
 				layout: {type: 'vbox', align: 'stretch'},
 				cls: "contentbox", minHeight: 240, id: "threshold_box",
 				items: [{
-					html: '<h2 style="width: 100%;">Configure the metabolite class activity threshold</h2>'
+					html: '<h2 style="width: 100%;">Metabolite class activity test</h2>'
 				}, {
-					/* The old copy described only the manual branch -- "higher than
-					   a user-defined threshold" -- while the field defaults to the
-					   automatic one, which tests something else entirely: a
-					   competitive comparison against the rest of the job rather
-					   than a self-contained comparison against a constant. Both
-					   are named here because the choice below silently switches
-					   between them. */
-					html: '<p>A one-sided binomial test asks, for each metabolite class, whether it holds\n' +
-						'a higher proportion of significant compounds than expected. You choose what\n' +
-						'"expected" means:</p>' +
+					/* Two tests, chosen by what the data can support. The
+					   question each one answers is spelled out because they can
+					   give opposite answers on the same job. */
+					html: '<p>For each KEGG BRITE class (at three levels), PaintOmics asks <b>whether the class responds</b>.\n' +
+						'Which test runs depends on what you uploaded:</p>' +
 						'<ul style="margin: 0 0 10px 18px;">' +
-						'<li><b>Generate automatically</b> compares each class with the rest of your job -\n' +
-						'the proportion of significant compounds among those KEGG BRITE can classify.\n' +
-						'The class being tested is part of that figure. In a targeted assay where most\n' +
-						'compounds changed, this bar is high and few classes will stand out.</li>' +
-						'<li><b>A fixed proportion</b> compares each class with the number you set, and\n' +
-						'does not involve the rest of your data.</li>' +
+						'<li><b>Replicates and an experimental design</b> (one column per sample, plus the design that maps columns\n' +
+						'to conditions): a <b>permutation test on your replicates</b>. Per metabolite, an F-test for the chosen factor;\n' +
+						'per class, the mean F of its members against re-labellings of the factor. Self-contained, and it keeps the\n' +
+						'correlation between metabolites of a class.</li>' +
+						'<li><b>Ratios and a relevant list only</b>: a one-sided <b>binomial</b> on how many members are in your relevant\n' +
+						'list, against the significance threshold you used to build it (under "no member changed", each is flagged\n' +
+						'only by a type-I error at that rate). Valid when the list came from a statistical test; a fold-change\n' +
+						'cut-off has no such rate. "Relative to this job" instead asks whether the class is <i>more</i> relevant than\n' +
+						'the rest of your panel, which can never be significant when most of a targeted panel moves.</li>' +
 						'</ul>' +
-						'<p>These are different questions and can give opposite answers. P-values are\n' +
-						'corrected for multiple testing across the classes your data populates.</p>'
+						'<p>P-values are corrected across the classes of each level. Classes with fewer than three measured\n' +
+						'members are reported but marked descriptive.</p>'
 				},{
 					xtype: 'form',
 					maxWidth: 600,
@@ -1114,6 +1128,49 @@ function PA_Step2JobView() {
 	return this;
 }
 PA_Step2JobView.prototype = new View();
+
+
+/**
+* What the class activity test can use from a compound omic's design, or null.
+*
+* Mirrors src/common/DesignFile._factor_positions: a token position of the
+* condition names is a factor when every name splits into the same number of
+* tokens and the position takes more than one value but fewer than all. Ids
+* are "factor<position>" so the server resolves the same choice.
+*/
+function paClassActivityDesign(omic) {
+	var mapping = omic.replicateMapping || [];
+	var sampleHeader = omic.sampleHeader || [];
+	var columns = (omic.omicHeader || []).length - 1;
+	if (!mapping.length || !sampleHeader.length || mapping.length !== columns) { return null; }
+	var counts = {};
+	mapping.forEach(function (m) { counts[m] = (counts[m] || 0) + 1; });
+	var replicates = Object.keys(counts).map(function (k) { return counts[k]; });
+	var factors = [];
+	["_", "-", "."].some(function (sep) {
+		var tokens = sampleHeader.map(function (name) { return name.split(sep); });
+		var width = tokens[0].length;
+		if (width < 2 || tokens.some(function (t) { return t.length !== width; })) { return false; }
+		for (var position = 0; position < width; position++) {
+			var values = [];
+			tokens.forEach(function (t) { if (values.indexOf(t[position]) === -1) { values.push(t[position]); } });
+			if (values.length > 1 && values.length < sampleHeader.length) {
+				factors.push({id: "factor" + position, label: values.slice(0, 4).join(", ") + (values.length > 4 ? "…" : "")
+					+ " (" + values.length + " levels)", levels: values.length});
+			}
+		}
+		return factors.length > 0;
+	});
+	/* The server's default is the factor with the fewest levels; offer it first. */
+	factors.sort(function (a, b) { return a.levels - b.levels; });
+	return {
+		columns: columns,
+		conditions: sampleHeader.length,
+		replicates: Math.min.apply(null, replicates) === Math.max.apply(null, replicates)
+			? replicates[0] : (Math.min.apply(null, replicates) + "–" + Math.max.apply(null, replicates)),
+		factors: factors
+	};
+}
 
 /***********************************************************************
 * PA_Step2ReplicateDetectionView

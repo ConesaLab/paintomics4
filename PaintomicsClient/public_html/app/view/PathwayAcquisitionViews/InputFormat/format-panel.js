@@ -78,7 +78,10 @@
            `associations` contract was refusing a file the server takes. */
         moreAssociationsFileSelector: "regulator-targets",
         secondaryAssociationFileSelector: "relevant-associations",
-        conditionsFileSelector: "design"
+        conditionsFileSelector: "design",
+        /* The metabolomics panel's experimental design: column -> condition,
+           long form or the MORE indicator matrix. */
+        designFileSelector: "design"
     };
 
     /* The omic-name field a card would actually submit.

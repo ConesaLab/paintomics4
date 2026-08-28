@@ -158,6 +158,32 @@
            MOREServlet._designPatternNames handles on purpose), and numeric
            levels such as Time 0/24/48. The design-matrix advice stays as
            advice; only what R rejects is refused here. */
+        /* Long form -- `column<TAB>condition`, one row per sample column, an
+           optional header -- is the other shape a design comes in. It is what
+           src/common/DesignFile.py parse_design reads for a metabolomics
+           design (and the Step-2 upload box accepts), so refusing it here
+           blocked a file the server takes. Every row two cells: unique
+           samples, no blank condition label. */
+        var longForm = body.every(function (r) { return r.length === 2; });
+        if (longForm) {
+            var seenSample = {};
+            body.forEach(function (r, i) {
+                var sample = String(r[0]).trim(), label = String(r[1]).trim();
+                if (!sample) {
+                    problems.push(problem("BLANK_IDENTIFIER", i, "A design row needs the sample column's name."));
+                    return;
+                }
+                if (!label) {
+                    problems.push(problem("NOT_ONE_CONDITION", i, "Sample " + JSON.stringify(sample) + " has no condition."));
+                }
+                if (seenSample[sample]) {
+                    problems.push(problem("DUPLICATE_IDENTIFIER", i, "Sample " + JSON.stringify(sample) + " appears twice."));
+                }
+                seenSample[sample] = true;
+            });
+            return { ok: problems.length === 0, problems: problems.slice(0, 10),
+                     summary: { nRows: body.length, nCols: 2, longForm: true } };
+        }
         var header = body[0];
         var samples = body.slice(1);
         var wide = samples.length && samples.every(function (r) { return r.length === header.length + 1; });

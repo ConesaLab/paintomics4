@@ -91,6 +91,7 @@ EXAMPLE_ROLES = {
     "gene_expression_values.tab": "values",
     "metabolomics_by_name_values.tab": "values",
     "metabolomics_values.tab": "values",
+    "metabolomics_replicates.tab": "values",
     "mirna_regulators.tab": "values",
     "mirna_unmapped_values.tab": "values",
     "mirna_values.tab": "values",

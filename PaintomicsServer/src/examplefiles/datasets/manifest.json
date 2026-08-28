@@ -784,6 +784,53 @@
         "Pathway enrichment on a real regulatory hand-off"
       ],
       "title": "STATegra \u2014 real expression against a real TF network (MORE)"
+    },
+    {
+      "conditions": [
+        "Ctr_0H",
+        "Ctr_2H",
+        "Ctr_6H",
+        "Ctr_12H",
+        "Ctr_18H",
+        "Ctr_24H",
+        "Ik_0H",
+        "Ik_2H",
+        "Ik_6H",
+        "Ik_12H",
+        "Ik_18H",
+        "Ik_24H"
+      ],
+      "databases": [
+        "KEGG"
+      ],
+      "id": "stategra-metabolomics-replicates",
+      "omics": [
+        {
+          "dataFile": "datasets/12-stategra-metabolomics-replicates/data/metabolomics_replicates.tab",
+          "designFile": "datasets/12-stategra-metabolomics-replicates/data/experimental_design.tab",
+          "enrichment": "features",
+          "omicName": "Metabolomics",
+          "omicType": "compound",
+          "relevantFile": "datasets/12-stategra-metabolomics-replicates/data/metabolomics_relevant.tab"
+        }
+      ],
+      "order": 12,
+      "organism": "mmu",
+      "pipeline": "pathway-acquisition",
+      "provenance": [
+        "The STATegra metabolomics time course (Gomez-Cabrero et al., Sci Data 6:256, 2019; MetaboLights MTBLS283) at SAMPLE level: 58 targeted GC-MS + LC-MS analytes x 36 samples (Ikaros-induced and control, six time points, three biological replicates), processed exactly as in the authors' script (13C internal-standard normalisation, batch 12 removed, fused, log, per-sample median centring) and converted to log2.",
+        "",
+        "Built by `src/AdminTools/scripts/exampledata/stategrametabolomics.py` from the deposited `Metabolomics_fused_log_mean_2019.txt`. The experimental design maps each column to its condition (`Ctr_0H` ... `Ik_24H`). The relevant list is derived by a recorded rule: per metabolite, the F-test for Ikaros (main effect plus Ikaros x time, adjusting for time) at BH < 0.05 -- 34 of 58."
+      ],
+      "references": [],
+      "simulated": false,
+      "summary": "The STATegra metabolomics with its 36 samples and an experimental design instead of six averaged ratios. Replicates are what let the metabolite class activity test ask whether a class responds at all (a permutation test on your own noise) rather than whether it is more changed than the rest of a panel that was picked to change.",
+      "tests": [
+        "Experimental design applied to a values file with one column per sample",
+        "Metabolite class activity: permutation test on replicates, at three BRITE levels",
+        "Direction of change per class over the time course"
+      ],
+      "title": "STATegra metabolomics \u2014 replicates and experimental design"
     }
   ],
   "seed": 20260809,

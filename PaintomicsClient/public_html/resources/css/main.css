@@ -9302,3 +9302,96 @@ div.contentbox .paClassMapKeys li { padding-left: 0; }
 .paClassDetailFigure { display: flex; align-items: flex-start; }
 .paClassDetailFigure .PA_step5_heatmapContainer { flex: none; }
 .paClassDetailFigure .PA_step5_plotContainer { flex: 1 1 320px; min-width: 320px; position: sticky; top: 8px; }
+
+/* ---------------------------------------------------------------------------
+   Metabolite class activity ladder (PA_Step3Views.drawClassLadder).
+   One row per class at the chosen BRITE level: name and size, the mean-F bar
+   with the permutation null's 95th percentile as a tick (or the k/n bar under
+   the binomial), the direction strip over conditions, |FC| and the p pill.
+   Colours come from the same tokens as the class map above; the direction
+   strip is painted by JS on the app's own bwr ramp.
+   --------------------------------------------------------------------------- */
+.paLadderBar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 22px; margin: 4px 0 12px; }
+.paLadderBar .paClassMapControlLabel { margin-right: 2px; }
+.paLadderSeg { display: inline-flex; border: 1px solid #B5C1CE; border-radius: 6px; overflow: hidden; background: #FFFFFF; }
+.paLadderSeg button { border: 0; background: transparent; padding: 5px 12px; cursor: pointer; color: #44556A;
+                      font: inherit; font-size: 13px; line-height: 1.2; border-right: 1px solid #E3E9EF; }
+.paLadderSeg button:last-child { border-right: 0; }
+.paLadderSeg button small { display: block; font-size: 10.5px; color: #78879A; }
+.paLadderSeg button[aria-pressed="true"] { background: #19589E; color: #FFFFFF; }
+.paLadderSeg button[aria-pressed="true"] small { color: rgba(255, 255, 255, .8); }
+.paLadderSwitch { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: #44556A; cursor: pointer; }
+.paLadderSwitch input { margin: 0; }
+.paLadderWarn { margin: 0 0 10px; padding: 8px 12px; border-left: 3px solid #B5761F; background: #FBF6EC;
+                color: #44556A; font-size: 13px; }
+.paLadder { border: 1px solid #E3E9EF; border-radius: 6px; overflow: hidden; background: #FFFFFF; }
+.paLadderHead, .paLadderRow { display: grid; grid-template-columns: minmax(200px, 1.4fr) minmax(200px, 1.6fr) 150px 60px 112px;
+                              gap: 14px; align-items: center; padding: 0 14px; }
+.paLadderHead { background: #F6F8FA; border-bottom: 1px solid #E3E9EF; height: 40px; font-size: 10.5px;
+                letter-spacing: .06em; text-transform: uppercase; color: #78879A; font-weight: 600; }
+.paLadderHead .paLadderAxis { position: relative; height: 100%; }
+.paLadderHead .paLadderAxis span { position: absolute; top: 50%; transform: translate(-50%, -50%); letter-spacing: 0;
+                                   text-transform: none; font-size: 10.5px; color: #78879A;
+                                   font-variant-numeric: tabular-nums; }
+.paLadderHead .paLadderAxis span.paIsZero { color: #141E2B; }
+.paLadderRowWrap { border-bottom: 1px solid #E3E9EF; }
+.paLadderRowWrap:last-child { border-bottom: 0; }
+.paLadderRow { width: 100%; background: transparent; border: 0; text-align: left; cursor: pointer; min-height: 54px;
+               padding-top: 8px; padding-bottom: 8px; font: inherit; color: inherit; }
+.paLadderRow:hover, .paLadderRow[aria-expanded="true"] { background: #F6F8FA; }
+.paLadderRow.paIsSelected { background: #E9F1F9; }
+.paLadderRow.paIsDesc .paLadderName, .paLadderRow.paIsDesc .paLadderNum { color: #8A98A8; }
+.paLadderRow.paIsDesc .paLadderFill { background: #C4CFDA; }
+.paLadderName { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.paLadderCrumb { font-size: 11px; color: #78879A; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.paLadderTitle { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 14px; color: #141E2B; }
+.paLadderChip { font-size: 10.5px; padding: 1px 6px; border-radius: 99px; border: 1px solid #B5C1CE; color: #44556A;
+                font-weight: 400; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.paLadderChip.paIsWarn { border-color: #B5761F; color: #B5761F; }
+.paLadderSub { font-size: 12px; color: #78879A; }
+.paLadderFBar { position: relative; height: 26px; }
+.paLadderFBar .paLadderTrack { position: absolute; top: 8px; bottom: 8px; left: 0; right: 0; background: #F1F5F8; border-radius: 2px; }
+.paLadderFBar .paLadderFill { position: absolute; top: 8px; bottom: 8px; left: 0; background: #4A6785; border-radius: 2px; }
+.paLadderFBar .paLadderZero { position: absolute; top: 2px; bottom: 2px; width: 1px; background: #B5C1CE; }
+.paLadderFBar .paLadderQ95 { position: absolute; top: 0; bottom: 0; width: 2px; background: #B5761F; }
+.paLadderFBar .paLadderQ95::after { content: ""; position: absolute; left: -3px; top: -1px; border: 4px solid transparent;
+                                    border-top: 5px solid #B5761F; }
+.paLadderFBar .paLadderVal { position: absolute; top: 50%; transform: translateY(-50%); font-size: 11.5px; padding-left: 6px;
+                             color: #141E2B; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.paLadderStrip { display: grid; grid-template-columns: repeat(var(--pa-strip-n, 6), 1fr); gap: 2px; height: 26px; }
+.paLadderStrip i { display: block; border-radius: 2px; background: #E8E8E8; }
+.paLadderStrip i:hover { outline: 2px solid #141E2B; outline-offset: -1px; }
+.paLadderNum { font-size: 12.5px; color: #141E2B; font-variant-numeric: tabular-nums; text-align: right; }
+.paLadderP { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+.paLadderPill { font-size: 11.5px; padding: 2px 8px; border-radius: 99px; background: #141E2B; color: #FFFFFF;
+                font-weight: 600; font-variant-numeric: tabular-nums; }
+.paLadderPill.paIsNs { background: transparent; color: #78879A; border: 1px solid #B5C1CE; font-weight: 400; }
+.paLadderP small { font-size: 10.5px; color: #78879A; font-variant-numeric: tabular-nums; }
+.paLadderMembers { background: #F9FBFC; border-top: 1px dashed #E3E9EF; padding: 10px 14px 12px 30px; }
+.paLadderMembers table { border-collapse: collapse; width: 100%; font-size: 13px; }
+.paLadderMembers th { text-align: left; font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: #78879A;
+                      font-weight: 600; padding: 4px 10px 6px 0; border-bottom: 1px solid #E3E9EF; }
+.paLadderMembers td { padding: 5px 10px 5px 0; border-bottom: 1px solid #E3E9EF; vertical-align: middle; color: #141E2B; }
+.paLadderMembers tr:last-child td { border-bottom: 0; }
+.paLadderMembers td.paIsRight, .paLadderMembers th.paIsRight { text-align: right; }
+.paLadderMembers .paLadderMini { width: 150px; }
+.paLadderMembers .paLadderMini .paLadderStrip { height: 18px; }
+.paLadderMembers .paLadderMBar { position: relative; height: 16px; width: 150px; }
+.paLadderMembers .paLadderMBar .paLadderFill { position: absolute; top: 4px; bottom: 4px; left: 0; background: #4A6785; border-radius: 2px; }
+.paLadderMembers .paLadderMBar .paLadderZero { position: absolute; top: 0; bottom: 0; width: 1px; background: #B5C1CE; }
+.paLadderMembers tr.paIsNs td { color: #8A98A8; }
+.paLadderMembers tr.paIsNs .paLadderFill { background: #C4CFDA; }
+.paLadderMembers .paLadderNote { font-size: 12.5px; color: #44556A; margin: 0 0 8px; }
+.paLadderMembers .paLadderNote b { color: #141E2B; }
+.paLadderMembers .paLadderOpen { margin: 8px 0 0; }
+.paLadderMembers .paLadderOpen a { font-size: 12.5px; }
+.paLadderExcluded { margin: 12px 0 0; font-size: 12.5px; color: #44556A; }
+.paLadderExcluded summary { cursor: pointer; color: #44556A; }
+.paLadderExcluded ul { margin: 6px 0 0 18px; padding: 0; columns: 2; column-gap: 24px; }
+.paLadderExcluded li { padding: 1px 0; }
+.paLadderExcluded li.paIsSig { font-weight: 600; color: #141E2B; }
+.paLadderTip { position: fixed; z-index: 20000; pointer-events: none; background: #141E2B; color: #FFFFFF; font-size: 12px;
+               padding: 5px 8px; border-radius: 4px; white-space: nowrap; display: none; }
+.paDesignNote { margin: 0 0 6px 155px; font-size: 12px; color: #52525B; max-width: 62ch; }
+.paClassTestDesign { margin: 0 0 10px; padding: 8px 12px; border-left: 3px solid #247B21; background: #F1F8F0;
+                     color: #3F3F46; font-size: 13px; max-width: 70ch; }

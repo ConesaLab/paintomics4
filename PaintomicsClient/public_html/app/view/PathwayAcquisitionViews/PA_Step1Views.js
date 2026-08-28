@@ -2481,6 +2481,10 @@ function OmicSubmittingPanel(nElem, options) {
 		setExampleLabel(component.queryById("mainFileSelector"), label + " — values");
 		setExampleLabel(component.queryById("secondaryFileSelector"),
 			label + " — relevant features");
+		var design = component.queryById("designFileSelector");
+		if (design && !design.hidden) {
+			setExampleLabel(design, label + " — experimental design");
+		}
 	};
 	/*********************************************************************
 	* COMPONENT DECLARATION
@@ -2599,6 +2603,34 @@ function OmicSubmittingPanel(nElem, options) {
 								filters: [{property: 'type', value : 'list'}]
 							}),
 							helpTip: "Specify the type of data for uploaded file (Relevant Genes list, Relevant proteins list,...)."
+						}, {
+							/* Metabolomics only. A values file with one column per
+							   SAMPLE plus this design (column -> condition) is what
+							   lets the class activity test run on the replicates:
+							   it asks whether a chemical class responds at all, on
+							   the data's own noise, instead of whether it is more
+							   changed than the rest of a panel picked to change.
+							   Without it the test is a binomial on the relevant
+							   list against the significance threshold used to
+							   build that list. Optional, and the panel is still
+							   valid without it. */
+							xtype: "myFilesSelectorButton",
+							fieldLabel: 'Experimental design',
+							namePrefix: this.namePrefix + '_design',
+							itemId: "designFileSelector",
+							hidden: this.mapTo !== "Compound",
+							helpTip: "Optional. A two-column file mapping each sample column of the data file to its condition " +
+								"(e.g. Ctr_0H_B1<tab>Ctr_0H), or a MORE-style 0/1 design matrix. Upload it together with a " +
+								"data file that has one column per sample."
+						}, {
+							xtype: 'box',
+							itemId: "designFileNote",
+							hidden: this.mapTo !== "Compound",
+							html: '<p class="paDesignNote"><b>With replicates and a design</b>, metabolite class activity runs a ' +
+								'permutation test on your own samples: "does this class respond to the factor at all?" ' +
+								'The values are collapsed to one column per condition for painting. ' +
+								'<b>Without them</b>, it runs a binomial test on the relevant-features list against the ' +
+								'significance threshold you used to build that list.</p>'
 						}, {
 							xtype: 'combo',
 							fieldLabel: 'Can be mapped to',

@@ -21,6 +21,7 @@ import glob
 import logging
 import math
 import os
+import numpy as np
 import re
 
 from os import path as os_path, makedirs as os_makedirs
@@ -49,6 +50,12 @@ from src.classes.Pathway import Pathway
 from src.classes.PathwayGraphicalData import PathwayGraphicalData
 
 from src.conf.serverconf import KEGG_DATA_DIR, MAX_THREADS, MAX_WAIT_THREADS, MAX_NUMBER_FEATURES
+# Defensive: a deployment whose serverconf predates the setting must not lose
+# the whole job class to an ImportError (see adding-a-serverconf-setting).
+try:
+    from src.conf.serverconf import CLASS_ACTIVITY_PERMUTATIONS
+except ImportError:
+    CLASS_ACTIVITY_PERMUTATIONS = int(os.getenv("PAINTOMICS_CLASS_ACTIVITY_PERMUTATIONS", "2000"))
 
 
 # ensure_utf8 lives in src/common/Util.py so the data-management jobs can
@@ -91,6 +98,10 @@ PAINTOMICS4_DICT_FIELDS = {
     # it is the field the Step 3 metabolite panels are gated on, so dropping it
     # cost the whole section on cold recovery.
     "exprssionMetabolites",
+    # Class activity at BRITE levels 1-3 with the test that ran (binomial on
+    # the relevant list, or the permutation test on replicates), per-class
+    # statistics and per-metabolite F/p. 58 metabolites x 3 levels is ~40 KB.
+    "classActivity",
 }
 
 # Large dict fields that stay in-memory cache only (too large for a single
@@ -321,6 +332,7 @@ class PathwayAcquisitionJob(Job):
         self.totalRelevantFeaturesInCategory = None
         self.featureSummary = None
         self.classificationMeta = None
+        self.classActivity = None
         self.compoundRegulateFeatures = None
 
         self.globalExpressionData = None
@@ -880,6 +892,15 @@ class PathwayAcquisitionJob(Job):
             return []
 
         candidates = []
+        # The omic's OWN design first: uploaded beside its values file in
+        # step 1, or declared by an example scenario (absolute path). It
+        # states the grouping for exactly this omic, so nothing else is
+        # tried before it.
+        own = inputOmic.get("designFile")
+        if own:
+            path = own if os.path.isabs(own) else os.path.join(inputDir, own)
+            if os.path.exists(path):
+                candidates.append(path)
         dataFile = os.path.basename(inputOmic.get("inputDataFile") or "")
         match = re.match(r"^MORE_output_.*_(\d+)\.tab$", dataFile)
         if match:
@@ -2815,10 +2836,274 @@ class PathwayAcquisitionJob(Job):
                         for className in classificationDict},
             "nullProportion": nullProportion_cond,
             "thresholdSource": "user" if usingUserThreshold else "auto",
+            # What the fixed number MEANS: a typed threshold is the alpha of
+            # the user's own per-metabolite test (H0: no member of the class
+            # changed), the derived one is the panel's relevant rate (H0: the
+            # class is like the rest of the panel). Different hypotheses.
+            "nullKind": "alpha" if usingUserThreshold else "relative",
+            "alpha": threshold if usingUserThreshold else None,
         }
         self.compoundRegulateFeatures = compoundRegulateFeatures
 
+        # The full analysis: every BRITE level, and the replicate-based
+        # permutation test when the compound omic carries a design. Never
+        # fatal -- the level-2 fields above are the contract every older
+        # client and test relies on, and a failure here must not cost them.
+        try:
+            relevantByFeature = {}
+            for key, items in classificationDict.items():
+                for item in items:
+                    comp = self.inputCompoundsData.get(item)
+                    if not (comp and comp.omicsValues):
+                        continue
+                    rel = comp.omicsValues[0].relevant
+                    rel = list(rel) if isinstance(rel, list) else [bool(rel)]
+                    relevantByFeature.setdefault(featureKeyOf(item), [bool(r) for r in rel])
+            self.classActivity = self._buildClassActivity(
+                metaboliteClassThreshold, featureKeyOf, nConditions,
+                relevantByFeature, nullProportion_cond,
+                "alpha" if usingUserThreshold else "relative",
+                threshold if usingUserThreshold else None)
+            self.classificationMeta["test"] = self.classActivity.get("test")
+        except Exception as ex:
+            logging.exception("CLASS ACTIVITY: the multi-level analysis failed (%s); "
+                              "the level-2 binomial result stands.", ex)
+            self.classActivity = None
+
         return self.mappingComp, self.pValueInDict, self.classificationDict, self.exprssionMetabolites, self.adjustPvalue, self.totalRelevantFeaturesInCategory, self.featureSummary, self.compoundRegulateFeatures
+
+    # ------------------------------------------------------------------
+    # Class activity at every BRITE level
+    # ------------------------------------------------------------------
+    def _compoundOmicForClassActivity(self):
+        """The compound omic whose values the class test reads, or None."""
+        omics = getattr(self, "compoundBasedInputOmics", None) or []
+        if not omics:
+            return None
+        for compound in self.inputCompoundsData.values():
+            if compound.omicsValues:
+                name = getattr(compound.omicsValues[0], "omicName", None)
+                for omic in omics:
+                    if omic.get("omicName") == name:
+                        return omic
+                break
+        return omics[0]
+
+    def _measuredCompoundNames(self, inputOmic):
+        """Every name in the first column of the omic's values file, lowercased.
+
+        The job keeps only the compounds KEGG matched; the ones it did not
+        match vanish from every later view. The class analysis lists them so
+        a reader can see what never had a chance to join a class.
+        """
+        if not inputOmic:
+            return []
+        fileName = inputOmic.get("inputDataFile") or ""
+        if not inputOmic.get("isExample", False) and fileName:
+            fileName = os.path.join(self.getInputDir(), fileName)
+        if not fileName or not os_path.isfile(fileName):
+            return []
+        names = []
+        try:
+            delimiter = Job.detect_delimiter(fileName)
+            with open(fileName, "r", encoding="utf-8-sig", newline="") as handle:
+                for n, line in enumerate(csv_reader(handle, delimiter=delimiter)):
+                    if not line or not line[0].strip():
+                        continue
+                    if n == 0:
+                        try:
+                            float(line[1])
+                        except (IndexError, ValueError):
+                            continue
+                    names.append(line[0].strip().lower())
+        except Exception as ex:
+            logging.warning("CLASS ACTIVITY: could not read %s for the unmatched list (%s)", fileName, ex)
+        return names
+
+    def _replicateDesignFor(self, inputOmic):
+        """``(sampleHeader, mapping, replicateHeader)`` when the omic carries an
+        applied design that covers its columns, else None."""
+        if not inputOmic:
+            return None
+        mapping = inputOmic.get("replicateMapping") or []
+        sampleHeader = inputOmic.get("sampleHeader") or []
+        header = inputOmic.get("omicHeader") or []
+        replicateHeader = header[1:] if len(header) > 1 else []
+        if not mapping or not sampleHeader or len(mapping) != len(replicateHeader):
+            return None
+        # A design that collapses nothing (one column per condition) is still
+        # returned: the replicate check in _buildClassActivity says WHY the
+        # permutation test cannot run, instead of this returning None in
+        # silence.
+        return list(sampleHeader), [int(m) for m in mapping], list(replicateHeader)
+
+    def _buildClassActivity(self, metaboliteClassThreshold, featureKeyOf, nConditions,
+                            relevantByFeature, nullPerCondition, nullKind, alpha):
+        """The class-activity payload the Step 3 ladder reads.
+
+        Shape::
+
+            {"test": "permutation" | "binomial", "nullKind": "alpha" | "relative",
+             "alpha": float | None, "nullProportion": [per condition],
+             "conditions": [labels of the direction columns],
+             "levels": {"1": [entry, ...], "2": [...], "3": [...]},
+             "features": {featureKey: {"name", "kegg", "relevant", "eff", ...}},
+             "excluded": {"unmatched": [names], "unclassified": [featureKeys]},
+             "factors": [...], "factor": id, "nPerm": int, "warnings": [str]}
+
+        Every level entry carries the binomial counts (``k``, ``binomial.p``,
+        ``binomial.bh`` per condition); under the permutation test it also
+        carries ``meanF``, ``p``, ``bh``, ``nullQ95`` and the direction strip.
+        """
+        import zlib
+        from src.common import ClassActivity as CA
+
+        brite = CA.loadBrite()
+        compoundIDsByFeature = defaultdict(list)
+        valuesByFeature = {}
+        namesByFeature = {}
+        for compoundID, compound in self.inputCompoundsData.items():
+            if not compound.omicsValues:
+                continue
+            key = featureKeyOf(compoundID)
+            compoundIDsByFeature[key].append(compoundID)
+            # Attribute access, like featureKeyOf above: the OmicValue contract
+            # is its fields, and the older class-activity tests drive this
+            # method with bare stand-ins that carry the fields and no getters.
+            omicValue = compound.omicsValues[0]
+            valuesByFeature.setdefault(key, list(getattr(omicValue, "values", None) or []))
+            namesByFeature.setdefault(key, getattr(omicValue, "originalName", None)
+                                      or getattr(omicValue, "inputName", None) or key)
+            relevant = getattr(omicValue, "relevant", [])
+            relevantByFeature.setdefault(key, [bool(r) for r in (relevant if isinstance(relevant, list) else [relevant])])
+        levels = CA.membershipsByLevel(compoundIDsByFeature, brite)
+        classified = set()
+        for entry in levels[2].values():
+            classified |= entry["members"]
+        unclassified = sorted(k for k in compoundIDsByFeature if k not in classified)
+
+        inputOmic = self._compoundOmicForClassActivity()
+        matchedNames = {k.lower() for k in compoundIDsByFeature}
+        unmatched = [n for n in self._measuredCompoundNames(inputOmic) if n not in matchedNames]
+
+        result = {
+            "test": "binomial", "nullKind": nullKind, "alpha": alpha,
+            "nullProportion": list(nullPerCondition), "nConditions": nConditions,
+            "conditions": [], "levels": {}, "features": {}, "warnings": [],
+            "excluded": {"unmatched": unmatched, "unclassified": unclassified},
+            "levelNames": {str(k): v for k, v in CA.LEVEL_NAMES.items()},
+            "factors": [], "factor": None, "nPerm": 0,
+        }
+
+        # Direction with no replicates: the values themselves (ratios), one
+        # column per condition of the values file.
+        header = (inputOmic or {}).get("omicHeader") or []
+        conditionLabels = [str(h) for h in header[1:]]
+        for key in compoundIDsByFeature:
+            values = [CA._finite(v) for v in valuesByFeature.get(key, [])]
+            result["features"][key] = {
+                "name": namesByFeature[key], "kegg": sorted(compoundIDsByFeature[key]),
+                "relevant": relevantByFeature.get(key, []), "values": values,
+            }
+
+        binomialByLevel = {level: CA.binomialClassTest(levels[level], relevantByFeature,
+                                                       nConditions, nullPerCondition)
+                           for level in (1, 2, 3)}
+
+        # ---- the permutation test, when the omic carries replicates + design
+        design = self._replicateDesignFor(inputOmic)
+        perm = None
+        factor = None
+        if design is not None:
+            sampleHeader, mapping, replicateHeader = design
+            factors = CA.designFactors(sampleHeader, mapping)
+            wanted = (metaboliteClassThreshold or {}).get("thresholdMetaboliteClassFactor")
+            factor = next((f for f in factors if f["id"] == wanted), None) \
+                or min(factors, key=lambda f: len(f["levels"]))
+            result["factors"] = [{"id": f["id"], "label": f["label"], "levels": f["levels"],
+                                  "nStrata": len(f["strataLabels"])} for f in factors]
+            result["factor"] = factor["id"]
+            # Every level x stratum cell needs two replicates or there is no
+            # residual variance to test against.
+            cells = defaultdict(int)
+            for lvl, st in zip(factor["columnLevel"], factor["strata"]):
+                cells[(lvl, st)] += 1
+            thin = [(factor["levels"][lvl], factor["strataLabels"][st])
+                    for (lvl, st), count in cells.items() if count < 2]
+            if thin:
+                result["warnings"].append(
+                    "The permutation test needs at least two replicates per condition; "
+                    + ", ".join(("%s %s" % (l, s)).strip() for l, s in thin[:4])
+                    + (" and more" if len(thin) > 4 else "")
+                    + " have one. The binomial test on your relevant list ran instead.")
+            else:
+                keys = sorted(compoundIDsByFeature)
+                rows = {k: i for i, k in enumerate(keys)}
+                width = len(mapping)
+                Y = np.full((len(keys), width), np.nan)
+                for k in keys:
+                    values = valuesByFeature.get(k) or []
+                    if len(values) == width:
+                        Y[rows[k]] = [v if isinstance(v, (int, float)) and math.isfinite(v)
+                                      else np.nan for v in values]
+                nPerm = max(100, int(CLASS_ACTIVITY_PERMUTATIONS))
+                seed = zlib.crc32(str(getattr(self, "jobID", "")).encode("utf-8"))
+                perm = CA.permutationClassTest(Y, factor, levels, rows, nPerm=nPerm, seed=seed)
+                result.update({"test": "permutation", "nPerm": nPerm,
+                               "conditions": list(perm["effects"]["labels"]),
+                               "transformed": bool(perm["transformed"]),
+                               "design": {"samples": width, "conditions": len(sampleHeader),
+                                          "strata": factor["strataLabels"],
+                                          "levels": factor["levels"]}})
+                if perm["transformed"]:
+                    result["warnings"].append(
+                        "Values looked like raw intensities (all positive, spanning more than "
+                        "50-fold) and were log2-transformed before testing.")
+                feats = perm["features"]
+                effects = perm["effects"]["values"]
+                for k, i in rows.items():
+                    entry = result["features"][k]
+                    entry.update({
+                        "F": CA._finite(feats["F"][i]), "p": CA._finite(feats["p"][i]),
+                        "bh": CA._finite(feats["bh"][i]),
+                        "sig": bool(np.isfinite(feats["bh"][i]) and feats["bh"][i] < 0.05),
+                        "eff": [CA._finite(v) for v in (effects[i].tolist() if effects.shape[1] else [])],
+                    })
+        if perm is None:
+            result["conditions"] = conditionLabels
+
+        # ---- assemble the levels
+        for level in (1, 2, 3):
+            entries = []
+            for key, cls in levels[level].items():
+                binom = binomialByLevel[level][key]
+                members = sorted(cls["members"])
+                entry = {
+                    "key": key, "name": cls["name"], "parent": cls["parent"], "path": cls["path"],
+                    "level": level, "n": len(members), "members": members,
+                    "k": binom["k"], "binomial": {"p": binom["p"], "bh": binom["bh"]},
+                }
+                if perm is not None:
+                    p = perm["levels"][level][key]
+                    entry.update({"meanF": CA._finite(p["meanF"]), "p": CA._finite(p["p"]),
+                                  "bh": CA._finite(p["bh"]), "nullQ95": CA._finite(p["nullQ95"]),
+                                  "nullMedian": CA._finite(p["nullMedian"]),
+                                  "nullMax": CA._finite(p["nullMax"]), "nsig": p["nsig"],
+                                  "tested": p["tested"], "eff": p["eff"], "E": p["E"]})
+                else:
+                    # Direction from the ratios: per condition, the mean of
+                    # the members' values.
+                    columns = list(zip(*[valuesByFeature.get(m) or [] for m in members
+                                         if len(valuesByFeature.get(m) or []) == len(conditionLabels)]))
+                    eff = []
+                    for column in columns:
+                        finite = [v for v in column if isinstance(v, (int, float)) and math.isfinite(v)]
+                        eff.append(float(np.mean(finite)) if finite else None)
+                    absolute = [abs(v) for v in eff if v is not None]
+                    entry.update({"eff": eff, "E": float(np.mean(absolute)) if absolute else None})
+                entries.append(entry)
+            result["levels"][str(level)] = entries
+        return result
 
     def getCompoundRegulateFeatures(self):
         """

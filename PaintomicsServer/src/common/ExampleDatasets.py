@@ -346,7 +346,7 @@ def declaredFiles(scenario):
     """Every path a scenario declares, as manifest-relative strings."""
     paths = []
     for omic in scenario.get("omics", []):
-        for key in ("dataFile", "relevantFile", "associationsFile"):
+        for key in ("dataFile", "relevantFile", "associationsFile", "designFile"):
             if omic.get(key):
                 paths.append(omic[key])
     for section in ("target", "design"):
@@ -443,6 +443,12 @@ def applyScenario(jobInstance, exampleFilesDir, scenarioId=None):
         if omic.get("relevantFile"):
             entry["relevantFeaturesFile"] = absolutePath(
                 exampleFilesDir, omic["relevantFile"])
+        # An experimental design (column -> condition) for a values file with
+        # one column per sample. The job applies it at step 1, which is what
+        # turns replicate columns into conditions for painting and lets the
+        # class activity test run on the replicates.
+        if omic.get("designFile"):
+            entry["designFile"] = absolutePath(exampleFilesDir, omic["designFile"])
         if omic.get("enrichment"):
             entry["enrichment"] = omic["enrichment"]
         # Carried onto the job so the regulator/target pairing survives past

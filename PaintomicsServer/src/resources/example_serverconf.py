@@ -284,3 +284,8 @@ MORE_RS_BINARY = os.getenv("PAINTOMICS_MORE_RS", "")
 # Raise it only in step with the queue timeout -- a budget above that just
 # moves the failure back to where it was. Set it to 0 to disable the check.
 MORE_RUNTIME_BUDGET_SECONDS = int(os.getenv("PAINTOMICS_MORE_RUNTIME_BUDGET", "1800"))
+
+# Metabolite class activity: label shuffles behind the permutation test that
+# runs when a compound omic carries replicates and a design. The smallest
+# reachable p is 1/(N+1); 2000 costs ~1 s on a 60 x 36 matrix. Floor of 100.
+CLASS_ACTIVITY_PERMUTATIONS = int(os.getenv("PAINTOMICS_CLASS_ACTIVITY_PERMUTATIONS", "2000"))

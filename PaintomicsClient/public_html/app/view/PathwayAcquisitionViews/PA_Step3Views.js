@@ -5834,6 +5834,12 @@ function PA_Step3MetaboliteView() {
 	   check. */
 	let classifiableTotal = 0;
 	let classifiableRelevant = [];   // per condition, like nullProportion
+	/* The multi-level class activity payload (null on older jobs) and the
+	   ladder's own view state; the ladder replaces the level-2 ranking
+	   whenever the payload exists. */
+	let classActivity = null;
+	let ladderState = {level: 2, sort: "effect", hideSmall: false, open: {}, condition: 0};
+	let ladderSelectedIDs = null;
 	let me = this;
 
 
@@ -5952,6 +5958,11 @@ function PA_Step3MetaboliteView() {
 			if (sawNegative && sawPositive) break;
 		}
 		classMapHasDirection = sawNegative && sawPositive;
+
+		classActivity = (typeof this.model.getClassActivity === "function") ? this.model.getClassActivity() : null;
+		if (classActivity && !(classActivity.levels && classActivity.levels["2"])) classActivity = null;
+		ladderState = {level: 2, sort: "effect", hideSmall: false, open: {}, condition: 0};
+		ladderSelectedIDs = null;
 	}
 
 
@@ -5970,6 +5981,7 @@ function PA_Step3MetaboliteView() {
 
 	this.selectClass = function (className) {
 		classMapSelected = className || null;
+		if (!className && typeof ladderSelectedIDs !== "undefined") ladderSelectedIDs = null;
 		classDetailDismissed = !className;
 		me.markSelectedClass();
 		me.renderClassDetail();
@@ -5992,7 +6004,7 @@ function PA_Step3MetaboliteView() {
 		var host = document.getElementById("classActivityDetail");
 		if (!host) return;
 		var row = classMapSelected
-			? (classMapRowsCache || []).filter(function (r) { return r.name === classMapSelected; })[0]
+			? (classMapRowsCache || []).filter(function (r) { return r.key === classMapSelected || r.name === classMapSelected; })[0]
 			: null;
 		if (!row) {
 			host.innerHTML = "";
@@ -6006,7 +6018,8 @@ function PA_Step3MetaboliteView() {
 		classDetailKey = key;
 
 		var omicName = compoundOmicName;
-		var ids = (dataFinal[row.name] || {}).ID || [];
+		var ladderOpen = (typeof classActivity !== "undefined" && classActivity && typeof ladderSelectedIDs !== "undefined" && ladderSelectedIDs);
+		var ids = ladderOpen ? ladderSelectedIDs : ((dataFinal[row.name] || {}).ID || []);
 		var values = [];
 		ids.forEach(function (id) {
 			var omicValue = globalExpressionComp ? globalExpressionComp[id] : null;
@@ -6024,7 +6037,9 @@ function PA_Step3MetaboliteView() {
 
 		var head = '<div class="paClassDetailHead">'
 			+ '<h4>' + classMapEscape(row.name) + '</h4>'
-			+ '<span class="paClassDetailStats">' + row.k + ' of ' + row.n + ' measured compounds relevant'
+			+ '<span class="paClassDetailStats">' + ((typeof classActivity !== "undefined" && classActivity && classActivity.test === "permutation" && typeof row.stat === "number")
+				? 'mean F ' + row.stat.toFixed(1) + ' &middot; ' + row.k + ' of ' + row.n + ' in your relevant list'
+				: row.k + ' of ' + row.n + ' measured compounds relevant')
 			+ ' &middot; p ' + classMapFormatP(row.p) + ' &middot; FDR ' + classMapFormatP(row.fdr) + '</span>'
 			+ '<span class="paClassDetailTools">'
 			+ '<label class="paClassDetailToggle"><input type="checkbox" id="classDetailOnlyRelevant"'
@@ -6366,6 +6381,10 @@ function PA_Step3MetaboliteView() {
 	this.drawClassMap = function () {
 		var host = document.getElementById("classActivityMap");
 		if (!host) return;
+		/* typeof: test_class_ranking_keeps_every_class_in_its_row runs this
+		   function extracted into node, where the view's closure variables are
+		   only the ones it stubs. */
+		if (typeof classActivity !== "undefined" && classActivity) { me.drawClassLadder(host); return; }
 		host.innerHTML = "";
 
 		var rows = me.buildClassMapRows(classMapCondition);
@@ -6622,6 +6641,403 @@ function PA_Step3MetaboliteView() {
 		me.markSelectedClass();
 		me.renderClassDetail();
 	};
+
+	/* ------------------------------------------------------------------
+	   The class activity ladder: one row per class at the chosen BRITE
+	   level, drawn from the job's classActivity payload. Replaces the
+	   level-2 ranking above whenever the payload exists; jobs stored before
+	   it existed keep the ranking.
+
+	   Reading a row: the bar is the test statistic against its own null --
+	   under the permutation test the class's mean F on a log axis with the
+	   null's 95th percentile as a tick, under the binomial the share of
+	   members in the relevant list against p0 -- the strip is the mean
+	   change of the members per condition, |FC| their mean absolute change,
+	   and the pill the p-value with its BH correction underneath. Rows are
+	   ordered by effect, not by p: when most of a targeted panel moves every
+	   self-contained p is small and the effect is what separates classes.
+	   ------------------------------------------------------------------ */
+	function ladderEscape(value) { return classMapEscape(value); }
+
+	function ladderColor(value, clamp) {
+		var dark = document.documentElement.getAttribute("data-theme") === "dark";
+		var down = [0x0F, 0x59, 0xA9], up = [0xA5, 0x1F, 0x1E], mid = dark ? [0x3A, 0x39, 0x36] : [0xE8, 0xE8, 0xE8];
+		if (value === null || value === undefined || isNaN(value)) return dark ? "#2A3340" : "#EEF1F4";
+		var t = Math.max(-1, Math.min(1, value / clamp));
+		var target = t < 0 ? down : up, w = Math.abs(t);
+		/* OKLab interpolation, the ramp the heatmaps use, so a cell here is the
+		   colour it is on a pathway. */
+		function lin(c) { c /= 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }
+		function toLab(rgb) {
+			var r = lin(rgb[0]), g = lin(rgb[1]), b = lin(rgb[2]);
+			var l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
+			var m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
+			var s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
+			return [0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s,
+				1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s,
+				0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s];
+		}
+		function toHex(L, a, b) {
+			var l_ = L + 0.3963377774 * a + 0.2158037573 * b, m_ = L - 0.1055613458 * a - 0.0638541728 * b,
+				s_ = L - 0.0894841775 * a - 1.2914855480 * b;
+			var l = l_ * l_ * l_, m = m_ * m_ * m_, s = s_ * s_ * s_;
+			var rgb = [4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
+				-1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
+				-0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s];
+			return "#" + rgb.map(function (c) {
+				c = Math.max(0, Math.min(1, c));
+				return Math.round(255 * (c <= 0.0031308 ? 12.92 * c : 1.055 * Math.pow(c, 1 / 2.4) - 0.055)).toString(16).padStart(2, "0");
+			}).join("");
+		}
+		var A = toLab(mid), B = toLab(target);
+		return toHex(A[0] + (B[0] - A[0]) * w, A[1] + (B[1] - A[1]) * w, A[2] + (B[2] - A[2]) * w);
+	}
+
+	var LADDER_FMIN = 0.25, LADDER_FMAX = 128;
+	function ladderFx(f) {
+		return Math.max(0, Math.min(1, Math.log2(Math.max(f, LADDER_FMIN) / LADDER_FMIN) / Math.log2(LADDER_FMAX / LADDER_FMIN)));
+	}
+	function ladderFormatP(p) {
+		if (typeof p !== "number" || isNaN(p)) return "–";
+		if (p < 0.001) return p.toExponential(0).replace("e-", "e−");
+		return p.toFixed(p < 0.1 ? 3 : 2);
+	}
+	function ladderStrip(values, clamp, cls) {
+		var labels = (classActivity && classActivity.conditions) || [];
+		if (!values || !values.length) return '<div class="paLadderStrip ' + (cls || "") + '" style="--pa-strip-n:1"><i></i></div>';
+		return '<div class="paLadderStrip ' + (cls || "") + '" style="--pa-strip-n:' + values.length + '">'
+			+ values.map(function (v, i) {
+				return '<i style="background:' + ladderColor(v, clamp) + '" data-label="' + ladderEscape(labels[i] || ("#" + (i + 1)))
+					+ '" data-v="' + (v === null || v === undefined ? "" : v) + '"></i>';
+			}).join("") + '</div>';
+	}
+
+	function ladderIsPermutation() { return !!(classActivity && classActivity.test === "permutation"); }
+
+	/* One row's numbers, whichever test ran. */
+	function ladderRowOf(entry) {
+		var perm = ladderIsPermutation();
+		var c = ladderState.condition;
+		var row = {
+			key: entry.key, name: entry.name, parent: entry.parent || "", path: entry.path || [],
+			n: entry.n, members: entry.members || [], eff: entry.eff || [], E: entry.E,
+			k: (entry.k || [])[c] || 0, desc: entry.n < 3
+		};
+		if (perm) {
+			row.stat = entry.meanF; row.p = entry.p; row.fdr = entry.bh; row.q95 = entry.nullQ95;
+			row.nsig = entry.nsig || 0; row.tested = entry.tested;
+			row.effect = (typeof entry.meanF === "number") ? entry.meanF : -1;
+		} else {
+			row.p = (entry.binomial && entry.binomial.p || [])[c];
+			row.fdr = (entry.binomial && entry.binomial.bh || [])[c];
+			row.proportion = entry.n ? row.k / entry.n : 0;
+			row.effect = row.proportion;
+		}
+		row.significant = (typeof row.fdr === "number") && row.fdr < 0.05 && !row.desc;
+		return row;
+	}
+
+	function ladderRows() {
+		var entries = (classActivity.levels || {})[String(ladderState.level)] || [];
+		var rows = entries.map(ladderRowOf);
+		if (ladderState.hideSmall) rows = rows.filter(function (r) { return !r.desc; });
+		var cmp = {
+			effect: function (a, b) { return (b.effect - a.effect) || ((a.p || 2) - (b.p || 2)); },
+			p: function (a, b) { return ((typeof a.p === "number" ? a.p : 2) - (typeof b.p === "number" ? b.p : 2)) || (b.effect - a.effect); },
+			n: function (a, b) { return (b.n - a.n) || (b.effect - a.effect); },
+			name: function (a, b) { return String(a.name).localeCompare(String(b.name)); }
+		}[ladderState.sort] || function () { return 0; };
+		rows.sort(cmp);
+		return rows;
+	}
+
+	this.drawClassLadder = function (host) {
+		var perm = ladderIsPermutation();
+		var rows = ladderRows();
+		var all = ((classActivity.levels || {})[String(ladderState.level)] || []).map(ladderRowOf);
+		classMapRowsCache = all;
+		var nullP0 = (classActivity.nullProportion || [])[ladderState.condition];
+		var clamp = perm ? 2 : 2;
+
+		/* Controls: level, order, small classes, and the condition when the
+		   binomial ran per condition. */
+		var controls = document.getElementById("classActivityMapControls");
+		if (controls) {
+			var levelNames = classActivity.levelNames || {"1": "category", "2": "class", "3": "subclass"};
+			var seg = [1, 2, 3].map(function (l) {
+				var count = ((classActivity.levels || {})[String(l)] || []).length;
+				return '<button type="button" data-level="' + l + '" aria-pressed="' + (l === ladderState.level) + '">'
+					+ l + ' <small>' + ladderEscape(levelNames[String(l)] || "") + ' · ' + count + '</small></button>';
+			}).join("");
+			var condSel = "";
+			if (!perm && (classActivity.nConditions || 1) > 1) {
+				condSel = '<label class="paClassMapControlLabel" for="classLadderCondition">Condition</label>'
+					+ '<select id="classLadderCondition" class="paClassMapSelect">'
+					+ (classActivity.conditions || []).map(function (name, i) {
+						return '<option value="' + i + '"' + (i === ladderState.condition ? " selected" : "") + '>' + ladderEscape(name) + '</option>';
+					}).join("") + '</select>';
+			}
+			controls.innerHTML = '<div class="paLadderBar">'
+				+ '<span class="paClassMapControlLabel">Level</span><div class="paLadderSeg" id="classLadderLevel">' + seg + '</div>'
+				+ '<label class="paClassMapControlLabel" for="classLadderSort">Order by</label>'
+				+ '<select id="classLadderSort" class="paClassMapSelect">'
+				+ '<option value="effect"' + (ladderState.sort === "effect" ? " selected" : "") + '>' + (perm ? "Effect (mean F)" : "Share in relevant list") + '</option>'
+				+ '<option value="p"' + (ladderState.sort === "p" ? " selected" : "") + '>p-value</option>'
+				+ '<option value="n"' + (ladderState.sort === "n" ? " selected" : "") + '>Class size</option>'
+				+ '<option value="name"' + (ladderState.sort === "name" ? " selected" : "") + '>Name</option></select>'
+				+ condSel
+				+ '<label class="paLadderSwitch"><input type="checkbox" id="classLadderHideSmall"' + (ladderState.hideSmall ? " checked" : "")
+				+ '> Hide classes with fewer than 3 members</label></div>';
+			controls.querySelector("#classLadderLevel").addEventListener("click", function (event) {
+				var button = event.target.closest("button");
+				if (!button) return;
+				ladderState.level = parseInt(button.getAttribute("data-level"), 10) || 2;
+				me.drawClassMap();
+			});
+			controls.querySelector("#classLadderSort").addEventListener("change", function (event) {
+				ladderState.sort = event.target.value; me.drawClassMap();
+			});
+			controls.querySelector("#classLadderHideSmall").addEventListener("change", function (event) {
+				ladderState.hideSmall = event.target.checked; me.drawClassMap();
+			});
+			var condNode = controls.querySelector("#classLadderCondition");
+			if (condNode) condNode.addEventListener("change", function (event) {
+				ladderState.condition = parseInt(event.target.value, 10) || 0; me.drawClassMap();
+			});
+		}
+
+		/* Caption: which test, against what, and how many pass. */
+		var passing = all.filter(function (r) { return r.significant; }).length;
+		var small = all.filter(function (r) { return r.desc; }).length;
+		var summary = document.getElementById("classActivityMapSummary");
+		if (summary) {
+			summary.classList.remove("paIsFocused");
+			var what;
+			if (perm) {
+				var design = classActivity.design || {};
+				var factor = (classActivity.factors || []).filter(function (f) { return f.id === classActivity.factor; })[0];
+				what = '<b>Permutation test on your replicates</b> &middot; ' + (design.samples || "?") + ' samples in '
+					+ (design.conditions || "?") + ' conditions &middot; factor <b>' + ladderEscape((factor && factor.label) || classActivity.factor || "")
+					+ '</b>' + ((design.strata || []).length > 1 ? ', stratified by ' + ladderEscape((design.strata || []).slice(0, 3).join(", ")) + ((design.strata || []).length > 3 ? "…" : "") : "")
+					+ ' &middot; ' + (classActivity.nPerm || 0).toLocaleString() + ' re-labellings';
+			} else if (classActivity.nullKind === "alpha") {
+				what = '<b>Binomial on your relevant list</b> against your threshold p<sub>0</sub> = <b>' + Number(classActivity.alpha).toFixed(2)
+					+ '</b> <span class="paClassMapMuted">(H<sub>0</sub>: no member of the class changed; valid when the list came from a test at that threshold)</span>';
+			} else {
+				what = '<b>Binomial on your relevant list</b> against the rest of this job, p<sub>0</sub> = <b>'
+					+ (typeof nullP0 === "number" ? nullP0.toFixed(3) : "?") + '</b> <span class="paClassMapMuted">(H<sub>0</sub>: the class is like the rest of the panel &mdash; a relative question)</span>';
+			}
+			summary.innerHTML = '<span class="paClassMapBase">' + what
+				+ ' &middot; <b>' + passing + '</b> of ' + all.length + ' classes at level ' + ladderState.level + ' pass BH &lt; 0.05'
+				+ (small ? ' &middot; ' + small + ' with fewer than 3 members (descriptive)' : "")
+				+ '</span><span class="paClassMapReadout"></span>';
+		}
+
+		var warnings = (classActivity.warnings || []).map(function (w) {
+			return '<p class="paLadderWarn">' + ladderEscape(w) + '</p>';
+		}).join("");
+
+		/* Head. */
+		var axis;
+		if (perm) {
+			axis = [0.5, 1, 2, 4, 8, 16, 32, 64].map(function (v) {
+				return '<span style="left:' + (ladderFx(v) * 100) + '%"' + (v === 1 ? ' class="paIsZero"' : "") + '>' + v + '</span>';
+			}).join("");
+		} else {
+			axis = [0, 0.25, 0.5, 0.75, 1].map(function (v) {
+				return '<span style="left:' + (v * 100) + '%">' + Math.round(v * 100) + '%</span>';
+			}).join("");
+		}
+		var head = '<div class="paLadderHead"><div>Class</div><div class="paLadderAxis">' + axis + '</div>'
+			+ '<div>' + (perm ? ladderEscape((classActivity.design || {}).levels ? (classActivity.design.levels[1] + " − " + classActivity.design.levels[0]) : "Effect") + ' by ' + (classActivity.factors && classActivity.factors.length > 1 ? "stratum" : "condition")
+				: (classMapHasDirection ? "Mean value by condition" : "")) + '</div>'
+			+ '<div title="Mean absolute change across members and conditions">|FC|</div>'
+			+ '<div style="text-align:right">' + (perm ? "Permutation p" : "Binomial p") + '</div></div>';
+
+		var body = rows.map(function (row) {
+			var open = !!ladderState.open[row.key];
+			var crumb = row.path.length > 1 ? row.path.slice(0, -1).join(" › ") + " ›" : "";
+			var chip = 'n = ' + row.n + (row.desc ? ' · descriptive' : "");
+			var sub = perm ? (row.nsig + ' of ' + row.n + ' respond individually' + (row.tested < row.n ? ' (' + (row.n - row.tested) + ' untestable)' : ""))
+				: (row.k + ' of ' + row.n + ' in your relevant list');
+			var bar;
+			if (perm) {
+				var fx = ladderFx(typeof row.stat === "number" ? row.stat : 0);
+				bar = '<div class="paLadderFBar"><div class="paLadderTrack"></div><div class="paLadderZero" style="left:' + (ladderFx(1) * 100) + '%"></div>'
+					+ '<div class="paLadderFill" style="width:' + (fx * 100) + '%"></div>'
+					+ (typeof row.q95 === "number" ? '<div class="paLadderQ95" style="left:' + (ladderFx(row.q95) * 100) + '%" title="null 95th percentile = ' + row.q95.toFixed(1) + '"></div>' : "")
+					+ '<span class="paLadderVal" style="left:' + (fx * 100) + '%">' + (typeof row.stat === "number" ? row.stat.toFixed(1) : "–") + '</span></div>';
+			} else {
+				bar = '<div class="paLadderFBar"><div class="paLadderTrack"></div>'
+					+ '<div class="paLadderFill" style="width:' + (row.proportion * 100) + '%"></div>'
+					+ (typeof nullP0 === "number" ? '<div class="paLadderQ95" style="left:' + (nullP0 * 100) + '%" title="p0 = ' + nullP0.toFixed(3) + '"></div>' : "")
+					+ '<span class="paLadderVal" style="left:' + (row.proportion * 100) + '%">' + row.k + '/' + row.n + '</span></div>';
+			}
+			var strip = (perm || classMapHasDirection) ? ladderStrip(row.eff, clamp) : '<div class="paLadderStrip" style="--pa-strip-n:1"><i></i></div>';
+			return '<div class="paLadderRowWrap">'
+				+ '<button type="button" class="paLadderRow' + (row.desc ? " paIsDesc" : "") + (classMapSelected === row.key ? " paIsSelected" : "")
+				+ '" aria-expanded="' + open + '" data-key="' + ladderEscape(row.key) + '">'
+				+ '<div class="paLadderName">' + (crumb ? '<span class="paLadderCrumb">' + ladderEscape(crumb) + '</span>' : "")
+				+ '<span class="paLadderTitle">' + ladderEscape(row.name) + ' <span class="paLadderChip' + (row.desc ? " paIsWarn" : "") + '">' + chip + '</span></span>'
+				+ '<span class="paLadderSub">' + sub + '</span></div>'
+				+ bar + strip
+				+ '<div class="paLadderNum">' + (typeof row.E === "number" ? row.E.toFixed(2) : "–") + '</div>'
+				+ '<div class="paLadderP"><span class="paLadderPill' + (row.significant ? "" : " paIsNs") + '">' + ladderFormatP(row.p) + '</span><small>BH ' + ladderFormatP(row.fdr) + '</small></div>'
+				+ '</button>' + (open ? ladderMembersHTML(row) : "") + '</div>';
+		}).join("");
+		if (!rows.length) {
+			body = '<p class="paEmptyNote" style="padding:16px">Every class at this level has fewer than 3 members.</p>';
+		}
+
+		/* What never reached a class. */
+		var excluded = classActivity.excluded || {};
+		var features = classActivity.features || {};
+		var unmatched = excluded.unmatched || [], unclassified = excluded.unclassified || [];
+		var excludedHTML = "";
+		if (unmatched.length || unclassified.length) {
+			var li = function (name, key) {
+				var f = key ? features[key] : null;
+				var sig = f && f.sig;
+				return '<li' + (sig ? ' class="paIsSig"' : "") + '>' + ladderEscape(name)
+					+ (f && typeof f.F === "number" ? ' <span class="paClassMapMuted">F ' + f.F.toFixed(1) + '</span>' : "") + '</li>';
+			};
+			excludedHTML = '<details class="paLadderExcluded"><summary>' + (unmatched.length + unclassified.length) + ' of the measured metabolites reach no class'
+				+ ' &mdash; ' + unmatched.length + ' matched no KEGG compound, ' + unclassified.length + ' matched one that KEGG BRITE does not classify'
+				+ (perm ? '; bold = responds on its own (BH &lt; 0.05)' : "") + '</summary>'
+				+ (unmatched.length ? '<div class="paClassMapControlLabel" style="margin-top:8px">No KEGG match</div><ul>' + unmatched.map(function (n) { return li(n, null); }).join("") + '</ul>' : "")
+				+ (unclassified.length ? '<div class="paClassMapControlLabel" style="margin-top:8px">Outside br08001</div><ul>' + unclassified.map(function (k) { return li((features[k] || {}).name || k, k); }).join("") + '</ul>' : "")
+				+ '</details>';
+		}
+
+		host.innerHTML = warnings + '<div class="paLadder">' + head + '<div id="classLadderRows">' + body + '</div></div>' + excludedHTML;
+
+		var keys = document.getElementById("classActivityKeys");
+		if (keys) {
+			var items = perm
+				? [['paKeySwatch', 'mean F of the class (log axis)', "background:#4A6785"],
+				   ['paKeyGlyph', 'F = 1: no effect', "width:1px;height:14px;background:#B5C1CE;border-radius:0"],
+				   ['paKeyGlyph', '95th percentile of the re-labelled null — a bar past it is significant at ≈0.05', "width:2px;height:14px;background:#B5761F;border-radius:0"],
+				   ['paKeySwatch', 'strip: mean change per condition, blue down · red up (±2 log2)', "background:linear-gradient(90deg,#0F59A9,#E8E8E8,#A51F1E);width:34px"]]
+				: [['paKeySwatch', 'share of the class in your relevant list', "background:#4A6785"],
+				   ['paKeyGlyph', 'p₀ the class is tested against', "width:2px;height:14px;background:#B5761F;border-radius:0"]];
+			keys.innerHTML = items.map(function (item) {
+				return '<li><span class="' + item[0] + '" style="' + item[2] + '"></span>' + item[1] + '</li>';
+			}).join("");
+			keys.style.paddingLeft = "0";
+		}
+
+		var rowsHost = host.querySelector("#classLadderRows");
+		rowsHost.addEventListener("click", function (event) {
+			if (event.target.closest(".paLadderStrip")) return;
+			var openLink = event.target.closest("[data-open-class]");
+			if (openLink) {
+				event.preventDefault();
+				me.selectLadderClass(openLink.getAttribute("data-open-class"));
+				return;
+			}
+			var button = event.target.closest(".paLadderRow");
+			if (!button) return;
+			var key = button.getAttribute("data-key");
+			if (ladderState.open[key]) delete ladderState.open[key]; else ladderState.open[key] = true;
+			me.drawClassMap();
+		});
+		ladderBindTooltip(host);
+
+		/* The compounds panel below follows the selected class, or the top
+		   row on first draw. */
+		if (classMapSelected && !all.some(function (r) { return r.key === classMapSelected; })) classMapSelected = null;
+		if (!classMapSelected && !classDetailDismissed && rows.length) classMapSelected = rows[0].key;
+		me.renderClassDetail();
+	};
+
+	function ladderMembersHTML(row) {
+		var perm = ladderIsPermutation();
+		var features = classActivity.features || {};
+		var members = row.members.map(function (k) { return Ext.apply({key: k}, features[k] || {name: k}); });
+		var note;
+		if (perm) {
+			members.sort(function (a, b) { return (b.F || 0) - (a.F || 0); });
+			var total = members.reduce(function (s, m) { return s + (m.F || 0); }, 0);
+			var top = members[0];
+			var share = total > 0 && top ? (top.F || 0) / total : 0;
+			note = members.length === 1
+				? '<p class="paLadderNote">A one-member class: this is <b>' + ladderEscape(top.name) + '</b>\'s own test, not a class result.</p>'
+				: (share > 0.6
+					? '<p class="paLadderNote"><b>' + ladderEscape(top.name) + '</b> carries ' + Math.round(share * 100) + '% of this class\'s F &mdash; read "' + ladderEscape(row.name) + ' responds" as "' + ladderEscape(top.name) + ' responds".</p>'
+					: '<p class="paLadderNote">The effect is spread across members; ' + row.nsig + ' of ' + row.n + ' respond on their own.</p>');
+		} else {
+			members.sort(function (a, b) {
+				var ra = (a.relevant || [])[ladderState.condition] ? 1 : 0, rb = (b.relevant || [])[ladderState.condition] ? 1 : 0;
+				return rb - ra || String(a.name).localeCompare(String(b.name));
+			});
+			note = '<p class="paLadderNote">' + row.k + ' of ' + row.n + ' members are in your relevant list' + (row.n < 3 ? ' &mdash; too few for a class-level statement' : "") + '.</p>';
+		}
+		var rowsHTML = members.map(function (m) {
+			var sig = perm ? !!m.sig : !!((m.relevant || [])[ladderState.condition]);
+			var stat;
+			if (perm) {
+				stat = '<td><div class="paLadderMBar"><div class="paLadderZero" style="left:' + (ladderFx(1) * 100) + '%"></div><div class="paLadderFill" style="width:' + (ladderFx(typeof m.F === "number" ? m.F : 0) * 100) + '%"></div></div></td>'
+					+ '<td class="paIsRight paLadderNum">' + (typeof m.F === "number" ? m.F.toFixed(1) : "–") + ' · ' + ladderFormatP(m.bh) + '</td>';
+			} else {
+				stat = '<td colspan="2">' + (sig ? 'relevant' : '<span class="paClassMapMuted">not relevant</span>') + '</td>';
+			}
+			var strip = perm ? ladderStrip(m.eff, 3) : (classMapHasDirection ? ladderStrip(m.values, 2) : "");
+			return '<tr class="' + (sig ? "" : "paIsNs") + '"><td>' + ladderEscape(m.name) + '</td>' + stat
+				+ '<td class="paLadderMini">' + strip + '</td><td class="paIsRight paLadderNum">' + ladderEscape((m.kegg || []).join(", ")) + '</td></tr>';
+		}).join("");
+		return '<div class="paLadderMembers">' + note
+			+ '<table><thead><tr><th>Metabolite</th><th colspan="2">' + (perm ? 'F · BH' : 'Relevant') + '</th><th>' + (perm ? 'Change by condition' : (classMapHasDirection ? 'Value by condition' : "")) + '</th><th class="paIsRight">KEGG</th></tr></thead>'
+			+ '<tbody>' + rowsHTML + '</tbody></table>'
+			+ '<p class="paLadderOpen"><a href="javascript:void(0)" data-open-class="' + ladderEscape(row.key) + '">Open these compounds below (heatmap and profiles)</a></p>'
+			+ '</div>';
+	}
+
+	/* The ladder's selection reaches the compounds panel through the same
+	   two variables the ranking used, keyed by the class path so a name
+	   that BRITE reuses at level 3 ("Biogenic amines" under Amines and under
+	   Neurotransmitters) opens the right members. */
+	this.selectLadderClass = function (key) {
+		var entry = ((classActivity.levels || {})[String(ladderState.level)] || []).filter(function (e) { return e.key === key; })[0];
+		if (!entry) return;
+		var features = classActivity.features || {};
+		var ids = [];
+		(entry.members || []).forEach(function (m) {
+			((features[m] || {}).kegg || []).forEach(function (id) { if (ids.indexOf(id) === -1) ids.push(id); });
+		});
+		ladderSelectedIDs = ids;
+		classDetailDismissed = false;
+		classMapSelected = key;
+		Array.prototype.forEach.call(document.querySelectorAll(".paLadderRow"), function (node) {
+			node.classList.toggle("paIsSelected", node.getAttribute("data-key") === key);
+		});
+		classDetailKey = null;
+		me.renderClassDetail();
+		var detail = document.getElementById("classActivityDetail");
+		if (detail && detail.scrollIntoView) detail.scrollIntoView({block: "nearest", behavior: "smooth"});
+	};
+
+	function ladderBindTooltip(host) {
+		var tip = document.getElementById("classLadderTip");
+		if (!tip) {
+			tip = document.createElement("div");
+			tip.id = "classLadderTip"; tip.className = "paLadderTip";
+			document.body.appendChild(tip);
+		}
+		host.addEventListener("mouseover", function (event) {
+			var cell = event.target.closest(".paLadderStrip i");
+			if (!cell || !cell.getAttribute("data-label")) { tip.style.display = "none"; return; }
+			var v = cell.getAttribute("data-v");
+			var value = v === "" ? null : Number(v);
+			tip.textContent = cell.getAttribute("data-label") + "  " + (value === null ? "no value" : ((value > 0 ? "+" : "") + value.toFixed(2)) + (ladderIsPermutation() ? " log2 FC" : ""));
+			tip.style.display = "block";
+		});
+		host.addEventListener("mousemove", function (event) {
+			if (tip.style.display !== "block") return;
+			tip.style.left = (event.clientX + 14) + "px";
+			tip.style.top = (event.clientY + 14) + "px";
+		});
+		host.addEventListener("mouseleave", function () { tip.style.display = "none"; });
+	}
 
 	this.initComponent = function () {
 		this.component = Ext.widget(

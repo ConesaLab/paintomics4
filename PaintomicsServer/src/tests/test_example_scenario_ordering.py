@@ -59,6 +59,7 @@ EXPECTED_ORDER = [
     (9, "stategra-regions"),
     (10, "stategra-mirna"),
     (11, "stategra-more"),
+    (12, "stategra-metabolomics-replicates"),
 ]
 
 # What the picker offers: the real block (directories 08-11) ahead of the
@@ -70,6 +71,7 @@ EXPECTED_OFFER = [
     "stategra-regions",
     "stategra-mirna",
     "stategra-more",
+    "stategra-metabolomics-replicates",
     "gene-single-condition",
     "gene-multi-condition",
     "gene-multi-condition-relevance",
