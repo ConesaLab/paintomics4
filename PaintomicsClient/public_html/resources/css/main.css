@@ -9237,7 +9237,7 @@ div.contentbox .paClassMapKeys li { padding-left: 0; }
 /* Hover linkage. Pointing at a mark rings it and drops every other class to a
    fifth, which is what makes eight marks read as a set being compared rather
    than eight independent dots. */
-.paIsFocusing .paClassMapMark { opacity: .22; }
+.paIsFocusing .paClassMapMark { opacity: .45; }
 .paIsFocusing .paClassMapMark.paIsFocused { opacity: 1; }
 .paClassMapMark.paIsFocused .paClassMapDisc { stroke: #B5761F; stroke-width: 3; }
 /* The caption doubles as the hover readout. The readout is laid OVER the
@@ -9263,3 +9263,42 @@ div.contentbox .paClassMapKeys li { padding-left: 0; }
 .paClassMapSelect { padding: 4px 8px; border: 1px solid #B5C1CE; border-radius: 4px;
                     background: #FFFFFF; color: #141E2B; font-size: 13px; }
 .paClassMapControlNote { color: #78879A; font-size: 12px; }
+
+/* The class ranking (drawClassMap): one row per class. The whole row is the
+   hover/click target; the selected row stays tinted while its compounds are
+   open in the detail below. */
+.paClassRankHit { fill: transparent; }
+.paClassMapMark:hover .paClassRankHit { fill: #F1F5F8; }
+.paClassMapMark.paIsSelected .paClassRankHit { fill: #E9F1F9; }
+.paClassMapMark.paIsSelected .paClassMapLabel { font-weight: 600; }
+.paClassRankHead { fill: #78879A; font-size: 10px; letter-spacing: .07em; text-transform: uppercase; }
+.paClassMapParent { fill: #78879A; font-size: 9.5px; }
+.paClassRankStem { stroke: #4A6785; stroke-width: 3; stroke-linecap: round; }
+.paClassRankStemBelow { stroke: #C4CFDA; }
+.paClassRankDot { fill: #141E2B; stroke: #FFFFFF; stroke-width: 1.5; }
+.paClassRankFdr { fill: #78879A; font-size: 11px; font-variant-numeric: tabular-nums; }
+.paClassRankFdr.paIsSig { fill: #141E2B; font-weight: 600; }
+
+/* The selected class's compounds, inside the same card as the ranking. */
+.paClassDetail { display: none; }
+/* 26px each side: the text rail every paragraph and heading in a
+   .contentbox sits on. Flush to the card edge, the class heading was
+   the one line on the card 26px left of every other. */
+.paClassDetail.paIsOpen { display: block; margin-top: 16px; padding: 14px 26px 0; border-top: 1px solid #E3E9EF; }
+.paClassDetailHead { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.paClassDetailHead h4 { margin: 0; font-size: 15px; font-weight: 600; color: #141E2B; }
+.paClassDetailStats { color: #78879A; font-size: 12.5px; }
+.paClassDetailTools { margin-left: auto; display: flex; align-items: center; gap: 16px; font-size: 12.5px; color: #44556A; }
+.paClassDetailToggle { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.paClassDetailToggle input { margin: 0; }
+.paClassDetailClose { border: 0; background: transparent; color: #78879A; font-size: 20px; line-height: 1;
+                      padding: 0 2px; cursor: pointer; }
+.paClassDetailClose:hover { color: #141E2B; }
+.paClassDetailScale { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin: 10px 0 8px;
+                      color: #78879A; font-size: 12px; }
+/* Heatmap and chart are one figure: the strip is fixed, the chart takes the
+   rest, and on a class with many rows the chart stays in view while the
+   strip scrolls past. */
+.paClassDetailFigure { display: flex; align-items: flex-start; }
+.paClassDetailFigure .PA_step5_heatmapContainer { flex: none; }
+.paClassDetailFigure .PA_step5_plotContainer { flex: 1 1 320px; min-width: 320px; position: sticky; top: 8px; }
