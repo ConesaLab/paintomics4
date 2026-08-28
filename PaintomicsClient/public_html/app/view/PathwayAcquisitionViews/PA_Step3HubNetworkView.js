@@ -47,6 +47,97 @@
  */
 var PA_OMIC_CHART_FURNITURE = 132;
 
+/**
+ * Every connection of one node, grouped by pathway, DE neighbours first.
+ *
+ * The panel this replaces printed `connectedEdges().slice(0, 8)`. On the
+ * STATegra job that is 8 of Ggt1's 72 -- 11% of the answer, with no count, no
+ * "and 64 more", and no scroll that could ever reach the rest. 48 of that
+ * graph's 161 nodes were truncated the same way, and they are exactly the hub
+ * nodes the panel exists to explain: the median degree is 2, so the cap only
+ * ever bit the interesting cases.
+ *
+ * Pure on purpose -- `describe` is injected rather than read off `me`, so the
+ * ordering can be tested in node without a Cytoscape instance behind it.
+ *
+ *   edges     [{source, target, kind, subtype, pathway}]
+ *   id        the node whose connections these are
+ *   describe  id -> {name, state}
+ *
+ * Ordering carries the science: DE concentration is the claim the hub table
+ * makes, so a differentially expressed neighbour never sorts below a gene
+ * nobody measured, and a small pathway that holds the DE partners outranks a
+ * bigger one that holds none.
+ */
+var paHubConnections = function (edges, id, describe) {
+	var groups = {}, order = [];
+	var states = { up: 0, down: 0, quiet: 0, absent: 0 };
+	var partners = {}, byName = {};
+
+	(edges || []).forEach(function (edge) {
+		var other = (edge.source === id) ? edge.target : edge.source;
+		var about = describe(other) || {};
+		var state = about.state || "absent";
+		var name = about.name || other;
+		var key = edge.pathway || "";
+
+		if (!groups[key]) {
+			groups[key] = { pathway: key, de: 0, rows: [] };
+			order.push(groups[key]);
+		}
+		groups[key].rows.push({
+			id: other, name: name, state: state,
+			// KEGG records Ggt1->Chac1 AND Chac1->Ggt1 as two separate ECrel
+			// edges. Without this the two print the same line twice and the
+			// list looks like it is repeating itself.
+			direction: (edge.source === id) ? "out" : "in",
+			kind: edge.kind || "", subtype: edge.subtype || ""
+		});
+
+		// Counted once per PARTNER, never per edge: two edges to one gene is
+		// one neighbour, and counting edges would claim more DE neighbours
+		// than the job actually has.
+		if (!partners[other]) {
+			partners[other] = 1;
+			if (states[state] === undefined) { states[state] = 0; }
+			states[state]++;
+			(byName[name] = byName[name] || {})[other] = 1;
+		}
+	});
+
+	var RANK = { up: 0, down: 1, quiet: 2, absent: 3 };
+	order.forEach(function (group) {
+		group.de = 0;
+		group.rows.forEach(function (row) {
+			// One symbol can stand for several KEGG ids -- 100042314, 14857
+			// and 14858 all resolve to "Gsta5" -- and three rows printing the
+			// identical line reads as the panel repeating itself. A collided
+			// row keeps its id so the two can be told apart.
+			row.ambiguous = Object.keys(byName[row.name] || {}).length > 1;
+			if (row.state === "up" || row.state === "down") { group.de++; }
+		});
+		group.rows.sort(function (a, b) {
+			var rank = (RANK[a.state] === undefined ? 9 : RANK[a.state]) -
+			           (RANK[b.state] === undefined ? 9 : RANK[b.state]);
+			if (rank !== 0) { return rank; }
+			return String(a.name).localeCompare(String(b.name)) ||
+			       String(a.id).localeCompare(String(b.id)) ||
+			       String(a.direction).localeCompare(String(b.direction));
+		});
+	});
+	order.sort(function (a, b) {
+		return b.de - a.de || b.rows.length - a.rows.length ||
+		       String(a.pathway).localeCompare(String(b.pathway));
+	});
+
+	return {
+		total: (edges || []).length,
+		partners: Object.keys(partners).length,
+		states: states,
+		groups: order
+	};
+};
+
 function PA_Step3HubNetworkView() {
 	this.name = "PA_Step3HubNetworkView";
 	// Randomised ids: Step 3 can hold more than one network panel, and Ext
@@ -74,6 +165,11 @@ function PA_Step3HubNetworkView() {
 	this.featureCache = {};  // id|kind -> /pa_hub_feature payload
 	this.compoundNames = {}; // KEGG compound id -> readable name
 	this.sortKey = "padjust";
+	this.detailTab = "expr";  // sticky across clicks
+	this.detailFacet = null;   // "state:up" | "pathway:mmu00480"
+	this.EGO_LABEL_MAX = 22;   // names stay legible up to here
+	this.DETAIL_MIN = 140;
+	this.detailHeight = null;  // survives a re-render, not a close
 	this.query = "";
 
 	/* ------------------------------------------------------------------ *
@@ -595,6 +691,33 @@ function PA_Step3HubNetworkView() {
 				{ selector: "edge[inhibits = 1]", style: {
 					"target-arrow-shape": "tee" }},
 				{ selector: ".dim", style: { "opacity": 0.08 }},
+				// Everything outside the clicked node's ego network. Declared
+				// AFTER .dim so an element carrying both settles on this one,
+				// and BEFORE the ego classes so a lit edge overrides it.
+				{ selector: "node.pa-away", style: { "opacity": 0.15 }},
+				{ selector: "edge.pa-away", style: { "opacity": 0.04 }},
+				// The clicked node's own edges, coloured by the neighbour's DE
+				// direction -- the same two validated hues the nodes use, so
+				// the graph answers "how does this connect?" without the
+				// reader moving to a list.
+				// A mid grey, not a dark one: the canvas is transparent over
+				// --pa-surface, which flips with the theme, and cytoscape
+				// styles are JS so they cannot read a CSS token. #71717a is
+				// legible on both grounds. What actually separates a lit edge
+				// from the rest is the opacity gap (0.95 against 0.04), not
+				// the hue -- so this stays readable either way.
+				{ selector: "edge.pa-ego-edge", style: {
+					"width": 1.8, "opacity": 0.95, "line-color": "#71717a",
+					"target-arrow-color": "#71717a", "z-index": 20 }},
+				{ selector: "edge.pa-ego-up", style: {
+					"line-color": "#e34948", "target-arrow-color": "#e34948" }},
+				{ selector: "edge.pa-ego-down", style: {
+					"line-color": "#2a78d6", "target-arrow-color": "#2a78d6" }},
+				{ selector: "node.pa-ego-node", style: { "z-index": 21 }},
+				// A ring of 44 partners cannot all be labelled legibly, so the
+				// label goes on the neighbours that carry the finding; a small
+				// ego network gets every name (see focusEgo).
+				{ selector: "node.pa-ego-label", style: { "label": "data(label)" }},
 				{ selector: ".hovered", style: {
 					"border-width": 3, "border-color": "#18181b" }},
 				// setLevel owns .dim; a click highlight must use its own class
@@ -756,6 +879,137 @@ function PA_Step3HubNetworkView() {
 		});
 	};
 
+	/**
+	 * Light one node's own edges; wash out everything else.
+	 *
+	 * This is the half of "how it connects" that belongs in the GRAPH. Before
+	 * it, clicking a node drew a 4px ring on that node and changed nothing
+	 * else, so its 72 edges stayed indistinguishable inside a 600-edge wash --
+	 * which is precisely why a text list had to carry the whole answer, and
+	 * why that list being capped at eight rows lost the panel's point.
+	 *
+	 * Composes with the step filter rather than fighting it: `.dim` belongs to
+	 * setLevel, and an element outside the chosen ring stays dimmed whether or
+	 * not it touches the clicked node. This never adds or removes `.dim`.
+	 *
+	 * `keep` optionally narrows the lit set to one facet (a DE direction or a
+	 * pathway), which is what makes a 72-edge node readable rather than merely
+	 * complete.
+	 */
+	this.focusEgo = function (id, keep) {
+		var me = this;
+		if (!me.cy) { return; }
+		me.cy.batch(function () {
+			me.cy.elements().removeClass(
+				"pa-away pa-ego-edge pa-ego-up pa-ego-down pa-ego-node pa-ego-label");
+			if (!id) { return; }
+			var node = me.cy.getElementById(id);
+			if (!node || !node.length) { return; }
+
+			var lit = {}, edges = [];
+			lit[id] = 1;
+			node.connectedEdges().forEach(function (edge) {
+				if (edge.hasClass("dim")) { return; }
+				var other = (edge.data("source") === id) ? edge.target() : edge.source();
+				if (keep && !keep(edge, other)) { return; }
+				edges.push({ edge: edge, other: other });
+				lit[other.id()] = 1;
+			});
+
+			// Every name, when the ring is small enough to read them; only the
+			// DE neighbours when it is not. 44 overlapping labels is not more
+			// information than 12.
+			var nameAll = Object.keys(lit).length <= me.EGO_LABEL_MAX;
+
+			me.cy.nodes().forEach(function (n) {
+				if (n.hasClass("dim")) { return; }
+				if (!lit[n.id()]) { n.addClass("pa-away"); return; }
+				n.addClass("pa-ego-node");
+				var state = n.data("state");
+				if (nameAll || state === "up" || state === "down" || n.id() === id) {
+					n.addClass("pa-ego-label");
+				}
+			});
+			me.cy.edges().forEach(function (e) { if (!e.hasClass("dim")) { e.addClass("pa-away"); } });
+			edges.forEach(function (row) {
+				var state = row.other.data("state");
+				row.edge.removeClass("pa-away").addClass("pa-ego-edge");
+				if (state === "up") { row.edge.addClass("pa-ego-up"); }
+				else if (state === "down") { row.edge.addClass("pa-ego-down"); }
+			});
+		});
+	};
+
+	/**
+	 * Drag the card's top edge.
+	 *
+	 * The card is a fixed 300px, and on this job the expression figures alone
+	 * measure 1046px -- so its PRIMARY content was already showing at 26% before
+	 * any connection list existed. flex-basis, never height: with a height
+	 * transition this item resolved to 1px and stayed there, the animation and
+	 * the flex pass restarting each other while Cytoscape resized against the
+	 * same box.
+	 *
+	 * The graph is resized on every frame but re-fitted only when the drag
+	 * ENDS: re-fitting continuously churns the zoom under the cursor, and not
+	 * re-fitting at all leaves the canvas clipped once it shrinks.
+	 */
+	this.bindResize = function (host) {
+		var me = this;
+		var grip = host.querySelector(".pa-hub-grip");
+		if (!grip) { return; }
+		var stage = host.parentNode;
+
+		var begin = function (event) {
+			event.preventDefault();
+			var startY = (event.touches ? event.touches[0].clientY : event.clientY);
+			var startH = host.getBoundingClientRect().height;
+			var ceiling = stage ? stage.getBoundingClientRect().height - 160 : 640;
+
+			var move = function (next) {
+				var y = (next.touches ? next.touches[0].clientY : next.clientY);
+				var wanted = startH + (startY - y);
+				me.detailHeight = Math.max(me.DETAIL_MIN, Math.min(ceiling, wanted));
+				host.style.flexBasis = me.detailHeight + "px";
+				if (me.cy) { me.cy.resize(); me.drawRings(); }
+			};
+			var end = function () {
+				document.removeEventListener("mousemove", move);
+				document.removeEventListener("mouseup", end);
+				document.removeEventListener("touchmove", move);
+				document.removeEventListener("touchend", end);
+				me.resizeGraph();
+			};
+			document.addEventListener("mousemove", move);
+			document.addEventListener("mouseup", end);
+			document.addEventListener("touchmove", move, { passive: false });
+			document.addEventListener("touchend", end);
+		};
+		grip.addEventListener("mousedown", begin);
+		grip.addEventListener("touchstart", begin, { passive: false });
+	};
+
+	/**
+	 * Say, visibly, that the pane holds more than it shows.
+	 *
+	 * The reported bug was a row sliced through the middle at the card's edge.
+	 * The content was reachable -- the pane scrolls -- but macOS draws overlay
+	 * scrollbars that stay invisible until dragged, so a severed row is the
+	 * only signal, and it reads as a broken render rather than as "scroll me".
+	 */
+	this.bindFade = function (host) {
+		var pane = host.querySelector(".pa-hub-pane");
+		if (!pane) { return; }
+		var update = function () {
+			var atEnd = pane.scrollTop + pane.clientHeight >= pane.scrollHeight - 2;
+			var fits = pane.scrollHeight <= pane.clientHeight + 1;
+			pane.parentNode.classList.toggle("at-end", atEnd || fits);
+		};
+		pane.addEventListener("scroll", update, { passive: true });
+		paDeferFrame(update);
+		return update;
+	};
+
 	/** An edge endpoint by name, using the node already on the graph. */
 	this.edgeEnd = function (edge, which) {
 		var id = edge.data(which);
@@ -798,7 +1052,11 @@ function PA_Step3HubNetworkView() {
 		if (host) {
 			host.innerHTML = "";
 			host.classList.remove("is-open");
+			// The drag writes an inline flex-basis. Left behind, it outranks
+			// the collapsed `flex: 0 0 0` and the closed card keeps its height.
+			host.style.flexBasis = "";
 		}
+		this.focusEgo(null);
 		this.resizeGraph();
 	};
 
@@ -820,10 +1078,16 @@ function PA_Step3HubNetworkView() {
 			'<button type="button" class="pa-hub-detail-close" ' +
 			  'aria-label="Close">&times;</button>' + html;
 		host.classList.add("is-open");
+		// Switching tab or facet re-renders through clearDetail(), which drops
+		// the inline flex-basis. Without this the card snapped back to 300px
+		// every time the reader touched a chip, throwing away the height they
+		// had just dragged out.
+		if (me.detailHeight) { host.style.flexBasis = me.detailHeight + "px"; }
 		var close = host.querySelector(".pa-hub-detail-close");
 		if (close) {
 			close.addEventListener("click", function () {
 				if (me.cy) { me.cy.nodes().removeClass("picked"); }
+				me.detailHeight = null;   // a close forgets the size; a re-render does not
 				me.clearDetail();
 			});
 		}
@@ -914,10 +1178,11 @@ function PA_Step3HubNetworkView() {
 		}).join("");
 
 		var host = me.openDetail(
+			'<div class="pa-hub-grip" title="Drag to resize"><i></i></div>' +
 			'<h3 class="pa-hub-detail-title">' + me.nameWithID(entry.ID, "compound") +
 			  ' <span class="pa-hub-detail-where">' +
 			  'the metabolite this network is centred on</span></h3>' +
-			'<div class="pa-hub-detail-body">' +
+			'<div class="pa-hub-detail-body"><div class="pa-hub-pane">' +
 			  '<table class="pa-hub-steptable">' +
 			    '<thead><tr><th>Step</th><th>DE</th><th>Measured</th>' +
 			    '<th>% DE</th><th title="Where this density ranks among balls ' +
@@ -939,11 +1204,141 @@ function PA_Step3HubNetworkView() {
 			    'data; the step chips above count every node in a single ring, ' +
 			    'so the two do not add up.</p>' +
 			  '<div class="pa-hub-omics"></div>' +
-			'</div>', reveal);
-		if (host) { me.fillOmics(host, me.seed, "compound"); }
+			'</div></div>', reveal);
+		me.focusEgo(null);
+		if (host) {
+			me.fillOmics(host, me.seed, "compound");
+			me.bindResize(host);
+			me.bindFade(host);
+		}
 	};
 
-	/** A clicked node: what it is, how far, how it connects, its expression. */
+	/**
+	 * The clicked node's connections, as the model behind the card.
+	 *
+	 * Scoped to the CURRENT STEP, because everything else in this panel is:
+	 * the ring chips gate the graph, the ring labels, and the notice above it.
+	 * At step 1 gene 27053 has 15 edges in the fetched subgraph and exactly one
+	 * of them is in view -- a card reading "Connections 15" beside a graph
+	 * lighting one edge is the same kind of untruth as the eight-row cap this
+	 * change removes. The count on the tab always equals what the graph lights.
+	 */
+	this.connectionsFor = function (node) {
+		var me = this;
+		var id = node.id();
+		var edges = node.connectedEdges().filter(function (e) {
+			return !e.hasClass("dim");
+		}).map(function (e) {
+			return { source: e.data("source"), target: e.data("target"),
+			         kind: e.data("kind"), subtype: e.data("subtype"),
+			         pathway: e.data("pathway") };
+		});
+		return paHubConnections(edges, id, function (other) {
+			var n = me.cy && me.cy.getElementById(other);
+			return (n && n.length)
+				? { name: n.data("fullName") || n.data("label"), state: n.data("state") }
+				: { name: other, state: "absent" };
+		});
+	};
+
+	/** A facet key -> the predicate the graph and the list both filter on. */
+	this.facetFilter = function () {
+		var facet = this.detailFacet;
+		if (!facet) { return null; }
+		var split = facet.indexOf(":");
+		var kind = facet.slice(0, split), value = facet.slice(split + 1);
+		return function (edge, other) {
+			return (kind === "state")
+				? other.data("state") === value
+				: (edge.data("pathway") || "") === value;
+		};
+	};
+
+	/**
+	 * The connection list: all of it, grouped, DE first.
+	 *
+	 * Every row the node has. The count in the heading is the whole point --
+	 * "8 of 72" used to be true and unsaid.
+	 */
+	this.connectionsHTML = function (model) {
+		var me = this;
+		var facet = me.detailFacet;
+		var shownRows = 0;
+
+		var chips = "";
+		["up", "down", "quiet", "absent"].forEach(function (state) {
+			var n = model.states[state] || 0;
+			if (!n) { return; }
+			var WORD = { up: "up", down: "down", quiet: "measured",
+			             absent: "not measured" };
+			chips += '<button type="button" class="pa-hub-facet' +
+				(facet === "state:" + state ? " is-on" : "") +
+				'" data-facet="state:' + state + '">' +
+				'<i class="sw ' + state + '"></i>' + WORD[state] +
+				' <span class="n">' + n + '</span></button>';
+		});
+		model.groups.forEach(function (group) {
+			if (!group.pathway) { return; }
+			chips += '<button type="button" class="pa-hub-facet' +
+				(facet === "pathway:" + group.pathway ? " is-on" : "") +
+				'" data-facet="pathway:' + Ext.String.htmlEncode(group.pathway) + '">' +
+				Ext.String.htmlEncode(group.pathway) +
+				' <span class="n">' + group.rows.length + '</span></button>';
+		});
+
+		var body = model.groups.map(function (group) {
+			var rows = group.rows.filter(function (row) {
+				if (!facet) { return true; }
+				var split = facet.indexOf(":");
+				return (facet.slice(0, split) === "state")
+					? row.state === facet.slice(split + 1)
+					: group.pathway === facet.slice(split + 1);
+			});
+			if (!rows.length) { return ""; }
+			shownRows += rows.length;
+			var items = rows.map(function (row) {
+				return '<li><i class="sw ' + row.state + '"></i>' +
+					'<span class="pa-hub-dir" title="' +
+					  (row.direction === "out" ? "from this node" : "to this node") +
+					  '">' + (row.direction === "out" ? "&rarr;" : "&larr;") + '</span>' +
+					'<span class="nm">' + Ext.String.htmlEncode(row.name) +
+					(row.ambiguous ? ' <span class="pa-hub-id">' +
+					                 Ext.String.htmlEncode(row.id) + '</span>' : "") +
+					'</span><span class="rel">' + Ext.String.htmlEncode(row.kind) +
+					(row.subtype ? " &middot; " + Ext.String.htmlEncode(row.subtype) : "") +
+					'</span></li>';
+			}).join("");
+			return '<p class="pa-hub-group">' +
+				'<span class="pw">' + (group.pathway
+					? Ext.String.htmlEncode(group.pathway) : "no pathway recorded") + '</span>' +
+				'<span class="n">' + rows.length + '</span></p>' +
+				'<ul class="pa-hub-conns">' + items + '</ul>';
+		}).join("");
+
+		return '<p class="pa-hub-countline">' +
+				'<b>' + model.partners + '</b> <span>partner' +
+				(model.partners === 1 ? "" : "s") + '</span> ' +
+				'<b>' + model.total + '</b> <span>link' +
+				(model.total === 1 ? "" : "s") + '</span> ' +
+				'<b>' + model.groups.length + '</b> <span>pathway' +
+				(model.groups.length === 1 ? "" : "s") + '</span></p>' +
+			(chips ? '<div class="pa-hub-facets">' + chips + '</div>' : "") +
+			(facet ? '<p class="pa-hub-filtered">Showing ' + shownRows + " of " +
+			         model.total + ' &middot; <button type="button" ' +
+			         'class="pa-hub-clearfacet">show all</button></p>' : "") +
+			body;
+	};
+
+	/**
+	 * A clicked node: what it is, how far, its expression, how it connects.
+	 *
+	 * Expression and connections are TABS, not one stacked scroll. On this job
+	 * the omic figures measure 1046px and the card's pane is 269px, so stacking
+	 * a second tall thing underneath them meant neither was readable -- the
+	 * reported symptom was a connection row sliced in half at the card's edge.
+	 * Expression stays the tab that opens, because that is what the card showed
+	 * before; the connection count rides on the other tab so it is never silent.
+	 */
 	this.showNodeDetail = function (node) {
 		var me = this;
 		var id = node.id();
@@ -957,31 +1352,57 @@ function PA_Step3HubNetworkView() {
 		              quiet: "measured, not differentially expressed",
 		              absent: "not measured in any omic you uploaded" };
 		var state = node.data("state");
+		var model = me.connectionsFor(node);
+		me.focusEgo(id, me.facetFilter());
 
-		// How a gene reaches the seed is the genuinely new information here:
-		// compoundRegulateFeatures shipped node sets, so no earlier view could
-		// answer "via what?" for anything past the first ring.
-		var edges = node.connectedEdges().map(function (e) {
-			return '<li><b>' + Ext.String.htmlEncode(me.edgeEnd(e, "source")) +
-				" → " + Ext.String.htmlEncode(me.edgeEnd(e, "target")) +
-				'</b> · ' + e.data("kind") +
-				(e.data("subtype") ? " · " + e.data("subtype") : "") +
-				(e.data("pathway") ? ' <span class="pa-hub-edge-src">' +
-				                     e.data("pathway") + '</span>' : "") + '</li>';
-		}).slice(0, 8).join("");
+		var pane = (me.detailTab === "conn")
+			? me.connectionsHTML(model)
+			: '<p class="pa-hub-detail-summary">' + (WORDS[state] || state) + '.</p>' +
+			  '<div class="pa-hub-omics"></div>';
 
 		var host = me.openDetail(
+			'<div class="pa-hub-grip" title="Drag to resize"><i></i></div>' +
 			'<h3 class="pa-hub-detail-title">' + me.nameWithID(id, kind) +
 			  ' <span class="pa-hub-detail-where">' + kind + " &middot; " + step +
 			  " step" + (step === 1 ? "" : "s") + " from " +
 			  Ext.String.htmlEncode(seedName) + '</span></h3>' +
+			'<div class="pa-hub-tabs">' +
+			  '<button type="button" class="pa-hub-tab' +
+			    (me.detailTab === "expr" ? " is-on" : "") + '" data-tab="expr">' +
+			    'Expression</button>' +
+			  '<button type="button" class="pa-hub-tab' +
+			    (me.detailTab === "conn" ? " is-on" : "") + '" data-tab="conn">' +
+			    'Connections <span class="n">' + model.total + '</span></button>' +
+			'</div>' +
 			'<div class="pa-hub-detail-body">' +
-			  '<p class="pa-hub-detail-summary">' + (WORDS[state] || state) + '.</p>' +
-			  '<div class="pa-hub-omics"></div>' +
-			  (edges ? '<p class="pa-hub-detail-sub">How it connects</p>' +
-			           '<ul class="pa-hub-edges">' + edges + '</ul>' : "") +
+			  '<div class="pa-hub-pane">' + pane + '</div>' +
 			'</div>', true);
-		if (host) { me.fillOmics(host, id, kind); }
+		if (!host) { return; }
+
+		if (me.detailTab === "expr") { me.fillOmics(host, id, kind); }
+		me.bindResize(host);
+		me.bindFade(host);
+
+		host.querySelectorAll(".pa-hub-tab").forEach(function (button) {
+			button.addEventListener("click", function () {
+				me.detailTab = button.getAttribute("data-tab");
+				me.showNodeDetail(node);
+			});
+		});
+		host.querySelectorAll(".pa-hub-facet").forEach(function (button) {
+			button.addEventListener("click", function () {
+				var key = button.getAttribute("data-facet");
+				me.detailFacet = (me.detailFacet === key) ? null : key;
+				me.showNodeDetail(node);
+			});
+		});
+		var clear = host.querySelector(".pa-hub-clearfacet");
+		if (clear) {
+			clear.addEventListener("click", function () {
+				me.detailFacet = null;
+				me.showNodeDetail(node);
+			});
+		}
 	};
 
 	/**
@@ -1212,7 +1633,15 @@ function PA_Step3HubNetworkView() {
 		// redrawn -- but only while the card is showing the metabolite, or
 		// changing step would throw away the node you clicked.
 		var host = document.getElementById(me.detailID);
-		if (host && host.querySelector(".pa-hub-steptable")) { me.showSeedDetail(); }
+		if (host && host.querySelector(".pa-hub-steptable")) {
+			me.showSeedDetail();
+		} else {
+			// A node card is open. setLevel just rewrote .dim underneath the
+			// focus, so the lit set has to be derived again or an edge can be
+			// dimmed and highlighted at the same time.
+			var picked = me.cy.nodes(".picked");
+			if (picked.length) { me.focusEgo(picked[0].id(), me.facetFilter()); }
+		}
 	};
 
 	/* ------------------------------------------------------------------ *

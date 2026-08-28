@@ -478,9 +478,18 @@
 	border: 1.5px solid var(--hub-quiet-ink, #595959);
 	background: var(--hub-quiet, #ffffff);
 }
-.pa-hub-legend .sw.up     { background: var(--hub-up);   border-color: var(--hub-up); }
-.pa-hub-legend .sw.down   { background: var(--hub-down); border-color: var(--hub-down); }
-.pa-hub-legend .sw.absent { border-style: dashed; border-color: var(--hub-absent); }
+/* Shared with the connection rows and the facet chips: a swatch means the
+   same thing wherever it appears, so the colours are not scoped to the
+   legend that happened to need them first. */
+.pa-hub-legend .sw.up,
+.pa-hub-conns .sw.up,
+.pa-hub-facet .sw.up     { background: var(--hub-up);   border-color: var(--hub-up); }
+.pa-hub-legend .sw.down,
+.pa-hub-conns .sw.down,
+.pa-hub-facet .sw.down   { background: var(--hub-down); border-color: var(--hub-down); }
+.pa-hub-legend .sw.absent,
+.pa-hub-conns .sw.absent,
+.pa-hub-facet .sw.absent { border-style: dashed; border-color: var(--hub-absent); }
 .pa-hub-legend .sw.seed   {
 	border-radius: 2px;
 	transform: rotate(45deg);
@@ -730,11 +739,11 @@
 }
 .pa-hub-step:hover:not(:disabled) { border-color: var(--hub-ink, #18181b); }
 .pa-hub-step.is-current {
-	color: #fff;
+	color: var(--pa-surface, #fff);
 	background: var(--hub-ink, #18181b);
 	border-color: var(--hub-ink, #18181b);
 }
-.pa-hub-step.is-current em { color: rgba(255, 255, 255, 0.75); }
+.pa-hub-step.is-current em { color: inherit; opacity: 0.75; }
 .pa-hub-step:disabled {
 	opacity: 0.4;
 	cursor: default;
@@ -799,7 +808,12 @@
 	cursor: pointer;
 }
 .pa-hub-detail-close:hover { color: var(--hub-ink, #18181b); }
-.pa-hub-detail-title {
+/* Scoped to the card so it outranks main.css's `div.contentbox h3`, which is
+   (0,1,2) against this class's (0,1,0) and was quietly winning: the title sat
+   on the card's edge at margin-left 0 while everything under it -- tabs, rows,
+   counts -- sits on the 12px rail. Invisible until the tabs gave it something
+   to be misaligned against. */
+.pa-hub-detail .pa-hub-detail-title {
 	margin: 8px 34px 6px 12px;
 	font-size: 14px;
 }
@@ -899,6 +913,228 @@
 }
 .pa-hub-edge-src { color: var(--pa-ink-subtle, #8a8a8a); }
 .pa-hub-warn { color: var(--hub-up, #e34948); }
+
+/* ------------------------------------------------------------------ *
+ * The node inspector: tabs, facets, and a card that admits it scrolls *
+ * ------------------------------------------------------------------ */
+
+/* Drag the top edge. The card is a fixed 300px and this job's expression
+   figures measure 1046px, so its primary content was showing at 26% before a
+   connection list was ever added. */
+.pa-hub-grip {
+	position: absolute;
+	top: -9px;
+	left: 50%;
+	transform: translateX(-50%);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 46px;
+	height: 18px;
+	cursor: ns-resize;
+	z-index: 6;
+}
+.pa-hub-grip i {
+	display: block;
+	width: 30px;
+	height: 3px;
+	border-radius: 2px;
+	background: var(--hub-quiet-ink, #595959);
+	opacity: 0.35;
+}
+.pa-hub-grip:hover i { background: var(--hub-ink, #18181b); opacity: 1; }
+
+.pa-hub-tabs {
+	display: flex;
+	gap: 2px;
+	flex: 0 0 auto;
+	padding: 4px 12px 0;
+	border-bottom: 1px solid var(--pa-border, #e0e0e0);
+}
+.pa-hub-tab {
+	font: inherit;
+	font-size: 12.5px;
+	padding: 5px 12px 7px;
+	position: relative;
+	top: 1px;
+	color: var(--pa-ink-muted, #595959);
+	background: transparent;
+	border: 0;
+	border-bottom: 2px solid transparent;
+	cursor: pointer;
+}
+.pa-hub-tab:hover { color: var(--hub-ink, #18181b); }
+.pa-hub-tab.is-on {
+	font-weight: 600;
+	color: var(--hub-ink, #18181b);
+	border-bottom-color: var(--hub-ink, #18181b);
+}
+.pa-hub-tab .n {
+	margin-left: 5px;
+	font-size: 11px;
+	color: var(--pa-ink-subtle, #8a8a8a);
+	font-variant-numeric: tabular-nums;
+}
+.pa-hub-tab.is-on .n { color: var(--pa-ink-muted, #595959); }
+
+/* The scrolling pane lives inside the body so the fade can sit over it. */
+.pa-hub-detail-body { position: relative; display: flex; }
+.pa-hub-pane {
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow-y: auto;
+	padding-bottom: 4px;
+}
+/* The reported bug was a row sliced through the middle at the card's edge.
+   The content was always reachable -- the pane scrolls -- but macOS draws
+   overlay scrollbars that stay invisible until dragged, so a severed row was
+   the ONLY signal and it reads as a broken render. A permanent track plus a
+   fade that clears at the end says "more below" without being touched. */
+.pa-hub-pane::-webkit-scrollbar { width: 10px; }
+.pa-hub-pane::-webkit-scrollbar-track {
+	background: var(--pa-surface-sunken, #f5f4ef);
+}
+.pa-hub-pane::-webkit-scrollbar-thumb {
+	background: var(--hub-quiet-ink, #595959);
+	border-radius: 6px;
+	border: 3px solid var(--pa-surface-sunken, #f5f4ef);
+}
+.pa-hub-detail-body::after {
+	content: "";
+	position: absolute;
+	left: 0;
+	right: 10px;
+	bottom: 0;
+	height: 26px;
+	background: linear-gradient(to top, var(--pa-surface, #fff), transparent);
+	pointer-events: none;
+	opacity: 1;
+	transition: opacity .15s;
+}
+.pa-hub-detail-body.at-end::after { opacity: 0; }
+
+.pa-hub-countline {
+	margin: 8px 0 9px;
+	padding: 0;
+	font-size: 12.5px;
+	color: var(--pa-ink-muted, #595959);
+}
+.pa-hub-countline b {
+	font-size: 15px;
+	color: var(--hub-ink, #18181b);
+	font-variant-numeric: tabular-nums;
+}
+.pa-hub-countline span { margin-right: 8px; }
+
+.pa-hub-facets {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin: 0 0 11px;
+}
+.pa-hub-facet {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	font: inherit;
+	font-size: 11.5px;
+	padding: 3px 9px 3px 7px;
+	border-radius: 999px;
+	border: 1px solid var(--pa-border, #e0e0e0);
+	background: var(--pa-surface, #fff);
+	color: var(--hub-ink, #18181b);
+	cursor: pointer;
+	font-variant-numeric: tabular-nums;
+}
+.pa-hub-facet:hover { border-color: var(--hub-ink, #18181b); }
+.pa-hub-facet:focus-visible {
+	outline: 2px solid var(--hub-ink, #18181b);
+	outline-offset: 1px;
+}
+.pa-hub-facet.is-on {
+	background: var(--hub-ink, #18181b);
+	border-color: var(--hub-ink, #18181b);
+	color: var(--pa-surface, #fff);
+}
+.pa-hub-facet .n { color: var(--pa-ink-subtle, #8a8a8a); }
+.pa-hub-facet.is-on .n { color: inherit; opacity: 0.72; }
+.pa-hub-facet.is-on .sw.quiet,
+.pa-hub-facet.is-on .sw.absent { border-color: currentColor; }
+
+.pa-hub-filtered {
+	margin: -4px 0 8px;
+	padding: 0;
+	font-size: 11.5px;
+	color: var(--pa-ink-subtle, #8a8a8a);
+}
+.pa-hub-clearfacet {
+	font: inherit;
+	font-size: 11.5px;
+	padding: 0;
+	border: 0;
+	background: none;
+	color: var(--hub-down, #2a78d6);
+	text-decoration: underline;
+	cursor: pointer;
+}
+
+.pa-hub-group {
+	display: flex;
+	align-items: baseline;
+	gap: 7px;
+	margin: 11px 0 3px;
+	padding: 0 0 3px;
+	border-bottom: 1px solid var(--pa-border, #e0e0e0);
+	font-size: 11.5px;
+	font-weight: 600;
+	color: var(--pa-ink-muted, #595959);
+}
+.pa-hub-group .n {
+	margin-left: auto;
+	color: var(--pa-ink-subtle, #8a8a8a);
+	font-variant-numeric: tabular-nums;
+}
+.pa-hub-conns {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	font-size: 12.5px;
+}
+.pa-hub-conns li {
+	display: flex;
+	align-items: baseline;
+	gap: 7px;
+	padding: 3px 0;
+	border-bottom: 1px solid var(--pa-border, #e0e0e0);
+}
+/* Which way the edge points, relative to the node whose card this is. Two
+   reciprocal ECrel edges are two different facts about the network. */
+.pa-hub-dir {
+	flex: 0 0 auto;
+	width: 9px;
+	color: var(--pa-ink-subtle, #8a8a8a);
+	font-size: 11px;
+}
+.pa-hub-conns .nm { font-weight: 600; color: var(--hub-ink, #18181b); }
+.pa-hub-conns .rel {
+	margin-left: auto;
+	font-size: 11.5px;
+	color: var(--pa-ink-muted, #595959);
+	white-space: nowrap;
+}
+/* The swatch vocabulary is the graph's, so a row and a node read as the same
+   claim -- the state colours are shared up where the legend defines them. */
+.pa-hub-conns .sw,
+.pa-hub-facet .sw {
+	flex: 0 0 auto;
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	border: 1.4px solid var(--hub-quiet-ink, #595959);
+	background: var(--hub-quiet, #ffffff);
+	position: relative;
+	top: 1px;
+}
 
 @media (max-width: 900px) {
 	.pa-hub-listrail {

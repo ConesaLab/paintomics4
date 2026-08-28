@@ -155,8 +155,14 @@ PUBLISHED = {
     # is where .paColorLegend and .pa-hub-omic-figure now live -- a browser
     # keeping the v=1.8 script would build the old single-row markup those
     # rules no longer describe.
+    # v=2.5 moves the connection answer into the graph: focusEgo() lights a
+    # clicked node's own edges, and the card gains tabs, facet chips and a
+    # drag handle. It ships with network-views.css v=2.2, which is where
+    # .pa-hub-tab, .pa-hub-facet, .pa-hub-conns and the scroll fade live -- a
+    # browser keeping the v=1.9 script would build markup those rules describe
+    # while a browser keeping the old CSS would render the new markup unstyled.
     "app/view/PathwayAcquisitionViews/PA_Step3HubNetworkView.js": (
-        "1.9", "825efe7af3560cbc34b7c27bc681dc378a9e9a978d3e83450bbdb9d41624b690"),
+        "2.5", "f06fdb156681d2b0d607d272d3c884e88940228d828553031dfe6e37d90d9852"),
     # v=0.9 adds SERVER_URL_PA_PATHWAY_EVIDENCE. The endpoint was added at
     # v=0.8 WITHOUT a bump, which this guard caught: a returning browser keeps
     # this file for up to 12 hours, so the evidence overlay would have POSTed
