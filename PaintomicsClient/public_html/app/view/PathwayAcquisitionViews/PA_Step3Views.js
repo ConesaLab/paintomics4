@@ -5820,6 +5820,14 @@ function PA_Step3MetaboliteView() {
 	let classMapHasDirection = false;
 	let classificationDictRef = {};
 	let classMapRowsCache = [];
+	/* The class whose compounds are open below the ranking, and the
+	   detail's own state. Dismissed = the user closed it, so a redraw must
+	   not reopen the top class on them. */
+	let classMapSelected = null;
+	let classDetailDismissed = false;
+	let classDetailOnlyRelevant = false;
+	let classDetailKey = null;
+	let compoundOmicName = "Metabolomics";
 	/* featureSummary = [distinct classifiable compounds, [relevant per condition]].
 	   These are the numerator and denominator of the derived null, and naming
 	   them is the difference between "p0 = 0.741" and a number a reader can
@@ -5920,6 +5928,13 @@ function PA_Step3MetaboliteView() {
 		classifiableRelevant = relevantTotals;
 		classificationDictRef = classificationDict || {};
 		classMapCondition = 0;
+		classMapSelected = null;
+		classDetailDismissed = false;
+		classDetailKey = null;
+		/* The compound omic's real name: the detail used to hard-code
+		   "Metabolomics", and a job that called it anything else had no
+		   distribution summary under that key. */
+		compoundOmicName = (this.model.getCompoundBasedInputOmics()[0] || {}).omicName || "Metabolomics";
 
 		/* Direction is only meaningful if the uploaded values are ratios. If
 		   nothing is ever negative the omic is abundance-like and a "70% up"
@@ -5942,84 +5957,156 @@ function PA_Step3MetaboliteView() {
 
 	/* The Paint action, addressed by class name so both the grid's brush
 	   column and a click on the class map can reach it. */
+	/* One card, one instrument. Clicking a row (or the old Paint action,
+	   kept under its name so nothing that called it breaks) opens that
+	   class's compounds BELOW the ranking, inside this same card -- not in a
+	   second "Expression Value" box appended to the page, which read as a
+	   different analysis that happened to share a name. The ranking keeps
+	   the selected row lit so the two halves are visibly the same class. */
 	this.paintClassCompounds = function (className) {
-
-			revealPlotPanel('classificationPlotPanel');
-
-			let elem = $("#classificationPlot");
-			elem.empty();
-			/* Reserve the fixed-width heatmap that sits beside the
-			   plot, as in the hub table above - otherwise the pair
-			   wraps and the strip is left stranded above a chart
-			   four times its width. */
-			let divWidth = Math.max(260, elem.width() - 400);
-			let regulateFeatures = (dataFinal[className] || {}).ID || [];
-			let regulateOmicsValueComp = []
-			let omicName =  "Metabolomics"
-			let divId = "Compound_expression_heatmapContainer_class"
-
-
-			for (let i = 0; i < regulateFeatures.length; i++) {
-				let regulateFeature = regulateFeatures[i]
-				try {
-					let ov = globalExpressionComp[regulateFeature];
-					if (ov) {
-						if (!(ov instanceof OmicValue)) {
-							ov = OmicValue.loadFromJSON(ov);
-						}
-						regulateOmicsValueComp.push(ov);
-					}
-				} catch (e) {
-					console.log('No expression data for: ' + regulateFeature)
-				}
-			}
-
-			regulateOmicsValueComp = regulateOmicsValueComp.filter(function (x) {
-					return x !== undefined;
-				}
-			);
-
-			if (regulateOmicsValueComp.length > 0) {
-				htmlCode =
-					"<div class='contentbox'>" +
-					"  <h3>" + omicName + "<span><input type='checkbox' id='" + divId + "_cb_relevant' value='" + omicName + "'/>Only relevant</span></h3>" +
-					"  <div class='PA_step5_heatmapContainer' id='Compound_expression_heatmapContainer_class'  style='height: " + ((regulateOmicsValueComp.length * 30) + 100) + "px'><i class='fa fa-cog fa-spin'></i> Loading..</div>" +
-					"  <div class='PA_step5_plotContainer' id='" + divId + "_plotContainer'  style='width:" + divWidth + "px;height: " + ((regulateOmicsValueComp.length * 30) + 100) + "px'><i class='fa fa-cog fa-spin'></i> Loading..</div>" +
-
-					"</div>";
-				elem.append(htmlCode);
-				heatmapComp = generateHeatmap(divId, omicName, regulateOmicsValueComp, distributionSummaries, visualOptions, paOmicHeaders(me.model, omicName))
-				plot = generatePlot(divId + "_plotContainer", omicName, regulateOmicsValueComp, distributionSummaries, divId + "_plotlegendContainer", visualOptions, paOmicHeaders(me.model, omicName));
-
-				$("#" + divId + "_cb_relevant").change(function () {
-					let onlyRelevants = $(this).is(":checked");
-
-					// Highcharts does not automatically hide Y labels when hiding series, so it is easier and faster
-					// to recreate the whole graphic.
-					let omicValues = regulateOmicsValueComp;
-
-					if (onlyRelevants) {
-						omicValues = omicValues.filter(x => x.isRelevant() || x.isRelevantAssociation());
-					}
-
-					$('#' + divId).height(omicValues.length * 30 + 100);
-
-					heatmapComp = generateHeatmap(divId, omicName, omicValues, distributionSummaries, visualOptions, paOmicHeaders(me.model, omicName))
-					plot = generatePlot(divId + "_plotContainer", omicName, omicValues, distributionSummaries, divId + "_plotlegendContainer", visualOptions, paOmicHeaders(me.model, omicName));
-
-				});
-
-			} else {
-				// The panel is revealed before the data is checked, so
-				// without this the class opens an empty white box.
-				elem.append(
-					'<div class="contentbox paEmptyNote">' +
-					'  <p>None of the ' + regulateFeatures.length + ' metabolite' + (regulateFeatures.length === 1 ? '' : 's') + ' in this class carry measured values in the omics you uploaded.</p>' +
-					'</div>');
-			}
-
-			fitPlotPanel('classificationPlotPanel', 'classificationPlot');
+		classDetailDismissed = false;
+		me.selectClass(className);
 	};
+
+	this.selectClass = function (className) {
+		classMapSelected = className || null;
+		classDetailDismissed = !className;
+		me.markSelectedClass();
+		me.renderClassDetail();
+	};
+
+	this.markSelectedClass = function () {
+		var map = document.getElementById("classActivityMap");
+		if (!map) return;
+		Array.prototype.forEach.call(map.querySelectorAll("[data-class]"), function (node) {
+			node.classList.toggle("paIsSelected",
+				!!classMapSelected && node.getAttribute("data-class") === classMapSelected);
+		});
+	};
+
+	/* The compounds of the selected class: a heatmap and the same values as
+	   lines, side by side, painted on the omic's colour scale and labelled
+	   with it. Re-drawn only when the class, the condition or the relevance
+	   filter changes; a window resize is left to Highcharts' own reflow. */
+	this.renderClassDetail = function () {
+		var host = document.getElementById("classActivityDetail");
+		if (!host) return;
+		var row = classMapSelected
+			? (classMapRowsCache || []).filter(function (r) { return r.name === classMapSelected; })[0]
+			: null;
+		if (!row) {
+			host.innerHTML = "";
+			host.classList.remove("paIsOpen");
+			classDetailKey = null;
+			return;
+		}
+
+		var key = [row.name, classMapCondition, classDetailOnlyRelevant ? 1 : 0].join("|");
+		if (key === classDetailKey && host.firstChild) return;
+		classDetailKey = key;
+
+		var omicName = compoundOmicName;
+		var ids = (dataFinal[row.name] || {}).ID || [];
+		var values = [];
+		ids.forEach(function (id) {
+			var omicValue = globalExpressionComp ? globalExpressionComp[id] : null;
+			if (!omicValue) return;
+			if (!(omicValue instanceof OmicValue)) {
+				try { omicValue = OmicValue.loadFromJSON(omicValue); }
+				catch (e) { return; }
+			}
+			values.push(omicValue);
+		});
+		var measured = values.length;
+		if (classDetailOnlyRelevant) {
+			values = values.filter(function (x) { return x.isRelevant() || x.isRelevantAssociation(); });
+		}
+
+		var head = '<div class="paClassDetailHead">'
+			+ '<h4>' + classMapEscape(row.name) + '</h4>'
+			+ '<span class="paClassDetailStats">' + row.k + ' of ' + row.n + ' measured compounds relevant'
+			+ ' &middot; p ' + classMapFormatP(row.p) + ' &middot; FDR ' + classMapFormatP(row.fdr) + '</span>'
+			+ '<span class="paClassDetailTools">'
+			+ '<label class="paClassDetailToggle"><input type="checkbox" id="classDetailOnlyRelevant"'
+			+ (classDetailOnlyRelevant ? ' checked' : '') + '> Only relevant</label>'
+			+ '<button type="button" class="paClassDetailClose" id="classDetailClose" aria-label="Close">&times;</button>'
+			+ '</span></div>';
+
+		var summaries = (distributionSummaries || {})[omicName];
+		var note = null;
+		if (!measured) {
+			note = 'None of the ' + ids.length + ' metabolite' + (ids.length === 1 ? '' : 's')
+				+ ' in this class carry measured values in the omics you uploaded.';
+		} else if (!values.length) {
+			note = 'None of the ' + measured + ' measured compounds in this class is relevant.';
+		} else if (!summaries) {
+			note = 'This job carries no distribution summary for ' + classMapEscape(omicName)
+				+ ', so the heatmap cannot be scaled.';
+		}
+		if (note) {
+			host.innerHTML = head + '<p class="paEmptyNote">' + note + '</p>';
+			host.classList.add("paIsOpen");
+			bindClassDetailControls();
+			return;
+		}
+
+		var visual = visualOptions || {};
+		var reference = (visual.colorReferences && visual.colorReferences[omicName]) || PA_DEFAULT_COLOR_REFERENCE;
+		var scale = visual.colorScale || PA_DEFAULT_COLOR_SCALE;
+		var legend = "";
+		try {
+			legend = paColorLegend(getMinMax(summaries, reference), scale,
+				{caption: paColourReferenceLabel(reference)});
+		} catch (e) {
+			console.warn("[class map] no colour legend for " + omicName + ": " + e);
+		}
+		var headers = paOmicHeaders(me.model, omicName);
+		var columns = (paValuesForHeader(values[0], headers) || []).length;
+		var figureH = values.length * 30 + PA_CLASS_CHART_FURNITURE;
+		/* Wide enough for a 150px two-line row label plus one legible cell per
+		   condition; the chart takes what is left of the card. */
+		var heatmapW = Math.min(480, 170 + Math.max(3, columns) * 30);
+
+		host.innerHTML = head
+			+ '<div class="paClassDetailScale">' + legend
+			+ '<span class="paClassDetailScaleNote">Cells are painted on this scale of ' + classMapEscape(omicName)
+			+ '; on the chart, the shaded band marks values beyond it.</span></div>'
+			/* The heatmap div and the plot div must be ADJACENT SIBLINGS with
+			   the heatmap first: its point handlers reach the plot with
+			   .parent().next().highcharts(). */
+			+ '<div class="paClassDetailFigure">'
+			+ '<div class="PA_step5_heatmapContainer" id="classDetail_hm" style="width:' + heatmapW
+			+ 'px;height:' + figureH + 'px"></div>'
+			+ '<div class="PA_step5_plotContainer" id="classDetail_pl" style="height:'
+			+ Math.min(figureH, 440) + 'px"></div>'
+			+ '</div>';
+		host.classList.add("paIsOpen");
+
+		try {
+			generateHeatmap("classDetail_hm", omicName, values, distributionSummaries, visual, headers,
+				{labelWidth: 150, maxChars: 22});
+			generatePlot("classDetail_pl", omicName, values, distributionSummaries, null, visual, headers,
+				{yAxisTitle: omicName});
+		} catch (e) {
+			/* A silent guard reads as a dead click, so say what happened. */
+			console.warn("[class map] could not draw " + row.name + ": " + e);
+		}
+		bindClassDetailControls();
+	};
+
+	function bindClassDetailControls() {
+		var toggle = document.getElementById("classDetailOnlyRelevant");
+		if (toggle) {
+			toggle.addEventListener("change", function () {
+				classDetailOnlyRelevant = toggle.checked;
+				me.renderClassDetail();
+			});
+		}
+		var close = document.getElementById("classDetailClose");
+		if (close) {
+			close.addEventListener("click", function () { me.selectClass(null); });
+		}
+	}
 
 	/* ==================================================================
 	   The class map.
@@ -6048,6 +6135,10 @@ function PA_Step3MetaboliteView() {
 	   ================================================================== */
 
 	var CLASSMAP_NS = "http://www.w3.org/2000/svg";
+	/* Row pitch is the pathway views' 30px; the constant is the chart's own
+	   furniture (top margin plus the rotated condition names beneath), the
+	   same one the hub panel sizes its figures with when it is loaded. */
+	var PA_CLASS_CHART_FURNITURE = (typeof PA_OMIC_CHART_FURNITURE === "number") ? PA_OMIC_CHART_FURNITURE : 132;
 
 	function classMapEl(tag, attrs) {
 		var node = document.createElementNS(CLASSMAP_NS, tag);
@@ -6252,9 +6343,25 @@ function PA_Step3MetaboliteView() {
 			+ (classMapHasDirection
 				? ' &nbsp; <span class="paDirUp">▲' + row.up + '</span> <span class="paDirDown">▼' + row.down + '</span>'
 				: "")
-			+ ' &nbsp; <span class="paClassMapMuted">click to paint its compounds</span>';
+			+ ' &nbsp; <span class="paClassMapMuted">click to open its compounds below</span>';
 		summary.classList.add("paIsFocused");
 	};
+
+	/* Strongest evidence first: raw p, then the proportion, then n. A class
+	   with no p at all (an old job, a class the server skipped) goes last. */
+	function classMapRank(a, b) {
+		var pa = (typeof a.p === "number") ? a.p : 2;
+		var pb = (typeof b.p === "number") ? b.p : 2;
+		if (pa !== pb) return pa - pb;
+		if (a.proportion !== b.proportion) return b.proportion - a.proportion;
+		if (a.n !== b.n) return b.n - a.n;
+		return String(a.name).localeCompare(String(b.name));
+	}
+
+	function classMapTruncate(text, maxChars) {
+		text = String(text);
+		return text.length > maxChars ? text.slice(0, Math.max(1, maxChars - 1)) + "…" : text;
+	}
 
 	this.drawClassMap = function () {
 		var host = document.getElementById("classActivityMap");
@@ -6262,118 +6369,105 @@ function PA_Step3MetaboliteView() {
 		host.innerHTML = "";
 
 		var rows = me.buildClassMapRows(classMapCondition);
-		classMapRowsCache = rows;
 		if (!rows.length) {
+			classMapRowsCache = [];
 			host.innerHTML = '<p class="paEmptyNote">No metabolite class in this job carries measured compounds.</p>';
+			me.renderClassDetail();
 			return;
 		}
+
+		/* Ranked by evidence -- raw p first, then the proportion, then n --
+		   and the rank IS the layout: one row per class, top to bottom. A
+		   class can therefore never be drawn on top of another or outside
+		   the chart. The previous scatter placed classes by BRITE parent
+		   along x and by -log10 FDR along y, then nudged siblings sideways
+		   by +-0.27, +-0.54 band widths to keep them apart. A job stored
+		   before the parents were sent (every class "Unclassified") put all
+		   eight in ONE band: the fourth nudge is 0.54 of the band, past its
+		   edge, and that mark was drawn half outside the plot. And with
+		   every FDR at 1.0 all eight sat on the x axis, on top of the parent
+		   label, saying nothing. Rows have no such failure mode, and the
+		   proportion axis still separates classes when the test does not. */
+		rows.sort(classMapRank);
+		classMapRowsCache = rows;
 
 		var meta = classMapMeta || {};
 		var nullList = meta.nullProportion || [];
 		var p0 = (typeof nullList[classMapCondition] === "number") ? nullList[classMapCondition] : null;
+		var userSet = (meta.thresholdSource === "user");
 
-		/* Parent groups, ordered by how much of the job they carry, so the
-		   busiest chemistry is not stranded at the right edge. */
-		var byParent = {};
-		rows.forEach(function (row) {
-			(byParent[row.parent] = byParent[row.parent] || []).push(row);
-		});
-		var groups = Object.keys(byParent).sort(function (a, b) {
-			var sa = byParent[a].reduce(function (t, r) { return t + r.n; }, 0);
-			var sb = byParent[b].reduce(function (t, r) { return t + r.n; }, 0);
-			return sb - sa || a.localeCompare(b);
-		});
+		var width = Math.max(640, host.clientWidth || 640);
+		var pitch = 30;
+		var headH = 40;
+		var footH = (p0 === null) ? 10 : 26;
+		var height = headH + rows.length * pitch + footH;
+		var colName = Math.min(250, Math.max(170, Math.round(width * 0.25)));
+		var colMark = 46;
+		var colFdr = 86;
+		var axisL = colName + colMark + 10;
+		var axisR = width - colFdr - 14;
+		var trackW = Math.max(120, axisR - axisL);
+		var nMax = rows.reduce(function (t, r) { return Math.max(t, r.n); }, 1);
+		var nameChars = Math.max(10, Math.floor((colName - 14) / 6.6));
 
-		var width = Math.max(760, host.clientWidth || 760);
-		var height = 470;
-		var padL = 62, padR = 24, padT = 40, padB = 116;
-		var plotW = width - padL - padR;
-		var plotH = height - padT - padB;
-		var bandW = plotW / groups.length;
-
-		var maxY = 2.2;
-		rows.forEach(function (row) {
-			var fdr = (typeof row.fdr === "number" && row.fdr > 0) ? row.fdr : CLASSMAP_FDR_FLOOR;
-			maxY = Math.max(maxY, -Math.log(fdr) / Math.LN10);
-		});
-		maxY = maxY * 1.14;
-
-		function yFor(value) { return padT + plotH - (value / maxY) * plotH; }
-		function radiusFor(n) { return Math.max(7, Math.sqrt(n) * 4.4); }
+		function xFor(proportion) { return axisL + Math.max(0, Math.min(1, proportion)) * trackW; }
+		function yFor(index) { return headH + (index + 0.5) * pitch; }
+		/* Area is n: r grows with sqrt(n), the biggest class filling its row. */
+		function radiusFor(n) { return Math.max(4, 12 * Math.sqrt(n / nMax)); }
 
 		var svg = classMapEl("svg", {
-			viewBox: "0 0 " + width + " " + height,
-			width: "100%", height: height, "class": "paClassMap", role: "img",
-			"aria-label": "Metabolite class map. Horizontal position groups classes by KEGG BRITE parent; "
-				+ "vertical position is minus log 10 of the BH-adjusted p-value; mark area is the number of "
-				+ "compounds measured; the filled sweep is the proportion of those compounds that were relevant."
+			width: width, height: height, viewBox: "0 0 " + width + " " + height,
+			"class": "paClassMap", role: "img",
+			"aria-label": "Metabolite classes ranked by evidence. Each row is one class: the mark's area is "
+				+ "the number of compounds measured and its filled sweep the share of them that were relevant; "
+				+ "the dot places that share on a 0 to 100 percent axis against the null proportion; the last "
+				+ "column is the BH-adjusted p-value."
 		});
 
-		groups.forEach(function (group, index) {
-			if (index % 2 === 0) {
-				svg.appendChild(classMapEl("rect", {
-					x: padL + index * bandW, y: padT - 8,
-					width: bandW, height: plotH + 8, "class": "paClassMapBand"
-				}));
-			}
-			var cx = padL + (index + 0.5) * bandW;
-			var label = group.length > 20 ? group.slice(0, 19) + "…" : group;
-			svg.appendChild(classMapText(label, cx, height - padB + 30, "paClassMapTick", {
-				"text-anchor": "end",
-				transform: "rotate(-34 " + cx + " " + (height - padB + 30) + ")"
+		/* Column headings and the proportion axis. */
+		svg.appendChild(classMapText("Class", colName - 8, 14, "paClassRankHead", {"text-anchor": "end"}));
+		svg.appendChild(classMapText("Relevant compounds in class", axisL, 14, "paClassRankHead"));
+		svg.appendChild(classMapText("FDR (BH)", width - 8, 14, "paClassRankHead", {"text-anchor": "end"}));
+		[0, 0.25, 0.5, 0.75, 1].forEach(function (tick) {
+			var x = xFor(tick);
+			svg.appendChild(classMapEl("line", {
+				x1: x, x2: x, y1: headH - 6, y2: height - footH, "class": "paClassMapGrid"
 			}));
+			svg.appendChild(classMapText(Math.round(tick * 100) + "%", x, headH - 10, "paClassMapTick",
+				{"text-anchor": tick === 0 ? "start" : (tick === 1 ? "end" : "middle")}));
 		});
 
-		var step = maxY > 6 ? 2 : 1;
-		for (var v = 0; v <= maxY; v += step) {
+		if (p0 !== null) {
+			var px = xFor(p0);
 			svg.appendChild(classMapEl("line", {
-				x1: padL, x2: width - padR, y1: yFor(v), y2: yFor(v), "class": "paClassMapGrid"
+				x1: px, x2: px, y1: headH - 6, y2: height - footH + 4, "class": "paClassMapSigLine"
 			}));
-			svg.appendChild(classMapText(v.toFixed(0), padL - 9, yFor(v) + 4, "paClassMapTick",
-				{"text-anchor": "end"}));
-		}
-		svg.appendChild(classMapText("−log₁₀ FDR (BH)", padL - 9, padT - 18, "paClassMapAxis"));
-		svg.appendChild(classMapText("BRITE parent group · x is a grouping, not a measurement",
-			padL, height - 12, "paClassMapAxis"));
-
-		var sigY = yFor(-Math.log(0.05) / Math.LN10);
-		if (sigY > padT && sigY < padT + plotH) {
-			svg.appendChild(classMapEl("line", {
-				x1: padL, x2: width - padR, y1: sigY, y2: sigY, "class": "paClassMapSigLine"
-			}));
-			svg.appendChild(classMapText("FDR 0.05", width - padR - 4, sigY - 7, "paClassMapSigLabel",
-				{"text-anchor": "end"}));
+			svg.appendChild(classMapText(
+				"p₀ = " + p0.toFixed(2) + (userSet ? " · the proportion you set" : " · rest of this job"),
+				px, height - 8, "paClassMapSigLabel",
+				{"text-anchor": (p0 > 0.72) ? "end" : (p0 < 0.28 ? "start" : "middle")}));
 		}
 
-		/* Geometry first, so a label can never be dropped on another mark. */
-		var laid = [];
-		groups.forEach(function (group) {
-			var list = byParent[group].slice().sort(function (a, b) { return b.n - a.n; });
-			var groupIndex = groups.indexOf(group);
-			var cx0 = padL + (groupIndex + 0.5) * bandW;
-			list.forEach(function (row, i) {
-				var offset = (list.length === 1) ? 0
-					: ((i % 2 ? 1 : -1) * Math.ceil(i / 2)) * (bandW * 0.27);
-				var fdr = (typeof row.fdr === "number" && row.fdr > 0) ? row.fdr : CLASSMAP_FDR_FLOOR;
-				laid.push({
-					row: row, cx: cx0 + offset,
-					cy: yFor(-Math.log(fdr) / Math.LN10),
-					rr: radiusFor(row.n)
-				});
-			});
-		});
-
-		var occupied = laid.map(function (d) {
-			return {x0: d.cx - d.rr - 3, x1: d.cx + d.rr + 3, y0: d.cy - d.rr - 3, y1: d.cy + d.rr + 3};
-		});
-
-		laid.slice().sort(function (a, b) { return b.row.n - a.row.n; }).forEach(function (d) {
-			var row = d.row, cx = d.cx, cy = d.cy, rr = d.rr;
+		rows.forEach(function (row, index) {
+			var cy = yFor(index);
 			var group = classMapEl("g", {"class": "paClassMapMark", "data-class": row.name});
 
-			group.appendChild(classMapEl("circle", {
-				cx: cx, cy: cy, r: rr, "class": "paClassMapDisc"
+			/* The whole row is the target, not just the glyphs. */
+			group.appendChild(classMapEl("rect", {
+				x: 0, y: cy - pitch / 2, width: width, height: pitch, rx: 4, "class": "paClassRankHit"
 			}));
+
+			var showParent = !!row.parent && row.parent !== "Unclassified";
+			group.appendChild(classMapText(classMapTruncate(row.name, nameChars), colName - 8,
+				cy + (showParent ? -1 : 4), "paClassMapLabel", {"text-anchor": "end"}));
+			if (showParent) {
+				group.appendChild(classMapText(classMapTruncate(row.parent, nameChars + 4), colName - 8,
+					cy + 11, "paClassMapParent", {"text-anchor": "end"}));
+			}
+
+			/* The mark: area n, sweep k/n, hue direction. */
+			var cx = colName + colMark / 2, rr = radiusFor(row.n);
+			group.appendChild(classMapEl("circle", {cx: cx, cy: cy, r: rr, "class": "paClassMapDisc"}));
 
 			if (row.k > 0) {
 				var start = -Math.PI / 2;
@@ -6401,33 +6495,28 @@ function PA_Step3MetaboliteView() {
 				}
 			}
 
+			/* The proportion on its axis: a stem from p0 (or from 0 when no
+			   null was sent) to k/n, and the dot that is the reading. */
+			var dx = xFor(row.proportion);
+			var from = xFor(p0 === null ? 0 : p0);
+			group.appendChild(classMapEl("line", {
+				x1: from, x2: dx, y1: cy, y2: cy,
+				"class": "paClassRankStem" + ((p0 !== null && row.proportion < p0) ? " paClassRankStemBelow" : "")
+			}));
 			if (row.significant) {
-				group.appendChild(classMapEl("circle",
-					{cx: cx, cy: cy, r: rr + 4, "class": "paClassMapRing"}));
+				group.appendChild(classMapEl("circle", {cx: dx, cy: cy, r: 9, "class": "paClassMapRing"}));
 			}
+			group.appendChild(classMapEl("circle", {cx: dx, cy: cy, r: 5, "class": "paClassRankDot"}));
 
-			if (row.n >= 5 || row.significant) {
-				var labelWidth = Math.max(row.name.length * 6.6, 34) + 10;
-				var labelY = cy - rr - 13;
-				var placed = false;
-				for (var attempt = 0; attempt < 6; attempt++) {
-					var box = {x0: cx - labelWidth / 2, x1: cx + labelWidth / 2,
-						y0: labelY - 11, y1: labelY + 13};
-					var clash = occupied.some(function (q) {
-						return box.x0 < q.x1 && box.x1 > q.x0 && box.y0 < q.y1 && box.y1 > q.y0;
-					});
-					if (!clash) { occupied.push(box); placed = true; break; }
-					labelY -= 14;
-				}
-				if (placed) {
-					group.appendChild(classMapText(row.name, cx, labelY, "paClassMapLabel",
-						{"text-anchor": "middle"}));
-					group.appendChild(classMapText(row.k + "/" + row.n, cx, labelY + 11,
-						"paClassMapCount", {"text-anchor": "middle"}));
-				}
-			}
+			var countText = row.k + "/" + row.n;
+			var countRight = (dx + 14 + countText.length * 6.4) < axisR;
+			group.appendChild(classMapText(countText, countRight ? dx + 12 : dx - 12, cy + 4, "paClassMapCount",
+				{"text-anchor": countRight ? "start" : "end"}));
 
-			var tip = row.name + " (" + row.parent + ")"
+			group.appendChild(classMapText(classMapFormatP(row.fdr), width - 8, cy + 4,
+				"paClassRankFdr" + (row.significant ? " paIsSig" : ""), {"text-anchor": "end"}));
+
+			var tip = row.name + (showParent ? " (" + row.parent + ")" : "")
 				+ "\n" + row.k + " of " + row.n + " measured compounds relevant"
 				+ " = " + (row.proportion * 100).toFixed(0) + "%"
 				+ (p0 === null ? "" : "\nnull p0 = " + p0.toFixed(3))
@@ -6440,25 +6529,18 @@ function PA_Step3MetaboliteView() {
 
 			group.addEventListener("mouseenter", function () { me.focusClass(row.name); });
 			group.addEventListener("mouseleave", function () { me.focusClass(null); });
-			group.addEventListener("click", function () {
-				me.paintClassCompounds(row.name);
-			});
+			group.addEventListener("click", function () { me.paintClassCompounds(row.name); });
 
 			svg.appendChild(group);
 		});
 
 		host.appendChild(svg);
 
-		/* The legend describes marks inside the plot, and the axis caption
-		   directly above it is drawn at x = padL. Flush to the card, the legend
-		   sat padL to the left of both. The SVG scales with its viewBox, so the
-		   indent is padL through the same scale rather than a fixed 62px. */
 		var keys = document.getElementById("classActivityKeys");
 		if (keys) {
 			/* Only the keys this chart actually uses. Direction is dropped when
 			   the omic never crosses zero, and printing its two colours anyway
-			   put swatches in the legend that appear nowhere on the plot -- and
-			   pushed the row to a second line to do it. */
+			   put swatches in the legend that appear nowhere on the plot. */
 			var items = classMapHasDirection
 				? [['paKeySwatch paKeyUp', 'relevant &amp; increased'],
 				   ['paKeySwatch paKeyDown', 'relevant &amp; decreased']]
@@ -6471,9 +6553,8 @@ function PA_Step3MetaboliteView() {
 				return '<li' + (item[2] ? ' class="paKeyBreak"' : '') + '>'
 					+ '<span class="' + item[0] + '"></span>' + item[1] + '</li>';
 			}).join("");
-
-			var rendered = svg.getBoundingClientRect().width || width;
-			keys.style.paddingLeft = Math.round(padL * (rendered / width)) + "px";
+			/* Under the proportion axis, where the marks it describes are. */
+			keys.style.paddingLeft = colName + "px";
 		}
 
 		me.renderClassMapControls();
@@ -6489,7 +6570,6 @@ function PA_Step3MetaboliteView() {
 			   a typed threshold compares it with a constant (self-contained),
 			   and one combo in step 2 switched between them with no change
 			   anywhere in the output. */
-			var userSet = (meta.thresholdSource === "user");
 			var background = "";
 			if (!userSet && classifiableTotal) {
 				/* [classMapCondition], like p0 on the same line: with the
@@ -6498,6 +6578,19 @@ function PA_Step3MetaboliteView() {
 				background = ' &mdash; ' + (classifiableRelevant[classMapCondition] || 0) + ' of the ' + classifiableTotal
 					+ ' compounds KEGG BRITE can classify in this job are relevant,'
 					+ ' and that is the bar every class is measured against';
+			}
+			/* When nothing passes, say what COULD have. The smallest raw p a
+			   class of n compounds can reach is p0^n (every one relevant), and
+			   BH on the best of m classes multiplies it by m, so the smallest
+			   class that can pass here is n >= log(0.05 / m) / log(p0). On the
+			   bundled STATegra job that is 17 compounds, all relevant, at
+			   p0 = 0.74 -- a flat chart is the data's answer, not a broken
+			   test, and this is the sentence that lets a reader check it. */
+			var reach = "";
+			if (!passing && p0 !== null && p0 > 0 && p0 < 1) {
+				var nMin = Math.ceil(Math.log(0.05 / rows.length) / Math.log(p0));
+				reach = ' &middot; nothing passes: at this p<sub>0</sub> a class needs at least <b>' + nMin
+					+ '</b> measured compounds, every one relevant, to reach FDR 0.05';
 			}
 			summary.innerHTML =
 				'<span class="paClassMapBase">'
@@ -6508,13 +6601,26 @@ function PA_Step3MetaboliteView() {
 							+ ' <span class="paClassMapMuted">(not a comparison with the rest of your data)</span>'
 						: 'tested against the rest of this job, p<sub>0</sub> = <b>' + p0.toFixed(3) + '</b>'
 							+ '<span class="paClassMapMuted">' + background + '</span>'))
+				+ reach
 				+ (classMapHasDirection ? "" :
 					' &middot; <span class="paClassMapMuted">values never cross zero, so no direction is shown</span>')
 				/* The second span is the hover readout. focusClass fills it and
 				   lays it over the caption; the caption stays put, so the
-				   paragraph -- and the map under it -- never changes height. */
+				   paragraph -- and the chart under it -- never changes height. */
 				+ '</span><span class="paClassMapReadout"></span>';
 		}
+
+		/* The selection survives a redraw (resize, condition change), and the
+		   first draw opens the top-ranked class, so the card is one
+		   instrument from the start rather than a chart with a hidden door. */
+		if (classMapSelected && !rows.some(function (r) { return r.name === classMapSelected; })) {
+			classMapSelected = null;
+		}
+		if (!classMapSelected && !classDetailDismissed) {
+			classMapSelected = rows[0].name;
+		}
+		me.markSelectedClass();
+		me.renderClassDetail();
 	};
 
 	this.initComponent = function () {
@@ -6542,14 +6648,15 @@ function PA_Step3MetaboliteView() {
 							'<p class="paClassMapSummary" id="classActivityMapSummary"></p>' +
 							'<div class="paClassMapControls" id="classActivityMapControls"></div>' +
 							'<div id="classActivityMap"></div>' +
-							/* data-guides="ignore": the keys sit on the chart's
-							   own axis line (x = padL inside the SVG), which the
-							   alignment overlay does not rail -- it reads DOM
-							   boxes, not SVG geometry -- so it would list them
-							   against the enrichment table's cell inset 4px
-							   away. Measured: li 337, swatch 337, axis 337. */
+							/* data-guides="ignore": the keys sit under the chart's
+							   own label column, which the alignment overlay does
+							   not rail -- it reads DOM boxes, not SVG geometry. */
 							'<ul class="paClassMapKeys" id="classActivityKeys" data-guides="ignore"></ul>' +
-							'',
+							/* The selected class's compounds open HERE, inside the
+							   card. They used to open in a second contentbox below
+							   it, titled "Expression Value", which read as a
+							   different analysis. */
+							'<div class="paClassDetail" id="classActivityDetail"></div>',
 						listeners: {
 							afterrender: function (box) {
 								/* clientWidth is 0 until the column layout has
@@ -6584,18 +6691,6 @@ function PA_Step3MetaboliteView() {
 								clearTimeout(me._classMapResizeTimer);
 							}
 						}
-					},
-					{
-						xtype: 'box',
-						itemId: 'classificationPlotPanel',
-						cls: "contentbox",
-						hidden: true,
-						columnWidth: 1,
-						padding: '30',
-						height: 350,
-						html:
-							' <h4>Expression Value<span class="infoTip">Use this tool to <b> show expression details of metabolites</b> based on their classification </span></h4> ' +
-							' <div id="classificationPlot" style="height: 100%; overflow: auto;" ></div>'
 					}
 				]
 			}
@@ -8028,6 +8123,66 @@ var paScaleClipLine = function (value, text, above) {
 	};
 };
 
+/**
+ * The y axis of a line chart drawn beside a heatmap of the same values.
+ *
+ * Highcharts' default axis fitted the data and nothing else: a series that
+ * crossed zero got an axis from -0.4 to 0.2 with no zero line, so "up" and
+ * "down" were not readable off it, and the two colour-clip hairlines carried
+ * bare labels ("scale min") that sat wherever the clip happened to fall --
+ * on a flat series, on top of the data. This axis is symmetric about zero
+ * whenever the data crosses it, draws the zero line, and shades the region
+ * beyond the colour scale so the label is inside the thing it names. The
+ * clip hairlines stay, unlabelled, where the shading already says what they
+ * are.
+ */
+var paPlotYAxis = function (limits, dataMin, dataMax, options) {
+	options = options || {};
+	var axis = {
+		title: {text: options.yAxisTitle || null, style: {color: "#78879A", fontSize: "10px"}},
+		gridLineColor: "#E9EDF1",
+		labels: {style: {fontSize: "10px", color: "#78879A"}},
+		plotLines: [],
+		plotBands: []
+	};
+	var hasData = isFinite(dataMin) && isFinite(dataMax);
+	var hasClip = !!limits && isFinite(limits.min) && isFinite(limits.max) && limits.min < limits.max;
+	if (!hasData) return axis;
+
+	var lo = dataMin, hi = dataMax;
+	var crossesZero = lo < 0 && hi > 0;
+	if (crossesZero) {
+		var reach = Math.max(-lo, hi);
+		lo = -reach;
+		hi = reach;
+	}
+	var pad = (hi - lo) * 0.08 || Math.abs(hi || lo) * 0.1 || 1;
+	axis.min = lo - pad;
+	axis.max = hi + pad;
+	axis.startOnTick = false;
+	axis.endOnTick = false;
+	if (crossesZero) {
+		axis.plotLines.push({value: 0, color: "#B5C1CE", width: 1, zIndex: 2});
+	}
+
+	if (hasClip) {
+		var bandColor = "rgba(120, 135, 154, 0.09)";
+		var bandLabel = {text: "beyond colour scale", align: "right", x: -4,
+			style: {color: "#A1A1AA", fontSize: "9px"}};
+		if (dataMax > limits.max) {
+			axis.plotBands.push({from: limits.max, to: axis.max, color: bandColor, zIndex: 0,
+				label: Ext.apply({y: 12}, bandLabel)});
+			axis.plotLines.push(paScaleClipLine(limits.max, "", true));
+		}
+		if (dataMin < limits.min) {
+			axis.plotBands.push({from: axis.min, to: limits.min, color: bandColor, zIndex: 0,
+				label: Ext.apply({verticalAlign: "bottom", y: -4}, bandLabel)});
+			axis.plotLines.push(paScaleClipLine(limits.min, "", false));
+		}
+	}
+	return axis;
+};
+
 /* Likewise for the range the scale is stretched over. */
 var PA_DEFAULT_COLOR_REFERENCE = "p10p90";
 
@@ -8238,8 +8393,19 @@ var renderFunctionHub= function (value, metadata, record) {
  * view of their own, so unlike the chart methods elsewhere they cannot walk up
  * to the job model themselves - the caller, which does have it, passes it in.
  * Omitting it is allowed and falls back to positional labels. */
-let generateHeatmap = function (targetID, omicName, omicsValues, dataDistributionSummaries, visualOptions, omicHeader) {
+let generateHeatmap = function (targetID, omicName, omicsValues, dataDistributionSummaries, visualOptions, omicHeader, options) {
 	var featureValues, x = 0, y = 0, maxX = -1, series = [], yAxisCat = [], serie;
+	/* Row-label width and its character budget. 100px / 16 characters is
+	   the pathway views' column; a panel with room to spare passes more,
+	   so "Mannitol, D-Mannitol" is not cut to "Mannitol, D-M...". */
+	options = options || {};
+	var labelWidth = options.labelWidth || 100;
+	var labelChars = options.maxChars || 16;
+	/* Highcharts reads yAxis.width as the PLOT AREA's width, not the label
+	   column's: the legacy 100 squeezed six conditions into 100px of cells
+	   beside a 100px label. A caller that sizes its own labels gets the
+	   rest of the container for cells instead. */
+	var plotAreaWidth = options.labelWidth ? undefined : 100;
 
 	for (var i in omicsValues) {
 		if (!omicsValues[i]) continue;
@@ -8336,14 +8502,17 @@ if (omicsValues[i].isRelevantAssociation()) {
 		},
 		xAxis: xAxisConfig,
 		yAxis: {
-			categories: yAxisCat, title: null, width: 100,
+			categories: yAxisCat, title: null, width: plotAreaWidth,
 			labels: {
 				formatter: function () {
 					var title = this.value.split("#");
 					title[1] = (title.length > 1) ? title[1] : "No data";
-					return paRowLabel(title[0], title[1], {width: 100, maxChars: 16});
+					return paRowLabel(title[0], title[1], {width: labelWidth, maxChars: labelChars});
 				},
-				style: {fontSize: "9px"}, useHTML: true
+				/* Declared, or Highcharts caps a vertical axis's labels at a third
+				   of the chart width (106px on a 350px chart) and the 150px label
+				   block inside overflows its wrapper -- under the cells. */
+				style: {fontSize: "9px", width: labelWidth + "px"}, useHTML: true
 			}
 		},
 		series: series,
@@ -8392,9 +8561,9 @@ if (omicsValues[i].isRelevantAssociation()) {
 };
 
 /* `omicHeader` - see the note on generateHeatmap above. */
-let generatePlot = function (targetID, omicName, omicsValues, dataDistributionSummaries, legendContainerId, visualOptions, omicHeader) {
+let generatePlot = function (targetID, omicName, omicsValues, dataDistributionSummaries, legendContainerId, visualOptions, omicHeader, options) {
 	var series = [], maxX = -1;
-	var yAxisItem = {title: null}, omicsValue, auxValues;
+	var omicsValue, auxValues, dataMin = Infinity, dataMax = -Infinity;
 
 	if (visualOptions.colorReferences) {
 		var limits = getMinMax(dataDistributionSummaries[omicName], visualOptions.colorReferences[omicName]);
@@ -8413,6 +8582,10 @@ let generatePlot = function (targetID, omicName, omicsValues, dataDistributionSu
 
 		for (var j in plottedValues) {
 			auxValues.push({y: plottedValues[j], marker: ((plottedValues[j] > limits.max || plottedValues[j] < limits.min) ? {fillColor: '#ff6e00'} : null)});
+			if (typeof plottedValues[j] === "number" && isFinite(plottedValues[j])) {
+				dataMin = Math.min(dataMin, plottedValues[j]);
+				dataMax = Math.max(dataMax, plottedValues[j]);
+			}
 		}
 
 		var relevantSymbols = "";
@@ -8431,19 +8604,9 @@ if (omicsValues[i].isRelevantAssociation()) {
 		});
 	}
 
-	if (limits.max !== limits.absMax && limits.min !== limits.absMin) {
-		/* These two lines mark where the COLOUR SCALE clips, not where the data
-		   ends -- a point beyond them is drawn as an outlier in the heatmap
-		   beside this chart. They were labelled 'min' and 'max', which reads as
-		   the minimum and maximum of the series, and the labels were centred on
-		   the lines themselves, so on a flat series the word sat on top of the
-		   data it was annotating. Named for what they are and nudged clear of
-		   their own line. */
-		yAxisItem.plotLines = [
-			paScaleClipLine(limits.max, "scale max", true),
-			paScaleClipLine(limits.min, "scale min", false)
-		];
-	}
+	/* See paPlotYAxis: symmetric about zero, zero line, shaded beyond the
+	   colour scale. */
+	var yAxisItem = paPlotYAxis(limits, dataMin, dataMax, options);
 
 	/* Real condition names on the x axis - see paConditionAxis(). */
 	var xAxisConfig = paConditionAxis(maxX, omicHeader, {maxChars: 12});
